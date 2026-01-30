@@ -1,14 +1,28 @@
 using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
-var builder = FunctionsApplication.CreateBuilder(args);
+var host = new HostBuilder()
+    .ConfigureFunctionsWebApplication()
+    .ConfigureServices(services =>
+    {
+        // Application Insights
+        services.AddApplicationInsightsTelemetryWorkerService();
+        services.ConfigureFunctionsApplicationInsights();
 
-builder.ConfigureFunctionsWebApplication();
+        // Logging
+        services.AddLogging(builder =>
+        {
+            builder.AddConsole();
+            builder.SetMinimumLevel(LogLevel.Information);
+        });
 
-builder.Services
-    .AddApplicationInsightsTelemetryWorkerService()
-    .ConfigureFunctionsApplicationInsights();
+        // TODO: Agregar servicios personalizados cuando se implementen
+        // services.AddSingleton<IClasificacionService, ClasificacionService>();
+        // services.AddSingleton<IExtraccionService, ExtraccionService>();
+        // services.AddSingleton<IValidacionService, ValidacionService>();
+    })
+    .Build();
 
-builder.Build().Run();
+host.Run();
