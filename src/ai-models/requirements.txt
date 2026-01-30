@@ -1,0 +1,24 @@
+﻿# Azure SDKs
+azure-ai-formrecognizer==3.3.0
+azure-storage-blob==12.19.0
+azure-identity==1.15.0
+azure-keyvault-secrets==4.7.0
+
+# Data Processing
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.13.1
+
+# ML & Evaluation
+scikit-learn==1.5.0
+
+# Utilities
+python-dotenv==1.0.1
+pydantic==2.7.1
+
+# Development
+jupyter==1.0.0
+jupyterlab==4.2.0
+pytest==8.2.0
+black==24.4.2
+flake8==7.0.0
