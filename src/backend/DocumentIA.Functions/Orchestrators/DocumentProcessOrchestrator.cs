@@ -26,7 +26,7 @@ public class DocumentProcessOrchestrator
             Identificacion = new Identificacion
             {
                 Documento = entrada.Documento.Name,
-                FechaProceso = DateTime.UtcNow
+                FechaProceso = context.CurrentUtcDateTime
             },
             Integridad = new Integridad()
         };
