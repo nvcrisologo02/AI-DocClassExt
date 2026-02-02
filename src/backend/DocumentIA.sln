@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocumentIA.Data", "Document
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocumentIA.Tests", "DocumentIA.Tests\DocumentIA.Tests.csproj", "{308BAEB3-9A9A-4067-92B4-F4370F7E54B9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocumentIA.Tests.Unit", "DocumentIA.Tests.Unit\DocumentIA.Tests.Unit.csproj", "{143480EC-F1C7-4A68-8669-B8A06CC6116B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{308BAEB3-9A9A-4067-92B4-F4370F7E54B9}.Release|x64.Build.0 = Release|Any CPU
 		{308BAEB3-9A9A-4067-92B4-F4370F7E54B9}.Release|x86.ActiveCfg = Release|Any CPU
 		{308BAEB3-9A9A-4067-92B4-F4370F7E54B9}.Release|x86.Build.0 = Release|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Debug|x64.Build.0 = Debug|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Debug|x86.Build.0 = Debug|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Release|x64.ActiveCfg = Release|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Release|x64.Build.0 = Release|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Release|x86.ActiveCfg = Release|Any CPU
+		{143480EC-F1C7-4A68-8669-B8A06CC6116B}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
