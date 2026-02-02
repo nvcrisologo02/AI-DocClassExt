@@ -1,0 +1,59 @@
+namespace DocumentIA.Core.Validation.Models
+{
+    public class ValidationResult
+    {
+        public bool IsValid { get; set; }
+        public ValidationSeverity Severity { get; set; }
+        public string Message { get; set; }
+        public string FieldName { get; set; }
+        public string SuggestionString { get; set; }
+        public Dictionary<string, object> Metadata { get; set; }
+
+        public ValidationResult()
+        {
+            Metadata = new Dictionary<string, object>();
+        }
+    }
+
+    public enum ValidationSeverity
+    {
+        Info,
+        Warning,
+        Error
+    }
+
+    public class ValidationReport
+    {
+        public bool IsValid { get; set; }
+        public List<ValidationResult> Results { get; set; }
+        public int ErrorCount { get; set; }
+        public int WarningCount { get; set; }
+        public int InfoCount { get; set; }
+
+        public ValidationReport()
+        {
+            Results = new List<ValidationResult>();
+        }
+
+        public void AddResult(ValidationResult result)
+        {
+            Results.Add(result);
+            
+            switch (result.Severity)
+            {
+                case ValidationSeverity.Error:
+                    ErrorCount++;
+                    break;
+                case ValidationSeverity.Warning:
+                    WarningCount++;
+                    break;
+                case ValidationSeverity.Info:
+                    InfoCount++;
+                    break;
+            }
+
+            // Si hay al menos un error, el reporte no es valido
+            IsValid = ErrorCount == 0;
+        }
+    }
+}
