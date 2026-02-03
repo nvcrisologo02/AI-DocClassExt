@@ -15,14 +15,20 @@ namespace DocumentIA.Core.Validation.Rules
 
         public override string RuleName => "CatastralReferenceValidator";
 
-        public override ValidationResult Validate(string fieldName, object value, Dictionary<string, object> context = null)
+        public override ValidationResult Validate(string fieldName, object? value, Dictionary<string, object?>? context = null)
         {
-            if (value == null || string.IsNullOrWhiteSpace(value.ToString()))
+            if (value == null)
             {
                 return CreateSuccessResult(fieldName);
             }
 
-            string catastralRef = value.ToString().ToUpper().Trim().Replace(" ", "");
+            var catastralRef = value.ToString();
+            if (string.IsNullOrWhiteSpace(catastralRef))
+            {
+                return CreateSuccessResult(fieldName);
+            }
+
+            catastralRef = catastralRef.ToUpperInvariant().Trim().Replace(" ", "");
 
             if (catastralRef.Length != 20)
             {

@@ -1,60 +1,58 @@
 using System.Collections.Generic;
+using DocumentIA.Core.Validation;
 using DocumentIA.Core.Validation.Models;
+using DocumentIA.Core.Validation.Rules;
+using FluentAssertions;
+using Xunit;
 
-namespace DocumentIA.Core.Validation
+
+#nullable disable
+
+namespace DocumentIA.Tests.Unit.Validation
 {
-    public class ValidationEngine
+    public class ValidationEngineTests
     {
-        private readonly Dictionary<string, List<IValidationRule>> _fieldRules;
-
-        public ValidationEngine()
+        [Fact]
+        public void ValidateDocument_NoRules_ReturnsValidReport()
         {
-            _fieldRules = new Dictionary<string, List<IValidationRule>>();
+            var engine = new ValidationEngine();
+            var data = new Dictionary<string, object?> { { "Campo", "valor" } };
+
+            var report = engine.ValidateDocument(data);
+
+            report.IsValid.Should().BeTrue();
+            report.Results.Should().BeEmpty();
+            report.ErrorCount.Should().Be(0);
         }
 
-        public ValidationEngine AddRule(string fieldName, IValidationRule rule)
+        [Fact]
+        public void ValidateDocument_MissingRequiredField_ReturnsError()
         {
-            if (!_fieldRules.ContainsKey(fieldName))
-            {
-                _fieldRules[fieldName] = new List<IValidationRule>();
-            }
+            var engine = new ValidationEngine()
+                .AddRule("Campo", new RequiredFieldValidator());
 
-            _fieldRules[fieldName].Add(rule);
-            return this;
+            var data = new Dictionary<string, object?>();
+
+            var report = engine.ValidateDocument(data);
+
+            report.IsValid.Should().BeFalse();
+            report.Results.Should().HaveCount(1);
+            report.ErrorCount.Should().Be(1);
+            report.Results[0].FieldName.Should().Be("Campo");
         }
 
-        public ValidationReport ValidateDocument(Dictionary<string, object> extractedData, Dictionary<string, object> context = null)
+        [Fact]
+        public void ValidateDocument_ValidField_ReturnsNoErrors()
         {
-            var report = new ValidationReport();
+            var engine = new ValidationEngine()
+                .AddRule("Campo", new RequiredFieldValidator());
 
-            foreach (var fieldConfig in _fieldRules)
-            {
-                string fieldName = fieldConfig.Key;
-                List<IValidationRule> rules = fieldConfig.Value;
+            var data = new Dictionary<string, object?> { { "Campo", "ok" } };
 
-                object fieldValue = extractedData.ContainsKey(fieldName) 
-                    ? extractedData[fieldName] 
-                    : null;
+            var report = engine.ValidateDocument(data);
 
-                foreach (var rule in rules)
-                {
-                    var result = rule.Validate(fieldName, fieldValue, context);
-                    
-                    // IMPORTANTE: Solo agregar resultados INVALIDOS al reporte
-                    if (!result.IsValid)
-                    {
-                        report.AddResult(result);
-                        
-                        // Si es error critico, parar validacion de este campo
-                        if (result.Severity == ValidationSeverity.Error)
-                        {
-                            break;
-                        }
-                    }
-                }
-            }
-
-            return report;
+            report.IsValid.Should().BeTrue();
+            report.Results.Should().BeEmpty();
         }
     }
 }

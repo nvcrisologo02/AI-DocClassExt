@@ -92,7 +92,9 @@ public class DocumentProcessOrchestrator
             var validacionInput = new ValidacionInput
             {
                 Tipologia = salida.Identificacion.Tipologia,
-                DatosExtraidos = resultadoExtraccion
+                DatosExtraidos = resultadoExtraccion.ToDictionary(
+                    kvp => kvp.Key,
+                    kvp => (object?)kvp.Value)
             };
 
             var resultadoValidacion = await context.CallActivityAsync<DetalleValidacion>(

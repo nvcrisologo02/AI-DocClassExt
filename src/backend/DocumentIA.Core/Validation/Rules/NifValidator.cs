@@ -14,14 +14,20 @@ namespace DocumentIA.Core.Validation.Rules
 
         public override string RuleName => "NifCifNieValidator";
 
-        public override ValidationResult Validate(string fieldName, object value, Dictionary<string, object> context = null)
+        public override ValidationResult Validate(string fieldName, object? value, Dictionary<string, object?>? context = null)
         {
-            if (value == null || string.IsNullOrWhiteSpace(value.ToString()))
+            if (value == null)
             {
                 return CreateSuccessResult(fieldName);
             }
 
-            string nifValue = value.ToString().ToUpper().Trim();
+            var nifValue = value.ToString();
+            if (string.IsNullOrWhiteSpace(nifValue))
+            {
+                return CreateSuccessResult(fieldName);
+            }
+
+            nifValue = nifValue.ToUpperInvariant().Trim();
 
             if (Regex.IsMatch(nifValue, NIF_PATTERN))
             {

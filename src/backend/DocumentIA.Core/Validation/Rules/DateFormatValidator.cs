@@ -16,7 +16,7 @@ namespace DocumentIA.Core.Validation.Rules
         public override string RuleName => "DateFormatValidator";
 
         public DateFormatValidator(
-            string[] acceptedFormats = null, 
+            string[]? acceptedFormats = null, 
             bool allowFutureDates = true, 
             bool allowPastDates = true)
         {
@@ -31,14 +31,20 @@ namespace DocumentIA.Core.Validation.Rules
             _allowPastDates = allowPastDates;
         }
 
-        public override ValidationResult Validate(string fieldName, object value, Dictionary<string, object> context = null)
+        public override ValidationResult Validate(string fieldName, object? value, Dictionary<string, object?>? context = null)
         {
-            if (value == null || string.IsNullOrWhiteSpace(value.ToString()))
+            if (value == null)
             {
                 return CreateSuccessResult(fieldName);
             }
 
-            string dateString = value.ToString().Trim();
+            var dateString = value.ToString();
+            if (string.IsNullOrWhiteSpace(dateString))
+            {
+                return CreateSuccessResult(fieldName);
+            }
+
+            dateString = dateString.Trim();
 
             if (!DateTime.TryParseExact(dateString, _acceptedFormats, 
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsedDate))

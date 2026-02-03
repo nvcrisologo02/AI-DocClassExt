@@ -21,7 +21,7 @@ namespace DocumentIA.Functions.Activities
         }
 
         [Function(nameof(ValidarActivity))]
-        public async Task<DetalleValidacion> Run(
+        public Task<DetalleValidacion> Run(
             [ActivityTrigger] ValidacionInput input)
         {
             _logger.LogInformation($"Validando documento de tipologia: {input.Tipologia}");
@@ -40,7 +40,7 @@ namespace DocumentIA.Functions.Activities
                 {
                     _logger.LogWarning(ex, $"No se encontro configuracion de validacion para {input.Tipologia}");
                     
-                    return new DetalleValidacion
+                    return Task.FromResult(new DetalleValidacion
                     {
                         TotalReglas = 0,
                         ReglasAplicadas = 0,
@@ -58,7 +58,7 @@ namespace DocumentIA.Functions.Activities
                             }
                         },
                         ConfianzaValidacion = 0.5
-                    };
+                    });
                 }
 
                 var report = engine.ValidateDocument(input.DatosExtraidos);
@@ -84,7 +84,7 @@ namespace DocumentIA.Functions.Activities
                         Math.Max(0.0, 1.0 - ((double)report.ErrorCount / Math.Max(report.Results.Count, 1)))
                 };
 
-                return detalle;
+                return Task.FromResult(detalle);
             }
             catch (Exception ex)
             {

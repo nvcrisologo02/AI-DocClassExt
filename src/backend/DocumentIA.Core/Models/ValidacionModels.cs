@@ -4,8 +4,8 @@ namespace DocumentIA.Core.Models
 {
     public class ValidacionInput
     {
-        public string Tipologia { get; set; }
-        public Dictionary<string, object> DatosExtraidos { get; set; }
+        public string Tipologia { get; set; } = string.Empty;
+        public Dictionary<string, object?> DatosExtraidos { get; set; } = new Dictionary<string, object?>();
     }
 
     public class DetalleValidacion
@@ -25,10 +25,10 @@ namespace DocumentIA.Core.Models
 
     public class ItemValidacion
     {
-        public string Campo { get; set; }
-        public string Estado { get; set; }
-        public string Severidad { get; set; }
-        public string Mensaje { get; set; }
-        public string Sugerencia { get; set; }
+        public string Campo { get; set; } = string.Empty;
+        public string Estado { get; set; } = string.Empty;
+        public string Severidad { get; set; } = string.Empty;
+        public string Mensaje { get; set; } = string.Empty;
+        public string Sugerencia { get; set; } = string.Empty;
     }
 }

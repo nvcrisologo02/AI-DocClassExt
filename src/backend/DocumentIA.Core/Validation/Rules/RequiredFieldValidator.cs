@@ -10,7 +10,7 @@ namespace DocumentIA.Core.Validation.Rules
     {
         public override string RuleName => "RequiredFieldValidator";
 
-        public override ValidationResult Validate(string fieldName, object value, Dictionary<string, object> context = null)
+        public override ValidationResult Validate(string fieldName, object? value, Dictionary<string, object?>? context = null)
         {
             if (value == null || 
                 (value is string str && string.IsNullOrWhiteSpace(str)))

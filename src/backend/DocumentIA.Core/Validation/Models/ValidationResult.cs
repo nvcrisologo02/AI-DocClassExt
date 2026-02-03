@@ -4,14 +4,14 @@ namespace DocumentIA.Core.Validation.Models
     {
         public bool IsValid { get; set; }
         public ValidationSeverity Severity { get; set; }
-        public string Message { get; set; }
-        public string FieldName { get; set; }
-        public string SuggestionString { get; set; }
-        public Dictionary<string, object> Metadata { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string FieldName { get; set; } = string.Empty;
+        public string SuggestionString { get; set; } = string.Empty;
+        public Dictionary<string, object?> Metadata { get; set; } = new Dictionary<string, object?>();
 
         public ValidationResult()
         {
-            Metadata = new Dictionary<string, object>();
+            Metadata = new Dictionary<string, object?>();
         }
     }
 

@@ -18,7 +18,7 @@ namespace DocumentIA.Core.Validation
         /// <param name="value">Valor del campo</param>
         /// <param name="context">Contexto adicional (documento completo, metadata, etc)</param>
         /// <returns>Resultado de la validacion</returns>
-        ValidationResult Validate(string fieldName, object value, Dictionary<string, object> context = null);
+        ValidationResult Validate(string fieldName, object? value, Dictionary<string, object?>? context = null);
     }
 
     /// <summary>
@@ -29,7 +29,7 @@ namespace DocumentIA.Core.Validation
         public abstract string RuleName { get; }
         public virtual ValidationSeverity Severity { get; set; } = ValidationSeverity.Error;
 
-        public abstract ValidationResult Validate(string fieldName, object value, Dictionary<string, object> context = null);
+        public abstract ValidationResult Validate(string fieldName, object? value, Dictionary<string, object?>? context = null);
 
         protected ValidationResult CreateSuccessResult(string fieldName)
         {
@@ -41,7 +41,7 @@ namespace DocumentIA.Core.Validation
             };
         }
 
-        protected ValidationResult CreateFailureResult(string fieldName, string message, string suggestion = null)
+        protected ValidationResult CreateFailureResult(string fieldName, string message, string? suggestion = null)
         {
             return new ValidationResult
             {

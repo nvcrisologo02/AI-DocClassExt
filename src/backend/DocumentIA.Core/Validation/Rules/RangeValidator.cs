@@ -19,14 +19,16 @@ namespace DocumentIA.Core.Validation.Rules
             _max = max;
         }
 
-        public override ValidationResult Validate(string fieldName, object value, Dictionary<string, object> context = null)
+        public override ValidationResult Validate(string fieldName, object? value, Dictionary<string, object?>? context = null)
         {
             if (value == null)
             {
                 return CreateSuccessResult(fieldName);
             }
 
-            if (!decimal.TryParse(value.ToString(), out decimal numericValue))
+            var valueString = value.ToString();
+
+            if (string.IsNullOrWhiteSpace(valueString) || !decimal.TryParse(valueString, out decimal numericValue))
             {
                 return CreateFailureResult(fieldName,
                     $"El valor '{value}' no es numerico",

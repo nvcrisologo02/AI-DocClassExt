@@ -33,7 +33,7 @@ namespace DocumentIA.Core.Configuration
             var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(jsonContent, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
-            });
+            }) ?? throw new InvalidDataException($"Configuracion invalida para tipologia '{tipologiaId}' en {configPath}");
 
             return config;
         }
@@ -46,7 +46,9 @@ namespace DocumentIA.Core.Configuration
             var config = LoadConfig(tipologiaId);
             var engine = new ValidationEngine();
 
-            foreach (var fieldConfig in config.Fields)
+            var fieldConfigs = config.Fields ?? new List<FieldValidationConfig>();
+
+            foreach (var fieldConfig in fieldConfigs)
             {
                 // Agregar validador de campo requerido
                 if (fieldConfig.Required)
@@ -55,7 +57,9 @@ namespace DocumentIA.Core.Configuration
                 }
 
                 // Agregar reglas especificas
-                foreach (var ruleConfig in fieldConfig.Rules)
+                var ruleConfigs = fieldConfig.Rules ?? new List<ValidationRuleConfig>();
+
+                foreach (var ruleConfig in ruleConfigs)
                 {
                     IValidationRule rule = CreateRuleFromConfig(ruleConfig);
                     engine.AddRule(fieldConfig.Name, rule);
@@ -98,15 +102,19 @@ namespace DocumentIA.Core.Configuration
             return rule;
         }
 
-        private T GetParameter<T>(Dictionary<string, object> parameters, string key, T defaultValue = default)
+        private T GetParameter<T>(Dictionary<string, object?>? parameters, string key, T defaultValue = default!)
         {
-            if (parameters.ContainsKey(key))
+            if (parameters != null && parameters.TryGetValue(key, out var value))
             {
-                var value = parameters[key];
-                
+                if (value is null)
+                {
+                    return defaultValue;
+                }
+
                 if (value is JsonElement jsonElement)
                 {
-                    return JsonSerializer.Deserialize<T>(jsonElement.GetRawText());
+                    var parsed = JsonSerializer.Deserialize<T>(jsonElement.GetRawText());
+                    return parsed is null ? defaultValue : parsed;
                 }
                 
                 return (T)Convert.ChangeType(value, typeof(T));

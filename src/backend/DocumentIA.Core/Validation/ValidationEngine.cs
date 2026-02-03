@@ -23,7 +23,7 @@ namespace DocumentIA.Core.Validation
             return this;
         }
 
-        public ValidationReport ValidateDocument(Dictionary<string, object> extractedData, Dictionary<string, object> context = null)
+        public ValidationReport ValidateDocument(Dictionary<string, object?> extractedData, Dictionary<string, object?>? context = null)
         {
             var report = new ValidationReport();
 
@@ -32,8 +32,8 @@ namespace DocumentIA.Core.Validation
                 string fieldName = fieldConfig.Key;
                 List<IValidationRule> rules = fieldConfig.Value;
 
-                object fieldValue = extractedData.ContainsKey(fieldName) 
-                    ? extractedData[fieldName] 
+                object? fieldValue = extractedData.TryGetValue(fieldName, out var value)
+                    ? value
                     : null;
 
                 foreach (var rule in rules)
