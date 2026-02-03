@@ -6,7 +6,7 @@ using FluentAssertions;
 using Xunit;
 
 
-#nullable disable
+#nullable enable
 
 namespace DocumentIA.Tests.Unit.Validation
 {

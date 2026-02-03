@@ -48,7 +48,7 @@ namespace DocumentIA.Core.Validation
                 IsValid = false,
                 FieldName = fieldName,
                 Message = message,
-                SuggestionString = suggestion,
+                SuggestionString = suggestion ?? string.Empty,
                 Severity = Severity
             };
         }
