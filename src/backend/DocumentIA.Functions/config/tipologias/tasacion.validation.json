@@ -19,7 +19,7 @@
       ]
     },
     {
-      "name": "FechaTasacion",
+      "name": "FechaDocumento",
       "type": "date",
       "required": true,
       "rules": [
@@ -27,7 +27,7 @@
           "ruleType": "date",
           "severity": "Error",
           "parameters": {
-            "formats": ["dd/MM/yyyy", "yyyy-MM-dd"],
+            "formats": [ "dd/MM/yyyy", "yyyy-MM-dd" ],
             "allowFuture": false,
             "allowPast": true
           }
