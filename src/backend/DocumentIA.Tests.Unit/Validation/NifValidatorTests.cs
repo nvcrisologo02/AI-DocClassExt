@@ -40,7 +40,7 @@ namespace DocumentIA.Tests.Unit.Validation
 
         [Theory]
         [InlineData("X0000000T", true)]   // X + 00000000 = 0, letra T
-        [InlineData("Y0000000Z", true)]   // Y + 10000000 = 10000000 % 23 = 10, letra K (cambiar a K!)
+        [InlineData("Y0000000Z", true)]   // Y + 10000000 = 10000000 % 23 = 14, letra Z
         [InlineData("X1234567L", true)]
         [InlineData("X1234567A", false)]  // Letra incorrecta
         public void Validate_Nie_ReturnsExpectedResult(string nie, bool expectedValid)

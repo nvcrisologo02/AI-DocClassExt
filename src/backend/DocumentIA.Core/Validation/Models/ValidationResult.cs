@@ -33,6 +33,8 @@ namespace DocumentIA.Core.Validation.Models
         public ValidationReport()
         {
             Results = new List<ValidationResult>();
+            // Sin resultados (sin errores) el reporte es valido por defecto.
+            IsValid = true;
         }
 
         public void AddResult(ValidationResult result)
