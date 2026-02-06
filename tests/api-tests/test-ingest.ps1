@@ -8,8 +8,8 @@ $endpoint = "http://localhost:7071/api/IngestDocument"
 $body = @{
     instrucciones = @{
         expectedType = "Tasacion"
-        skipDuplicateCheck = $false
-        forceReprocess = $false
+        skipDuplicateCheck = $true
+        forceReprocess = $true
         classification = @{
             model = "auto"
             umbral = 0.85
@@ -22,7 +22,7 @@ $body = @{
     documento = @{
         name = "tasacion_test_001.pdf"
         content = @{
-            base64 = "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1szIDAgUl0+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDYxMiA3OTJdL1BhcmVudCAyIDAgUi9SZXNvdXJjZXM8PD4+Pj4KZW5kb2JqCnhyZWYKMCA0CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDY0IDAwMDAwIG4gCjAwMDAwMDAxMjEgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDQvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoyMDIKJSVFT0Y="
+            base64 = "SGVsbG8gd29ybGQh"
         }
     }
     trazabilidad = @{

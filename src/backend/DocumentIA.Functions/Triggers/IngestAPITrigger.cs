@@ -28,7 +28,12 @@ public class IngestAPITrigger
         {
             // Leer el body
             var requestBody = await req.ReadAsStringAsync();
-            var contratoEntrada = JsonSerializer.Deserialize<ContratoEntrada>(requestBody!);
+            var contratoEntrada = JsonSerializer.Deserialize<ContratoEntrada>(
+                requestBody!,
+                new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
 
             if (contratoEntrada == null)
             {
