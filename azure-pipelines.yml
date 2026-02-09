@@ -1,0 +1,23 @@
+trigger:
+- '*'
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+- group: github-secrets
+
+steps:
+- checkout: self
+  fetchDepth: 0
+  persistCredentials: true
+
+- script: |
+    set -e
+
+    git config --global user.email "sync-bot@company.local"
+    git config --global user.name "AzureDevOps Sync Bot"
+
+    git remote add github https://$(GITHUB_PAT)@github.com/nvcrisologo02/AI-DocClassExt.git
+    git push github --mirror
+  displayName: 'Mirror Azure DevOps → GitHub'
