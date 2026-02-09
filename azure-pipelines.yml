@@ -18,15 +18,14 @@ steps:
     git config --global user.email "sync-bot@company.local"
     git config --global user.name "AzureDevOps Sync Bot"
  
-    # Traer TODAS las ramas del repo de Azure DevOps
-    git fetch --all
+    # Traer TODAS las ramas del repo de Azure DevOps (incluye ramas remotas)
+    git fetch origin "+refs/heads/*:refs/remotes/origin/*" --prune
 
     git remote remove github || true
     git remote add github https://$(GITHUB_PAT)@github.com/nvcrisologo02/AI-DocClassExt.git
- 
+  
 
-
-    # Empujar TODAS las ramas y tags
-    git push github --all
+    # Empujar TODAS las ramas remotas y tags
+    git push github "refs/remotes/origin/*:refs/heads/*"
     git push github --tags
   displayName: 'Sync Azure DevOps → GitHub'
