@@ -18,7 +18,10 @@ steps:
     git config --global user.email "sync-bot@company.local"
     git config --global user.name "AzureDevOps Sync Bot"
 
+    git remote remove github || true
     git remote add github https://$(GITHUB_PAT)@github.com/nvcrisologo02/AI-DocClassExt.git
-    git push github --mirror
-    git push github origin/master:refs/heads/master || true
-  displayName: 'Mirror Azure DevOps → GitHub'
+
+    # Empujar todas las ramas y tags (SIN borrar default branch)
+    git push github --all
+    git push github --tags
+  displayName: 'Sync Azure DevOps → GitHub'
