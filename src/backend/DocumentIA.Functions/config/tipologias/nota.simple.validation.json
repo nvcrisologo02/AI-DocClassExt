@@ -1,0 +1,79 @@
+{
+  "tipologiaId": "notasimple",
+  "tipologiaNombre": "Nota Simple",
+  "version": "1.0",
+  "fields": [
+    {
+      "name": "superficie",
+      "type": "decimal",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Error",
+          "parameters": {
+            "min": 0,
+            "max": 200000000
+          }
+        }
+      ]
+    },
+    {
+      "name": "FechaDocumento",
+      "type": "date",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "date",
+          "severity": "Error",
+          "parameters": {
+            "formats": [ "dd/MM/yyyy", "yyyy-MM-dd" ],
+            "allowFuture": false,
+            "allowPast": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "NIF",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "nif",
+          "severity": "Warning",
+          "parameters": {}
+        }
+      ]
+    },
+    {
+      "name": "Direccion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "RuleType": "address",
+          "Parameters": {
+            "minLength": 6,
+            "maxLength": 160,
+            "requireStreetNumber": true,
+            "requireMunicipality": true,
+            "requireProvince": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "ReferenciaCatastral",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "catastral",
+          "severity": "Warning",
+          "parameters": {}
+        }
+      ]
+    }
+  ]
+}

@@ -1,17 +1,25 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using DocumentIA.Functions.Abstractions;
 
 namespace DocumentIA.Functions.Activities;
 
+/// <summary>
+/// Activity que extrae datos de documentos.
+/// Utiliza una implementación de IExtraerDataProvider para obtener los datos.
+/// Actualmente utiliza MockExtraerDataProvider para pruebas, 
+/// pero puede ser reemplazada por una implementación real usando Azure AI Document Intelligence.
+/// </summary>
 public class ExtraerActivity
 {
     private readonly ILogger<ExtraerActivity> _logger;
-    // TODO: Inyectar servicio de Azure AI Document Intelligence
+    private readonly IExtraerDataProvider _dataProvider;
 
-    public ExtraerActivity(ILogger<ExtraerActivity> logger)
+    public ExtraerActivity(ILogger<ExtraerActivity> logger, IExtraerDataProvider dataProvider)
     {
         _logger = logger;
+        _dataProvider = dataProvider;
     }
 
     [Function("ExtraerActivity")]
@@ -24,15 +32,8 @@ public class ExtraerActivity
         
         var tipologia = inputData?["Tipologia"].GetString() ?? "Desconocida";
 
-        // Mock de datos extraídos según tipología
-        var datosExtraidos = new Dictionary<string, object>
-        {
-            ["FechaDocumento"] = "24/10/2025",
-            ["Emisor"] = "Tasadora Ejemplo S.L.",
-            ["ValorTasado"] = 350000.00,
-            ["Direccion"] = "Calle Alcalá 45, 28014 Madrid",
-            ["ReferenciaCatastral"] = "1234567890ABCDEFGH"
-        };
+        // Obtener datos a través del proveedor inyectado
+        var datosExtraidos = _dataProvider.ObtenerDatos(tipologia);
 
         _logger.LogInformation($"Extracción completada para tipología: {tipologia}");
         return datosExtraidos;
