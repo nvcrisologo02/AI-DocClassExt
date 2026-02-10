@@ -1,10 +1,10 @@
 {
-  "tipologiaId": "tasacion",
-  "tipologiaNombre": "Tasacion",
+  "tipologiaId": "notasimple",
+  "tipologiaNombre": "Nota Simple",
   "version": "1.0",
   "fields": [
     {
-      "name": "ValorTasado",
+      "name": "superficie",
       "type": "decimal",
       "required": true,
       "rules": [
@@ -12,8 +12,8 @@
           "ruleType": "range",
           "severity": "Error",
           "parameters": {
-            "min": 1000,
-            "max": 2000000
+            "min": 0,
+            "max": 200000000
           }
         }
       ]
@@ -34,23 +34,6 @@
         }
       ]
     },
-     {
-      "name": "Direccion",
-      "type": "string",
-      "required": false,
-      "rules": [
-        {
-          "ruleType": "address",
-          "parameters": {
-            "minLength": 6,
-            "maxLength": 160,
-            "requireStreetNumber": true,
-            "requireMunicipality": true,
-            "requireProvince": true
-          }
-        }
-      ]
-    },
     {
       "name": "NIF",
       "type": "string",
@@ -60,6 +43,23 @@
           "ruleType": "nif",
           "severity": "Warning",
           "parameters": {}
+        }
+      ]
+    },
+    {
+      "name": "Direccion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "RuleType": "address",
+          "Parameters": {
+            "minLength": 6,
+            "maxLength": 160,
+            "requireStreetNumber": true,
+            "requireMunicipality": true,
+            "requireProvince": true
+          }
         }
       ]
     },

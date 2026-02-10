@@ -84,6 +84,13 @@ namespace DocumentIA.Core.Configuration
                     allowFutureDates: GetParameter<bool>(ruleConfig.Parameters, "allowFuture", true),
                     allowPastDates: GetParameter<bool>(ruleConfig.Parameters, "allowPast", true)
                 ),
+                "address" => new Validation.Rules.AddressValidator(
+                    minLength: GetParameter<int>(ruleConfig.Parameters, "minLength", 5),
+                    maxLength: GetParameter<int>(ruleConfig.Parameters, "maxLength", 260),
+                    requireStreetNumber: GetParameter<bool>(ruleConfig.Parameters, "requireStreetNumber", true),
+                    requireMunicipality: GetParameter<bool>(ruleConfig.Parameters, "requireMunicipality", false),
+                    requireProvince: GetParameter<bool>(ruleConfig.Parameters, "requireProvince", false)
+                ),
                 _ => throw new NotSupportedException($"Tipo de regla '{ruleConfig.RuleType}' no soportado")
             };
 
