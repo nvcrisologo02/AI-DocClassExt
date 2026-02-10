@@ -54,6 +54,17 @@ public class PersistirActivity
                 await _documentoRepository.UpdateAsync(documentoExistente);
 
                 _logger.LogInformation($"Documento actualizado: ID {documentoExistente.Id}");
+
+                // Registrar auditoría para actualización/reprocesamiento
+                await _auditoriaRepository.AddAsync(new AuditoriaEntity
+                {
+                    DocumentoId = documentoExistente.Id,
+                    Accion = "Reprocesamiento",
+                    Nivel = salida.Resultado.Estado == "OK" ? "Info" : "Warning",
+                    Mensaje = $"Documento reprocesado con estado: {salida.Resultado.Estado}",
+                    DetallesJson = JsonSerializer.Serialize(salida.Resultado),
+                    FechaHora = DateTime.UtcNow
+                });
             }
             else
             {
