@@ -7,6 +7,8 @@ using Microsoft.Extensions.Logging;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Services;
+using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Mocks;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -31,6 +33,9 @@ var host = new HostBuilder()
 
         // Services
         services.AddSingleton<IBlobStorageService, BlobStorageService>();
+
+        // Data Providers (actualmente usando mock, reemplazar por implementación real en el futuro)
+        services.AddSingleton<IExtraerDataProvider, MockExtraerDataProvider>();
 
         // Logging
         services.AddLogging(builder =>

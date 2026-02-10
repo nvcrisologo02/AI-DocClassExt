@@ -56,13 +56,31 @@ namespace DocumentIA.Core.Configuration
                     engine.AddRule(fieldConfig.Name, new Validation.Rules.RequiredFieldValidator());
                 }
 
-                // Agregar reglas especificas
-                var ruleConfigs = fieldConfig.Rules ?? new List<ValidationRuleConfig>();
+                // Validar según el tipo de campo
+                var fieldType = fieldConfig.Type.ToLower();
 
-                foreach (var ruleConfig in ruleConfigs)
+                if (fieldType == "boolean")
                 {
-                    IValidationRule rule = CreateRuleFromConfig(ruleConfig);
-                    engine.AddRule(fieldConfig.Name, rule);
+                    engine.AddRule(fieldConfig.Name, new Validation.Rules.BooleanValidator());
+                }
+                else if (fieldType == "array")
+                {
+                    if (fieldConfig.Items != null)
+                    {
+                        var arrayValidator = new Validation.Rules.ArrayValidator(fieldConfig.Items);
+                        engine.AddRule(fieldConfig.Name, arrayValidator);
+                    }
+                }
+                else
+                {
+                    // Agregar reglas especificas para campos simples
+                    var ruleConfigs = fieldConfig.Rules ?? new List<ValidationRuleConfig>();
+
+                    foreach (var ruleConfig in ruleConfigs)
+                    {
+                        IValidationRule rule = CreateRuleFromConfig(ruleConfig);
+                        engine.AddRule(fieldConfig.Name, rule);
+                    }
                 }
             }
 
@@ -90,6 +108,19 @@ namespace DocumentIA.Core.Configuration
                     requireStreetNumber: GetParameter<bool>(ruleConfig.Parameters, "requireStreetNumber", true),
                     requireMunicipality: GetParameter<bool>(ruleConfig.Parameters, "requireMunicipality", false),
                     requireProvince: GetParameter<bool>(ruleConfig.Parameters, "requireProvince", false)
+                ),
+                "enum" => new Validation.Rules.EnumValidator(
+                    values: GetParameter<List<string>>(ruleConfig.Parameters, "values", new List<string>()),
+                    caseSensitive: GetParameter<bool>(ruleConfig.Parameters, "caseSensitive", false)
+                ),
+                "regex" => new Validation.Rules.RegexValidator(
+                    pattern: GetParameter<string>(ruleConfig.Parameters, "pattern", "")
+                ),
+                "minlength" => new Validation.Rules.LengthValidator(
+                    minLength: GetParameter<int?>(ruleConfig.Parameters, "value")
+                ),
+                "maxlength" => new Validation.Rules.LengthValidator(
+                    maxLength: GetParameter<int?>(ruleConfig.Parameters, "value")
                 ),
                 _ => throw new NotSupportedException($"Tipo de regla '{ruleConfig.RuleType}' no soportado")
             };

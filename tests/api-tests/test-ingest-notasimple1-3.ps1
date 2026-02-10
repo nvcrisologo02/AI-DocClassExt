@@ -1,4 +1,4 @@
-# Script de prueba para invocar la funcion
+# Script de prueba para invocar la funcion con Nota Simple 1.3
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 
@@ -7,7 +7,7 @@ $endpoint = "http://localhost:7071/api/IngestDocument"
 
 $body = @{
     instrucciones = @{
-        expectedType = "Nota Simple"
+        expectedType = "notasimple1.3"
         skipDuplicateCheck = $true
         forceReprocess = $true
         classification = @{
@@ -20,23 +20,23 @@ $body = @{
         }
     }
     documento = @{
-        name = "NT_test_001.pdf"
+        name = "NT_notasimple13_001.pdf"
         content = @{
             base64 = "SGVsbG8gd29ybGQh"
         }
     }
     trazabilidad = @{
-        correlationId = "TEST-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
+        correlationId = "NOTASIMPLE13-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
         submittedBy = "usuario.prueba@sareb.es"
         idGDC = $null
-        idActivo = "123456"
+        idActivo = "NT-13-001-2025"
     }
 } | ConvertTo-Json -Depth 10
 
 
 Write-Host ""
 Write-Host "========================================"
-Write-Host "  Probando Azure Functions MVP"
+Write-Host "  Prueba Nota Simple 1.3"
 Write-Host "========================================"
 Write-Host ""
 
@@ -65,9 +65,9 @@ try {
 
 
     # Guardar instance ID
-    $response.instanceId | Out-File "last-instance-id.txt" -Encoding UTF8
+    $response.instanceId | Out-File "last-instance-id-notasimple13.txt" -Encoding UTF8
     Write-Host ""
-    Write-Host "[OK] Instance ID guardado en last-instance-id.txt"
+    Write-Host "[OK] Instance ID guardado en last-instance-id-notasimple13.txt"
 
 
     # Esperar y consultar estado hasta que complete
@@ -129,18 +129,66 @@ try {
         $status.output | ConvertTo-Json -Depth 10
         Write-Host ""
         
-        # Mostrar resumen
+        # Mostrar resumen específico para Nota Simple 1.3
         if ($status.output.Identificacion) {
             Write-Host "========================================"
-            Write-Host "  RESUMEN"
+            Write-Host "  RESUMEN NOTA SIMPLE 1.3"
             Write-Host "========================================"
             Write-Host "Documento      : $($status.output.Identificacion.Documento)"
             Write-Host "Tipologia      : $($status.output.Identificacion.Tipologia)"
             Write-Host "Estado         : $($status.output.Resultado.Estado)"
             Write-Host "Confianza      : $($status.output.Resultado.ConfianzaGlobal)"
             Write-Host "SHA256         : $($status.output.Integridad.SHA256)"
-            Write-Host "Modelo Clasif. : $($status.output.DetalleEjecucion.Clasificacion.Modelo)"
-            Write-Host "Confianza Cls. : $($status.output.DetalleEjecucion.Clasificacion.Confianza)"
+            Write-Host ""
+            
+            # Si hay datos extraídos, mostrar informacion específica de NotaSimple 1.3
+            if ($status.output.DatosExtraidos) {
+                Write-Host "--- Datos Extraidos ---"
+                Write-Host "Finca Registral    : $($status.output.DatosExtraidos.FincaRegistral)"
+                Write-Host "Registro Propiedad : $($status.output.DatosExtraidos.RegistroPropiedad)"
+                Write-Host "Municipio          : $($status.output.DatosExtraidos.MunicipioRegistro)"
+                Write-Host "Fecha Documento    : $($status.output.DatosExtraidos.FechaDocumento)"
+                Write-Host "Direccion          : $($status.output.DatosExtraidos.Direccion)"
+                Write-Host "Referencia Catastral : $($status.output.DatosExtraidos.ReferenciaCatastral)"
+                Write-Host "Tipologia Inmueble : $($status.output.DatosExtraidos.TipologiaInmueble)"
+                Write-Host "Superficie         : $($status.output.DatosExtraidos.superficie) $($status.output.DatosExtraidos.UnidadSuperficie)"
+                Write-Host "Titulares          : $($status.output.DatosExtraidos.Titular)"
+                Write-Host "NIF                : $($status.output.DatosExtraidos.NIF)"
+                Write-Host "Derecho Titularidad: $($status.output.DatosExtraidos.DerechoTitularidad)"
+                Write-Host "Cuota Participacion: $($status.output.DatosExtraidos.CuotaParticipacion)"
+                Write-Host "Ocupacion          : $($status.output.DatosExtraidos.Ocupacion)"
+                Write-Host ""
+                
+                # Mostrar Anejos si existen
+                if ($status.output.DatosExtraidos.Anejos -and $status.output.DatosExtraidos.Anejos.Count -gt 0) {
+                    Write-Host "--- Anejos ---"
+                    foreach ($idx in 0..($status.output.DatosExtraidos.Anejos.Count - 1)) {
+                        $anejo = $status.output.DatosExtraidos.Anejos[$idx]
+                        Write-Host "  Anejo $($idx + 1):"
+                        Write-Host "    Tipo        : $($anejo.tipo)"
+                        Write-Host "    Descripcion : $($anejo.descripcion)"
+                        Write-Host "    Superficie  : $($anejo.superficie) m2"
+                    }
+                    Write-Host ""
+                }
+                
+                # Mostrar Cargas si existen
+                if ($status.output.DatosExtraidos.Cargas -and $status.output.DatosExtraidos.Cargas.Count -gt 0) {
+                    Write-Host "--- Cargas ---"
+                    foreach ($idx in 0..($status.output.DatosExtraidos.Cargas.Count - 1)) {
+                        $carga = $status.output.DatosExtraidos.Cargas[$idx]
+                        Write-Host "  Carga $($idx + 1):"
+                        Write-Host "    Tipo                    : $($carga.tipo)"
+                        Write-Host "    Descripcion             : $($carga.descripcion)"
+                        Write-Host "    Importe Max Responsabil.: $($carga.importeMaxResponsabilidad)"
+                        Write-Host "    Fecha Inscripcion       : $($carga.fechaInscripcion)"
+                    }
+                    Write-Host ""
+                }
+            }
+            
+            Write-Host "Modelo Clasif.     : $($status.output.DetalleEjecucion.Clasificacion.Modelo)"
+            Write-Host "Confianza Cls.     : $($status.output.DetalleEjecucion.Clasificacion.Confianza)"
             Write-Host ""
         }
         

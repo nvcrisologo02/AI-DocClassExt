@@ -17,13 +17,30 @@ namespace DocumentIA.Core.Configuration
     public class FieldValidationConfig
     {
         public string Name { get; set; } = string.Empty;
-        public string Type { get; set; } = string.Empty; // decimal, string, date, etc
+        public string Type { get; set; } = string.Empty; // decimal, string, date, array, object, etc
         public bool Required { get; set; }
         public List<ValidationRuleConfig> Rules { get; set; } = new List<ValidationRuleConfig>();
+        
+        // Para soportar arrays y objetos anidados
+        public ItemsConfig? Items { get; set; }
 
         public FieldValidationConfig()
         {
             Rules = new List<ValidationRuleConfig>();
+        }
+    }
+
+    /// <summary>
+    /// Configuración para items dentro de arrays
+    /// </summary>
+    public class ItemsConfig
+    {
+        public string Type { get; set; } = string.Empty; // object, string, decimal, etc
+        public List<FieldValidationConfig>? Properties { get; set; }
+
+        public ItemsConfig()
+        {
+            Properties = new List<FieldValidationConfig>();
         }
     }
 

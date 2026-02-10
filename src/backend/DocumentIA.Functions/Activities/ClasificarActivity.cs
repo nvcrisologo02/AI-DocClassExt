@@ -19,13 +19,42 @@ public class ClasificarActivity
     public ResultadoClasificacion Run([ActivityTrigger] object input)
     {
         _logger.LogInformation("Clasificando documento");
-
-        // Deserializar input
+        // Deserializar input y comprobar si las instrucciones incluyen un ExpectedType
         var inputJson = JsonSerializer.Serialize(input);
         var inputData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson);
 
-        // Por ahora retornamos un resultado mock
-        // TODO: Integrar con Azure AI Document Intelligence
+        try
+        {
+            if (inputData != null && inputData.TryGetValue("Entrada", out var entradaEl))
+            {
+                if (entradaEl.ValueKind == JsonValueKind.Object && entradaEl.TryGetProperty("Instrucciones", out var instrEl))
+                {
+                    if (instrEl.ValueKind == JsonValueKind.Object && instrEl.TryGetProperty("ExpectedType", out var expectedEl))
+                    {
+                        var expected = expectedEl.GetString();
+                        if (!string.IsNullOrWhiteSpace(expected))
+                        {
+                            var forced = new ResultadoClasificacion
+                            {
+                                Modelo = "expectedtype-input",
+                                Confianza = 1.0,
+                                FallbackLLM = false,
+                                TipologiaDetectada = expected
+                            };
+
+                            _logger.LogInformation($"Clasificación forzada por ExpectedType: {expected}");
+                            return forced;
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Error leyendo ExpectedType del input de clasificación; continuando con clasificador mock.");
+        }
+
+        // Por ahora retornamos un resultado mock de clasificación
         var resultado = new ResultadoClasificacion
         {
             Modelo = "mock-classifier-v1",
