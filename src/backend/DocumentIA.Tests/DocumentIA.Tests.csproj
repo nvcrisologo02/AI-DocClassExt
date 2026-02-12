@@ -15,6 +15,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\DocumentIA.Core\DocumentIA.Core.csproj" />
+    <ProjectReference Include="..\DocumentIA.Data\DocumentIA.Data.csproj" />
+    <ProjectReference Include="..\DocumentIA.Functions\DocumentIA.Functions.csproj" />
+    <ProjectReference Include="..\DocumentIA.Plugins\DocumentIA.Plugins.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 

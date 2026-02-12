@@ -9,6 +9,8 @@ using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Mocks;
+using DocumentIA.Plugins.Integration;
+using System.IO;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -43,6 +45,24 @@ var host = new HostBuilder()
             builder.AddConsole();
             builder.SetMinimumLevel(LogLevel.Information);
         });
+  // Configurar HttpClientFactory para plugins
+        services.AddHttpClient();
+
+        // Registrar PluginManager como Singleton
+        services.AddSingleton<PluginManager>();
+
+        // Registrar PluginFactory
+        services.AddSingleton<PluginFactory>();
+
+        // Registrar PluginConfigLoader con path a configuraciones
+        services.AddSingleton<PluginConfigLoader>(provider =>
+        {
+            var logger = provider.GetRequiredService<ILogger<PluginConfigLoader>>();
+            string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
+            return new PluginConfigLoader(configPath, logger);
+        });
+
+
     })
     .Build();
 

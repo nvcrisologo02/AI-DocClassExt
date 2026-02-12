@@ -3,8 +3,8 @@ using DocumentIA.Functions.Abstractions;
 namespace DocumentIA.Functions.Mocks;
 
 /// <summary>
-/// Proveedor de datos de prueba (mocks) para la extracción de documentos.
-/// Se utilizará temporalmente hasta que se implemente el servicio real de Azure AI Document Intelligence.
+/// Proveedor de datos de prueba (mocks) para la extraccion de documentos.
+/// Se utilizara temporalmente hasta que se implemente el servicio real de Azure AI Document Intelligence.
 /// </summary>
 public class MockExtraerDataProvider : IExtraerDataProvider
 {
@@ -12,8 +12,8 @@ public class MockExtraerDataProvider : IExtraerDataProvider
     {
         return tipologia switch
         {
-            "notasimple1.2" => ObtenerDatosNotaSimple12(),
-            "notasimple1.3" => ObtenerDatosNotaSimple13(),
+            "nota.simple.1_2" => ObtenerDatosNotaSimple12(),
+            "nota.simple.1_3" => ObtenerDatosNotaSimple13(),
             _ => ObtenerDatosGenerico()
         };
     }
@@ -33,7 +33,7 @@ public class MockExtraerDataProvider : IExtraerDataProvider
             ["TipologiaInmueble"] = "Vivienda",
             ["superficie"] = 120.50m,
             ["UnidadSuperficie"] = "m2_construidos",
-            ["Titular"] = "Juan Pérez García",
+            ["Titular"] = "Juan Perez Garcia",
             ["NIF"] = "12345678A",
             ["DerechoTitularidad"] = "Pleno dominio",
             ["CuotaParticipacion"] = "1/1",
@@ -41,15 +41,15 @@ public class MockExtraerDataProvider : IExtraerDataProvider
             ["FechaInscripcion"] = "20/10/2024",
             ["TomoLibroFolio"] = "Tomo 5520, Libro 10245, Folio 125",
             ["VPO"] = false,
-            ["LimitacionesAdministrativas"] = "Ninguna limitación registrada",
+            ["LimitacionesAdministrativas"] = "Ninguna limitacion registrada",
             ["Ocupacion"] = "Libre",
-            ["Observaciones"] = "Nota simple extraída correctamente del Registro de la Propiedad",
+            ["Observaciones"] = "Nota simple extraida correctamente del Registro de la Propiedad",
             ["Anejos"] = new object[]
             {
                 new Dictionary<string, object>
                 {
                     ["tipo"] = "Trastero",
-                    ["descripcion"] = "Trastero en sótano del edificio",
+                    ["descripcion"] = "Trastero en sotano del edificio",
                     ["superficie"] = 8.5m
                 }
             },
@@ -70,58 +70,53 @@ public class MockExtraerDataProvider : IExtraerDataProvider
     {
         return new Dictionary<string, object>
         {
-            ["FincaRegistral"] = "78901",
-            ["RegistroPropiedad"] = "Registro de la Propiedad No. 7 de Barcelona",
-            ["MunicipioRegistro"] = "Barcelona",
-            ["IDUFIR_CRU"] = "08019A002002567",
-            ["FechaDocumento"] = "22/01/2025",
-            ["NumeroAsientoPresentacion"] = "ASI-2025-00089",
-            ["Direccion"] = "Paseo de Gracia 456, planta 8, puerta A, 08008 Barcelona",
-            ["ReferenciaCatastral"] = "0801904DJ3045300MT",
-            ["TipologiaInmueble"] = "Local",
-            ["superficie"] = 85.75m,
-            ["UnidadSuperficie"] = "m2_utiles",
-            ["Titular"] = "María González López y Carlos Redondo Fernández",
-            ["NIF"] = "87654321B",
-            ["DerechoTitularidad"] = "Copropiedad",
-            ["CuotaParticipacion"] = "1/2",
-            ["TituloAdquisicion"] = "Herencia",
-            ["FechaInscripcion"] = "10/01/2025",
-            ["TomoLibroFolio"] = "Tomo 3340, Libro 8765, Folio 234",
-            ["VPO"] = false,
-            ["LimitacionesAdministrativas"] = "Restricción para actividades comerciales",
-            ["Ocupacion"] = "Arrendado inscrito",
-            ["Observaciones"] = "Nota simple v1.3 con datos de copropiedad en actividad comercial",
-            ["Anejos"] = new object[]{
+            ["FincaRegistral"] = "107609",
+            ["RegistroPropiedad"] = null,
+            ["MunicipioRegistro"] = null,
+            ["IDUFIR_CRU"] = "18019000836709",
+            ["FechaDocumento"] = "02/02/2018",
+            ["NumeroAsientoPresentacion"] = "1048 del Diario 68 (12/05/2016)",
+            ["Direccion"] = "Avenida del Conocimiento 3",
+            ["ReferenciaCatastral"] = "6313502VG4161C0000RL",
+            ["CodigoPostal"] = "18001",
+            ["Provincia"] = "Granada",
+            ["Municipio"] = "Granada",
+            ["TipologiaInmueble"] = "Suelo",
+            ["superficie"] = 2130.12m,
+            ["UnidadSuperficie"] = "m2_construidos",
+            ["Anejos"] = null,
+            ["Linderos"] = "Norte, de Oeste a Este: Espacio Libre ELSG-7 del PP-S2 del PGOU 2001 de Granada y Avenida del Conocimiento; Este, de Norte a Sur: Avenida del Conocimiento y resto de la finca registral 95336 y de la catastral de referencia 6313501VG4161C0001LB; Sur, de Oeste a Este: calle Menendez Pelayo y resto de la finca registral 95336 y de la parcela catastral 6313501VG4161C0001LB; y Oeste, de Norte a Sur: Espacio libre ELSG-7 del PP-S2 del PGOU 2001 de Granada y calle Menendez Pelayo. Condiciones urbanisticas.- Clasificacion: Suelo Urbano. Uso: Equipamiento Terciario complementario en Ordenacion abierta. Edificabilidad: 4.730,45 m2 construidos de techo. Representacion grafica georreferenciada: Es la resultante del archivo GML adjunto a la certificacion catastral descriptiva y grafica con CSV: DH34HC42TJHR5PAR.",
+            ["CalificacionUrbanistica"] = "Suelo urbano",
+            ["Titular"] = "AYUNTAMIENTO DE GRANADA",
+            ["NIF"] = "P1808900C",
+            ["DerechoTitularidad"] = "Pleno dominio",
+            ["CuotaParticipacion"] = null,
+            ["FechaAdquisicion"] = null,
+            ["TituloAdquisicion"] = null,
+            ["FechaInscripcion"] = "09/06/2016",
+            ["TomoLibroFolio"] = "Tomo 2006, Libro 2023, Folio 33",
+            ["Cargas"] = new object[]
+            {
                 new Dictionary<string, object>
                 {
-                    ["tipo"] = "Parking",
-                    ["descripcion"] = "Dos plazas de parking en sótano -2",
-                    ["superficie"] = 25.0m
-                },
-                new Dictionary<string, object>
-                {
-                    ["tipo"] = "Almacén",
-                    ["descripcion"] = "Almacén anexo al local",
-                    ["superficie"] = 12.3m
+                    ["tipo"] = "Afeccion fiscal",
+                    ["descripcion"] = "AFECCION FISCAL: Afeccion fiscal durante el plazo de CINCO ANOS, al pago de la liquidacion o liquidaciones complementarias que, en su caso puedan girarse por el Impuesto de Transmisiones Patrimoniales y Actos Juridicos Documentados, habiendose declarado exenta, segun nota al margen de la inscripcion la de fecha 9 de Junio de 2016.",
+                    ["importeMaxResponsabilidad"] = null,
+                    ["fechaInscripcion"] = null,
+                    ["acreedor"] = null
                 }
             },
-            ["Cargas"] = new object[]{
-                new Dictionary<string, object>
-                {
-                    ["tipo"] = "Hipoteca",
-                    ["descripcion"] = "Hipoteca en favor de CaixaBank",
-                    ["importeMaxResponsabilidad"] = 75000m,
-                    ["fechaInscripcion"] = "10/01/2025"
-                },
-                new Dictionary<string, object>
-                {
-                    ["tipo"] = "Embargo",
-                    ["descripcion"] = "Embargo preventivo por sentencia judicial",
-                    ["importeMaxResponsabilidad"] = 5000m,
-                    ["fechaInscripcion"] = "15/02/2025"
-                }
-            }
+            ["VPO"] = null,
+            ["LimitacionesAdministrativas"] = null,
+            ["AfeccionesFiscales"] = "AFECCION FISCAL: Afeccion fiscal durante el plazo de CINCO ANOS, al pago de la liquidacion o liquidaciones complementarias que, en su caso puedan girarse por el Impuesto de Transmisiones Patrimoniales",
+            ["Ocupacion"] = null,
+            ["ArrendamientosInscritos"] = null,
+            ["HistorialInscripciones"] = null,
+            ["Observaciones"] = null,
+            ["NotificacionesJudiciales"] = null,
+            ["ValoracionCatastral"] = null,
+            ["DeudaIBI"] = null,
+            ["DeudaComunidad"] = null
         };
     }
 
@@ -132,7 +127,7 @@ public class MockExtraerDataProvider : IExtraerDataProvider
             ["FechaDocumento"] = "24/10/2025",
             ["Emisor"] = "Tasadora Ejemplo S.L.",
             ["ValorTasado"] = 350000.00,
-            ["Direccion"] = "Calle Alcalá 45, 28014 Madrid",
+            ["Direccion"] = "Calle Alcala 45, 28014 Madrid",
             ["ReferenciaCatastral"] = "1234567890ABCDEFGH"
         };
     }

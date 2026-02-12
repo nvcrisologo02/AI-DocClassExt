@@ -153,7 +153,6 @@ namespace DocumentIA.Core.Validation.Rules
         private ValidationResult Fail(string fieldName, string value, string message, string suggestion)
         {
             // Alineado con el estilo de tus reglas: Error por defecto; Warning/Info si lo decides
-            this.Severity = ValidationSeverity.Error; // propiedad de la base, igual que en Catastral cuando baja a Warning [5](https://srbo365-my.sharepoint.com/personal/ignacio_varas_sareb_es/Documents/Archivos%20de%20Microsoft%C2%A0Copilot%20Chat/CatastralReferenceValidator.cs)
             var vr = CreateFailureResult(fieldName, message, suggestion);
             // Metadatos útiles para diagnóstico
             vr.Metadata["input"] = value;
