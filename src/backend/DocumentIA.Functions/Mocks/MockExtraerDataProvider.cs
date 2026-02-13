@@ -71,8 +71,8 @@ public class MockExtraerDataProvider : IExtraerDataProvider
         return new Dictionary<string, object>
         {
             ["FincaRegistral"] = "107609",
-            ["RegistroPropiedad"] = null,
-            ["MunicipioRegistro"] = null,
+            ["RegistroPropiedad"] = null!,
+            ["MunicipioRegistro"] = null!,
             ["IDUFIR_CRU"] = "18019000836709",
             ["FechaDocumento"] = "02/02/2018",
             ["NumeroAsientoPresentacion"] = "1048 del Diario 68 (12/05/2016)",
@@ -84,15 +84,15 @@ public class MockExtraerDataProvider : IExtraerDataProvider
             ["TipologiaInmueble"] = "Suelo",
             ["superficie"] = 2130.12m,
             ["UnidadSuperficie"] = "m2_construidos",
-            ["Anejos"] = null,
+            ["Anejos"] = null!,
             ["Linderos"] = "Norte, de Oeste a Este: Espacio Libre ELSG-7 del PP-S2 del PGOU 2001 de Granada y Avenida del Conocimiento; Este, de Norte a Sur: Avenida del Conocimiento y resto de la finca registral 95336 y de la catastral de referencia 6313501VG4161C0001LB; Sur, de Oeste a Este: calle Menendez Pelayo y resto de la finca registral 95336 y de la parcela catastral 6313501VG4161C0001LB; y Oeste, de Norte a Sur: Espacio libre ELSG-7 del PP-S2 del PGOU 2001 de Granada y calle Menendez Pelayo. Condiciones urbanisticas.- Clasificacion: Suelo Urbano. Uso: Equipamiento Terciario complementario en Ordenacion abierta. Edificabilidad: 4.730,45 m2 construidos de techo. Representacion grafica georreferenciada: Es la resultante del archivo GML adjunto a la certificacion catastral descriptiva y grafica con CSV: DH34HC42TJHR5PAR.",
             ["CalificacionUrbanistica"] = "Suelo urbano",
             ["Titular"] = "AYUNTAMIENTO DE GRANADA",
             ["NIF"] = "P1808900C",
             ["DerechoTitularidad"] = "Pleno dominio",
-            ["CuotaParticipacion"] = null,
-            ["FechaAdquisicion"] = null,
-            ["TituloAdquisicion"] = null,
+            ["CuotaParticipacion"] = null!,
+            ["FechaAdquisicion"] = null!,
+            ["TituloAdquisicion"] = null!,
             ["FechaInscripcion"] = "09/06/2016",
             ["TomoLibroFolio"] = "Tomo 2006, Libro 2023, Folio 33",
             ["Cargas"] = new object[]
@@ -101,22 +101,22 @@ public class MockExtraerDataProvider : IExtraerDataProvider
                 {
                     ["tipo"] = "Afeccion fiscal",
                     ["descripcion"] = "AFECCION FISCAL: Afeccion fiscal durante el plazo de CINCO ANOS, al pago de la liquidacion o liquidaciones complementarias que, en su caso puedan girarse por el Impuesto de Transmisiones Patrimoniales y Actos Juridicos Documentados, habiendose declarado exenta, segun nota al margen de la inscripcion la de fecha 9 de Junio de 2016.",
-                    ["importeMaxResponsabilidad"] = null,
-                    ["fechaInscripcion"] = null,
-                    ["acreedor"] = null
+                    ["importeMaxResponsabilidad"] = null!,
+                    ["fechaInscripcion"] = null!,
+                    ["acreedor"] = null!
                 }
             },
-            ["VPO"] = null,
-            ["LimitacionesAdministrativas"] = null,
+            ["VPO"] = null!,
+            ["LimitacionesAdministrativas"] = null!,
             ["AfeccionesFiscales"] = "AFECCION FISCAL: Afeccion fiscal durante el plazo de CINCO ANOS, al pago de la liquidacion o liquidaciones complementarias que, en su caso puedan girarse por el Impuesto de Transmisiones Patrimoniales",
-            ["Ocupacion"] = null,
-            ["ArrendamientosInscritos"] = null,
-            ["HistorialInscripciones"] = null,
-            ["Observaciones"] = null,
-            ["NotificacionesJudiciales"] = null,
-            ["ValoracionCatastral"] = null,
-            ["DeudaIBI"] = null,
-            ["DeudaComunidad"] = null
+            ["Ocupacion"] = null!,
+            ["ArrendamientosInscritos"] = null!,
+            ["HistorialInscripciones"] = null!,
+            ["Observaciones"] = null!,
+            ["NotificacionesJudiciales"] = null!,
+            ["ValoracionCatastral"] = null!,
+            ["DeudaIBI"] = null!,
+            ["DeudaComunidad"] = null!
         };
     }
 
