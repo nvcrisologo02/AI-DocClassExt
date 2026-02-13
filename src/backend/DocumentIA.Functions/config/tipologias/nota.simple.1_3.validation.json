@@ -15,7 +15,7 @@
     {
       "name": "RegistroPropiedad",
       "type": "string",
-      "required": true,
+      "required": false,
       "rules": [
         { "ruleType": "minLength", "severity": "Error", "parameters": { "value": 3 } },
         { "ruleType": "maxLength", "severity": "Error", "parameters": { "value": 120 } }

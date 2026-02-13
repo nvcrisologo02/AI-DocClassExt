@@ -64,7 +64,7 @@ if (Test-Path $dllPath) {
 # Payload de test
 Write-Host "`nEnviando documento de prueba..." -ForegroundColor Yellow
 
-$endpoint = "http://localhost:7071/api/IngestDocument"
+$endpoint = "http://localhost:7271/api/IngestDocument"
 
 $payload = @{
     instrucciones = @{
@@ -91,28 +91,46 @@ try {
     Write-Host "  [OK] Documento enviado" -ForegroundColor Green
     Write-Host "  Instance ID: $($response.instanceId)" -ForegroundColor Gray
     
-    if ($response.statusQueryUri) {
+    # Debuggear la respuesta
+    Write-Host "`nDetalles de respuesta:" -ForegroundColor Gray
+    Write-Host ($response | ConvertTo-Json -Depth 3) -ForegroundColor Gray
+    
+    # Construir status URI correctamente
+    $instanceId = $response.instanceId
+    $statusUri = "http://localhost:7271/runtime/webhooks/durabletask/instances/$instanceId"
+    
+    if ($instanceId) {
         Write-Host "`nMonitoreando ejecucion..." -ForegroundColor Yellow
+        Write-Host "Status URI: $statusUri" -ForegroundColor Gray
         
-        $maxRetries = 20
+        $maxRetries = 30
         $retryCount = 0
+        $completed = $false
         
-        while ($retryCount -lt $maxRetries) {
+        while ($retryCount -lt $maxRetries -and -not $completed) {
             Start-Sleep -Seconds 2
             
             try {
-                $status = Invoke-RestMethod -Uri $response.statusQueryUri -Method Get
-                
+                $status = Invoke-RestMethod -Uri $statusUri -Method Get -ErrorAction Stop
                 Write-Host "  [$($retryCount + 1)/$maxRetries] Estado: $($status.runtimeStatus)" -ForegroundColor Cyan
                 
                 if ($status.runtimeStatus -eq "Completed") {
+                    $completed = $true
                     Write-Host "`n========================================" -ForegroundColor Green
                     Write-Host "  ORQUESTACION COMPLETADA" -ForegroundColor Green
                     Write-Host "========================================`n" -ForegroundColor Green
                     
-                    # Analizar resultado de integracion
+                    # Mostrar resultado completo
+                    Write-Host "Resultado completo:" -ForegroundColor White
+                    Write-Host ($status.output | ConvertTo-Json -Depth 5) -ForegroundColor Green
+                    
+                    # Analizar si hay integracion
                     if ($status.output.detalleEjecucion.integracion) {
                         $integracion = $status.output.detalleEjecucion.integracion
+                        
+                        Write-Host "`n========================================" -ForegroundColor Cyan
+                        Write-Host "DETALLES DE INTEGRACION" -ForegroundColor Cyan
+                        Write-Host "========================================`n" -ForegroundColor Cyan
                         
                         Write-Host "Estado Integracion: $($integracion.Estado)" -ForegroundColor White
                         Write-Host "Mensaje: $($integracion.Mensaje)" -ForegroundColor White
@@ -138,66 +156,45 @@ try {
                             }
                             Write-Host ""
                         }
-                        
-                        # Mostrar comparacion de datos
-                        Write-Host "========================================" -ForegroundColor Cyan
-                        Write-Host "DATOS ORIGINALES vs DATOS FINALES" -ForegroundColor Cyan
-                        Write-Host "========================================`n" -ForegroundColor Cyan
-                        
-                        $datosOriginales = $integracion.DatosOriginales
-                        $datosFinales = $integracion.DatosFinales
-                        
-                        if ($datosOriginales -and $datosFinales) {
-                            $camposOriginales = ($datosOriginales | Get-Member -MemberType NoteProperty).Count
-                            $camposFinales = ($datosFinales | Get-Member -MemberType NoteProperty).Count
-                            $camposAgregados = $camposFinales - $camposOriginales
-                            
-                            Write-Host "Campos originales: $camposOriginales" -ForegroundColor Yellow
-                            Write-Host "Campos finales: $camposFinales" -ForegroundColor Green
-                            Write-Host "Campos agregados: $camposAgregados" -ForegroundColor Cyan
-                            Write-Host ""
-                            
-                            # Mostrar campos nuevos agregados por los plugins
-                            Write-Host "Nuevos campos agregados:" -ForegroundColor White
-                            $datosFinales.PSObject.Properties | ForEach-Object {
-                                $campo = $_.Name
-                                if (-not ($datosOriginales.PSObject.Properties.Name -contains $campo)) {
-                                    Write-Host "  + $campo = $($_.Value)" -ForegroundColor Green
-                                }
-                            }
-                        }
                     }
-                    
-                    break
                 }
                 elseif ($status.runtimeStatus -eq "Failed") {
+                    $completed = $true
                     Write-Host "`n[ERROR] Orquestacion fallo" -ForegroundColor Red
-                    if ($status.output) {
-                        Write-Host ($status.output | ConvertTo-Json -Depth 5) -ForegroundColor Red
-                    }
+                    Write-Host ($status.output | ConvertTo-Json -Depth 5) -ForegroundColor Red
                     break
+                }
+                elseif ($status.runtimeStatus -eq "Pending") {
+                    Write-Host "  [$($retryCount + 1)/$maxRetries] Estado: PENDIENTE..." -ForegroundColor Yellow
                 }
             }
             catch {
-                Write-Host "  Error consultando estado: $($_.Exception.Message)" -ForegroundColor Yellow
+                Write-Host "  [$($retryCount + 1)/$maxRetries] Esperando... (Error temporal)" -ForegroundColor Yellow
             }
             
             $retryCount++
         }
         
-        if ($retryCount -eq $maxRetries) {
-            Write-Host "`n[TIMEOUT] La orquestacion no completo en el tiempo esperado" -ForegroundColor Yellow
+        if (-not $completed) {
+            Write-Host "`n[TIMEOUT] La orquestacion no completo en 60 segundos ($maxRetries intentos)" -ForegroundColor Yellow
+            Write-Host "Verifica que:" -ForegroundColor Yellow
+            Write-Host "  1. Azure Functions esta ejecutandose: func host start" -ForegroundColor Yellow
+            Write-Host "  2. Los servidores mock estan activos (puerto 8080 y 8081)" -ForegroundColor Yellow
+            Write-Host "  3. Instance ID: $instanceId" -ForegroundColor Gray
         }
+    }
+    else {
+        Write-Host "`n[ERROR] No se recibio Instance ID" -ForegroundColor Red
     }
     
 } catch {
-    Write-Host "`n[ERROR] Fallo la solicitud" -ForegroundColor Red
+    Write-Host "`n[ERROR] Fallo la solicitud inicial" -ForegroundColor Red
     Write-Host $_.Exception.Message -ForegroundColor Red
     if ($_.Exception.Response) {
         $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
         $reader.BaseStream.Position = 0
         $responseBody = $reader.ReadToEnd()
-        Write-Host $responseBody -ForegroundColor Red
+        Write-Host "Respuesta servidor: $responseBody" -ForegroundColor Red
     }
 }
 
