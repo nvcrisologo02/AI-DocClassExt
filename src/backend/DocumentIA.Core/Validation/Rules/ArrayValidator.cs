@@ -1,6 +1,7 @@
 // DocumentIA.Core/Validation/Rules/ArrayValidator.cs
 using DocumentIA.Core.Validation.Models;
 using DocumentIA.Core.Configuration;
+using System.Text.Json;
 
 namespace DocumentIA.Core.Validation.Rules
 {
@@ -32,15 +33,64 @@ namespace DocumentIA.Core.Validation.Rules
                 return CreateSuccessResult(fieldName);
             }
 
-            // Intentar convertir a IEnumerable
-            if (value is not System.Collections.IEnumerable enumerable || value is string)
-            {
-                return CreateFailureResult(fieldName,
-                    $"El valor no es una colección válida",
-                    "Proporcionar un array válido");
-            }
+            List<object> items = new();
 
-            var items = enumerable.Cast<object>().ToList();
+            // Manejo de diferentes tipos de entrada
+            if (value is JsonElement jsonArray)
+            {
+                // Si es un JsonElement array
+                if (jsonArray.ValueKind == JsonValueKind.Array)
+                {
+                    items = jsonArray.EnumerateArray().Cast<object>().ToList();
+                }
+                else if (jsonArray.ValueKind == JsonValueKind.String)
+                {
+                    // Si es un string, intentar parsear como JSON
+                    try
+                    {
+                        var parsed = JsonSerializer.Deserialize<List<object>>(jsonArray.GetString() ?? "[]");
+                        items = parsed ?? new List<object>();
+                    }
+                    catch
+                    {
+                        // Si no se puede parsear, no es array válido
+                        return CreateFailureResult(fieldName,
+                            $"El valor no es una colección JSON válida",
+                            "Proporcionar un array JSON válido");
+                    }
+                }
+                else
+                {
+                    return CreateFailureResult(fieldName,
+                        $"El valor no es una colección válida (JsonElement tipo: {jsonArray.ValueKind})",
+                        "Proporcionar un array válido");
+                }
+            }
+            else if (value is string strValue)
+            {
+                // Si es un string, intentar parsear como JSON
+                try
+                {
+                    var parsed = JsonSerializer.Deserialize<List<object>>(strValue);
+                    items = parsed ?? new List<object>();
+                }
+                catch
+                {
+                    return CreateFailureResult(fieldName,
+                        $"El valor no es una colección JSON válida",
+                        "Proporcionar un array JSON válido");
+                }
+            }
+            else if (value is System.Collections.IEnumerable enumerable && value is not string)
+            {
+                // Si es IEnumerable válido
+                items = enumerable.Cast<object>().ToList();
+            }
+            else
+            {
+                // Si es un objeto individual, envolverlo en array para validacion
+                items = new List<object> { value };
+            }
 
             if (!items.Any())
             {
