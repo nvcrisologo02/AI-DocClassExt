@@ -18,6 +18,25 @@
         "exponentialBackoff": true,
         "retryOnStatusCodes": [408, 429, 500, 502, 503, 504]
       }
+    },
+    {
+      "pluginKey": "mock-enrichment",
+      "pluginType": "rest",
+      "enabled": true,
+      "priority": 1,
+      "configuration": {
+        "baseUrl": "http://localhost:8080",
+        
+        "authType": "None",
+        "timeoutSeconds": 10,
+        "endpoint": "/"   
+      },
+      "retryPolicy": {
+        "maxRetries": 2,
+        "initialDelayMs": 500,
+        "exponentialBackoff": true,
+        "retryOnStatusCodes": [408, 429, 500, 502, 503, 504]
+      }
     }
   ]
 }

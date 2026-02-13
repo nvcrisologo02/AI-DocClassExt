@@ -57,10 +57,35 @@ public class InformacionPostproceso
     public List<string> Inconsistencias { get; set; } = new();
 }
 
+public class IntegrarInput
+{
+    public string Tipologia { get; set; } = string.Empty;
+    public string DocumentoId { get; set; } = string.Empty;
+    public Dictionary<string, object> DatosExtraidos { get; set; } = new();
+    public Dictionary<string, object> Metadata { get; set; } = new();
+}
+
 public class ResultadoIntegracion
 {
-    public string Modulo { get; set; } = string.Empty;
-    public string Result { get; set; } = "OK"; // OK | REVISION | ERROR
+    public string Tipologia { get; set; } = string.Empty;
+    public string Estado { get; set; } = "OK"; // OK | REVISION | ERROR
+    public string Mensaje { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
+    public List<PluginExecutionResult> Plugins { get; set; } = new();
+    public Dictionary<string, object> DatosOriginales { get; set; } = new();
+    public Dictionary<string, object> DatosFinales { get; set; } = new();
+}
+
+public class PluginExecutionResult
+{
+    public string PluginKey { get; set; } = string.Empty;
+    public int Priority { get; set; }
+    public bool Success { get; set; }
+    public string Mensaje { get; set; } = string.Empty;
+    public int StatusCode { get; set; }
+    public int DurationMs { get; set; }
+    public string? Error { get; set; }
+    public Dictionary<string, object>? DatosEnriquecidos { get; set; }
 }
 
 public class ResultadoFinal

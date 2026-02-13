@@ -4,6 +4,7 @@ using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
+using System.Linq;
 using System.Text.Json;
 
 namespace DocumentIA.Functions.Activities;
@@ -130,8 +131,10 @@ public class PersistirActivity
         resultado.ValidacionesJson = JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Validaciones);
         resultado.InconsistenciasJson = JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Inconsistencias);
 
-        resultado.ModuloIntegracion = salida.DetalleEjecucion.Integracion.Modulo;
-        resultado.ResultadoIntegracion = salida.DetalleEjecucion.Integracion.Result;
+        resultado.ModuloIntegracion = salida.DetalleEjecucion.Integracion.Plugins.Count > 0
+            ? string.Join(",", salida.DetalleEjecucion.Integracion.Plugins.Select(p => p.PluginKey))
+            : "N/A";
+        resultado.ResultadoIntegracion = salida.DetalleEjecucion.Integracion.Estado;
 
         // Tiempos (si estuvieran disponibles en el DetalleEjecucion)
         if (salida.DetalleEjecucion.Extraccion.TiemposMs != null && salida.DetalleEjecucion.Extraccion.TiemposMs.Count > 0)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using DocumentIA.Core.Models;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Plugins.Integration;
@@ -28,31 +29,30 @@ namespace DocumentIA.Functions.Activities
         }
 
         [Function(nameof(IntegrarActivity))]
-        public async Task<ResultadoIntegracion> Run(
-            [ActivityTrigger] IntegrarInput input)
+        public async Task<ResultadoIntegracion> Run([ActivityTrigger] IntegrarInput input)
         {
             logger.LogInformation("Iniciando integracion para tipologia: {Tipologia}", input.Tipologia);
 
             var resultado = new ResultadoIntegracion
             {
                 Tipologia = input.Tipologia,
-                Timestamp = DateTime.UtcNow
+                Timestamp = DateTime.UtcNow,
+                DatosOriginales = new Dictionary<string, object>(input.DatosExtraidos),
+                DatosFinales = new Dictionary<string, object>(input.DatosExtraidos) // Copia inicial
             };
 
             try
             {
-                // Cargar configuracion de plugins para esta tipologia
                 var pluginConfig = await configLoader.LoadConfigAsync(input.Tipologia);
 
                 if (pluginConfig.Plugins.Count == 0)
                 {
                     logger.LogWarning("No hay plugins configurados para tipologia {Tipologia}", input.Tipologia);
                     resultado.Estado = "OK";
-                    resultado.Mensaje = "No hay integraciones configuradas para esta tipologia";
+                    resultado.Mensaje = "No hay integraciones configuradas";
                     return resultado;
                 }
 
-                // Ordenar plugins por prioridad
                 var pluginsOrdenados = pluginConfig.Plugins
                     .Where(p => p.Enabled)
                     .OrderBy(p => p.Priority)
@@ -60,19 +60,33 @@ namespace DocumentIA.Functions.Activities
 
                 logger.LogInformation("Ejecutando {Count} plugins en orden de prioridad", pluginsOrdenados.Count);
 
-                // Ejecutar cada plugin
-                foreach (var pluginCfg in pluginsOrdenados)
+                // Ejecutar cada plugin secuencialmente
+                foreach (var pluginConf in pluginsOrdenados)
                 {
-                    var pluginResult = await ExecutePluginAsync(pluginCfg, input);
+                    var pluginResult = await ExecutePluginWithEnrichmentAsync(
+                        pluginConf, 
+                        input, 
+                        resultado.DatosFinales); // Pasar datos acumulados
+
                     resultado.Plugins.Add(pluginResult);
 
-                    // Si un plugin critico falla, detener la cadena
-                    if (!pluginResult.Success && pluginCfg.Priority == 1)
+                    // Si el plugin devolvió datos enriquecidos, hacer MERGE
+                    if (pluginResult.Success && pluginResult.DatosEnriquecidos != null)
                     {
-                        logger.LogError("Plugin critico {PluginKey} fallo. Deteniendo cadena de integracion",
-                            pluginCfg.PluginKey);
+                        MergeDatos(resultado.DatosFinales, pluginResult.DatosEnriquecidos);
+                        
+                        logger.LogInformation(
+                            "Plugin {PluginKey} enriqueció datos. Total campos ahora: {Count}", 
+                            pluginConf.PluginKey, 
+                            resultado.DatosFinales.Count);
+                    }
+
+                    // Detener si plugin critico falla
+                    if (!pluginResult.Success && pluginConf.Priority == 1)
+                    {
+                        logger.LogError("Plugin critico {PluginKey} fallo. Deteniendo cadena", pluginConf.PluginKey);
                         resultado.Estado = "ERROR";
-                        resultado.Mensaje = $"Plugin critico {pluginCfg.PluginKey} fallo";
+                        resultado.Mensaje = $"Plugin critico {pluginConf.PluginKey} fallo";
                         return resultado;
                     }
                 }
@@ -84,34 +98,30 @@ namespace DocumentIA.Functions.Activities
                 if (todosExitosos)
                 {
                     resultado.Estado = "OK";
-                    resultado.Mensaje = $"Todas las integraciones completadas exitosamente ({resultado.Plugins.Count})";
+                    resultado.Mensaje = $"Integraciones completadas. Datos finales: {resultado.DatosFinales.Count} campos";
                 }
                 else if (algunoFallo)
                 {
                     resultado.Estado = "REVISION";
-                    resultado.Mensaje = $"Algunas integraciones fallaron. Revisar logs.";
+                    resultado.Mensaje = "Algunas integraciones fallaron pero el proceso continuo";
                 }
 
                 logger.LogInformation("Integracion completada. Estado: {Estado}", resultado.Estado);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Error en proceso de integracion para tipologia {Tipologia}", input.Tipologia);
+                logger.LogError(ex, "Error en proceso de integracion");
                 resultado.Estado = "ERROR";
-                resultado.Mensaje = $"Error en integracion: {ex.Message}";
-                resultado.Plugins.Add(new PluginExecutionResult
-                {
-                    PluginKey = "sistema",
-                    Success = false,
-                    Mensaje = ex.Message,
-                    Error = ex.ToString()
-                });
+                resultado.Mensaje = $"Error: {ex.Message}";
             }
 
             return resultado;
         }
 
-        private async Task<PluginExecutionResult> ExecutePluginAsync(PluginConfig pluginConfig, IntegrarInput input)
+        private async Task<PluginExecutionResult> ExecutePluginWithEnrichmentAsync(
+            PluginConfig pluginConfig,
+            IntegrarInput input,
+            Dictionary<string, object> datosActuales)
         {
             var result = new PluginExecutionResult
             {
@@ -125,37 +135,42 @@ namespace DocumentIA.Functions.Activities
                 var plugin = pluginManager.GetPlugin(pluginConfig.PluginKey);
                 if (plugin == null)
                 {
-                    logger.LogInformation("Plugin {PluginKey} no encontrado en manager. Creando...", 
-                        pluginConfig.PluginKey);
+                    logger.LogInformation("Creando plugin {PluginKey}...", pluginConfig.PluginKey);
                     plugin = await pluginFactory.CreatePluginAsync(pluginConfig);
                     pluginManager.RegisterPlugin(pluginConfig.PluginKey, plugin);
                 }
 
-                // Preparar datos para el plugin
-                var pluginData = new Dictionary<string, object>
+                // Preparar payload: enviar TODOS los datos actuales
+                var payload = new Dictionary<string, object>
                 {
                     ["tipologia"] = input.Tipologia,
                     ["documentoId"] = input.DocumentoId,
-                    ["datosExtraidos"] = input.DatosExtraidos,
+                    ["datosExtraidos"] = datosActuales, // Datos acumulados hasta ahora
                     ["metadata"] = input.Metadata
                 };
 
                 // Ejecutar plugin
-                var integrationResult = await pluginManager.ExecutePluginAsync(pluginConfig.PluginKey, pluginData);
+                var integrationResult = await pluginManager.ExecutePluginAsync(pluginConfig.PluginKey, payload);
 
                 result.Success = integrationResult.Success;
                 result.Mensaje = integrationResult.Message;
                 result.StatusCode = integrationResult.StatusCode;
                 result.DurationMs = (int)integrationResult.Duration.TotalMilliseconds;
-                result.ResponseData = integrationResult.ResponseData;
+
+                // Si el endpoint devolvió datos en ResponseData, usarlos como enriquecidos
+                if (integrationResult.Success && integrationResult.ResponseData != null && integrationResult.ResponseData.Count > 0)
+                {
+                    result.DatosEnriquecidos = integrationResult.ResponseData;
+                    logger.LogInformation(
+                        "Plugin {PluginKey} devolvió {Count} campos enriquecidos", 
+                        pluginConfig.PluginKey, 
+                        integrationResult.ResponseData.Count);
+                }
 
                 if (!integrationResult.Success)
                 {
                     result.Error = string.Join("; ", integrationResult.Errors);
                 }
-
-                logger.LogInformation("Plugin {PluginKey} ejecutado. Success: {Success}, Duration: {Duration}ms",
-                    pluginConfig.PluginKey, result.Success, result.DurationMs);
             }
             catch (Exception ex)
             {
@@ -167,35 +182,26 @@ namespace DocumentIA.Functions.Activities
 
             return result;
         }
+
+        /// <summary>
+        /// Merge simple: los datos nuevos sobrescriben los existentes
+        /// </summary>
+        private void MergeDatos(Dictionary<string, object> destino, Dictionary<string, object> nuevos)
+        {
+            foreach (var kvp in nuevos)
+            {
+                if (destino.ContainsKey(kvp.Key))
+                {
+                    logger.LogDebug("Actualizando campo existente: {Key}", kvp.Key);
+                }
+                else
+                {
+                    logger.LogDebug("Agregando nuevo campo: {Key}", kvp.Key);
+                }
+                
+                destino[kvp.Key] = kvp.Value; // Sobrescribir o agregar
+            }
+        }
     }
 
-    // Modelos de entrada/salida
-    public class IntegrarInput
-    {
-        public string Tipologia { get; set; } = string.Empty;
-        public string DocumentoId { get; set; } = string.Empty;
-        public Dictionary<string, object> DatosExtraidos { get; set; } = new();
-        public Dictionary<string, object> Metadata { get; set; } = new();
-    }
-
-    public class ResultadoIntegracion
-    {
-        public string Tipologia { get; set; } = string.Empty;
-        public string Estado { get; set; } = "OK"; // OK | ERROR | REVISION
-        public string Mensaje { get; set; } = string.Empty;
-        public DateTime Timestamp { get; set; }
-        public List<PluginExecutionResult> Plugins { get; set; } = new();
-    }
-
-    public class PluginExecutionResult
-    {
-        public string PluginKey { get; set; } = string.Empty;
-        public int Priority { get; set; }
-        public bool Success { get; set; }
-        public string Mensaje { get; set; } = string.Empty;
-        public int StatusCode { get; set; }
-        public int DurationMs { get; set; }
-        public string? Error { get; set; }
-        public Dictionary<string, object> ResponseData { get; set; } = new();
-    }
 }

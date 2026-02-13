@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 
+
 namespace DocumentIA.Plugins.Integration
 {
     /// <summary>
@@ -23,27 +24,34 @@ namespace DocumentIA.Plugins.Integration
         private Dictionary<string, string> defaultHeaders = new();
         private int timeoutSeconds = 30;
 
+
         public string PluginName => "RestPlugin";
         public string Version => "1.0.0";
+
 
         public RestPlugin(HttpClient httpClient)
         {
             this.httpClient = httpClient;
         }
 
+
         public Task InitializeAsync(Dictionary<string, object> configuration)
         {
             if (configuration.TryGetValue("baseUrl", out var baseUrlValue))
                 baseUrl = GetStringValue(baseUrlValue) ?? string.Empty;
 
+
             if (configuration.TryGetValue("endpoint", out var endpointValue))
                 endpoint = GetStringValue(endpointValue) ?? "/api/process";
+
 
             if (configuration.TryGetValue("authToken", out var authTokenValue))
                 authToken = GetStringValue(authTokenValue) ?? string.Empty;
 
+
             if (configuration.TryGetValue("authType", out var authTypeValue))
                 authType = GetStringValue(authTypeValue) ?? "Bearer";
+
 
             if (configuration.TryGetValue("timeoutSeconds", out var timeoutValue)
                 && TryGetIntValue(timeoutValue, out var parsedTimeout))
@@ -51,10 +59,13 @@ namespace DocumentIA.Plugins.Integration
                 timeoutSeconds = parsedTimeout;
             }
 
+
             if (configuration.TryGetValue("headers", out var headersValue))
                 defaultHeaders = ParseHeaders(headersValue);
 
+
             httpClient.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+
 
             if (!string.IsNullOrEmpty(authToken))
             {
@@ -65,36 +76,45 @@ namespace DocumentIA.Plugins.Integration
                     httpClient.DefaultRequestHeaders.Add("X-API-Key", authToken);
             }
 
+
             foreach (var header in defaultHeaders)
             {
                 // Content-* headers are not valid on DefaultRequestHeaders; they belong to HttpContent.
                 if (IsContentHeader(header.Key))
                     continue;
 
+
                 if (httpClient.DefaultRequestHeaders.Contains(header.Key))
                     httpClient.DefaultRequestHeaders.Remove(header.Key);
+
 
                 httpClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
             }
 
+
             return Task.CompletedTask;
         }
+
 
         private static string? GetStringValue(object? value)
         {
             if (value == null)
                 return null;
 
+
             if (value is JsonElement element)
             {
                 if (element.ValueKind == JsonValueKind.String)
                     return element.GetString();
 
+
                 return element.ToString();
             }
 
+
             return value.ToString();
         }
+
 
         private static bool TryGetIntValue(object? value, out int result)
         {
@@ -118,10 +138,12 @@ namespace DocumentIA.Plugins.Integration
             }
         }
 
+
         private static Dictionary<string, string> ParseHeaders(object? headersValue)
         {
             if (headersValue is Dictionary<string, string> stringHeaders)
                 return stringHeaders;
+
 
             if (headersValue is Dictionary<string, object> objectHeaders)
             {
@@ -131,8 +153,10 @@ namespace DocumentIA.Plugins.Integration
                     mappedHeaders[header.Key] = GetStringValue(header.Value) ?? string.Empty;
                 }
 
+
                 return mappedHeaders;
             }
+
 
             if (headersValue is JsonElement headersElement && headersElement.ValueKind == JsonValueKind.Object)
             {
@@ -142,76 +166,125 @@ namespace DocumentIA.Plugins.Integration
                     mappedHeaders[property.Name] = property.Value.ToString();
                 }
 
+
                 return mappedHeaders;
             }
 
+
             return new Dictionary<string, string>();
         }
+
 
         private static bool IsContentHeader(string headerName)
         {
             return headerName.StartsWith("Content-", StringComparison.OrdinalIgnoreCase);
         }
 
+
         public async Task<IntegrationResult> ExecuteAsync(Dictionary<string, object> data)
         {
             var stopwatch = Stopwatch.StartNew();
             var result = new IntegrationResult();
 
+
             try
             {
                 // Determinar endpoint y metodo
-                // El endpoint puede venir de configuracion o ser sobrescrito en ejecucion
-                string executionEndpoint = data.ContainsKey("endpoint") ? data["endpoint"].ToString() ?? endpoint : endpoint;
+                string executionEndpoint = data.ContainsKey("endpoint") 
+                    ? GetStringValue(data["endpoint"]) ?? endpoint 
+                    : endpoint;
                 
-                string method = data.ContainsKey("method") ? data["method"].ToString() ?? "POST" : "POST";
+                string method = data.ContainsKey("method") 
+                    ? GetStringValue(data["method"]) ?? "POST" 
+                    : "POST";
+                    
                 string fullUrl = baseUrl.TrimEnd('/') + "/" + executionEndpoint.TrimStart('/');
 
-                // Preparar payload
-                var payload = data.ContainsKey("payload") ? data["payload"] : data;
+                // Preparar payload limpio (sin campos de control)
+                var payload = new Dictionary<string, object>(data);
+                payload.Remove("endpoint");
+                payload.Remove("method");
+                
+                // Si hay un campo "payload" especifico, usarlo
+                if (data.ContainsKey("payload"))
+                {
+                    payload = data["payload"] as Dictionary<string, object> ?? payload;
+                }
+
+                // Serializar payload a JSON string para asegurar Content-Length correcto
+                var jsonPayload = JsonSerializer.Serialize(payload, new JsonSerializerOptions
+                {
+                    WriteIndented = false
+                });
 
                 HttpResponseMessage response;
+
 
                 switch (method.ToUpper())
                 {
                     case "POST":
-                        response = await httpClient.PostAsJsonAsync(fullUrl, payload);
+                        var postContent = new StringContent(
+                            jsonPayload, 
+                            Encoding.UTF8, 
+                            "application/json");
+                        response = await httpClient.PostAsync(fullUrl, postContent);
                         break;
+
 
                     case "PUT":
-                        response = await httpClient.PutAsJsonAsync(fullUrl, payload);
+                        var putContent = new StringContent(
+                            jsonPayload, 
+                            Encoding.UTF8, 
+                            "application/json");
+                        response = await httpClient.PutAsync(fullUrl, putContent);
                         break;
 
+
                     case "GET":
-                        var queryString = BuildQueryString(payload as Dictionary<string, object>);
+                        var queryString = BuildQueryString(payload);
                         response = await httpClient.GetAsync(fullUrl + queryString);
                         break;
+
 
                     case "DELETE":
                         response = await httpClient.DeleteAsync(fullUrl);
                         break;
 
+
                     default:
-                        throw new PluginException(PluginName, $"Metodo HTTP no soportado: {method}");
+                        throw new InvalidOperationException($"Metodo HTTP no soportado: {method}");
                 }
 
+
                 stopwatch.Stop();
+
 
                 result.StatusCode = (int)response.StatusCode;
                 result.Duration = stopwatch.Elapsed;
                 result.Success = response.IsSuccessStatusCode;
+
 
                 if (response.IsSuccessStatusCode)
                 {
                     result.Status = "OK";
                     result.Message = $"Integracion exitosa con {baseUrl}";
 
+
                     var responseContent = await response.Content.ReadAsStringAsync();
                     if (!string.IsNullOrEmpty(responseContent))
                     {
                         try
                         {
-                            result.ResponseData = JsonSerializer.Deserialize<Dictionary<string, object>>(responseContent) ?? new();
+                            // Intentar deserializar como Dictionary
+                            var responseDict = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(responseContent);
+                            if (responseDict != null)
+                            {
+                                // Convertir JsonElement a object para compatibilidad
+                                foreach (var kvp in responseDict)
+                                {
+                                    result.ResponseData[kvp.Key] = ConvertJsonElement(kvp.Value);
+                                }
+                            }
                         }
                         catch
                         {
@@ -224,6 +297,7 @@ namespace DocumentIA.Plugins.Integration
                     result.Status = "ERROR";
                     result.Message = $"Error en integracion: {response.StatusCode}";
                     result.Errors.Add($"HTTP {response.StatusCode}: {response.ReasonPhrase}");
+
 
                     var errorContent = await response.Content.ReadAsStringAsync();
                     if (!string.IsNullOrEmpty(errorContent))
@@ -263,8 +337,10 @@ namespace DocumentIA.Plugins.Integration
                 result.Metadata["exception"] = ex.GetType().Name;
             }
 
+
             return result;
         }
+
 
         public async Task<bool> HealthCheckAsync()
         {
@@ -280,10 +356,12 @@ namespace DocumentIA.Plugins.Integration
             }
         }
 
+
         private string BuildQueryString(Dictionary<string, object>? parameters)
         {
             if (parameters == null || parameters.Count == 0)
                 return string.Empty;
+
 
             var queryParams = new List<string>();
             foreach (var param in parameters)
@@ -291,7 +369,49 @@ namespace DocumentIA.Plugins.Integration
                 queryParams.Add($"{Uri.EscapeDataString(param.Key)}={Uri.EscapeDataString(param.Value?.ToString() ?? string.Empty)}");
             }
 
+
             return "?" + string.Join("&", queryParams);
+        }
+
+
+        /// <summary>
+        /// Convierte JsonElement a object para compatibilidad
+        /// </summary>
+        private static object ConvertJsonElement(JsonElement element)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.String:
+                    return element.GetString() ?? string.Empty;
+                case JsonValueKind.Number:
+                    if (element.TryGetInt32(out var intVal))
+                        return intVal;
+                    if (element.TryGetInt64(out var longVal))
+                        return longVal;
+                    return element.GetDouble();
+                case JsonValueKind.True:
+                    return true;
+                case JsonValueKind.False:
+                    return false;
+                case JsonValueKind.Null:
+                    return null!;
+                case JsonValueKind.Object:
+                    var dict = new Dictionary<string, object>();
+                    foreach (var prop in element.EnumerateObject())
+                    {
+                        dict[prop.Name] = ConvertJsonElement(prop.Value);
+                    }
+                    return dict;
+                case JsonValueKind.Array:
+                    var list = new List<object>();
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        list.Add(ConvertJsonElement(item));
+                    }
+                    return list;
+                default:
+                    return element.ToString();
+            }
         }
     }
 }

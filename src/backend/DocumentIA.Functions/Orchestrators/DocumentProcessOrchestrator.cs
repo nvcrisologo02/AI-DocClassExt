@@ -137,13 +137,32 @@ public class DocumentProcessOrchestrator
                 return salida;
             }
 
-            // 6. Integracion (opcional)
+            // Paso 6: Integrar con sistemas externos (ENRIQUECIMIENTO)
             logger.LogInformation("Paso 6: Integrando con sistemas externos");
-            var resultadoIntegracion = await context.CallActivityAsync<ResultadoIntegracion>(
+            var integrarInput = new DocumentIA.Core.Models.IntegrarInput
+            {
+                Tipologia = salida.Identificacion.Tipologia,
+                DocumentoId = salida.Identificacion.Guid,
+                DatosExtraidos = salida.DatosExtraidos, // Pasar datos extraidos
+                Metadata = new Dictionary<string, object>
+                {
+                    ["correlationId"] = entrada.Trazabilidad.CorrelationId,
+                    ["submittedBy"] = entrada.Trazabilidad.SubmittedBy
+                }
+            };
+
+            var resultadoIntegracion = await context.CallActivityAsync<DocumentIA.Core.Models.ResultadoIntegracion>(
                 "IntegrarActivity",
-                new { Tipologia = salida.Identificacion.Tipologia, Datos = resultadoExtraccion });
+                integrarInput);
 
             salida.DetalleEjecucion.Integracion = resultadoIntegracion;
+
+            // IMPORTANTE: Reemplazar datos extraidos con datos enriquecidos
+            if (resultadoIntegracion.Estado == "OK" && resultadoIntegracion.DatosFinales.Count > 0)
+            {
+                salida.DatosExtraidos = resultadoIntegracion.DatosFinales; // Usar datos enriquecidos
+                logger.LogInformation("Datos enriquecidos: {Count} campos totales", resultadoIntegracion.DatosFinales.Count);
+            }
 
             // 7. Persistencia
             logger.LogInformation("Paso 7: Persistiendo resultados");
