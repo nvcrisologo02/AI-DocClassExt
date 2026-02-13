@@ -10,7 +10,7 @@ para cada campo según su tipo de dato y requisitos de negocio.
 Identificadores:
   - Tipología: notasimple
   - Nombre: Nota Simple
-  - Versión: 1.2
+  - Versión: 1.1
 
 ================================================================================
 SECCIONES Y CAMPOS

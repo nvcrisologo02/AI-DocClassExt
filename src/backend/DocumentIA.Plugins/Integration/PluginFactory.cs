@@ -13,40 +13,64 @@ namespace DocumentIA.Plugins.Integration
     {
         private readonly IHttpClientFactory httpClientFactory;
         private readonly ILogger<PluginFactory> logger;
+        private readonly ILoggerFactory loggerFactory;
 
-        public PluginFactory(IHttpClientFactory httpClientFactory, ILogger<PluginFactory> logger)
+        public PluginFactory(IHttpClientFactory httpClientFactory, ILogger<PluginFactory> logger, ILoggerFactory loggerFactory)
         {
             this.httpClientFactory = httpClientFactory;
             this.logger = logger;
+            this.loggerFactory = loggerFactory;
         }
 
         /// <summary>
         /// Crea y configura un plugin basado en la configuracion
         /// </summary>
         public async Task<IIntegrationPlugin> CreatePluginAsync(PluginConfig config)
-        {
-            IIntegrationPlugin plugin = config.PluginType.ToLower() switch
-            {
-                "rest" => CreateRestPlugin(config.PluginKey),
-                "soap" => throw new NotImplementedException("Plugin SOAP pendiente de implementacion"),
-                "custom" => throw new NotImplementedException("Plugin custom requiere implementacion especifica"),
-                _ => throw new PluginException("PluginFactory", 
-                    $"Tipo de plugin no soportado: {config.PluginType}")
-            };
+{
+    logger.LogInformation("Creando plugin: {Key} - Tipo: {Type}", config.PluginKey, config.PluginType);
 
-            // Inicializar con configuracion
-            await plugin.InitializeAsync(config.Configuration);
+    IIntegrationPlugin plugin;
 
-            // Envolver con resiliencia si tiene retry policy
-            if (config.RetryPolicy != null)
-            {
-                plugin = new ResilientPlugin(plugin, config.RetryPolicy, logger);
-                logger.LogInformation("Plugin {PluginKey} envuelto con ResilientPlugin. Retries: {MaxRetries}",
-                    config.PluginKey, config.RetryPolicy.MaxRetries);
-            }
+    switch (config.PluginType.ToLower())
+    {
+        case "rest":
+            var httpClient = httpClientFactory.CreateClient();
+            plugin = new RestPlugin(httpClient);
+            logger.LogDebug("RestPlugin creado para {Key}", config.PluginKey);
+            break;
 
-            return plugin;
-        }
+        case "soap":
+            var soapHttpClient = httpClientFactory.CreateClient();
+            var soapLogger = loggerFactory.CreateLogger<SoapPlugin>();
+            plugin = new SoapPlugin(soapHttpClient, soapLogger);
+            logger.LogDebug("SoapPlugin creado para {Key}", config.PluginKey);
+            break;
+
+        case "custom":
+            var customLogger = loggerFactory.CreateLogger<CustomPlugin>();
+            plugin = new CustomPlugin(customLogger);
+            logger.LogDebug("CustomPlugin creado para {Key}", config.PluginKey);
+            break;
+
+        default:
+            throw new InvalidOperationException($"Tipo de plugin no soportado: {config.PluginType}");
+    }
+
+    // Inicializar plugin
+    await plugin.InitializeAsync(config.Configuration);
+
+    // Envolver con ResilientPlugin si hay retry policy
+    if (config.RetryPolicy != null)
+    {
+        var resilientLogger = loggerFactory.CreateLogger<ResilientPlugin>();
+        plugin = new ResilientPlugin(plugin, config.RetryPolicy, resilientLogger);
+        logger.LogInformation(
+            "Plugin {Key} envuelto con ResilientPlugin. Retries: {Retries}", 
+            config.PluginKey, config.RetryPolicy.MaxRetries);
+    }
+
+    return plugin;
+}
 
         /// <summary>
         /// Crea multiples plugins desde una configuracion de tipologia

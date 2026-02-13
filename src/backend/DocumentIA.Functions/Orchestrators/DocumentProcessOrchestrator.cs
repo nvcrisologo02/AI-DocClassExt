@@ -128,13 +128,12 @@ public class DocumentProcessOrchestrator
                     $"Total de errores de validacion: {resultadoValidacion.Errores}");
             }
 
-            // Si hay errores criticos de validacion, marcar como ERROR
+            // Si hay errores de validacion, registrar pero continuar procesando
+            bool conErroresValidacion = false;
             if (resultadoValidacion.Errores > 0)
             {
-                logger.LogWarning($"Documento tiene {resultadoValidacion.Errores} errores de validacion");
-                salida.Resultado.Estado = "ERROR_VALIDACION";
-                salida.Resultado.ConfianzaGlobal = resultadoValidacion.ConfianzaValidacion;
-                return salida;
+                conErroresValidacion = true;
+                logger.LogWarning($"Documento tiene {resultadoValidacion.Errores} errores de validacion, continuando con procesamiento");
             }
 
             // Paso 6: Integrar con sistemas externos (ENRIQUECIMIENTO)
@@ -171,12 +170,20 @@ public class DocumentProcessOrchestrator
                 salida);
 
             // Resultado final
-            salida.Resultado.Estado = "OK";
+            if (conErroresValidacion)
+            {
+                salida.Resultado.Estado = "VALIDACION_CON_ERRORES";
+                logger.LogWarning("Procesamiento completado con errores de validacion");
+            }
+            else
+            {
+                salida.Resultado.Estado = "OK";
+                logger.LogInformation($"Procesamiento completado exitosamente para {entrada.Documento.Name}");
+            }
+            
             salida.Resultado.ConfianzaGlobal = Math.Min(
                 resultadoClasificacion.Confianza, 
                 resultadoValidacion.ConfianzaValidacion);
-
-            logger.LogInformation($"Procesamiento completado exitosamente para {entrada.Documento.Name}");
         }
         catch (Exception ex)
         {

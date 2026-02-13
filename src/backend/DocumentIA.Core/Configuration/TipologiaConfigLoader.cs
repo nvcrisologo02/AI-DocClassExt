@@ -53,11 +53,7 @@ namespace DocumentIA.Core.Configuration
                 // Agregar validador de campo requerido
                 if (fieldConfig.Required)
                 {
-                    var requiredValidator = new Validation.Rules.RequiredFieldValidator
-                    {
-                        Severity = ValidationSeverity.Warning
-                    };
-                    engine.AddRule(fieldConfig.Name, requiredValidator);
+                    engine.AddRule(fieldConfig.Name, new Validation.Rules.RequiredFieldValidator());
                 }
 
                 // Validar según el tipo de campo
@@ -65,20 +61,13 @@ namespace DocumentIA.Core.Configuration
 
                 if (fieldType == "boolean")
                 {
-                    var booleanValidator = new Validation.Rules.BooleanValidator
-                    {
-                        Severity = ValidationSeverity.Warning
-                    };
-                    engine.AddRule(fieldConfig.Name, booleanValidator);
+                    engine.AddRule(fieldConfig.Name, new Validation.Rules.BooleanValidator());
                 }
                 else if (fieldType == "array")
                 {
                     if (fieldConfig.Items != null)
                     {
-                        var arrayValidator = new Validation.Rules.ArrayValidator(fieldConfig.Items)
-                        {
-                            Severity = ValidationSeverity.Warning
-                        };
+                        var arrayValidator = new Validation.Rules.ArrayValidator(fieldConfig.Items);
                         engine.AddRule(fieldConfig.Name, arrayValidator);
                     }
                 }
@@ -136,13 +125,7 @@ namespace DocumentIA.Core.Configuration
                 _ => throw new NotSupportedException($"Tipo de regla '{ruleConfig.RuleType}' no soportado")
             };
 
-            // Por defecto degradamos las reglas a Warning para no generar errores bloqueantes.
-            if (rule is ValidationRuleBase defaultRuleBase)
-            {
-                defaultRuleBase.Severity = ValidationSeverity.Warning;
-            }
-
-            // Configurar severidad explicita si existe en JSON.
+            // Configurar severidad
             if (!string.IsNullOrEmpty(ruleConfig.Severity))
             {
                 if (Enum.TryParse<ValidationSeverity>(ruleConfig.Severity, true, out var severity))

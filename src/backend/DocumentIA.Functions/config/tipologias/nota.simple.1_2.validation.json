@@ -1,7 +1,7 @@
 {
-  "tipologiaId": "notasimple1.2",
-  "tipologiaNombre": "Nota Simple 1.2",
-  "version": "1.2",
+  "tipologiaId": "notasimple",
+  "tipologiaNombre": "Nota Simple",
+  "version": "1.1",
   "fields": [
     {
       "name": "FincaRegistral",

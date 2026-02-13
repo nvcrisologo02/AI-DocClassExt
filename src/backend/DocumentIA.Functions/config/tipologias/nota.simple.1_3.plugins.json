@@ -1,16 +1,16 @@
 {
   "tipologiaId": "nota.simple.1_3",
-  "plugins": [    
+  "plugins": [
     {
-      "pluginKey": "httpbin-test",
+      "pluginKey": "mock-enrichment",
       "pluginType": "rest",
       "enabled": true,
-      "priority": 3,
+      "priority": 1,
       "configuration": {
-        "baseUrl": "https://httpbin.org",
+        "baseUrl": "http://localhost:8080",
         "authType": "None",
-        "endpoint": "/post",
-        "timeoutSeconds": 10
+        "timeoutSeconds": 10,
+        "endpoint": "/"
       },
       "retryPolicy": {
         "maxRetries": 2,
@@ -20,16 +20,47 @@
       }
     },
     {
-      "pluginKey": "mock-enrichment",
-      "pluginType": "rest",
+      "pluginKey": "mock-soap-catastro",
+      "pluginType": "soap",
       "enabled": true,
-      "priority": 1,
+      "priority": 2,
       "configuration": {
-        "baseUrl": "http://localhost:8080",
-        
+        "endpoint": "http://localhost:8081",
+        "soapVersion": "1.1",
+        "action": "ConsultarReferenciaCatastral",
+        "namespace": "http://tempuri.org/",
         "authType": "None",
-        "timeoutSeconds": 10,
-        "endpoint": "/"   
+        "timeoutSeconds": 15
+      },
+      "retryPolicy": {
+        "maxRetries": 2,
+        "initialDelayMs": 1000,
+        "exponentialBackoff": false
+      }
+    },
+    {
+      "pluginKey": "sareb-business-rules",
+      "pluginType": "custom",
+      "enabled": true,
+      "priority": 3,
+      "configuration": {
+        "assemblyPath": "C:\\temp\\MVP\\documento-ia-clasificacion-mvp\\plugins\\SarebEnrichments.dll",
+        "className": "Sareb.Enrichments.NotaSimpleEnricher",
+        "customConfig": {
+          "enableCaching": true
+        }
+      }
+    },
+    {
+      "pluginKey": "httpbin-test",
+      "pluginType": "rest",
+      "enabled": false,
+      "priority": 4,
+      "configuration": {
+        "baseUrl": "https://httpbin.org",
+        "authType": "None",
+        "endpoint": "/post",
+        "timeoutSeconds": 10
       },
       "retryPolicy": {
         "maxRetries": 2,

@@ -198,7 +198,7 @@ namespace DocumentIA.Core.Validation.Rules
         {
             try
             {
-                IValidationRule? validator = ruleConfig.RuleType.ToLower() switch
+                return ruleConfig.RuleType.ToLower() switch
                 {
                     "range" => new RangeValidator(
                         min: GetParameter<decimal?>(ruleConfig.Parameters, "min"),
@@ -224,19 +224,6 @@ namespace DocumentIA.Core.Validation.Rules
                     ),
                     _ => null
                 };
-
-                if (validator is ValidationRuleBase ruleBase)
-                {
-                    ruleBase.Severity = ValidationSeverity.Warning;
-
-                    if (!string.IsNullOrEmpty(ruleConfig.Severity)
-                        && Enum.TryParse<ValidationSeverity>(ruleConfig.Severity, true, out var parsedSeverity))
-                    {
-                        ruleBase.Severity = parsedSeverity;
-                    }
-                }
-
-                return validator;
             }
             catch
             {
