@@ -1,150 +1,177 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
-using DocumentIA.Core.Services;
-using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
-using System.Linq;
+using DocumentIA.Data.Entities;
+using System;
 using System.Text.Json;
+using System.Threading.Tasks;
+using System.Linq;
+using System.Text.RegularExpressions;
 
-namespace DocumentIA.Functions.Activities;
-
-public class PersistirActivity
+namespace DocumentIA.Functions.Activities
 {
-    private readonly ILogger<PersistirActivity> _logger;
-    private readonly IDocumentoRepository _documentoRepository;
-    private readonly IAuditoriaRepository _auditoriaRepository;
-
-    public PersistirActivity(
-        ILogger<PersistirActivity> logger,
-        IDocumentoRepository documentoRepository,
-        IAuditoriaRepository auditoriaRepository)
+    public class PersistirActivity
     {
-        _logger = logger;
-        _documentoRepository = documentoRepository;
-        _auditoriaRepository = auditoriaRepository;
-    }
+        private readonly ILogger<PersistirActivity> _logger;
+        private readonly IDocumentoRepository _documentoRepo;
+        private readonly IDocumentoEjecucionRepository _ejecucionRepo;
+        private readonly IAuditoriaRepository _auditoriaRepo;
 
-    [Function("PersistirActivity")]
-    public async Task Run([ActivityTrigger] ContratoSalida salida)
-    {
-        _logger.LogInformation($"Persistiendo resultado para documento: {salida.Identificacion.Documento}");
-
-        try
+        public PersistirActivity(
+            ILogger<PersistirActivity> logger,
+            IDocumentoRepository documentoRepo,
+            IDocumentoEjecucionRepository ejecucionRepo,
+            IAuditoriaRepository auditoriaRepo)
         {
-            // Buscar si ya existe el documento por SHA256
-            var documentoExistente = await _documentoRepository.GetBySHA256Async(salida.Integridad.SHA256);
+            _logger = logger;
+            _documentoRepo = documentoRepo;
+            _ejecucionRepo = ejecucionRepo;
+            _auditoriaRepo = auditoriaRepo;
+        }
 
-            if (documentoExistente != null)
+        [Function(nameof(PersistirActivity))]
+        public async Task Run([ActivityTrigger] ContratoSalida salida)
+        {
+            _logger.LogInformation("Persistiendo resultado para documento {Documento}", 
+                salida.Identificacion.Documento);
+
+            try
             {
-                // Actualizar documento existente
-                documentoExistente.Estado = salida.Resultado.Estado;
-                documentoExistente.ConfianzaGlobal = salida.Resultado.ConfianzaGlobal;
-                documentoExistente.Tipologia = salida.Identificacion.Tipologia;
-                documentoExistente.FechaProceso = salida.Identificacion.FechaProceso;
-                documentoExistente.Paginas = salida.Identificacion.Paginas;
-
-                // Actualizar o crear resultado
-                if (documentoExistente.Resultado == null)
+                // 1. Obtener o crear documento base
+                var documento = await _documentoRepo.GetBySHA256Async(salida.Integridad.SHA256);
+                
+                if (documento == null)
                 {
-                    documentoExistente.Resultado = new ResultadoProcesamientoEntity();
+                    documento = new DocumentoEntity
+                    {
+                        Guid = salida.Identificacion.Guid,
+                        NombreArchivo = salida.Identificacion.Documento,
+                        SHA256 = salida.Integridad.SHA256,
+                        CRC32 = salida.Integridad.CRC32,
+                        Tipologia = salida.Identificacion.Tipologia,
+                        Estado = salida.Resultado.Estado,
+                        ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
+                        Paginas = salida.Identificacion.Paginas,
+                        CorrelationId = salida.Identificacion.Guid,
+                        FechaCreacion = DateTime.UtcNow,
+                        FechaProceso = salida.Identificacion.FechaProceso
+                    };
+                    
+                    documento = await _documentoRepo.AddAsync(documento);
+                    _logger.LogInformation("Nuevo documento creado ID={Id}", documento.Id);
+                }
+                else
+                {
+                    documento.Estado = salida.Resultado.Estado;
+                    documento.ConfianzaGlobal = salida.Resultado.ConfianzaGlobal;
+                    documento.FechaActualizacion = DateTime.UtcNow;
+                    await _documentoRepo.UpdateAsync(documento);
+                    _logger.LogInformation("Documento actualizado ID={Id}", documento.Id);
                 }
 
-                MapearResultado(documentoExistente.Resultado, salida, documentoExistente.Id);
-
-                await _documentoRepository.UpdateAsync(documentoExistente);
-
-                _logger.LogInformation($"Documento actualizado: ID {documentoExistente.Id}");
-
-                // Registrar auditoría para actualización/reprocesamiento
-                await _auditoriaRepository.AddAsync(new AuditoriaEntity
+                // 2. Crear registro de ejecucion con historico completo
+                var ejecucion = new DocumentoEjecucionEntity
                 {
-                    DocumentoId = documentoExistente.Id,
-                    Accion = "Reprocesamiento",
-                    Nivel = salida.Resultado.Estado == "OK" ? "Info" : "Warning",
-                    Mensaje = $"Documento reprocesado con estado: {salida.Resultado.Estado}",
-                    DetallesJson = JsonSerializer.Serialize(salida.Resultado),
-                    FechaHora = DateTime.UtcNow
-                });
-            }
-            else
-            {
-                // Crear nuevo documento
-                var nuevoDocumento = new DocumentoEntity
-                {
-                    Guid = salida.Identificacion.Guid,
-                    NombreArchivo = salida.Identificacion.Documento,
-                    SHA256 = salida.Integridad.SHA256,
-                    CRC32 = salida.Integridad.CRC32,
+                    DocumentoId = documento.Id,
+                    EjecucionGuid = Guid.NewGuid().ToString(),
+                    FechaEjecucion = DateTime.UtcNow,
                     Tipologia = salida.Identificacion.Tipologia,
-                    Estado = salida.Resultado.Estado,
+                    EstadoFinal = salida.Resultado.Estado,
                     ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
-                    Paginas = salida.Identificacion.Paginas,
-                    CorrelationId = salida.Identificacion.Guid, // Temporal, actualizar cuando tengamos trazabilidad
-                    FechaCreacion = DateTime.UtcNow,
-                    FechaProceso = salida.Identificacion.FechaProceso
+                    ModeloClasificacion = salida.DetalleEjecucion.Clasificacion.Modelo,
+                    ConfianzaClasificacion = salida.DetalleEjecucion.Clasificacion.Confianza,
+                    UseFallbackLLM = salida.DetalleEjecucion.Clasificacion.FallbackLLM,
+                    
+                    // NUEVO: Guardar respuesta completa para auditoria
+                    ContratoSalidaCompletoJson = JsonSerializer.Serialize(salida, new JsonSerializerOptions 
+                    { 
+                        WriteIndented = false 
+                    }),
+                    
+                    DatosOriginalesJson = salida.DetalleEjecucion.Integracion?.DatosOriginales != null 
+                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Integracion.DatosOriginales) 
+                        : null,
+                    DatosFinalesJson = JsonSerializer.Serialize(salida.DatosExtraidos),
+                    DuracionTotalMs = 0
                 };
 
-                // Crear resultado
-                nuevoDocumento.Resultado = new ResultadoProcesamientoEntity();
-                MapearResultado(nuevoDocumento.Resultado, salida, 0);
-
-                var documentoGuardado = await _documentoRepository.AddAsync(nuevoDocumento);
-
-                _logger.LogInformation($"Nuevo documento guardado: ID {documentoGuardado.Id}");
-
-                // Registrar auditoría
-                await _auditoriaRepository.AddAsync(new AuditoriaEntity
+                // 3. Guardar detalle de cada plugin ejecutado
+                if (salida.DetalleEjecucion.Integracion?.Plugins != null)
                 {
-                    DocumentoId = documentoGuardado.Id,
+                    foreach (var plugin in salida.DetalleEjecucion.Integracion.Plugins)
+                    {
+                        ejecucion.PluginsEjecutados.Add(new PluginEjecucionEntity
+                        {
+                            PluginKey = plugin.PluginKey,
+                            Priority = plugin.Priority,
+                            Success = plugin.Success,
+                            Mensaje = plugin.Mensaje,
+                            StatusCode = plugin.StatusCode,
+                            DurationMs = plugin.DurationMs,
+                            Error = plugin.Error,
+                            DatosEnriquecidosJson = plugin.DatosEnriquecidos != null 
+                                ? JsonSerializer.Serialize(plugin.DatosEnriquecidos) 
+                                : null,
+                            FechaEjecucion = DateTime.UtcNow
+                        });
+                        
+                        ejecucion.DuracionTotalMs += plugin.DurationMs;
+                    }
+                }
+
+                // 4. Guardar validaciones estructuradas
+                if (salida.DetalleEjecucion.Postproceso?.Validaciones != null)
+                {
+                    foreach (var validacion in salida.DetalleEjecucion.Postproceso.Validaciones)
+                    {
+                        // Parsear formato "[Warning] Campo: Mensaje"
+                        var match = Regex.Match(validacion, @"\[(\w+)\]\s+(\w+):\s+(.+)");
+                        if (match.Success)
+                        {
+                            ejecucion.Validaciones.Add(new ValidacionResultadoEntity
+                            {
+                                Severidad = match.Groups[1].Value,
+                                Campo = match.Groups[2].Value,
+                                Mensaje = match.Groups[3].Value,
+                                Pasado = false,
+                                FechaValidacion = DateTime.UtcNow
+                            });
+                        }
+                    }
+                }
+
+                // Guardar ejecucion con todas sus relaciones
+                await _ejecucionRepo.AddAsync(ejecucion);
+                
+                _logger.LogInformation(
+                    "Ejecucion guardada ID={Id}, Plugins={Plugins}, Validaciones={Validaciones}",
+                    ejecucion.Id,
+                    ejecucion.PluginsEjecutados.Count,
+                    ejecucion.Validaciones.Count);
+
+                // 5. Registrar auditoria
+                await _auditoriaRepo.AddAsync(new AuditoriaEntity
+                {
+                    DocumentoId = documento.Id,
                     Accion = "Procesamiento Completo",
                     Nivel = salida.Resultado.Estado == "OK" ? "Info" : "Warning",
-                    Mensaje = $"Documento procesado con estado: {salida.Resultado.Estado}",
-                    DetallesJson = JsonSerializer.Serialize(salida.Resultado),
+                    Mensaje = $"Documento procesado con estado {salida.Resultado.Estado}",
+                    DetallesJson = JsonSerializer.Serialize(new 
+                    { 
+                        EjecucionGuid = ejecucion.EjecucionGuid,
+                        Confianza = salida.Resultado.ConfianzaGlobal 
+                    }),
                     FechaHora = DateTime.UtcNow
                 });
+
+                _logger.LogInformation("Persistencia completada exitosamente");
             }
-
-            _logger.LogInformation("Persistencia completada exitosamente");
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error durante la persistencia");
+                throw;
+            }
         }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error durante la persistencia");
-            throw;
-        }
-    }
-
-    private void MapearResultado(ResultadoProcesamientoEntity resultado, ContratoSalida salida, int documentoId)
-    {
-        if (documentoId > 0)
-            resultado.DocumentoId = documentoId;
-
-        resultado.ModeloClasificacion = salida.DetalleEjecucion.Clasificacion.Modelo;
-        resultado.ConfianzaClasificacion = salida.DetalleEjecucion.Clasificacion.Confianza;
-        resultado.FallbackLLM = salida.DetalleEjecucion.Clasificacion.FallbackLLM;
-
-        resultado.ModeloExtraccion = salida.DetalleEjecucion.Extraccion.Modelo;
-        resultado.LayoutEnabled = salida.DetalleEjecucion.Extraccion.LayoutEnabled;
-
-        resultado.DatosExtraidosJson = JsonSerializer.Serialize(salida.DatosExtraidos);
-        resultado.NormalizacionesJson = JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Normalizaciones);
-        resultado.ValidacionesJson = JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Validaciones);
-        resultado.InconsistenciasJson = JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Inconsistencias);
-
-        resultado.ModuloIntegracion = salida.DetalleEjecucion.Integracion.Plugins.Count > 0
-            ? string.Join(",", salida.DetalleEjecucion.Integracion.Plugins.Select(p => p.PluginKey))
-            : "N/A";
-        resultado.ResultadoIntegracion = salida.DetalleEjecucion.Integracion.Estado;
-
-        // Tiempos (si estuvieran disponibles en el DetalleEjecucion)
-        if (salida.DetalleEjecucion.Extraccion.TiemposMs != null && salida.DetalleEjecucion.Extraccion.TiemposMs.Count > 0)
-        {
-            resultado.TiempoClasificacionMs = salida.DetalleEjecucion.Extraccion.TiemposMs.ContainsKey("Classify") 
-                ? salida.DetalleEjecucion.Extraccion.TiemposMs["Classify"] : null;
-            resultado.TiempoExtraccionMs = salida.DetalleEjecucion.Extraccion.TiemposMs.ContainsKey("Extract") 
-                ? salida.DetalleEjecucion.Extraccion.TiemposMs["Extract"] : null;
-        }
-
-        resultado.FechaCreacion = DateTime.UtcNow;
     }
 }

@@ -32,6 +32,7 @@ var host = new HostBuilder()
         services.AddScoped<IDocumentoRepository, DocumentoRepository>();
         services.AddScoped<ITipologiaRepository, TipologiaRepository>();
         services.AddScoped<IAuditoriaRepository, AuditoriaRepository>();
+        services.AddScoped<IDocumentoEjecucionRepository, DocumentoEjecucionRepository>();
 
         // Services
         services.AddSingleton<IBlobStorageService, BlobStorageService>();
