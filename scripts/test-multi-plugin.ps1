@@ -64,7 +64,7 @@ if (Test-Path $dllPath) {
 # Payload de test
 Write-Host "`nEnviando documento de prueba..." -ForegroundColor Yellow
 
-$endpoint = "http://localhost:7271/api/IngestDocument"
+$endpoint = "http://localhost:7071/api/IngestDocument"
 
 $payload = @{
     instrucciones = @{
@@ -97,7 +97,7 @@ try {
     
     # Construir status URI correctamente
     $instanceId = $response.instanceId
-    $statusUri = "http://localhost:7271/runtime/webhooks/durabletask/instances/$instanceId"
+    $statusUri = "http://localhost:7071/runtime/webhooks/durabletask/instances/$instanceId"
     
     if ($instanceId) {
         Write-Host "`nMonitoreando ejecucion..." -ForegroundColor Yellow

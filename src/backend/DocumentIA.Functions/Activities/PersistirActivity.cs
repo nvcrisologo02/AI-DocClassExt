@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Data.Entities;
+using DocumentIA.Data.Context;
 using System;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -17,17 +18,20 @@ namespace DocumentIA.Functions.Activities
         private readonly IDocumentoRepository _documentoRepo;
         private readonly IDocumentoEjecucionRepository _ejecucionRepo;
         private readonly IAuditoriaRepository _auditoriaRepo;
+        private readonly DocumentIADbContext _context;
 
         public PersistirActivity(
             ILogger<PersistirActivity> logger,
             IDocumentoRepository documentoRepo,
             IDocumentoEjecucionRepository ejecucionRepo,
-            IAuditoriaRepository auditoriaRepo)
+            IAuditoriaRepository auditoriaRepo,
+            DocumentIADbContext context)
         {
             _logger = logger;
             _documentoRepo = documentoRepo;
             _ejecucionRepo = ejecucionRepo;
             _auditoriaRepo = auditoriaRepo;
+            _context = context;
         }
 
         [Function(nameof(PersistirActivity))]
@@ -70,7 +74,51 @@ namespace DocumentIA.Functions.Activities
                     _logger.LogInformation("Documento actualizado ID={Id}", documento.Id);
                 }
 
-                // 2. Crear registro de ejecucion con historico completo
+                // 2. Crear registro en ResultadosProcesamiento (tabla principal de resultados)
+                var resultado = new ResultadoProcesamientoEntity
+                {
+                    DocumentoId = documento.Id,
+                    
+                    // Clasificación
+                    ModeloClasificacion = salida.DetalleEjecucion.Clasificacion.Modelo,
+                    ConfianzaClasificacion = salida.DetalleEjecucion.Clasificacion.Confianza,
+                    FallbackLLM = salida.DetalleEjecucion.Clasificacion.FallbackLLM,
+                    
+                    // Extracción
+                    ModeloExtraccion = salida.DetalleEjecucion.Extraccion.Modelo,
+                    LayoutEnabled = salida.DetalleEjecucion.Extraccion.LayoutEnabled,
+                    DatosExtraidosJson = JsonSerializer.Serialize(salida.DatosExtraidos),
+                    
+                    // Postproceso
+                    NormalizacionesJson = salida.DetalleEjecucion.Postproceso?.Normalizaciones != null 
+                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Normalizaciones) 
+                        : null,
+                    ValidacionesJson = salida.DetalleEjecucion.Postproceso?.Validaciones != null 
+                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Validaciones) 
+                        : null,
+                    InconsistenciasJson = salida.DetalleEjecucion.Postproceso?.Inconsistencias != null 
+                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Inconsistencias) 
+                        : null,
+                    
+                    // Integración
+                    ModuloIntegracion = string.Join(",", 
+                        salida.DetalleEjecucion.Integracion?.Plugins?.Select(p => p.PluginKey) ?? Enumerable.Empty<string>()),
+                    ResultadoIntegracion = salida.DetalleEjecucion.Integracion?.Estado ?? "DESCONOCIDO",
+                    
+                    // Tiempos
+                    TiempoNormalizacionMs = GetTiempoMs(salida.DetalleEjecucion.Extraccion.TiemposMs, "Normalize"),
+                    TiempoClasificacionMs = GetTiempoMs(salida.DetalleEjecucion.Extraccion.TiemposMs, "Classify"),
+                    TiempoExtraccionMs = GetTiempoMs(salida.DetalleEjecucion.Extraccion.TiemposMs, "Extract"),
+                    
+                    FechaCreacion = DateTime.UtcNow
+                };
+                
+                // Guardar ResultadosProcesamiento
+                _context.ResultadosProcesamiento.Add(resultado);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Resultado procesamiento guardado ID={Id}", resultado.Id);
+
+                // 3. Crear registro de ejecucion con historico completo
                 var ejecucion = new DocumentoEjecucionEntity
                 {
                     DocumentoId = documento.Id,
@@ -172,6 +220,14 @@ namespace DocumentIA.Functions.Activities
                 _logger.LogError(ex, "Error durante la persistencia");
                 throw;
             }
+        }
+
+        private int? GetTiempoMs(Dictionary<string, int> tiempos, string clave)
+        {
+            if (tiempos == null || !tiempos.ContainsKey(clave))
+                return null;
+            
+            return tiempos[clave];
         }
     }
 }
