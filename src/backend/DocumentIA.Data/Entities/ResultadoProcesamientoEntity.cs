@@ -53,6 +53,13 @@ public class ResultadoProcesamientoEntity
     public int? TiempoTotalMs { get; set; }
 
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
+    // Metricas agregadas
+    public int NumeroEjecucion { get; set; }
+    public int TotalPluginsEjecutados { get; set; }
+    public int TotalValidacionesAplicadas { get; set; }
+    public int TotalErroresValidacion { get; set; }
+    public int TotalWarningsValidacion { get; set; }
+    public double PorcentajeCompletitud { get; set; }
 
     // Navegación
     [ForeignKey("DocumentoId")]

@@ -4,6 +4,7 @@ using DocumentIA.Data.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DocumentIA.Data.Migrations
 {
     [DbContext(typeof(DocumentIADbContext))]
-    partial class DocumentIADbContextModelSnapshot : ModelSnapshot
+    [Migration("20260216111744_AgregarHistoricoEjecuciones")]
+    partial class AgregarHistoricoEjecuciones
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -76,9 +79,6 @@ namespace DocumentIA.Data.Migrations
 
                     b.Property<double>("ConfianzaGlobal")
                         .HasColumnType("float");
-
-                    b.Property<string>("ContratoSalidaCompletoJson")
-                        .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("DatosFinalesJson")
                         .HasColumnType("nvarchar(max)");
@@ -429,7 +429,7 @@ namespace DocumentIA.Data.Migrations
                             Id = 1,
                             Activa = true,
                             Codigo = "tasacion",
-                            FechaCreacion = new DateTime(2026, 2, 16, 11, 54, 19, 503, DateTimeKind.Utc).AddTicks(3425),
+                            FechaCreacion = new DateTime(2026, 2, 16, 11, 17, 44, 283, DateTimeKind.Utc).AddTicks(6168),
                             Nombre = "Tasación",
                             UmbralClasificacion = 0.84999999999999998,
                             UmbralExtraccion = 0.80000000000000004,
