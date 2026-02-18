@@ -14,6 +14,7 @@ public class MockExtraerDataProvider : IExtraerDataProvider
         {
             "nota.simple.1_2" => ObtenerDatosNotaSimple12(),
             "nota.simple.1_3" => ObtenerDatosNotaSimple13(),
+            "nota.simple.1_4" => ObtenerDatosNotaSimple14(),
             _ => ObtenerDatosGenerico()
         };
     }
@@ -117,6 +118,74 @@ public class MockExtraerDataProvider : IExtraerDataProvider
             ["ValoracionCatastral"] = null!,
             ["DeudaIBI"] = null!,
             ["DeudaComunidad"] = null!
+        };
+    }
+
+    private Dictionary<string, object> ObtenerDatosNotaSimple14()
+    {
+        return new Dictionary<string, object>
+        {
+            ["FincaRegistral"] = "NS14-88921",
+            ["RegistroPropiedad"] = "Registro de la Propiedad n.º 3 de Valencia",
+            ["MunicipioRegistro"] = "Valencia",
+            ["IDUFIR_CRU"] = "46012000123456",
+            ["Registrador"] = "Luis Sanchez Martinez",
+            ["FechaDocumento"] = "2025-11-28",
+            ["NumeroAsientoPresentacion"] = "Asiento 1421 Diario 90",
+            ["Direccion"] = "Calle de Colón 45, 46004 Valencia",
+            ["ReferenciaCatastral"] = "1234567BC1234D12EABC",
+            ["CodigoPostal"] = "46004",
+            ["Provincia"] = "Valencia",
+            ["Municipio"] = "Valencia",
+            ["TipologiaInmueble"] = "Vivienda",
+            ["superficie"] = 97.35m,
+            ["UnidadSuperficie"] = "m2_construidos",
+            ["Anejos"] = new object[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["tipo"] = "Garaje",
+                    ["descripcion"] = "Plaza de garaje en sótano -1",
+                    ["superficie"] = 12.30m
+                },
+                new Dictionary<string, object>
+                {
+                    ["tipo"] = "Trastero",
+                    ["descripcion"] = "Trastero junto al núcleo de escaleras",
+                    ["superficie"] = 6.20m
+                }
+            },
+            ["CalificacionUrbanistica"] = "Suelo urbano",
+            ["Titular"] = "MARIA LOPEZ RUIZ",
+            ["NIF"] = "12345678Z",
+            ["CuotaParticipacion"] = "1/1",
+            ["FechaAdquisicion"] = "2019-04-22",
+            ["TituloAdquisicion"] = "Compraventa",
+            ["FechaInscripcion"] = "2019-05-03",
+            ["TomoLibroFolio"] = "Tomo 4211, Libro 889, Folio 27",
+            ["Cargas"] = new object[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["tipo"] = "Hipoteca",
+                    ["descripcion"] = "Préstamo hipotecario con Banco Ejemplo",
+                    ["importeMaxResponsabilidad"] = 186500m,
+                    ["fechaInscripcion"] = "2019-05-03",
+                    ["acreedor"] = "Banco Ejemplo S.A."
+                }
+            },
+            ["VPO"] = false,
+            ["LimitacionesAdministrativas"] = "No constan",
+            ["Ocupacion"] = "Libre",
+            ["ArrendamientosInscritos"] = new object[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["arrendatario"] = "Carlos Perez Martin",
+                    ["fechaInicio"] = "2024-01-01",
+                    ["fechaFin"] = "2028-12-31"
+                }
+            }
         };
     }
 
