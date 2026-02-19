@@ -1,23 +1,17 @@
 {
   "tipologiaId": "nota.simple.1_4",
-  "plugins": [
+ "plugins": [
     {
-      "pluginKey": "mock-enrichment",
-      "pluginType": "rest",
+      "pluginKey": "refCatExcel",
+      "type": "RestPlugin",
       "enabled": true,
       "priority": 1,
       "configuration": {
-        "baseUrl": "http://localhost:8080",
-        "authType": "None",
-        "timeoutSeconds": 10,
-        "endpoint": "/"
-      },
-      "retryPolicy": {
-        "maxRetries": 2,
-        "initialDelayMs": 500,
-        "exponentialBackoff": true,
-        "retryOnStatusCodes": [408, 429, 500, 502, 503, 504]
+        "baseUrl": "http://127.0.0.1:8080",
+        "endpoint": "/enriquecer",
+        "method": "POST",
+        "authType": "None"
       }
     }
-   ] 
+  ]
 }
