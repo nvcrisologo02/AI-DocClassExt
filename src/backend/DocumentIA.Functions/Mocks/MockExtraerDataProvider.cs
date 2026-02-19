@@ -133,7 +133,7 @@ public class MockExtraerDataProvider : IExtraerDataProvider
             ["FechaDocumento"] = "2025-11-28",
             ["NumeroAsientoPresentacion"] = "Asiento 1421 Diario 90",
             ["Direccion"] = "Calle de Colón 45, 46004 Valencia",
-            ["ReferenciaCatastral"] = "1234567BC1234D12EABC",
+            ["ReferenciaCatastral"] = "7949211YJ2874N0025RA",
             ["CodigoPostal"] = "46004",
             ["Provincia"] = "Valencia",
             ["Municipio"] = "Valencia",

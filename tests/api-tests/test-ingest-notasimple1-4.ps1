@@ -2,7 +2,7 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 
-$endpoint = "http://localhost:7071/api/IngestDocument"
+$endpoint = "http://localhost:7271/api/IngestDocument"
 
 
 $body = @{
@@ -58,7 +58,7 @@ try {
     # Corregir la URL de estado (agregar puerto si falta)
     $statusUri = $response.statusQueryUri
     if ($statusUri -match "http://localhost/") {
-        $statusUri = $statusUri -replace "http://localhost/", "http://localhost:7071/"
+        $statusUri = $statusUri -replace "http://localhost/", "http://localhost:7271/"
     }
     
     Write-Host "Status URI     : $statusUri"
