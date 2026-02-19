@@ -199,6 +199,34 @@ try {
     Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
 }
 
+# 10. Verificar objetos de migracion para busqueda por IdActivo
+Write-Host "`n[10] Verificando objetos de migracion (IdActivo):" -ForegroundColor Yellow
+try {
+    $query = @"
+    SELECT
+        CASE WHEN COL_LENGTH('dbo.DocumentoEjecuciones', 'IdActivoNormalizado') IS NOT NULL THEN 'OK' ELSE 'MISSING' END AS ColumnaCalculada,
+        CASE WHEN EXISTS (
+            SELECT 1
+            FROM sys.indexes
+            WHERE name = 'IX_DocumentoEjecuciones_IdActivoNormalizado_DocumentoId'
+              AND object_id = OBJECT_ID('dbo.DocumentoEjecuciones')
+        ) THEN 'OK' ELSE 'MISSING' END AS Indice,
+        CASE WHEN OBJECT_ID('dbo.sp_ObtenerDocumentoEjecucionesPorIdActivo', 'P') IS NOT NULL THEN 'OK' ELSE 'MISSING' END AS StoredProcedure;
+"@
+
+    $result = sqlcmd -S $server -U $user -P $password -d $database -Q $query -h -1 | Where-Object { $_.Trim() }
+    $line = ($result | Select-Object -Last 1).Trim()
+    Write-Host "  $line" -ForegroundColor Cyan
+
+    if ($line -match "MISSING") {
+        Write-Host "  [ADVERTENCIA] Faltan objetos. Ejecuta migraciones EF Core antes de usar el SP." -ForegroundColor Yellow
+    } else {
+        Write-Host "  [OK] Objetos de IdActivo disponibles." -ForegroundColor Green
+    }
+} catch {
+    Write-Host "  [ERROR] $($_.Exception.Message)" -ForegroundColor Red
+}
+
 Write-Host "`n========================================" -ForegroundColor Cyan
 Write-Host "  FIN DEL DIAGNOSTICO" -ForegroundColor Cyan
 Write-Host "========================================`n" -ForegroundColor Cyan

@@ -67,4 +67,29 @@ var host = new HostBuilder()
     })
     .Build();
 
+using (var scope = host.Services.CreateScope())
+{
+    var logger = scope.ServiceProvider
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger("Startup.Database");
+    var configuration = scope.ServiceProvider.GetRequiredService<IConfiguration>();
+
+    var runMigrationsSetting = configuration["RunDatabaseMigrationsOnStartup"];
+    var runMigrations = string.IsNullOrWhiteSpace(runMigrationsSetting)
+        || runMigrationsSetting.Equals("true", StringComparison.OrdinalIgnoreCase)
+        || runMigrationsSetting.Equals("1", StringComparison.OrdinalIgnoreCase);
+
+    if (runMigrations)
+    {
+        var dbContext = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
+        logger.LogInformation("Applying pending EF Core migrations at startup.");
+        dbContext.Database.Migrate();
+        logger.LogInformation("EF Core migrations applied successfully.");
+    }
+    else
+    {
+        logger.LogInformation("Skipping EF Core migrations at startup (RunDatabaseMigrationsOnStartup={Value}).", runMigrationsSetting);
+    }
+}
+
 host.Run();
