@@ -70,6 +70,9 @@ Ver carpeta docs/ para:
 - Arquitectura detallada
 - Contratos de entrada/salida
 - Manuales de operacion
+- Manual de plugins: `docs/manuales/MANUAL_PLUGINS.md`
+- Manual de activities (Azure Functions): `docs/manuales/MANUAL_ACTIVITIES_AZURE_FUNCTIONS.md`
+- Plantillas de plugins: `docs/contratos/PLANTILLA_PLUGINS_JSON.md`
 
 ## Licencia
 
