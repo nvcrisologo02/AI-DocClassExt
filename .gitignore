@@ -45,3 +45,10 @@ tests/api-tests/last-instance-id.txt
 tests/api-tests/last-instance-id-notasimple13.txt
 tests/api-tests/last-instance-id-notasimple.txt
 tests/api-tests/last-instance-id-notasimple14.txt
+docs/backlog_revisado.csv
+docs/difs.csv
+scripts/ado-reset-hierarchy-relations-rest.ps1
+scripts/ado-reset-hierarchy-relations.ps1
+docs/Backlog/backlog_revisado.csv
+docs/Backlog/backlog.xlsx
+docs/Backlog/difs.csv
