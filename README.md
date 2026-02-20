@@ -72,6 +72,7 @@ Ver carpeta docs/ para:
 - Manuales de operacion
 - Manual de plugins: `docs/manuales/MANUAL_PLUGINS.md`
 - Manual de activities (Azure Functions): `docs/manuales/MANUAL_ACTIVITIES_AZURE_FUNCTIONS.md`
+- Manual del motor de validaciones: `docs/manuales/MANUAL_VALIDACIONES.md`
 - Plantillas de plugins: `docs/contratos/PLANTILLA_PLUGINS_JSON.md`
 
 ## Licencia
