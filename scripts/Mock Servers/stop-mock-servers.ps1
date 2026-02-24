@@ -1,7 +1,6 @@
 $ErrorActionPreference = "Stop"
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectRoot = Split-Path -Parent $scriptDir
 $pidFile = Join-Path $scriptDir ".mock-servers.pids.json"
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -18,6 +17,10 @@ if (Test-Path $pidFile) {
 
             $running = Get-Process -Id ([int]$proc.pid) -ErrorAction SilentlyContinue
             if ($running) {
+                $children = Get-CimInstance Win32_Process -Filter "ParentProcessId = $([int]$proc.pid)" -ErrorAction SilentlyContinue
+                foreach ($child in $children) {
+                    Stop-Process -Id $child.ProcessId -Force -ErrorAction SilentlyContinue
+                }
                 Stop-Process -Id ([int]$proc.pid) -Force -ErrorAction SilentlyContinue
                 Write-Host "[OK] Detenido $($proc.name) (PID $($proc.pid))" -ForegroundColor Green
                 $stopped++
@@ -35,7 +38,7 @@ if ($stopped -eq 0) {
         "-m uvicorn ActivoEnrichment:app"
     )
 
-    $processes = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
+    $processes = Get-CimInstance Win32_Process |
         Where-Object {
             $cmd = $_.CommandLine
             if ([string]::IsNullOrEmpty($cmd)) { return $false }

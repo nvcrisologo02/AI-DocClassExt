@@ -7,8 +7,8 @@ param(
 
 # Si no se proporciona instanceId, leer del archivo
 if ([string]::IsNullOrEmpty($InstanceId)) {
-    if (Test-Path "last-instance-id.txt") {
-        $InstanceId = Get-Content "last-instance-id.txt" -Raw
+    if (Test-Path "last-instance-id-notasimple14.txt") {
+        $InstanceId = Get-Content "last-instance-id-notasimple14.txt" -Raw
         $InstanceId = $InstanceId.Trim()
         Write-Host "Usando Instance ID del último test: $InstanceId`n" -ForegroundColor Gray
     } else {
@@ -28,10 +28,10 @@ try {
     Write-Host "Runtime Status: " -NoNewline -ForegroundColor Gray
     
     switch ($status.runtimeStatus) {
-        "Running" { Write-Host "🔄 RUNNING" -ForegroundColor Yellow }
-        "Completed" { Write-Host "✓ COMPLETED" -ForegroundColor Green }
-        "Failed" { Write-Host "✗ FAILED" -ForegroundColor Red }
-        "Pending" { Write-Host "⏳ PENDING" -ForegroundColor Blue }
+        "Running" { Write-Host "RUNNING" -ForegroundColor Yellow }
+        "Completed" { Write-Host "COMPLETED" -ForegroundColor Green }
+        "Failed" { Write-Host "FAILED" -ForegroundColor Red }
+        "Pending" { Write-Host "PENDING" -ForegroundColor Blue }
         default { Write-Host $status.runtimeStatus -ForegroundColor White }
     }
     

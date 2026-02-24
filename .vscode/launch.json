@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Azure Functions: Launch (.NET)",
+            "type": "dotnet",
+            "request": "launch",
+            "projectPath": "${workspaceFolder}/src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj",
+            "preLaunchTask": "build (functions)",
+            "cwd": "${workspaceFolder}/src/backend/DocumentIA.Functions"
+        },
+        {
             "name": "Azure Functions: Attaching to Host Process",
             "type": "coreclr",
             "request": "attach",
