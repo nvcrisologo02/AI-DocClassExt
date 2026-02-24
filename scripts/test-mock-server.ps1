@@ -20,7 +20,7 @@ try {
     Write-Host "  Version: $($health.version)" -ForegroundColor Gray
 } catch {
     Write-Host "  [ERROR] Servidor no responde" -ForegroundColor Red
-    Write-Host "  Asegurate de que esta corriendo: python scripts\mock-enrichment-server.py" -ForegroundColor Yellow
+    Write-Host "  Asegurate de haber ejecutado la tarea: start (mock servers)" -ForegroundColor Yellow
     exit 1
 }
 

@@ -12,6 +12,7 @@ Write-Host "Verificando servidores mock..." -ForegroundColor Yellow
 
 $restOk = $false
 $soapOk = $false
+$activoOk = $false
 
 try {
     # Cambiar a llamar directamente a la raiz
@@ -28,7 +29,7 @@ try {
         Write-Host "  [OK] Mock REST Server (puerto 8080)" -ForegroundColor Green
     } catch {
         Write-Host "  [ERROR] Mock REST Server no responde (puerto 8080)" -ForegroundColor Red
-        Write-Host "  Ejecuta: python scripts\mock-enrichment-server.py" -ForegroundColor Yellow
+        Write-Host "  Ejecuta la tarea: start (mock servers)" -ForegroundColor Yellow
     }
 }
 
@@ -41,10 +42,27 @@ try {
     Write-Host "  [OK] Mock SOAP Server (puerto 8081)" -ForegroundColor Green
 } catch {
     Write-Host "  [ERROR] Mock SOAP Server no responde (puerto 8081)" -ForegroundColor Red
-    Write-Host "  Ejecuta: python scripts\mock-soap-server.py" -ForegroundColor Yellow
+    Write-Host "  Ejecuta la tarea: start (mock servers)" -ForegroundColor Yellow
 }
 
-if (-not ($restOk -and $soapOk)) {
+try {
+    $activoHealth = Invoke-RestMethod -Uri "http://localhost:8082/health" -Method Get -TimeoutSec 2 -ErrorAction SilentlyContinue
+    $activoOk = $true
+    Write-Host "  [OK] ActivoEnrichment API (puerto 8082)" -ForegroundColor Green
+} catch {
+    try {
+        $tcpClient = New-Object System.Net.Sockets.TcpClient
+        $tcpClient.Connect("localhost", 8082)
+        $tcpClient.Close()
+        $activoOk = $true
+        Write-Host "  [OK] ActivoEnrichment API (puerto 8082)" -ForegroundColor Green
+    } catch {
+        Write-Host "  [ERROR] ActivoEnrichment API no responde (puerto 8082)" -ForegroundColor Red
+        Write-Host "  Ejecuta la tarea: start (mock servers)" -ForegroundColor Yellow
+    }
+}
+
+if (-not ($restOk -and $soapOk -and $activoOk)) {
     Write-Host "`n[ADVERTENCIA] Algunos servidores no responden, pero continuando..." -ForegroundColor Yellow
     # No salir, continuar de todas formas
 }
@@ -179,7 +197,7 @@ try {
             Write-Host "`n[TIMEOUT] La orquestacion no completo en 60 segundos ($maxRetries intentos)" -ForegroundColor Yellow
             Write-Host "Verifica que:" -ForegroundColor Yellow
             Write-Host "  1. Azure Functions esta ejecutandose: func host start" -ForegroundColor Yellow
-            Write-Host "  2. Los servidores mock estan activos (puerto 8080 y 8081)" -ForegroundColor Yellow
+            Write-Host "  2. Los servidores mock estan activos (puertos 8080, 8081 y 8082)" -ForegroundColor Yellow
             Write-Host "  3. Instance ID: $instanceId" -ForegroundColor Gray
         }
     }
