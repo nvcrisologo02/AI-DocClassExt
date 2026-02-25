@@ -7,7 +7,7 @@ $endpoint = "http://localhost:7071/api/IngestDocument"
 
 $body = @{
     instrucciones = @{
-        expectedType = "Nota Simple"
+        
         skipDuplicateCheck = $true
         forceReprocess = $true
         classification = @{
