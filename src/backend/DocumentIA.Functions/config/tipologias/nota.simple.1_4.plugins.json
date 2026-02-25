@@ -3,7 +3,7 @@
  "plugins": [
     {
       "pluginKey": "refCatExcel",
-      "type": "RestPlugin",
+      "pluginType": "rest",
       "enabled": true,
       "priority": 1,
       "configuration": {
