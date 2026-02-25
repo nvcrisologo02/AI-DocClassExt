@@ -45,6 +45,11 @@ public class DocumentProcessOrchestrator
 
             salida.Integridad.SHA256 = datosNormalizados["SHA256"].ToString() ?? "";
             salida.Integridad.CRC32 = datosNormalizados["CRC32"].ToString() ?? "";
+            // Propagar la ruta real del blob para persistir trazabilidad documento -> blob
+            salida.Integridad.RutaBlobStorage =
+                datosNormalizados.TryGetValue("BlobPath", out var blobPathObj)
+                    ? blobPathObj?.ToString()
+                    : null;
 
             // 2. Verificar duplicados (si esta habilitado)
             if (!entrada.Instrucciones.SkipDuplicateCheck)
@@ -124,6 +129,7 @@ public class DocumentProcessOrchestrator
             
             if (resultadoValidacion.Errores > 0)
             {
+                // Resumen agregado para facilitar consulta rápida en auditoría/persistencia
                 salida.DetalleEjecucion.Postproceso.Inconsistencias.Add(
                     $"Total de errores de validacion: {resultadoValidacion.Errores}");
             }

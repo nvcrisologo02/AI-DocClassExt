@@ -22,6 +22,8 @@ public class Integridad
 {
     public string CRC32 { get; set; } = string.Empty;
     public string SHA256 { get; set; } = string.Empty;
+    // Ruta completa en blob (container/path) para relacionar documento logico con almacenamiento fisico
+    public string? RutaBlobStorage { get; set; }
     public string? GestorDocumental { get; set; }
     public string? IdActivo { get; set; }
 }
@@ -40,7 +42,7 @@ public class ResultadoClasificacion
     public string Modelo { get; set; } = string.Empty;
     public double Confianza { get; set; }
     public bool FallbackLLM { get; set; }
-    public string? TipologiaDetectada { get; set; } // Agregar esta línea
+    public string? TipologiaDetectada { get; set; }
 }
 
 public class ResultadoExtraccion
