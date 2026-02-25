@@ -9,7 +9,7 @@ $projectRoot = Split-Path -Parent $scriptDir
 
 $enrichmentScript = Join-Path $scriptDir "mock-enrichment-server.py"
 $soapScript = Join-Path $scriptDir "mock-soap-server.py"
-$activoEnrichmentDir = Join-Path $projectRoot "src\enrichments\ActivoEnrichment"
+$activoEnrichmentDir = Join-Path $projectRoot "..\src\enrichments\ActivoEnrichment"
 $activoEnrichmentApp = Join-Path $activoEnrichmentDir "ActivoEnrichment.py"
 $pidFile = Join-Path $scriptDir ".mock-servers.pids.json"
 
