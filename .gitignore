@@ -52,3 +52,4 @@ scripts/ado-reset-hierarchy-relations.ps1
 docs/Backlog/backlog_revisado.csv
 docs/Backlog/backlog.xlsx
 docs/Backlog/difs.csv
+scripts/Mock Servers/.mock-servers.pids.json
