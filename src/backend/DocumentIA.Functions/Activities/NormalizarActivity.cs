@@ -1,7 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
-using DocumentIA.Core.Services;
 using System.Security.Cryptography;
 
 namespace DocumentIA.Functions.Activities;
@@ -9,18 +8,14 @@ namespace DocumentIA.Functions.Activities;
 public class NormalizarActivity
 {
     private readonly ILogger<NormalizarActivity> _logger;
-    private readonly IBlobStorageService _blobStorageService;
 
-    public NormalizarActivity(
-        ILogger<NormalizarActivity> logger,
-        IBlobStorageService blobStorageService)
+    public NormalizarActivity(ILogger<NormalizarActivity> logger)
     {
         _logger = logger;
-        _blobStorageService = blobStorageService;
     }
 
     [Function("NormalizarActivity")]
-    public async Task<Dictionary<string, object>> Run([ActivityTrigger] ContratoEntrada entrada)
+    public Dictionary<string, object> Run([ActivityTrigger] ContratoEntrada entrada)
     {
         _logger.LogInformation($"Normalizando documento: {entrada.Documento.Name}");
 
@@ -33,32 +28,13 @@ public class NormalizarActivity
         // Calcular CRC32
         var crc32 = CalcularCRC32(documentBytes);
 
-        // Subir a Blob Storage
-        string blobPath;
-        try
-        {
-            blobPath = await _blobStorageService.UploadDocumentAsync(
-                documentBytes, 
-                entrada.Documento.Name, 
-                "documents");
-            
-            _logger.LogInformation($"Documento subido a blob storage: {blobPath}");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error subiendo a blob storage, continuando sin almacenamiento");
-            blobPath = string.Empty;
-        }
-
         var resultado = new Dictionary<string, object>
         {
             ["SHA256"] = sha256,
             ["CRC32"] = crc32,
             ["TamañoBytes"] = documentBytes.Length,
             ["NombreNormalizado"] = entrada.Documento.Name.Trim().ToLowerInvariant(),
-            ["FechaNormalizacion"] = DateTime.UtcNow,
-            ["DocumentoBytes"] = documentBytes,
-            ["BlobPath"] = blobPath
+            ["FechaNormalizacion"] = DateTime.UtcNow
         };
 
         _logger.LogInformation($"Normalización completada. SHA256: {sha256}");
