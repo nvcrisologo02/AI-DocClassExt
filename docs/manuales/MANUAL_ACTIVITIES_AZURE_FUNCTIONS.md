@@ -8,7 +8,7 @@ Este manual describe cómo funcionan las `Activities` del backend `DocumentIA.Fu
 
 - Trigger de entrada HTTP.
 - Orquestador Durable (`DocumentProcessOrchestrator`).
-- Activities de procesamiento (`Normalizar`, `Clasificar`, `Extraer`, `Validar`, `Integrar`, `Persistir`, `VerificarDuplicado`).
+- Activities de procesamiento (`Normalizar`, `VerificarDuplicado`, `SubirBlob`, `Clasificar`, `Extraer`, `Validar`, `Integrar`, `Persistir`).
 
 ---
 
@@ -23,11 +23,12 @@ Pipeline del orquestador:
 
 1. `NormalizarActivity`
 2. `VerificarDuplicadoActivity` (si no se indicó `SkipDuplicateCheck`)
-3. `ClasificarActivity`
-4. `ExtraerActivity`
-5. `ValidarActivity`
-6. `IntegrarActivity`
-7. `PersistirActivity`
+3. `SubirBlobActivity` (si no se corta por duplicado o si `ForceReprocess=true`)
+4. `ClasificarActivity`
+5. `ExtraerActivity`
+6. `ValidarActivity`
+7. `IntegrarActivity`
+8. `PersistirActivity`
 
 Salida:
 
@@ -41,24 +42,25 @@ flowchart TD
   B --> C[1. NormalizarActivity]
   C --> D{SkipDuplicateCheck?}
   D -- No --> E[2. VerificarDuplicadoActivity]
-  D -- Sí --> F[3. ClasificarActivity]
+  D -- Sí --> F[3. SubirBlobActivity]
   E --> G{Duplicado y no ForceReprocess?}
   G -- Sí --> H[Estado DUPLICADO\nFin]
   G -- No --> F
-  F --> I{Confianza < Umbral?}
-  I -- Sí --> J[Estado BAJA_CONFIANZA_CLASIFICACION\nFin]
-  I -- No --> K[4. ExtraerActivity]
-  K --> L[5. ValidarActivity]
-  L --> M[6. IntegrarActivity]
-  M --> N[7. PersistirActivity]
-  N --> O{Errores de validación?}
-  O -- Sí --> P[Estado VALIDACION_CON_ERRORES]
-  O -- No --> Q[Estado OK]
+  F --> I[4. ClasificarActivity]
+  I --> J{Confianza < Umbral?}
+  J -- Sí --> K[Estado BAJA_CONFIANZA_CLASIFICACION\nFin]
+  J -- No --> L[5. ExtraerActivity]
+  L --> M[6. ValidarActivity]
+  M --> N[7. IntegrarActivity]
+  N --> O[8. PersistirActivity]
+  O --> P{Errores de validación?}
+  P -- Sí --> Q[Estado VALIDACION_CON_ERRORES]
+  P -- No --> R[Estado OK]
 
   style H fill:#fff3cd,stroke:#d39e00
-  style J fill:#fff3cd,stroke:#d39e00
-  style P fill:#ffe5e5,stroke:#cc0000
-  style Q fill:#e8f5e9,stroke:#2e7d32
+  style K fill:#fff3cd,stroke:#d39e00
+  style Q fill:#ffe5e5,stroke:#cc0000
+  style R fill:#e8f5e9,stroke:#2e7d32
 ```
 
 ### Diagrama swimlane (Mermaid)
@@ -77,7 +79,6 @@ sequenceDiagram
   T->>O: ScheduleNewOrchestrationInstance
 
   O->>A: NormalizarActivity(entrada)
-  A->>X: BlobStorage.Upload (opcional)
   A-->>O: SHA256, CRC32, metadata
 
   alt SkipDuplicateCheck = false
@@ -88,6 +89,10 @@ sequenceDiagram
       O-->>T: Estado DUPLICADO
     end
   end
+
+  O->>A: SubirBlobActivity(base64, nombre)
+  A->>X: BlobStorage.Upload
+  A-->>O: RutaBlobStorage
 
   O->>A: ClasificarActivity(...)
   A-->>O: ResultadoClasificacion
@@ -169,17 +174,30 @@ Responsabilidad:
 
 - Decodificar Base64 del documento.
 - Calcular `SHA256` y `CRC32`.
-- Intentar subida a Blob Storage (`IBlobStorageService`).
 
 Salida:
 
-- Diccionario con: `SHA256`, `CRC32`, `TamañoBytes`, `NombreNormalizado`, `FechaNormalizacion`, `DocumentoBytes`, `BlobPath`.
+- Diccionario con: `SHA256`, `CRC32`, `TamañoBytes`, `NombreNormalizado`, `FechaNormalizacion`.
 
 Comportamiento de error:
 
-- Si falla Blob Storage, registra warning y continúa con `BlobPath` vacío.
+- Si falla la normalización/cálculo de integridad, propaga excepción y el orquestador termina en `ERROR`.
 
-## 4.2 `VerificarDuplicadoActivity`
+## 4.2 `SubirBlobActivity`
+
+Responsabilidad:
+
+- Subir a Blob Storage el contenido del documento cuando el flujo debe continuar.
+
+Salida:
+
+- `RutaBlobStorage` (string) o vacío si no se pudo almacenar.
+
+Comportamiento de error:
+
+- Si falla la subida a Blob, registra warning y continúa devolviendo string vacío.
+
+## 4.3 `VerificarDuplicadoActivity`
 
 Responsabilidad:
 
@@ -193,7 +211,7 @@ Decisión en orquestador:
 
 - Si es duplicado y `ForceReprocess=false` ⇒ estado final `DUPLICADO` y finaliza.
 
-## 4.3 `ClasificarActivity`
+## 4.4 `ClasificarActivity`
 
 Responsabilidad:
 
@@ -211,7 +229,7 @@ Decisión en orquestador:
 
 - Si `Confianza < Instrucciones.Classification.Umbral` ⇒ estado `BAJA_CONFIANZA_CLASIFICACION` y finaliza.
 
-## 4.4 `ExtraerActivity`
+## 4.5 `ExtraerActivity`
 
 Responsabilidad:
 
@@ -225,7 +243,7 @@ Salida:
 
 - `Dictionary<string, object>` con campos extraídos.
 
-## 4.5 `ValidarActivity`
+## 4.6 `ValidarActivity`
 
 Responsabilidad:
 
@@ -244,7 +262,7 @@ Comportamiento especial:
 
 - Si no existe archivo de validación, devuelve warning funcional (no excepción fatal).
 
-## 4.6 `IntegrarActivity`
+## 4.7 `IntegrarActivity`
 
 Responsabilidad:
 
@@ -262,7 +280,7 @@ Salida:
 
 - `ResultadoIntegracion` con detalle por plugin y datos finales enriquecidos.
 
-## 4.7 `PersistirActivity`
+## 4.8 `PersistirActivity`
 
 Responsabilidad:
 
@@ -331,7 +349,7 @@ Archivos de configuración utilizados por activities:
 ## 7.3 Orden recomendado de diagnóstico
 
 1. Confirmar `instanceId` y estado de orquestación.
-2. Revisar logs por paso (`Paso 1...Paso 7`).
+2. Revisar logs por paso (`Paso 1...Paso 8`, incluyendo `Paso 2.5` para subida a blob).
 3. Validar configuración de tipología (validation/plugins).
 4. Revisar conectividad a servicios externos (Blob, plugins REST/SOAP).
 5. Verificar persistencia en tablas de documento/ejecución/auditoría.

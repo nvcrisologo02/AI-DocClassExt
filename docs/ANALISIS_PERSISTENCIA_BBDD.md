@@ -25,7 +25,7 @@ Almacena información del documento procesado.
 | `Estado` | string(100) | Estado del procesamiento | ✅ Sí |
 | `ConfianzaGlobal` | double? | Confianza entre 0 y 1 | ✅ Sí |
 | `Paginas` | int | Número de páginas | ✅ Sí |
-| `RutaBlobStorage` | string(500) | Ruta en blob storage (usar después) | ⚠️ No se guarda |
+| `RutaBlobStorage` | string(500) | Ruta en blob storage (usar después) | ✅ Sí (cuando la subida a blob se realiza correctamente) |
 | `CorrelationId` | string(100) | ID de correlación (trazabilidad) | ✅ Sí |
 | `SubmittedBy` | string(200) | Quién envió el documento | ⚠️ No se guarda* |
 | `IdGDC` | string(100) | ID GDC (trazabilidad externa) | ⚠️ No se guarda* |

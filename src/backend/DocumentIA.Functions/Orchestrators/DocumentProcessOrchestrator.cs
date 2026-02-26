@@ -45,11 +45,7 @@ public class DocumentProcessOrchestrator
 
             salida.Integridad.SHA256 = datosNormalizados["SHA256"].ToString() ?? "";
             salida.Integridad.CRC32 = datosNormalizados["CRC32"].ToString() ?? "";
-            // Propagar la ruta real del blob para persistir trazabilidad documento -> blob
-            salida.Integridad.RutaBlobStorage =
-                datosNormalizados.TryGetValue("BlobPath", out var blobPathObj)
-                    ? blobPathObj?.ToString()
-                    : null;
+            salida.Integridad.RutaBlobStorage = null;
 
             // 2. Verificar duplicados (si esta habilitado)
             if (!entrada.Instrucciones.SkipDuplicateCheck)
@@ -65,6 +61,21 @@ public class DocumentProcessOrchestrator
                     logger.LogWarning("Documento duplicado detectado");
                     return salida;
                 }
+            }
+
+            logger.LogInformation("Paso 2.5: Subiendo documento a blob storage");
+            var blobPath = await context.CallActivityAsync<string>(
+                "SubirBlobActivity",
+                new SubirBlobInput
+                {
+                    ContenidoBase64 = entrada.Documento.Content.Base64,
+                    NombreArchivo = entrada.Documento.Name,
+                    Contenedor = "documents"
+                });
+
+            if (!string.IsNullOrWhiteSpace(blobPath))
+            {
+                salida.Integridad.RutaBlobStorage = blobPath;
             }
 
             // 3. Clasificacion
