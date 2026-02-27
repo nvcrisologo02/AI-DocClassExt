@@ -22,6 +22,10 @@ public class DocumentoEntity
     public string SHA256 { get; set; } = string.Empty;
 
     [Required]
+    [MaxLength(32)]
+    public string MD5 { get; set; } = string.Empty;
+
+    [Required]
     [MaxLength(8)]
     public string CRC32 { get; set; } = string.Empty;
 

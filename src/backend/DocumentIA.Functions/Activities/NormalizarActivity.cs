@@ -25,19 +25,23 @@ public class NormalizarActivity
         // Calcular SHA256
         var sha256 = CalcularSHA256(documentBytes);
 
+        // Calcular MD5
+        var md5 = CalcularMD5(documentBytes);
+
         // Calcular CRC32
         var crc32 = CalcularCRC32(documentBytes);
 
         var resultado = new Dictionary<string, object>
         {
             ["SHA256"] = sha256,
+            ["MD5"] = md5,
             ["CRC32"] = crc32,
             ["TamañoBytes"] = documentBytes.Length,
             ["NombreNormalizado"] = entrada.Documento.Name.Trim().ToLowerInvariant(),
             ["FechaNormalizacion"] = DateTime.UtcNow
         };
 
-        _logger.LogInformation($"Normalización completada. SHA256: {sha256}");
+        _logger.LogInformation($"Normalización completada. SHA256: {sha256}, MD5: {md5}");
         return resultado;
     }
 
@@ -45,6 +49,13 @@ public class NormalizarActivity
     {
         using var sha256 = SHA256.Create();
         var hash = sha256.ComputeHash(data);
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private static string CalcularMD5(byte[] data)
+    {
+        using var md5 = MD5.Create();
+        var hash = md5.ComputeHash(data);
         return Convert.ToHexString(hash).ToLowerInvariant();
     }
 
