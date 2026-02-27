@@ -44,6 +44,7 @@ public class DocumentProcessOrchestrator
                 entrada);
 
             salida.Integridad.SHA256 = datosNormalizados["SHA256"].ToString() ?? "";
+            salida.Integridad.MD5 = datosNormalizados["MD5"].ToString() ?? "";
             salida.Integridad.CRC32 = datosNormalizados["CRC32"].ToString() ?? "";
             salida.Integridad.RutaBlobStorage = null;
 

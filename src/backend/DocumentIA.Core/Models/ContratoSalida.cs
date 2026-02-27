@@ -22,6 +22,7 @@ public class Integridad
 {
     public string CRC32 { get; set; } = string.Empty;
     public string SHA256 { get; set; } = string.Empty;
+    public string MD5 { get; set; } = string.Empty;
     // Ruta completa en blob (container/path) para relacionar documento logico con almacenamiento fisico
     public string? RutaBlobStorage { get; set; }
     public string? GestorDocumental { get; set; }

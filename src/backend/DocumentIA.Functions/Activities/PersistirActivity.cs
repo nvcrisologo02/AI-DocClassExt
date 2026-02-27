@@ -52,6 +52,7 @@ namespace DocumentIA.Functions.Activities
                         Guid = salida.Identificacion.Guid,
                         NombreArchivo = salida.Identificacion.Documento,
                         SHA256 = salida.Integridad.SHA256,
+                        MD5 = salida.Integridad.MD5,
                         CRC32 = salida.Integridad.CRC32,
                         // Guardar la ruta del blob desde la primera persistencia para trazabilidad directa
                         RutaBlobStorage = salida.Integridad.RutaBlobStorage,
@@ -71,6 +72,7 @@ namespace DocumentIA.Functions.Activities
                 {
                     documento.Estado = salida.Resultado.Estado;
                     documento.ConfianzaGlobal = salida.Resultado.ConfianzaGlobal;
+                    documento.MD5 = salida.Integridad.MD5;
                     if (!string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage))
                     {
                         // Actualizar ruta solo cuando venga informada para no pisar con null/vacío
