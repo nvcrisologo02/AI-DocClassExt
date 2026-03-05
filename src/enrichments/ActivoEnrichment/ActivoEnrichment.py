@@ -24,6 +24,8 @@ class IntegracionRequest(BaseModel):
     # Este modelo replica la estructura que envia IntegrarActivity a traves del RestPlugin
     tipologia: str
     documentoId: Optional[str] = None 
+    # IdActivo puede venir en la petición (viene ahora en el payload desde IntegrarActivity)
+    idActivo: Optional[str] = None
     datosExtraidos: DatosExtraidos
     metadata: Dict[str, Any]
 
@@ -97,6 +99,13 @@ def enriquecer(request: IntegracionRequest) -> Dict[str, Any]:
         "tipologia_activo": str(fila["TIPOLOGIA"]).strip(),
         "id_ref_catast": str(fila["ID_REF_CATAST"]).strip(),
     }
+    # Propagar idActivo para compatibilidad con pipeline (clave esperada: "idActivo")
+    # Si la petición ya traía un idActivo, preservarlo; sino usar el id_activo_sareb hallado
+    if request.idActivo:
+        resultado["idActivo"] = request.idActivo
+    else:
+        if id_activo and id_activo > 0:
+            resultado["idActivo"] = str(id_activo)
     
     print(f"DEBUG: RESULTADO: {resultado}")
     return resultado

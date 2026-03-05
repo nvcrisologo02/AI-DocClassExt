@@ -57,3 +57,13 @@ docs/manuales/GUIA_DEMO_NOTA_SIMPLE_1_4.md
 tests/api-tests/last-instance-id.txt
 tests/api-tests/last-instance-id.txt
 tests/api-tests/last-instance-id.txt
+docs/manuales/GUIA_DEMO_NOTA_SIMPLE_1_4 copy.md
+tmp_notasimple_output_pretty.json
+tmp_notasimple_output.json
+tmp_tasacion_output_pretty.json
+tmp_tasacion_output.json
+docs/manuales/salidas-demo/salida_nota_simple_1_4.json
+docs/manuales/salidas-demo/salida_test_ingest_tasacion.json
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id.txt

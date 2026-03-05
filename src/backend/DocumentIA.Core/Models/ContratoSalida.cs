@@ -66,6 +66,10 @@ public class IntegrarInput
     public string DocumentoId { get; set; } = string.Empty;
     public Dictionary<string, object> DatosExtraidos { get; set; } = new();
     public Dictionary<string, object> Metadata { get; set; } = new();
+    /// <summary>
+    /// IdActivo de trazabilidad de entrada. Puede estar vacío si el plugin de enriquecimiento lo retorna.
+    /// </summary>
+    public string? IdActivo { get; set; }
 }
 
 public class ResultadoIntegracion
@@ -77,6 +81,11 @@ public class ResultadoIntegracion
     public List<PluginExecutionResult> Plugins { get; set; } = new();
     public Dictionary<string, object> DatosOriginales { get; set; } = new();
     public Dictionary<string, object> DatosFinales { get; set; } = new();
+    /// <summary>
+    /// IdActivo resuelto tras la integración: el devuelto por un plugin (clave "idActivo" en DatosFinales)
+    /// o en su defecto el que venía en la entrada. Null si ningún plugin lo proporcionó y no vino en entrada.
+    /// </summary>
+    public string? IdActivoResuelto { get; set; }
 }
 
 public class PluginExecutionResult

@@ -74,6 +74,24 @@ namespace Sareb.Enrichments
             enriched["EnriquecidoEn"] = DateTime.UtcNow.ToString("o");
             enriched["EnriquecidoPor"] = Name;
 
+            // 6. Preservar / propagar idActivo si viene en la entrada (soporte case-insensitive)
+            if (data != null)
+            {
+                // Buscar claves que representen idActivo en diferentes formatos
+                var idKey = data.Keys.FirstOrDefault(k => string.Equals(k, "idActivo", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(k, "id_activo", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(k, "IdActivo", StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrEmpty(idKey) && data.TryGetValue(idKey, out var idVal))
+                {
+                    var idStr = idVal?.ToString();
+                    if (!string.IsNullOrWhiteSpace(idStr) && !enriched.ContainsKey("idActivo"))
+                    {
+                        enriched["idActivo"] = idStr;
+                    }
+                }
+            }
+
             return Task.FromResult(enriched);
         }
 

@@ -284,6 +284,15 @@ namespace DocumentIA.Plugins.Integration
                                 {
                                     result.ResponseData[kvp.Key] = ConvertJsonElement(kvp.Value);
                                 }
+                                // Si el payload incluía idActivo y la respuesta no, conservarlo para trazabilidad
+                                if (payload != null && payload.TryGetValue("idActivo", out var idActivoValue))
+                                {
+                                    var idActivoStr = idActivoValue?.ToString();
+                                    if (!string.IsNullOrWhiteSpace(idActivoStr) && !result.ResponseData.ContainsKey("idActivo"))
+                                    {
+                                        result.ResponseData["idActivo"] = idActivoStr;
+                                    }
+                                }
                             }
                         }
                         catch

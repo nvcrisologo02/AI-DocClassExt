@@ -120,6 +120,16 @@ namespace DocumentIA.Plugins.Integration
                 logger.LogInformation(
                     "Enriquecimiento custom exitoso. Campos devueltos: {Count}", 
                     enrichedData.Count);
+                // Si el payload original contenía idActivo y el enriquecedor no lo devolvió,
+                // mantenerlo para asegurar trazabilidad en el pipeline
+                if (data != null && data.TryGetValue("idActivo", out var idActivoFromPayload))
+                {
+                    var idActivoStr = idActivoFromPayload?.ToString();
+                    if (!string.IsNullOrWhiteSpace(idActivoStr) && !result.ResponseData.ContainsKey("idActivo"))
+                    {
+                        result.ResponseData["idActivo"] = idActivoStr;
+                    }
+                }
             }
             catch (Exception ex)
             {

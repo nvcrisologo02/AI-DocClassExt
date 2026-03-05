@@ -161,6 +161,7 @@ public class DocumentProcessOrchestrator
                 Tipologia = salida.Identificacion.Tipologia,
                 DocumentoId = salida.Identificacion.Guid,
                 DatosExtraidos = salida.DatosExtraidos, // Pasar datos extraidos
+                IdActivo = entrada.Trazabilidad.IdActivo, // Puede venir vacío; un plugin puede resolverlo
                 Metadata = new Dictionary<string, object>
                 {
                     ["correlationId"] = entrada.Trazabilidad.CorrelationId,
@@ -180,6 +181,15 @@ public class DocumentProcessOrchestrator
                 salida.DatosExtraidos = resultadoIntegracion.DatosFinales; // Usar datos enriquecidos
                 logger.LogInformation("Datos enriquecidos: {Count} campos totales", resultadoIntegracion.DatosFinales.Count);
             }
+
+            // Resolver IdActivo: primero lo devuelto por plugins, luego el original de entrada
+            salida.Integridad.IdActivo = resultadoIntegracion.IdActivoResuelto
+                ?? entrada.Trazabilidad.IdActivo;
+
+            if (!string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
+                logger.LogInformation("IdActivo resuelto para GDC: {IdActivo}", salida.Integridad.IdActivo);
+            else
+                logger.LogWarning("IdActivo no disponible tras integración. La subida a GDC será omitida si aplica.");
 
             // 7. Persistencia
             logger.LogInformation("Paso 7: Persistiendo resultados");

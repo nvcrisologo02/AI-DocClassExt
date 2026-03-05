@@ -123,6 +123,17 @@ namespace DocumentIA.Plugins.Integration
                     result.Message = "Consulta SOAP exitosa";
                     result.ResponseData = parsedData;
 
+                    // Si el payload incluía idActivo y la respuesta no lo contiene,
+                    // conservar el idActivo original para trazabilidad.
+                    if (data != null && data.TryGetValue("idActivo", out var idActivoFromPayload))
+                    {
+                        var idActivoStr = idActivoFromPayload?.ToString();
+                        if (!string.IsNullOrWhiteSpace(idActivoStr) && !result.ResponseData.ContainsKey("idActivo"))
+                        {
+                            result.ResponseData["idActivo"] = idActivoStr;
+                        }
+                    }
+
                     logger.LogInformation("SOAP exitoso. Campos recibidos: {Count}", parsedData.Count);
                 }
                 else
