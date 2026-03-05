@@ -30,7 +30,7 @@ namespace DocumentIA.Tests.Unit.Plugins
             // Inject mock into private field 'enricherInstance'
             var field = typeof(CustomPlugin).GetField("enricherInstance", BindingFlags.NonPublic | BindingFlags.Instance);
             field.Should().NotBeNull();
-            field.SetValue(plugin, enricherMock.Object);
+            field!.SetValue(plugin, enricherMock.Object);
 
             var payload = new Dictionary<string, object>
             {
@@ -42,7 +42,7 @@ namespace DocumentIA.Tests.Unit.Plugins
 
             result.Success.Should().BeTrue();
             result.ResponseData.Should().ContainKey("idActivo");
-            result.ResponseData["idActivo"].ToString().Should().Be("ACT-CUST-1");
+            result.ResponseData["idActivo"]!.ToString().Should().Be("ACT-CUST-1");
         }
 
         [Fact]
@@ -62,7 +62,7 @@ namespace DocumentIA.Tests.Unit.Plugins
 
             var field = typeof(CustomPlugin).GetField("enricherInstance", BindingFlags.NonPublic | BindingFlags.Instance);
             field.Should().NotBeNull();
-            field.SetValue(plugin, enricherMock.Object);
+            field!.SetValue(plugin, enricherMock.Object);
 
             var payload = new Dictionary<string, object>
             {
@@ -74,7 +74,7 @@ namespace DocumentIA.Tests.Unit.Plugins
 
             result.Success.Should().BeTrue();
             result.ResponseData.Should().ContainKey("idActivo");
-            result.ResponseData["idActivo"].ToString().Should().Be("ENR-999");
+            result.ResponseData["idActivo"]!.ToString().Should().Be("ENR-999");
         }
     }
 }

@@ -10,6 +10,9 @@ using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Mocks;
 using DocumentIA.Plugins.Integration;
+using DocumentIA.Core.Configuration;
+using DocumentIA.Functions.Services;
+using Microsoft.Extensions.Options;
 using System.IO;
 
 var host = new HostBuilder()
@@ -46,8 +49,38 @@ var host = new HostBuilder()
             builder.AddConsole();
             builder.SetMinimumLevel(LogLevel.Information);
         });
-  // Configurar HttpClientFactory para plugins
+        // Configurar HttpClientFactory para plugins
         services.AddHttpClient();
+
+        // Bind GDC settings
+        services.Configure<GdcSettings>(context.Configuration.GetSection("GDC"));
+
+        // Named HttpClient for GDC (used by GdcService)
+        services.AddHttpClient("GDC", client =>
+        {
+            var endpoint = context.Configuration["GDC:Endpoint"];
+            if (!string.IsNullOrWhiteSpace(endpoint))
+            {
+                try
+                {
+                    client.BaseAddress = new Uri(endpoint);
+                }
+                catch { }
+            }
+
+            if (int.TryParse(context.Configuration["GDC:TimeoutSeconds"], out var t))
+            {
+                client.Timeout = TimeSpan.FromSeconds(t);
+            }
+        });
+
+        // Register GDC services: concrete implementation + resilient decorator
+        services.AddScoped<GdcService>();
+        services.AddScoped<IGdcService>(sp =>
+            new ResilientGdcService(
+                sp.GetRequiredService<GdcService>(),
+                sp.GetRequiredService<IOptions<GdcSettings>>(),
+                sp.GetRequiredService<ILogger<ResilientGdcService>>()));
 
         // Registrar PluginManager como Singleton
         services.AddSingleton<PluginManager>();
@@ -61,6 +94,13 @@ var host = new HostBuilder()
             var logger = provider.GetRequiredService<ILogger<PluginConfigLoader>>();
             string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
             return new PluginConfigLoader(configPath, logger);
+        });
+
+        // Registrar TipologiaConfigLoader (usado por SubirGDCActivity)
+        services.AddSingleton<TipologiaConfigLoader>(provider =>
+        {
+            string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
+            return new TipologiaConfigLoader(configPath);
         });
 
 

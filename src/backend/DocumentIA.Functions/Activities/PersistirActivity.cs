@@ -61,6 +61,9 @@ namespace DocumentIA.Functions.Activities
                         ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
                         Paginas = salida.Identificacion.Paginas,
                         CorrelationId = salida.Identificacion.Guid,
+                        // Registrar IdGDC e IdActivo si están disponibles
+                        IdGDC = salida.Integridad.GestorDocumental,
+                        IdActivo = salida.Integridad.IdActivo,
                         FechaCreacion = DateTime.UtcNow,
                         FechaProceso = salida.Identificacion.FechaProceso
                     };
@@ -77,6 +80,16 @@ namespace DocumentIA.Functions.Activities
                     {
                         // Actualizar ruta solo cuando venga informada para no pisar con null/vacío
                         documento.RutaBlobStorage = salida.Integridad.RutaBlobStorage;
+                    }
+                    // Actualizar IdGDC/IdActivo si vienen informados
+                    if (!string.IsNullOrWhiteSpace(salida.Integridad.GestorDocumental))
+                    {
+                        documento.IdGDC = salida.Integridad.GestorDocumental;
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
+                    {
+                        documento.IdActivo = salida.Integridad.IdActivo;
                     }
                     documento.FechaActualizacion = DateTime.UtcNow;
                     await _documentoRepo.UpdateAsync(documento);

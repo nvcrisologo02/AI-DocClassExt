@@ -36,6 +36,8 @@ public class DetalleEjecucion
     public ResultadoExtraccion Extraccion { get; set; } = new();
     public InformacionPostproceso Postproceso { get; set; } = new();
     public ResultadoIntegracion Integracion { get; set; } = new();
+    // Resultado de la interacción con el Gestor Documental (GDC)
+    public ResultadoGDC GDC { get; set; } = new();
 }
 
 public class ResultadoClasificacion
@@ -104,4 +106,40 @@ public class ResultadoFinal
 {
     public string Estado { get; set; } = "OK";
     public double ConfianzaGlobal { get; set; }
+}
+
+/// <summary>
+/// Input necesarios para subir un documento al GDC
+/// </summary>
+public class SubirGDCInput
+{
+    public string IdActivo { get; set; } = string.Empty;
+    public string Matricula { get; set; } = string.Empty;
+    public string ContenidoBase64 { get; set; } = string.Empty;
+    public string NombreArchivo { get; set; } = string.Empty;
+    public string SHA256 { get; set; } = string.Empty;
+    public string MD5 { get; set; } = string.Empty;
+    public string CorrelationId { get; set; } = string.Empty;
+}
+
+public class ResultadoGDC
+{
+    public bool Exitoso { get; set; }
+    public string ObjectId { get; set; } = string.Empty;
+    public string Mensaje { get; set; } = string.Empty;
+    public int Intentos { get; set; }
+    public int DuracionMs { get; set; }
+    public string ErrorDetalle { get; set; } = string.Empty;
+    public bool YaExistia { get; set; }
+
+    public ResultadoGDC()
+    {
+        Exitoso = false;
+        ObjectId = string.Empty;
+        Mensaje = string.Empty;
+        Intentos = 0;
+        DuracionMs = 0;
+        ErrorDetalle = string.Empty;
+        YaExistia = false;
+    }
 }
