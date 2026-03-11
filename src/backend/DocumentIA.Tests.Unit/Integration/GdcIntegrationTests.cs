@@ -1,7 +1,6 @@
-using System;
-using System.Diagnostics;
-using System.IO;
+using System.Net;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
@@ -12,51 +11,63 @@ using Xunit;
 
 namespace DocumentIA.Tests.Unit.Integration
 {
-    public class GdcIntegrationTests : IDisposable
+    // Integration-like tests that run against a deterministic fake HTTP handler
+    public class GdcIntegrationTests
     {
-        private Process? _gdcProcess;
-
-        public GdcIntegrationTests()
+        private class FakeHttpMessageHandler : HttpMessageHandler
         {
-            // Start mock-gdc-server.py from scripts/Mock Servers
-            var repoRoot = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", ".."));
-            var scriptPath = Path.Combine(repoRoot, "scripts", "Mock Servers", "mock-gdc-server.py");
-
-            if (!File.Exists(scriptPath))
-                throw new FileNotFoundException("mock-gdc-server.py not found", scriptPath);
-
-            var psi = new ProcessStartInfo("python", "\"" + scriptPath + "\"")
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
             {
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                CreateNoWindow = true,
-                WorkingDirectory = Path.GetDirectoryName(scriptPath)
-            };
+                var content = request.Content?.ReadAsStringAsync().Result ?? string.Empty;
 
-            _gdcProcess = Process.Start(psi);
-            // give server time to start
-            Task.Delay(1500).Wait();
+                if (content.Contains("searchEntities") || content.Contains("entityTypeId") )
+                {
+                    if (content.Contains("md5-exists") || content.Contains("this-exists") || content.Contains("some-exists-id"))
+                    {
+                        var xml = "<?xml version=\"1.0\"?><soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><searchEntitiesResponse xmlns=\"http://services.api.sint.sareb.es/\"><return><entities><entityId>GDC-12345</entityId></entities></return></searchEntitiesResponse></soap:Body></soap:Envelope>";
+                        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(xml) });
+                    }
 
-            if (_gdcProcess == null)
-            {
-                throw new InvalidOperationException("Failed to start mock-gdc-server process");
-            }
+                    var xmlNo = "<?xml version=\"1.0\"?><soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><searchEntitiesResponse xmlns=\"http://services.api.sint.sareb.es/\"><return></return></searchEntitiesResponse></soap:Body></soap:Envelope>";
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(xmlNo) });
+                }
 
-            if (_gdcProcess.HasExited)
-            {
-                string err = _gdcProcess.StandardError.ReadToEnd();
-                throw new InvalidOperationException($"mock-gdc-server process exited: {err}");
+                if (content.Contains("SubirDocumentoRequest") || content.Contains("SubirDocumentoResponse"))
+                {
+                    if (content.Contains("already") || content.Contains("Already") || content.Contains("already-file"))
+                    {
+                        var already = "<?xml version=\"1.0\"?><soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><SubirDocumentoResponse xmlns=\"http://sintws.example.org/\"><AlreadyExists>1</AlreadyExists></SubirDocumentoResponse></soap:Body></soap:Envelope>";
+                        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(already) });
+                    }
+
+                    var ok = "<?xml version=\"1.0\"?><soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><SubirDocumentoResponse xmlns=\"http://sintws.example.org/\"><ObjectId>GDC-UPLOAD-1</ObjectId></SubirDocumentoResponse></soap:Body></soap:Envelope>";
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(ok) });
+                }
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.BadRequest));
             }
         }
 
-        [Fact]
-        public async Task SubirDocumento_EndToEnd_With_Mock_ReturnsObjectId()
+        private class SimpleHttpClientFactory : IHttpClientFactory
         {
-            var client = new HttpClient { BaseAddress = new Uri("http://localhost:8083/") };
-            var factory = new SimpleFactory(client);
-            var options = Options.Create(new GdcSettings { Endpoint = "http://localhost:8083/", TimeoutSeconds = 10 });
-            var svc = new GdcService(factory, options, new NullLogger<GdcService>());
+            private readonly HttpClient _client;
+            public SimpleHttpClientFactory(HttpClient client) => _client = client;
+            public HttpClient CreateClient(string name) => _client;
+        }
+
+        private GdcService CreateService(HttpMessageHandler handler)
+        {
+            var client = new HttpClient(handler);
+            var factory = new SimpleHttpClientFactory(client);
+            var options = Options.Create(new GdcSettings { Endpoint = "http://example.local/", TimeoutSeconds = 10 });
+            var logger = new NullLogger<GdcService>();
+            return new GdcService(factory, options, logger);
+        }
+
+        [Fact]
+        public async Task SubirDocumento_EndToEnd_With_FakeHttpHandler_ReturnsObjectId()
+        {
+            var svc = CreateService(new FakeHttpMessageHandler());
 
             var input = new SubirGDCInput
             {
@@ -72,37 +83,14 @@ namespace DocumentIA.Tests.Unit.Integration
             Assert.False(string.IsNullOrWhiteSpace(res.ObjectId));
         }
 
-        [Fact(Skip = "Flaky in CI; Consultar behavior validated in unit tests and via Subir E2E")]
-        public async Task ConsultarDocumento_EndToEnd_Mock_ReturnsExistsForContainsExists()
+        [Fact]
+        public async Task ConsultarDocumento_EndToEnd_With_FakeHttpHandler_ReturnsExists()
         {
-            var client = new HttpClient { BaseAddress = new Uri("http://localhost:8083/") };
-            var factory = new SimpleFactory(client);
-            var options = Options.Create(new GdcSettings { Endpoint = "http://localhost:8083/", TimeoutSeconds = 10 });
-            var svc = new GdcService(factory, options, new NullLogger<GdcService>());
+            var svc = CreateService(new FakeHttpMessageHandler());
 
             var (exists, objectId) = await svc.ConsultarDocumentoAsync("this-exists-999", "md5-exists", "MATR");
-            // See skip reason
-            Assert.True(true);
-        }
-
-        public void Dispose()
-        {
-            try
-            {
-                if (_gdcProcess != null && !_gdcProcess.HasExited)
-                {
-                    _gdcProcess.Kill(true);
-                    _gdcProcess.Dispose();
-                }
-            }
-            catch { }
-        }
-
-        private class SimpleFactory : IHttpClientFactory
-        {
-            private readonly HttpClient _client;
-            public SimpleFactory(HttpClient client) => _client = client;
-            public HttpClient CreateClient(string name) => _client;
+            Assert.True(exists);
+            Assert.Equal("GDC-12345", objectId);
         }
     }
 }
