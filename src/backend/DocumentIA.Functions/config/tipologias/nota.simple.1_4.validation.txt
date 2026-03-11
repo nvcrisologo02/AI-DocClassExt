@@ -90,12 +90,11 @@ Campos:
   • TipologiaInmueble (string)
     - Enumeración: Vivienda, Local, Trastero, Garaje, Edificio, Suelo, Oficina, Nave, Finca rústica, Otro
 
-  • superficie (decimal) - REQUERIDO
-    - Rango: 0 - 200.000.000 m²
-    - Métrica estándar de extensión del inmueble
-
-  • UnidadSuperficie (string)
-    - Enumeración: m2_construidos, m2_utiles, m2_suelo, otro
+  • superficies (array de objetos) - REQUERIDO
+    - Cada elemento representa una medición de superficie del inmueble
+    - Propiedades por elemento:
+      - valor (decimal, rango: 0 - 200.000.000) - REQUERIDO
+      - UnidadSuperficie (string, enum: m2_construidos, m2_utiles, m2_suelo, otro)
 
   • Anejos (array de objetos) - Elementos adicionales del inmueble
     Propiedades de cada anejo:
@@ -251,7 +250,7 @@ NOTAS IMPORTANTES
 • Los patrones regex deben cumplirse exactamente para pasar la validación.
 • Los arrays pueden estar vacíos, pero si contienen elementos, cada elemento
   debe cumplir con sus propias reglas de validación.
-• La superficie (campo obligatorio) debe estar dentro de rango y no ser negativa.
+• El array superficies es obligatorio y cada valor debe estar dentro de rango y no ser negativo.
 • Esta versión 1.4 introduce explícitamente el campo Registrador y mantiene un
   esquema enfocado en datos registrales, titularidad, cargas y ocupación.
 

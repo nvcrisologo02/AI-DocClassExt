@@ -191,30 +191,40 @@
       ]
     },
     {
-      "name": "superficie",
-      "type": "decimal",
-      "required": true,
-      "rules": [
+      "name": "Superficies",
+      "type": "array",
+      "required": false,
+      "items": {
+      "type": "object",
+      "properties": [
         {
+        "name": "valor",
+        "type": "decimal",
+        "required": true,
+        "rules": [
+          {
           "ruleType": "range",
           "severity": "Error",
           "parameters": {"min": 0, "max": 200000000}
-        }
-      ]
-    },
-    {
-      "name": "UnidadSuperficie",
-      "type": "string",
-      "required": false,
-      "rules": [
+          }
+        ]
+        },
         {
+        "name": "unidad",
+        "type": "string",
+        "required": false,
+        "rules": [
+          {
           "ruleType": "enum",
           "severity": "Warning",
           "parameters": {
             "values": ["m2_construidos", "m2_utiles", "m2_suelo", "otro"]
           }
+          }
+        ]
         }
       ]
+      }
     },
     {
       "name": "Anejos",

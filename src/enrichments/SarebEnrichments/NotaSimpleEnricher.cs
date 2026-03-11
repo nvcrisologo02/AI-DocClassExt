@@ -50,9 +50,17 @@ namespace Sareb.Enrichments
             }
 
             // 2. Completitud de datos
-            var camposRequeridos = new[] { "FincaRegistral", "Titular", "superficie", "Direccion" };
-            var camposFaltantes = camposRequeridos.Count(c => 
-                !data.ContainsKey(c) || string.IsNullOrEmpty(data[c]?.ToString()));
+            var camposRequeridos = new[] { "FincaRegistral", "Titular", "superficies", "Direccion" };
+            var camposFaltantes = camposRequeridos.Count(c =>
+            {
+                if (c == "superficies")
+                {
+                    return !data.TryGetValue(c, out var superficiesObj)
+                        || !TieneElementosSuperficie(superficiesObj);
+                }
+
+                return !data.ContainsKey(c) || string.IsNullOrWhiteSpace(data[c]?.ToString());
+            });
 
             var completitud = (int)((1 - (camposFaltantes / (double)camposRequeridos.Length)) * 100);
             enriched["CompletitudDocumento"] = completitud;
@@ -80,6 +88,14 @@ namespace Sareb.Enrichments
         public Task<bool> HealthCheckAsync()
         {
             return Task.FromResult(true);
+        }
+
+        private static bool TieneElementosSuperficie(object? superficiesObj)
+        {
+            if (superficiesObj is IEnumerable<object> superficies)
+                return superficies.Any();
+
+            return false;
         }
     }
 }

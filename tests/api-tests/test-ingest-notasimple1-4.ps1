@@ -152,7 +152,14 @@ try {
                 Write-Host "Direccion            : $($status.output.DatosExtraidos.Direccion)"
                 Write-Host "Referencia Catastral : $($status.output.DatosExtraidos.ReferenciaCatastral)"
                 Write-Host "Tipologia Inmueble   : $($status.output.DatosExtraidos.TipologiaInmueble)"
-                Write-Host "Superficie           : $($status.output.DatosExtraidos.superficie) $($status.output.DatosExtraidos.UnidadSuperficie)"
+                if ($status.output.DatosExtraidos.superficies -and $status.output.DatosExtraidos.superficies.Count -gt 0) {
+                    Write-Host "Superficies          :"
+                    foreach ($superficie in $status.output.DatosExtraidos.superficies) {
+                        Write-Host "  - $($superficie.valor) $($superficie.UnidadSuperficie)"
+                    }
+                } else {
+                    Write-Host "Superficies          : (sin datos)"
+                }
                 Write-Host "Titular              : $($status.output.DatosExtraidos.Titular)"
                 Write-Host "NIF                  : $($status.output.DatosExtraidos.NIF)"
                 Write-Host "Cuota Participacion  : $($status.output.DatosExtraidos.CuotaParticipacion)"
