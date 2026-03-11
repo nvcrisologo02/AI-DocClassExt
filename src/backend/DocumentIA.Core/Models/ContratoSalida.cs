@@ -36,6 +36,8 @@ public class DetalleEjecucion
     public ResultadoExtraccion Extraccion { get; set; } = new();
     public InformacionPostproceso Postproceso { get; set; } = new();
     public ResultadoIntegracion Integracion { get; set; } = new();
+    // Resultado de la interacción con el Gestor Documental (GDC)
+    public ResultadoGDC GDC { get; set; } = new();
 }
 
 public class ResultadoClasificacion
@@ -66,6 +68,10 @@ public class IntegrarInput
     public string DocumentoId { get; set; } = string.Empty;
     public Dictionary<string, object> DatosExtraidos { get; set; } = new();
     public Dictionary<string, object> Metadata { get; set; } = new();
+    /// <summary>
+    /// IdActivo de trazabilidad de entrada. Puede estar vacío si el plugin de enriquecimiento lo retorna.
+    /// </summary>
+    public string? IdActivo { get; set; }
 }
 
 public class ResultadoIntegracion
@@ -77,6 +83,11 @@ public class ResultadoIntegracion
     public List<PluginExecutionResult> Plugins { get; set; } = new();
     public Dictionary<string, object> DatosOriginales { get; set; } = new();
     public Dictionary<string, object> DatosFinales { get; set; } = new();
+    /// <summary>
+    /// IdActivo resuelto tras la integración: el devuelto por un plugin (clave "idActivo" en DatosFinales)
+    /// o en su defecto el que venía en la entrada. Null si ningún plugin lo proporcionó y no vino en entrada.
+    /// </summary>
+    public string? IdActivoResuelto { get; set; }
 }
 
 public class PluginExecutionResult
@@ -95,4 +106,40 @@ public class ResultadoFinal
 {
     public string Estado { get; set; } = "OK";
     public double ConfianzaGlobal { get; set; }
+}
+
+/// <summary>
+/// Input necesarios para subir un documento al GDC
+/// </summary>
+public class SubirGDCInput
+{
+    public string IdActivo { get; set; } = string.Empty;
+    public string Matricula { get; set; } = string.Empty;
+    public string ContenidoBase64 { get; set; } = string.Empty;
+    public string NombreArchivo { get; set; } = string.Empty;
+    public string SHA256 { get; set; } = string.Empty;
+    public string MD5 { get; set; } = string.Empty;
+    public string CorrelationId { get; set; } = string.Empty;
+}
+
+public class ResultadoGDC
+{
+    public bool Exitoso { get; set; }
+    public string ObjectId { get; set; } = string.Empty;
+    public string Mensaje { get; set; } = string.Empty;
+    public int Intentos { get; set; }
+    public int DuracionMs { get; set; }
+    public string ErrorDetalle { get; set; } = string.Empty;
+    public bool YaExistia { get; set; }
+
+    public ResultadoGDC()
+    {
+        Exitoso = false;
+        ObjectId = string.Empty;
+        Mensaje = string.Empty;
+        Intentos = 0;
+        DuracionMs = 0;
+        ErrorDetalle = string.Empty;
+        YaExistia = false;
+    }
 }

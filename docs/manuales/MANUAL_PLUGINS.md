@@ -80,11 +80,16 @@ La ejecución real se produce en `src/backend/DocumentIA.Functions/Activities/In
      - `tipologia`
      - `documentoId`
      - `datosExtraidos` (acumulados)
+    - `idActivo` (siempre se envía; puede venir vacío)
      - `metadata`
    - Ejecuta plugin (`ExecutePluginAsync`).
    - Si devuelve `ResponseData`, hace merge sobre `DatosFinales`.
-5. Si falla un plugin crítico (`priority == 1`), detiene la cadena.
-6. Devuelve estado final `OK`, `REVISION` o `ERROR`.
+5. Tras ejecutar la cadena, se resuelve `IdActivo` con prioridad:
+  - `DatosFinales["idActivo"]` (si algún plugin lo devuelve),
+  - `IntegrarInput.IdActivo` (valor original de entrada),
+  - `null` si no existe en ninguno de los dos.
+6. Si falla un plugin crítico (`priority == 1`), detiene la cadena.
+7. Devuelve estado final `OK`, `REVISION` o `ERROR`.
 
 Registro DI en `src/backend/DocumentIA.Functions/Program.cs`:
 
@@ -178,7 +183,17 @@ El resultado de integración incluye:
 
 - estado global (`OK`, `REVISION`, `ERROR`),
 - detalle por plugin (`PluginExecutionResult`),
-- `DatosFinales` tras merge acumulado.
+- `DatosFinales` tras merge acumulado,
+- `IdActivoResuelto` (priorizando el `idActivo` devuelto por plugins).
+
+### Nota para integraciones GDC
+
+Para facilitar la subida posterior al gestor documental, los plugins deben:
+
+- aceptar `idActivo` en el payload de entrada,
+- devolver `idActivo` en `ResponseData` cuando lo obtengan durante el enriquecimiento.
+
+Así, el pipeline conserva un único `IdActivo` resuelto para pasos posteriores (p. ej., actividad de upload a GDC).
 
 ---
 

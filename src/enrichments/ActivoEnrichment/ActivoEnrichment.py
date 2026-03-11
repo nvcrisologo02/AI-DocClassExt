@@ -24,6 +24,8 @@ class IntegracionRequest(BaseModel):
     # Este modelo replica la estructura que envia IntegrarActivity a traves del RestPlugin
     tipologia: str
     documentoId: Optional[str] = None 
+    # IdActivo puede venir en la petición (viene ahora en el payload desde IntegrarActivity)
+    idActivo: Optional[str] = None
     datosExtraidos: DatosExtraidos
     metadata: Dict[str, Any]
 
@@ -92,11 +94,18 @@ def enriquecer(request: IntegracionRequest) -> Dict[str, Any]:
         id_activo = 0
 
     resultado = {
-        "id_activo_sareb": id_activo,
+        "idActivo": id_activo,
         "servicer": str(fila["SERVICER"]).strip(),
         "tipologia_activo": str(fila["TIPOLOGIA"]).strip(),
         "id_ref_catast": str(fila["ID_REF_CATAST"]).strip(),
     }
+    
+    # Si la petición ya traía un idActivo, añadirlo a la respuessta en idActivo_original para referencia, pero no sobreescribir el idActivo encontrado en el Excel (que es el que se usará para la integración con GDC).
+    if request.idActivo:
+        resultado["idActivo_original"] = request.idActivo
+    # else:
+    #     if id_activo and id_activo > 0:
+    #         resultado["idActivo"] = str(id_activo)
     
     print(f"DEBUG: RESULTADO: {resultado}")
     return resultado

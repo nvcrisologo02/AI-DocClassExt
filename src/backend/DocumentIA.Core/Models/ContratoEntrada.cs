@@ -12,6 +12,8 @@ public class Instrucciones
     public string ExpectedType { get; set; } = string.Empty;
     public bool SkipDuplicateCheck { get; set; }
     public bool ForceReprocess { get; set; }
+    //En caso de querer forzar la NO subida a GDC (por ejemplo, para documentos de prueba o que no se quieran almacenar en el gestor documental), se puede indicar aquí. 
+    public bool SkipGDCUpload { get; set; }
     public ConfiguracionIA Classification { get; set; } = new();
     public ConfiguracionIA Extraction { get; set; } = new();
 }

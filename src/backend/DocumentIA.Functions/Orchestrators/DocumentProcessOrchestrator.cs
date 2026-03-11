@@ -2,6 +2,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
+using DocumentIA.Functions.Activities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -161,6 +162,7 @@ public class DocumentProcessOrchestrator
                 Tipologia = salida.Identificacion.Tipologia,
                 DocumentoId = salida.Identificacion.Guid,
                 DatosExtraidos = salida.DatosExtraidos, // Pasar datos extraidos
+                IdActivo = entrada.Trazabilidad.IdActivo, // Puede venir vacío; un plugin puede resolverlo
                 Metadata = new Dictionary<string, object>
                 {
                     ["correlationId"] = entrada.Trazabilidad.CorrelationId,
@@ -181,8 +183,59 @@ public class DocumentProcessOrchestrator
                 logger.LogInformation("Datos enriquecidos: {Count} campos totales", resultadoIntegracion.DatosFinales.Count);
             }
 
-            // 7. Persistencia
-            logger.LogInformation("Paso 7: Persistiendo resultados");
+            // Resolver IdActivo: primero lo devuelto por plugins, luego el original de entrada
+            salida.Integridad.IdActivo = resultadoIntegracion.IdActivoResuelto
+                ?? entrada.Trazabilidad.IdActivo;
+
+            if (!string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
+                logger.LogInformation("IdActivo resuelto para GDC: {IdActivo}", salida.Integridad.IdActivo);
+            else
+                logger.LogWarning("IdActivo no disponible tras integración. La subida a GDC será omitida si aplica.");
+
+            // 7. Subida a GDC (opcional) - se ejecuta sólo si no se indica Skip y existe IdActivo
+            if (!entrada.Instrucciones.SkipGDCUpload)
+            {
+                if (!string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
+                {
+                    logger.LogInformation("Paso 7: Intentando subir a GDC IdActivo={IdActivo}", salida.Integridad.IdActivo);
+
+                    var subirInput = new SubirGDCActivity.SubirGDCActivityInput
+                    {
+                        Tipologia = salida.Identificacion.Tipologia,
+                        Input = new SubirGDCInput
+                        {
+                            IdActivo = salida.Integridad.IdActivo ?? string.Empty,
+                            ContenidoBase64 = entrada.Documento.Content.Base64,
+                            NombreArchivo = entrada.Documento.Name,
+                            SHA256 = salida.Integridad.SHA256,
+                            MD5 = salida.Integridad.MD5,
+                            CorrelationId = entrada.Trazabilidad.CorrelationId ?? string.Empty
+                        }
+                    };
+
+                    var resultadoGdc = await context.CallActivityAsync<ResultadoGDC>(
+                        "SubirGDCActivity",
+                        subirInput);
+
+                    salida.DetalleEjecucion.GDC = resultadoGdc ?? new ResultadoGDC();
+
+                    if (resultadoGdc != null && resultadoGdc.Exitoso && !string.IsNullOrWhiteSpace(resultadoGdc.ObjectId))
+                    {
+                        salida.Integridad.GestorDocumental = resultadoGdc.ObjectId;
+                    }
+                }
+                else
+                {
+                    logger.LogInformation("Omitiendo subida a GDC: IdActivo no disponible");
+                }
+            }
+            else
+            {
+                logger.LogInformation("SkipGDCUpload activado en instrucciones; se omite subida a GDC");
+            }
+
+            // 8. Persistencia
+            logger.LogInformation("Paso 8: Persistiendo resultados");
             await context.CallActivityAsync(
                 "PersistirActivity",
                 salida);

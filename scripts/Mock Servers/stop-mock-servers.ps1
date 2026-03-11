@@ -35,7 +35,8 @@ if ($stopped -eq 0) {
     $patterns = @(
         "mock-enrichment-server.py",
         "mock-soap-server.py",
-        "-m uvicorn ActivoEnrichment:app"
+        "-m uvicorn ActivoEnrichment:app",
+        "mock-gdc-server.py"
     )
 
     $processes = Get-CimInstance Win32_Process |

@@ -115,6 +115,27 @@ namespace DocumentIA.Functions.Activities
                 resultado.Mensaje = $"Error: {ex.Message}";
             }
 
+            // Resolver IdActivo: extraer de DatosFinales si algún plugin lo devolvió,
+            // o mantener el que vino en la entrada si ya estaba informado
+            if (resultado.DatosFinales.TryGetValue("idActivo", out var idActivoEnriquecido))
+            {
+                var idActivoStr = idActivoEnriquecido?.ToString();
+                if (!string.IsNullOrWhiteSpace(idActivoStr))
+                {
+                    resultado.IdActivoResuelto = idActivoStr;
+                    logger.LogInformation("IdActivo resuelto por plugin: {IdActivo}", idActivoStr);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(resultado.IdActivoResuelto) && !string.IsNullOrWhiteSpace(input.IdActivo))
+            {
+                resultado.IdActivoResuelto = input.IdActivo;
+                logger.LogInformation("IdActivo mantenido de entrada: {IdActivo}", input.IdActivo);
+            }
+
+            if (string.IsNullOrWhiteSpace(resultado.IdActivoResuelto))
+                logger.LogWarning("IdActivo no disponible tras integración para tipologia {Tipologia}", input.Tipologia);
+
             return resultado;
         }
 
@@ -141,11 +162,14 @@ namespace DocumentIA.Functions.Activities
                 }
 
                 // Preparar payload: enviar TODOS los datos actuales
+                // idActivo se incluye siempre (aunque sea vacío) para que el plugin pueda recibirlo,
+                // enriquecerlo o retornarlo cumplimentado en la respuesta
                 var payload = new Dictionary<string, object>
                 {
                     ["tipologia"] = input.Tipologia,
                     ["documentoId"] = input.DocumentoId,
                     ["datosExtraidos"] = datosActuales, // Datos acumulados hasta ahora
+                    ["idActivo"] = input.IdActivo ?? string.Empty,
                     ["metadata"] = input.Metadata
                 };
 

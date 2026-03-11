@@ -1,4 +1,4 @@
-#nullable disable
+#nullable enable
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Validation;
 using DocumentIA.Core.Validation.Models;

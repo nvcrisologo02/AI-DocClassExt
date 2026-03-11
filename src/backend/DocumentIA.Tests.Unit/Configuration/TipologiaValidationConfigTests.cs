@@ -1,4 +1,4 @@
-#nullable disable
+#nullable enable
 using DocumentIA.Core.Configuration;
 using FluentAssertions;
 using Xunit;
@@ -154,13 +154,13 @@ namespace DocumentIA.Tests.Unit.Configuration
             };
 
             // Act
-            field.Items.Properties.Add(new FieldValidationConfig { Name = "tipo", Type = "string" });
-            field.Items.Properties.Add(new FieldValidationConfig { Name = "descripcion", Type = "string" });
+            field.Items!.Properties!.Add(new FieldValidationConfig { Name = "tipo", Type = "string" });
+            field.Items!.Properties!.Add(new FieldValidationConfig { Name = "descripcion", Type = "string" });
 
             // Assert
-            field.Items.Properties.Should().HaveCount(2);
-            field.Items.Properties[0].Name.Should().Be("tipo");
-            field.Items.Properties[1].Name.Should().Be("descripcion");
+            field.Items!.Properties!.Should().HaveCount(2);
+            field.Items!.Properties![0].Name.Should().Be("tipo");
+            field.Items!.Properties![1].Name.Should().Be("descripcion");
         }
 
         [Fact]
@@ -247,7 +247,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             {
                 RuleType = "nif",
                 Severity = "Warning",
-                Parameters = null
+                Parameters = null!
             };
 
             // Assert - Should create new empty dict when accessed
@@ -279,13 +279,13 @@ namespace DocumentIA.Tests.Unit.Configuration
                 RuleType = "range",
                 Severity = "Error"
             };
-            rule.Parameters["min"] = 10;
-            rule.Parameters["max"] = 100;
+            rule.Parameters!["min"] = 10;
+            rule.Parameters!["max"] = 100;
 
             // Assert
             rule.RuleType.Should().Be("range");
-            rule.Parameters["min"].Should().Be(10);
-            rule.Parameters["max"].Should().Be(100);
+            rule.Parameters!["min"].Should().Be(10);
+            rule.Parameters!["max"].Should().Be(100);
         }
 
         [Fact]
@@ -297,13 +297,13 @@ namespace DocumentIA.Tests.Unit.Configuration
                 RuleType = "enum",
                 Severity = "Error"
             };
-            rule.Parameters["values"] = new List<string> { "Activo", "Inactivo", "Pendiente" };
-            rule.Parameters["caseSensitive"] = false;
+            rule.Parameters!["values"] = new List<string> { "Activo", "Inactivo", "Pendiente" };
+            rule.Parameters!["caseSensitive"] = false;
 
             // Assert
             rule.RuleType.Should().Be("enum");
-            rule.Parameters["values"].Should().BeOfType<List<string>>();
-            rule.Parameters["caseSensitive"].Should().Be(false);
+            rule.Parameters!["values"].Should().BeOfType<List<string>>();
+            rule.Parameters!["caseSensitive"].Should().Be(false);
         }
 
         [Fact]
@@ -315,15 +315,15 @@ namespace DocumentIA.Tests.Unit.Configuration
                 RuleType = "date",
                 Severity = "Error"
             };
-            rule.Parameters["formats"] = new[] { "dd/MM/yyyy", "yyyy-MM-dd" };
-            rule.Parameters["allowFuture"] = false;
-            rule.Parameters["allowPast"] = true;
+            rule.Parameters!["formats"] = new[] { "dd/MM/yyyy", "yyyy-MM-dd" };
+            rule.Parameters!["allowFuture"] = false;
+            rule.Parameters!["allowPast"] = true;
 
             // Assert
             rule.RuleType.Should().Be("date");
-            var formats = rule.Parameters["formats"] as string[];
-            formats.Should().HaveCount(2);
-            formats[0].Should().Be("dd/MM/yyyy");
+            var formats = rule.Parameters!["formats"] as string[];
+            formats!.Should().HaveCount(2);
+            formats![0].Should().Be("dd/MM/yyyy");
         }
 
         [Fact]
@@ -335,11 +335,11 @@ namespace DocumentIA.Tests.Unit.Configuration
                 RuleType = "regex",
                 Severity = "Error"
             };
-            rule.Parameters["pattern"] = @"^\d{5}$";
+            rule.Parameters!["pattern"] = @"^\d{5}$";
 
             // Assert
             rule.RuleType.Should().Be("regex");
-            rule.Parameters["pattern"].Should().Be(@"^\d{5}$");
+            rule.Parameters!["pattern"].Should().Be(@"^\d{5}$");
         }
 
         #endregion
@@ -354,8 +354,8 @@ namespace DocumentIA.Tests.Unit.Configuration
 
             // Assert
             items.Type.Should().BeEmpty();
-            items.Properties.Should().NotBeNull();
-            items.Properties.Should().BeEmpty();
+            items.Properties!.Should().NotBeNull();
+            items.Properties!.Should().BeEmpty();
         }
 
         [Fact]
@@ -375,13 +375,13 @@ namespace DocumentIA.Tests.Unit.Configuration
             var items = new ItemsConfig { Type = "object" };
 
             // Act
-            items.Properties.Add(new FieldValidationConfig { Name = "tipo", Type = "string", Required = true });
-            items.Properties.Add(new FieldValidationConfig { Name = "cantidad", Type = "decimal", Required = false });
+            items.Properties!.Add(new FieldValidationConfig { Name = "tipo", Type = "string", Required = true });
+            items.Properties!.Add(new FieldValidationConfig { Name = "cantidad", Type = "decimal", Required = false });
 
             // Assert
-            items.Properties.Should().HaveCount(2);
-            items.Properties[0].Name.Should().Be("tipo");
-            items.Properties[1].Name.Should().Be("cantidad");
+            items.Properties!.Should().HaveCount(2);
+            items.Properties![0].Name.Should().Be("tipo");
+            items.Properties![1].Name.Should().Be("cantidad");
         }
 
         [Fact]
@@ -397,13 +397,13 @@ namespace DocumentIA.Tests.Unit.Configuration
             };
 
             // Act
-            parentItems.Properties.Add(nestedField);
-            nestedField.Items.Properties.Add(new FieldValidationConfig { Name = "subfield", Type = "string" });
+            parentItems.Properties!.Add(nestedField);
+            nestedField.Items!.Properties!.Add(new FieldValidationConfig { Name = "subfield", Type = "string" });
 
             // Assert
-            parentItems.Properties.Should().HaveCount(1);
-            parentItems.Properties[0].Items.Properties.Should().HaveCount(1);
-            parentItems.Properties[0].Items.Properties[0].Name.Should().Be("subfield");
+            parentItems.Properties!.Should().HaveCount(1);
+            parentItems.Properties![0].Items!.Properties!.Should().HaveCount(1);
+            parentItems.Properties![0].Items!.Properties![0].Name.Should().Be("subfield");
         }
 
         #endregion
@@ -468,13 +468,13 @@ namespace DocumentIA.Tests.Unit.Configuration
                 Required = false,
                 Items = new ItemsConfig { Type = "object" }
             };
-            cargasField.Items.Properties.Add(new FieldValidationConfig
+            cargasField.Items!.Properties!.Add(new FieldValidationConfig
             {
                 Name = "tipo",
                 Type = "string",
                 Required = true
             });
-            cargasField.Items.Properties.Add(new FieldValidationConfig
+            cargasField.Items!.Properties!.Add(new FieldValidationConfig
             {
                 Name = "descripcion",
                 Type = "string",
@@ -498,7 +498,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             config.Fields[2].Name.Should().Be("Cargas");
             config.Fields[2].Type.Should().Be("array");
             config.Fields[2].Items.Should().NotBeNull();
-            config.Fields[2].Items.Properties.Should().HaveCount(2);
+            config.Fields[2].Items!.Properties.Should().HaveCount(2);
         }
 
         [Fact]

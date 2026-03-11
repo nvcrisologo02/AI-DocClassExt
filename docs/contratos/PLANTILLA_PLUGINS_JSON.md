@@ -12,6 +12,17 @@ Este documento ofrece plantillas listas para copiar y adaptar en archivos:
 - `enabled: false` permite dejar plugins preparados sin ejecutarlos.
 - `retryPolicy` es opcional, pero recomendable para servicios externos.
 
+### Contrato funcional recomendado (`idActivo`)
+
+Para compatibilidad con el flujo de persistencia/GDC:
+
+- `IntegrarActivity` envía siempre `idActivo` en el payload al plugin (puede llegar vacío).
+- Si el plugin obtiene/resuelve el identificador, debe devolverlo en `ResponseData` con clave `idActivo`.
+- El pipeline resuelve el valor final con prioridad:
+  1. `DatosFinales["idActivo"]` (valor devuelto por plugins)
+  2. `IntegrarInput.IdActivo` (valor original de entrada)
+  3. `null` si no existe en ninguno.
+
 ---
 
 ## 1) Plantilla mínima (1 plugin REST)
@@ -202,6 +213,7 @@ Este documento ofrece plantillas listas para copiar y adaptar en archivos:
 - Endpoints accesibles desde el entorno de ejecución.
 - Si es `custom`, DLL existente y `className` implementa `ICustomEnricher`.
 - Secretos fuera de Git cuando aplique (API keys, usuario/password).
+- Si el plugin puede resolver el activo, devolver `idActivo` en `ResponseData`.
 
 ---
 
@@ -411,4 +423,5 @@ Este documento ofrece plantillas listas para copiar y adaptar en archivos:
 - Confirmar que no hay placeholders sin reemplazar (`__...__`).
 - Validar conectividad de endpoints antes de habilitar `enabled: true` en prod.
 - Registrar en PR qué campos cambiaron entre entornos y por qué.
+- Verificar en QA que el plugin devuelve `idActivo` cuando aplica (trazabilidad para subida GDC).
 

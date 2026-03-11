@@ -22,6 +22,7 @@
     {
       "pluginKey": "mock-soap-catastro",
       "pluginType": "soap",
+      "returnsIdActivo": true,
       "enabled": true,
       "priority": 2,
       "configuration": {
@@ -41,6 +42,7 @@
     {
       "pluginKey": "sareb-business-rules",
       "pluginType": "custom",
+      "returnsIdActivo": true,
       "enabled": true,
       "priority": 3,
       "configuration": {

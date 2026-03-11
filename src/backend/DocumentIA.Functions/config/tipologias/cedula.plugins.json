@@ -4,6 +4,7 @@
     {
       "pluginKey": "gdc-integration",
       "pluginType": "rest",
+      "returnsIdActivo": true,
       "enabled": true,
       "priority": 1,
       "configuration": {

@@ -6,6 +6,9 @@ namespace DocumentIA.Core.Configuration
         public string TipologiaId { get; set; } = string.Empty;
         public string TipologiaNombre { get; set; } = string.Empty;
         public string Version { get; set; } = string.Empty;
+        // Matricula utilizada para GDC upload checks for this tipologia.
+        // If empty, the global default from configuration will be used.
+        public string TipologiaMGDCMatricula { get; set; } = string.Empty;
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
         public TipologiaValidationConfig()

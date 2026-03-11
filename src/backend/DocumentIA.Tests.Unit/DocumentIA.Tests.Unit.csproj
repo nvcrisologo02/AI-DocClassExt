@@ -23,6 +23,7 @@
   <ItemGroup>
     <ProjectReference Include="..\DocumentIA.Core\DocumentIA.Core.csproj" />
     <ProjectReference Include="..\DocumentIA.Plugins\DocumentIA.Plugins.csproj" />
+    <ProjectReference Include="..\DocumentIA.Functions\DocumentIA.Functions.csproj" />
   </ItemGroup>
 
 </Project>
