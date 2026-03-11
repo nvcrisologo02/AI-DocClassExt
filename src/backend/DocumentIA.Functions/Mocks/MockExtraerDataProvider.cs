@@ -138,8 +138,14 @@ public class MockExtraerDataProvider : IExtraerDataProvider
             ["Provincia"] = "Valencia",
             ["Municipio"] = "Valencia",
             ["TipologiaInmueble"] = "Vivienda",
-            ["superficie"] = 97.35m,
-            ["UnidadSuperficie"] = "m2_construidos",
+            ["superficies"] = new object[]
+            {
+                new Dictionary<string, object>
+                {
+                    ["valor"] = 97.35m,
+                    ["UnidadSuperficie"] = "m2_construidos"
+                }
+            },
             ["Anejos"] = new object[]
             {
                 new Dictionary<string, object>
