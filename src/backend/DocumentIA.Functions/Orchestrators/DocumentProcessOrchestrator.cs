@@ -99,18 +99,29 @@ public class DocumentProcessOrchestrator
 
             // 4. Extraccion
             logger.LogInformation("Paso 4: Extrayendo datos");
-            var resultadoExtraccion = await context.CallActivityAsync<Dictionary<string, object>>(
+            var resultadoExtraccion = await context.CallActivityAsync<ExtraccionResultado>(
                 "ExtraerActivity",
-                new { Entrada = entrada, Tipologia = salida.Identificacion.Tipologia, DatosNormalizados = datosNormalizados });
+                new ExtraccionInput
+                {
+                    Entrada = entrada,
+                    Tipologia = salida.Identificacion.Tipologia,
+                    DatosNormalizados = datosNormalizados
+                });
 
-            salida.DatosExtraidos = resultadoExtraccion;
+            salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
+            salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
+            {
+                Modelo = resultadoExtraccion.Modelo,
+                LayoutEnabled = resultadoExtraccion.LayoutEnabled,
+                TiemposMs = resultadoExtraccion.TiemposMs
+            };
 
             // 5. Validacion - ACTUALIZADO PARA USAR MOTOR DE VALIDACION
             logger.LogInformation("Paso 5: Validando datos extraidos con motor de reglas");
             var validacionInput = new ValidacionInput
             {
                 Tipologia = salida.Identificacion.Tipologia,
-                DatosExtraidos = resultadoExtraccion.ToDictionary(
+                DatosExtraidos = salida.DatosExtraidos.ToDictionary(
                     kvp => kvp.Key,
                     kvp => (object?)kvp.Value)
             };

@@ -40,8 +40,13 @@ var host = new HostBuilder()
         // Services
         services.AddSingleton<IBlobStorageService, BlobStorageService>();
 
-        // Data Providers (actualmente usando mock, reemplazar por implementación real en el futuro)
-        services.AddSingleton<IExtraerDataProvider, MockExtraerDataProvider>();
+        services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
+        services.Configure<AzureContentUnderstandingSettings>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
+
+        services.AddSingleton<MockExtraerDataProvider>();
+        services.AddSingleton<AzureContentUnderstandingProvider>();
+        services.AddSingleton<ContentUnderstandingResultMapper>();
+        services.AddSingleton<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
 
         // Logging
         services.AddLogging(builder =>
@@ -101,6 +106,12 @@ var host = new HostBuilder()
         {
             string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
             return new TipologiaConfigLoader(configPath);
+        });
+
+        services.AddSingleton<ExtractionModelRegistryLoader>(provider =>
+        {
+            string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "extraction", "models.json");
+            return new ExtractionModelRegistryLoader(registryPath);
         });
 
 
