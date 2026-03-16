@@ -20,6 +20,7 @@ public class Instrucciones
 
 public class ConfiguracionIA
 {
+    public string Provider { get; set; } = "auto"; // auto | azure-document-intelligence | mock
     public string Model { get; set; } = "auto"; // DI | GPT | auto
     public double Umbral { get; set; } = 0.85;
 }

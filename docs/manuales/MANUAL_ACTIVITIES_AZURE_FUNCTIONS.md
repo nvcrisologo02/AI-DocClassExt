@@ -24,7 +24,7 @@ Pipeline del orquestador:
 1. `NormalizarActivity`
 2. `VerificarDuplicadoActivity` (si no se indicó `SkipDuplicateCheck`)
 3. `SubirBlobActivity` (si no se corta por duplicado o si `ForceReprocess=true`)
-4. `ClasificarActivity`
+4. `ClasificarActivity` (se omite si `Instrucciones.ExpectedType` viene informado)
 5. `ExtraerActivity`
 6. `ValidarActivity`
 7. `IntegrarActivity`
@@ -46,8 +46,13 @@ flowchart TD
   E --> G{Duplicado y no ForceReprocess?}
   G -- Sí --> H[Estado DUPLICADO\nFin]
   G -- No --> F
-  F --> I[4. ClasificarActivity]
-  I --> J{Confianza < Umbral?}
+  F --> I{ExpectedType informado?}
+  I -- Sí --> I2[Clasificación forzada
+Modelo=expectedtype-input
+Confianza=1.0]
+  I -- No --> I3[4. ClasificarActivity]
+  I2 --> J{Confianza < Umbral?}
+  I3 --> J{Confianza < Umbral?}
   J -- Sí --> K[Estado BAJA_CONFIANZA_CLASIFICACION\nFin]
   J -- No --> L[5. ExtraerActivity]
   L --> M[6. ValidarActivity]
@@ -143,9 +148,11 @@ sequenceDiagram
 
 Campos relevantes:
 
-- `Instrucciones.ExpectedType`: fuerza tipología en clasificación (si viene informado).
+- `Instrucciones.ExpectedType`: fuerza tipología y omite la activity de clasificación.
 - `Instrucciones.SkipDuplicateCheck`: omite validación de duplicado.
 - `Instrucciones.ForceReprocess`: permite seguir aunque sea duplicado.
+- `Instrucciones.Classification.Provider`: override opcional del proveedor (`auto`, `azure-document-intelligence`, `mock`).
+- `Instrucciones.Classification.Model`: override opcional del modelo (`auto` para usar default global).
 - `Instrucciones.Classification.Umbral`: umbral mínimo de confianza para continuar.
 - `Documento.Name` y `Documento.Content.Base64`: contenido a procesar.
 - `Trazabilidad.CorrelationId`, `SubmittedBy`: metadata operativa.
@@ -219,11 +226,11 @@ Responsabilidad:
 
 Reglas actuales:
 
-- Si `Instrucciones.ExpectedType` viene informado, fuerza clasificación con confianza `1.0`.
-- En caso contrario usa resultado mock:
-  - `Modelo = mock-classifier-v1`
-  - `TipologiaDetectada = Tasacion`
-  - `Confianza = 0.95`
+- Si `Instrucciones.ExpectedType` viene informado, la clasificación se resuelve en orquestación y esta activity no se ejecuta.
+- Si no existe `ExpectedType`, la activity usa `IClasificarDataProvider` con precedencia:
+  - `Instrucciones.Classification.Provider` / `Instrucciones.Classification.Model`
+  - `Classification:DefaultProvider` / `Classification:DefaultModelKey`
+- El proveedor por defecto es Azure DI (`azure-document-intelligence`) salvo override explícito.
 
 Decisión en orquestador:
 
@@ -319,7 +326,8 @@ Confianza global:
 
 Dependencias clave registradas en `Program.cs`:
 
-- `IExtraerDataProvider` (actual: mock).
+- `IClasificarDataProvider` (default: `ConfigurableClasificarDataProvider` con Azure DI).
+- `IExtraerDataProvider`.
 - `IBlobStorageService`.
 - Repositorios de persistencia y `DbContext`.
 - Sistema de plugins (`PluginManager`, `PluginFactory`, `PluginConfigLoader`).
@@ -360,13 +368,11 @@ Archivos de configuración utilizados por activities:
 
 Limitaciones observadas:
 
-- Clasificación aún mock cuando no se fuerza `ExpectedType`.
-- Extracción actualmente acoplada a proveedor mock en `Program.cs`.
+- Dependencia de configuración correcta de `Classification:AzureDocumentIntelligence` y `config/classification/models.json` para clasificación real.
 - Dependencia fuerte de configuración de tipología en filesystem.
 
 Evolución natural:
 
-- Sustituir clasificador mock por Azure AI Document Intelligence / modelo real.
 - Sustituir extractor mock por implementación real.
 - Externalizar secretos y parámetros por entorno (local/qa/prod).
 

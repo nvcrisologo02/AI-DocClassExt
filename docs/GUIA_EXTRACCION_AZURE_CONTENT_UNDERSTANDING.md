@@ -429,3 +429,59 @@ La llamada usa `WaitUntil.Completed`, que hace que el SDK espere a que Azure fin
 
 **¿Cómo puedo ver el JSON raw que devuelve Azure?**
 El log de la Function App con nivel `Debug` o `Trace` mostrará el JSON completo. También se puede instrumentar `AzureContentUnderstandingProvider` temporalmente para volcar `operation.Value.ToString()`.
+
+---
+
+## 11. Clasificación por defecto con Azure Document Intelligence
+
+Desde marzo 2026, la clasificación del orquestador usa por defecto **Azure Document Intelligence** cuando no se indique lo contrario en el contrato de entrada.
+
+Precedencia para clasificación:
+
+1. `Instrucciones.Classification.Provider` y `Instrucciones.Classification.Model` (si no son `auto`).
+2. `Classification:DefaultProvider` y `Classification:DefaultModelKey`.
+
+Regla importante de negocio:
+
+- Si `Instrucciones.ExpectedType` viene informado, se **omite** la activity de clasificación y se fuerza:
+  - `Modelo = expectedtype-input`
+  - `Confianza = 1.0`
+  - `TipologiaDetectada = ExpectedType`
+
+Configuración mínima en `appsettings.json` / variables de entorno:
+
+```json
+{
+  "Classification": {
+    "DefaultProvider": "azure-document-intelligence",
+    "DefaultModelKey": "default.azure-di",
+    "AzureDocumentIntelligence": {
+      "Endpoint": "https://<tu-recurso>.cognitiveservices.azure.com/",
+      "ApiKey": "<api-key>",
+      "ApiVersion": "2024-11-30"
+    }
+  }
+}
+```
+
+Registro de modelos de clasificación:
+
+- Archivo: `DocumentIA.Functions/config/classification/models.json`
+- Ejemplo:
+
+```json
+{
+  "models": [
+    {
+      "key": "default.azure-di",
+      "provider": "azure-document-intelligence",
+      "classifierId": "CHANGEME_CLASSIFIER_ID",
+      "apiVersion": "2024-11-30"
+    }
+  ]
+}
+```
+
+Nota de diseño:
+
+- La tipología **no** selecciona el modelo de clasificación. La clasificación ocurre antes y es precisamente la que determina la tipología del documento.

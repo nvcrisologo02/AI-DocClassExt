@@ -43,6 +43,7 @@ $body = @{
         expectedType = "nota.simple.1_4"
         skipDuplicateCheck = $true
         forceReprocess = $true
+        SkipGDCUpload = $true
         classification = @{
             model = "auto"
             umbral = 0.85
