@@ -3,6 +3,13 @@
   "tipologiaNombre": "Nota Simple",
   "tipologiaMGDCMatricula": "NOTA_SIMPLE",
   "version": "1.4",
+  "extraction": {
+    "enabled": true,
+    "provider": "azure-content-understanding",
+    "modelKey": "nota.simple.1_4.azure-cu",
+    "autoMapUnmappedFields": true,
+    "fieldMappings": []
+  },
   "fields": [
     {
       "name": "FincaRegistral",
@@ -192,39 +199,39 @@
       ]
     },
     {
-      "name": "Superficies",
+      "name": "superficies",
       "type": "array",
-      "required": false,
+      "required": true,
       "items": {
-      "type": "object",
-      "properties": [
-        {
-        "name": "valor",
-        "type": "decimal",
-        "required": true,
-        "rules": [
+        "type": "object",
+        "properties": [
           {
-          "ruleType": "range",
-          "severity": "Error",
-          "parameters": {"min": 0, "max": 200000000}
+            "name": "valor",
+            "type": "decimal",
+            "required": true,
+            "rules": [
+              {
+                "ruleType": "range",
+                "severity": "Error",
+                "parameters": {"min": 0, "max": 200000000}
+              }
+            ]
+          },
+          {
+            "name": "UnidadSuperficie",
+            "type": "string",
+            "required": false,
+            "rules": [
+              {
+                "ruleType": "enum",
+                "severity": "Warning",
+                "parameters": {
+                  "values": ["m2_construidos", "m2_utiles", "m2_suelo", "otro"]
+                }
+              }
+            ]
           }
         ]
-        },
-        {
-        "name": "unidad",
-        "type": "string",
-        "required": false,
-        "rules": [
-          {
-          "ruleType": "enum",
-          "severity": "Warning",
-          "parameters": {
-            "values": ["m2_construidos", "m2_utiles", "m2_suelo", "otro"]
-          }
-          }
-        ]
-        }
-      ]
       }
     },
     {
@@ -285,7 +292,8 @@
               "Suelo rústico",
               "Suelo no urbanizable",
               "No consta",
-              "Otros"
+               "Otros",
+               "Urbana"
             ]
           }
         }
@@ -317,7 +325,7 @@
         {
           "ruleType": "regex",
           "severity": "Warning",
-          "parameters": {"pattern": "^[0-9]+\\/[0-9]+$"}
+           "parameters": {"pattern": "^\\d+(\\.\\d+)?%$"}
         }
       ]
     },

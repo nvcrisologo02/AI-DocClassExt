@@ -59,6 +59,41 @@ namespace DocumentIA.Tests.Unit.Configuration
         }
 
         [Fact]
+        public void LoadConfig_WithExtractionSection_DeserializesExtractionSettings()
+        {
+            var configPath = Path.Combine(_tempDirectory, "extract.validation.json");
+            var jsonContent = @"{
+                ""tipologiaId"": ""extract"",
+                ""tipologiaNombre"": ""Extraction Config"",
+                ""version"": ""1.0"",
+                ""extraction"": {
+                    ""enabled"": true,
+                    ""provider"": ""azure-content-understanding"",
+                    ""modelKey"": ""nota.simple.1_4.azure-cu"",
+                    ""autoMapUnmappedFields"": false,
+                    ""fieldMappings"": [
+                        {
+                            ""targetField"": ""Titular"",
+                            ""sourcePath"": ""Owner.Name""
+                        }
+                    ]
+                },
+                ""fields"": []
+            }";
+            File.WriteAllText(configPath, jsonContent);
+
+            var loader = new TipologiaConfigLoader(_tempDirectory);
+
+            var config = loader.LoadConfig("extract");
+
+            config.Extraction.Enabled.Should().BeTrue();
+            config.Extraction.Provider.Should().Be("azure-content-understanding");
+            config.Extraction.ModelKey.Should().Be("nota.simple.1_4.azure-cu");
+            config.Extraction.AutoMapUnmappedFields.Should().BeFalse();
+            config.Extraction.FieldMappings.Should().ContainSingle();
+        }
+
+        [Fact]
         public void LoadConfig_NonExistentFile_ThrowsFileNotFoundException()
         {
             // Arrange

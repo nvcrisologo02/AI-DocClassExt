@@ -9,6 +9,7 @@ namespace DocumentIA.Core.Configuration
         // Matricula utilizada para GDC upload checks for this tipologia.
         // If empty, the global default from configuration will be used.
         public string TipologiaMGDCMatricula { get; set; } = string.Empty;
+        public TipologiaExtractionConfig Extraction { get; set; } = new();
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
         public TipologiaValidationConfig()
@@ -31,6 +32,21 @@ namespace DocumentIA.Core.Configuration
         {
             Rules = new List<ValidationRuleConfig>();
         }
+    }
+
+    public class TipologiaExtractionConfig
+    {
+        public bool Enabled { get; set; }
+        public string Provider { get; set; } = string.Empty;
+        public string ModelKey { get; set; } = string.Empty;
+        public bool AutoMapUnmappedFields { get; set; } = true;
+        public List<ExtractionFieldMappingConfig> FieldMappings { get; set; } = new List<ExtractionFieldMappingConfig>();
+    }
+
+    public class ExtractionFieldMappingConfig
+    {
+        public string TargetField { get; set; } = string.Empty;
+        public string SourcePath { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -57,5 +73,20 @@ namespace DocumentIA.Core.Configuration
         {
             Parameters = new Dictionary<string, object?>();
         }
+    }
+
+    public class ExtractionModelRegistry
+    {
+        public List<ExtractionModelConfig> Models { get; set; } = new List<ExtractionModelConfig>();
+    }
+
+    public class ExtractionModelConfig
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Provider { get; set; } = string.Empty;
+        public string AnalyzerId { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public string ProcessingLocation { get; set; } = string.Empty;
+        public string InputRange { get; set; } = string.Empty;
     }
 }

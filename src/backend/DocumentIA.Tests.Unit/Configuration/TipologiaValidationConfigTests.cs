@@ -23,6 +23,8 @@ namespace DocumentIA.Tests.Unit.Configuration
             config.TipologiaId.Should().BeEmpty();
             config.TipologiaNombre.Should().BeEmpty();
             config.Version.Should().BeEmpty();
+            config.Extraction.Should().NotBeNull();
+            config.Extraction.AutoMapUnmappedFields.Should().BeTrue();
             config.Fields.Should().NotBeNull();
             config.Fields.Should().BeEmpty();
         }
@@ -42,6 +44,31 @@ namespace DocumentIA.Tests.Unit.Configuration
             config.TipologiaId.Should().Be("notasimple");
             config.TipologiaNombre.Should().Be("Nota Simple");
             config.Version.Should().Be("1.4");
+        }
+
+        [Fact]
+        public void TipologiaValidationConfig_ExtractionProperties_StoresValuesCorrectly()
+        {
+            var config = new TipologiaValidationConfig
+            {
+                Extraction = new TipologiaExtractionConfig
+                {
+                    Enabled = true,
+                    Provider = "azure-content-understanding",
+                    ModelKey = "nota.simple.1_4.azure-cu",
+                    AutoMapUnmappedFields = false,
+                    FieldMappings = new List<ExtractionFieldMappingConfig>
+                    {
+                        new() { TargetField = "Titular", SourcePath = "Owner.Name" }
+                    }
+                }
+            };
+
+            config.Extraction.Enabled.Should().BeTrue();
+            config.Extraction.Provider.Should().Be("azure-content-understanding");
+            config.Extraction.ModelKey.Should().Be("nota.simple.1_4.azure-cu");
+            config.Extraction.AutoMapUnmappedFields.Should().BeFalse();
+            config.Extraction.FieldMappings.Should().HaveCount(1);
         }
 
         [Fact]

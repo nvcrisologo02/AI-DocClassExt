@@ -9,6 +9,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Azure.AI.ContentUnderstanding" Version="1.0.1" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Azure.AI.FormRecognizer" Version="4.1.0" />
     <PackageReference Include="Azure.Identity" Version="1.17.1" />

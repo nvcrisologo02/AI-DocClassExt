@@ -1,7 +1,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
-using System.Text.Json;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Core.Models;
 
 namespace DocumentIA.Functions.Activities;
 
@@ -23,19 +23,18 @@ public class ExtraerActivity
     }
 
     [Function("ExtraerActivity")]
-    public Dictionary<string, object> Run([ActivityTrigger] object input)
+    public async Task<ExtraccionResultado> Run([ActivityTrigger] ExtraccionInput input)
     {
-        _logger.LogInformation("Extrayendo datos del documento");
+        _logger.LogInformation("Extrayendo datos del documento para tipología: {Tipologia}", input.Tipologia);
 
-        var inputJson = JsonSerializer.Serialize(input);
-        var inputData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson);
-        
-        var tipologia = inputData?["Tipologia"].GetString() ?? "Desconocida";
+        var resultado = await _dataProvider.ObtenerDatosAsync(input);
 
-        // Obtener datos a través del proveedor inyectado
-        var datosExtraidos = _dataProvider.ObtenerDatos(tipologia);
+        _logger.LogInformation(
+            "Extracción completada para tipología: {Tipologia} con proveedor {Proveedor} y modelo {Modelo}",
+            input.Tipologia,
+            resultado.Proveedor,
+            resultado.Modelo);
 
-        _logger.LogInformation($"Extracción completada para tipología: {tipologia}");
-        return datosExtraidos;
+        return resultado;
     }
 }

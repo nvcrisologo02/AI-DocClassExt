@@ -103,7 +103,7 @@ Campos:
       - superficie (decimal, rango: 0 - 200.000.000)
 
   • CalificacionUrbanistica (string)
-    - Enumeración: Suelo urbano, Suelo urbanizable, Suelo rústico, Suelo no urbanizable, No consta, Otros
+    - Enumeración: Suelo urbano, Suelo urbanizable, Suelo rústico, Suelo no urbanizable, No consta, Otros, Urbana
 
 ---
 5) TITULARIDAD
@@ -119,8 +119,8 @@ Campos:
     - Validación de NIF español
 
   • CuotaParticipacion (string)
-    - Patrón: fracción (numerador/denominador) - regex: ^[0-9]+\/[0-9]+$
-    - Ej: 1/2, 3/4, etc.
+    - Patrón: porcentaje (número con símbolo `%`) - regex: ^\d+(\.\d+)?%$
+    - Ej: 100%, 50%, 33.33%
 
   • FechaAdquisicion (date)
     - Formatos: dd/MM/yyyy o yyyy-MM-dd

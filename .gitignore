@@ -62,6 +62,9 @@ tmp_notasimple_output_pretty.json
 tmp_notasimple_output.json
 tmp_tasacion_output_pretty.json
 tmp_tasacion_output.json
+tmp_analyzers.json
+tmp_analyze_result.json
+tests/api-tests/tmp_final_status.json
 docs/manuales/salidas-demo/salida_nota_simple_1_4.json
 docs/manuales/salidas-demo/salida_test_ingest_tasacion.json
 tests/api-tests/last-instance-id.txt

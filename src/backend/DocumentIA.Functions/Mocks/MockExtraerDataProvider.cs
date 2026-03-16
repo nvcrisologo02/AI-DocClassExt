@@ -1,4 +1,5 @@
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Core.Models;
 
 namespace DocumentIA.Functions.Mocks;
 
@@ -8,15 +9,23 @@ namespace DocumentIA.Functions.Mocks;
 /// </summary>
 public class MockExtraerDataProvider : IExtraerDataProvider
 {
-    public Dictionary<string, object> ObtenerDatos(string tipologia)
+    public Task<ExtraccionResultado> ObtenerDatosAsync(ExtraccionInput input, CancellationToken cancellationToken = default)
     {
-        return tipologia switch
+        var datos = input.Tipologia switch
         {
             "nota.simple.1_2" => ObtenerDatosNotaSimple12(),
             "nota.simple.1_3" => ObtenerDatosNotaSimple13(),
             "nota.simple.1_4" => ObtenerDatosNotaSimple14(),
             _ => ObtenerDatosGenerico()
         };
+
+        return Task.FromResult(new ExtraccionResultado
+        {
+            Proveedor = "mock",
+            Modelo = "mock",
+            LayoutEnabled = false,
+            DatosExtraidos = datos
+        });
     }
 
     private Dictionary<string, object> ObtenerDatosNotaSimple12()
