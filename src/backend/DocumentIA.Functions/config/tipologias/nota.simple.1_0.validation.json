@@ -1,7 +1,8 @@
 {
-  "tipologiaId": "notasimple",
+  "tipologiaId": "nota-simple",
   "tipologiaNombre": "Nota Simple",
   "version": "1.0",
+  "isDefault": false,
   "fields": [
     {
       "name": "superficie",
@@ -58,20 +59,9 @@
             "maxLength": 160,
             "requireStreetNumber": true,
             "requireMunicipality": true,
-            "requireProvince": true
-          }
-        }
-      ]
-    },
-    {
-      "name": "ReferenciaCatastral",
-      "type": "string",
-      "required": false,
-      "rules": [
-        {
-          "ruleType": "catastral",
-          "severity": "Warning",
-          "parameters": {}
+            "requireProvince": false
+          },
+          "Severity": "Warning"
         }
       ]
     }

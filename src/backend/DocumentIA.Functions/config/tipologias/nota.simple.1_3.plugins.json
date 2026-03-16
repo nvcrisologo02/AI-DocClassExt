@@ -1,5 +1,5 @@
 {
-  "tipologiaId": "nota.simple.1_3",
+  "tipologiaId": "nota-simple",
   "plugins": [
     {
       "pluginKey": "mock-enrichment",

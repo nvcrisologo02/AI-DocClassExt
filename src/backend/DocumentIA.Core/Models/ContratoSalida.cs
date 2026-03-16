@@ -14,6 +14,8 @@ public class Identificacion
     public string Documento { get; set; } = string.Empty;
     public string Guid { get; set; } = System.Guid.NewGuid().ToString();
     public string Tipologia { get; set; } = string.Empty;
+    public string TipologiaFamilia { get; set; } = string.Empty;
+    public string TipologiaVersion { get; set; } = string.Empty;
     public DateTime FechaProceso { get; set; } = DateTime.UtcNow;
     public int Paginas { get; set; }
 }

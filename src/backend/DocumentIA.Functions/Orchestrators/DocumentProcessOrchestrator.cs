@@ -2,6 +2,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Configuration;
 using DocumentIA.Functions.Activities;
 using System;
 using System.Collections.Generic;
@@ -106,7 +107,15 @@ public class DocumentProcessOrchestrator
             }
 
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
-            salida.Identificacion.Tipologia = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
+            var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
+            var tipologiaResuelta = await context.CallActivityAsync<ResolvedTipologia>(
+                "ResolverTipologiaActivity",
+                tipologiaEntrada);
+
+            salida.Identificacion.Tipologia = tipologiaResuelta.TechnicalKey;
+            salida.Identificacion.TipologiaFamilia = tipologiaResuelta.TipologiaId;
+            salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
+            salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
 
             // Verificar umbral de confianza
             if (resultadoClasificacion.Confianza < entrada.Instrucciones.Classification.Umbral)

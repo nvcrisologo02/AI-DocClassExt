@@ -114,6 +114,12 @@ var host = new HostBuilder()
             return new TipologiaConfigLoader(configPath);
         });
 
+        services.AddSingleton<ITipologiaVersionResolver>(provider =>
+        {
+            string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
+            return new TipologiaVersionResolver(configPath);
+        });
+
         services.AddSingleton<ExtractionModelRegistryLoader>(provider =>
         {
             string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "extraction", "models.json");
