@@ -81,10 +81,29 @@ public class DocumentProcessOrchestrator
             }
 
             // 3. Clasificacion
-            logger.LogInformation("Paso 3: Clasificando documento");
-            var resultadoClasificacion = await context.CallActivityAsync<ResultadoClasificacion>(
-                "ClasificarActivity",
-                new { Entrada = entrada, DatosNormalizados = datosNormalizados });
+            ResultadoClasificacion resultadoClasificacion;
+            if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType))
+            {
+                logger.LogInformation("Paso 3: Clasificación omitida por ExpectedType={ExpectedType}", entrada.Instrucciones.ExpectedType);
+                resultadoClasificacion = new ResultadoClasificacion
+                {
+                    Modelo = "expectedtype-input",
+                    Confianza = 1.0,
+                    FallbackLLM = false,
+                    TipologiaDetectada = entrada.Instrucciones.ExpectedType
+                };
+            }
+            else
+            {
+                logger.LogInformation("Paso 3: Clasificando documento");
+                resultadoClasificacion = await context.CallActivityAsync<ResultadoClasificacion>(
+                    "ClasificarActivity",
+                    new ClasificacionInput
+                    {
+                        Entrada = entrada,
+                        DatosNormalizados = datosNormalizados
+                    });
+            }
 
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
             salida.Identificacion.Tipologia = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";

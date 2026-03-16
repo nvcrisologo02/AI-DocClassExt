@@ -1,6 +1,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
+using DocumentIA.Functions.Abstractions;
 using System.Text.Json;
 
 namespace DocumentIA.Functions.Activities;
@@ -8,62 +9,59 @@ namespace DocumentIA.Functions.Activities;
 public class ClasificarActivity
 {
     private readonly ILogger<ClasificarActivity> _logger;
-    // TODO: Inyectar servicio de Azure AI Document Intelligence
+    private readonly IClasificarDataProvider _clasificadorProvider;
 
-    public ClasificarActivity(ILogger<ClasificarActivity> logger)
+    public ClasificarActivity(ILogger<ClasificarActivity> logger, IClasificarDataProvider clasificadorProvider)
     {
         _logger = logger;
+        _clasificadorProvider = clasificadorProvider;
     }
 
     [Function("ClasificarActivity")]
-    public ResultadoClasificacion Run([ActivityTrigger] object input)
+    public async Task<ResultadoClasificacion> Run([ActivityTrigger] object input)
     {
         _logger.LogInformation("Clasificando documento");
-        // Deserializar input y comprobar si las instrucciones incluyen un ExpectedType
-        var inputJson = JsonSerializer.Serialize(input);
-        var inputData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(inputJson);
 
-        try
+        var clasificacionInput = ParseInput(input);
+        var expectedType = clasificacionInput.Entrada.Instrucciones.ExpectedType;
+
+        if (!string.IsNullOrWhiteSpace(expectedType))
         {
-            if (inputData != null && inputData.TryGetValue("Entrada", out var entradaEl))
+            var forced = new ResultadoClasificacion
             {
-                if (entradaEl.ValueKind == JsonValueKind.Object && entradaEl.TryGetProperty("Instrucciones", out var instrEl))
-                {
-                    if (instrEl.ValueKind == JsonValueKind.Object && instrEl.TryGetProperty("ExpectedType", out var expectedEl))
-                    {
-                        var expected = expectedEl.GetString();
-                        if (!string.IsNullOrWhiteSpace(expected))
-                        {
-                            var forced = new ResultadoClasificacion
-                            {
-                                Modelo = "expectedtype-input",
-                                Confianza = 1.0,
-                                FallbackLLM = false,
-                                TipologiaDetectada = expected
-                            };
+                Modelo = "expectedtype-input",
+                Confianza = 1.0,
+                FallbackLLM = false,
+                TipologiaDetectada = expectedType
+            };
 
-                            _logger.LogInformation($"Clasificación forzada por ExpectedType: {expected}");
-                            return forced;
-                        }
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error leyendo ExpectedType del input de clasificación; continuando con clasificador mock.");
+            _logger.LogInformation("Clasificación forzada por ExpectedType: {ExpectedType}", expectedType);
+            return forced;
         }
 
-        // Por ahora retornamos un resultado mock de clasificación
-        var resultado = new ResultadoClasificacion
-        {
-            Modelo = "mock-classifier-v1",
-            Confianza = 0.95,
-            FallbackLLM = false,
-            TipologiaDetectada = "Tasacion"
-        };
-
-        _logger.LogInformation($"Clasificación completada: {resultado.TipologiaDetectada} (confianza: {resultado.Confianza})");
+        var resultado = await _clasificadorProvider.ClasificarAsync(clasificacionInput);
+        _logger.LogInformation("Clasificación completada: {Tipologia} (confianza: {Confianza})", resultado.TipologiaDetectada, resultado.Confianza);
         return resultado;
+    }
+
+    private static ClasificacionInput ParseInput(object input)
+    {
+        if (input is ClasificacionInput typedInput)
+        {
+            return typedInput;
+        }
+
+        var json = JsonSerializer.Serialize(input);
+        var parsed = JsonSerializer.Deserialize<ClasificacionInput>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        });
+
+        if (parsed is null)
+        {
+            throw new InvalidOperationException("Input de clasificación inválido");
+        }
+
+        return parsed;
     }
 }

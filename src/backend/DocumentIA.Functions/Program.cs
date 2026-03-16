@@ -42,11 +42,17 @@ var host = new HostBuilder()
 
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<AzureContentUnderstandingSettings>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
+        services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
+        services.Configure<AzureDocumentIntelligenceClassificationSettings>(context.Configuration.GetSection("Classification:AzureDocumentIntelligence"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
         services.AddSingleton<ContentUnderstandingResultMapper>();
         services.AddSingleton<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
+
+        services.AddSingleton<MockClasificarDataProvider>();
+        services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
+        services.AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>();
 
         // Logging
         services.AddLogging(builder =>
@@ -112,6 +118,12 @@ var host = new HostBuilder()
         {
             string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "extraction", "models.json");
             return new ExtractionModelRegistryLoader(registryPath);
+        });
+
+        services.AddSingleton<ClassificationModelRegistryLoader>(provider =>
+        {
+            string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "classification", "models.json");
+            return new ClassificationModelRegistryLoader(registryPath);
         });
 
 
