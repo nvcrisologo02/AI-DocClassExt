@@ -74,6 +74,20 @@ public class TipologiaVersionResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_WithMultipleDefaultVersions_Throws()
+    {
+        WriteValidationConfig("nota.simple.1_3.validation.json", "nota-simple", "1.3", true);
+        WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", true);
+
+        var sut = new TipologiaVersionResolver(_tempDirectory);
+
+        var action = () => sut.Resolve("nota-simple");
+
+        action.Should().Throw<InvalidOperationException>()
+            .WithMessage("*multiples versiones marcadas como default*");
+    }
+
+    [Fact]
     public void Resolve_WithUnknownVersion_Throws()
     {
         WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", true);

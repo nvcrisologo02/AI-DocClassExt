@@ -35,7 +35,7 @@ $body = @{
         classification = @{
             provider = "auto"
             model = "auto"
-            umbral = 0.85
+            umbral = 0.5
         }
         extraction = @{
             model = "auto"
