@@ -357,7 +357,7 @@
           "parameters": {
             "values": [
               "Compraventa",  "Herencia",     "Adjudicacion", "Dacion",
-              "Donacion",     "Otros"
+              "Donacion",     "Otros", "Cesion"
             ]
           }
         }
