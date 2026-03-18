@@ -14,6 +14,11 @@ namespace DocumentIA.Core.Configuration
         // HTTP/SOAP timeout in seconds
         public int TimeoutSeconds { get; set; } = 30;
 
+        // Identity credentials for GDC SOAP authentication (passed as arg0 in every operation)
+        public string ApplicationId { get; set; } = string.Empty;
+        public string Username { get; set; } = string.Empty;
+        public string NominalUser { get; set; } = string.Empty;
+
         // Retry behavior
         public int MaxRetries { get; set; } = 3;
         public int InitialDelayMs { get; set; } = 200;

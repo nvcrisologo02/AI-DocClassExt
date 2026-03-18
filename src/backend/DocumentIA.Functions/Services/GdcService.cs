@@ -39,14 +39,21 @@ namespace DocumentIA.Functions.Services
                    "<soap:Body>" + body + "</soap:Body></soap:Envelope>";
         }
 
+        private string BuildIdentityElement()
+        {
+            return "<ns0:applicationId>" + SecurityElement.Escape(settings.ApplicationId) + "</ns0:applicationId>" +
+                   "<ns0:nominalUser>" + SecurityElement.Escape(settings.NominalUser) + "</ns0:nominalUser>" +
+                   "<ns0:username>" + SecurityElement.Escape(settings.Username) + "</ns0:username>";
+        }
+
         private string BuildSearchEntitiesRequest(string idActivo, string md5)
         {
             var safeIdActivo = SecurityElement.Escape(idActivo) ?? string.Empty;
             var safeMd5 = SecurityElement.Escape(md5) ?? string.Empty;
 
             return
-                "<ns1:searchEntities xmlns:ns1=\"http://services.api.sint.sareb.es/\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
-                "<ns1:arg0 xsi:nil=\"true\" />" +
+                "<ns1:searchEntities xmlns:ns1=\"http://services.api.sint.sareb.es/\" xmlns:ns0=\"http://auth.model.api.sint.sareb.es\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
+                "<ns1:arg0>" + BuildIdentityElement() + "</ns1:arg0>" +
                 "<ns1:arg1 xmlns:ns2=\"http://search.model.api.sint.sareb.es\" xmlns:ns3=\"http://data.model.api.sint.sareb.es\" xsi:type=\"ns2:Query\">" +
                 "<ns2:entityTypeId>document</ns2:entityTypeId>" +
                 "<ns2:filter xsi:type=\"ns2:SetExpression\">" +
@@ -138,14 +145,17 @@ namespace DocumentIA.Functions.Services
         public async Task<ResultadoGDC> SubirDocumentoAsync(SubirGDCInput input, CancellationToken cancellationToken = default)
         {
             var result = new ResultadoGDC();
-            var body = $"<SubirDocumentoRequest xmlns=\"http://sintws.example.org/\">" +
+            // TODO(C4): remap to real WSDL 'create' operation with Entity type.
+            // Temporary body preserving existing field semantics + Identity auth (C3).
+            var body = "<ns1:SubirDocumentoRequest xmlns:ns1=\"http://services.api.sint.sareb.es/\" xmlns:ns0=\"http://auth.model.api.sint.sareb.es\">" +
+                       "<ns1:arg0>" + BuildIdentityElement() + "</ns1:arg0>" +
                        $"<IdActivo>{SecurityElement.Escape(input.IdActivo)}</IdActivo>" +
                        $"<Matricula>{SecurityElement.Escape(input.Matricula)}</Matricula>" +
                        $"<NombreArchivo>{SecurityElement.Escape(input.NombreArchivo)}</NombreArchivo>" +
                        $"<ContenidoBase64>{SecurityElement.Escape(input.ContenidoBase64)}</ContenidoBase64>" +
                        $"<SHA256>{SecurityElement.Escape(input.SHA256)}</SHA256>" +
                        $"<CorrelationId>{SecurityElement.Escape(input.CorrelationId)}</CorrelationId>" +
-                       "</SubirDocumentoRequest>";
+                       "</ns1:SubirDocumentoRequest>";
 
             var envelope = WrapSoapEnvelope(body);
             var content = new StringContent(envelope, Encoding.UTF8, "text/xml");
