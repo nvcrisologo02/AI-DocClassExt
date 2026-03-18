@@ -171,7 +171,34 @@ public class ContentUnderstandingResultMapper
             return contentElement.GetString();
         }
 
+        if (HasOnlyMetadataProperties(fieldElement))
+        {
+            return string.Empty;
+        }
+
         return fieldElement.GetRawText();
+    }
+
+    private static bool HasOnlyMetadataProperties(JsonElement fieldElement)
+    {
+        if (fieldElement.ValueKind != JsonValueKind.Object)
+        {
+            return false;
+        }
+
+        var hasProperties = false;
+        foreach (var property in fieldElement.EnumerateObject())
+        {
+            hasProperties = true;
+
+            if (property.Name.StartsWith("value", StringComparison.Ordinal)
+                || string.Equals(property.Name, "content", StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+
+        return hasProperties;
     }
 
     private static object? ConvertPrimitive(JsonElement element)

@@ -110,4 +110,46 @@ public class ContentUnderstandingResultMapperTests
 
         result["Titular"].Should().Be("MARIA LOPEZ RUIZ");
     }
+
+    [Fact]
+    public void Map_FieldWithoutExtractedValue_ReturnsEmptyString()
+    {
+        using var analysisDocument = JsonDocument.Parse(@"{
+            ""result"": {
+                ""contents"": [
+                    {
+                        ""fields"": {
+                            ""NumeroAsientoPresentacion"": { ""type"": ""string"", ""confidence"": 0.968 },
+                            ""Direccion"": { ""type"": ""string"", ""valueString"": ""Camino de la Torrecilla, Vallecas, Madrid"" },
+                            ""ReferenciaCatastral"": { ""type"": ""string"", ""confidence"": 0.963 }
+                        }
+                    }
+                ]
+            }
+        }");
+
+        var config = new TipologiaValidationConfig
+        {
+            Extraction = new TipologiaExtractionConfig
+            {
+                Enabled = true,
+                Provider = "azure-content-understanding",
+                AutoMapUnmappedFields = true
+            },
+            Fields = new List<FieldValidationConfig>
+            {
+                new() { Name = "NumeroAsientoPresentacion", Type = "string" },
+                new() { Name = "Direccion", Type = "string" },
+                new() { Name = "ReferenciaCatastral", Type = "string" }
+            }
+        };
+
+        var mapper = new ContentUnderstandingResultMapper();
+
+        var result = mapper.Map(analysisDocument, config);
+
+        result["NumeroAsientoPresentacion"].Should().Be(string.Empty);
+        result["Direccion"].Should().Be("Camino de la Torrecilla, Vallecas, Madrid");
+        result["ReferenciaCatastral"].Should().Be(string.Empty);
+    }
 }
