@@ -1,6 +1,7 @@
 {
   "tipologiaId": "nota-simple",
   "tipologiaNombre": "Nota Simple",
+  "tipologiaMGDCMatricula": "NOTA_SIMPLE",
   "version": "1.2",
   "isDefault": false,
   "fields": [

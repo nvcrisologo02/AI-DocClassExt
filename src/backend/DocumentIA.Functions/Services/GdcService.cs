@@ -129,7 +129,7 @@ namespace DocumentIA.Functions.Services
             }
             catch (Exception ex)
             {
-                logger.LogWarning(ex, "Failed parsing searchEntities response");
+                logger.LogWarning(ex, "Failed parsing searchEntities response. XML: {XmlResponse}", xml);
             }
 
             return (false, null);

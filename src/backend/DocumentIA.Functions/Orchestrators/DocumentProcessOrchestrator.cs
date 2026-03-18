@@ -252,9 +252,29 @@ public class DocumentProcessOrchestrator
                         }
                     };
 
-                    var resultadoGdc = await context.CallActivityAsync<ResultadoGDC>(
+                    const int GdcActivityTimeoutSeconds = 120;
+                    using var cts = new System.Threading.CancellationTokenSource();
+                    var activityTask = context.CallActivityAsync<ResultadoGDC>(
                         "SubirGDCActivity",
                         subirInput);
+                    var timeoutTask = context.CreateTimer(
+                        context.CurrentUtcDateTime.AddSeconds(GdcActivityTimeoutSeconds),
+                        cts.Token);
+
+                    var winner = await Task.WhenAny(activityTask, timeoutTask);
+                    ResultadoGDC? resultadoGdc;
+                    if (winner == timeoutTask)
+                    {
+                        logger.LogWarning(
+                            "SubirGDCActivity timeout after {TimeoutSeconds}s for IdActivo={IdActivo}",
+                            GdcActivityTimeoutSeconds, salida.Integridad.IdActivo);
+                        resultadoGdc = new ResultadoGDC { Exitoso = false, Mensaje = "Timeout" };
+                    }
+                    else
+                    {
+                        cts.Cancel();
+                        resultadoGdc = await activityTask;
+                    }
 
                     salida.DetalleEjecucion.GDC = resultadoGdc ?? new ResultadoGDC();
 

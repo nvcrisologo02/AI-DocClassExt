@@ -1,6 +1,7 @@
 {
   "tipologiaId": "tasacion",
   "tipologiaNombre": "Tasacion",
+  "tipologiaMGDCMatricula": "TASACION",
   "version": "1.0",
   "isDefault": true,
   "fields": [

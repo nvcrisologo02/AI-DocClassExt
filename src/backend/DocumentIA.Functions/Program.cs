@@ -83,6 +83,17 @@ var host = new HostBuilder()
             {
                 client.Timeout = TimeSpan.FromSeconds(t);
             }
+        })
+        .ConfigurePrimaryHttpMessageHandler(() =>
+        {
+            var handler = new HttpClientHandler();
+            if (context.HostingEnvironment.IsDevelopment())
+            {
+                // Bypass SSL validation for internal DEV endpoints with self-signed certificates
+                handler.ServerCertificateCustomValidationCallback =
+                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+            }
+            return handler;
         });
 
         // Register GDC services: concrete implementation + resilient decorator
