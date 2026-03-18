@@ -19,6 +19,24 @@ namespace DocumentIA.Core.Configuration
         public string Username { get; set; } = string.Empty;
         public string NominalUser { get; set; } = string.Empty;
 
+        // GDC entity typeId used in create and searchEntities (confirm with Sistemas if different)
+        public string DocumentTypeId { get; set; } = "document";
+
+        // GDC field name for binary file content in create operation (confirm with Sistemas)
+        public string ContentFieldName { get; set; } = "content";
+
+        // origen_documento field value — mandatory since SINTWS v4.0 (2020); identifies the source system
+        public string OrigenDocumento { get; set; } = string.Empty;
+
+        // clase_expediente value for the entity expediente field (OTCS folder class, e.g. "AI", "AAII")
+        // Used to place uploaded documents in the correct activo folder in OTCS
+        public string ClaseExpediente { get; set; } = string.Empty;
+
+        // Optional: DocRepository for searchEntities (name + id of the GDC repository to search)
+        // Leave empty to search across all repositories (server default when repo is not found)
+        public string RepositoryId { get; set; } = string.Empty;
+        public string RepositoryName { get; set; } = string.Empty;
+
         // Retry behavior
         public int MaxRetries { get; set; } = 3;
         public int InitialDelayMs { get; set; } = 200;

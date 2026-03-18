@@ -32,6 +32,18 @@ namespace DocumentIA.Tests.Unit.Integration
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(xmlNo) });
                 }
 
+                if (content.Contains(":create") || content.Contains("ns1:create"))
+                {
+                    if (content.Contains("already") || content.Contains("Already") || content.Contains("already-file"))
+                    {
+                        var already = "<?xml version=\"1.0\"?><soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><soap:Fault><faultcode>soap:Server</faultcode><faultstring>Error</faultstring><detail><ServiceException xmlns=\"http://exceptions.model.api.sint.sareb.es\"><errorCode>DOC_OBJECT_EXISTS</errorCode></ServiceException></detail></soap:Fault></soap:Body></soap:Envelope>";
+                        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(already) });
+                    }
+
+                    var ok = "<?xml version=\"1.0\"?><soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\"><soap:Body><ns1:createResponse xmlns:ns1=\"http://services.api.sint.sareb.es/\"><ns1:return>GDC-UPLOAD-1</ns1:return></ns1:createResponse></soap:Body></soap:Envelope>";
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(ok) });
+                }
+
                 if (content.Contains("SubirDocumentoRequest") || content.Contains("SubirDocumentoResponse"))
                 {
                     if (content.Contains("already") || content.Contains("Already") || content.Contains("already-file"))

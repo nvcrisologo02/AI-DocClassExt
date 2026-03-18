@@ -102,6 +102,41 @@ class GdcHandler(BaseHTTPRequestHandler):
                             object_id = f"GDC-{hashlib.sha1(seed.encode()).hexdigest()[:12]}"
                             response_body = f"<SubirDocumentoResponse xmlns=\"http://sintws.example.org/\"><ObjectId>{object_id}</ObjectId></SubirDocumentoResponse>"
 
+                    elif tag == 'create':
+                        # Real WSDL operation: create(Identity, Entity) -> string (objectId)
+                        # Extract field values from SingleField/StringFieldValue elements
+                        field_map = {}
+                        for f in req_elem.findall('.//{*}Field'):
+                            fname = (f.findtext('.//{*}name') or '').strip()
+                            fvalue = (f.findtext('.//{*}value') or '').strip()
+                            if fname:
+                                field_map[fname] = fvalue
+                        id_activo = field_map.get('id_activo', '')
+                        nombre = field_map.get('nombre_fichero', field_map.get('nombre_archivo', 'file'))
+                        print(f"GDC create: id_activo={id_activo} nombre={nombre}")
+
+                        if 'already' in nombre.lower() or 'already' in id_activo.lower():
+                            response_body = (
+                                '<soap:Fault>'
+                                '<faultcode>soap:Server</faultcode>'
+                                '<faultstring>Document already exists</faultstring>'
+                                '<detail>'
+                                '<ServiceException xmlns="http://exceptions.model.api.sint.sareb.es">'
+                                '<errorCode>DOC_OBJECT_EXISTS</errorCode>'
+                                '<errorMessage>Document already exists in GDC</errorMessage>'
+                                '</ServiceException>'
+                                '</detail>'
+                                '</soap:Fault>'
+                            )
+                        else:
+                            seed = f"{id_activo}|{nombre}|{datetime.utcnow().isoformat()}"
+                            object_id = f"GDC-{hashlib.sha1(seed.encode()).hexdigest()[:12]}"
+                            response_body = (
+                                f'<createResponse xmlns="http://services.api.sint.sareb.es/">'
+                                f'<return>{object_id}</return>'
+                                f'</createResponse>'
+                            )
+
                 if response_body is None:
                     response_body = f"<Response xmlns=\"http://tempuri.org/\"><Fecha>{datetime.now().isoformat()}</Fecha></Response>"
 
@@ -130,7 +165,7 @@ def run_server(port=8083):
     print('MOCK GDC SERVER')
     print('='*60)
     print(f'Listening on http://localhost:{port}')
-    print('Supports: searchEntities, ConsultarDocumentoRequest, SubirDocumentoRequest')
+    print('Supports: searchEntities, ConsultarDocumentoRequest, create (real WSDL)')
     print('='*60)
     try:
         httpd.serve_forever()
