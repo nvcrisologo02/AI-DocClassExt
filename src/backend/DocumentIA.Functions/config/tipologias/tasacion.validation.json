@@ -2,6 +2,7 @@
   "tipologiaId": "tasacion",
   "tipologiaNombre": "Tasacion",
   "version": "1.0",
+  "isDefault": true,
   "fields": [
     {
       "name": "ValorTasado",

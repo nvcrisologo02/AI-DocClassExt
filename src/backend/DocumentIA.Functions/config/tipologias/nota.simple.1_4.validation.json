@@ -1,8 +1,9 @@
 {
-  "tipologiaId": "notasimple",
+  "tipologiaId": "nota-simple",
   "tipologiaNombre": "Nota Simple",
   "tipologiaMGDCMatricula": "NOTA_SIMPLE",
   "version": "1.4",
+  "isDefault": true,
   "extraction": {
     "enabled": true,
     "provider": "azure-content-understanding",

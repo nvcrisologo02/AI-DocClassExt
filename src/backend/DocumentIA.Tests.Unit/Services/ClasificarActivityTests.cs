@@ -23,7 +23,7 @@ public class ClasificarActivityTests
             {
                 Instrucciones = new Instrucciones
                 {
-                    ExpectedType = "nota.simple.1_4"
+                    ExpectedType = "nota-simple@1.4"
                 }
             }
         };
@@ -32,7 +32,7 @@ public class ClasificarActivityTests
 
         result.Modelo.Should().Be("expectedtype-input");
         result.Confianza.Should().Be(1.0);
-        result.TipologiaDetectada.Should().Be("nota.simple.1_4");
+        result.TipologiaDetectada.Should().Be("nota-simple@1.4");
         provider.Verify(p => p.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 

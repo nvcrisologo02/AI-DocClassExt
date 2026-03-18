@@ -40,7 +40,7 @@ $documentName = [System.IO.Path]::GetFileName($resolvedDocumentPath)
 
 $body = @{
     instrucciones = @{
-        expectedType = "nota.simple.1_4"
+        expectedType = "nota-simple@1.4"
         skipDuplicateCheck = $true
         forceReprocess = $true
         SkipGDCUpload = $true

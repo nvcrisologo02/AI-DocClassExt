@@ -1,5 +1,5 @@
 {
-  "tipologiaId": "nota.simple.1_4",
+  "tipologiaId": "nota-simple",
  "plugins": [
     {
       "pluginKey": "refCatExcel",
