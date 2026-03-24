@@ -1,7 +1,7 @@
 # Guía de Integración con GDC (Gestor Documental Corporativo)
 
-> **Versión**: 1.0 | **Fecha**: 18/03/2026  
-> **Rama**: `feature/integracion-gdc-real` | **Último commit de referencia**: `6550daa`  
+> **Versión**: 1.1 | **Fecha**: 18/03/2026  
+> **Rama**: `feature/integracion-gdc-real` | **Último commit de referencia**: `756d3b3`  
 > **SINTWS spec base**: "Integración con SINTWS v1.0, 07/01/2016 (VILT)" + "Capa de Servicios [SINTWS] Manual Int. y Admin. v7.0 (Nttdata, 29/04/2024)"
 
 ---
@@ -31,9 +31,12 @@ El **GDC (Gestor Documental Corporativo)** de SAREB es un sistema Opentext Conte
 Cuando el proceso de clasificación de DocumentIA finaliza, el documento procesado se **sube automáticamente al GDC** siempre que se cumplan dos condiciones:
 
 1. Se dispone de un `IdActivo` válido (identificador del activo en SAREB).
-2. El campo `SkipGDCUpload` de las instrucciones de entrada **no** está marcado como `true`.
+2. El campo `SkipGDCUpload` efectivo **no** es `true`. Este campo puede venir de dos fuentes con la siguiente precedencia:
+   - **`Instrucciones.SkipGDCUpload`** (en la petición): si viene informado (`true` o `false`) tiene prioridad absoluta.
+   - **`skipGDCUpload` de la tipología** (en el JSON de configuración): si la petición no lo especifica (`null`/omitido), se usa el valor configurado para la tipología detectada.
+   - Por defecto, las tipologías `nota-simple` tienen `skipGDCUpload: false` (sí sube) y `tasacion` tiene `skipGDCUpload: true` (no sube).
 
-Antes de subir, se realiza una **consulta previa** al GDC para evitar duplicados: si el documento ya existe (mismo `id_activo` + mismo `md5`), la operación devuelve éxito indicando `YaExistia = true`, sin volver a crear el documento.
+Antes de subir, se realiza una **consulta previa** al GDC para evitar duplicados: si el documento ya existe (mismo `expediente.id_expediente` + mismo `checksum`), la operación devuelve éxito indicando `YaExistia = true`, sin volver a crear el documento.
 
 ### Resultado que devuelve la integración
 
@@ -94,23 +97,29 @@ DocumentProcessOrchestrator (Durable Function)
   ├─ entrada.Trazabilidad.IdActivo   (puede venir del ingest o resolverse via plugin)
   ├─ entrada.Documento.Content.Base64
   ├─ entrada.Documento.Name
-  └─ entrada.Instrucciones.SkipGDCUpload (false por defecto)
+  └─ entrada.Instrucciones.SkipGDCUpload (null/omitido = usar config de tipología)
+
+[Orquestador — Paso 7]
+  │  skipGDC = Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload
+  │  Si skipGDC == true → omitir subida (log: fuente = "instrucciones" o "config-tipologia")
+  │
+  └─ Si skipGDC == false: llamar SubirGDCActivity
 
 [SubirGDCActivity.Run()]
   │
-  ├─ 1. Resolver matrícula:
+  ├─ 1. Resolver matrícula (matricula_doc):
   │      a) input.Matricula si viene informada
   │      b) TipologiaMGDCMatricula de la config de la tipología
   │      c) GdcSettings.DefaultMatricula ("OTROS_DOCUMENTOS" por defecto)
   │
   ├─ 2. Validar IdActivo → si vacío: devuelve error sin llamar al GDC
   │
-  ├─ 3. ConsultarDocumentoAsync(idActivo, md5, matricula)
-  │      → searchEntities SOAP
+  ├─ 3. ConsultarDocumentoAsync(idActivo, checksum)
+  │      → searchEntities SOAP (EntityExpression IN expediente.id_expediente + checksum)
   │      → Si existe: devuelve YaExistia=true, Exitoso=true → FIN
   │
   └─ 4. SubirDocumentoAsync(input)
-         → create SOAP
+         → create SOAP (campos SINTWS v4.0+)
          ├─ createResponse.return = objectId → Exitoso=true, ObjectId=<id>
          ├─ SOAP Fault errorCode=DOC_OBJECT_EXISTS → YaExistia=true, Exitoso=true
          └─ Otro Fault / HTTP error → Exitoso=false, ErrorDetalle=<XML>
@@ -134,7 +143,7 @@ Operación WSDL: `create(Identity arg0, Entity arg1) → string (objectId)`
 | `ns3` | `http://field.data.model.api.sint.sareb.es` |
 | `ns4` | `http://fieldvalue.data.model.api.sint.sareb.es` |
 
-**Estructura de petición**:
+**Estructura de petición** (campos SINTWS v4.0+, emitidos en orden):
 
 ```xml
 <ns1:create xmlns:ns1="http://services.api.sint.sareb.es/"
@@ -146,9 +155,9 @@ Operación WSDL: `create(Identity arg0, Entity arg1) → string (objectId)`
 
   <!-- arg0: Identidad de la aplicación integradora -->
   <ns1:arg0 xsi:type="ns0:Identity">
-    <ns0:applicationId>DOC_IA_MVP</ns0:applicationId>
-    <ns0:nominalUser></ns0:nominalUser>
-    <ns0:username></ns0:username>
+    <ns0:applicationId>{ApplicationId}</ns0:applicationId>
+    <ns0:nominalUser>{NominalUser}</ns0:nominalUser>
+    <ns0:username>{Username}</ns0:username>
   </ns1:arg0>
 
   <!-- arg1: Entidad documento con sus metadatos y contenido -->
@@ -156,29 +165,87 @@ Operación WSDL: `create(Identity arg0, Entity arg1) → string (objectId)`
     <ns2:typeId>document</ns2:typeId>
     <ns2:fields>
 
-      <!-- OBLIGATORIO desde SINTWS v4.0 (2020) -->
+      <!-- origen_documento — obligatorio desde SINTWS v4.0. Omitido si OrigenDocumento está vacío -->
       <ns3:Field xsi:type="ns3:SingleField">
         <ns3:name>origen_documento</ns3:name>
         <ns3:fieldValue xsi:type="ns4:StringFieldValue">
-          <ns4:value>DOC_IA_MVP</ns4:value>
+          <ns4:value>{GdcSettings.OrigenDocumento}</ns4:value>
         </ns3:fieldValue>
       </ns3:Field>
 
+      <!-- entidad_origen — omitido si EntidadOrigen está vacío -->
       <ns3:Field xsi:type="ns3:SingleField">
-        <ns3:name>id_activo</ns3:name>
+        <ns3:name>entidad_origen</ns3:name>
         <ns3:fieldValue xsi:type="ns4:StringFieldValue">
-          <ns4:value>{IdActivo}</ns4:value>
+          <ns4:value>{GdcSettings.EntidadOrigen}</ns4:value>   <!-- ej: "9999" -->
         </ns3:fieldValue>
       </ns3:Field>
 
+      <!-- proceso_carga — omitido si ProcesoCarga está vacío -->
       <ns3:Field xsi:type="ns3:SingleField">
-        <ns3:name>matricula</ns3:name>
+        <ns3:name>proceso_carga</ns3:name>
         <ns3:fieldValue xsi:type="ns4:StringFieldValue">
-          <ns4:value>{Matricula}</ns4:value>
+          <ns4:value>{GdcSettings.ProcesoCarga}</ns4:value>   <!-- ej: "PC01" -->
         </ns3:fieldValue>
       </ns3:Field>
 
-      <!-- Nombre real del fichero en OTCS (campo: nombre_fichero, NO nombre_archivo) -->
+      <!-- publico — siempre presente; default "verdadero" (string, no booleano SOAP) -->
+      <ns3:Field xsi:type="ns3:SingleField">
+        <ns3:name>publico</ns3:name>
+        <ns3:fieldValue xsi:type="ns4:StringFieldValue">
+          <ns4:value>{GdcSettings.Publico}</ns4:value>   <!-- "verdadero" | "falso" -->
+        </ns3:fieldValue>
+      </ns3:Field>
+
+      <!-- servicer — omitido si Servicer está vacío -->
+      <ns3:Field xsi:type="ns3:SingleField">
+        <ns3:name>servicer</ns3:name>
+        <ns3:fieldValue xsi:type="ns4:StringFieldValue">
+          <ns4:value>{GdcSettings.Servicer}</ns4:value>   <!-- ej: "9999" -->
+        </ns3:fieldValue>
+      </ns3:Field>
+
+      <!-- tipo_expediente — omitido si TipoExpediente está vacío; default "AI" -->
+      <ns3:Field xsi:type="ns3:SingleField">
+        <ns3:name>tipo_expediente</ns3:name>
+        <ns3:fieldValue xsi:type="ns4:StringFieldValue">
+          <ns4:value>{GdcSettings.TipoExpediente}</ns4:value>   <!-- "AI" = Activo Inmobiliario -->
+        </ns3:fieldValue>
+      </ns3:Field>
+
+      <!-- serie — de tipología (gdcSerie). Omitido si vacío -->
+      <ns3:Field xsi:type="ns3:SingleField">
+        <ns3:name>serie</ns3:name>
+        <ns3:fieldValue xsi:type="ns4:StringFieldValue">
+          <ns4:value>{input.Serie}</ns4:value>   <!-- ej: "AI01" para nota simple -->
+        </ns3:fieldValue>
+      </ns3:Field>
+
+      <!-- tipo_documento — de tipología (gdcTipoDocumento). Omitido si vacío -->
+      <ns3:Field xsi:type="ns3:SingleField">
+        <ns3:name>tipo_documento</ns3:name>
+        <ns3:fieldValue xsi:type="ns4:StringFieldValue">
+          <ns4:value>{input.TipoDocumento}</ns4:value>   <!-- ej: "NOTS" para nota simple -->
+        </ns3:fieldValue>
+      </ns3:Field>
+
+      <!-- subtipo_documento — de tipología (gdcSubtipoDocumento). Omitido si vacío -->
+      <ns3:Field xsi:type="ns3:SingleField">
+        <ns3:name>subtipo_documento</ns3:name>
+        <ns3:fieldValue xsi:type="ns4:StringFieldValue">
+          <ns4:value>{input.SubtipoDocumento}</ns4:value>   <!-- ej: "NOTS01" para nota simple -->
+        </ns3:fieldValue>
+      </ns3:Field>
+
+      <!-- nombre_documento — nombre lógico del doc; si no se especifica, usa nombre_fichero -->
+      <ns3:Field xsi:type="ns3:SingleField">
+        <ns3:name>nombre_documento</ns3:name>
+        <ns3:fieldValue xsi:type="ns4:StringFieldValue">
+          <ns4:value>documento.pdf</ns4:value>
+        </ns3:fieldValue>
+      </ns3:Field>
+
+      <!-- nombre_fichero — nombre real del fichero en OTCS (NO usar nombre_archivo) -->
       <ns3:Field xsi:type="ns3:SingleField">
         <ns3:name>nombre_fichero</ns3:name>
         <ns3:fieldValue xsi:type="ns4:StringFieldValue">
@@ -186,17 +253,19 @@ Operación WSDL: `create(Identity arg0, Entity arg1) → string (objectId)`
         </ns3:fieldValue>
       </ns3:Field>
 
+      <!-- matricula_doc — matrícula resuelta (tipología → DefaultMatricula) -->
       <ns3:Field xsi:type="ns3:SingleField">
-        <ns3:name>md5</ns3:name>
+        <ns3:name>matricula_doc</ns3:name>
         <ns3:fieldValue xsi:type="ns4:StringFieldValue">
-          <ns4:value>{MD5}</ns4:value>
+          <ns4:value>{input.Matricula}</ns4:value>   <!-- ej: "AI-01-NOTS-01" -->
         </ns3:fieldValue>
       </ns3:Field>
 
+      <!-- checksum — hash MD5 del contenido; usado también para deduplicación -->
       <ns3:Field xsi:type="ns3:SingleField">
-        <ns3:name>sha256</ns3:name>
+        <ns3:name>checksum</ns3:name>
         <ns3:fieldValue xsi:type="ns4:StringFieldValue">
-          <ns4:value>{SHA256}</ns4:value>
+          <ns4:value>{input.MD5}</ns4:value>
         </ns3:fieldValue>
       </ns3:Field>
 
@@ -263,7 +332,9 @@ Operación WSDL: `create(Identity arg0, Entity arg1) → string (objectId)`
 
 Operación WSDL: `searchEntities(Identity arg0, Query arg1, List<DocRepository> arg2) → SearchResult`
 
-Busca documentos por `id_activo` + `md5` (condición AND). Se usa **antes** de la subida para detectar duplicados.
+Busca documentos por `expediente.id_expediente` (EntityExpression IN) + `checksum` (condición AND). Se usa **antes** de la subida para detectar duplicados.
+
+> **Nota**: el campo de hash en SINTWS v4.0 es `checksum` (no `md5`). El operador para buscar en entidades relacionadas es `EntityExpression IN` (no `FieldExpression EQUAL` sobre campo plano).
 
 **Estructura de petición relevante**:
 
@@ -281,25 +352,35 @@ Busca documentos por `id_activo` + `md5` (condición AND). Se usa **antes** de l
     <ns2:entityTypeId>document</ns2:entityTypeId>
     <ns2:filter xsi:type="ns2:SetExpression">
       <ns2:expressions>
-        <ns2:Expression xsi:type="ns2:FieldExpression">
-          <ns2:condition>EQUAL</ns2:condition>
-          <ns2:fieldName>id_activo</ns2:fieldName>
-          <ns2:value xsi:type="ns2:StringValue">{IdActivo}</ns2:value>
+        <!-- Busca por id_expediente del activo (expediente = carpeta OTCS del activo) -->
+        <ns2:Expression xsi:type="ns2:EntityExpression">
+          <ns2:condition>IN</ns2:condition>
+          <ns2:entityName>expediente</ns2:entityName>
+          <ns2:fieldName>id_expediente</ns2:fieldName>
+          <ns2:value xsi:type="ns2:StringValueList">
+            <ns2:values><ns1:string>{IdActivo}</ns1:string></ns2:values>
+          </ns2:value>
         </ns2:Expression>
+        <!-- Busca por checksum (hash MD5 del fichero) -->
         <ns2:Expression xsi:type="ns2:FieldExpression">
-          <ns2:condition>EQUAL</ns2:condition>
-          <ns2:fieldName>md5</ns2:fieldName>
-          <ns2:value xsi:type="ns2:StringValue">{MD5}</ns2:value>
+          <ns2:condition>EQUALS</ns2:condition>
+          <ns2:fieldName>checksum</ns2:fieldName>
+          <ns2:value xsi:type="ns2:StringValue">
+            <ns2:value>{MD5}</ns2:value>
+          </ns2:value>
         </ns2:Expression>
       </ns2:expressions>
       <ns2:operator>AND</ns2:operator>
     </ns2:filter>
     <ns2:firstResultIndex>1</ns2:firstResultIndex>
     <ns2:maxResults>1</ns2:maxResults>
+    <ns2:orderingField xsi:type="ns2:OrderingField">
+      <ns2:ascending>false</ns2:ascending>
+      <ns2:fieldName>create_date</ns2:fieldName>
+    </ns2:orderingField>
     <ns2:resultsProfile xsi:type="ns3:EntityProfile">
       <ns3:fieldNames>
-        <ns1:string>id_activo</ns1:string>
-        <ns1:string>md5</ns1:string>
+        <ns1:string>checksum</ns1:string>
         <ns1:string>nombre_fichero</ns1:string>
       </ns3:fieldNames>
       <ns3:ignoreContent>true</ns3:ignoreContent>
@@ -311,8 +392,8 @@ Busca documentos por `id_activo` + `md5` (condición AND). Se usa **antes** de l
   <ns1:arg2>
     <ns2:DocRepository xmlns:ns2="http://doc.model.api.sint.sareb.es"
                        xsi:type="ns2:DocRepository">
-      <ns2:id>69466</ns2:id>
-      <ns2:name>01 AAII-Activos Inmobiliarios</ns2:name>
+      <ns2:id>{GdcSettings.RepositoryId}</ns2:id>
+      <ns2:name>{GdcSettings.RepositoryName}</ns2:name>
     </ns2:DocRepository>
   </ns1:arg2>
 </ns1:searchEntities>
@@ -324,18 +405,25 @@ Busca documentos por `id_activo` + `md5` (condición AND). Se usa **antes** de l
 
 ## 5. Modelo de campos GDC (entidad document)
 
-Campos que envía esta integración en la operación `create`:
+Campos que envía esta integración en la operación `create` (SINTWS v4.0+):
 
 | Campo OTCS | Fuente en código | Obligatorio | Notas |
 |---|---|---|---|
-| `origen_documento` | `GdcSettings.OrigenDocumento` | ✅ Sí (desde v4.0) | Identificador del sistema integrador. Se omite si el setting está vacío (⚠ error en producción). |
-| `id_activo` | `SubirGDCInput.IdActivo` | ✅ Sí | Identificador del activo en SAREB. Sin él no se realiza la subida. |
-| `matricula` | `SubirGDCInput.Matricula` → tipología → `DefaultMatricula` | ✅ Sí | Matrícula del activo. Valor por defecto: `"OTROS_DOCUMENTOS"`. |
-| `nombre_fichero` | `SubirGDCInput.NombreArchivo` | ✅ Sí | Nombre del fichero en OTCS. **Importante**: el campo se llama `nombre_fichero`, no `nombre_archivo`. |
-| `md5` | `SubirGDCInput.MD5` | ✅ Sí | Hash MD5 del contenido binario. Usado también para detección de duplicados. |
-| `sha256` | `SubirGDCInput.SHA256` | ✅ Sí | Hash SHA256 del contenido binario. |
+| `origen_documento` | `GdcSettings.OrigenDocumento` | ⚠ Recomendado | Identificador del sistema integrador. Se omite si el setting está vacío (⚠ error en producción). |
+| `entidad_origen` | `GdcSettings.EntidadOrigen` | ⚠ Recomendado | Código de entidad/servicer origen. Normalmente igual a `Servicer`. Se omite si vacío. |
+| `proceso_carga` | `GdcSettings.ProcesoCarga` | ⚠ Recomendado | Código del proceso de carga (ej: `"PC01"`, `"CKP1"`). Se omite si vacío. |
+| `publico` | `GdcSettings.Publico` | ✅ Sí | Visibilidad del doc. String `"verdadero"` o `"falso"` (no booleano SOAP). Default: `"verdadero"`. |
+| `servicer` | `GdcSettings.Servicer` | ⚠ Recomendado | Código del servicer (ej: `"9999"` en DEV). Se omite si vacío. |
+| `tipo_expediente` | `GdcSettings.TipoExpediente` | ⚠ Recomendado | Tipo de expediente GDC. Default: `"AI"`. Se omite si vacío. |
+| `serie` | `SubirGDCInput.Serie` ← `gdcSerie` de tipología | ⚠ Recomendado | Serie documental GDC (ej: `"AI01"` para nota simple). Se omite si vacío. |
+| `tipo_documento` | `SubirGDCInput.TipoDocumento` ← `gdcTipoDocumento` de tipología | ⚠ Recomendado | Tipo de documento en catálogo GDC (ej: `"NOTS"`). Se omite si vacío. |
+| `subtipo_documento` | `SubirGDCInput.SubtipoDocumento` ← `gdcSubtipoDocumento` de tipología | ⚪ Opcional | Subtipo GDC (ej: `"NOTS01"`). Se omite si vacío. |
+| `nombre_documento` | `SubirGDCInput.NombreDocumento` ?? `NombreArchivo` | ✅ Sí | Nombre lógico del documento en OTCS. |
+| `nombre_fichero` | `SubirGDCInput.NombreArchivo` | ✅ Sí | Nombre real del fichero en OTCS. **El campo es `nombre_fichero`, no `nombre_archivo`.** |
+| `matricula_doc` | `SubirGDCInput.Matricula` → tipología (`tipologiaMGDCMatricula`) → `DefaultMatricula` | ✅ Sí | Matrícula del activo. Default: `"OTROS_DOCUMENTOS"`. |
+| `checksum` | `SubirGDCInput.MD5` | ✅ Sí | Hash MD5 del contenido binario. Usado también para detección de duplicados en `searchEntities`. |
 | `expediente` *(EntityFieldValue)* | `IdActivo` + `GdcSettings.ClaseExpediente` | ⚠ Recomendado | Ubica el documento en la carpeta OTCS del activo. Solo se incluye si `ClaseExpediente` está configurado. **Sistemas debe proporcionar el valor** (ej: `"AI"`, `"AAII"`). |
-| `content` *(FileContentFieldValue)* | `SubirGDCInput.ContenidoBase64` | ✅ Sí | Contenido binario del fichero en Base64. Nombre configurable vía `ContentFieldName`. |
+| `content` *(FileContentFieldValue)* | `SubirGDCInput.ContenidoBase64` | ✅ Sí | Contenido binario del fichero en Base64. Nombre del campo configurable vía `ContentFieldName`. |
 
 ---
 
@@ -353,13 +441,20 @@ Todas las claves se leen de la sección `GDC` del fichero de configuración (en 
 | `GDC:Username` | string | — | Usuario técnico de la aplicación. **Requiere credencial de Sistemas.** |
 | `GDC:Password` | string | — | Contraseña del usuario técnico. **Requiere credencial de Sistemas.** |
 | `GDC:NominalUser` | string | — | Usuario nominal (opcional según spec). Puede dejarse vacío. |
+| `GDC:HttpBasicUsername` | string | — | Usuario para HTTP Basic Auth en el transporte (si el gateway lo requiere). |
+| `GDC:HttpBasicPassword` | string | — | Contraseña para HTTP Basic Auth. |
+| `GDC:OrigenDocumento` | string | — | Valor del campo `origen_documento` (SINTWS v4.0). Normalmente el mismo que `ApplicationId`. |
+| `GDC:EntidadOrigen` | string | — | Código de entidad/servicer origen (campo `entidad_origen`). **Confirmar con Sistemas.** |
+| `GDC:ProcesoCarga` | string | — | Código del proceso de carga (campo `proceso_carga`, ej: `"PC01"`). **Confirmar con Sistemas.** |
+| `GDC:Servicer` | string | — | Código del servicer (campo `servicer`, ej: `"9999"` en DEV). **Confirmar con Sistemas.** |
+| `GDC:TipoExpediente` | string | `"AI"` | Tipo de expediente GDC (`"AI"` = Activo Inmobiliario, `"AF"` = Activo Financiero). |
+| `GDC:Publico` | string | `"verdadero"` | Visibilidad del documento. `"verdadero"` o `"falso"` (string, no booleano SOAP). |
 | `GDC:DocumentTypeId` | string | `"document"` | Tipo de entidad GDC a crear. No cambiar salvo indicación de Sistemas. |
 | `GDC:ContentFieldName` | string | `"content"` | Nombre del campo de contenido binario en el schema de OTCS. Confirmar con Sistemas. |
-| `GDC:OrigenDocumento` | string | — | Valor del campo obligatorio `origen_documento`. Normalmente el mismo que `ApplicationId`. |
 | `GDC:ClaseExpediente` | string | — | Clase del expediente/carpeta en OTCS (ej: `"AI"`). Si vacío, no se añade campo `expediente`. **Confirmar con Sistemas.** |
 | `GDC:RepositoryId` | string | — | ID numérico del repositorio GDC para `searchEntities`. Si vacío, busca en todos. **Confirmar con Sistemas.** |
 | `GDC:RepositoryName` | string | — | Nombre del repositorio (ej: `"01 AAII-Activos Inmobiliarios"`). |
-| `GDC:DefaultMatricula` | string | `"OTROS_DOCUMENTOS"` | Matrícula usada cuando ni el input ni la tipología la definen. |
+| `GDC:DefaultMatricula` | string | `"OTROS_DOCUMENTOS"` | Matrícula (`matricula_doc`) cuando ni el input ni la tipología la definen. |
 | `GDC:MaxRetries` | int | `3` | Número máximo de reintentos ante fallos transitorios. |
 | `GDC:InitialDelayMs` | int | `200` | Delay base para el primer reintento (ms). Con backoff exponencial: 200ms → 400ms → 800ms. |
 | `GDC:ExponentialBackoff` | bool | `true` | Si `true`, el delay se dobla en cada reintento. |
@@ -376,6 +471,11 @@ Todas las claves se leen de la sección `GDC` del fichero de configuración (en 
 "GDC:Password": "<contraseña>",
 "GDC:NominalUser": "",
 "GDC:OrigenDocumento": "DOC_IA_MVP",
+"GDC:EntidadOrigen": "<confirmar con Sistemas>",
+"GDC:ProcesoCarga": "<confirmar con Sistemas>",
+"GDC:Servicer": "<confirmar con Sistemas>",
+"GDC:TipoExpediente": "AI",
+"GDC:Publico": "verdadero",
 "GDC:ClaseExpediente": "<confirmar con Sistemas>",
 "GDC:RepositoryId": "<confirmar con Sistemas>",
 "GDC:RepositoryName": "<confirmar con Sistemas>"
@@ -485,6 +585,10 @@ Los siguientes parámetros **deben ser confirmados por el equipo de Sistemas** a
 | 4 | **`ContentFieldName`**: confirmar si el campo de contenido binario se llama `"content"` o diferente | `GDC:ContentFieldName` | ⏳ Pendiente |
 | 5 | **`NominalUser`**: si aplica para esta integración | `GDC:NominalUser` | ⏳ Pendiente |
 | 6 | **Endpoint correcto** para DEV y QA (puerto 8090 vs 8443) | `GDC:Endpoint` | ⏳ Confirmar |
+| 7 | **`EntidadOrigen`**: código de entidad origen del documento | `GDC:EntidadOrigen` | ⏳ Pendiente |
+| 8 | **`ProcesoCarga`**: código del proceso de carga (ej: `"PC01"`, `"CKP1"`) | `GDC:ProcesoCarga` | ⏳ Pendiente |
+| 9 | **`Servicer`**: código del servicer (ej: `"9999"` en DEV) | `GDC:Servicer` | ⏳ Pendiente |
+| 10 | **Series y tipos por tipología**: confirmar `gdcSerie`, `gdcTipoDocumento`, `gdcSubtipoDocumento` para cada tipología | JSON de tipología | ⏳ Pendiente — provisionales: `AI01/NOTS/NOTS01` para nota simple |
 
 ---
 

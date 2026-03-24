@@ -17,6 +17,9 @@ namespace DocumentIA.Core.Configuration
         public string GdcSubtipoDocumento { get; set; } = string.Empty;
         // GdcSerie: serie documental GDC (ej. "AI09", "AI05"). Confirmar con Sistemas el valor exacto.
         public string GdcSerie { get; set; } = string.Empty;
+        // SkipGDCUpload: si true, la subida a GDC se omite por defecto para esta tipología.
+        // Puede sobreescribirse explícitamente en cada petición vía Instrucciones.SkipGDCUpload.
+        public bool SkipGDCUpload { get; set; } = false;
         public TipologiaExtractionConfig Extraction { get; set; } = new();
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 

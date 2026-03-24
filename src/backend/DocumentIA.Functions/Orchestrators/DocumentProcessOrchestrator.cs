@@ -231,8 +231,10 @@ public class DocumentProcessOrchestrator
             else
                 logger.LogWarning("IdActivo no disponible tras integración. La subida a GDC será omitida si aplica.");
 
-            // 7. Subida a GDC (opcional) - se ejecuta sólo si no se indica Skip y existe IdActivo
-            if (!entrada.Instrucciones.SkipGDCUpload)
+            // 7. Subida a GDC (opcional)
+            // Prioridad: Instrucciones.SkipGDCUpload (si viene informado) > tipologiaResuelta.SkipGDCUpload (config de tipología)
+            var skipGDC = entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload;
+            if (!skipGDC)
             {
                 if (!string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
                 {
@@ -290,7 +292,9 @@ public class DocumentProcessOrchestrator
             }
             else
             {
-                logger.LogInformation("SkipGDCUpload activado en instrucciones; se omite subida a GDC");
+                logger.LogInformation(
+                    "SkipGDCUpload activo (fuente={Fuente}); se omite subida a GDC",
+                    entrada.Instrucciones.SkipGDCUpload.HasValue ? "instrucciones" : "config-tipologia");
             }
 
             // 8. Persistencia

@@ -8,9 +8,36 @@ Contiene 32 campos divididos en 11 secciones temáticas, con validaciones espec�
 para cada campo según su tipo de dato y requisitos de negocio.
 
 Identificadores:
-  - Tipología: notasimple
+  - Tipología: nota-simple
   - Nombre: Nota Simple
   - Versión: 1.3
+
+================================================================================
+CONFIGURACIÓN GDC (Gestor Documental Corporativo)
+================================================================================
+
+Campos de catálogo SINTWS v4.0 para la subida automática al GDC:
+
+  tipologiaMGDCMatricula : "AI-01-NOTS-01"
+    Matrícula GDC usada para buscar/clasificar el documento. Si el campo
+    'Matricula' del input viene informado, tiene prioridad. Si ambos están
+    vacíos, se usa GdcSettings.DefaultMatricula.
+
+  gdcTipoDocumento       : "NOTS"
+    Código del tipo de documento en el catálogo GDC. Obligatorio en create.
+
+  gdcSubtipoDocumento    : "NOTS01"
+    Código del subtipo de documento (opcional). Se emite sólo si no está vacío.
+
+  gdcSerie               : "AI01"
+    Serie documental GDC. Obligatoria en create. Confirmar con Sistemas.
+
+  skipGDCUpload          : false
+    Comportamiento por defecto para esta tipología cuando la petición no
+    especifica explícitamente Instrucciones.SkipGDCUpload.
+    false = subir al GDC si hay IdActivo disponible.
+    Puede sobreescribirse por petición: true/false en Instrucciones.SkipGDCUpload,
+    o null/omitido para usar este valor por defecto de tipología.
 
 ================================================================================
 SECCIONES Y CAMPOS
@@ -139,7 +166,9 @@ Datos del título por el que se adquirió y datos del registro.
 
 Campos:
   • TituloAdquisicion (string)
-    - Enumeración: Compraventa, Herencia, Adjudicacion, Dacion, Donacion, Otros
+    - Enumeración: Compraventa, Herencia, Adjudicacion, Dacion, Donacion, Otros,
+                   Cesion, Acta de Manifestaciones
+    - Validación case-insensitive
     - Base legal de la adquisición
     
   • FechaInscripcion (date)

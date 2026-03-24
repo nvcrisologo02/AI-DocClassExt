@@ -135,7 +135,8 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 TipologiaId: config.TipologiaId.Trim(),
                 Version: config.Version.Trim(),
                 TechnicalKey: technicalKey,
-                IsDefault: config.IsDefault);
+                IsDefault: config.IsDefault,
+                SkipGDCUpload: config.SkipGDCUpload);
 
             byTechnicalKey[technicalKey] = resolved;
 

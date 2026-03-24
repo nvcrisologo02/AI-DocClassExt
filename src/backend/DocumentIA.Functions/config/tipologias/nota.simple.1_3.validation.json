@@ -5,6 +5,7 @@
   "gdcTipoDocumento": "NOTS",
   "gdcSubtipoDocumento": "NOTS01",
   "gdcSerie": "AI01",
+  "skipGDCUpload": false,
   "version": "1.3",
   "isDefault": false,
   "fields": [

@@ -11,4 +11,5 @@ public sealed record ResolvedTipologia(
     string TipologiaId,
     string Version,
     string TechnicalKey,
-    bool IsDefault);
+    bool IsDefault,
+    bool SkipGDCUpload = false);
