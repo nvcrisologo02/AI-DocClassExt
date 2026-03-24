@@ -10,6 +10,13 @@ namespace DocumentIA.Core.Configuration
         // Matricula utilizada para GDC upload checks for this tipologia.
         // If empty, the global default from configuration will be used.
         public string TipologiaMGDCMatricula { get; set; } = string.Empty;
+        // GDC taxonomy fields — mandatory for document create in SINTWS.
+        // GdcTipoDocumento: código del tipo de documento en catálogo GDC (ej. "NOTS", "CERT", "ESIN").
+        public string GdcTipoDocumento { get; set; } = string.Empty;
+        // GdcSubtipoDocumento: código del subtipo de documento en catálogo GDC (opcional, ej. "NOTS01").
+        public string GdcSubtipoDocumento { get; set; } = string.Empty;
+        // GdcSerie: serie documental GDC (ej. "AI09", "AI05"). Confirmar con Sistemas el valor exacto.
+        public string GdcSerie { get; set; } = string.Empty;
         public TipologiaExtractionConfig Extraction { get; set; } = new();
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 

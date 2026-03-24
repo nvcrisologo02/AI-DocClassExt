@@ -122,6 +122,15 @@ public class SubirGDCInput
     public string SHA256 { get; set; } = string.Empty;
     public string MD5 { get; set; } = string.Empty;
     public string CorrelationId { get; set; } = string.Empty;
+    // GDC taxonomy fields — resolved by SubirGDCActivity from tipología config before calling GdcService.
+    // TipoDocumento: código tipo de documento GDC (ej. "NOTS"). Mandatory in SINTWS create.
+    public string TipoDocumento { get; set; } = string.Empty;
+    // SubtipoDocumento: código subtipo de documento GDC (ej. "NOTS01"). Optional in SINTWS create.
+    public string SubtipoDocumento { get; set; } = string.Empty;
+    // Serie: serie documental GDC (ej. "AI09"). Mandatory in SINTWS create.
+    public string Serie { get; set; } = string.Empty;
+    // NombreDocumento: nombre lógico del documento (display name). When empty, NombreArchivo is used.
+    public string NombreDocumento { get; set; } = string.Empty;
 }
 
 public class ResultadoGDC

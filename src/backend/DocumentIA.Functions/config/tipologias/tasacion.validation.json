@@ -2,6 +2,9 @@
   "tipologiaId": "tasacion",
   "tipologiaNombre": "Tasacion",
   "tipologiaMGDCMatricula": "TASACION",
+  "gdcTipoDocumento": "",
+  "gdcSubtipoDocumento": "",
+  "gdcSerie": "",
   "version": "1.0",
   "isDefault": true,
   "fields": [

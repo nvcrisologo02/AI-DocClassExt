@@ -43,7 +43,7 @@ $body = @{
         expectedType = "nota-simple@1.4"
         skipDuplicateCheck = $true
         forceReprocess = $true
-        SkipGDCUpload = $true
+        SkipGDCUpload = $false
         classification = @{
             model = "auto"
             umbral = 0.85
@@ -63,7 +63,7 @@ $body = @{
         correlationId = "NOTASIMPLE14-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
         submittedBy = "usuario.prueba@sareb.es"
         idGDC = $null
-        idActivo = "NT-14-001-2026"
+        idActivo = "354942"
     }
 } | ConvertTo-Json -Depth 10
 

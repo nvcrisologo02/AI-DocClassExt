@@ -31,7 +31,7 @@ $body = @{
     instrucciones = @{
         skipDuplicateCheck = $true
         forceReprocess = $true
-        SkipGDCUpload = $true
+        SkipGDCUpload = $false
         classification = @{
             provider = "auto"
             model = "auto"
@@ -52,7 +52,7 @@ $body = @{
         correlationId = "NOTASIMPLE14-CLASSIFY-$(Get-Date -Format 'yyyyMMdd-HHmmss')"
         submittedBy = "usuario.prueba@sareb.es"
         idGDC = $null
-        idActivo = "NT-14-001-2026"
+        idActivo = "354937"
     }
 } | ConvertTo-Json -Depth 10
 

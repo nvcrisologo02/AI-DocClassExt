@@ -83,6 +83,15 @@ var host = new HostBuilder()
             {
                 client.Timeout = TimeSpan.FromSeconds(t);
             }
+
+            var basicUser = context.Configuration["GDC:HttpBasicUsername"];
+            var basicPass = context.Configuration["GDC:HttpBasicPassword"];
+            if (!string.IsNullOrEmpty(basicUser))
+            {
+                var credentials = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes($"{basicUser}:{basicPass}"));
+                client.DefaultRequestHeaders.Authorization =
+                    new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
+            }
         })
         .ConfigurePrimaryHttpMessageHandler(() =>
         {

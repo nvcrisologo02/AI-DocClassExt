@@ -55,6 +55,22 @@ namespace DocumentIA.Functions.Activities
                         {
                             matricula = cfg.TipologiaMGDCMatricula;
                         }
+
+                        // Resolve GDC taxonomy fields from tipología config when not already set
+                        if (string.IsNullOrWhiteSpace(input.TipoDocumento) && !string.IsNullOrWhiteSpace(cfg.GdcTipoDocumento))
+                        {
+                            input.TipoDocumento = cfg.GdcTipoDocumento;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(input.SubtipoDocumento) && !string.IsNullOrWhiteSpace(cfg.GdcSubtipoDocumento))
+                        {
+                            input.SubtipoDocumento = cfg.GdcSubtipoDocumento;
+                        }
+
+                        if (string.IsNullOrWhiteSpace(input.Serie) && !string.IsNullOrWhiteSpace(cfg.GdcSerie))
+                        {
+                            input.Serie = cfg.GdcSerie;
+                        }
                     }
                     catch (Exception ex)
                     {

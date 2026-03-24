@@ -17,6 +17,7 @@ namespace DocumentIA.Core.Configuration
         // Identity credentials for GDC SOAP authentication (passed as arg0 in every operation)
         public string ApplicationId { get; set; } = string.Empty;
         public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
         public string NominalUser { get; set; } = string.Empty;
 
         // GDC entity typeId used in create and searchEntities (confirm with Sistemas if different)
@@ -36,6 +37,22 @@ namespace DocumentIA.Core.Configuration
         // Leave empty to search across all repositories (server default when repo is not found)
         public string RepositoryId { get; set; } = string.Empty;
         public string RepositoryName { get; set; } = string.Empty;
+
+        // Mandatory GDC document fields — global to all uploads from this application
+        // servicer: código del servicer (ej. "9999" en DEV)
+        public string Servicer { get; set; } = string.Empty;
+        // entidad_origen: código de la entidad/servicer origen del documento (normalmente igual a Servicer)
+        public string EntidadOrigen { get; set; } = string.Empty;
+        // proceso_carga: código del proceso de carga (ej. "PC01", "CKP1")
+        public string ProcesoCarga { get; set; } = string.Empty;
+        // tipo_expediente: tipo de expediente GDC ("AI" = Activo Inmobiliario, "AF" = Activo Financiero)
+        public string TipoExpediente { get; set; } = "AI";
+        // publico: "verdadero" o "falso" (string, no boolean nativo SOAP)
+        public string Publico { get; set; } = "verdadero";
+
+        // HTTP Basic Auth credentials for the GDC transport (separate from SOAP Identity)
+        public string HttpBasicUsername { get; set; } = string.Empty;
+        public string HttpBasicPassword { get; set; } = string.Empty;
 
         // Retry behavior
         public int MaxRetries { get; set; } = 3;

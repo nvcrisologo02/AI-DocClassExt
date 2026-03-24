@@ -1,7 +1,10 @@
 {
   "tipologiaId": "nota-simple",
   "tipologiaNombre": "Nota Simple",
-  "tipologiaMGDCMatricula": "NOTA_SIMPLE",
+  "tipologiaMGDCMatricula": "AI-01-NOTS-01",
+  "gdcTipoDocumento": "NOTS",
+  "gdcSubtipoDocumento": "NOTS01",
+  "gdcSerie": "AI01",
   "version": "1.0",
   "isDefault": false,
   "fields": [
