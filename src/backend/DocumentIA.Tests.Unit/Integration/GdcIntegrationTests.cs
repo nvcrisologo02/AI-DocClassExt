@@ -24,21 +24,25 @@ namespace DocumentIA.Tests.Unit.Integration
                 {
                     if (content.Contains("md5-exists") || content.Contains("this-exists") || content.Contains("some-exists-id"))
                     {
-                        // SOAP 1.2 response — totalItemsResult + Entity/id (confirmed format from POC tests)
+                        // SOAP 1.2 response — namespace-prefixed elements matching real SINTWS format
                         var xml = "<?xml version=\"1.0\"?>" +
                                   "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"><soap:Body>" +
-                                  "<searchEntitiesResponse xmlns=\"http://services.api.sint.sareb.es/\"><return>" +
-                                  "<totalItemsResult>1</totalItemsResult>" +
-                                  "<data><Entity xmlns=\"http://data.model.api.sint.sareb.es\"><id>GDC-12345</id></Entity></data>" +
-                                  "</return></searchEntitiesResponse></soap:Body></soap:Envelope>";
+                                  "<ns1:searchEntitiesResponse xmlns:ns1=\"http://services.api.sint.sareb.es/\"><ns1:return" +
+                                  " xmlns:ns2=\"http://search.model.api.sint.sareb.es\" xsi:type=\"ns2:SearchResult\"" +
+                                  " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
+                                  "<ns2:totalItemsResult>1</ns2:totalItemsResult>" +
+                                  "<ns2:data><ns3:Entity xmlns:ns3=\"http://data.model.api.sint.sareb.es\"><ns3:id>GDC-12345</ns3:id></ns3:Entity></ns2:data>" +
+                                  "</ns1:return></ns1:searchEntitiesResponse></soap:Body></soap:Envelope>";
                         return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(xml) });
                     }
 
                     var xmlNo = "<?xml version=\"1.0\"?>" +
                                 "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"><soap:Body>" +
-                                "<searchEntitiesResponse xmlns=\"http://services.api.sint.sareb.es/\"><return>" +
-                                "<totalItemsResult>0</totalItemsResult><data/>" +
-                                "</return></searchEntitiesResponse></soap:Body></soap:Envelope>";
+                                "<ns1:searchEntitiesResponse xmlns:ns1=\"http://services.api.sint.sareb.es/\"><ns1:return" +
+                                " xmlns:ns2=\"http://search.model.api.sint.sareb.es\" xsi:type=\"ns2:SearchResult\"" +
+                                " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
+                                "<ns2:totalItemsResult>0</ns2:totalItemsResult><ns2:data/>" +
+                                "</ns1:return></ns1:searchEntitiesResponse></soap:Body></soap:Envelope>";
                     return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(xmlNo) });
                 }
 

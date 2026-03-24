@@ -332,7 +332,14 @@ Operación WSDL: `create(Identity arg0, Entity arg1) → string (objectId)`
 
 Operación WSDL: `searchEntities(Identity arg0, Query arg1, List<DocRepository> arg2) → SearchResult`
 
-Busca documentos por `expediente.id_expediente` (EntityExpression IN) + `checksum` (condición AND). Se usa **antes** de la subida para detectar duplicados.
+Busca documentos para detectar duplicados antes de la subida. La estrategia de búsqueda es **adaptativa** según si `GDC:ClaseExpediente` está configurado:
+
+| `ClaseExpediente` | Filtro usado | Cuándo se aplica |
+|---|---|---|
+| Configurado | `EntityExpression IN expediente.id_expediente AND EQUALS checksum` | Dedup exacto por activo + contenido |
+| **Vacío** | `FieldExpression EQUALS checksum` | Fallback cuando el `expediente` no se almacena en create; dedup por contenido únicamente |
+
+> **Importante**: si `ClaseExpediente` no está configurado, el campo `expediente` **no se incluye** en el `create`. En ese caso, buscar por `expediente.id_expediente` devolvería siempre 0 resultados (falso "no existe") y el create siguiente fallaría con `DOC_OBJECT_EXISTS`. El filtro por `checksum` evita ese comportamiento.
 
 > **Nota**: el campo de hash en SINTWS v4.0 es `checksum` (no `md5`). El operador para buscar en entidades relacionadas es `EntityExpression IN` (no `FieldExpression EQUAL` sobre campo plano).
 

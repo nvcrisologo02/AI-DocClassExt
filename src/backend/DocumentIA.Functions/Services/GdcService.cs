@@ -192,32 +192,57 @@ namespace DocumentIA.Functions.Services
                   "</ns2:DocRepository>" +
                   "</ns1:arg2>";
 
+            // Filter strategy depends on whether expediente relationship is configured:
+            // - ClaseExpediente set   → use EntityExpression IN expediente.id_expediente + checksum
+            //   (documents were created with the expediente field, so this is an exact per-activo dedup)
+            // - ClaseExpediente empty → expediente was NOT stored in create, so the EntityExpression
+            //   would always return 0 results. Fall back to checksum only.
+            string filterXml;
+            if (!string.IsNullOrEmpty(settings.ClaseExpediente))
+            {
+                filterXml =
+                    "<ns2:filter xsi:type=\"ns2:SetExpression\">" +
+                    "<ns2:expressions>" +
+                    "<ns2:Expression xsi:type=\"ns2:EntityExpression\">" +
+                    "<ns2:condition>IN</ns2:condition>" +
+                    "<ns2:entityName>expediente</ns2:entityName>" +
+                    "<ns2:fieldName>id_expediente</ns2:fieldName>" +
+                    "<ns2:value xsi:type=\"ns2:StringValueList\">" +
+                    "<ns2:values><ns1:string>" + safeIdActivo + "</ns1:string></ns2:values>" +
+                    "</ns2:value>" +
+                    "</ns2:Expression>" +
+                    "<ns2:Expression xsi:type=\"ns2:FieldExpression\">" +
+                    "<ns2:condition>EQUALS</ns2:condition>" +
+                    "<ns2:fieldName>checksum</ns2:fieldName>" +
+                    "<ns2:value xsi:type=\"ns2:StringValue\">" +
+                    "<ns2:value>" + safeMd5 + "</ns2:value>" +
+                    "</ns2:value>" +
+                    "</ns2:Expression>" +
+                    "</ns2:expressions>" +
+                    "<ns2:operator>AND</ns2:operator>" +
+                    "</ns2:filter>";
+            }
+            else
+            {
+                // No expediente configured → documents don't have that relationship.
+                // Search by checksum only (content-hash dedup; false positives for identical content
+                // across different activos are acceptable when ClaseExpediente is not yet configured).
+                filterXml =
+                    "<ns2:filter xsi:type=\"ns2:FieldExpression\">" +
+                    "<ns2:condition>EQUALS</ns2:condition>" +
+                    "<ns2:fieldName>checksum</ns2:fieldName>" +
+                    "<ns2:value xsi:type=\"ns2:StringValue\">" +
+                    "<ns2:value>" + safeMd5 + "</ns2:value>" +
+                    "</ns2:value>" +
+                    "</ns2:filter>";
+            }
+
             return
                 "<ns1:searchEntities xmlns:ns1=\"http://services.api.sint.sareb.es/\" xmlns:ns0=\"http://auth.model.api.sint.sareb.es\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
                 "<ns1:arg0 xsi:type=\"ns0:Identity\">" + BuildIdentityElement() + "</ns1:arg0>" +
                 "<ns1:arg1 xmlns:ns2=\"http://search.model.api.sint.sareb.es\" xmlns:ns3=\"http://data.model.api.sint.sareb.es\" xsi:type=\"ns2:Query\">" +
                 "<ns2:entityTypeId>document</ns2:entityTypeId>" +
-                "<ns2:filter xsi:type=\"ns2:SetExpression\">" +
-                "<ns2:expressions>" +
-                // EntityExpression IN: search by expediente.id_expediente (confirmed working in POC)
-                "<ns2:Expression xsi:type=\"ns2:EntityExpression\">" +
-                "<ns2:condition>IN</ns2:condition>" +
-                "<ns2:entityName>expediente</ns2:entityName>" +
-                "<ns2:fieldName>id_expediente</ns2:fieldName>" +
-                "<ns2:value xsi:type=\"ns2:StringValueList\">" +
-                "<ns2:values><ns1:string>" + safeIdActivo + "</ns1:string></ns2:values>" +
-                "</ns2:value>" +
-                "</ns2:Expression>" +
-                "<ns2:Expression xsi:type=\"ns2:FieldExpression\">" +
-                "<ns2:condition>EQUALS</ns2:condition>" +
-                "<ns2:fieldName>checksum</ns2:fieldName>" +
-                "<ns2:value xsi:type=\"ns2:StringValue\">" +
-                "<ns2:value>" + safeMd5 + "</ns2:value>" +
-                "</ns2:value>" +
-                "</ns2:Expression>" +
-                "</ns2:expressions>" +
-                "<ns2:operator>AND</ns2:operator>" +
-                "</ns2:filter>" +
+                filterXml +
                 "<ns2:firstResultIndex>1</ns2:firstResultIndex>" +
                 "<ns2:maxResults>1</ns2:maxResults>" +
                 "<ns2:orderingField xsi:type=\"ns2:OrderingField\">" +
@@ -257,6 +282,8 @@ namespace DocumentIA.Functions.Services
 
         public async Task<(bool Exists, string? ObjectId)> ConsultarDocumentoAsync(string idActivo, string md5, string matricula, CancellationToken cancellationToken = default)
         {
+            var estrategia = string.IsNullOrEmpty(settings.ClaseExpediente) ? "checksum" : "expediente+checksum";
+            logger.LogDebug("ConsultarDocumento estrategia={Estrategia} IdActivo={IdActivo} MD5={MD5}", estrategia, idActivo, md5);
             var body = BuildSearchEntitiesRequest(idActivo, md5);
 
             var envelope = WrapSoapEnvelope(body);
@@ -276,10 +303,11 @@ namespace DocumentIA.Functions.Services
                 if (fault.Count > 0) return (false, null);
 
                 // totalItemsResult > 0 means document exists; Entity/id is the GDC object id
-                var totalItems = doc.GetElementsByTagName("totalItemsResult");
+                // Use namespace wildcard "*" because SINTWS prefixes elements (e.g. ns2:totalItemsResult, ns3:id)
+                var totalItems = doc.GetElementsByTagName("totalItemsResult", "*");
                 if (totalItems.Count > 0 && int.TryParse(totalItems[0]?.InnerText, out var total) && total > 0)
                 {
-                    var entityIdNodes = doc.GetElementsByTagName("id");
+                    var entityIdNodes = doc.GetElementsByTagName("id", "*");
                     var objectId = entityIdNodes.Count > 0 ? entityIdNodes[0]?.InnerText : null;
                     return (true, string.IsNullOrWhiteSpace(objectId) ? null : objectId);
                 }
