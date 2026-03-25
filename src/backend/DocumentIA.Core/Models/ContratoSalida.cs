@@ -40,6 +40,29 @@ public class DetalleEjecucion
     public ResultadoIntegracion Integracion { get; set; } = new();
     // Resultado de la interacción con el Gestor Documental (GDC)
     public ResultadoGDC GDC { get; set; } = new();
+    // Seguimiento estructurado de actividades para monitorización en tiempo real y post-ejecución.
+    public SeguimientoOrquestacion Seguimiento { get; set; } = new();
+}
+
+public class SeguimientoOrquestacion
+{
+    public string Version { get; set; } = "1.0";
+    public string Estado { get; set; } = "Pending";
+    public string ActividadActual { get; set; } = string.Empty;
+    public int ActividadesTotales { get; set; }
+    public List<string> ActividadesCompletadas { get; set; } = new();
+    public int DuracionTotalMs { get; set; }
+    public List<TrazaActividad> Actividades { get; set; } = new();
+}
+
+public class TrazaActividad
+{
+    public string Nombre { get; set; } = string.Empty;
+    public string Estado { get; set; } = "Pending"; // Pending | Running | Completed | Failed | Skipped | Timeout
+    public DateTime InicioUtc { get; set; }
+    public DateTime? FinUtc { get; set; }
+    public int DuracionMs { get; set; }
+    public string? Mensaje { get; set; }
 }
 
 public class ResultadoClasificacion

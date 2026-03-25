@@ -44,7 +44,23 @@ namespace DocumentIA.Data.Entities
         
          [Column(TypeName = "nvarchar(max)")]
         public string? ContratoSalidaCompletoJson { get; set; }
+
+        [Column(TypeName = "nvarchar(max)")]
+        public string? ActivityTimelineJson { get; set; }
+
         public int DuracionTotalMs { get; set; }
+
+        public int? DuracionClasificacionMs { get; set; }
+
+        public int? DuracionExtraccionMs { get; set; }
+
+        public int? DuracionValidacionMs { get; set; }
+
+        public int? DuracionIntegracionMs { get; set; }
+
+        public int? DuracionGDCMs { get; set; }
+
+        public int? DuracionPersistenciaMs { get; set; }
         
         [ForeignKey(nameof(DocumentoId))]
         public virtual DocumentoEntity Documento { get; set; } = null!;

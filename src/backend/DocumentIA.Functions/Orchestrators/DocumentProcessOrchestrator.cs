@@ -7,6 +7,7 @@ using DocumentIA.Functions.Activities;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace DocumentIA.Functions.Orchestrators;
@@ -18,7 +19,7 @@ public class DocumentProcessOrchestrator
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
         var logger = context.CreateReplaySafeLogger<DocumentProcessOrchestrator>();
-        
+
         var entrada = context.GetInput<ContratoEntrada>();
         if (entrada == null)
         {
@@ -37,6 +38,128 @@ public class DocumentProcessOrchestrator
             Integridad = new Integridad()
         };
 
+        var inicioOrquestacion = context.CurrentUtcDateTime;
+        var actividadesNegocio = new[] { "Clasificar", "Extraer", "Validar", "Integrar", "SubirGDC", "Persistir" };
+
+        var seguimiento = salida.DetalleEjecucion.Seguimiento;
+        seguimiento.Estado = "Pending";
+        seguimiento.ActividadActual = string.Empty;
+        seguimiento.ActividadesTotales = actividadesNegocio.Length;
+        seguimiento.Actividades.Clear();
+        seguimiento.ActividadesCompletadas.Clear();
+
+        foreach (var actividad in actividadesNegocio)
+        {
+            seguimiento.Actividades.Add(new TrazaActividad
+            {
+                Nombre = actividad,
+                Estado = "Pending"
+            });
+        }
+
+        TrazaActividad ObtenerTraza(string nombre) =>
+            seguimiento.Actividades.First(a => string.Equals(a.Nombre, nombre, StringComparison.Ordinal));
+
+        void PublicarEstado(string estado, string actividadActual, string? mensaje = null)
+        {
+            seguimiento.Estado = estado;
+            seguimiento.ActividadActual = actividadActual;
+            seguimiento.DuracionTotalMs = (int)Math.Max(0, (context.CurrentUtcDateTime - inicioOrquestacion).TotalMilliseconds);
+
+            context.SetCustomStatus(new
+            {
+                version = seguimiento.Version,
+                estado = seguimiento.Estado,
+                actividadActual = seguimiento.ActividadActual,
+                actividadesTotales = seguimiento.ActividadesTotales,
+                actividadesCompletadas = seguimiento.ActividadesCompletadas,
+                duracionTotalMs = seguimiento.DuracionTotalMs,
+                actividades = seguimiento.Actividades.Select(a => new
+                {
+                    nombre = a.Nombre,
+                    estado = a.Estado,
+                    duracionMs = a.DuracionMs,
+                    mensaje = a.Mensaje
+                }).ToList(),
+                mensaje
+            });
+        }
+
+        void MarcarInicioActividad(string nombre)
+        {
+            var traza = ObtenerTraza(nombre);
+            traza.Estado = "Running";
+            traza.Mensaje = null;
+            traza.InicioUtc = context.CurrentUtcDateTime;
+            traza.FinUtc = null;
+            traza.DuracionMs = 0;
+
+            PublicarEstado("Running", nombre);
+        }
+
+        void MarcarFinActividad(string nombre, string estado, string? mensaje = null)
+        {
+            var traza = ObtenerTraza(nombre);
+            traza.FinUtc = context.CurrentUtcDateTime;
+
+            if (traza.InicioUtc == default)
+            {
+                traza.InicioUtc = traza.FinUtc.Value;
+            }
+
+            traza.DuracionMs = (int)Math.Max(0, (traza.FinUtc.Value - traza.InicioUtc).TotalMilliseconds);
+            traza.Estado = estado;
+            traza.Mensaje = mensaje;
+
+            if ((estado == "Completed" || estado == "Skipped" || estado == "Timeout") &&
+                !seguimiento.ActividadesCompletadas.Contains(nombre))
+            {
+                seguimiento.ActividadesCompletadas.Add(nombre);
+            }
+
+            PublicarEstado("Running", string.Empty, mensaje);
+        }
+
+        async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
+        {
+            MarcarInicioActividad(nombre);
+
+            try
+            {
+                var resultado = await accion();
+                MarcarFinActividad(nombre, "Completed");
+                return resultado;
+            }
+            catch (Exception ex)
+            {
+                MarcarFinActividad(nombre, "Failed", ex.Message);
+                throw;
+            }
+        }
+
+        async Task EjecutarPasoNegocioSinResultado(string nombre, Func<Task> accion)
+        {
+            MarcarInicioActividad(nombre);
+
+            try
+            {
+                await accion();
+                MarcarFinActividad(nombre, "Completed");
+            }
+            catch (Exception ex)
+            {
+                MarcarFinActividad(nombre, "Failed", ex.Message);
+                throw;
+            }
+        }
+
+        void FinalizarSeguimiento(string estado, string? mensaje = null)
+        {
+            PublicarEstado(estado, string.Empty, mensaje);
+        }
+
+        PublicarEstado("Running", string.Empty);
+
         try
         {
             // 1. Normalizacion y calculo de hashes
@@ -49,6 +172,7 @@ public class DocumentProcessOrchestrator
             salida.Integridad.MD5 = datosNormalizados["MD5"].ToString() ?? "";
             salida.Integridad.CRC32 = datosNormalizados["CRC32"].ToString() ?? "";
             salida.Integridad.RutaBlobStorage = null;
+            salida.Identificacion.Paginas = ObtenerEntero(datosNormalizados, "Paginas");
 
             // 2. Verificar duplicados (si esta habilitado)
             if (!entrada.Instrucciones.SkipDuplicateCheck)
@@ -62,6 +186,8 @@ public class DocumentProcessOrchestrator
                 {
                     salida.Resultado.Estado = "DUPLICADO";
                     logger.LogWarning("Documento duplicado detectado");
+
+                    FinalizarSeguimiento("Completed", "Documento detectado como duplicado");
                     return salida;
                 }
             }
@@ -85,6 +211,7 @@ public class DocumentProcessOrchestrator
             ResultadoClasificacion resultadoClasificacion;
             if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType))
             {
+                MarcarInicioActividad("Clasificar");
                 logger.LogInformation("Paso 3: Clasificación omitida por ExpectedType={ExpectedType}", entrada.Instrucciones.ExpectedType);
                 resultadoClasificacion = new ResultadoClasificacion
                 {
@@ -93,17 +220,20 @@ public class DocumentProcessOrchestrator
                     FallbackLLM = false,
                     TipologiaDetectada = entrada.Instrucciones.ExpectedType
                 };
+                MarcarFinActividad("Clasificar", "Completed", "Clasificación por ExpectedType");
             }
             else
             {
                 logger.LogInformation("Paso 3: Clasificando documento");
-                resultadoClasificacion = await context.CallActivityAsync<ResultadoClasificacion>(
-                    "ClasificarActivity",
-                    new ClasificacionInput
-                    {
-                        Entrada = entrada,
-                        DatosNormalizados = datosNormalizados
-                    });
+                resultadoClasificacion = await EjecutarPasoNegocio(
+                    "Clasificar",
+                    () => context.CallActivityAsync<ResultadoClasificacion>(
+                        "ClasificarActivity",
+                        new ClasificacionInput
+                        {
+                            Entrada = entrada,
+                            DatosNormalizados = datosNormalizados
+                        }));
             }
 
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
@@ -122,21 +252,57 @@ public class DocumentProcessOrchestrator
             {
                 salida.Resultado.Estado = "BAJA_CONFIANZA_CLASIFICACION";
                 logger.LogWarning($"Confianza de clasificacion baja: {resultadoClasificacion.Confianza}");
+
+                FinalizarSeguimiento("Completed", "Clasificación por debajo de umbral");
                 return salida;
             }
 
             // 4. Extraccion
             logger.LogInformation("Paso 4: Extrayendo datos");
-            var resultadoExtraccion = await context.CallActivityAsync<ExtraccionResultado>(
-                "ExtraerActivity",
-                new ExtraccionInput
-                {
-                    Entrada = entrada,
-                    Tipologia = salida.Identificacion.Tipologia,
-                    DatosNormalizados = datosNormalizados
-                });
+            var resultadoExtraccion = await EjecutarPasoNegocio(
+                "Extraer",
+                () => context.CallActivityAsync<ExtraccionResultado>(
+                    "ExtraerActivity",
+                    new ExtraccionInput
+                    {
+                        Entrada = entrada,
+                        Tipologia = salida.Identificacion.Tipologia,
+                        DatosNormalizados = datosNormalizados
+                    }));
 
             salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
+
+            // Prioridad para páginas:
+            // 1) valor explícito devuelto por el proveedor de extracción
+            // 2) metadato presente en DatosExtraidos
+            // 3) heurística previa de normalización
+            if (resultadoExtraccion.Paginas > 0)
+            {
+                salida.Identificacion.Paginas = resultadoExtraccion.Paginas;
+            }
+            else if (salida.Identificacion.Paginas <= 0)
+            {
+                var paginasDesdeExtraccion = ObtenerEntero(salida.DatosExtraidos, "Paginas");
+                if (paginasDesdeExtraccion <= 0)
+                {
+                    paginasDesdeExtraccion = ObtenerEntero(salida.DatosExtraidos, "NumeroPaginas");
+                }
+                if (paginasDesdeExtraccion <= 0)
+                {
+                    paginasDesdeExtraccion = ObtenerEntero(salida.DatosExtraidos, "NumPaginas");
+                }
+                if (paginasDesdeExtraccion <= 0)
+                {
+                    paginasDesdeExtraccion = ObtenerEntero(salida.DatosExtraidos, "pageCount");
+                }
+                if (paginasDesdeExtraccion <= 0)
+                {
+                    paginasDesdeExtraccion = ObtenerEntero(salida.DatosExtraidos, "pages");
+                }
+
+                salida.Identificacion.Paginas = paginasDesdeExtraccion;
+            }
+
             salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
             {
                 Modelo = resultadoExtraccion.Modelo,
@@ -154,9 +320,11 @@ public class DocumentProcessOrchestrator
                     kvp => (object?)kvp.Value)
             };
 
-            var resultadoValidacion = await context.CallActivityAsync<DetalleValidacion>(
-                "ValidarActivity",
-                validacionInput);
+            var resultadoValidacion = await EjecutarPasoNegocio(
+                "Validar",
+                () => context.CallActivityAsync<DetalleValidacion>(
+                    "ValidarActivity",
+                    validacionInput));
 
             // Convertir DetalleValidacion a InformacionPostproceso
             salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
@@ -209,9 +377,11 @@ public class DocumentProcessOrchestrator
                 }
             };
 
-            var resultadoIntegracion = await context.CallActivityAsync<DocumentIA.Core.Models.ResultadoIntegracion>(
-                "IntegrarActivity",
-                integrarInput);
+            var resultadoIntegracion = await EjecutarPasoNegocio(
+                "Integrar",
+                () => context.CallActivityAsync<DocumentIA.Core.Models.ResultadoIntegracion>(
+                    "IntegrarActivity",
+                    integrarInput));
 
             salida.DetalleEjecucion.Integracion = resultadoIntegracion;
 
@@ -238,6 +408,7 @@ public class DocumentProcessOrchestrator
             {
                 if (!string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
                 {
+                    MarcarInicioActividad("SubirGDC");
                     logger.LogInformation("Paso 7: Intentando subir a GDC IdActivo={IdActivo}", salida.Integridad.IdActivo);
 
                     var subirInput = new SubirGDCActivity.SubirGDCActivityInput
@@ -271,11 +442,13 @@ public class DocumentProcessOrchestrator
                             "SubirGDCActivity timeout after {TimeoutSeconds}s for IdActivo={IdActivo}",
                             GdcActivityTimeoutSeconds, salida.Integridad.IdActivo);
                         resultadoGdc = new ResultadoGDC { Exitoso = false, Mensaje = "Timeout" };
+                        MarcarFinActividad("SubirGDC", "Timeout", "Timeout en SubirGDCActivity");
                     }
                     else
                     {
                         cts.Cancel();
                         resultadoGdc = await activityTask;
+                        MarcarFinActividad("SubirGDC", "Completed", resultadoGdc?.Mensaje);
                     }
 
                     salida.DetalleEjecucion.GDC = resultadoGdc ?? new ResultadoGDC();
@@ -288,6 +461,8 @@ public class DocumentProcessOrchestrator
                 else
                 {
                     logger.LogInformation("Omitiendo subida a GDC: IdActivo no disponible");
+                    MarcarInicioActividad("SubirGDC");
+                    MarcarFinActividad("SubirGDC", "Skipped", "IdActivo no disponible");
                 }
             }
             else
@@ -295,13 +470,17 @@ public class DocumentProcessOrchestrator
                 logger.LogInformation(
                     "SkipGDCUpload activo (fuente={Fuente}); se omite subida a GDC",
                     entrada.Instrucciones.SkipGDCUpload.HasValue ? "instrucciones" : "config-tipologia");
+                MarcarInicioActividad("SubirGDC");
+                MarcarFinActividad("SubirGDC", "Skipped", "SkipGDCUpload activo");
             }
 
             // 8. Persistencia
             logger.LogInformation("Paso 8: Persistiendo resultados");
-            await context.CallActivityAsync(
-                "PersistirActivity",
-                salida);
+            await EjecutarPasoNegocioSinResultado(
+                "Persistir",
+                () => context.CallActivityAsync(
+                    "PersistirActivity",
+                    salida));
 
             // Resultado final
             if (conErroresValidacion)
@@ -314,18 +493,43 @@ public class DocumentProcessOrchestrator
                 salida.Resultado.Estado = "OK";
                 logger.LogInformation($"Procesamiento completado exitosamente para {entrada.Documento.Name}");
             }
-            
+
             salida.Resultado.ConfianzaGlobal = Math.Min(
                 resultadoClasificacion.Confianza, 
                 resultadoValidacion.ConfianzaValidacion);
+
+            FinalizarSeguimiento("Completed");
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error durante el procesamiento");
             salida.Resultado.Estado = "ERROR";
             salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {ex.Message}");
+            FinalizarSeguimiento("Failed", ex.Message);
         }
 
         return salida;
+    }
+
+    private static int ObtenerEntero(IDictionary<string, object> values, string key)
+    {
+        if (!values.TryGetValue(key, out var raw) || raw == null)
+        {
+            return 0;
+        }
+
+        return raw switch
+        {
+            int i => i,
+            long l when l <= int.MaxValue && l >= int.MinValue => (int)l,
+            decimal d => (int)d,
+            double db => (int)db,
+            float f => (int)f,
+            string s when int.TryParse(s, out var parsed) => parsed,
+            JsonElement json when json.ValueKind == JsonValueKind.Number && json.TryGetInt32(out var parsedInt) => parsedInt,
+            JsonElement json when json.ValueKind == JsonValueKind.Number && json.TryGetInt64(out var parsedLong) && parsedLong <= int.MaxValue && parsedLong >= int.MinValue => (int)parsedLong,
+            JsonElement json when json.ValueKind == JsonValueKind.String && int.TryParse(json.GetString(), out var parsedString) => parsedString,
+            _ => 0
+        };
     }
 }
