@@ -114,6 +114,43 @@ public class TipologiaVersionResolverTests : IDisposable
         result.Should().Equal("1.0", "1.4");
     }
 
+        [Fact]
+        public void Resolve_WithPromptOnlyTypology_SetsPromptAndExtractionFlags()
+        {
+                var content = """
+                {
+                    "tipologiaId": "resumen-documental",
+                    "tipologiaNombre": "Resumen Documental",
+                    "version": "1.0",
+                    "isDefault": true,
+                    "extraction": {
+                        "enabled": false,
+                        "provider": "mock",
+                        "modelKey": "unused"
+                    },
+                    "promptConfig": {
+                        "enabled": true,
+                        "modelKey": "default.gpt4o-mini",
+                        "systemPrompt": "",
+                        "userPromptTemplate": "Resume: {contenido}",
+                        "maxTokens": 300,
+                        "temperature": 0.0,
+                        "contentMode": "vision"
+                    },
+                    "fields": []
+                }
+                """;
+
+                File.WriteAllText(Path.Combine(_tempDirectory, "resumen.documental.validation.json"), content);
+
+                var sut = new TipologiaVersionResolver(_tempDirectory);
+
+                var result = sut.Resolve("resumen-documental");
+
+                result.PromptEnabled.Should().BeTrue();
+                result.ExtractionEnabled.Should().BeFalse();
+        }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

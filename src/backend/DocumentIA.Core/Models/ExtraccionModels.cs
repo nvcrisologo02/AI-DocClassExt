@@ -19,4 +19,34 @@ public class ExtraccionResultado
     public string? MarkdownExtraido { get; set; }
     public Dictionary<string, int> TiemposMs { get; set; } = new();
     public Dictionary<string, object> DatosExtraidos { get; set; } = new();
+    /// <summary>
+    /// Resultado del prompt libre cuando se ejecutó en modo combinado con el fallback de extracción
+    /// (una única llamada LLM que realizó extracción + prompt a la vez). Null en caso contrario.
+    /// </summary>
+    public string? ResultadoPromptCombinado { get; set; }
+}
+
+/// <summary>
+/// Input para la actividad de ejecución del prompt libre de tipología.
+/// Puede contener el markdown ya extraído (modo markdown) o los bytes del documento (modo vision).
+/// Si ResultadoPromptCombinado no es null, la actividad reutiliza ese resultado sin llamar al LLM.
+/// </summary>
+public class PromptActivityInput
+{
+    public string Tipologia { get; set; } = string.Empty;
+    /// <summary>Markdown extraído en el paso de extracción previo (si existe).</summary>
+    public string? MarkdownExtraido { get; set; }
+    /// <summary>Documento en base64 para modo vision (cuando no hay markdown disponible).</summary>
+    public string? DocumentoBase64 { get; set; }
+    public string? ContentType { get; set; }
+    /// <summary>
+    /// Campos ya extraídos. Se usan para resolver los placeholders {campo:NombreCampo} del template.
+    /// Solo están disponibles en flujo secuencial (extracción primero, prompt después).
+    /// </summary>
+    public Dictionary<string, object> DatosExtraidos { get; set; } = new();
+    /// <summary>
+    /// Cuando viene con valor (modo combinado con fallback), la actividad devuelve este resultado
+    /// directamente sin realizar ninguna llamada adicional al LLM.
+    /// </summary>
+    public string? ResultadoPromptCombinado { get; set; }
 }

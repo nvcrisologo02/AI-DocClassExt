@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using System.Text.Json;
 using Azure;
 using Azure.AI.OpenAI;
@@ -98,6 +99,167 @@ public class GptFallbackExtraerDataProvider
             },
             DatosExtraidos = datos
         };
+    }
+
+    /// <summary>
+    /// Modo combinado: realiza una única llamada LLM que extrae campos Y ejecuta el prompt libre
+    /// de la tipología en la misma petición. Ahorra una iteración cuando el fallback de extracción
+    /// y el prompt comparten el mismo modelo.
+    /// </summary>
+    public virtual async Task<ExtraccionResultado> ObtenerDatosConFallbackYPromptAsync(
+        ExtraccionInput input,
+        TipologiaValidationConfig tipologiaConfig,
+        PromptConfig promptConfig,
+        string? markdownContexto,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        _logger.LogInformation(
+            "Iniciando fallback GPT (modo combinado con prompt) para tipología={Tipologia}, Deployment={Deployment}",
+            input.Tipologia,
+            _settings.DeploymentName);
+
+        var combinedSystemPrompt =
+            "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
+            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, " +
+            "con exactamente dos claves: " +
+            "'campos_extraidos' (objeto JSON con los campos del documento, usa null para no encontrados) y " +
+            "'resultado_prompt' (string con la respuesta a la instrucción adicional a continuación).";
+
+        if (!string.IsNullOrWhiteSpace(promptConfig.SystemPrompt))
+        {
+            combinedSystemPrompt += $"\n\nINSTRUCCIÓN ADICIONAL PARA LA RESPUESTA DE 'resultado_prompt':\n{promptConfig.SystemPrompt}";
+        }
+
+        var systemMessage = new SystemChatMessage(combinedSystemPrompt);
+
+        var fieldList = BuildFieldList(tipologiaConfig);
+
+        // Para el modo combinado, {contenido} se sustituye por el marcador ya que el contenido
+        // se pasa al modelo directamente como parte del mensaje. Los {campo:X} no se resuelven
+        // aquí porque la extracción y el prompt ocurren simultáneamente.
+        var promptInstruction = promptConfig.UserPromptTemplate
+            .Replace("{contenido}", "[contenido del documento proporcionado en este mensaje]",
+                StringComparison.OrdinalIgnoreCase);
+        promptInstruction = Regex.Replace(promptInstruction, "\\{campo:[^}]+\\}", string.Empty, RegexOptions.IgnoreCase);
+
+        var userPromptText =
+            $"Tipo de documento: {tipologiaConfig.TipologiaId} ({tipologiaConfig.TipologiaNombre})\n\n" +
+            "**Parte 1 — Extracción de campos** ('campos_extraidos'):\n" +
+            "Extrae estos campos y devuelve exactamente estos nombres de clave:\n" +
+            fieldList + "\n\n" +
+            "**Parte 2 — Instrucción adicional** ('resultado_prompt'):\n" +
+            promptInstruction;
+
+        UserChatMessage userMessage;
+
+        if (!string.IsNullOrWhiteSpace(markdownContexto))
+        {
+            userMessage = new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(
+                    $"{userPromptText}\n\nCONTENIDO DEL DOCUMENTO (markdown):\n{markdownContexto}"));
+        }
+        else
+        {
+            var pdfBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64);
+            userMessage = new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(userPromptText),
+                ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(pdfBytes), "application/pdf"));
+        }
+
+        var options = new ChatCompletionOptions
+        {
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
+            Temperature = (float)_settings.Temperature,
+            MaxOutputTokenCount = _settings.MaxTokens
+        };
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+
+        var response = await _chatClient.Value.CompleteChatAsync(
+            new List<ChatMessage> { systemMessage, userMessage },
+            options,
+            cts.Token);
+
+        stopwatch.Stop();
+
+        var responseText = response.Value.Content[0].Text;
+
+        using var document = JsonDocument.Parse(responseText);
+        var root = document.RootElement;
+
+        Dictionary<string, object> campos;
+        string resultadoPrompt;
+
+        if (root.TryGetProperty("campos_extraidos", out var camposElement))
+        {
+            campos = ParseExtractedFields(camposElement, tipologiaConfig);
+        }
+        else
+        {
+            // Fallback: si el modelo devolvió el JSON directamente sin la estructura combinada
+            _logger.LogWarning("Respuesta combinada sin clave 'campos_extraidos'. Intentando parseo directo.");
+            campos = ParseJsonObjectResponse(responseText, tipologiaConfig);
+        }
+
+        if (root.TryGetProperty("resultado_prompt", out var promptElement))
+        {
+            resultadoPrompt = promptElement.ValueKind == JsonValueKind.String
+                ? promptElement.GetString() ?? string.Empty
+                : promptElement.GetRawText();
+        }
+        else
+        {
+            _logger.LogWarning("Respuesta combinada sin clave 'resultado_prompt'.");
+            resultadoPrompt = string.Empty;
+        }
+
+        return new ExtraccionResultado
+        {
+            Proveedor = "azure-openai",
+            Modelo = _settings.DeploymentName,
+            LayoutEnabled = false,
+            FallbackUsado = true,
+            TiemposMs = new Dictionary<string, int>
+            {
+                ["gpt-fallback-combined"] = (int)stopwatch.ElapsedMilliseconds
+            },
+            DatosExtraidos = campos,
+            ResultadoPromptCombinado = resultadoPrompt
+        };
+    }
+
+    private Dictionary<string, object> ParseExtractedFields(
+        JsonElement camposElement,
+        TipologiaValidationConfig tipologiaConfig)
+    {
+        if (camposElement.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, object>();
+        }
+
+        var result = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+        var expected = new HashSet<string>(
+            tipologiaConfig.Fields.Select(f => f.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var prop in camposElement.EnumerateObject())
+        {
+            if (expected.Count > 0 && !expected.Contains(prop.Name))
+            {
+                continue;
+            }
+
+            var value = ConvertJsonValue(prop.Value);
+            if (value is not null)
+            {
+                result[prop.Name] = value;
+            }
+        }
+
+        return result;
     }
 
     private Dictionary<string, object> ParseJsonObjectResponse(string responseText, TipologiaValidationConfig tipologiaConfig)

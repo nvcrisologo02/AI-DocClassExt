@@ -50,6 +50,7 @@ var host = new HostBuilder()
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
         services.AddSingleton<GptFallbackExtraerDataProvider>();
+        services.AddSingleton<IPromptDataProvider, OpenAIPromptDataProvider>();
         services.AddSingleton<ContentUnderstandingResultMapper>();
         services.AddSingleton<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
 
@@ -160,6 +161,12 @@ var host = new HostBuilder()
         {
             string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "classification", "models.json");
             return new ClassificationModelRegistryLoader(registryPath);
+        });
+
+        services.AddSingleton<PromptModelRegistryLoader>(provider =>
+        {
+            string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "prompt", "models.json");
+            return new PromptModelRegistryLoader(registryPath);
         });
 
 

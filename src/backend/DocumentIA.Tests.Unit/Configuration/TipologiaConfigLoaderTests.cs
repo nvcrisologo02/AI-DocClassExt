@@ -94,6 +94,45 @@ namespace DocumentIA.Tests.Unit.Configuration
         }
 
         [Fact]
+        public void LoadConfig_WithPromptSection_DeserializesPromptSettings()
+        {
+            var configPath = Path.Combine(_tempDirectory, "prompt.validation.json");
+            var jsonContent = @"{
+                ""tipologiaId"": ""prompt-test"",
+                ""tipologiaNombre"": ""Prompt Test"",
+                ""version"": ""1.0"",
+                ""extraction"": {
+                    ""enabled"": false,
+                    ""provider"": ""mock"",
+                    ""modelKey"": ""unused""
+                },
+                ""promptConfig"": {
+                    ""enabled"": true,
+                    ""modelKey"": ""default.gpt4o-mini"",
+                    ""systemPrompt"": ""Sistema"",
+                    ""userPromptTemplate"": ""Resumen: {contenido}"",
+                    ""maxTokens"": 800,
+                    ""temperature"": 0.1,
+                    ""contentMode"": ""vision""
+                },
+                ""fields"": []
+            }";
+            File.WriteAllText(configPath, jsonContent);
+
+            var loader = new TipologiaConfigLoader(_tempDirectory);
+
+            var config = loader.LoadConfig("prompt");
+
+            config.PromptConfig.Should().NotBeNull();
+            config.PromptConfig!.Enabled.Should().BeTrue();
+            config.PromptConfig.ModelKey.Should().Be("default.gpt4o-mini");
+            config.PromptConfig.SystemPrompt.Should().Be("Sistema");
+            config.PromptConfig.UserPromptTemplate.Should().Contain("{contenido}");
+            config.PromptConfig.ContentMode.Should().Be("vision");
+            config.Extraction.Enabled.Should().BeFalse();
+        }
+
+        [Fact]
         public void LoadConfig_NonExistentFile_ThrowsFileNotFoundException()
         {
             // Arrange

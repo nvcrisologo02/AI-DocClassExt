@@ -293,6 +293,13 @@ public class DocumentProcessOrchestrator
             salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
 
+            // Añadir actividad Prompt al seguimiento si la tipología la tiene habilitada
+            if (tipologiaResuelta.PromptEnabled)
+            {
+                seguimiento.ActividadesTotales++;
+                seguimiento.Actividades.Add(new TrazaActividad { Nombre = "Prompt", Estado = "Pending" });
+            }
+
             // Verificar umbral de confianza
             if (resultadoClasificacion.Confianza < entrada.Instrucciones.Classification.Umbral)
             {
@@ -303,26 +310,44 @@ public class DocumentProcessOrchestrator
                 return salida;
             }
 
-            // 4. Extraccion
-            logger.LogInformation("Paso 4: Extrayendo datos");
-            var resultadoExtraccion = await EjecutarPasoNegocio(
-                "Extraer",
-                () => context.CallActivityAsync<ExtraccionResultado>(
-                    "ExtraerActivity",
-                    new ExtraccionInput
-                    {
-                        Entrada = entrada,
-                        Tipologia = salida.Identificacion.Tipologia,
-                        DatosNormalizados = datosNormalizados
-                    }));
-
-            if (resultadoExtraccion.FallbackUsado)
+            ExtraccionResultado resultadoExtraccion;
+            if (tipologiaResuelta.ExtractionEnabled)
             {
-                var trazaExtraccion = ObtenerTraza("Extraer");
-                trazaExtraccion.FallbackActivado = true;
-                trazaExtraccion.FallbackRazon = resultadoExtraccion.FallbackRazon;
-                trazaExtraccion.Mensaje = $"Fallback extracción activado ({resultadoExtraccion.FallbackRazon ?? "sin razon informada"})";
-                PublicarEstado("Running", string.Empty, trazaExtraccion.Mensaje);
+                // 4. Extraccion
+                logger.LogInformation("Paso 4: Extrayendo datos");
+                resultadoExtraccion = await EjecutarPasoNegocio(
+                    "Extraer",
+                    () => context.CallActivityAsync<ExtraccionResultado>(
+                        "ExtraerActivity",
+                        new ExtraccionInput
+                        {
+                            Entrada = entrada,
+                            Tipologia = salida.Identificacion.Tipologia,
+                            DatosNormalizados = datosNormalizados
+                        }));
+
+                if (resultadoExtraccion.FallbackUsado)
+                {
+                    var trazaExtraccion = ObtenerTraza("Extraer");
+                    trazaExtraccion.FallbackActivado = true;
+                    trazaExtraccion.FallbackRazon = resultadoExtraccion.FallbackRazon;
+                    trazaExtraccion.Mensaje = $"Fallback extracción activado ({resultadoExtraccion.FallbackRazon ?? "sin razon informada"})";
+                    PublicarEstado("Running", string.Empty, trazaExtraccion.Mensaje);
+                }
+            }
+            else
+            {
+                logger.LogInformation("Paso 4: Extracción omitida para tipología {Tipologia} (Extraction.Enabled=false)", salida.Identificacion.Tipologia);
+                MarcarInicioActividad("Extraer");
+                MarcarFinActividad("Extraer", "Skipped", "Extracción deshabilitada en configuración de tipología");
+
+                resultadoExtraccion = new ExtraccionResultado
+                {
+                    Proveedor = "none",
+                    Modelo = "disabled",
+                    LayoutEnabled = false,
+                    DatosExtraidos = new Dictionary<string, object>()
+                };
             }
 
             salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
@@ -366,6 +391,41 @@ public class DocumentProcessOrchestrator
                 FallbackRazon = resultadoExtraccion.FallbackRazon,
                 TiemposMs = resultadoExtraccion.TiemposMs
             };
+
+            // 4.5 Prompt libre (si la tipología lo tiene habilitado)
+            if (tipologiaResuelta.PromptEnabled)
+            {
+                logger.LogInformation("Paso 4.5: Ejecutando prompt libre de tipología");
+                var promptInput = new PromptActivityInput
+                {
+                    Tipologia = salida.Identificacion.Tipologia,
+                    MarkdownExtraido = resultadoExtraccion.MarkdownExtraido,
+                    DocumentoBase64 = entrada.Documento.Content.Base64,
+                    DatosExtraidos = resultadoExtraccion.DatosExtraidos,
+                    // Optimización: si el fallback ya ejecutó el prompt en modo combinado, no hacer otra llamada
+                    ResultadoPromptCombinado = resultadoExtraccion.ResultadoPromptCombinado
+                };
+
+                var resultadoPrompt = await EjecutarPasoNegocio(
+                    "Prompt",
+                    () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
+
+                salida.ResultadoPrompt = resultadoPrompt;
+                salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+                {
+                    Modelo = resultadoPrompt.Modelo,
+                    TiempoMs = resultadoPrompt.TiempoMs,
+                    CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
+                    Error = resultadoPrompt.Error
+                };
+
+                if (resultadoPrompt.CombinedWithFallback)
+                {
+                    var trazaPrompt = ObtenerTraza("Prompt");
+                    trazaPrompt.Mensaje = "Resultado reutilizado de llamada combinada con fallback de extracción";
+                    PublicarEstado("Running", string.Empty, trazaPrompt.Mensaje);
+                }
+            }
 
             // 5. Validacion - ACTUALIZADO PARA USAR MOTOR DE VALIDACION
             logger.LogInformation("Paso 5: Validando datos extraidos con motor de reglas");

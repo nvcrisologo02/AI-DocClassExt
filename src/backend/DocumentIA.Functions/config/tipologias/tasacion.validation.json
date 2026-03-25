@@ -9,6 +9,15 @@
   "gptDescripcion": "Informe de tasaci\u00f3n inmobiliaria. Documento t\u00e9cnico que certifica el valor de mercado de un inmueble. Incluye valor tasado, metodolog\u00eda de valoraci\u00f3n, descripci\u00f3n del inmueble, superficies y datos del tasador.",
   "version": "1.0",
   "isDefault": true,
+  "promptConfig": {
+    "enabled": false,
+    "modelKey": "default.gpt4o-mini",
+    "systemPrompt": "",
+    "userPromptTemplate": "",
+    "maxTokens": 2000,
+    "temperature": 0.0,
+    "contentMode": "markdown"
+  },
   "fields": [
     {
       "name": "ValorTasado",
