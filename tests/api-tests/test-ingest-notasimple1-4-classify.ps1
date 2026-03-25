@@ -84,8 +84,8 @@ $documentName = [System.IO.Path]::GetFileName($resolvedDocumentPath)
 
 $body = @{
     instrucciones = @{
-        skipDuplicateCheck = $true
-        forceReprocess = $true
+        skipDuplicateCheck = $false
+        forceReprocess = $false
         SkipGDCUpload = $false
         classification = @{
             provider = "auto"
