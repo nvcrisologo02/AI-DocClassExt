@@ -14,7 +14,7 @@ using OpenAI.Chat;
 namespace DocumentIA.Functions.Services;
 
 /// <summary>
-/// Proveedor de clasificación basado en GPT-4o-mini (Azure OpenAI).
+/// Proveedor de clasificación basado en un deployment configurable de Azure OpenAI.
 /// Se usa como fallback cuando Azure Document Intelligence falla o devuelve confianza insuficiente.
 /// </summary>
 public class GptClasificarDataProvider : IClasificarDataProvider
@@ -41,8 +41,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     {
         var stopwatch = Stopwatch.StartNew();
         _logger.LogInformation(
-            "Iniciando clasificación GPT fallback para documento {Documento}",
-            input.Entrada.Documento.Name);
+            "Iniciando clasificación Azure OpenAI fallback para documento {Documento} con deployment {DeploymentName}",
+            input.Entrada.Documento.Name,
+            _settings.DeploymentName);
 
         var pdfBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64);
         var tipologias = _tipologiasPromptSection.Value;
@@ -147,6 +148,12 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         {
             throw new InvalidOperationException(
                 "Classification:GptFallback:Endpoint es obligatorio cuando el fallback GPT está habilitado.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_settings.DeploymentName))
+        {
+            throw new InvalidOperationException(
+                "Classification:GptFallback:DeploymentName es obligatorio cuando el fallback GPT está habilitado.");
         }
 
         AzureOpenAIClient azureClient;

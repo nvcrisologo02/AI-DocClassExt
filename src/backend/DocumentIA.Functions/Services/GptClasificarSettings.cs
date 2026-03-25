@@ -11,8 +11,8 @@ public class GptClasificarSettings
     /// <summary>ApiKey | DefaultAzureCredential</summary>
     public string AuthMode { get; set; } = "ApiKey";
 
-    /// <summary>Nombre del deployment en Azure OpenAI. Ejemplo: "gpt-4o-mini".</summary>
-    public string DeploymentName { get; set; } = "gpt-4o-mini";
+    /// <summary>Nombre del deployment en Azure OpenAI. Se toma siempre de configuración.</summary>
+    public string DeploymentName { get; set; } = string.Empty;
 
     /// <summary>
     /// Si false (valor por defecto), el fallback GPT está completamente desactivado.

@@ -63,6 +63,8 @@ public class TrazaActividad
     public DateTime? FinUtc { get; set; }
     public int DuracionMs { get; set; }
     public string? Mensaje { get; set; }
+    public bool FallbackActivado { get; set; }
+    public string? FallbackRazon { get; set; }
 }
 
 public class ResultadoClasificacion
