@@ -300,6 +300,15 @@ public class DocumentProcessOrchestrator
                         DatosNormalizados = datosNormalizados
                     }));
 
+            if (resultadoExtraccion.FallbackUsado)
+            {
+                var trazaExtraccion = ObtenerTraza("Extraer");
+                trazaExtraccion.FallbackActivado = true;
+                trazaExtraccion.FallbackRazon = resultadoExtraccion.FallbackRazon;
+                trazaExtraccion.Mensaje = $"Fallback extracción activado ({resultadoExtraccion.FallbackRazon ?? "sin razon informada"})";
+                PublicarEstado("Running", string.Empty, trazaExtraccion.Mensaje);
+            }
+
             salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
 
             // Prioridad para páginas:
@@ -337,6 +346,8 @@ public class DocumentProcessOrchestrator
             {
                 Modelo = resultadoExtraccion.Modelo,
                 LayoutEnabled = resultadoExtraccion.LayoutEnabled,
+                FallbackUsado = resultadoExtraccion.FallbackUsado,
+                FallbackRazon = resultadoExtraccion.FallbackRazon,
                 TiemposMs = resultadoExtraccion.TiemposMs
             };
 

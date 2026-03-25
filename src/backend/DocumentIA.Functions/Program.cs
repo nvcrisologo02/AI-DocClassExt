@@ -42,12 +42,14 @@ var host = new HostBuilder()
 
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<AzureContentUnderstandingSettings>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
+        services.Configure<GptFallbackExtraerSettings>(context.Configuration.GetSection("Extraction:GptFallback"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
         services.Configure<AzureDocumentIntelligenceClassificationSettings>(context.Configuration.GetSection("Classification:AzureDocumentIntelligence"));
         services.Configure<GptClasificarSettings>(context.Configuration.GetSection("Classification:GptFallback"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
+        services.AddSingleton<GptFallbackExtraerDataProvider>();
         services.AddSingleton<ContentUnderstandingResultMapper>();
         services.AddSingleton<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
 

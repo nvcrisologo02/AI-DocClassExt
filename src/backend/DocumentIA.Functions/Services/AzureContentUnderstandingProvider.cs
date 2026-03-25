@@ -36,7 +36,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         _client = CreateClient(_settings);
     }
 
-    public async Task<ExtraccionResultado> ObtenerDatosAsync(ExtraccionInput input, CancellationToken cancellationToken = default)
+    public virtual async Task<ExtraccionResultado> ObtenerDatosAsync(ExtraccionInput input, CancellationToken cancellationToken = default)
     {
         var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
         var extractionConfig = tipologiaConfig.Extraction;
@@ -74,6 +74,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         using var analysisDocument = JsonDocument.Parse(operation.Value.ToString());
         var datosExtraidos = _resultMapper.Map(analysisDocument, tipologiaConfig);
         var paginas = ResolvePageCount(analysisDocument);
+        var markdownExtraido = TryExtractMarkdown(analysisDocument);
 
         if (paginas > 0)
         {
@@ -94,6 +95,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             LayoutEnabled = true,
             OperationId = operation.Id,
             Paginas = paginas,
+            MarkdownExtraido = markdownExtraido,
             TiemposMs = new Dictionary<string, int>
             {
                 ["analysis"] = (int)stopwatch.ElapsedMilliseconds
@@ -214,5 +216,31 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         }
 
         return false;
+    }
+
+    private static string? TryExtractMarkdown(JsonDocument analysisDocument)
+    {
+        if (analysisDocument.RootElement.TryGetProperty("result", out var resultElement)
+            && resultElement.ValueKind == JsonValueKind.Object
+            && resultElement.TryGetProperty("contents", out var contentsElement)
+            && contentsElement.ValueKind == JsonValueKind.Array
+            && contentsElement.GetArrayLength() > 0)
+        {
+            foreach (var content in contentsElement.EnumerateArray())
+            {
+                if (content.ValueKind == JsonValueKind.Object
+                    && content.TryGetProperty("markdown", out var markdownElement)
+                    && markdownElement.ValueKind == JsonValueKind.String)
+                {
+                    var markdown = markdownElement.GetString();
+                    if (!string.IsNullOrWhiteSpace(markdown))
+                    {
+                        return markdown;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 }

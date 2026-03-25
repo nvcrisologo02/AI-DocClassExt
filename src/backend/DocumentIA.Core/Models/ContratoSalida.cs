@@ -80,6 +80,8 @@ public class ResultadoExtraccion
 {
     public string Modelo { get; set; } = string.Empty;
     public bool LayoutEnabled { get; set; }
+    public bool FallbackUsado { get; set; }
+    public string? FallbackRazon { get; set; }
     public Dictionary<string, int> TiemposMs { get; set; } = new();
 }
 
