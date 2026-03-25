@@ -79,7 +79,9 @@ public class DocumentProcessOrchestrator
                     nombre = a.Nombre,
                     estado = a.Estado,
                     duracionMs = a.DuracionMs,
-                    mensaje = a.Mensaje
+                    mensaje = a.Mensaje,
+                    fallbackActivado = a.FallbackActivado,
+                    fallbackRazon = a.FallbackRazon
                 }).ToList(),
                 mensaje
             });
@@ -90,6 +92,8 @@ public class DocumentProcessOrchestrator
             var traza = ObtenerTraza(nombre);
             traza.Estado = "Running";
             traza.Mensaje = null;
+            traza.FallbackActivado = false;
+            traza.FallbackRazon = null;
             traza.InicioUtc = context.CurrentUtcDateTime;
             traza.FinUtc = null;
             traza.DuracionMs = 0;
@@ -97,7 +101,12 @@ public class DocumentProcessOrchestrator
             PublicarEstado("Running", nombre);
         }
 
-        void MarcarFinActividad(string nombre, string estado, string? mensaje = null)
+        void MarcarFinActividad(
+            string nombre,
+            string estado,
+            string? mensaje = null,
+            bool fallbackActivado = false,
+            string? fallbackRazon = null)
         {
             var traza = ObtenerTraza(nombre);
             traza.FinUtc = context.CurrentUtcDateTime;
@@ -110,6 +119,8 @@ public class DocumentProcessOrchestrator
             traza.DuracionMs = (int)Math.Max(0, (traza.FinUtc.Value - traza.InicioUtc).TotalMilliseconds);
             traza.Estado = estado;
             traza.Mensaje = mensaje;
+            traza.FallbackActivado = fallbackActivado;
+            traza.FallbackRazon = fallbackRazon;
 
             if ((estado == "Completed" || estado == "Skipped" || estado == "Timeout") &&
                 !seguimiento.ActividadesCompletadas.Contains(nombre))
@@ -225,15 +236,34 @@ public class DocumentProcessOrchestrator
             else
             {
                 logger.LogInformation("Paso 3: Clasificando documento");
-                resultadoClasificacion = await EjecutarPasoNegocio(
-                    "Clasificar",
-                    () => context.CallActivityAsync<ResultadoClasificacion>(
+                MarcarInicioActividad("Clasificar");
+
+                try
+                {
+                    resultadoClasificacion = await context.CallActivityAsync<ResultadoClasificacion>(
                         "ClasificarActivity",
                         new ClasificacionInput
                         {
                             Entrada = entrada,
                             DatosNormalizados = datosNormalizados
-                        }));
+                        });
+
+                    var mensajeClasificacion = resultadoClasificacion.FallbackLLM
+                        ? $"Fallback Azure OpenAI activado ({resultadoClasificacion.FallbackRazon ?? "sin razon informada"})"
+                        : null;
+
+                    MarcarFinActividad(
+                        "Clasificar",
+                        "Completed",
+                        mensajeClasificacion,
+                        resultadoClasificacion.FallbackLLM,
+                        resultadoClasificacion.FallbackRazon);
+                }
+                catch (Exception ex)
+                {
+                    MarcarFinActividad("Clasificar", "Failed", ex.Message);
+                    throw;
+                }
             }
 
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;

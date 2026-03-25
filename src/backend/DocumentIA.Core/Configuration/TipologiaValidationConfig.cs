@@ -20,6 +20,11 @@ namespace DocumentIA.Core.Configuration
         // SkipGDCUpload: si true, la subida a GDC se omite por defecto para esta tipología.
         // Puede sobreescribirse explícitamente en cada petición vía Instrucciones.SkipGDCUpload.
         public bool SkipGDCUpload { get; set; } = false;
+        /// <summary>
+        /// Descripción optimizada para el prompt de clasificación GPT.
+        /// Si está vacía, se usa TipologiaNombre como fallback en el prompt.
+        /// </summary>
+        public string GptDescripcion { get; set; } = string.Empty;
         public TipologiaExtractionConfig Extraction { get; set; } = new();
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 

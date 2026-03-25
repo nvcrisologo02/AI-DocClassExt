@@ -63,6 +63,8 @@ public class TrazaActividad
     public DateTime? FinUtc { get; set; }
     public int DuracionMs { get; set; }
     public string? Mensaje { get; set; }
+    public bool FallbackActivado { get; set; }
+    public string? FallbackRazon { get; set; }
 }
 
 public class ResultadoClasificacion
@@ -70,6 +72,7 @@ public class ResultadoClasificacion
     public string Modelo { get; set; } = string.Empty;
     public double Confianza { get; set; }
     public bool FallbackLLM { get; set; }
+    public string? FallbackRazon { get; set; }
     public string? TipologiaDetectada { get; set; }
 }
 
