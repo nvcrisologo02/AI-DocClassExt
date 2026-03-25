@@ -195,8 +195,24 @@ public class DocumentProcessOrchestrator
 
                 if (esDuplicado && !entrada.Instrucciones.ForceReprocess)
                 {
+                    logger.LogWarning("Documento duplicado detectado. Recuperando última ejecución persistida");
+
+                    var salidaDuplicado = await context.CallActivityAsync<ContratoSalida?>(
+                        "ObtenerUltimaEjecucionDuplicadoActivity",
+                        salida.Integridad.SHA256);
+
+                    if (salidaDuplicado is not null)
+                    {
+                        salidaDuplicado.Resultado.ReutilizadaPorDuplicado = true;
+                        salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
+
+                        FinalizarSeguimiento("Completed", "Documento duplicado detectado. Devolviendo última ejecución");
+                        return salidaDuplicado;
+                    }
+
                     salida.Resultado.Estado = "DUPLICADO";
-                    logger.LogWarning("Documento duplicado detectado");
+                    salida.Resultado.ReutilizadaPorDuplicado = true;
+                    salida.Resultado.MensajeReutilizacion = "Documento duplicado detectado sin ejecución histórica reutilizable.";
 
                     FinalizarSeguimiento("Completed", "Documento detectado como duplicado");
                     return salida;
