@@ -44,6 +44,7 @@ var host = new HostBuilder()
         services.Configure<AzureContentUnderstandingSettings>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
         services.Configure<AzureDocumentIntelligenceClassificationSettings>(context.Configuration.GetSection("Classification:AzureDocumentIntelligence"));
+        services.Configure<GptClasificarSettings>(context.Configuration.GetSection("Classification:GptFallback"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
@@ -52,6 +53,13 @@ var host = new HostBuilder()
 
         services.AddSingleton<MockClasificarDataProvider>();
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
+        services.AddSingleton<GptClasificarDataProvider>(provider =>
+        {
+            var settings = provider.GetRequiredService<IOptions<GptClasificarSettings>>();
+            var logger = provider.GetRequiredService<ILogger<GptClasificarDataProvider>>();
+            string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
+            return new GptClasificarDataProvider(settings, configPath, logger);
+        });
         services.AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>();
 
         // Logging

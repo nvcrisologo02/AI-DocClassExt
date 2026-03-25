@@ -6,6 +6,7 @@
   "gdcSubtipoDocumento": "NOTS01",
   "gdcSerie": "AI01",
   "skipGDCUpload": false,
+  "gptDescripcion": "Nota simple registral espa\u00f1ola. Documento oficial del Registro de la Propiedad que certifica la situaci\u00f3n jur\u00eddica de una finca: titular dominical, cargas, hipotecas, servidumbres y gravám\u00e9nes.",
   "version": "1.4",
   "isDefault": true,
   "extraction": {

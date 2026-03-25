@@ -70,6 +70,7 @@ public class ResultadoClasificacion
     public string Modelo { get; set; } = string.Empty;
     public double Confianza { get; set; }
     public bool FallbackLLM { get; set; }
+    public string? FallbackRazon { get; set; }
     public string? TipologiaDetectada { get; set; }
 }
 
