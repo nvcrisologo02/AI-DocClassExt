@@ -14,6 +14,31 @@ namespace DocumentIA.Tests.Unit.Services;
 public class ConfigurableExtraerDataProviderTests
 {
     [Fact]
+    public async Task ObtenerDatosAsync_ExtractionDisabled_ReturnsEmptyResultWithoutCallingProviders()
+    {
+        using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true, extractionEnabled: false);
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        result.Proveedor.Should().Be("none");
+        result.Modelo.Should().Be("disabled");
+        result.DatosExtraidos.Should().BeEmpty();
+
+        fixture.AzureProvider.Verify(
+            p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        fixture.GptProvider.Verify(
+            p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task ObtenerDatosAsync_CuException_ActivaFallbackGpt()
     {
         using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true);
@@ -142,6 +167,7 @@ public class ConfigurableExtraerDataProviderTests
         public Mock<ILogger<ConfigurableExtraerDataProvider>> Logger { get; }
 
         private readonly TipologiaConfigLoader _tipologiaConfigLoader;
+        private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
         private readonly MockExtraerDataProvider _mockProvider;
         private readonly ExtractionRoutingSettings _routingSettings;
         private readonly GptFallbackExtraerSettings _fallbackSettings;
@@ -152,6 +178,9 @@ public class ConfigurableExtraerDataProviderTests
             _tipologiaId = tipologiaId;
 
             _tipologiaConfigLoader = new TipologiaConfigLoader(_tempDir);
+            var promptRegistryPath = Path.Combine(_tempDir, "prompt.models.json");
+            File.WriteAllText(promptRegistryPath, "{\"models\":[]}");
+            _promptModelRegistryLoader = new PromptModelRegistryLoader(promptRegistryPath);
             _mockProvider = new MockExtraerDataProvider();
 
             var dummyRegistry = new ExtractionModelRegistryLoader(Path.Combine(_tempDir, "models.json"));
@@ -196,7 +225,7 @@ public class ConfigurableExtraerDataProviderTests
             Logger = new Mock<ILogger<ConfigurableExtraerDataProvider>>();
         }
 
-        public static TestFixture Create(double minFieldsRatio, bool fallbackEnabled)
+        public static TestFixture Create(double minFieldsRatio, bool fallbackEnabled, bool extractionEnabled = true)
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "DocumentIA.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
@@ -212,7 +241,7 @@ public class ConfigurableExtraerDataProviderTests
                 isDefault = true,
                 extraction = new
                 {
-                    enabled = true,
+                    enabled = extractionEnabled,
                     provider = "azure-content-understanding",
                     modelKey = "default",
                     autoMapUnmappedFields = true,
@@ -237,6 +266,7 @@ public class ConfigurableExtraerDataProviderTests
                 _mockProvider,
                 AzureProvider.Object,
                 GptProvider.Object,
+                _promptModelRegistryLoader,
                 Options.Create(_routingSettings),
                 Options.Create(_fallbackSettings),
                 Logger.Object);

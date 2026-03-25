@@ -7,6 +7,11 @@ public class ContratoSalida
     public Dictionary<string, object> DatosExtraidos { get; set; } = new();
     public DetalleEjecucion DetalleEjecucion { get; set; } = new();
     public ResultadoFinal Resultado { get; set; } = new();
+    /// <summary>
+    /// Resultado del prompt libre definido en la configuración de la tipología.
+    /// Null cuando la tipología no tiene prompt habilitado.
+    /// </summary>
+    public PromptResultado? ResultadoPrompt { get; set; }
 }
 
 public class Identificacion
@@ -42,6 +47,16 @@ public class DetalleEjecucion
     public ResultadoGDC GDC { get; set; } = new();
     // Seguimiento estructurado de actividades para monitorización en tiempo real y post-ejecución.
     public SeguimientoOrquestacion Seguimiento { get; set; } = new();
+    /// <summary>Información de ejecución del prompt libre (cuando la tipología lo tiene habilitado).</summary>
+    public ResultadoPromptEjecucion? Prompt { get; set; }
+}
+
+public class ResultadoPromptEjecucion
+{
+    public string Modelo { get; set; } = string.Empty;
+    public int TiempoMs { get; set; }
+    public bool CombinedWithFallback { get; set; }
+    public string? Error { get; set; }
 }
 
 public class SeguimientoOrquestacion

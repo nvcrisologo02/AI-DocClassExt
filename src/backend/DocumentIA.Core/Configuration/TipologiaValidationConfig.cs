@@ -26,6 +26,12 @@ namespace DocumentIA.Core.Configuration
         /// </summary>
         public string GptDescripcion { get; set; } = string.Empty;
         public TipologiaExtractionConfig Extraction { get; set; } = new();
+        /// <summary>
+        /// Configuración del prompt libre. Cuando está habilitado, se ejecuta el prompt contra
+        /// el modelo indicado y el resultado se devuelve en ResultadoPrompt de la salida.
+        /// Puede coexistir con Extraction (flujo secuencial) o usarse como único paso.
+        /// </summary>
+        public PromptConfig? PromptConfig { get; set; }
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
         public TipologiaValidationConfig()
@@ -52,7 +58,7 @@ namespace DocumentIA.Core.Configuration
 
     public class TipologiaExtractionConfig
     {
-        public bool Enabled { get; set; }
+        public bool Enabled { get; set; } = true;
         public string Provider { get; set; } = string.Empty;
         public string ModelKey { get; set; } = string.Empty;
         public bool AutoMapUnmappedFields { get; set; } = true;

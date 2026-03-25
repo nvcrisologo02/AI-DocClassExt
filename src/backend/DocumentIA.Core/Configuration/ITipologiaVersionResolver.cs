@@ -12,4 +12,6 @@ public sealed record ResolvedTipologia(
     string Version,
     string TechnicalKey,
     bool IsDefault,
-    bool SkipGDCUpload = false);
+    bool SkipGDCUpload = false,
+    bool PromptEnabled = false,
+    bool ExtractionEnabled = true);

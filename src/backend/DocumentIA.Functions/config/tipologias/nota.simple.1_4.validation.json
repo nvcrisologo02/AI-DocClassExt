@@ -16,6 +16,15 @@
     "autoMapUnmappedFields": true,
     "fieldMappings": []
   },
+  "promptConfig": {
+    "enabled": false,
+    "modelKey": "default.gpt4o-mini",
+    "systemPrompt": "",
+    "userPromptTemplate": "",
+    "maxTokens": 2000,
+    "temperature": 0.0,
+    "contentMode": "markdown"
+  },
   "fields": [
     {
       "name": "FincaRegistral",

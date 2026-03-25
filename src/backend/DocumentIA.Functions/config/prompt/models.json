@@ -1,0 +1,13 @@
+{
+  "models": [
+    {
+      "key": "default.gpt4o-mini",
+      "provider": "azure-openai",
+      "endpoint": "",
+      "apiKey": "",
+      "authMode": "ApiKey",
+      "deploymentName": "gpt-4o-mini",
+      "timeoutSeconds": 60
+    }
+  ]
+}

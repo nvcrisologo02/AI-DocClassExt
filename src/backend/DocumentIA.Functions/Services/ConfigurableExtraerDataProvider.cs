@@ -13,6 +13,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private readonly MockExtraerDataProvider _mockProvider;
     private readonly AzureContentUnderstandingProvider _azureProvider;
     private readonly GptFallbackExtraerDataProvider _gptFallbackProvider;
+    private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
     private readonly ExtractionRoutingSettings _routingSettings;
     private readonly GptFallbackExtraerSettings _fallbackSettings;
     private readonly ILogger<ConfigurableExtraerDataProvider> _logger;
@@ -22,6 +23,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         MockExtraerDataProvider mockProvider,
         AzureContentUnderstandingProvider azureProvider,
         GptFallbackExtraerDataProvider gptFallbackProvider,
+        PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<ExtractionRoutingSettings> routingSettings,
         IOptions<GptFallbackExtraerSettings> fallbackSettings,
         ILogger<ConfigurableExtraerDataProvider> logger)
@@ -30,6 +32,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         _mockProvider = mockProvider;
         _azureProvider = azureProvider;
         _gptFallbackProvider = gptFallbackProvider;
+        _promptModelRegistryLoader = promptModelRegistryLoader;
         _routingSettings = routingSettings.Value;
         _fallbackSettings = fallbackSettings.Value;
         _logger = logger;
@@ -38,6 +41,22 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     public async Task<ExtraccionResultado> ObtenerDatosAsync(ExtraccionInput input, CancellationToken cancellationToken = default)
     {
         var config = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
+
+        if (!config.Extraction.Enabled)
+        {
+            _logger.LogInformation(
+                "Extracción deshabilitada para tipología {Tipologia}. Se devuelve resultado vacío.",
+                input.Tipologia);
+
+            return new ExtraccionResultado
+            {
+                Proveedor = "none",
+                Modelo = "disabled",
+                LayoutEnabled = false,
+                DatosExtraidos = new Dictionary<string, object>()
+            };
+        }
+
         var provider = string.IsNullOrWhiteSpace(config.Extraction.Provider)
             ? _routingSettings.DefaultProvider
             : config.Extraction.Provider;
@@ -80,11 +99,31 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             _logger.LogWarning(ex, "Extracción CU falló para {Tipologia}. Activando fallback GPT.", input.Tipologia);
         }
 
-        var resultadoGpt = await _gptFallbackProvider.ObtenerDatosConFallbackAsync(
-            input,
-            config,
-            resultadoCu?.MarkdownExtraido,
-            cancellationToken);
+        ExtraccionResultado resultadoGpt;
+
+        // Optimización: si prompt está habilitado y usa el mismo modelo/deployment que el fallback,
+        // se ejecuta extracción + prompt en una única llamada LLM.
+        if (DebeUsarModoCombinado(config))
+        {
+            _logger.LogInformation(
+                "Activando modo combinado fallback+prompt para tipología {Tipologia}.",
+                input.Tipologia);
+
+            resultadoGpt = await _gptFallbackProvider.ObtenerDatosConFallbackYPromptAsync(
+                input,
+                config,
+                config.PromptConfig!,
+                resultadoCu?.MarkdownExtraido,
+                cancellationToken);
+        }
+        else
+        {
+            resultadoGpt = await _gptFallbackProvider.ObtenerDatosConFallbackAsync(
+                input,
+                config,
+                resultadoCu?.MarkdownExtraido,
+                cancellationToken);
+        }
 
         resultadoGpt.FallbackUsado = true;
         resultadoGpt.FallbackRazon = fallbackRazon;
@@ -119,4 +158,36 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
 
     private static bool IsAzureContentUnderstandingProvider(string provider) =>
         provider.ToLowerInvariant() is "azure-content-understanding" or "azure-cu" or "cu";
+
+    private bool DebeUsarModoCombinado(TipologiaValidationConfig config)
+    {
+        var prompt = config.PromptConfig;
+        if (prompt == null || !prompt.Enabled)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrWhiteSpace(prompt.ModelKey) || string.IsNullOrWhiteSpace(_fallbackSettings.DeploymentName))
+        {
+            return false;
+        }
+
+        PromptModelConfig promptModel;
+        try
+        {
+            promptModel = _promptModelRegistryLoader.GetModel(prompt.ModelKey);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "No se pudo resolver PromptModelConfig para modelKey={ModelKey}. Se omite optimización combinada.",
+                prompt.ModelKey);
+            return false;
+        }
+
+        return string.Equals(
+            promptModel.DeploymentName,
+            _fallbackSettings.DeploymentName,
+            StringComparison.OrdinalIgnoreCase);
+    }
 }
