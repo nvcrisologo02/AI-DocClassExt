@@ -14,6 +14,9 @@ public class ExtraccionResultado
     public bool LayoutEnabled { get; set; }
     public string? OperationId { get; set; }
     public int Paginas { get; set; }
+    public bool FallbackUsado { get; set; }
+    public string? FallbackRazon { get; set; }
+    public string? MarkdownExtraido { get; set; }
     public Dictionary<string, int> TiemposMs { get; set; } = new();
     public Dictionary<string, object> DatosExtraidos { get; set; } = new();
 }
