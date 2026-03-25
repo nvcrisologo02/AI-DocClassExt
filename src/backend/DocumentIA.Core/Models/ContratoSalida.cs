@@ -136,6 +136,8 @@ public class ResultadoFinal
 {
     public string Estado { get; set; } = "OK";
     public double ConfianzaGlobal { get; set; }
+    public bool ReutilizadaPorDuplicado { get; set; }
+    public string? MensajeReutilizacion { get; set; }
 }
 
 /// <summary>
