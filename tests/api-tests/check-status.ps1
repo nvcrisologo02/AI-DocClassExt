@@ -5,6 +5,28 @@ param(
     [string]$InstanceId
 )
 
+function Get-FieldValue {
+    param(
+        [Parameter(Mandatory = $false)]
+        [object]$Object,
+        [Parameter(Mandatory = $true)]
+        [string[]]$Names
+    )
+
+    if ($null -eq $Object) {
+        return $null
+    }
+
+    foreach ($name in $Names) {
+        $prop = $Object.PSObject.Properties[$name]
+        if ($null -ne $prop) {
+            return $prop.Value
+        }
+    }
+
+    return $null
+}
+
 # Si no se proporciona instanceId, leer del archivo
 if ([string]::IsNullOrEmpty($InstanceId)) {
     if (Test-Path "last-instance-id-notasimple14.txt") {
@@ -48,7 +70,35 @@ try {
     
     if ($status.customStatus) {
         Write-Host "`n--- Custom Status ---" -ForegroundColor Cyan
-        $status.customStatus | ConvertTo-Json -Depth 10 | Write-Host
+
+        $current = Get-FieldValue -Object $status.customStatus -Names @("actividadActual", "ActividadActual", "currentActivity")
+        $completed = Get-FieldValue -Object $status.customStatus -Names @("actividadesCompletadas", "ActividadesCompletadas", "completedActivities")
+        $total = Get-FieldValue -Object $status.customStatus -Names @("actividadesTotales", "ActividadesTotales", "totalActivities")
+        $elapsed = Get-FieldValue -Object $status.customStatus -Names @("duracionTotalMs", "DuracionTotalMs", "elapsedMs")
+        $timeline = Get-FieldValue -Object $status.customStatus -Names @("actividades", "Actividades", "activityTimeline")
+
+        if ($null -ne $current -and -not [string]::IsNullOrWhiteSpace([string]$current)) {
+            Write-Host "Actividad actual : $current" -ForegroundColor White
+        }
+
+        if ($null -ne $completed -and $null -ne $total) {
+            Write-Host "Completadas      : $($completed.Count)/$total" -ForegroundColor White
+        }
+
+        if ($null -ne $elapsed) {
+            Write-Host "Duracion total   : $elapsed ms" -ForegroundColor White
+        }
+
+        if ($timeline) {
+            Write-Host "`nTimeline:" -ForegroundColor Cyan
+            foreach ($actividad in $timeline) {
+                $nombre = Get-FieldValue -Object $actividad -Names @("nombre", "Nombre")
+                $estado = Get-FieldValue -Object $actividad -Names @("estado", "Estado")
+                $duracion = Get-FieldValue -Object $actividad -Names @("duracionMs", "DuracionMs")
+                $duracionTexto = if ($null -ne $duracion) { "$duracion ms" } else { "-" }
+                Write-Host (" - {0,-12} {1,-10} {2}" -f $nombre, $estado, $duracionTexto)
+            }
+        }
     }
 
 } catch {

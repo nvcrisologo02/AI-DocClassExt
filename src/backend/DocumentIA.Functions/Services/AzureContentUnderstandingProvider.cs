@@ -73,12 +73,19 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
 
         using var analysisDocument = JsonDocument.Parse(operation.Value.ToString());
         var datosExtraidos = _resultMapper.Map(analysisDocument, tipologiaConfig);
+        var paginas = ResolvePageCount(analysisDocument);
+
+        if (paginas > 0)
+        {
+            datosExtraidos["Paginas"] = paginas;
+        }
 
         _logger.LogInformation(
-            "Azure Content Understanding completado para tipología {Tipologia} con analyzer {AnalyzerId}. Campos: {Count}",
+            "Azure Content Understanding completado para tipología {Tipologia} con analyzer {AnalyzerId}. Campos: {Count}. Paginas: {Paginas}",
             input.Tipologia,
             model.AnalyzerId,
-            datosExtraidos.Count);
+            datosExtraidos.Count,
+            paginas);
 
         return new ExtraccionResultado
         {
@@ -86,6 +93,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             Modelo = model.AnalyzerId,
             LayoutEnabled = true,
             OperationId = operation.Id,
+            Paginas = paginas,
             TiemposMs = new Dictionary<string, int>
             {
                 ["analysis"] = (int)stopwatch.ElapsedMilliseconds
@@ -151,5 +159,60 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             ".txt" => "text/plain",
             _ => "application/octet-stream"
         };
+    }
+
+    private static int ResolvePageCount(JsonDocument analysisDocument)
+    {
+        if (TryGetPagesFromContents(analysisDocument.RootElement, out var pagesFromContents))
+        {
+            return pagesFromContents;
+        }
+
+        if (analysisDocument.RootElement.TryGetProperty("usage", out var usageElement)
+            && usageElement.ValueKind == JsonValueKind.Object
+            && usageElement.TryGetProperty("documentPagesStandard", out var pagesUsageElement)
+            && pagesUsageElement.TryGetInt32(out var pagesFromUsage)
+            && pagesFromUsage > 0)
+        {
+            return pagesFromUsage;
+        }
+
+        return 0;
+    }
+
+    private static bool TryGetPagesFromContents(JsonElement rootElement, out int pages)
+    {
+        pages = 0;
+
+        if (!rootElement.TryGetProperty("result", out var resultElement)
+            || resultElement.ValueKind != JsonValueKind.Object
+            || !resultElement.TryGetProperty("contents", out var contentsElement)
+            || contentsElement.ValueKind != JsonValueKind.Array
+            || contentsElement.GetArrayLength() == 0)
+        {
+            return false;
+        }
+
+        var firstContent = contentsElement[0];
+
+        if (firstContent.TryGetProperty("pages", out var pagesElement)
+            && pagesElement.ValueKind == JsonValueKind.Array
+            && pagesElement.GetArrayLength() > 0)
+        {
+            pages = pagesElement.GetArrayLength();
+            return true;
+        }
+
+        if (firstContent.TryGetProperty("startPageNumber", out var startPageElement)
+            && firstContent.TryGetProperty("endPageNumber", out var endPageElement)
+            && startPageElement.TryGetInt32(out var startPage)
+            && endPageElement.TryGetInt32(out var endPage)
+            && endPage >= startPage)
+        {
+            pages = endPage - startPage + 1;
+            return true;
+        }
+
+        return false;
     }
 }

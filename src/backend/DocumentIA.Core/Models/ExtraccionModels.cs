@@ -13,6 +13,7 @@ public class ExtraccionResultado
     public string Modelo { get; set; } = string.Empty;
     public bool LayoutEnabled { get; set; }
     public string? OperationId { get; set; }
+    public int Paginas { get; set; }
     public Dictionary<string, int> TiemposMs { get; set; } = new();
     public Dictionary<string, object> DatosExtraidos { get; set; } = new();
 }

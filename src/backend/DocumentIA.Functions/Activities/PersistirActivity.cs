@@ -158,12 +158,22 @@ namespace DocumentIA.Functions.Activities
                     { 
                         WriteIndented = false 
                     }),
+
+                    ActivityTimelineJson = salida.DetalleEjecucion.Seguimiento?.Actividades != null
+                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Seguimiento.Actividades)
+                        : null,
                     
                     DatosOriginalesJson = salida.DetalleEjecucion.Integracion?.DatosOriginales != null 
                         ? JsonSerializer.Serialize(salida.DetalleEjecucion.Integracion.DatosOriginales) 
                         : null,
                     DatosFinalesJson = JsonSerializer.Serialize(salida.DatosExtraidos),
-                    DuracionTotalMs = 0
+                    DuracionTotalMs = salida.DetalleEjecucion.Seguimiento?.DuracionTotalMs ?? 0,
+                    DuracionClasificacionMs = GetDuracionActividad(salida, "Clasificar"),
+                    DuracionExtraccionMs = GetDuracionActividad(salida, "Extraer"),
+                    DuracionValidacionMs = GetDuracionActividad(salida, "Validar"),
+                    DuracionIntegracionMs = GetDuracionActividad(salida, "Integrar"),
+                    DuracionGDCMs = GetDuracionActividad(salida, "SubirGDC"),
+                    DuracionPersistenciaMs = GetDuracionActividad(salida, "Persistir")
                 };
 
                 // 3. Guardar detalle de cada plugin ejecutado
@@ -186,7 +196,10 @@ namespace DocumentIA.Functions.Activities
                             FechaEjecucion = DateTime.UtcNow
                         });
                         
-                        ejecucion.DuracionTotalMs += plugin.DurationMs;
+                        if (ejecucion.DuracionTotalMs <= 0)
+                        {
+                            ejecucion.DuracionTotalMs += plugin.DurationMs;
+                        }
                     }
                 }
 
@@ -250,6 +263,24 @@ namespace DocumentIA.Functions.Activities
                 return null;
             
             return tiempos[clave];
+        }
+
+        private int? GetDuracionActividad(ContratoSalida salida, string nombreActividad)
+        {
+            var actividad = salida.DetalleEjecucion.Seguimiento?.Actividades?
+                .FirstOrDefault(a => string.Equals(a.Nombre, nombreActividad, StringComparison.Ordinal));
+
+            if (actividad == null)
+            {
+                return null;
+            }
+
+            if (!actividad.FinUtc.HasValue || string.Equals(actividad.Estado, "Running", StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return actividad.DuracionMs;
         }
     }
 }
