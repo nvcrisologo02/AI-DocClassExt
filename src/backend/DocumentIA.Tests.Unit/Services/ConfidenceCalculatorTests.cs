@@ -138,19 +138,26 @@ public class ConfidenceCalculatorTests
     [Fact]
     public void Validacion_NoErrors_Returns1()
     {
-        ConfidenceCalculator.Validacion(errores: 0, reglasRequeridas: 10).Should().Be(1.0);
+        ConfidenceCalculator.Validacion(errores: 0, totalReglas: 10).Should().Be(1.0);
     }
 
     [Fact]
     public void Validacion_AllErrors_Returns0()
     {
-        ConfidenceCalculator.Validacion(errores: 5, reglasRequeridas: 5).Should().Be(0.0);
+        ConfidenceCalculator.Validacion(errores: 5, totalReglas: 5).Should().Be(0.0);
     }
 
     [Fact]
     public void Validacion_ZeroRules_Returns1()
     {
-        ConfidenceCalculator.Validacion(errores: 0, reglasRequeridas: 0).Should().Be(1.0);
+        ConfidenceCalculator.Validacion(errores: 0, totalReglas: 0).Should().Be(1.0);
+    }
+
+    [Fact]
+    public void Validacion_OneErrorOutOfMany_IsProportional()
+    {
+        // 1 error de 20 reglas = 0.95, no 0.0
+        ConfidenceCalculator.Validacion(errores: 1, totalReglas: 20).Should().BeApproximately(0.95, 0.001);
     }
 
     // ─── Global ────────────────────────────────────────────────────────────────

@@ -96,12 +96,13 @@ public static class ConfidenceCalculator
         => Math.Clamp(selfConf ?? 0.6, 0.0, 1.0);
 
     /// <summary>
-    /// Calcula la confianza de la validación como 1 - (errores / reglasRequeridas).
+    /// Calcula la confianza de la validación como 1 - (errores / totalReglas).
+    /// El denominador es el total de reglas evaluadas, no solo las que fallaron.
     /// </summary>
-    public static double Validacion(int errores, int reglasRequeridas)
+    public static double Validacion(int errores, int totalReglas)
     {
-        if (reglasRequeridas <= 0) return 1.0;
-        return Math.Clamp(1.0 - (errores / (double)reglasRequeridas), 0.0, 1.0);
+        if (totalReglas <= 0) return 1.0;
+        return Math.Clamp(1.0 - (errores / (double)totalReglas), 0.0, 1.0);
     }
 
     /// <summary>

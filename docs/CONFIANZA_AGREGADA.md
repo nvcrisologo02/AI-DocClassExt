@@ -126,15 +126,30 @@ ConfianzaExtrac = CLAMP(selfConf ?? 0.6, 0, 1)
 
 GPT no devuelve confianzas de campo individuales. Se usa `0.6` como valor conservador por defecto. Si el modelo llega a incluir un campo de autoconfianza en el futuro, se capturará.
 
-### 4.4 Validación — `ConfidenceCalculator.Validacion`
+### 4.4 Validación — `ValidarActivity`
 
 ```
-ConfianzaValid = CLAMP(1 − errores / max(1, reglasRequeridas), 0, 1)
+si no hay errores:    ConfianzaValid = 1.0
+si hay errores:       ConfianzaValid = CLAMP(1 − ErrorCount / max(1, TotalChecked), 0, 1)
 ```
 
-- Solo cuentan las reglas con severidad `Error` sobre campos `required`.
-- Los `Warning` no penalizan la confianza de validación (sí penalizan la de extracción en CU vía `RatioWarnings`).
-- Si no hay reglas requeridas definidas, la confianza es `1.0`.
+Donde:
+- `ErrorCount` = número de resultados con severidad `Error`
+- `TotalChecked` = **total de reglas evaluadas** (las que pasaron + las que fallaron), contado en `ValidationEngine`
+
+Los `Warning` **no** penalizan el numerador (`ErrorCount`). Aparecen en `Validaciones` del output pero no reducen la confianza. La confianza es proporcional al ratio de errores sobre el total de reglas configuradas para esa tipología.
+
+Ejemplo: 20 reglas, 1 falla con Error:
+```
+ConfianzaValid = 1 - 1/20 = 0.95  →  EstadoCalidad = "OK"
+```
+
+Ejemplo real (NS 2691): 28 reglas evaluadas, 2 errores de campo:
+```
+ConfianzaValid = 1 - 2/28 ≈ 0.93
+```
+
+> **Nota sobre `ConfidenceCalculator.Validacion`**: existe como método auxiliar con la misma fórmula (`1 - errores/totalReglas`), pero la fuente de verdad en producción es `ValidarActivity`, que calcula directamente sobre el `ValidationReport`.
 
 ---
 
