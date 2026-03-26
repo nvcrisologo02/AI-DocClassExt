@@ -12,6 +12,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
     private readonly MockExtraerDataProvider _mockProvider;
     private readonly AzureContentUnderstandingProvider _azureProvider;
+    private readonly AzureDocumentIntelligenceExtraerDataProvider _diExtraerProvider;
     private readonly GptFallbackExtraerDataProvider _gptFallbackProvider;
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
     private readonly ExtractionRoutingSettings _routingSettings;
@@ -22,6 +23,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         TipologiaConfigLoader tipologiaConfigLoader,
         MockExtraerDataProvider mockProvider,
         AzureContentUnderstandingProvider azureProvider,
+        AzureDocumentIntelligenceExtraerDataProvider diExtraerProvider,
         GptFallbackExtraerDataProvider gptFallbackProvider,
         PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<ExtractionRoutingSettings> routingSettings,
@@ -31,6 +33,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _mockProvider = mockProvider;
         _azureProvider = azureProvider;
+        _diExtraerProvider = diExtraerProvider;
         _gptFallbackProvider = gptFallbackProvider;
         _promptModelRegistryLoader = promptModelRegistryLoader;
         _routingSettings = routingSettings.Value;
@@ -67,7 +70,10 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         {
             return provider.ToLowerInvariant() switch
             {
-                "azure-content-understanding" => await _azureProvider.ObtenerDatosAsync(input, cancellationToken),
+                "azure-content-understanding" or "azure-cu" or "cu"
+                    => await _azureProvider.ObtenerDatosAsync(input, cancellationToken),
+                "azure-document-intelligence" or "azure-di" or "di"
+                    => await _diExtraerProvider.ObtenerDatosAsync(input, cancellationToken),
                 "mock" => await _mockProvider.ObtenerDatosAsync(input, cancellationToken),
                 _ => throw new NotSupportedException($"Proveedor de extracción '{provider}' no soportado para tipología '{input.Tipologia}'")
             };

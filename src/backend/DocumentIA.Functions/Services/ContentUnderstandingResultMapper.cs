@@ -22,6 +22,21 @@ public class ContentUnderstandingResultMapper
             return new Dictionary<string, object>();
         }
 
+        return MapFromFields(fieldsElement, tipologiaConfig);
+    }
+
+    /// <summary>
+    /// Mapea campos directamente desde un JsonElement que representa el objeto "fields".
+    /// Permite reutilizar la lógica de mapeo cuando la ruta al elemento fields difiere
+    /// del formato CU (p. ej. en respuestas de DI custom: analyzeResult.documents[0].fields).
+    /// </summary>
+    public Dictionary<string, object> MapFromFields(JsonElement fieldsElement, TipologiaValidationConfig tipologiaConfig)
+    {
+        if (fieldsElement.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, object>();
+        }
+
         var result = new Dictionary<string, object>();
         var mappings = tipologiaConfig.Extraction.FieldMappings
             .ToDictionary(m => m.TargetField, m => m.SourcePath, StringComparer.OrdinalIgnoreCase);

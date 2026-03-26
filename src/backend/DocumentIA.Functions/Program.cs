@@ -49,6 +49,7 @@ var host = new HostBuilder()
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
+        services.AddSingleton<AzureDocumentIntelligenceExtraerDataProvider>();
         services.AddSingleton<GptFallbackExtraerDataProvider>();
         services.AddSingleton<IPromptDataProvider, OpenAIPromptDataProvider>();
         services.AddSingleton<ContentUnderstandingResultMapper>();
