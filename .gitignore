@@ -72,3 +72,5 @@ tests/api-tests/last-instance-id.txt
 tests/api-tests/last-instance-id.txt
 docs/auxiliares/
 tests/api-tests/last-instance-id-notasimple14-classify.txt
+tests/api-tests/last-instance-id-*.txt
+tmp_func_host_prompt_*.log
