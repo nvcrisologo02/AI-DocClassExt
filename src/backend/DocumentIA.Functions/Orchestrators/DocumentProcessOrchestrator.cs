@@ -314,6 +314,10 @@ public class DocumentProcessOrchestrator
                 return salida;
             }
 
+            resultadoClasificacion.Confianza = RedondearSalida(resultadoClasificacion.Confianza);
+            resultadoClasificacion.ConfianzaDI = RedondearSalida(resultadoClasificacion.ConfianzaDI);
+            resultadoClasificacion.ConfianzaGPT = RedondearSalida(resultadoClasificacion.ConfianzaGPT);
+
             ExtraccionResultado resultadoExtraccion;
             if (tipologiaResuelta.ExtractionEnabled)
             {
@@ -402,7 +406,7 @@ public class DocumentProcessOrchestrator
                 LayoutEnabled = resultadoExtraccion.LayoutEnabled,
                 FallbackUsado = resultadoExtraccion.FallbackUsado,
                 FallbackRazon = resultadoExtraccion.FallbackRazon,
-                ConfianzaExtraccion = resultadoExtraccion.ConfianzaExtraccion,
+                ConfianzaExtraccion = RedondearSalida(resultadoExtraccion.ConfianzaExtraccion),
                 ProveedorExtrac = resultadoExtraccion.ProveedorExtrac,
                 TiemposMs = resultadoExtraccion.TiemposMs
             };
@@ -704,12 +708,12 @@ public class DocumentProcessOrchestrator
             var confValid = resultadoValidacion.ConfianzaValidacion;
             var confidenceCfg = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
 
-            salida.Resultado.ConfianzaGlobal = ConfidenceCalculator.Global(confClasif, confExtrac, confValid);
+            salida.Resultado.ConfianzaGlobal = RedondearSalida(ConfidenceCalculator.Global(confClasif, confExtrac, confValid));
             salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(salida.Resultado.ConfianzaGlobal, confidenceCfg);
-            salida.Resultado.ConfianzaClasificacion = confClasif;
-            salida.Resultado.ConfianzaExtraccion = confExtrac ?? 0.0;
-            salida.Resultado.ConfianzaValidacion = confValid;
-            salida.DetalleEjecucion.Postproceso.ConfianzaValidacion = confValid;
+            salida.Resultado.ConfianzaClasificacion = RedondearSalida(confClasif);
+            salida.Resultado.ConfianzaExtraccion = RedondearSalida(confExtrac ?? 0.0);
+            salida.Resultado.ConfianzaValidacion = RedondearSalida(confValid);
+            salida.DetalleEjecucion.Postproceso.ConfianzaValidacion = RedondearSalida(confValid);
 
             logger.LogInformation(
                 "ConfGlobal={Global:F3} \u2192 {EstadoCalidad} (Clasif:{Clasif:F3}, Extrac:{Extrac:F3}, Valid:{Valid:F3})",
@@ -752,5 +756,10 @@ public class DocumentProcessOrchestrator
             JsonElement json when json.ValueKind == JsonValueKind.String && int.TryParse(json.GetString(), out var parsedString) => parsedString,
             _ => 0
         };
+    }
+
+    private static double RedondearSalida(double value)
+    {
+        return Math.Round(value, 3, MidpointRounding.AwayFromZero);
     }
 }
