@@ -45,8 +45,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             input.Entrada.Documento.Name,
             _settings.DeploymentName);
 
-        var pdfBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64);
         var tipologias = _tipologiasPromptSection.Value;
+        var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
 
         var systemMessage = new SystemChatMessage(
             "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
@@ -56,13 +56,27 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             "usando exactamente este formato: " +
             "{\"tipologia\": \"<tipologiaId>\", \"confianza\": <número entre 0.0 y 1.0>, \"razon\": \"<explicación breve en español>\"}");
 
-        var userMessage = new UserChatMessage(
-            ChatMessageContentPart.CreateTextPart(
-                $"Clasifica este documento entre las siguientes tipologías conocidas:\n\n{tipologias}\n\n" +
-                "Si el documento no corresponde a ninguna tipología conocida, " +
-                "responde con tipologiaId=\"Desconocido\" y confianza inferior a 0.3."),
-            ChatMessageContentPart.CreateImagePart(
-                BinaryData.FromBytes(pdfBytes), "application/pdf"));
+        var textoUsuario =
+            $"Clasifica este documento entre las siguientes tipologías conocidas:\n\n{tipologias}\n\n" +
+            "Si el documento no corresponde a ninguna tipología conocida, " +
+            "responde con tipologiaId=\"Desconocido\" y confianza inferior a 0.3.";
+
+        if (!string.IsNullOrWhiteSpace(contextoTexto))
+        {
+            textoUsuario += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}";
+        }
+        else
+        {
+            _logger.LogWarning(
+                "No hay contexto textual preprocesado para el fallback de clasificación en {Documento}. Se continuará con contexto mínimo.",
+                input.Entrada.Documento.Name);
+
+            textoUsuario +=
+                $"\n\nNo hay contenido textual disponible para este fallback. " +
+                $"Nombre de archivo: {input.Entrada.Documento.Name}.";
+        }
+
+        var userMessage = new UserChatMessage(ChatMessageContentPart.CreateTextPart(textoUsuario));
 
         var options = new ChatCompletionOptions
         {
@@ -140,6 +154,48 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             TipologiaDetectada = tipologiaFallback,
             Confianza = Math.Clamp(confianzaFallback, 0.0, 1.0)
         };
+    }
+
+    private static string? ObtenerContextoTexto(IDictionary<string, object> datosNormalizados)
+    {
+        if (datosNormalizados is null || datosNormalizados.Count == 0)
+        {
+            return null;
+        }
+
+        var claves = new[]
+        {
+            "Markdown",
+            "markdown",
+            "Texto",
+            "texto",
+            "ContentText",
+            "contentText"
+        };
+
+        foreach (var clave in claves)
+        {
+            if (!datosNormalizados.TryGetValue(clave, out var raw) || raw is null)
+            {
+                continue;
+            }
+
+            if (raw is string s && !string.IsNullOrWhiteSpace(s))
+            {
+                return s;
+            }
+
+            if (raw is JsonElement json && json.ValueKind == JsonValueKind.String)
+            {
+                var value = json.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+        }
+
+        return null;
     }
 
     private ChatClient CreateChatClient()

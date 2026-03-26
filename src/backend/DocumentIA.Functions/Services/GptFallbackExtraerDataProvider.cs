@@ -51,20 +51,24 @@ public class GptFallbackExtraerDataProvider
             "Extrae estos campos y devuelve exactamente estos nombres de clave:\n" +
             fieldList;
 
-        UserChatMessage userMessage;
+        var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
+            ? ObtenerContextoTexto(input.DatosNormalizados)
+            : markdownContexto;
 
-        if (!string.IsNullOrWhiteSpace(markdownContexto))
-        {
-            userMessage = new UserChatMessage(
+        var userMessage = !string.IsNullOrWhiteSpace(contextoTexto)
+            ? new UserChatMessage(
                 ChatMessageContentPart.CreateTextPart(
-                    $"{userPrompt}\n\nCONTENIDO DEL DOCUMENTO (markdown):\n{markdownContexto}"));
-        }
-        else
+                    $"{userPrompt}\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}"))
+            : new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(
+                    $"{userPrompt}\n\nNo hay contenido textual disponible. " +
+                    $"Nombre de archivo: {input.Entrada.Documento.Name}."));
+
+        if (string.IsNullOrWhiteSpace(contextoTexto))
         {
-            var pdfBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64);
-            userMessage = new UserChatMessage(
-                ChatMessageContentPart.CreateTextPart(userPrompt),
-                ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(pdfBytes), "application/pdf"));
+            _logger.LogWarning(
+                "No hay contexto textual preprocesado para fallback de extracción en {Documento}. Se continuará con contexto mínimo.",
+                input.Entrada.Documento.Name);
         }
 
         var options = new ChatCompletionOptions
@@ -152,20 +156,24 @@ public class GptFallbackExtraerDataProvider
             "**Parte 2 — Instrucción adicional** ('resultado_prompt'):\n" +
             promptInstruction;
 
-        UserChatMessage userMessage;
+        var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
+            ? ObtenerContextoTexto(input.DatosNormalizados)
+            : markdownContexto;
 
-        if (!string.IsNullOrWhiteSpace(markdownContexto))
-        {
-            userMessage = new UserChatMessage(
+        var userMessage = !string.IsNullOrWhiteSpace(contextoTexto)
+            ? new UserChatMessage(
                 ChatMessageContentPart.CreateTextPart(
-                    $"{userPromptText}\n\nCONTENIDO DEL DOCUMENTO (markdown):\n{markdownContexto}"));
-        }
-        else
+                    $"{userPromptText}\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}"))
+            : new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(
+                    $"{userPromptText}\n\nNo hay contenido textual disponible. " +
+                    $"Nombre de archivo: {input.Entrada.Documento.Name}."));
+
+        if (string.IsNullOrWhiteSpace(contextoTexto))
         {
-            var pdfBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64);
-            userMessage = new UserChatMessage(
-                ChatMessageContentPart.CreateTextPart(userPromptText),
-                ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(pdfBytes), "application/pdf"));
+            _logger.LogWarning(
+                "No hay contexto textual preprocesado para fallback combinado de extracción en {Documento}. Se continuará con contexto mínimo.",
+                input.Entrada.Documento.Name);
         }
 
         var options = new ChatCompletionOptions
@@ -322,6 +330,48 @@ public class GptFallbackExtraerDataProvider
         return string.Join(
             "\n",
             config.Fields.Select(f => $"- {f.Name} (tipo={f.Type}, requerido={f.Required})"));
+    }
+
+    private static string? ObtenerContextoTexto(IDictionary<string, object> datosNormalizados)
+    {
+        if (datosNormalizados is null || datosNormalizados.Count == 0)
+        {
+            return null;
+        }
+
+        var claves = new[]
+        {
+            "Markdown",
+            "markdown",
+            "Texto",
+            "texto",
+            "ContentText",
+            "contentText"
+        };
+
+        foreach (var clave in claves)
+        {
+            if (!datosNormalizados.TryGetValue(clave, out var raw) || raw is null)
+            {
+                continue;
+            }
+
+            if (raw is string s && !string.IsNullOrWhiteSpace(s))
+            {
+                return s;
+            }
+
+            if (raw is JsonElement json && json.ValueKind == JsonValueKind.String)
+            {
+                var value = json.GetString();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    return value;
+                }
+            }
+        }
+
+        return null;
     }
 
     private ChatClient CreateChatClient()

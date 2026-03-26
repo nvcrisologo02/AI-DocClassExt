@@ -50,3 +50,21 @@ public class PromptActivityInput
     /// </summary>
     public string? ResultadoPromptCombinado { get; set; }
 }
+
+/// <summary>
+/// Input para extraer markdown con DI prebuilt-layout antes del prompt
+/// en escenarios en los que no se ejecuta extracción de negocio.
+/// </summary>
+public class ExtraerMarkdownLayoutInput
+{
+    public string Tipologia { get; set; } = string.Empty;
+    public string DocumentoBase64 { get; set; } = string.Empty;
+    public string NombreDocumento { get; set; } = string.Empty;
+}
+
+public class ExtraerMarkdownLayoutResultado
+{
+    public string Modelo { get; set; } = "prebuilt-layout";
+    public string? Markdown { get; set; }
+    public int Paginas { get; set; }
+}

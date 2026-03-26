@@ -81,6 +81,11 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             datosExtraidos["Paginas"] = paginas;
         }
 
+        if (!string.IsNullOrWhiteSpace(markdownExtraido))
+        {
+            datosExtraidos["Markdown"] = markdownExtraido;
+        }
+
         _logger.LogInformation(
             "Azure Content Understanding completado para tipología {Tipologia} con analyzer {AnalyzerId}. Campos: {Count}. Paginas: {Paginas}",
             input.Tipologia,

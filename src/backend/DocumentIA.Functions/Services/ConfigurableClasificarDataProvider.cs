@@ -91,17 +91,42 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                 fallbackRazon);
         }
 
-        var resultadoGpt = await _gptProvider.ClasificarAsync(input, cancellationToken);
-        resultadoGpt.FallbackLLM = true;
-        resultadoGpt.FallbackRazon = fallbackRazon;
+        // Si DI extrajo contenido textual, inyectarlo en DatosNormalizados para que el fallback GPT lo use
+        if (!string.IsNullOrWhiteSpace(resultadoDI?.ContentExtraido)
+            && !input.DatosNormalizados.ContainsKey("Markdown"))
+        {
+            input.DatosNormalizados["Markdown"] = resultadoDI.ContentExtraido;
+            _logger.LogInformation(
+                "Contenido DI ({Length} chars) inyectado en DatosNormalizados para fallback GPT de clasificación.",
+                resultadoDI.ContentExtraido.Length);
+        }
 
-        _logger.LogInformation(
-            "Fallback GPT completado para {Documento}. Tipología: {Tipologia}, Confianza: {Confianza:F3}",
-            input.Entrada.Documento.Name,
-            resultadoGpt.TipologiaDetectada,
-            resultadoGpt.Confianza);
+        try
+        {
+            var resultadoGpt = await _gptProvider.ClasificarAsync(input, cancellationToken);
+            resultadoGpt.FallbackLLM = true;
+            resultadoGpt.FallbackRazon = fallbackRazon;
 
-        return resultadoGpt;
+            _logger.LogInformation(
+                "Fallback GPT completado para {Documento}. Tipología: {Tipologia}, Confianza: {Confianza:F3}",
+                input.Entrada.Documento.Name,
+                resultadoGpt.TipologiaDetectada,
+                resultadoGpt.Confianza);
+
+            return resultadoGpt;
+        }
+        catch (Exception ex) when (resultadoDI is not null)
+        {
+            resultadoDI.FallbackLLM = false;
+            resultadoDI.FallbackRazon = $"fallback_attempt_failed:{ex.GetType().Name}";
+
+            _logger.LogWarning(
+                ex,
+                "Fallback GPT falló para {Documento}. Se mantiene el resultado de Azure DI.",
+                input.Entrada.Documento.Name);
+
+            return resultadoDI;
+        }
     }
 
     private static bool IsAzureDiProvider(string provider) =>

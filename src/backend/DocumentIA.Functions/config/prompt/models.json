@@ -3,8 +3,8 @@
     {
       "key": "default.gpt4o-mini",
       "provider": "azure-openai",
-      "endpoint": "",
-      "apiKey": "",
+      "endpoint": "https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+      "apiKey": "COMPLETAR_AZURE_AI_API_KEY",
       "authMode": "ApiKey",
       "deploymentName": "gpt-4o-mini",
       "timeoutSeconds": 60

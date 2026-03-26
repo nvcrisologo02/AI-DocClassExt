@@ -264,9 +264,12 @@ public class DocumentProcessOrchestrator
                             DatosNormalizados = datosNormalizados
                         });
 
-                    var mensajeClasificacion = resultadoClasificacion.FallbackLLM
-                        ? $"Fallback Azure OpenAI activado ({resultadoClasificacion.FallbackRazon ?? "sin razon informada"})"
-                        : null;
+                        var mensajeClasificacion = resultadoClasificacion.FallbackLLM
+                            ? $"Fallback Azure OpenAI activado ({resultadoClasificacion.FallbackRazon ?? "sin razon informada"})"
+                            : (!string.IsNullOrWhiteSpace(resultadoClasificacion.FallbackRazon)
+                                && resultadoClasificacion.FallbackRazon.StartsWith("fallback_attempt_failed:", StringComparison.OrdinalIgnoreCase)
+                                ? $"Fallback Azure OpenAI intentado pero no aplicado ({resultadoClasificacion.FallbackRazon})"
+                                : null);
 
                     MarcarFinActividad(
                         "Clasificar",
@@ -352,6 +355,15 @@ public class DocumentProcessOrchestrator
 
             salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
 
+            // Propagar markdown extraído a datosNormalizados para fallbacks
+            if (resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownExtraido) 
+                && markdownExtraido is string markdown 
+                && !string.IsNullOrWhiteSpace(markdown))
+            {
+                datosNormalizados["Markdown"] = markdown;
+                logger.LogInformation("Markdown de extracción propagado a datosNormalizados ({Length} caracteres)", markdown.Length);
+            }
+
             // Prioridad para páginas:
             // 1) valor explícito devuelto por el proveedor de extracción
             // 2) metadato presente en DatosExtraidos
@@ -395,11 +407,63 @@ public class DocumentProcessOrchestrator
             // 4.5 Prompt libre (si la tipología lo tiene habilitado)
             if (tipologiaResuelta.PromptEnabled)
             {
+                var markdownParaPrompt = resultadoExtraccion.MarkdownExtraido;
+                if (string.IsNullOrWhiteSpace(markdownParaPrompt)
+                    && resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownDesdeDatos)
+                    && markdownDesdeDatos is string markdownDetectado
+                    && !string.IsNullOrWhiteSpace(markdownDetectado))
+                {
+                    markdownParaPrompt = markdownDetectado;
+                }
+
+                if (!tipologiaResuelta.ExtractionEnabled && string.IsNullOrWhiteSpace(markdownParaPrompt))
+                {
+                    logger.LogInformation(
+                        "Paso 4.4: Tipología {Tipologia} sin extracción. Obteniendo markdown con DI layout antes del prompt.",
+                        salida.Identificacion.Tipologia);
+
+                    try
+                    {
+                        var markdownLayout = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                            "ExtraerMarkdownLayoutActivity",
+                            new ExtraerMarkdownLayoutInput
+                            {
+                                Tipologia = salida.Identificacion.Tipologia,
+                                DocumentoBase64 = entrada.Documento.Content.Base64,
+                                NombreDocumento = entrada.Documento.Name
+                            });
+
+                        if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
+                        {
+                            markdownParaPrompt = markdownLayout.Markdown;
+                            resultadoExtraccion.MarkdownExtraido = markdownLayout.Markdown;
+                            resultadoExtraccion.DatosExtraidos["Markdown"] = markdownLayout.Markdown;
+                            datosNormalizados["Markdown"] = markdownLayout.Markdown;
+
+                            logger.LogInformation(
+                                "Markdown DI layout preparado para prompt ({Length} caracteres)",
+                                markdownLayout.Markdown.Length);
+                        }
+
+                        if (salida.Identificacion.Paginas <= 0 && markdownLayout.Paginas > 0)
+                        {
+                            salida.Identificacion.Paginas = markdownLayout.Paginas;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(
+                            ex,
+                            "No se pudo extraer markdown DI layout para tipología {Tipologia}. Se continúa con prompt sin markdown.",
+                            salida.Identificacion.Tipologia);
+                    }
+                }
+
                 logger.LogInformation("Paso 4.5: Ejecutando prompt libre de tipología");
                 var promptInput = new PromptActivityInput
                 {
                     Tipologia = salida.Identificacion.Tipologia,
-                    MarkdownExtraido = resultadoExtraccion.MarkdownExtraido,
+                    MarkdownExtraido = markdownParaPrompt,
                     DocumentoBase64 = entrada.Documento.Content.Base64,
                     DatosExtraidos = resultadoExtraccion.DatosExtraidos,
                     // Optimización: si el fallback ya ejecutó el prompt en modo combinado, no hacer otra llamada
@@ -411,6 +475,14 @@ public class DocumentProcessOrchestrator
                     () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
 
                 salida.ResultadoPrompt = resultadoPrompt;
+
+                if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
+                {
+                    // Exponer resultado de prompt en DatosExtraidos para validación/integración/persistencia
+                    salida.DatosExtraidos["ResultadoPrompt"] = resultadoPrompt.Resultado;
+                    salida.DatosExtraidos["resultado_prompt"] = resultadoPrompt.Resultado;
+                }
+
                 salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
                 {
                     Modelo = resultadoPrompt.Modelo,
@@ -510,8 +582,18 @@ public class DocumentProcessOrchestrator
             }
 
             // Resolver IdActivo: primero lo devuelto por plugins, luego el original de entrada
+            salida.Integridad.IdActivoEntrada = resultadoIntegracion.IdActivoEntrada;
             salida.Integridad.IdActivo = resultadoIntegracion.IdActivoResuelto
                 ?? entrada.Trazabilidad.IdActivo;
+            salida.Integridad.IdActivoCambiado = resultadoIntegracion.IdActivoCambiado;
+
+            if (salida.Integridad.IdActivoCambiado)
+            {
+                logger.LogWarning(
+                    "Se detectó cambio de IdActivo entre entrada y salida. Entrada={IdActivoEntrada}, Salida={IdActivo}",
+                    salida.Integridad.IdActivoEntrada,
+                    salida.Integridad.IdActivo);
+            }
 
             if (!string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
                 logger.LogInformation("IdActivo resuelto para GDC: {IdActivo}", salida.Integridad.IdActivo);
