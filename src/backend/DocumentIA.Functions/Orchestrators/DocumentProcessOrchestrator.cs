@@ -481,13 +481,10 @@ public class DocumentProcessOrchestrator
                     "Prompt",
                     () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
 
-                salida.ResultadoPrompt = resultadoPrompt;
-
                 if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
                 {
                     // Exponer resultado de prompt en DatosExtraidos para validación/integración/persistencia
                     salida.DatosExtraidos["ResultadoPrompt"] = resultadoPrompt.Resultado;
-                    salida.DatosExtraidos["resultado_prompt"] = resultadoPrompt.Resultado;
                 }
 
                 salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
