@@ -32,6 +32,11 @@ namespace DocumentIA.Core.Configuration
         /// Puede coexistir con Extraction (flujo secuencial) o usarse como único paso.
         /// </summary>
         public PromptConfig? PromptConfig { get; set; }
+        /// <summary>
+        /// Configuración de umbrales y pesos para el cálculo de confianza.
+        /// Si es null, se usan los defaults de ConfidenceConfig.
+        /// </summary>
+        public ConfidenceConfig? ConfidenceConfig { get; set; }
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
         public TipologiaValidationConfig()
@@ -95,6 +100,26 @@ namespace DocumentIA.Core.Configuration
         {
             Parameters = new Dictionary<string, object?>();
         }
+    }
+
+    /// <summary>
+    /// Umbrales y pesos para el cálculo de confianza agregada.
+    /// Los defaults (0.5/0.3/0.2 pesos; 0.85/0.70 umbrales) se aplican cuando este objeto no se define en el JSON.
+    /// </summary>
+    public class ConfidenceConfig
+    {
+        /// <summary>Umbral de confianza de clasificación DI por debajo del cual se activa fallback GPT.</summary>
+        public double ClasifUmbralFallback { get; set; } = 0.85;
+        /// <summary>Peso del promedio de confianza de campos en el cálculo CU.</summary>
+        public double ExtracWeightCampos { get; set; } = 0.5;
+        /// <summary>Peso del ratio de campos requeridos presentes en el cálculo CU.</summary>
+        public double ExtracWeightRequeridos { get; set; } = 0.3;
+        /// <summary>Peso de la penalización por warnings en el cálculo CU.</summary>
+        public double ExtracWeightWarnings { get; set; } = 0.2;
+        /// <summary>Confianza global mínima para estado OK.</summary>
+        public double UmbralOK { get; set; } = 0.85;
+        /// <summary>Confianza global mínima para estado REVISION (por debajo es ERROR).</summary>
+        public double UmbralRevision { get; set; } = 0.70;
     }
 
     public class ExtractionModelRegistry

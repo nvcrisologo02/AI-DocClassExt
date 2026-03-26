@@ -68,8 +68,8 @@ namespace DocumentIA.Functions.Activities
 
                 var detalle = new DetalleValidacion
                 {
-                    TotalReglas = report.Results.Count,
-                    ReglasAplicadas = report.Results.Count,
+                    TotalReglas = report.TotalChecked,
+                    ReglasAplicadas = report.TotalChecked,
                     Errores = report.ErrorCount,
                     Warnings = report.WarningCount,
                     Validaciones = report.Results.Select(r => new ItemValidacion
@@ -80,8 +80,8 @@ namespace DocumentIA.Functions.Activities
                         Mensaje = r.Message,
                         Sugerencia = r.SuggestionString
                     }).ToList(),
-                    ConfianzaValidacion = report.IsValid ? 1.0 : 
-                        Math.Max(0.0, 1.0 - ((double)report.ErrorCount / Math.Max(report.Results.Count, 1)))
+                    ConfianzaValidacion = report.IsValid ? 1.0 :
+                        Math.Max(0.0, 1.0 - ((double)report.ErrorCount / Math.Max(report.TotalChecked, 1)))
                 };
 
                 return Task.FromResult(detalle);

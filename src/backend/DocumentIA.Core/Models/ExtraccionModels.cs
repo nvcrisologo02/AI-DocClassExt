@@ -17,6 +17,12 @@ public class ExtraccionResultado
     public bool FallbackUsado { get; set; }
     public string? FallbackRazon { get; set; }
     public string? MarkdownExtraido { get; set; }
+    /// <summary>Confianza calculada para la extracción (0-1). Calculada por ConfidenceCalculator.</summary>
+    public double ConfianzaExtraccion { get; set; }
+    /// <summary>Proveedor que realizó la extracción: "AzureContentUnderstanding" | "DICustom" | "GPT4oMini".</summary>
+    public string ProveedorExtrac { get; set; } = string.Empty;
+    /// <summary>Métricas de debug del cálculo de confianza de extracción. Null si no se calculó.</summary>
+    public ConfidenceMetricasExtraccion? MetricasDebug { get; set; }
     public Dictionary<string, int> TiemposMs { get; set; } = new();
     public Dictionary<string, object> DatosExtraidos { get; set; } = new();
     /// <summary>
@@ -24,6 +30,15 @@ public class ExtraccionResultado
     /// (una única llamada LLM que realizó extracción + prompt a la vez). Null en caso contrario.
     /// </summary>
     public string? ResultadoPromptCombinado { get; set; }
+}
+
+public class ConfidenceMetricasExtraccion
+{
+    public double PromedioConfianza { get; set; }
+    public double RatioRequeridos { get; set; }
+    public int CamposConConfianza { get; set; }
+    public int CamposTotales { get; set; }
+    public List<string> CamposBajaConfianza { get; set; } = new();
 }
 
 /// <summary>

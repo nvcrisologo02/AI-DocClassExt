@@ -29,6 +29,8 @@ namespace DocumentIA.Core.Validation.Models
         public int ErrorCount { get; set; }
         public int WarningCount { get; set; }
         public int InfoCount { get; set; }
+        /// <summary>Total de reglas evaluadas (incluye las que pasaron).</summary>
+        public int TotalChecked { get; set; }
 
         public ValidationReport()
         {

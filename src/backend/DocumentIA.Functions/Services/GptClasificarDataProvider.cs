@@ -121,7 +121,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 {
                     Modelo = _settings.DeploymentName,
                     TipologiaDetectada = tipologia,
-                    Confianza = Math.Clamp(confianza, 0.0, 1.0)
+                    Confianza = Math.Clamp(confianza, 0.0, 1.0),
+                    ConfianzaGPT = Math.Clamp(confianza, 0.0, 1.0),
+                    ProveedorClasif = "GPT4oMini"
                 };
             }
         }
@@ -152,7 +154,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         {
             Modelo = _settings.DeploymentName,
             TipologiaDetectada = tipologiaFallback,
-            Confianza = Math.Clamp(confianzaFallback, 0.0, 1.0)
+            Confianza = Math.Clamp(confianzaFallback, 0.0, 1.0),
+            ConfianzaGPT = Math.Clamp(confianzaFallback, 0.0, 1.0),
+            ProveedorClasif = "GPT4oMini"
         };
     }
 

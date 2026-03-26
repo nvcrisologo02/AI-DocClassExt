@@ -138,7 +138,8 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 IsDefault: config.IsDefault,
                 SkipGDCUpload: config.SkipGDCUpload,
                 PromptEnabled: config.PromptConfig?.Enabled == true,
-                ExtractionEnabled: config.Extraction.Enabled);
+                ExtractionEnabled: config.Extraction.Enabled,
+                ConfidenceConfig: config.ConfidenceConfig);
 
             byTechnicalKey[technicalKey] = resolved;
 

@@ -38,6 +38,7 @@ namespace DocumentIA.Core.Validation
 
                 foreach (var rule in rules)
                 {
+                    report.TotalChecked++;
                     var result = rule.Validate(fieldName, fieldValue, context);
                     
                     // IMPORTANTE: Solo agregar resultados INVALIDOS al reporte

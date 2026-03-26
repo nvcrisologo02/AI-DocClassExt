@@ -170,6 +170,8 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
             {
                 Modelo = model.ClassifierId,
                 Confianza = confidence,
+                ConfianzaDI = confidence,
+                ProveedorClasif = "DocumentIntelligence",
                 FallbackLLM = false,
                 TipologiaDetectada = detectedType,
                 ContentExtraido = contentExtraido

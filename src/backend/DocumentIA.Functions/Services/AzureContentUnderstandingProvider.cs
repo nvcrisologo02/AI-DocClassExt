@@ -4,6 +4,7 @@ using Azure.Core;
 using Azure.Identity;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -86,6 +87,24 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             datosExtraidos["Markdown"] = markdownExtraido;
         }
 
+        var camposPresentes = datosExtraidos.Keys
+            .Count(k => k != "Paginas" && k != "Markdown");
+        var camposRequeridos = tipologiaConfig.Fields.Count(f => f.Required);
+        var camposRequeridosPresentes = tipologiaConfig.Fields
+            .Where(f => f.Required)
+            .Count(f => datosExtraidos.ContainsKey(f.Name));
+        var fieldConfs = TryExtractFieldConfidences(analysisDocument);
+        var confidenceConfig = tipologiaConfig.ConfidenceConfig;
+
+        var (confianzaExtraccion, metricasDebug) = ConfidenceCalculator.ExtracCU(
+            fieldConfs: fieldConfs,
+            camposPresentes: camposPresentes,
+            camposTotales: tipologiaConfig.Fields.Count,
+            camposRequeridos: camposRequeridos,
+            camposRequeridosPresentes: camposRequeridosPresentes,
+            warnings: 0,
+            cfg: confidenceConfig);
+
         _logger.LogInformation(
             "Azure Content Understanding completado para tipología {Tipologia} con analyzer {AnalyzerId}. Campos: {Count}. Paginas: {Paginas}",
             input.Tipologia,
@@ -101,6 +120,9 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             OperationId = operation.Id,
             Paginas = paginas,
             MarkdownExtraido = markdownExtraido,
+            ConfianzaExtraccion = confianzaExtraccion,
+            ProveedorExtrac = "AzureContentUnderstanding",
+            MetricasDebug = metricasDebug,
             TiemposMs = new Dictionary<string, int>
             {
                 ["analysis"] = (int)stopwatch.ElapsedMilliseconds
@@ -247,5 +269,46 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Intenta extraer las confianzas de cada campo del response CU.
+    /// Estructura esperada: result.contents[0].fields[fieldName].confidence
+    /// Devuelve null si la API no incluye confianzas de campo.
+    /// </summary>
+    private static IReadOnlyList<double?>? TryExtractFieldConfidences(JsonDocument analysisDocument)
+    {
+        if (!analysisDocument.RootElement.TryGetProperty("result", out var resultEl)
+            || resultEl.ValueKind != JsonValueKind.Object
+            || !resultEl.TryGetProperty("contents", out var contentsEl)
+            || contentsEl.ValueKind != JsonValueKind.Array
+            || contentsEl.GetArrayLength() == 0)
+        {
+            return null;
+        }
+
+        var firstContent = contentsEl[0];
+        if (!firstContent.TryGetProperty("fields", out var fieldsEl)
+            || fieldsEl.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var confs = new List<double?>();
+        foreach (var field in fieldsEl.EnumerateObject())
+        {
+            if (field.Value.ValueKind == JsonValueKind.Object
+                && field.Value.TryGetProperty("confidence", out var confEl)
+                && confEl.TryGetDouble(out var conf))
+            {
+                confs.Add(conf);
+            }
+            else
+            {
+                confs.Add(null);
+            }
+        }
+
+        return confs.Count > 0 ? confs : null;
     }
 }

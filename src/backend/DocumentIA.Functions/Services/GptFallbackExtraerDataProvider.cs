@@ -6,6 +6,7 @@ using Azure.AI.OpenAI;
 using Azure.Identity;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI.Chat;
@@ -97,6 +98,8 @@ public class GptFallbackExtraerDataProvider
             Modelo = _settings.DeploymentName,
             LayoutEnabled = false,
             FallbackUsado = true,
+            ConfianzaExtraccion = ConfidenceCalculator.ExtracGPT(),
+            ProveedorExtrac = "GPT4oMini",
             TiemposMs = new Dictionary<string, int>
             {
                 ["gpt-fallback"] = (int)stopwatch.ElapsedMilliseconds
@@ -230,6 +233,8 @@ public class GptFallbackExtraerDataProvider
             Modelo = _settings.DeploymentName,
             LayoutEnabled = false,
             FallbackUsado = true,
+            ConfianzaExtraccion = ConfidenceCalculator.ExtracGPT(),
+            ProveedorExtrac = "GPT4oMini",
             TiemposMs = new Dictionary<string, int>
             {
                 ["gpt-fallback-combined"] = (int)stopwatch.ElapsedMilliseconds
