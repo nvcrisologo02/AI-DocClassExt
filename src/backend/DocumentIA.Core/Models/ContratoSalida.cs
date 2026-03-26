@@ -89,7 +89,14 @@ public class TrazaActividad
 public class ResultadoClasificacion
 {
     public string Modelo { get; set; } = string.Empty;
+    /// <summary>Confianza final usada en ConfianzaGlobal (DI primario, o GPT si hubo fallback).</summary>
     public double Confianza { get; set; }
+    /// <summary>Confianza bruta de Azure Document Intelligence (0 si no se ejecutó).</summary>
+    public double ConfianzaDI { get; set; }
+    /// <summary>Confianza reportada por GPT fallback (0 si no se activó).</summary>
+    public double ConfianzaGPT { get; set; }
+    /// <summary>Proveedor que produjo la clasificación final: "DocumentIntelligence" | "GPT4oMini".</summary>
+    public string ProveedorClasif { get; set; } = string.Empty;
     public bool FallbackLLM { get; set; }
     public string? FallbackRazon { get; set; }
     public string? TipologiaDetectada { get; set; }
@@ -102,6 +109,10 @@ public class ResultadoClasificacion
 public class ResultadoExtraccion
 {
     public string Modelo { get; set; } = string.Empty;
+    /// <summary>Confianza calculada para la extracción (0-1). 0 cuando la extracción está deshabilitada.</summary>
+    public double ConfianzaExtraccion { get; set; }
+    /// <summary>Proveedor que realizó la extracción: "AzureContentUnderstanding" | "DICustom" | "GPT4oMini".</summary>
+    public string ProveedorExtrac { get; set; } = string.Empty;
     public bool LayoutEnabled { get; set; }
     public bool FallbackUsado { get; set; }
     public string? FallbackRazon { get; set; }
@@ -113,6 +124,8 @@ public class InformacionPostproceso
     public List<string> Normalizaciones { get; set; } = new();
     public List<string> Validaciones { get; set; } = new();
     public List<string> Inconsistencias { get; set; } = new();
+    /// <summary>Confianza de validación calculada por el motor de reglas (1 - errores/reglasRequeridas).</summary>
+    public double ConfianzaValidacion { get; set; }
 }
 
 public class IntegrarInput
@@ -167,6 +180,12 @@ public class ResultadoFinal
 {
     public string Estado { get; set; } = "OK";
     public double ConfianzaGlobal { get; set; }
+    /// <summary>Estado de calidad basado en umbrales de confianza: OK | REVISION | ERROR.</summary>
+    public string EstadoCalidad { get; set; } = string.Empty;
+    /// <summary>Componentes del MIN usado para ConfianzaGlobal.</summary>
+    public double ConfianzaClasificacion { get; set; }
+    public double ConfianzaExtraccion { get; set; }
+    public double ConfianzaValidacion { get; set; }
     public bool ReutilizadaPorDuplicado { get; set; }
     public string? MensajeReutilizacion { get; set; }
 }
