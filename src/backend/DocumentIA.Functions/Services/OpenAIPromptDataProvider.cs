@@ -87,12 +87,17 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         {
             var chatClient = GetOrCreateClient(modelConfig);
 
-            var systemMessage = new SystemChatMessage(
-                string.IsNullOrWhiteSpace(promptConfig.SystemPrompt)
-                    ? "Eres un asistente experto en análisis de documentos inmobiliarios y registrales españoles."
-                    : promptConfig.SystemPrompt);
+            var systemPrompt = string.IsNullOrWhiteSpace(promptConfig.SystemPrompt)
+                ? "Eres un asistente experto en análisis de documentos inmobiliarios y registrales españoles."
+                : promptConfig.SystemPrompt;
 
             var userMessage = BuildUserMessage(promptConfig, input, tipologiaConfig);
+
+            var messages = new List<ChatMessage>
+            {
+                new SystemChatMessage(systemPrompt),
+                userMessage
+            };
 
             var options = new ChatCompletionOptions
             {
@@ -103,10 +108,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(modelConfig.TimeoutSeconds));
 
-            var response = await chatClient.CompleteChatAsync(
-                new List<ChatMessage> { systemMessage, userMessage },
-                options,
-                cts.Token);
+            var response = await chatClient.CompleteChatAsync(messages, options, cts.Token);
 
             stopwatch.Stop();
 
@@ -137,8 +139,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
     {
         // Determinar el contenido del documento a interpolar en {contenido}
         string contenido;
-        if (!string.IsNullOrWhiteSpace(input.MarkdownExtraido) &&
-            !string.Equals(promptConfig.ContentMode, "vision", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(input.MarkdownExtraido))
         {
             contenido = input.MarkdownExtraido;
         }
@@ -156,11 +157,22 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
         // Si hay documento en base64 y el modo es vision (o no hay markdown), adjuntar como imagen
         if (!string.IsNullOrWhiteSpace(input.DocumentoBase64) &&
-            (string.IsNullOrWhiteSpace(input.MarkdownExtraido) ||
-             string.Equals(promptConfig.ContentMode, "vision", StringComparison.OrdinalIgnoreCase)))
+            string.IsNullOrWhiteSpace(input.MarkdownExtraido) &&
+            string.Equals(promptConfig.ContentMode, "vision", StringComparison.OrdinalIgnoreCase))
         {
             var pdfBytes = Convert.FromBase64String(input.DocumentoBase64);
             var ct = string.IsNullOrWhiteSpace(input.ContentType) ? "application/pdf" : input.ContentType;
+
+            if (!ct.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "Prompt vision omitido para tipología {Tipologia}: ContentType {ContentType} no es imagen. Se envía solo texto.",
+                    input.Tipologia,
+                    ct);
+
+                return new UserChatMessage(ChatMessageContentPart.CreateTextPart(promptText));
+            }
+
             return new UserChatMessage(
                 ChatMessageContentPart.CreateTextPart(promptText),
                 ChatMessageContentPart.CreateImagePart(BinaryData.FromBytes(pdfBytes), ct));

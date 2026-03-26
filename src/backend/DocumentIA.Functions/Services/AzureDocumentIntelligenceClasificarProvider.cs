@@ -147,19 +147,32 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
                 }
             }
 
+            string? contentExtraido = null;
+            if (analyzeResult.TryGetProperty("content", out var contentEl)
+                && contentEl.ValueKind == JsonValueKind.String)
+            {
+                var text = contentEl.GetString();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    contentExtraido = text;
+                }
+            }
+
             _logger.LogInformation(
-                "Clasificación Azure DI completada. modelKey={ModelKey}, classifierId={ClassifierId}, detectedType={DetectedType}, confidence={Confidence}",
+                "Clasificación Azure DI completada. modelKey={ModelKey}, classifierId={ClassifierId}, detectedType={DetectedType}, confidence={Confidence}, contentLength={ContentLength}",
                 modelKey,
                 model.ClassifierId,
                 detectedType,
-                confidence);
+                confidence,
+                contentExtraido?.Length ?? 0);
 
             return new ResultadoClasificacion
             {
                 Modelo = model.ClassifierId,
                 Confianza = confidence,
                 FallbackLLM = false,
-                TipologiaDetectada = detectedType
+                TipologiaDetectada = detectedType,
+                ContentExtraido = contentExtraido
             };
         }
     }

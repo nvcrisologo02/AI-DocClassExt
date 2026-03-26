@@ -38,7 +38,8 @@ namespace DocumentIA.Functions.Activities
                 Tipologia = input.Tipologia,
                 Timestamp = DateTime.UtcNow,
                 DatosOriginales = new Dictionary<string, object>(input.DatosExtraidos),
-                DatosFinales = new Dictionary<string, object>(input.DatosExtraidos) // Copia inicial
+                DatosFinales = new Dictionary<string, object>(input.DatosExtraidos), // Copia inicial
+                IdActivoEntrada = string.IsNullOrWhiteSpace(input.IdActivo) ? null : input.IdActivo.Trim()
             };
 
             try
@@ -129,8 +130,21 @@ namespace DocumentIA.Functions.Activities
 
             if (string.IsNullOrWhiteSpace(resultado.IdActivoResuelto) && !string.IsNullOrWhiteSpace(input.IdActivo))
             {
-                resultado.IdActivoResuelto = input.IdActivo;
-                logger.LogInformation("IdActivo mantenido de entrada: {IdActivo}", input.IdActivo);
+                resultado.IdActivoResuelto = input.IdActivo.Trim();
+                logger.LogInformation("IdActivo mantenido de entrada: {IdActivo}", resultado.IdActivoResuelto);
+            }
+
+            resultado.IdActivoCambiado =
+                !string.IsNullOrWhiteSpace(resultado.IdActivoEntrada) &&
+                !string.IsNullOrWhiteSpace(resultado.IdActivoResuelto) &&
+                !string.Equals(resultado.IdActivoEntrada, resultado.IdActivoResuelto, StringComparison.OrdinalIgnoreCase);
+
+            if (resultado.IdActivoCambiado)
+            {
+                logger.LogWarning(
+                    "IdActivo cambiado durante la integración. Entrada={IdActivoEntrada}, Resuelto={IdActivoResuelto}",
+                    resultado.IdActivoEntrada,
+                    resultado.IdActivoResuelto);
             }
 
             if (string.IsNullOrWhiteSpace(resultado.IdActivoResuelto))

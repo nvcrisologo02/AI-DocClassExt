@@ -56,6 +56,7 @@ var host = new HostBuilder()
 
         services.AddSingleton<MockClasificarDataProvider>();
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
+        services.AddSingleton<AzureDocumentIntelligenceLayoutMarkdownProvider>();
         services.AddSingleton<GptClasificarDataProvider>(provider =>
         {
             var settings = provider.GetRequiredService<IOptions<GptClasificarSettings>>();

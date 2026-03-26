@@ -17,11 +17,11 @@
     "fieldMappings": []
   },
   "promptConfig": {
-    "enabled": false,
+    "enabled": true,
     "modelKey": "default.gpt4o-mini",
-    "systemPrompt": "",
-    "userPromptTemplate": "",
-    "maxTokens": 2000,
+    "systemPrompt": "Eres un analista documental. Responde en espanol neutro, sin inventar datos y con formato estructurado.",
+    "userPromptTemplate": "Genera un resumen ejecutivo del documento usando esta estructura exacta:\n1) Objetivo del documento\n2) Datos clave\n3) Riesgos o alertas\n4) Acciones recomendadas\n\nContenido:\n{contenido}",
+    "maxTokens": 1600,
     "temperature": 0.0,
     "contentMode": "markdown"
   },

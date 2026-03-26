@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace DocumentIA.Core.Models;
 
 public class ContratoSalida
@@ -34,6 +36,8 @@ public class Integridad
     public string? RutaBlobStorage { get; set; }
     public string? GestorDocumental { get; set; }
     public string? IdActivo { get; set; }
+    public string? IdActivoEntrada { get; set; }
+    public bool IdActivoCambiado { get; set; }
 }
 
 public class DetalleEjecucion
@@ -89,6 +93,10 @@ public class ResultadoClasificacion
     public bool FallbackLLM { get; set; }
     public string? FallbackRazon { get; set; }
     public string? TipologiaDetectada { get; set; }
+
+    /// <summary>Texto extraído por DI durante la clasificación. Campo transitorio, no se serializa en la respuesta.</summary>
+    [JsonIgnore]
+    public string? ContentExtraido { get; set; }
 }
 
 public class ResultadoExtraccion
@@ -129,10 +137,18 @@ public class ResultadoIntegracion
     public Dictionary<string, object> DatosOriginales { get; set; } = new();
     public Dictionary<string, object> DatosFinales { get; set; } = new();
     /// <summary>
+    /// IdActivo recibido en la entrada de integración, antes de cualquier enriquecimiento.
+    /// </summary>
+    public string? IdActivoEntrada { get; set; }
+    /// <summary>
     /// IdActivo resuelto tras la integración: el devuelto por un plugin (clave "idActivo" en DatosFinales)
     /// o en su defecto el que venía en la entrada. Null si ningún plugin lo proporcionó y no vino en entrada.
     /// </summary>
     public string? IdActivoResuelto { get; set; }
+    /// <summary>
+    /// True cuando el IdActivo informado en entrada existe y el resuelto tras integración no coincide.
+    /// </summary>
+    public bool IdActivoCambiado { get; set; }
 }
 
 public class PluginExecutionResult
