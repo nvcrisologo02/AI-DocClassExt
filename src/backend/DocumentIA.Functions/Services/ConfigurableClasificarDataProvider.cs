@@ -106,6 +106,9 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             var resultadoGpt = await _gptProvider.ClasificarAsync(input, cancellationToken);
             resultadoGpt.FallbackLLM = true;
             resultadoGpt.FallbackRazon = fallbackRazon;
+            // Propagar la confianza DI original para observabilidad
+            if (resultadoDI is not null)
+                resultadoGpt.ConfianzaDI = resultadoDI.ConfianzaDI;
 
             _logger.LogInformation(
                 "Fallback GPT completado para {Documento}. Tipología: {Tipologia}, Confianza: {Confianza:F3}",

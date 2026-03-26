@@ -3,6 +3,7 @@ using Microsoft.DurableTask;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Configuration;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Activities;
 using System;
 using System.Collections.Generic;
@@ -401,6 +402,8 @@ public class DocumentProcessOrchestrator
                 LayoutEnabled = resultadoExtraccion.LayoutEnabled,
                 FallbackUsado = resultadoExtraccion.FallbackUsado,
                 FallbackRazon = resultadoExtraccion.FallbackRazon,
+                ConfianzaExtraccion = resultadoExtraccion.ConfianzaExtraccion,
+                ProveedorExtrac = resultadoExtraccion.ProveedorExtrac,
                 TiemposMs = resultadoExtraccion.TiemposMs
             };
 
@@ -693,9 +696,28 @@ public class DocumentProcessOrchestrator
                 logger.LogInformation($"Procesamiento completado exitosamente para {entrada.Documento.Name}");
             }
 
-            salida.Resultado.ConfianzaGlobal = Math.Min(
-                resultadoClasificacion.Confianza, 
-                resultadoValidacion.ConfianzaValidacion);
+            // Confianza global = MIN(Clasif, Extrac, Valid)
+            var confClasif = resultadoClasificacion.Confianza;
+            var confExtrac = tipologiaResuelta.ExtractionEnabled
+                ? resultadoExtraccion.ConfianzaExtraccion
+                : (double?)null;
+            var confValid = resultadoValidacion.ConfianzaValidacion;
+            var confidenceCfg = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
+
+            salida.Resultado.ConfianzaGlobal = ConfidenceCalculator.Global(confClasif, confExtrac, confValid);
+            salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(salida.Resultado.ConfianzaGlobal, confidenceCfg);
+            salida.Resultado.ConfianzaClasificacion = confClasif;
+            salida.Resultado.ConfianzaExtraccion = confExtrac ?? 0.0;
+            salida.Resultado.ConfianzaValidacion = confValid;
+            salida.DetalleEjecucion.Postproceso.ConfianzaValidacion = confValid;
+
+            logger.LogInformation(
+                "ConfGlobal={Global:F3} \u2192 {EstadoCalidad} (Clasif:{Clasif:F3}, Extrac:{Extrac:F3}, Valid:{Valid:F3})",
+                salida.Resultado.ConfianzaGlobal,
+                salida.Resultado.EstadoCalidad,
+                confClasif,
+                confExtrac ?? 0.0,
+                confValid);
 
             FinalizarSeguimiento("Completed");
         }
