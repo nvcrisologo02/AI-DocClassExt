@@ -13,7 +13,7 @@ public class ContratoSalida
     /// Resultado del prompt libre definido en la configuración de la tipología.
     /// Null cuando la tipología no tiene prompt habilitado.
     /// </summary>
-    public PromptResultado? ResultadoPrompt { get; set; }
+    //public PromptResultado? ResultadoPrompt { get; set; }
 }
 
 public class Identificacion
@@ -179,6 +179,8 @@ public class PluginExecutionResult
 public class ResultadoFinal
 {
     public string Estado { get; set; } = "OK";
+    /// <summary>Detalle del motivo cuando Estado = ERROR.</summary>
+    public string? MensajeError { get; set; }
     public double ConfianzaGlobal { get; set; }
     /// <summary>Estado de calidad basado en umbrales de confianza: OK | REVISION | ERROR.</summary>
     public string EstadoCalidad { get; set; } = string.Empty;

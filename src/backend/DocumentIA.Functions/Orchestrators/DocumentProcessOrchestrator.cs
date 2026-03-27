@@ -282,6 +282,42 @@ public class DocumentProcessOrchestrator
                 catch (Exception ex)
                 {
                     MarcarFinActividad("Clasificar", "Failed", ex.Message);
+                    
+                    // Si la clasificación falló porque no se pudo identificar la tipología,
+                    // terminar el proceso ahí sin intentar extraer ni validar
+                    if (ex.Message.Contains("No se ha podido identificar la tipologia"))
+                    {
+                        const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
+
+                        logger.LogWarning(
+                            "Clasificación falló: no se pudo identificar la tipología. Terminando procesamiento.");
+
+                        salida.DetalleEjecucion.Clasificacion = new ResultadoClasificacion
+                        {
+                            Modelo = "gpt-4o-mini",
+                            Confianza = 0,
+                            ConfianzaDI = 0,
+                            ConfianzaGPT = 0,
+                            ProveedorClasif = "GPT4oMini",
+                            FallbackLLM = true,
+                            FallbackRazon = "fallback_unclassified",
+                            TipologiaDetectada = "Desconocido"
+                        };
+                        
+                        salida.Resultado.Estado = "ERROR";
+                        salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
+                        salida.Resultado.ConfianzaGlobal = 0;
+                        salida.Resultado.EstadoCalidad = "ERROR";
+                        salida.Resultado.ConfianzaClasificacion = 0;
+                        salida.Resultado.ConfianzaExtraccion = 0;
+                        salida.Resultado.ConfianzaValidacion = 0;
+                        salida.DetalleEjecucion.Postproceso.Inconsistencias.Add(
+                            $"Error: {mensajeTipologiaNoIdentificada}");
+                        
+                        FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
+                        return salida;
+                    }
+                    
                     throw;
                 }
             }
@@ -296,7 +332,10 @@ public class DocumentProcessOrchestrator
                     "ResolverTipologiaActivity",
                     tipologiaEntrada);
             }
-            catch (Exception ex) when (ex is KeyNotFoundException || ex.InnerException is KeyNotFoundException)
+            catch (Exception ex) when (
+                ex is KeyNotFoundException ||
+                ex.InnerException is KeyNotFoundException ||
+                ex is TaskFailedException && ex.Message.Contains("No existe la tipologia"))
             {
                 const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
 
@@ -307,6 +346,12 @@ public class DocumentProcessOrchestrator
 
                 salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
                 salida.Resultado.Estado = "ERROR";
+                salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
+                salida.Resultado.ConfianzaGlobal = 0;
+                salida.Resultado.EstadoCalidad = "ERROR";
+                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                salida.Resultado.ConfianzaExtraccion = 0;
+                salida.Resultado.ConfianzaValidacion = 0;
                 salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
 
                 FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
@@ -747,6 +792,7 @@ public class DocumentProcessOrchestrator
         {
             logger.LogError(ex, "Error durante el procesamiento");
             salida.Resultado.Estado = "ERROR";
+            salida.Resultado.MensajeError = ex.Message;
             salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {ex.Message}");
             FinalizarSeguimiento("Failed", ex.Message);
         }

@@ -1,4 +1,4 @@
-using DocumentIA.Core.Models;
+﻿using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -41,7 +41,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             : requestedProvider;
 
         _logger.LogInformation(
-            "Proveedor de clasificación resuelto: {Provider}. Model solicitado: {ModelInstruction}",
+            "Proveedor de clasificaciÃ³n resuelto: {Provider}. Model solicitado: {ModelInstruction}",
             provider,
             input.Entrada.Instrucciones.Classification.Model);
 
@@ -51,11 +51,11 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             return provider.ToLowerInvariant() switch
             {
                 "mock" => await _mockProvider.ClasificarAsync(input, cancellationToken),
-                _ => throw new NotSupportedException($"Proveedor de clasificación '{provider}' no soportado")
+                _ => throw new NotSupportedException($"Proveedor de clasificaciÃ³n '{provider}' no soportado")
             };
         }
 
-        // Ruta Azure DI — sin fallback si está desactivado
+        // Ruta Azure DI â€” sin fallback si estÃ¡ desactivado
         if (!_fallbackSettings.Enabled)
         {
             return await _azureProvider.ClasificarAsync(input, cancellationToken);
@@ -69,24 +69,34 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         {
             resultadoDI = await _azureProvider.ClasificarAsync(input, cancellationToken);
 
-            if (resultadoDI.Confianza >= _fallbackSettings.FallbackThreshold)
+            // Si DI devuelve RESTO (tipologÃ­a genÃ©rica/desconocida), activar fallback GPT sin importar confianza
+            if (string.Equals(resultadoDI.TipologiaDetectada, "RESTO", StringComparison.OrdinalIgnoreCase))
+            {
+                fallbackRazon = $"resto_classification:{resultadoDI.Confianza:F3}";
+                _logger.LogWarning(
+                    "Azure DI clasificÃ³ como RESTO para {Documento}. Activando fallback GPT obligatorio.",
+                    input.Entrada.Documento.Name);
+            }
+            else if (resultadoDI.Confianza >= _fallbackSettings.FallbackThreshold)
             {
                 return resultadoDI;
             }
-
-            fallbackRazon = $"low_confidence:{resultadoDI.Confianza:F3}";
-            _logger.LogWarning(
-                "Confianza DI ({Confianza:F3}) inferior al umbral de fallback ({Umbral:F3}) para {Documento}. Activando fallback GPT.",
-                resultadoDI.Confianza,
-                _fallbackSettings.FallbackThreshold,
-                input.Entrada.Documento.Name);
+            else
+            {
+                fallbackRazon = $"low_confidence:{resultadoDI.Confianza:F3}";
+                _logger.LogWarning(
+                    "Confianza DI ({Confianza:F3}) inferior al umbral de fallback ({Umbral:F3}) para {Documento}. Activando fallback GPT.",
+                    resultadoDI.Confianza,
+                    _fallbackSettings.FallbackThreshold,
+                    input.Entrada.Documento.Name);
+            }
         }
         catch (Exception ex)
         {
             fallbackRazon = $"exception:{ex.GetType().Name}";
             _logger.LogWarning(
                 ex,
-                "Azure DI falló para {Documento}. Activando fallback GPT. Razón: {Razon}",
+                "Azure DI fallÃ³ para {Documento}. Activando fallback GPT. RazÃ³n: {Razon}",
                 input.Entrada.Documento.Name,
                 fallbackRazon);
         }
@@ -97,7 +107,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         {
             input.DatosNormalizados["Markdown"] = resultadoDI.ContentExtraido;
             _logger.LogInformation(
-                "Contenido DI ({Length} chars) inyectado en DatosNormalizados para fallback GPT de clasificación.",
+                "Contenido DI ({Length} chars) inyectado en DatosNormalizados para fallback GPT de clasificaciÃ³n.",
                 resultadoDI.ContentExtraido.Length);
         }
 
@@ -111,12 +121,35 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                 resultadoGpt.ConfianzaDI = resultadoDI.ConfianzaDI;
 
             _logger.LogInformation(
-                "Fallback GPT completado para {Documento}. Tipología: {Tipologia}, Confianza: {Confianza:F3}",
+                "Fallback GPT completado para {Documento}. TipologÃ­a: {Tipologia}, Confianza: {Confianza:F3}",
                 input.Entrada.Documento.Name,
                 resultadoGpt.TipologiaDetectada,
                 resultadoGpt.Confianza);
 
+            // ValidaciÃ³n: Si el fallback GPT no logrÃ³ clasificar (devuelve Desconocido o muy baja confianza),
+            // lanzar excepciÃ³n para terminar la clasificaciÃ³n sin intentar resolver la tipologÃ­a
+            if (string.Equals(resultadoGpt.TipologiaDetectada, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                || resultadoGpt.Confianza < 0.3)
+            {
+                _logger.LogWarning(
+                    "Fallback GPT no logrÃ³ clasificar el documento {Documento}. " +
+                    "TipologÃ­a: {Tipologia}, Confianza: {Confianza:F3}. Abortando procesamiento.",
+                    input.Entrada.Documento.Name,
+                    resultadoGpt.TipologiaDetectada,
+                    resultadoGpt.Confianza);
+
+                throw new InvalidOperationException(
+                    $"No se ha podido identificar la tipologia del documento. " +
+                    $"Fallback GPT devolviÃ³: {resultadoGpt.TipologiaDetectada} (confianza: {resultadoGpt.Confianza:F3})");
+            }
+
             return resultadoGpt;
+        }
+        catch (InvalidOperationException)
+        {
+            // Si fallback GPT no logrÃ³ clasificar documentos Desconocido, propagar la excepciÃ³n
+            // para que el orquestador termine con ERROR sin retroceder a DI
+            throw;
         }
         catch (Exception ex) when (resultadoDI is not null)
         {
@@ -125,7 +158,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
 
             _logger.LogWarning(
                 ex,
-                "Fallback GPT falló para {Documento}. Se mantiene el resultado de Azure DI.",
+                "Fallback GPT fallÃ³ para {Documento}. Se mantiene el resultado de Azure DI.",
                 input.Entrada.Documento.Name);
 
             return resultadoDI;
@@ -135,3 +168,4 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
     private static bool IsAzureDiProvider(string provider) =>
         provider.ToLowerInvariant() is "azure-document-intelligence" or "azure-di" or "di";
 }
+
