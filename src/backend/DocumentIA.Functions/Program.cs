@@ -36,6 +36,7 @@ var host = new HostBuilder()
         services.AddScoped<IDocumentoRepository, DocumentoRepository>();
         services.AddScoped<ITipologiaRepository, TipologiaRepository>();
         services.AddScoped<IModeloConfigRepository, ModeloConfigRepository>();
+        services.AddScoped<IPluginTipologiaConfigRepository, PluginTipologiaConfigRepository>();
         services.AddScoped<IAuditoriaRepository, AuditoriaRepository>();
         services.AddScoped<IDocumentoEjecucionRepository, DocumentoEjecucionRepository>();
         services.AddMemoryCache();
@@ -139,8 +140,10 @@ var host = new HostBuilder()
         services.AddSingleton<PluginConfigLoader>(provider =>
         {
             var logger = provider.GetRequiredService<ILogger<PluginConfigLoader>>();
-            string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
-            return new PluginConfigLoader(configPath, logger);
+            return new PluginConfigLoader(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                logger);
         });
 
         // Registrar TipologiaConfigLoader (usado por SubirGDCActivity)

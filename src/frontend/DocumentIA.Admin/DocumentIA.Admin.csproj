@@ -9,6 +9,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\backend\DocumentIA.Core\DocumentIA.Core.csproj" />
     <ProjectReference Include="..\..\backend\DocumentIA.Data\DocumentIA.Data.csproj" />
+    <ProjectReference Include="..\..\backend\DocumentIA.Plugins\DocumentIA.Plugins.csproj" />
   </ItemGroup>
 
 </Project>

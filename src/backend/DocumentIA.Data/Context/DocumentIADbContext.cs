@@ -18,6 +18,7 @@ public class DocumentIADbContext : DbContext
     public DbSet<PluginEjecucionEntity> PluginEjecuciones { get; set; } = null!;
     public DbSet<ValidacionResultadoEntity> ValidacionResultados { get; set; } = null!;
     public DbSet<ModeloConfigEntity> ModeloConfigs { get; set; } = null!;
+    public DbSet<PluginTipologiaConfigEntity> PluginTipologiaConfigs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +54,10 @@ public class DocumentIADbContext : DbContext
 
         modelBuilder.Entity<ModeloConfigEntity>()
             .HasIndex(m => m.Key)
+            .IsUnique();
+
+        modelBuilder.Entity<PluginTipologiaConfigEntity>()
+            .HasIndex(p => p.TipologiaCodigo)
             .IsUnique();
 
         // Seed data inicial

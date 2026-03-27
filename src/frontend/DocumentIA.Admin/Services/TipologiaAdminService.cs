@@ -2,6 +2,7 @@ using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
+using DocumentIA.Plugins.Integration;
 using Microsoft.EntityFrameworkCore;
 
 namespace DocumentIA.Admin.Services;
@@ -101,6 +102,73 @@ public class TipologiaAdminService
         return modelo;
     }
 
+    public async Task<IReadOnlyCollection<PluginTipologiaConfigEntity>> GetPluginConfigsAsync()
+    {
+        return await _dbContext.PluginTipologiaConfigs
+            .OrderBy(x => x.TipologiaCodigo)
+            .ToListAsync();
+    }
+
+    public async Task<PluginTipologiaConfigEntity?> GetPluginConfigAsync(string tipologiaCodigo)
+    {
+        return await _dbContext.PluginTipologiaConfigs
+            .FirstOrDefaultAsync(x => x.TipologiaCodigo == tipologiaCodigo);
+    }
+
+    public async Task<PluginTipologiaConfigEntity> SavePluginDraftAsync(string tipologiaCodigo, string configuracionJson)
+    {
+        var entity = await _dbContext.PluginTipologiaConfigs
+            .FirstOrDefaultAsync(x => x.TipologiaCodigo == tipologiaCodigo);
+
+        if (entity is null)
+        {
+            entity = new PluginTipologiaConfigEntity
+            {
+                TipologiaCodigo = tipologiaCodigo,
+                ConfiguracionJson = configuracionJson,
+                Estado = EstadoPluginConfig.Draft,
+                FechaCreacion = DateTime.UtcNow,
+                FechaActualizacion = DateTime.UtcNow
+            };
+            _dbContext.PluginTipologiaConfigs.Add(entity);
+        }
+        else
+        {
+            entity.ConfiguracionJson = configuracionJson;
+            entity.Estado = EstadoPluginConfig.Draft;
+            entity.FechaActualizacion = DateTime.UtcNow;
+        }
+
+        await _dbContext.SaveChangesAsync();
+        return entity;
+    }
+
+    public async Task PublishPluginConfigAsync(string tipologiaCodigo, string usuario)
+    {
+        var entity = await _dbContext.PluginTipologiaConfigs
+            .FirstOrDefaultAsync(x => x.TipologiaCodigo == tipologiaCodigo)
+            ?? throw new InvalidOperationException($"No existe configuracion de plugins para '{tipologiaCodigo}'.");
+
+        entity.Estado = EstadoPluginConfig.Published;
+        entity.PublicadaEn = DateTime.UtcNow;
+        entity.PublicadaPor = usuario;
+        entity.FechaActualizacion = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync();
+    }
+
+    public async Task RetirePluginConfigAsync(string tipologiaCodigo)
+    {
+        var entity = await _dbContext.PluginTipologiaConfigs
+            .FirstOrDefaultAsync(x => x.TipologiaCodigo == tipologiaCodigo)
+            ?? throw new InvalidOperationException($"No existe configuracion de plugins para '{tipologiaCodigo}'.");
+
+        entity.Estado = EstadoPluginConfig.Retired;
+        entity.FechaActualizacion = DateTime.UtcNow;
+
+        await _dbContext.SaveChangesAsync();
+    }
+
     public static IReadOnlyCollection<string> ValidarConfiguracionJson(string json)
     {
         var errors = new List<string>();
@@ -131,6 +199,41 @@ public class TipologiaAdminService
             if (string.IsNullOrWhiteSpace(config.Version))
             {
                 errors.Add("version es obligatorio.");
+            }
+        }
+        catch (Exception ex)
+        {
+            errors.Add($"JSON inválido: {ex.Message}");
+        }
+
+        return errors;
+    }
+
+    public static IReadOnlyCollection<string> ValidarPluginConfigJson(string json)
+    {
+        var errors = new List<string>();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            errors.Add("ConfiguracionJson no puede estar vacío.");
+            return errors;
+        }
+
+        try
+        {
+            var config = JsonSerializer.Deserialize<PluginConfiguration>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (config is null)
+            {
+                errors.Add("No se pudo deserializar la configuración de plugins.");
+                return errors;
+            }
+
+            if (config.Plugins is null)
+            {
+                errors.Add("plugins es obligatorio.");
             }
         }
         catch (Exception ex)

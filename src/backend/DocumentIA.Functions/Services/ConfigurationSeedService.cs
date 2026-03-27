@@ -13,6 +13,7 @@ public static class ConfigurationSeedService
     {
         await SeedTipologiasAsync(dbContext, logger, Path.Combine(configRootPath, "tipologias"));
         await SeedModelosAsync(dbContext, logger, configRootPath);
+        await SeedPluginsAsync(dbContext, logger, Path.Combine(configRootPath, "tipologias"));
     }
 
     private static async Task SeedTipologiasAsync(DocumentIADbContext dbContext, ILogger logger, string tipologiasPath)
@@ -152,5 +153,53 @@ public static class ConfigurationSeedService
             existing.ConfiguracionJson = configJson;
             existing.FechaActualizacion = DateTime.UtcNow;
         }
+    }
+
+    private static async Task SeedPluginsAsync(DocumentIADbContext dbContext, ILogger logger, string tipologiasPath)
+    {
+        if (!Directory.Exists(tipologiasPath))
+        {
+            logger.LogWarning("No existe directorio de tipologias para seed de plugins: {Path}", tipologiasPath);
+            return;
+        }
+
+        var files = Directory.EnumerateFiles(tipologiasPath, "*.plugins.json", SearchOption.TopDirectoryOnly);
+        foreach (var filePath in files)
+        {
+            var technicalKey = Path.GetFileName(filePath).Replace(".plugins.json", string.Empty, StringComparison.OrdinalIgnoreCase);
+            var json = await File.ReadAllTextAsync(filePath);
+
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                continue;
+            }
+
+            var existing = await dbContext.PluginTipologiaConfigs
+                .FirstOrDefaultAsync(p => p.TipologiaCodigo == technicalKey);
+
+            if (existing is null)
+            {
+                dbContext.PluginTipologiaConfigs.Add(new PluginTipologiaConfigEntity
+                {
+                    TipologiaCodigo = technicalKey,
+                    ConfiguracionJson = json,
+                    Estado = EstadoPluginConfig.Published,
+                    FechaCreacion = DateTime.UtcNow,
+                    FechaActualizacion = DateTime.UtcNow,
+                    PublicadaEn = DateTime.UtcNow,
+                    PublicadaPor = "seed"
+                });
+            }
+            else if (string.IsNullOrWhiteSpace(existing.ConfiguracionJson))
+            {
+                existing.ConfiguracionJson = json;
+                existing.Estado = EstadoPluginConfig.Published;
+                existing.FechaActualizacion = DateTime.UtcNow;
+                existing.PublicadaEn ??= DateTime.UtcNow;
+                existing.PublicadaPor ??= "seed";
+            }
+        }
+
+        await dbContext.SaveChangesAsync();
     }
 }
