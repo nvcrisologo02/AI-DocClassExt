@@ -288,9 +288,30 @@ public class DocumentProcessOrchestrator
 
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
-            var tipologiaResuelta = await context.CallActivityAsync<ResolvedTipologia>(
-                "ResolverTipologiaActivity",
-                tipologiaEntrada);
+            ResolvedTipologia tipologiaResuelta;
+
+            try
+            {
+                tipologiaResuelta = await context.CallActivityAsync<ResolvedTipologia>(
+                    "ResolverTipologiaActivity",
+                    tipologiaEntrada);
+            }
+            catch (Exception ex) when (ex is KeyNotFoundException || ex.InnerException is KeyNotFoundException)
+            {
+                const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
+
+                logger.LogWarning(
+                    ex,
+                    "La clasificación devolvió una tipología no resoluble: {TipologiaDetectada}",
+                    tipologiaEntrada);
+
+                salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
+                salida.Resultado.Estado = "ERROR";
+                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
+
+                FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
+                return salida;
+            }
 
             salida.Identificacion.Tipologia = tipologiaResuelta.TechnicalKey;
             salida.Identificacion.TipologiaFamilia = tipologiaResuelta.TipologiaId;
