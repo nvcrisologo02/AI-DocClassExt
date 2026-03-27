@@ -1,10 +1,17 @@
 using Newtonsoft.Json.Linq;
+using System;
+using System.Globalization;
+using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
+using System.Windows.Media;
 
 namespace DocumentIA.Desktop.Views
 {
     public partial class JsonViewerControl : UserControl
     {
+        private JToken _currentToken;
+
         public JsonViewerControl()
         {
             InitializeComponent();
@@ -13,6 +20,10 @@ namespace DocumentIA.Desktop.Views
         public void DisplayJson(object jsonObject)
         {
             JsonTreeView.Items.Clear();
+            RawJsonTextBox.Text = string.Empty;
+            SummaryText.Text = "Sin datos";
+            FooterText.Text = "Listo";
+            _currentToken = null;
 
             if (jsonObject == null)
                 return;
@@ -34,13 +45,23 @@ namespace DocumentIA.Desktop.Views
                     jtoken = JToken.FromObject(jsonObject);
                 }
 
+                _currentToken = jtoken;
+                RawJsonTextBox.Text = jtoken.ToString(Newtonsoft.Json.Formatting.Indented);
+                SummaryText.Text = BuildSummary(jtoken);
+
                 var rootItem = BuildTreeItem(jtoken, "root");
                 if (rootItem != null)
                 {
+                    rootItem.IsExpanded = true;
                     JsonTreeView.Items.Add(rootItem);
                 }
+
+                FooterText.Text = "JSON cargado correctamente";
             }
-            catch { }
+            catch (Exception ex)
+            {
+                FooterText.Text = $"Error parseando JSON: {ex.Message}";
+            }
         }
 
         private TreeViewItem BuildTreeItem(JToken token, string name)
@@ -75,43 +96,132 @@ namespace DocumentIA.Desktop.Views
 
         private string FormatHeader(JToken token, string name)
         {
-            var typeName = GetTypeName(token.Type);
-            var count = token is JArray arr ? arr.Count : 0;
-            var displayValue = GetDisplayValue(token, name, count);
-            return displayValue;
-        }
+            var key = string.IsNullOrWhiteSpace(name) ? "root" : name;
 
-        private string GetTypeName(JTokenType type)
-        {
-            return type switch
-            {
-                JTokenType.Object => "{ }",
-                JTokenType.Array => "[ ]",
-                JTokenType.String => "\" \"",
-                JTokenType.Integer => "#",
-                JTokenType.Float => "#.#",
-                JTokenType.Boolean => "✓/✗",
-                JTokenType.Null => "∅",
-                _ => "?"
-            };
-        }
-
-        private string GetDisplayValue(JToken token, string name, int count)
-        {
             if (token.Type == JTokenType.Object)
-                return name + ": {...}";
-            else if (token.Type == JTokenType.Array)
-                return name + ": [" + count + " items]";
-            else if (token.Type == JTokenType.String)
+            {
+                return $"{key}: {{...}}";
+            }
+
+            if (token.Type == JTokenType.Array)
+            {
+                return $"{key}: [{((JArray)token).Count} items]";
+            }
+
+            if (token.Type == JTokenType.String)
             {
                 var val = token.ToString();
-                var trimmed = val.Length > 50 ? val.Substring(0, 47) + "..." : val;
-                return name + ": \"" + trimmed + "\"";
+                var trimmed = val.Length > 80 ? val.Substring(0, 77) + "..." : val;
+                return $"{key}: \"{trimmed}\"";
             }
-            else if (token.Type == JTokenType.Null)
-                return name + ": null";
-            else
-                return name + ": " + token.ToString();
+
+            if (token.Type == JTokenType.Null)
+            {
+                return $"{key}: null";
+            }
+
+            return $"{key}: {token}";
+        }
+
+        private string BuildSummary(JToken token)
+        {
+            var nodeCount = CountNodes(token);
+            var objectCount = CountByType(token, JTokenType.Object);
+            var arrayCount = CountByType(token, JTokenType.Array);
+            return $"{nodeCount} nodos | {objectCount} objetos | {arrayCount} arrays";
+        }
+
+        private int CountNodes(JToken token)
+        {
+            var count = 1;
+
+            if (token is JObject obj)
+            {
+                foreach (var prop in obj.Properties())
+                {
+                    count += CountNodes(prop.Value);
+                }
+            }
+            else if (token is JArray arr)
+            {
+                foreach (var child in arr)
+                {
+                    count += CountNodes(child);
+                }
+            }
+
+            return count;
+        }
+
+        private int CountByType(JToken token, JTokenType type)
+        {
+            var count = token.Type == type ? 1 : 0;
+
+            if (token is JObject obj)
+            {
+                foreach (var prop in obj.Properties())
+                {
+                    count += CountByType(prop.Value, type);
+                }
+            }
+            else if (token is JArray arr)
+            {
+                foreach (var child in arr)
+                {
+                    count += CountByType(child, type);
+                }
+            }
+
+            return count;
+        }
+
+        private void ExpandAllButton_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var item in JsonTreeView.Items)
+            {
+                if (item is TreeViewItem treeItem)
+                {
+                    SetExpandedRecursive(treeItem, true);
+                }
+            }
+            FooterText.Text = "Árbol expandido";
+        }
+
+        private void CollapseAllButton_Click(object sender, RoutedEventArgs e)
+        {
+            foreach (var item in JsonTreeView.Items)
+            {
+                if (item is TreeViewItem treeItem)
+                {
+                    SetExpandedRecursive(treeItem, false);
+                }
+            }
+            FooterText.Text = "Árbol colapsado";
+        }
+
+        private void CopyJsonButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentToken == null)
+            {
+                FooterText.Text = "No hay JSON para copiar";
+                return;
+            }
+
+            Clipboard.SetText(_currentToken.ToString(Newtonsoft.Json.Formatting.Indented));
+            FooterText.Text = "JSON copiado al portapapeles";
+        }
+
+        private void SetExpandedRecursive(TreeViewItem item, bool isExpanded)
+        {
+            item.IsExpanded = isExpanded;
+
+            foreach (var child in item.Items)
+            {
+                if (child is TreeViewItem childItem)
+                {
+                    SetExpandedRecursive(childItem, isExpanded);
+                }
+            }
         }
     }
 }

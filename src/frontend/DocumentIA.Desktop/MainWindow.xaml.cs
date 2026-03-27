@@ -12,17 +12,25 @@ namespace DocumentIA.Desktop
         {
             InitializeComponent();
 
-            _viewModel = new ProcessingViewModel();
-            DataContext = _viewModel;
-
-            // Hook up property change for JSON output
-            _viewModel.PropertyChanged += (s, e) =>
+            try
             {
-                if (e.PropertyName == nameof(ProcessingViewModel.OutputJson) && _viewModel.OutputJson != null)
+                _viewModel = new ProcessingViewModel();
+                DataContext = _viewModel;
+
+                // Hook up property change for JSON output
+                _viewModel.PropertyChanged += (s, e) =>
                 {
-                    JsonViewer.DisplayJson(_viewModel.OutputJson);
-                }
-            };
+                    if (e.PropertyName == nameof(ProcessingViewModel.OutputJson) && _viewModel.OutputJson != null)
+                    {
+                        JsonViewer.DisplayJson(_viewModel.OutputJson);
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error inicializando MainWindow:\n{ex.Message}\n\n{ex.StackTrace}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                throw;
+            }
         }
     }
 }

@@ -1,8 +1,10 @@
 using DocumentIA.Desktop.Models;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using RestSharp;
 using System;
 using System.IO;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace DocumentIA.Desktop.Services
@@ -18,43 +20,82 @@ namespace DocumentIA.Desktop.Services
     {
         private readonly RestClient _client;
         private readonly string _baseUrl;
+        private readonly JsonSerializerSettings _jsonSettings;
 
         public OrchestratorApiClient(string baseUrl = "http://localhost:7071")
         {
             _baseUrl = baseUrl.TrimEnd('/');
             _client = new RestClient(_baseUrl);
+            
+            // Configure JSON settings to be more lenient with parsing
+            _jsonSettings = new JsonSerializerSettings
+            {
+                NullValueHandling = NullValueHandling.Ignore,
+                DateFormatString = "yyyy-MM-ddTHH:mm:ss.fffffffZ",
+                DateTimeZoneHandling = DateTimeZoneHandling.Utc,
+                FloatParseHandling = FloatParseHandling.Double,
+                Formatting = Formatting.Indented,
+                Error = (sender, args) => 
+                {
+                    // Log the error but continue deserializing
+                    System.Diagnostics.Debug.WriteLine($"JSON Error at {args.CurrentObject}: {args.ErrorContext.Error.Message}");
+                    args.ErrorContext.Handled = true;
+                }
+            };
         }
 
         public async Task<bool> CheckConnectionAsync()
         {
             try
             {
-                var request = new RestRequest("/api/health", Method.Get);
+                // Simply try to reach http://localhost:7071 and see if it responds
+                // If we get any response (404, 500, etc.), the server is up
+                var request = new RestRequest("/", Method.Get);
                 var response = await _client.ExecuteAsync(request);
-                return response.IsSuccessful;
+                
+                // If we got any response at all, the server is reachable
+                return response != null && !string.IsNullOrEmpty(response.Content);
             }
-            catch
+            catch (HttpRequestException ex)
             {
+                System.Diagnostics.Debug.WriteLine($"HttpRequestException: {ex.Message}");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Exception in CheckConnection: {ex.Message}");
                 return false;
             }
         }
 
         public async Task<ProcessingResponse> IngestDocumentAsync(ProcessingRequest request)
         {
-            var restRequest = new RestRequest("/api/IngestDocument", Method.Post);
-            restRequest.AddHeader("Content-Type", "application/json");
-            var json = JsonConvert.SerializeObject(request, Formatting.Indented);
-            restRequest.AddParameter("application/json", json, ParameterType.RequestBody);
-
-            var response = await _client.ExecuteAsync(restRequest);
-
-            if (!response.IsSuccessful)
+            try
             {
-                throw new Exception($"API Error: {response.StatusCode} - {response.Content}");
-            }
+                var restRequest = new RestRequest("/api/IngestDocument", Method.Post);
+                
+                // Serializar el request directamente
+                var jsonString = JsonConvert.SerializeObject(request);
+                
+                // Usar AddBody que envía el string directly sin serializar de nuevo
+                restRequest.AddBody(jsonString, "application/json");
 
-            var result = JsonConvert.DeserializeObject<ProcessingResponse>(response.Content);
-            return result;
+                var response = await _client.ExecuteAsync(restRequest);
+
+                if (!response.IsSuccessful)
+                {
+                    System.Diagnostics.Debug.WriteLine($"IngestDocument Error {response.StatusCode}: {response.Content}");
+                    throw new Exception($"API Error: {response.StatusCode} - {response.Content}");
+                }
+
+                var result = JsonConvert.DeserializeObject<ProcessingResponse>(response.Content, _jsonSettings);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"IngestDocumentAsync Exception: {ex.Message}");
+                throw;
+            }
         }
 
         public async Task<ProcessingStatus> GetStatusAsync(string statusUri)
@@ -72,8 +113,17 @@ namespace DocumentIA.Desktop.Services
                     throw new Exception($"Status check failed: {response.StatusCode}");
                 }
 
-                var result = JsonConvert.DeserializeObject<ProcessingStatus>(response.Content);
-                return result;
+                try
+                {
+                    var result = JsonConvert.DeserializeObject<ProcessingStatus>(response.Content, _jsonSettings);
+                    return result;
+                }
+                catch (JsonSerializationException jsonEx)
+                {
+                    System.Diagnostics.Debug.WriteLine($"JSON Deserialization Error: {jsonEx.Message}");
+                    System.Diagnostics.Debug.WriteLine($"Response Content: {response.Content}");
+                    throw new Exception($"Failed to parse status response: {jsonEx.Message}", jsonEx);
+                }
             }
             catch (Exception ex)
             {

@@ -25,6 +25,7 @@ namespace DocumentIA.Desktop.Models
             {
                 ActivityStatusEnum.Running => "▶",
                 ActivityStatusEnum.Completed => "✓",
+                ActivityStatusEnum.Skipped => "↷",
                 ActivityStatusEnum.Failed => "✗",
                 _ => "◯"
             };

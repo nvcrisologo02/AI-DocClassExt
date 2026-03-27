@@ -1,4 +1,5 @@
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System.Collections.Generic;
 
 namespace DocumentIA.Desktop.Models
@@ -101,14 +102,23 @@ namespace DocumentIA.Desktop.Models
 
     public class ProcessingStatus
     {
+        [JsonProperty("name")]
+        public string Name { get; set; }
+
+        [JsonProperty("instanceId")]
+        public string InstanceId { get; set; }
+
         [JsonProperty("runtimeStatus")]
         public string RuntimeStatus { get; set; }
 
+        [JsonProperty("input")]
+        public JObject Input { get; set; }
+
         [JsonProperty("customStatus")]
-        public CustomStatus CustomStatus { get; set; }
+        public JObject CustomStatus { get; set; }
 
         [JsonProperty("output")]
-        public object Output { get; set; }
+        public JObject Output { get; set; }
 
         [JsonProperty("createdTime")]
         public string CreatedTime { get; set; }
@@ -119,11 +129,20 @@ namespace DocumentIA.Desktop.Models
 
     public class CustomStatus
     {
+        [JsonProperty("version")]
+        public string Version { get; set; }
+
+        [JsonProperty("estado")]
+        public string Estado { get; set; }
+
         [JsonProperty("actividadActual")]
         public string CurrentActivity { get; set; }
 
         [JsonProperty("ActividadActual")]
         public string CurrentActivityAlt { get; set; }
+
+        [JsonProperty("actividadesTotales")]
+        public int TotalActivities { get; set; }
 
         [JsonProperty("actividadesCompletadas")]
         public List<string> CompletedActivities { get; set; }
@@ -131,11 +150,17 @@ namespace DocumentIA.Desktop.Models
         [JsonProperty("ActividadesCompletadas")]
         public List<string> CompletedActivitiesAlt { get; set; }
 
+        [JsonProperty("duracionTotalMs")]
+        public long TotalDurationMs { get; set; }
+
         [JsonProperty("actividades")]
         public List<ActivityTimeline> ActivityTimeline { get; set; }
 
         [JsonProperty("Actividades")]
         public List<ActivityTimeline> ActivityTimelineAlt { get; set; }
+
+        [JsonProperty("mensaje")]
+        public string Message { get; set; }
     }
 
     public class ActivityTimeline
@@ -158,8 +183,39 @@ namespace DocumentIA.Desktop.Models
         [JsonProperty("DuracionMs")]
         public long? DurationMsAlt { get; set; }
 
+        [JsonProperty("inicioUtc")]
+        public string StartTimeUtc { get; set; }
+
+        [JsonProperty("InicioUtc")]
+        public string StartTimeUtcAlt { get; set; }
+
+        [JsonProperty("finUtc")]
+        public string EndTimeUtc { get; set; }
+
+        [JsonProperty("FinUtc")]
+        public string EndTimeUtcAlt { get; set; }
+
+        [JsonProperty("mensaje")]
+        public string Message { get; set; }
+
+        [JsonProperty("Mensaje")]
+        public string MessageAlt { get; set; }
+
+        [JsonProperty("fallbackActivado")]
+        public bool? FallbackActivated { get; set; }
+
+        [JsonProperty("FallbackActivado")]
+        public bool? FallbackActivatedAlt { get; set; }
+
+        [JsonProperty("fallbackRazon")]
+        public string FallbackReason { get; set; }
+
+        [JsonProperty("FallbackRazon")]
+        public string FallbackReasonAlt { get; set; }
+
         public string GetName() => !string.IsNullOrEmpty(Name) ? Name : NameAlt;
         public string GetState() => !string.IsNullOrEmpty(State) ? State : StateAlt;
         public long? GetDuration() => DurationMs.HasValue ? DurationMs : DurationMsAlt;
+        public string GetMessage() => !string.IsNullOrEmpty(Message) ? Message : MessageAlt;
     }
 }

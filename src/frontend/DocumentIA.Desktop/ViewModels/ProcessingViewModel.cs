@@ -1,9 +1,12 @@
 using DocumentIA.Desktop.Models;
 using DocumentIA.Desktop.Services;
+using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
@@ -33,8 +36,21 @@ namespace DocumentIA.Desktop.ViewModels
 
     public class ProcessingViewModel : NotifyPropertyChanged
     {
+        private static readonly string[] DefaultActivityOrder =
+        {
+            "Clasificar",
+            "Extraer",
+            "Prompt",
+            "Validar",
+            "Integrar",
+            "SubirGDC",
+            "Persistir",
+            "Resultado"
+        };
+
         private readonly IOrchestratorApiClient _apiClient;
         private CancellationTokenSource _pollingCts;
+        private string _lastLoggedActivity;
 
         public ObservableCollection<ActivityStatus> ActivityStatuses { get; }
         public ObservableCollection<ActivityLogEntry> ActivityLogs { get; }
@@ -153,6 +169,48 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
+        private bool _skipDuplicateCheck = true;
+        public bool SkipDuplicateCheck
+        {
+            get => _skipDuplicateCheck;
+            set
+            {
+                if (_skipDuplicateCheck != value)
+                {
+                    _skipDuplicateCheck = value;
+                    OnPropertyChanged(nameof(SkipDuplicateCheck));
+                }
+            }
+        }
+
+        private bool _forceReprocess = true;
+        public bool ForceReprocess
+        {
+            get => _forceReprocess;
+            set
+            {
+                if (_forceReprocess != value)
+                {
+                    _forceReprocess = value;
+                    OnPropertyChanged(nameof(ForceReprocess));
+                }
+            }
+        }
+
+        private bool _skipGDCUpload = true;
+        public bool SkipGDCUpload
+        {
+            get => _skipGDCUpload;
+            set
+            {
+                if (_skipGDCUpload != value)
+                {
+                    _skipGDCUpload = value;
+                    OnPropertyChanged(nameof(SkipGDCUpload));
+                }
+            }
+        }
+
         public bool IsExecuteEnabled => !IsProcessing && !string.IsNullOrWhiteSpace(SelectedDocumentPath) && IsApiConnected;
 
         public ICommand ExecuteCommand { get; }
@@ -160,25 +218,36 @@ namespace DocumentIA.Desktop.ViewModels
 
         public ProcessingViewModel()
         {
-            _apiClient = new OrchestratorApiClient("http://localhost:7071");
-            ActivityStatuses = new ObservableCollection<ActivityStatus>();
-            ActivityLogs = new ObservableCollection<ActivityLogEntry>();
-            
-            ExecuteCommand = new RelayCommand(_ => ExecuteAsync().ConfigureAwait(false), _ => IsExecuteEnabled);
-            SelectFileCommand = new RelayCommand(_ => SelectFile());
+            try
+            {
+                _apiClient = new OrchestratorApiClient("http://localhost:7071");
+                ActivityStatuses = new ObservableCollection<ActivityStatus>();
+                ActivityLogs = new ObservableCollection<ActivityLogEntry>();
+                
+                ExecuteCommand = new RelayCommand(_ => ExecuteAsync().ConfigureAwait(false), _ => IsExecuteEnabled);
+                SelectFileCommand = new RelayCommand(_ => SelectFile());
 
-            InitializeActivities();
-            CheckApiConnectionAsync().ConfigureAwait(false);
+                InitializeActivities();
+                
+                // Initial connection check on UI thread
+                CheckApiConnectionAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                IsApiConnected = false;
+                ApiStatusMessage = $"Error en inicialización: {ex.Message}";
+            }
         }
 
         private void InitializeActivities()
         {
             ActivityStatuses.Clear();
-            var activities = new[] { "Clasificación", "Extracción", "Normalización", "Validación", "Persistencia" };
-            foreach (var activity in activities)
+            foreach (var activity in DefaultActivityOrder)
             {
                 ActivityStatuses.Add(new ActivityStatus(activity));
             }
+
+            UpdateLastActivityFlags();
         }
 
         private async Task CheckApiConnectionAsync()
@@ -188,10 +257,10 @@ namespace DocumentIA.Desktop.ViewModels
                 IsApiConnected = await _apiClient.CheckConnectionAsync();
                 ApiStatusMessage = IsApiConnected ? "API Conectada ✓" : "API No Disponible ✗";
             }
-            catch
+            catch (Exception ex)
             {
                 IsApiConnected = false;
-                ApiStatusMessage = "Error al conectar con API ✗";
+                ApiStatusMessage = $"Error: {ex.Message}";
             }
         }
 
@@ -219,6 +288,7 @@ namespace DocumentIA.Desktop.ViewModels
 
             IsProcessing = true;
             OutputJson = null;
+            _lastLoggedActivity = null;
             InitializeActivities();
             ActivityLogs.Clear();
 
@@ -287,9 +357,9 @@ namespace DocumentIA.Desktop.ViewModels
                 Instructions = new Instructions
                 {
                     ExpectedType = expectedType,
-                    SkipDuplicateCheck = true,
-                    ForceReprocess = true,
-                    SkipGDCUpload = true,
+                    SkipDuplicateCheck = SkipDuplicateCheck,
+                    ForceReprocess = ForceReprocess,
+                    SkipGDCUpload = SkipGDCUpload,
                     Classification = new ClassificationSettings
                     {
                         Provider = expectedType == null ? "auto" : null,
@@ -336,7 +406,8 @@ namespace DocumentIA.Desktop.ViewModels
                 }
                 catch (Exception ex)
                 {
-                    ActivityLogs.Add(new ActivityLogEntry($"Poll #{retryCount}", ActivityStatusEnum.Failed, message: ex.Message));
+                    var errorMessage = ex.InnerException?.Message ?? ex.Message;
+                    ActivityLogs.Add(new ActivityLogEntry($"Poll #{retryCount}", ActivityStatusEnum.Failed, message: errorMessage));
                 }
             }
 
@@ -344,6 +415,7 @@ namespace DocumentIA.Desktop.ViewModels
             {
                 ActivityLogs.Add(new ActivityLogEntry("Completado", ActivityStatusEnum.Completed, message: "Procesamiento exitoso ✓"));
                 OutputJson = lastStatus.Output;
+                PopulateActivityMessagesFromOutput(lastStatus.Output);
                 MarkActivitiesComplete();
             }
             else if (lastStatus?.RuntimeStatus == "Failed")
@@ -360,48 +432,198 @@ namespace DocumentIA.Desktop.ViewModels
         {
             try
             {
-                var customStatus = status.CustomStatus;
-                if (customStatus == null) return;
+                if (status?.CustomStatus == null) return;
 
-                // Get current activity
-                var currentActivity = customStatus.CurrentActivity ?? customStatus.CurrentActivityAlt;
+                var customStatus = status.CustomStatus;
+
+                // Extract timeline array  from JObject
+                var timeline = new List<ActivityTimeline>();
                 
-                // Get timeline
-                var timeline = customStatus.ActivityTimeline ?? customStatus.ActivityTimelineAlt ?? new System.Collections.Generic.List<ActivityTimeline>();
+                // Try to get actividades or Actividades from JObject
+                var timelineData = customStatus["actividades"] ?? customStatus["Actividades"];
+                if (timelineData != null && timelineData.Type == Newtonsoft.Json.Linq.JTokenType.Array)
+                {
+                    foreach (var item in timelineData.Children<JObject>())
+                    {
+                        var activity = item.ToObject<ActivityTimeline>();
+                        if (activity != null)
+                        {
+                            timeline.Add(activity);
+                        }
+                    }
+                }
+
+                // Extract current activity
+                var currentActivityValue = customStatus["actividadActual"]?.Value<string>() ??
+                                          customStatus["ActividadActual"]?.Value<string>();
+                var currentCanonical = CanonicalizeActivityName(currentActivityValue);
+
+                // Ensure all activities seen in runtime are visible in timeline.
+                if (!string.IsNullOrWhiteSpace(currentCanonical))
+                {
+                    EnsureActivityExists(currentCanonical);
+                }
+
+                foreach (var timelineEntry in timeline)
+                {
+                    var timelineName = CanonicalizeActivityName(timelineEntry.GetName());
+                    EnsureActivityExists(timelineName);
+                }
 
                 // Update all activities based on timeline
                 foreach (var activity in ActivityStatuses)
                 {
-                    var timelineEntry = timeline.FirstOrDefault(t => t.GetName().Equals(activity.Name, StringComparison.OrdinalIgnoreCase));
+                    var timelineEntry = timeline.FirstOrDefault(t =>
+                        CanonicalizeActivityName(t.GetName()).Equals(activity.Name, StringComparison.OrdinalIgnoreCase));
 
                     if (timelineEntry != null)
                     {
                         activity.DurationMs = timelineEntry.GetDuration();
-                        
-                        var state = timelineEntry.GetState();
-                        if (state == "Completed")
+                        var timelineMessage = timelineEntry.GetMessage();
+                        if (!string.IsNullOrWhiteSpace(timelineMessage))
+                        {
+                            activity.Message = timelineMessage;
+                        }
+
+                        var state = NormalizeState(timelineEntry.GetState());
+                        if (state == "completed")
                         {
                             activity.Status = ActivityStatusEnum.Completed;
                         }
-                        else if (state == "Failed")
+                        else if (state == "failed")
                         {
                             activity.Status = ActivityStatusEnum.Failed;
                         }
-                        else if (activity.Name.Equals(currentActivity, StringComparison.OrdinalIgnoreCase))
+                        else if (state == "skipped")
+                        {
+                            activity.Status = ActivityStatusEnum.Skipped;
+                        }
+                        else if (state == "running" || activity.Name.Equals(currentCanonical, StringComparison.OrdinalIgnoreCase))
                         {
                             activity.Status = ActivityStatusEnum.Running;
                         }
+                        else if (activity.Status == ActivityStatusEnum.Running)
+                        {
+                            // Prevent stale blinking when runtime advances or skips steps.
+                            activity.Status = ActivityStatusEnum.Pending;
+                        }
                     }
-                    else if (activity.Name.Equals(currentActivity, StringComparison.OrdinalIgnoreCase))
+                    else if (activity.Name.Equals(currentCanonical, StringComparison.OrdinalIgnoreCase))
                     {
                         activity.Status = ActivityStatusEnum.Running;
                     }
+                    else if (activity.Status == ActivityStatusEnum.Running)
+                    {
+                        activity.Status = ActivityStatusEnum.Pending;
+                    }
                 }
 
-                // Log progress
-                ActivityLogs.Add(new ActivityLogEntry($"Actividad: {currentActivity}", ActivityStatusEnum.Running));
+                // Log activity transition only once per stage.
+                if (!string.IsNullOrWhiteSpace(currentCanonical) &&
+                    !currentCanonical.Equals(_lastLoggedActivity, StringComparison.OrdinalIgnoreCase))
+                {
+                    ActivityLogs.Add(new ActivityLogEntry($"Actividad: {currentCanonical}", ActivityStatusEnum.Running));
+                    _lastLoggedActivity = currentCanonical;
+                }
             }
             catch { /* ignore logging errors */ }
+        }
+
+        private void EnsureActivityExists(string activityName)
+        {
+            if (string.IsNullOrWhiteSpace(activityName))
+            {
+                return;
+            }
+
+            if (ActivityStatuses.Any(a => a.Name.Equals(activityName, StringComparison.OrdinalIgnoreCase)))
+            {
+                return;
+            }
+
+            // Keep "Resultado" as the visual terminal node in timeline.
+            var resultIndex = ActivityStatuses.ToList().FindIndex(a => a.Name.Equals("Resultado", StringComparison.OrdinalIgnoreCase));
+            if (resultIndex >= 0 && !activityName.Equals("Resultado", StringComparison.OrdinalIgnoreCase))
+            {
+                ActivityStatuses.Insert(resultIndex, new ActivityStatus(activityName));
+            }
+            else
+            {
+                ActivityStatuses.Add(new ActivityStatus(activityName));
+            }
+
+            UpdateLastActivityFlags();
+        }
+
+        private static string NormalizeState(string state)
+        {
+            if (string.IsNullOrWhiteSpace(state))
+            {
+                return string.Empty;
+            }
+
+            var normalized = RemoveDiacritics(state).Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "completed" => "completed",
+                "completado" => "completed",
+                "failed" => "failed",
+                "error" => "failed",
+                "running" => "running",
+                "inprogress" => "running",
+                "enproceso" => "running",
+                "skipped" => "skipped",
+                "omitido" => "skipped",
+                "omitted" => "skipped",
+                _ => normalized
+            };
+        }
+
+        private static string CanonicalizeActivityName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                return string.Empty;
+            }
+
+            var normalized = RemoveDiacritics(name).Trim().ToLowerInvariant();
+            normalized = normalized.Replace("_", string.Empty).Replace("-", string.Empty).Replace(" ", string.Empty);
+
+            return normalized switch
+            {
+                "prompt" => "Prompt",
+                "clasificar" => "Clasificar",
+                "clasificacion" => "Clasificar",
+                "extraer" => "Extraer",
+                "extraccion" => "Extraer",
+                "validar" => "Validar",
+                "validacion" => "Validar",
+                "integrar" => "Integrar",
+                "normalizacion" => "Integrar",
+                "subirgdc" => "SubirGDC",
+                "uploadgdc" => "SubirGDC",
+                "persistir" => "Persistir",
+                "persistencia" => "Persistir",
+                "resultado" => "Resultado",
+                _ => name.Trim()
+            };
+        }
+
+        private static string RemoveDiacritics(string text)
+        {
+            var normalizedString = text.Normalize(NormalizationForm.FormD);
+            var stringBuilder = new StringBuilder();
+
+            foreach (var c in normalizedString)
+            {
+                var unicodeCategory = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c);
+                if (unicodeCategory != System.Globalization.UnicodeCategory.NonSpacingMark)
+                {
+                    stringBuilder.Append(c);
+                }
+            }
+
+            return stringBuilder.ToString().Normalize(NormalizationForm.FormC);
         }
 
         private void MarkActivitiesComplete()
@@ -413,6 +635,309 @@ namespace DocumentIA.Desktop.ViewModels
                     activity.Status = ActivityStatusEnum.Completed;
                 }
             }
+        }
+
+        private void PopulateActivityMessagesFromOutput(JObject output)
+        {
+            if (output == null)
+            {
+                return;
+            }
+
+            foreach (var activity in ActivityStatuses)
+            {
+                activity.DetailRows.Clear();
+
+                foreach (var row in BuildActivityDetailRows(activity.Name, output))
+                {
+                    activity.DetailRows.Add(row);
+                }
+
+                var summary = BuildActivityOutputSummary(activity.Name, output);
+                if (!string.IsNullOrWhiteSpace(summary))
+                {
+                    activity.Message = summary;
+                }
+            }
+        }
+
+        private string BuildActivityOutputSummary(string activityName, JObject output)
+        {
+            var canonical = CanonicalizeActivityName(activityName);
+            var detalle = FindPropertyIgnoreCase(output, "DetalleEjecucion") as JObject;
+
+            return canonical switch
+            {
+                "Clasificar" => FirstNonEmptySummary(
+                    BuildCompactSummary(FindPropertyIgnoreCase(output, "Identificacion") ?? FindPropertyIgnoreCase(detalle, "Clasificacion")),
+                    BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
+                "Extraer" => FirstNonEmptySummary(
+                    BuildCompactSummary(FindPropertyIgnoreCase(detalle, "Extraccion")),
+                    BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
+                "Validar" => FirstNonEmptySummary(
+                    CombineSummaries(
+                        BuildCompactSummary(FindPropertyIgnoreCase(detalle, "Validacion")),
+                        BuildCompactSummary(FindPropertyIgnoreCase(detalle, "PostProceso") ?? FindPropertyIgnoreCase(output, "PostProceso"))),
+                    BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
+                "Integrar" => FirstNonEmptySummary(
+                    BuildCompactSummary(FindPropertyIgnoreCase(detalle, "Integracion")),
+                    BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
+                "SubirGDC" => FirstNonEmptySummary(
+                    BuildCompactSummary(FindPropertyIgnoreCase(detalle, "SubidaGDC") ?? FindPropertyIgnoreCase(detalle, "GDC")),
+                    BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
+                "Persistir" => FirstNonEmptySummary(
+                    BuildCompactSummary(FindPropertyIgnoreCase(detalle, "Persistencia")),
+                    BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
+                "Prompt" => FirstNonEmptySummary(
+                    BuildCompactSummary(FindPropertyIgnoreCase(detalle, "Prompt")),
+                    BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
+                "Resultado" => BuildCompactSummary(FindPropertyIgnoreCase(output, "Resultado")),
+                _ => BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))
+            };
+        }
+
+        private static string CombineSummaries(string first, string second)
+        {
+            if (string.IsNullOrWhiteSpace(first))
+            {
+                return second;
+            }
+
+            if (string.IsNullOrWhiteSpace(second))
+            {
+                return first;
+            }
+
+            return $"{first}\n\nPostProceso: {second}";
+        }
+
+        private static string FirstNonEmptySummary(params string[] candidates)
+        {
+            foreach (var candidate in candidates)
+            {
+                if (!string.IsNullOrWhiteSpace(candidate))
+                {
+                    return candidate;
+                }
+            }
+
+            return string.Empty;
+        }
+
+        private IEnumerable<ActivityDetailRow> BuildActivityDetailRows(string activityName, JObject output)
+        {
+            var canonical = CanonicalizeActivityName(activityName);
+            var detalle = FindPropertyIgnoreCase(output, "DetalleEjecucion") as JObject;
+
+            return canonical switch
+            {
+                "Clasificar" => BuildRowsFromToken(
+                    FindPropertyIgnoreCase(output, "Identificacion") ??
+                    FindPropertyIgnoreCase(detalle, "Clasificacion"),
+                    "Clasificacion"),
+                "Extraer" => BuildRowsFromToken(FindPropertyIgnoreCase(detalle, "Extraccion"), "Extraccion"),
+                "Validar" => BuildRowsForValidation(detalle, output),
+                "Integrar" => BuildRowsFromToken(FindPropertyIgnoreCase(detalle, "Integracion"), "Integracion"),
+                "SubirGDC" => BuildRowsFromToken(
+                    FindPropertyIgnoreCase(detalle, "SubidaGDC") ??
+                    FindPropertyIgnoreCase(detalle, "GDC"),
+                    "SubirGDC"),
+                "Persistir" => BuildRowsFromToken(FindPropertyIgnoreCase(detalle, "Persistencia"), "Persistencia"),
+                "Prompt" => BuildRowsFromToken(FindPropertyIgnoreCase(detalle, "Prompt"), "Prompt"),
+                "Resultado" => BuildResultDetailRows(output),
+                _ => BuildRowsFromToken(FindTrackingActivitySummary(detalle, canonical), activityName)
+            };
+        }
+
+        private IEnumerable<ActivityDetailRow> BuildRowsForValidation(JObject detalle, JObject output)
+        {
+            var rows = new List<ActivityDetailRow>();
+
+            AddRowsFromToken(rows, FindPropertyIgnoreCase(detalle, "Validacion"), "Validacion");
+            AddRowsFromToken(
+                rows,
+                FindPropertyIgnoreCase(detalle, "PostProceso") ?? FindPropertyIgnoreCase(output, "PostProceso"),
+                "PostProceso");
+
+            if (rows.Count == 0)
+            {
+                rows.Add(new ActivityDetailRow
+                {
+                    Key = "Validacion",
+                    Value = "Sin detalle disponible"
+                });
+            }
+
+            return rows;
+        }
+
+        private IEnumerable<ActivityDetailRow> BuildRowsFromToken(JToken token, string rootLabel)
+        {
+            var rows = new List<ActivityDetailRow>();
+
+            AddRowsFromToken(rows, token, rootLabel);
+
+            if (rows.Count == 0)
+            {
+                rows.Add(new ActivityDetailRow
+                {
+                    Key = rootLabel,
+                    Value = "Sin detalle disponible"
+                });
+            }
+
+            return rows;
+        }
+
+        private IEnumerable<ActivityDetailRow> BuildResultDetailRows(JObject output)
+        {
+            var rows = new List<ActivityDetailRow>();
+
+            var resultado = FindPropertyIgnoreCase(output, "Resultado");
+            AddRowsFromToken(rows, resultado, "Resultado");
+
+            if (rows.Count == 0)
+            {
+                rows.Add(new ActivityDetailRow
+                {
+                    Key = "Resultado",
+                    Value = "No se encontro la seccion Resultado en la salida"
+                });
+            }
+
+            return rows;
+        }
+
+        private static void AddRowsFromToken(ICollection<ActivityDetailRow> rows, JToken token, string prefix, int depth = 0)
+        {
+            if (token == null || rows.Count >= 16)
+            {
+                return;
+            }
+
+            if (depth >= 3)
+            {
+                rows.Add(new ActivityDetailRow
+                {
+                    Key = prefix,
+                    Value = BuildCompactSummary(token)
+                });
+                return;
+            }
+
+            if (token is JObject obj)
+            {
+                foreach (var property in obj.Properties())
+                {
+                    if (rows.Count >= 16)
+                    {
+                        break;
+                    }
+
+                    var childKey = string.IsNullOrWhiteSpace(prefix) ? property.Name : $"{prefix}.{property.Name}";
+                    AddRowsFromToken(rows, property.Value, childKey, depth + 1);
+                }
+                return;
+            }
+
+            if (token is JArray array)
+            {
+                if (array.Count == 0)
+                {
+                    rows.Add(new ActivityDetailRow
+                    {
+                        Key = prefix,
+                        Value = "[]"
+                    });
+                    return;
+                }
+
+                if (array.All(item => item is JValue))
+                {
+                    rows.Add(new ActivityDetailRow
+                    {
+                        Key = prefix,
+                        Value = string.Join(", ", array.Select(item => BuildCompactSummary(item)))
+                    });
+                    return;
+                }
+
+                rows.Add(new ActivityDetailRow
+                {
+                    Key = prefix,
+                    Value = $"[{array.Count} elementos]"
+                });
+
+                var maxChildren = Math.Min(array.Count, 3);
+                for (var i = 0; i < maxChildren && rows.Count < 16; i++)
+                {
+                    AddRowsFromToken(rows, array[i], $"{prefix}[{i}]", depth + 1);
+                }
+
+                return;
+            }
+
+            rows.Add(new ActivityDetailRow
+            {
+                Key = prefix,
+                Value = BuildCompactSummary(token)
+            });
+        }
+
+        private void UpdateLastActivityFlags()
+        {
+            for (var i = 0; i < ActivityStatuses.Count; i++)
+            {
+                ActivityStatuses[i].IsLast = i == ActivityStatuses.Count - 1;
+            }
+        }
+
+        private JToken FindTrackingActivitySummary(JObject detalle, string canonical)
+        {
+            var seguimiento = FindPropertyIgnoreCase(detalle, "Seguimiento") as JObject;
+            var actividades = FindPropertyIgnoreCase(seguimiento, "Actividades") as JArray;
+            if (actividades == null)
+            {
+                return null;
+            }
+
+            foreach (var token in actividades.OfType<JObject>())
+            {
+                var nombre = token["Nombre"]?.Value<string>() ?? token["nombre"]?.Value<string>();
+                if (CanonicalizeActivityName(nombre).Equals(canonical, StringComparison.OrdinalIgnoreCase))
+                {
+                    return token;
+                }
+            }
+
+            return null;
+        }
+
+        private static JToken FindPropertyIgnoreCase(JToken token, string propertyName)
+        {
+            if (token is not JObject obj || string.IsNullOrWhiteSpace(propertyName))
+            {
+                return null;
+            }
+
+            var prop = obj.Properties().FirstOrDefault(p => p.Name.Equals(propertyName, StringComparison.OrdinalIgnoreCase));
+            return prop?.Value;
+        }
+
+        private static string BuildCompactSummary(JToken token)
+        {
+            if (token == null)
+            {
+                return string.Empty;
+            }
+
+            var raw = token.Type == JTokenType.String ? token.Value<string>() : token.ToString(Newtonsoft.Json.Formatting.None);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return string.Empty;
+            }
+
+            return raw.Length <= 380 ? raw : raw.Substring(0, 377) + "...";
         }
     }
 

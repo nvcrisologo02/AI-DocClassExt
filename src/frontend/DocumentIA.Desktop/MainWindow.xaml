@@ -6,82 +6,138 @@
         xmlns:local="clr-namespace:DocumentIA.Desktop"
         xmlns:views="clr-namespace:DocumentIA.Desktop.Views"
         mc:Ignorable="d"
-        Title="DocumentIA - Test Runner" Height="900" Width="1200" WindowStartupLocation="CenterScreen" Background="#F5F5F5">
-    <DockPanel>
-        <!-- Status Bar -->
-        <Border DockPanel.Dock="Top" Background="White" Padding="10" Height="50">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <Ellipse Width="20" Height="20" Margin="0,0,10,0" Fill="Green"/>
-                <TextBlock Text="{Binding ApiStatusMessage}" Margin="0,0,20,0" VerticalAlignment="Center" FontWeight="Bold"/>
-                <TextBlock Text="{Binding InstanceId}" Margin="0,0,20,0" VerticalAlignment="Center" FontSize="11" Foreground="#666"/>
-                <TextBlock Text="{Binding CorrelationId}" VerticalAlignment="Center" FontSize="11" Foreground="#666"/>
-            </StackPanel>
-        </Border>
+        Title="DocumentIA - Test Runner" Height="860" Width="1320" WindowStartupLocation="CenterScreen"
+        Background="{StaticResource BrushAppBackground}" WindowState="Normal" Topmost="False"
+        FontFamily="Segoe UI Variable Display,Segoe UI">
+    <Grid Margin="16">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="1.05*" MinWidth="360"/>
+        </Grid.ColumnDefinitions>
 
-        <!-- Main Content -->
-        <DockPanel DockPanel.Dock="Top" Margin="10">
-            <!-- Left Panel: Activity Timeline -->
-            <StackPanel DockPanel.Dock="Left" Width="550" Margin="0,0,10,0">
-                <views:ActivityTimelineControl DataContext="{Binding}" Height="200"/>
-            </StackPanel>
-
-            <!-- Right Panel: Activity Log -->
-            <StackPanel DockPanel.Dock="Right" Margin="10,0,0,0">
-                <TextBlock Text="Registro de Actividades" FontSize="14" FontWeight="Bold" Margin="0,0,0,10"/>
-                <ListBox ItemsSource="{Binding ActivityLogs}" Height="180" Background="White" Foreground="Black">
-                    <ListBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding}" FontFamily="Courier New" FontSize="10" Margin="5"/>
-                        </DataTemplate>
-                    </ListBox.ItemTemplate>
-                </ListBox>
-            </StackPanel>
-        </DockPanel>
-
-        <!-- File Selection & Execution -->
-        <Border DockPanel.Dock="Top" Background="White" Padding="10" Margin="10,0,10,10">
-            <Grid Height="120">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                </Grid.ColumnDefinitions>
+        <!-- Left: Input -->
+        <Border Grid.Column="0" Style="{StaticResource CardPanel}" Margin="0,0,12,0">
+            <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
-            <!-- Row 0: File Selection -->
-            <TextBlock Grid.Row="0" Grid.Column="0" Text="Documento PDF:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,0,5"/>
-            
-            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding SelectedDocumentPath}" 
-                      Background="#F0F0F0" Padding="10" Foreground="#333" Margin="0,0,10,0" Height="35" VerticalAlignment="Center"/>
-            
-            <Button Grid.Row="1" Grid.Column="1" Content="Seleccionar..." Command="{Binding SelectFileCommand}" 
-                   Style="{StaticResource ButtonPrimary}" Width="100" Margin="0,0,10,0"/>
+                <TextBlock Grid.Row="0" Text="PANEL DE ENTRADA" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource BrushTextPrimary}"/>
 
-            <!-- Row 2: Classification Type -->
-            <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="3" Text="Tipo de Documento:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,0,5"/>
+                <Border Grid.Row="1" Margin="0,14,0,0" Padding="10" BorderBrush="#3A4458" BorderThickness="1" CornerRadius="6" Background="#131A26">
+                    <StackPanel>
+                        <TextBlock Text="DOCUMENTO" Foreground="{StaticResource BrushTextMuted}" FontSize="11"/>
+                        <TextBlock Text="{Binding SelectedDocumentPath}" Foreground="{StaticResource BrushTextPrimary}" FontSize="12" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                </Border>
 
-            <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="3" Orientation="Horizontal" Margin="0,0,0,10">
-                <RadioButton Content="Nota Simple 1.4" GroupName="DocType" Margin="0,0,20,0" VerticalAlignment="Center"
-                            IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=nota-simple@1.4}"/>
-                <RadioButton Content="Resumen Documental" GroupName="DocType" Margin="0,0,20,0" VerticalAlignment="Center"
-                            IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=resumen-documental}"/>
-                <RadioButton Content="Auto-clasificar" GroupName="DocType" VerticalAlignment="Center"
-                            IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=auto}"/>
-            </StackPanel>
+                <StackPanel Grid.Row="2" Margin="0,14,0,0">
+                    <TextBlock Text="TIPOLOGÍA" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,6"/>
+                    <StackPanel Orientation="Vertical">
+                        <RadioButton Content="Nota Simple 1.4" GroupName="DocType" Margin="0,0,0,4" Foreground="{StaticResource BrushTextPrimary}"
+                                     IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=nota-simple@1.4}"/>
+                        <RadioButton Content="Resumen" GroupName="DocType" Margin="0,0,0,4" Foreground="{StaticResource BrushTextPrimary}"
+                                     IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=resumen-documental}"/>
+                        <RadioButton Content="Auto" GroupName="DocType" Foreground="{StaticResource BrushTextPrimary}"
+                                     IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=auto}"/>
+                    </StackPanel>
+                </StackPanel>
 
-            <!-- Execute Button -->
-            <Button Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="3" Content="EJECUTAR" Command="{Binding ExecuteCommand}"
-                   Style="{StaticResource ButtonPrimary}" Height="40" FontSize="16" 
-                   IsEnabled="{Binding IsExecuteEnabled}"/>
+                <Button Grid.Row="3" Content="SELECCIONAR DOCUMENTO" Command="{Binding SelectFileCommand}" Style="{StaticResource ButtonSecondary}" Margin="0,14,0,0" Height="34"/>
+
+                <StackPanel Grid.Row="4" Margin="0,14,0,0">
+                    <TextBlock Text="OPCIONES" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,8"/>
+                    <CheckBox Content="skipDuplicateCheck" IsChecked="{Binding SkipDuplicateCheck}" Margin="0,0,0,8" Foreground="{StaticResource BrushTextPrimary}"/>
+                    <CheckBox Content="forceReprocess" IsChecked="{Binding ForceReprocess}" Margin="0,0,0,8" Foreground="{StaticResource BrushTextPrimary}"/>
+                    <CheckBox Content="skipGDCUpload" IsChecked="{Binding SkipGDCUpload}" Foreground="{StaticResource BrushTextPrimary}"/>
+                </StackPanel>
+
+                <Button Grid.Row="5" Content="EJECUTAR" Command="{Binding ExecuteCommand}" Style="{StaticResource ButtonPrimary}" Height="38" Margin="0,12,0,0" IsEnabled="{Binding IsExecuteEnabled}"/>
             </Grid>
         </Border>
 
-        <!-- JSON Viewer -->
-        <views:JsonViewerControl x:Name="JsonViewer" DockPanel.Dock="Bottom" Margin="10" Height="300"/>
-    </DockPanel>
+        <!-- Center: Monitoring -->
+        <Border Grid.Column="1" Style="{StaticResource CardPanel}" Margin="0,0,12,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="MONITOREO" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource BrushTextPrimary}"/>
+
+                <Grid Grid.Row="1" Margin="0,12,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Ellipse Width="12" Height="12" Margin="0,0,8,0" Fill="{Binding IsApiConnected, Converter={StaticResource StatusToBrushConverter}}"/>
+                        <TextBlock Text="ESTADO API" Foreground="{StaticResource BrushTextPrimary}" FontSize="11"/>
+                    </StackPanel>
+
+                    <TextBlock Grid.Column="1" Text="{Binding ApiStatusMessage}" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="14,0,0,0" VerticalAlignment="Center"/>
+
+                    <Button Grid.Column="2" Content="Copiar" Style="{StaticResource ButtonSecondary}" Height="26" MinWidth="58"/>
+                </Grid>
+
+                <Grid Grid.Row="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="3*"/>
+                        <ColumnDefinition Width="2*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                               Text="{Binding InstanceId, StringFormat=INSTANCE ID: {0}}"
+                               Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,10"/>
+
+                    <Border Grid.Row="1" Grid.Column="0" Background="#111722" BorderBrush="#2A3140" BorderThickness="1" CornerRadius="8" Padding="10" Height="420" VerticalAlignment="Top" Margin="0,0,10,0">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <views:ActivityTimelineControl DataContext="{Binding}"/>
+                        </ScrollViewer>
+                    </Border>
+
+                    <Border Grid.Row="1" Grid.Column="1" Background="#131A26" BorderBrush="#2A3140" BorderThickness="1" CornerRadius="8" Padding="10" Margin="0,0,0,0">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock Text="LOG DE ACTIVIDAD" Foreground="{StaticResource BrushTextPrimary}" FontSize="11" Margin="0,0,0,8"/>
+                            <ListBox Grid.Row="1" ItemsSource="{Binding ActivityLogs}" Background="Transparent" BorderThickness="0" Foreground="{StaticResource BrushTextMuted}" FontFamily="Consolas" FontSize="10"/>
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+        </Border>
+
+        <!-- Right: Results -->
+        <Border Grid.Column="2" Style="{StaticResource CardPanel}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Text="RESULTADOS" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource BrushTextPrimary}"/>
+
+                <Border Grid.Row="1" Margin="0,12,0,0" BorderBrush="#2A3140" BorderThickness="1" CornerRadius="8" Background="#0E131E">
+                    <views:JsonViewerControl x:Name="JsonViewer"/>
+                </Border>
+            </Grid>
+        </Border>
+    </Grid>
 </Window>
