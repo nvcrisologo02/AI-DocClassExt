@@ -1,6 +1,6 @@
 # Causísticas Nota Simple 1.4: Clasificación + Extracción
 
-## **MATRIZ DE 20 CAUSÍSTICAS VÁLIDAS**
+## **MATRIZ DE 22 CAUSÍSTICAS VÁLIDAS**
 
 | # | Clasificación | Fallback Clasif | Estado Clasif | Extracción | Resultado Extrac | Fallback Extrac | Resultado Final |
 |---|---|---|---|---|---|---|---|
@@ -24,6 +24,8 @@
 | **18** | DI error | GPT ✓ OK | ✓ OK | Provider | ✗ Error | YES | `ERROR` |
 | **19** | Mock | N/A | ✓ OK | Provider | ✓ OK | NO | `OK` |
 | **20** | DI error | GPT ✗ Fail | ✗ FAIL | — | — | — | **`ERROR`** |
+| **21** | DI = RESTO | GPT ✓ OK | ✓ OK | Provider | ✓ OK | NO | `OK` |
+| **22** | DI = RESTO | GPT ✗ Desconocido | ✗ FAIL | — | — | — | **`ERROR`** |
 
 ---
 
@@ -102,8 +104,10 @@ graph TD
 
 ## **Resumen de Resultados**
 
-- **OK:** 16 causísticas (#1, #2, #3, #5, #6, #7, #9, #10, #11, #13, #14, #15, #16, #17, #19)
-- **ERROR:** 4 causísticas (#4, #8, #12, #18, #20)
+- **OK:** 16 causísticas (#1, #2, #3, #5, #6, #7, #9, #10, #11, #13, #14, #15, #16, #17, #19, #21)
+- **ERROR:** 6 causísticas (#4, #8, #12, #18, #20, #22)
+
+> **Nota comportamiento RESTO (causísticas #21 y #22):** Cuando Azure DI clasifica como `RESTO`, el fallback a GPT es **obligatorio** independientemente de la confianza DI. A diferencia del caso "DI <0.85" (causísticas #13-#15), si GPT falla semánticamente (devuelve Desconocido o confianza < 0.3), el proceso termina en ERROR sin continuar a extracción. Si GPT falla técnicamente (excepción de API), el proceso cae al resultado DI (RESTO) y falla en la resolución de tipología por ser `RESTO` un valor no registrado en el resolver.
 
 ---
 
@@ -226,5 +230,17 @@ graph TD
 ### Causística #20
 - **Clasificación:** DI error → Fallback GPT ✗
 - **Extracción:** —
-- **Descripción:** Clasificación falla completamente (DI error + Fallback GPT error). Orquestador no llega a extracción
+- **Descripción:** Clasificación falla completamente (DI error + Fallback GPT error técnico). Orquestador no llega a extracción
+- **Resultado:** ERROR
+
+### Causística #21
+- **Clasificación:** DI = RESTO → Fallback GPT ✓
+- **Extracción:** Provider (extrae ≥50% campos)
+- **Descripción:** DI no reconoce el documento (devuelve `RESTO`), fallback GPT obligatorio, GPT clasifica correctamente, extracción exitosa
+- **Resultado:** OK
+
+### Causística #22
+- **Clasificación:** DI = RESTO → Fallback GPT ✗ (Desconocido)
+- **Extracción:** —
+- **Descripción:** DI no reconoce el documento (devuelve `RESTO`), fallback GPT obligatorio, GPT devuelve `Desconocido` o confianza < 0.3. El orquestador termina el proceso con `Estado=ERROR` y `Resultado.MensajeError` poblado. No se ejecutan Extraer, Validar ni Integrar.
 - **Resultado:** ERROR

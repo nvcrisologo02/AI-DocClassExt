@@ -110,7 +110,7 @@ Ubicación actual:
 
 ```json
 {
-  "tipologiaId": "nota.simple.1_3",
+  "tipologiaId": "nota.simple.1_4",
   "plugins": [
     {
       "pluginKey": "mock-enrichment",
@@ -140,6 +140,7 @@ Ubicación actual:
 - `pluginType`: `rest`, `soap` o `custom`.
 - `enabled`: activa/desactiva ejecución.
 - `priority`: orden de ejecución (menor = antes).
+- `returnsIdActivo` *(opcional, anotación documental)*: indica que el plugin puede devolver el `idActivo` del activo en su `ResponseData`. No modifica el comportamiento del motor — el pipeline siempre lee `idActivo` directamente de `DatosFinales["idActivo"]` tras la integración.
 - `configuration`: parámetros específicos por tipo.
 - `retryPolicy` (opcional): activa resiliencia.
 

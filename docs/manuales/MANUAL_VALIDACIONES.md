@@ -174,13 +174,15 @@ Parámetros:
   "parameters": { "pattern": "^[0-9]{5}$" } }
 ```
 
-### 4.9 `minlength` / `maxlength` (LengthValidator)
+### 4.9 `minLength` / `maxLength` (LengthValidator)
 
 Valida la longitud de un string.
 
+> El campo `ruleType` es insensible a mayúsculas (el motor aplica `.ToLower()` al leer la configuración). Por convenio, los archivos de configuración usan camelCase: `minLength` / `maxLength`.
+
 ```json
-{ "ruleType": "minlength", "severity": "Warning", "parameters": { "value": 5 } }
-{ "ruleType": "maxlength", "severity": "Error",   "parameters": { "value": 100 } }
+{ "ruleType": "minLength", "severity": "Warning", "parameters": { "value": 5 } }
+{ "ruleType": "maxLength", "severity": "Error",   "parameters": { "value": 100 } }
 ```
 
 ### 4.10 `boolean` (BooleanValidator)
@@ -208,7 +210,7 @@ Ubicación: `src/backend/DocumentIA.Functions/config/tipologias/<tipologia>.vali
 
 ```json
 {
-  "tipologiaId": "nota.simple",
+  "tipologiaId": "nota-simple",
   "tipologiaNombre": "Nota Simple",
   "version": "1.0",
   "fields": [
@@ -234,22 +236,26 @@ Ubicación: `src/backend/DocumentIA.Functions/config/tipologias/<tipologia>.vali
 }
 ```
 
-### Ejemplo real (`nota.simple.validation.json`)
+### Ejemplo real (`nota.simple.1_4.validation.json`, campos principales)
 
 ```json
 {
-  "tipologiaId": "notasimple",
+  "tipologiaId": "nota-simple",
+  "version": "1.4",
   "fields": [
-    { "name": "superficie", "type": "decimal", "required": true,
-      "rules": [{ "ruleType": "range", "severity": "Error", "parameters": { "min": 0, "max": 200000000 } }] },
+    { "name": "FincaRegistral", "type": "string", "required": true,
+      "rules": [
+        { "ruleType": "minLength", "severity": "Error", "parameters": { "value": 1 } },
+        { "ruleType": "maxLength", "severity": "Error", "parameters": { "value": 30 } }
+      ] },
     { "name": "FechaDocumento", "type": "date", "required": true,
       "rules": [{ "ruleType": "date", "severity": "Error",
-                  "parameters": { "formats": ["dd/MM/yyyy","yyyy-MM-dd"], "allowFuture": false } }] },
-    { "name": "NIF", "type": "string", "required": false,
-      "rules": [{ "ruleType": "nif", "severity": "Warning", "parameters": {} }] },
+                  "parameters": { "formats": ["dd/MM/yyyy","yyyy-MM-dd"], "allowFuture": false, "allowPast": true } }] },
+    { "name": "IDUFIR_CRU", "type": "string", "required": false,
+      "rules": [{ "ruleType": "regex", "severity": "Warning", "parameters": { "pattern": "^[0-9]{14}$" } }] },
     { "name": "Direccion", "type": "string", "required": false,
       "rules": [{ "ruleType": "address",
-                  "parameters": { "minLength": 6, "maxLength": 160, "requireStreetNumber": true } }] },
+                  "parameters": { "minLength": 6, "maxLength": 160, "requireStreetNumber": true, "requireMunicipality": true, "requireProvince": true } }] },
     { "name": "ReferenciaCatastral", "type": "string", "required": false,
       "rules": [{ "ruleType": "catastral", "severity": "Warning", "parameters": {} }] }
   ]

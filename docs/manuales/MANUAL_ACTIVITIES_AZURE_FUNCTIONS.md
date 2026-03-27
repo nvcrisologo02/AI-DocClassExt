@@ -51,8 +51,16 @@ flowchart TD
 Modelo=expectedtype-input
 Confianza=1.0]
   I -- No --> I3[4. ClasificarActivity]
+  I3 --> IRESTO{DI = RESTO
+o confianza < 0.85?}
+  IRESTO -- Sí --> IGPT[Fallback GPT]
+  IGPT --> IUNK{GPT = Desconocido
+o confianza < 0.3?}
+  IUNK -- Sí --> IERR[Estado ERROR
+MensajeError poblado\nFin]
+  IUNK -- No --> J
+  IRESTO -- No --> J
   I2 --> J{Confianza < Umbral?}
-  I3 --> J{Confianza < Umbral?}
   J -- Sí --> K[Estado BAJA_CONFIANZA_CLASIFICACION\nFin]
   J -- No --> L[5. ExtraerActivity]
   L --> M[6. ValidarActivity]
@@ -66,6 +74,7 @@ Confianza=1.0]
   style K fill:#fff3cd,stroke:#d39e00
   style Q fill:#ffe5e5,stroke:#cc0000
   style R fill:#e8f5e9,stroke:#2e7d32
+  style IERR fill:#ffcccc,stroke:#cc0000
 ```
 
 ### Diagrama swimlane (Mermaid)
@@ -131,8 +140,8 @@ sequenceDiagram
 - `OK`: procesamiento completo sin errores de validación.
 - `VALIDACION_CON_ERRORES`: procesamiento completo con errores de validación.
 - `DUPLICADO`: documento ya existente y sin reproceso forzado.
-- `BAJA_CONFIANZA_CLASIFICACION`: confianza de clasificación por debajo del umbral.
-- `ERROR`: excepción no controlada en cualquier etapa.
+- `BAJA_CONFIANZA_CLASIFICACION`: clasificación exitosa pero confianza por debajo del umbral de la solicitud.
+- `ERROR`: fallo en el pipeline. Incluye casos de documento no clasificable (DI devuelve RESTO + GPT devuelve Desconocido), tipología no registrada, plugin crítico fallido, o excepción inesperada. El campo `Resultado.MensajeError` detalla el motivo.
 
 ### Leyenda de colores (diagrama de flujo)
 
@@ -226,15 +235,30 @@ Responsabilidad:
 
 Reglas actuales:
 
-- Si `Instrucciones.ExpectedType` viene informado, la clasificación se resuelve en orquestación y esta activity no se ejecuta.
+- Si `Instrucciones.ExpectedType` viene informado, la clasificación se resuelve en orquestación y esta activity no se ejecuta (confianza forzada a 1.0).
 - Si no existe `ExpectedType`, la activity usa `IClasificarDataProvider` con precedencia:
   - `Instrucciones.Classification.Provider` / `Instrucciones.Classification.Model`
   - `Classification:DefaultProvider` / `Classification:DefaultModelKey`
 - El proveedor por defecto es Azure DI (`azure-document-intelligence`) salvo override explícito.
 
+Fallback GPT (`ConfigurableClasificarDataProvider`):
+
+- Si DI devuelve **`RESTO`** (etiqueta que Azure DI asigna cuando no reconoce ninguna clase), el fallback a GPT es **obligatorio** independientemente de la confianza.
+- Si la confianza DI es menor que `clasifUmbralFallback` (por defecto 0.85), también se activa el fallback GPT.
+- Si el proveedor DI lanza excepción, se intenta GPT si hay resultado parcial.
+- Si GPT devuelve `"Desconocido"` o confianza < 0.3, lanza `InvalidOperationException` que termina el proceso en `ERROR`.
+
 Decisión en orquestador:
 
-- Si `Confianza < Instrucciones.Classification.Umbral` ⇒ estado `BAJA_CONFIANZA_CLASIFICACION` y finaliza.
+- Si GPT no puede clasificar ⇒ estado `ERROR`, `Resultado.MensajeError` poblado, y finaliza sin ejecutar Extraer/Validar/Integrar.
+- Si `Confianza < Instrucciones.Classification.Umbral` (clasificación exitosa pero baja) ⇒ estado `BAJA_CONFIANZA_CLASIFICACION` y finaliza.
+
+Campos de salida relevantes en caso de `ERROR` por clasificación:
+
+- `Resultado.Estado = "ERROR"`
+- `Resultado.MensajeError = "No se ha podido identificar la tipologia del documento"`
+- `Resultado.ConfianzaGlobal = 0`, `Resultado.EstadoCalidad = "ERROR"`
+- `DetalleEjecucion.Clasificacion.TipologiaDetectada = "Desconocido"`, `FallbackLLM = true`
 
 ## 4.5 `ExtraerActivity`
 
@@ -311,10 +335,16 @@ Comportamiento de error:
 ## 5) Reglas de estado del orquestador
 
 - `DUPLICADO`: hash ya existe y no se fuerza reproceso.
-- `BAJA_CONFIANZA_CLASIFICACION`: clasificación por debajo de umbral.
+- `BAJA_CONFIANZA_CLASIFICACION`: clasificación exitosa pero confianza por debajo del umbral de la solicitud.
 - `VALIDACION_CON_ERRORES`: pipeline completo, con errores de validación.
 - `OK`: pipeline completo sin errores de validación.
-- `ERROR`: excepción no controlada en pipeline.
+- `ERROR`: excepción no controlada en pipeline. Puede incluir:
+  - Clasificación fallida: DI devuelve RESTO y GPT tampoco puede clasificar.
+  - Tipología no registrada en el resolver.
+  - Plugin crítico (prioridad 1) que falla en `IntegrarActivity`.
+  - Cualquier otra excepción no tratada.
+
+Cuando `Estado = ERROR`, el campo `Resultado.MensajeError` contiene el motivo legible del error.
 
 Confianza global:
 
@@ -350,9 +380,11 @@ Archivos de configuración utilizados por activities:
 ## 7.2 Qué revisar en incidencias
 
 - `DUPLICADO`: revisar `SkipDuplicateCheck` / `ForceReprocess`.
-- `BAJA_CONFIANZA_CLASIFICACION`: ajustar umbral o tipología esperada.
-- `VALIDACION_CON_ERRORES`: revisar reglas `<tipologia>.validation.json` y campos faltantes.
-- `ERROR`: revisar logs de activity específica y persistencia.
+- `BAJA_CONFIANZA_CLASIFICACION`: ajustar umbral de la solicitud (`Instrucciones.Classification.Umbral`) o usar `ExpectedType` para forzar tipología.
+- `VALIDACION_CON_ERRORES`: revisar reglas `<tipologia>.validation.json` y campos faltantes en la extracción.
+- `ERROR` por clasificación: comprobar `Resultado.MensajeError`. Si contiene "tipologia", el documento no fue clasificable — el clasificador DI (`DocumentAICC_v0`) devolvió RESTO y GPT no identificó el tipo. Opciones: (1) usar `ExpectedType` si se conoce la tipología, (2) reentrenar el clasificador DI con muestras del documento.
+- `ERROR` por tipología no registrada: el valor de `ExpectedType` o la etiqueta DI no corresponde a ningún archivo `*.validation.json` en `config/tipologias/`.
+- `ERROR` genérico: revisar logs de la activity específica (seguimiento del orquestador) y persistencia.
 
 ## 7.3 Orden recomendado de diagnóstico
 

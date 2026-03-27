@@ -34,7 +34,7 @@ Cuando el proceso de clasificación de DocumentIA finaliza, el documento procesa
 2. El campo `SkipGDCUpload` efectivo **no** es `true`. Este campo puede venir de dos fuentes con la siguiente precedencia:
    - **`Instrucciones.SkipGDCUpload`** (en la petición): si viene informado (`true` o `false`) tiene prioridad absoluta.
    - **`skipGDCUpload` de la tipología** (en el JSON de configuración): si la petición no lo especifica (`null`/omitido), se usa el valor configurado para la tipología detectada.
-   - Por defecto, las tipologías `nota-simple` tienen `skipGDCUpload: false` (sí sube) y `tasacion` tiene `skipGDCUpload: true` (no sube).
+   - Por defecto: `nota-simple` tiene `skipGDCUpload: false` (sí sube); `tasacion` y `resumen-documental` tienen `skipGDCUpload: true` (no suben).
 
 Antes de subir, se realiza una **consulta previa** al GDC para evitar duplicados: si el documento ya existe (mismo `expediente.id_expediente` + mismo `checksum`), la operación devuelve éxito indicando `YaExistia = true`, sin volver a crear el documento.
 

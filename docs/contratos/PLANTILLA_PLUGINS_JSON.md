@@ -22,6 +22,7 @@ Para compatibilidad con el flujo de persistencia/GDC:
   1. `DatosFinales["idActivo"]` (valor devuelto por plugins)
   2. `IntegrarInput.IdActivo` (valor original de entrada)
   3. `null` si no existe en ninguno.
+- El campo `returnsIdActivo: true` en el JSON es una **anotación documental** que indica que el plugin devuelve `idActivo`. No modifica el comportamiento del motor; es ignorado en la deserialización del modelo.
 
 ---
 
