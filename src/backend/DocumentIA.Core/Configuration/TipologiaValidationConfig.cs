@@ -108,8 +108,13 @@ namespace DocumentIA.Core.Configuration
     /// </summary>
     public class ConfidenceConfig
     {
-        /// <summary>Umbral de confianza de clasificación DI por debajo del cual se activa fallback GPT.</summary>
+        /// <summary>Umbral de confianza de clasificación DI por debajo del cual se activa fallback GPT.
+        /// También se usa como umbral BAJA_CONFIANZA_CLASIFICACION cuando no hay umbral en la petición.</summary>
         public double ClasifUmbralFallback { get; set; } = 0.85;
+        /// <summary>Ratio mínimo de campos obtenidos/esperados para considerar la extracción CU suficiente.
+        /// Si CU no supera este ratio, se activa el fallback GPT de extracción.
+        /// null = usar config.MinFieldsRatio (GptFallbackExtraerSettings) como último recurso.</summary>
+        public double? ExtracUmbralFallback { get; set; } = null;
         /// <summary>Peso del promedio de confianza de campos en el cálculo CU.</summary>
         public double ExtracWeightCampos { get; set; } = 0.5;
         /// <summary>Peso del ratio de campos requeridos presentes en el cálculo CU.</summary>

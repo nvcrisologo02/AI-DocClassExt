@@ -155,11 +155,48 @@ ConfianzaValid = 1 - 2/28 ≈ 0.93
 
 ## 5. Configuración por tipología
 
+### 5.1 Jerarquía de umbrales de fallback
+
+Los umbrales que determinan cuándo se activa el fallback GPT (tanto en clasificación como en extracción) siguen una cadena de prioridad de 3 niveles:
+
+```
+petición HTTP   →   tipología (*.validation.json)   →   configuración servidor (appsettings)
+```
+
+| Nivel | Campo (clasificación) | Campo (extracción) | Nota |
+|---|---|---|---|
+| **1 — Petición** | `instrucciones.classification.umbral` | `instrucciones.extraction.umbral` | Opcional. `null` = no especificado. |
+| **2 — Tipología** | `confidenceConfig.clasifUmbralFallback` | `confidenceConfig.extracUmbralFallback` | Opcional. `null` = no especificado. |
+| **3 — Servidor** | `Classification:GptFallback:FallbackThreshold` | `Extraction:GptFallback:MinFieldsRatio` | Siempre presente. Nivel de último recurso. |
+
+El orquestador resuelve el umbral efectivo antes de invocar cada actividad:
+
+```csharp
+// Clasificación (tipología no conocida todavía — solo niveles 1 y 3)
+var umbralClasifFallback = entrada.Instrucciones.Classification.Umbral
+    ?? _gptClasifSettings.FallbackThreshold;
+
+// Clasificación — check BAJA_CONFIANZA (tipología ya resuelta — cadena completa)
+var umbralBajaConfianza = entrada.Instrucciones.Classification.Umbral
+    ?? tipologiaResuelta.ConfidenceConfig?.ClasifUmbralFallback
+    ?? _gptClasifSettings.FallbackThreshold;
+
+// Extracción (solo si ExtractionEnabled = true)
+var umbralExtracFallback = entrada.Instrucciones.Extraction.Umbral
+    ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
+    ?? _gptExtracSettings.MinFieldsRatio;
+```
+
+> El nivel de tipología para clasificación se usa en el check `BAJA_CONFIANZA_CLASIFICACION` pero no en el umbral de DI→GPT previo a la resolución de tipología, donde solo se usan los niveles 1 y 3.
+
+### 5.2 Bloque `confidenceConfig`
+
 Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opcional. Si no está, se usan los defaults:
 
 ```json
 "confidenceConfig": {
   "clasifUmbralFallback": 0.85,
+  "extracUmbralFallback": 0.9,
   "extracWeightCampos": 0.5,
   "extracWeightRequeridos": 0.3,
   "extracWeightWarnings": 0.2,
@@ -170,7 +207,8 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 
 | Parámetro | Descripción | Default |
 |---|---|---|
-| `clasifUmbralFallback` | Si `ConfianzaDI < umbral`, `ConfigurableClasificarDataProvider` activa el fallback GPT | `0.85` |
+| `clasifUmbralFallback` | Umbral de confianza DI para activar fallback GPT en clasificación, y también para el check `BAJA_CONFIANZA_CLASIFICACION` (cuando la petición no especifica umbral). | `0.85` |
+| `extracUmbralFallback` | Ratio mínimo de campos para considerar la extracción CU suficiente. Si CU no llega, se activa fallback GPT. Para tipologías con `extraction.enabled=false` este campo no aplica. `null` = usar `MinFieldsRatio` del servidor. | `null` |
 | `extracWeightCampos` | Peso del promedio de confianzas de campo CU | `0.5` |
 | `extracWeightRequeridos` | Peso del ratio de campos requeridos presentes | `0.3` |
 | `extracWeightWarnings` | Peso de la penalización por warnings | `0.2` |
@@ -242,7 +280,10 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 | `DocumentIA.Core/Services/ConfidenceCalculator.cs` | Core | Cálculos puros, sin DI. Único punto de verdad matemático |
 | `DocumentIA.Core/Models/ContratoSalida.cs` | Core | Campos nuevos en `ResultadoFinal`, `ResultadoClasificacion`, `ResultadoExtraccion`, `InformacionPostproceso` |
 | `DocumentIA.Core/Models/ExtraccionModels.cs` | Core | `ConfianzaExtraccion`, `ProveedorExtrac`, `MetricasDebug` en `ExtraccionResultado` |
-| `DocumentIA.Core/Configuration/TipologiaValidationConfig.cs` | Core | Clase `ConfidenceConfig` + propiedad en `TipologiaValidationConfig` |
+| `DocumentIA.Core/Models/ContratoEntrada.cs` | Core | `ConfiguracionIA.Umbral` → `double?` (null = no especificado, usar jerarquía) |
+| `DocumentIA.Core/Models/ClasificacionModels.cs` | Core | `UmbralFallbackEfectivo double?` en `ClasificacionInput` |
+| `DocumentIA.Core/Models/ExtraccionModels.cs` | Core | `UmbralFallbackEfectivo double?` en `ExtraccionInput` |
+| `DocumentIA.Core/Configuration/TipologiaValidationConfig.cs` | Core | Clase `ConfidenceConfig` + propiedad en `TipologiaValidationConfig` + `ExtracUmbralFallback double?` |
 | `DocumentIA.Core/Configuration/ITipologiaVersionResolver.cs` | Core | `ConfidenceConfig` en `ResolvedTipologia` record |
 | `DocumentIA.Core/Configuration/TipologiaVersionResolver.cs` | Core | Propagación de `ConfidenceConfig` al resolver |
 | `DocumentIA.Functions/Services/AzureDocumentIntelligenceClasificarProvider.cs` | Functions | Extrae y asigna `ConfianzaDI`, `ProveedorClasif` |
@@ -250,7 +291,7 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 | `DocumentIA.Functions/Services/ConfigurableClasificarDataProvider.cs` | Functions | Propaga `ConfianzaDI` cuando ejecuta fallback GPT |
 | `DocumentIA.Functions/Services/AzureContentUnderstandingProvider.cs` | Functions | `TryExtractFieldConfidences()` + cálculo `ExtracCU()` + `MetricasDebug` |
 | `DocumentIA.Functions/Services/GptFallbackExtraerDataProvider.cs` | Functions | Asigna `ConfianzaExtraccion = ExtracGPT()`, `ProveedorExtrac` |
-| `DocumentIA.Functions/Orchestrators/DocumentProcessOrchestrator.cs` | Functions | Agrega `Global()`, asigna `EstadoCalidad`, descompone campos en contrato |
+| `DocumentIA.Functions/Orchestrators/DocumentProcessOrchestrator.cs` | Functions | Resuelve jerarquía de umbrales (petición→tipología→config) en 3 puntos; agrega `Global()`, asigna `EstadoCalidad`, descompone campos en contrato |
 | `DocumentIA.Functions/config/tipologias/*.validation.json` | Config | Bloque `confidenceConfig` con defaults explícitos |
 | `DocumentIA.Tests.Unit/Services/ConfidenceCalculatorTests.cs` | Tests | 24 tests unitarios cubriendo todos los métodos y casos límite |
 

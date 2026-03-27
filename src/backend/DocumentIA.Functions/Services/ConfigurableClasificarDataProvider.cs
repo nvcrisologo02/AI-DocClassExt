@@ -77,17 +77,18 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                     "Azure DI clasificÃ³ como RESTO para {Documento}. Activando fallback GPT obligatorio.",
                     input.Entrada.Documento.Name);
             }
-            else if (resultadoDI.Confianza >= _fallbackSettings.FallbackThreshold)
+            else if (resultadoDI.Confianza >= (input.UmbralFallbackEfectivo ?? _fallbackSettings.FallbackThreshold))
             {
                 return resultadoDI;
             }
             else
             {
+                var umbralEfectivo = input.UmbralFallbackEfectivo ?? _fallbackSettings.FallbackThreshold;
                 fallbackRazon = $"low_confidence:{resultadoDI.Confianza:F3}";
                 _logger.LogWarning(
                     "Confianza DI ({Confianza:F3}) inferior al umbral de fallback ({Umbral:F3}) para {Documento}. Activando fallback GPT.",
                     resultadoDI.Confianza,
-                    _fallbackSettings.FallbackThreshold,
+                    umbralEfectivo,
                     input.Entrada.Documento.Name);
             }
         }

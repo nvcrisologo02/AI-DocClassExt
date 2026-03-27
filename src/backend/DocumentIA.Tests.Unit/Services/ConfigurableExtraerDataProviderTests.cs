@@ -265,6 +265,7 @@ public class ConfigurableExtraerDataProviderTests
                 _tipologiaConfigLoader,
                 _mockProvider,
                 AzureProvider.Object,
+                null!,  // diExtraerProvider — no usado en estos tests (ruta CU/GPT)
                 GptProvider.Object,
                 _promptModelRegistryLoader,
                 Options.Create(_routingSettings),

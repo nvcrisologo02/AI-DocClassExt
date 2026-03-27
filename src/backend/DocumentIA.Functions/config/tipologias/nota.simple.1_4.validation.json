@@ -27,6 +27,7 @@
   },
   "confidenceConfig": {
     "clasifUmbralFallback": 0.85,
+    "extracUmbralFallback": 0.9,
     "extracWeightCampos": 0.5,
     "extracWeightRequeridos": 0.3,
     "extracWeightWarnings": 0.2,
