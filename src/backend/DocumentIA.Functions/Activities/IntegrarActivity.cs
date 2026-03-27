@@ -116,16 +116,12 @@ namespace DocumentIA.Functions.Activities
                 resultado.Mensaje = $"Error: {ex.Message}";
             }
 
-            // Resolver IdActivo: extraer de DatosFinales si algún plugin lo devolvió,
+            // Resolver IdActivo: extraer de DatosFinales (case-insensitive) si algún plugin lo devolvió,
             // o mantener el que vino en la entrada si ya estaba informado
-            if (resultado.DatosFinales.TryGetValue("idActivo", out var idActivoEnriquecido))
+            if (TryObtenerIdActivo(resultado.DatosFinales, out var idActivoEnriquecido))
             {
-                var idActivoStr = idActivoEnriquecido?.ToString();
-                if (!string.IsNullOrWhiteSpace(idActivoStr))
-                {
-                    resultado.IdActivoResuelto = idActivoStr;
-                    logger.LogInformation("IdActivo resuelto por plugin: {IdActivo}", idActivoStr);
-                }
+                resultado.IdActivoResuelto = idActivoEnriquecido;
+                logger.LogInformation("IdActivo resuelto por plugin: {IdActivo}", idActivoEnriquecido);
             }
 
             if (string.IsNullOrWhiteSpace(resultado.IdActivoResuelto) && !string.IsNullOrWhiteSpace(input.IdActivo))
@@ -178,12 +174,16 @@ namespace DocumentIA.Functions.Activities
                 // Preparar payload: enviar TODOS los datos actuales
                 // idActivo se incluye siempre (aunque sea vacío) para que el plugin pueda recibirlo,
                 // enriquecerlo o retornarlo cumplimentado en la respuesta
+                var idActivoActual = TryObtenerIdActivo(datosActuales, out var idActivoEnriquecido)
+                    ? idActivoEnriquecido
+                    : (input.IdActivo ?? string.Empty);
+
                 var payload = new Dictionary<string, object>
                 {
                     ["tipologia"] = input.Tipologia,
                     ["documentoId"] = input.DocumentoId,
                     ["datosExtraidos"] = datosActuales, // Datos acumulados hasta ahora
-                    ["idActivo"] = input.IdActivo ?? string.Empty,
+                    ["idActivo"] = idActivoActual,
                     ["metadata"] = input.Metadata
                 };
 
@@ -239,6 +239,27 @@ namespace DocumentIA.Functions.Activities
                 
                 destino[kvp.Key] = kvp.Value; // Sobrescribir o agregar
             }
+        }
+
+        private static bool TryObtenerIdActivo(IReadOnlyDictionary<string, object> values, out string idActivo)
+        {
+            foreach (var kvp in values)
+            {
+                if (!string.Equals(kvp.Key, "idActivo", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var value = kvp.Value?.ToString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    idActivo = value;
+                    return true;
+                }
+            }
+
+            idActivo = string.Empty;
+            return false;
         }
     }
 
