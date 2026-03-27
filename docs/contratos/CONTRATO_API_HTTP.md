@@ -43,13 +43,11 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "skipGDCUpload": null,
     "classification": {
       "provider": "auto",
-      "model": "auto",
-      "umbral": 0.85
+      "model": "auto"
     },
     "extraction": {
       "provider": "auto",
-      "model": "auto",
-      "umbral": 0.85
+      "model": "auto"
     }
   },
   "documento": {
@@ -79,10 +77,10 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `skipGDCUpload` | bool? | `null` = respetar la configuración de la tipología. `true` = no subir al GDC. `false` = forzar subida. |
 | `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `mock` |
 | `classification.model` | string | Reservado. Usar `"auto"`. |
-| `classification.umbral` | double | Umbral de confianza para aceptar la clasificación. `[0.0–1.0]`. |
+| `classification.umbral` | double? | _(Opcional)_ Umbral de confianza para activar fallback GPT y para el check `BAJA_CONFIANZA_CLASIFICACION`. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor. |
 | `extraction.provider` | string | `auto` \| `azure-content-understanding` \| `mock` |
 | `extraction.model` | string | Reservado. Usar `"auto"`. |
-| `extraction.umbral` | double | Umbral de confianza para aceptar la extracción. |
+| `extraction.umbral` | double? | _(Opcional)_ Ratio mínimo de campos para considerar la extracción CU suficiente. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor (`MinFieldsRatio`). |
 
 **`documento`**
 
@@ -251,8 +249,8 @@ $body = @{
         skipDuplicateCheck = $false
         forceReprocess    = $false
         skipGDCUpload     = $null
-        classification    = @{ provider = "auto"; model = "auto"; umbral = 0.85 }
-        extraction        = @{ provider = "auto"; model = "auto"; umbral = 0.85 }
+        classification    = @{ provider = "auto"; model = "auto" }
+        extraction        = @{ provider = "auto"; model = "auto" }
     }
     documento = @{
         name    = "nota_simple.pdf"

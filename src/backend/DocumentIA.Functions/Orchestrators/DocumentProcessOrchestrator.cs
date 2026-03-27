@@ -1,10 +1,12 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Activities;
+using DocumentIA.Functions.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -15,6 +17,16 @@ namespace DocumentIA.Functions.Orchestrators;
 
 public class DocumentProcessOrchestrator
 {
+    private readonly GptClasificarSettings _gptClasifSettings;
+    private readonly GptFallbackExtraerSettings _gptExtracSettings;
+
+    public DocumentProcessOrchestrator(
+        IOptions<GptClasificarSettings> gptClasifSettings,
+        IOptions<GptFallbackExtraerSettings> gptExtracSettings)
+    {
+        _gptClasifSettings = gptClasifSettings.Value;
+        _gptExtracSettings = gptExtracSettings.Value;
+    }
     [Function("DocumentProcessOrchestrator")]
     public async Task<ContratoSalida> RunOrchestrator(
         [OrchestrationTrigger] TaskOrchestrationContext context)
@@ -255,6 +267,11 @@ public class DocumentProcessOrchestrator
                 logger.LogInformation("Paso 3: Clasificando documento");
                 MarcarInicioActividad("Clasificar");
 
+                // Umbral de fallback DI→GPT: instrucciones ?? config servidor
+                // (tipología no conocida todavía en este punto)
+                var umbralClasifFallback = entrada.Instrucciones.Classification.Umbral
+                    ?? _gptClasifSettings.FallbackThreshold;
+
                 try
                 {
                     resultadoClasificacion = await context.CallActivityAsync<ResultadoClasificacion>(
@@ -262,7 +279,8 @@ public class DocumentProcessOrchestrator
                         new ClasificacionInput
                         {
                             Entrada = entrada,
-                            DatosNormalizados = datosNormalizados
+                            DatosNormalizados = datosNormalizados,
+                            UmbralFallbackEfectivo = umbralClasifFallback
                         });
 
                         var mensajeClasificacion = resultadoClasificacion.FallbackLLM
@@ -370,11 +388,15 @@ public class DocumentProcessOrchestrator
                 seguimiento.Actividades.Add(new TrazaActividad { Nombre = "Prompt", Estado = "Pending" });
             }
 
-            // Verificar umbral de confianza
-            if (resultadoClasificacion.Confianza < entrada.Instrucciones.Classification.Umbral)
+            // Verificar umbral de confianza: instrucciones ?? tipología ?? config servidor
+            var umbralBajaConfianza = entrada.Instrucciones.Classification.Umbral
+                ?? tipologiaResuelta.ConfidenceConfig?.ClasifUmbralFallback
+                ?? _gptClasifSettings.FallbackThreshold;
+
+            if (resultadoClasificacion.Confianza < umbralBajaConfianza)
             {
                 salida.Resultado.Estado = "BAJA_CONFIANZA_CLASIFICACION";
-                logger.LogWarning($"Confianza de clasificacion baja: {resultadoClasificacion.Confianza}");
+                logger.LogWarning($"Confianza de clasificacion baja: {resultadoClasificacion.Confianza} (umbral: {umbralBajaConfianza})");
 
                 FinalizarSeguimiento("Completed", "Clasificación por debajo de umbral");
                 return salida;
@@ -389,6 +411,12 @@ public class DocumentProcessOrchestrator
             {
                 // 4. Extraccion
                 logger.LogInformation("Paso 4: Extrayendo datos");
+
+                // Umbral de fallback CU→GPT: instrucciones ?? tipología ?? config servidor
+                var umbralExtracFallback = entrada.Instrucciones.Extraction.Umbral
+                    ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
+                    ?? _gptExtracSettings.MinFieldsRatio;
+
                 resultadoExtraccion = await EjecutarPasoNegocio(
                     "Extraer",
                     () => context.CallActivityAsync<ExtraccionResultado>(
@@ -397,7 +425,8 @@ public class DocumentProcessOrchestrator
                         {
                             Entrada = entrada,
                             Tipologia = salida.Identificacion.Tipologia,
-                            DatosNormalizados = datosNormalizados
+                            DatosNormalizados = datosNormalizados,
+                            UmbralFallbackEfectivo = umbralExtracFallback
                         }));
 
                 if (resultadoExtraccion.FallbackUsado)

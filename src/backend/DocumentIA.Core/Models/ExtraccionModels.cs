@@ -5,6 +5,12 @@ public class ExtraccionInput
     public ContratoEntrada Entrada { get; set; } = new();
     public string Tipologia { get; set; } = string.Empty;
     public Dictionary<string, object> DatosNormalizados { get; set; } = new();
+    /// <summary>
+    /// Umbral de fallback efectivo resuelto por el orquestador antes de llamar a ExtraerActivity.
+    /// Cadena: instrucciones.Extraction.Umbral ?? tipología.ExtracUmbralFallback ?? config.MinFieldsRatio.
+    /// null = usar config.MinFieldsRatio directamente en el proveedor.
+    /// </summary>
+    public double? UmbralFallbackEfectivo { get; set; }
 }
 
 public class ExtraccionResultado

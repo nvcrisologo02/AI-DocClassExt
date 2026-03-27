@@ -86,7 +86,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         {
             resultadoCu = await _azureProvider.ObtenerDatosAsync(input, cancellationToken);
 
-            if (EsResultadoCuSuficiente(config, resultadoCu, out var ratio, out var esperados, out var obtenidos))
+            if (EsResultadoCuSuficiente(config, resultadoCu, input.UmbralFallbackEfectivo, out var ratio, out var esperados, out var obtenidos))
             {
                 return resultadoCu;
             }
@@ -145,6 +145,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private bool EsResultadoCuSuficiente(
         TipologiaValidationConfig config,
         ExtraccionResultado resultadoCu,
+        double? umbralFallback,
         out double ratio,
         out int esperados,
         out int obtenidos)
@@ -159,7 +160,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         }
 
         ratio = (double)obtenidos / esperados;
-        return ratio >= _fallbackSettings.MinFieldsRatio;
+        return ratio >= (umbralFallback ?? _fallbackSettings.MinFieldsRatio);
     }
 
     private static bool IsAzureContentUnderstandingProvider(string provider) =>

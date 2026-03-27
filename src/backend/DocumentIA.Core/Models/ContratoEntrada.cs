@@ -24,7 +24,10 @@ public class ConfiguracionIA
 {
     public string Provider { get; set; } = "auto"; // auto | azure-document-intelligence | mock
     public string Model { get; set; } = "auto"; // DI | GPT | auto
-    public double Umbral { get; set; } = 0.85;
+    /// <summary>
+    /// Umbral de confianza para esta etapa. null = usar el valor configurado en la tipología o en el servidor.
+    /// </summary>
+    public double? Umbral { get; set; } = null;
 }
 
 public class Documento
