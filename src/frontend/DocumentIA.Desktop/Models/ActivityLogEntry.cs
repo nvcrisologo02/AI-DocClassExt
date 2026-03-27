@@ -8,9 +8,9 @@ namespace DocumentIA.Desktop.Models
         public ActivityStatusEnum Status { get; set; }
         public DateTime Timestamp { get; set; }
         public long? DurationMs { get; set; }
-        public string Message { get; set; }
+        public string? Message { get; set; }
 
-        public ActivityLogEntry(string activityName, ActivityStatusEnum status, long? durationMs = null, string message = null)
+        public ActivityLogEntry(string activityName, ActivityStatusEnum status, long? durationMs = null, string? message = null)
         {
             ActivityName = activityName;
             Status = status;

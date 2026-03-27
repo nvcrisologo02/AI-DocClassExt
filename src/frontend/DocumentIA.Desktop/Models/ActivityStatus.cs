@@ -5,8 +5,8 @@ namespace DocumentIA.Desktop.Models
 {
     public class ActivityDetailRow
     {
-        public string Key { get; set; }
-        public string Value { get; set; }
+        public string Key { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
     }
 
     public enum ActivityStatusEnum
@@ -23,7 +23,7 @@ namespace DocumentIA.Desktop.Models
         private string _name;
         private ActivityStatusEnum _status;
         private long? _durationMs;
-        private string _message;
+        private string? _message;
         private bool _isLast;
 
         public string Name
@@ -65,7 +65,7 @@ namespace DocumentIA.Desktop.Models
             }
         }
 
-        public string Message
+        public string? Message
         {
             get => _message;
             set
@@ -103,7 +103,7 @@ namespace DocumentIA.Desktop.Models
             DetailRows = new ObservableCollection<ActivityDetailRow>();
         }
 
-        public event PropertyChangedEventHandler PropertyChanged;
+        public event PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged(string propertyName)
         {

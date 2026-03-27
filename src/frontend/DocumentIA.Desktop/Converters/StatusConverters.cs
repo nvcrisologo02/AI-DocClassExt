@@ -8,7 +8,7 @@ namespace DocumentIA.Desktop.Converters
 {
     public class ActivityStatusToBrushConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
             if (value is bool isConnected)
             {
@@ -36,7 +36,7 @@ namespace DocumentIA.Desktop.Converters
 
     public class ActivityStatusToStringConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
             if (value is ActivityStatusEnum status)
             {
@@ -57,7 +57,7 @@ namespace DocumentIA.Desktop.Converters
 
     public class ActivityStatusToLabelConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
             if (value is ActivityStatusEnum status)
             {
@@ -79,20 +79,20 @@ namespace DocumentIA.Desktop.Converters
 
     public class BoolToVisibilityConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
-            return (bool)value ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
+            return value is bool boolValue && boolValue ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
-            return (System.Windows.Visibility)value == System.Windows.Visibility.Visible;
+            return value is System.Windows.Visibility visibility && visibility == System.Windows.Visibility.Visible;
         }
     }
 
     public class DurationToDisplayConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
             if (value is long duration)
             {
@@ -102,9 +102,9 @@ namespace DocumentIA.Desktop.Converters
             {
                 return "";
             }
-            return value.ToString();
+            return value.ToString() ?? string.Empty;
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
+        public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotImplementedException();
     }
 }

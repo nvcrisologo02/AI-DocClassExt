@@ -15,23 +15,23 @@ namespace DocumentIA.Desktop.ViewModels
 {
     public class RelayCommand : ICommand
     {
-        private readonly Action<object> _execute;
-        private readonly Predicate<object> _canExecute;
+        private readonly Action<object?> _execute;
+        private readonly Predicate<object?>? _canExecute;
 
-        public RelayCommand(Action<object> execute, Predicate<object> canExecute = null)
+        public RelayCommand(Action<object?> execute, Predicate<object?>? canExecute = null)
         {
             _execute = execute ?? throw new ArgumentNullException(nameof(execute));
             _canExecute = canExecute;
         }
 
-        public event EventHandler CanExecuteChanged
+        public event EventHandler? CanExecuteChanged
         {
             add { CommandManager.RequerySuggested += value; }
             remove { CommandManager.RequerySuggested -= value; }
         }
 
-        public bool CanExecute(object parameter) => _canExecute?.Invoke(parameter) ?? true;
-        public void Execute(object parameter) => _execute(parameter);
+        public bool CanExecute(object? parameter) => _canExecute?.Invoke(parameter) ?? true;
+        public void Execute(object? parameter) => _execute(parameter);
     }
 
     public class ProcessingViewModel : NotifyPropertyChanged
@@ -49,14 +49,14 @@ namespace DocumentIA.Desktop.ViewModels
         };
 
         private readonly IOrchestratorApiClient _apiClient;
-        private CancellationTokenSource _pollingCts;
-        private string _lastLoggedActivity;
+        private CancellationTokenSource? _pollingCts;
+        private string? _lastLoggedActivity;
 
-        public ObservableCollection<ActivityStatus> ActivityStatuses { get; }
-        public ObservableCollection<ActivityLogEntry> ActivityLogs { get; }
+        public ObservableCollection<ActivityStatus> ActivityStatuses { get; } = new ObservableCollection<ActivityStatus>();
+        public ObservableCollection<ActivityLogEntry> ActivityLogs { get; } = new ObservableCollection<ActivityLogEntry>();
 
-        private string _selectedDocumentPath;
-        public string SelectedDocumentPath
+        private string? _selectedDocumentPath;
+        public string? SelectedDocumentPath
         {
             get => _selectedDocumentPath;
             set
@@ -84,8 +84,8 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private string _instanceId;
-        public string InstanceId
+        private string? _instanceId;
+        public string? InstanceId
         {
             get => _instanceId;
             set
@@ -98,8 +98,8 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private string _correlationId;
-        public string CorrelationId
+        private string? _correlationId;
+        public string? CorrelationId
         {
             get => _correlationId;
             set
@@ -112,8 +112,8 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private object _outputJson;
-        public object OutputJson
+        private object? _outputJson;
+        public object? OutputJson
         {
             get => _outputJson;
             set
@@ -155,7 +155,7 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private string _apiStatusMessage;
+        private string _apiStatusMessage = string.Empty;
         public string ApiStatusMessage
         {
             get => _apiStatusMessage;
@@ -218,25 +218,14 @@ namespace DocumentIA.Desktop.ViewModels
 
         public ProcessingViewModel()
         {
-            try
-            {
-                _apiClient = new OrchestratorApiClient("http://localhost:7071");
-                ActivityStatuses = new ObservableCollection<ActivityStatus>();
-                ActivityLogs = new ObservableCollection<ActivityLogEntry>();
-                
-                ExecuteCommand = new RelayCommand(_ => ExecuteAsync().ConfigureAwait(false), _ => IsExecuteEnabled);
-                SelectFileCommand = new RelayCommand(_ => SelectFile());
+            _apiClient = new OrchestratorApiClient("http://localhost:7071");
+            ExecuteCommand = new RelayCommand(_ => _ = ExecuteAsync(), _ => IsExecuteEnabled);
+            SelectFileCommand = new RelayCommand(_ => SelectFile());
 
-                InitializeActivities();
-                
-                // Initial connection check on UI thread
-                CheckApiConnectionAsync().ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                IsApiConnected = false;
-                ApiStatusMessage = $"Error en inicialización: {ex.Message}";
-            }
+            InitializeActivities();
+
+            // Initial connection check on UI thread
+            _ = CheckApiConnectionAsync();
         }
 
         private void InitializeActivities()
@@ -303,7 +292,7 @@ namespace DocumentIA.Desktop.ViewModels
 
                 // Build request
                 var request = BuildRequest(documentName, documentBase64);
-                CorrelationId = request.Traceability.CorrelationId;
+                CorrelationId = request.Traceability?.CorrelationId;
 
                 ActivityLogs.Add(new ActivityLogEntry("Lectura", ActivityStatusEnum.Completed, message: $"{documentName}"));
                 ActivityLogs.Add(new ActivityLogEntry("Envío", ActivityStatusEnum.Running, message: "Enviando a servidor..."));
@@ -316,6 +305,11 @@ namespace DocumentIA.Desktop.ViewModels
                 ActivityLogs.Add(new ActivityLogEntry("Procesamiento", ActivityStatusEnum.Running, message: "Esperando resultado..."));
 
                 // Poll status
+                if (string.IsNullOrWhiteSpace(response.StatusQueryUri))
+                {
+                    throw new Exception("La respuesta no incluye StatusQueryUri");
+                }
+
                 await PollStatusAsync(response.StatusQueryUri);
             }
             catch (Exception ex)
@@ -330,7 +324,7 @@ namespace DocumentIA.Desktop.ViewModels
 
         private ProcessingRequest BuildRequest(string documentName, string documentBase64)
         {
-            var expectedType = SelectedClassificationType switch
+            string? expectedType = SelectedClassificationType switch
             {
                 "nota-simple@1.4" => "nota-simple@1.4",
                 "resumen-documental" => "resumen-documental",
@@ -382,7 +376,7 @@ namespace DocumentIA.Desktop.ViewModels
             var retryCount = 0;
             var pollIntervalMs = 2000; // 2 seconds
 
-            ProcessingStatus lastStatus = null;
+            ProcessingStatus? lastStatus = null;
 
             while (retryCount < maxRetries && !_pollingCts.Token.IsCancellationRequested)
             {
@@ -415,7 +409,10 @@ namespace DocumentIA.Desktop.ViewModels
             {
                 ActivityLogs.Add(new ActivityLogEntry("Completado", ActivityStatusEnum.Completed, message: "Procesamiento exitoso ✓"));
                 OutputJson = lastStatus.Output;
-                PopulateActivityMessagesFromOutput(lastStatus.Output);
+                if (lastStatus.Output != null)
+                {
+                    PopulateActivityMessagesFromOutput(lastStatus.Output);
+                }
                 MarkActivitiesComplete();
             }
             else if (lastStatus?.RuntimeStatus == "Failed")
@@ -555,7 +552,7 @@ namespace DocumentIA.Desktop.ViewModels
             UpdateLastActivityFlags();
         }
 
-        private static string NormalizeState(string state)
+        private static string NormalizeState(string? state)
         {
             if (string.IsNullOrWhiteSpace(state))
             {
@@ -579,7 +576,7 @@ namespace DocumentIA.Desktop.ViewModels
             };
         }
 
-        private static string CanonicalizeActivityName(string name)
+        private static string CanonicalizeActivityName(string? name)
         {
             if (string.IsNullOrWhiteSpace(name))
             {
@@ -609,8 +606,9 @@ namespace DocumentIA.Desktop.ViewModels
             };
         }
 
-        private static string RemoveDiacritics(string text)
+        private static string RemoveDiacritics(string? text)
         {
+            text ??= string.Empty;
             var normalizedString = text.Normalize(NormalizationForm.FormD);
             var stringBuilder = new StringBuilder();
 
@@ -749,7 +747,7 @@ namespace DocumentIA.Desktop.ViewModels
             };
         }
 
-        private IEnumerable<ActivityDetailRow> BuildRowsForValidation(JObject detalle, JObject output)
+        private IEnumerable<ActivityDetailRow> BuildRowsForValidation(JObject? detalle, JObject output)
         {
             var rows = new List<ActivityDetailRow>();
 
@@ -771,7 +769,7 @@ namespace DocumentIA.Desktop.ViewModels
             return rows;
         }
 
-        private IEnumerable<ActivityDetailRow> BuildRowsFromToken(JToken token, string rootLabel)
+        private IEnumerable<ActivityDetailRow> BuildRowsFromToken(JToken? token, string rootLabel)
         {
             var rows = new List<ActivityDetailRow>();
 
@@ -808,7 +806,7 @@ namespace DocumentIA.Desktop.ViewModels
             return rows;
         }
 
-        private static void AddRowsFromToken(ICollection<ActivityDetailRow> rows, JToken token, string prefix, int depth = 0)
+        private static void AddRowsFromToken(ICollection<ActivityDetailRow> rows, JToken? token, string prefix, int depth = 0)
         {
             if (token == null || rows.Count >= 16)
             {
@@ -892,7 +890,7 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private JToken FindTrackingActivitySummary(JObject detalle, string canonical)
+        private JToken? FindTrackingActivitySummary(JObject? detalle, string canonical)
         {
             var seguimiento = FindPropertyIgnoreCase(detalle, "Seguimiento") as JObject;
             var actividades = FindPropertyIgnoreCase(seguimiento, "Actividades") as JArray;
@@ -913,7 +911,7 @@ namespace DocumentIA.Desktop.ViewModels
             return null;
         }
 
-        private static JToken FindPropertyIgnoreCase(JToken token, string propertyName)
+        private static JToken? FindPropertyIgnoreCase(JToken? token, string propertyName)
         {
             if (token is not JObject obj || string.IsNullOrWhiteSpace(propertyName))
             {
@@ -924,7 +922,7 @@ namespace DocumentIA.Desktop.ViewModels
             return prop?.Value;
         }
 
-        private static string BuildCompactSummary(JToken token)
+        private static string BuildCompactSummary(JToken? token)
         {
             if (token == null)
             {
@@ -943,7 +941,7 @@ namespace DocumentIA.Desktop.ViewModels
 
     public class NotifyPropertyChanged : System.ComponentModel.INotifyPropertyChanged
     {
-        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 
         protected void OnPropertyChanged(string propertyName)
         {

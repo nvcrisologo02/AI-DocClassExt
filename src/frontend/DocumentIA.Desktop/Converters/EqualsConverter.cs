@@ -6,17 +6,19 @@ namespace DocumentIA.Desktop.Converters
 {
     public class EqualsConverter : IValueConverter
     {
-        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
             if (value == null || parameter == null)
                 return false;
 
-            return value.ToString().Equals(parameter.ToString(), StringComparison.OrdinalIgnoreCase);
+            var left = value.ToString();
+            var right = parameter.ToString();
+            return string.Equals(left, right, StringComparison.OrdinalIgnoreCase);
         }
 
-        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
         {
-            if ((bool)value && parameter != null)
+            if (value is bool boolValue && boolValue && parameter != null)
                 return parameter.ToString();
 
             return null;

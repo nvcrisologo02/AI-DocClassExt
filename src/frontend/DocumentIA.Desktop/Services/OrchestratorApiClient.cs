@@ -88,8 +88,13 @@ namespace DocumentIA.Desktop.Services
                     throw new Exception($"API Error: {response.StatusCode} - {response.Content}");
                 }
 
+                if (string.IsNullOrWhiteSpace(response.Content))
+                {
+                    throw new Exception("API returned an empty response");
+                }
+
                 var result = JsonConvert.DeserializeObject<ProcessingResponse>(response.Content, _jsonSettings);
-                return result;
+                return result ?? throw new Exception("Failed to deserialize ingest response");
             }
             catch (Exception ex)
             {
@@ -102,6 +107,11 @@ namespace DocumentIA.Desktop.Services
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(statusUri))
+                {
+                    throw new ArgumentException("Status URI is required", nameof(statusUri));
+                }
+
                 // Fix URL if it has incorrect localhost reference
                 var fixedUri = statusUri.Replace("http://localhost/", "http://localhost:7071/");
 
@@ -115,8 +125,13 @@ namespace DocumentIA.Desktop.Services
 
                 try
                 {
+                    if (string.IsNullOrWhiteSpace(response.Content))
+                    {
+                        throw new Exception("Status response is empty");
+                    }
+
                     var result = JsonConvert.DeserializeObject<ProcessingStatus>(response.Content, _jsonSettings);
-                    return result;
+                    return result ?? throw new Exception("Failed to deserialize status response");
                 }
                 catch (JsonSerializationException jsonEx)
                 {

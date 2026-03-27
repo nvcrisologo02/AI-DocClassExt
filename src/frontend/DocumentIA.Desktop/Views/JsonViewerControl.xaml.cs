@@ -10,14 +10,14 @@ namespace DocumentIA.Desktop.Views
 {
     public partial class JsonViewerControl : UserControl
     {
-        private JToken _currentToken;
+        private JToken? _currentToken;
 
         public JsonViewerControl()
         {
             InitializeComponent();
         }
 
-        public void DisplayJson(object jsonObject)
+        public void DisplayJson(object? jsonObject)
         {
             JsonTreeView.Items.Clear();
             RawJsonTextBox.Text = string.Empty;
