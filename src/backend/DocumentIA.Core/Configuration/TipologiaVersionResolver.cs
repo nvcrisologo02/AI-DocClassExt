@@ -1,17 +1,29 @@
 using System.Text.Json;
+using DocumentIA.Data.Entities;
+using DocumentIA.Data.Repositories;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DocumentIA.Core.Configuration;
 
 public class TipologiaVersionResolver : ITipologiaVersionResolver
 {
     private const string ValidationSuffix = ".validation.json";
-    private readonly string _configBasePath;
-    private readonly Lazy<ResolverIndex> _index;
+    private readonly string? _configBasePath;
+    private readonly IMemoryCache? _cache;
+    private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly Lazy<ResolverIndex>? _index;
 
     public TipologiaVersionResolver(string configBasePath)
     {
         _configBasePath = configBasePath;
         _index = new Lazy<ResolverIndex>(BuildIndex);
+    }
+
+    public TipologiaVersionResolver(IMemoryCache cache, IServiceScopeFactory scopeFactory)
+    {
+        _cache = cache;
+        _scopeFactory = scopeFactory;
     }
 
     public ResolvedTipologia Resolve(string input)
@@ -22,7 +34,7 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
         }
 
         var normalizedInput = input.Trim();
-        var index = _index.Value;
+        var index = GetIndex();
 
         if (index.ByTechnicalKey.TryGetValue(normalizedInput, out var directMatch))
         {
@@ -89,7 +101,8 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
         }
 
         var normalizedTipologiaId = tipologiaId.Trim();
-        if (!_index.Value.ByFamily.TryGetValue(normalizedTipologiaId, out var entries))
+        var index = GetIndex();
+        if (!index.ByFamily.TryGetValue(normalizedTipologiaId, out var entries))
         {
             return Array.Empty<string>();
         }
@@ -101,8 +114,32 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
             .ToArray();
     }
 
+    private ResolverIndex GetIndex()
+    {
+        if (_cache is not null && _scopeFactory is not null)
+        {
+            return _cache.GetOrCreate("tipologias:snapshot", entry =>
+            {
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+                return BuildIndexFromDatabase();
+            })!;
+        }
+
+        if (_index is null)
+        {
+            throw new InvalidOperationException("TipologiaVersionResolver no esta correctamente configurado.");
+        }
+
+        return _index.Value;
+    }
+
     private ResolverIndex BuildIndex()
     {
+        if (_configBasePath is null)
+        {
+            throw new InvalidOperationException("No se ha configurado ruta base de tipologias.");
+        }
+
         if (!Directory.Exists(_configBasePath))
         {
             throw new DirectoryNotFoundException($"No existe el directorio de tipologias: {_configBasePath}");
@@ -150,6 +187,66 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
             }
 
             familyEntries.Add(resolved);
+        }
+
+        return new ResolverIndex(byTechnicalKey, byFamily);
+    }
+
+    private ResolverIndex BuildIndexFromDatabase()
+    {
+        using var scope = _scopeFactory!.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
+
+        var publishedTipologias = repository.GetAllPublishedAsync()
+            .GetAwaiter()
+            .GetResult();
+
+        var byTechnicalKey = new Dictionary<string, ResolvedTipologia>(StringComparer.OrdinalIgnoreCase);
+        var byFamily = new Dictionary<string, List<ResolvedTipologia>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var tipologia in publishedTipologias)
+        {
+            if (!tipologia.Activa || tipologia.Estado != EstadoTipologia.Published)
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(tipologia.ConfiguracionJson))
+            {
+                continue;
+            }
+
+            var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(tipologia.ConfiguracionJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            if (config is null || string.IsNullOrWhiteSpace(config.TipologiaId) || string.IsNullOrWhiteSpace(config.Version))
+            {
+                continue;
+            }
+
+            var technicalKey = tipologia.Codigo;
+            var resolved = new ResolvedTipologia(
+                RequestedValue: technicalKey,
+                TipologiaId: config.TipologiaId.Trim(),
+                Version: config.Version.Trim(),
+                TechnicalKey: technicalKey,
+                IsDefault: config.IsDefault,
+                SkipGDCUpload: config.SkipGDCUpload,
+                PromptEnabled: config.PromptConfig?.Enabled == true,
+                ExtractionEnabled: config.Extraction.Enabled,
+                ConfidenceConfig: config.ConfidenceConfig);
+
+            byTechnicalKey[technicalKey] = resolved;
+
+            if (!byFamily.TryGetValue(resolved.TipologiaId, out var entries))
+            {
+                entries = new List<ResolvedTipologia>();
+                byFamily[resolved.TipologiaId] = entries;
+            }
+
+            entries.Add(resolved);
         }
 
         return new ResolverIndex(byTechnicalKey, byFamily);

@@ -1,0 +1,84 @@
+@page "/tipologias/{Id:int}"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Detalle Tipología</PageTitle>
+
+@if (_tipologia is null)
+{
+    <p>No existe la tipología.</p>
+}
+else
+{
+    <h1>@_tipologia.Nombre</h1>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+    }
+
+    <dl class="row">
+        <dt class="col-sm-3">Codigo</dt>
+        <dd class="col-sm-9">@_tipologia.Codigo</dd>
+
+        <dt class="col-sm-3">Version</dt>
+        <dd class="col-sm-9">@_tipologia.Version</dd>
+
+        <dt class="col-sm-3">Estado</dt>
+        <dd class="col-sm-9">@_tipologia.Estado</dd>
+
+        <dt class="col-sm-3">Publicada</dt>
+        <dd class="col-sm-9">@(_tipologia.PublicadaEn?.ToString("u") ?? "-")</dd>
+    </dl>
+
+    <div class="mb-3">
+        <button class="btn btn-success" @onclick="PublishAsync">Publicar</button>
+        <button class="btn btn-warning ms-2" @onclick="RetireAsync">Retirar</button>
+        <a class="btn btn-secondary ms-2" href="/tipologias">Volver</a>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private TipologiaEntity? _tipologia;
+    private bool _error;
+    private string? _message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _tipologia = await AdminService.GetTipologiaAsync(Id);
+    }
+
+    private async Task PublishAsync()
+    {
+        try
+        {
+            await AdminService.PublishTipologiaAsync(Id, "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui");
+            _error = false;
+            _message = "Tipología publicada.";
+            _tipologia = await AdminService.GetTipologiaAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private async Task RetireAsync()
+    {
+        try
+        {
+            await AdminService.RetireTipologiaAsync(Id);
+            _error = false;
+            _message = "Tipología retirada.";
+            _tipologia = await AdminService.GetTipologiaAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

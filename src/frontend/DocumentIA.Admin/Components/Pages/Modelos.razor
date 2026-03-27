@@ -1,0 +1,55 @@
+@page "/modelos"
+@inject TipologiaAdminService AdminService
+
+<PageTitle>Modelos</PageTitle>
+
+<h1>Modelos</h1>
+
+<h3>Clasificación</h3>
+@RenderTable(_clasificacion)
+
+<h3>Extracción</h3>
+@RenderTable(_extraccion)
+
+<h3>Prompt</h3>
+@RenderTable(_prompt)
+
+@code {
+    private IReadOnlyCollection<ModeloConfigEntity> _clasificacion = Array.Empty<ModeloConfigEntity>();
+    private IReadOnlyCollection<ModeloConfigEntity> _extraccion = Array.Empty<ModeloConfigEntity>();
+    private IReadOnlyCollection<ModeloConfigEntity> _prompt = Array.Empty<ModeloConfigEntity>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _clasificacion = await AdminService.GetModelosByTipoAsync(TipoModelo.Clasificacion);
+        _extraccion = await AdminService.GetModelosByTipoAsync(TipoModelo.Extraccion);
+        _prompt = await AdminService.GetModelosByTipoAsync(TipoModelo.Prompt);
+    }
+
+    private RenderFragment RenderTable(IReadOnlyCollection<ModeloConfigEntity> rows) => builder =>
+    {
+        var seq = 0;
+        builder.OpenElement(seq++, "table");
+        builder.AddAttribute(seq++, "class", "table table-striped");
+
+        builder.OpenElement(seq++, "thead");
+        builder.OpenElement(seq++, "tr");
+        builder.OpenElement(seq++, "th"); builder.AddContent(seq++, "Key"); builder.CloseElement();
+        builder.OpenElement(seq++, "th"); builder.AddContent(seq++, "Provider"); builder.CloseElement();
+        builder.OpenElement(seq++, "th"); builder.AddContent(seq++, "Activo"); builder.CloseElement();
+        builder.CloseElement();
+        builder.CloseElement();
+
+        builder.OpenElement(seq++, "tbody");
+        foreach (var row in rows)
+        {
+            builder.OpenElement(seq++, "tr");
+            builder.OpenElement(seq++, "td"); builder.AddContent(seq++, row.Key); builder.CloseElement();
+            builder.OpenElement(seq++, "td"); builder.AddContent(seq++, row.Provider); builder.CloseElement();
+            builder.OpenElement(seq++, "td"); builder.AddContent(seq++, row.Activo ? "Si" : "No"); builder.CloseElement();
+            builder.CloseElement();
+        }
+        builder.CloseElement();
+        builder.CloseElement();
+    };
+}

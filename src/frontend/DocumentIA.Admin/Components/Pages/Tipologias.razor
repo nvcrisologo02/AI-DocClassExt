@@ -1,0 +1,63 @@
+@page "/tipologias"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Tipologías</PageTitle>
+
+<h1>Tipologías</h1>
+
+<p>
+    <button class="btn btn-primary" @onclick="CreateTipologia">Nueva tipología</button>
+</p>
+
+@if (_loading)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Codigo</th>
+                <th>Nombre</th>
+                <th>Version</th>
+                <th>Estado</th>
+                <th>Actualizado</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var tipologia in _tipologias)
+            {
+                <tr>
+                    <td>@tipologia.Codigo</td>
+                    <td>@tipologia.Nombre</td>
+                    <td>@tipologia.Version</td>
+                    <td>@tipologia.Estado</td>
+                    <td>@(tipologia.FechaActualizacion?.ToString("u") ?? "-")</td>
+                    <td>
+                        <a class="btn btn-sm btn-outline-primary" href="/tipologias/@tipologia.Id">Detalle</a>
+                        <a class="btn btn-sm btn-outline-secondary ms-2" href="/tipologias/edit/@tipologia.Id">Editar</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private IReadOnlyCollection<TipologiaEntity> _tipologias = Array.Empty<TipologiaEntity>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tipologias = await AdminService.GetTipologiasAsync();
+        _loading = false;
+    }
+
+    private void CreateTipologia()
+    {
+        Navigation.NavigateTo("/tipologias/edit");
+    }
+}

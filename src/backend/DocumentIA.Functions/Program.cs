@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Caching.Memory;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Services;
@@ -34,8 +35,10 @@ var host = new HostBuilder()
         // Repositories
         services.AddScoped<IDocumentoRepository, DocumentoRepository>();
         services.AddScoped<ITipologiaRepository, TipologiaRepository>();
+        services.AddScoped<IModeloConfigRepository, ModeloConfigRepository>();
         services.AddScoped<IAuditoriaRepository, AuditoriaRepository>();
         services.AddScoped<IDocumentoEjecucionRepository, DocumentoEjecucionRepository>();
+        services.AddMemoryCache();
 
         // Services
         services.AddSingleton<IBlobStorageService, BlobStorageService>();
@@ -142,34 +145,29 @@ var host = new HostBuilder()
 
         // Registrar TipologiaConfigLoader (usado por SubirGDCActivity)
         services.AddSingleton<TipologiaConfigLoader>(provider =>
-        {
-            string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
-            return new TipologiaConfigLoader(configPath);
-        });
+            new TipologiaConfigLoader(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>()));
 
         services.AddSingleton<ITipologiaVersionResolver>(provider =>
-        {
-            string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
-            return new TipologiaVersionResolver(configPath);
-        });
+            new TipologiaVersionResolver(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>()));
 
         services.AddSingleton<ExtractionModelRegistryLoader>(provider =>
-        {
-            string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "extraction", "models.json");
-            return new ExtractionModelRegistryLoader(registryPath);
-        });
+            new ExtractionModelRegistryLoader(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>()));
 
         services.AddSingleton<ClassificationModelRegistryLoader>(provider =>
-        {
-            string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "classification", "models.json");
-            return new ClassificationModelRegistryLoader(registryPath);
-        });
+            new ClassificationModelRegistryLoader(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>()));
 
         services.AddSingleton<PromptModelRegistryLoader>(provider =>
-        {
-            string registryPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "prompt", "models.json");
-            return new PromptModelRegistryLoader(registryPath);
-        });
+            new PromptModelRegistryLoader(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>()));
 
 
     })
@@ -192,6 +190,7 @@ using (var scope = host.Services.CreateScope())
         var dbContext = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
         logger.LogInformation("Applying pending EF Core migrations at startup.");
         dbContext.Database.Migrate();
+        await ConfigurationSeedService.SeedAsync(dbContext, logger, Path.Combine(Directory.GetCurrentDirectory(), "config"));
         logger.LogInformation("EF Core migrations applied successfully.");
     }
     else

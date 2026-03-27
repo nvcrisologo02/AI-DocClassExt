@@ -17,6 +17,7 @@ public class DocumentIADbContext : DbContext
     public DbSet<DocumentoEjecucionEntity> DocumentoEjecuciones { get; set; } = null!;
     public DbSet<PluginEjecucionEntity> PluginEjecuciones { get; set; } = null!;
     public DbSet<ValidacionResultadoEntity> ValidacionResultados { get; set; } = null!;
+    public DbSet<ModeloConfigEntity> ModeloConfigs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -50,6 +51,10 @@ public class DocumentIADbContext : DbContext
             .HasIndex(t => t.Codigo)
             .IsUnique();
 
+        modelBuilder.Entity<ModeloConfigEntity>()
+            .HasIndex(m => m.Key)
+            .IsUnique();
+
         // Seed data inicial
         modelBuilder.Entity<TipologiaEntity>().HasData(
             new TipologiaEntity
@@ -59,6 +64,10 @@ public class DocumentIADbContext : DbContext
                 Nombre = "Tasación",
                 Version = "1.0",
                 Activa = true,
+                Estado = EstadoTipologia.Published,
+                PublicadaEn = DateTime.UtcNow,
+                PublicadaPor = "seed",
+                VersionPublicada = "1.0",
                 UmbralClasificacion = 0.85,
                 UmbralExtraccion = 0.80,
                 FechaCreacion = DateTime.UtcNow

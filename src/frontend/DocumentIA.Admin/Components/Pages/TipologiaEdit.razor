@@ -1,0 +1,89 @@
+@page "/tipologias/edit"
+@page "/tipologias/edit/{Id:int}"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Editar Tipología</PageTitle>
+
+<h1>@(Id.HasValue ? "Editar Tipología" : "Nueva Tipología")</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+}
+
+<EditForm Model="_model" OnValidSubmit="SaveAsync">
+    <div class="mb-3">
+        <label class="form-label">Codigo</label>
+        <InputText class="form-control" @bind-Value="_model.Codigo" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Nombre</label>
+        <InputText class="form-control" @bind-Value="_model.Nombre" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Version</label>
+        <InputText class="form-control" @bind-Value="_model.Version" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">ConfiguracionJson</label>
+        <InputTextArea class="form-control" style="min-height: 260px;" @bind-Value="_model.ConfiguracionJson" />
+    </div>
+
+    <div class="mb-3">
+        <button class="btn btn-outline-primary" type="button" @onclick="ValidateJson">Validar JSON</button>
+        <button class="btn btn-primary ms-2" type="submit">Guardar</button>
+        <a class="btn btn-secondary ms-2" href="/tipologias">Volver</a>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private TipologiaEntity _model = new();
+    private bool _error;
+    private string? _message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id.HasValue)
+        {
+            var existing = await AdminService.GetTipologiaAsync(Id.Value);
+            if (existing is not null)
+            {
+                _model = existing;
+            }
+        }
+    }
+
+    private void ValidateJson()
+    {
+        var errors = TipologiaAdminService.ValidarConfiguracionJson(_model.ConfiguracionJson ?? string.Empty);
+        if (errors.Count == 0)
+        {
+            _error = false;
+            _message = "Configuración válida.";
+            return;
+        }
+
+        _error = true;
+        _message = string.Join("\n", errors);
+    }
+
+    private async Task SaveAsync()
+    {
+        var errors = TipologiaAdminService.ValidarConfiguracionJson(_model.ConfiguracionJson ?? string.Empty);
+        if (errors.Count > 0)
+        {
+            _error = true;
+            _message = string.Join("\n", errors);
+            return;
+        }
+
+        await AdminService.SaveTipologiaAsync(_model);
+        Navigation.NavigateTo("/tipologias");
+    }
+}
