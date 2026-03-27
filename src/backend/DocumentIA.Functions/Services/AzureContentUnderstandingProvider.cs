@@ -47,7 +47,10 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             throw new InvalidOperationException($"La extracción Azure no está habilitada para la tipología '{input.Tipologia}'");
         }
 
-        var model = _modelRegistryLoader.GetModel(extractionConfig.ModelKey);
+        var modelKey = !string.IsNullOrWhiteSpace(input.ModelKeyEfectivo)
+            ? input.ModelKeyEfectivo
+            : extractionConfig.ModelKey;
+        var model = _modelRegistryLoader.GetModel(modelKey);
         var fileName = input.Entrada.Documento.Name;
         var binaryData = BinaryData.FromBytes(Convert.FromBase64String(input.Entrada.Documento.Content.Base64));
         var contentType = ResolveContentType(model, fileName, binaryData);

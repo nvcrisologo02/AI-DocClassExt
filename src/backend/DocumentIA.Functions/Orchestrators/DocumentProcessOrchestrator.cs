@@ -417,6 +417,17 @@ public class DocumentProcessOrchestrator
                     ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
                     ?? _gptExtracSettings.MinFieldsRatio;
 
+                // Provider y model override: instrucciones ?? null (tipología se aplica en el proveedor)
+                var providerEfectivo = string.IsNullOrWhiteSpace(entrada.Instrucciones.Extraction.Provider)
+                    || entrada.Instrucciones.Extraction.Provider.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : entrada.Instrucciones.Extraction.Provider;
+
+                var modelKeyEfectivo = string.IsNullOrWhiteSpace(entrada.Instrucciones.Extraction.Model)
+                    || entrada.Instrucciones.Extraction.Model.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : entrada.Instrucciones.Extraction.Model;
+
                 resultadoExtraccion = await EjecutarPasoNegocio(
                     "Extraer",
                     () => context.CallActivityAsync<ExtraccionResultado>(
@@ -426,7 +437,9 @@ public class DocumentProcessOrchestrator
                             Entrada = entrada,
                             Tipologia = salida.Identificacion.Tipologia,
                             DatosNormalizados = datosNormalizados,
-                            UmbralFallbackEfectivo = umbralExtracFallback
+                            UmbralFallbackEfectivo = umbralExtracFallback,
+                            ProviderEfectivo = providerEfectivo,
+                            ModelKeyEfectivo = modelKeyEfectivo
                         }));
 
                 if (resultadoExtraccion.FallbackUsado)

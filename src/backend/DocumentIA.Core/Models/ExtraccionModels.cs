@@ -11,6 +11,16 @@ public class ExtraccionInput
     /// null = usar config.MinFieldsRatio directamente en el proveedor.
     /// </summary>
     public double? UmbralFallbackEfectivo { get; set; }
+    /// <summary>
+    /// Provider de extracción efectivo resuelto por el orquestador.
+    /// Viene de instrucciones.Extraction.Provider si no es "auto" ni vacío; de lo contrario null (usa config de tipología).
+    /// </summary>
+    public string? ProviderEfectivo { get; set; }
+    /// <summary>
+    /// Model key de extracción efectivo resuelto por el orquestador.
+    /// Viene de instrucciones.Extraction.Model si no es "auto" ni vacío; de lo contrario null (usa config de tipología).
+    /// </summary>
+    public string? ModelKeyEfectivo { get; set; }
 }
 
 public class ExtraccionResultado

@@ -148,16 +148,50 @@ Sección raíz: `GDC`
 
 ---
 
-## 7. Configuración de tipologías (ficheros JSON)
+## 7. Configuración dinámica (BD + cache + seed)
 
-Las tipologías se configuran con ficheros bajo `config/tipologias/`. Ver [TIPOLOGIAS_REFERENCIA.md](../TIPOLOGIAS_REFERENCIA.md) para el detalle completo.
+La configuración operativa de tipologías, modelos y plugins se carga desde base de datos y se cachea en memoria para evitar reinicios y minimizar coste de infraestructura.
 
-Ficheros relevantes:
+### 7.1 Fuente de verdad y estados
 
-| Fichero | Propósito |
+| Dominio | Tabla | Estados |
+|---|---|---|
+| Tipologías/versiones | `Tipologias` | `Draft` \| `Published` \| `Retired` |
+| Modelos (clasificación/extracción/prompt) | `ModelosConfig` | `Draft` \| `Published` \| `Retired` |
+| Plugins por tipología | `PluginTipologiaConfigs` | `Draft` \| `Published` \| `Retired` |
+
+Solo la configuración en estado `Published` se utiliza en ejecución.
+
+### 7.2 Cache en runtime
+
+- Los loaders DB-backed usan `IMemoryCache` con TTL de 5 minutos.
+- Se cachean por dominio (`modelos:*`, `tipologias:*`, `plugins:*`).
+- Si se publica un cambio, puede tardar hasta 5 minutos en converger si no se fuerza recarga.
+
+### 7.3 Seed inicial desde ficheros
+
+En arranque, el servicio `ConfigurationSeedService` puede sembrar datos desde JSON para bootstrap inicial:
+
+| Origen | Destino |
 |---|---|
-| `<tipologia>.plugins.json` | Define los plugins de integración para la tipología. |
-| `<tipologia>.<version>.validation.json` | Define las reglas de validación por campo y versión. |
+| `config/tipologias/*.validation.json` | `Tipologias` |
+| `config/models/*.models.json` | `ModelosConfig` |
+| `config/tipologias/*.plugins.json` | `PluginTipologiaConfigs` |
+
+Esto permite mantener compatibilidad con artefactos históricos y acelerar provisión en nuevos entornos.
+
+### 7.4 Modo fichero (compatibilidad)
+
+Los loaders conservan constructor en modo fichero para pruebas unitarias y escenarios de compatibilidad local. En producción se recomienda modo BD.
+
+### 7.5 Gestión COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrativa
+
+La gestión se realiza por API COMPLETAR_GDC_HTTP_BASIC_USERNAME (`/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/...`) y por la app `DocumentIA.Admin` para:
+
+- guardar borradores,
+- publicar,
+- retirar configuración,
+- listar estado actual.
 
 ---
 

@@ -60,9 +60,11 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             };
         }
 
-        var provider = string.IsNullOrWhiteSpace(config.Extraction.Provider)
-            ? _routingSettings.DefaultProvider
-            : config.Extraction.Provider;
+        var provider = !string.IsNullOrWhiteSpace(input.ProviderEfectivo)
+            ? input.ProviderEfectivo
+            : string.IsNullOrWhiteSpace(config.Extraction.Provider)
+                ? _routingSettings.DefaultProvider
+                : config.Extraction.Provider;
 
         _logger.LogInformation("Proveedor de extracción resuelto para tipología {Tipologia}: {Provider}", input.Tipologia, provider);
 

@@ -76,10 +76,10 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `forceReprocess` | bool | `true` = aunque el documento sea duplicado, procesar igualmente (no reutilizar ejecución anterior). Default: `false`. |
 | `skipGDCUpload` | bool? | `null` = respetar la configuración de la tipología. `true` = no subir al GDC. `false` = forzar subida. |
 | `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `mock` |
-| `classification.model` | string | Reservado. Usar `"auto"`. |
+| `classification.model` | string | Reservado. Usar `"auto"`. El model key se resuelve desde la configuración de la tipología. |
 | `classification.umbral` | double? | _(Opcional)_ Umbral de confianza para activar fallback GPT y para el check `BAJA_CONFIANZA_CLASIFICACION`. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor. |
-| `extraction.provider` | string | `auto` \| `azure-content-understanding` \| `mock` |
-| `extraction.model` | string | Reservado. Usar `"auto"`. |
+| `extraction.provider` | string | `auto` \| `azure-content-understanding` \| `azure-cu` \| `azure-document-intelligence` \| `azure-di` \| `mock`. Si se especifica un valor distinto de `"auto"`, sobreescribe el proveedor configurado en la tipología para esta petición. |
+| `extraction.model` | string | Model key del registro de modelos de extracción. Si se especifica un valor distinto de `"auto"`, sobreescribe el `modelKey` configurado en la tipología para esta petición. Debe coincidir con una clave del registro de modelos (`extraction-models.json`). |
 | `extraction.umbral` | double? | _(Opcional)_ Ratio mínimo de campos para considerar la extracción CU suficiente. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor (`MinFieldsRatio`). |
 
 **`documento`**
@@ -291,3 +291,46 @@ $status.output.resultado
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
 - Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. Si coincide, se devuelve la ejecución previa sin reprocesar (ver [MANUAL_DEDUPLICACION.md](MANUAL_DEDUPLICACION.md)).
+
+---
+
+## 9. Endpoints COMPLETAR_GDC_HTTP_BASIC_USERNAME de configuración dinámica
+
+Estos endpoints gestionan configuración de tipologías, modelos y plugins en base de datos. Todos son `AuthorizationLevel.Function`.
+
+### 9.1 Tipologías
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias` | Lista tipologías/versiones con estado. |
+| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{codigo}` | Obtiene una tipología por código. |
+| `PUT` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{codigo}` | Crea/actualiza borrador (`Draft`). |
+| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{codigo}/publicar` | Publica (`Published`) la tipología. |
+| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{codigo}/retirar` | Retira (`Retired`) la tipología. |
+
+### 9.2 Modelos
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos` | Lista modelos por tipo/estado. |
+| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{key}` | Obtiene un modelo por clave. |
+| `PUT` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{key}` | Crea/actualiza borrador (`Draft`). |
+| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{key}/publicar` | Publica (`Published`) el modelo. |
+| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{key}/retirar` | Retira (`Retired`) el modelo. |
+
+### 9.3 Plugins por tipología
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias` | Lista configuraciones de plugins por tipología. |
+| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}` | Obtiene configuración de una tipología. |
+| `PUT` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}` | Crea/actualiza borrador (`Draft`) de plugins. |
+| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}/publicar` | Publica (`Published`) la configuración de plugins. |
+| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}/retirar` | Retira (`Retired`) la configuración de plugins. |
+
+### 9.4 Validaciones relevantes
+
+- `PUT` de tipologías y plugins valida que el JSON sea deserializable.
+- `POST publicar` vuelve a validar antes de promover a `Published`.
+- Si un recurso no existe, la API devuelve `404 Not Found`.
+- Si el JSON es inválido, la API devuelve `400 Bad Request` con detalle en `error`.
