@@ -56,6 +56,32 @@
                     <CheckBox Content="skipDuplicateCheck" IsChecked="{Binding SkipDuplicateCheck}" Margin="0,0,0,8" Foreground="{StaticResource BrushTextPrimary}"/>
                     <CheckBox Content="forceReprocess" IsChecked="{Binding ForceReprocess}" Margin="0,0,0,8" Foreground="{StaticResource BrushTextPrimary}"/>
                     <CheckBox Content="skipGDCUpload" IsChecked="{Binding SkipGDCUpload}" Foreground="{StaticResource BrushTextPrimary}"/>
+
+                    <TextBlock Text="PARÁMETROS REQUEST" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,14,0,8"/>
+
+                    <TextBlock Text="idActivo" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding InputIdActivo, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                    <TextBlock Text="submittedBy" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding InputSubmittedBy, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                    <TextBlock Text="classification.provider" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding ClassificationProvider, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                    <TextBlock Text="classification.model" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding ClassificationModel, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                    <TextBlock Text="classification.umbral" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding ClassificationThreshold, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                    <TextBlock Text="extraction.model" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding ExtractionModel, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                    <TextBlock Text="extraction.umbral" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding ExtractionThreshold, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                    <TextBlock Text="API check (segundos)" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                    <TextBox Text="{Binding ApiCheckIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
                 </StackPanel>
 
                 <Button Grid.Row="5" Content="EJECUTAR" Command="{Binding ExecuteCommand}" Style="{StaticResource ButtonPrimary}" Height="38" Margin="0,12,0,0" IsEnabled="{Binding IsExecuteEnabled}"/>

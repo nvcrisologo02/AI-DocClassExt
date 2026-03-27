@@ -4,12 +4,14 @@ using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Input;
+using System.Windows.Threading;
 
 namespace DocumentIA.Desktop.ViewModels
 {
@@ -49,8 +51,14 @@ namespace DocumentIA.Desktop.ViewModels
         };
 
         private readonly IOrchestratorApiClient _apiClient;
+        private readonly DispatcherTimer _apiConnectionTimer;
         private CancellationTokenSource? _pollingCts;
         private string? _lastLoggedActivity;
+        private bool _isCheckingApiConnection;
+
+        private static readonly TimeSpan ApiConnectionCheckInterval = TimeSpan.FromSeconds(30);
+        private const decimal DefaultClassificationThreshold = 0.5m;
+        private const decimal DefaultExtractionThreshold = 0.80m;
 
         public ObservableCollection<ActivityStatus> ActivityStatuses { get; } = new ObservableCollection<ActivityStatus>();
         public ObservableCollection<ActivityLogEntry> ActivityLogs { get; } = new ObservableCollection<ActivityLogEntry>();
@@ -151,6 +159,7 @@ namespace DocumentIA.Desktop.ViewModels
                 {
                     _isApiConnected = value;
                     OnPropertyChanged(nameof(IsApiConnected));
+                    OnPropertyChanged(nameof(IsExecuteEnabled));
                 }
             }
         }
@@ -211,6 +220,119 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
+        private string _inputIdActivo = "DESKTOP-TEST";
+        public string InputIdActivo
+        {
+            get => _inputIdActivo;
+            set
+            {
+                if (_inputIdActivo != value)
+                {
+                    _inputIdActivo = value;
+                    OnPropertyChanged(nameof(InputIdActivo));
+                }
+            }
+        }
+
+        private string _inputSubmittedBy = "usuario.desktop@sareb.es";
+        public string InputSubmittedBy
+        {
+            get => _inputSubmittedBy;
+            set
+            {
+                if (_inputSubmittedBy != value)
+                {
+                    _inputSubmittedBy = value;
+                    OnPropertyChanged(nameof(InputSubmittedBy));
+                }
+            }
+        }
+
+        private string _classificationProvider = "auto";
+        public string ClassificationProvider
+        {
+            get => _classificationProvider;
+            set
+            {
+                if (_classificationProvider != value)
+                {
+                    _classificationProvider = value;
+                    OnPropertyChanged(nameof(ClassificationProvider));
+                }
+            }
+        }
+
+        private string _classificationModel = "auto";
+        public string ClassificationModel
+        {
+            get => _classificationModel;
+            set
+            {
+                if (_classificationModel != value)
+                {
+                    _classificationModel = value;
+                    OnPropertyChanged(nameof(ClassificationModel));
+                }
+            }
+        }
+
+        private string _classificationThreshold = "0.5";
+        public string ClassificationThreshold
+        {
+            get => _classificationThreshold;
+            set
+            {
+                if (_classificationThreshold != value)
+                {
+                    _classificationThreshold = value;
+                    OnPropertyChanged(nameof(ClassificationThreshold));
+                }
+            }
+        }
+
+        private string _extractionModel = "auto";
+        public string ExtractionModel
+        {
+            get => _extractionModel;
+            set
+            {
+                if (_extractionModel != value)
+                {
+                    _extractionModel = value;
+                    OnPropertyChanged(nameof(ExtractionModel));
+                }
+            }
+        }
+
+        private string _extractionThreshold = "0.80";
+        public string ExtractionThreshold
+        {
+            get => _extractionThreshold;
+            set
+            {
+                if (_extractionThreshold != value)
+                {
+                    _extractionThreshold = value;
+                    OnPropertyChanged(nameof(ExtractionThreshold));
+                }
+            }
+        }
+
+        private string _apiCheckIntervalSeconds = "30";
+        public string ApiCheckIntervalSeconds
+        {
+            get => _apiCheckIntervalSeconds;
+            set
+            {
+                if (_apiCheckIntervalSeconds != value)
+                {
+                    _apiCheckIntervalSeconds = value;
+                    OnPropertyChanged(nameof(ApiCheckIntervalSeconds));
+                    ApplyApiConnectionCheckInterval();
+                }
+            }
+        }
+
         public bool IsExecuteEnabled => !IsProcessing && !string.IsNullOrWhiteSpace(SelectedDocumentPath) && IsApiConnected;
 
         public ICommand ExecuteCommand { get; }
@@ -222,10 +344,18 @@ namespace DocumentIA.Desktop.ViewModels
             ExecuteCommand = new RelayCommand(_ => _ = ExecuteAsync(), _ => IsExecuteEnabled);
             SelectFileCommand = new RelayCommand(_ => SelectFile());
 
+            _apiConnectionTimer = new DispatcherTimer
+            {
+                Interval = ApiConnectionCheckInterval
+            };
+            _apiConnectionTimer.Tick += async (_, _) => await RefreshApiConnectionAsync();
+            ApplyApiConnectionCheckInterval();
+
             InitializeActivities();
 
             // Initial connection check on UI thread
-            _ = CheckApiConnectionAsync();
+            _ = RefreshApiConnectionAsync();
+            _apiConnectionTimer.Start();
         }
 
         private void InitializeActivities()
@@ -250,6 +380,24 @@ namespace DocumentIA.Desktop.ViewModels
             {
                 IsApiConnected = false;
                 ApiStatusMessage = $"Error: {ex.Message}";
+            }
+        }
+
+        private async Task RefreshApiConnectionAsync()
+        {
+            if (_isCheckingApiConnection)
+            {
+                return;
+            }
+
+            _isCheckingApiConnection = true;
+            try
+            {
+                await CheckApiConnectionAsync();
+            }
+            finally
+            {
+                _isCheckingApiConnection = false;
             }
         }
 
@@ -331,14 +479,23 @@ namespace DocumentIA.Desktop.ViewModels
                 _ => null // auto
             };
 
+            var classificationThreshold = ParseThresholdOrDefault(ClassificationThreshold, DefaultClassificationThreshold);
+            var extractionThreshold = ParseThresholdOrDefault(ExtractionThreshold, DefaultExtractionThreshold);
+            var submittedBy = string.IsNullOrWhiteSpace(InputSubmittedBy)
+                ? "usuario.desktop@sareb.es"
+                : InputSubmittedBy.Trim();
+            var idActivo = string.IsNullOrWhiteSpace(InputIdActivo)
+                ? "DESKTOP-TEST"
+                : InputIdActivo.Trim();
+
             return new ProcessingRequest
             {
                 Traceability = new Traceability
                 {
                     CorrelationId = $"DESKTOP-{SelectedClassificationType}-{DateTime.Now:yyyyMMdd-HHmmss}",
-                    SubmittedBy = "usuario.desktop@sareb.es",
+                    SubmittedBy = submittedBy,
                     IdGdc = null,
-                    IdActivo = "DESKTOP-TEST"
+                    IdActivo = idActivo
                 },
                 Document = new DocumentInfo
                 {
@@ -356,17 +513,61 @@ namespace DocumentIA.Desktop.ViewModels
                     SkipGDCUpload = SkipGDCUpload,
                     Classification = new ClassificationSettings
                     {
-                        Provider = expectedType == null ? "auto" : null,
-                        Model = "auto",
-                        Threshold = 0.5m
+                        Provider = expectedType == null ? NormalizeOptionalText(ClassificationProvider, "auto") : null,
+                        Model = NormalizeOptionalText(ClassificationModel, "auto")!,
+                        Threshold = classificationThreshold
                     },
                     Extraction = new ExtractionSettings
                     {
-                        Model = "auto",
-                        Threshold = 0.80m
+                        Model = NormalizeOptionalText(ExtractionModel, "auto")!,
+                        Threshold = extractionThreshold
                     }
                 }
             };
+        }
+
+        private void ApplyApiConnectionCheckInterval()
+        {
+            if (int.TryParse(ApiCheckIntervalSeconds, out var seconds) && seconds > 0)
+            {
+                _apiConnectionTimer.Interval = TimeSpan.FromSeconds(seconds);
+            }
+            else
+            {
+                _apiConnectionTimer.Interval = ApiConnectionCheckInterval;
+            }
+        }
+
+        private static decimal ParseThresholdOrDefault(string? rawValue, decimal defaultValue)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return defaultValue;
+            }
+
+            var normalized = rawValue.Trim();
+            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.CurrentCulture, out var currentParsed))
+            {
+                return currentParsed;
+            }
+
+            normalized = normalized.Replace(',', '.');
+            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var invariantParsed))
+            {
+                return invariantParsed;
+            }
+
+            return defaultValue;
+        }
+
+        private static string? NormalizeOptionalText(string? value, string? fallback = null)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return fallback;
+            }
+
+            return value.Trim();
         }
 
         private async Task PollStatusAsync(string statusUri)
