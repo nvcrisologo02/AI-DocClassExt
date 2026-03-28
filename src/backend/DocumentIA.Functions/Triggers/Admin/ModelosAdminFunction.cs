@@ -24,7 +24,7 @@ public class ModelosAdminFunction
 
     [Function("Admin_GetModelosByTipo")]
     public async Task<HttpResponseData> GetModelosByTipo(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{tipo}")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/modelos/{tipo}")] HttpRequestData req,
         string tipo)
     {
         if (!TryParseTipo(tipo, out var tipoModelo))
@@ -44,7 +44,7 @@ public class ModelosAdminFunction
 
     [Function("Admin_CreateModelo")]
     public async Task<HttpResponseData> CreateModelo(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos")] HttpRequestData req)
+           [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/modelos")] HttpRequestData req)
     {
         var payload = await ReadBody<ModeloUpsertRequest>(req);
         if (payload is null)
@@ -95,7 +95,7 @@ public class ModelosAdminFunction
 
     [Function("Admin_UpdateModelo")]
     public async Task<HttpResponseData> UpdateModelo(
-        [HttpTrigger(AuthorizationLevel.Function, "put", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{id:int}")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "put", Route = "management/modelos/{id:int}")] HttpRequestData req,
         int id)
     {
         var entity = await _dbContext.ModeloConfigs.FirstOrDefaultAsync(m => m.Id == id);
@@ -136,7 +136,7 @@ public class ModelosAdminFunction
 
     [Function("Admin_DeleteModelo")]
     public async Task<HttpResponseData> DeleteModelo(
-        [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{id:int}")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "delete", Route = "management/modelos/{id:int}")] HttpRequestData req,
         int id)
     {
         var entity = await _dbContext.ModeloConfigs.FirstOrDefaultAsync(m => m.Id == id);

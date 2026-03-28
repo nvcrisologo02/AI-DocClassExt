@@ -32,8 +32,16 @@ else
     </dl>
 
     <div class="mb-3">
+        @if (_tipologia.Estado != EstadoTipologia.Draft)
+        {
+            <button class="btn btn-outline-primary" @onclick="PasarADraftAsync">Pasar a Draft</button>
+        }
         <button class="btn btn-success" @onclick="PublishAsync">Publicar</button>
         <button class="btn btn-warning ms-2" @onclick="RetireAsync">Retirar</button>
+        @if (_tipologia.Estado is EstadoTipologia.Draft or EstadoTipologia.Retired)
+        {
+            <a class="btn btn-outline-secondary ms-2" href="/tipologias/edit/@_tipologia.Id">Editar</a>
+        }
         <a class="btn btn-secondary ms-2" href="/tipologias">Volver</a>
     </div>
 }
@@ -57,6 +65,22 @@ else
             await AdminService.PublishTipologiaAsync(Id, "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui");
             _error = false;
             _message = "Tipología publicada.";
+            _tipologia = await AdminService.GetTipologiaAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private async Task PasarADraftAsync()
+    {
+        try
+        {
+            await AdminService.PasarTipologiaADraftAsync(Id);
+            _error = false;
+            _message = "Tipología movida a Draft.";
             _tipologia = await AdminService.GetTipologiaAsync(Id);
         }
         catch (Exception ex)

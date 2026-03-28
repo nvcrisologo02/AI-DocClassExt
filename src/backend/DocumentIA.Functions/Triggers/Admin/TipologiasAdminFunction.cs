@@ -34,7 +34,7 @@ public class TipologiasAdminFunction
 
     [Function("Admin_GetTipologias")]
     public async Task<HttpResponseData> GetTipologias(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias")] HttpRequestData req)
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/tipologias")] HttpRequestData req)
     {
         var rows = await _dbContext.Tipologias
             .OrderBy(t => t.Nombre)
@@ -61,7 +61,7 @@ public class TipologiasAdminFunction
 
     [Function("Admin_GetTipologiaById")]
     public async Task<HttpResponseData> GetTipologiaById(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{id:int}")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/tipologias/{id:int}")] HttpRequestData req,
         int id)
     {
         var tipologia = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
@@ -77,7 +77,7 @@ public class TipologiasAdminFunction
 
     [Function("Admin_CreateTipologia")]
     public async Task<HttpResponseData> CreateTipologia(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias")] HttpRequestData req)
+            [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/tipologias")] HttpRequestData req)
     {
         var payload = await ReadBody<TipologiaUpsertRequest>(req);
         if (payload is null)
@@ -123,7 +123,7 @@ public class TipologiasAdminFunction
 
     [Function("Admin_UpdateTipologia")]
     public async Task<HttpResponseData> UpdateTipologia(
-        [HttpTrigger(AuthorizationLevel.Function, "put", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{id:int}")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "put", Route = "management/tipologias/{id:int}")] HttpRequestData req,
         int id)
     {
         var entity = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
@@ -132,9 +132,9 @@ public class TipologiasAdminFunction
             return await CreateError(req, HttpStatusCode.NotFound, $"No existe tipologia con id {id}.");
         }
 
-        if (entity.Estado != EstadoTipologia.Draft)
+        if (entity.Estado == EstadoTipologia.Published)
         {
-            return await CreateError(req, HttpStatusCode.Conflict, "Solo se pueden editar tipologias en estado Draft.");
+              return await CreateError(req, HttpStatusCode.Conflict, "Solo se pueden editar tipologias en estado Draft o Retired.");
         }
 
         var payload = await ReadBody<TipologiaUpsertRequest>(req);
@@ -163,7 +163,7 @@ public class TipologiasAdminFunction
 
     [Function("Admin_PublicarTipologia")]
     public async Task<HttpResponseData> PublicarTipologia(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{id:int}/publicar")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/tipologias/{id:int}/publicar")] HttpRequestData req,
         int id)
     {
         var entity = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
@@ -194,7 +194,7 @@ public class TipologiasAdminFunction
 
     [Function("Admin_RetirarTipologia")]
     public async Task<HttpResponseData> RetirarTipologia(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{id:int}/retirar")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/tipologias/{id:int}/retirar")] HttpRequestData req,
         int id)
     {
         var exists = await _dbContext.Tipologias.AnyAsync(t => t.Id == id);
@@ -208,6 +208,27 @@ public class TipologiasAdminFunction
 
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(updated);
+        return response;
+    }
+
+    [Function("Admin_PasarTipologiaADraft")]
+    public async Task<HttpResponseData> PasarTipologiaADraft(
+            [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/tipologias/{id:int}/draft")] HttpRequestData req,
+        int id)
+    {
+        var entity = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
+        if (entity is null)
+        {
+            return await CreateError(req, HttpStatusCode.NotFound, $"No existe tipologia con id {id}.");
+        }
+
+        entity.Estado = EstadoTipologia.Draft;
+        entity.FechaActualizacion = DateTime.UtcNow;
+
+        await _tipologiaRepository.UpdateAsync(entity);
+
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(entity);
         return response;
     }
 

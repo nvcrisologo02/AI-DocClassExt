@@ -1,7 +1,5 @@
 using DocumentIA.Admin.Components;
 using DocumentIA.Admin.Services;
-using DocumentIA.Data.Context;
-using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -9,16 +7,19 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-var connectionString = builder.Configuration["ConnectionStrings:DocumentIA"]
-    ?? builder.Configuration["SqlConnectionString"];
-
-if (!string.IsNullOrWhiteSpace(connectionString))
+builder.Services.AddHttpClient<TipologiaAdminService>((serviceProvider, client) =>
 {
-    builder.Services.AddDbContext<DocumentIADbContext>(options =>
-        options.UseSqlServer(connectionString));
-}
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var baseUrl = configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071/api/";
 
-builder.Services.AddScoped<TipologiaAdminService>();
+    client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+
+    var functionKey = configuration["FunctionsAdminApi:FunctionKey"];
+    if (!string.IsNullOrWhiteSpace(functionKey))
+    {
+        client.DefaultRequestHeaders.Add("x-functions-key", functionKey);
+    }
+});
 
 var app = builder.Build();
 

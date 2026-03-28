@@ -24,7 +24,7 @@ public class PluginsTipologiaAdminFunction
 
     [Function("Admin_GetPluginsTipologias")]
     public async Task<HttpResponseData> GetAll(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias")] HttpRequestData req)
+           [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/plugins-tipologias")] HttpRequestData req)
     {
         var rows = await _pluginRepository.GetAllAsync();
         var response = req.CreateResponse(HttpStatusCode.OK);
@@ -34,7 +34,7 @@ public class PluginsTipologiaAdminFunction
 
     [Function("Admin_GetPluginsTipologiaByCodigo")]
     public async Task<HttpResponseData> GetByCodigo(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/plugins-tipologias/{tipologiaCodigo}")] HttpRequestData req,
         string tipologiaCodigo)
     {
         var row = await _pluginRepository.GetByTipologiaCodigoAsync(tipologiaCodigo);
@@ -50,7 +50,7 @@ public class PluginsTipologiaAdminFunction
 
     [Function("Admin_UpsertPluginsTipologiaDraft")]
     public async Task<HttpResponseData> UpsertDraft(
-        [HttpTrigger(AuthorizationLevel.Function, "put", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "put", Route = "management/plugins-tipologias/{tipologiaCodigo}")] HttpRequestData req,
         string tipologiaCodigo)
     {
         var payload = await ReadBody<PluginConfigUpsertRequest>(req);
@@ -72,7 +72,7 @@ public class PluginsTipologiaAdminFunction
 
     [Function("Admin_PublicarPluginsTipologia")]
     public async Task<HttpResponseData> Publish(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}/publicar")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/plugins-tipologias/{tipologiaCodigo}/publicar")] HttpRequestData req,
         string tipologiaCodigo)
     {
         var payload = await ReadBody<PluginPublishRequest>(req);
@@ -97,7 +97,7 @@ public class PluginsTipologiaAdminFunction
 
     [Function("Admin_RetirarPluginsTipologia")]
     public async Task<HttpResponseData> Retire(
-        [HttpTrigger(AuthorizationLevel.Function, "post", Route = "COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}/retirar")] HttpRequestData req,
+            [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/plugins-tipologias/{tipologiaCodigo}/retirar")] HttpRequestData req,
         string tipologiaCodigo)
     {
         var current = await _pluginRepository.GetByTipologiaCodigoAsync(tipologiaCodigo);

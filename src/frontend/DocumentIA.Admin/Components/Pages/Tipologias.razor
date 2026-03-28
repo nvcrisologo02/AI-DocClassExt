@@ -38,7 +38,14 @@ else
                     <td>@(tipologia.FechaActualizacion?.ToString("u") ?? "-")</td>
                     <td>
                         <a class="btn btn-sm btn-outline-primary" href="/tipologias/@tipologia.Id">Detalle</a>
-                        <a class="btn btn-sm btn-outline-secondary ms-2" href="/tipologias/edit/@tipologia.Id">Editar</a>
+                            @if (tipologia.Estado is EstadoTipologia.Draft or EstadoTipologia.Retired)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary ms-2" href="/tipologias/edit/@tipologia.Id">Editar</a>
+                        }
+                        else
+                        {
+                                <button class="btn btn-sm btn-outline-secondary ms-2" disabled title="Solo se pueden editar tipologías en estado Draft o Retired.">Editar</button>
+                        }
                     </td>
                 </tr>
             }

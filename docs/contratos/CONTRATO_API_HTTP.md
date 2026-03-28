@@ -302,31 +302,31 @@ Estos endpoints gestionan configuración de tipologías, modelos y plugins en ba
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias` | Lista tipologías/versiones con estado. |
-| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{codigo}` | Obtiene una tipología por código. |
-| `PUT` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{codigo}` | Crea/actualiza borrador (`Draft`). |
-| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{codigo}/publicar` | Publica (`Published`) la tipología. |
-| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/tipologias/{codigo}/retirar` | Retira (`Retired`) la tipología. |
+| `GET` | `/api/management/tipologias` | Lista tipologías/versiones con estado. |
+| `GET` | `/api/management/tipologias/{codigo}` | Obtiene una tipología por código. |
+| `PUT` | `/api/management/tipologias/{codigo}` | Crea/actualiza borrador (`Draft`). |
+| `POST` | `/api/management/tipologias/{codigo}/publicar` | Publica (`Published`) la tipología. |
+| `POST` | `/api/management/tipologias/{codigo}/retirar` | Retira (`Retired`) la tipología. |
 
 ### 9.2 Modelos
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos` | Lista modelos por tipo/estado. |
-| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{key}` | Obtiene un modelo por clave. |
-| `PUT` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{key}` | Crea/actualiza borrador (`Draft`). |
-| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{key}/publicar` | Publica (`Published`) el modelo. |
-| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/modelos/{key}/retirar` | Retira (`Retired`) el modelo. |
+| `GET` | `/api/management/modelos` | Lista modelos por tipo/estado. |
+| `GET` | `/api/management/modelos/{key}` | Obtiene un modelo por clave. |
+| `PUT` | `/api/management/modelos/{key}` | Crea/actualiza borrador (`Draft`). |
+| `POST` | `/api/management/modelos/{key}/publicar` | Publica (`Published`) el modelo. |
+| `POST` | `/api/management/modelos/{key}/retirar` | Retira (`Retired`) el modelo. |
 
 ### 9.3 Plugins por tipología
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias` | Lista configuraciones de plugins por tipología. |
-| `GET` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}` | Obtiene configuración de una tipología. |
-| `PUT` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}` | Crea/actualiza borrador (`Draft`) de plugins. |
-| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}/publicar` | Publica (`Published`) la configuración de plugins. |
-| `POST` | `/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/plugins-tipologias/{tipologiaCodigo}/retirar` | Retira (`Retired`) la configuración de plugins. |
+| `GET` | `/api/management/plugins-tipologias` | Lista configuraciones de plugins por tipología. |
+| `GET` | `/api/management/plugins-tipologias/{tipologiaCodigo}` | Obtiene configuración de una tipología. |
+| `PUT` | `/api/management/plugins-tipologias/{tipologiaCodigo}` | Crea/actualiza borrador (`Draft`) de plugins. |
+| `POST` | `/api/management/plugins-tipologias/{tipologiaCodigo}/publicar` | Publica (`Published`) la configuración de plugins. |
+| `POST` | `/api/management/plugins-tipologias/{tipologiaCodigo}/retirar` | Retira (`Retired`) la configuración de plugins. |
 
 ### 9.4 Validaciones relevantes
 

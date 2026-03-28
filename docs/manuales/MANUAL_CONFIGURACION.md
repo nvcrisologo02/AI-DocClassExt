@@ -186,7 +186,7 @@ Los loaders conservan constructor en modo fichero para pruebas unitarias y escen
 
 ### 7.5 Gestión COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrativa
 
-La gestión se realiza por API COMPLETAR_GDC_HTTP_BASIC_USERNAME (`/api/COMPLETAR_GDC_HTTP_BASIC_USERNAME/...`) y por la app `DocumentIA.Admin` para:
+La gestión se realiza por API management (`/api/management/...`) y por la app `DocumentIA.Admin` para:
 
 - guardar borradores,
 - publicar,

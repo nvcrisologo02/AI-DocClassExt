@@ -27,6 +27,20 @@
     <div class="col-12 col-md-8">
         <h4>Editor</h4>
         <div class="mb-2">
+            <label class="form-label">Seleccionar tipología</label>
+            <div class="d-flex gap-2">
+                <InputSelect class="form-select" @bind-Value="_selectedTipologiaCodigo">
+                    <option value="">Selecciona una tipología</option>
+                    @foreach (var tipologia in _tipologias)
+                    {
+                        <option value="@tipologia.Codigo">@tipologia.Codigo</option>
+                    }
+                </InputSelect>
+                <button class="btn btn-outline-secondary" @onclick="PrepareNewConfig">Cargar</button>
+            </div>
+            <div class="form-text">Puedes crear una configuración nueva aunque la tipología aún no tenga plugins configurados.</div>
+        </div>
+        <div class="mb-2">
             <label class="form-label">Tipologia Codigo</label>
             <InputText class="form-control" @bind-Value="_tipologiaCodigo" />
         </div>
@@ -45,6 +59,8 @@
 
 @code {
     private IReadOnlyCollection<PluginTipologiaConfigEntity> _items = Array.Empty<PluginTipologiaConfigEntity>();
+    private IReadOnlyCollection<TipologiaEntity> _tipologias = Array.Empty<TipologiaEntity>();
+    private string _selectedTipologiaCodigo = string.Empty;
     private string _tipologiaCodigo = string.Empty;
     private string _json = "{\n  \"tipologiaId\": \"\",\n  \"plugins\": []\n}";
     private bool _error;
@@ -58,13 +74,33 @@
     private async Task Reload()
     {
         _items = await AdminService.GetPluginConfigsAsync();
+        _tipologias = await AdminService.GetTipologiasAsync();
     }
 
     private async Task Select(string tipologiaCodigo)
     {
         _tipologiaCodigo = tipologiaCodigo;
+        _selectedTipologiaCodigo = tipologiaCodigo;
         var row = await AdminService.GetPluginConfigAsync(tipologiaCodigo);
-        _json = row?.ConfiguracionJson ?? _json;
+        _json = row?.ConfiguracionJson ?? BuildEmptyPluginConfigJson(tipologiaCodigo);
+    }
+
+    private async Task PrepareNewConfig()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedTipologiaCodigo))
+        {
+            _error = true;
+            _message = "Selecciona una tipología.";
+            return;
+        }
+
+        _tipologiaCodigo = _selectedTipologiaCodigo.Trim();
+        var existing = await AdminService.GetPluginConfigAsync(_tipologiaCodigo);
+        _json = existing?.ConfiguracionJson ?? BuildEmptyPluginConfigJson(_tipologiaCodigo);
+        _error = false;
+        _message = existing is null
+            ? $"Nueva configuración inicializada para '{_tipologiaCodigo}'."
+            : $"Configuración existente cargada para '{_tipologiaCodigo}'.";
     }
 
     private void Validate()
@@ -91,10 +127,19 @@
             return;
         }
 
-        await AdminService.SavePluginDraftAsync(_tipologiaCodigo.Trim(), _json);
-        _error = false;
-        _message = "Draft guardado.";
-        await Reload();
+        try
+        {
+            await AdminService.SavePluginDraftAsync(_tipologiaCodigo.Trim(), _json);
+            _error = false;
+            _message = "Draft guardado.";
+            await Reload();
+            _selectedTipologiaCodigo = _tipologiaCodigo.Trim();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
     }
 
     private async Task Publish()
@@ -106,10 +151,18 @@
             return;
         }
 
-        await AdminService.PublishPluginConfigAsync(_tipologiaCodigo.Trim(), "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui");
-        _error = false;
-        _message = "Configuración publicada.";
-        await Reload();
+        try
+        {
+            await AdminService.PublishPluginConfigAsync(_tipologiaCodigo.Trim(), "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui");
+            _error = false;
+            _message = "Configuración publicada.";
+            await Reload();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
     }
 
     private async Task Retire()
@@ -121,9 +174,22 @@
             return;
         }
 
-        await AdminService.RetirePluginConfigAsync(_tipologiaCodigo.Trim());
-        _error = false;
-        _message = "Configuración retirada.";
-        await Reload();
+        try
+        {
+            await AdminService.RetirePluginConfigAsync(_tipologiaCodigo.Trim());
+            _error = false;
+            _message = "Configuración retirada.";
+            await Reload();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private static string BuildEmptyPluginConfigJson(string tipologiaCodigo)
+    {
+        return "{\n  \"tipologiaId\": \"" + tipologiaCodigo + "\",\n  \"plugins\": []\n}";
     }
 }
