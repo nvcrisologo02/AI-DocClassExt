@@ -4,6 +4,7 @@ using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Mocks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Globalization;
 
 namespace DocumentIA.Functions.Services;
 
@@ -88,17 +89,39 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         {
             resultadoCu = await _azureProvider.ObtenerDatosAsync(input, cancellationToken);
 
-            if (EsResultadoCuSuficiente(config, resultadoCu, input.UmbralFallbackEfectivo, out var ratio, out var esperados, out var obtenidos))
+            if (EsResultadoCuSuficiente(
+                config,
+                resultadoCu,
+                input.UmbralFallbackEfectivo,
+                input.UmbralFallbackEfectivoCompletitud,
+                input.UmbralFallbackEfectivoConfianza,
+                out var ratioCompletitud,
+                out var confianzaCu,
+                out var esperados,
+                out var obtenidosEsperados,
+                out var umbralCompletitud,
+                out var umbralConfianza))
             {
                 return resultadoCu;
             }
 
-            fallbackRazon = $"insufficient_fields:{obtenidos}/{esperados} ratio={ratio:F3}";
+            fallbackRazon = string.Format(
+                CultureInfo.InvariantCulture,
+                "insufficient_extraction:ratio={0:F3}<{1:F3};conf={2:F3}<{3:F3};fields={4}/{5}",
+                ratioCompletitud,
+                umbralCompletitud,
+                confianzaCu,
+                umbralConfianza,
+                obtenidosEsperados,
+                esperados);
             _logger.LogWarning(
-                "Extracción CU insuficiente para {Tipologia}. Ratio={Ratio:F3}, obtenidos={Obtenidos}, esperados={Esperados}. Activando fallback GPT.",
+                "Extracción CU insuficiente para {Tipologia}. Ratio={Ratio:F3} (umbral={UmbralRatio:F3}), Confianza={Confianza:F3} (umbral={UmbralConfianza:F3}), obtenidosEsperados={ObtenidosEsperados}, esperados={Esperados}. Activando fallback GPT.",
                 input.Tipologia,
-                ratio,
-                obtenidos,
+                ratioCompletitud,
+                umbralCompletitud,
+                confianzaCu,
+                umbralConfianza,
+                obtenidosEsperados,
                 esperados);
         }
         catch (Exception ex)
@@ -148,21 +171,67 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         TipologiaValidationConfig config,
         ExtraccionResultado resultadoCu,
         double? umbralFallback,
-        out double ratio,
+        double? umbralFallbackCompletitudRequest,
+        double? umbralFallbackConfianzaRequest,
+        out double ratioCompletitud,
+        out double confianzaCu,
         out int esperados,
-        out int obtenidos)
+        out int obtenidosEsperados,
+        out double umbralCompletitud,
+        out double umbralConfianza)
     {
-        esperados = config.Fields.Count;
-        obtenidos = resultadoCu.DatosExtraidos.Count;
+        var confidenceConfig = config.ConfidenceConfig;
+
+        var camposEsperados = config.Fields
+            .Select(f => f.Name)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        esperados = camposEsperados.Count;
+
+        // Umbral legático (request.umbral ?? tipología.ExtracUmbralFallback) usado como fallback para ambos criterios
+        var umbralLegado = umbralFallback ?? confidenceConfig?.ExtracUmbralFallback;
 
         if (esperados <= 0)
         {
-            ratio = 1.0;
+            obtenidosEsperados = 0;
+            ratioCompletitud = 1.0;
+            confianzaCu = resultadoCu.ConfianzaExtraccion;
+
+            // Prioridad: request-específico > tipología-específico > umbral-legático > global
+            umbralCompletitud = umbralFallbackCompletitudRequest
+                ?? confidenceConfig?.ExtracUmbralFallbackCompletitud
+                ?? umbralLegado
+                ?? _fallbackSettings.MinFieldsRatio;
+            umbralConfianza = umbralFallbackConfianzaRequest
+                ?? confidenceConfig?.ExtracUmbralFallbackConfianza
+                ?? umbralLegado
+                ?? _fallbackSettings.MinFieldsRatio;
+
             return true;
         }
 
-        ratio = (double)obtenidos / esperados;
-        return ratio >= (umbralFallback ?? _fallbackSettings.MinFieldsRatio);
+        var camposObtenidos = resultadoCu.DatosExtraidos.Keys
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        obtenidosEsperados = camposObtenidos.Count(camposEsperados.Contains);
+        ratioCompletitud = (double)obtenidosEsperados / esperados;
+        confianzaCu = resultadoCu.ConfianzaExtraccion;
+
+        // Prioridad: request-específico > tipología-específico > umbral-legático > global
+        umbralCompletitud = umbralFallbackCompletitudRequest
+            ?? confidenceConfig?.ExtracUmbralFallbackCompletitud
+            ?? umbralLegado
+            ?? _fallbackSettings.MinFieldsRatio;
+        umbralConfianza = umbralFallbackConfianzaRequest
+            ?? confidenceConfig?.ExtracUmbralFallbackConfianza
+            ?? umbralLegado
+            ?? _fallbackSettings.MinFieldsRatio;
+
+        return ratioCompletitud >= umbralCompletitud && confianzaCu >= umbralConfianza;
     }
 
     private static bool IsAzureContentUnderstandingProvider(string provider) =>

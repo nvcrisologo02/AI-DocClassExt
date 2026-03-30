@@ -115,6 +115,12 @@ namespace DocumentIA.Core.Configuration
         /// Si CU no supera este ratio, se activa el fallback GPT de extracción.
         /// null = usar config.MinFieldsRatio (GptFallbackExtraerSettings) como último recurso.</summary>
         public double? ExtracUmbralFallback { get; set; } = null;
+        /// <summary>Umbral mínimo de completitud (ratio de campos esperados presentes) para considerar CU suficiente.
+        /// Si no se informa, usa ExtracUmbralFallback y, en último término, config.MinFieldsRatio.</summary>
+        public double? ExtracUmbralFallbackCompletitud { get; set; } = null;
+        /// <summary>Umbral mínimo de confianza global de extracción CU para considerar CU suficiente.
+        /// Si no se informa, usa ExtracUmbralFallback y, en último término, config.MinFieldsRatio.</summary>
+        public double? ExtracUmbralFallbackConfianza { get; set; } = null;
         /// <summary>Peso del promedio de confianza de campos en el cálculo CU.</summary>
         public double ExtracWeightCampos { get; set; } = 0.5;
         /// <summary>Peso del ratio de campos requeridos presentes en el cálculo CU.</summary>

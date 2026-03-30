@@ -139,6 +139,32 @@
             "run"
         ],
         "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "run (frontend desktop)",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Desktop"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "run (frontend web)",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run",
+        "--launch-profile",
+        "http"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Admin"
+      },
+      "problemMatcher": "$msCompile"
     }
   ]
 }

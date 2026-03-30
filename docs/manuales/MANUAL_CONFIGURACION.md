@@ -115,6 +115,55 @@ Sección: `Extraction:GptFallback`
 | `MaxTokens` | int | Máximo tokens en respuesta GPT. | `2000` |
 | `TimeoutSeconds` | int | Timeout de la llamada GPT. | `60` |
 
+### 5.4 Jerarquía de umbrales de fallback CU→GPT
+
+El sistema evalúa dos criterios independientes para decidir si la extracción CU es suficiente:
+
+- **Completitud**: ratio de campos esperados (según la tipología) que están presentes en `DatosExtraidos`.
+- **Confianza**: valor de `ConfianzaExtraccion` devuelto por CU.
+
+Si cualquiera de los dos criterios no supera su umbral, se activa el fallback GPT.
+
+La jerarquía de resolución para **cada criterio** (de mayor a menor prioridad) es:
+
+| Nivel | Origen | Campo (completitud) | Campo (confianza) |
+|---|---|---|---|
+| 1 · petición | `instrucciones.extraction` (API/HTTP) | `umbralCompletitud` | `umbralConfianza` |
+| 2 · tipología | `confidenceConfig` (JSON validación / BD) | `extracUmbralFallbackCompletitud` | `extracUmbralFallbackConfianza` |
+| 3 · legado | `instrucciones.extraction` o `confidenceConfig` | `umbral` / `extracUmbralFallback` | ídem |
+| 4 · global | `Extraction:GptFallback` (`appsettings.json`) | `MinFieldsRatio` | `MinFieldsRatio` |
+
+> El campo legado `umbral` / `extracUmbralFallback` actúa como valor único para ambos criterios cuando los específicos no están informados.
+
+#### Campos de tipología (`confidenceConfig` en el JSON de validación / BD)
+
+| Campo JSON | Tipo | Descripción | Default |
+|---|---|---|---|
+| `extracUmbralFallback` | double? | Umbral legado: aplica a completitud y confianza si los específicos no están informados. | `null` |
+| `extracUmbralFallbackCompletitud` | double? | Ratio mín. de campos esperados presentes (nivel tipología). Rango `[0–1]`. | `null` |
+| `extracUmbralFallbackConfianza` | double? | Confianza CU mínima para no activar fallback (nivel tipología). Rango `[0–1]`. | `null` |
+
+#### Campos de la petición HTTP (`instrucciones.extraction`)
+
+| Campo JSON | Tipo | Descripción |
+|---|---|---|
+| `umbral` | double? | Umbral legado (aplica a completitud y confianza si los específicos no están informados). |
+| `umbralCompletitud` | double? | Override de completitud para esta petición. Tiene precedencia sobre tipología. Omitir = usar tipología o global. |
+| `umbralConfianza` | double? | Override de confianza para esta petición. Tiene precedencia sobre tipología. Omitir = usar tipología o global. |
+
+**Ejemplo de petición con umbrales independientes:**
+
+```json
+{
+  "instrucciones": {
+    "extraction": {
+      "umbralCompletitud": 0.7,
+      "umbralConfianza": 0.85
+    }
+  }
+}
+```
+
 ---
 
 ## 6. GDC (Gestor Documental)

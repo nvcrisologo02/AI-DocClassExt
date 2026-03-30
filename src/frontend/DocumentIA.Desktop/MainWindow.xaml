@@ -21,70 +21,81 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <TextBlock Grid.Row="0" Text="PANEL DE ENTRADA" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource BrushTextPrimary}"/>
 
-                <Border Grid.Row="1" Margin="0,14,0,0" Padding="10" BorderBrush="#3A4458" BorderThickness="1" CornerRadius="6" Background="#131A26">
+                <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,14,0,0">
                     <StackPanel>
-                        <TextBlock Text="DOCUMENTO" Foreground="{StaticResource BrushTextMuted}" FontSize="11"/>
-                        <TextBlock Text="{Binding SelectedDocumentPath}" Foreground="{StaticResource BrushTextPrimary}" FontSize="12" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/>
+                        <Border Padding="10" BorderBrush="#3A4458" BorderThickness="1" CornerRadius="6" Background="#131A26">
+                            <StackPanel>
+                                <TextBlock Text="DOCUMENTO" Foreground="{StaticResource BrushTextMuted}" FontSize="11"/>
+                                <TextBlock Text="{Binding SelectedDocumentPath}" Foreground="{StaticResource BrushTextPrimary}" FontSize="12" Margin="0,6,0,0" TextTrimming="CharacterEllipsis"/>
+                            </StackPanel>
+                        </Border>
+
+                        <StackPanel Margin="0,14,0,0">
+                            <TextBlock Text="TIPOLOGÍA" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,6"/>
+                            <StackPanel Orientation="Vertical">
+                                <RadioButton Content="Nota Simple 1.4" GroupName="DocType" Margin="0,0,0,4" Foreground="{StaticResource BrushTextPrimary}"
+                                             IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=nota-simple@1.4}"/>
+                                <RadioButton Content="Resumen" GroupName="DocType" Margin="0,0,0,4" Foreground="{StaticResource BrushTextPrimary}"
+                                             IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=resumen-documental}"/>
+                                <RadioButton Content="Auto" GroupName="DocType" Foreground="{StaticResource BrushTextPrimary}"
+                                             IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=auto}"/>
+                            </StackPanel>
+                        </StackPanel>
+
+                        <Button Content="SELECCIONAR DOCUMENTO" Command="{Binding SelectFileCommand}" Style="{StaticResource ButtonSecondary}" Margin="0,14,0,0" Height="34"/>
+
+                        <StackPanel Margin="0,14,0,0">
+                            <TextBlock Text="OPCIONES" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,8"/>
+                            <CheckBox Content="skipDuplicateCheck" IsChecked="{Binding SkipDuplicateCheck}" Margin="0,0,0,8" Foreground="{StaticResource BrushTextPrimary}"/>
+                            <CheckBox Content="forceReprocess" IsChecked="{Binding ForceReprocess}" Margin="0,0,0,8" Foreground="{StaticResource BrushTextPrimary}"/>
+                            <CheckBox Content="skipGDCUpload" IsChecked="{Binding SkipGDCUpload}" Foreground="{StaticResource BrushTextPrimary}"/>
+
+                            <TextBlock Text="PARÁMETROS REQUEST" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,14,0,8"/>
+
+                            <TextBlock Text="idActivo" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding InputIdActivo, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="submittedBy" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding InputSubmittedBy, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="classification.provider" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding ClassificationProvider, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="classification.model" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding ClassificationModel, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="classification.umbral" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,2"/>
+                            <TextBlock Text="Confianza mínima de clasificación para aceptar el tipo detectado (0–1)." Foreground="#556070" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBox Text="{Binding ClassificationThreshold, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="extraction.model" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding ExtractionModel, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="extraction.umbral" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,2"/>
+                            <TextBlock Text="Umbral legado: aplica a completitud y confianza si no se informan los específicos (0–1)." Foreground="#556070" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBox Text="{Binding ExtractionThreshold, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="extraction.umbralCompletitud" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,2"/>
+                            <TextBlock Text="Ratio mín. de campos esperados presentes en la extracción CU (0–1). Vacío = usa tipología o global." Foreground="#556070" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBox Text="{Binding ExtractionThresholdCompletitud, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="extraction.umbralConfianza" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,2"/>
+                            <TextBlock Text="Confianza CU mínima para no activar el fallback a GPT (0–1). Vacío = usa tipología o global." Foreground="#556070" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBox Text="{Binding ExtractionThresholdConfianza, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="API check (segundos)" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding ApiCheckIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+                        </StackPanel>
                     </StackPanel>
-                </Border>
+                </ScrollViewer>
 
-                <StackPanel Grid.Row="2" Margin="0,14,0,0">
-                    <TextBlock Text="TIPOLOGÍA" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,6"/>
-                    <StackPanel Orientation="Vertical">
-                        <RadioButton Content="Nota Simple 1.4" GroupName="DocType" Margin="0,0,0,4" Foreground="{StaticResource BrushTextPrimary}"
-                                     IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=nota-simple@1.4}"/>
-                        <RadioButton Content="Resumen" GroupName="DocType" Margin="0,0,0,4" Foreground="{StaticResource BrushTextPrimary}"
-                                     IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=resumen-documental}"/>
-                        <RadioButton Content="Auto" GroupName="DocType" Foreground="{StaticResource BrushTextPrimary}"
-                                     IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=auto}"/>
-                    </StackPanel>
-                </StackPanel>
-
-                <Button Grid.Row="3" Content="SELECCIONAR DOCUMENTO" Command="{Binding SelectFileCommand}" Style="{StaticResource ButtonSecondary}" Margin="0,14,0,0" Height="34"/>
-
-                <StackPanel Grid.Row="4" Margin="0,14,0,0">
-                    <TextBlock Text="OPCIONES" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,8"/>
-                    <CheckBox Content="skipDuplicateCheck" IsChecked="{Binding SkipDuplicateCheck}" Margin="0,0,0,8" Foreground="{StaticResource BrushTextPrimary}"/>
-                    <CheckBox Content="forceReprocess" IsChecked="{Binding ForceReprocess}" Margin="0,0,0,8" Foreground="{StaticResource BrushTextPrimary}"/>
-                    <CheckBox Content="skipGDCUpload" IsChecked="{Binding SkipGDCUpload}" Foreground="{StaticResource BrushTextPrimary}"/>
-
-                    <TextBlock Text="PARÁMETROS REQUEST" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,14,0,8"/>
-
-                    <TextBlock Text="idActivo" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                    <TextBox Text="{Binding InputIdActivo, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
-
-                    <TextBlock Text="submittedBy" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                    <TextBox Text="{Binding InputSubmittedBy, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
-
-                    <TextBlock Text="classification.provider" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                    <TextBox Text="{Binding ClassificationProvider, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
-
-                    <TextBlock Text="classification.model" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                    <TextBox Text="{Binding ClassificationModel, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
-
-                    <TextBlock Text="classification.umbral" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                    <TextBox Text="{Binding ClassificationThreshold, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
-
-                    <TextBlock Text="extraction.model" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                    <TextBox Text="{Binding ExtractionModel, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
-
-                    <TextBlock Text="extraction.umbral" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                    <TextBox Text="{Binding ExtractionThreshold, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
-
-                    <TextBlock Text="API check (segundos)" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
-                    <TextBox Text="{Binding ApiCheckIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
-                </StackPanel>
-
-                <Button Grid.Row="5" Content="EJECUTAR" Command="{Binding ExecuteCommand}" Style="{StaticResource ButtonPrimary}" Height="38" Margin="0,12,0,0" IsEnabled="{Binding IsExecuteEnabled}"/>
+                <Button Grid.Row="2" Content="EJECUTAR" Command="{Binding ExecuteCommand}" Style="{StaticResource ButtonPrimary}" Height="38" Margin="0,12,0,0" IsEnabled="{Binding IsExecuteEnabled}"/>
             </Grid>
         </Border>
 

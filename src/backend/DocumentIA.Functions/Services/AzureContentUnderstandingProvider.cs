@@ -96,7 +96,8 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         var camposRequeridosPresentes = tipologiaConfig.Fields
             .Where(f => f.Required)
             .Count(f => datosExtraidos.ContainsKey(f.Name));
-        var fieldConfs = TryExtractFieldConfidences(analysisDocument);
+        var confidenceMap = TryExtractFieldConfidenceMap(analysisDocument);
+        var fieldConfs = confidenceMap?.Values.Select(v => (double?)v).ToList();
         var confidenceConfig = tipologiaConfig.ConfidenceConfig;
 
         var (confianzaExtraccion, metricasDebug) = ConfidenceCalculator.ExtracCU(
@@ -107,6 +108,17 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             camposRequeridosPresentes: camposRequeridosPresentes,
             warnings: 0,
             cfg: confidenceConfig);
+
+        var umbralDuda = input.UmbralFallbackEfectivo
+            ?? confidenceConfig?.ExtracUmbralFallback
+            ?? 0.6;
+
+        metricasDebug.ConfianzaPorCampo = confidenceMap ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        metricasDebug.CamposBajaConfianza = metricasDebug.ConfianzaPorCampo
+            .Where(kvp => kvp.Value < umbralDuda)
+            .Select(kvp => kvp.Key)
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         _logger.LogInformation(
             "Azure Content Understanding completado para tipología {Tipologia} con analyzer {AnalyzerId}. Campos: {Count}. Paginas: {Paginas}",
@@ -279,7 +291,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
     /// Estructura esperada: result.contents[0].fields[fieldName].confidence
     /// Devuelve null si la API no incluye confianzas de campo.
     /// </summary>
-    private static IReadOnlyList<double?>? TryExtractFieldConfidences(JsonDocument analysisDocument)
+    private static Dictionary<string, double>? TryExtractFieldConfidenceMap(JsonDocument analysisDocument)
     {
         if (!analysisDocument.RootElement.TryGetProperty("result", out var resultEl)
             || resultEl.ValueKind != JsonValueKind.Object
@@ -297,21 +309,17 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             return null;
         }
 
-        var confs = new List<double?>();
+        var confByField = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
         foreach (var field in fieldsEl.EnumerateObject())
         {
             if (field.Value.ValueKind == JsonValueKind.Object
                 && field.Value.TryGetProperty("confidence", out var confEl)
                 && confEl.TryGetDouble(out var conf))
             {
-                confs.Add(conf);
-            }
-            else
-            {
-                confs.Add(null);
+                confByField[field.Name] = conf;
             }
         }
 
-        return confs.Count > 0 ? confs : null;
+        return confByField.Count > 0 ? confByField : null;
     }
 }

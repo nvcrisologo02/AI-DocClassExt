@@ -417,6 +417,10 @@ public class DocumentProcessOrchestrator
                     ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
                     ?? _gptExtracSettings.MinFieldsRatio;
 
+                // Umbrales específicos por criterio (completitud y confianza): solo desde instrucciones (mayor prioridad)
+                var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud;
+                var umbralExtracConfianzaRequest = entrada.Instrucciones.Extraction.UmbralConfianza;
+
                 // Provider y model override: instrucciones ?? null (tipología se aplica en el proveedor)
                 var providerEfectivo = string.IsNullOrWhiteSpace(entrada.Instrucciones.Extraction.Provider)
                     || entrada.Instrucciones.Extraction.Provider.Equals("auto", StringComparison.OrdinalIgnoreCase)
@@ -438,6 +442,8 @@ public class DocumentProcessOrchestrator
                             Tipologia = salida.Identificacion.Tipologia,
                             DatosNormalizados = datosNormalizados,
                             UmbralFallbackEfectivo = umbralExtracFallback,
+                            UmbralFallbackEfectivoCompletitud = umbralExtracCompletitudRequest,
+                            UmbralFallbackEfectivoConfianza = umbralExtracConfianzaRequest,
                             ProviderEfectivo = providerEfectivo,
                             ModelKeyEfectivo = modelKeyEfectivo
                         }));
@@ -516,6 +522,14 @@ public class DocumentProcessOrchestrator
                 FallbackRazon = resultadoExtraccion.FallbackRazon,
                 ConfianzaExtraccion = RedondearSalida(resultadoExtraccion.ConfianzaExtraccion),
                 ProveedorExtrac = resultadoExtraccion.ProveedorExtrac,
+                ConfianzaPorCampo = resultadoExtraccion.MetricasDebug?.ConfianzaPorCampo
+                    .ToDictionary(kvp => kvp.Key, kvp => RedondearSalida(kvp.Value), StringComparer.OrdinalIgnoreCase)
+                    ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
+                CamposConDuda = resultadoExtraccion.MetricasDebug?.CamposBajaConfianza
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                    ?? new List<string>(),
                 TiemposMs = resultadoExtraccion.TiemposMs
             };
 
@@ -644,9 +658,12 @@ public class DocumentProcessOrchestrator
                     .ToList()
             };
 
+            var confianzaValidacionRedondeada = RedondearSalida(resultadoValidacion.ConfianzaValidacion);
+            salida.DetalleEjecucion.Postproceso.ConfianzaValidacion = confianzaValidacionRedondeada;
+
             // Agregar metadata de validacion
             salida.DetalleEjecucion.Postproceso.Normalizaciones.Add(
-                $"Confianza de validacion: {resultadoValidacion.ConfianzaValidacion:P0}");
+                $"Confianza de validacion: {confianzaValidacionRedondeada:P0}");
             
             if (resultadoValidacion.Errores > 0)
             {
@@ -817,8 +834,8 @@ public class DocumentProcessOrchestrator
             salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(salida.Resultado.ConfianzaGlobal, confidenceCfg);
             salida.Resultado.ConfianzaClasificacion = RedondearSalida(confClasif);
             salida.Resultado.ConfianzaExtraccion = RedondearSalida(confExtrac ?? 0.0);
-            salida.Resultado.ConfianzaValidacion = RedondearSalida(confValid);
-            salida.DetalleEjecucion.Postproceso.ConfianzaValidacion = RedondearSalida(confValid);
+            salida.Resultado.ConfianzaValidacion = confianzaValidacionRedondeada;
+            salida.DetalleEjecucion.Postproceso.ConfianzaValidacion = confianzaValidacionRedondeada;
 
             logger.LogInformation(
                 "ConfGlobal={Global:F3} \u2192 {EstadoCalidad} (Clasif:{Clasif:F3}, Extrac:{Extrac:F3}, Valid:{Valid:F3})",

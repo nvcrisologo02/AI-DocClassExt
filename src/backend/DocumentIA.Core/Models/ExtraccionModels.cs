@@ -6,11 +6,21 @@ public class ExtraccionInput
     public string Tipologia { get; set; } = string.Empty;
     public Dictionary<string, object> DatosNormalizados { get; set; } = new();
     /// <summary>
-    /// Umbral de fallback efectivo resuelto por el orquestador antes de llamar a ExtraerActivity.
+    /// Umbral de fallback efectivo resuelto por el orquestador (legado, aplica a ambos criterios si los específicos son null).
     /// Cadena: instrucciones.Extraction.Umbral ?? tipología.ExtracUmbralFallback ?? config.MinFieldsRatio.
     /// null = usar config.MinFieldsRatio directamente en el proveedor.
     /// </summary>
     public double? UmbralFallbackEfectivo { get; set; }
+    /// <summary>
+    /// Umbral de completitud de extracción CU resuelto por el orquestador para esta petición.
+    /// Precede sobre tipología. null = usa tipología o UmbralFallbackEfectivo como fallback.
+    /// </summary>
+    public double? UmbralFallbackEfectivoCompletitud { get; set; }
+    /// <summary>
+    /// Umbral de confianza global de extracción CU resuelto por el orquestador para esta petición.
+    /// Precede sobre tipología. null = usa tipología o UmbralFallbackEfectivo como fallback.
+    /// </summary>
+    public double? UmbralFallbackEfectivoConfianza { get; set; }
     /// <summary>
     /// Provider de extracción efectivo resuelto por el orquestador.
     /// Viene de instrucciones.Extraction.Provider si no es "auto" ni vacío; de lo contrario null (usa config de tipología).
@@ -54,6 +64,7 @@ public class ConfidenceMetricasExtraccion
     public double RatioRequeridos { get; set; }
     public int CamposConConfianza { get; set; }
     public int CamposTotales { get; set; }
+    public Dictionary<string, double> ConfianzaPorCampo { get; set; } = new();
     public List<string> CamposBajaConfianza { get; set; } = new();
 }
 

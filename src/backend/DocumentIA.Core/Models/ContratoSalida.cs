@@ -116,6 +116,10 @@ public class ResultadoExtraccion
     public bool LayoutEnabled { get; set; }
     public bool FallbackUsado { get; set; }
     public string? FallbackRazon { get; set; }
+    /// <summary>Confianzas individuales reportadas por el proveedor de extracción por campo normalizado.</summary>
+    public Dictionary<string, double> ConfianzaPorCampo { get; set; } = new();
+    /// <summary>Campos cuya confianza de extracción quedó por debajo del umbral efectivo de extracción.</summary>
+    public List<string> CamposConDuda { get; set; } = new();
     public Dictionary<string, int> TiemposMs { get; set; } = new();
 }
 
