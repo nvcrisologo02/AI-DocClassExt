@@ -1,0 +1,104 @@
+{
+  "tipologiaId": "tasacion",
+  "tipologiaNombre": "Tasacion",
+  "tipologiaMGDCMatricula": "TASACION",
+  "gdcTipoDocumento": "",
+  "gdcSubtipoDocumento": "",
+  "gdcSerie": "",
+  "skipGDCUpload": true,
+  "gptDescripcion": "Informe de tasaci\u00f3n inmobiliaria. Documento t\u00e9cnico que certifica el valor de mercado de un inmueble. Incluye valor tasado, metodolog\u00eda de valoraci\u00f3n, descripci\u00f3n del inmueble, superficies y datos del tasador.",
+  "version": "1.0",
+  "isDefault": true,
+  "promptConfig": {
+    "enabled": false,
+    "modelKey": "default.gpt4o-mini",
+    "systemPrompt": "",
+    "userPromptTemplate": "",
+    "maxTokens": 2000,
+    "temperature": 0.0,
+    "contentMode": "markdown"
+  },
+  "confidenceConfig": {
+    "clasifUmbralFallback": 0.85,
+    "extracUmbralFallback": 0.6,
+    "extracWeightCampos": 0.5,
+    "extracWeightRequeridos": 0.3,
+    "extracWeightWarnings": 0.2,
+    "umbralOK": 0.85,
+    "umbralRevision": 0.70
+  },
+  "fields": [
+    {
+      "name": "ValorTasado",
+      "type": "decimal",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Error",
+          "parameters": {
+            "min": 1000,
+            "max": 2000000
+          }
+        }
+      ]
+    },
+    {
+      "name": "FechaDocumento",
+      "type": "date",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "date",
+          "severity": "Error",
+          "parameters": {
+            "formats": [ "dd/MM/yyyy", "yyyy-MM-dd" ],
+            "allowFuture": false,
+            "allowPast": true
+          }
+        }
+      ]
+    },
+     {
+      "name": "Direccion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "address",
+          "parameters": {
+            "minLength": 6,
+            "maxLength": 160,
+            "requireStreetNumber": true,
+            "requireMunicipality": true,
+            "requireProvince": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "NIF",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "nif",
+          "severity": "Warning",
+          "parameters": {}
+        }
+      ]
+    },
+    {
+      "name": "ReferenciaCatastral",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "catastral",
+          "severity": "Warning",
+          "parameters": {}
+        }
+      ]
+    }
+  ]
+}

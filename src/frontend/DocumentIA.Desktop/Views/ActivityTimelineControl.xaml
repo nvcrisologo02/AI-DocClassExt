@@ -1,0 +1,138 @@
+<UserControl x:Class="DocumentIA.Desktop.Views.ActivityTimelineControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:DocumentIA.Desktop"
+             xmlns:models="clr-namespace:DocumentIA.Desktop.Models"
+             mc:Ignorable="d" 
+             d:DesignHeight="200" d:DesignWidth="600">
+    <Border Background="Transparent" Padding="10">
+        <ItemsControl ItemsSource="{Binding ActivityStatuses}" VerticalAlignment="Top">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <StackPanel Orientation="Vertical"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Grid Margin="0,0,0,12">
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="ToolTip" Value="{x:Null}"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Status}" Value="{x:Static models:ActivityStatusEnum.Completed}">
+                                        <Setter Property="ToolTip">
+                                            <Setter.Value>
+                                                <Border Background="#1A2130" BorderBrush="#3A4458" BorderThickness="1" CornerRadius="6" Padding="10" MaxWidth="560">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" Foreground="#E8EEF8" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="Completed" Foreground="#7DFF62" FontSize="11" Margin="0,0,0,6"/>
+                                                        <Border BorderBrush="#3A4458" BorderThickness="1" CornerRadius="4" Padding="6">
+                                                            <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="260">
+                                                                <ItemsControl ItemsSource="{Binding DetailRows}">
+                                                                    <ItemsControl.ItemTemplate>
+                                                                        <DataTemplate>
+                                                                            <Grid Margin="0,0,0,4">
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="190"/>
+                                                                                    <ColumnDefinition Width="*"/>
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <TextBlock Grid.Column="0" Text="{Binding Key}" Foreground="#9AA6BB" FontFamily="Consolas" FontSize="11"/>
+                                                                                <TextBlock Grid.Column="1" Text="{Binding Value}" Foreground="#D6DEED" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"/>
+                                                                            </Grid>
+                                                                        </DataTemplate>
+                                                                    </ItemsControl.ItemTemplate>
+                                                                </ItemsControl>
+                                                            </ScrollViewer>
+                                                        </Border>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Status}" Value="{x:Static models:ActivityStatusEnum.Skipped}">
+                                        <Setter Property="ToolTip">
+                                            <Setter.Value>
+                                                <Border Background="#1A2130" BorderBrush="#3A4458" BorderThickness="1" CornerRadius="6" Padding="10" MaxWidth="460">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" Foreground="#E8EEF8" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="Skipped" Foreground="#8FA8FF" FontSize="11" Margin="0,0,0,6"/>
+                                                        <TextBlock Text="{Binding Message, TargetNullValue=Actividad omitida sin detalle adicional}" Foreground="#D6DEED" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Status}" Value="{x:Static models:ActivityStatusEnum.Failed}">
+                                        <Setter Property="ToolTip">
+                                            <Setter.Value>
+                                                <Border Background="#1A2130" BorderBrush="#3A4458" BorderThickness="1" CornerRadius="6" Padding="10" MaxWidth="460">
+                                                    <StackPanel>
+                                                        <TextBlock Text="{Binding Name}" Foreground="#E8EEF8" FontWeight="SemiBold" Margin="0,0,0,2"/>
+                                                        <TextBlock Text="Failed" Foreground="#FF5C75" FontSize="11" Margin="0,0,0,6"/>
+                                                        <TextBlock Text="{Binding Message, TargetNullValue=No se recibió detalle de error}" Foreground="#D6DEED" TextWrapping="Wrap" FontFamily="Consolas" FontSize="11"/>
+                                                    </StackPanel>
+                                                </Border>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="42"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0" VerticalAlignment="Top">
+                            <Rectangle Width="2" Height="48" Fill="#2A3140" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,18,0,-42">
+                                <Rectangle.Style>
+                                    <Style TargetType="Rectangle">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsLast}" Value="True">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Rectangle.Style>
+                            </Rectangle>
+                            <Ellipse x:Name="ActivityCircle" Width="24" Height="24"
+                                     Fill="{Binding Status, Converter={StaticResource StatusToBrushConverter}}"
+                                     Margin="0,0,0,0" RenderTransformOrigin="0.5,0.5" Stroke="#22304A" StrokeThickness="2"
+                                     HorizontalAlignment="Center" VerticalAlignment="Top">
+                                <Ellipse.RenderTransform>
+                                    <ScaleTransform ScaleX="1" ScaleY="1"/>
+                                </Ellipse.RenderTransform>
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Status}" Value="{x:Static models:ActivityStatusEnum.Running}">
+                                                <DataTrigger.EnterActions>
+                                                    <BeginStoryboard Storyboard="{StaticResource PulseAnimation}"/>
+                                                </DataTrigger.EnterActions>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <TextBlock Text="{Binding Status, Converter={StaticResource StatusToStringConverter}}"
+                                       FontSize="12" FontWeight="Bold" Foreground="White"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="8,0,0,0">
+                            <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold" Foreground="{StaticResource BrushTextPrimary}"/>
+                            <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                                <TextBlock Text="{Binding Status, Converter={StaticResource StatusToLabelConverter}}" FontSize="11" Foreground="{StaticResource BrushTextMuted}"/>
+                                <TextBlock Text="  " FontSize="11"/>
+                                <TextBlock Text="{Binding DurationMs, Converter={StaticResource DurationToDisplayConverter}}" FontSize="11" Foreground="{StaticResource BrushTextMuted}"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Border>
+</UserControl>

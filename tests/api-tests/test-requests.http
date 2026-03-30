@@ -1,0 +1,89 @@
+### Variables
+@baseUrl = http://localhost:7071
+@instanceId = 
+
+### 1. Ingestar documento de prueba - Tasación
+POST {{baseUrl}}/api/IngestDocument
+Content-Type: application/json
+
+{
+  "instrucciones": {
+    "expectedType": "Tasacion",
+    "skipDuplicateCheck": false,
+    "forceReprocess": false,
+    "classification": {
+      "model": "auto",
+      "umbral": 0.85
+    },
+    "extraction": {
+      "model": "auto",
+      "umbral": 0.80
+    }
+  },
+  "documento": {
+    "name": "tasacion_test_001.pdf",
+    "content": {
+      "base64": "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1szIDAgUl0+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDYxMiA3OTJdL1BhcmVudCAyIDAgUi9SZXNvdXJjZXM8PD4+Pj4KZW5kb2JqCnhyZWYKMCA0CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDY0IDAwMDAwIG4gCjAwMDAwMDAxMjEgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDQvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoyMDIKJSVFT0Y="
+    }
+  },
+  "trazabilidad": {
+    "correlationId": "TEST-001-2026",
+    "submittedBy": "usuario.prueba@sareb.es",
+    "idGDC": null,
+    "idActivo": "ACT-12345"
+  }
+}
+
+### 2. Consultar estado de la orquestación
+# Copia el instanceId de la respuesta anterior y reemplázalo arriba en @instanceId
+GET {{baseUrl}}/runtime/webhooks/durabletask/instances/{{instanceId}}
+
+### 3. Obtener resultado completo
+GET {{baseUrl}}/runtime/webhooks/durabletask/instances/{{instanceId}}
+Accept: application/json
+
+### 4. Purgar historial de instancia
+POST {{baseUrl}}/runtime/webhooks/durabletask/instances/{{instanceId}}/purge
+
+### 5. Test con Skip Duplicate Check
+POST {{baseUrl}}/api/IngestDocument
+Content-Type: application/json
+
+{
+  "instrucciones": {
+    "expectedType": "Tasacion",
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "classification": {
+      "model": "DI",
+      "umbral": 0.90
+    },
+    "extraction": {
+      "model": "GPT",
+      "umbral": 0.75
+    }
+  },
+  "documento": {
+    "name": "tasacion_test_002.pdf",
+    "content": {
+      "base64": "JVBERi0xLjQKJeLjz9MKMSAwIG9iago8PC9UeXBlL0NhdGFsb2cvUGFnZXMgMiAwIFI+PgplbmRvYmoKMiAwIG9iago8PC9UeXBlL1BhZ2VzL0NvdW50IDEvS2lkc1szIDAgUl0+PgplbmRvYmoKMyAwIG9iago8PC9UeXBlL1BhZ2UvTWVkaWFCb3hbMCAwIDYxMiA3OTJdL1BhcmVudCAyIDAgUi9SZXNvdXJjZXM8PD4+Pj4KZW5kb2JqCnhyZWYKMCA0CjAwMDAwMDAwMDAgNjU1MzUgZiAKMDAwMDAwMDAxNSAwMDAwMCBuIAowMDAwMDAwMDY0IDAwMDAwIG4gCjAwMDAwMDAxMjEgMDAwMDAgbiAKdHJhaWxlcgo8PC9TaXplIDQvUm9vdCAxIDAgUj4+CnN0YXJ0eHJlZgoyMDIKJSVFT0Y="
+    }
+  },
+  "trazabilidad": {
+    "correlationId": "TEST-002-2026",
+    "submittedBy": "usuario.prueba@sareb.es",
+    "idGDC": "GDC-98765",
+    "idActivo": "ACT-67890"
+  }
+}
+
+### 6. Listar todas las instancias
+GET {{baseUrl}}/runtime/webhooks/durabletask/instances
+
+### 7. Terminar orquestación manualmente
+POST {{baseUrl}}/runtime/webhooks/durabletask/instances/{{instanceId}}/terminate
+Content-Type: application/json
+
+{
+  "reason": "Prueba terminada manualmente"
+}

@@ -1,0 +1,10 @@
+{
+  "models": [
+    {
+      "key": "default.azure-di",
+      "provider": "azure-document-intelligence",
+      "classifierId": "DocumentAICC_v0",
+      "apiVersion": "2024-11-30"
+    }
+  ]
+}

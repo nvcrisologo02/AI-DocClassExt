@@ -1,0 +1,86 @@
+<UserControl x:Class="DocumentIA.Desktop.Views.JsonViewerControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+             xmlns:local="clr-namespace:DocumentIA.Desktop"
+             mc:Ignorable="d" 
+             d:DesignHeight="400" d:DesignWidth="600">
+    <UserControl.Resources>
+        <Style TargetType="TabItem">
+            <Setter Property="Foreground" Value="#E8EEF8"/>
+            <Setter Property="Background" Value="#131A26"/>
+            <Setter Property="BorderBrush" Value="#2A3140"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="10,4"/>
+        </Style>
+
+        <Style TargetType="TreeViewItem">
+            <Setter Property="Foreground" Value="#DCE5F5"/>
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Background="#0E131E">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Border Grid.Row="0" Background="#131A26" BorderBrush="#2A3140" BorderThickness="0,0,0,1" Padding="10,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <StackPanel>
+                    <TextBlock Text="JSON Viewer" Foreground="#E8EEF8" FontSize="13" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="SummaryText" Text="Sin datos" Foreground="#9AA6BB" FontSize="10" Margin="0,2,0,0"/>
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button Content="Copiar" Click="CopyJsonButton_Click" Margin="0,0,6,0" Padding="10,4" FontSize="10"
+                            Background="#2A3140" Foreground="#E8EEF8" BorderBrush="#3B465C" BorderThickness="1"/>
+                    <Button Content="Expandir" Click="ExpandAllButton_Click" Margin="0,0,6,0" Padding="10,4" FontSize="10"
+                            Background="#2A3140" Foreground="#E8EEF8" BorderBrush="#3B465C" BorderThickness="1"/>
+                    <Button Content="Colapsar" Click="CollapseAllButton_Click" Padding="10,4" FontSize="10"
+                            Background="#2A3140" Foreground="#E8EEF8" BorderBrush="#3B465C" BorderThickness="1"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <TabControl Grid.Row="1" Margin="8" Background="#0E131E" BorderBrush="#2A3140" BorderThickness="1">
+            <TabItem Header="Visual">
+                <Border Background="#0E131E" Padding="6">
+                    <TreeView Name="JsonTreeView"
+                              Background="#0E131E"
+                              Foreground="#DCE5F5"
+                              BorderBrush="Transparent"
+                              FontFamily="Consolas"
+                              FontSize="11"/>
+                </Border>
+            </TabItem>
+            <TabItem Header="Raw">
+                <Border Background="#0E131E" Padding="6">
+                    <TextBox x:Name="RawJsonTextBox"
+                             Background="#0E131E"
+                             Foreground="#DCE5F5"
+                             BorderBrush="Transparent"
+                             FontFamily="Consolas"
+                             FontSize="11"
+                             IsReadOnly="True"
+                             TextWrapping="NoWrap"
+                             VerticalScrollBarVisibility="Auto"
+                             HorizontalScrollBarVisibility="Auto"/>
+                </Border>
+            </TabItem>
+        </TabControl>
+
+        <Border Grid.Row="2" Background="#131A26" BorderBrush="#2A3140" BorderThickness="0,1,0,0" Padding="10,6">
+            <TextBlock x:Name="FooterText" Text="Listo" Foreground="#9AA6BB" FontSize="10"/>
+        </Border>
+    </Grid>
+</UserControl>

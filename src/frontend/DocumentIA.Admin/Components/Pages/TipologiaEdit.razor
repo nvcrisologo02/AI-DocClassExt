@@ -1,0 +1,115 @@
+@page "/tipologias/edit"
+@page "/tipologias/edit/{Id:int}"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Editar Tipología</PageTitle>
+
+<h1>@(Id.HasValue ? "Editar Tipología" : "Nueva Tipología")</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+}
+
+@if (Id.HasValue && !_isEditable)
+{
+    <div class="alert alert-warning">Solo se pueden editar tipologías en estado Draft. Esta tipología está en estado <strong>@_model.Estado</strong>.</div>
+}
+
+<EditForm Model="_model" OnValidSubmit="SaveAsync">
+    <div class="mb-3">
+        <label class="form-label">Codigo</label>
+        <InputText class="form-control" @bind-Value="_model.Codigo" disabled="@(!_isEditable)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Nombre</label>
+        <InputText class="form-control" @bind-Value="_model.Nombre" disabled="@(!_isEditable)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">Version</label>
+        <InputText class="form-control" @bind-Value="_model.Version" disabled="@(!_isEditable)" />
+    </div>
+
+    <div class="mb-3">
+        <label class="form-label">ConfiguracionJson</label>
+        <InputTextArea class="form-control" style="min-height: 260px;" @bind-Value="_model.ConfiguracionJson" disabled="@(!_isEditable)" />
+    </div>
+
+    <div class="mb-3">
+        <button class="btn btn-outline-primary" type="button" @onclick="ValidateJson" disabled="@(!_isEditable)">Validar JSON</button>
+        <button class="btn btn-primary ms-2" type="submit" disabled="@(!_isEditable)">Guardar</button>
+        <a class="btn btn-secondary ms-2" href="/tipologias">Volver</a>
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private TipologiaEntity _model = new();
+    private bool _error;
+    private string? _message;
+    private bool _isEditable = true;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isEditable = true;
+        _message = null;
+        _error = false;
+
+        if (Id.HasValue)
+        {
+            var existing = await AdminService.GetTipologiaAsync(Id.Value);
+            if (existing is not null)
+            {
+                _model = existing;
+                _isEditable = existing.Estado == EstadoTipologia.Draft;
+            }
+        }
+    }
+
+    private void ValidateJson()
+    {
+        var errors = TipologiaAdminService.ValidarConfiguracionJson(_model.ConfiguracionJson ?? string.Empty);
+        if (errors.Count == 0)
+        {
+            _error = false;
+            _message = "Configuración válida.";
+            return;
+        }
+
+        _error = true;
+        _message = string.Join("\n", errors);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_isEditable)
+        {
+            _error = true;
+            _message = "Solo se pueden editar tipologías en estado Draft.";
+            return;
+        }
+
+        var errors = TipologiaAdminService.ValidarConfiguracionJson(_model.ConfiguracionJson ?? string.Empty);
+        if (errors.Count > 0)
+        {
+            _error = true;
+            _message = string.Join("\n", errors);
+            return;
+        }
+
+        try
+        {
+            await AdminService.SaveTipologiaAsync(_model);
+            Navigation.NavigateTo("/tipologias");
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

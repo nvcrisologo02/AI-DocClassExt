@@ -26,7 +26,7 @@ env/
 .ipynb_checkpoints/
 
 # IDE
-.vscode/
+
 .idea/
 *.swp
 *.swo
@@ -39,3 +39,38 @@ Thumbs.db
 *.pfx
 *.key
 appsettings.Development.json
+last-instance-id.txt
+commit-motor-validacion.ps1
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id-notasimple13.txt
+tests/api-tests/last-instance-id-notasimple.txt
+tests/api-tests/last-instance-id-notasimple14.txt
+docs/backlog_revisado.csv
+docs/difs.csv
+scripts/ado-reset-hierarchy-relations-rest.ps1
+scripts/ado-reset-hierarchy-relations.ps1
+docs/Backlog/backlog_revisado.csv
+docs/Backlog/backlog.xlsx
+docs/Backlog/difs.csv
+scripts/Mock Servers/.mock-servers.pids.json
+docs/manuales/GUIA_DEMO_NOTA_SIMPLE_1_4.md
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id.txt
+docs/manuales/GUIA_DEMO_NOTA_SIMPLE_1_4 copy.md
+tmp_notasimple_output_pretty.json
+tmp_notasimple_output.json
+tmp_tasacion_output_pretty.json
+tmp_tasacion_output.json
+tmp_analyzers.json
+tmp_analyze_result.json
+tests/api-tests/tmp_final_status.json
+docs/manuales/salidas-demo/salida_nota_simple_1_4.json
+docs/manuales/salidas-demo/salida_test_ingest_tasacion.json
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id.txt
+docs/auxiliares/
+tests/api-tests/last-instance-id-notasimple14-classify.txt
+tests/api-tests/last-instance-id-*.txt
+tmp_func_host_prompt_*.log

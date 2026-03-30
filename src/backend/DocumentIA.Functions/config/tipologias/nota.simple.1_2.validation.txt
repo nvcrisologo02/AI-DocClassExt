@@ -1,0 +1,262 @@
+================================================================================
+CONFIGURACIÓN DE VALIDACIÓN - NOTA SIMPLE v1.2
+================================================================================
+
+DESCRIPCIÓN GENERAL:
+Este JSON define las reglas de validación para los documentos de tipo "Nota Simple".
+Contiene 26 campos divididos en 9 secciones temáticas, con validaciones específicas
+para cada campo según su tipo de dato y requisitos de negocio.
+
+Identificadores:
+  - Tipología: nota-simple
+  - Nombre: Nota Simple
+  - Versión: 1.2
+
+================================================================================
+CONFIGURACIÓN GDC (Gestor Documental Corporativo)
+================================================================================
+
+Campos de catálogo SINTWS v4.0 para la subida automática al GDC:
+
+  tipologiaMGDCMatricula : "AI-01-NOTS-01"
+    Matrícula GDC usada para buscar/clasificar el documento. Si el campo
+    'Matricula' del input viene informado, tiene prioridad. Si ambos están
+    vacíos, se usa GdcSettings.DefaultMatricula.
+
+  gdcTipoDocumento       : "NOTS"
+    Código del tipo de documento en el catálogo GDC. Obligatorio en create.
+
+  gdcSubtipoDocumento    : "NOTS01"
+    Código del subtipo de documento (opcional). Se emite sólo si no está vacío.
+
+  gdcSerie               : "AI01"
+    Serie documental GDC. Obligatoria en create. Confirmar con Sistemas.
+
+  skipGDCUpload          : false
+    Comportamiento por defecto para esta tipología cuando la petición no
+    especifica explícitamente Instrucciones.SkipGDCUpload.
+    false = subir al GDC si hay IdActivo disponible.
+    Puede sobreescribirse por petición: true/false en Instrucciones.SkipGDCUpload,
+    o null/omitido para usar este valor por defecto de tipología.
+
+================================================================================
+SECCIONES Y CAMPOS
+================================================================================
+
+---
+1) IDENTIFICACIÓN REGISTRAL
+---
+Datos que identifican inequívocamente el inmueble en el Registro de Propiedad.
+
+Campos:
+  • FincaRegistral (string) - REQUERIDO
+    - Longitud: 1-30 caracteres
+    - Identificador único del registro inmobiliario
+    
+  • RegistroPropiedad (string) - REQUERIDO
+    - Longitud: 3-120 caracteres
+    - Nombre del registro donde está inscrito el inmueble
+    
+  • MunicipioRegistro (string)
+    - Máximo: 80 caracteres
+    - Municipio donde se localiza el registro
+    
+  • IDUFIR_CRU (string)
+    - Patrón: 14 dígitos (regex: ^[0-9]{14}$)
+    - Identificador único de finca del Registro
+
+---
+2) DATOS DEL DOCUMENTO
+---
+Información temporal del documento de la nota simple.
+
+Campos:
+  • FechaDocumento (date) - REQUERIDO
+    - Formatos: dd/MM/yyyy o yyyy-MM-dd
+    - No permite: fechas futuras
+    - Permite: fechas pasadas
+    
+  • NumeroAsientoPresentacion (string)
+    - Máximo: 40 caracteres
+    - Número de asiento en el que consta la presentación
+
+---
+3) LOCALIZACIÓN / DIRECCIÓN
+---
+Ubicación geográfica y referencias catastrales del inmueble.
+
+Campos:
+  • Direccion (string)
+    - Validación completa de dirección (dirección, número, municipio, provincia)
+    - Longitud: 6-160 caracteres
+    - Requerimientos: número de vía, municipio y provincia obligatorios
+    
+  • ReferenciaCatastral (string)
+    - Validación de referencia catastral
+    - Formato específico de 20 caracteres
+
+---
+4) DESCRIPCIÓN DEL INMUEBLE
+---
+Características físicas y descripción del bien inmueble.
+
+Campos:
+  • TipologiaInmueble (string)
+    - Enumeración: Vivienda, Local, Trastero, Garaje, Edificio, Suelo, Oficina, Nave, Otro
+    
+  • superficie (decimal) - REQUERIDO
+    - Rango: 0 - 200.000.000 m²
+    - Métrica estándar de extensión del inmueble
+    
+  • UnidadSuperficie (string)
+    - Enumeración: m2_construidos, m2_utiles, m2_suelo, otro
+    
+  • Anejos (array de objetos) - Elementos adicionales del inmueble
+    Propiedades de cada anejo:
+      - tipo (string, máx 40 caracteres)
+      - descripcion (string, máx 200 caracteres)
+      - superficie (decimal, rango: 0 - 200.000.000)
+
+---
+5) TITULARIDAD
+---
+Información sobre los titulares del inmueble y su tipo de titularidad.
+
+Campos:
+  • Titular (string) - REQUERIDO
+    - Máximo: 160 caracteres
+    - Nombre del propietario o titular del derecho
+    
+  • NIF (string)
+    - Validación de NIF español
+    
+  • DerechoTitularidad (string) - REQUERIDO
+    - Enumeración: Pleno dominio, Nuda propiedad, Usufructo, Copropiedad, Otro
+    - Tipo de derecho que ostenta el titular
+    
+  • CuotaParticipacion (string)
+    - Patrón: fracción (numerador/denominador) - regex: ^[0-9]+\/[0-9]+$
+    - Ej: 1/2, 3/4, etc.
+
+---
+6) TÍTULO E INSCRIPCIÓN
+---
+Datos del título por el que se adquirió y datos del registro.
+
+Campos:
+  • TituloAdquisicion (string)
+    - Enumeración: Compraventa, Herencia, Adjudicacion, Dacion, Donacion, Otros,
+                   Acta de Manifestaciones
+    - Validación case-insensitive
+    - Base legal de la adquisición
+    
+  • FechaInscripcion (date)
+    - Formatos: dd/MM/yyyy o yyyy-MM-dd
+    - No permite: fechas futuras
+    - Permite: fechas pasadas
+    
+  • TomoLibroFolio (string)
+    - Máximo: 60 caracteres
+    - Referencia al libro, tomo y folio del registro
+
+---
+7) CARGAS Y GRAVÁMENES
+---
+Derechos de terceros que afectan al inmueble (hipotecas, embargos, etc).
+
+Campos:
+  • Cargas (array de objetos) - Cargas, hipotecas y gravámenes
+    Propiedades de cada carga:
+      - tipo (string)
+        Enumeración: Hipoteca, Embargo, Servidumbre, Condicion resolutoria, Afeccion fiscal, Otra
+      
+      - descripcion (string, máx 300 caracteres)
+        Detalle de la carga
+      
+      - importeMaxResponsabilidad (decimal, rango: 0 - 999.999.999.999)
+        Cantidad sobre la que responde la carga
+      
+      - fechaInscripcion (date)
+        Formatos: dd/MM/yyyy o yyyy-MM-dd
+        No permite: fechas futuras
+        Permite: fechas pasadas
+
+---
+8) LIMITACIONES / RÉGIMEN
+---
+Restricciones y limitaciones legales que afectan al uso del inmueble.
+
+Campos:
+  • VPO (boolean)
+    - Indica si el inmueble es Vivienda de Protección Oficial
+    
+  • LimitacionesAdministrativas (string)
+    - Máximo: 300 caracteres
+    - Restricciones impuestas por COMPLETAR_GDC_HTTP_BASIC_USERNAMEistraciones públicas
+
+---
+9) SITUACIÓN POSESORIA
+---
+Estado de ocupación del inmueble.
+
+Campos:
+  • Ocupacion (string)
+    - Enumeración: No consta, Libre, Arrendado inscrito, Ocupado, Otro
+    - Situación actual de ocupación
+    
+  • Observaciones (string)
+    - Máximo: 500 caracteres
+    - Notas adicionales sobre el inmueble o su inscripción
+
+================================================================================
+TIPOS DE VALIDACIÓN UTILIZADOS
+================================================================================
+
+1. minLength/maxLength
+   - Valida la longitud mínima o máxima de strings
+   
+2. regex
+   - Valida patrones específicos mediante expresiones regulares
+   
+3. range
+   - Valida que valores numéricos estén dentro de un rango
+   
+4. date
+   - Valida formato de fechas y restricciones temporales
+   
+5. address
+   - Valida estructura completa de direcciones postales
+   
+6. nif
+   - Valida formato de DNI/NIF español
+   
+7. enum
+   - Valida que el valor pertenezca a una lista predefinida
+   
+8. boolean
+   - Valida valores booleanos (true/false)
+   
+9. catastral
+   - Valida formato de referencias catastrales
+
+================================================================================
+SEVERIDADES DE VALIDACIÓN
+================================================================================
+
+- Error: Fallos críticos que impiden procesar el documento. Interrumpen la validación.
+- Warning: Fallos no críticos. El documento puede procesarse con advertencias.
+- Info: Información adicional, sin impacto en la validación.
+
+================================================================================
+NOTAS IMPORTANTES
+================================================================================
+
+• Los campos marcados como "REQUERIDO" deben estar siempre presentes en el documento.
+• Las fechas no permiten valores futuros (validación retroactiva).
+• Los patrones regex deben cumplirse exactamente para pasar la validación.
+• Los arrays pueden estar vacíos, pero si contienen elementos, cada elemento
+  debe cumplir con sus propias reglas de validación.
+• La Superficie (campo obligatorio en sección 4) debe ser mayor a 0.
+• Esta es una versión simplificada (1.1) con 26 campos vs. 32 en versión 1.3.
+
+================================================================================
