@@ -43,15 +43,20 @@ public class GptFallbackExtraerDataProvider
 
         var systemMessage = new SystemChatMessage(
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
-            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional. " +
-            "Preferiblemente devuelve un objeto con claves 'campos_extraidos' y 'confianza_por_campo'. " +
-            "En 'confianza_por_campo' informa un valor de 0 a 1 por cada campo extraído. " +
+            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
+            "'campos_extraidos' (objeto con los campos extraídos, null para no encontrados), " +
+            "'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción), " +
+            "'confianza_por_campo' (objeto con confianza 0..1 por cada campo extraído). " +
+            "Para cada campo se indican el tipo esperado, si es obligatorio y las reglas de validación " +
+            "(formatos permitidos, patrones, valores de enumeración, rangos numéricos). " +
+            "Respeta estrictamente esas reglas al extraer el valor de cada campo. " +
             "Usa null para campos no encontrados.");
 
         var fieldList = BuildFieldList(tipologiaConfig);
         var userPrompt =
             $"Tipo de documento: {tipologiaConfig.TipologiaId} ({tipologiaConfig.TipologiaNombre})\n\n" +
-            "Extrae estos campos y devuelve exactamente estos nombres de clave:\n" +
+            "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
+            "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
             fieldList;
 
         var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
@@ -111,7 +116,13 @@ public class GptFallbackExtraerDataProvider
             ? ParseFieldConfidenceMap(confidenceElement, tipologiaConfig)
             : null;
 
-        var metricasDebug = BuildFallbackMetricas(input, tipologiaConfig, datos, confianzaPorCampo);
+        var confianzaExtraccionGpt = root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("confianza_extraccion", out var ceElement)
+            && ceElement.TryGetDouble(out var ceVal)
+            ? (double?)Math.Clamp(ceVal, 0.0, 1.0)
+            : null;
+
+        var (confianzaCalculada, metricasDebug) = BuildFallbackMetricas(input, tipologiaConfig, datos, confianzaPorCampo);
 
         return new ExtraccionResultado
         {
@@ -119,7 +130,7 @@ public class GptFallbackExtraerDataProvider
             Modelo = _settings.DeploymentName,
             LayoutEnabled = false,
             FallbackUsado = true,
-            ConfianzaExtraccion = ConfidenceCalculator.ExtracGPT(),
+            ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada,
             ProveedorExtrac = "GPT4oMini",
             TiemposMs = new Dictionary<string, int>
             {
@@ -151,11 +162,14 @@ public class GptFallbackExtraerDataProvider
 
         var combinedSystemPrompt =
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
-            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, " +
-            "con hasta tres claves: " +
-            "'campos_extraidos' (objeto JSON con los campos del documento, usa null para no encontrados) y " +
-            "'resultado_prompt' (string con la respuesta a la instrucción adicional a continuación) y " +
-            "'confianza_por_campo' (objeto con confianza 0..1 por campo extraído).";
+            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
+            "'campos_extraidos' (objeto JSON con los campos del documento, usa null para no encontrados), " +
+            "'resultado_prompt' (string con la respuesta a la instrucción adicional a continuación), " +
+            "'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción) y " +
+            "'confianza_por_campo' (objeto con confianza 0..1 por campo extraído). " +
+            "Para cada campo en 'campos_extraidos' se indican el tipo esperado, si es obligatorio y las reglas " +
+            "de validación (formatos, patrones, enumeraciones, rangos). " +
+            "Respeta estrictamente esas reglas al extraer el valor de cada campo.";
 
         if (!string.IsNullOrWhiteSpace(promptConfig.SystemPrompt))
         {
@@ -177,7 +191,8 @@ public class GptFallbackExtraerDataProvider
         var userPromptText =
             $"Tipo de documento: {tipologiaConfig.TipologiaId} ({tipologiaConfig.TipologiaNombre})\n\n" +
             "**Parte 1 — Extracción de campos** ('campos_extraidos'):\n" +
-            "Extrae estos campos y devuelve exactamente estos nombres de clave:\n" +
+            "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
+            "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
             fieldList + "\n\n" +
             "**Parte 2 — Instrucción adicional** ('resultado_prompt'):\n" +
             promptInstruction;
@@ -254,7 +269,12 @@ public class GptFallbackExtraerDataProvider
             ? ParseFieldConfidenceMap(confidenceElement, tipologiaConfig)
             : null;
 
-        var metricasDebug = BuildFallbackMetricas(input, tipologiaConfig, campos, confianzaPorCampo);
+        var confianzaExtraccionGpt = root.TryGetProperty("confianza_extraccion", out var ceElement2)
+            && ceElement2.TryGetDouble(out var ceVal2)
+            ? (double?)Math.Clamp(ceVal2, 0.0, 1.0)
+            : null;
+
+        var (confianzaCalculada, metricasDebug) = BuildFallbackMetricas(input, tipologiaConfig, campos, confianzaPorCampo);
 
         return new ExtraccionResultado
         {
@@ -262,7 +282,7 @@ public class GptFallbackExtraerDataProvider
             Modelo = _settings.DeploymentName,
             LayoutEnabled = false,
             FallbackUsado = true,
-            ConfianzaExtraccion = ConfidenceCalculator.ExtracGPT(),
+            ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada,
             ProveedorExtrac = "GPT4oMini",
             TiemposMs = new Dictionary<string, int>
             {
@@ -274,7 +294,7 @@ public class GptFallbackExtraerDataProvider
         };
     }
 
-    private ConfidenceMetricasExtraccion BuildFallbackMetricas(
+    private (double Confianza, ConfidenceMetricasExtraccion Metricas) BuildFallbackMetricas(
         ExtraccionInput input,
         TipologiaValidationConfig tipologiaConfig,
         Dictionary<string, object> campos,
@@ -299,8 +319,6 @@ public class GptFallbackExtraerDataProvider
             warnings: 0,
             cfg: tipologiaConfig.ConfidenceConfig);
 
-        _ = confianzaCalculada; // Métrica informativa para debug; la confianza efectiva del fallback sigue siendo ExtracGPT().
-
         metricas.ConfianzaPorCampo = confianzaPorCampo ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
         var umbralDuda = input.UmbralFallbackEfectivo
@@ -313,7 +331,7 @@ public class GptFallbackExtraerDataProvider
             .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return metricas;
+        return (confianzaCalculada, metricas);
     }
 
     private Dictionary<string, double>? ParseFieldConfidenceMap(
@@ -437,13 +455,153 @@ public class GptFallbackExtraerDataProvider
     private static string BuildFieldList(TipologiaValidationConfig config)
     {
         if (config.Fields.Count == 0)
-        {
             return "- Sin definición de campos en configuración.";
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var field in config.Fields)
+            AppendFieldLine(sb, field, depth: 0);
+        return sb.ToString().TrimEnd();
+    }
+
+    private static void AppendFieldLine(System.Text.StringBuilder sb, FieldValidationConfig field, int depth)
+    {
+        var indent = new string(' ', depth * 4);
+        var requerido = field.Required ? " [REQUERIDO]" : "";
+        sb.AppendLine($"{indent}- {field.Name}: tipo={field.Type}{requerido}");
+
+        foreach (var rule in field.Rules)
+        {
+            var hint = BuildRuleHint(rule);
+            if (!string.IsNullOrEmpty(hint))
+                sb.AppendLine($"{indent}    -> {hint}");
         }
 
-        return string.Join(
-            "\n",
-            config.Fields.Select(f => $"- {f.Name} (tipo={f.Type}, requerido={f.Required})"));
+        if (string.Equals(field.Type, "array", StringComparison.OrdinalIgnoreCase)
+            && field.Items?.Properties?.Count > 0)
+        {
+            sb.AppendLine($"{indent}  (array de objetos; propiedades de cada elemento:)");
+            foreach (var subField in field.Items.Properties)
+                AppendFieldLine(sb, subField, depth + 1);
+        }
+    }
+
+    private static string BuildRuleHint(ValidationRuleConfig rule)
+    {
+        return rule.RuleType.ToLowerInvariant() switch
+        {
+            "enum" => BuildEnumHint(rule.Parameters),
+            "regex" => BuildRegexHint(rule.Parameters),
+            "date" => BuildDateHint(rule.Parameters),
+            "range" => BuildRangeHint(rule.Parameters),
+            "minlength" when TryGetParamString(rule.Parameters, "value", out var v) => $"longitud mínima: {v} caracteres",
+            "maxlength" when TryGetParamString(rule.Parameters, "value", out var v) => $"longitud máxima: {v} caracteres",
+            "nif" => "NIF/DNI/CIF/NIE español válido (ej: 12345678A, A12345678, X1234567L)",
+            "catastral" => "referencia catastral española (20 caracteres alfanuméricos)",
+            "address" => BuildAddressHint(rule.Parameters),
+            _ => string.Empty
+        };
+    }
+
+    private static string BuildEnumHint(Dictionary<string, object?> parameters)
+    {
+        if (!parameters.TryGetValue("values", out var raw) || raw is null)
+            return string.Empty;
+
+        IEnumerable<string>? values = raw switch
+        {
+            JsonElement je when je.ValueKind == JsonValueKind.Array =>
+                je.EnumerateArray()
+                  .Where(e => e.ValueKind == JsonValueKind.String)
+                  .Select(e => e.GetString()!)
+                  .Where(s => !string.IsNullOrWhiteSpace(s)),
+            System.Collections.IEnumerable list =>
+                list.Cast<object?>()
+                    .Select(v => v?.ToString() ?? string.Empty)
+                    .Where(s => !string.IsNullOrWhiteSpace(s)),
+            _ => null
+        };
+
+        if (values is null) return string.Empty;
+        var joined = string.Join(", ", values);
+        return string.IsNullOrEmpty(joined) ? string.Empty : $"uno de los valores permitidos: {joined}";
+    }
+
+    private static string BuildRegexHint(Dictionary<string, object?> parameters)
+    {
+        if (!TryGetParamString(parameters, "pattern", out var pattern) || string.IsNullOrWhiteSpace(pattern))
+            return string.Empty;
+        return $"patrón esperado (regex): {pattern}";
+    }
+
+    private static string BuildDateHint(Dictionary<string, object?> parameters)
+    {
+        var hints = new List<string>();
+
+        if (parameters.TryGetValue("formats", out var fmtRaw) && fmtRaw != null)
+        {
+            IEnumerable<string>? formats = fmtRaw switch
+            {
+                JsonElement je when je.ValueKind == JsonValueKind.Array =>
+                    je.EnumerateArray()
+                      .Where(e => e.ValueKind == JsonValueKind.String)
+                      .Select(e => e.GetString()!)
+                      .Where(s => !string.IsNullOrWhiteSpace(s)),
+                System.Collections.IEnumerable list =>
+                    list.Cast<object?>()
+                        .Select(v => v?.ToString() ?? string.Empty)
+                        .Where(s => !string.IsNullOrWhiteSpace(s)),
+                _ => null
+            };
+            if (formats != null)
+            {
+                var joined = string.Join(", ", formats);
+                if (!string.IsNullOrEmpty(joined))
+                    hints.Add($"formatos: {joined}");
+            }
+        }
+
+        if (parameters.TryGetValue("allowFuture", out var af) && af != null)
+        {
+            var allowFuture = af is JsonElement je ? je.GetBoolean() : Convert.ToBoolean(af);
+            if (!allowFuture) hints.Add("no puede ser fecha futura");
+        }
+
+        return hints.Count > 0 ? string.Join("; ", hints) : string.Empty;
+    }
+
+    private static string BuildRangeHint(Dictionary<string, object?> parameters)
+    {
+        var parts = new List<string>();
+        if (TryGetParamString(parameters, "min", out var min)) parts.Add($"mín={min}");
+        if (TryGetParamString(parameters, "max", out var max)) parts.Add($"máx={max}");
+        return parts.Count > 0 ? $"rango numérico: {string.Join(", ", parts)}" : string.Empty;
+    }
+
+    private static string BuildAddressHint(Dictionary<string, object?> parameters)
+    {
+        var required = new List<string>();
+        if (TryGetBoolParam(parameters, "requireStreetNumber")) required.Add("número de calle");
+        if (TryGetBoolParam(parameters, "requireMunicipality")) required.Add("municipio");
+        if (TryGetBoolParam(parameters, "requireProvince")) required.Add("provincia");
+        return required.Count > 0
+            ? $"dirección postal completa (incluir: {string.Join(", ", required)})"
+            : "dirección postal completa";
+    }
+
+    private static bool TryGetParamString(Dictionary<string, object?> parameters, string key, out string value)
+    {
+        value = string.Empty;
+        if (!parameters.TryGetValue(key, out var raw) || raw is null) return false;
+        value = raw is JsonElement je
+            ? (je.ValueKind == JsonValueKind.String ? je.GetString() ?? string.Empty : je.GetRawText())
+            : raw.ToString() ?? string.Empty;
+        return !string.IsNullOrEmpty(value);
+    }
+
+    private static bool TryGetBoolParam(Dictionary<string, object?> parameters, string key)
+    {
+        if (!parameters.TryGetValue(key, out var raw) || raw is null) return false;
+        return raw is JsonElement je ? je.GetBoolean() : Convert.ToBoolean(raw);
     }
 
     private static string? ObtenerContextoTexto(IDictionary<string, object> datosNormalizados)

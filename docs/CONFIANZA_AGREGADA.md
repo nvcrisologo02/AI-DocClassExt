@@ -1,6 +1,6 @@
 # Confianza Agregada — Análisis Técnico y Funcional
 
-> Rama: `feature/calculadora-umbral` | Implementado: 2026-03-26 | Actualizado: 2026-03-30 | Actualizado: 2026-03-30
+> Rama: `develop` | Implementado: 2026-03-26 | Actualizado: 2026-03-30
 
 ---
 
@@ -63,7 +63,9 @@ DocumentProcessOrchestrator (Durable)
         │
         ├─► ExtraerActivity ─────────────────────────────────────────────┐
         │       ├─ Azure Content Understanding  → formula ponderada CU   │
-        │       └─ GPT 4o-mini (fallback)       → self-conf o 0.6        │
+        │       └─ GPT 4o-mini (fallback)                                │
+        │               ├─ confianza_extraccion (self-report del modelo) │
+        │               └─ valor calculado (ExtracCU) como fallback      │
         │                                                                 ▼
         │                                              ConfianzaExtraccion + ProveedorExtrac
         │
@@ -118,13 +120,24 @@ ConfianzaExtrac =
 - `CamposConConfianza` — número de campos con confianza individual de CU
 - `CamposTotales` — total de campos de la tipología
 
-### 4.3 Extracción GPT — `ConfidenceCalculator.ExtracGPT`
+### 4.3 Extracción GPT — `confianza_extraccion` auto-reportada
+
+El modelo GPT incluye en su respuesta JSON el campo `confianza_extraccion` (0.0–1.0), siguiendo el mismo patrón que clasificación usa con `confianza`. El system prompt solicita explícitamente ese campo:
 
 ```
-ConfianzaExtrac = CLAMP(selfConf ?? 0.6, 0, 1)
+'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción)
 ```
 
-GPT no devuelve confianzas de campo individuales. Se usa `0.6` como valor conservador por defecto. Si el modelo llega a incluir un campo de autoconfianza en el futuro, se capturará.
+La asignación final sigue la regla:
+
+```
+ConfianzaExtrac = CLAMP(confianzaExtraccionGpt ?? confianzaCalculada, 0, 1)
+```
+
+- **`confianzaExtraccionGpt`**: valor `confianza_extraccion` del JSON de respuesta. Si el modelo lo devuelve, se usa directamente.
+- **`confianzaCalculada`**: resultado de `ExtracCU(fieldConfs, campos, requeridos, warnings, cfg)`, idéntico al cálculo de CU. Se usa como fallback si el modelo no incluye el campo o la respuesta está mal formada.
+
+El valor fijo `0.6` ha sido eliminado. GPT no devuelve confianzas por campo individuales; éstas siguen siendo solicitadas en `confianza_por_campo` y se propagan a `CamposBajaConfianza`.
 
 ### 4.4 Validación — `ValidarActivity`
 
@@ -325,7 +338,7 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 | `DocumentIA.Functions/Services/GptClasificarDataProvider.cs` | Functions | Extrae `confianza` del JSON GPT, asigna `ConfianzaGPT`, `ProveedorClasif` |
 | `DocumentIA.Functions/Services/ConfigurableClasificarDataProvider.cs` | Functions | Propaga `ConfianzaDI` cuando ejecuta fallback GPT |
 | `DocumentIA.Functions/Services/AzureContentUnderstandingProvider.cs` | Functions | `TryExtractFieldConfidences()` + cálculo `ExtracCU()` + `MetricasDebug` |
-| `DocumentIA.Functions/Services/GptFallbackExtraerDataProvider.cs` | Functions | Asigna `ConfianzaExtraccion = ExtracGPT()`, `ProveedorExtrac` |
+| `DocumentIA.Functions/Services/GptFallbackExtraerDataProvider.cs` | Functions | Pide `confianza_extraccion` al modelo en el prompt; `BuildFallbackMetricas` devuelve `(double, ConfidenceMetricasExtraccion)`; `ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada`; `BuildFieldList` incluye hints de validación por campo (enum, regex, fecha, rango, dirección) |
 | `DocumentIA.Functions/Orchestrators/DocumentProcessOrchestrator.cs` | Functions | Resuelve jerarquía de umbrales (petición→tipología→config) en 3 puntos; agrega `Global()`, asigna `EstadoCalidad`, descompone campos en contrato |
 | `DocumentIA.Functions/config/tipologias/*.validation.json` | Config | Bloque `confidenceConfig` con defaults explícitos |
 | `DocumentIA.Tests.Unit/Services/ConfidenceCalculatorTests.cs` | Tests | 24 tests unitarios cubriendo todos los métodos y casos límite |
