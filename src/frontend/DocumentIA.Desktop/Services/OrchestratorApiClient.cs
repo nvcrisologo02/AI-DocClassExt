@@ -14,6 +14,7 @@ namespace DocumentIA.Desktop.Services
         Task<bool> CheckConnectionAsync();
         Task<ProcessingResponse> IngestDocumentAsync(ProcessingRequest request);
         Task<ProcessingStatus> GetStatusAsync(string statusUri);
+        Task<List<TipologiaPublicadaDto>> GetTipologiasPublicadasAsync();
     }
 
     public class OrchestratorApiClient : IOrchestratorApiClient
@@ -100,6 +101,26 @@ namespace DocumentIA.Desktop.Services
             {
                 System.Diagnostics.Debug.WriteLine($"IngestDocumentAsync Exception: {ex.Message}");
                 throw;
+            }
+        }
+
+        public async Task<List<TipologiaPublicadaDto>> GetTipologiasPublicadasAsync()
+        {
+            try
+            {
+                var request = new RestRequest("/api/tipologias", Method.Get);
+                var response = await _client.ExecuteAsync(request);
+
+                if (!response.IsSuccessful || string.IsNullOrWhiteSpace(response.Content))
+                    return new List<TipologiaPublicadaDto>();
+
+                return JsonConvert.DeserializeObject<List<TipologiaPublicadaDto>>(response.Content, _jsonSettings)
+                       ?? new List<TipologiaPublicadaDto>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"GetTipologiasPublicadasAsync Exception: {ex.Message}");
+                return new List<TipologiaPublicadaDto>();
             }
         }
 

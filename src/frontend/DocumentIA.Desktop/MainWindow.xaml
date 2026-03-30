@@ -11,7 +11,7 @@
         FontFamily="Segoe UI Variable Display,Segoe UI">
     <Grid Margin="16">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="280"/>
+            <ColumnDefinition Width="300"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="1.05*" MinWidth="360"/>
         </Grid.ColumnDefinitions>
@@ -36,19 +36,15 @@
                             </StackPanel>
                         </Border>
 
+                        <Button Content="SELECCIONAR DOCUMENTO" Command="{Binding SelectFileCommand}" Style="{StaticResource ButtonSecondary}" Margin="0,8,0,0" Height="34"/>
+
                         <StackPanel Margin="0,14,0,0">
                             <TextBlock Text="TIPOLOGÍA" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,6"/>
-                            <StackPanel Orientation="Vertical">
-                                <RadioButton Content="Nota Simple 1.4" GroupName="DocType" Margin="0,0,0,4" Foreground="{StaticResource BrushTextPrimary}"
-                                             IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=nota-simple@1.4}"/>
-                                <RadioButton Content="Resumen" GroupName="DocType" Margin="0,0,0,4" Foreground="{StaticResource BrushTextPrimary}"
-                                             IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=resumen-documental}"/>
-                                <RadioButton Content="Auto" GroupName="DocType" Foreground="{StaticResource BrushTextPrimary}"
-                                             IsChecked="{Binding SelectedClassificationType, Converter={StaticResource EqualsConverter}, ConverterParameter=auto}"/>
-                            </StackPanel>
+                            <ComboBox ItemsSource="{Binding AvailableTipologias}"
+                                      SelectedItem="{Binding SelectedTipologia, Mode=TwoWay}"
+                                      DisplayMemberPath="Display"
+                                      Height="30"/>
                         </StackPanel>
-
-                        <Button Content="SELECCIONAR DOCUMENTO" Command="{Binding SelectFileCommand}" Style="{StaticResource ButtonSecondary}" Margin="0,14,0,0" Height="34"/>
 
                         <StackPanel Margin="0,14,0,0">
                             <TextBlock Text="OPCIONES" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,8"/>

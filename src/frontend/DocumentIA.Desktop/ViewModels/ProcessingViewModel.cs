@@ -78,19 +78,27 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private string _selectedClassificationType = "auto"; // "nota-simple@1.4", "resumen-documental", "auto"
-        public string SelectedClassificationType
+        private static readonly TipologiaPublicadaDto AutoItem = new() { Identificador = "auto", Nombre = "Auto" };
+
+        public ObservableCollection<TipologiaPublicadaDto> AvailableTipologias { get; } = new ObservableCollection<TipologiaPublicadaDto> { AutoItem };
+
+        private TipologiaPublicadaDto _selectedTipologia = AutoItem;
+        public TipologiaPublicadaDto SelectedTipologia
         {
-            get => _selectedClassificationType;
+            get => _selectedTipologia;
             set
             {
-                if (_selectedClassificationType != value)
+                if (_selectedTipologia != value)
                 {
-                    _selectedClassificationType = value;
+                    _selectedTipologia = value ?? AutoItem;
+                    OnPropertyChanged(nameof(SelectedTipologia));
                     OnPropertyChanged(nameof(SelectedClassificationType));
                 }
             }
         }
+
+        // Computed from SelectedTipologia — kept for backwards-compat with BuildRequest
+        public string SelectedClassificationType => _selectedTipologia.Identificador;
 
         private string? _instanceId;
         public string? InstanceId
@@ -220,7 +228,7 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private string _inputIdActivo = "DESKTOP-TEST";
+        private string _inputIdActivo = string.Empty;
         public string InputIdActivo
         {
             get => _inputIdActivo;
@@ -386,6 +394,20 @@ namespace DocumentIA.Desktop.ViewModels
             // Initial connection check on UI thread
             _ = RefreshApiConnectionAsync();
             _apiConnectionTimer.Start();
+
+            // Load published tipologias (non-blocking)
+            _ = LoadTipologiasAsync();
+        }
+
+        private async Task LoadTipologiasAsync()
+        {
+            // Remove any previously loaded items (keep AutoItem at index 0)
+            while (AvailableTipologias.Count > 1)
+                AvailableTipologias.RemoveAt(1);
+
+            var tipologias = await _apiClient.GetTipologiasPublicadasAsync();
+            foreach (var t in tipologias)
+                AvailableTipologias.Add(t);
         }
 
         private void InitializeActivities()
@@ -514,9 +536,7 @@ namespace DocumentIA.Desktop.ViewModels
             var submittedBy = string.IsNullOrWhiteSpace(InputSubmittedBy)
                 ? "usuario.desktop@sareb.es"
                 : InputSubmittedBy.Trim();
-            var idActivo = string.IsNullOrWhiteSpace(InputIdActivo)
-                ? "DESKTOP-TEST"
-                : InputIdActivo.Trim();
+            var idActivo = InputIdActivo.Trim();
 
             return new ProcessingRequest
             {
