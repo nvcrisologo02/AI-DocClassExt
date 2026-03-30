@@ -46,9 +46,16 @@ namespace DocumentIA.Core.Validation.Rules
                 else if (jsonArray.ValueKind == JsonValueKind.String)
                 {
                     // Si es un string, intentar parsear como JSON
+                    var rawValue = jsonArray.GetString();
+                    if (string.IsNullOrWhiteSpace(rawValue) ||
+                        string.Equals(rawValue?.Trim(), "null", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return CreateSuccessResult(fieldName);
+                    }
+
                     try
                     {
-                        var parsed = JsonSerializer.Deserialize<List<object>>(jsonArray.GetString() ?? "[]");
+                        var parsed = JsonSerializer.Deserialize<List<object>>(rawValue ?? "[]");
                         items = parsed ?? new List<object>();
                     }
                     catch
@@ -69,6 +76,12 @@ namespace DocumentIA.Core.Validation.Rules
             else if (value is string strValue)
             {
                 // Si es un string, intentar parsear como JSON
+                if (string.IsNullOrWhiteSpace(strValue) ||
+                    string.Equals(strValue.Trim(), "null", StringComparison.OrdinalIgnoreCase))
+                {
+                    return CreateSuccessResult(fieldName);
+                }
+
                 try
                 {
                     var parsed = JsonSerializer.Deserialize<List<object>>(strValue);

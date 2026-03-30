@@ -115,6 +115,55 @@ Sección: `Extraction:GptFallback`
 | `MaxTokens` | int | Máximo tokens en respuesta GPT. | `2000` |
 | `TimeoutSeconds` | int | Timeout de la llamada GPT. | `60` |
 
+### 5.4 Jerarquía de umbrales de fallback CU→GPT
+
+El sistema evalúa dos criterios independientes para decidir si la extracción CU es suficiente:
+
+- **Completitud**: ratio de campos esperados (según la tipología) que están presentes en `DatosExtraidos`.
+- **Confianza**: valor de `ConfianzaExtraccion` devuelto por CU.
+
+Si cualquiera de los dos criterios no supera su umbral, se activa el fallback GPT.
+
+La jerarquía de resolución para **cada criterio** (de mayor a menor prioridad) es:
+
+| Nivel | Origen | Campo (completitud) | Campo (confianza) |
+|---|---|---|---|
+| 1 · petición | `instrucciones.extraction` (API/HTTP) | `umbralCompletitud` | `umbralConfianza` |
+| 2 · tipología | `confidenceConfig` (JSON validación / BD) | `extracUmbralFallbackCompletitud` | `extracUmbralFallbackConfianza` |
+| 3 · legado | `instrucciones.extraction` o `confidenceConfig` | `umbral` / `extracUmbralFallback` | ídem |
+| 4 · global | `Extraction:GptFallback` (`appsettings.json`) | `MinFieldsRatio` | `MinFieldsRatio` |
+
+> El campo legado `umbral` / `extracUmbralFallback` actúa como valor único para ambos criterios cuando los específicos no están informados.
+
+#### Campos de tipología (`confidenceConfig` en el JSON de validación / BD)
+
+| Campo JSON | Tipo | Descripción | Default |
+|---|---|---|---|
+| `extracUmbralFallback` | double? | Umbral legado: aplica a completitud y confianza si los específicos no están informados. | `null` |
+| `extracUmbralFallbackCompletitud` | double? | Ratio mín. de campos esperados presentes (nivel tipología). Rango `[0–1]`. | `null` |
+| `extracUmbralFallbackConfianza` | double? | Confianza CU mínima para no activar fallback (nivel tipología). Rango `[0–1]`. | `null` |
+
+#### Campos de la petición HTTP (`instrucciones.extraction`)
+
+| Campo JSON | Tipo | Descripción |
+|---|---|---|
+| `umbral` | double? | Umbral legado (aplica a completitud y confianza si los específicos no están informados). |
+| `umbralCompletitud` | double? | Override de completitud para esta petición. Tiene precedencia sobre tipología. Omitir = usar tipología o global. |
+| `umbralConfianza` | double? | Override de confianza para esta petición. Tiene precedencia sobre tipología. Omitir = usar tipología o global. |
+
+**Ejemplo de petición con umbrales independientes:**
+
+```json
+{
+  "instrucciones": {
+    "extraction": {
+      "umbralCompletitud": 0.7,
+      "umbralConfianza": 0.85
+    }
+  }
+}
+```
+
 ---
 
 ## 6. GDC (Gestor Documental)
@@ -148,16 +197,50 @@ Sección raíz: `GDC`
 
 ---
 
-## 7. Configuración de tipologías (ficheros JSON)
+## 7. Configuración dinámica (BD + cache + seed)
 
-Las tipologías se configuran con ficheros bajo `config/tipologias/`. Ver [TIPOLOGIAS_REFERENCIA.md](../TIPOLOGIAS_REFERENCIA.md) para el detalle completo.
+La configuración operativa de tipologías, modelos y plugins se carga desde base de datos y se cachea en memoria para evitar reinicios y minimizar coste de infraestructura.
 
-Ficheros relevantes:
+### 7.1 Fuente de verdad y estados
 
-| Fichero | Propósito |
+| Dominio | Tabla | Estados |
+|---|---|---|
+| Tipologías/versiones | `Tipologias` | `Draft` \| `Published` \| `Retired` |
+| Modelos (clasificación/extracción/prompt) | `ModelosConfig` | `Draft` \| `Published` \| `Retired` |
+| Plugins por tipología | `PluginTipologiaConfigs` | `Draft` \| `Published` \| `Retired` |
+
+Solo la configuración en estado `Published` se utiliza en ejecución.
+
+### 7.2 Cache en runtime
+
+- Los loaders DB-backed usan `IMemoryCache` con TTL de 5 minutos.
+- Se cachean por dominio (`modelos:*`, `tipologias:*`, `plugins:*`).
+- Si se publica un cambio, puede tardar hasta 5 minutos en converger si no se fuerza recarga.
+
+### 7.3 Seed inicial desde ficheros
+
+En arranque, el servicio `ConfigurationSeedService` puede sembrar datos desde JSON para bootstrap inicial:
+
+| Origen | Destino |
 |---|---|
-| `<tipologia>.plugins.json` | Define los plugins de integración para la tipología. |
-| `<tipologia>.<version>.validation.json` | Define las reglas de validación por campo y versión. |
+| `config/tipologias/*.validation.json` | `Tipologias` |
+| `config/models/*.models.json` | `ModelosConfig` |
+| `config/tipologias/*.plugins.json` | `PluginTipologiaConfigs` |
+
+Esto permite mantener compatibilidad con artefactos históricos y acelerar provisión en nuevos entornos.
+
+### 7.4 Modo fichero (compatibilidad)
+
+Los loaders conservan constructor en modo fichero para pruebas unitarias y escenarios de compatibilidad local. En producción se recomienda modo BD.
+
+### 7.5 Gestión COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrativa
+
+La gestión se realiza por API management (`/api/management/...`) y por la app `DocumentIA.Admin` para:
+
+- guardar borradores,
+- publicar,
+- retirar configuración,
+- listar estado actual.
 
 ---
 

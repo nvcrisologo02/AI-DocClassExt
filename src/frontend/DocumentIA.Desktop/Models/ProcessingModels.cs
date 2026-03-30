@@ -56,6 +56,20 @@ namespace DocumentIA.Desktop.Models
 
         [JsonProperty("umbral")]
         public decimal Threshold { get; set; } = 0.80m;
+
+        /// <summary>
+        /// Ratio mínimo de campos esperados presentes (completitud CU).
+        /// null = omitir, el servidor usará la tipología o el valor global.
+        /// </summary>
+        [JsonProperty("umbralCompletitud")]
+        public decimal? ThresholdCompletitud { get; set; } = null;
+
+        /// <summary>
+        /// Confianza CU mínima para no activar fallback GPT.
+        /// null = omitir, el servidor usará la tipología o el valor global.
+        /// </summary>
+        [JsonProperty("umbralConfianza")]
+        public decimal? ThresholdConfianza { get; set; } = null;
     }
 
     public class DocumentInfo

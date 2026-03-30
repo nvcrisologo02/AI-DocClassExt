@@ -1,6 +1,6 @@
 # Confianza Agregada — Análisis Técnico y Funcional
 
-> Rama: `feature/calculadora-umbral` | Implementado: 2026-03-26
+> Rama: `feature/calculadora-umbral` | Implementado: 2026-03-26 | Actualizado: 2026-03-30 | Actualizado: 2026-03-30
 
 ---
 
@@ -157,22 +157,32 @@ ConfianzaValid = 1 - 2/28 ≈ 0.93
 
 ### 5.1 Jerarquía de umbrales de fallback
 
-Los umbrales que determinan cuándo se activa el fallback GPT (tanto en clasificación como en extracción) siguen una cadena de prioridad de 3 niveles:
+Los umbrales que determinan cuándo se activa el fallback GPT siguen una cadena de prioridad. En clasificación hay un único umbral. En extracción hay **dos criterios independientes**:
+
+- **Completitud**: ratio de campos esperados (según la tipología) presentes en `DatosExtraidos`.
+- **Confianza**: valor de `ConfianzaExtraccion` devuelto por CU.
+
+Si **cualquiera** de los dos criterios no supera su umbral, se activa el fallback GPT.
+
+La cadena de resolución para **cada criterio de extracción** (de mayor a menor prioridad) es:
 
 ```
-petición HTTP   →   tipología (*.validation.json)   →   configuración servidor (appsettings)
+petición HTTP (específico)   →   tipología (específico)   →   umbral legado   →   config servidor
 ```
 
-| Nivel | Campo (clasificación) | Campo (extracción) | Nota |
+| Nivel | Campo clasificación | Campo extracción (completitud) | Campo extracción (confianza) |
 |---|---|---|---|
-| **1 — Petición** | `instrucciones.classification.umbral` | `instrucciones.extraction.umbral` | Opcional. `null` = no especificado. |
-| **2 — Tipología** | `confidenceConfig.clasifUmbralFallback` | `confidenceConfig.extracUmbralFallback` | Opcional. `null` = no especificado. |
-| **3 — Servidor** | `Classification:GptFallback:FallbackThreshold` | `Extraction:GptFallback:MinFieldsRatio` | Siempre presente. Nivel de último recurso. |
+| **1 — Petición (específico)** | `instrucciones.classification.umbral` | `instrucciones.extraction.umbralCompletitud` | `instrucciones.extraction.umbralConfianza` |
+| **2 — Tipología (específico)** | `confidenceConfig.clasifUmbralFallback` | `confidenceConfig.extracUmbralFallbackCompletitud` | `confidenceConfig.extracUmbralFallbackConfianza` |
+| **3 — Legado** | _(igual que nivel 1/2)_ | `instrucciones.extraction.umbral` / `confidenceConfig.extracUmbralFallback` | ídem |
+| **4 — Servidor** | `Classification:GptFallback:FallbackThreshold` | `Extraction:GptFallback:MinFieldsRatio` | `Extraction:GptFallback:MinFieldsRatio` |
+
+> El campo legado `umbral` / `extracUmbralFallback` actúa como valor único para ambos criterios cuando los específicos son `null`. Esto garantiza compatibilidad con tipologías y peticiones anteriores.
 
 El orquestador resuelve el umbral efectivo antes de invocar cada actividad:
 
 ```csharp
-// Clasificación (tipología no conocida todavía — solo niveles 1 y 3)
+// Clasificación (tipología no conocida todavía — solo niveles 1 y 4)
 var umbralClasifFallback = entrada.Instrucciones.Classification.Umbral
     ?? _gptClasifSettings.FallbackThreshold;
 
@@ -181,13 +191,34 @@ var umbralBajaConfianza = entrada.Instrucciones.Classification.Umbral
     ?? tipologiaResuelta.ConfidenceConfig?.ClasifUmbralFallback
     ?? _gptClasifSettings.FallbackThreshold;
 
-// Extracción (solo si ExtractionEnabled = true)
+// Extracción — umbral legado (se pasa como UmbralFallbackEfectivo, nivel 3)
 var umbralExtracFallback = entrada.Instrucciones.Extraction.Umbral
     ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
     ?? _gptExtracSettings.MinFieldsRatio;
+
+// Extracción — umbrales específicos (niveles 1 y 2 se resuelven en el proveedor)
+var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud;
+var umbralExtracConfianzaRequest   = entrada.Instrucciones.Extraction.UmbralConfianza;
 ```
 
-> El nivel de tipología para clasificación se usa en el check `BAJA_CONFIANZA_CLASIFICACION` pero no en el umbral de DI→GPT previo a la resolución de tipología, donde solo se usan los niveles 1 y 3.
+Dentro de `ConfigurableExtraerDataProvider.EsResultadoCuSuficiente`, la resolución final de cada criterio es:
+
+```csharp
+// Prioridad: request-específico > tipología-específico > umbral-legado > global
+umbralCompletitud = umbralFallbackCompletitudRequest      // nivel 1
+    ?? confidenceConfig?.ExtracUmbralFallbackCompletitud   // nivel 2
+    ?? umbralLegado                                        // nivel 3
+    ?? _fallbackSettings.MinFieldsRatio;                   // nivel 4
+
+umbralConfianza = umbralFallbackConfianzaRequest           // nivel 1
+    ?? confidenceConfig?.ExtracUmbralFallbackConfianza     // nivel 2
+    ?? umbralLegado                                        // nivel 3
+    ?? _fallbackSettings.MinFieldsRatio;                   // nivel 4
+
+return ratioCompletitud >= umbralCompletitud && confianzaCu >= umbralConfianza;
+```
+
+> El nivel de tipología para clasificación se usa en el check `BAJA_CONFIANZA_CLASIFICACION` pero no en el umbral de DI→GPT previo a la resolución de tipología, donde solo se usan los niveles 1 y 4.
 
 ### 5.2 Bloque `confidenceConfig`
 
@@ -197,6 +228,8 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 "confidenceConfig": {
   "clasifUmbralFallback": 0.85,
   "extracUmbralFallback": 0.9,
+  "extracUmbralFallbackCompletitud": 0.9,
+  "extracUmbralFallbackConfianza": 0.9,
   "extracWeightCampos": 0.5,
   "extracWeightRequeridos": 0.3,
   "extracWeightWarnings": 0.2,
@@ -208,7 +241,9 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 | Parámetro | Descripción | Default |
 |---|---|---|
 | `clasifUmbralFallback` | Umbral de confianza DI para activar fallback GPT en clasificación, y también para el check `BAJA_CONFIANZA_CLASIFICACION` (cuando la petición no especifica umbral). | `0.85` |
-| `extracUmbralFallback` | Ratio mínimo de campos para considerar la extracción CU suficiente. Si CU no llega, se activa fallback GPT. Para tipologías con `extraction.enabled=false` este campo no aplica. `null` = usar `MinFieldsRatio` del servidor. | `null` |
+| `extracUmbralFallback` | Umbral **legado**: aplica a completitud y confianza si los campos específicos no están informados en la tipología ni en la petición. Mantiene retrocompatibilidad. | `null` |
+| `extracUmbralFallbackCompletitud` | Ratio mín. de campos esperados presentes (nivel tipología). Nivel 2 en la jerarquía de completitud. `null` = usar legado o global. | `null` |
+| `extracUmbralFallbackConfianza` | Confianza CU mínima para no activar fallback (nivel tipología). Nivel 2 en la jerarquía de confianza. `null` = usar legado o global. | `null` |
 | `extracWeightCampos` | Peso del promedio de confianzas de campo CU | `0.5` |
 | `extracWeightRequeridos` | Peso del ratio de campos requeridos presentes | `0.3` |
 | `extracWeightWarnings` | Peso de la penalización por warnings | `0.2` |
@@ -280,10 +315,10 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 | `DocumentIA.Core/Services/ConfidenceCalculator.cs` | Core | Cálculos puros, sin DI. Único punto de verdad matemático |
 | `DocumentIA.Core/Models/ContratoSalida.cs` | Core | Campos nuevos en `ResultadoFinal`, `ResultadoClasificacion`, `ResultadoExtraccion`, `InformacionPostproceso` |
 | `DocumentIA.Core/Models/ExtraccionModels.cs` | Core | `ConfianzaExtraccion`, `ProveedorExtrac`, `MetricasDebug` en `ExtraccionResultado` |
-| `DocumentIA.Core/Models/ContratoEntrada.cs` | Core | `ConfiguracionIA.Umbral` → `double?` (null = no especificado, usar jerarquía) |
+| `DocumentIA.Core/Models/ContratoEntrada.cs` | Core | `ConfiguracionIA.Umbral`, `UmbralCompletitud`, `UmbralConfianza` → `double?` (null = no especificado, usar jerarquía) |
 | `DocumentIA.Core/Models/ClasificacionModels.cs` | Core | `UmbralFallbackEfectivo double?` en `ClasificacionInput` |
-| `DocumentIA.Core/Models/ExtraccionModels.cs` | Core | `UmbralFallbackEfectivo double?` en `ExtraccionInput` |
-| `DocumentIA.Core/Configuration/TipologiaValidationConfig.cs` | Core | Clase `ConfidenceConfig` + propiedad en `TipologiaValidationConfig` + `ExtracUmbralFallback double?` |
+| `DocumentIA.Core/Models/ExtraccionModels.cs` | Core | `UmbralFallbackEfectivo`, `UmbralFallbackEfectivoCompletitud`, `UmbralFallbackEfectivoConfianza` `double?` en `ExtraccionInput` |
+| `DocumentIA.Core/Configuration/TipologiaValidationConfig.cs` | Core | Clase `ConfidenceConfig` + propiedad en `TipologiaValidationConfig` + `ExtracUmbralFallback`, `ExtracUmbralFallbackCompletitud`, `ExtracUmbralFallbackConfianza` `double?` |
 | `DocumentIA.Core/Configuration/ITipologiaVersionResolver.cs` | Core | `ConfidenceConfig` en `ResolvedTipologia` record |
 | `DocumentIA.Core/Configuration/TipologiaVersionResolver.cs` | Core | Propagación de `ConfidenceConfig` al resolver |
 | `DocumentIA.Functions/Services/AzureDocumentIntelligenceClasificarProvider.cs` | Functions | Extrae y asigna `ConfianzaDI`, `ProveedorClasif` |

@@ -44,6 +44,8 @@ public class GptFallbackExtraerDataProvider
         var systemMessage = new SystemChatMessage(
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
             "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional. " +
+            "Preferiblemente devuelve un objeto con claves 'campos_extraidos' y 'confianza_por_campo'. " +
+            "En 'confianza_por_campo' informa un valor de 0 a 1 por cada campo extraído. " +
             "Usa null para campos no encontrados.");
 
         var fieldList = BuildFieldList(tipologiaConfig);
@@ -90,7 +92,26 @@ public class GptFallbackExtraerDataProvider
         stopwatch.Stop();
 
         var responseText = response.Value.Content[0].Text;
-        var datos = ParseJsonObjectResponse(responseText, tipologiaConfig);
+
+        using var responseDoc = JsonDocument.Parse(responseText);
+        var root = responseDoc.RootElement;
+
+        Dictionary<string, object> datos;
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("campos_extraidos", out var camposElement))
+        {
+            datos = ParseExtractedFields(camposElement, tipologiaConfig);
+        }
+        else
+        {
+            datos = ParseJsonObjectResponse(responseText, tipologiaConfig);
+        }
+
+        var confianzaPorCampo = root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("confianza_por_campo", out var confidenceElement)
+            ? ParseFieldConfidenceMap(confidenceElement, tipologiaConfig)
+            : null;
+
+        var metricasDebug = BuildFallbackMetricas(input, tipologiaConfig, datos, confianzaPorCampo);
 
         return new ExtraccionResultado
         {
@@ -104,6 +125,7 @@ public class GptFallbackExtraerDataProvider
             {
                 ["gpt-fallback"] = (int)stopwatch.ElapsedMilliseconds
             },
+            MetricasDebug = metricasDebug,
             DatosExtraidos = datos
         };
     }
@@ -130,9 +152,10 @@ public class GptFallbackExtraerDataProvider
         var combinedSystemPrompt =
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
             "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, " +
-            "con exactamente dos claves: " +
+            "con hasta tres claves: " +
             "'campos_extraidos' (objeto JSON con los campos del documento, usa null para no encontrados) y " +
-            "'resultado_prompt' (string con la respuesta a la instrucción adicional a continuación).";
+            "'resultado_prompt' (string con la respuesta a la instrucción adicional a continuación) y " +
+            "'confianza_por_campo' (objeto con confianza 0..1 por campo extraído).";
 
         if (!string.IsNullOrWhiteSpace(promptConfig.SystemPrompt))
         {
@@ -227,6 +250,12 @@ public class GptFallbackExtraerDataProvider
             resultadoPrompt = string.Empty;
         }
 
+        var confianzaPorCampo = root.TryGetProperty("confianza_por_campo", out var confidenceElement)
+            ? ParseFieldConfidenceMap(confidenceElement, tipologiaConfig)
+            : null;
+
+        var metricasDebug = BuildFallbackMetricas(input, tipologiaConfig, campos, confianzaPorCampo);
+
         return new ExtraccionResultado
         {
             Proveedor = "azure-openai",
@@ -239,9 +268,89 @@ public class GptFallbackExtraerDataProvider
             {
                 ["gpt-fallback-combined"] = (int)stopwatch.ElapsedMilliseconds
             },
+            MetricasDebug = metricasDebug,
             DatosExtraidos = campos,
             ResultadoPromptCombinado = resultadoPrompt
         };
+    }
+
+    private ConfidenceMetricasExtraccion BuildFallbackMetricas(
+        ExtraccionInput input,
+        TipologiaValidationConfig tipologiaConfig,
+        Dictionary<string, object> campos,
+        Dictionary<string, double>? confianzaPorCampo)
+    {
+        var camposPresentes = campos.Keys
+            .Count(k => !string.Equals(k, "Paginas", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(k, "Markdown", StringComparison.OrdinalIgnoreCase));
+
+        var camposTotales = tipologiaConfig.Fields.Count;
+        var camposRequeridos = tipologiaConfig.Fields.Count(f => f.Required);
+        var camposRequeridosPresentes = tipologiaConfig.Fields
+            .Where(f => f.Required)
+            .Count(f => campos.ContainsKey(f.Name));
+
+        var (confianzaCalculada, metricas) = ConfidenceCalculator.ExtracCU(
+            fieldConfs: confianzaPorCampo?.Values.Select(v => (double?)v).ToList(),
+            camposPresentes: camposPresentes,
+            camposTotales: camposTotales,
+            camposRequeridos: camposRequeridos,
+            camposRequeridosPresentes: camposRequeridosPresentes,
+            warnings: 0,
+            cfg: tipologiaConfig.ConfidenceConfig);
+
+        _ = confianzaCalculada; // Métrica informativa para debug; la confianza efectiva del fallback sigue siendo ExtracGPT().
+
+        metricas.ConfianzaPorCampo = confianzaPorCampo ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+
+        var umbralDuda = input.UmbralFallbackEfectivo
+            ?? tipologiaConfig.ConfidenceConfig?.ExtracUmbralFallback
+            ?? _settings.MinFieldsRatio;
+
+        metricas.CamposBajaConfianza = metricas.ConfianzaPorCampo
+            .Where(kvp => kvp.Value < umbralDuda)
+            .Select(kvp => kvp.Key)
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return metricas;
+    }
+
+    private Dictionary<string, double>? ParseFieldConfidenceMap(
+        JsonElement confidenceElement,
+        TipologiaValidationConfig tipologiaConfig)
+    {
+        if (confidenceElement.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        var expected = new HashSet<string>(
+            tipologiaConfig.Fields.Select(f => f.Name),
+            StringComparer.OrdinalIgnoreCase);
+
+        var map = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        foreach (var prop in confidenceElement.EnumerateObject())
+        {
+            if (expected.Count > 0 && !expected.Contains(prop.Name))
+            {
+                continue;
+            }
+
+            if (prop.Value.ValueKind == JsonValueKind.Number && prop.Value.TryGetDouble(out var confidence))
+            {
+                map[prop.Name] = Math.Clamp(confidence, 0.0, 1.0);
+                continue;
+            }
+
+            if (prop.Value.ValueKind == JsonValueKind.String
+                && double.TryParse(prop.Value.GetString(), out var confidenceFromString))
+            {
+                map[prop.Name] = Math.Clamp(confidenceFromString, 0.0, 1.0);
+            }
+        }
+
+        return map.Count > 0 ? map : null;
     }
 
     private Dictionary<string, object> ParseExtractedFields(

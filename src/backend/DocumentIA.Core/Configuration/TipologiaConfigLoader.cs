@@ -1,7 +1,11 @@
 // DocumentIA.Core/Configuration/TipologiaConfigLoader.cs
 using System.Text.Json;
+using DocumentIA.Data.Entities;
+using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Validation;
 using DocumentIA.Core.Validation.Models;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace DocumentIA.Core.Configuration
 {
@@ -10,11 +14,19 @@ namespace DocumentIA.Core.Configuration
     /// </summary>
     public class TipologiaConfigLoader
     {
-        private readonly string _configBasePath;
+        private readonly string? _configBasePath;
+        private readonly IMemoryCache? _cache;
+        private readonly IServiceScopeFactory? _scopeFactory;
 
         public TipologiaConfigLoader(string configBasePath = "config/tipologias")
         {
             _configBasePath = configBasePath;
+        }
+
+        public TipologiaConfigLoader(IMemoryCache cache, IServiceScopeFactory scopeFactory)
+        {
+            _cache = cache;
+            _scopeFactory = scopeFactory;
         }
 
         /// <summary>
@@ -22,6 +34,20 @@ namespace DocumentIA.Core.Configuration
         /// </summary>
         public TipologiaValidationConfig LoadConfig(string tipologiaId)
         {
+            if (_cache is not null && _scopeFactory is not null)
+            {
+                return _cache.GetOrCreate($"tipologia:config:{tipologiaId}", entry =>
+                {
+                    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+                    return LoadConfigFromDatabase(tipologiaId);
+                })!;
+            }
+
+            if (_configBasePath is null)
+            {
+                throw new InvalidOperationException("TipologiaConfigLoader no esta correctamente configurado.");
+            }
+
             string configPath = Path.Combine(_configBasePath, $"{tipologiaId}.validation.json");
 
             if (!File.Exists(configPath))
@@ -36,6 +62,31 @@ namespace DocumentIA.Core.Configuration
             }) ?? throw new InvalidDataException($"Configuracion invalida para tipologia '{tipologiaId}' en {configPath}");
 
             return config;
+        }
+
+        private TipologiaValidationConfig LoadConfigFromDatabase(string tipologiaId)
+        {
+            using var scope = _scopeFactory!.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
+
+            var tipologia = repository.GetByCodigoAsync(tipologiaId)
+                .GetAwaiter()
+                .GetResult();
+
+            if (tipologia is null || !tipologia.Activa || tipologia.Estado != EstadoTipologia.Published)
+            {
+                throw new FileNotFoundException($"No se encontro configuracion publicada para tipologia '{tipologiaId}' en base de datos.");
+            }
+
+            if (string.IsNullOrWhiteSpace(tipologia.ConfiguracionJson))
+            {
+                throw new InvalidDataException($"La tipologia '{tipologiaId}' no tiene ConfiguracionJson en base de datos.");
+            }
+
+            return JsonSerializer.Deserialize<TipologiaValidationConfig>(tipologia.ConfiguracionJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            }) ?? throw new InvalidDataException($"Configuracion invalida para tipologia '{tipologiaId}' en base de datos.");
         }
 
         /// <summary>

@@ -242,6 +242,52 @@ namespace DocumentIA.Data.Migrations
                     b.ToTable("Documentos");
                 });
 
+            modelBuilder.Entity("DocumentIA.Data.Entities.ModeloConfigEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("Activo")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("ConfiguracionJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("CreadoPor")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime?>("FechaActualizacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Key")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Tipo")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Key")
+                        .IsUnique();
+
+                    b.ToTable("ModeloConfigs");
+                });
+
             modelBuilder.Entity("DocumentIA.Data.Entities.PluginEjecucionEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -288,6 +334,47 @@ namespace DocumentIA.Data.Migrations
                     b.HasIndex("EjecucionId", "PluginKey");
 
                     b.ToTable("PluginEjecuciones");
+                });
+
+            modelBuilder.Entity("DocumentIA.Data.Entities.PluginTipologiaConfigEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ConfiguracionJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("Estado")
+                        .HasColumnType("int");
+
+                    b.Property<DateTime?>("FechaActualizacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("FechaCreacion")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("PublicadaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PublicadaPor")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("TipologiaCodigo")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TipologiaCodigo")
+                        .IsUnique();
+
+                    b.ToTable("PluginTipologiaConfigs");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.ResultadoProcesamientoEntity", b =>
@@ -408,6 +495,9 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<int>("Estado")
+                        .HasColumnType("int");
+
                     b.Property<DateTime?>("FechaActualizacion")
                         .HasColumnType("datetime2");
 
@@ -431,6 +521,13 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<DateTime?>("PublicadaEn")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("PublicadaPor")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<double>("UmbralClasificacion")
                         .HasColumnType("float");
 
@@ -439,6 +536,10 @@ namespace DocumentIA.Data.Migrations
 
                     b.Property<string>("Version")
                         .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("VersionPublicada")
                         .HasMaxLength(50)
                         .HasColumnType("nvarchar(50)");
 
@@ -455,11 +556,15 @@ namespace DocumentIA.Data.Migrations
                             Id = 1,
                             Activa = true,
                             Codigo = "tasacion",
-                            FechaCreacion = new DateTime(2026, 3, 24, 16, 20, 36, 869, DateTimeKind.Utc).AddTicks(6009),
+                            Estado = 1,
+                            FechaCreacion = new DateTime(2026, 3, 27, 20, 3, 57, 484, DateTimeKind.Utc).AddTicks(4797),
                             Nombre = "Tasación",
+                            PublicadaEn = new DateTime(2026, 3, 27, 20, 3, 57, 484, DateTimeKind.Utc).AddTicks(4792),
+                            PublicadaPor = "seed",
                             UmbralClasificacion = 0.84999999999999998,
                             UmbralExtraccion = 0.80000000000000004,
-                            Version = "1.0"
+                            Version = "1.0",
+                            VersionPublicada = "1.0"
                         });
                 });
 

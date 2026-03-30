@@ -318,6 +318,36 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
+        private string _extractionThresholdCompletitud = string.Empty;
+        /// <summary>Umbral de completitud CU (ratio de campos esperados). Vacío = servidor usa tipología o global.</summary>
+        public string ExtractionThresholdCompletitud
+        {
+            get => _extractionThresholdCompletitud;
+            set
+            {
+                if (_extractionThresholdCompletitud != value)
+                {
+                    _extractionThresholdCompletitud = value;
+                    OnPropertyChanged(nameof(ExtractionThresholdCompletitud));
+                }
+            }
+        }
+
+        private string _extractionThresholdConfianza = string.Empty;
+        /// <summary>Umbral de confianza CU para no activar fallback GPT. Vacío = servidor usa tipología o global.</summary>
+        public string ExtractionThresholdConfianza
+        {
+            get => _extractionThresholdConfianza;
+            set
+            {
+                if (_extractionThresholdConfianza != value)
+                {
+                    _extractionThresholdConfianza = value;
+                    OnPropertyChanged(nameof(ExtractionThresholdConfianza));
+                }
+            }
+        }
+
         private string _apiCheckIntervalSeconds = "30";
         public string ApiCheckIntervalSeconds
         {
@@ -520,7 +550,9 @@ namespace DocumentIA.Desktop.ViewModels
                     Extraction = new ExtractionSettings
                     {
                         Model = NormalizeOptionalText(ExtractionModel, "auto")!,
-                        Threshold = extractionThreshold
+                        Threshold = extractionThreshold,
+                        ThresholdCompletitud = ParseOptionalThreshold(ExtractionThresholdCompletitud),
+                        ThresholdConfianza = ParseOptionalThreshold(ExtractionThresholdConfianza)
                     }
                 }
             };
@@ -538,6 +570,35 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
+        /// <summary>Parsea un umbral opcional. Retorna null si vacío o inválido (el servidor usará el valor de tipología).</summary>
+        private static decimal? ParseOptionalThreshold(string? rawValue)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+                return null;
+
+            var normalized = rawValue.Trim().Replace(" ", string.Empty);
+            if (normalized.Contains(',') && normalized.Contains('.'))
+            {
+                normalized = normalized.LastIndexOf(',') > normalized.LastIndexOf('.')
+                    ? normalized.Replace(".", string.Empty).Replace(',', '.')
+                    : normalized.Replace(",", string.Empty);
+            }
+            else
+            {
+                normalized = normalized.Replace(',', '.');
+            }
+
+            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed)
+                && parsed >= 0m && parsed <= 1m)
+                return parsed;
+
+            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.CurrentCulture, out var parsedCurrent)
+                && parsedCurrent >= 0m && parsedCurrent <= 1m)
+                return parsedCurrent;
+
+            return null;
+        }
+
         private static decimal ParseThresholdOrDefault(string? rawValue, decimal defaultValue)
         {
             if (string.IsNullOrWhiteSpace(rawValue))
@@ -545,16 +606,38 @@ namespace DocumentIA.Desktop.ViewModels
                 return defaultValue;
             }
 
-            var normalized = rawValue.Trim();
-            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.CurrentCulture, out var currentParsed))
+            var normalized = rawValue.Trim().Replace(" ", string.Empty);
+
+            // Normalizar separadores para evitar interpretaciones distintas por cultura
+            // (ej. "0.5" en es-ES puede interpretarse como 5).
+            if (normalized.Contains(',') && normalized.Contains('.'))
             {
-                return currentParsed;
+                if (normalized.LastIndexOf(',') > normalized.LastIndexOf('.'))
+                {
+                    normalized = normalized.Replace(".", string.Empty).Replace(',', '.');
+                }
+                else
+                {
+                    normalized = normalized.Replace(",", string.Empty);
+                }
+            }
+            else
+            {
+                normalized = normalized.Replace(',', '.');
             }
 
-            normalized = normalized.Replace(',', '.');
             if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.InvariantCulture, out var invariantParsed))
             {
-                return invariantParsed;
+                return invariantParsed >= 0m && invariantParsed <= 1m
+                    ? invariantParsed
+                    : defaultValue;
+            }
+
+            if (decimal.TryParse(normalized, NumberStyles.Number, CultureInfo.CurrentCulture, out var currentParsed))
+            {
+                return currentParsed >= 0m && currentParsed <= 1m
+                    ? currentParsed
+                    : defaultValue;
             }
 
             return defaultValue;

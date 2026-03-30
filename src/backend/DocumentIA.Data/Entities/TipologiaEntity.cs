@@ -3,6 +3,13 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace DocumentIA.Data.Entities;
 
+public enum EstadoTipologia
+{
+    Draft = 0,
+    Published = 1,
+    Retired = 2
+}
+
 [Table("Tipologias")]
 public class TipologiaEntity
 {
@@ -43,4 +50,14 @@ public class TipologiaEntity
 
     [MaxLength(200)]
     public string? CreadoPor { get; set; }
+
+    public EstadoTipologia Estado { get; set; } = EstadoTipologia.Draft;
+
+    public DateTime? PublicadaEn { get; set; }
+
+    [MaxLength(200)]
+    public string? PublicadaPor { get; set; }
+
+    [MaxLength(50)]
+    public string? VersionPublicada { get; set; }
 }
