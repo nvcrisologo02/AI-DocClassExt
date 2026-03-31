@@ -113,9 +113,12 @@ var host = new HostBuilder()
         .ConfigurePrimaryHttpMessageHandler(() =>
         {
             var handler = new HttpClientHandler();
-            if (context.HostingEnvironment.IsDevelopment())
+            // Bypass SSL for internal endpoints with untrusted/self-signed certificates.
+            // Controlled via GDC:BypassSslValidation=true (app setting / local.settings.json).
+            var bypassSsl = context.Configuration["GDC:BypassSslValidation"];
+            if (context.HostingEnvironment.IsDevelopment() ||
+                string.Equals(bypassSsl, "true", StringComparison.OrdinalIgnoreCase))
             {
-                // Bypass SSL validation for internal DEV endpoints with self-signed certificates
                 handler.ServerCertificateCustomValidationCallback =
                     HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
             }
