@@ -48,8 +48,8 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
     {
         if (string.IsNullOrWhiteSpace(_settings.Endpoint))
             throw new InvalidOperationException("Classification:AzureDocumentIntelligence:Endpoint es obligatorio");
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:ApiKey es obligatorio");
+        if (_settings.AuthMode != "DefaultAzureCredential" && string.IsNullOrWhiteSpace(_settings.ApiKey))
+            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:ApiKey es obligatorio cuando AuthMode=ApiKey");
 
         var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
         var model = _modelRegistryLoader.GetModel(tipologiaConfig.Extraction.ModelKey);
@@ -67,8 +67,8 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
         {
             Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
         };
-        request.Headers.Add("Ocp-Apim-Subscription-Key", _settings.ApiKey);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        await DocumentIntelligenceAuthHelper.ApplyAuthAsync(request, _settings, cancellationToken);
 
         var stopwatch = Stopwatch.StartNew();
 
@@ -95,7 +95,7 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
             await Task.Delay(Math.Max(500, _settings.PollIntervalMs), cancellationToken);
 
             using var pollRequest = new HttpRequestMessage(HttpMethod.Get, operationLocation);
-            pollRequest.Headers.Add("Ocp-Apim-Subscription-Key", _settings.ApiKey);
+            await DocumentIntelligenceAuthHelper.ApplyAuthAsync(pollRequest, _settings, cancellationToken);
 
             using var pollResponse = await client.SendAsync(pollRequest, cancellationToken);
             var pollBody = await pollResponse.Content.ReadAsStringAsync(cancellationToken);

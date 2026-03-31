@@ -38,9 +38,9 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
             throw new InvalidOperationException("Classification:AzureDocumentIntelligence:Endpoint es obligatorio");
         }
 
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+        if (_settings.AuthMode != "DefaultAzureCredential" && string.IsNullOrWhiteSpace(_settings.ApiKey))
         {
-            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:ApiKey es obligatorio");
+            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:ApiKey es obligatorio cuando AuthMode=ApiKey");
         }
 
         var requestedModel = input.Entrada.Instrucciones.Classification.Model;
@@ -62,8 +62,8 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
             Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
         };
 
-        request.Headers.Add("Ocp-Apim-Subscription-Key", _settings.ApiKey);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        await DocumentIntelligenceAuthHelper.ApplyAuthAsync(request, _settings, cancellationToken);
 
         using var startResponse = await client.SendAsync(request, cancellationToken);
         if (!startResponse.IsSuccessStatusCode)
@@ -89,7 +89,7 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
             await Task.Delay(Math.Max(250, _settings.PollIntervalMs), cancellationToken);
 
             using var pollRequest = new HttpRequestMessage(HttpMethod.Get, operationLocation);
-            pollRequest.Headers.Add("Ocp-Apim-Subscription-Key", _settings.ApiKey);
+            await DocumentIntelligenceAuthHelper.ApplyAuthAsync(pollRequest, _settings, cancellationToken);
             pollRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var pollResponse = await client.SendAsync(pollRequest, cancellationToken);
