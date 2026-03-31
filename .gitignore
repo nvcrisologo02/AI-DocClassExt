@@ -1,6 +1,10 @@
 ﻿# .NET
 bin/
 obj/
+publish/
+*.dll
+*.pdb
+*.exe
 *.user
 *.suo
 .vs/
