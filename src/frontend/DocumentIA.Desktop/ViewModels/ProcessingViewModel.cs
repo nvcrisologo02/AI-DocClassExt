@@ -50,7 +50,7 @@ namespace DocumentIA.Desktop.ViewModels
             "Resultado"
         };
 
-        private readonly IOrchestratorApiClient _apiClient;
+        private IOrchestratorApiClient _apiClient;
         private readonly DispatcherTimer _apiConnectionTimer;
         private CancellationTokenSource? _pollingCts;
         private string? _lastLoggedActivity;
@@ -153,9 +153,12 @@ namespace DocumentIA.Desktop.ViewModels
                     _isProcessing = value;
                     OnPropertyChanged(nameof(IsProcessing));
                     OnPropertyChanged(nameof(IsExecuteEnabled));
+                    OnPropertyChanged(nameof(IsCancelEnabled));
                 }
             }
         }
+
+        public bool IsCancelEnabled => _isProcessing;
 
         private bool _isApiConnected;
         public bool IsApiConnected
@@ -373,14 +376,66 @@ namespace DocumentIA.Desktop.ViewModels
 
         public bool IsExecuteEnabled => !IsProcessing && !string.IsNullOrWhiteSpace(SelectedDocumentPath) && IsApiConnected;
 
+        // ─── Entorno (Local / Azure) ──────────────────────────────────────────
+        private const string LocalUrl  = "http://localhost:7071";
+        private const string AzureUrl  = "https://srbappprodocai.azurewebsites.net";
+
+        private bool _useAzure = false;
+        public bool UseAzure
+        {
+            get => _useAzure;
+            set
+            {
+                if (_useAzure != value)
+                {
+                    _useAzure = value;
+                    OnPropertyChanged(nameof(UseAzure));
+                    OnPropertyChanged(nameof(CurrentEnvironmentLabel));
+                    OnPropertyChanged(nameof(CurrentEnvironmentUrl));
+                    OnPropertyChanged(nameof(ShowFunctionKeyField));
+                    RebuildApiClient();
+                }
+            }
+        }
+
+        private string _azureFunctionKey = string.Empty;
+        public string AzureFunctionKey
+        {
+            get => _azureFunctionKey;
+            set
+            {
+                if (_azureFunctionKey != value)
+                {
+                    _azureFunctionKey = value;
+                    OnPropertyChanged(nameof(AzureFunctionKey));
+                    if (_useAzure) RebuildApiClient();
+                }
+            }
+        }
+
+        public string CurrentEnvironmentLabel => _useAzure ? "☁ AZURE" : "⚙ LOCAL";
+        public string CurrentEnvironmentUrl   => _useAzure ? AzureUrl : LocalUrl;
+        public bool   ShowFunctionKeyField    => _useAzure;
+
+        private void RebuildApiClient()
+        {
+            var url = _useAzure ? AzureUrl : LocalUrl;
+            var key = _useAzure && !string.IsNullOrWhiteSpace(_azureFunctionKey) ? _azureFunctionKey : null;
+            _apiClient = new OrchestratorApiClient(url, key);
+            _ = RefreshApiConnectionAsync();
+            _ = LoadTipologiasAsync();
+        }
+
         public ICommand ExecuteCommand { get; }
         public ICommand SelectFileCommand { get; }
+        public ICommand CancelCommand { get; }
 
         public ProcessingViewModel()
         {
-            _apiClient = new OrchestratorApiClient("http://localhost:7071");
+            _apiClient = new OrchestratorApiClient(LocalUrl);
             ExecuteCommand = new RelayCommand(_ => _ = ExecuteAsync(), _ => IsExecuteEnabled);
             SelectFileCommand = new RelayCommand(_ => SelectFile());
+            CancelCommand = new RelayCommand(_ => { _pollingCts?.Cancel(); }, _ => IsCancelEnabled);
 
             _apiConnectionTimer = new DispatcherTimer
             {

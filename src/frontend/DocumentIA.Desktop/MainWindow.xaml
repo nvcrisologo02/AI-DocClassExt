@@ -29,6 +29,84 @@
 
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,14,0,0">
                     <StackPanel>
+
+                        <!-- ENTORNO -->
+                        <Border Padding="10" BorderThickness="1" CornerRadius="6" Margin="0,0,0,10">
+                            <Border.Style>
+                                <Style TargetType="Border">
+                                    <Setter Property="BorderBrush" Value="#3A4458"/>
+                                    <Setter Property="Background" Value="#131A26"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding UseAzure}" Value="True">
+                                            <Setter Property="BorderBrush" Value="#0078D4"/>
+                                            <Setter Property="Background" Value="#0D1E33"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Border.Style>
+                            <StackPanel>
+                                <TextBlock Text="ENTORNO" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,8"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding CurrentEnvironmentLabel}"
+                                               FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="#8899AA"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding UseAzure}" Value="True">
+                                                        <Setter Property="Foreground" Value="#3AA0F3"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <ToggleButton Grid.Column="1" IsChecked="{Binding UseAzure, Mode=TwoWay}"
+                                                  Width="44" Height="22" VerticalAlignment="Center"
+                                                  BorderThickness="0" Cursor="Hand">
+                                        <ToggleButton.Style>
+                                            <Style TargetType="ToggleButton">
+                                                <Setter Property="Template">
+                                                    <Setter.Value>
+                                                        <ControlTemplate TargetType="ToggleButton">
+                                                            <Border x:Name="track" CornerRadius="11" Width="44" Height="22"
+                                                                    Background="#3A4458" Padding="2">
+                                                                <Border x:Name="thumb" Width="18" Height="18"
+                                                                        CornerRadius="9" Background="#8899AA"
+                                                                        HorizontalAlignment="Left"/>
+                                                            </Border>
+                                                            <ControlTemplate.Triggers>
+                                                                <Trigger Property="IsChecked" Value="True">
+                                                                    <Setter TargetName="track" Property="Background" Value="#0078D4"/>
+                                                                    <Setter TargetName="thumb" Property="Background" Value="White"/>
+                                                                    <Setter TargetName="thumb" Property="HorizontalAlignment" Value="Right"/>
+                                                                </Trigger>
+                                                                <Trigger Property="IsMouseOver" Value="True">
+                                                                    <Setter TargetName="track" Property="Opacity" Value="0.85"/>
+                                                                </Trigger>
+                                                            </ControlTemplate.Triggers>
+                                                        </ControlTemplate>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Style>
+                                        </ToggleButton.Style>
+                                    </ToggleButton>
+                                </Grid>
+                                <TextBlock Text="{Binding CurrentEnvironmentUrl}" Foreground="#556070"
+                                           FontSize="9" Margin="0,4,0,0" TextTrimming="CharacterEllipsis"/>
+                                <!-- Function Key (solo visible en Azure) -->
+                                <StackPanel Visibility="{Binding ShowFunctionKeyField, Converter={StaticResource BoolToVisibilityConverter}}" Margin="0,8,0,0">
+                                    <TextBlock Text="Function Key" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                                    <TextBox Text="{Binding AzureFunctionKey, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="6" Background="#0A1520" Foreground="{StaticResource BrushTextPrimary}"
+                                             BorderBrush="#0078D4" FontFamily="Consolas" FontSize="11"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
                         <Border Padding="10" BorderBrush="#3A4458" BorderThickness="1" CornerRadius="6" Background="#131A26">
                             <StackPanel>
                                 <TextBlock Text="DOCUMENTO" Foreground="{StaticResource BrushTextMuted}" FontSize="11"/>
@@ -91,7 +169,45 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <Button Grid.Row="2" Content="EJECUTAR" Command="{Binding ExecuteCommand}" Style="{StaticResource ButtonPrimary}" Height="38" Margin="0,12,0,0" IsEnabled="{Binding IsExecuteEnabled}"/>
+                <Grid Grid.Row="2" Margin="0,12,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="EJECUTAR" Command="{Binding ExecuteCommand}" Style="{StaticResource ButtonPrimary}" Height="38" IsEnabled="{Binding IsExecuteEnabled}" Margin="0,0,6,0"/>
+                    <Button Grid.Column="1" Content="CANCELAR" Command="{Binding CancelCommand}" Height="38" MinWidth="90" IsEnabled="{Binding IsCancelEnabled}"
+                            Background="#8B1A1A" Foreground="White" FontWeight="SemiBold" FontSize="12"
+                            BorderThickness="0" Cursor="Hand">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Background" Value="#8B1A1A"/>
+                                <Setter Property="Foreground" Value="White"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="Cursor" Value="Hand"/>
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border Background="{TemplateBinding Background}" CornerRadius="4" Padding="8,0">
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                                <Style.Triggers>
+                                    <Trigger Property="IsEnabled" Value="False">
+                                        <Setter Property="Background" Value="#3A2020"/>
+                                        <Setter Property="Foreground" Value="#666"/>
+                                    </Trigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="#C0392B"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </Grid>
             </Grid>
         </Border>
 
