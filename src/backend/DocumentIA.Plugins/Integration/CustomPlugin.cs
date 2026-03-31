@@ -44,6 +44,12 @@ namespace DocumentIA.Plugins.Integration
             {
                 try
                 {
+                    // Resolver rutas relativas contra el directorio base de la aplicacion
+                    if (!Path.IsPathRooted(assemblyPath))
+                    {
+                        assemblyPath = Path.GetFullPath(assemblyPath, AppContext.BaseDirectory);
+                    }
+
                     logger.LogInformation(
                         "Cargando enriquecedor custom: {Assembly} - {Class}", 
                         assemblyPath, className);
