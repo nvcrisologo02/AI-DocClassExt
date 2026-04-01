@@ -1,31 +1,174 @@
 trigger:
-- '*'
-
-pool:
-  vmImage: ubuntu-latest
+  branches:
+    include:
+      - main
 
 variables:
-- group: github-secrets
+  - name: AZURE_SERVICE_CONNECTION
+    value: sc-azure-documentia-prod
+  - name: AZURE_FUNCTIONS_APP_NAME
+    value: srbappprodocai
+  - name: AZURE_RESOURCE_GROUP
+    value: rg-documentia-mvp
+  - name: buildConfiguration
+    value: Release
+  - name: solutionPath
+    value: src/backend/DocumentIA.sln
+  - name: functionsProject
+    value: src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj
+  - name: COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject
+    value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
+  - name: sarebEnrichmentsProject
+    value: src/enrichments/SarebEnrichments/SarebEnrichments.csproj
+  - name: testsProject
+    value: src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
 
-steps:
-- checkout: self
-  fetchDepth: 0
-  persistCredentials: true
+pool:
+  vmImage: windows-latest
 
-- script: |
-    set -e
+stages:
 
-    git config --global user.email "sync-bot@company.local"
-    git config --global user.name "AzureDevOps Sync Bot"
- 
-    # Traer TODAS las ramas del repo de Azure DevOps (incluye ramas remotas)
-    git fetch origin "+refs/heads/*:refs/remotes/origin/*" --prune
+  # ─────────────────────────────────────────
+  # STAGE 1: Build
+  # ─────────────────────────────────────────
+  - stage: Build
+    displayName: Build & Test
+    jobs:
+      - job: BuildJob
+        displayName: Build solution
+        steps:
 
-    git remote remove github || true
-    git remote add github https://$(GITHUB_PAT)@github.com/nvcrisologo02/AI-DocClassExt.git
-  
+          - task: UseDotNet@2
+            displayName: Use .NET 8 SDK
+            inputs:
+              packageType: sdk
+              version: 8.x
 
-    # Empujar TODAS las ramas remotas y tags
-    git push github "refs/remotes/origin/*:refs/heads/*"
-    git push github --tags
-  displayName: 'Sync Azure DevOps → GitHub'
+          - task: DotNetCoreCLI@2
+            displayName: Restore
+            inputs:
+              command: restore
+              projects: $(solutionPath)
+
+          - task: DotNetCoreCLI@2
+            displayName: Build
+            inputs:
+              command: build
+              projects: $(solutionPath)
+              arguments: --configuration $(buildConfiguration) --no-restore
+
+          - task: DotNetCoreCLI@2
+            displayName: Test
+            inputs:
+              command: test
+              projects: $(testsProject)
+              arguments: --configuration $(buildConfiguration) --no-build
+
+          # Compilar SarebEnrichments y copiar DLL al directorio publish de Functions
+          - task: DotNetCoreCLI@2
+            displayName: Build SarebEnrichments
+            inputs:
+              command: build
+              projects: $(sarebEnrichmentsProject)
+              arguments: --configuration $(buildConfiguration) --no-restore
+
+          # Publicar Functions
+          - task: DotNetCoreCLI@2
+            displayName: Publish Functions
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: $(functionsProject)
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/functions
+              zipAfterPublish: false
+              modifyOutputPath: false
+
+          # Copiar SarebEnrichments.dll a la subcarpeta plugins/ del artifact
+          - task: CopyFiles@2
+            displayName: Copy SarebEnrichments plugin
+            inputs:
+              SourceFolder: src/enrichments/SarebEnrichments/bin/$(buildConfiguration)/net8.0
+              Contents: SarebEnrichments.dll
+              TargetFolder: $(Build.ArtifactStagingDirectory)/functions/plugins
+
+          # Publicar Admin Blazor
+          - task: DotNetCoreCLI@2
+            displayName: Publish Admin
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: $(COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject)
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
+              zipAfterPublish: false
+              modifyOutputPath: false
+
+          - task: PublishBuildArtifacts@1
+            displayName: Upload artifact - functions
+            inputs:
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/functions
+              ArtifactName: drop-functions
+
+          - task: PublishBuildArtifacts@1
+            displayName: Upload artifact - COMPLETAR_GDC_HTTP_BASIC_USERNAME
+            inputs:
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
+              ArtifactName: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+
+  # ─────────────────────────────────────────
+  # STAGE 2: Deploy Functions
+  # ─────────────────────────────────────────
+  - stage: DeployFunctions
+    displayName: Deploy Functions
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployFunctionsJob
+        displayName: Deploy to srbappprodocai
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+
+                - download: current
+                  artifact: drop-functions
+
+                - task: AzureFunctionApp@2
+                  displayName: Deploy Function App
+                  inputs:
+                    connectedServiceNameARM: $(AZURE_SERVICE_CONNECTION)
+                    appType: functionApp
+                    appName: $(AZURE_FUNCTIONS_APP_NAME)
+                    package: $(Pipeline.Workspace)/drop-functions
+                    deploymentMethod: zipDeploy
+                    resourceGroupName: $(AZURE_RESOURCE_GROUP)
+
+  # ─────────────────────────────────────────
+  # STAGE 3: Deploy Admin
+  # Desactivado hasta que el recurso srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai esté creado.
+  # Cambiar condition a succeeded() cuando esté listo.
+  # ─────────────────────────────────────────
+  - stage: DeployAdmin
+    displayName: Deploy Admin Blazor
+    dependsOn: Build
+    condition: false
+    jobs:
+      - deployment: DeployAdminJob
+        displayName: Deploy to srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+
+                - download: current
+                  artifact: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+
+                - task: AzureWebApp@1
+                  displayName: Deploy Admin Web App
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    appType: webApp
+                    appName: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+                    package: $(Pipeline.Workspace)/drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+                    deploymentMethod: zipDeploy
