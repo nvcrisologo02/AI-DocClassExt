@@ -4,7 +4,12 @@ trigger:
       - main
 
 variables:
-  - group: documentia-prod-vars
+  - name: AZURE_SERVICE_CONNECTION
+    value: sc-azure-documentia-prod
+  - name: AZURE_FUNCTIONS_APP_NAME
+    value: srbappprodocai
+  - name: AZURE_RESOURCE_GROUP
+    value: rg-documentia-mvp
   - name: buildConfiguration
     value: Release
   - name: solutionPath
