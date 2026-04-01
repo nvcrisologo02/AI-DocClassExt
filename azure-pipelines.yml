@@ -18,8 +18,6 @@ variables:
     value: src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj
   - name: COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject
     value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
-  - name: sarebEnrichmentsProject
-    value: src/enrichments/SarebEnrichments/SarebEnrichments.csproj
   - name: testsProject
     value: src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
 
@@ -64,14 +62,6 @@ stages:
               projects: $(testsProject)
               arguments: --configuration $(buildConfiguration) --no-build
 
-          # Compilar SarebEnrichments y copiar DLL al directorio publish de Functions
-          - task: DotNetCoreCLI@2
-            displayName: Build SarebEnrichments
-            inputs:
-              command: build
-              projects: $(sarebEnrichmentsProject)
-              arguments: --configuration $(buildConfiguration) --no-restore
-
           # Publicar Functions
           - task: DotNetCoreCLI@2
             displayName: Publish Functions
@@ -82,14 +72,6 @@ stages:
               arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/functions
               zipAfterPublish: false
               modifyOutputPath: false
-
-          # Copiar SarebEnrichments.dll a la subcarpeta plugins/ del artifact
-          - task: CopyFiles@2
-            displayName: Copy SarebEnrichments plugin
-            inputs:
-              SourceFolder: src/enrichments/SarebEnrichments/bin/$(buildConfiguration)/net8.0
-              Contents: SarebEnrichments.dll
-              TargetFolder: $(Build.ArtifactStagingDirectory)/functions/plugins
 
           # Publicar Admin Blazor
           - task: DotNetCoreCLI@2
