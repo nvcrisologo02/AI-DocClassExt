@@ -19,7 +19,7 @@ variables:
     value: src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
 
 pool:
-  name: documentia-selfhosted
+  vmImage: windows-latest
 
 stages:
 

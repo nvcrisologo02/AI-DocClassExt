@@ -119,7 +119,7 @@ public class ConfigurableExtraerDataProviderTests
         var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
 
         result.FallbackUsado.Should().BeTrue();
-        result.FallbackRazon.Should().Contain("insufficient_fields");
+        result.FallbackRazon.Should().Contain("insufficient_extraction");
         fixture.GptProvider.VerifyAll();
     }
 
@@ -132,6 +132,7 @@ public class ConfigurableExtraerDataProviderTests
         {
             Proveedor = "azure-content-understanding",
             Modelo = "cu",
+            ConfianzaExtraccion = 0.95,
             DatosExtraidos = new Dictionary<string, object>
             {
                 ["CampoA"] = "v",
