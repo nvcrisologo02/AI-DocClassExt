@@ -15,9 +15,37 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Functions.Services;
 using Microsoft.Extensions.Options;
 using System.IO;
+using Azure.Identity;
+using Azure.Security.KeyVault.Secrets;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
+    .ConfigureAppConfiguration((context, config) =>
+    {
+        var built = config.Build();
+        var secretsSource = built["SecretsSource"] ?? "Config";
+        var useAzureVault = string.Equals(secretsSource, "AzureVault", StringComparison.OrdinalIgnoreCase);
+        var keyVaultName = built["KeyVaultName"];
+        if (useAzureVault && !string.IsNullOrWhiteSpace(keyVaultName))
+        {
+            var kvUri = new Uri($"https://{keyVaultName}.vault.azure.net/");
+            // DefaultAzureCredential intenta: SharedTokenCache → VisualStudio → AzurePowerShell → InteractiveBrowser
+            var credentialOptions = new DefaultAzureCredentialOptions
+            {
+                ExcludeWorkloadIdentityCredential = true,
+                ExcludeManagedIdentityCredential = !context.HostingEnvironment.IsProduction(), // permite Managed Identity en prod
+                ExcludeAzureCliCredential = true,       // bloqueada por proxy corporativo
+                ExcludeVisualStudioCodeCredential = true,
+                TenantId = built["AZURE_TENANT_ID"] ?? "1a213c5a-2e3d-4ae4-b0ba-075c42f9700e"
+            };
+            config.AddAzureKeyVault(kvUri, new DefaultAzureCredential(credentialOptions));
+            Console.WriteLine($"[KeyVault] Cargando secretos desde: {kvUri}");
+        }
+        else
+        {
+            Console.WriteLine($"[Config] SecretsSource={secretsSource}. Usando configuración local/appsettings.");
+        }
+    })
     .ConfigureServices((context, services) =>
     {
         // Application Insights

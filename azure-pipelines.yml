@@ -10,6 +10,8 @@ variables:
     value: srbappprodocai
   - name: AZURE_RESOURCE_GROUP
     value: rg-documentia-mvp
+  - name: KEY_VAULT_NAME
+    value: srbkvprodocai
   - name: buildConfiguration
     value: Release
   - name: solutionPath
@@ -124,6 +126,20 @@ stages:
                     package: $(Pipeline.Workspace)/drop-functions
                     deploymentMethod: zipDeploy
                     resourceGroupName: $(AZURE_RESOURCE_GROUP)
+
+                - task: AzureCLI@2
+                  displayName: Set Function App settings (Key Vault mode)
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az functionapp config appsettings set \
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" \
+                        --name "$(AZURE_FUNCTIONS_APP_NAME)" \
+                        --settings SecretsSource=AzureVault KeyVaultName=$(KEY_VAULT_NAME) \
+                        --only-show-errors \
+                        --output none
 
   # ─────────────────────────────────────────
   # STAGE 3: Deploy Admin
