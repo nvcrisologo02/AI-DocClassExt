@@ -15,7 +15,7 @@ param(
     [string]$FunctionAppName = "srbappprodocai",
 
     [Parameter(Mandatory = $false)]
-    [string]$StorageDocuments = "srbstgprodocai",
+    [string]$StorageDocuments = "srbstgproapppdocai",
 
     [Parameter(Mandatory = $false)]
     [string]$StorageDurable = "srbstgproapppdocai",
