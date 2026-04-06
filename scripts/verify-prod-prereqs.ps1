@@ -44,8 +44,26 @@ function Test-SecretExists {
         [string]$SecretName
     )
 
-    $result = & az keyvault secret show --vault-name $VaultName --name $SecretName --query id -o tsv 2>$null
-    return ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace(($result | Out-String).Trim()))
+    $output = & az keyvault secret show --vault-name $VaultName --name $SecretName --query id -o tsv 2>&1
+    $exitCode = $LASTEXITCODE
+    $text = ($output | Out-String).Trim()
+
+    if ($exitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($text)) {
+        return [pscustomobject]@{
+            Exists = $true
+            Unauthorized = $false
+            Message = ""
+        }
+    }
+
+    $lower = $text.ToLowerInvariant()
+    $isUnauthorized = $lower.Contains("forbidden") -or $lower.Contains("not authorized") -or $lower.Contains("permission") -or $lower.Contains("access denied")
+
+    return [pscustomobject]@{
+        Exists = $false
+        Unauthorized = $isUnauthorized
+        Message = $text
+    }
 }
 
 $requiredSecrets = @(
@@ -112,14 +130,24 @@ Write-Host "  [OK] $($storage.name)"
 
 Write-Host "[4/5] Verificando secretos obligatorios en Key Vault..." -ForegroundColor Yellow
 $missingSecrets = @()
+$unauthorizedSecrets = @()
 foreach ($secretName in $requiredSecrets) {
-    if (Test-SecretExists -VaultName $KeyVaultName -SecretName $secretName) {
+    $check = Test-SecretExists -VaultName $KeyVaultName -SecretName $secretName
+    if ($check.Exists) {
         Write-Host "  [OK] $secretName" -ForegroundColor Green
+    }
+    elseif ($check.Unauthorized) {
+        Write-Host "  [SIN PERMISO] $secretName" -ForegroundColor Red
+        $unauthorizedSecrets += $secretName
     }
     else {
         Write-Host "  [FALTA] $secretName" -ForegroundColor Red
         $missingSecrets += $secretName
     }
+}
+
+if ($unauthorizedSecrets.Count -gt 0) {
+    throw "Sin permisos para leer secretos en Key Vault '$KeyVaultName'. Revisar RBAC/Access Policies del identity usado por el pipeline. Secretos afectados: $($unauthorizedSecrets -join ', ')"
 }
 
 if ($missingSecrets.Count -gt 0) {

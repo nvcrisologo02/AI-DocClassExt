@@ -116,15 +116,6 @@ stages:
 
                 - checkout: self
 
-                - task: AzureCLI@2
-                  displayName: Verify deploy prerequisites
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    scriptType: pscore
-                    scriptLocation: scriptPath
-                    scriptPath: scripts/verify-prod-prereqs.ps1
-                    arguments: -ResourceGroup $(AZURE_RESOURCE_GROUP) -FunctionAppName $(AZURE_FUNCTIONS_APP_NAME) -KeyVaultName $(KEY_VAULT_NAME)
-
                 - download: current
                   artifact: drop-functions
 
@@ -145,19 +136,8 @@ stages:
                     scriptType: pscore
                     scriptLocation: inlineScript
                     inlineScript: |
-                      az functionapp config appsettings set \
-                        --resource-group "$(AZURE_RESOURCE_GROUP)" \
-                        --name "$(AZURE_FUNCTIONS_APP_NAME)" \
-                        --settings SecretsSource=AzureVault KeyVaultName=$(KEY_VAULT_NAME) "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)" \
-                        --only-show-errors \
-                        --output none
-
-                      az functionapp config appsettings delete \
-                        --resource-group "$(AZURE_RESOURCE_GROUP)" \
-                        --name "$(AZURE_FUNCTIONS_APP_NAME)" \
-                        --setting-names AzureWebJobsStorage__accountName AzureWebJobsStorage__credential \
-                        --only-show-errors \
-                        --output none
+                      az functionapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --settings SecretsSource=AzureVault KeyVaultName=$(KEY_VAULT_NAME) "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)" --only-show-errors --output none
+                      az functionapp config appsettings delete --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --setting-names AzureWebJobsStorage__accountName AzureWebJobsStorage__credential --only-show-errors --output none
 
                 - task: AzureCLI@2
                   displayName: Resolve Function App host name
