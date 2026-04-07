@@ -7,14 +7,18 @@ public class SystemConfigService
 {
     private readonly IConfiguration _configuration;
     private readonly TipologiaAdminService _tipologiaService;
-    private readonly HttpClient _httpClient;
+    private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SystemConfigService> _logger;
 
-    public SystemConfigService(IConfiguration configuration, TipologiaAdminService tipologiaService, HttpClient httpClient, ILogger<SystemConfigService> logger)
+    public SystemConfigService(
+        IConfiguration configuration, 
+        TipologiaAdminService tipologiaService, 
+        IHttpClientFactory httpClientFactory,
+        ILogger<SystemConfigService> logger)
     {
         _configuration = configuration;
         _tipologiaService = tipologiaService;
-        _httpClient = httpClient;
+        _httpClientFactory = httpClientFactory;
         _logger = logger;
     }
 
@@ -80,12 +84,15 @@ public class SystemConfigService
     {
         try
         {
+            // Obtener HttpClient de la factory - tiene BaseAddress configurado
+            var httpClient = _httpClientFactory.CreateClient(nameof(SystemConfigService));
+            
             // La URL relativa se resolverá contra BaseAddress del HttpClient
             // BaseAddress ya es http://localhost:7071/api/
             var configUrl = "management/configuration";
 
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            var response = await _httpClient.GetAsync(configUrl, timeoutCts.Token);
+            var response = await httpClient.GetAsync(configUrl, timeoutCts.Token);
 
             if (response.IsSuccessStatusCode)
             {

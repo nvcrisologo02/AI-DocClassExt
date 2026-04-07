@@ -21,7 +21,7 @@ builder.Services.AddHttpClient<TipologiaAdminService>((serviceProvider, client) 
     }
 });
 
-builder.Services.AddHttpClient<SystemConfigService>((serviceProvider, client) =>
+builder.Services.AddHttpClient(nameof(SystemConfigService), (serviceProvider, client) =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
     var baseUrl = configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071/api/";
