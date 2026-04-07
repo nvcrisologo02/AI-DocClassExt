@@ -80,8 +80,9 @@ public class SystemConfigService
     {
         try
         {
-            var functionsBaseUrl = _configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071";
-            var configUrl = $"{functionsBaseUrl}/api/management/configuration";
+            // La URL relativa se resolverá contra BaseAddress del HttpClient
+            // BaseAddress ya es http://localhost:7071/api/
+            var configUrl = "management/configuration";
 
             using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
             var response = await _httpClient.GetAsync(configUrl, timeoutCts.Token);
