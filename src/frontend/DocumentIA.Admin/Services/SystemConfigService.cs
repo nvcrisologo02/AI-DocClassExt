@@ -89,8 +89,12 @@ public class SystemConfigService
             if (response.IsSuccessStatusCode)
             {
                 var jsonContent = await response.Content.ReadAsStringAsync();
-                var config = JsonSerializer.Deserialize<FunctionsConfiguration>(jsonContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                return config;
+                var config = JsonSerializer.Deserialize<dynamic>(jsonContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                
+                if (config != null)
+                {
+                    return ParseFunctionsConfiguration(jsonContent);
+                }
             }
             else
             {
@@ -111,6 +115,63 @@ public class SystemConfigService
         }
 
         return null;
+    }
+
+    private FunctionsConfiguration? ParseFunctionsConfiguration(string jsonContent)
+    {
+        try
+        {
+            using (JsonDocument doc = JsonDocument.Parse(jsonContent))
+            {
+                var root = doc.RootElement;
+                
+                var config = new FunctionsConfiguration
+                {
+                    Environment = root.TryGetProperty("environment", out var env) ? env.GetString() : null,
+                    TimestampUtc = root.TryGetProperty("timestampUtc", out var ts) ? ts.GetString() : null,
+                    SqlConnectionStatus = "Configured",
+                };
+
+                // Extraer información de configuración
+                if (root.TryGetProperty("settings", out var settings))
+                {
+                    var settingsList = new Dictionary<string, string>();
+                    foreach (var setting in settings.EnumerateArray())
+                    {
+                        if (setting.TryGetProperty("key", out var key) && setting.TryGetProperty("value", out var value))
+                        {
+                            var keyStr = key.GetString() ?? "";
+                            var valueStr = value.GetString() ?? "";
+                            
+                            // Filtrar solo configuración relevante (no secrets)
+                            if (!keyStr.Contains("Password") && !keyStr.Contains("Key") && 
+                                !valueStr.Contains("***") && !string.IsNullOrWhiteSpace(valueStr) && 
+                                valueStr != "(empty)")
+                            {
+                                settingsList.TryAdd(keyStr, valueStr);
+                            }
+                        }
+                    }
+                    config.Settings = settingsList;
+                }
+
+                // Extraer información de SQL Connection
+                if (root.TryGetProperty("effectiveSqlConnection", out var sqlConn))
+                {
+                    if (sqlConn.TryGetProperty("key", out var connKey))
+                    {
+                        config.SqlConnectionStatus = connKey.GetString();
+                    }
+                }
+
+                return config;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error parsing Functions configuration: {ex.Message}");
+            return null;
+        }
     }
 }
 
@@ -155,10 +216,7 @@ public class SystemConfiguration
 public class FunctionsConfiguration
 {
     public string? Environment { get; set; }
-    public string? Version { get; set; }
-    public string? DirectoriesLoaded { get; set; }
-    public string? DefaultWorkerRuntime { get; set; }
-    public Dictionary<string, object>? Values { get; set; }
-    public List<string>? LoadedExtensions { get; set; }
-    public Dictionary<string, object>? RuntimeVersions { get; set; }
+    public string? TimestampUtc { get; set; }
+    public string? SqlConnectionStatus { get; set; }
+    public Dictionary<string, string>? Settings { get; set; }
 }

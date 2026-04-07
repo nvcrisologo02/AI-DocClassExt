@@ -157,7 +157,7 @@
                                     @if (_config.FunctionsConfiguration != null)
                                     {
                                         <tr class="table-light">
-                                            <td colspan="2"><small class="text-muted"><strong>Configuración de Functions</strong></small></td>
+                                            <td colspan="2"><small class="text-muted"><strong>Configuración de Azure Functions</strong></small></td>
                                         </tr>
                                         @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.Environment))
                                         {
@@ -166,33 +166,40 @@
                                                 <td class="text-end"><small><span class="badge bg-info">@_config.FunctionsConfiguration.Environment</span></small></td>
                                             </tr>
                                         }
-                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.Version))
+                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.SqlConnectionStatus))
                                         {
                                             <tr>
-                                                <td class="text-muted"><small>Version:</small></td>
-                                                <td class="text-end"><small>@_config.FunctionsConfiguration.Version</small></td>
+                                                <td class="text-muted"><small>SQL Connection:</small></td>
+                                                <td class="text-end"><span class="badge bg-success"><small>@_config.FunctionsConfiguration.SqlConnectionStatus</small></span></td>
                                             </tr>
                                         }
-                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.DefaultWorkerRuntime))
+                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.TimestampUtc))
                                         {
                                             <tr>
-                                                <td class="text-muted"><small>Runtime:</small></td>
-                                                <td class="text-end"><small>@_config.FunctionsConfiguration.DefaultWorkerRuntime</small></td>
+                                                <td class="text-muted"><small>Timestamp:</small></td>
+                                                <td class="text-end"><small>@_config.FunctionsConfiguration.TimestampUtc</small></td>
                                             </tr>
                                         }
-                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.DirectoriesLoaded))
+                                        @if (_config.FunctionsConfiguration.Settings?.Any() == true)
                                         {
-                                            <tr>
-                                                <td class="text-muted"><small>Directorio:</small></td>
-                                                <td class="text-end"><small class="text-break"><code style="font-size: 0.65rem;">@_config.FunctionsConfiguration.DirectoriesLoaded</code></small></td>
+                                            <tr class="table-light">
+                                                <td colspan="2" style="padding: 0.5rem 0.75rem;">
+                                                    <small class="text-muted"><strong>Configuración Cargada:</strong></small>
+                                                </td>
                                             </tr>
-                                        }
-                                        @if (_config.FunctionsConfiguration.LoadedExtensions?.Any() == true)
-                                        {
-                                            <tr>
-                                                <td class="text-muted"><small>Extensions:</small></td>
-                                                <td class="text-end"><small>@string.Join(", ", _config.FunctionsConfiguration.LoadedExtensions)</small></td>
-                                            </tr>
+                                            @foreach (var setting in _config.FunctionsConfiguration.Settings.Take(5))
+                                            {
+                                                <tr>
+                                                    <td class="text-muted"><small>@setting.Key:</small></td>
+                                                    <td class="text-end"><small class="text-break">@setting.Value</small></td>
+                                                </tr>
+                                            }
+                                            @if (_config.FunctionsConfiguration.Settings.Count > 5)
+                                            {
+                                                <tr>
+                                                    <td colspan="2" class="text-center"><small class="text-muted">+@(_config.FunctionsConfiguration.Settings.Count - 5) más...</small></td>
+                                                </tr>
+                                            }
                                         }
                                     }
                                     <tr>
