@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DocumentIA.Data.Entities;
 
 namespace DocumentIA.Admin.Services;
@@ -6,11 +7,15 @@ public class SystemConfigService
 {
     private readonly IConfiguration _configuration;
     private readonly TipologiaAdminService _tipologiaService;
+    private readonly HttpClient _httpClient;
+    private readonly ILogger<SystemConfigService> _logger;
 
-    public SystemConfigService(IConfiguration configuration, TipologiaAdminService tipologiaService)
+    public SystemConfigService(IConfiguration configuration, TipologiaAdminService tipologiaService, HttpClient httpClient, ILogger<SystemConfigService> logger)
     {
         _configuration = configuration;
         _tipologiaService = tipologiaService;
+        _httpClient = httpClient;
+        _logger = logger;
     }
 
     /// <summary>
@@ -26,6 +31,9 @@ public class SystemConfigService
         modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Extraccion));
         modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Prompt));
 
+        // Obtener configuración de Functions
+        var functionsConfig = await GetFunctionsConfigurationAsync();
+
         return new SystemConfiguration
         {
             // Información general
@@ -37,6 +45,7 @@ public class SystemConfigService
 
             // Configuración de APIs
             FunctionsBaseUrl = _configuration["FunctionsAdminApi:BaseUrl"] ?? string.Empty,
+            FunctionsConfiguration = functionsConfig,
             
             // Resumen de datos
             TipologiasTotal = tipologias.Count,
@@ -63,6 +72,46 @@ public class SystemConfigService
             TipologiasConPlugins = plugins.Select(p => p.TipologiaCodigo).Distinct().Count()
         };
     }
+
+    /// <summary>
+    /// Obtiene la configuración del servicio de Functions
+    /// </summary>
+    private async Task<FunctionsConfiguration?> GetFunctionsConfigurationAsync()
+    {
+        try
+        {
+            var functionsBaseUrl = _configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071";
+            var configUrl = $"{functionsBaseUrl}/api/management/configuration";
+
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var response = await _httpClient.GetAsync(configUrl, timeoutCts.Token);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonContent = await response.Content.ReadAsStringAsync();
+                var config = JsonSerializer.Deserialize<FunctionsConfiguration>(jsonContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                return config;
+            }
+            else
+            {
+                _logger.LogWarning($"No se pudo obtener configuración de Functions desde {configUrl}: {response.StatusCode}");
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning($"Error conectando a Functions configuration: {ex.Message}");
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogWarning("Timeout al obtener configuración de Functions");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError($"Error al obtener configuración de Functions: {ex.Message}");
+        }
+
+        return null;
+    }
 }
 
 public class SystemConfiguration
@@ -76,6 +125,7 @@ public class SystemConfiguration
 
     // APIs
     public string FunctionsBaseUrl { get; set; } = string.Empty;
+    public FunctionsConfiguration? FunctionsConfiguration { get; set; }
 
     // Tipologías
     public int TipologiasTotal { get; set; }
@@ -100,4 +150,15 @@ public class SystemConfiguration
 
     // Providers
     public List<string> ProvidersUsados { get; set; } = new();
+}
+
+public class FunctionsConfiguration
+{
+    public string? Environment { get; set; }
+    public string? Version { get; set; }
+    public string? DirectoriesLoaded { get; set; }
+    public string? DefaultWorkerRuntime { get; set; }
+    public Dictionary<string, object>? Values { get; set; }
+    public List<string>? LoadedExtensions { get; set; }
+    public Dictionary<string, object>? RuntimeVersions { get; set; }
 }

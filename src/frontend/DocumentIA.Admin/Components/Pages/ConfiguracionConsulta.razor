@@ -154,6 +154,47 @@
                                             <td class="text-end"><small class="text-break"><code style="font-size: 0.75rem;">@_config.FunctionsBaseUrl</code></small></td>
                                         </tr>
                                     }
+                                    @if (_config.FunctionsConfiguration != null)
+                                    {
+                                        <tr class="table-light">
+                                            <td colspan="2"><small class="text-muted"><strong>Configuración de Functions</strong></small></td>
+                                        </tr>
+                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.Environment))
+                                        {
+                                            <tr>
+                                                <td class="text-muted"><small>Environment:</small></td>
+                                                <td class="text-end"><small><span class="badge bg-info">@_config.FunctionsConfiguration.Environment</span></small></td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.Version))
+                                        {
+                                            <tr>
+                                                <td class="text-muted"><small>Version:</small></td>
+                                                <td class="text-end"><small>@_config.FunctionsConfiguration.Version</small></td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.DefaultWorkerRuntime))
+                                        {
+                                            <tr>
+                                                <td class="text-muted"><small>Runtime:</small></td>
+                                                <td class="text-end"><small>@_config.FunctionsConfiguration.DefaultWorkerRuntime</small></td>
+                                            </tr>
+                                        }
+                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.DirectoriesLoaded))
+                                        {
+                                            <tr>
+                                                <td class="text-muted"><small>Directorio:</small></td>
+                                                <td class="text-end"><small class="text-break"><code style="font-size: 0.65rem;">@_config.FunctionsConfiguration.DirectoriesLoaded</code></small></td>
+                                            </tr>
+                                        }
+                                        @if (_config.FunctionsConfiguration.LoadedExtensions?.Any() == true)
+                                        {
+                                            <tr>
+                                                <td class="text-muted"><small>Extensions:</small></td>
+                                                <td class="text-end"><small>@string.Join(", ", _config.FunctionsConfiguration.LoadedExtensions)</small></td>
+                                            </tr>
+                                        }
+                                    }
                                     <tr>
                                         <td class="text-muted"><small>Actualizado:</small></td>
                                         <td class="text-end"><small>@_config.Timestamp.ToString("HH:mm:ss")</small></td>
