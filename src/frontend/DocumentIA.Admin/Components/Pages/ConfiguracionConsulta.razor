@@ -202,30 +202,72 @@
                         <h5 class="mb-0">Información del Sistema</h5>
                     </div>
                     <div class="card-body">
-                        <table class="table table-sm mb-0">
+                        <table class="table table-sm mb-3">
                             <tbody>
                                 <tr>
                                     <td><strong>Última actualización</strong></td>
-                                    <td>@DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                    <td><code>@DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</code></td>
                                 </tr>
                                 <tr>
                                     <td><strong>Total de configuraciones</strong></td>
-                                    <td>@((_tipologias?.Count ?? 0) + (_modelos?.Count ?? 0) + (_plugins?.Count ?? 0))</td>
+                                    <td><code>@((_tipologias?.Count ?? 0) + (_modelos?.Count ?? 0) + (_plugins?.Count ?? 0))</code></td>
                                 </tr>
                                 @if (_estadisticas != null)
                                 {
                                     <tr>
                                         <td><strong>Tipologías activas</strong></td>
-                                        <td>@_estadisticas.TipologiasActivas</td>
+                                        <td><code>@_estadisticas.TipologiasActivas</code></td>
                                     </tr>
                                     <tr>
                                         <td><strong>Modelos activos</strong></td>
-                                        <td>@_estadisticas.ModelosActivos</td>
+                                        <td><code>@_estadisticas.ModelosActivos</code></td>
                                     </tr>
                                     <tr>
                                         <td><strong>Providers únicos</strong></td>
-                                        <td>@_estadisticas.ProvidersUnicos</td>
+                                        <td><code>@string.Join(", ", _estadisticas.ProvidersList)</code></td>
                                     </tr>
+                                }
+                            </tbody>
+                        </table>
+                        
+                        <h6 class="mt-3 mb-2">Configuración de la Aplicación</h6>
+                        <table class="table table-sm table-hover">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Entorno</strong></td>
+                                    <td><code>@(_systemConfig?.Entorno ?? "N/A")</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Versión .NET</strong></td>
+                                    <td><code>@System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>SO</strong></td>
+                                    <td><code>@System.Runtime.InteropServices.RuntimeInformation.OSDescription</code></td>
+                                </tr>
+                                @if (_systemConfig != null)
+                                {
+                                    @if (!string.IsNullOrEmpty(_systemConfig.ExtraccionProvider))
+                                    {
+                                        <tr>
+                                            <td><strong>Provider Extracción</strong></td>
+                                            <td><code>@_systemConfig.ExtraccionProvider</code></td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(_systemConfig.ClasificacionProvider))
+                                    {
+                                        <tr>
+                                            <td><strong>Provider Clasificación</strong></td>
+                                            <td><code>@_systemConfig.ClasificacionProvider</code></td>
+                                        </tr>
+                                    }
+                                    @if (!string.IsNullOrEmpty(_systemConfig.Zona))
+                                    {
+                                        <tr>
+                                            <td><strong>Zona Horaria</strong></td>
+                                            <td><code>@_systemConfig.Zona</code></td>
+                                        </tr>
+                                    }
                                 }
                             </tbody>
                         </table>
@@ -247,6 +289,7 @@
     private IReadOnlyCollection<ModeloConfigEntity>? _modelos;
     private IReadOnlyCollection<PluginTipologiaConfigEntity>? _plugins;
     private ConfiguracionEstadisticas? _estadisticas;
+    private SystemConfigInfo? _systemConfig;
     private bool _isLoading = true;
     private bool _error = false;
     private string? _errorMessage;
@@ -279,11 +322,28 @@
             _plugins = await AdminService.GetPluginConfigsAsync();
 
             // Calcular estadísticas
+            var providers = _modelos?.Select(m => m.Provider).Distinct().ToList() ?? new List<string>();
             _estadisticas = new ConfiguracionEstadisticas
             {
                 TipologiasActivas = _tipologias?.Count(t => t.Activa) ?? 0,
                 ModelosActivos = _modelos?.Count(m => m.Activo) ?? 0,
-                ProvidersUnicos = _modelos?.Select(m => m.Provider).Distinct().Count() ?? 0
+                ProvidersUnicos = providers.Count,
+                ProvidersList = providers
+            };
+
+            // Cargar configuración del sistema
+            _systemConfig = new SystemConfigInfo
+            {
+                Entorno = GetEnvironment(),
+                ExtraccionProvider = _modelos?
+                    .Where(m => m.Tipo == TipoModelo.Extraccion && m.Activo)
+                    .Select(m => m.Provider)
+                    .FirstOrDefault() ?? "N/A",
+                ClasificacionProvider = _modelos?
+                    .Where(m => m.Tipo == TipoModelo.Clasificacion && m.Activo)
+                    .Select(m => m.Provider)
+                    .FirstOrDefault() ?? "N/A",
+                Zona = TimeZoneInfo.Local.DisplayName
             };
 
             _isLoading = false;
@@ -296,10 +356,32 @@
         }
     }
 
+    private string GetEnvironment()
+    {
+        try
+        {
+            var env = System.Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+            return !string.IsNullOrEmpty(env) ? env : "Production (default)";
+        }
+        catch
+        {
+            return "N/A";
+        }
+    }
+
     private class ConfiguracionEstadisticas
     {
         public int TipologiasActivas { get; set; }
         public int ModelosActivos { get; set; }
         public int ProvidersUnicos { get; set; }
+        public List<string> ProvidersList { get; set; } = new();
+    }
+
+    private class SystemConfigInfo
+    {
+        public string? Entorno { get; set; }
+        public string? ExtraccionProvider { get; set; }
+        public string? ClasificacionProvider { get; set; }
+        public string? Zona { get; set; }
     }
 }

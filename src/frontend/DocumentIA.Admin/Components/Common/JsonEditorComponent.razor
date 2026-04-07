@@ -31,7 +31,6 @@
 </div>
 
 @code {
-    private IJSObjectReference? module;
     private string EditorId { get; } = $"json-editor-{Guid.NewGuid()}";
     private bool JsonIsValid = true;
     private string? ValidationError;
@@ -84,10 +83,8 @@
         {
             try
             {
-                module = await JS.InvokeAsync<IJSObjectReference>("import", "./js/json-editor-interop.js");
-                
-                // Initialize the editor
-                await module.InvokeVoidAsync("jsonEditorInterop.initEditor", EditorId, Mode, ReadOnly);
+                // Acceder a window.jsonEditorInterop directamente (está definido como global en json-editor-interop.js)
+                await JS.InvokeVoidAsync("jsonEditorInterop.initEditor", EditorId, Mode, ReadOnly);
                 
                 // Set initial JSON content if provided
                 if (!string.IsNullOrWhiteSpace(JsonContent))
@@ -107,11 +104,9 @@
     /// </summary>
     public async Task SetJsonAsync(string jsonString)
     {
-        if (module == null) return;
-
         try
         {
-            await module.InvokeVoidAsync("jsonEditorInterop.setJson", EditorId, jsonString);
+            await JS.InvokeVoidAsync("jsonEditorInterop.setJson", EditorId, jsonString);
             JsonContent = jsonString;
             ValidateJson();
         }
@@ -126,11 +121,9 @@
     /// </summary>
     public async Task<string?> GetJsonAsync()
     {
-        if (module == null) return null;
-
         try
         {
-            var json = await module.InvokeAsync<string?>("jsonEditorInterop.getJson", EditorId);
+            var json = await JS.InvokeAsync<string?>("jsonEditorInterop.getJson", EditorId);
             if (json != null)
             {
                 JsonContent = json;
@@ -150,11 +143,9 @@
     /// </summary>
     public async Task<string?> GetTextAsync()
     {
-        if (module == null) return null;
-
         try
         {
-            return await module.InvokeAsync<string?>("jsonEditorInterop.getText", EditorId);
+            return await JS.InvokeAsync<string?>("jsonEditorInterop.getText", EditorId);
         }
         catch (Exception ex)
         {
@@ -168,11 +159,9 @@
     /// </summary>
     public async Task SetModeAsync(string newMode)
     {
-        if (module == null) return;
-
         try
         {
-            await module.InvokeVoidAsync("jsonEditorInterop.setMode", EditorId, newMode);
+            await JS.InvokeVoidAsync("jsonEditorInterop.setMode", EditorId, newMode);
         }
         catch (Exception ex)
         {
@@ -185,11 +174,9 @@
     /// </summary>
     public async Task<string?> GetModeAsync()
     {
-        if (module == null) return null;
-
         try
         {
-            return await module.InvokeAsync<string?>("jsonEditorInterop.getMode", EditorId);
+            return await JS.InvokeAsync<string?>("jsonEditorInterop.getMode", EditorId);
         }
         catch (Exception ex)
         {
@@ -203,11 +190,9 @@
     /// </summary>
     public async Task<bool> ValidateAsync()
     {
-        if (module == null) return false;
-
         try
         {
-            var result = await module.InvokeAsync<dynamic>("jsonEditorInterop.validateJson", EditorId);
+            var result = await JS.InvokeAsync<dynamic>("jsonEditorInterop.validateJson", EditorId);
             JsonIsValid = (bool)result.valid;
             ValidationError = JsonIsValid ? null : (string?)result.error;
             return JsonIsValid;
@@ -250,17 +235,13 @@
 
     async ValueTask IAsyncDisposable.DisposeAsync()
     {
-        if (module is not null)
+        try
         {
-            try
-            {
-                await module.InvokeVoidAsync("jsonEditorInterop.destroyEditor", EditorId);
-                await module.DisposeAsync();
-            }
-            catch (JSDisconnectedException)
-            {
-                // Ignored
-            }
+            await JS.InvokeVoidAsync("jsonEditorInterop.destroyEditor", EditorId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // Ignored
         }
     }
 }
