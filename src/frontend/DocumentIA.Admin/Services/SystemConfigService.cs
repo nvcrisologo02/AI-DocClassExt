@@ -132,8 +132,20 @@ public class SystemConfigService
                 {
                     Environment = root.TryGetProperty("environment", out var env) ? env.GetString() : null,
                     TimestampUtc = root.TryGetProperty("timestampUtc", out var ts) ? ts.GetString() : null,
-                    SqlConnectionStatus = "Configured",
                 };
+
+                // Extraer información de SQL Connection - obtener el valor real
+                if (root.TryGetProperty("effectiveSqlConnection", out var sqlConn))
+                {
+                    if (sqlConn.TryGetProperty("value", out var connValue))
+                    {
+                        var connStr = connValue.GetString();
+                        if (!string.IsNullOrWhiteSpace(connStr) && !connStr.Contains("***"))
+                        {
+                            config.SqlConnectionString = connStr;
+                        }
+                    }
+                }
 
                 // Extraer información de configuración
                 if (root.TryGetProperty("settings", out var settings))
@@ -156,15 +168,6 @@ public class SystemConfigService
                         }
                     }
                     config.Settings = settingsList;
-                }
-
-                // Extraer información de SQL Connection
-                if (root.TryGetProperty("effectiveSqlConnection", out var sqlConn))
-                {
-                    if (sqlConn.TryGetProperty("key", out var connKey))
-                    {
-                        config.SqlConnectionStatus = connKey.GetString();
-                    }
                 }
 
                 return config;
@@ -220,6 +223,6 @@ public class FunctionsConfiguration
 {
     public string? Environment { get; set; }
     public string? TimestampUtc { get; set; }
-    public string? SqlConnectionStatus { get; set; }
+    public string? SqlConnectionString { get; set; }
     public Dictionary<string, string>? Settings { get; set; }
 }

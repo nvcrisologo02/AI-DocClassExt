@@ -182,11 +182,11 @@
                                                 <td class="text-end"><small><span class="badge bg-info">@_config.FunctionsConfiguration.Environment</span></small></td>
                                             </tr>
                                         }
-                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.SqlConnectionStatus))
+                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.SqlConnectionString))
                                         {
                                             <tr>
                                                 <td class="text-muted"><small>SQL Connection:</small></td>
-                                                <td class="text-end"><span class="badge bg-success"><small>@_config.FunctionsConfiguration.SqlConnectionStatus</small></span></td>
+                                                <td class="text-end"><small class="text-break"><code style="font-size: 0.7rem;">@_config.FunctionsConfiguration.SqlConnectionString</code></small></td>
                                             </tr>
                                         }
                                         @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.TimestampUtc))
