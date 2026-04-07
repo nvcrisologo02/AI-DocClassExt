@@ -77,6 +77,19 @@
     [Parameter]
     public bool ShowValidationMessage { get; set; } = true;
 
+    private string? _previousJsonContent;
+    private bool _editorInitialized = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Si el JSON cambió y el editor ya está inicializado, actualizar el editor
+        if (_editorInitialized && _previousJsonContent != JsonContent && !string.IsNullOrWhiteSpace(JsonContent))
+        {
+            await SetJsonAsync(JsonContent);
+        }
+        _previousJsonContent = JsonContent;
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -85,6 +98,7 @@
             {
                 // Acceder a window.jsonEditorInterop directamente (está definido como global en json-editor-interop.js)
                 await JS.InvokeVoidAsync("jsonEditorInterop.initEditor", EditorId, Mode, ReadOnly);
+                _editorInitialized = true;
                 
                 // Set initial JSON content if provided
                 if (!string.IsNullOrWhiteSpace(JsonContent))

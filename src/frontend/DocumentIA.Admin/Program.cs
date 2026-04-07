@@ -21,6 +21,8 @@ builder.Services.AddHttpClient<TipologiaAdminService>((serviceProvider, client) 
     }
 });
 
+builder.Services.AddScoped<SystemConfigService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
