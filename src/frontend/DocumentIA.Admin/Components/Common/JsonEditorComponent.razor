@@ -206,9 +206,13 @@
     {
         try
         {
-            var result = await JS.InvokeAsync<dynamic>("jsonEditorInterop.validateJson", EditorId);
-            JsonIsValid = (bool)result.valid;
-            ValidationError = JsonIsValid ? null : (string?)result.error;
+            // Usar una clase específica para recibir el resultado en lugar de dynamic
+            var result = await JS.InvokeAsync<JsonValidationResult>("jsonEditorInterop.validateJson", EditorId);
+            if (result != null)
+            {
+                JsonIsValid = result.Valid;
+                ValidationError = JsonIsValid ? null : result.Error;
+            }
             return JsonIsValid;
         }
         catch (Exception ex)
@@ -239,6 +243,15 @@
             JsonIsValid = false;
             ValidationError = ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Clase para representar el resultado de validación JSON desde JavaScript
+    /// </summary>
+    private class JsonValidationResult
+    {
+        public bool Valid { get; set; }
+        public string? Error { get; set; }
     }
 
     private async Task OnModeChanged(string newMode)
