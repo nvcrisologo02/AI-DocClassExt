@@ -1,0 +1,305 @@
+@page "/configuracion-consulta"
+@inject TipologiaAdminService AdminService
+@rendermode InteractiveServer
+
+<PageTitle>Consulta de Configuración del Sistema</PageTitle>
+
+<div class="container-fluid mt-4">
+    <h1>Consulta de Configuración del Sistema</h1>
+    <p class="text-muted">Vista consolidada del estado de configuración de tipologías, modelos y plugins.</p>
+
+    @if (_isLoading)
+    {
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Cargando...</span>
+        </div>
+    }
+    else if (_error && !string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="alert alert-danger" role="alert">
+            <h4 class="alert-heading">Error</h4>
+            <p>@_errorMessage</p>
+        </div>
+    }
+    else
+    {
+        <div class="row">
+            <!-- TIPOLOGÍAS -->
+            <div class="col-12 col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Tipologías</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (_tipologias != null && _tipologias.Count > 0)
+                        {
+                            <div class="row mb-3">
+                                <div class="col-4 text-center">
+                                    <div class="h3">@_tipologias.Count</div>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                                <div class="col-4 text-center">
+                                    <div class="h3">@(_tipologias.Count(t => t.Estado == EstadoTipologia.Draft))</div>
+                                    <small class="text-muted">Draft</small>
+                                </div>
+                                <div class="col-4 text-center">
+                                    <div class="h3">@(_tipologias.Count(t => t.Estado == EstadoTipologia.Published))</div>
+                                    <small class="text-muted">Publicadas</small>
+                                </div>
+                            </div>
+
+                            <div class="list-group">
+                                @foreach (var grupo in _tipologias.GroupBy(t => t.Estado))
+                                {
+                                    <div class="list-group-item">
+                                        <h6 class="mb-2">@grupo.Key</h6>
+                                        <ul class="small mb-0">
+                                            @foreach (var tipologia in grupo.Take(5))
+                                            {
+                                                <li>
+                                                    <strong>@tipologia.Codigo</strong> (v@tipologia.Version)
+                                                    @if (!tipologia.Activa)
+                                                    {
+                                                        <span class="badge bg-warning">Inactiva</span>
+                                                    }
+                                                </li>
+                                            }
+                                            @if (grupo.Count() > 5)
+                                            {
+                                                <li><em>... y @(grupo.Count() - 5) más</em></li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted">No hay tipologías configuradas.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- MODELOS -->
+            <div class="col-12 col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Modelos</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (_modelos != null && _modelos.Count > 0)
+                        {
+                            <div class="row mb-3">
+                                <div class="col-4 text-center">
+                                    <div class="h3">@_modelos.Count</div>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                                <div class="col-4 text-center">
+                                    <div class="h3">@(_modelos.Count(m => m.Activo))</div>
+                                    <small class="text-muted">Activos</small>
+                                </div>
+                                <div class="col-4 text-center">
+                                    <div class="h3">@(_modelos.Select(m => m.Tipo).Distinct().Count())</div>
+                                    <small class="text-muted">Tipos</small>
+                                </div>
+                            </div>
+
+                            <div class="list-group">
+                                @foreach (var grupo in _modelos.GroupBy(m => m.Tipo))
+                                {
+                                    <div class="list-group-item">
+                                        <h6 class="mb-2">@grupo.Key</h6>
+                                        <ul class="small mb-0">
+                                            @foreach (var modelo in grupo.Take(4))
+                                            {
+                                                <li>
+                                                    <strong>@modelo.Key</strong> (@modelo.Provider)
+                                                    @if (!modelo.Activo)
+                                                    {
+                                                        <span class="badge bg-secondary">Inactivo</span>
+                                                    }
+                                                </li>
+                                            }
+                                            @if (grupo.Count() > 4)
+                                            {
+                                                <li><em>... y @(grupo.Count() - 4) más</em></li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted">No hay modelos configurados.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- PLUGINS -->
+            <div class="col-12 col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">Plugins</h5>
+                    </div>
+                    <div class="card-body">
+                        @if (_plugins != null && _plugins.Count > 0)
+                        {
+                            <div class="row mb-3">
+                                <div class="col-4 text-center">
+                                    <div class="h3">@_plugins.Count</div>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                                <div class="col-4 text-center">
+                                    <div class="h3">@(_plugins.Count(p => p.Estado == EstadoPluginConfig.Published))</div>
+                                    <small class="text-muted">Publicados</small>
+                                </div>
+                                <div class="col-4 text-center">
+                                    <div class="h3">@(_plugins.Count(p => p.Estado == EstadoPluginConfig.Draft))</div>
+                                    <small class="text-muted">Draft</small>
+                                </div>
+                            </div>
+
+                            <div class="list-group">
+                                @foreach (var grupo in _plugins.GroupBy(p => p.Estado))
+                                {
+                                    <div class="list-group-item">
+                                        <h6 class="mb-2">@grupo.Key</h6>
+                                        <ul class="small mb-0">
+                                            @foreach (var plugin in grupo.Take(5))
+                                            {
+                                                <li>
+                                                    <strong>@plugin.TipologiaCodigo</strong>
+                                                    @if (plugin.PublicadaEn.HasValue)
+                                                    {
+                                                        <small class="text-muted">(@plugin.PublicadaEn.Value.ToString("g"))</small>
+                                                    }
+                                                </li>
+                                            }
+                                            @if (grupo.Count() > 5)
+                                            {
+                                                <li><em>... y @(grupo.Count() - 5) más</em></li>
+                                            }
+                                        </ul>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-muted">No hay configuraciones de plugins.</p>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <!-- INFORMACIÓN DEL SISTEMA -->
+            <div class="col-12 col-md-6 mb-3">
+                <div class="card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Información del Sistema</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm mb-0">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Última actualización</strong></td>
+                                    <td>@DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Total de configuraciones</strong></td>
+                                    <td>@((_tipologias?.Count ?? 0) + (_modelos?.Count ?? 0) + (_plugins?.Count ?? 0))</td>
+                                </tr>
+                                @if (_estadisticas != null)
+                                {
+                                    <tr>
+                                        <td><strong>Tipologías activas</strong></td>
+                                        <td>@_estadisticas.TipologiasActivas</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Modelos activos</strong></td>
+                                        <td>@_estadisticas.ModelosActivos</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Providers únicos</strong></td>
+                                        <td>@_estadisticas.ProvidersUnicos</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <button class="btn btn-outline-secondary" @onclick="ReloadAsync">
+                <span class="me-2">🔄</span> Actualizar
+            </button>
+        </div>
+    }
+</div>
+
+@code {
+    private IReadOnlyCollection<TipologiaEntity>? _tipologias;
+    private IReadOnlyCollection<ModeloConfigEntity>? _modelos;
+    private IReadOnlyCollection<PluginTipologiaConfigEntity>? _plugins;
+    private ConfiguracionEstadisticas? _estadisticas;
+    private bool _isLoading = true;
+    private bool _error = false;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _error = false;
+            _errorMessage = null;
+
+            // Cargar datos
+            _tipologias = await AdminService.GetTipologiasAsync();
+            
+            // Obtener modelos de todos los tipos
+            var modelosClasificacion = await AdminService.GetModelosByTipoAsync(TipoModelo.Clasificacion);
+            var modelosExtraccion = await AdminService.GetModelosByTipoAsync(TipoModelo.Extraccion);
+            var modelosPrompt = await AdminService.GetModelosByTipoAsync(TipoModelo.Prompt);
+            _modelos = modelosClasificacion
+                .Concat(modelosExtraccion)
+                .Concat(modelosPrompt)
+                .ToList();
+            
+            _plugins = await AdminService.GetPluginConfigsAsync();
+
+            // Calcular estadísticas
+            _estadisticas = new ConfiguracionEstadisticas
+            {
+                TipologiasActivas = _tipologias?.Count(t => t.Activa) ?? 0,
+                ModelosActivos = _modelos?.Count(m => m.Activo) ?? 0,
+                ProvidersUnicos = _modelos?.Select(m => m.Provider).Distinct().Count() ?? 0
+            };
+
+            _isLoading = false;
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _errorMessage = $"Error al cargar configuración: {ex.Message}";
+            _isLoading = false;
+        }
+    }
+
+    private class ConfiguracionEstadisticas
+    {
+        public int TipologiasActivas { get; set; }
+        public int ModelosActivos { get; set; }
+        public int ProvidersUnicos { get; set; }
+    }
+}

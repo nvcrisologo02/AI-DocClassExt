@@ -320,6 +320,23 @@ El script aplica en 3 bloques:
 > - `Classification__GptFallback__ApiKey`
 > - `GDC__Password`, `GDC__HttpBasicPassword`
 
+### 4.5.4 Revision obligatoria de Azure y Azure DevOps
+
+Esta revisión es el control mínimo para considerar un despliegue apto en entorno objetivo.
+El detalle operativo está en `docs/08_CHECKLISTS_DESPLIEGUE.md`.
+
+| Area | Punto de revision | Evidencia esperada |
+|------|-------------------|--------------------|
+| Azure DevOps | Service Connection `AI DocClassExt` valida y con permisos sobre `SRBRGDOCSAIPROD` | Service Connection en estado OK y SP con roles requeridos |
+| Azure DevOps | Pipeline ejecuta `Build` y `DeployFunctions` sin errores | Run en estado `Succeeded` |
+| Azure DevOps | Tareas post-deploy de app settings y smoke test ejecutadas | Logs de `AzureCLI@2` y `smoke-test-functions.ps1` |
+| Azure Platform | Recursos críticos disponibles (Function App, Storage, KV, DI, AppInsights) | Estado saludable en Portal/Azure CLI |
+| Seguridad | Managed Identity con RBAC mínimo necesario | Roles asignados en KV/Storage/AI (y SQL cuando aplique) |
+| Secretos | Key Vault con secretos requeridos y referencias en Function App resueltas | `verify-prod-prereqs.ps1` sin errores + settings `Resolved` |
+| Observabilidad | Sin regresión post deploy en AppInsights | Sin picos anómalos de excepciones/failures |
+
+> Alcance: este bloque se centra en revisión Azure/DevOps. La validación funcional de negocio se gestiona en el plan de pruebas.
+
 ---
 
 ## 4.6 Operaciones Frecuentes

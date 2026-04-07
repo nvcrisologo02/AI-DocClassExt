@@ -13,42 +13,45 @@
     <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
 }
 
-<EditForm Model="_model" OnValidSubmit="SaveAsync">
-    <div class="mb-3">
-        <label class="form-label">Tipo</label>
-        <InputSelect class="form-select" @bind-Value="_model.Tipo">
-            <option value="@TipoModelo.Clasificacion">Clasificación</option>
-            <option value="@TipoModelo.Extraccion">Extracción</option>
-            <option value="@TipoModelo.Prompt">Prompt</option>
-        </InputSelect>
-    </div>
+<div class="mb-3">
+    <label class="form-label">Tipo</label>
+    <InputSelect class="form-select" @bind-Value="_model.Tipo">
+        <option value="@TipoModelo.Clasificacion">Clasificación</option>
+        <option value="@TipoModelo.Extraccion">Extracción</option>
+        <option value="@TipoModelo.Prompt">Prompt</option>
+    </InputSelect>
+</div>
 
-    <div class="mb-3">
-        <label class="form-label">Key</label>
-        <InputText class="form-control" @bind-Value="_model.Key" />
-    </div>
+<div class="mb-3">
+    <label class="form-label">Key</label>
+    <InputText class="form-control" @bind-Value="_model.Key" />
+</div>
 
-    <div class="mb-3">
-        <label class="form-label">Provider</label>
-        <InputText class="form-control" @bind-Value="_model.Provider" />
-    </div>
+<div class="mb-3">
+    <label class="form-label">Provider</label>
+    <InputText class="form-control" @bind-Value="_model.Provider" />
+</div>
 
-    <div class="form-check mb-3">
-        <InputCheckbox class="form-check-input" @bind-Value="_model.Activo" />
-        <label class="form-check-label">Activo</label>
-    </div>
+<div class="form-check mb-3">
+    <InputCheckbox class="form-check-input" @bind-Value="_model.Activo" />
+    <label class="form-check-label">Activo</label>
+</div>
 
-    <div class="mb-3">
-        <label class="form-label">ConfiguracionJson</label>
-        <InputTextArea class="form-control" style="min-height: 260px;" @bind-Value="_model.ConfiguracionJson" />
-    </div>
+<div class="mb-3">
+    <label class="form-label">Configuración JSON</label>
+    <JsonEditorComponent 
+        @ref="_jsonEditor"
+        JsonContent="@_model.ConfiguracionJson"
+        Mode="form"
+        Height="450px"
+        SupportedModes="@(new List<string> { "tree", "form", "code" })" />
+</div>
 
-    <div class="mb-3">
-        <button class="btn btn-outline-primary" type="button" @onclick="ValidateJson">Validar JSON</button>
-        <button class="btn btn-primary ms-2" type="submit">Guardar</button>
-        <a class="btn btn-secondary ms-2" href="/modelos">Volver</a>
-    </div>
-</EditForm>
+<div class="mb-3">
+    <button class="btn btn-outline-primary" type="button" @onclick="ValidateJsonAsync">Validar JSON</button>
+    <button class="btn btn-primary ms-2" type="button" @onclick="SaveAsync">Guardar</button>
+    <a class="btn btn-secondary ms-2" href="/modelos">Volver</a>
+</div>
 
 @code {
     [Parameter] public int? Id { get; set; }
@@ -56,6 +59,7 @@
     private ModeloConfigEntity _model = new();
     private bool _error;
     private string? _message;
+    private JsonEditorComponent? _jsonEditor;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -69,22 +73,35 @@
         }
     }
 
-    private void ValidateJson()
+    private async Task ValidateJsonAsync()
     {
-        var errors = TipologiaAdminService.ValidarModeloConfigJson(_model.ConfiguracionJson ?? string.Empty);
-        if (errors.Count == 0)
+        if (_jsonEditor == null) return;
+
+        var isValid = await _jsonEditor.ValidateAsync();
+        if (isValid)
         {
             _error = false;
             _message = "Configuración válida.";
-            return;
         }
-
-        _error = true;
-        _message = string.Join("\n", errors);
+        else
+        {
+            _error = true;
+            _message = "El JSON contiene errores. Revisalo en el editor.";
+        }
     }
 
     private async Task SaveAsync()
     {
+        // Obtener JSON del editor
+        if (_jsonEditor != null)
+        {
+            var jsonFromEditor = await _jsonEditor.GetJsonAsync();
+            if (!string.IsNullOrWhiteSpace(jsonFromEditor))
+            {
+                _model.ConfiguracionJson = jsonFromEditor;
+            }
+        }
+
         var errors = TipologiaAdminService.ValidarModeloConfigJson(_model.ConfiguracionJson ?? string.Empty);
         if (errors.Count > 0)
         {
@@ -93,7 +110,15 @@
             return;
         }
 
-        await AdminService.SaveModeloAsync(_model);
-        Navigation.NavigateTo("/modelos");
+        try
+        {
+            await AdminService.SaveModeloAsync(_model);
+            Navigation.NavigateTo("/modelos");
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
     }
 }

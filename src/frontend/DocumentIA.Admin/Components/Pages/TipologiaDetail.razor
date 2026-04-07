@@ -17,19 +17,46 @@ else
         <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
     }
 
-    <dl class="row">
-        <dt class="col-sm-3">Codigo</dt>
-        <dd class="col-sm-9">@_tipologia.Codigo</dd>
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5 class="mb-0">Información General</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">Codigo</dt>
+                <dd class="col-sm-9">@_tipologia.Codigo</dd>
 
-        <dt class="col-sm-3">Version</dt>
-        <dd class="col-sm-9">@_tipologia.Version</dd>
+                <dt class="col-sm-3">Version</dt>
+                <dd class="col-sm-9">@_tipologia.Version</dd>
 
-        <dt class="col-sm-3">Estado</dt>
-        <dd class="col-sm-9">@_tipologia.Estado</dd>
+                <dt class="col-sm-3">Estado</dt>
+                <dd class="col-sm-9">@_tipologia.Estado</dd>
 
-        <dt class="col-sm-3">Publicada</dt>
-        <dd class="col-sm-9">@(_tipologia.PublicadaEn?.ToString("u") ?? "-")</dd>
-    </dl>
+                <dt class="col-sm-3">Publicada</dt>
+                <dd class="col-sm-9">@(_tipologia.PublicadaEn?.ToString("u") ?? "-")</dd>
+
+                <dt class="col-sm-3">Activa</dt>
+                <dd class="col-sm-9">@(_tipologia.Activa ? "Sí" : "No")</dd>
+            </dl>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_tipologia.ConfiguracionJson))
+    {
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Configuración JSON</h5>
+            </div>
+            <div class="card-body">
+                <JsonEditorComponent 
+                    JsonContent="@_tipologia.ConfiguracionJson"
+                    Mode="tree"
+                    ReadOnly="true"
+                    Height="450px"
+                    SupportedModes="@(new List<string> { "tree", "code", "preview" })" />
+            </div>
+        </div>
+    }
 
     <div class="mb-3">
         @if (_tipologia.Estado != EstadoTipologia.Draft)
