@@ -17,10 +17,11 @@ internal static class DocumentIntelligenceAuthHelper
 
     public static async Task ApplyAuthAsync(
         HttpRequestMessage request,
-        AzureDocumentIntelligenceClassificationSettings settings,
+        string authMode,
+        string apiKey,
         CancellationToken cancellationToken = default)
     {
-        if (string.Equals(settings.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(authMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
         {
             var credential = GetCredential();
             var tokenContext = new TokenRequestContext(Scopes);
@@ -29,7 +30,7 @@ internal static class DocumentIntelligenceAuthHelper
         }
         else
         {
-            request.Headers.Add("Ocp-Apim-Subscription-Key", settings.ApiKey);
+            request.Headers.Add("Ocp-Apim-Subscription-Key", apiKey);
         }
     }
 

@@ -15,4 +15,5 @@ public sealed record ResolvedTipologia(
     bool SkipGDCUpload = false,
     bool PromptEnabled = false,
     bool ExtractionEnabled = true,
-    ConfidenceConfig? ConfidenceConfig = null);
+    ConfidenceConfig? ConfidenceConfig = null,
+    string ExtractionProvider = "");

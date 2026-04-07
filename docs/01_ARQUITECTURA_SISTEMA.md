@@ -188,13 +188,33 @@ IClasificarDataProvider (interfaz)
 ```
 IExtraerDataProvider (interfaz)
   ├─ ConfigurableExtraerDataProvider (router)
-  │   ├─ AzureContentUnderstandingProvider
-  │   ├─ AzureDocumentIntelligenceExtraerDataProvider
-  │   ├─ GptFallbackExtraerDataProvider
-  │   └─ MockExtraerDataProvider
+  │   ├─ AzureContentUnderstandingProvider            ← provider = "azure-content-understanding"
+  │   ├─ AzureDocumentIntelligenceExtraerDataProvider ← provider = "azure-document-intelligence"
+  │   ├─ GptDirectExtraerDataProvider                 ← provider = "azure-openai" | "gpt" | "openai"
+  │   ├─ GptFallbackExtraerDataProvider               ← fallback automático cuando CU es insuficiente
+  │   └─ MockExtraerDataProvider                      ← provider = "mock"
+
+ILayoutMarkdownDataProvider (interfaz)
+  └─ AzureDocumentIntelligenceLayoutMarkdownProvider  ← provider = "azure-document-intelligence-layout"
 ```
 
-El proveedor se selecciona por `Extraction.DefaultProvider` / `Classification.DefaultProvider` en configuracion, pudiendo ser sobreescrito por las instrucciones de cada peticion.
+> El proveedor se resuelve por prioridad: instrucciones de la petición → campo `extraction.provider` de la tipología → `Extraction.DefaultProvider` de configuración global.
+> `GptDirectExtraerDataProvider` extrae directamente con OpenAI (sin CU previo), validando upfront que el modelo tiene endpoint, deployment y API key configurados.
+
+### 1.4.2a Patrón RegistryLoader — Configuración de Proveedores IA desde BD
+
+Todos los parámetros de conexión de los proveedores IA (**endpoint, apiKey, authMode, apiVersion**, etc.) se almacenan **exclusivamente en la tabla `ModeloConfigs` de BD**. No hay ninguna clave de configuración en `appsettings` ni en `local.settings.json` para estos parámetros.
+
+Cada tipo de modelo tiene su propio loader que hereda de `ModelRegistryLoader<TConfig>`:
+
+| Loader | Tipo modelo | Configuración cargada |
+|--------|-------------|----------------------|
+| `ClassificationModelRegistryLoader` | `TipoModelo.Clasificacion` | `ClassificationModelConfig` |
+| `ExtractionModelRegistryLoader` | `TipoModelo.Extraccion` | `ExtractionModelConfig` |
+| `PromptModelRegistryLoader` | `TipoModelo.Prompt` | `PromptModelConfig` |
+| `LayoutModelRegistryLoader` | `TipoModelo.Layout` | `LayoutModelConfig` |
+
+Los proveedores reciben el loader por inyección de dependencias y obtienen el modelo con `GetModel(key)` o `GetDefaultModel()`. El seed inicial se carga desde los archivos `config/{tipo}/models.json` al arrancar la Function App (solo si no existen ya en BD).
 
 ### 1.4.3 Repository Pattern
 

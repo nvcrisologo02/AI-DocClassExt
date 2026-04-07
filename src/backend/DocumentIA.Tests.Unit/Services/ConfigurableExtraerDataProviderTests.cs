@@ -36,6 +36,59 @@ public class ConfigurableExtraerDataProviderTests
                 It.IsAny<string?>(),
                 It.IsAny<CancellationToken>()),
             Times.Never);
+
+        fixture.DirectGptProvider.Verify(
+            p => p.ObtenerDatosAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ObtenerDatosAsync_GptDirecto_UsaProveedorDirectoSinFallback()
+    {
+        using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true, extractionProvider: "azure-openai");
+
+        fixture.DirectGptProvider
+            .Setup(p => p.ObtenerDatosAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-direct",
+                DatosExtraidos = new Dictionary<string, object>
+                {
+                    ["CampoA"] = "valor"
+                }
+            });
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        result.Proveedor.Should().Be("azure-openai");
+
+        fixture.DirectGptProvider.Verify(
+            p => p.ObtenerDatosAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+
+        fixture.GptProvider.Verify(
+            p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        fixture.AzureProvider.Verify(
+            p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()),
+            Times.Never);
     }
 
     [Fact]
@@ -164,14 +217,15 @@ public class ConfigurableExtraerDataProviderTests
         private readonly string _tipologiaId;
 
         public Mock<AzureContentUnderstandingProvider> AzureProvider { get; }
+        public Mock<GptDirectExtraerDataProvider> DirectGptProvider { get; }
         public Mock<GptFallbackExtraerDataProvider> GptProvider { get; }
         public Mock<ILogger<ConfigurableExtraerDataProvider>> Logger { get; }
 
         private readonly TipologiaConfigLoader _tipologiaConfigLoader;
+        private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
         private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
         private readonly MockExtraerDataProvider _mockProvider;
         private readonly ExtractionRoutingSettings _routingSettings;
-        private readonly GptFallbackExtraerSettings _fallbackSettings;
 
         private TestFixture(string tempDir, string tipologiaId, double minFieldsRatio, bool fallbackEnabled)
         {
@@ -179,54 +233,117 @@ public class ConfigurableExtraerDataProviderTests
             _tipologiaId = tipologiaId;
 
             _tipologiaConfigLoader = new TipologiaConfigLoader(_tempDir);
+            var extractionRegistryPath = Path.Combine(_tempDir, "extraction.models.json");
+            var extractionRegistry = fallbackEnabled
+                ? new
+                {
+                    models = new object[]
+                    {
+                        new
+                        {
+                            key = "default.cu",
+                            provider = "azure-content-understanding",
+                            isDefault = true,
+                            endpoint = "https://example.cu.azure.com",
+                            apiKey = "test",
+                            authMode = "ApiKey",
+                            analyzerId = "analyzer-default",
+                            processingLocation = "global",
+                            minFieldsRatio = minFieldsRatio
+                        },
+                        new
+                        {
+                            key = "direct.gpt",
+                            provider = "azure-openai",
+                            endpoint = "https://example.openai.azure.com",
+                            apiKey = "test",
+                            authMode = "ApiKey",
+                            deploymentName = "deployment-direct",
+                            minFieldsRatio = minFieldsRatio,
+                            temperature = 0.0,
+                            maxTokens = 256,
+                            timeoutSeconds = 20
+                        },
+                        new
+                        {
+                            key = "fallback.gpt",
+                            provider = "azure-openai",
+                            useAsFallback = true,
+                            endpoint = "https://example.openai.azure.com",
+                            apiKey = "test",
+                            authMode = "ApiKey",
+                            deploymentName = "deployment-test",
+                            minFieldsRatio = minFieldsRatio,
+                            temperature = 0.0,
+                            maxTokens = 256,
+                            timeoutSeconds = 20
+                        }
+                    }
+                }
+                : new
+                {
+                    models = new object[]
+                    {
+                        new
+                        {
+                            key = "default.cu",
+                            provider = "azure-content-understanding",
+                            isDefault = true,
+                            endpoint = "https://example.cu.azure.com",
+                            apiKey = "test",
+                            authMode = "ApiKey",
+                            analyzerId = "analyzer-default",
+                            processingLocation = "global",
+                            minFieldsRatio = minFieldsRatio
+                        },
+                        new
+                        {
+                            key = "direct.gpt",
+                            provider = "azure-openai",
+                            endpoint = "https://example.openai.azure.com",
+                            apiKey = "test",
+                            authMode = "ApiKey",
+                            deploymentName = "deployment-direct",
+                            minFieldsRatio = minFieldsRatio,
+                            temperature = 0.0,
+                            maxTokens = 256,
+                            timeoutSeconds = 20
+                        }
+                    }
+                };
+            File.WriteAllText(extractionRegistryPath, JsonSerializer.Serialize(extractionRegistry));
+            _extractionModelRegistryLoader = new ExtractionModelRegistryLoader(extractionRegistryPath);
+
             var promptRegistryPath = Path.Combine(_tempDir, "prompt.models.json");
             File.WriteAllText(promptRegistryPath, "{\"models\":[]}");
             _promptModelRegistryLoader = new PromptModelRegistryLoader(promptRegistryPath);
             _mockProvider = new MockExtraerDataProvider();
 
-            var dummyRegistry = new ExtractionModelRegistryLoader(Path.Combine(_tempDir, "models.json"));
             var mapper = new ContentUnderstandingResultMapper();
-
-            var azureSettings = Options.Create(new AzureContentUnderstandingSettings
-            {
-                Endpoint = "https://example.cognitiveservices.azure.com",
-                ApiKey = "test",
-                AuthMode = "ApiKey",
-                DefaultProcessingLocation = "global"
-            });
 
             AzureProvider = new Mock<AzureContentUnderstandingProvider>(
                 MockBehavior.Strict,
                 new Mock<ILogger<AzureContentUnderstandingProvider>>().Object,
                 _tipologiaConfigLoader,
-                dummyRegistry,
-                mapper,
-                azureSettings);
-
-            var gptSettings = Options.Create(new GptFallbackExtraerSettings
-            {
-                Enabled = fallbackEnabled,
-                Endpoint = "https://example.openai.azure.com",
-                ApiKey = "test",
-                AuthMode = "ApiKey",
-                DeploymentName = "deployment-test",
-                MinFieldsRatio = minFieldsRatio,
-                Temperature = 0,
-                MaxTokens = 256,
-                TimeoutSeconds = 20
-            });
+                _extractionModelRegistryLoader,
+                mapper);
 
             GptProvider = new Mock<GptFallbackExtraerDataProvider>(
                 MockBehavior.Strict,
-                gptSettings,
+                _extractionModelRegistryLoader,
                 new Mock<ILogger<GptFallbackExtraerDataProvider>>().Object);
 
+            DirectGptProvider = new Mock<GptDirectExtraerDataProvider>(
+                MockBehavior.Strict,
+                GptProvider.Object,
+                _extractionModelRegistryLoader,
+                new Mock<ILogger<GptDirectExtraerDataProvider>>().Object);
+
             _routingSettings = new ExtractionRoutingSettings { DefaultProvider = "azure-content-understanding" };
-            _fallbackSettings = gptSettings.Value;
             Logger = new Mock<ILogger<ConfigurableExtraerDataProvider>>();
         }
 
-        public static TestFixture Create(double minFieldsRatio, bool fallbackEnabled, bool extractionEnabled = true)
+        public static TestFixture Create(double minFieldsRatio, bool fallbackEnabled, bool extractionEnabled = true, string extractionProvider = "azure-content-understanding")
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "DocumentIA.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
@@ -243,8 +360,8 @@ public class ConfigurableExtraerDataProviderTests
                 extraction = new
                 {
                     enabled = extractionEnabled,
-                    provider = "azure-content-understanding",
-                    modelKey = "default",
+                    provider = extractionProvider,
+                    modelKey = extractionProvider == "azure-openai" ? "direct.gpt" : "default.cu",
                     autoMapUnmappedFields = true,
                     fieldMappings = Array.Empty<object>()
                 },
@@ -267,10 +384,11 @@ public class ConfigurableExtraerDataProviderTests
                 _mockProvider,
                 AzureProvider.Object,
                 null!,  // diExtraerProvider — no usado en estos tests (ruta CU/GPT)
+                DirectGptProvider.Object,
                 GptProvider.Object,
+                _extractionModelRegistryLoader,
                 _promptModelRegistryLoader,
                 Options.Create(_routingSettings),
-                Options.Create(_fallbackSettings),
                 Logger.Object);
 
         public ExtraccionInput CreateInput() => new()

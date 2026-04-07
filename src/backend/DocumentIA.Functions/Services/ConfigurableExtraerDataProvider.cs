@@ -14,10 +14,11 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private readonly MockExtraerDataProvider _mockProvider;
     private readonly AzureContentUnderstandingProvider _azureProvider;
     private readonly AzureDocumentIntelligenceExtraerDataProvider _diExtraerProvider;
+    private readonly GptDirectExtraerDataProvider _gptDirectProvider;
     private readonly GptFallbackExtraerDataProvider _gptFallbackProvider;
+    private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
     private readonly ExtractionRoutingSettings _routingSettings;
-    private readonly GptFallbackExtraerSettings _fallbackSettings;
     private readonly ILogger<ConfigurableExtraerDataProvider> _logger;
 
     public ConfigurableExtraerDataProvider(
@@ -25,20 +26,22 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         MockExtraerDataProvider mockProvider,
         AzureContentUnderstandingProvider azureProvider,
         AzureDocumentIntelligenceExtraerDataProvider diExtraerProvider,
+        GptDirectExtraerDataProvider gptDirectProvider,
         GptFallbackExtraerDataProvider gptFallbackProvider,
+        ExtractionModelRegistryLoader extractionModelRegistryLoader,
         PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<ExtractionRoutingSettings> routingSettings,
-        IOptions<GptFallbackExtraerSettings> fallbackSettings,
         ILogger<ConfigurableExtraerDataProvider> logger)
     {
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _mockProvider = mockProvider;
         _azureProvider = azureProvider;
         _diExtraerProvider = diExtraerProvider;
+        _gptDirectProvider = gptDirectProvider;
         _gptFallbackProvider = gptFallbackProvider;
+        _extractionModelRegistryLoader = extractionModelRegistryLoader;
         _promptModelRegistryLoader = promptModelRegistryLoader;
         _routingSettings = routingSettings.Value;
-        _fallbackSettings = fallbackSettings.Value;
         _logger = logger;
     }
 
@@ -67,9 +70,12 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
                 ? _routingSettings.DefaultProvider
                 : config.Extraction.Provider;
 
+        var fallbackEnabled = TryResolveFallbackModel(out var fallbackModel);
+        var minFieldsRatio = fallbackModel?.MinFieldsRatio ?? 0.5;
+
         _logger.LogInformation("Proveedor de extracción resuelto para tipología {Tipologia}: {Provider}", input.Tipologia, provider);
 
-        if (!IsAzureContentUnderstandingProvider(provider) || !_fallbackSettings.Enabled)
+        if (!IsAzureContentUnderstandingProvider(provider) || !fallbackEnabled)
         {
             return provider.ToLowerInvariant() switch
             {
@@ -77,6 +83,8 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
                     => await _azureProvider.ObtenerDatosAsync(input, cancellationToken),
                 "azure-document-intelligence" or "azure-di" or "di"
                     => await _diExtraerProvider.ObtenerDatosAsync(input, cancellationToken),
+                "azure-openai" or "openai" or "gpt"
+                    => await _gptDirectProvider.ObtenerDatosAsync(input, config, cancellationToken),
                 "mock" => await _mockProvider.ObtenerDatosAsync(input, cancellationToken),
                 _ => throw new NotSupportedException($"Proveedor de extracción '{provider}' no soportado para tipología '{input.Tipologia}'")
             };
@@ -100,7 +108,8 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
                 out var esperados,
                 out var obtenidosEsperados,
                 out var umbralCompletitud,
-                out var umbralConfianza))
+                out var umbralConfianza,
+                minFieldsRatio))
             {
                 return resultadoCu;
             }
@@ -131,10 +140,11 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         }
 
         ExtraccionResultado resultadoGpt;
+        var promptConfig = config.PromptConfig;
 
         // Optimización: si prompt está habilitado y usa el mismo modelo/deployment que el fallback,
         // se ejecuta extracción + prompt en una única llamada LLM.
-        if (DebeUsarModoCombinado(config))
+        if (promptConfig is not null && DebeUsarModoCombinado(config))
         {
             _logger.LogInformation(
                 "Activando modo combinado fallback+prompt para tipología {Tipologia}.",
@@ -143,7 +153,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             resultadoGpt = await _gptFallbackProvider.ObtenerDatosConFallbackYPromptAsync(
                 input,
                 config,
-                config.PromptConfig!,
+                promptConfig,
                 resultadoCu?.MarkdownExtraido,
                 cancellationToken);
         }
@@ -154,15 +164,16 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
                 config,
                 resultadoCu?.MarkdownExtraido,
                 cancellationToken);
+
+            var paginasCu = resultadoCu?.Paginas ?? 0;
+            if (resultadoGpt.Paginas <= 0 && paginasCu > 0)
+            {
+                resultadoGpt.Paginas = paginasCu;
+            }
         }
 
         resultadoGpt.FallbackUsado = true;
         resultadoGpt.FallbackRazon = fallbackRazon;
-
-        if (resultadoGpt.Paginas <= 0 && resultadoCu?.Paginas > 0)
-        {
-            resultadoGpt.Paginas = resultadoCu.Paginas;
-        }
 
         return resultadoGpt;
     }
@@ -178,7 +189,8 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         out int esperados,
         out int obtenidosEsperados,
         out double umbralCompletitud,
-        out double umbralConfianza)
+        out double umbralConfianza,
+        double minFieldsRatio)
     {
         var confidenceConfig = config.ConfidenceConfig;
 
@@ -203,11 +215,11 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             umbralCompletitud = umbralFallbackCompletitudRequest
                 ?? confidenceConfig?.ExtracUmbralFallbackCompletitud
                 ?? umbralLegado
-                ?? _fallbackSettings.MinFieldsRatio;
+                ?? minFieldsRatio;
             umbralConfianza = umbralFallbackConfianzaRequest
                 ?? confidenceConfig?.ExtracUmbralFallbackConfianza
                 ?? umbralLegado
-                ?? _fallbackSettings.MinFieldsRatio;
+                ?? minFieldsRatio;
 
             return true;
         }
@@ -225,11 +237,11 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         umbralCompletitud = umbralFallbackCompletitudRequest
             ?? confidenceConfig?.ExtracUmbralFallbackCompletitud
             ?? umbralLegado
-            ?? _fallbackSettings.MinFieldsRatio;
+            ?? minFieldsRatio;
         umbralConfianza = umbralFallbackConfianzaRequest
             ?? confidenceConfig?.ExtracUmbralFallbackConfianza
             ?? umbralLegado
-            ?? _fallbackSettings.MinFieldsRatio;
+            ?? minFieldsRatio;
 
         return ratioCompletitud >= umbralCompletitud && confianzaCu >= umbralConfianza;
     }
@@ -239,13 +251,18 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
 
     private bool DebeUsarModoCombinado(TipologiaValidationConfig config)
     {
+        if (!TryResolveFallbackModel(out var fallbackModel) || string.IsNullOrWhiteSpace(fallbackModel?.DeploymentName))
+        {
+            return false;
+        }
+
         var prompt = config.PromptConfig;
         if (prompt == null || !prompt.Enabled)
         {
             return false;
         }
 
-        if (string.IsNullOrWhiteSpace(prompt.ModelKey) || string.IsNullOrWhiteSpace(_fallbackSettings.DeploymentName))
+        if (string.IsNullOrWhiteSpace(prompt.ModelKey))
         {
             return false;
         }
@@ -265,7 +282,21 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
 
         return string.Equals(
             promptModel.DeploymentName,
-            _fallbackSettings.DeploymentName,
+            fallbackModel!.DeploymentName,
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool TryResolveFallbackModel(out ExtractionModelConfig? model)
+    {
+        try
+        {
+            model = _extractionModelRegistryLoader.GetFallbackModel();
+            return true;
+        }
+        catch (KeyNotFoundException)
+        {
+            model = null;
+            return false;
+        }
     }
 }
