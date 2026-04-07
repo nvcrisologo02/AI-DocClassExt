@@ -38,14 +38,18 @@ public class SystemConfigService
         // Obtener configuración de Functions
         var functionsConfig = await GetFunctionsConfigurationAsync();
 
+        // Zona horaria de España
+        var spainTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Romance Standard Time");
+        var spainTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, spainTimeZone);
+
         return new SystemConfiguration
         {
             // Información general
             Environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
             DotNetVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             OS = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
-            TimeZone = TimeZoneInfo.Local.DisplayName,
-            Timestamp = DateTime.UtcNow,
+            TimeZone = spainTimeZone.DisplayName,
+            Timestamp = spainTime,
 
             // Configuración de APIs
             FunctionsBaseUrl = _configuration["FunctionsAdminApi:BaseUrl"] ?? string.Empty,
@@ -130,6 +134,7 @@ public class SystemConfigService
                 
                 var config = new FunctionsConfiguration
                 {
+                    // Obtener environment de Functions (no del Admin)
                     Environment = root.TryGetProperty("environment", out var env) ? env.GetString() : null,
                     TimestampUtc = root.TryGetProperty("timestampUtc", out var ts) ? ts.GetString() : null,
                 };
@@ -140,7 +145,8 @@ public class SystemConfigService
                     if (sqlConn.TryGetProperty("value", out var connValue))
                     {
                         var connStr = connValue.GetString();
-                        if (!string.IsNullOrWhiteSpace(connStr) && !connStr.Contains("***"))
+                        // Solo mostrar si no está masked
+                        if (!string.IsNullOrWhiteSpace(connStr) && !connStr.Equals("***", StringComparison.OrdinalIgnoreCase))
                         {
                             config.SqlConnectionString = connStr;
                         }
@@ -150,7 +156,7 @@ public class SystemConfigService
                 // Extraer información de configuración
                 if (root.TryGetProperty("settings", out var settings))
                 {
-                    var settingsList = new Dictionary<string, string>();
+                    var settingsList = new List<string>();
                     foreach (var setting in settings.EnumerateArray())
                     {
                         if (setting.TryGetProperty("key", out var key) && setting.TryGetProperty("value", out var value))
@@ -158,16 +164,17 @@ public class SystemConfigService
                             var keyStr = key.GetString() ?? "";
                             var valueStr = value.GetString() ?? "";
                             
-                            // Filtrar solo configuración relevante (no secrets)
+                            // Filtrar solo configuración relevante (no secrets ni valores vacíos/masked)
                             if (!keyStr.Contains("Password") && !keyStr.Contains("Key") && 
-                                !valueStr.Contains("***") && !string.IsNullOrWhiteSpace(valueStr) && 
-                                valueStr != "(empty)")
+                                !valueStr.Equals("***", StringComparison.OrdinalIgnoreCase) && 
+                                !string.IsNullOrWhiteSpace(valueStr) && 
+                                !valueStr.Equals("(empty)", StringComparison.OrdinalIgnoreCase))
                             {
-                                settingsList.TryAdd(keyStr, valueStr);
+                                settingsList.Add($"{keyStr}: {valueStr}");
                             }
                         }
                     }
-                    config.Settings = settingsList;
+                    config.SettingsList = settingsList;
                 }
 
                 return config;
@@ -224,5 +231,5 @@ public class FunctionsConfiguration
     public string? Environment { get; set; }
     public string? TimestampUtc { get; set; }
     public string? SqlConnectionString { get; set; }
-    public Dictionary<string, string>? Settings { get; set; }
+    public List<string>? SettingsList { get; set; }
 }
