@@ -97,12 +97,7 @@ public class SystemConfigService
             if (response.IsSuccessStatusCode)
             {
                 var jsonContent = await response.Content.ReadAsStringAsync();
-                var config = JsonSerializer.Deserialize<dynamic>(jsonContent, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-                
-                if (config != null)
-                {
-                    return ParseFunctionsConfiguration(jsonContent);
-                }
+                return ParseFunctionsConfiguration(jsonContent);
             }
             else
             {

@@ -88,6 +88,18 @@
                             <dt class="col-8">Providers Únicos:</dt>
                             <dd class="col-4 text-end"><span class="badge bg-info">@_config.ProvidersUsados.Count</span></dd>
                         </dl>
+                        @if (_config.ProvidersUsados.Any())
+                        {
+                            <div class="mt-2 pt-2 border-top">
+                                <small class="text-muted d-block mb-2"><strong>Providers Configurados:</strong></small>
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var provider in _config.ProvidersUsados)
+                                    {
+                                        <span class="badge bg-secondary">@provider</span>
+                                    }
+                                </div>
+                            </div>
+                        }
                     </div>
                 </div>
             </div>
@@ -100,17 +112,21 @@
                     </div>
                     <div class="card-body">
                         <div class="row text-center mb-3">
-                            <div class="col-4">
+                            <div class="col-3">
                                 <div class="h4 text-warning">@_config.PluginsTotal</div>
                                 <small class="text-muted">Total</small>
                             </div>
-                            <div class="col-4">
+                            <div class="col-3">
                                 <div class="h4 text-success">@_config.PluginsPublished</div>
                                 <small class="text-muted">Publicados</small>
                             </div>
-                            <div class="col-4">
+                            <div class="col-3">
                                 <div class="h4 text-info">@_config.PluginsDraft</div>
                                 <small class="text-muted">Draft</small>
+                            </div>
+                            <div class="col-3">
+                                <div class="h4 text-danger">@_config.PluginsRetired</div>
+                                <small class="text-muted">Retirados</small>
                             </div>
                         </div>
                         <dl class="row small mb-0">
