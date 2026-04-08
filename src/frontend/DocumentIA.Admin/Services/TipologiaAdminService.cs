@@ -81,7 +81,22 @@ public class TipologiaAdminService
 
     public async Task<IReadOnlyCollection<ModeloConfigEntity>> GetModelosByTipoAsync(TipoModelo tipo)
     {
-        return await GetRequiredAsync<List<ModeloConfigEntity>>($"management/modelos/{ToTipoSegment(tipo)}") ?? [];
+        try
+        {
+            var list = await GetRequiredAsync<List<ModeloConfigEntity>>($"management/modelos/{ToTipoSegment(tipo)}");
+            return (IReadOnlyCollection<ModeloConfigEntity>)(list ?? new List<ModeloConfigEntity>());
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Backend may reject unknown tipo values (e.g. layout) with a clear message.
+            // In that case, return an empty collection so the UI remains functional.
+            if (ex.Message?.Contains("Tipo de modelo invalido") == true || ex.Message?.Contains("Valores:") == true)
+            {
+                return Array.Empty<ModeloConfigEntity>();
+            }
+
+            throw;
+        }
     }
 
     public async Task<ModeloConfigEntity?> GetModeloByIdAsync(int id)
@@ -243,6 +258,7 @@ public class TipologiaAdminService
         TipoModelo.Clasificacion => "clasificacion",
         TipoModelo.Extraccion => "extraccion",
         TipoModelo.Prompt => "prompt",
+        TipoModelo.Layout => "layout",
         _ => throw new ArgumentOutOfRangeException(nameof(tipo), tipo, null)
     };
 

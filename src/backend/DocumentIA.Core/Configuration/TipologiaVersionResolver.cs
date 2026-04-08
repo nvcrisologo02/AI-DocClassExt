@@ -176,7 +176,8 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 SkipGDCUpload: config.SkipGDCUpload,
                 PromptEnabled: config.PromptConfig?.Enabled == true,
                 ExtractionEnabled: config.Extraction.Enabled,
-                ConfidenceConfig: config.ConfidenceConfig);
+                ConfidenceConfig: config.ConfidenceConfig,
+                ExtractionProvider: config.Extraction.Provider ?? string.Empty);
 
             byTechnicalKey[technicalKey] = resolved;
 
@@ -236,7 +237,8 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 SkipGDCUpload: config.SkipGDCUpload,
                 PromptEnabled: config.PromptConfig?.Enabled == true,
                 ExtractionEnabled: config.Extraction.Enabled,
-                ConfidenceConfig: config.ConfidenceConfig);
+                ConfidenceConfig: config.ConfidenceConfig,
+                ExtractionProvider: config.Extraction.Provider ?? string.Empty);
 
             byTechnicalKey[technicalKey] = resolved;
 

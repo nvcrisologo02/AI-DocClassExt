@@ -87,7 +87,7 @@ El archivo `local.settings.json` ya viene configurado para desarrollo local con 
 | `Classification:DefaultProvider` | `azure-document-intelligence` |
 | `Extraction:DefaultProvider` | `azure-content-understanding` |
 
-**API Keys de AI**: Completar con las claves de los servicios Azure AI correspondientes. Consultar con el equipo.
+**Parámetros de los proveedores AI** (endpoints, API keys, versiones API): se cargan automáticamente desde la base de datos en la primera ejecución. La semilla inicial se encuentra en los ficheros `config/classification/models.json`, `config/extraction/models.json`, `config/prompt/models.json` y `config/layout/models.json`. Para entornos de producción, modificar los valores en esos ficheros antes del primer arranque, o editarlos desde la interfaz web de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración (`/modelos`) una vez que la app esté corriendo.
 
 ### Paso 5: Compilar plugins de enriquecimiento
 
@@ -177,34 +177,10 @@ dotnet run --launch-profile http
 | `AzureStorageConnectionString` | string | Connection string Storage para documentos (blobs) | Si |
 | `RunDatabaseMigrationsOnStartup` | bool | Aplicar migraciones EF Core al iniciar | Si |
 | **Clasificacion** | | | |
-| `Classification:DefaultProvider` | string | Proveedor: `azure-document-intelligence` / `mock` | Si |
-| `Classification:DefaultModelKey` | string | Clave del modelo DI en el registro (`default.azure-di`) | Si |
-| `Classification:AzureDocumentIntelligence:Endpoint` | string | URL del recurso Document Intelligence | Si* |
-| `Classification:AzureDocumentIntelligence:ApiKey` | string | API Key de Document Intelligence | Si* |
-| `Classification:AzureDocumentIntelligence:AuthMode` | string | `ApiKey` / `DefaultAzureCredential` | Si |
-| `Classification:AzureDocumentIntelligence:ApiVersion` | string | Version API DI (`2024-11-30`) | Si |
-| `Classification:GptFallback:Enabled` | bool | Habilitar fallback GPT para clasificacion | No |
-| `Classification:GptFallback:Endpoint` | string | URL Azure OpenAI | Cond. |
-| `Classification:GptFallback:ApiKey` | string | API Key Azure OpenAI | Cond. |
-| `Classification:GptFallback:DeploymentName` | string | Deployment GPT (`gpt-4o-mini`) | Cond. |
-| `Classification:GptFallback:FallbackThreshold` | double | Umbral confianza DI para activar fallback (0.0-1.0) | No |
-| `Classification:GptFallback:Temperature` | double | Temperatura GPT (0.0 recomendado) | No |
-| `Classification:GptFallback:MaxTokens` | int | Max tokens respuesta GPT | No |
-| `Classification:GptFallback:TimeoutSeconds` | int | Timeout GPT en segundos | No |
+| `Classification:DefaultProvider` | string | Proveedor por defecto: `azure-document-intelligence` / `mock` | Si |
+| `Classification:DefaultModelKey` | string | Clave del modelo en la tabla `ModeloConfigs` (`default.azure-di`) | Si |
 | **Extraccion** | | | |
-| `Extraction:DefaultProvider` | string | Proveedor: `azure-content-understanding` / `mock` | Si |
-| `Extraction:AzureContentUnderstanding:Endpoint` | string | URL Content Understanding | Si* |
-| `Extraction:AzureContentUnderstanding:ApiKey` | string | API Key CU | Si* |
-| `Extraction:AzureContentUnderstanding:AuthMode` | string | `ApiKey` / `DefaultAzureCredential` | Si |
-| `Extraction:AzureContentUnderstanding:DefaultProcessingLocation` | string | `geography` / `global` | No |
-| `Extraction:GptFallback:Enabled` | bool | Habilitar fallback GPT para extraccion | No |
-| `Extraction:GptFallback:Endpoint` | string | URL Azure OpenAI | Cond. |
-| `Extraction:GptFallback:ApiKey` | string | API Key Azure OpenAI | Cond. |
-| `Extraction:GptFallback:DeploymentName` | string | Deployment GPT | Cond. |
-| `Extraction:GptFallback:MinFieldsRatio` | double | Ratio minimo de campos para NO activar fallback (0.0-1.0) | No |
-| `Extraction:GptFallback:Temperature` | double | Temperatura GPT | No |
-| `Extraction:GptFallback:MaxTokens` | int | Max tokens respuesta GPT | No |
-| `Extraction:GptFallback:TimeoutSeconds` | int | Timeout GPT | No |
+| `Extraction:DefaultProvider` | string | Proveedor por defecto: `azure-content-understanding` / `azure-openai` / `azure-document-intelligence` / `mock` | Si |
 | **GDC** | | | |
 | `GDC:Endpoint` | string | URL del servicio SOAP GDC SINTWS | Si |
 | `GDC:TimeoutSeconds` | int | Timeout GDC en segundos | Si |
@@ -223,8 +199,7 @@ dotnet run --launch-profile http
 | `GDC:ProcesoCarga` | string | Codigo proceso de carga | Si |
 | `GDC:Publico` | string | Visibilidad documento (`verdadero`/`falso`) | Si |
 
-> **Si***: Requerido cuando el provider no es `mock`.  
-> **Cond.**: Requerido cuando el fallback correspondiente esta habilitado (`Enabled=true`).
+> **Nota**: Endpoint, ApiKey, AuthMode, ApiVersion y demás parámetros de cada proveedor AI (Document Intelligence clasificador/extractor, Azure Content Understanding, Azure OpenAI GPT) se almacenan **exclusivamente en la base de datos**, en la tabla `ModeloConfigs`. Se gestionan desde la interfaz web de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración en `/modelos` o mediante los ficheros seed en `config/classification/models.json`, `config/extraction/models.json`, `config/prompt/models.json` y `config/layout/models.json`. No requieren variables de entorno adicionales.
 
 ### 4.4.2 host.json (Configuracion del Runtime)
 
@@ -314,11 +289,9 @@ El script aplica en 3 bloques:
 
 > **IMPORTANTE**: Cuando Key Vault este disponible, migrar los siguientes secretos:
 > - `SqlConnectionString`
-> - `Extraction__AzureContentUnderstanding__ApiKey`
-> - `Extraction__GptFallback__ApiKey`
-> - `Classification__AzureDocumentIntelligence__ApiKey`
-> - `Classification__GptFallback__ApiKey`
 > - `GDC__Password`, `GDC__HttpBasicPassword`
+>
+> Las API Keys de servicios AI (Document Intelligence, Content Understanding, Azure OpenAI) se gestionan en la base de datos dentro de `ModeloConfigs.ConfiguracionJson`. Si se desea centralizarlas en Key Vault, usar referencias KV (`@Microsoft.KeyVault(...)`) en los campos `apiKey` de cada modelo via la interfaz de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración.
 
 ### 4.5.4 Revision obligatoria de Azure y Azure DevOps
 
@@ -541,13 +514,17 @@ Las claves estan en Application Settings de la Function App. No hay Key Vault co
 
 ## 4.10 Gestion de Tipologias sin Cambiar Codigo
 
-### Paso 1: Crear archivos de configuracion
+> **Importante:** Los archivos JSON en `config/tipologias/` son solo fuente de **seed inicial**. En tiempo de ejecucion, la Function App lee toda la configuracion desde base de datos. Para gestionar tipologias en produccion, usar siempre la Admin API.
+
+### Paso 1: Crear la configuracion JSON (seed o como referencia)
 
 ```
 config/tipologias/
-  mi-nueva-tipologia.validation.json    # Reglas de validacion
+  mi-nueva-tipologia.validation.json    # Reglas de validacion (seed o referencia)
   mi-nueva-tipologia.plugins.json       # Plugins de integracion (opcional)
 ```
+
+> Si la Function App arranca con estos archivos presentes y sin registro previo en BD, `ConfigurationSeedService` los insertar automaticamente. Para entornos donde ya existe la BD, usar directamente el Paso 2.
 
 ### Paso 2: Registrar tipologia via API Admin
 

@@ -8,23 +8,24 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
 
 public class GptFallbackExtraerDataProvider
 {
-    private readonly GptFallbackExtraerSettings _settings;
+    private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly ILogger<GptFallbackExtraerDataProvider> _logger;
+    private readonly Lazy<ExtractionModelConfig> _fallbackModel;
     private readonly Lazy<ChatClient> _chatClient;
 
     public GptFallbackExtraerDataProvider(
-        IOptions<GptFallbackExtraerSettings> settings,
+        ExtractionModelRegistryLoader modelRegistryLoader,
         ILogger<GptFallbackExtraerDataProvider> logger)
     {
-        _settings = settings.Value;
+        _modelRegistryLoader = modelRegistryLoader;
         _logger = logger;
+        _fallbackModel = new Lazy<ExtractionModelConfig>(ResolveFallbackModel);
         _chatClient = new Lazy<ChatClient>(CreateChatClient);
     }
 
@@ -35,11 +36,12 @@ public class GptFallbackExtraerDataProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
+        var model = _fallbackModel.Value;
 
         _logger.LogInformation(
             "Iniciando fallback GPT para extracción. Tipología={Tipologia}, Deployment={Deployment}",
             input.Tipologia,
-            _settings.DeploymentName);
+            model.DeploymentName);
 
         var systemMessage = new SystemChatMessage(
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
@@ -82,12 +84,12 @@ public class GptFallbackExtraerDataProvider
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)_settings.Temperature,
-            MaxOutputTokenCount = _settings.MaxTokens
+            Temperature = (float)model.Temperature,
+            MaxOutputTokenCount = model.MaxTokens
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
 
         var response = await _chatClient.Value.CompleteChatAsync(
             new List<ChatMessage> { systemMessage, userMessage },
@@ -127,7 +129,7 @@ public class GptFallbackExtraerDataProvider
         return new ExtraccionResultado
         {
             Proveedor = "azure-openai",
-            Modelo = _settings.DeploymentName,
+            Modelo = model.DeploymentName,
             LayoutEnabled = false,
             FallbackUsado = true,
             ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada,
@@ -135,6 +137,111 @@ public class GptFallbackExtraerDataProvider
             TiemposMs = new Dictionary<string, int>
             {
                 ["gpt-fallback"] = (int)stopwatch.ElapsedMilliseconds
+            },
+            MetricasDebug = metricasDebug,
+            DatosExtraidos = datos
+        };
+    }
+
+    public virtual async Task<ExtraccionResultado> ObtenerDatosConModeloAsync(
+        ExtraccionInput input,
+        TipologiaValidationConfig tipologiaConfig,
+        string modelKey,
+        string? markdownContexto,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var model = ResolveModel(modelKey);
+        var chatClient = CreateChatClient(model);
+
+        var systemMessage = new SystemChatMessage(
+            "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
+            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
+            "'campos_extraidos' (objeto con los campos extraídos, null para no encontrados), " +
+            "'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción), " +
+            "'confianza_por_campo' (objeto con confianza 0..1 por cada campo extraído). " +
+            "Para cada campo se indican el tipo esperado, si es obligatorio y las reglas de validación " +
+            "(formatos permitidos, patrones, valores de enumeración, rangos numéricos). " +
+            "Respeta estrictamente esas reglas al extraer el valor de cada campo. " +
+            "Usa null para campos no encontrados.");
+
+        var fieldList = BuildFieldList(tipologiaConfig);
+        var userPrompt =
+            $"Tipo de documento: {tipologiaConfig.TipologiaId} ({tipologiaConfig.TipologiaNombre})\n\n" +
+            "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
+            "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
+            fieldList;
+
+        var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
+            ? ObtenerContextoTexto(input.DatosNormalizados)
+            : markdownContexto;
+
+        var userMessage = !string.IsNullOrWhiteSpace(contextoTexto)
+            ? new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(
+                    $"{userPrompt}\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}"))
+            : new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(
+                    $"{userPrompt}\n\nNo hay contenido textual disponible. " +
+                    $"Nombre de archivo: {input.Entrada.Documento.Name}."));
+
+        var options = new ChatCompletionOptions
+        {
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
+            Temperature = (float)model.Temperature,
+            MaxOutputTokenCount = model.MaxTokens
+        };
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
+
+        var response = await chatClient.CompleteChatAsync(
+            new List<ChatMessage> { systemMessage, userMessage },
+            options,
+            cts.Token);
+
+        stopwatch.Stop();
+
+        var responseText = response.Value.Content[0].Text;
+
+        using var responseDoc = JsonDocument.Parse(responseText);
+        var root = responseDoc.RootElement;
+
+        Dictionary<string, object> datos;
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("campos_extraidos", out var camposElement))
+        {
+            datos = ParseExtractedFields(camposElement, tipologiaConfig);
+        }
+        else
+        {
+            datos = ParseJsonObjectResponse(responseText, tipologiaConfig);
+        }
+
+        var confianzaPorCampo = root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("confianza_por_campo", out var confidenceElement)
+            ? ParseFieldConfidenceMap(confidenceElement, tipologiaConfig)
+            : null;
+
+        var confianzaExtraccionGpt = root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("confianza_extraccion", out var ceElement)
+            && ceElement.TryGetDouble(out var ceVal)
+            ? (double?)Math.Clamp(ceVal, 0.0, 1.0)
+            : null;
+
+        var (confianzaCalculada, metricasDebug) = BuildFallbackMetricas(input, tipologiaConfig, datos, confianzaPorCampo);
+
+        return new ExtraccionResultado
+        {
+            Proveedor = "azure-openai",
+            Modelo = model.DeploymentName,
+            LayoutEnabled = false,
+            FallbackUsado = false,
+            FallbackRazon = null,
+            ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada,
+            ProveedorExtrac = "GPT4oMini",
+            TiemposMs = new Dictionary<string, int>
+            {
+                ["gpt-direct"] = (int)stopwatch.ElapsedMilliseconds
             },
             MetricasDebug = metricasDebug,
             DatosExtraidos = datos
@@ -154,11 +261,12 @@ public class GptFallbackExtraerDataProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
+        var model = _fallbackModel.Value;
 
         _logger.LogInformation(
             "Iniciando fallback GPT (modo combinado con prompt) para tipología={Tipologia}, Deployment={Deployment}",
             input.Tipologia,
-            _settings.DeploymentName);
+            model.DeploymentName);
 
         var combinedSystemPrompt =
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
@@ -220,12 +328,12 @@ public class GptFallbackExtraerDataProvider
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)_settings.Temperature,
-            MaxOutputTokenCount = _settings.MaxTokens
+            Temperature = (float)model.Temperature,
+            MaxOutputTokenCount = model.MaxTokens
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
 
         var response = await _chatClient.Value.CompleteChatAsync(
             new List<ChatMessage> { systemMessage, userMessage },
@@ -279,7 +387,7 @@ public class GptFallbackExtraerDataProvider
         return new ExtraccionResultado
         {
             Proveedor = "azure-openai",
-            Modelo = _settings.DeploymentName,
+            Modelo = model.DeploymentName,
             LayoutEnabled = false,
             FallbackUsado = true,
             ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada,
@@ -323,7 +431,7 @@ public class GptFallbackExtraerDataProvider
 
         var umbralDuda = input.UmbralFallbackEfectivo
             ?? tipologiaConfig.ConfidenceConfig?.ExtracUmbralFallback
-            ?? _settings.MinFieldsRatio;
+            ?? _fallbackModel.Value.MinFieldsRatio;
 
         metricas.CamposBajaConfianza = metricas.ConfianzaPorCampo
             .Where(kvp => kvp.Value < umbralDuda)
@@ -648,34 +756,100 @@ public class GptFallbackExtraerDataProvider
 
     private ChatClient CreateChatClient()
     {
-        if (string.IsNullOrWhiteSpace(_settings.Endpoint))
+        var model = _fallbackModel.Value;
+
+        return CreateChatClient(model);
+    }
+
+    private ChatClient CreateChatClient(ExtractionModelConfig model)
+    {
+
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
         {
-            throw new InvalidOperationException("Extraction:GptFallback:Endpoint es obligatorio cuando el fallback está habilitado.");
+            throw new InvalidOperationException($"ExtractionModelConfig.Endpoint es obligatorio para el modelo de fallback '{model.Key}'.");
         }
 
-        if (string.IsNullOrWhiteSpace(_settings.DeploymentName))
+        if (string.IsNullOrWhiteSpace(model.DeploymentName))
         {
-            throw new InvalidOperationException("Extraction:GptFallback:DeploymentName es obligatorio cuando el fallback está habilitado.");
+            throw new InvalidOperationException($"ExtractionModelConfig.DeploymentName es obligatorio para el modelo de fallback '{model.Key}'.");
         }
 
         AzureOpenAIClient azureClient;
 
-        if (string.Equals(_settings.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
         {
-            azureClient = new AzureOpenAIClient(new Uri(_settings.Endpoint), new DefaultAzureCredential());
+            azureClient = new AzureOpenAIClient(new Uri(model.Endpoint), new DefaultAzureCredential());
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+            if (string.IsNullOrWhiteSpace(model.ApiKey))
             {
-                throw new InvalidOperationException("Extraction:GptFallback:ApiKey es obligatorio cuando AuthMode=ApiKey.");
+                throw new InvalidOperationException($"ExtractionModelConfig.ApiKey es obligatorio para el modelo de fallback '{model.Key}' cuando AuthMode=ApiKey.");
             }
 
             azureClient = new AzureOpenAIClient(
-                new Uri(_settings.Endpoint),
-                new AzureKeyCredential(_settings.ApiKey));
+                new Uri(model.Endpoint),
+                new AzureKeyCredential(model.ApiKey));
         }
 
-        return azureClient.GetChatClient(_settings.DeploymentName);
+        return azureClient.GetChatClient(model.DeploymentName);
     }
+
+    public virtual ExtractionModelConfig ResolveModel(string modelKey)
+    {
+        if (string.IsNullOrWhiteSpace(modelKey))
+        {
+            throw new InvalidOperationException("El modelKey de extracción GPT directa es obligatorio.");
+        }
+
+        var model = _modelRegistryLoader.GetModel(modelKey);
+        if (!IsAzureOpenAiProvider(model.Provider))
+        {
+            throw new InvalidOperationException(
+                $"El modelo de extracción '{model.Key}' debe ser de provider Azure OpenAI. Provider actual: '{model.Provider}'.");
+        }
+
+        ValidateModelConfiguration(model);
+        return model;
+    }
+
+    /// <summary>
+    /// Valida que la configuración del modelo OpenAI sea completa (endpoint, apikey si es necesario, deployment).
+    /// </summary>
+    private void ValidateModelConfiguration(ExtractionModelConfig model)
+    {
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
+        {
+            throw new InvalidOperationException(
+                $"Extracción GPT: modelo '{model.Key}' requiere Endpoint configurado. Verifica la configuración de '{model.Key}' en appsettings/KeyVault.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.DeploymentName))
+        {
+            throw new InvalidOperationException(
+                $"Extracción GPT: modelo '{model.Key}' requiere DeploymentName configurado. Verifica la configuración de '{model.Key}' en appsettings/KeyVault.");
+        }
+
+        if (!string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(model.ApiKey))
+        {
+            throw new InvalidOperationException(
+                $"Extracción GPT: modelo '{model.Key}' requiere ApiKey configurada cuando AuthMode={model.AuthMode}. Verifica la configuración en appsettings/KeyVault (ej: Extraction:GptFallback:ApiKey).");
+        }
+    }
+
+    private ExtractionModelConfig ResolveFallbackModel()
+    {
+        var model = _modelRegistryLoader.GetFallbackModel();
+        if (!IsAzureOpenAiProvider(model.Provider))
+        {
+            throw new InvalidOperationException(
+                $"El modelo de fallback de extracción '{model.Key}' debe ser de provider Azure OpenAI. Provider actual: '{model.Provider}'.");
+        }
+
+        return model;
+    }
+
+    private static bool IsAzureOpenAiProvider(string provider) =>
+        provider.ToLowerInvariant() is "azure-openai" or "gpt" or "openai";
 }

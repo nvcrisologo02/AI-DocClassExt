@@ -34,6 +34,7 @@ public class SystemConfigService
         modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Clasificacion));
         modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Extraccion));
         modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Prompt));
+        modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Layout));
 
         // Obtener configuración de Functions
         var functionsConfig = await GetFunctionsConfigurationAsync();
@@ -67,6 +68,7 @@ public class SystemConfigService
             ModelosClasificacion = modelos.Count(m => m.Tipo == TipoModelo.Clasificacion),
             ModelosExtraccion = modelos.Count(m => m.Tipo == TipoModelo.Extraccion),
             ModelosPrompt = modelos.Count(m => m.Tipo == TipoModelo.Prompt),
+            ModelosLayout = modelos.Count(m => m.Tipo == TipoModelo.Layout),
 
             PluginsTotal = plugins.Count,
             PluginsDraft = plugins.Count(p => p.Estado == EstadoPluginConfig.Draft),
@@ -214,6 +216,7 @@ public class SystemConfiguration
     public int ModelosClasificacion { get; set; }
     public int ModelosExtraccion { get; set; }
     public int ModelosPrompt { get; set; }
+    public int ModelosLayout { get; set; }
 
     // Plugins
     public int PluginsTotal { get; set; }

@@ -326,9 +326,11 @@
             var modelosClasificacion = await AdminService.GetModelosByTipoAsync(TipoModelo.Clasificacion);
             var modelosExtraccion = await AdminService.GetModelosByTipoAsync(TipoModelo.Extraccion);
             var modelosPrompt = await AdminService.GetModelosByTipoAsync(TipoModelo.Prompt);
+            var modelosLayout = await AdminService.GetModelosByTipoAsync(TipoModelo.Layout);
             _modelos = modelosClasificacion
                 .Concat(modelosExtraccion)
                 .Concat(modelosPrompt)
+                .Concat(modelosLayout)
                 .ToList();
             
             _plugins = await AdminService.GetPluginConfigsAsync();

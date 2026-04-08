@@ -1,0 +1,15 @@
+{
+  "models": [
+    {
+      "key": "layout.prebuilt-layout",
+      "provider": "azure-document-intelligence-layout",
+      "isDefault": true,
+      "endpoint": "https://srbdiprodocai.cognitiveservices.azure.com/",
+      "apiKey": "",
+      "authMode": "DefaultAzureCredential",
+      "apiVersion": "2024-11-30",
+      "timeoutSeconds": 120,
+      "pollIntervalMs": 1000
+    }
+  ]
+}
