@@ -518,16 +518,67 @@ public class DocumentProcessOrchestrator
                 };
             }
 
-            salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
-
-            // Propagar markdown extraído a datosNormalizados para fallbacks
-            if (resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownExtraido) 
-                && markdownExtraido is string markdown 
-                && !string.IsNullOrWhiteSpace(markdown))
+            var markdownNormalizacion = resultadoExtraccion.MarkdownExtraido;
+            if (string.IsNullOrWhiteSpace(markdownNormalizacion)
+                && resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownExtraido)
+                && markdownExtraido is string markdownDetectado
+                && !string.IsNullOrWhiteSpace(markdownDetectado))
             {
-                datosNormalizados["Markdown"] = markdown;
-                logger.LogInformation("Markdown de extracción propagado a datosNormalizados ({Length} caracteres)", markdown.Length);
+                markdownNormalizacion = markdownDetectado;
             }
+
+            if (!string.IsNullOrWhiteSpace(markdownNormalizacion))
+            {
+                datosNormalizados["Markdown"] = markdownNormalizacion;
+                logger.LogInformation(
+                    "Markdown de extracción preparado para normalización y fallbacks ({Length} caracteres)",
+                    markdownNormalizacion.Length);
+            }
+            else
+            {
+                try
+                {
+                    logger.LogInformation(
+                        "No se recibió markdown del provider de extracción. Intentando fallback DI layout para tipología {Tipologia}.",
+                        salida.Identificacion.Tipologia);
+
+                    var markdownLayout = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                        "ExtraerMarkdownLayoutActivity",
+                        new ExtraerMarkdownLayoutInput
+                        {
+                            Tipologia = salida.Identificacion.Tipologia,
+                            DocumentoBase64 = entrada.Documento.Content.Base64,
+                            NombreDocumento = entrada.Documento.Name
+                        });
+
+                    if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
+                    {
+                        markdownNormalizacion = markdownLayout.Markdown;
+                        resultadoExtraccion.MarkdownExtraido = markdownLayout.Markdown;
+                        datosNormalizados["Markdown"] = markdownLayout.Markdown;
+
+                        logger.LogInformation(
+                            "Markdown obtenido vía fallback DI layout ({Length} caracteres)",
+                            markdownLayout.Markdown.Length);
+                    }
+
+                    if (salida.Identificacion.Paginas <= 0 && markdownLayout.Paginas > 0)
+                    {
+                        salida.Identificacion.Paginas = markdownLayout.Paginas;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "No se pudo obtener markdown vía DI layout para tipología {Tipologia}. Se continúa sin markdown.",
+                        salida.Identificacion.Tipologia);
+                }
+            }
+
+            // El markdown no debe formar parte de DatosExtraidos de salida.
+            resultadoExtraccion.DatosExtraidos.Remove("Markdown");
+            salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
 
             // Prioridad para páginas:
             // 1) valor explícito devuelto por el proveedor de extracción
@@ -583,55 +634,9 @@ public class DocumentProcessOrchestrator
             if (tipologiaResuelta.PromptEnabled)
             {
                 var markdownParaPrompt = resultadoExtraccion.MarkdownExtraido;
-                if (string.IsNullOrWhiteSpace(markdownParaPrompt)
-                    && resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownDesdeDatos)
-                    && markdownDesdeDatos is string markdownDetectado
-                    && !string.IsNullOrWhiteSpace(markdownDetectado))
+                if (string.IsNullOrWhiteSpace(markdownParaPrompt) && !string.IsNullOrWhiteSpace(markdownNormalizacion))
                 {
-                    markdownParaPrompt = markdownDetectado;
-                }
-
-                if (!tipologiaResuelta.ExtractionEnabled && string.IsNullOrWhiteSpace(markdownParaPrompt))
-                {
-                    logger.LogInformation(
-                        "Paso 4.4: Tipología {Tipologia} sin extracción. Obteniendo markdown con DI layout antes del prompt.",
-                        salida.Identificacion.Tipologia);
-
-                    try
-                    {
-                        var markdownLayout = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                            "ExtraerMarkdownLayoutActivity",
-                            new ExtraerMarkdownLayoutInput
-                            {
-                                Tipologia = salida.Identificacion.Tipologia,
-                                DocumentoBase64 = entrada.Documento.Content.Base64,
-                                NombreDocumento = entrada.Documento.Name
-                            });
-
-                        if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
-                        {
-                            markdownParaPrompt = markdownLayout.Markdown;
-                            resultadoExtraccion.MarkdownExtraido = markdownLayout.Markdown;
-                            resultadoExtraccion.DatosExtraidos["Markdown"] = markdownLayout.Markdown;
-                            datosNormalizados["Markdown"] = markdownLayout.Markdown;
-
-                            logger.LogInformation(
-                                "Markdown DI layout preparado para prompt ({Length} caracteres)",
-                                markdownLayout.Markdown.Length);
-                        }
-
-                        if (salida.Identificacion.Paginas <= 0 && markdownLayout.Paginas > 0)
-                        {
-                            salida.Identificacion.Paginas = markdownLayout.Paginas;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(
-                            ex,
-                            "No se pudo extraer markdown DI layout para tipología {Tipologia}. Se continúa con prompt sin markdown.",
-                            salida.Identificacion.Tipologia);
-                    }
+                    markdownParaPrompt = markdownNormalizacion;
                 }
 
                 logger.LogInformation("Paso 4.5: Ejecutando prompt libre de tipología");
@@ -694,6 +699,7 @@ public class DocumentProcessOrchestrator
                 { 
                     $"Aplicadas {resultadoValidacion.ReglasAplicadas} reglas de validacion"
                 },
+                Markdown = string.IsNullOrWhiteSpace(markdownNormalizacion) ? null : markdownNormalizacion,
                 Validaciones = resultadoValidacion.Validaciones
                     .Where(v => v.Severidad == "Warning" || v.Severidad == "Info")
                     .Select(v => $"[{v.Severidad}] {v.Campo}: {v.Mensaje}")
@@ -710,6 +716,11 @@ public class DocumentProcessOrchestrator
             // Agregar metadata de validacion
             salida.DetalleEjecucion.Postproceso.Normalizaciones.Add(
                 $"Confianza de validacion: {confianzaValidacionRedondeada:P0}");
+
+            if (!string.IsNullOrWhiteSpace(salida.DetalleEjecucion.Postproceso.Markdown))
+            {
+                salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+            }
             
             if (resultadoValidacion.Errores > 0)
             {

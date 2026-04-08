@@ -577,6 +577,11 @@ public class GptFallbackExtraerDataProvider
         var requerido = field.Required ? " [REQUERIDO]" : "";
         sb.AppendLine($"{indent}- {field.Name}: tipo={field.Type}{requerido}");
 
+        if (!string.IsNullOrWhiteSpace(field.Description))
+        {
+            sb.AppendLine($"{indent}    -> descripción: {field.Description.Trim()}");
+        }
+
         foreach (var rule in field.Rules)
         {
             var hint = BuildRuleHint(rule);

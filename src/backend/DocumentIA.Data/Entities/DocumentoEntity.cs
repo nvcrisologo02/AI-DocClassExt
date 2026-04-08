@@ -44,6 +44,9 @@ public class DocumentoEntity
     [MaxLength(500)]
     public string? RutaBlobStorage { get; set; }
 
+    [Column(TypeName = "nvarchar(max)")]
+    public string? NormalizacionMarkdownCompressed { get; set; }
+
     // Trazabilidad
     [Required]
     [MaxLength(100)]

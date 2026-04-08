@@ -579,12 +579,7 @@ namespace DocumentIA.Desktop.ViewModels
 
         private ProcessingRequest BuildRequest(string documentName, string documentBase64)
         {
-            string? expectedType = SelectedClassificationType switch
-            {
-                "nota-simple@1.4" => "nota-simple@1.4",
-                "resumen-documental" => "resumen-documental",
-                _ => null // auto
-            };
+            var expectedType = BuildExpectedTypeFromSelectedTipologia(SelectedClassificationType);
 
             var classificationThreshold = ParseThresholdOrDefault(ClassificationThreshold, DefaultClassificationThreshold);
             var extractionThreshold = ParseThresholdOrDefault(ExtractionThreshold, DefaultExtractionThreshold);
@@ -726,6 +721,20 @@ namespace DocumentIA.Desktop.ViewModels
             }
 
             return value.Trim();
+        }
+
+        private static string? BuildExpectedTypeFromSelectedTipologia(string? selectedIdentifier)
+        {
+            var normalized = NormalizeOptionalText(selectedIdentifier, "auto");
+            if (string.IsNullOrWhiteSpace(normalized)
+                || string.Equals(normalized, "auto", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            // Preservar exactamente el identificador seleccionado para permitir forzar versión
+            // desde instrucciones (ej: "familia@version" o "codigo@version").
+            return normalized;
         }
 
         private async Task PollStatusAsync(string statusUri)

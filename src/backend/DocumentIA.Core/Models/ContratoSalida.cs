@@ -126,6 +126,7 @@ public class ResultadoExtraccion
 public class InformacionPostproceso
 {
     public List<string> Normalizaciones { get; set; } = new();
+    public string? Markdown { get; set; }
     public List<string> Validaciones { get; set; } = new();
     public List<string> Inconsistencias { get; set; } = new();
     /// <summary>Confianza de validación calculada por el motor de reglas (1 - errores/reglasRequeridas).</summary>

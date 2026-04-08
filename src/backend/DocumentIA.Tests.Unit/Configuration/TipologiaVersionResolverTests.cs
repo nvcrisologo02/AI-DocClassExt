@@ -60,6 +60,20 @@ public class TipologiaVersionResolverTests : IDisposable
     }
 
     [Fact]
+    public void Resolve_WithTechnicalKeyAndVersionSuffix_ReturnsTechnicalKeyMatch()
+    {
+        WriteValidationConfig("IBI_1.1.validation.json", "IBI", "1.1", true);
+
+        var sut = new TipologiaVersionResolver(_tempDirectory);
+
+        var result = sut.Resolve("IBI_1.1@1.1");
+
+        result.TechnicalKey.Should().Be("IBI_1.1");
+        result.TipologiaId.Should().Be("IBI");
+        result.Version.Should().Be("1.1");
+    }
+
+    [Fact]
     public void Resolve_WithoutDefaultAndMultipleVersions_Throws()
     {
         WriteValidationConfig("nota.simple.1_3.validation.json", "nota-simple", "1.3", false);

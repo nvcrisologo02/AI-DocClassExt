@@ -53,6 +53,19 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                     $"El formato de tipologia '{normalizedInput}' es invalido. Use 'familia' o 'familia@version'.");
             }
 
+            // Compatibilidad con entradas híbridas provenientes de algunos clientes/modelos,
+            // por ejemplo: "IBI_1.1@1.1" (technicalKey@version).
+            if (index.ByTechnicalKey.TryGetValue(family, out var technicalMatch))
+            {
+                if (string.Equals(technicalMatch.Version, version, StringComparison.OrdinalIgnoreCase))
+                {
+                    return technicalMatch with { RequestedValue = normalizedInput };
+                }
+
+                throw new KeyNotFoundException(
+                    $"La version '{version}' no coincide con la tipologia tecnica '{family}' (version esperada '{technicalMatch.Version}').");
+            }
+
             if (!index.ByFamily.TryGetValue(family, out var entries))
             {
                 throw new KeyNotFoundException($"No existe la tipologia '{family}'.");
