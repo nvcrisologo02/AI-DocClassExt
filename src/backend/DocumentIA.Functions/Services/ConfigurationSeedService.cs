@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
@@ -119,6 +120,20 @@ public static class ConfigurationSeedService
             }
         }
 
+        var layoutPath = Path.Combine(configRootPath, "layout", "models.json");
+        if (File.Exists(layoutPath))
+        {
+            var json = await File.ReadAllTextAsync(layoutPath);
+            var registry = JsonSerializer.Deserialize<LayoutModelRegistry>(json, options);
+            if (registry is not null)
+            {
+                foreach (var model in registry.Models)
+                {
+                    await UpsertModeloAsync(dbContext, TipoModelo.Layout, model.Key, model.Provider, JsonSerializer.Serialize(model));
+                }
+            }
+        }
+
         await dbContext.SaveChangesAsync();
     }
 
@@ -145,14 +160,81 @@ public static class ConfigurationSeedService
             return;
         }
 
-        if (string.IsNullOrWhiteSpace(existing.ConfiguracionJson))
+        var mergedConfigJson = string.IsNullOrWhiteSpace(existing.ConfiguracionJson)
+            ? configJson
+            : MergeMissingJsonProperties(existing.ConfiguracionJson, configJson);
+
+        var changed = false;
+
+        if (existing.Tipo != tipo)
         {
             existing.Tipo = tipo;
+            changed = true;
+        }
+
+        if (!string.Equals(existing.Provider, provider, StringComparison.Ordinal))
+        {
             existing.Provider = provider;
+            changed = true;
+        }
+
+        if (!existing.Activo)
+        {
             existing.Activo = true;
-            existing.ConfiguracionJson = configJson;
+            changed = true;
+        }
+
+        if (!string.Equals(existing.ConfiguracionJson, mergedConfigJson, StringComparison.Ordinal))
+        {
+            existing.ConfiguracionJson = mergedConfigJson;
+            changed = true;
+        }
+
+        if (changed)
+        {
             existing.FechaActualizacion = DateTime.UtcNow;
         }
+    }
+
+    private static string MergeMissingJsonProperties(string currentJson, string seedJson)
+    {
+        var currentNode = JsonNode.Parse(currentJson) as JsonObject ?? new JsonObject();
+        var seedNode = JsonNode.Parse(seedJson) as JsonObject ?? new JsonObject();
+
+        MergeObjects(currentNode, seedNode);
+        return currentNode.ToJsonString();
+    }
+
+    private static void MergeObjects(JsonObject target, JsonObject source)
+    {
+        foreach (var property in source)
+        {
+            if (!target.TryGetPropertyValue(property.Key, out var currentValue) || IsNullOrWhiteSpaceValue(currentValue))
+            {
+                target[property.Key] = property.Value?.DeepClone();
+                continue;
+            }
+
+            if (currentValue is JsonObject currentObject && property.Value is JsonObject sourceObject)
+            {
+                MergeObjects(currentObject, sourceObject);
+            }
+        }
+    }
+
+    private static bool IsNullOrWhiteSpaceValue(JsonNode? node)
+    {
+        if (node is null)
+        {
+            return true;
+        }
+
+        if (node is JsonValue value && value.TryGetValue<string>(out var stringValue))
+        {
+            return string.IsNullOrWhiteSpace(stringValue);
+        }
+
+        return false;
     }
 
     private static async Task SeedPluginsAsync(DocumentIADbContext dbContext, ILogger logger, string tipologiasPath)

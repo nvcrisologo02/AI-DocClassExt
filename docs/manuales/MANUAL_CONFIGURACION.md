@@ -86,7 +86,7 @@ Sección raíz: `Extraction`
 
 | Clave | Clase | Valores | Descripción |
 |---|---|---|---|
-| `Extraction:DefaultProvider` | `ExtractionRoutingSettings` | `azure-content-understanding` \| `mock` | Proveedor activo de extracción. |
+| `Extraction:DefaultProvider` | `ExtractionRoutingSettings` | `azure-content-understanding` \| `azure-openai` \| `azure-document-intelligence` \| `mock` | Proveedor activo de extracción global. Puede ser sobreescrito por la configuración de cada tipología (`extraction.provider` en el JSON de validación / BD). |
 
 ### 5.2 Azure Content Understanding
 
@@ -99,13 +99,15 @@ Sección: `Extraction:AzureContentUnderstanding`
 | `AuthMode` | string | `ApiKey` \| `DefaultAzureCredential` | `ApiKey` |
 | `DefaultProcessingLocation` | string | `global` \| `geography` | `global` |
 
-### 5.3 GPT Fallback de Extracción
+### 5.3 GPT Fallback de Extracción / Extracción GPT directa
 
 Sección: `Extraction:GptFallback`
 
+> Esta sección configura **tanto el fallback GPT** (CU→GPT cuando la completitud/confianza no supera el umbral) **como el proveedor GPT directo** (`azure-openai`). Ambos modos comparten el registro de modelos (`ModelosConfig` en BD / `extraction-models.json`) y los mismos parámetros de conexión.
+
 | Clave | Tipo | Descripción | Default |
 |---|---|---|---|
-| `Enabled` | bool | Activa el fallback GPT cuando CU no supera el umbral. | `false` |
+| `Enabled` | bool | Activa el fallback GPT cuando CU no supera el umbral. No afecta al proveedor directo `azure-openai` (que siempre se activa si así está configurado en la tipología). | `false` |
 | `Endpoint` | string | URL Azure OpenAI. | — |
 | `ApiKey` | string | API Key Azure OpenAI. | — |
 | `AuthMode` | string | `ApiKey` \| `DefaultAzureCredential` | `ApiKey` |
@@ -115,7 +117,26 @@ Sección: `Extraction:GptFallback`
 | `MaxTokens` | int | Máximo tokens en respuesta GPT. | `2000` |
 | `TimeoutSeconds` | int | Timeout de la llamada GPT. | `60` |
 
-### 5.4 Jerarquía de umbrales de fallback CU→GPT
+### 5.4 Modos de extracción GPT
+
+El sistema dispone de **dos modos distintos** de extracción basada en GPT:
+
+| Modo | Activación | `FallbackUsado` en salida | Descripción |
+|---|---|---|---|
+| **Directo** (`azure-openai`) | Tipología tiene `extraction.provider = azure-openai` | `false` | GPT extrae directamente sin pasar por CU. Útil para tipologías donde CU no tiene analizador entrenado. |
+| **Fallback** (CU→GPT) | Tipología usa CU pero completitud/confianza no supera umbral | `true` | GPT complementa la extracción cuando CU es insuficiente. |
+
+**Validación temprana (modo directo):** Al iniciarse, se valida que el modelo esté completamente configurado (endpoint, deployment, API key si no usa Managed Identity). Un error en esta validación aparece como `InvalidOperationException` con un mensaje que indica exactamente qué clave de configuración falta, p. ej.:
+```
+Extracción GPT: modelo 'default.gpt4o-mini_ex' requiere ApiKey configurada cuando AuthMode=ApiKey.
+Verifica la configuración en appsettings/KeyVault (ej: Extraction:GptFallback:ApiKey).
+```
+
+**Markdown en modo directo:** El proveedor directo intenta obtener el markdown del documento desde `DatosNormalizados` (si viene de un paso previo). Si no está disponible, GPT extrae con el mínimo contexto disponible (nombre del archivo). Para obtener mejores resultados con tipologías de extracción directa, asegurarse de que el pipeline no omite la clasificación o que el markdown ya viene en los datos de entrada.
+
+### 5.5 Jerarquía de umbrales de fallback CU→GPT
+
+> Esta jerarquía solo aplica al modo **fallback** (CU→GPT). El modo directo (`azure-openai`) no participa en esta lógica.
 
 El sistema evalúa dos criterios independientes para decidir si la extracción CU es suficiente:
 

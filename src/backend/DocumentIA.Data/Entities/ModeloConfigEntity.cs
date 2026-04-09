@@ -7,7 +7,8 @@ public enum TipoModelo
 {
     Clasificacion = 0,
     Extraccion = 1,
-    Prompt = 2
+    Prompt = 2,
+    Layout = 3
 }
 
 [Table("ModeloConfigs")]

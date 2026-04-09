@@ -132,7 +132,7 @@ flowchart TB
 |-------|---------|
 | **Actor principal** | Administrador |
 | **Endpoints** | `GET /management/modelos/{tipo}`, `POST /management/modelos`, `PUT .../modelos/{id}`, `DELETE .../modelos/{id}` |
-| **Tipos** | Clasificacion, Extraccion, Prompt |
+| **Tipos** | Clasificacion, Extraccion, Prompt, Layout |
 | **Datos** | Key unica, provider, modelo, configuracion JSON, activo/inactivo. |
 
 ### CU5: Configurar Plugins por Tipologia
@@ -263,7 +263,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 | RF08 | El sistema debe persistir resultados y auditoria en BD | `PersistirActivity` guarda DocumentoEntity, ResultadoProcesamientoEntity, DocumentoEjecucionEntity, AuditoriaEntity. | DONE |
 | RF09 | El sistema debe exponer progreso de procesamiento en tiempo real | customStatus con timeline de actividades consultable via statusQueryUri. | DONE |
 | RF10 | El sistema debe soportar gestion CRUD de tipologias via API | Endpoints `/management/tipologias` con ciclo Draft→Published→Retired. | DONE |
-| RF11 | El sistema debe soportar gestion de modelos AI (clasificacion, extraccion, prompt) | Endpoints `/management/modelos` con CRUD y activacion. | DONE |
+| RF11 | El sistema debe soportar gestion de modelos AI (clasificacion, extraccion, prompt, layout) | Endpoints `/management/modelos` con CRUD y activacion. | DONE |
 | RF12 | El sistema debe ejecutar prompts libres configurables por tipologia | PromptActivity con OpenAI, configurable via `promptConfig` en tipologia JSON. | DONE |
 | RF13 | El sistema debe soportar versionado de tipologias | Resolucion `nota-simple` → default version, `nota-simple@1.4` → version especifica. | DONE |
 | RF14 | El sistema debe calcular hashes SHA256, MD5 y CRC32 para integridad | NormalizarActivity calcula los tres hashes. SHA256 usado para deduplicacion, MD5 para GDC. | DONE |

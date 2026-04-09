@@ -73,10 +73,12 @@ Actúa como router. Lee el campo `Extraction.Provider` del fichero de validació
 
 Proveedores soportados:
 
-| Valor en config | Proveedor |
-|-----------------|-----------|
-| `azure-content-understanding` | `AzureContentUnderstandingProvider` |
-| `mock` | `MockExtraerDataProvider` |
+| Valor en config | Proveedor | Descripción |
+|-----------------|-----------|-------------|
+| `azure-content-understanding` | `AzureContentUnderstandingProvider` | Llamada a Azure AI Content Understanding. Si la completitud es baja puede activar fallback GPT. |
+| `azure-document-intelligence` / `azure-di` | `AzureDocumentIntelligenceExtraerDataProvider` | Extracción con Azure Document Intelligence (layout/modelo). |
+| `azure-openai` / `openai` / `gpt` | `GptDirectExtraerDataProvider` | Extracción directa con GPT (sin CU previo). Requiere `Extraction:GptFallback:Endpoint/DeploymentName/ApiKey`. |
+| `mock` | `MockExtraerDataProvider` | Datos fijos para testing. |
 
 ### `AzureContentUnderstandingProvider`
 **Fichero:** `DocumentIA.Functions/Services/AzureContentUnderstandingProvider.cs`

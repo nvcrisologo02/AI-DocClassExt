@@ -1,44 +1,47 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace DocumentIA.Functions.Services;
 
 public class AzureDocumentIntelligenceLayoutMarkdownProvider
 {
     private readonly IHttpClientFactory _httpClientFactory;
-    private readonly AzureDocumentIntelligenceClassificationSettings _settings;
+    private readonly LayoutModelRegistryLoader _modelRegistryLoader;
     private readonly ILogger<AzureDocumentIntelligenceLayoutMarkdownProvider> _logger;
 
     public AzureDocumentIntelligenceLayoutMarkdownProvider(
         IHttpClientFactory httpClientFactory,
-        IOptions<AzureDocumentIntelligenceClassificationSettings> settings,
+        LayoutModelRegistryLoader modelRegistryLoader,
         ILogger<AzureDocumentIntelligenceLayoutMarkdownProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
-        _settings = settings.Value;
+        _modelRegistryLoader = modelRegistryLoader;
         _logger = logger;
     }
 
-    public async Task<ExtraerMarkdownLayoutResultado> ExtraerMarkdownAsync(
+    public virtual async Task<ExtraerMarkdownLayoutResultado> ExtraerMarkdownAsync(
         ExtraerMarkdownLayoutInput input,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.Endpoint))
+        var model = _modelRegistryLoader.GetDefaultModel();
+
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
         {
-            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:Endpoint es obligatorio");
+            throw new InvalidOperationException("El modelo de layout no tiene Endpoint configurado en base de datos.");
         }
 
-        if (_settings.AuthMode != "DefaultAzureCredential" && string.IsNullOrWhiteSpace(_settings.ApiKey))
+        if (!string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(model.ApiKey))
         {
-            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:ApiKey es obligatorio cuando AuthMode=ApiKey");
+            throw new InvalidOperationException("El modelo de layout no tiene ApiKey configurado en base de datos (AuthMode=ApiKey).");
         }
 
-        var apiVersion = string.IsNullOrWhiteSpace(_settings.ApiVersion) ? "2024-11-30" : _settings.ApiVersion;
-        var baseEndpoint = _settings.Endpoint.TrimEnd('/');
+        var apiVersion = string.IsNullOrWhiteSpace(model.ApiVersion) ? "2024-11-30" : model.ApiVersion;
+        var baseEndpoint = model.Endpoint.TrimEnd('/');
         var analyzeUrl =
             $"{baseEndpoint}/documentintelligence/documentModels/prebuilt-layout:analyze?outputContentFormat=markdown&api-version={Uri.EscapeDataString(apiVersion)}";
 
@@ -54,7 +57,7 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider
         };
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        await DocumentIntelligenceAuthHelper.ApplyAuthAsync(request, _settings, cancellationToken);
+        await DocumentIntelligenceAuthHelper.ApplyAuthAsync(request, model.AuthMode, model.ApiKey, cancellationToken);
 
         using var startResponse = await client.SendAsync(request, cancellationToken);
         if (!startResponse.IsSuccessStatusCode)
@@ -72,15 +75,15 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider
             throw new InvalidOperationException("La respuesta de DI layout no devolvió operation-location");
         }
 
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(10, _settings.TimeoutSeconds));
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(10, model.TimeoutSeconds));
         JsonDocument? finalResult = null;
 
         while (DateTimeOffset.UtcNow < deadline)
         {
-            await Task.Delay(Math.Max(250, _settings.PollIntervalMs), cancellationToken);
+            await Task.Delay(Math.Max(250, model.PollIntervalMs), cancellationToken);
 
             using var pollRequest = new HttpRequestMessage(HttpMethod.Get, operationLocation);
-            await DocumentIntelligenceAuthHelper.ApplyAuthAsync(pollRequest, _settings, cancellationToken);
+            await DocumentIntelligenceAuthHelper.ApplyAuthAsync(pollRequest, model.AuthMode, model.ApiKey, cancellationToken);
             pollRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var pollResponse = await client.SendAsync(pollRequest, cancellationToken);

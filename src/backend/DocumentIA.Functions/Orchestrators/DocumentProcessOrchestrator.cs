@@ -1,7 +1,6 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.DurableTask;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Services;
@@ -17,15 +16,12 @@ namespace DocumentIA.Functions.Orchestrators;
 
 public class DocumentProcessOrchestrator
 {
-    private readonly GptClasificarSettings _gptClasifSettings;
-    private readonly GptFallbackExtraerSettings _gptExtracSettings;
+    private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
 
     public DocumentProcessOrchestrator(
-        IOptions<GptClasificarSettings> gptClasifSettings,
-        IOptions<GptFallbackExtraerSettings> gptExtracSettings)
+        ExtractionModelRegistryLoader extractionModelRegistryLoader)
     {
-        _gptClasifSettings = gptClasifSettings.Value;
-        _gptExtracSettings = gptExtracSettings.Value;
+        _extractionModelRegistryLoader = extractionModelRegistryLoader;
     }
     [Function("DocumentProcessOrchestrator")]
     public async Task<ContratoSalida> RunOrchestrator(
@@ -269,8 +265,7 @@ public class DocumentProcessOrchestrator
 
                 // Umbral de fallback DI→GPT: instrucciones ?? config servidor
                 // (tipología no conocida todavía en este punto)
-                var umbralClasifFallback = entrada.Instrucciones.Classification.Umbral
-                    ?? _gptClasifSettings.FallbackThreshold;
+                var umbralClasifFallback = entrada.Instrucciones.Classification.Umbral;
 
                 try
                 {
@@ -340,6 +335,16 @@ public class DocumentProcessOrchestrator
                 }
             }
 
+            // Propagar markdown extraído por DI clasificador a DatosNormalizados
+            if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ContentExtraido)
+                && !datosNormalizados.ContainsKey("Markdown"))
+            {
+                datosNormalizados["Markdown"] = resultadoClasificacion.ContentExtraido;
+                logger.LogInformation(
+                    "Markdown de clasificación DI propagado a datosNormalizados ({Len} chars)",
+                    resultadoClasificacion.ContentExtraido.Length);
+            }
+            resultadoClasificacion.ContentExtraido = null; // limpiar: no exponer en respuesta
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
             ResolvedTipologia tipologiaResuelta;
@@ -391,7 +396,8 @@ public class DocumentProcessOrchestrator
             // Verificar umbral de confianza: instrucciones ?? tipología ?? config servidor
             var umbralBajaConfianza = entrada.Instrucciones.Classification.Umbral
                 ?? tipologiaResuelta.ConfidenceConfig?.ClasifUmbralFallback
-                ?? _gptClasifSettings.FallbackThreshold;
+                ?? resultadoClasificacion.UmbralFallbackAplicado
+                ?? 0.6;
 
             if (resultadoClasificacion.Confianza < umbralBajaConfianza)
             {
@@ -413,14 +419,18 @@ public class DocumentProcessOrchestrator
                 logger.LogInformation("Paso 4: Extrayendo datos");
 
                 // Umbral de fallback CU→GPT: instrucciones ?? tipología ?? config servidor
+                var minFieldsRatioFallback = ResolveExtractionFallbackMinFieldsRatio();
                 var umbralExtracFallback = entrada.Instrucciones.Extraction.Umbral
                     ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
-                    ?? _gptExtracSettings.MinFieldsRatio;
+                    ?? minFieldsRatioFallback;
 
-                // Umbrales específicos por criterio (completitud y confianza): solo desde instrucciones (mayor prioridad)
-                var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud;
-                var umbralExtracConfianzaRequest = entrada.Instrucciones.Extraction.UmbralConfianza;
-
+                // Capa instrucciones para extracción:
+                // - Si hay umbral específico, se usa ese valor.
+                // - Si falta el específico, usa instrucciones.extraction.umbral (legado de la misma capa).
+                var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud
+                    ?? entrada.Instrucciones.Extraction.Umbral;
+                var umbralExtracConfianzaRequest = entrada.Instrucciones.Extraction.UmbralConfianza
+                    ?? entrada.Instrucciones.Extraction.Umbral;
                 // Provider y model override: instrucciones ?? null (tipología se aplica en el proveedor)
                 var providerEfectivo = string.IsNullOrWhiteSpace(entrada.Instrucciones.Extraction.Provider)
                     || entrada.Instrucciones.Extraction.Provider.Equals("auto", StringComparison.OrdinalIgnoreCase)
@@ -431,6 +441,45 @@ public class DocumentProcessOrchestrator
                     || entrada.Instrucciones.Extraction.Model.Equals("auto", StringComparison.OrdinalIgnoreCase)
                     ? null
                     : entrada.Instrucciones.Extraction.Model;
+
+                // Paso 3.5: si el proveedor es GPT-directo y no hay markdown previo de clasificación, extraerlo con DI Layout
+                var providerParaMarkdown = providerEfectivo ?? tipologiaResuelta.ExtractionProvider;
+                if (IsGptDirectProvider(providerParaMarkdown) && !datosNormalizados.ContainsKey("Markdown"))
+                {
+                    logger.LogInformation(
+                        "Paso 3.5: Extrayendo markdown DI Layout previo para provider GPT-directo. Tipología={Tipologia}",
+                        salida.Identificacion.Tipologia);
+
+                    try
+                    {
+                        var markdownLayout = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                            "ExtraerMarkdownLayoutActivity",
+                            new ExtraerMarkdownLayoutInput
+                            {
+                                Tipologia = salida.Identificacion.Tipologia,
+                                DocumentoBase64 = entrada.Documento.Content.Base64,
+                                NombreDocumento = entrada.Documento.Name
+                            });
+
+                        if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
+                        {
+                            datosNormalizados["Markdown"] = markdownLayout.Markdown;
+                            logger.LogInformation(
+                                "Markdown DI Layout listo para extraccion GPT-directo ({Len} chars)",
+                                markdownLayout.Markdown.Length);
+                        }
+
+                        if (salida.Identificacion.Paginas <= 0 && markdownLayout.Paginas > 0)
+                            salida.Identificacion.Paginas = markdownLayout.Paginas;
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(
+                            ex,
+                            "No se pudo extraer markdown DI Layout previo. Tipología={Tipologia}. Se continua sin markdown.",
+                            salida.Identificacion.Tipologia);
+                    }
+                }
 
                 resultadoExtraccion = await EjecutarPasoNegocio(
                     "Extraer",
@@ -472,16 +521,67 @@ public class DocumentProcessOrchestrator
                 };
             }
 
-            salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
-
-            // Propagar markdown extraído a datosNormalizados para fallbacks
-            if (resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownExtraido) 
-                && markdownExtraido is string markdown 
-                && !string.IsNullOrWhiteSpace(markdown))
+            var markdownNormalizacion = resultadoExtraccion.MarkdownExtraido;
+            if (string.IsNullOrWhiteSpace(markdownNormalizacion)
+                && resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownExtraido)
+                && markdownExtraido is string markdownDetectado
+                && !string.IsNullOrWhiteSpace(markdownDetectado))
             {
-                datosNormalizados["Markdown"] = markdown;
-                logger.LogInformation("Markdown de extracción propagado a datosNormalizados ({Length} caracteres)", markdown.Length);
+                markdownNormalizacion = markdownDetectado;
             }
+
+            if (!string.IsNullOrWhiteSpace(markdownNormalizacion))
+            {
+                datosNormalizados["Markdown"] = markdownNormalizacion;
+                logger.LogInformation(
+                    "Markdown de extracción preparado para normalización y fallbacks ({Length} caracteres)",
+                    markdownNormalizacion.Length);
+            }
+            else
+            {
+                try
+                {
+                    logger.LogInformation(
+                        "No se recibió markdown del provider de extracción. Intentando fallback DI layout para tipología {Tipologia}.",
+                        salida.Identificacion.Tipologia);
+
+                    var markdownLayout = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                        "ExtraerMarkdownLayoutActivity",
+                        new ExtraerMarkdownLayoutInput
+                        {
+                            Tipologia = salida.Identificacion.Tipologia,
+                            DocumentoBase64 = entrada.Documento.Content.Base64,
+                            NombreDocumento = entrada.Documento.Name
+                        });
+
+                    if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
+                    {
+                        markdownNormalizacion = markdownLayout.Markdown;
+                        resultadoExtraccion.MarkdownExtraido = markdownLayout.Markdown;
+                        datosNormalizados["Markdown"] = markdownLayout.Markdown;
+
+                        logger.LogInformation(
+                            "Markdown obtenido vía fallback DI layout ({Length} caracteres)",
+                            markdownLayout.Markdown.Length);
+                    }
+
+                    if (salida.Identificacion.Paginas <= 0 && markdownLayout.Paginas > 0)
+                    {
+                        salida.Identificacion.Paginas = markdownLayout.Paginas;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "No se pudo obtener markdown vía DI layout para tipología {Tipologia}. Se continúa sin markdown.",
+                        salida.Identificacion.Tipologia);
+                }
+            }
+
+            // El markdown no debe formar parte de DatosExtraidos de salida.
+            resultadoExtraccion.DatosExtraidos.Remove("Markdown");
+            salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
 
             // Prioridad para páginas:
             // 1) valor explícito devuelto por el proveedor de extracción
@@ -537,55 +637,9 @@ public class DocumentProcessOrchestrator
             if (tipologiaResuelta.PromptEnabled)
             {
                 var markdownParaPrompt = resultadoExtraccion.MarkdownExtraido;
-                if (string.IsNullOrWhiteSpace(markdownParaPrompt)
-                    && resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownDesdeDatos)
-                    && markdownDesdeDatos is string markdownDetectado
-                    && !string.IsNullOrWhiteSpace(markdownDetectado))
+                if (string.IsNullOrWhiteSpace(markdownParaPrompt) && !string.IsNullOrWhiteSpace(markdownNormalizacion))
                 {
-                    markdownParaPrompt = markdownDetectado;
-                }
-
-                if (!tipologiaResuelta.ExtractionEnabled && string.IsNullOrWhiteSpace(markdownParaPrompt))
-                {
-                    logger.LogInformation(
-                        "Paso 4.4: Tipología {Tipologia} sin extracción. Obteniendo markdown con DI layout antes del prompt.",
-                        salida.Identificacion.Tipologia);
-
-                    try
-                    {
-                        var markdownLayout = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                            "ExtraerMarkdownLayoutActivity",
-                            new ExtraerMarkdownLayoutInput
-                            {
-                                Tipologia = salida.Identificacion.Tipologia,
-                                DocumentoBase64 = entrada.Documento.Content.Base64,
-                                NombreDocumento = entrada.Documento.Name
-                            });
-
-                        if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
-                        {
-                            markdownParaPrompt = markdownLayout.Markdown;
-                            resultadoExtraccion.MarkdownExtraido = markdownLayout.Markdown;
-                            resultadoExtraccion.DatosExtraidos["Markdown"] = markdownLayout.Markdown;
-                            datosNormalizados["Markdown"] = markdownLayout.Markdown;
-
-                            logger.LogInformation(
-                                "Markdown DI layout preparado para prompt ({Length} caracteres)",
-                                markdownLayout.Markdown.Length);
-                        }
-
-                        if (salida.Identificacion.Paginas <= 0 && markdownLayout.Paginas > 0)
-                        {
-                            salida.Identificacion.Paginas = markdownLayout.Paginas;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(
-                            ex,
-                            "No se pudo extraer markdown DI layout para tipología {Tipologia}. Se continúa con prompt sin markdown.",
-                            salida.Identificacion.Tipologia);
-                    }
+                    markdownParaPrompt = markdownNormalizacion;
                 }
 
                 logger.LogInformation("Paso 4.5: Ejecutando prompt libre de tipología");
@@ -648,6 +702,7 @@ public class DocumentProcessOrchestrator
                 { 
                     $"Aplicadas {resultadoValidacion.ReglasAplicadas} reglas de validacion"
                 },
+                Markdown = string.IsNullOrWhiteSpace(markdownNormalizacion) ? null : markdownNormalizacion,
                 Validaciones = resultadoValidacion.Validaciones
                     .Where(v => v.Severidad == "Warning" || v.Severidad == "Info")
                     .Select(v => $"[{v.Severidad}] {v.Campo}: {v.Mensaje}")
@@ -664,6 +719,11 @@ public class DocumentProcessOrchestrator
             // Agregar metadata de validacion
             salida.DetalleEjecucion.Postproceso.Normalizaciones.Add(
                 $"Confianza de validacion: {confianzaValidacionRedondeada:P0}");
+
+            if (!string.IsNullOrWhiteSpace(salida.DetalleEjecucion.Postproceso.Markdown))
+            {
+                salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+            }
             
             if (resultadoValidacion.Errores > 0)
             {
@@ -885,4 +945,22 @@ public class DocumentProcessOrchestrator
     {
         return Math.Round(value, 3, MidpointRounding.AwayFromZero);
     }
+
+    private double ResolveExtractionFallbackMinFieldsRatio()
+    {
+        try
+        {
+            return _extractionModelRegistryLoader.GetFallbackModel().MinFieldsRatio;
+        }
+        catch (KeyNotFoundException)
+        {
+            return 0.5;
+        }
+    }
+
+    private static bool IsGptDirectProvider(string? provider) =>
+        !string.IsNullOrWhiteSpace(provider) &&
+        (provider.Equals("azure-openai", StringComparison.OrdinalIgnoreCase) ||
+         provider.Equals("openai", StringComparison.OrdinalIgnoreCase) ||
+         provider.Equals("gpt", StringComparison.OrdinalIgnoreCase));
 }

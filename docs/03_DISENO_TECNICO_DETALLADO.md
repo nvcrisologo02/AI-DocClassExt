@@ -201,7 +201,7 @@ sequenceDiagram
 
     O->>+VA: CallActivityAsync("Validar", input)
     VA->>+TCL: LoadValidationConfig(tipologia)
-    TCL->>TCL: Lee {tipologia}.validation.json
+    TCL->>TCL: Lee ConfiguracionJson de BD (tabla TipologiasConfig)
     TCL-->>-VA: ValidationConfig { campos, reglas }
 
     VA->>+VE: Validate(datosExtraidos, validationConfig)
@@ -702,7 +702,7 @@ Si `totalRequired = 0` (sin reglas Error), `ConfianzaValidacion = 1.0`.
 
 ```mermaid
 flowchart LR
-    LOAD["PluginConfigLoader<br/>Lee plugins.json<br/>de la tipologia"] --> FACTORY["PluginFactory<br/>Crea instancias<br/>REST/SOAP/Custom"]
+    LOAD["PluginConfigLoader<br/>Lee config plugins<br/>de BD (tabla PluginTipologiaConfigs)"] --> FACTORY["PluginFactory<br/>Crea instancias<br/>REST/SOAP/Custom"]
     FACTORY --> WRAP{"RetryPolicy<br/>definida?"}
     WRAP -->|"Si"| DEC["ResilientPlugin<br/>(decorator)"]
     WRAP -->|"No"| RAW["Plugin directo"]
@@ -781,15 +781,20 @@ Buscar en TipologiaEntity WHERE Codigo = input (exacto)
 TipologiaConfig { Codigo, Version, Umbrales, ConfigJson }
 ```
 
-### 3.8.2 Archivos de Configuracion por Tipologia
+### 3.8.2 Archivos de Configuración por Tipología
 
-Cada tipologia tiene hasta 3 archivos JSON en `config/tipologias/`:
+Los archivos JSON en `config/tipologias/` son únicamente **fuente de seed**: al arrancar la Function App, `ConfigurationSeedService` los lee y los inserta en BD si no existen. En tiempo de ejecución, **toda la configuración se lee exclusivamente desde base de datos**.
 
-| Archivo | Proposito | Ejemplo |
-|---------|----------|---------|
-| `{codigo}.validation.json` | Reglas de validacion por campo | `nota.simple.1_4.validation.json` |
-| `{codigo}.plugins.json` | Plugins de integracion | `nota.simple.1_4.plugins.json` |
-| `{codigo}.extraction.json` | Config de extraccion (campos esperados, modelo CU) | `nota.simple.1_4.extraction.json` |
+| Archivo (solo seed) | Propósito | Tabla BD en runtime |
+|---------------------|-----------|---------------------|
+| `{codigo}.validation.json` | Reglas de validación por campo | `TipologiasConfig.ConfiguracionJson` |
+| `{codigo}.plugins.json` | Plugins de integración | `PluginTipologiaConfigs.ConfiguracionJson` |
+| `config/extraction/models.json` | Modelos de extracción | `ModelosConfig` (tipo = Extraccion) |
+| `config/classification/models.json` | Modelos de clasificación | `ModelosConfig` (tipo = Clasificacion) |
+| `config/prompt/models.json` | Modelos de prompt | `ModelosConfig` (tipo = Prompt) |
+| `config/layout/models.json` | Modelos de layout markdown | `ModelosConfig` (tipo = Layout) |
+
+> **Nunca editar los JSON de `config/tipologias/` para cambiar el comportamiento en producción.** Para modificar una tipología existente, usar los endpoints de la Admin API (`PUT /management/tipologias/{id}` + `POST /management/tipologias/{id}/publicar`). Los archivos JSON siguen siendo útiles como respaldo o para crear nuevas versiones de tipologías via re-seed en un entorno nuevo.
 
 ### 3.8.3 Ciclo de Vida Draft → Published → Retired
 

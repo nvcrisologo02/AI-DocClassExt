@@ -73,16 +73,13 @@ var host = new HostBuilder()
         services.AddSingleton<IBlobStorageService, BlobStorageService>();
 
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
-        services.Configure<AzureContentUnderstandingSettings>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
-        services.Configure<GptFallbackExtraerSettings>(context.Configuration.GetSection("Extraction:GptFallback"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
-        services.Configure<AzureDocumentIntelligenceClassificationSettings>(context.Configuration.GetSection("Classification:AzureDocumentIntelligence"));
-        services.Configure<GptClasificarSettings>(context.Configuration.GetSection("Classification:GptFallback"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
         services.AddSingleton<AzureDocumentIntelligenceExtraerDataProvider>();
         services.AddSingleton<GptFallbackExtraerDataProvider>();
+        services.AddSingleton<GptDirectExtraerDataProvider>();
         services.AddSingleton<IPromptDataProvider, OpenAIPromptDataProvider>();
         services.AddSingleton<ContentUnderstandingResultMapper>();
         services.AddSingleton<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
@@ -90,13 +87,8 @@ var host = new HostBuilder()
         services.AddSingleton<MockClasificarDataProvider>();
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
         services.AddSingleton<AzureDocumentIntelligenceLayoutMarkdownProvider>();
-        services.AddSingleton<GptClasificarDataProvider>(provider =>
-        {
-            var settings = provider.GetRequiredService<IOptions<GptClasificarSettings>>();
-            var logger = provider.GetRequiredService<ILogger<GptClasificarDataProvider>>();
-            string configPath = Path.Combine(Directory.GetCurrentDirectory(), "config", "tipologias");
-            return new GptClasificarDataProvider(settings, configPath, logger);
-        });
+        services.AddSingleton<ClassificationTipologiaPromptBuilder>();
+        services.AddSingleton<GptClasificarDataProvider>();
         services.AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>();
 
         // Logging
@@ -203,6 +195,11 @@ var host = new HostBuilder()
                 provider.GetRequiredService<IMemoryCache>(),
                 provider.GetRequiredService<IServiceScopeFactory>()));
 
+        services.AddSingleton<LayoutModelRegistryLoader>(provider =>
+            new LayoutModelRegistryLoader(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>()));
+
 
     })
     .Build();
@@ -219,18 +216,21 @@ using (var scope = host.Services.CreateScope())
         || runMigrationsSetting.Equals("true", StringComparison.OrdinalIgnoreCase)
         || runMigrationsSetting.Equals("1", StringComparison.OrdinalIgnoreCase);
 
+    var dbContext = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
+
     if (runMigrations)
     {
-        var dbContext = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
         logger.LogInformation("Applying pending EF Core migrations at startup.");
         dbContext.Database.Migrate();
-        await ConfigurationSeedService.SeedAsync(dbContext, logger, Path.Combine(Directory.GetCurrentDirectory(), "config"));
         logger.LogInformation("EF Core migrations applied successfully.");
     }
     else
     {
         logger.LogInformation("Skipping EF Core migrations at startup (RunDatabaseMigrationsOnStartup={Value}).", runMigrationsSetting);
     }
+
+    await ConfigurationSeedService.SeedAsync(dbContext, logger, Path.Combine(Directory.GetCurrentDirectory(), "config"));
+    logger.LogInformation("Configuration seed completed successfully.");
 }
 
 host.Run();

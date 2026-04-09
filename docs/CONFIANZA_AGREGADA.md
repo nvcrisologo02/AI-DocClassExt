@@ -180,17 +180,16 @@ Si **cualquiera** de los dos criterios no supera su umbral, se activa el fallbac
 La cadena de resolución para **cada criterio de extracción** (de mayor a menor prioridad) es:
 
 ```
-petición HTTP (específico)   →   tipología (específico)   →   umbral legado   →   config servidor
+petición HTTP (específico/legado)   →   tipología (específico/legado)   →   modelo/servidor
 ```
 
 | Nivel | Campo clasificación | Campo extracción (completitud) | Campo extracción (confianza) |
 |---|---|---|---|
-| **1 — Petición (específico)** | `instrucciones.classification.umbral` | `instrucciones.extraction.umbralCompletitud` | `instrucciones.extraction.umbralConfianza` |
-| **2 — Tipología (específico)** | `confidenceConfig.clasifUmbralFallback` | `confidenceConfig.extracUmbralFallbackCompletitud` | `confidenceConfig.extracUmbralFallbackConfianza` |
-| **3 — Legado** | _(igual que nivel 1/2)_ | `instrucciones.extraction.umbral` / `confidenceConfig.extracUmbralFallback` | ídem |
-| **4 — Servidor** | `Classification:GptFallback:FallbackThreshold` | `Extraction:GptFallback:MinFieldsRatio` | `Extraction:GptFallback:MinFieldsRatio` |
+| **1 — Petición** | `instrucciones.classification.umbral` | `instrucciones.extraction.umbralCompletitud ?? instrucciones.extraction.umbral` | `instrucciones.extraction.umbralConfianza ?? instrucciones.extraction.umbral` |
+| **2 — Tipología** | `confidenceConfig.clasifUmbralFallback` | `confidenceConfig.extracUmbralFallbackCompletitud ?? confidenceConfig.extracUmbralFallback` | `confidenceConfig.extracUmbralFallbackConfianza ?? confidenceConfig.extracUmbralFallback` |
+| **3 — Modelo/Servidor** | `Classification:GptFallback:FallbackThreshold` | `Extraction:GptFallback:MinFieldsRatio` | `Extraction:GptFallback:MinFieldsRatio` |
 
-> El campo legado `umbral` / `extracUmbralFallback` actúa como valor único para ambos criterios cuando los específicos son `null`. Esto garantiza compatibilidad con tipologías y peticiones anteriores.
+> Regla de compatibilidad: en cada capa, el umbral legado (`umbral` / `extracUmbralFallback`) solo se usa cuando el específico del criterio está en `null`.
 
 El orquestador resuelve el umbral efectivo antes de invocar cada actividad:
 
@@ -209,24 +208,26 @@ var umbralExtracFallback = entrada.Instrucciones.Extraction.Umbral
     ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
     ?? _gptExtracSettings.MinFieldsRatio;
 
-// Extracción — umbrales específicos (niveles 1 y 2 se resuelven en el proveedor)
-var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud;
-var umbralExtracConfianzaRequest   = entrada.Instrucciones.Extraction.UmbralConfianza;
+// Extracción — capa petición (específico si existe; si no, legado de la misma capa)
+var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud
+  ?? entrada.Instrucciones.Extraction.Umbral;
+var umbralExtracConfianzaRequest   = entrada.Instrucciones.Extraction.UmbralConfianza
+  ?? entrada.Instrucciones.Extraction.Umbral;
 ```
 
 Dentro de `ConfigurableExtraerDataProvider.EsResultadoCuSuficiente`, la resolución final de cada criterio es:
 
 ```csharp
-// Prioridad: request-específico > tipología-específico > umbral-legado > global
+// Prioridad por capas: petición > tipología > modelo/servidor
 umbralCompletitud = umbralFallbackCompletitudRequest      // nivel 1
     ?? confidenceConfig?.ExtracUmbralFallbackCompletitud   // nivel 2
-    ?? umbralLegado                                        // nivel 3
-    ?? _fallbackSettings.MinFieldsRatio;                   // nivel 4
+  ?? umbralLegado                                        // legado tipología o modelo
+  ?? _fallbackSettings.MinFieldsRatio;                   // último recurso
 
 umbralConfianza = umbralFallbackConfianzaRequest           // nivel 1
     ?? confidenceConfig?.ExtracUmbralFallbackConfianza     // nivel 2
-    ?? umbralLegado                                        // nivel 3
-    ?? _fallbackSettings.MinFieldsRatio;                   // nivel 4
+  ?? umbralLegado                                        // legado tipología o modelo
+  ?? _fallbackSettings.MinFieldsRatio;                   // último recurso
 
 return ratioCompletitud >= umbralCompletitud && confianzaCu >= umbralConfianza;
 ```

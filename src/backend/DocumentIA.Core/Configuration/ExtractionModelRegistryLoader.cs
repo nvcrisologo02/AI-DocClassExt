@@ -67,6 +67,30 @@ public class ExtractionModelRegistryLoader
         return model ?? throw new KeyNotFoundException($"No se encontro el modelo de extraccion '{modelKey}' en {_registryFilePath}");
     }
 
+    public ExtractionModelConfig GetDefaultModel(string? provider = null)
+    {
+        var registry = Load();
+        var candidates = registry.Models
+            .Where(m => string.IsNullOrWhiteSpace(provider)
+                || string.Equals(m.Provider, provider, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var model = candidates.FirstOrDefault(m => m.IsDefault)
+            ?? (candidates.Count == 1 ? candidates[0] : null);
+
+        return model ?? throw new KeyNotFoundException(
+            $"No se encontro un modelo de extraccion por defecto{(string.IsNullOrWhiteSpace(provider) ? string.Empty : $" para provider '{provider}'")}.");
+    }
+
+    public ExtractionModelConfig GetFallbackModel()
+    {
+        var registry = Load();
+        var candidates = registry.Models.Where(m => m.UseAsFallback).ToList();
+        var model = candidates.Count == 1 ? candidates[0] : null;
+
+        return model ?? throw new KeyNotFoundException("No se encontro un modelo de extracción marcado para fallback en base de datos.");
+    }
+
     private ExtractionModelRegistry LoadFromDatabase()
     {
         using var scope = _scopeFactory!.CreateScope();

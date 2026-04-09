@@ -50,6 +50,7 @@ namespace DocumentIA.Core.Configuration
         public string Name { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty; // decimal, string, date, array, object, etc
         public bool Required { get; set; }
+        public string Description { get; set; } = string.Empty;
         public List<ValidationRuleConfig> Rules { get; set; } = new List<ValidationRuleConfig>();
         
         // Para soportar arrays y objetos anidados
@@ -142,9 +143,21 @@ namespace DocumentIA.Core.Configuration
     {
         public string Key { get; set; } = string.Empty;
         public string Provider { get; set; } = string.Empty;
+        public bool IsDefault { get; set; }
+        public bool UseAsFallback { get; set; }
+        public string Endpoint { get; set; } = string.Empty;
+        public string ApiKey { get; set; } = string.Empty;
+        public string AuthMode { get; set; } = "ApiKey";
         public string AnalyzerId { get; set; } = string.Empty;
+        public string DeploymentName { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
         public string ProcessingLocation { get; set; } = string.Empty;
         public string InputRange { get; set; } = string.Empty;
+        public string ApiVersion { get; set; } = "2024-11-30";
+        public int TimeoutSeconds { get; set; } = 60;
+        public int PollIntervalMs { get; set; } = 1000;
+        public double MinFieldsRatio { get; set; } = 0.5;
+        public double Temperature { get; set; } = 0.0;
+        public int MaxTokens { get; set; } = 2000;
     }
 }

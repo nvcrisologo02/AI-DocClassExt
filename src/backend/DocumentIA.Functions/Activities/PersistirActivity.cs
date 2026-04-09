@@ -9,6 +9,9 @@ using System.Text.Json;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.IO;
+using System.IO.Compression;
+using System.Text;
 
 namespace DocumentIA.Functions.Activities
 {
@@ -61,6 +64,7 @@ namespace DocumentIA.Functions.Activities
                         ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
                         Paginas = salida.Identificacion.Paginas,
                         CorrelationId = salida.Identificacion.Guid,
+                        NormalizacionMarkdownCompressed = CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown),
                         // Registrar IdGDC e IdActivo si están disponibles
                         IdGDC = salida.Integridad.GestorDocumental,
                         IdActivo = salida.Integridad.IdActivo,
@@ -91,6 +95,7 @@ namespace DocumentIA.Functions.Activities
                     {
                         documento.IdActivo = salida.Integridad.IdActivo;
                     }
+                    documento.NormalizacionMarkdownCompressed = CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown);
                     documento.FechaActualizacion = DateTime.UtcNow;
                     await _documentoRepo.UpdateAsync(documento);
                     _logger.LogInformation("Documento actualizado ID={Id}", documento.Id);
@@ -141,6 +146,12 @@ namespace DocumentIA.Functions.Activities
                 _logger.LogInformation("Resultado procesamiento guardado ID={Id}", resultado.Id);
 
                 // 3. Crear registro de ejecucion con historico completo
+                var markdownPostproceso = salida.DetalleEjecucion.Postproceso?.Markdown;
+                if (salida.DetalleEjecucion.Postproceso != null)
+                {
+                    salida.DetalleEjecucion.Postproceso.Markdown = null;
+                }
+
                 var ejecucion = new DocumentoEjecucionEntity
                 {
                     DocumentoId = documento.Id,
@@ -175,6 +186,11 @@ namespace DocumentIA.Functions.Activities
                     DuracionGDCMs = GetDuracionActividad(salida, "SubirGDC"),
                     DuracionPersistenciaMs = GetDuracionActividad(salida, "Persistir")
                 };
+
+                if (salida.DetalleEjecucion.Postproceso != null)
+                {
+                    salida.DetalleEjecucion.Postproceso.Markdown = markdownPostproceso;
+                }
 
                 // 3. Guardar detalle de cada plugin ejecutado
                 if (salida.DetalleEjecucion.Integracion?.Plugins != null)
@@ -281,6 +297,24 @@ namespace DocumentIA.Functions.Activities
             }
 
             return actividad.DuracionMs;
+        }
+
+        private static string? CompressToBase64(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            var rawBytes = Encoding.UTF8.GetBytes(value);
+            using var output = new MemoryStream();
+            using (var gzip = new GZipStream(output, CompressionLevel.Optimal, leaveOpen: true))
+            {
+                gzip.Write(rawBytes, 0, rawBytes.Length);
+            }
+
+            output.Position = 0;
+            return Convert.ToBase64String(output.ToArray());
         }
     }
 }

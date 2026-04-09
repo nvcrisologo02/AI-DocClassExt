@@ -7,7 +7,6 @@ using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -19,22 +18,17 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
     private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly ContentUnderstandingResultMapper _resultMapper;
-    private readonly ContentUnderstandingClient _client;
-    private readonly AzureContentUnderstandingSettings _settings;
 
     public AzureContentUnderstandingProvider(
         ILogger<AzureContentUnderstandingProvider> logger,
         TipologiaConfigLoader tipologiaConfigLoader,
         ExtractionModelRegistryLoader modelRegistryLoader,
-        ContentUnderstandingResultMapper resultMapper,
-        IOptions<AzureContentUnderstandingSettings> settings)
+        ContentUnderstandingResultMapper resultMapper)
     {
         _logger = logger;
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _modelRegistryLoader = modelRegistryLoader;
         _resultMapper = resultMapper;
-        _settings = settings.Value;
-        _client = CreateClient(_settings);
     }
 
     public virtual async Task<ExtraccionResultado> ObtenerDatosAsync(ExtraccionInput input, CancellationToken cancellationToken = default)
@@ -51,6 +45,8 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             ? input.ModelKeyEfectivo
             : extractionConfig.ModelKey;
         var model = _modelRegistryLoader.GetModel(modelKey);
+        ValidateAzureCuModel(model);
+        var client = CreateClient(model);
         var fileName = input.Entrada.Documento.Name;
         var binaryData = BinaryData.FromBytes(Convert.FromBase64String(input.Entrada.Documento.Content.Base64));
         var contentType = ResolveContentType(model, fileName, binaryData);
@@ -60,14 +56,14 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
 
         var stopwatch = Stopwatch.StartNew();
         var operation = contentRange is { } range
-            ? await _client.AnalyzeBinaryAsync(
+            ? await client.AnalyzeBinaryAsync(
                 WaitUntil.Completed,
                 model.AnalyzerId,
                 contentType,
                 requestContent,
                 processingLocation: processingLocation,
                 contentRange: range)
-            : await _client.AnalyzeBinaryAsync(
+            : await client.AnalyzeBinaryAsync(
                 WaitUntil.Completed,
                 model.AnalyzerId,
                 contentType,
@@ -146,37 +142,54 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         };
     }
 
-    private static ContentUnderstandingClient CreateClient(AzureContentUnderstandingSettings settings)
+    private static ContentUnderstandingClient CreateClient(ExtractionModelConfig model)
     {
-        if (string.IsNullOrWhiteSpace(settings.Endpoint))
+        if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("Extraction:AzureContentUnderstanding:Endpoint es obligatorio");
+            return new ContentUnderstandingClient(new Uri(model.Endpoint), new DefaultAzureCredential());
         }
 
-        if (string.Equals(settings.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
-        {
-            return new ContentUnderstandingClient(new Uri(settings.Endpoint), new DefaultAzureCredential());
-        }
-
-        if (string.IsNullOrWhiteSpace(settings.ApiKey))
-        {
-            throw new InvalidOperationException("Extraction:AzureContentUnderstanding:ApiKey es obligatorio cuando AuthMode=ApiKey");
-        }
-
-        return new ContentUnderstandingClient(new Uri(settings.Endpoint), new AzureKeyCredential(settings.ApiKey));
+        return new ContentUnderstandingClient(new Uri(model.Endpoint), new AzureKeyCredential(model.ApiKey));
     }
 
-    private string ResolveProcessingLocation(ExtractionModelConfig model)
+    private static string ResolveProcessingLocation(ExtractionModelConfig model)
     {
         if (!string.IsNullOrWhiteSpace(model.ProcessingLocation))
         {
             return model.ProcessingLocation;
         }
 
-        return string.IsNullOrWhiteSpace(_settings.DefaultProcessingLocation)
-            ? "global"
-            : _settings.DefaultProcessingLocation;
+        return "global";
     }
+
+    private static void ValidateAzureCuModel(ExtractionModelConfig model)
+    {
+        if (!IsAzureCuProvider(model.Provider))
+        {
+            throw new InvalidOperationException(
+                $"El modelo de extracción '{model.Key}' no es compatible con Azure Content Understanding. Provider actual: '{model.Provider}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
+        {
+            throw new InvalidOperationException($"ExtractionModelConfig.Endpoint es obligatorio para el modelo '{model.Key}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.AnalyzerId))
+        {
+            throw new InvalidOperationException($"ExtractionModelConfig.AnalyzerId es obligatorio para el modelo '{model.Key}'.");
+        }
+
+        if (!string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(model.ApiKey))
+        {
+            throw new InvalidOperationException(
+                $"ExtractionModelConfig.ApiKey es obligatorio para el modelo '{model.Key}' cuando AuthMode=ApiKey.");
+        }
+    }
+
+    private static bool IsAzureCuProvider(string provider) =>
+        provider.ToLowerInvariant() is "azure-content-understanding" or "azure-cu" or "cu";
 
     private static string ResolveContentType(ExtractionModelConfig model, string fileName, BinaryData binaryData)
     {

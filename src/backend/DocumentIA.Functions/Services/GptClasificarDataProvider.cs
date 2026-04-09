@@ -5,10 +5,10 @@ using System.Text.RegularExpressions;
 using Azure;
 using Azure.AI.OpenAI;
 using Azure.Identity;
+using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
@@ -19,20 +19,24 @@ namespace DocumentIA.Functions.Services;
 /// </summary>
 public class GptClasificarDataProvider : IClasificarDataProvider
 {
-    private readonly GptClasificarSettings _settings;
+    private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
+    private readonly ClassificationTipologiaPromptBuilder _tipologiaPromptBuilder;
     private readonly ILogger<GptClasificarDataProvider> _logger;
+    private readonly Lazy<ClassificationModelConfig> _fallbackModel;
     private readonly Lazy<ChatClient> _chatClient;
     private readonly Lazy<string> _tipologiasPromptSection;
 
     public GptClasificarDataProvider(
-        IOptions<GptClasificarSettings> settings,
-        string tipologiasConfigPath,
+        ClassificationModelRegistryLoader modelRegistryLoader,
+        ClassificationTipologiaPromptBuilder tipologiaPromptBuilder,
         ILogger<GptClasificarDataProvider> logger)
     {
-        _settings = settings.Value;
+        _modelRegistryLoader = modelRegistryLoader;
+        _tipologiaPromptBuilder = tipologiaPromptBuilder;
         _logger = logger;
+        _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
         _chatClient = new Lazy<ChatClient>(CreateChatClient);
-        _tipologiasPromptSection = new Lazy<string>(() => BuildTipologiasPromptSection(tipologiasConfigPath));
+        _tipologiasPromptSection = new Lazy<string>(() => _tipologiaPromptBuilder.Build());
     }
 
     public async Task<ResultadoClasificacion> ClasificarAsync(
@@ -40,10 +44,11 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
+        var model = _fallbackModel.Value;
         _logger.LogInformation(
             "Iniciando clasificación Azure OpenAI fallback para documento {Documento} con deployment {DeploymentName}",
             input.Entrada.Documento.Name,
-            _settings.DeploymentName);
+            model.DeploymentName);
 
         var tipologias = _tipologiasPromptSection.Value;
         var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
@@ -81,12 +86,12 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)_settings.Temperature,
-            MaxOutputTokenCount = _settings.MaxTokens
+            Temperature = (float)model.Temperature,
+            MaxOutputTokenCount = model.MaxTokens
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
 
         var response = await _chatClient.Value.CompleteChatAsync(
             new List<ChatMessage> { systemMessage, userMessage },
@@ -101,10 +106,10 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             stopwatch.ElapsedMilliseconds,
             responseText);
 
-        return ParseGptResponse(responseText);
+        return ParseGptResponse(responseText, model);
     }
 
-    private ResultadoClasificacion ParseGptResponse(string responseText)
+    private ResultadoClasificacion ParseGptResponse(string responseText, ClassificationModelConfig model)
     {
         try
         {
@@ -119,7 +124,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             {
                 return new ResultadoClasificacion
                 {
-                    Modelo = _settings.DeploymentName,
+                    Modelo = model.DeploymentName,
                     TipologiaDetectada = tipologia,
                     Confianza = Math.Clamp(confianza, 0.0, 1.0),
                     ConfianzaGPT = Math.Clamp(confianza, 0.0, 1.0),
@@ -152,7 +157,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         return new ResultadoClasificacion
         {
-            Modelo = _settings.DeploymentName,
+            Modelo = model.DeploymentName,
             TipologiaDetectada = tipologiaFallback,
             Confianza = Math.Clamp(confianzaFallback, 0.0, 1.0),
             ConfianzaGPT = Math.Clamp(confianzaFallback, 0.0, 1.0),
@@ -204,89 +209,53 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
     private ChatClient CreateChatClient()
     {
-        if (string.IsNullOrWhiteSpace(_settings.Endpoint))
+        var model = _fallbackModel.Value;
+
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
         {
             throw new InvalidOperationException(
-                "Classification:GptFallback:Endpoint es obligatorio cuando el fallback GPT está habilitado.");
+                $"ClassificationModelConfig.Endpoint es obligatorio para el modelo de fallback '{model.Key}'.");
         }
 
-        if (string.IsNullOrWhiteSpace(_settings.DeploymentName))
+        if (string.IsNullOrWhiteSpace(model.DeploymentName))
         {
             throw new InvalidOperationException(
-                "Classification:GptFallback:DeploymentName es obligatorio cuando el fallback GPT está habilitado.");
+                $"ClassificationModelConfig.DeploymentName es obligatorio para el modelo de fallback '{model.Key}'.");
         }
 
         AzureOpenAIClient azureClient;
 
-        if (string.Equals(_settings.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
         {
-            azureClient = new AzureOpenAIClient(new Uri(_settings.Endpoint), new DefaultAzureCredential());
+            azureClient = new AzureOpenAIClient(new Uri(model.Endpoint), new DefaultAzureCredential());
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+            if (string.IsNullOrWhiteSpace(model.ApiKey))
             {
                 throw new InvalidOperationException(
-                    "Classification:GptFallback:ApiKey es obligatorio cuando AuthMode=ApiKey.");
+                    $"ClassificationModelConfig.ApiKey es obligatorio para el modelo de fallback '{model.Key}' cuando AuthMode=ApiKey.");
             }
             azureClient = new AzureOpenAIClient(
-                new Uri(_settings.Endpoint),
-                new AzureKeyCredential(_settings.ApiKey));
+                new Uri(model.Endpoint),
+                new AzureKeyCredential(model.ApiKey));
         }
 
-        return azureClient.GetChatClient(_settings.DeploymentName);
+        return azureClient.GetChatClient(model.DeploymentName);
     }
 
-    /// <summary>
-    /// Escanea los ficheros *.validation.json del directorio de tipologías y construye
-    /// la sección del prompt con las tipologías marcadas como isDefault.
-    /// Se evalúa una sola vez (Lazy) al primer uso.
-    /// </summary>
-    private static string BuildTipologiasPromptSection(string configBasePath)
+    private ClassificationModelConfig ResolveFallbackModel()
     {
-        if (!Directory.Exists(configBasePath))
+        var model = _modelRegistryLoader.GetFallbackModel();
+        if (!IsAzureOpenAiProvider(model.Provider))
         {
-            return string.Empty;
+            throw new InvalidOperationException(
+                $"El modelo de fallback '{model.Key}' debe ser de provider Azure OpenAI. Provider actual: '{model.Provider}'.");
         }
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var lines = new List<string>();
-
-        foreach (var file in Directory.EnumerateFiles(configBasePath, "*.validation.json"))
-        {
-            try
-            {
-                var json = File.ReadAllText(file);
-                using var doc = JsonDocument.Parse(json);
-                var root = doc.RootElement;
-
-                // Solo tipologías marcadas como default para evitar duplicados por familia
-                var isDefault = root.TryGetProperty("isDefault", out var isDefaultProp)
-                    && isDefaultProp.GetBoolean();
-                if (!isDefault) continue;
-
-                var tipologiaId = root.TryGetProperty("tipologiaId", out var idProp)
-                    ? idProp.GetString() : null;
-                if (string.IsNullOrWhiteSpace(tipologiaId) || !seen.Add(tipologiaId))
-                    continue;
-
-                var nombre = root.TryGetProperty("tipologiaNombre", out var nombreProp)
-                    ? nombreProp.GetString() : tipologiaId;
-                var descripcion = root.TryGetProperty("gptDescripcion", out var descProp)
-                    ? descProp.GetString() : null;
-
-                var definition = string.IsNullOrWhiteSpace(descripcion)
-                    ? $"- {tipologiaId}: {nombre}"
-                    : $"- {tipologiaId}: {descripcion}";
-
-                lines.Add(definition);
-            }
-            catch
-            {
-                // Ignorar archivos malformados — el prompt seguirá con las tipologías válidas
-            }
-        }
-
-        return string.Join("\n", lines);
+        return model;
     }
+
+    private static bool IsAzureOpenAiProvider(string provider) =>
+        provider.ToLowerInvariant() is "azure-openai" or "gpt" or "openai";
 }

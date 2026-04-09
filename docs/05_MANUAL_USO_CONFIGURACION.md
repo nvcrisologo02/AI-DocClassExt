@@ -150,7 +150,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.classification.model` | string | No | Reservado. Usar `"auto"`. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
 | `instrucciones.extraction` | object | No | Config extraccion para esta peticion. |
-| `instrucciones.extraction.provider` | string | No | `"auto"` / `"azure-content-understanding"` / `"azure-cu"` / `"azure-document-intelligence"` / `"azure-di"` / `"mock"`. |
+| `instrucciones.extraction.provider` | string | No | `"auto"` / `"azure-content-understanding"` / `"azure-cu"` / `"azure-document-intelligence"` / `"azure-di"` / `"azure-openai"` / `"gpt"` / `"mock"`. Con `"azure-openai"` se activa el modo GPT directo (sin CU). |
 | `instrucciones.extraction.model` | string | No | Model key del registro. `"auto"` = usar config tipologia. |
 | `instrucciones.extraction.umbral` | double? | No | Umbral legacy (aplica si no se informan los especificos). |
 | `instrucciones.extraction.umbralCompletitud` | double? | No | Ratio minimo campos para NO activar fallback GPT (0.0-1.0). |
@@ -167,12 +167,27 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 ### Jerarquia de Umbrales
 
 ```
-Peticion (instrucciones.extraction.umbralCompletitud)
-  → Tipologia (config JSON: extractionConfig.minFieldsRatio)
-    → Servidor (appsettings: Extraction:GptFallback:MinFieldsRatio)
+Extracción (completitud):
+  instrucciones.extraction.umbralCompletitud
+    ?? instrucciones.extraction.umbral
+    ?? tipologia.confidenceConfig.extracUmbralFallbackCompletitud
+    ?? tipologia.confidenceConfig.extracUmbralFallback
+    ?? modelo.minFieldsRatio
+
+Extracción (confianza):
+  instrucciones.extraction.umbralConfianza
+    ?? instrucciones.extraction.umbral
+    ?? tipologia.confidenceConfig.extracUmbralFallbackConfianza
+    ?? tipologia.confidenceConfig.extracUmbralFallback
+    ?? modelo.minFieldsRatio
+
+Clasificación:
+  instrucciones.classification.umbral
+    ?? tipologia.confidenceConfig.clasifUmbralFallback
+    ?? modelo.fallbackThreshold
 ```
 
-La misma cascada aplica para clasificacion (`umbral` → tipologia → servidor).
+En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el específico de ese criterio es `null`.
 
 ---
 
@@ -246,7 +261,8 @@ La misma cascada aplica para clasificacion (`umbral` → tipologia → servidor)
 | Campo | Valor | Significado |
 |-------|-------|------------|
 | `clasificacion.fallbackLLM` | `true` | Clasificacion fue hecha por GPT (DI tuvo baja confianza) |
-| `extraccion.fallbackUsado` | `true` | Extraccion complementada por GPT (CU tuvo baja completitud) |
+| `extraccion.fallbackUsado` | `true` | Extracción complementada por GPT (CU tuvo baja completitud/confianza) |
+| `extraccion.fallbackUsado` | `false` | Extracción directa GPT (`azure-openai`) o CU suficiente sin activar fallback |
 | `clasificacion.fallbackRazon` | string | Motivo del fallback |
 | `seguimiento.actividades[].fallbackActivado` | `true` | Actividad especifica uso fallback |
 
@@ -254,7 +270,9 @@ La misma cascada aplica para clasificacion (`umbral` → tipologia → servidor)
 
 ## 5.5 Configuracion de Validacion
 
-### 5.5.1 Estructura del Archivo de Validacion
+> Los archivos `.validation.json` descritos aquí son la **estructura de referencia y de seed**. En runtime, la configuración se lee desde la columna `ConfiguracionJson` de la tabla `TipologiasConfig` en BD.
+
+### 5.5.1 Estructura del Archivo de Validacion (referencia / seed)
 
 Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
 
@@ -358,23 +376,139 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
 
 ## 5.6 Checklist: Anadir Nueva Tipologia
 
+> Los archivos JSON de `config/tipologias/` son **solo seed**. En runtime la Function App usa BD. El proceso recomendado crea la tipología directamente en BD via Admin API.
+
 | # | Paso | Detalle | Verificacion |
 |---|------|---------|-------------|
-| 1 | Crear archivo validacion JSON | `config/tipologias/{codigo}.validation.json` con campos y reglas | JSON valido, campos coinciden con modelo CU |
-| 2 | Crear archivo plugins JSON (si aplica) | `config/tipologias/{codigo}.plugins.json` con plugins de enriquecimiento | JSON valido, pluginKeys correctos |
+| 1 | Preparar JSON de validacion | Crear `config/tipologias/{codigo}.validation.json` con campos y reglas (usado como seed o referencia) | JSON valido, campos coinciden con modelo CU |
+| 2 | Preparar JSON de plugins (si aplica) | Crear `config/tipologias/{codigo}.plugins.json` (seed) | JSON valido, pluginKeys correctos |
 | 3 | Entrenar modelo CU (si extraccion custom) | Azure Content Understanding → crear analyzer con campos custom | Modelo publicado y accesible |
-| 4 | Registrar modelo en BD | `POST /management/modelos` con Key, Tipo, Provider, Modelo | 200 OK |
+| 4 | Registrar modelo en BD | `POST /management/modelos` con `Key`, `Tipo` y `ConfiguracionJson` (ver §5.6.1 para el schema por tipo de proveedor) | 200 OK |
 | 5 | Entrenar clasificador DI (si clasificacion custom) | Azure Document Intelligence → entrenar modelo custom | Modelo publicado |
-| 6 | Crear tipologia via API | `POST /management/tipologias` con codigo, nombre, version, umbrales | Estado = Draft |
+| 6 | Crear tipologia via API (fuente de verdad) | `POST /management/tipologias` con codigo, nombre, version, umbrales y ConfiguracionJson | Estado = Draft |
 | 7 | Publicar tipologia | `POST /management/tipologias/{id}/publicar` | Estado = Published |
 | 8 | Verificar en catalogo | `GET /api/tipologias` debe incluir la nueva tipologia | Aparece en lista |
 | 9 | Test de ingesta | Enviar documento de prueba con la nueva tipologia | Estado final = OK o REVISION |
 
 ---
 
+### 5.6.1 Schema de ConfiguracionJson por Tipo de Proveedor
+
+> Todos los parametros de conexion AI se almacenan **exclusivamente en BD** (tabla `ModeloConfigs`). No hay claves en `appsettings` para estos valores.
+> La columna `ConfiguracionJson` del modelo contiene un objeto JSON cuya estructura depende del `provider`.
+
+#### Proveedor `azure-document-intelligence` (Clasificacion)
+
+```json
+{
+  "endpoint": "https://<nombre>.cognitiveservices.azure.com/",
+  "apiKey": "<clave>",
+  "authMode": "ApiKey",
+  "apiVersion": "2024-11-30",
+  "pollIntervalMs": 1000,
+  "timeoutSeconds": 120,
+  "isDefault": true,
+  "fallbackThreshold": 0.6
+}
+```
+
+| Campo | Tipo | Obligatorio | Notas |
+|-------|------|-------------|-------|
+| `endpoint` | string | Sí | URL base del servicio Azure DI |
+| `apiKey` | string | Si `authMode=ApiKey` | API Key del servicio |
+| `authMode` | string | Sí | `"ApiKey"` o `"ManagedIdentity"` |
+| `apiVersion` | string | No | Default: `"2024-11-30"` |
+| `pollIntervalMs` | int | No | ms entre sondeos de estado. Default: `1000` |
+| `timeoutSeconds` | int | No | Timeout total. Default: `120` |
+| `isDefault` | bool | No | Marca como modelo de clasificacion por defecto |
+| `fallbackThreshold` | double | No | Confianza mínima DI para no activar fallback GPT |
+
+#### Proveedor `azure-document-intelligence` (Extraccion)
+
+```json
+{
+  "endpoint": "https://<nombre>.cognitiveservices.azure.com/",
+  "apiKey": "<clave>",
+  "authMode": "ApiKey",
+  "apiVersion": "2024-11-30",
+  "analyzerId": "<id-del-modelo-custom>",
+  "pollIntervalMs": 1000,
+  "timeoutSeconds": 120,
+  "isDefault": false,
+  "useAsFallback": false
+}
+```
+
+#### Proveedor `azure-content-understanding` (Extraccion)
+
+```json
+{
+  "endpoint": "https://<nombre>.cognitiveservices.azure.com/",
+  "apiKey": "<clave>",
+  "authMode": "ApiKey",
+  "analyzerId": "<id-del-analyzer-CU>",
+  "processingLocation": "westeurope",
+  "contentType": "application/pdf",
+  "timeoutSeconds": 120,
+  "isDefault": true,
+  "useAsFallback": false
+}
+```
+
+| Campo | Tipo | Obligatorio | Notas |
+|-------|------|-------------|-------|
+| `analyzerId` | string | Sí | ID del analyzer publicado en Azure Content Understanding |
+| `processingLocation` | string | No | Region de procesamiento. Ej: `"westeurope"` |
+| `contentType` | string | No | Default: `"application/pdf"` |
+
+#### Proveedor `azure-openai` (Extraccion / Prompt / Clasificacion)
+
+```json
+{
+  "endpoint": "https://<nombre>.openai.azure.com/",
+  "apiKey": "<clave>",
+  "authMode": "ApiKey",
+  "deploymentName": "gpt-4o-mini",
+  "temperature": 0.0,
+  "maxTokens": 4096,
+  "timeoutSeconds": 120,
+  "minFieldsRatio": 0.5,
+  "isDefault": false,
+  "useAsFallback": true
+}
+```
+
+| Campo | Tipo | Obligatorio | Notas |
+|-------|------|-------------|-------|
+| `deploymentName` | string | Sí | Nombre del deployment en Azure OpenAI |
+| `temperature` | double | No | Temperatura de generacion. Default: `0.0` |
+| `maxTokens` | int | No | Tokens maximos de respuesta. Default: `4096` |
+| `minFieldsRatio` | double | No | Completitud minima para activar este modelo como fallback |
+| `useAsFallback` | bool | No | `true` = actuar como fallback de extraccion GPT |
+
+#### Proveedor `azure-document-intelligence-layout` (Layout)
+
+```json
+{
+  "endpoint": "https://<nombre>.cognitiveservices.azure.com/",
+  "apiKey": "<clave>",
+  "authMode": "ApiKey",
+  "apiVersion": "2024-11-30",
+  "pollIntervalMs": 1000,
+  "timeoutSeconds": 120,
+  "isDefault": true
+}
+```
+
+> **Nota sobre `authMode`:** Con `"ManagedIdentity"` el campo `apiKey` se ignora y la autenticacion se realiza via Managed Identity de la Function App (sin credenciales en BD).
+
+---
+
 ## 5.7 Configuracion de Plugins
 
-### 5.7.1 Estructura del Archivo de Plugins
+> Los archivos `.plugins.json` son **solo seed**. En runtime, los plugins se resuelven desde la tabla `PluginTipologiaConfigs` en BD. Para modificar plugins en produccion, usar `PUT /management/tipologias/{id}/plugins`.
+
+### 5.7.1 Estructura del Archivo de Plugins (referencia / seed)
 
 Archivo: `config/tipologias/{tipologia-codigo}.plugins.json`
 
