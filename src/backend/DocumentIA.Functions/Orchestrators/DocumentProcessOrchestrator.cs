@@ -424,10 +424,13 @@ public class DocumentProcessOrchestrator
                     ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
                     ?? minFieldsRatioFallback;
 
-                // Umbrales específicos por criterio (completitud y confianza): solo desde instrucciones (mayor prioridad)
-                var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud;
-                var umbralExtracConfianzaRequest = entrada.Instrucciones.Extraction.UmbralConfianza;
-
+                // Capa instrucciones para extracción:
+                // - Si hay umbral específico, se usa ese valor.
+                // - Si falta el específico, usa instrucciones.extraction.umbral (legado de la misma capa).
+                var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud
+                    ?? entrada.Instrucciones.Extraction.Umbral;
+                var umbralExtracConfianzaRequest = entrada.Instrucciones.Extraction.UmbralConfianza
+                    ?? entrada.Instrucciones.Extraction.Umbral;
                 // Provider y model override: instrucciones ?? null (tipología se aplica en el proveedor)
                 var providerEfectivo = string.IsNullOrWhiteSpace(entrada.Instrucciones.Extraction.Provider)
                     || entrada.Instrucciones.Extraction.Provider.Equals("auto", StringComparison.OrdinalIgnoreCase)

@@ -211,6 +211,162 @@ public class ConfigurableExtraerDataProviderTests
             Times.Never);
     }
 
+    [Fact]
+    public async Task ObtenerDatosAsync_InstruccionesLegacyRellenaEspecificosYPrimaSobreTipologia()
+    {
+        using var fixture = TestFixture.Create(
+            minFieldsRatio: 0.5,
+            fallbackEnabled: true,
+            tipExtracUmbralFallback: 0.95,
+            tipExtracUmbralFallbackCompletitud: 0.90,
+            tipExtracUmbralFallbackConfianza: 0.90);
+
+        var input = fixture.CreateInput();
+        input.UmbralFallbackEfectivo = 0.80;
+        input.UmbralFallbackEfectivoCompletitud = 0.80;
+        input.UmbralFallbackEfectivoConfianza = 0.80;
+
+        var cuResult = new ExtraccionResultado
+        {
+            Proveedor = "azure-content-understanding",
+            Modelo = "cu",
+            ConfianzaExtraccion = 0.85,
+            DatosExtraidos = new Dictionary<string, object>
+            {
+                ["CampoA"] = "v",
+                ["CampoB"] = "v2",
+                ["CampoC"] = "v3"
+            }
+        };
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(input, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(cuResult);
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(input);
+
+        result.Should().BeSameAs(cuResult);
+        fixture.GptProvider.Verify(
+            p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task ObtenerDatosAsync_InstruccionesEspecificoPrimaSobreLegacyEnSuCriterio()
+    {
+        using var fixture = TestFixture.Create(
+            minFieldsRatio: 0.5,
+            fallbackEnabled: true,
+            tipExtracUmbralFallback: 0.70,
+            tipExtracUmbralFallbackCompletitud: 0.70,
+            tipExtracUmbralFallbackConfianza: 0.70);
+
+        var input = fixture.CreateInput();
+        input.UmbralFallbackEfectivo = 0.80;
+        input.UmbralFallbackEfectivoCompletitud = 0.80;
+        input.UmbralFallbackEfectivoConfianza = 0.92;
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(input, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-content-understanding",
+                Modelo = "cu",
+                ConfianzaExtraccion = 0.85,
+                DatosExtraidos = new Dictionary<string, object>
+                {
+                    ["CampoA"] = "v",
+                    ["CampoB"] = "v2",
+                    ["CampoC"] = "v3"
+                }
+            });
+
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackAsync(
+                input,
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object>
+                {
+                    ["CampoA"] = "v"
+                }
+            });
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(input);
+
+        result.FallbackUsado.Should().BeTrue();
+        result.FallbackRazon.Should().Contain("conf=0.850<0.920");
+        fixture.GptProvider.VerifyAll();
+    }
+
+    [Fact]
+    public async Task ObtenerDatosAsync_SinInstruccionesUsaTipologiaEspecificoAntesQueLegacy()
+    {
+        using var fixture = TestFixture.Create(
+            minFieldsRatio: 0.5,
+            fallbackEnabled: true,
+            tipExtracUmbralFallback: 0.80,
+            tipExtracUmbralFallbackCompletitud: 0.80,
+            tipExtracUmbralFallbackConfianza: 0.90);
+
+        var input = fixture.CreateInput();
+        input.UmbralFallbackEfectivo = 0.80;
+        input.UmbralFallbackEfectivoCompletitud = null;
+        input.UmbralFallbackEfectivoConfianza = null;
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(input, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-content-understanding",
+                Modelo = "cu",
+                ConfianzaExtraccion = 0.85,
+                DatosExtraidos = new Dictionary<string, object>
+                {
+                    ["CampoA"] = "v",
+                    ["CampoB"] = "v2",
+                    ["CampoC"] = "v3"
+                }
+            });
+
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackAsync(
+                input,
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object>
+                {
+                    ["CampoA"] = "v"
+                }
+            });
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(input);
+
+        result.FallbackUsado.Should().BeTrue();
+        result.FallbackRazon.Should().Contain("conf=0.850<0.900");
+        fixture.GptProvider.VerifyAll();
+    }
+
     private sealed class TestFixture : IDisposable
     {
         private readonly string _tempDir;
@@ -343,7 +499,14 @@ public class ConfigurableExtraerDataProviderTests
             Logger = new Mock<ILogger<ConfigurableExtraerDataProvider>>();
         }
 
-        public static TestFixture Create(double minFieldsRatio, bool fallbackEnabled, bool extractionEnabled = true, string extractionProvider = "azure-content-understanding")
+        public static TestFixture Create(
+            double minFieldsRatio,
+            bool fallbackEnabled,
+            bool extractionEnabled = true,
+            string extractionProvider = "azure-content-understanding",
+            double? tipExtracUmbralFallback = null,
+            double? tipExtracUmbralFallbackCompletitud = null,
+            double? tipExtracUmbralFallbackConfianza = null)
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "DocumentIA.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
@@ -364,6 +527,12 @@ public class ConfigurableExtraerDataProviderTests
                     modelKey = extractionProvider == "azure-openai" ? "direct.gpt" : "default.cu",
                     autoMapUnmappedFields = true,
                     fieldMappings = Array.Empty<object>()
+                },
+                confidenceConfig = new
+                {
+                    extracUmbralFallback = tipExtracUmbralFallback,
+                    extracUmbralFallbackCompletitud = tipExtracUmbralFallbackCompletitud,
+                    extracUmbralFallbackConfianza = tipExtracUmbralFallbackConfianza
                 },
                 fields = new[]
                 {

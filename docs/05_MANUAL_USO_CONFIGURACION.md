@@ -167,12 +167,27 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 ### Jerarquia de Umbrales
 
 ```
-Peticion (instrucciones.extraction.umbralCompletitud)
-  → Tipologia (config JSON: extractionConfig.minFieldsRatio)
-    → Servidor (modelo BD: campo `minFieldsRatio` del modelo de extracción en tabla ModeloConfigs)
+Extracción (completitud):
+  instrucciones.extraction.umbralCompletitud
+    ?? instrucciones.extraction.umbral
+    ?? tipologia.confidenceConfig.extracUmbralFallbackCompletitud
+    ?? tipologia.confidenceConfig.extracUmbralFallback
+    ?? modelo.minFieldsRatio
+
+Extracción (confianza):
+  instrucciones.extraction.umbralConfianza
+    ?? instrucciones.extraction.umbral
+    ?? tipologia.confidenceConfig.extracUmbralFallbackConfianza
+    ?? tipologia.confidenceConfig.extracUmbralFallback
+    ?? modelo.minFieldsRatio
+
+Clasificación:
+  instrucciones.classification.umbral
+    ?? tipologia.confidenceConfig.clasifUmbralFallback
+    ?? modelo.fallbackThreshold
 ```
 
-La misma cascada aplica para clasificacion (`umbral` → tipologia → servidor).
+En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el específico de ese criterio es `null`.
 
 ---
 
