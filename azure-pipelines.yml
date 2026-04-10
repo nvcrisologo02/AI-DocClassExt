@@ -126,7 +126,7 @@ stages:
               SecretsFilter: 'SqlConnectionString'
               RunAsPreJob: false
 
-          - powershell: |
+          - script: |
               Write-Host "Installing dotnet-ef tool if missing..."
               if (-not (Get-Command dotnet-ef -ErrorAction SilentlyContinue)) {
                 dotnet tool install --global dotnet-ef --version 8.0.1
