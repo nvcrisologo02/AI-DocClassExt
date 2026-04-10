@@ -116,12 +116,18 @@ stages:
               RunAsPreJob: false
 
           - pwsh: |
-              Write-Host "Installing dotnet-ef tool if missing..."
-              if (-not (Get-Command dotnet-ef -ErrorAction SilentlyContinue)) {
-                dotnet tool install --global dotnet-ef --version 8.0.1
-              }
+              $ErrorActionPreference = 'Stop'
+
+              Write-Host "Installing dotnet-ef..."
+              dotnet tool update --global dotnet-ef --version 9.* || dotnet tool install --global dotnet-ef --version 9.*
 
               $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+
+              Write-Host "Dotnet info:"
+              dotnet --info
+
+              Write-Host "dotnet-ef version:"
+              dotnet ef --version
 
               Write-Host "Restoring solution..."
               dotnet restore $(solutionPath)
