@@ -6,7 +6,7 @@
   "gdcSubtipoDocumento": "",
   "gdcSerie": "",
   "skipGDCUpload": true,
-  "gptDescripcion": "Tipolog\u00EDa orientada a generar un resumen estandarizado del documento de entrada.",
+  "gptDescripcion": "Tipología orientada a generar un resumen estandarizado del documento de entrada.",
   "version": "1.0",
   "isDefault": true,
   "extraction": {
@@ -30,8 +30,5 @@
     "umbralOK": 0.85,
     "umbralRevision": 0.70
   },
-  "fields": [],
-  "TipologiaId": "resumen.documental",
-  "TipologiaNombre": "Resumen Documental Estandar",
-  "Version": "1.0"
+  "fields": []
 }

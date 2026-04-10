@@ -6,7 +6,7 @@
   "gdcSubtipoDocumento": "",
   "gdcSerie": "",
   "skipGDCUpload": true,
-  "gptDescripcion": "Informe de tasaci\u00F3n inmobiliaria. Documento t\u00E9cnico que certifica el valor de mercado de un inmueble. Incluye valor tasado, metodolog\u00EDa de valoraci\u00F3n, descripci\u00F3n del inmueble, superficies y datos del tasador.",
+  "gptDescripcion": "Informe de tasaci\u00f3n inmobiliaria. Documento t\u00e9cnico que certifica el valor de mercado de un inmueble. Incluye valor tasado, metodolog\u00eda de valoraci\u00f3n, descripci\u00f3n del inmueble, superficies y datos del tasador.",
   "version": "1.0",
   "isDefault": true,
   "promptConfig": {
@@ -52,17 +52,14 @@
           "ruleType": "date",
           "severity": "Error",
           "parameters": {
-            "formats": [
-              "dd/MM/yyyy",
-              "yyyy-MM-dd"
-            ],
+            "formats": [ "dd/MM/yyyy", "yyyy-MM-dd" ],
             "allowFuture": false,
             "allowPast": true
           }
         }
       ]
     },
-    {
+     {
       "name": "Direccion",
       "type": "string",
       "required": false,
@@ -103,8 +100,5 @@
         }
       ]
     }
-  ],
-  "TipologiaId": "tasacion",
-  "TipologiaNombre": "Tasacion",
-  "Version": "1.0"
+  ]
 }

@@ -8,21 +8,14 @@
   "skipGDCUpload": false,
   "version": "1.0",
   "isDefault": false,
-  "extraction": {
-    "enabled": true,
-    "provider": "azure-content-understanding",
-    "modelKey": "nota.simple.1_4.azure-cu",
-    "autoMapUnmappedFields": true,
-    "fieldMappings": []
-  },
   "confidenceConfig": {
     "clasifUmbralFallback": 0.85,
     "extracUmbralFallback": 0.8,
     "extracWeightCampos": 0.5,
     "extracWeightRequeridos": 0.3,
     "extracWeightWarnings": 0.2,
-    "umbralOK": 0.8,
-    "umbralRevision": 0.7
+    "umbralOK": 0.85,
+    "umbralRevision": 0.70
   },
   "fields": [
     {
@@ -49,10 +42,7 @@
           "ruleType": "date",
           "severity": "Error",
           "parameters": {
-            "formats": [
-              "dd/MM/yyyy",
-              "yyyy-MM-dd"
-            ],
+            "formats": [ "dd/MM/yyyy", "yyyy-MM-dd" ],
             "allowFuture": false,
             "allowPast": true
           }
@@ -89,8 +79,5 @@
         }
       ]
     }
-  ],
-  "TipologiaId": "nota.simple.1_0",
-  "TipologiaNombre": "Nota Simple",
-  "Version": "1.0"
+  ]
 }

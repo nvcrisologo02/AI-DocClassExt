@@ -1,0 +1,28 @@
+{
+  "models": [
+    {
+      "key": "default.azure-di",
+      "provider": "azure-document-intelligence",
+      "isDefault": true,
+      "endpoint": "https://srbdiprodocai.cognitiveservices.azure.com/",
+      "authMode": "DefaultAzureCredential",
+      "classifierId": "DocumentAICC_v0",
+      "apiVersion": "2024-11-30",
+      "timeoutSeconds": 120,
+      "pollIntervalMs": 1000
+    },
+    {
+      "key": "classification.gpt4o-mini-fallback",
+      "provider": "azure-openai",
+      "useAsFallback": true,
+      "endpoint": "https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+      "apiKey": "COMPLETAR_AZURE_AI_API_KEY",
+      "authMode": "ApiKey",
+      "deploymentName": "gpt-4o-mini",
+      "fallbackThreshold": 0.6,
+      "temperature": 0.0,
+      "maxTokens": 150,
+      "timeoutSeconds": 30
+    }
+  ]
+}
