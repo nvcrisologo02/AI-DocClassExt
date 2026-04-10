@@ -23,8 +23,20 @@
       "type": "string",
       "required": true,
       "rules": [
-        { "ruleType": "minLength", "severity": "Error", "parameters": { "value": 1 } },
-        { "ruleType": "maxLength", "severity": "Error", "parameters": { "value": 30 } }
+        {
+          "ruleType": "minLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 1
+          }
+        },
+        {
+          "ruleType": "maxLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 30
+          }
+        }
       ]
     },
     {
@@ -32,8 +44,20 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "minLength", "severity": "Error", "parameters": { "value": 3 } },
-        { "ruleType": "maxLength", "severity": "Error", "parameters": { "value": 120 } }
+        {
+          "ruleType": "minLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 3
+          }
+        },
+        {
+          "ruleType": "maxLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 120
+          }
+        }
       ]
     },
     {
@@ -41,7 +65,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 80 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 80
+          }
+        }
       ]
     },
     {
@@ -49,7 +79,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "regex", "severity": "Warning", "parameters": { "pattern": "^[0-9]{14}$" } }
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^[0-9]{14}$"
+          }
+        }
       ]
     },
     {
@@ -61,7 +97,10 @@
           "ruleType": "date",
           "severity": "Error",
           "parameters": {
-            "formats": ["dd/MM/yyyy", "yyyy-MM-dd"],
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
             "allowFuture": false,
             "allowPast": true
           }
@@ -73,7 +112,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 40 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 40
+          }
+        }
       ]
     },
     {
@@ -99,12 +144,12 @@
       "type": "string",
       "required": false,
       "rules": [
-        { 
-          "ruleType": "regex", 
-          "severity": "Warning", 
-          "parameters": { 
-            "pattern": "^[0-9]{7}[A-Z]{2}[0-9]{4}[A-Z]{1}[0-9]{4}[A-Z]{2}$" 
-          } 
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^[0-9]{7}[A-Z]{2}[0-9]{4}[A-Z]{1}[0-9]{4}[A-Z]{2}$"
+          }
         }
       ]
     },
@@ -113,12 +158,12 @@
       "type": "string",
       "required": false,
       "rules": [
-        { 
-          "ruleType": "regex", 
-          "severity": "Warning", 
-          "parameters": { 
-            "pattern": "^[0-9]{5}$" 
-          } 
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^[0-9]{5}$"
+          }
         }
       ]
     },
@@ -127,7 +172,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 50 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 50
+          }
+        }
       ]
     },
     {
@@ -135,7 +186,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 80 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 80
+          }
+        }
       ]
     },
     {
@@ -147,7 +204,18 @@
           "ruleType": "enum",
           "severity": "Warning",
           "parameters": {
-            "values": ["Vivienda", "Local", "Trastero", "Garaje", "Edificio", "Suelo", "Oficina", "Nave", "Finca rústica", "Otro"]
+            "values": [
+              "Vivienda",
+              "Local",
+              "Trastero",
+              "Garaje",
+              "Edificio",
+              "Suelo",
+              "Oficina",
+              "Nave",
+              "Finca r\u00FAstica",
+              "Otro"
+            ]
           }
         }
       ]
@@ -160,7 +228,10 @@
         {
           "ruleType": "range",
           "severity": "Error",
-          "parameters": { "min": 0, "max": 200000000 }
+          "parameters": {
+            "min": 0,
+            "max": 200000000
+          }
         }
       ]
     },
@@ -172,7 +243,14 @@
         {
           "ruleType": "enum",
           "severity": "Warning",
-          "parameters": { "values": ["m2_construidos", "m2_utiles", "m2_suelo", "otro"] }
+          "parameters": {
+            "values": [
+              "m2_construidos",
+              "m2_utiles",
+              "m2_suelo",
+              "otro"
+            ]
+          }
         }
       ]
     },
@@ -183,9 +261,46 @@
       "items": {
         "type": "object",
         "properties": [
-          { "name": "tipo", "type": "string", "rules": [{ "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 40 } }] },
-          { "name": "descripcion", "type": "string", "rules": [{ "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 200 } }] },
-          { "name": "superficie", "type": "decimal", "rules": [{ "ruleType": "range", "severity": "Warning", "parameters": { "min": 0, "max": 200000000 } }] }
+          {
+            "name": "tipo",
+            "type": "string",
+            "rules": [
+              {
+                "ruleType": "maxLength",
+                "severity": "Warning",
+                "parameters": {
+                  "value": 40
+                }
+              }
+            ]
+          },
+          {
+            "name": "descripcion",
+            "type": "string",
+            "rules": [
+              {
+                "ruleType": "maxLength",
+                "severity": "Warning",
+                "parameters": {
+                  "value": 200
+                }
+              }
+            ]
+          },
+          {
+            "name": "superficie",
+            "type": "decimal",
+            "rules": [
+              {
+                "ruleType": "range",
+                "severity": "Warning",
+                "parameters": {
+                  "min": 0,
+                  "max": 200000000
+                }
+              }
+            ]
+          }
         ]
       }
     },
@@ -194,7 +309,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 500 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 500
+          }
+        }
       ]
     },
     {
@@ -205,8 +326,15 @@
         {
           "ruleType": "enum",
           "severity": "Warning",
-          "parameters": { 
-            "values": ["Suelo urbano", "Suelo urbanizable", "Suelo rústico", "Suelo no urbanizable", "No consta", "Otros"] 
+          "parameters": {
+            "values": [
+              "Suelo urbano",
+              "Suelo urbanizable",
+              "Suelo r\u00FAstico",
+              "Suelo no urbanizable",
+              "No consta",
+              "Otros"
+            ]
           }
         }
       ]
@@ -216,7 +344,13 @@
       "type": "string",
       "required": true,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Error", "parameters": { "value": 160 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 160
+          }
+        }
       ]
     },
     {
@@ -224,7 +358,11 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "nif", "severity": "Warning", "parameters": {} }
+        {
+          "ruleType": "nif",
+          "severity": "Warning",
+          "parameters": {}
+        }
       ]
     },
     {
@@ -235,7 +373,15 @@
         {
           "ruleType": "enum",
           "severity": "Error",
-          "parameters": { "values": ["Pleno dominio", "Nuda propiedad", "Usufructo", "Copropiedad", "Otro"] }
+          "parameters": {
+            "values": [
+              "Pleno dominio",
+              "Nuda propiedad",
+              "Usufructo",
+              "Copropiedad",
+              "Otro"
+            ]
+          }
         }
       ]
     },
@@ -244,7 +390,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "regex", "severity": "Warning", "parameters": { "pattern": "^[0-9]+\\/[0-9]+$" } }
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^[0-9]\u002B\\/[0-9]\u002B$"
+          }
+        }
       ]
     },
     {
@@ -256,7 +408,10 @@
           "ruleType": "date",
           "severity": "Warning",
           "parameters": {
-            "formats": ["dd/MM/yyyy", "yyyy-MM-dd"],
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
             "allowFuture": false,
             "allowPast": true
           }
@@ -271,7 +426,17 @@
         {
           "ruleType": "enum",
           "severity": "Warning",
-          "parameters": { "values": ["Compraventa", "Herencia", "Adjudicacion", "Dacion", "Donacion", "Otros", "Acta de Manifestaciones"] }
+          "parameters": {
+            "values": [
+              "Compraventa",
+              "Herencia",
+              "Adjudicacion",
+              "Dacion",
+              "Donacion",
+              "Otros",
+              "Acta de Manifestaciones"
+            ]
+          }
         }
       ]
     },
@@ -284,7 +449,10 @@
           "ruleType": "date",
           "severity": "Warning",
           "parameters": {
-            "formats": ["dd/MM/yyyy", "yyyy-MM-dd"],
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
             "allowFuture": false,
             "allowPast": true
           }
@@ -296,7 +464,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 60 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 60
+          }
+        }
       ]
     },
     {
@@ -313,15 +487,45 @@
               {
                 "ruleType": "enum",
                 "severity": "Warning",
-                "parameters": { "values": ["Hipoteca", "Embargo", "Servidumbre", "Condicion resolutoria", "Afeccion fiscal", "Otra"] }
+                "parameters": {
+                  "values": [
+                    "Hipoteca",
+                    "Embargo",
+                    "Servidumbre",
+                    "Condicion resolutoria",
+                    "Afeccion fiscal",
+                    "Otra"
+                  ]
+                }
               }
             ]
           },
-          { "name": "descripcion", "type": "string", "rules": [{ "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 300 } }] },
+          {
+            "name": "descripcion",
+            "type": "string",
+            "rules": [
+              {
+                "ruleType": "maxLength",
+                "severity": "Warning",
+                "parameters": {
+                  "value": 300
+                }
+              }
+            ]
+          },
           {
             "name": "importeMaxResponsabilidad",
             "type": "decimal",
-            "rules": [{ "ruleType": "range", "severity": "Warning", "parameters": { "min": 0, "max": 999999999999 } }]
+            "rules": [
+              {
+                "ruleType": "range",
+                "severity": "Warning",
+                "parameters": {
+                  "min": 0,
+                  "max": 999999999999
+                }
+              }
+            ]
           },
           {
             "name": "fechaInscripcion",
@@ -330,14 +534,29 @@
               {
                 "ruleType": "date",
                 "severity": "Warning",
-                "parameters": { "formats": ["dd/MM/yyyy", "yyyy-MM-dd"], "allowFuture": false, "allowPast": true }
+                "parameters": {
+                  "formats": [
+                    "dd/MM/yyyy",
+                    "yyyy-MM-dd"
+                  ],
+                  "allowFuture": false,
+                  "allowPast": true
+                }
               }
             ]
           },
           {
             "name": "acreedor",
             "type": "string",
-            "rules": [{ "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 160 } }]
+            "rules": [
+              {
+                "ruleType": "maxLength",
+                "severity": "Warning",
+                "parameters": {
+                  "value": 160
+                }
+              }
+            ]
           }
         ]
       }
@@ -352,7 +571,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 300 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 300
+          }
+        }
       ]
     },
     {
@@ -360,7 +585,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 200 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 200
+          }
+        }
       ]
     },
     {
@@ -371,7 +602,15 @@
         {
           "ruleType": "enum",
           "severity": "Warning",
-          "parameters": { "values": ["No consta", "Libre", "Arrendado inscrito", "Ocupado", "Otro"] }
+          "parameters": {
+            "values": [
+              "No consta",
+              "Libre",
+              "Arrendado inscrito",
+              "Ocupado",
+              "Otro"
+            ]
+          }
         }
       ]
     },
@@ -382,9 +621,18 @@
       "items": {
         "type": "object",
         "properties": [
-          { "name": "arrendatario", "type": "string" },
-          { "name": "fechaInicio", "type": "date" },
-          { "name": "fechaFin", "type": "date" }
+          {
+            "name": "arrendatario",
+            "type": "string"
+          },
+          {
+            "name": "fechaInicio",
+            "type": "date"
+          },
+          {
+            "name": "fechaFin",
+            "type": "date"
+          }
         ]
       }
     },
@@ -395,9 +643,18 @@
       "items": {
         "type": "object",
         "properties": [
-          { "name": "tipo", "type": "string" },
-          { "name": "fecha", "type": "date" },
-          { "name": "descripcion", "type": "string" }
+          {
+            "name": "tipo",
+            "type": "string"
+          },
+          {
+            "name": "fecha",
+            "type": "date"
+          },
+          {
+            "name": "descripcion",
+            "type": "string"
+          }
         ]
       }
     },
@@ -406,7 +663,13 @@
       "type": "string",
       "required": false,
       "rules": [
-        { "ruleType": "maxLength", "severity": "Warning", "parameters": { "value": 500 } }
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 500
+          }
+        }
       ]
     },
     {
@@ -419,7 +682,14 @@
       "type": "decimal",
       "required": false,
       "rules": [
-        { "ruleType": "range", "severity": "Warning", "parameters": { "min": 0, "max": 999999999 } }
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 999999999
+          }
+        }
       ]
     },
     {
@@ -427,7 +697,14 @@
       "type": "decimal",
       "required": false,
       "rules": [
-        { "ruleType": "range", "severity": "Warning", "parameters": { "min": 0, "max": 99999999 } }
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 99999999
+          }
+        }
       ]
     },
     {
@@ -435,8 +712,18 @@
       "type": "decimal",
       "required": false,
       "rules": [
-        { "ruleType": "range", "severity": "Warning", "parameters": { "min": 0, "max": 99999999 } }
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 99999999
+          }
+        }
       ]
     }
-  ]
+  ],
+  "TipologiaId": "nota.simple.1_3",
+  "TipologiaNombre": "Nota Simple",
+  "Version": "1.3"
 }

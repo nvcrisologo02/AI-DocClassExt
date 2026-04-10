@@ -16,14 +16,7 @@
         "maxRetries": 2,
         "initialDelayMs": 500,
         "exponentialBackoff": true,
-        "retryOnStatusCodes": [
-          408,
-          429,
-          500,
-          502,
-          503,
-          504
-        ]
+        "retryOnStatusCodes": [408, 429, 500, 502, 503, 504]
       }
     },
     {
@@ -75,14 +68,7 @@
         "maxRetries": 2,
         "initialDelayMs": 500,
         "exponentialBackoff": true,
-        "retryOnStatusCodes": [
-          408,
-          429,
-          500,
-          502,
-          503,
-          504
-        ]
+        "retryOnStatusCodes": [408, 429, 500, 502, 503, 504]
       }
     }
   ]
