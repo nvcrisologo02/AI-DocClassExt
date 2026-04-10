@@ -27,17 +27,12 @@ pool:
   vmImage: windows-latest
 
 stages:
-
-  # ─────────────────────────────────────────
-  # STAGE 1: Build
-  # ─────────────────────────────────────────
   - stage: Build
     displayName: Build & Test
     jobs:
       - job: BuildJob
         displayName: Build solution
         steps:
-
           - task: UseDotNet@2
             displayName: Use .NET 9 SDK
             inputs:
@@ -64,7 +59,6 @@ stages:
               projects: $(testsProject)
               arguments: --configuration $(buildConfiguration) --no-build
 
-          # Publicar Functions
           - task: DotNetCoreCLI@2
             displayName: Publish Functions
             inputs:
@@ -75,7 +69,6 @@ stages:
               zipAfterPublish: false
               modifyOutputPath: false
 
-          # Publicar Admin Blazor
           - task: DotNetCoreCLI@2
             displayName: Publish Admin
             inputs:
@@ -98,9 +91,6 @@ stages:
               PathtoPublish: $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
               ArtifactName: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
 
-  # ─────────────────────────────────────────
-  # STAGE X: Run EF Core migrations (pre-deploy)
-  # ─────────────────────────────────────────
   - stage: RunMigrations
     displayName: Run Database Migrations
     dependsOn: Build
@@ -111,7 +101,6 @@ stages:
         pool:
           vmImage: windows-latest
         steps:
-
           - task: UseDotNet@2
             displayName: Use .NET 9 SDK
             inputs:
@@ -123,27 +112,31 @@ stages:
             inputs:
               azureSubscription: $(AZURE_SERVICE_CONNECTION)
               KeyVaultName: $(KEY_VAULT_NAME)
-              SecretsFilter: 'SqlConnectionString'
+              SecretsFilter: SqlConnectionString
               RunAsPreJob: false
 
-          - script: |
+          - pwsh: |
               Write-Host "Installing dotnet-ef tool if missing..."
               if (-not (Get-Command dotnet-ef -ErrorAction SilentlyContinue)) {
                 dotnet tool install --global dotnet-ef --version 8.0.1
               }
+
               $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+
               Write-Host "Restoring solution..."
               dotnet restore $(solutionPath)
+
               Write-Host "Building solution..."
               dotnet build $(solutionPath) --configuration $(buildConfiguration) --no-restore
-              Write-Host "Applying EF Core migrations against database..."
-              dotnet ef database update --project src/backend/DocumentIA.Data/ --startup-project src/backend/DocumentIA.Functions/ --configuration $(buildConfiguration) --connection "$(SqlConnectionString)"
-            displayName: Apply EF Core migrations
-            pwsh: true
 
-  # ─────────────────────────────────────────
-  # STAGE 2: Deploy Functions
-  # ─────────────────────────────────────────
+              Write-Host "Applying EF Core migrations against database..."
+              dotnet ef database update `
+                --project src/backend/DocumentIA.Data/ `
+                --startup-project src/backend/DocumentIA.Functions/ `
+                --configuration $(buildConfiguration) `
+                --connection "$(SqlConnectionString)"
+            displayName: Apply EF Core migrations
+
   - stage: DeployFunctions
     displayName: Deploy Functions
     dependsOn: RunMigrations
@@ -156,7 +149,6 @@ stages:
           runOnce:
             deploy:
               steps:
-
                 - checkout: self
 
                 - download: current
@@ -170,7 +162,6 @@ stages:
                     appName: $(AZURE_FUNCTIONS_APP_NAME)
                     package: $(Pipeline.Workspace)/drop-functions
                     deploymentMethod: zipDeploy
-                    resourceGroupName: $(AZURE_RESOURCE_GROUP)
 
                 - task: AzureCLI@2
                   displayName: Set Function App settings (Key Vault mode)
@@ -201,11 +192,6 @@ stages:
                     arguments: -HostName $(FUNCTIONS_HOST_NAME)
                     pwsh: true
 
-  # ─────────────────────────────────────────
-  # STAGE 3: Deploy Admin
-  # Desactivado hasta que el recurso srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai esté creado.
-  # Cambiar condition a succeeded() cuando esté listo.
-  # ─────────────────────────────────────────
   - stage: DeployAdmin
     displayName: Deploy Admin Blazor
     dependsOn: Build
@@ -218,7 +204,6 @@ stages:
           runOnce:
             deploy:
               steps:
-
                 - download: current
                   artifact: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
 
