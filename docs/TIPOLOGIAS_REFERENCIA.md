@@ -2,7 +2,7 @@
 
 ## 1. Resumen de tipologías activas
 
-| Familia (`tipologiaId`) | Versión | Clave técnica | Default | GDC Tipo | GDC Subtipo | Skip GDC | Extracción | Prompt |
+| Familia (`tipologiaId`) | Versión | Clave técnica | Default | GDC Tipo | GDC Subtipo | Skip GDC | Extracción (proveedor) | Prompt |
 |---|---|---|---|---|---|---|---|---|
 | `nota-simple` | 1.0 | `nota.simple.1_0` | No | NOTS | NOTS01 | No | — | — |
 | `nota-simple` | 1.2 | `nota.simple.1_2` | No | NOTS | NOTS01 | No | — | — |
@@ -10,20 +10,27 @@
 | `nota-simple` | **1.4** | `nota.simple.1_4` | **Sí** | NOTS | NOTS01 | No | CU (`nota.simple.1_4.azure-cu`) | Sí (gpt4o-mini) |
 | `tasacion` | 1.0 | `tasacion` | Sí | — | — | **Sí** | — | No |
 | `resumen-documental` | 1.0 | `resumen.documental` | Sí | — | — | **Sí** | Disabled (mock) | Sí (vision, gpt4o-mini) |
+| `ibi` ★ | 1.0 | DB-backed | No | — | — | No | GPT directo (`azure-openai`) | — |
 
 > **Cédula:** el archivo `cedula.plugins.json` ha sido eliminado. La tipología `cedula` no está operativa.
+>
+> ★ **`ibi`** es una tipología almacenada exclusivamente en base de datos (sin fichero `.validation.json` en disco). Usa `extraction.provider = "azure-openai"` → `GptDirectExtraerDataProvider`. El modelo de extracción se define en la tabla `ModelosConfig` (key `default.gpt4o-mini_ex`).
 
 ---
 
 ## 2. Resolución de tipología (`TipologiaVersionResolver`)
 
-El resolver carga automáticamente todos los archivos `*.validation.json` del directorio `config/tipologias/`. Admite tres formas de referencia:
+El resolver carga tipologías desde dos fuentes (con prioridad DB sobre fichero):
+1. **Base de datos** — tabla `TipologiasConfig` vía `TipologiaVersionResolver` (tipologías DB-backed como `ibi`).
+2. **Ficheros JSON** — archivos `*.validation.json` del directorio `config/tipologias/` (tipologías legacy como `nota-simple`, `tasacion`, `resumen-documental`).
+
+Admite tres formas de referencia:
 
 | Formato de entrada | Resultado |
 |---|---|
 | `nota-simple` | Versión marcada `isDefault: true` dentro de la familia (actualmente v1.4) |
 | `nota-simple@1.3` | Versión exacta 1.3 |
-| `nota.simple.1_3` | Clave técnica directa (nombre de archivo sin extensión) |
+| `nota.simple.1_3` | Clave técnica directa (código en BD / nombre de archivo de seed sin extensión) |
 
 **Errores que puede lanzar:**
 

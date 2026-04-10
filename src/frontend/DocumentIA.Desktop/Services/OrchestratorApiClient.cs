@@ -14,17 +14,20 @@ namespace DocumentIA.Desktop.Services
         Task<bool> CheckConnectionAsync();
         Task<ProcessingResponse> IngestDocumentAsync(ProcessingRequest request);
         Task<ProcessingStatus> GetStatusAsync(string statusUri);
+        Task<List<TipologiaPublicadaDto>> GetTipologiasPublicadasAsync();
     }
 
     public class OrchestratorApiClient : IOrchestratorApiClient
     {
         private readonly RestClient _client;
         private readonly string _baseUrl;
+        private readonly string? _functionKey;
         private readonly JsonSerializerSettings _jsonSettings;
 
-        public OrchestratorApiClient(string baseUrl = "http://localhost:7071")
+        public OrchestratorApiClient(string baseUrl = "http://localhost:7071", string? functionKey = null)
         {
             _baseUrl = baseUrl.TrimEnd('/');
+            _functionKey = functionKey;
             _client = new RestClient(_baseUrl);
             
             // Configure JSON settings to be more lenient with parsing
@@ -44,13 +47,30 @@ namespace DocumentIA.Desktop.Services
             };
         }
 
+        private void AddFunctionKey(RestRequest request)
+        {
+            if (!string.IsNullOrWhiteSpace(_functionKey))
+                request.AddHeader("x-functions-key", _functionKey);
+        }
+
+        private string FixStatusUri(string statusUri)
+        {
+            // En local puede venir con localhost sin puerto; en Azure puede venir con la URL interna
+            var uri = statusUri
+                .Replace("http://localhost/", $"{_baseUrl}/")
+                .Replace("https://localhost/", $"{_baseUrl}/");
+
+            // Si la URI empieza por http(s):// y la base es distinta, usarla tal cual (Azure ya devuelve la URL correcta)
+            return uri;
+        }
+
         public async Task<bool> CheckConnectionAsync()
         {
             try
             {
-                // Simply try to reach http://localhost:7071 and see if it responds
-                // If we get any response (404, 500, etc.), the server is up
-                var request = new RestRequest("/", Method.Get);
+                // Usamos /api/tipologias (Anonymous) como health check
+                var request = new RestRequest("/api/tipologias", Method.Get);
+                AddFunctionKey(request);
                 var response = await _client.ExecuteAsync(request);
                 
                 // If we got any response at all, the server is reachable
@@ -73,7 +93,8 @@ namespace DocumentIA.Desktop.Services
             try
             {
                 var restRequest = new RestRequest("/api/IngestDocument", Method.Post);
-                
+                AddFunctionKey(restRequest);
+
                 // Serializar el request directamente
                 var jsonString = JsonConvert.SerializeObject(request);
                 
@@ -103,6 +124,27 @@ namespace DocumentIA.Desktop.Services
             }
         }
 
+        public async Task<List<TipologiaPublicadaDto>> GetTipologiasPublicadasAsync()
+        {
+            try
+            {
+                var request = new RestRequest("/api/tipologias", Method.Get);
+                AddFunctionKey(request);
+                var response = await _client.ExecuteAsync(request);
+
+                if (!response.IsSuccessful || string.IsNullOrWhiteSpace(response.Content))
+                    return new List<TipologiaPublicadaDto>();
+
+                return JsonConvert.DeserializeObject<List<TipologiaPublicadaDto>>(response.Content, _jsonSettings)
+                       ?? new List<TipologiaPublicadaDto>();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"GetTipologiasPublicadasAsync Exception: {ex.Message}");
+                return new List<TipologiaPublicadaDto>();
+            }
+        }
+
         public async Task<ProcessingStatus> GetStatusAsync(string statusUri)
         {
             try
@@ -112,31 +154,38 @@ namespace DocumentIA.Desktop.Services
                     throw new ArgumentException("Status URI is required", nameof(statusUri));
                 }
 
-                // Fix URL if it has incorrect localhost reference
-                var fixedUri = statusUri.Replace("http://localhost/", "http://localhost:7071/");
+                var fixedUri = FixStatusUri(statusUri);
 
-                var request = new RestRequest(fixedUri, Method.Get);
-                var response = await _client.ExecuteAsync(request);
+                // Use HttpClient directly for the status check: the URI is absolute and may already
+                // contain a ?code=... query param (Durable Functions system key). RestSharp combines
+                // relative paths with its BaseUrl and can corrupt absolute URLs with query strings.
+                using var http = new System.Net.Http.HttpClient();
+                if (!string.IsNullOrWhiteSpace(_functionKey))
+                    http.DefaultRequestHeaders.Add("x-functions-key", _functionKey);
 
-                if (!response.IsSuccessful)
+                var httpResponse = await http.GetAsync(fixedUri);
+
+                if (!httpResponse.IsSuccessStatusCode)
                 {
-                    throw new Exception($"Status check failed: {response.StatusCode}");
+                    throw new Exception($"Status check failed: {httpResponse.StatusCode}");
+                }
+
+                var content = await httpResponse.Content.ReadAsStringAsync();
+
+                if (string.IsNullOrWhiteSpace(content))
+                {
+                    throw new Exception("Status response is empty");
                 }
 
                 try
                 {
-                    if (string.IsNullOrWhiteSpace(response.Content))
-                    {
-                        throw new Exception("Status response is empty");
-                    }
-
-                    var result = JsonConvert.DeserializeObject<ProcessingStatus>(response.Content, _jsonSettings);
+                    var result = JsonConvert.DeserializeObject<ProcessingStatus>(content, _jsonSettings);
                     return result ?? throw new Exception("Failed to deserialize status response");
                 }
                 catch (JsonSerializationException jsonEx)
                 {
                     System.Diagnostics.Debug.WriteLine($"JSON Deserialization Error: {jsonEx.Message}");
-                    System.Diagnostics.Debug.WriteLine($"Response Content: {response.Content}");
+                    System.Diagnostics.Debug.WriteLine($"Response Content: {content}");
                     throw new Exception($"Failed to parse status response: {jsonEx.Message}", jsonEx);
                 }
             }

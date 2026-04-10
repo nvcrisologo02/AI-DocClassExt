@@ -8,23 +8,24 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
 
 public class GptFallbackExtraerDataProvider
 {
-    private readonly GptFallbackExtraerSettings _settings;
+    private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly ILogger<GptFallbackExtraerDataProvider> _logger;
+    private readonly Lazy<ExtractionModelConfig> _fallbackModel;
     private readonly Lazy<ChatClient> _chatClient;
 
     public GptFallbackExtraerDataProvider(
-        IOptions<GptFallbackExtraerSettings> settings,
+        ExtractionModelRegistryLoader modelRegistryLoader,
         ILogger<GptFallbackExtraerDataProvider> logger)
     {
-        _settings = settings.Value;
+        _modelRegistryLoader = modelRegistryLoader;
         _logger = logger;
+        _fallbackModel = new Lazy<ExtractionModelConfig>(ResolveFallbackModel);
         _chatClient = new Lazy<ChatClient>(CreateChatClient);
     }
 
@@ -35,23 +36,29 @@ public class GptFallbackExtraerDataProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
+        var model = _fallbackModel.Value;
 
         _logger.LogInformation(
             "Iniciando fallback GPT para extracción. Tipología={Tipologia}, Deployment={Deployment}",
             input.Tipologia,
-            _settings.DeploymentName);
+            model.DeploymentName);
 
         var systemMessage = new SystemChatMessage(
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
-            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional. " +
-            "Preferiblemente devuelve un objeto con claves 'campos_extraidos' y 'confianza_por_campo'. " +
-            "En 'confianza_por_campo' informa un valor de 0 a 1 por cada campo extraído. " +
+            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
+            "'campos_extraidos' (objeto con los campos extraídos, null para no encontrados), " +
+            "'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción), " +
+            "'confianza_por_campo' (objeto con confianza 0..1 por cada campo extraído). " +
+            "Para cada campo se indican el tipo esperado, si es obligatorio y las reglas de validación " +
+            "(formatos permitidos, patrones, valores de enumeración, rangos numéricos). " +
+            "Respeta estrictamente esas reglas al extraer el valor de cada campo. " +
             "Usa null para campos no encontrados.");
 
         var fieldList = BuildFieldList(tipologiaConfig);
         var userPrompt =
             $"Tipo de documento: {tipologiaConfig.TipologiaId} ({tipologiaConfig.TipologiaNombre})\n\n" +
-            "Extrae estos campos y devuelve exactamente estos nombres de clave:\n" +
+            "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
+            "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
             fieldList;
 
         var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
@@ -77,12 +84,12 @@ public class GptFallbackExtraerDataProvider
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)_settings.Temperature,
-            MaxOutputTokenCount = _settings.MaxTokens
+            Temperature = (float)model.Temperature,
+            MaxOutputTokenCount = model.MaxTokens
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
 
         var response = await _chatClient.Value.CompleteChatAsync(
             new List<ChatMessage> { systemMessage, userMessage },
@@ -111,19 +118,130 @@ public class GptFallbackExtraerDataProvider
             ? ParseFieldConfidenceMap(confidenceElement, tipologiaConfig)
             : null;
 
-        var metricasDebug = BuildFallbackMetricas(input, tipologiaConfig, datos, confianzaPorCampo);
+        var confianzaExtraccionGpt = root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("confianza_extraccion", out var ceElement)
+            && ceElement.TryGetDouble(out var ceVal)
+            ? (double?)Math.Clamp(ceVal, 0.0, 1.0)
+            : null;
+
+        var (confianzaCalculada, metricasDebug) = BuildFallbackMetricas(input, tipologiaConfig, datos, confianzaPorCampo);
 
         return new ExtraccionResultado
         {
             Proveedor = "azure-openai",
-            Modelo = _settings.DeploymentName,
+            Modelo = model.DeploymentName,
             LayoutEnabled = false,
             FallbackUsado = true,
-            ConfianzaExtraccion = ConfidenceCalculator.ExtracGPT(),
+            ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada,
             ProveedorExtrac = "GPT4oMini",
             TiemposMs = new Dictionary<string, int>
             {
                 ["gpt-fallback"] = (int)stopwatch.ElapsedMilliseconds
+            },
+            MetricasDebug = metricasDebug,
+            DatosExtraidos = datos
+        };
+    }
+
+    public virtual async Task<ExtraccionResultado> ObtenerDatosConModeloAsync(
+        ExtraccionInput input,
+        TipologiaValidationConfig tipologiaConfig,
+        string modelKey,
+        string? markdownContexto,
+        CancellationToken cancellationToken = default)
+    {
+        var stopwatch = Stopwatch.StartNew();
+        var model = ResolveModel(modelKey);
+        var chatClient = CreateChatClient(model);
+
+        var systemMessage = new SystemChatMessage(
+            "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
+            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
+            "'campos_extraidos' (objeto con los campos extraídos, null para no encontrados), " +
+            "'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción), " +
+            "'confianza_por_campo' (objeto con confianza 0..1 por cada campo extraído). " +
+            "Para cada campo se indican el tipo esperado, si es obligatorio y las reglas de validación " +
+            "(formatos permitidos, patrones, valores de enumeración, rangos numéricos). " +
+            "Respeta estrictamente esas reglas al extraer el valor de cada campo. " +
+            "Usa null para campos no encontrados.");
+
+        var fieldList = BuildFieldList(tipologiaConfig);
+        var userPrompt =
+            $"Tipo de documento: {tipologiaConfig.TipologiaId} ({tipologiaConfig.TipologiaNombre})\n\n" +
+            "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
+            "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
+            fieldList;
+
+        var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
+            ? ObtenerContextoTexto(input.DatosNormalizados)
+            : markdownContexto;
+
+        var userMessage = !string.IsNullOrWhiteSpace(contextoTexto)
+            ? new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(
+                    $"{userPrompt}\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}"))
+            : new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(
+                    $"{userPrompt}\n\nNo hay contenido textual disponible. " +
+                    $"Nombre de archivo: {input.Entrada.Documento.Name}."));
+
+        var options = new ChatCompletionOptions
+        {
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
+            Temperature = (float)model.Temperature,
+            MaxOutputTokenCount = model.MaxTokens
+        };
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
+
+        var response = await chatClient.CompleteChatAsync(
+            new List<ChatMessage> { systemMessage, userMessage },
+            options,
+            cts.Token);
+
+        stopwatch.Stop();
+
+        var responseText = response.Value.Content[0].Text;
+
+        using var responseDoc = JsonDocument.Parse(responseText);
+        var root = responseDoc.RootElement;
+
+        Dictionary<string, object> datos;
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("campos_extraidos", out var camposElement))
+        {
+            datos = ParseExtractedFields(camposElement, tipologiaConfig);
+        }
+        else
+        {
+            datos = ParseJsonObjectResponse(responseText, tipologiaConfig);
+        }
+
+        var confianzaPorCampo = root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("confianza_por_campo", out var confidenceElement)
+            ? ParseFieldConfidenceMap(confidenceElement, tipologiaConfig)
+            : null;
+
+        var confianzaExtraccionGpt = root.ValueKind == JsonValueKind.Object
+            && root.TryGetProperty("confianza_extraccion", out var ceElement)
+            && ceElement.TryGetDouble(out var ceVal)
+            ? (double?)Math.Clamp(ceVal, 0.0, 1.0)
+            : null;
+
+        var (confianzaCalculada, metricasDebug) = BuildFallbackMetricas(input, tipologiaConfig, datos, confianzaPorCampo);
+
+        return new ExtraccionResultado
+        {
+            Proveedor = "azure-openai",
+            Modelo = model.DeploymentName,
+            LayoutEnabled = false,
+            FallbackUsado = false,
+            FallbackRazon = null,
+            ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada,
+            ProveedorExtrac = "GPT4oMini",
+            TiemposMs = new Dictionary<string, int>
+            {
+                ["gpt-direct"] = (int)stopwatch.ElapsedMilliseconds
             },
             MetricasDebug = metricasDebug,
             DatosExtraidos = datos
@@ -143,19 +261,23 @@ public class GptFallbackExtraerDataProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
+        var model = _fallbackModel.Value;
 
         _logger.LogInformation(
             "Iniciando fallback GPT (modo combinado con prompt) para tipología={Tipologia}, Deployment={Deployment}",
             input.Tipologia,
-            _settings.DeploymentName);
+            model.DeploymentName);
 
         var combinedSystemPrompt =
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
-            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, " +
-            "con hasta tres claves: " +
-            "'campos_extraidos' (objeto JSON con los campos del documento, usa null para no encontrados) y " +
-            "'resultado_prompt' (string con la respuesta a la instrucción adicional a continuación) y " +
-            "'confianza_por_campo' (objeto con confianza 0..1 por campo extraído).";
+            "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
+            "'campos_extraidos' (objeto JSON con los campos del documento, usa null para no encontrados), " +
+            "'resultado_prompt' (string con la respuesta a la instrucción adicional a continuación), " +
+            "'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción) y " +
+            "'confianza_por_campo' (objeto con confianza 0..1 por campo extraído). " +
+            "Para cada campo en 'campos_extraidos' se indican el tipo esperado, si es obligatorio y las reglas " +
+            "de validación (formatos, patrones, enumeraciones, rangos). " +
+            "Respeta estrictamente esas reglas al extraer el valor de cada campo.";
 
         if (!string.IsNullOrWhiteSpace(promptConfig.SystemPrompt))
         {
@@ -177,7 +299,8 @@ public class GptFallbackExtraerDataProvider
         var userPromptText =
             $"Tipo de documento: {tipologiaConfig.TipologiaId} ({tipologiaConfig.TipologiaNombre})\n\n" +
             "**Parte 1 — Extracción de campos** ('campos_extraidos'):\n" +
-            "Extrae estos campos y devuelve exactamente estos nombres de clave:\n" +
+            "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
+            "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
             fieldList + "\n\n" +
             "**Parte 2 — Instrucción adicional** ('resultado_prompt'):\n" +
             promptInstruction;
@@ -205,12 +328,12 @@ public class GptFallbackExtraerDataProvider
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)_settings.Temperature,
-            MaxOutputTokenCount = _settings.MaxTokens
+            Temperature = (float)model.Temperature,
+            MaxOutputTokenCount = model.MaxTokens
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(_settings.TimeoutSeconds));
+        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
 
         var response = await _chatClient.Value.CompleteChatAsync(
             new List<ChatMessage> { systemMessage, userMessage },
@@ -254,15 +377,20 @@ public class GptFallbackExtraerDataProvider
             ? ParseFieldConfidenceMap(confidenceElement, tipologiaConfig)
             : null;
 
-        var metricasDebug = BuildFallbackMetricas(input, tipologiaConfig, campos, confianzaPorCampo);
+        var confianzaExtraccionGpt = root.TryGetProperty("confianza_extraccion", out var ceElement2)
+            && ceElement2.TryGetDouble(out var ceVal2)
+            ? (double?)Math.Clamp(ceVal2, 0.0, 1.0)
+            : null;
+
+        var (confianzaCalculada, metricasDebug) = BuildFallbackMetricas(input, tipologiaConfig, campos, confianzaPorCampo);
 
         return new ExtraccionResultado
         {
             Proveedor = "azure-openai",
-            Modelo = _settings.DeploymentName,
+            Modelo = model.DeploymentName,
             LayoutEnabled = false,
             FallbackUsado = true,
-            ConfianzaExtraccion = ConfidenceCalculator.ExtracGPT(),
+            ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada,
             ProveedorExtrac = "GPT4oMini",
             TiemposMs = new Dictionary<string, int>
             {
@@ -274,7 +402,7 @@ public class GptFallbackExtraerDataProvider
         };
     }
 
-    private ConfidenceMetricasExtraccion BuildFallbackMetricas(
+    private (double Confianza, ConfidenceMetricasExtraccion Metricas) BuildFallbackMetricas(
         ExtraccionInput input,
         TipologiaValidationConfig tipologiaConfig,
         Dictionary<string, object> campos,
@@ -299,13 +427,11 @@ public class GptFallbackExtraerDataProvider
             warnings: 0,
             cfg: tipologiaConfig.ConfidenceConfig);
 
-        _ = confianzaCalculada; // Métrica informativa para debug; la confianza efectiva del fallback sigue siendo ExtracGPT().
-
         metricas.ConfianzaPorCampo = confianzaPorCampo ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
 
         var umbralDuda = input.UmbralFallbackEfectivo
             ?? tipologiaConfig.ConfidenceConfig?.ExtracUmbralFallback
-            ?? _settings.MinFieldsRatio;
+            ?? _fallbackModel.Value.MinFieldsRatio;
 
         metricas.CamposBajaConfianza = metricas.ConfianzaPorCampo
             .Where(kvp => kvp.Value < umbralDuda)
@@ -313,7 +439,7 @@ public class GptFallbackExtraerDataProvider
             .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        return metricas;
+        return (confianzaCalculada, metricas);
     }
 
     private Dictionary<string, double>? ParseFieldConfidenceMap(
@@ -437,13 +563,158 @@ public class GptFallbackExtraerDataProvider
     private static string BuildFieldList(TipologiaValidationConfig config)
     {
         if (config.Fields.Count == 0)
-        {
             return "- Sin definición de campos en configuración.";
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var field in config.Fields)
+            AppendFieldLine(sb, field, depth: 0);
+        return sb.ToString().TrimEnd();
+    }
+
+    private static void AppendFieldLine(System.Text.StringBuilder sb, FieldValidationConfig field, int depth)
+    {
+        var indent = new string(' ', depth * 4);
+        var requerido = field.Required ? " [REQUERIDO]" : "";
+        sb.AppendLine($"{indent}- {field.Name}: tipo={field.Type}{requerido}");
+
+        if (!string.IsNullOrWhiteSpace(field.Description))
+        {
+            sb.AppendLine($"{indent}    -> descripción: {field.Description.Trim()}");
         }
 
-        return string.Join(
-            "\n",
-            config.Fields.Select(f => $"- {f.Name} (tipo={f.Type}, requerido={f.Required})"));
+        foreach (var rule in field.Rules)
+        {
+            var hint = BuildRuleHint(rule);
+            if (!string.IsNullOrEmpty(hint))
+                sb.AppendLine($"{indent}    -> {hint}");
+        }
+
+        if (string.Equals(field.Type, "array", StringComparison.OrdinalIgnoreCase)
+            && field.Items?.Properties?.Count > 0)
+        {
+            sb.AppendLine($"{indent}  (array de objetos; propiedades de cada elemento:)");
+            foreach (var subField in field.Items.Properties)
+                AppendFieldLine(sb, subField, depth + 1);
+        }
+    }
+
+    private static string BuildRuleHint(ValidationRuleConfig rule)
+    {
+        return rule.RuleType.ToLowerInvariant() switch
+        {
+            "enum" => BuildEnumHint(rule.Parameters),
+            "regex" => BuildRegexHint(rule.Parameters),
+            "date" => BuildDateHint(rule.Parameters),
+            "range" => BuildRangeHint(rule.Parameters),
+            "minlength" when TryGetParamString(rule.Parameters, "value", out var v) => $"longitud mínima: {v} caracteres",
+            "maxlength" when TryGetParamString(rule.Parameters, "value", out var v) => $"longitud máxima: {v} caracteres",
+            "nif" => "NIF/DNI/CIF/NIE español válido (ej: 12345678A, A12345678, X1234567L)",
+            "catastral" => "referencia catastral española (20 caracteres alfanuméricos)",
+            "address" => BuildAddressHint(rule.Parameters),
+            _ => string.Empty
+        };
+    }
+
+    private static string BuildEnumHint(Dictionary<string, object?> parameters)
+    {
+        if (!parameters.TryGetValue("values", out var raw) || raw is null)
+            return string.Empty;
+
+        IEnumerable<string>? values = raw switch
+        {
+            JsonElement je when je.ValueKind == JsonValueKind.Array =>
+                je.EnumerateArray()
+                  .Where(e => e.ValueKind == JsonValueKind.String)
+                  .Select(e => e.GetString()!)
+                  .Where(s => !string.IsNullOrWhiteSpace(s)),
+            System.Collections.IEnumerable list =>
+                list.Cast<object?>()
+                    .Select(v => v?.ToString() ?? string.Empty)
+                    .Where(s => !string.IsNullOrWhiteSpace(s)),
+            _ => null
+        };
+
+        if (values is null) return string.Empty;
+        var joined = string.Join(", ", values);
+        return string.IsNullOrEmpty(joined) ? string.Empty : $"uno de los valores permitidos: {joined}";
+    }
+
+    private static string BuildRegexHint(Dictionary<string, object?> parameters)
+    {
+        if (!TryGetParamString(parameters, "pattern", out var pattern) || string.IsNullOrWhiteSpace(pattern))
+            return string.Empty;
+        return $"patrón esperado (regex): {pattern}";
+    }
+
+    private static string BuildDateHint(Dictionary<string, object?> parameters)
+    {
+        var hints = new List<string>();
+
+        if (parameters.TryGetValue("formats", out var fmtRaw) && fmtRaw != null)
+        {
+            IEnumerable<string>? formats = fmtRaw switch
+            {
+                JsonElement je when je.ValueKind == JsonValueKind.Array =>
+                    je.EnumerateArray()
+                      .Where(e => e.ValueKind == JsonValueKind.String)
+                      .Select(e => e.GetString()!)
+                      .Where(s => !string.IsNullOrWhiteSpace(s)),
+                System.Collections.IEnumerable list =>
+                    list.Cast<object?>()
+                        .Select(v => v?.ToString() ?? string.Empty)
+                        .Where(s => !string.IsNullOrWhiteSpace(s)),
+                _ => null
+            };
+            if (formats != null)
+            {
+                var joined = string.Join(", ", formats);
+                if (!string.IsNullOrEmpty(joined))
+                    hints.Add($"formatos: {joined}");
+            }
+        }
+
+        if (parameters.TryGetValue("allowFuture", out var af) && af != null)
+        {
+            var allowFuture = af is JsonElement je ? je.GetBoolean() : Convert.ToBoolean(af);
+            if (!allowFuture) hints.Add("no puede ser fecha futura");
+        }
+
+        return hints.Count > 0 ? string.Join("; ", hints) : string.Empty;
+    }
+
+    private static string BuildRangeHint(Dictionary<string, object?> parameters)
+    {
+        var parts = new List<string>();
+        if (TryGetParamString(parameters, "min", out var min)) parts.Add($"mín={min}");
+        if (TryGetParamString(parameters, "max", out var max)) parts.Add($"máx={max}");
+        return parts.Count > 0 ? $"rango numérico: {string.Join(", ", parts)}" : string.Empty;
+    }
+
+    private static string BuildAddressHint(Dictionary<string, object?> parameters)
+    {
+        var required = new List<string>();
+        if (TryGetBoolParam(parameters, "requireStreetNumber")) required.Add("número de calle");
+        if (TryGetBoolParam(parameters, "requireMunicipality")) required.Add("municipio");
+        if (TryGetBoolParam(parameters, "requireProvince")) required.Add("provincia");
+        return required.Count > 0
+            ? $"dirección postal completa (incluir: {string.Join(", ", required)})"
+            : "dirección postal completa";
+    }
+
+    private static bool TryGetParamString(Dictionary<string, object?> parameters, string key, out string value)
+    {
+        value = string.Empty;
+        if (!parameters.TryGetValue(key, out var raw) || raw is null) return false;
+        value = raw is JsonElement je
+            ? (je.ValueKind == JsonValueKind.String ? je.GetString() ?? string.Empty : je.GetRawText())
+            : raw.ToString() ?? string.Empty;
+        return !string.IsNullOrEmpty(value);
+    }
+
+    private static bool TryGetBoolParam(Dictionary<string, object?> parameters, string key)
+    {
+        if (!parameters.TryGetValue(key, out var raw) || raw is null) return false;
+        return raw is JsonElement je ? je.GetBoolean() : Convert.ToBoolean(raw);
     }
 
     private static string? ObtenerContextoTexto(IDictionary<string, object> datosNormalizados)
@@ -490,34 +761,100 @@ public class GptFallbackExtraerDataProvider
 
     private ChatClient CreateChatClient()
     {
-        if (string.IsNullOrWhiteSpace(_settings.Endpoint))
+        var model = _fallbackModel.Value;
+
+        return CreateChatClient(model);
+    }
+
+    private ChatClient CreateChatClient(ExtractionModelConfig model)
+    {
+
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
         {
-            throw new InvalidOperationException("Extraction:GptFallback:Endpoint es obligatorio cuando el fallback está habilitado.");
+            throw new InvalidOperationException($"ExtractionModelConfig.Endpoint es obligatorio para el modelo de fallback '{model.Key}'.");
         }
 
-        if (string.IsNullOrWhiteSpace(_settings.DeploymentName))
+        if (string.IsNullOrWhiteSpace(model.DeploymentName))
         {
-            throw new InvalidOperationException("Extraction:GptFallback:DeploymentName es obligatorio cuando el fallback está habilitado.");
+            throw new InvalidOperationException($"ExtractionModelConfig.DeploymentName es obligatorio para el modelo de fallback '{model.Key}'.");
         }
 
         AzureOpenAIClient azureClient;
 
-        if (string.Equals(_settings.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
         {
-            azureClient = new AzureOpenAIClient(new Uri(_settings.Endpoint), new DefaultAzureCredential());
+            azureClient = new AzureOpenAIClient(new Uri(model.Endpoint), new DefaultAzureCredential());
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(_settings.ApiKey))
+            if (string.IsNullOrWhiteSpace(model.ApiKey))
             {
-                throw new InvalidOperationException("Extraction:GptFallback:ApiKey es obligatorio cuando AuthMode=ApiKey.");
+                throw new InvalidOperationException($"ExtractionModelConfig.ApiKey es obligatorio para el modelo de fallback '{model.Key}' cuando AuthMode=ApiKey.");
             }
 
             azureClient = new AzureOpenAIClient(
-                new Uri(_settings.Endpoint),
-                new AzureKeyCredential(_settings.ApiKey));
+                new Uri(model.Endpoint),
+                new AzureKeyCredential(model.ApiKey));
         }
 
-        return azureClient.GetChatClient(_settings.DeploymentName);
+        return azureClient.GetChatClient(model.DeploymentName);
     }
+
+    public virtual ExtractionModelConfig ResolveModel(string modelKey)
+    {
+        if (string.IsNullOrWhiteSpace(modelKey))
+        {
+            throw new InvalidOperationException("El modelKey de extracción GPT directa es obligatorio.");
+        }
+
+        var model = _modelRegistryLoader.GetModel(modelKey);
+        if (!IsAzureOpenAiProvider(model.Provider))
+        {
+            throw new InvalidOperationException(
+                $"El modelo de extracción '{model.Key}' debe ser de provider Azure OpenAI. Provider actual: '{model.Provider}'.");
+        }
+
+        ValidateModelConfiguration(model);
+        return model;
+    }
+
+    /// <summary>
+    /// Valida que la configuración del modelo OpenAI sea completa (endpoint, apikey si es necesario, deployment).
+    /// </summary>
+    private void ValidateModelConfiguration(ExtractionModelConfig model)
+    {
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
+        {
+            throw new InvalidOperationException(
+                $"Extracción GPT: modelo '{model.Key}' requiere Endpoint configurado. Verifica la configuración de '{model.Key}' en appsettings/KeyVault.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.DeploymentName))
+        {
+            throw new InvalidOperationException(
+                $"Extracción GPT: modelo '{model.Key}' requiere DeploymentName configurado. Verifica la configuración de '{model.Key}' en appsettings/KeyVault.");
+        }
+
+        if (!string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrWhiteSpace(model.ApiKey))
+        {
+            throw new InvalidOperationException(
+                $"Extracción GPT: modelo '{model.Key}' requiere ApiKey configurada cuando AuthMode={model.AuthMode}. Verifica la configuración en appsettings/KeyVault (ej: Extraction:GptFallback:ApiKey).");
+        }
+    }
+
+    private ExtractionModelConfig ResolveFallbackModel()
+    {
+        var model = _modelRegistryLoader.GetFallbackModel();
+        if (!IsAzureOpenAiProvider(model.Provider))
+        {
+            throw new InvalidOperationException(
+                $"El modelo de fallback de extracción '{model.Key}' debe ser de provider Azure OpenAI. Provider actual: '{model.Provider}'.");
+        }
+
+        return model;
+    }
+
+    private static bool IsAzureOpenAiProvider(string provider) =>
+        provider.ToLowerInvariant() is "azure-openai" or "gpt" or "openai";
 }

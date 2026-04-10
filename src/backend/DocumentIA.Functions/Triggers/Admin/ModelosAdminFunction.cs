@@ -29,7 +29,7 @@ public class ModelosAdminFunction
     {
         if (!TryParseTipo(tipo, out var tipoModelo))
         {
-            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt.");
+            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt, layout.");
         }
 
         var modelos = await _dbContext.ModeloConfigs
@@ -54,7 +54,7 @@ public class ModelosAdminFunction
 
         if (!TryParseTipo(payload.Tipo, out var tipoModelo))
         {
-            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt.");
+            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt, layout.");
         }
 
         if (string.IsNullOrWhiteSpace(payload.Key) || string.IsNullOrWhiteSpace(payload.Provider) || string.IsNullOrWhiteSpace(payload.ConfiguracionJson))
@@ -112,7 +112,7 @@ public class ModelosAdminFunction
 
         if (!TryParseTipo(payload.Tipo, out var tipoModelo))
         {
-            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt.");
+            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt, layout.");
         }
 
         if (!TryValidateJson(payload.ConfiguracionJson, out var jsonError))
@@ -168,6 +168,7 @@ public class ModelosAdminFunction
             "clasificacion" => SetTipo(TipoModelo.Clasificacion, out tipoModelo),
             "extraccion" => SetTipo(TipoModelo.Extraccion, out tipoModelo),
             "prompt" => SetTipo(TipoModelo.Prompt, out tipoModelo),
+            "layout" => SetTipo(TipoModelo.Layout, out tipoModelo),
             _ => false
         };
     }

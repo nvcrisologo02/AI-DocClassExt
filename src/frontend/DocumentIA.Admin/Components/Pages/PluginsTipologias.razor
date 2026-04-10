@@ -45,14 +45,19 @@
             <InputText class="form-control" @bind-Value="_tipologiaCodigo" />
         </div>
         <div class="mb-2">
-            <label class="form-label">ConfiguracionJson</label>
-            <InputTextArea class="form-control" style="min-height: 320px;" @bind-Value="_json" />
+            <label class="form-label">Configuración JSON</label>
+            <JsonEditorComponent 
+                @ref="_jsonEditor"
+                JsonContent="@_json"
+                Mode="code"
+                Height="400px"
+                SupportedModes="@(new List<string> { "tree", "form", "code" })" />
         </div>
         <div class="mb-2">
-            <button class="btn btn-outline-primary" @onclick="Validate">Validar</button>
-            <button class="btn btn-primary ms-2" @onclick="SaveDraft">Guardar Draft</button>
-            <button class="btn btn-success ms-2" @onclick="Publish">Publicar</button>
-            <button class="btn btn-warning ms-2" @onclick="Retire">Retirar</button>
+            <button class="btn btn-outline-primary" @onclick="ValidateAsync">Validar</button>
+            <button class="btn btn-primary ms-2" @onclick="SaveDraftAsync">Guardar Draft</button>
+            <button class="btn btn-success ms-2" @onclick="PublishAsync">Publicar</button>
+            <button class="btn btn-warning ms-2" @onclick="RetireAsync">Retirar</button>
         </div>
     </div>
 </div>
@@ -65,6 +70,7 @@
     private string _json = "{\n  \"tipologiaId\": \"\",\n  \"plugins\": []\n}";
     private bool _error;
     private string? _message;
+    private JsonEditorComponent? _jsonEditor;
 
     protected override async Task OnInitializedAsync()
     {
@@ -83,6 +89,10 @@
         _selectedTipologiaCodigo = tipologiaCodigo;
         var row = await AdminService.GetPluginConfigAsync(tipologiaCodigo);
         _json = row?.ConfiguracionJson ?? BuildEmptyPluginConfigJson(tipologiaCodigo);
+        if (_jsonEditor != null)
+        {
+            await _jsonEditor.SetJsonAsync(_json);
+        }
     }
 
     private async Task PrepareNewConfig()
@@ -97,26 +107,52 @@
         _tipologiaCodigo = _selectedTipologiaCodigo.Trim();
         var existing = await AdminService.GetPluginConfigAsync(_tipologiaCodigo);
         _json = existing?.ConfiguracionJson ?? BuildEmptyPluginConfigJson(_tipologiaCodigo);
+        
+        if (_jsonEditor != null)
+        {
+            await _jsonEditor.SetJsonAsync(_json);
+        }
+        
         _error = false;
         _message = existing is null
             ? $"Nueva configuración inicializada para '{_tipologiaCodigo}'."
             : $"Configuración existente cargada para '{_tipologiaCodigo}'.";
     }
 
-    private void Validate()
+    private async Task ValidateAsync()
     {
-        var errors = TipologiaAdminService.ValidarPluginConfigJson(_json);
-        _error = errors.Count > 0;
-        _message = _error ? string.Join("\n", errors) : "Configuración de plugins válida.";
+        if (_jsonEditor == null) return;
+
+        var isValid = await _jsonEditor.ValidateAsync();
+        if (isValid)
+        {
+            _error = false;
+            _message = "Configuración de plugins válida.";
+        }
+        else
+        {
+            _error = true;
+            _message = "El JSON contiene errores. Revisalo en el editor.";
+        }
     }
 
-    private async Task SaveDraft()
+    private async Task SaveDraftAsync()
     {
         if (string.IsNullOrWhiteSpace(_tipologiaCodigo))
         {
             _error = true;
             _message = "TipologiaCodigo es obligatorio.";
             return;
+        }
+
+        // Obtener JSON del editor
+        if (_jsonEditor != null)
+        {
+            var jsonFromEditor = await _jsonEditor.GetJsonAsync();
+            if (!string.IsNullOrWhiteSpace(jsonFromEditor))
+            {
+                _json = jsonFromEditor;
+            }
         }
 
         var errors = TipologiaAdminService.ValidarPluginConfigJson(_json);
@@ -142,7 +178,7 @@
         }
     }
 
-    private async Task Publish()
+    private async Task PublishAsync()
     {
         if (string.IsNullOrWhiteSpace(_tipologiaCodigo))
         {
@@ -165,7 +201,7 @@
         }
     }
 
-    private async Task Retire()
+    private async Task RetireAsync()
     {
         if (string.IsNullOrWhiteSpace(_tipologiaCodigo))
         {

@@ -2,6 +2,7 @@
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using DocumentIA.Core.Configuration;
 
 namespace DocumentIA.Functions.Services;
 
@@ -10,23 +11,23 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
     private readonly MockClasificarDataProvider _mockProvider;
     private readonly AzureDocumentIntelligenceClasificarProvider _azureProvider;
     private readonly GptClasificarDataProvider _gptProvider;
+    private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
     private readonly ClassificationRoutingSettings _routingSettings;
-    private readonly GptClasificarSettings _fallbackSettings;
     private readonly ILogger<ConfigurableClasificarDataProvider> _logger;
 
     public ConfigurableClasificarDataProvider(
         MockClasificarDataProvider mockProvider,
         AzureDocumentIntelligenceClasificarProvider azureProvider,
         GptClasificarDataProvider gptProvider,
+        ClassificationModelRegistryLoader modelRegistryLoader,
         IOptions<ClassificationRoutingSettings> routingSettings,
-        IOptions<GptClasificarSettings> fallbackSettings,
         ILogger<ConfigurableClasificarDataProvider> logger)
     {
         _mockProvider = mockProvider;
         _azureProvider = azureProvider;
         _gptProvider = gptProvider;
+        _modelRegistryLoader = modelRegistryLoader;
         _routingSettings = routingSettings.Value;
-        _fallbackSettings = fallbackSettings.Value;
         _logger = logger;
     }
 
@@ -51,14 +52,20 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             return provider.ToLowerInvariant() switch
             {
                 "mock" => await _mockProvider.ClasificarAsync(input, cancellationToken),
+                "azure-openai" or "gpt" => await _gptProvider.ClasificarAsync(input, cancellationToken),
                 _ => throw new NotSupportedException($"Proveedor de clasificaciÃ³n '{provider}' no soportado")
             };
         }
 
+        var fallbackEnabled = TryResolveFallbackModel(out var fallbackModel);
+        var umbralFallback = input.UmbralFallbackEfectivo ?? fallbackModel?.FallbackThreshold ?? 0.6;
+
         // Ruta Azure DI â€” sin fallback si estÃ¡ desactivado
-        if (!_fallbackSettings.Enabled)
+        if (!fallbackEnabled)
         {
-            return await _azureProvider.ClasificarAsync(input, cancellationToken);
+            var resultadoDirecto = await _azureProvider.ClasificarAsync(input, cancellationToken);
+            resultadoDirecto.UmbralFallbackAplicado = umbralFallback;
+            return resultadoDirecto;
         }
 
         // Ruta Azure DI con fallback GPT activo
@@ -77,18 +84,18 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                     "Azure DI clasificÃ³ como RESTO para {Documento}. Activando fallback GPT obligatorio.",
                     input.Entrada.Documento.Name);
             }
-            else if (resultadoDI.Confianza >= (input.UmbralFallbackEfectivo ?? _fallbackSettings.FallbackThreshold))
+            else if (resultadoDI.Confianza >= umbralFallback)
             {
+                resultadoDI.UmbralFallbackAplicado = umbralFallback;
                 return resultadoDI;
             }
             else
             {
-                var umbralEfectivo = input.UmbralFallbackEfectivo ?? _fallbackSettings.FallbackThreshold;
                 fallbackRazon = $"low_confidence:{resultadoDI.Confianza:F3}";
                 _logger.LogWarning(
                     "Confianza DI ({Confianza:F3}) inferior al umbral de fallback ({Umbral:F3}) para {Documento}. Activando fallback GPT.",
                     resultadoDI.Confianza,
-                    umbralEfectivo,
+                    umbralFallback,
                     input.Entrada.Documento.Name);
             }
         }
@@ -117,9 +124,14 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             var resultadoGpt = await _gptProvider.ClasificarAsync(input, cancellationToken);
             resultadoGpt.FallbackLLM = true;
             resultadoGpt.FallbackRazon = fallbackRazon;
+            resultadoGpt.UmbralFallbackAplicado = umbralFallback;
             // Propagar la confianza DI original para observabilidad
             if (resultadoDI is not null)
                 resultadoGpt.ConfianzaDI = resultadoDI.ConfianzaDI;
+
+            // Propagar contenido DI para que el orquestador lo inyecte en DatosNormalizados
+            if (!string.IsNullOrWhiteSpace(resultadoDI?.ContentExtraido))
+                resultadoGpt.ContentExtraido = resultadoDI.ContentExtraido;
 
             _logger.LogInformation(
                 "Fallback GPT completado para {Documento}. TipologÃ­a: {Tipologia}, Confianza: {Confianza:F3}",
@@ -156,6 +168,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         {
             resultadoDI.FallbackLLM = false;
             resultadoDI.FallbackRazon = $"fallback_attempt_failed:{ex.GetType().Name}";
+            resultadoDI.UmbralFallbackAplicado = umbralFallback;
 
             _logger.LogWarning(
                 ex,
@@ -163,6 +176,20 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                 input.Entrada.Documento.Name);
 
             return resultadoDI;
+        }
+    }
+
+    private bool TryResolveFallbackModel(out ClassificationModelConfig? model)
+    {
+        try
+        {
+            model = _modelRegistryLoader.GetFallbackModel();
+            return true;
+        }
+        catch (KeyNotFoundException)
+        {
+            model = null;
+            return false;
         }
     }
 

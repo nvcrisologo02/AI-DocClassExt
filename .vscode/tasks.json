@@ -1,3 +1,4 @@
+
 {
   "version": "2.0.0",
   "tasks": [
@@ -165,6 +166,42 @@
         "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Admin"
       },
       "problemMatcher": "$msCompile"
+    }, 
+
+    {
+      "label": "Activate PIM role (user - device code)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\activate-pim.ps1",
+        "-UseUser"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+    ,
+    {
+      "label": "List PIM eligible assignments (user)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\list-pim-eligible.ps1",
+        "-UseUser"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
     }
   ]
 }

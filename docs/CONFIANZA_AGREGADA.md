@@ -1,6 +1,6 @@
 # Confianza Agregada — Análisis Técnico y Funcional
 
-> Rama: `feature/calculadora-umbral` | Implementado: 2026-03-26 | Actualizado: 2026-03-30 | Actualizado: 2026-03-30
+> Rama: `develop` | Implementado: 2026-03-26 | Actualizado: 2026-03-30
 
 ---
 
@@ -63,7 +63,9 @@ DocumentProcessOrchestrator (Durable)
         │
         ├─► ExtraerActivity ─────────────────────────────────────────────┐
         │       ├─ Azure Content Understanding  → formula ponderada CU   │
-        │       └─ GPT 4o-mini (fallback)       → self-conf o 0.6        │
+        │       └─ GPT 4o-mini (fallback)                                │
+        │               ├─ confianza_extraccion (self-report del modelo) │
+        │               └─ valor calculado (ExtracCU) como fallback      │
         │                                                                 ▼
         │                                              ConfianzaExtraccion + ProveedorExtrac
         │
@@ -118,13 +120,24 @@ ConfianzaExtrac =
 - `CamposConConfianza` — número de campos con confianza individual de CU
 - `CamposTotales` — total de campos de la tipología
 
-### 4.3 Extracción GPT — `ConfidenceCalculator.ExtracGPT`
+### 4.3 Extracción GPT — `confianza_extraccion` auto-reportada
+
+El modelo GPT incluye en su respuesta JSON el campo `confianza_extraccion` (0.0–1.0), siguiendo el mismo patrón que clasificación usa con `confianza`. El system prompt solicita explícitamente ese campo:
 
 ```
-ConfianzaExtrac = CLAMP(selfConf ?? 0.6, 0, 1)
+'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción)
 ```
 
-GPT no devuelve confianzas de campo individuales. Se usa `0.6` como valor conservador por defecto. Si el modelo llega a incluir un campo de autoconfianza en el futuro, se capturará.
+La asignación final sigue la regla:
+
+```
+ConfianzaExtrac = CLAMP(confianzaExtraccionGpt ?? confianzaCalculada, 0, 1)
+```
+
+- **`confianzaExtraccionGpt`**: valor `confianza_extraccion` del JSON de respuesta. Si el modelo lo devuelve, se usa directamente.
+- **`confianzaCalculada`**: resultado de `ExtracCU(fieldConfs, campos, requeridos, warnings, cfg)`, idéntico al cálculo de CU. Se usa como fallback si el modelo no incluye el campo o la respuesta está mal formada.
+
+El valor fijo `0.6` ha sido eliminado. GPT no devuelve confianzas por campo individuales; éstas siguen siendo solicitadas en `confianza_por_campo` y se propagan a `CamposBajaConfianza`.
 
 ### 4.4 Validación — `ValidarActivity`
 
@@ -167,17 +180,16 @@ Si **cualquiera** de los dos criterios no supera su umbral, se activa el fallbac
 La cadena de resolución para **cada criterio de extracción** (de mayor a menor prioridad) es:
 
 ```
-petición HTTP (específico)   →   tipología (específico)   →   umbral legado   →   config servidor
+petición HTTP (específico/legado)   →   tipología (específico/legado)   →   modelo/servidor
 ```
 
 | Nivel | Campo clasificación | Campo extracción (completitud) | Campo extracción (confianza) |
 |---|---|---|---|
-| **1 — Petición (específico)** | `instrucciones.classification.umbral` | `instrucciones.extraction.umbralCompletitud` | `instrucciones.extraction.umbralConfianza` |
-| **2 — Tipología (específico)** | `confidenceConfig.clasifUmbralFallback` | `confidenceConfig.extracUmbralFallbackCompletitud` | `confidenceConfig.extracUmbralFallbackConfianza` |
-| **3 — Legado** | _(igual que nivel 1/2)_ | `instrucciones.extraction.umbral` / `confidenceConfig.extracUmbralFallback` | ídem |
-| **4 — Servidor** | `Classification:GptFallback:FallbackThreshold` | `Extraction:GptFallback:MinFieldsRatio` | `Extraction:GptFallback:MinFieldsRatio` |
+| **1 — Petición** | `instrucciones.classification.umbral` | `instrucciones.extraction.umbralCompletitud ?? instrucciones.extraction.umbral` | `instrucciones.extraction.umbralConfianza ?? instrucciones.extraction.umbral` |
+| **2 — Tipología** | `confidenceConfig.clasifUmbralFallback` | `confidenceConfig.extracUmbralFallbackCompletitud ?? confidenceConfig.extracUmbralFallback` | `confidenceConfig.extracUmbralFallbackConfianza ?? confidenceConfig.extracUmbralFallback` |
+| **3 — Modelo/Servidor** | `Classification:GptFallback:FallbackThreshold` | `Extraction:GptFallback:MinFieldsRatio` | `Extraction:GptFallback:MinFieldsRatio` |
 
-> El campo legado `umbral` / `extracUmbralFallback` actúa como valor único para ambos criterios cuando los específicos son `null`. Esto garantiza compatibilidad con tipologías y peticiones anteriores.
+> Regla de compatibilidad: en cada capa, el umbral legado (`umbral` / `extracUmbralFallback`) solo se usa cuando el específico del criterio está en `null`.
 
 El orquestador resuelve el umbral efectivo antes de invocar cada actividad:
 
@@ -196,24 +208,26 @@ var umbralExtracFallback = entrada.Instrucciones.Extraction.Umbral
     ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
     ?? _gptExtracSettings.MinFieldsRatio;
 
-// Extracción — umbrales específicos (niveles 1 y 2 se resuelven en el proveedor)
-var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud;
-var umbralExtracConfianzaRequest   = entrada.Instrucciones.Extraction.UmbralConfianza;
+// Extracción — capa petición (específico si existe; si no, legado de la misma capa)
+var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud
+  ?? entrada.Instrucciones.Extraction.Umbral;
+var umbralExtracConfianzaRequest   = entrada.Instrucciones.Extraction.UmbralConfianza
+  ?? entrada.Instrucciones.Extraction.Umbral;
 ```
 
 Dentro de `ConfigurableExtraerDataProvider.EsResultadoCuSuficiente`, la resolución final de cada criterio es:
 
 ```csharp
-// Prioridad: request-específico > tipología-específico > umbral-legado > global
+// Prioridad por capas: petición > tipología > modelo/servidor
 umbralCompletitud = umbralFallbackCompletitudRequest      // nivel 1
     ?? confidenceConfig?.ExtracUmbralFallbackCompletitud   // nivel 2
-    ?? umbralLegado                                        // nivel 3
-    ?? _fallbackSettings.MinFieldsRatio;                   // nivel 4
+  ?? umbralLegado                                        // legado tipología o modelo
+  ?? _fallbackSettings.MinFieldsRatio;                   // último recurso
 
 umbralConfianza = umbralFallbackConfianzaRequest           // nivel 1
     ?? confidenceConfig?.ExtracUmbralFallbackConfianza     // nivel 2
-    ?? umbralLegado                                        // nivel 3
-    ?? _fallbackSettings.MinFieldsRatio;                   // nivel 4
+  ?? umbralLegado                                        // legado tipología o modelo
+  ?? _fallbackSettings.MinFieldsRatio;                   // último recurso
 
 return ratioCompletitud >= umbralCompletitud && confianzaCu >= umbralConfianza;
 ```
@@ -325,7 +339,7 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 | `DocumentIA.Functions/Services/GptClasificarDataProvider.cs` | Functions | Extrae `confianza` del JSON GPT, asigna `ConfianzaGPT`, `ProveedorClasif` |
 | `DocumentIA.Functions/Services/ConfigurableClasificarDataProvider.cs` | Functions | Propaga `ConfianzaDI` cuando ejecuta fallback GPT |
 | `DocumentIA.Functions/Services/AzureContentUnderstandingProvider.cs` | Functions | `TryExtractFieldConfidences()` + cálculo `ExtracCU()` + `MetricasDebug` |
-| `DocumentIA.Functions/Services/GptFallbackExtraerDataProvider.cs` | Functions | Asigna `ConfianzaExtraccion = ExtracGPT()`, `ProveedorExtrac` |
+| `DocumentIA.Functions/Services/GptFallbackExtraerDataProvider.cs` | Functions | Pide `confianza_extraccion` al modelo en el prompt; `BuildFallbackMetricas` devuelve `(double, ConfidenceMetricasExtraccion)`; `ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada`; `BuildFieldList` incluye hints de validación por campo (enum, regex, fecha, rango, dirección) |
 | `DocumentIA.Functions/Orchestrators/DocumentProcessOrchestrator.cs` | Functions | Resuelve jerarquía de umbrales (petición→tipología→config) en 3 puntos; agrega `Global()`, asigna `EstadoCalidad`, descompone campos en contrato |
 | `DocumentIA.Functions/config/tipologias/*.validation.json` | Config | Bloque `confidenceConfig` con defaults explícitos |
 | `DocumentIA.Tests.Unit/Services/ConfidenceCalculatorTests.cs` | Tests | 24 tests unitarios cubriendo todos los métodos y casos límite |

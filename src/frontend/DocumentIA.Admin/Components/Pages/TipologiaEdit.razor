@@ -17,33 +17,37 @@
     <div class="alert alert-warning">Solo se pueden editar tipologías en estado Draft. Esta tipología está en estado <strong>@_model.Estado</strong>.</div>
 }
 
-<EditForm Model="_model" OnValidSubmit="SaveAsync">
-    <div class="mb-3">
-        <label class="form-label">Codigo</label>
-        <InputText class="form-control" @bind-Value="_model.Codigo" disabled="@(!_isEditable)" />
-    </div>
+<div class="mb-3">
+    <label class="form-label">Codigo</label>
+    <InputText class="form-control" @bind-Value="_model.Codigo" disabled="@(!_isEditable)" />
+</div>
 
-    <div class="mb-3">
-        <label class="form-label">Nombre</label>
-        <InputText class="form-control" @bind-Value="_model.Nombre" disabled="@(!_isEditable)" />
-    </div>
+<div class="mb-3">
+    <label class="form-label">Nombre</label>
+    <InputText class="form-control" @bind-Value="_model.Nombre" disabled="@(!_isEditable)" />
+</div>
 
-    <div class="mb-3">
-        <label class="form-label">Version</label>
-        <InputText class="form-control" @bind-Value="_model.Version" disabled="@(!_isEditable)" />
-    </div>
+<div class="mb-3">
+    <label class="form-label">Version</label>
+    <InputText class="form-control" @bind-Value="_model.Version" disabled="@(!_isEditable)" />
+</div>
 
-    <div class="mb-3">
-        <label class="form-label">ConfiguracionJson</label>
-        <InputTextArea class="form-control" style="min-height: 260px;" @bind-Value="_model.ConfiguracionJson" disabled="@(!_isEditable)" />
-    </div>
+<div class="mb-3">
+    <label class="form-label">Configuración JSON</label>
+    <JsonEditorComponent 
+        @ref="_jsonEditor"
+        JsonContent="@_model.ConfiguracionJson"
+        Mode="form"
+        ReadOnly="@(!_isEditable)"
+        Height="450px"
+        SupportedModes="@(new List<string> { "tree", "form", "code" })" />
+</div>
 
-    <div class="mb-3">
-        <button class="btn btn-outline-primary" type="button" @onclick="ValidateJson" disabled="@(!_isEditable)">Validar JSON</button>
-        <button class="btn btn-primary ms-2" type="submit" disabled="@(!_isEditable)">Guardar</button>
-        <a class="btn btn-secondary ms-2" href="/tipologias">Volver</a>
-    </div>
-</EditForm>
+<div class="mb-3">
+    <button class="btn btn-outline-primary" type="button" @onclick="ValidateJsonAsync" disabled="@(!_isEditable)">Validar JSON</button>
+    <button class="btn btn-primary ms-2" type="button" @onclick="SaveAsync" disabled="@(!_isEditable)">Guardar</button>
+    <a class="btn btn-secondary ms-2" href="/tipologias">Volver</a>
+</div>
 
 @code {
     [Parameter] public int? Id { get; set; }
@@ -52,6 +56,7 @@
     private bool _error;
     private string? _message;
     private bool _isEditable = true;
+    private JsonEditorComponent? _jsonEditor;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -70,18 +75,21 @@
         }
     }
 
-    private void ValidateJson()
+    private async Task ValidateJsonAsync()
     {
-        var errors = TipologiaAdminService.ValidarConfiguracionJson(_model.ConfiguracionJson ?? string.Empty);
-        if (errors.Count == 0)
+        if (_jsonEditor == null) return;
+
+        var isValid = await _jsonEditor.ValidateAsync();
+        if (isValid)
         {
             _error = false;
             _message = "Configuración válida.";
-            return;
         }
-
-        _error = true;
-        _message = string.Join("\n", errors);
+        else
+        {
+            _error = true;
+            _message = "El JSON contiene errores. Revisalo en el editor.";
+        }
     }
 
     private async Task SaveAsync()
@@ -91,6 +99,16 @@
             _error = true;
             _message = "Solo se pueden editar tipologías en estado Draft.";
             return;
+        }
+
+        // Obtener JSON del editor
+        if (_jsonEditor != null)
+        {
+            var jsonFromEditor = await _jsonEditor.GetJsonAsync();
+            if (!string.IsNullOrWhiteSpace(jsonFromEditor))
+            {
+                _model.ConfiguracionJson = jsonFromEditor;
+            }
         }
 
         var errors = TipologiaAdminService.ValidarConfiguracionJson(_model.ConfiguracionJson ?? string.Empty);

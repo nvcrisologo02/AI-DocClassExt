@@ -5,7 +5,6 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace DocumentIA.Functions.Services;
 
@@ -13,42 +12,25 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
-    private readonly ClassificationRoutingSettings _routingSettings;
-    private readonly AzureDocumentIntelligenceClassificationSettings _settings;
     private readonly ILogger<AzureDocumentIntelligenceClasificarProvider> _logger;
 
     public AzureDocumentIntelligenceClasificarProvider(
         IHttpClientFactory httpClientFactory,
         ClassificationModelRegistryLoader modelRegistryLoader,
-        IOptions<ClassificationRoutingSettings> routingSettings,
-        IOptions<AzureDocumentIntelligenceClassificationSettings> settings,
         ILogger<AzureDocumentIntelligenceClasificarProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
         _modelRegistryLoader = modelRegistryLoader;
-        _routingSettings = routingSettings.Value;
-        _settings = settings.Value;
         _logger = logger;
     }
 
     public async Task<ResultadoClasificacion> ClasificarAsync(ClasificacionInput input, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.Endpoint))
-        {
-            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:Endpoint es obligatorio");
-        }
-
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-        {
-            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:ApiKey es obligatorio");
-        }
-
         var requestedModel = input.Entrada.Instrucciones.Classification.Model;
-        var modelKey = ResolveModelKey(requestedModel);
-        var model = _modelRegistryLoader.GetModel(modelKey);
-        var apiVersion = string.IsNullOrWhiteSpace(model.ApiVersion) ? _settings.ApiVersion : model.ApiVersion;
+        var model = ResolveModel(requestedModel);
+        var apiVersion = string.IsNullOrWhiteSpace(model.ApiVersion) ? "2024-11-30" : model.ApiVersion;
 
-        var baseEndpoint = _settings.Endpoint.TrimEnd('/');
+        var baseEndpoint = model.Endpoint.TrimEnd('/');
         var analyzeUrl = $"{baseEndpoint}/documentintelligence/documentClassifiers/{Uri.EscapeDataString(model.ClassifierId)}:analyze?_overload=classifyDocument&api-version={Uri.EscapeDataString(apiVersion)}";
 
         var requestBody = JsonSerializer.Serialize(new
@@ -62,8 +44,8 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
             Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
         };
 
-        request.Headers.Add("Ocp-Apim-Subscription-Key", _settings.ApiKey);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        await DocumentIntelligenceAuthHelper.ApplyAuthAsync(request, model.AuthMode, model.ApiKey, cancellationToken);
 
         using var startResponse = await client.SendAsync(request, cancellationToken);
         if (!startResponse.IsSuccessStatusCode)
@@ -81,15 +63,15 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
             throw new InvalidOperationException("La respuesta de Azure DI no devolvió operation-location");
         }
 
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(10, _settings.TimeoutSeconds));
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(10, model.TimeoutSeconds));
         JsonDocument? finalResult = null;
 
         while (DateTimeOffset.UtcNow < deadline)
         {
-            await Task.Delay(Math.Max(250, _settings.PollIntervalMs), cancellationToken);
+            await Task.Delay(Math.Max(250, model.PollIntervalMs), cancellationToken);
 
             using var pollRequest = new HttpRequestMessage(HttpMethod.Get, operationLocation);
-            pollRequest.Headers.Add("Ocp-Apim-Subscription-Key", _settings.ApiKey);
+            await DocumentIntelligenceAuthHelper.ApplyAuthAsync(pollRequest, model.AuthMode, model.ApiKey, cancellationToken);
             pollRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var pollResponse = await client.SendAsync(pollRequest, cancellationToken);
@@ -160,7 +142,7 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
 
             _logger.LogInformation(
                 "Clasificación Azure DI completada. modelKey={ModelKey}, classifierId={ClassifierId}, detectedType={DetectedType}, confidence={Confidence}, contentLength={ContentLength}",
-                modelKey,
+                model.Key,
                 model.ClassifierId,
                 detectedType,
                 confidence,
@@ -179,18 +161,46 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
         }
     }
 
-    private string ResolveModelKey(string requestedModel)
+    private ClassificationModelConfig ResolveModel(string requestedModel)
     {
         if (string.IsNullOrWhiteSpace(requestedModel) || string.Equals(requestedModel, "auto", StringComparison.OrdinalIgnoreCase))
         {
-            if (string.IsNullOrWhiteSpace(_routingSettings.DefaultModelKey))
-            {
-                throw new InvalidOperationException("Classification:DefaultModelKey es obligatorio cuando Classification.Model=auto");
-            }
-
-            return _routingSettings.DefaultModelKey;
+            return ValidateModel(_modelRegistryLoader.GetDefaultModel("azure-document-intelligence"));
         }
 
-        return requestedModel;
+        return ValidateModel(_modelRegistryLoader.GetModel(requestedModel));
     }
+
+    private static ClassificationModelConfig ValidateModel(ClassificationModelConfig model)
+    {
+        if (!IsAzureDiProvider(model.Provider))
+        {
+            throw new InvalidOperationException(
+                $"El modelo de clasificación '{model.Key}' no es compatible con Azure Document Intelligence. Provider actual: '{model.Provider}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.Endpoint es obligatorio para el modelo '{model.Key}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.ClassifierId))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.ClassifierId es obligatorio para el modelo '{model.Key}'.");
+        }
+
+        if (!string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(model.ApiKey))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.ApiKey es obligatorio para el modelo '{model.Key}' cuando AuthMode=ApiKey.");
+        }
+
+        return model;
+    }
+
+    private static bool IsAzureDiProvider(string provider) =>
+        provider.ToLowerInvariant() is "azure-document-intelligence" or "azure-di" or "di";
 }

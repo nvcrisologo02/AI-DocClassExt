@@ -14,10 +14,12 @@ namespace DocumentIA.Functions.Activities
     public class ValidarActivity
     {
         private readonly ILogger<ValidarActivity> _logger;
+        private readonly TipologiaConfigLoader _tipologiaConfigLoader;
 
-        public ValidarActivity(ILogger<ValidarActivity> logger)
+        public ValidarActivity(ILogger<ValidarActivity> logger, TipologiaConfigLoader tipologiaConfigLoader)
         {
             _logger = logger;
+            _tipologiaConfigLoader = tipologiaConfigLoader;
         }
 
         [Function(nameof(ValidarActivity))]
@@ -28,12 +30,11 @@ namespace DocumentIA.Functions.Activities
 
             try
             {
-                var configLoader = new TipologiaConfigLoader("config/tipologias");
                 ValidationEngine engine;
                 
                 try
                 {
-                    engine = configLoader.BuildValidationEngine(input.Tipologia.ToLower());
+                    engine = _tipologiaConfigLoader.BuildValidationEngine(input.Tipologia);
                     _logger.LogInformation($"Configuracion de validacion cargada para {input.Tipologia}");
                 }
                 catch (System.IO.FileNotFoundException ex)

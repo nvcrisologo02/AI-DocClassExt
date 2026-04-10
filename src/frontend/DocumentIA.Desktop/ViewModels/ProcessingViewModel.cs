@@ -50,7 +50,7 @@ namespace DocumentIA.Desktop.ViewModels
             "Resultado"
         };
 
-        private readonly IOrchestratorApiClient _apiClient;
+        private IOrchestratorApiClient _apiClient;
         private readonly DispatcherTimer _apiConnectionTimer;
         private CancellationTokenSource? _pollingCts;
         private string? _lastLoggedActivity;
@@ -78,19 +78,27 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private string _selectedClassificationType = "auto"; // "nota-simple@1.4", "resumen-documental", "auto"
-        public string SelectedClassificationType
+        private static readonly TipologiaPublicadaDto AutoItem = new() { Identificador = "auto", Nombre = "Auto" };
+
+        public ObservableCollection<TipologiaPublicadaDto> AvailableTipologias { get; } = new ObservableCollection<TipologiaPublicadaDto> { AutoItem };
+
+        private TipologiaPublicadaDto _selectedTipologia = AutoItem;
+        public TipologiaPublicadaDto SelectedTipologia
         {
-            get => _selectedClassificationType;
+            get => _selectedTipologia;
             set
             {
-                if (_selectedClassificationType != value)
+                if (_selectedTipologia != value)
                 {
-                    _selectedClassificationType = value;
+                    _selectedTipologia = value ?? AutoItem;
+                    OnPropertyChanged(nameof(SelectedTipologia));
                     OnPropertyChanged(nameof(SelectedClassificationType));
                 }
             }
         }
+
+        // Computed from SelectedTipologia — kept for backwards-compat with BuildRequest
+        public string SelectedClassificationType => _selectedTipologia.Identificador;
 
         private string? _instanceId;
         public string? InstanceId
@@ -145,9 +153,12 @@ namespace DocumentIA.Desktop.ViewModels
                     _isProcessing = value;
                     OnPropertyChanged(nameof(IsProcessing));
                     OnPropertyChanged(nameof(IsExecuteEnabled));
+                    OnPropertyChanged(nameof(IsCancelEnabled));
                 }
             }
         }
+
+        public bool IsCancelEnabled => _isProcessing;
 
         private bool _isApiConnected;
         public bool IsApiConnected
@@ -220,7 +231,7 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private string _inputIdActivo = "DESKTOP-TEST";
+        private string _inputIdActivo = string.Empty;
         public string InputIdActivo
         {
             get => _inputIdActivo;
@@ -365,14 +376,66 @@ namespace DocumentIA.Desktop.ViewModels
 
         public bool IsExecuteEnabled => !IsProcessing && !string.IsNullOrWhiteSpace(SelectedDocumentPath) && IsApiConnected;
 
+        // ─── Entorno (Local / Azure) ──────────────────────────────────────────
+        private const string LocalUrl  = "http://localhost:7071";
+        private const string AzureUrl  = "https://srbappprodocai.azurewebsites.net";
+
+        private bool _useAzure = false;
+        public bool UseAzure
+        {
+            get => _useAzure;
+            set
+            {
+                if (_useAzure != value)
+                {
+                    _useAzure = value;
+                    OnPropertyChanged(nameof(UseAzure));
+                    OnPropertyChanged(nameof(CurrentEnvironmentLabel));
+                    OnPropertyChanged(nameof(CurrentEnvironmentUrl));
+                    OnPropertyChanged(nameof(ShowFunctionKeyField));
+                    RebuildApiClient();
+                }
+            }
+        }
+
+        private string _azureFunctionKey = string.Empty;
+        public string AzureFunctionKey
+        {
+            get => _azureFunctionKey;
+            set
+            {
+                if (_azureFunctionKey != value)
+                {
+                    _azureFunctionKey = value;
+                    OnPropertyChanged(nameof(AzureFunctionKey));
+                    if (_useAzure) RebuildApiClient();
+                }
+            }
+        }
+
+        public string CurrentEnvironmentLabel => _useAzure ? "☁ AZURE" : "⚙ LOCAL";
+        public string CurrentEnvironmentUrl   => _useAzure ? AzureUrl : LocalUrl;
+        public bool   ShowFunctionKeyField    => _useAzure;
+
+        private void RebuildApiClient()
+        {
+            var url = _useAzure ? AzureUrl : LocalUrl;
+            var key = _useAzure && !string.IsNullOrWhiteSpace(_azureFunctionKey) ? _azureFunctionKey : null;
+            _apiClient = new OrchestratorApiClient(url, key);
+            _ = RefreshApiConnectionAsync();
+            _ = LoadTipologiasAsync();
+        }
+
         public ICommand ExecuteCommand { get; }
         public ICommand SelectFileCommand { get; }
+        public ICommand CancelCommand { get; }
 
         public ProcessingViewModel()
         {
-            _apiClient = new OrchestratorApiClient("http://localhost:7071");
+            _apiClient = new OrchestratorApiClient(LocalUrl);
             ExecuteCommand = new RelayCommand(_ => _ = ExecuteAsync(), _ => IsExecuteEnabled);
             SelectFileCommand = new RelayCommand(_ => SelectFile());
+            CancelCommand = new RelayCommand(_ => { _pollingCts?.Cancel(); }, _ => IsCancelEnabled);
 
             _apiConnectionTimer = new DispatcherTimer
             {
@@ -386,6 +449,20 @@ namespace DocumentIA.Desktop.ViewModels
             // Initial connection check on UI thread
             _ = RefreshApiConnectionAsync();
             _apiConnectionTimer.Start();
+
+            // Load published tipologias (non-blocking)
+            _ = LoadTipologiasAsync();
+        }
+
+        private async Task LoadTipologiasAsync()
+        {
+            // Remove any previously loaded items (keep AutoItem at index 0)
+            while (AvailableTipologias.Count > 1)
+                AvailableTipologias.RemoveAt(1);
+
+            var tipologias = await _apiClient.GetTipologiasPublicadasAsync();
+            foreach (var t in tipologias)
+                AvailableTipologias.Add(t);
         }
 
         private void InitializeActivities()
@@ -502,21 +579,14 @@ namespace DocumentIA.Desktop.ViewModels
 
         private ProcessingRequest BuildRequest(string documentName, string documentBase64)
         {
-            string? expectedType = SelectedClassificationType switch
-            {
-                "nota-simple@1.4" => "nota-simple@1.4",
-                "resumen-documental" => "resumen-documental",
-                _ => null // auto
-            };
+            var expectedType = BuildExpectedTypeFromSelectedTipologia(SelectedClassificationType);
 
             var classificationThreshold = ParseThresholdOrDefault(ClassificationThreshold, DefaultClassificationThreshold);
             var extractionThreshold = ParseThresholdOrDefault(ExtractionThreshold, DefaultExtractionThreshold);
             var submittedBy = string.IsNullOrWhiteSpace(InputSubmittedBy)
                 ? "usuario.desktop@sareb.es"
                 : InputSubmittedBy.Trim();
-            var idActivo = string.IsNullOrWhiteSpace(InputIdActivo)
-                ? "DESKTOP-TEST"
-                : InputIdActivo.Trim();
+            var idActivo = InputIdActivo.Trim();
 
             return new ProcessingRequest
             {
@@ -651,6 +721,20 @@ namespace DocumentIA.Desktop.ViewModels
             }
 
             return value.Trim();
+        }
+
+        private static string? BuildExpectedTypeFromSelectedTipologia(string? selectedIdentifier)
+        {
+            var normalized = NormalizeOptionalText(selectedIdentifier, "auto");
+            if (string.IsNullOrWhiteSpace(normalized)
+                || string.Equals(normalized, "auto", StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            // Preservar exactamente el identificador seleccionado para permitir forzar versión
+            // desde instrucciones (ej: "familia@version" o "codigo@version").
+            return normalized;
         }
 
         private async Task PollStatusAsync(string statusUri)

@@ -7,7 +7,6 @@ using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace DocumentIA.Functions.Services;
 
@@ -15,7 +14,7 @@ namespace DocumentIA.Functions.Services;
 /// Proveedor de extraccion que usa Azure Document Intelligence con un modelo custom entrenado.
 /// Llama a documentModels/{modelId}:analyze y lee analyzeResult.documents[0].fields,
 /// que usa el mismo esquema value* que CU, por lo que ContentUnderstandingResultMapper es reutilizable.
-/// Comparte la configuracion Classification:AzureDocumentIntelligence (Endpoint, ApiKey, etc.).
+/// La configuracion de endpoint, autenticacion y version de API se lee del ExtractionModelRegistryLoader (base de datos).
 /// </summary>
 public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
 {
@@ -23,7 +22,6 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
     private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly ContentUnderstandingResultMapper _resultMapper;
-    private readonly AzureDocumentIntelligenceClassificationSettings _settings;
     private readonly ILogger<AzureDocumentIntelligenceExtraerDataProvider> _logger;
 
     public AzureDocumentIntelligenceExtraerDataProvider(
@@ -31,14 +29,12 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
         TipologiaConfigLoader tipologiaConfigLoader,
         ExtractionModelRegistryLoader modelRegistryLoader,
         ContentUnderstandingResultMapper resultMapper,
-        IOptions<AzureDocumentIntelligenceClassificationSettings> settings,
         ILogger<AzureDocumentIntelligenceExtraerDataProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _modelRegistryLoader = modelRegistryLoader;
         _resultMapper = resultMapper;
-        _settings = settings.Value;
         _logger = logger;
     }
 
@@ -46,19 +42,19 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
         ExtraccionInput input,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(_settings.Endpoint))
-            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:Endpoint es obligatorio");
-        if (string.IsNullOrWhiteSpace(_settings.ApiKey))
-            throw new InvalidOperationException("Classification:AzureDocumentIntelligence:ApiKey es obligatorio");
-
         var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
         var model = _modelRegistryLoader.GetModel(tipologiaConfig.Extraction.ModelKey);
-        var apiVersion = _settings.ApiVersion;
 
-        var baseEndpoint = _settings.Endpoint.TrimEnd('/');
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
+            throw new InvalidOperationException($"El modelo de extraccion '{model.Key}' no tiene Endpoint configurado en base de datos");
+        if (!string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(model.ApiKey))
+            throw new InvalidOperationException($"El modelo de extraccion '{model.Key}' no tiene ApiKey configurado en base de datos (AuthMode=ApiKey)");
+
+        var baseEndpoint = model.Endpoint.TrimEnd('/');
         var analyzeUrl =
             $"{baseEndpoint}/documentintelligence/documentModels/{Uri.EscapeDataString(model.AnalyzerId)}:analyze" +
-            $"?api-version={Uri.EscapeDataString(apiVersion)}";
+            $"?api-version={Uri.EscapeDataString(model.ApiVersion)}";
 
         var requestBody = JsonSerializer.Serialize(new { base64Source = input.Entrada.Documento.Content.Base64 });
 
@@ -67,8 +63,8 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
         {
             Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
         };
-        request.Headers.Add("Ocp-Apim-Subscription-Key", _settings.ApiKey);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        await DocumentIntelligenceAuthHelper.ApplyAuthAsync(request, model.AuthMode, model.ApiKey, cancellationToken);
 
         var stopwatch = Stopwatch.StartNew();
 
@@ -87,15 +83,15 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
         if (string.IsNullOrWhiteSpace(operationLocation))
             throw new InvalidOperationException("DI no devolvio operation-location en la respuesta de inicio de analisis");
 
-        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(30, _settings.TimeoutSeconds));
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(30, model.TimeoutSeconds));
         JsonDocument? finalResult = null;
 
         while (DateTimeOffset.UtcNow < deadline)
         {
-            await Task.Delay(Math.Max(500, _settings.PollIntervalMs), cancellationToken);
+            await Task.Delay(Math.Max(500, model.PollIntervalMs), cancellationToken);
 
             using var pollRequest = new HttpRequestMessage(HttpMethod.Get, operationLocation);
-            pollRequest.Headers.Add("Ocp-Apim-Subscription-Key", _settings.ApiKey);
+            await DocumentIntelligenceAuthHelper.ApplyAuthAsync(pollRequest, model.AuthMode, model.ApiKey, cancellationToken);
 
             using var pollResponse = await client.SendAsync(pollRequest, cancellationToken);
             var pollBody = await pollResponse.Content.ReadAsStringAsync(cancellationToken);

@@ -21,6 +21,22 @@ builder.Services.AddHttpClient<TipologiaAdminService>((serviceProvider, client) 
     }
 });
 
+builder.Services.AddHttpClient(nameof(SystemConfigService), (serviceProvider, client) =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var baseUrl = configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071/api/";
+    
+    client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+    
+    var functionKey = configuration["FunctionsAdminApi:FunctionKey"];
+    if (!string.IsNullOrWhiteSpace(functionKey))
+    {
+        client.DefaultRequestHeaders.Add("x-functions-key", functionKey);
+    }
+});
+
+builder.Services.AddScoped<SystemConfigService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

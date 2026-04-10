@@ -71,6 +71,64 @@ public class ClassificationModelRegistryLoaderTests : IDisposable
         action.Should().Throw<KeyNotFoundException>();
     }
 
+    [Fact]
+    public void GetDefaultModel_ReturnsModelMarkedAsDefault()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                {
+                    ""key"": ""classification.gpt4o-mini-fallback"",
+                    ""provider"": ""azure-openai"",
+                    ""useAsFallback"": true,
+                    ""deploymentName"": ""gpt-4o-mini""
+                },
+                {
+                    ""key"": ""default.azure-di"",
+                    ""provider"": ""azure-document-intelligence"",
+                    ""isDefault"": true,
+                    ""classifierId"": ""classifier-demo""
+                }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath);
+
+        var model = loader.GetDefaultModel("azure-document-intelligence");
+
+        model.Key.Should().Be("default.azure-di");
+        model.IsDefault.Should().BeTrue();
+    }
+
+    [Fact]
+    public void GetFallbackModel_ReturnsModelMarkedForFallback()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                {
+                    ""key"": ""default.azure-di"",
+                    ""provider"": ""azure-document-intelligence"",
+                    ""isDefault"": true,
+                    ""classifierId"": ""classifier-demo""
+                },
+                {
+                    ""key"": ""classification.gpt4o-mini-fallback"",
+                    ""provider"": ""azure-openai"",
+                    ""useAsFallback"": true,
+                    ""deploymentName"": ""gpt-4o-mini"",
+                    ""fallbackThreshold"": 0.6
+                }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath);
+
+        var model = loader.GetFallbackModel();
+
+        model.Key.Should().Be("classification.gpt4o-mini-fallback");
+        model.UseAsFallback.Should().BeTrue();
+        model.FallbackThreshold.Should().Be(0.6);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

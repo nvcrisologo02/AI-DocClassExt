@@ -9,7 +9,9 @@ variables:
   - name: AZURE_FUNCTIONS_APP_NAME
     value: srbappprodocai
   - name: AZURE_RESOURCE_GROUP
-    value: rg-documentia-mvp
+    value: SRBRGDOCSAIPROD
+  - name: KEY_VAULT_NAME
+    value: srbkvprodocai
   - name: buildConfiguration
     value: Release
   - name: solutionPath
@@ -18,8 +20,6 @@ variables:
     value: src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj
   - name: COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject
     value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
-  - name: sarebEnrichmentsProject
-    value: src/enrichments/SarebEnrichments/SarebEnrichments.csproj
   - name: testsProject
     value: src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
 
@@ -39,10 +39,10 @@ stages:
         steps:
 
           - task: UseDotNet@2
-            displayName: Use .NET 8 SDK
+            displayName: Use .NET 9 SDK
             inputs:
               packageType: sdk
-              version: 8.x
+              version: 9.x
 
           - task: DotNetCoreCLI@2
             displayName: Restore
@@ -64,14 +64,6 @@ stages:
               projects: $(testsProject)
               arguments: --configuration $(buildConfiguration) --no-build
 
-          # Compilar SarebEnrichments y copiar DLL al directorio publish de Functions
-          - task: DotNetCoreCLI@2
-            displayName: Build SarebEnrichments
-            inputs:
-              command: build
-              projects: $(sarebEnrichmentsProject)
-              arguments: --configuration $(buildConfiguration) --no-restore
-
           # Publicar Functions
           - task: DotNetCoreCLI@2
             displayName: Publish Functions
@@ -82,14 +74,6 @@ stages:
               arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/functions
               zipAfterPublish: false
               modifyOutputPath: false
-
-          # Copiar SarebEnrichments.dll a la subcarpeta plugins/ del artifact
-          - task: CopyFiles@2
-            displayName: Copy SarebEnrichments plugin
-            inputs:
-              SourceFolder: src/enrichments/SarebEnrichments/bin/$(buildConfiguration)/net8.0
-              Contents: SarebEnrichments.dll
-              TargetFolder: $(Build.ArtifactStagingDirectory)/functions/plugins
 
           # Publicar Admin Blazor
           - task: DotNetCoreCLI@2
@@ -130,6 +114,8 @@ stages:
             deploy:
               steps:
 
+                - checkout: self
+
                 - download: current
                   artifact: drop-functions
 
@@ -142,6 +128,35 @@ stages:
                     package: $(Pipeline.Workspace)/drop-functions
                     deploymentMethod: zipDeploy
                     resourceGroupName: $(AZURE_RESOURCE_GROUP)
+
+                - task: AzureCLI@2
+                  displayName: Set Function App settings (Key Vault mode)
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az functionapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --settings SecretsSource=AzureVault KeyVaultName=$(KEY_VAULT_NAME) RunDatabaseMigrationsOnStartup=false "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)" --only-show-errors --output none
+                      az functionapp config appsettings delete --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --setting-names AzureWebJobsStorage__accountName AzureWebJobsStorage__credential --only-show-errors --output none
+
+                - task: AzureCLI@2
+                  displayName: Resolve Function App host name
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $hostName = az functionapp show --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --query defaultHostName -o tsv
+                      if (-not $hostName) { throw "No se pudo resolver defaultHostName de $(AZURE_FUNCTIONS_APP_NAME)" }
+                      Write-Host "##vso[task.setvariable variable=FUNCTIONS_HOST_NAME]$hostName"
+
+                - task: PowerShell@2
+                  displayName: Smoke test Functions endpoint
+                  inputs:
+                    targetType: filePath
+                    filePath: scripts/smoke-test-functions.ps1
+                    arguments: -HostName $(FUNCTIONS_HOST_NAME)
+                    pwsh: true
 
   # ─────────────────────────────────────────
   # STAGE 3: Deploy Admin

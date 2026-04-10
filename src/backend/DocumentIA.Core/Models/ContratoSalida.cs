@@ -99,10 +99,10 @@ public class ResultadoClasificacion
     public string ProveedorClasif { get; set; } = string.Empty;
     public bool FallbackLLM { get; set; }
     public string? FallbackRazon { get; set; }
+    public double? UmbralFallbackAplicado { get; set; }
     public string? TipologiaDetectada { get; set; }
 
-    /// <summary>Texto extraído por DI durante la clasificación. Campo transitorio, no se serializa en la respuesta.</summary>
-    [JsonIgnore]
+    /// <summary>Texto extraído por DI durante la clasificación. El orquestador lo usa para propagar a DatosNormalizados["Markdown"] y luego lo limpia antes de incluirlo en la respuesta.</summary>
     public string? ContentExtraido { get; set; }
 }
 
@@ -126,6 +126,7 @@ public class ResultadoExtraccion
 public class InformacionPostproceso
 {
     public List<string> Normalizaciones { get; set; } = new();
+    public string? Markdown { get; set; }
     public List<string> Validaciones { get; set; } = new();
     public List<string> Inconsistencias { get; set; } = new();
     /// <summary>Confianza de validación calculada por el motor de reglas (1 - errores/reglasRequeridas).</summary>

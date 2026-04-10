@@ -207,6 +207,9 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<string>("NormalizacionMarkdownCompressed")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<int>("Paginas")
                         .HasColumnType("int");
 
@@ -557,9 +560,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 3, 27, 20, 3, 57, 484, DateTimeKind.Utc).AddTicks(4797),
+                            FechaCreacion = new DateTime(2026, 4, 8, 9, 30, 14, 495, DateTimeKind.Utc).AddTicks(6871),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 3, 27, 20, 3, 57, 484, DateTimeKind.Utc).AddTicks(4792),
+                            PublicadaEn = new DateTime(2026, 4, 8, 9, 30, 14, 495, DateTimeKind.Utc).AddTicks(6865),
                             PublicadaPor = "seed",
                             UmbralClasificacion = 0.84999999999999998,
                             UmbralExtraccion = 0.80000000000000004,
