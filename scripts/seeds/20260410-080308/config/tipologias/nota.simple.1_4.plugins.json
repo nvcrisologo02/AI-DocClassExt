@@ -1,10 +1,10 @@
 {
   "tipologiaId": "nota-simple",
-  "plugins": [
+ "plugins": [
     {
       "pluginKey": "refCatExcel",
       "pluginType": "rest",
-      "enabled": false,
+      "enabled": true,
       "priority": 1,
       "returnsIdActivo": true,
       "configuration": {

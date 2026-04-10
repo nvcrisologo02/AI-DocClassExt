@@ -1,0 +1,42 @@
+{
+  "models": [
+    {
+      "key": "nota.simple.1_4.azure-cu",
+      "provider": "azure-content-understanding",
+      "isDefault": true,
+      "endpoint": "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/",
+      "apiKey": "COMPLETAR_AZURE_AI_API_KEY",
+      "authMode": "ApiKey",
+      "analyzerId": "CU_NS_1.4_2",
+      "contentType": "application/pdf",
+      "processingLocation": "geography",
+      "inputRange": ""
+    },
+    {
+      "key": "nota.simple.1_4.azure-di",
+      "provider": "azure-document-intelligence",
+      "endpoint": "https://srbdiprodocai.cognitiveservices.azure.com/",
+      "apiKey": "",
+      "authMode": "DefaultAzureCredential",
+      "apiVersion": "2024-11-30",
+      "analyzerId": "DI_NS_1.4_v1",
+      "contentType": "application/pdf",
+      "inputRange": "",
+      "timeoutSeconds": 120,
+      "pollIntervalMs": 1000
+    },
+    {
+      "key": "extraction.gpt4o-mini-fallback",
+      "provider": "azure-openai",
+      "useAsFallback": true,
+      "endpoint": "https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+      "apiKey": "COMPLETAR_AZURE_AI_API_KEY",
+      "authMode": "ApiKey",
+      "deploymentName": "gpt-4o-mini",
+      "minFieldsRatio": 0.5,
+      "temperature": 0.0,
+      "maxTokens": 2000,
+      "timeoutSeconds": 60
+    }
+  ]
+}
