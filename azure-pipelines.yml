@@ -8,6 +8,8 @@ variables:
     value: AI DocClassExt
   - name: AZURE_FUNCTIONS_APP_NAME
     value: srbappprodocai
+  - name: AZURE_ADMIN_WEB_APP_NAME
+    value: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
   - name: AZURE_RESOURCE_GROUP
     value: SRBRGDOCSAIPROD
   - name: KEY_VAULT_NAME
@@ -200,11 +202,11 @@ stages:
 
   - stage: DeployAdmin
     displayName: Deploy Admin Blazor
-    dependsOn: Build
-    condition: false
+    dependsOn: DeployFunctions
+    condition: succeeded()
     jobs:
       - deployment: DeployAdminJob
-        displayName: Deploy to srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+        displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
         environment: prod
         strategy:
           runOnce:
@@ -218,6 +220,15 @@ stages:
                   inputs:
                     azureSubscription: $(AZURE_SERVICE_CONNECTION)
                     appType: webApp
-                    appName: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+                    appName: $(AZURE_ADMIN_WEB_APP_NAME)
                     package: $(Pipeline.Workspace)/drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
                     deploymentMethod: zipDeploy
+
+                - task: AzureCLI@2
+                  displayName: Set Admin App settings (Functions API base URL)
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az webapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --settings "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/" --only-show-errors --output none
