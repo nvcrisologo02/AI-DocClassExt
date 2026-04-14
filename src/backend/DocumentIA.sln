@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocumentIA.Tests.Unit", "Do
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocumentIA.Admin", "..\frontend\DocumentIA.Admin\DocumentIA.Admin.csproj", "{948BEAB8-1723-4C3F-892D-5721F6657910}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DocumentIA.AssetResolver", "..\plugins\DocumentIA.AssetResolver\DocumentIA.AssetResolver.csproj", "{F20AF114-6757-46E7-A378-F529981C79C2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -97,6 +99,18 @@ Global
 		{948BEAB8-1723-4C3F-892D-5721F6657910}.Release|x64.Build.0 = Release|Any CPU
 		{948BEAB8-1723-4C3F-892D-5721F6657910}.Release|x86.ActiveCfg = Release|Any CPU
 		{948BEAB8-1723-4C3F-892D-5721F6657910}.Release|x86.Build.0 = Release|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Debug|x64.Build.0 = Debug|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Debug|x86.Build.0 = Debug|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Release|x64.ActiveCfg = Release|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Release|x64.Build.0 = Release|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Release|x86.ActiveCfg = Release|Any CPU
+		{F20AF114-6757-46E7-A378-F529981C79C2}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

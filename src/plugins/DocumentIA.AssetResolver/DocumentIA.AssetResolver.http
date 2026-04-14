@@ -1,0 +1,6 @@
+@DocumentIA.AssetResolver_HostAddress = http://localhost:5006
+
+GET {{DocumentIA.AssetResolver_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
