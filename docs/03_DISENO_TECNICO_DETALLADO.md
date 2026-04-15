@@ -7,7 +7,7 @@
 
 ## 3.1 Diagrama de Flujo del Pipeline
 
-El pipeline de procesamiento esta orquestado por `DocumentProcessOrchestrator` (Durable Functions). Ejecuta 13 actividades en secuencia con multiples puntos de decision.
+El pipeline de procesamiento esta orquestado por `DocumentProcessOrchestrator` (Durable Functions). Ejecuta 14 actividades en secuencia con multiples puntos de decision.
 
 ```mermaid
 flowchart TD
@@ -48,7 +48,11 @@ flowchart TD
     CHK_PROMPT -->|"No"| VALID
     PROMPT --> VALID
 
-    VALID["ValidarActivity<br/>ValidationEngine + reglas JSON"] --> INTEG
+    VALID["ValidarActivity<br/>ValidationEngine + reglas JSON"] --> CHK_ASSET{"AssetResolver<br/>habilitado?"}
+
+    CHK_ASSET -->|"Si"| ASSET["ObtenerActivoActivity<br/>Busca en DM_POSICION_AAII_TB"]
+    CHK_ASSET -->|"No"| INTEG
+    ASSET --> INTEG
 
     INTEG["IntegrarActivity<br/>PluginManager + prioridad"] --> CHK_GDC{"SkipGDCUpload?"}
 
@@ -68,7 +72,7 @@ flowchart TD
     style FIN_OK fill:#9f9,stroke:#333
 ```
 
-### Detalle de las 13 Actividades
+### Detalle de las 14 Actividades
 
 | # | Actividad | Clase | Input principal | Output principal | Notas |
 |---|-----------|-------|----------------|-----------------|-------|
@@ -82,9 +86,10 @@ flowchart TD
 | 8 | ExtraerMarkdownLayout | `ExtraerMarkdownLayoutActivity` | byte[] PDF | Markdown texto | Layout extraction con DI (opcional) |
 | 9 | Prompt | `PromptActivity` | datos + markdown + prompt config | Datos prompt enriquecidos | GPT-4o-mini con prompt libre (opcional) |
 | 10 | Validar | `ValidarActivity` | DatosExtraidos + reglas JSON | ValidationReport | 11 tipos de validador |
-| 11 | Integrar | `IntegrarActivity` | datos + tipologia + plugins config | DatosFinales + plugins results | Ejecucion por prioridad |
-| 12 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP con timeout 120s |
-| 13 | Persistir | `PersistirActivity` | ContratoSalida completo | void | BD + auditoria |
+| 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral en DM_POSICION_AAII_TB (opcional) |
+| 12 | Integrar | `IntegrarActivity` | datos + tipologia + plugins config | DatosFinales + plugins results | Ejecucion por prioridad |
+| 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP con timeout 120s |
+| 14 | Persistir | `PersistirActivity` | ContratoSalida completo | void | BD + auditoria |
 
 ---
 
@@ -103,6 +108,7 @@ sequenceDiagram
     participant RES as ResolverTipologia
     participant EXT as ExtraerActivity
     participant VAL as ValidarActivity
+    participant ASSET as ObtenerActivoActivity
     participant INT as IntegrarActivity
     participant GDC as SubirGDCActivity
     participant PER as PersistirActivity
@@ -166,6 +172,13 @@ sequenceDiagram
     O->>+VAL: CallActivityAsync("Validar")
     VAL->>VAL: ValidationEngine con reglas JSON
     VAL-->>-O: ValidationReport
+
+    alt AssetResolver habilitado
+        O->>+ASSET: CallActivityAsync("ObtenerActivo")
+        ASSET->>ASSET: HTTP GET AssetResolver plugin
+        Note over ASSET: Busca IDUFIR/RefCatastral en DM_POSICION_AAII_TB
+        ASSET-->>-O: ResultadoAssetResolver
+    end
 
     O->>+INT: CallActivityAsync("Integrar")
     INT->>INT: PluginManager.ExecuteAll(por prioridad)
@@ -450,6 +463,65 @@ classDiagram
     ValidationEngine ..> ValidationReport : produces
 ```
 
+### 3.4.5 Subsistema AssetResolver
+
+```mermaid
+classDiagram
+    class ObtenerActivoActivity {
+        -IHttpClientFactory httpClientFactory
+        -ILogger logger
+        +Run(ObtenerActivoInput) ResultadoAssetResolver
+    }
+
+    class ObtenerActivoInput {
+        +string CorrelationId
+        +string Tipologia
+        +Dictionary DatosExtraidos
+        +List~string~ CamposSolicitados
+        +string IdufirOverride
+        +string ReferenciaCatastralOverride
+        +List~string~ MapeoIdufir
+        +List~string~ MapeoReferenciaCatastral
+    }
+
+    class ResultadoAssetResolver {
+        +bool Ejecutado
+        +bool Exitoso
+        +int ActivosEncontrados
+        +CriteriosBusquedaActivo CriteriosUsados
+        +List~ActivoEncontrado~ Activos
+        +List~string~ CamposConError
+        +string Mensaje
+        +long DuracionMs
+        +string Error
+    }
+
+    class ActivoEncontrado {
+        +string IdActivo
+        +DateTime FchCierre
+        +Dictionary CamposSolicitados
+    }
+
+    class AssetResolverService {
+        -AssetResolverDbContext db
+        -FieldAliasesConfig aliases
+        +SearchAsync(request) AssetResolverResponse
+    }
+
+    class DmPosicionAAII {
+        +string IdActivoSareb PK
+        +DateTime FchCierreDt PK
+        +string IdIdufir
+        +string IdRefCatast
+        +~160 columnas~
+    }
+
+    ObtenerActivoActivity ..> ObtenerActivoInput : receives
+    ObtenerActivoActivity ..> ResultadoAssetResolver : returns
+    ResultadoAssetResolver *-- ActivoEncontrado
+    AssetResolverService ..> DmPosicionAAII : queries
+```
+
 ---
 
 ## 3.5 Modelo Entidad-Relacion
@@ -538,6 +610,8 @@ erDiagram
         int DuracionValidMs
         int DuracionIntegMs
         int DuracionGdcMs
+        int DuracionAssetResolverMs "nullable — ms ObtenerActivo"
+        string AssetResolverResultJson "nullable — JSON [{IdActivo,FchCierre}]"
         int DuracionTotalMs
         DateTime FechaEjecucion "indice"
     }
@@ -916,7 +990,10 @@ stateDiagram-v2
 
     TipologiaResuelta --> Extraido : ExtraerActivity OK
     Extraido --> Validado : ValidarActivity OK
-    Validado --> Integrado : IntegrarActivity OK
+    Validado --> ActivoResuelto : ObtenerActivoActivity OK
+    Validado --> ActivoOmitido : AssetResolver deshabilitado
+    ActivoResuelto --> Integrado : IntegrarActivity OK
+    ActivoOmitido --> Integrado : IntegrarActivity OK
     Integrado --> GDCSubido : SubirGDCActivity OK
     Integrado --> GDCOmitido : SkipGDCUpload = true
     Integrado --> GDCTimeout : SubirGDC timeout 120s
@@ -975,6 +1052,14 @@ stateDiagram-v2
       "umbral": null,
       "umbralCompletitud": 0.9,
       "umbralConfianza": null
+    },
+    "assetResolver": {
+      "enabled": true,
+      "camposBusqueda": {
+        "idufir": "28077000012345",
+        "referenciaCatastral": null
+      },
+      "camposSolicitados": ["#ALL#"]
     }
   },
   "documento": {
@@ -1013,7 +1098,7 @@ stateDiagram-v2
     "version": "1.0",
     "estado": "Running",
     "actividadActual": "Extraer",
-    "actividadesTotales": 11,
+    "actividadesTotales": 12,
     "actividadesCompletadas": ["Normalizar", "VerificarDuplicado", "SubirBlob", "Clasificar", "ResolverTipologia"],
     "duracionTotalMs": 4200,
     "actividades": [
@@ -1134,6 +1219,31 @@ stateDiagram-v2
         "idActivoResuelto": "ACT-2026-00456",
         "idActivoCambiado": true
       },
+      "assetResolver": {
+        "ejecutado": true,
+        "exitoso": true,
+        "activosEncontrados": 1,
+        "criteriosUsados": {
+          "idufir": "28077000012345",
+          "referenciaCatastral": "9872023VH5797S0001WX"
+        },
+        "activos": [
+          {
+            "idActivo": "ACT-2026-00456",
+            "fchCierre": "2026-01-31T00:00:00Z",
+            "camposSolicitados": {
+              "ID_ACTIVO_SAREB": "ACT-2026-00456",
+              "FCH_CIERRE": "2026-01-31T00:00:00Z",
+              "ID_IDUFIR": "28077000012345",
+              "ID_REF_CATAST": "9872023VH5797S0001WX"
+            }
+          }
+        ],
+        "camposConError": [],
+        "mensaje": "1 activo(s) encontrado(s).",
+        "duracionMs": 180,
+        "error": null
+      },
       "gdc": {
         "exitoso": true,
         "objectId": "GDC-OBJ-12345",
@@ -1147,11 +1257,11 @@ stateDiagram-v2
         "version": "1.0",
         "estado": "Completed",
         "actividadActual": "",
-        "actividadesTotales": 11,
+        "actividadesTotales": 12,
         "actividadesCompletadas": [
           "Normalizar", "VerificarDuplicado", "SubirBlob",
           "Clasificar", "ResolverTipologia", "Extraer",
-          "Validar", "Integrar", "SubirGDC", "Persistir"
+          "Validar", "ObtenerActivo", "Integrar", "SubirGDC", "Persistir"
         ],
         "duracionTotalMs": 8500,
         "actividades": [
@@ -1159,6 +1269,7 @@ stateDiagram-v2
           { "nombre": "Clasificar", "estado": "Completed", "duracionMs": 2800, "fallbackActivado": true, "fallbackRazon": "Confianza DI 0.45 < umbral 0.85" },
           { "nombre": "Extraer", "estado": "Completed", "duracionMs": 3200, "fallbackActivado": false },
           { "nombre": "Validar", "estado": "Completed", "duracionMs": 45, "fallbackActivado": false },
+          { "nombre": "ObtenerActivo", "estado": "Completed", "duracionMs": 180, "fallbackActivado": false },
           { "nombre": "Integrar", "estado": "Completed", "duracionMs": 450, "fallbackActivado": false },
           { "nombre": "SubirGDC", "estado": "Completed", "duracionMs": 1200, "fallbackActivado": false },
           { "nombre": "Persistir", "estado": "Completed", "duracionMs": 85, "fallbackActivado": false }

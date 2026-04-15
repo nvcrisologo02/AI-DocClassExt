@@ -57,7 +57,21 @@ var host = new HostBuilder()
         {
             var connectionString = context.Configuration["ConnectionStrings:DocumentIA"] 
                 ?? context.Configuration["SqlConnectionString"];
-            options.UseSqlServer(connectionString);
+
+            if (!string.IsNullOrWhiteSpace(connectionString))
+            {
+                options.UseSqlServer(connectionString);
+            }
+            else if (context.HostingEnvironment.IsDevelopment())
+            {
+                // Local development fallback: use InMemory to allow host to start without SQL configured
+                options.UseInMemoryDatabase("DocumentIADev");
+            }
+            else
+            {
+                // In non-development environments fail fast so deployments don't silently run against InMemory
+                throw new InvalidOperationException("Missing database connection string for DocumentIA (ConnectionStrings:DocumentIA or SqlConnectionString).");
+            }
         });
 
         // Repositories
@@ -153,6 +167,24 @@ var host = new HostBuilder()
                 sp.GetRequiredService<IOptions<GdcSettings>>(),
                 sp.GetRequiredService<ILogger<ResilientGdcService>>()));
 
+        // Named HttpClient for AssetResolver plugin (used by ObtenerActivoActivity)
+        services.AddHttpClient("AssetResolver", client =>
+        {
+            var baseUrl = context.Configuration["AssetResolver:BaseUrl"];
+            if (!string.IsNullOrWhiteSpace(baseUrl))
+            {
+                client.BaseAddress = new Uri(baseUrl);
+            }
+
+            var apiKey = context.Configuration["AssetResolver:ApiKey"];
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                client.DefaultRequestHeaders.Add("X-Api-Key", apiKey);
+            }
+
+            client.Timeout = TimeSpan.FromSeconds(30);
+        });
+
         // Registrar PluginManager como Singleton
         services.AddSingleton<PluginManager>();
 
@@ -218,15 +250,22 @@ using (var scope = host.Services.CreateScope())
 
     var dbContext = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
 
-    if (runMigrations)
+    if (dbContext.Database.IsRelational())
     {
-        logger.LogInformation("Applying pending EF Core migrations at startup.");
-        dbContext.Database.Migrate();
-        logger.LogInformation("EF Core migrations applied successfully.");
+        if (runMigrations)
+        {
+            logger.LogInformation("Applying pending EF Core migrations at startup.");
+            dbContext.Database.Migrate();
+            logger.LogInformation("EF Core migrations applied successfully.");
+        }
+        else
+        {
+            logger.LogInformation("Skipping EF Core migrations at startup (RunDatabaseMigrationsOnStartup={Value}).", runMigrationsSetting);
+        }
     }
     else
     {
-        logger.LogInformation("Skipping EF Core migrations at startup (RunDatabaseMigrationsOnStartup={Value}).", runMigrationsSetting);
+        logger.LogInformation("Database provider is not relational; skipping migrations.");
     }
 
     await ConfigurationSeedService.SeedAsync(dbContext, logger, Path.Combine(Directory.GetCurrentDirectory(), "config"));

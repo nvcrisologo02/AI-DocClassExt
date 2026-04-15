@@ -1,10 +1,10 @@
+using DocumentIA.AssetResolver.Data.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace DocumentIA.AssetResolver.Data;
 
 /// <summary>
 /// DbContext para la base de datos propia de AssetResolver.
-/// Añade aquí los DbSet correspondientes a cada entidad del plugin.
 /// </summary>
 public class AssetResolverDbContext : DbContext
 {
@@ -13,13 +13,16 @@ public class AssetResolverDbContext : DbContext
     {
     }
 
-    // TODO: añadir DbSet<T> por cada entidad del dominio del plugin
-    // Ejemplo:
-    // public DbSet<Asset> Assets { get; set; } = null!;
+    public DbSet<DmPosicionAAII> DmPosicionAAII { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
-        // Configuraciones Fluent API aquí
+
+        modelBuilder.Entity<DmPosicionAAII>(entity =>
+        {
+            entity.HasKey(e => new { e.IdActivoSareb, e.FchCierreDt });
+            entity.ToTable("DM_POSICION_AAII_TB");
+        });
     }
 }

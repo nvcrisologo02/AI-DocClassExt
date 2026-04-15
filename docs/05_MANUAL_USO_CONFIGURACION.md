@@ -123,6 +123,18 @@ $body = @{
     }
     documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
 } | ConvertTo-Json -Depth 5
+
+# Activar resolucion de activo con IDUFIR override
+$body = @{
+    instrucciones = @{
+        assetResolver = @{
+            enabled = $true
+            camposBusqueda = @{ idufir = "28077000012345" }
+            camposSolicitados = @("ID_ACTIVO_SAREB", "ID_IDUFIR", "ID_REF_CATAST", "NOM_ACTIVO_GL")
+        }
+    }
+    documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
+} | ConvertTo-Json -Depth 5
 ```
 
 ### 5.1.4 Consultar Tipologias Publicadas
@@ -155,6 +167,12 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.extraction.umbral` | double? | No | Umbral legacy (aplica si no se informan los especificos). |
 | `instrucciones.extraction.umbralCompletitud` | double? | No | Ratio minimo campos para NO activar fallback GPT (0.0-1.0). |
 | `instrucciones.extraction.umbralConfianza` | double? | No | Confianza global minima de extraccion CU (0.0-1.0). |
+| `instrucciones.assetResolver` | object | No | Configuracion de resolucion de activo para esta peticion. |
+| `instrucciones.assetResolver.enabled` | bool? | No | `true` = forzar resolucion de activo. `false` = desactivar. `null` = respetar config tipologia. |
+| `instrucciones.assetResolver.camposBusqueda` | object | No | Valores override de busqueda. |
+| `instrucciones.assetResolver.camposBusqueda.idufir` | string? | No | IDUFIR a buscar (sobreescribe el extraido del documento). |
+| `instrucciones.assetResolver.camposBusqueda.referenciaCatastral` | string? | No | Referencia Catastral a buscar (sobreescribe la extraida). |
+| `instrucciones.assetResolver.camposSolicitados` | string[]? | No | Columnas de `DM_POSICION_AAII_TB` a retornar. Si `null`, usa config tipologia o default (`ID_ACTIVO_SAREB`). |
 | `documento` | object | **Si** | Documento a procesar. |
 | `documento.name` | string | **Si** | Nombre del archivo con extension. Ej: `"nota_simple.pdf"`. |
 | `documento.content.base64` | string | **Si** | Contenido PDF codificado en Base64 (RFC 4648, sin saltos de linea). |
@@ -230,6 +248,7 @@ En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el 
 | `.extraccion` | object | Detalles de extraccion (modelo, confianza por campo, fallback) |
 | `.postproceso` | object | Normalizaciones, validaciones, inconsistencias, confianza validacion |
 | `.integracion` | object | Plugins ejecutados, datos originales vs finales, IdActivo |
+| `.assetResolver` | object? | Resultado de resolucion de activo: ejecutado, exitoso, activos encontrados, criterios, duracion. `null` si AssetResolver deshabilitado. |
 | `.gdc` | object | Resultado subida GDC (exitoso, objectId, intentos, duracion) |
 | `.seguimiento` | object | Timeline de actividades con estado y duracion por actividad |
 | `.prompt` | object? | Resultado del prompt libre (si habilitado en tipologia) |
@@ -575,6 +594,94 @@ Backoff exponencial: `delay = initialDelayMs * 2^(attempt - 1)`
 
 ---
 
+## 5.7b Configuracion de AssetResolver (Resolucion de Activo)
+
+### 5.7b.1 Descripcion
+
+La actividad `ObtenerActivo` permite resolver automaticamente el `IdActivo` de un documento consultando la tabla `DM_POSICION_AAII_TB` del plugin AssetResolver. Se ejecuta **entre Validar e Integrar** y es **opcional** (deshabilitada por defecto).
+
+### 5.7b.2 Habilitacion por Precedencia
+
+```
+instrucciones.assetResolver.enabled        (peticion HTTP)
+  ?? tipologia.assetResolver.enabled       (config tipologia en BD)
+    ?? false                                (default: deshabilitado)
+```
+
+### 5.7b.3 Configuracion en Tipologia
+
+En la tabla `TipologiasConfig`, el campo `ConfiguracionJson` puede incluir una seccion `assetResolver`:
+
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "camposSolicitados": ["#ALL#"],
+    "mapeoIdufir": ["IDUFIR", "IDUFIR_CRU", "CRU", "CodigoRegistroUnico"],
+    "mapeoReferenciaCatastral": ["ReferenciaCatastral", "RefCatastral", "Catastral"]
+  }
+}
+```
+
+| Campo | Tipo | Descripcion |
+|-------|------|------------|
+| `enabled` | bool | Activa/desactiva la resolucion de activo para esta tipologia. |
+| `camposSolicitados` | string[] | Columnas de `DM_POSICION_AAII_TB` a retornar usando el nombre real de columna. Soporta `#ALL#` para expandir a todas las columnas. Si se informa una lista explicita, `ID_ACTIVO_SAREB` y `FCH_CIERRE` se incluyen siempre. Si no se informa, el plugin mantiene el comportamiento actual y retorna solo los campos obligatorios. |
+| `mapeoIdufir` | string[] | Claves del diccionario `DatosExtraidos` donde buscar el IDUFIR. Se prueban en orden hasta encontrar valor no vacio. |
+| `mapeoReferenciaCatastral` | string[] | Claves del diccionario `DatosExtraidos` donde buscar la Referencia Catastral. |
+
+### 5.7b.4 Configuracion del Plugin AssetResolver
+
+El plugin corre como proceso independiente (puerto 5006 en local). Su conexion y autenticacion se configuran en `local.settings.json` (local) o Key Vault (produccion):
+
+```json
+{
+  "AssetResolver:BaseUrl": "http://localhost:5006/",
+  "AssetResolver:ApiKey": "dev-local-api-key-replace-in-prod"
+}
+```
+
+El plugin lee la tabla `DM_POSICION_AAII_TB` usando la connection string `AssetResolverDb` configurada en su `appsettings.json`.
+
+### 5.7b.5 Alias de Campos (FieldAliases)
+
+El plugin define aliases globales en `appsettings.json` que mapean nombres logicos a claves de `DatosExtraidos`:
+
+```json
+{
+  "FieldAliases": {
+    "Idufir": ["IDUFIR", "IDUFIR_CRU", "CRU", "CodigoRegistroUnico"],
+    "ReferenciaCatastral": ["ReferenciaCatastral", "RefCatastral", "Catastral"]
+  }
+}
+```
+
+La precedencia de aliases es: **aliases en la peticion** > **mapeo de tipologia** > **aliases globales del plugin**.
+
+### 5.7b.6 Resultado en ContratoSalida
+
+Cuando AssetResolver se ejecuta, `detalleEjecucion.assetResolver` contiene:
+
+| Campo | Tipo | Descripcion |
+|-------|------|------------|
+| `ejecutado` | bool | `true` si el paso se ejecuto (no fue skipped). |
+| `exitoso` | bool | `true` si se encontro al menos un activo. |
+| `activosEncontrados` | int | Numero de activos encontrados (tras deduplicacion). |
+| `criteriosUsados` | object | `{ idufir, referenciaCatastral }` — valores usados para la busqueda. |
+| `activos` | array | Lista de `{ idActivo, fchCierre, camposSolicitados: {} }`. |
+| `camposConError` | string[] | Columnas solicitadas que no existen en la tabla. |
+| `mensaje` | string | Mensaje descriptivo del resultado. |
+| `duracionMs` | long | Milisegundos de ejecucion. |
+| `error` | string? | Detalle de error si fallo la llamada HTTP. |
+
+### 5.7b.7 Propagacion del IdActivo
+
+- Si se encuentra **exactamente 1 activo**, su `ID_ACTIVO_SAREB` se asigna como `IdActivo` y se propaga a Integracion y persistencia.
+- Si hay **0 o multiples activos**, el IdActivo no se modifica en este paso.
+- El IdActivo final (integridad) refleja: `AssetResolver (unico) ?? Plugin con returnsIdActivo ?? trazabilidad.idActivo de entrada`.
+
+---
+
 ## 5.8 Codigos de Error y Troubleshooting
 
 ### 5.8.1 Codigos HTTP
@@ -622,6 +729,15 @@ R: Verificar que `RunDatabaseMigrationsOnStartup=true` en la configuracion. Si f
 ```powershell
 dotnet ef database update --project ..\DocumentIA.Data --startup-project .
 ```
+
+**P: AssetResolver no encuentra el activo aunque existe en la tabla.**
+R: Verificar los alias de campos. El IDUFIR se busca en `DatosExtraidos` usando las claves definidas en `mapeoIdufir` (tipologia) o `FieldAliases` (plugin). Si el campo extraido tiene un nombre diferente (ej: `CRU` en vez de `IDUFIR_CRU`), añadir ese alias en la configuracion de tipologia o en `appsettings.json` del plugin.
+
+**P: AssetResolver devuelve multiples activos y no resuelve IdActivo.**
+R: La resolucion automatica requiere match unico. Si la tabla tiene multiples registros con el mismo IDUFIR (distintas `FCH_CIERRE_DT`), se retorna el mas reciente por activo pero pueden existir multiples activos. Revisar `detalleEjecucion.assetResolver.activos` para identificar el correcto manualmente.
+
+**P: AssetResolver devuelve `camposConError`.**
+R: Los campos solicitados (`camposSolicitados`) no existen como columnas en `DM_POSICION_AAII_TB`. Verificar los nombres de columna exactos (son sensibles a mayusculas/minusculas en la configuracion). Consultar el schema de la tabla en `docs/auxiliares/DM_Posicion_AAII_TB.sql`.
 
 ---
 

@@ -61,6 +61,11 @@ namespace DocumentIA.Data.Entities
         public int? DuracionGDCMs { get; set; }
 
         public int? DuracionPersistenciaMs { get; set; }
+
+        public int? DuracionAssetResolverMs { get; set; }
+
+        [Column(TypeName = "nvarchar(max)")]
+        public string? AssetResolverResultJson { get; set; }
         
         [ForeignKey(nameof(DocumentoId))]
         public virtual DocumentoEntity Documento { get; set; } = null!;

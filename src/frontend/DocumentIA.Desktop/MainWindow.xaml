@@ -163,6 +163,24 @@
                             <TextBlock Text="Confianza CU mínima para no activar el fallback a GPT (0–1). Vacío = usa tipología o global." Foreground="#556070" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"/>
                             <TextBox Text="{Binding ExtractionThresholdConfianza, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
 
+                            <TextBlock Text="ASSETRESOLVER (OVERRIDES)" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,10,0,8"/>
+
+                            <TextBlock Text="assetResolver.enabled" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,2"/>
+                            <TextBlock Text="auto = usa configuración de tipología; true/false = fuerza ejecución u omisión." Foreground="#556070" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <ComboBox ItemsSource="{Binding AssetResolverEnabledOptions}"
+                                      SelectedItem="{Binding AssetResolverEnabled, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                      Margin="0,0,0,8" Height="30"/>
+
+                            <TextBlock Text="assetResolver.camposBusqueda.idufir" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding AssetResolverIdufir, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="assetResolver.camposBusqueda.referenciaCatastral" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
+                            <TextBox Text="{Binding AssetResolverReferenciaCatastral, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
+                            <TextBlock Text="assetResolver.camposSolicitados" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,2"/>
+                            <TextBlock Text="Lista separada por coma, punto y coma o salto de línea. Usar nombres de columna de BBDD o #ALL# para devolver todas." Foreground="#556070" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBox Text="{Binding AssetResolverCamposSolicitados, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458" TextWrapping="Wrap" AcceptsReturn="True" MinHeight="54"/>
+
                             <TextBlock Text="API check (segundos)" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
                             <TextBox Text="{Binding ApiCheckIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
                         </StackPanel>

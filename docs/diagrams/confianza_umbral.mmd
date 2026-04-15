@@ -1,0 +1,22 @@
+flowchart TD
+    A[IngestDocument\nHTTP trigger] --> B[DocumentProcessOrchestrator (Durable)]
+    B --> C[ClasificarActivity]
+    C --> D1[Azure Document Intelligence]
+    C --> D2[GPT 4o-mini\n(fallback si DI < umbralFallback)]
+    D1 --> E1[ConfianzaDI]
+    D2 --> E2[ConfianzaGPT]
+    E1 & E2 --> F[ConfigurableClasificarDataProvider\npropaga Confianza + ProveedorClasif]
+    F --> G[ExtraerActivity]
+    G --> H1[Azure Content Understanding\n(ExtracCU)]
+    G --> H2[GPT 4o-mini\n(fallback)]
+    H1 --> I1[ConfianzaExtraccion]
+    H2 --> I2[confianza_extraccion (self-report)]
+    I1 & I2 --> J[ValidarActivity]
+    J --> K[Motor de reglas\nConfianzaValidacion = 1 - errores/reglas_req]
+    K --> L[ConfidenceCalculator.Global\nMIN(clasif, extrac?, valid)]
+    L --> M[ConfidenceCalculator.EstadoCalidad\numbralOK=0.85, umbralRevision=0.70]
+    M --> N{ConfianzaGlobal >= 0.85}
+    N -->|Sí| O[OK]
+    N -->|No| P{ConfianzaGlobal >= 0.70}
+    P -->|Sí| Q[REVISION]
+    P -->|No| R[ERROR]

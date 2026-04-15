@@ -37,6 +37,11 @@ namespace DocumentIA.Core.Configuration
         /// Si es null, se usan los defaults de ConfidenceConfig.
         /// </summary>
         public ConfidenceConfig? ConfidenceConfig { get; set; }
+        /// <summary>
+        /// Configuración de AssetResolver para esta tipología.
+        /// Si es null o Enabled=false, la actividad de obtención de activo no se ejecuta (salvo override por instrucciones).
+        /// </summary>
+        public TipologiaAssetResolverConfig? AssetResolver { get; set; }
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
         public TipologiaValidationConfig()
@@ -159,5 +164,31 @@ namespace DocumentIA.Core.Configuration
         public double MinFieldsRatio { get; set; } = 0.5;
         public double Temperature { get; set; } = 0.0;
         public int MaxTokens { get; set; } = 2000;
+    }
+
+    /// <summary>
+    /// Configuración de AssetResolver por tipología.
+    /// Controla si se ejecuta la consulta a DM_POSICION_AAII_TB y qué campos se devuelven.
+    /// </summary>
+    public class TipologiaAssetResolverConfig
+    {
+        /// <summary>Si true, la actividad ObtenerActivo se ejecuta por defecto para esta tipología.</summary>
+        public bool Enabled { get; set; } = false;
+        /// <summary>
+        /// Columnas de DM_POSICION_AAII_TB a devolver además de las obligatorias (ID_ACTIVO_SAREB, FCH_CIERRE).
+        /// null = solo obligatorias.
+        /// </summary>
+        public List<string>? CamposSolicitados { get; set; }
+        /// <summary>
+        /// Posibles nombres de campo extraído que mapean al IDUFIR de la tabla (columna ID_IDUFIR).
+        /// El plugin busca en los datos extraídos usando estos aliases para detectar automáticamente el valor.
+        /// Ej: ["IDUFIR", "CRU", "CodigoRegistroUnico"]
+        /// </summary>
+        public List<string> MapeoIdufir { get; set; } = new();
+        /// <summary>
+        /// Posibles nombres de campo extraído que mapean a la referencia catastral (columna ID_REF_CATAST).
+        /// Ej: ["ReferenciaCatastral", "RefCatastral", "Catastral"]
+        /// </summary>
+        public List<string> MapeoReferenciaCatastral { get; set; } = new();
     }
 }

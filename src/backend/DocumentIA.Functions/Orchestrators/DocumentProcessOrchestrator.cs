@@ -48,7 +48,7 @@ public class DocumentProcessOrchestrator
         };
 
         var inicioOrquestacion = context.CurrentUtcDateTime;
-        var actividadesNegocio = new[] { "Clasificar", "Extraer", "Validar", "Integrar", "SubirGDC", "Persistir" };
+        var actividadesNegocio = new[] { "Clasificar", "Extraer", "Validar", "ObtenerActivo", "Integrar", "SubirGDC", "Persistir" };
 
         var seguimiento = salida.DetalleEjecucion.Seguimiento;
         seguimiento.Estado = "Pending";
@@ -740,6 +740,69 @@ public class DocumentProcessOrchestrator
                 logger.LogWarning($"Documento tiene {resultadoValidacion.Errores} errores de validacion, continuando con procesamiento");
             }
 
+            // Paso 5.5: ObtenerActivo (opcional — controlado por Instrucciones/Tipología)
+            var assetResolverEnabled = entrada.Instrucciones.AssetResolver?.Enabled
+                ?? tipologiaResuelta.AssetResolverEnabled;
+
+            string? idActivoDesdeAssetResolver = null;
+
+            if (assetResolverEnabled)
+            {
+                logger.LogInformation("Paso 5.5: Obteniendo activo desde AssetResolver");
+
+                // Resolver campos de búsqueda: Instrucciones > auto-detección
+                var idufirOverride = entrada.Instrucciones.AssetResolver?.CamposBusqueda?.Idufir;
+                var refCatastralOverride = entrada.Instrucciones.AssetResolver?.CamposBusqueda?.ReferenciaCatastral;
+
+                // Resolver campos solicitados: Instrucciones > Tipología > solo obligatorios
+                var camposSolicitados = entrada.Instrucciones.AssetResolver?.CamposSolicitados
+                    ?? tipologiaResuelta.AssetResolverCamposSolicitados;
+
+                // Aliases desde tipología para auto-detección en DatosExtraidos
+                var mapeoIdufir = tipologiaResuelta.AssetResolverMapeoIdufir;
+                var mapeoRefCatastral = tipologiaResuelta.AssetResolverMapeoReferenciaCatastral;
+
+                var obtenerActivoInput = new ObtenerActivoInput
+                {
+                    CorrelationId = entrada.Trazabilidad.CorrelationId,
+                    Tipologia = salida.Identificacion.Tipologia,
+                    DatosExtraidos = salida.DatosExtraidos,
+                    CamposSolicitados = camposSolicitados,
+                    IdufirOverride = idufirOverride,
+                    ReferenciaCatastralOverride = refCatastralOverride,
+                    MapeoIdufir = mapeoIdufir,
+                    MapeoReferenciaCatastral = mapeoRefCatastral
+                };
+
+                var resultadoAssetResolver = await EjecutarPasoNegocio(
+                    "ObtenerActivo",
+                    () => context.CallActivityAsync<ResultadoAssetResolver>(
+                        nameof(ObtenerActivoActivity),
+                        obtenerActivoInput));
+
+                salida.DetalleEjecucion.AssetResolver = resultadoAssetResolver;
+
+                // Resolución de IdActivo: solo si un único activo encontrado
+                if (resultadoAssetResolver.Exitoso && resultadoAssetResolver.Count == 1)
+                {
+                    idActivoDesdeAssetResolver = resultadoAssetResolver.Activos[0].IdActivo;
+                    logger.LogInformation(
+                        "AssetResolver resolvió un único activo: IdActivo={IdActivo}",
+                        idActivoDesdeAssetResolver);
+                }
+                else if (resultadoAssetResolver.Count > 1)
+                {
+                    logger.LogWarning(
+                        "AssetResolver encontró {Count} activos. No se sobreescribe IdActivo.",
+                        resultadoAssetResolver.Count);
+                }
+            }
+            else
+            {
+                MarcarInicioActividad("ObtenerActivo");
+                MarcarFinActividad("ObtenerActivo", "Skipped", "AssetResolver no habilitado");
+            }
+
             // Paso 6: Integrar con sistemas externos (ENRIQUECIMIENTO)
             logger.LogInformation("Paso 6: Integrando con sistemas externos");
             var integrarInput = new DocumentIA.Core.Models.IntegrarInput
@@ -747,7 +810,7 @@ public class DocumentProcessOrchestrator
                 Tipologia = salida.Identificacion.Tipologia,
                 DocumentoId = salida.Identificacion.Guid,
                 DatosExtraidos = salida.DatosExtraidos, // Pasar datos extraidos
-                IdActivo = entrada.Trazabilidad.IdActivo, // Puede venir vacío; un plugin puede resolverlo
+                IdActivo = idActivoDesdeAssetResolver ?? entrada.Trazabilidad.IdActivo, // AssetResolver > Entrada
                 Metadata = new Dictionary<string, object>
                 {
                     ["correlationId"] = entrada.Trazabilidad.CorrelationId,

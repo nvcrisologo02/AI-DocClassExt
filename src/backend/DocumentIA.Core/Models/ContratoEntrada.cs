@@ -18,6 +18,39 @@ public class Instrucciones
     public bool? SkipGDCUpload { get; set; }
     public ConfiguracionIA Classification { get; set; } = new();
     public ConfiguracionIA Extraction { get; set; } = new();
+    /// <summary>
+    /// Configuración de AssetResolver para esta petición.
+    /// null = usar config de tipología; si se informa, sus valores tienen precedencia.
+    /// </summary>
+    public AssetResolverInstrucciones? AssetResolver { get; set; }
+}
+
+/// <summary>
+/// Instrucciones de AssetResolver por petición. Permite activar/desactivar y especificar
+/// campos de búsqueda y columnas solicitadas con precedencia sobre la tipología.
+/// </summary>
+public class AssetResolverInstrucciones
+{
+    /// <summary>
+    /// true = ejecutar AssetResolver; false = omitir; null = respetar config de tipología.
+    /// </summary>
+    public bool? Enabled { get; set; }
+    /// <summary>
+    /// Campos de cruce explícitos. Si se informan, tienen precedencia sobre la auto-detección
+    /// por aliases configurados en la tipología.
+    /// </summary>
+    public CamposBusquedaActivo? CamposBusqueda { get; set; }
+    /// <summary>
+    /// Columnas de DM_POSICION_AAII_TB a devolver además de las obligatorias (ID_ACTIVO_SAREB, FCH_CIERRE).
+    /// null = usar las definidas en tipología; lista vacía = solo obligatorias.
+    /// </summary>
+    public List<string>? CamposSolicitados { get; set; }
+}
+
+public class CamposBusquedaActivo
+{
+    public string? Idufir { get; set; }
+    public string? ReferenciaCatastral { get; set; }
 }
 
 public class ConfiguracionIA

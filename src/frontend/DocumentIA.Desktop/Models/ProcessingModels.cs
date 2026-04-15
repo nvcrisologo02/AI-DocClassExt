@@ -35,6 +35,30 @@ namespace DocumentIA.Desktop.Models
 
         [JsonProperty("extraction")]
         public ExtractionSettings? Extraction { get; set; }
+
+        [JsonProperty("assetResolver")]
+        public AssetResolverSettings? AssetResolver { get; set; }
+    }
+
+    public class AssetResolverSettings
+    {
+        [JsonProperty("enabled")]
+        public bool? Enabled { get; set; }
+
+        [JsonProperty("camposBusqueda")]
+        public AssetResolverSearchFields? CamposBusqueda { get; set; }
+
+        [JsonProperty("camposSolicitados")]
+        public List<string>? CamposSolicitados { get; set; }
+    }
+
+    public class AssetResolverSearchFields
+    {
+        [JsonProperty("idufir")]
+        public string? Idufir { get; set; }
+
+        [JsonProperty("referenciaCatastral")]
+        public string? ReferenciaCatastral { get; set; }
     }
 
     public class ClassificationSettings

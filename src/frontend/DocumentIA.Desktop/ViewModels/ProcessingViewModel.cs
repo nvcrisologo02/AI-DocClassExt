@@ -44,6 +44,7 @@ namespace DocumentIA.Desktop.ViewModels
             "Extraer",
             "Prompt",
             "Validar",
+            "AssetResolver",
             "Integrar",
             "SubirGDC",
             "Persistir",
@@ -359,6 +360,64 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
+        public IReadOnlyList<string> AssetResolverEnabledOptions { get; } = new[] { "auto", "true", "false" };
+
+        private string _assetResolverEnabled = "auto";
+        public string AssetResolverEnabled
+        {
+            get => _assetResolverEnabled;
+            set
+            {
+                if (_assetResolverEnabled != value)
+                {
+                    _assetResolverEnabled = value;
+                    OnPropertyChanged(nameof(AssetResolverEnabled));
+                }
+            }
+        }
+
+        private string _assetResolverIdufir = string.Empty;
+        public string AssetResolverIdufir
+        {
+            get => _assetResolverIdufir;
+            set
+            {
+                if (_assetResolverIdufir != value)
+                {
+                    _assetResolverIdufir = value;
+                    OnPropertyChanged(nameof(AssetResolverIdufir));
+                }
+            }
+        }
+
+        private string _assetResolverReferenciaCatastral = string.Empty;
+        public string AssetResolverReferenciaCatastral
+        {
+            get => _assetResolverReferenciaCatastral;
+            set
+            {
+                if (_assetResolverReferenciaCatastral != value)
+                {
+                    _assetResolverReferenciaCatastral = value;
+                    OnPropertyChanged(nameof(AssetResolverReferenciaCatastral));
+                }
+            }
+        }
+
+        private string _assetResolverCamposSolicitados = string.Empty;
+        public string AssetResolverCamposSolicitados
+        {
+            get => _assetResolverCamposSolicitados;
+            set
+            {
+                if (_assetResolverCamposSolicitados != value)
+                {
+                    _assetResolverCamposSolicitados = value;
+                    OnPropertyChanged(nameof(AssetResolverCamposSolicitados));
+                }
+            }
+        }
+
         private string _apiCheckIntervalSeconds = "30";
         public string ApiCheckIntervalSeconds
         {
@@ -583,6 +642,7 @@ namespace DocumentIA.Desktop.ViewModels
 
             var classificationThreshold = ParseThresholdOrDefault(ClassificationThreshold, DefaultClassificationThreshold);
             var extractionThreshold = ParseThresholdOrDefault(ExtractionThreshold, DefaultExtractionThreshold);
+            var assetResolverSettings = BuildAssetResolverSettings();
             var submittedBy = string.IsNullOrWhiteSpace(InputSubmittedBy)
                 ? "usuario.desktop@sareb.es"
                 : InputSubmittedBy.Trim();
@@ -623,9 +683,78 @@ namespace DocumentIA.Desktop.ViewModels
                         Threshold = extractionThreshold,
                         ThresholdCompletitud = ParseOptionalThreshold(ExtractionThresholdCompletitud),
                         ThresholdConfianza = ParseOptionalThreshold(ExtractionThresholdConfianza)
-                    }
+                    },
+                    AssetResolver = assetResolverSettings
                 }
             };
+        }
+
+        private AssetResolverSettings? BuildAssetResolverSettings()
+        {
+            var enabled = ParseNullableBooleanOverride(AssetResolverEnabled);
+            var idufir = NormalizeOptionalText(AssetResolverIdufir);
+            var referenciaCatastral = NormalizeOptionalText(AssetResolverReferenciaCatastral);
+            var camposSolicitados = ParseStringListOverride(AssetResolverCamposSolicitados);
+
+            var hasCamposBusqueda = !string.IsNullOrWhiteSpace(idufir)
+                                   || !string.IsNullOrWhiteSpace(referenciaCatastral);
+
+            if (enabled == null && !hasCamposBusqueda && camposSolicitados == null)
+            {
+                return null;
+            }
+
+            return new AssetResolverSettings
+            {
+                Enabled = enabled,
+                CamposBusqueda = hasCamposBusqueda
+                    ? new AssetResolverSearchFields
+                    {
+                        Idufir = idufir,
+                        ReferenciaCatastral = referenciaCatastral
+                    }
+                    : null,
+                CamposSolicitados = camposSolicitados
+            };
+        }
+
+        private static bool? ParseNullableBooleanOverride(string? rawValue)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return null;
+            }
+
+            var normalized = rawValue.Trim().ToLowerInvariant();
+            return normalized switch
+            {
+                "auto" => null,
+                "null" => null,
+                "true" => true,
+                "1" => true,
+                "yes" => true,
+                "false" => false,
+                "0" => false,
+                "no" => false,
+                _ => null
+            };
+        }
+
+        private static List<string>? ParseStringListOverride(string? rawValue)
+        {
+            if (string.IsNullOrWhiteSpace(rawValue))
+            {
+                return null;
+            }
+
+            var values = rawValue
+                .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(v => v.Trim())
+                .Where(v => !string.IsNullOrWhiteSpace(v))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return values.Count == 0 ? null : values;
         }
 
         private void ApplyApiConnectionCheckInterval()
@@ -963,6 +1092,8 @@ namespace DocumentIA.Desktop.ViewModels
                 "extraccion" => "Extraer",
                 "validar" => "Validar",
                 "validacion" => "Validar",
+                "assetresolver" => "AssetResolver",
+                "obteneractivo" => "AssetResolver",
                 "integrar" => "Integrar",
                 "normalizacion" => "Integrar",
                 "subirgdc" => "SubirGDC",
@@ -1045,6 +1176,9 @@ namespace DocumentIA.Desktop.ViewModels
                         BuildCompactSummary(FindPropertyIgnoreCase(detalle, "Validacion")),
                         BuildCompactSummary(FindPropertyIgnoreCase(detalle, "PostProceso") ?? FindPropertyIgnoreCase(output, "PostProceso"))),
                     BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
+                "AssetResolver" => FirstNonEmptySummary(
+                    BuildCompactSummary(FindPropertyIgnoreCase(detalle, "AssetResolver")),
+                    BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
                 "Integrar" => FirstNonEmptySummary(
                     BuildCompactSummary(FindPropertyIgnoreCase(detalle, "Integracion")),
                     BuildCompactSummary(FindTrackingActivitySummary(detalle, canonical))),
@@ -1103,6 +1237,7 @@ namespace DocumentIA.Desktop.ViewModels
                     "Clasificacion"),
                 "Extraer" => BuildRowsFromToken(FindPropertyIgnoreCase(detalle, "Extraccion"), "Extraccion"),
                 "Validar" => BuildRowsForValidation(detalle, output),
+                "AssetResolver" => BuildRowsFromToken(FindPropertyIgnoreCase(detalle, "AssetResolver"), "AssetResolver"),
                 "Integrar" => BuildRowsFromToken(FindPropertyIgnoreCase(detalle, "Integracion"), "Integracion"),
                 "SubirGDC" => BuildRowsFromToken(
                     FindPropertyIgnoreCase(detalle, "SubidaGDC") ??

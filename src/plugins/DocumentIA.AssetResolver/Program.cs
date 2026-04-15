@@ -1,5 +1,7 @@
 using DocumentIA.AssetResolver.Data;
 using DocumentIA.AssetResolver.Middleware;
+using DocumentIA.AssetResolver.Models;
+using DocumentIA.AssetResolver.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -24,8 +26,13 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+builder.Services.Configure<FieldAliasesConfig>(
+    builder.Configuration.GetSection("FieldAliases"));
+
 builder.Services.AddDbContext<AssetResolverDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("AssetResolverDb")));
+
+builder.Services.AddScoped<AssetResolverService>();
 
 var app = builder.Build();
 

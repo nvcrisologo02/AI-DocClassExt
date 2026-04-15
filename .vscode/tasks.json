@@ -202,6 +202,24 @@
         "panel": "shared"
       },
       "problemMatcher": []
+    },
+    {
+      "label": "run (AssetResolver)",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/plugins/DocumentIA.AssetResolver"
+      },
+      "isBackground": true,
+      "problemMatcher": "$msCompile",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "plugins"
+      }
     }
   ]
 }
