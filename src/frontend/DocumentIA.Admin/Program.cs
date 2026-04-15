@@ -37,6 +37,20 @@ builder.Services.AddHttpClient(nameof(SystemConfigService), (serviceProvider, cl
 
 builder.Services.AddScoped<SystemConfigService>();
 
+builder.Services.AddHttpClient<MonitorService>((serviceProvider, client) =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var baseUrl = configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071/api/";
+
+    client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
+
+    var functionKey = configuration["FunctionsAdminApi:FunctionKey"];
+    if (!string.IsNullOrWhiteSpace(functionKey))
+    {
+        client.DefaultRequestHeaders.Add("x-functions-key", functionKey);
+    }
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
