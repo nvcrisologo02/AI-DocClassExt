@@ -257,6 +257,24 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 ---
 
+## BLOQUE 6 — Verificar App Insights post-despliegue
+
+Usar tras cualquier despliegue a produccion para confirmar que la observabilidad esta operativa.
+
+| # | Tarea | Detalle | OK |
+|---|-------|---------|----|
+| 6.1 | `APPLICATIONINSIGHTS_CONNECTION_STRING` presente en App Settings | Portal → `srbappprodocai` → Configuration → Application Settings → buscar clave | ☐ |
+| 6.2 | Live Metrics accesible y reactivo | `srbappiprodocai` → Live Metrics → debe mostrar servidor activo en < 5 s tras invocar cualquier endpoint | ☐ |
+| 6.3 | Exceptions aparecen en Failures | Provocar un error controlado (parametro invalido) → verificar en App Insights → Failures en < 2 min | ☐ |
+| 6.4 | Durable Functions Monitor accesible | Portal → Function App → Durable Functions → listar instancias de las ultimas 24 h sin error de acceso | ☐ |
+| 6.5 | Log Analytics workspace vinculado y queries disponibles | `srbappiprodocai` → Logs → ejecutar Q1 (ver sec. 4.12.4 de Manual Explotacion) sin error de workspace | ☐ |
+| 6.6 | Retencion de datos ≥ 30 dias | `srbappiprodocai` → Usage and estimated costs → Data Retention: verificar ≥ 30 dias | ☐ |
+
+> **Referencia**: ver seccion `4.12 Monitorizacion y Observabilidad en Portal Azure` del [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md).  
+> Queries KQL base guardadas en Log Analytics como `DocumentIA-Q1` … `DocumentIA-Q4`.
+
+---
+
 ## Referencias
 
 | Documento | Contenido |
