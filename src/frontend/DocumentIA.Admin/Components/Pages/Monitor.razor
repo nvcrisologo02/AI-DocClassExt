@@ -1,0 +1,327 @@
+@page "/monitor"
+@inject MonitorService MonitorService
+@rendermode InteractiveServer
+@implements IDisposable
+
+<PageTitle>Monitor — DocumentIA</PageTitle>
+
+<div class="container-fluid mt-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h1 class="mb-0">Monitor de Ejecuciones</h1>
+            <p class="text-muted mb-0">Últimas ejecuciones procesadas por el sistema</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <label class="text-muted small mb-0">Mostrar:</label>
+            <select class="form-select form-select-sm" style="width:auto" @bind="_top" @bind:after="RefreshAsync">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+            </select>
+
+            <label class="text-muted small mb-0">Auto-refresh:</label>
+            <select class="form-select form-select-sm" style="width:auto" @onchange="OnRefreshIntervalChanged">
+                <option value="0">Off</option>
+                <option value="30" selected>30 s</option>
+                <option value="60">60 s</option>
+            </select>
+
+            <button class="btn btn-outline-primary btn-sm" @onclick="RefreshAsync" disabled="@_isLoading">
+                @if (_isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                }
+                else
+                {
+                    <span class="bi bi-arrow-clockwise me-1"></span>
+                }
+                Actualizar
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible" role="alert">
+            <strong>Error</strong>: @_errorMessage
+            <button type="button" class="btn-close" @onclick="() => _errorMessage = null"></button>
+        </div>
+    }
+
+    <!-- Tarjetas de resumen -->
+    @if (_ejecuciones.Count > 0)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-0 shadow-sm">
+                    <div class="card-body py-3">
+                        <div class="h3 mb-0">@_ejecuciones.Count</div>
+                        <small class="text-muted">Ejecuciones</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-0 shadow-sm @(_errores > 0 ? "border-danger border" : "")">
+                    <div class="card-body py-3">
+                        <div class="h3 mb-0 @(_errores > 0 ? "text-danger" : "text-success")">@_errores</div>
+                        <small class="text-muted">Errores</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-0 shadow-sm">
+                    <div class="card-body py-3">
+                        <div class="h3 mb-0">@(_mediaDuracion > 0 ? $"{_mediaDuracion / 1000.0:F1} s" : "—")</div>
+                        <small class="text-muted">Duración media</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-0 shadow-sm @(_pctFallback > 30 ? "border-warning border" : "")">
+                    <div class="card-body py-3">
+                        <div class="h3 mb-0 @(_pctFallback > 30 ? "text-warning" : "")">@_pctFallback %</div>
+                        <small class="text-muted">% Fallback LLM</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Tabla de ejecuciones -->
+    @if (_isLoading && _ejecuciones.Count == 0)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+    else if (_ejecuciones.Count == 0)
+    {
+        <div class="alert alert-info">No hay ejecuciones registradas.</div>
+    }
+    else
+    {
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:1rem"></th>
+                                <th>Fecha (UTC+1)</th>
+                                <th>Documento</th>
+                                <th>Tipología</th>
+                                <th>Estado</th>
+                                <th class="text-end">Confianza</th>
+                                <th class="text-end">Duración E2E</th>
+                                <th class="text-center">Fallback</th>
+                                <th>GUID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var e in _ejecuciones)
+                            {
+                                bool expanded = _expanded.Contains(e.Id);
+                                <tr class="@(expanded ? "table-active" : "")" style="cursor:pointer" @onclick="() => ToggleExpand(e.Id)">
+                                    <td class="text-center text-muted small">@(expanded ? "▾" : "▸")</td>
+                                    <td class="text-nowrap small">@ToSpainTime(e.FechaEjecucion).ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                    <td class="small text-truncate" style="max-width:150px" title="@e.NombreDocumento">@(e.NombreDocumento ?? "—")</td>
+                                    <td class="small">@(e.Tipologia ?? "—")</td>
+                                    <td>
+                                        <span class="badge @EstadoBadgeClass(e.EstadoFinal)">@e.EstadoFinal</span>
+                                    </td>
+                                    <td class="text-end small">
+                                        @if (e.ConfianzaGlobal > 0)
+                                        {
+                                            <span class="@ConfianzaClass(e.ConfianzaGlobal)">@e.ConfianzaGlobal.ToString("P0")</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-end small text-nowrap fw-semibold">@FormatDuracion(e.DuracionTotalMs)</td>
+                                    <td class="text-center">
+                                        @if (e.UseFallbackLLM)
+                                        {
+                                            <span class="badge bg-warning text-dark">Fallback</span>
+                                        }
+                                    </td>
+                                    <td class="small text-muted" style="font-family:monospace;font-size:0.7rem" title="@e.EjecucionGuid">@e.EjecucionGuid[..8]…</td>
+                                </tr>
+                                @if (expanded)
+                                {
+                                    <tr class="table-active">
+                                        <td colspan="9" class="ps-4 pb-3 pt-1">
+                                            <div class="d-flex flex-wrap gap-4 small">
+                                                <div>
+                                                    <div class="text-muted mb-1 fw-semibold" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em">Tiempos por actividad</div>
+                                                    <table class="table table-sm table-borderless mb-0" style="width:auto">
+                                                        <tbody>
+                                                            @foreach (var (label, ms) in GetTimingRows(e))
+                                                            {
+                                                                <tr>
+                                                                    <td class="text-muted py-0 pe-3">@label</td>
+                                                                    <td class="py-0 text-end fw-semibold @DuracionClass(ms)">@FormatDuracion(ms)</td>
+                                                                    <td class="py-0 ps-2">
+                                                                        <div class="bg-secondary bg-opacity-25 rounded" style="height:6px;width:@(BarWidth(ms, e.DuracionTotalMs))px;background-color:#0d6efd!important;opacity:0.6"></div>
+                                                                    </td>
+                                                                </tr>
+                                                            }
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <div>
+                                                    <div class="text-muted mb-1 fw-semibold" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em">Confianza</div>
+                                                    <div>Global: <span class="@ConfianzaClass(e.ConfianzaGlobal)">@(e.ConfianzaGlobal > 0 ? e.ConfianzaGlobal.ToString("P1") : "—")</span></div>
+                                                    <div>Clasificación: <span class="@ConfianzaClass(e.ConfianzaClasificacion)">@(e.ConfianzaClasificacion > 0 ? e.ConfianzaClasificacion.ToString("P1") : "—")</span></div>
+                                                </div>
+                                                <div>
+                                                    <div class="text-muted mb-1 fw-semibold" style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em">Identificador</div>
+                                                    <code style="font-size:0.7rem;word-break:break-all">@e.EjecucionGuid</code>
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <p class="text-muted small mt-2 text-end">
+            Última actualización: @_ultimaActualizacion?.ToString("HH:mm:ss") &nbsp;|&nbsp;
+            Próximo refresh: @_proximoRefresh
+        </p>
+    }
+</div>
+
+@code {
+    private List<EjecucionResumenDto> _ejecuciones = [];
+    private HashSet<int> _expanded = [];
+    private bool _isLoading = false;
+    private string? _errorMessage;
+    private int _top = 50;
+    private int _refreshIntervalSeconds = 30;
+    private Timer? _timer;
+    private DateTime? _ultimaActualizacion;
+    private string _proximoRefresh = "—";
+
+    private int _errores => _ejecuciones.Count(e => e.EstadoFinal is "Error" or "Fallido");
+    private int _mediaDuracion => _ejecuciones.Count > 0 ? (int)_ejecuciones.Average(e => e.DuracionTotalMs) : 0;
+    private int _pctFallback => _ejecuciones.Count > 0
+        ? (int)Math.Round(100.0 * _ejecuciones.Count(e => e.UseFallbackLLM) / _ejecuciones.Count)
+        : 0;
+
+    private static readonly TimeZoneInfo _spainTz =
+        TimeZoneInfo.FindSystemTimeZoneById("Romance Standard Time");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        StartTimer();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        try
+        {
+            _ejecuciones = await MonitorService.GetUltimasEjecucionesAsync(_top);
+            _ultimaActualizacion = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private void ToggleExpand(int id)
+    {
+        if (!_expanded.Add(id))
+            _expanded.Remove(id);
+    }
+
+    private void OnRefreshIntervalChanged(ChangeEventArgs e)
+    {
+        _refreshIntervalSeconds = int.TryParse(e.Value?.ToString(), out int v) ? v : 0;
+        StopTimer();
+        if (_refreshIntervalSeconds > 0)
+            StartTimer();
+        _proximoRefresh = _refreshIntervalSeconds > 0 ? $"{_refreshIntervalSeconds} s" : "Off";
+    }
+
+    private void StartTimer()
+    {
+        if (_refreshIntervalSeconds <= 0) return;
+        _timer = new Timer(async _ =>
+        {
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(_refreshIntervalSeconds), TimeSpan.FromSeconds(_refreshIntervalSeconds));
+        _proximoRefresh = $"{_refreshIntervalSeconds} s";
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    public void Dispose() => StopTimer();
+
+    private static DateTime ToSpainTime(DateTime utc) =>
+        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _spainTz);
+
+    private static string EstadoBadgeClass(string estado) => estado switch
+    {
+        "Completado" or "Completed" or "OK" => "bg-success",
+        "Error" or "Fallido" => "bg-danger",
+        "Duplicado" => "bg-secondary",
+        "Running" or "Pending" => "bg-warning text-dark",
+        _ => "bg-info text-dark"
+    };
+
+    private static string ConfianzaClass(double c) => c switch
+    {
+        >= 0.7 => "text-success fw-semibold",
+        >= 0.5 => "text-warning fw-semibold",
+        > 0 => "text-danger fw-semibold",
+        _ => "text-muted"
+    };
+
+    private static string DuracionClass(int ms) => ms switch
+    {
+        > 60000 => "text-danger",
+        > 30000 => "text-warning",
+        _ => ""
+    };
+
+    private static int BarWidth(int ms, int total) =>
+        total > 0 ? (int)Math.Round(120.0 * ms / total) : 0;
+
+    private static IEnumerable<(string Label, int Ms)> GetTimingRows(EjecucionResumenDto e)
+    {
+        if (e.DuracionClasificacionMs > 0) yield return ("Clasificación", e.DuracionClasificacionMs!.Value);
+        if (e.DuracionExtraccionMs > 0)    yield return ("Extracción", e.DuracionExtraccionMs!.Value);
+        if (e.DuracionValidacionMs > 0)    yield return ("Validación", e.DuracionValidacionMs!.Value);
+        if (e.DuracionGDCMs > 0)           yield return ("Integración GDC", e.DuracionGDCMs!.Value);
+        if (e.DuracionIntegracionMs > 0)   yield return ("Integración", e.DuracionIntegracionMs!.Value);
+        if (e.DuracionPersistenciaMs > 0)  yield return ("Persistencia", e.DuracionPersistenciaMs!.Value);
+        yield return ("Total E2E", e.DuracionTotalMs);
+    }
+
+    private static string FormatDuracion(int ms)
+    {
+        if (ms < 1000) return $"{ms} ms";
+        if (ms < 60000) return $"{ms / 1000.0:F1} s";
+        return $"{ms / 60000}m {(ms % 60000) / 1000}s";
+    }
+}
