@@ -8,6 +8,10 @@ variables:
     value: AI DocClassExt
   - name: AZURE_FUNCTIONS_APP_NAME
     value: srbappprodocai
+  - name: AZURE_ADMIN_WEB_APP_NAME
+    value: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+  - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+    value: srbwebpluginassetresolver
   - name: AZURE_RESOURCE_GROUP
     value: SRBRGDOCSAIPROD
   - name: KEY_VAULT_NAME
@@ -20,6 +24,8 @@ variables:
     value: src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj
   - name: COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject
     value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
+  - name: assetResolverProject
+    value: src/plugins/DocumentIA.AssetResolver/DocumentIA.AssetResolver.csproj
   - name: testsProject
     value: src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
 
@@ -79,6 +85,16 @@ stages:
               zipAfterPublish: false
               modifyOutputPath: false
 
+          - task: DotNetCoreCLI@2
+            displayName: Publish AssetResolver
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: $(assetResolverProject)
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/assetresolver
+              zipAfterPublish: false
+              modifyOutputPath: false
+
           - task: PublishBuildArtifacts@1
             displayName: Upload artifact - functions
             inputs:
@@ -90,6 +106,12 @@ stages:
             inputs:
               PathtoPublish: $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
               ArtifactName: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+
+          - task: PublishBuildArtifacts@1
+            displayName: Upload artifact - assetresolver
+            inputs:
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/assetresolver
+              ArtifactName: drop-assetresolver
 
   - stage: RunMigrations
     displayName: Run Database Migrations
@@ -200,11 +222,11 @@ stages:
 
   - stage: DeployAdmin
     displayName: Deploy Admin Blazor
-    dependsOn: Build
-    condition: false
+    dependsOn: DeployFunctions
+    condition: succeeded()
     jobs:
       - deployment: DeployAdminJob
-        displayName: Deploy to srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+        displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
         environment: prod
         strategy:
           runOnce:
@@ -218,6 +240,54 @@ stages:
                   inputs:
                     azureSubscription: $(AZURE_SERVICE_CONNECTION)
                     appType: webApp
-                    appName: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+                    appName: $(AZURE_ADMIN_WEB_APP_NAME)
                     package: $(Pipeline.Workspace)/drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
                     deploymentMethod: zipDeploy
+
+                - task: AzureCLI@2
+                  displayName: Set Admin App settings (Functions API base URL)
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az webapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --settings "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/" --only-show-errors --output none
+
+  - stage: DeployAssetResolver
+    displayName: Deploy AssetResolver Plugin
+    dependsOn: DeployFunctions
+    condition: succeeded()
+    jobs:
+      - deployment: DeployAssetResolverJob
+        displayName: Deploy to $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: drop-assetresolver
+
+                - task: AzureWebApp@1
+                  displayName: Deploy AssetResolver Web App
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    appType: webApp
+                    appName: $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
+                    package: $(Pipeline.Workspace)/drop-assetresolver
+                    deploymentMethod: zipDeploy
+
+                - task: AzureCLI@2
+                  displayName: Set AssetResolver App settings
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az webapp config appsettings set `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
+                        --settings `
+                          "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverDbConnectionString)" `
+                          "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)" `
+                        --only-show-errors --output none

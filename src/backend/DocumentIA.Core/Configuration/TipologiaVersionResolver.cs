@@ -190,7 +190,11 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 PromptEnabled: config.PromptConfig?.Enabled == true,
                 ExtractionEnabled: config.Extraction.Enabled,
                 ConfidenceConfig: config.ConfidenceConfig,
-                ExtractionProvider: config.Extraction.Provider ?? string.Empty);
+                ExtractionProvider: config.Extraction.Provider ?? string.Empty,
+                AssetResolverEnabled: config.AssetResolver?.Enabled == true,
+                AssetResolverCamposSolicitados: config.AssetResolver?.CamposSolicitados,
+                AssetResolverMapeoIdufir: config.AssetResolver?.MapeoIdufir,
+                AssetResolverMapeoReferenciaCatastral: config.AssetResolver?.MapeoReferenciaCatastral);
 
             byTechnicalKey[technicalKey] = resolved;
 
@@ -251,7 +255,11 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 PromptEnabled: config.PromptConfig?.Enabled == true,
                 ExtractionEnabled: config.Extraction.Enabled,
                 ConfidenceConfig: config.ConfidenceConfig,
-                ExtractionProvider: config.Extraction.Provider ?? string.Empty);
+                ExtractionProvider: config.Extraction.Provider ?? string.Empty,
+                AssetResolverEnabled: config.AssetResolver?.Enabled == true,
+                AssetResolverCamposSolicitados: config.AssetResolver?.CamposSolicitados,
+                AssetResolverMapeoIdufir: config.AssetResolver?.MapeoIdufir,
+                AssetResolverMapeoReferenciaCatastral: config.AssetResolver?.MapeoReferenciaCatastral);
 
             byTechnicalKey[technicalKey] = resolved;
 

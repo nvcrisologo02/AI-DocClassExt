@@ -92,7 +92,7 @@ flowchart TB
 **Flujo normal:**
 1. Cliente envia `POST /api/IngestDocument` con documento PDF (base64) e instrucciones opcionales.
 2. Sistema genera `instanceId` y devuelve `statusQueryUri` para polling.
-3. Orchestrator ejecuta pipeline: Normalizar → Verificar duplicado → Subir blob → Clasificar → Resolver tipologia → Extraer → Prompt → Validar → Integrar → Subir GDC → Persistir.
+3. Orchestrator ejecuta pipeline: Normalizar → Verificar duplicado → Subir blob → Clasificar → Resolver tipologia → Extraer → Prompt → Validar → ObtenerActivo → Integrar → Subir GDC → Persistir.
 4. Cliente consulta `statusQueryUri` hasta obtener estado `Completed`.
 5. Respuesta final incluye: datos extraidos, confianza global, estado calidad, auditoria.
 
@@ -106,6 +106,8 @@ flowchart TB
 | Tipologia no resoluble | Estado final `ERROR` con mensaje "No se ha podido identificar la tipologia". |
 | Extraccion con baja completitud | Activa fallback GPT-4o-mini para campos faltantes. |
 | Plugin critico (Priority=1) falla | Detiene cadena de plugins. Datos parciales se preservan. |
+| AssetResolver habilitado y activo encontrado | `ObtenerActivoActivity` resuelve IdActivo desde `DM_POSICION_AAII_TB` antes de la integracion. |
+| AssetResolver sin resultados | Paso se completa sin IdActivo; plugins posteriores pueden resolverlo. |
 | GDC timeout (>120s) | Marca `Timeout` en SubirGDC, continua a persistencia. |
 | Excepcion no controlada | Estado final `ERROR` con mensaje de excepcion. Persiste lo capturado hasta ese punto. |
 
@@ -150,6 +152,19 @@ flowchart TB
 | **Actor principal** | Sistema Cliente / Desktop |
 | **Endpoint** | `GET /api/tipologias` (Anonymous) |
 | **Respuesta** | Lista de tipologias publicadas con codigo, nombre, version, campos GDC. |
+
+### CU7: Obtener Activo desde Documento
+
+| Campo | Detalle |
+|-------|---------|
+| **Actor principal** | Sistema (automatico dentro del pipeline) |
+| **Precondicion** | Documento extraido con datos que contienen IDUFIR o Referencia Catastral. AssetResolver habilitado en tipologia o instrucciones. |
+| **Postcondicion** | Si se encuentra un activo unico, `IdActivo` queda resuelto y se propaga a Integracion y persistencia. |
+| **Descripcion** | La actividad `ObtenerActivoActivity` consulta la tabla `DM_POSICION_AAII_TB` del plugin AssetResolver usando los datos extraidos (IDUFIR y/o Referencia Catastral). Los campos de busqueda se resuelven por alias configurables (mapeo en tipologia o configuracion global). |
+| **Precedencia** | `instrucciones.assetResolver.enabled` > `tipologia.assetResolver.enabled` > deshabilitado (default) |
+| **Resultado** | `detalleEjecucion.assetResolver` con activos encontrados, criterios usados, campos solicitados y duracion. |
+| **Si no hay match** | `assetResolver.exitoso = false`, `activos = []`, pipeline continua sin IdActivo desde este paso. |
+| **Si hay match multiple** | Se retornan todos los activos pero no se resuelve IdActivo automaticamente (requiere match unico). |
 
 ---
 
@@ -222,6 +237,16 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 - Cada plugin puede devolver `DatosEnriquecidos` que se mergean acumulativamente en `DatosFinales`.
 - Un plugin con `returnsIdActivo=true` puede resolver/sobreescribir el `IdActivo` del documento.
 
+### RN7: Resolucion de Activo (AssetResolver)
+
+- La actividad `ObtenerActivo` se ejecuta entre Validar e Integrar, solo si esta habilitada.
+- Habilitacion por precedencia: `instrucciones.assetResolver.enabled ?? tipologia.assetResolver.enabled ?? false`.
+- Busqueda por IDUFIR: se busca en `DM_POSICION_AAII_TB.ID_IDUFIR` usando el valor del campo extraido mapeado por alias.
+- Busqueda por Referencia Catastral: se busca en `DM_POSICION_AAII_TB.ID_REF_CATAST` usando el valor del campo extraido mapeado por alias.
+- Los alias de campos se resuelven por precedencia: mapeos de la peticion > mapeo de la tipologia > configuracion global (`FieldAliases`).
+- Si se encuentra exactamente 1 activo, su `ID_ACTIVO_SAREB` se asigna como `IdActivo` del documento.
+- Si se encuentran 0 o multiples activos, no se resuelve IdActivo en este paso (puede ser resuelto por plugins posteriores).
+
 ---
 
 ## 2.5 Glosario de Terminos del Dominio
@@ -245,6 +270,9 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 | **GDC SINTWS** | Servicio SOAP del Gestor Documental Corporativo de SAREB (host: srbwidd03.sareb.srb:8090). |
 | **Fallback** | Mecanismo automatico que redirige al proveedor alternativo (GPT) cuando el primario (DI/CU) tiene baja confianza o falla. |
 | **Plugin** | Componente de integracion extensible (REST, SOAP o DLL .NET custom) que enriquece datos extraidos con fuentes externas. |
+| **AssetResolver** | Plugin HTTP que consulta la tabla `DM_POSICION_AAII_TB` para resolver el activo inmobiliario (IdActivo) a partir de IDUFIR o Referencia Catastral extraidos del documento. |
+| **DM_POSICION_AAII_TB** | Tabla SQL Server con la posicion de activos AAII de SAREB (~160 columnas). PK compuesta: `(ID_ACTIVO_SAREB, FCH_CIERRE_DT)`. Campos clave de busqueda: `ID_IDUFIR` (14 chars), `ID_REF_CATAST` (32 chars). |
+| **ObtenerActivoActivity** | Actividad del pipeline que invoca al AssetResolver via HTTP para resolver el activo asociado al documento. Se ejecuta entre Validar e Integrar. |
 | **Circuit Breaker** | Patron de resiliencia que abre el circuito tras N fallos consecutivos, impidiendo nuevas llamadas hasta que se restablezca el servicio. |
 
 ---
@@ -268,6 +296,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 | RF13 | El sistema debe soportar versionado de tipologias | Resolucion `nota-simple` → default version, `nota-simple@1.4` → version especifica. | DONE |
 | RF14 | El sistema debe calcular hashes SHA256, MD5 y CRC32 para integridad | NormalizarActivity calcula los tres hashes. SHA256 usado para deduplicacion, MD5 para GDC. | DONE |
 | RF15 | El sistema debe proteger datos personales segun GDPR/LOPD | Masking de datos sensibles, cifrado en reposo, retencion configurable. | PLANNED |
+| RF16 | El sistema debe resolver el activo inmobiliario desde datos extraidos | `ObtenerActivoActivity` consulta `DM_POSICION_AAII_TB` via AssetResolver. Devuelve `IdActivo` si match unico. Habilitacion configurable por tipologia/instrucciones. | DONE |
 
 ---
 
@@ -303,6 +332,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 | **EP7** | Proteccion de datos / GDPR | PLANNED | HU12 |
 | **EP8** | Mantenimiento Blob | PLANNED | HU13 |
 | **EP9** | GDC integracion completa | IN PROGRESS | — |
+| **EP10** | Resolucion de Activo | DONE | HU14 |
 
 ### Detalle de User Stories
 
@@ -321,6 +351,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 | HU11 | Observabilidad | Como operador, quiero metricas y logs en Application Insights para diagnosticar problemas. | Structured logging, telemetria AI SDK, metricas por actividad en seguimiento. | IN PROGRESS |
 | HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | PLANNED |
 | HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Lifecycle rules en Storage + soft delete + archivado por antigüedad. | PLANNED |
+| HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR o Referencia Catastral extraidos. | `ObtenerActivoActivity` busca en AssetResolver. Si match unico, `IdActivo` se propaga. Configurable por tipologia/instrucciones. Resultado en `detalleEjecucion.assetResolver`. | DONE |
 
 ---
 

@@ -184,7 +184,13 @@ namespace DocumentIA.Functions.Activities
                     DuracionValidacionMs = GetDuracionActividad(salida, "Validar"),
                     DuracionIntegracionMs = GetDuracionActividad(salida, "Integrar"),
                     DuracionGDCMs = GetDuracionActividad(salida, "SubirGDC"),
-                    DuracionPersistenciaMs = GetDuracionActividad(salida, "Persistir")
+                    DuracionPersistenciaMs = GetDuracionActividad(salida, "Persistir"),
+                    DuracionAssetResolverMs = GetDuracionActividad(salida, "ObtenerActivo"),
+                    AssetResolverResultJson = salida.DetalleEjecucion.AssetResolver is { Ejecutado: true }
+                        ? JsonSerializer.Serialize(
+                            salida.DetalleEjecucion.AssetResolver.Activos?.Select(a => new { a.IdActivo, a.FchCierre }),
+                            new JsonSerializerOptions { WriteIndented = false })
+                        : null
                 };
 
                 if (salida.DetalleEjecucion.Postproceso != null)

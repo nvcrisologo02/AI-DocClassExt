@@ -78,3 +78,35 @@ Ver carpeta docs/ para:
 ## Licencia
 
 Uso interno - Proyecto MVP
+
+## Notas de desarrollo (2026-04-15)
+
+Últimos cambios relevantes para desarrollo local y pruebas:
+
+- **Funciones (DocumentIA.Functions)**
+  - Añadido fallback a `EntityFrameworkCore.InMemory` para entornos de desarrollo para evitar fallos en el arranque cuando la base de datos no está inaccesible. (Ver [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs)).
+  - Evitar la ejecución de migraciones automáticas cuando el proveedor no es relacional (`Database.IsRelational()` guard).
+  - Añadida la dependencia `Microsoft.EntityFrameworkCore.InMemory` en `src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj`.
+
+- **Plugin AssetResolver (DocumentIA.AssetResolver)**
+  - `appsettings.Development.json` actualizado para apuntar a un SQL local (ejemplo: `Server=127.0.0.1,1433;Database=DocumentIA;User Id=sa;Password=COMPLETAR_SQL_PASSWORD;TrustServerCertificate=True;`).
+  - Se añadieron campos obligatorios que siempre se devuelven: `FCH_ALTA`, `FCH_BAJA`, `DES_SERVICER`.
+  - Cambio en la resolución por *aliases*: la resolución por aliases solo se ejecuta si ambos campos (IDUFIR y ReferenciaCatastral) vienen vacíos. Si alguno está **indicado** (por override o por mapeo en la tipología), la búsqueda se realiza únicamente por ese campo.
+  - Proyecto de tests unitarios añadido: [src/plugins/DocumentIA.AssetResolver.Tests](src/plugins/DocumentIA.AssetResolver.Tests) con pruebas para `AssetResolverService`.
+
+Instrucciones rápidas:
+
+- Ejecutar tests:
+  - `dotnet test src\plugins\DocumentIA.AssetResolver.Tests\DocumentIA.AssetResolver.Tests.csproj`
+- Ejecutar AssetResolver en modo desarrollo:
+  - Windows (PowerShell): `$Env:ASPNETCORE_ENVIRONMENT='Development'; cd src\plugins\DocumentIA.AssetResolver; dotnet run`
+  - Linux/macOS: `export ASPNETCORE_ENVIRONMENT=Development; cd src/plugins/DocumentIA.AssetResolver; dotnet run`
+- Endpoint de prueba:
+  - `POST http://localhost:5006/api/assets/GetAAIIInfo` con header `X-Api-Key` (middleware exige API key).
+  - Body ejemplo: `{ "CorrelationId": "c1", "ExtractedData": { "IDUFIR": "..." }, "RequestedFields": ["ID_ACTIVO_SAREB"] }`
+
+Notas operativas:
+
+- La tabla esperada en la base de datos es `DM_POSICION_AAII_TB`. Si aparece `Invalid object name 'DM_POSICION_AAII_TB'`, verifica que la cadena de conexión apunte a la base ODS correcta.
+- Si el build/reporta errores de copia por archivo en uso, detén el proceso que está corriendo (`dotnet run`) antes de recompilar.
+

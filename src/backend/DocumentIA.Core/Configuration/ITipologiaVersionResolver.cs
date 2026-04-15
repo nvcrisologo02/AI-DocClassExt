@@ -16,4 +16,8 @@ public sealed record ResolvedTipologia(
     bool PromptEnabled = false,
     bool ExtractionEnabled = true,
     ConfidenceConfig? ConfidenceConfig = null,
-    string ExtractionProvider = "");
+    string ExtractionProvider = "",
+    bool AssetResolverEnabled = false,
+    List<string>? AssetResolverCamposSolicitados = null,
+    List<string>? AssetResolverMapeoIdufir = null,
+    List<string>? AssetResolverMapeoReferenciaCatastral = null);

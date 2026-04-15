@@ -49,6 +49,9 @@ public class DetalleEjecucion
     public ResultadoIntegracion Integracion { get; set; } = new();
     // Resultado de la interacción con el Gestor Documental (GDC)
     public ResultadoGDC GDC { get; set; } = new();
+    // Resultado de la consulta AssetResolver (DM_POSICION_AAII_TB).
+    // Null cuando la actividad no está habilitada para la tipología/petición.
+    public ResultadoAssetResolver? AssetResolver { get; set; }
     // Seguimiento estructurado de actividades para monitorización en tiempo real y post-ejecución.
     public SeguimientoOrquestacion Seguimiento { get; set; } = new();
     /// <summary>Información de ejecución del prompt libre (cuando la tipología lo tiene habilitado).</summary>
@@ -240,4 +243,64 @@ public class ResultadoGDC
         ErrorDetalle = string.Empty;
         YaExistia = false;
     }
+}
+
+/// <summary>
+/// Resultado de la actividad ObtenerActivo que consulta DM_POSICION_AAII_TB vía AssetResolver.
+/// </summary>
+public class ResultadoAssetResolver
+{
+    public bool Ejecutado { get; set; }
+    public bool Exitoso { get; set; }
+    /// <summary>Número de activos encontrados.</summary>
+    public int Count { get; set; }
+    /// <summary>Criterios de búsqueda utilizados.</summary>
+    public CriteriosBusquedaActivo CriteriosUsados { get; set; } = new();
+    /// <summary>Array de activos encontrados (puede contener más de uno si la búsqueda por ReferenciaCatastral devuelve varios).</summary>
+    public List<ActivoEncontrado> Activos { get; set; } = new();
+    /// <summary>Campos solicitados que no existen como columna en DM_POSICION_AAII_TB.</summary>
+    public List<string> CamposConError { get; set; } = new();
+    public string Mensaje { get; set; } = string.Empty;
+    public int DuracionMs { get; set; }
+    public string? Error { get; set; }
+}
+
+public class CriteriosBusquedaActivo
+{
+    public string? Idufir { get; set; }
+    public string? ReferenciaCatastral { get; set; }
+}
+
+/// <summary>
+/// Un activo encontrado en DM_POSICION_AAII_TB.
+/// Siempre incluye IdActivo y FchCierre (campos obligatorios); el resto depende de CamposSolicitados.
+/// </summary>
+public class ActivoEncontrado
+{
+    /// <summary>ID_ACTIVO_SAREB (obligatorio).</summary>
+    public string IdActivo { get; set; } = string.Empty;
+    /// <summary>FCH_CIERRE (obligatorio).</summary>
+    public DateTime? FchCierre { get; set; }
+    /// <summary>Campos adicionales solicitados con su valor.</summary>
+    public Dictionary<string, object?> CamposSolicitados { get; set; } = new();
+}
+
+/// <summary>
+/// Input para la actividad ObtenerActivoActivity.
+/// </summary>
+public class ObtenerActivoInput
+{
+    public string CorrelationId { get; set; } = string.Empty;
+    public string Tipologia { get; set; } = string.Empty;
+    public Dictionary<string, object> DatosExtraidos { get; set; } = new();
+    /// <summary>Columnas adicionales a devolver; null = solo obligatorias.</summary>
+    public List<string>? CamposSolicitados { get; set; }
+    /// <summary>Valor de IDUFIR explícito desde instrucciones (tiene precedencia sobre auto-detección).</summary>
+    public string? IdufirOverride { get; set; }
+    /// <summary>Valor de ReferenciaCatastral explícito desde instrucciones.</summary>
+    public string? ReferenciaCatastralOverride { get; set; }
+    /// <summary>Aliases para auto-detectar IDUFIR en DatosExtraidos (desde config tipología).</summary>
+    public List<string> MapeoIdufir { get; set; } = new();
+    /// <summary>Aliases para auto-detectar ReferenciaCatastral en DatosExtraidos (desde config tipología).</summary>
+    public List<string> MapeoReferenciaCatastral { get; set; } = new();
 }

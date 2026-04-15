@@ -82,6 +82,16 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `extraction.model` | string | Model key del registro de modelos de extracción. Si se especifica un valor distinto de `"auto"`, sobreescribe el `modelKey` configurado en la tipología para esta petición. Debe coincidir con una clave del registro de modelos (`extraction-models.json`). |
 | `extraction.umbral` | double? | _(Opcional)_ Ratio mínimo de campos para considerar la extracción CU suficiente. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor (`MinFieldsRatio`). |
 
+**`instrucciones.assetResolver`** _(opcional)_
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `assetResolver.enabled` | bool? | `true` = forzar resolucion de activo via AssetResolver. `false` = desactivar. `null` = respetar config tipologia (default: deshabilitado). |
+| `assetResolver.camposBusqueda` | object? | Override de valores de busqueda. Si se informa, sobreescribe los datos extraidos del documento. |
+| `assetResolver.camposBusqueda.idufir` | string? | IDUFIR a buscar directamente (sin extraer del documento). |
+| `assetResolver.camposBusqueda.referenciaCatastral` | string? | Referencia Catastral a buscar directamente. |
+| `assetResolver.camposSolicitados` | string[]? | Columnas de `DM_POSICION_AAII_TB` a retornar. Si `null`, usa config tipologia o default (`ID_ACTIVO_SAREB`). |
+
 **`documento`**
 
 | Campo | Tipo | Descripción |
@@ -233,6 +243,14 @@ La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Fun
 | `detalleEjecucion.postproceso.validaciones` | Lista de reglas de validación ejecutadas. |
 | `detalleEjecucion.postproceso.inconsistencias` | Lista de inconsistencias detectadas. |
 | `detalleEjecucion.integracion.plugins` | Lista de plugins ejecutados con su resultado individual. |
+| `detalleEjecucion.assetResolver` | Resultado de resolucion de activo. `null` si AssetResolver deshabilitado. |
+| `detalleEjecucion.assetResolver.ejecutado` | `true` si el paso se ejecuto. |
+| `detalleEjecucion.assetResolver.exitoso` | `true` si se encontro al menos un activo. |
+| `detalleEjecucion.assetResolver.activosEncontrados` | Numero de activos encontrados. |
+| `detalleEjecucion.assetResolver.criteriosUsados` | `{ idufir, referenciaCatastral }` — valores usados para la busqueda. |
+| `detalleEjecucion.assetResolver.activos` | Array de `{ idActivo, fchCierre, camposSolicitados }`. |
+| `detalleEjecucion.assetResolver.duracionMs` | Milisegundos de ejecucion. |
+| `detalleEjecucion.assetResolver.error` | Detalle de error si fallo la llamada. |
 | `detalleEjecucion.gdc.exitoso` | `true` si la subida al GDC fue exitosa. |
 | `detalleEjecucion.gdc.objectId` | ID del objeto creado en el GDC. |
 | `detalleEjecucion.gdc.yaExistia` | `true` si el documento ya existía en GDC. |
