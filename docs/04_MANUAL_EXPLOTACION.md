@@ -583,3 +583,112 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Configuracion tecnica detallada |
 | [05_MANUAL_USO_CONFIGURACION.md](05_MANUAL_USO_CONFIGURACION.md) | Uso de API y configuraciones |
 | [README-activate-pim.md](../scripts/README-activate-pim.md) | Guia PIM |
+
+---
+
+## 4.12 Monitorizacion y Observabilidad en Portal Azure
+
+> **Recurso principal**: Application Insights `srbappiprodocai`  
+> Resource Group `SRBRGDOCSAIPROD` — West Europe  
+> ADO: T1 #99067 · T2 #99070 · T3 #99068 · T4 #99069
+
+### 4.12.1 Acceso rapido
+
+| Vista | Ruta en portal Azure |
+|-------|----------------------|
+| App Insights overview | Portal → `SRBRGDOCSAIPROD` → `srbappiprodocai` |
+| Live Metrics | App Insights → **Live Metrics** (menu lateral) |
+| Failures / Exceptions | App Insights → **Failures** |
+| Performance / Latencia | App Insights → **Performance** |
+| Log Analytics — Logs | App Insights → **Logs** (abre workspace vinculado) |
+| Durable Functions Monitor | Portal → Function App `srbappprodocai` → **Durable Functions** |
+
+### 4.12.2 Live Metrics
+
+1. Abrir `srbappiprodocai` → **Live Metrics** en el menu lateral.
+2. Verificar que aparecen servidores activos (la Function App debe estar warm o procesando).
+3. Monitorizar en tiempo real: requests/s, exception rate, CPU, dependencias externas.
+4. Umbral: si exception rate > 5 req/s sostenido, investigar via Failures → End-to-end transaction.
+
+### 4.12.3 Durable Functions Monitor
+
+1. En el portal: **Function App `srbappprodocai`** → seccion **Durable Functions**.
+2. Alternativa local: extension **Durable Functions Monitor** en VS Code → conectar al Storage Account `srbstgproapppdocai`.
+3. Permite inspeccionar instancias por estado: `Running` / `Completed` / `Failed` / `Terminated`.
+4. Para diagnosticar un documento concreto: buscar el `instanceId` (GUID de la ejecucion) en el historial de orquestacion.
+5. Las instancias `Failed` contienen el `FailureDetails` con stack trace completo.
+
+### 4.12.4 Queries KQL base (Log Analytics)
+
+Abrir `srbappiprodocai` → **Logs** y ejecutar las siguientes queries.  
+Se recomienda guardarlas en **Saved Queries** con prefijo `DocumentIA-`.
+
+#### Q1 — Ejecuciones recientes (ultimas 100, ultimas 24h)
+
+```kusto
+customEvents
+| where timestamp > ago(24h)
+| where name == "DocumentProcessed"
+| extend tipologia   = tostring(customDimensions["Tipologia"])
+       , estado      = tostring(customDimensions["EstadoFinal"])
+       , duracion_ms = toint(customDimensions["DuracionTotalMs"])
+       , fallback    = tobool(customDimensions["UseFallbackLLM"])
+| project timestamp, tipologia, estado, duracion_ms, fallback
+| order by timestamp desc
+| take 100
+```
+
+#### Q2 — Tasa de error por ventana horaria (ultimos 7 dias)
+
+```kusto
+customEvents
+| where timestamp > ago(7d)
+| where name == "DocumentProcessed"
+| extend estado = tostring(customDimensions["EstadoFinal"])
+| summarize total      = count()
+          , errores    = countif(estado == "Error")
+          , tasa_error = round(100.0 * countif(estado == "Error") / count(), 1)
+  by bin(timestamp, 1h)
+| order by timestamp desc
+```
+
+#### Q3 — Latencia E2E p50/p95/p99 por tipologia
+
+```kusto
+customEvents
+| where timestamp > ago(7d)
+| where name == "DocumentProcessed"
+| extend tipologia   = tostring(customDimensions["Tipologia"])
+       , duracion_ms = toint(customDimensions["DuracionTotalMs"])
+| summarize p50 = percentile(duracion_ms, 50)
+          , p95 = percentile(duracion_ms, 95)
+          , p99 = percentile(duracion_ms, 99)
+  by tipologia
+```
+
+#### Q4 — Uso de fallback LLM por tipologia
+
+```kusto
+customEvents
+| where timestamp > ago(7d)
+| where name == "DocumentProcessed"
+| extend tipologia   = tostring(customDimensions["Tipologia"])
+       , fallback    = tobool(customDimensions["UseFallbackLLM"])
+| summarize total        = count()
+          , con_fallback = countif(fallback == true)
+          , pct_fallback = round(100.0 * countif(fallback == true) / count(), 1)
+  by tipologia
+```
+
+> **Nota**: Las queries Q1–Q4 dependen de que `PersistirActivity` emita eventos `TrackEvent("DocumentProcessed")`.  
+> Esto se implementa en **Fase C** de EP6 (Feature F6.3). Hasta entonces, usar la tabla `requests` y `traces` nativas del SDK para visibilidad tecnica.
+
+### 4.12.5 Umbrales de referencia
+
+| Metrica | Normal | Alerta | Critico |
+|---------|--------|--------|---------|
+| Latencia E2E (p95) | < 30 s | 30–60 s | > 60 s |
+| Tasa de error (ventana 1 h) | < 5 % | 5–10 % | > 10 % |
+| Tasa fallback LLM | < 20 % | 20–40 % | > 40 % |
+| Confianza media (`ConfianzaGlobal`) | > 0.70 | 0.50–0.70 | < 0.50 |
+| Orchestrations en estado `Failed` | 0 / h | 1–3 / h | > 3 / h |
