@@ -284,5 +284,18 @@ stages:
                     scriptType: pscore
                     scriptLocation: inlineScript
                     inlineScript: |
-                      az webapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" --settings "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverDbConnectionString)" "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)" --only-show-errors --output none
+                      $azPython = Join-Path $env:ProgramFiles "Microsoft SDKs\Azure\CLI2\python.exe"
+                      if (-not (Test-Path $azPython)) {
+                        throw "Azure CLI python executable not found at '$azPython'"
+                      }
+
+                      $assetResolverDbSetting = "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverDbConnectionString)"
+                      $assetResolverApiKeySetting = "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
+
+                      & $azPython -IBm azure.cli webapp config appsettings set `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
+                        --settings $assetResolverDbSetting $assetResolverApiKeySetting `
+                        --only-show-errors `
+                        --output none
 
