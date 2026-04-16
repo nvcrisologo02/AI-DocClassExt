@@ -11,5 +11,6 @@ namespace DocumentIA.Data.Repositories
         Task<IEnumerable<DocumentoEjecucionEntity>> GetByDocumentoIdAsync(int documentoId);
         Task<DocumentoEjecucionEntity> AddAsync(DocumentoEjecucionEntity ejecucion);
         Task<IEnumerable<DocumentoEjecucionEntity>> GetUltimasEjecucionesAsync(int top = 10);
+        Task<EjecucionAgregadosResult> GetAgregadosAsync(int dias = 30);
     }
 }

@@ -12,6 +12,8 @@ using System.Text.RegularExpressions;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.DataContracts;
 
 namespace DocumentIA.Functions.Activities
 {
@@ -22,19 +24,22 @@ namespace DocumentIA.Functions.Activities
         private readonly IDocumentoEjecucionRepository _ejecucionRepo;
         private readonly IAuditoriaRepository _auditoriaRepo;
         private readonly DocumentIADbContext _context;
+        private readonly TelemetryClient _telemetryClient;
 
         public PersistirActivity(
             ILogger<PersistirActivity> logger,
             IDocumentoRepository documentoRepo,
             IDocumentoEjecucionRepository ejecucionRepo,
             IAuditoriaRepository auditoriaRepo,
-            DocumentIADbContext context)
+            DocumentIADbContext context,
+            TelemetryClient telemetryClient)
         {
             _logger = logger;
             _documentoRepo = documentoRepo;
             _ejecucionRepo = ejecucionRepo;
             _auditoriaRepo = auditoriaRepo;
             _context = context;
+            _telemetryClient = telemetryClient;
         }
 
         [Function(nameof(PersistirActivity))]
@@ -248,7 +253,10 @@ namespace DocumentIA.Functions.Activities
 
                 // Guardar ejecucion con todas sus relaciones
                 await _ejecucionRepo.AddAsync(ejecucion);
-                
+
+                // EP6-Fase C: emitir evento y métricas a Application Insights
+                EmitirTelemetria(ejecucion, salida);
+
                 _logger.LogInformation(
                     "Ejecucion guardada ID={Id}, Plugins={Plugins}, Validaciones={Validaciones}",
                     ejecucion.Id,
@@ -303,6 +311,45 @@ namespace DocumentIA.Functions.Activities
             }
 
             return actividad.DuracionMs;
+        }
+
+        private void EmitirTelemetria(DocumentoEjecucionEntity ejecucion, ContratoSalida salida)
+        {
+            try
+            {
+                // T1 – TrackEvent "DocumentProcessed" con dimensiones clave
+                var properties = new Dictionary<string, string>
+                {
+                    ["Tipologia"]      = ejecucion.Tipologia ?? string.Empty,
+                    ["EstadoFinal"]    = ejecucion.EstadoFinal ?? string.Empty,
+                    ["UseFallbackLLM"] = ejecucion.UseFallbackLLM.ToString(),
+                    ["NombreDocumento"] = salida.Identificacion.Documento ?? string.Empty,
+                    ["EjecucionGuid"]  = ejecucion.EjecucionGuid
+                };
+                _telemetryClient.TrackEvent("DocumentProcessed", properties);
+
+                // T2 – TrackMetric duraciones por actividad
+                TrackDuracion("Total",        ejecucion.DuracionTotalMs,        ejecucion.Tipologia);
+                TrackDuracion("Clasificacion", ejecucion.DuracionClasificacionMs, ejecucion.Tipologia);
+                TrackDuracion("Extraccion",   ejecucion.DuracionExtraccionMs,   ejecucion.Tipologia);
+                TrackDuracion("Validacion",   ejecucion.DuracionValidacionMs,   ejecucion.Tipologia);
+                TrackDuracion("GDC",          ejecucion.DuracionGDCMs,          ejecucion.Tipologia);
+                TrackDuracion("Integracion",  ejecucion.DuracionIntegracionMs,  ejecucion.Tipologia);
+                TrackDuracion("Persistencia", ejecucion.DuracionPersistenciaMs, ejecucion.Tipologia);
+            }
+            catch (Exception ex)
+            {
+                // La telemetría nunca debe bloquear el flujo principal
+                _logger.LogWarning(ex, "Error al emitir telemetría a Application Insights");
+            }
+        }
+
+        private void TrackDuracion(string actividad, int? duracionMs, string? tipologia)
+        {
+            if (!duracionMs.HasValue) return;
+            var metric = new MetricTelemetry($"DocumentIA.Duracion.{actividad}", duracionMs.Value);
+            metric.Properties["Tipologia"] = tipologia ?? string.Empty;
+            _telemetryClient.TrackMetric(metric);
         }
 
         private static string? CompressToBase64(string? value)
