@@ -140,6 +140,25 @@ window.jsonEditorInterop = {
         }
         return false;
     },
+
+    // Refresh editor layout after container resize
+    refreshEditor: function(elementId) {
+        const editor = this.editors[elementId];
+        if (!editor) {
+            return false;
+        }
+
+        try {
+            if (typeof editor.refresh === 'function') {
+                editor.refresh();
+            }
+            window.dispatchEvent(new Event('resize'));
+            return true;
+        } catch (error) {
+            console.error(`Error refreshing editor ${elementId}:`, error);
+            return false;
+        }
+    },
     
     // Check if editor exists
     hasEditor: function(elementId) {
