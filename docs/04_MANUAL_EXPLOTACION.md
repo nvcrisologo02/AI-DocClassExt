@@ -1,6 +1,6 @@
 # 4. Manual de Explotacion — DocumentIA MVP
 
-> Ultima actualizacion: 2026-03-31  
+> Ultima actualizacion: 2026-04-16  
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -30,7 +30,7 @@
 | Azure OpenAI | `upe48-mm2avmdm` | Sweden Central | GPT-4o-mini (fallback clasif/extrac + prompt) |
 | Content Understanding | `upe48-mm2avmdm` | Sweden Central | Extraccion de campos |
 | Application Insights | `srbappiprodocai` | West Europe | Telemetria y monitorizacion |
-| Key Vault | (pendiente) | West Europe | Secretos (EP7 roadmap) |
+| Key Vault | `srbkvprodocai` | West Europe | Secretos (connection strings, credenciales GDC) |
 | Azure SQL | (pendiente) | — | BD productiva (actualmente Docker SQL local) |
 
 ---
@@ -223,7 +223,7 @@ dotnet run --launch-profile http
 
 ```mermaid
 flowchart TD
-    RG["1. Resource Group<br/>SRBRGDOCSAIPROD"] --> KV["2. Key Vault<br/>(pendiente)"]
+    RG["1. Resource Group<br/>SRBRGDOCSAIPROD"] --> KV["2. Key Vault<br/>srbkvprodocai"]
     RG --> STG1["3. Storage Account<br/>srbstgproapppdocai<br/>(Durable hub)"]
     RG --> STG2["4. Storage Account<br/>srbstgprodocai<br/>(documentos)"]
     RG --> SQL["5. Azure SQL<br/>(pendiente — Docker temp)"]
@@ -287,7 +287,7 @@ El script aplica en 3 bloques:
 2. **AI**: Classification (DI + GPT fallback) + Extraction (CU + GPT fallback)
 3. **GDC**: Endpoint SOAP, credenciales, campos taxonomia
 
-> **IMPORTANTE**: Cuando Key Vault este disponible, migrar los siguientes secretos:
+> **Key Vault activo** (`srbkvprodocai`): los siguientes secretos ya estan almacenados en Key Vault y referenciados en la Function App via `@Microsoft.KeyVault(...)`:
 > - `SqlConnectionString`
 > - `GDC__Password`, `GDC__HttpBasicPassword`
 >
@@ -486,7 +486,7 @@ Acceder desde Azure Portal → Application Insights → Live Metrics para monito
 
 ### 4.9.1 Estado Actual
 
-Las claves estan en Application Settings de la Function App. No hay Key Vault configurado aun (roadmap EP7).
+Key Vault `srbkvprodocai` esta activo y operativo. Los secretos criticos (`SqlConnectionString`, `GDC__Password`, `GDC__HttpBasicPassword`) se almacenan en Key Vault y se referencian desde los App Settings de la Function App via `@Microsoft.KeyVault(SecretUri=...)`. El resto de settings no sensibles permanecen como App Settings directos.
 
 ### 4.9.2 Claves a Rotar Periodicamente
 
@@ -495,20 +495,26 @@ Las claves estan en Application Settings de la Function App. No hay Key Vault co
 | API Key Document Intelligence | `srbdiprodocai` | App Settings | 90 dias |
 | API Key Azure OpenAI | `upe48-mm2avmdm` | App Settings | 90 dias |
 | API Key Content Understanding | `upe48-mm2avmdm` | App Settings | 90 dias |
-| Password SQL Server | Docker / Azure SQL | App Settings | 90 dias |
-| Credenciales GDC | GDC SINTWS | App Settings | Segun politica SAREB |
+| Password SQL Server | Azure SQL | Key Vault `srbkvprodocai` | 90 dias |
+| Credenciales GDC | GDC SINTWS | Key Vault `srbkvprodocai` | Segun politica SAREB |
 | Function Key | `srbappprodocai` | Azure Portal | 180 dias |
 | Storage Account Keys | `srbstgprodocai`, `srbstgproapppdocai` | App Settings | 90 dias |
 
 ### 4.9.3 Procedimiento de Rotacion
 
-1. Generar nueva clave en el servicio correspondiente (Azure Portal).
-2. Actualizar `set-app-settings.ps1` con la nueva clave.
-3. Ejecutar `.\scripts\set-app-settings.ps1`.
-4. Verificar que la Function App funciona correctamente.
-5. Revocar la clave antigua.
+**Para secretos en Key Vault** (`SqlConnectionString`, `GDC__Password`, `GDC__HttpBasicPassword`):
 
-> **Futuro (con Key Vault)**: Las claves se almacenaran en Key Vault con rotacion automatica. Los App Settings referenciaran `@Microsoft.KeyVault(SecretUri=...)`.
+1. Generar nueva version del secreto en Key Vault `srbkvprodocai` (Azure Portal → Key Vault → Secrets → New Version).
+2. La Function App resolvera automaticamente la nueva version si la referencia usa la URI sin version; si usa URI con version, actualizar el App Setting correspondiente.
+3. Verificar que la Function App funciona correctamente tras la rotacion.
+4. Deshabilitar la version anterior del secreto en Key Vault.
+
+**Para secretos en App Settings directos** (API Keys de servicios AI):
+
+1. Generar nueva clave en el servicio correspondiente (Azure Portal).
+2. Actualizar el App Setting en la Function App (`srbappprodocai` → Configuration) o via `set-app-settings.ps1`.
+3. Verificar que la Function App funciona correctamente.
+4. Revocar la clave antigua.
 
 ---
 

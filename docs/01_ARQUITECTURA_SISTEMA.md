@@ -367,7 +367,7 @@ flowchart TB
 
     FUNCAPP --> STG_HUB
     FUNCAPP --> STG_DOCS
-    FUNCAPP -.->|"KV refs"| KV
+    FUNCAPP -.->|"KV refs +<br/>Managed Identity"| KV
     FUNCAPP -->|"Telemetria"| APPINS
     APPINS --> LAW
     FUNCAPP --> DI_PROD
@@ -376,7 +376,6 @@ flowchart TB
     FUNCAPP -->|"SOAP + Basic Auth"| GDC_PROD
     FUNCAPP -->|"EF Core<br/>(SqlConnectionString)"| SQL_TEMP
 
-    FUNCAPP -.->|"Managed Identity<br/>(pendiente RBAC)"| KV
     FUNCAPP -.->|"System MI<br/>e700ab11..."| DI_PROD
 ```
 
