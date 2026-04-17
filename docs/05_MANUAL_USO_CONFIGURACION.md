@@ -741,7 +741,61 @@ R: Los campos solicitados (`camposSolicitados`) no existen como columnas en `DM_
 
 ---
 
-## 5.9 Referencias
+## 5.9 Aplicacion de Administracion (Admin Blazor)
+
+La aplicacion de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistracion `DocumentIA.Admin` es una web Blazor Server accesible en produccion en la URL:
+
+```
+https://srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai.azurewebsites.net
+```
+
+En desarrollo local se levanta con:
+
+```powershell
+dotnet run --launch-profile http
+# Disponible en http://localhost:5000
+```
+
+La configuracion de la URL base y la Function Key usadas por el Admin apuntan a la Function App de produccion (`appsettings.json`):
+
+```json
+"FunctionsAdminApi": {
+  "BaseUrl": "https://srbappprodocai.azurewebsites.net/api/",
+  "FunctionKey": "<clave de host de la Function App>"
+}
+```
+
+### 5.9.1 Seccion Tipologias
+
+Permite ver, crear, editar, publicar y archivar tipologias. Cada tipologia dispone de cuatro pestanas de edicion:
+
+| Pestana | Contenido |
+|---------|----------|
+| **Info** | Nombre, familia, descripcion, version, estado (Borrador/Publicada/Archivada). |
+| **Config JSON** | JSON de configuracion completo (proveedor extraccion, clasificacion, campos esperados, umbrales). |
+| **Validacion JSON** | JSON de reglas de validacion (tipos de regla, severidades, campos requeridos). |
+| **Prompt** | Prompt GPT usado en extraccion o clasificacion por fallback. |
+
+### 5.9.2 Editor JSON — Modo Pantalla Completa
+
+Todos los editores JSON del Admin (`Config JSON`, `Validacion JSON`, etc.) disponen de un boton **Maximizar / Minimizar** en la barra de herramientas del editor.
+
+- **Maximizar**: expande el editor a pantalla completa (overlay fijo con `z-index: 2000`). El editor ocupa todo el viewport menos una franja para la barra de herramientas. Permite leer y editar JSONs extensos con comodidad.
+- **Minimizar**: restaura el editor a su tamano original embebido en la pagina.
+
+El boton se encuentra alineado a la derecha de la barra de modos (Arbol / Codigo / Vista / Texto). El editor refresca su layout al cambiar de modo para evitar artefactos visuales.
+
+### 5.9.3 Seccion Modelos
+
+Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI). Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
+
+### 5.9.4 Seccion Configuracion Consulta
+
+Permite editar la configuracion global de consulta del sistema (umbrales, timeouts, parametros de fallback GPT, etc.) en formato JSON directamente desde el Admin.
+
+---
+
+## 5.10 Referencias
 
 | Documento | Contenido |
 |-----------|-----------|

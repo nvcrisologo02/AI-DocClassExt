@@ -39,7 +39,7 @@ gantt
 | **EP3** | Validacion y motor de reglas | IN PROGRESS | 85% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field, reglas condicionales. |
 | **EP3** | Validacion y motor de reglas | IN PROGRESS | 88% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field (V-1), reglas condicionales (V-2). |
 | **EP4** | Persistencia y auditoria | DONE | 100% | 9 entidades EF Core, migraciones auto, auditoria por ejecucion, validaciones por campo. |
-| **EP5** | Configuracion y tipologias | IN PROGRESS | 75% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
+| **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
 | **EP6** | Observabilidad y pruebas | IN PROGRESS | 65% | ~231 tests automatizados, customStatus, seguimiento orquestacion. Pendiente: tests CI/CD pipeline (T-4), tests orchestrator (T-1), NormalizarActivity (T-2), EF tests (T-3), dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
 | **EP7** | Proteccion datos / GDPR | PLANNED | 0% | Cifrado en reposo (AES-256-GCM), masking PII en logs, retencion configurable, KV para secrets. |
 | **EP8** | Mantenimiento Blob | PLANNED | 0% | Lifecycle management, limpieza automatica, retencion por tipologia. |
@@ -75,7 +75,7 @@ gantt
 
 ## 7.3 Bloque 3 — Calidad, Pruebas y Observabilidad (Sprint actual)
 
-> **Estado 2026-04-13:** Bloques 1 (Infraestructura) y 2 (Codigo critico) completados al 100%. Sistema en produccion con Azure SQL, KV, MI, Admin Blazor y todos los fixes de fallback aplicados. Los proximos sprints se centran en calidad/pruebas y funcionalidad de negocio.
+> **Estado 2026-04-17:** Bloques 1 (Infraestructura) y 2 (Codigo critico) completados al 100%. Sistema en produccion con Azure SQL, KV, MI, Admin Blazor y todos los fixes de fallback aplicados. Pipeline CI/CD operativo con migraciones EF al arrancar y fix de settings AssetResolver (az CLI Python). Admin Blazor mejorado con editor JSON en pantalla completa. Los proximos sprints se centran en calidad/pruebas y funcionalidad de negocio.
 
 ### 7.3.1 Tests unitarios pendientes
 
