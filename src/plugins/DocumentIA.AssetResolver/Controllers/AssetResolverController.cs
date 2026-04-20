@@ -84,6 +84,65 @@ public class AssetResolverController : ControllerBase
 
         /// <summary>Aliases adicionales para ReferenciaCatastral (desde tipología).</summary>
         public List<string>? MapeoReferenciaCatastral { get; set; }
+
+        /// <summary>
+        /// Modo de combinación entre criterios resueltos de búsqueda.
+        /// Valores admitidos: AND, OR. Default: OR.
+        /// </summary>
+        public string ModoCombinacionCriterios { get; set; } = "OR";
+
+        // ── Búsqueda por dirección como criterio adicional ──
+
+        /// <summary>Si true, se incluye IDUFIR como criterio de búsqueda. Default: true.</summary>
+        public bool BusquedaIdufirHabilitada { get; set; } = true;
+        /// <summary>Si true, se incluye ReferenciaCatastral como criterio de búsqueda. Default: true.</summary>
+        public bool BusquedaReferenciaCatastralHabilitada { get; set; } = true;
+        /// <summary>Si true, habilita la búsqueda por dirección como un criterio adicional.</summary>
+        public bool BusquedaDireccionHabilitada { get; set; } = false;
+        /// <summary>
+        /// Si true, habilita la búsqueda por dirección tipificada (campos DES_*/NUM_*),
+        /// aplicando filtros AND solo sobre los campos presentes.
+        /// </summary>
+        public bool BusquedaDireccionTipificadaHabilitada { get; set; } = false;
+        /// <summary>
+        /// Campos de búsqueda de dirección tipificada. No se resuelven desde ExtractedData;
+        /// se usan directamente como filtros de búsqueda.
+        /// </summary>
+        public DireccionTipificadaInput? DireccionTipificada { get; set; }
+
+        /// <summary>Aliases para detectar una dirección libre/completa en ExtractedData.</summary>
+        public List<string>? MapeoDireccionCompleta { get; set; }
+
+        /// <summary>Aliases para detectar nombre de vía en ExtractedData.</summary>
+        public List<string>? MapeoDireccionNombreVia { get; set; }
+
+        /// <summary>Aliases para detectar número de vía en ExtractedData.</summary>
+        public List<string>? MapeoDireccionNumero { get; set; }
+
+        /// <summary>Aliases para detectar municipio en ExtractedData.</summary>
+        public List<string>? MapeoDireccionMunicipio { get; set; }
+
+        /// <summary>Aliases para detectar código postal en ExtractedData.</summary>
+        public List<string>? MapeoDireccionCodigoPostal { get; set; }
+
+        /// <summary>Umbral mínimo de score para aceptar un match por dirección (0.0–1.0, default 0.75).</summary>
+        public double UmbralScoreDireccion { get; set; } = 0.75;
+    }
+
+    public class DireccionTipificadaInput
+    {
+        public string? Pais { get; set; }
+        public string? Provincia { get; set; }
+        public string? ComunidadAutonoma { get; set; }
+        public string? Municipio { get; set; }
+        public string? Poblacion { get; set; }
+        public string? TipoVia { get; set; }
+        public string? Calle { get; set; }
+        public string? Numero { get; set; }
+        public string? Bloque { get; set; }
+        public string? Puerta { get; set; }
+        public string? CodigoPostal { get; set; }
+        public string? Planta { get; set; }
     }
 
     public class GetAAIIInfoResponse
@@ -97,5 +156,7 @@ public class AssetResolverController : ControllerBase
         public string Message { get; set; } = string.Empty;
         public int DuracionMs { get; set; }
         public string? Error { get; set; }
+        /// <summary>Criterio de búsqueda utilizado, incluyendo combinaciones AND/OR si aplica.</summary>
+        public string? CriterioUtilizado { get; set; }
     }
 }

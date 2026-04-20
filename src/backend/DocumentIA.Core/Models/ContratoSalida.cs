@@ -269,6 +269,25 @@ public class CriteriosBusquedaActivo
 {
     public string? Idufir { get; set; }
     public string? ReferenciaCatastral { get; set; }
+    public string ModoCombinacionCriterios { get; set; } = "OR";
+    /// <summary>Detalle del criterio de dirección utilizado (solo si se usó búsqueda fuzzy).</summary>
+    public DireccionCriterioActivo? Direccion { get; set; }
+}
+
+/// <summary>
+/// Detalle del criterio de búsqueda por dirección utilizado en AssetResolver.
+/// </summary>
+public class DireccionCriterioActivo
+{
+    public string? DireccionCompleta { get; set; }
+    public string? NombreVia { get; set; }
+    public string? Numero { get; set; }
+    public string? Municipio { get; set; }
+    public string? CodigoPostal { get; set; }
+    public string? DireccionNormalizada { get; set; }
+    public double Score { get; set; }
+    public int CandidatosEvaluados { get; set; }
+    public string? Razon { get; set; }
 }
 
 /// <summary>
@@ -303,4 +322,27 @@ public class ObtenerActivoInput
     public List<string> MapeoIdufir { get; set; } = new();
     /// <summary>Aliases para auto-detectar ReferenciaCatastral en DatosExtraidos (desde config tipología).</summary>
     public List<string> MapeoReferenciaCatastral { get; set; } = new();
+
+    public string ModoCombinacionCriterios { get; set; } = "OR";
+
+    // ── Búsqueda por dirección como criterio adicional ──
+
+    /// <summary>Si true, se incluye IDUFIR como criterio de búsqueda. Default: true.</summary>
+    public bool BusquedaIdufirHabilitada { get; set; } = true;
+    /// <summary>Si true, se incluye ReferenciaCatastral como criterio de búsqueda. Default: true.</summary>
+    public bool BusquedaReferenciaCatastralHabilitada { get; set; } = true;
+    /// <summary>Si true, habilita la búsqueda por dirección como un criterio adicional.</summary>
+    public bool BusquedaDireccionHabilitada { get; set; } = false;
+    /// <summary>Aliases para auto-detectar una dirección libre/completa en DatosExtraidos.</summary>
+    public List<string> MapeoDireccionCompleta { get; set; } = new();
+    /// <summary>Aliases para auto-detectar nombre de vía en DatosExtraidos.</summary>
+    public List<string> MapeoDireccionNombreVia { get; set; } = new();
+    /// <summary>Aliases para auto-detectar número de vía en DatosExtraidos.</summary>
+    public List<string> MapeoDireccionNumero { get; set; } = new();
+    /// <summary>Aliases para auto-detectar municipio en DatosExtraidos.</summary>
+    public List<string> MapeoDireccionMunicipio { get; set; } = new();
+    /// <summary>Aliases para auto-detectar código postal en DatosExtraidos.</summary>
+    public List<string> MapeoDireccionCodigoPostal { get; set; } = new();
+    /// <summary>Umbral mínimo de score para aceptar un match por dirección (0.0–1.0, default 0.75).</summary>
+    public double UmbralScoreDireccion { get; set; } = 0.75;
 }

@@ -19,5 +19,15 @@ public sealed record ResolvedTipologia(
     string ExtractionProvider = "",
     bool AssetResolverEnabled = false,
     List<string>? AssetResolverCamposSolicitados = null,
+    string AssetResolverModoCombinacionCriterios = "OR",
     List<string>? AssetResolverMapeoIdufir = null,
-    List<string>? AssetResolverMapeoReferenciaCatastral = null);
+    List<string>? AssetResolverMapeoReferenciaCatastral = null,
+    bool AssetResolverBusquedaIdufirHabilitada = true,
+    bool AssetResolverBusquedaReferenciaCatastralHabilitada = true,
+    bool AssetResolverBusquedaDireccionHabilitada = false,
+    List<string>? AssetResolverMapeoDireccionCompleta = null,
+    List<string>? AssetResolverMapeoDireccionNombreVia = null,
+    List<string>? AssetResolverMapeoDireccionNumero = null,
+    List<string>? AssetResolverMapeoDireccionMunicipio = null,
+    List<string>? AssetResolverMapeoDireccionCodigoPostal = null,
+    double AssetResolverUmbralScoreDireccion = 0.75);

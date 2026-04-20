@@ -193,8 +193,18 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 ExtractionProvider: config.Extraction.Provider ?? string.Empty,
                 AssetResolverEnabled: config.AssetResolver?.Enabled == true,
                 AssetResolverCamposSolicitados: config.AssetResolver?.CamposSolicitados,
+                AssetResolverModoCombinacionCriterios: config.AssetResolver?.ModoCombinacionCriterios ?? "OR",
                 AssetResolverMapeoIdufir: config.AssetResolver?.MapeoIdufir,
-                AssetResolverMapeoReferenciaCatastral: config.AssetResolver?.MapeoReferenciaCatastral);
+                AssetResolverMapeoReferenciaCatastral: config.AssetResolver?.MapeoReferenciaCatastral,
+                AssetResolverBusquedaIdufirHabilitada: config.AssetResolver?.BusquedaIdufirHabilitada ?? true,
+                AssetResolverBusquedaReferenciaCatastralHabilitada: config.AssetResolver?.BusquedaReferenciaCatastralHabilitada ?? true,
+                AssetResolverBusquedaDireccionHabilitada: config.AssetResolver?.BusquedaDireccionHabilitada == true,
+                AssetResolverMapeoDireccionCompleta: config.AssetResolver?.MapeoDireccionCompleta,
+                AssetResolverMapeoDireccionNombreVia: config.AssetResolver?.MapeoDireccionNombreVia,
+                AssetResolverMapeoDireccionNumero: config.AssetResolver?.MapeoDireccionNumero,
+                AssetResolverMapeoDireccionMunicipio: config.AssetResolver?.MapeoDireccionMunicipio,
+                AssetResolverMapeoDireccionCodigoPostal: config.AssetResolver?.MapeoDireccionCodigoPostal,
+                AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75);
 
             byTechnicalKey[technicalKey] = resolved;
 
@@ -258,8 +268,18 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 ExtractionProvider: config.Extraction.Provider ?? string.Empty,
                 AssetResolverEnabled: config.AssetResolver?.Enabled == true,
                 AssetResolverCamposSolicitados: config.AssetResolver?.CamposSolicitados,
+                AssetResolverModoCombinacionCriterios: config.AssetResolver?.ModoCombinacionCriterios ?? "OR",
                 AssetResolverMapeoIdufir: config.AssetResolver?.MapeoIdufir,
-                AssetResolverMapeoReferenciaCatastral: config.AssetResolver?.MapeoReferenciaCatastral);
+                AssetResolverMapeoReferenciaCatastral: config.AssetResolver?.MapeoReferenciaCatastral,
+                AssetResolverBusquedaIdufirHabilitada: config.AssetResolver?.BusquedaIdufirHabilitada ?? true,
+                AssetResolverBusquedaReferenciaCatastralHabilitada: config.AssetResolver?.BusquedaReferenciaCatastralHabilitada ?? true,
+                AssetResolverBusquedaDireccionHabilitada: config.AssetResolver?.BusquedaDireccionHabilitada == true,
+                AssetResolverMapeoDireccionCompleta: config.AssetResolver?.MapeoDireccionCompleta,
+                AssetResolverMapeoDireccionNombreVia: config.AssetResolver?.MapeoDireccionNombreVia,
+                AssetResolverMapeoDireccionNumero: config.AssetResolver?.MapeoDireccionNumero,
+                AssetResolverMapeoDireccionMunicipio: config.AssetResolver?.MapeoDireccionMunicipio,
+                AssetResolverMapeoDireccionCodigoPostal: config.AssetResolver?.MapeoDireccionCodigoPostal,
+                AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75);
 
             byTechnicalKey[technicalKey] = resolved;
 

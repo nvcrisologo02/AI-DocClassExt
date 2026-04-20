@@ -757,10 +757,24 @@ public class DocumentProcessOrchestrator
                 // Resolver campos solicitados: Instrucciones > Tipología > solo obligatorios
                 var camposSolicitados = entrada.Instrucciones.AssetResolver?.CamposSolicitados
                     ?? tipologiaResuelta.AssetResolverCamposSolicitados;
+                var modoCombinacionCriterios = tipologiaResuelta.AssetResolverModoCombinacionCriterios;
 
                 // Aliases desde tipología para auto-detección en DatosExtraidos
                 var mapeoIdufir = tipologiaResuelta.AssetResolverMapeoIdufir;
                 var mapeoRefCatastral = tipologiaResuelta.AssetResolverMapeoReferenciaCatastral;
+
+                // Flags de habilitación por criterio
+                var busquedaIdufirHabilitada              = tipologiaResuelta.AssetResolverBusquedaIdufirHabilitada;
+                var busquedaReferenciaCatastralHabilitada = tipologiaResuelta.AssetResolverBusquedaReferenciaCatastralHabilitada;
+
+                // Búsqueda por dirección como criterio adicional
+                var busquedaDireccionHabilitada = tipologiaResuelta.AssetResolverBusquedaDireccionHabilitada;
+                var mapeoDireccionCompleta      = tipologiaResuelta.AssetResolverMapeoDireccionCompleta;
+                var mapeoDireccionNombreVia     = tipologiaResuelta.AssetResolverMapeoDireccionNombreVia;
+                var mapeoDireccionNumero        = tipologiaResuelta.AssetResolverMapeoDireccionNumero;
+                var mapeoDireccionMunicipio     = tipologiaResuelta.AssetResolverMapeoDireccionMunicipio;
+                var mapeoDireccionCodigoPostal  = tipologiaResuelta.AssetResolverMapeoDireccionCodigoPostal;
+                var umbralScoreDireccion        = tipologiaResuelta.AssetResolverUmbralScoreDireccion;
 
                 var obtenerActivoInput = new ObtenerActivoInput
                 {
@@ -770,8 +784,18 @@ public class DocumentProcessOrchestrator
                     CamposSolicitados = camposSolicitados,
                     IdufirOverride = idufirOverride,
                     ReferenciaCatastralOverride = refCatastralOverride,
+                    ModoCombinacionCriterios = modoCombinacionCriterios,
                     MapeoIdufir = mapeoIdufir,
-                    MapeoReferenciaCatastral = mapeoRefCatastral
+                    MapeoReferenciaCatastral = mapeoRefCatastral,
+                    BusquedaIdufirHabilitada              = busquedaIdufirHabilitada,
+                    BusquedaReferenciaCatastralHabilitada = busquedaReferenciaCatastralHabilitada,
+                    BusquedaDireccionHabilitada    = busquedaDireccionHabilitada,
+                    MapeoDireccionCompleta         = mapeoDireccionCompleta       ?? new(),
+                    MapeoDireccionNombreVia        = mapeoDireccionNombreVia        ?? new(),
+                    MapeoDireccionNumero           = mapeoDireccionNumero           ?? new(),
+                    MapeoDireccionMunicipio        = mapeoDireccionMunicipio        ?? new(),
+                    MapeoDireccionCodigoPostal     = mapeoDireccionCodigoPostal     ?? new(),
+                    UmbralScoreDireccion           = umbralScoreDireccion
                 };
 
                 var resultadoAssetResolver = await EjecutarPasoNegocio(

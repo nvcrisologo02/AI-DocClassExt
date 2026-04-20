@@ -160,4 +160,106 @@ public class AssetResolverServiceTests
         Assert.Contains("FCH_BAJA", campos.Keys, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("DES_SERVICER", campos.Keys, StringComparer.OrdinalIgnoreCase);
     }
+
+    [Fact]
+    public async Task BuscarActivos_DireccionCompletaDesdeLocalizacion_ResuelveActivo()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateInMemoryDb(dbName, d =>
+        {
+            d.DmPosicionAAII.Add(new DmPosicionAAII
+            {
+                IdActivoSareb = 4m,
+                FchCierreDt = new DateTime(2026, 2, 1),
+                DesNombreVia = "CALLE MAYOR",
+                NumVia = "1",
+                DesMunicp = "MADRID",
+                FchAlta = new DateTime(2020, 1, 1),
+                DesServicer = "S4",
+                FchCierre = new DateTime(2026, 2, 1)
+            });
+            d.SaveChanges();
+        });
+
+        var options = Options.Create(new FieldAliasesConfig());
+        var service = new AssetResolverService(db, options, NullLogger<AssetResolverService>.Instance);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "c4",
+            ExtractedData = new Dictionary<string, string?>
+            {
+                ["Localizacion"] = "CALLE MAYOR 1, MADRID"
+            },
+            BusquedaDireccionHabilitada = true,
+            MapeoDireccionCompleta = new List<string> { "Localizacion" }
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.True(response.Found);
+        Assert.Equal(1, response.Count);
+        Assert.Equal("Direccion", response.CriterioUtilizado, ignoreCase: true);
+        Assert.Equal("CALLE MAYOR", response.CriteriosUsados?.Direccion?.NombreVia, ignoreCase: true);
+        Assert.Equal("1", response.CriteriosUsados?.Direccion?.Numero, ignoreCase: true);
+        Assert.Equal("MADRID", response.CriteriosUsados?.Direccion?.Municipio, ignoreCase: true);
+    }
+
+    [Fact]
+    public async Task BuscarActivos_ModoAnd_ExigeCoincidenciaEnTodosLosCriteriosResueltos()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateInMemoryDb(dbName, d =>
+        {
+            d.DmPosicionAAII.AddRange(
+                new DmPosicionAAII
+                {
+                    IdActivoSareb = 5m,
+                    FchCierreDt = new DateTime(2026, 3, 1),
+                    IdIdufir = "ID5",
+                    DesNombreVia = "CALLE ALCALA",
+                    NumVia = "10",
+                    DesMunicp = "MADRID",
+                    FchAlta = new DateTime(2020, 1, 1),
+                    DesServicer = "S5",
+                    FchCierre = new DateTime(2026, 3, 1)
+                },
+                new DmPosicionAAII
+                {
+                    IdActivoSareb = 6m,
+                    FchCierreDt = new DateTime(2026, 3, 2),
+                    IdIdufir = "ID6",
+                    DesNombreVia = "CALLE MAYOR",
+                    NumVia = "1",
+                    DesMunicp = "MADRID",
+                    FchAlta = new DateTime(2020, 1, 1),
+                    DesServicer = "S6",
+                    FchCierre = new DateTime(2026, 3, 2)
+                });
+            d.SaveChanges();
+        });
+
+        var options = Options.Create(new FieldAliasesConfig());
+        var service = new AssetResolverService(db, options, NullLogger<AssetResolverService>.Instance);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "c5",
+            ExtractedData = new Dictionary<string, string?>
+            {
+                ["IDUFIR_CRU"] = "ID5",
+                ["Localizacion"] = "CALLE MAYOR 1, MADRID"
+            },
+            MapeoIdufir = new List<string> { "IDUFIR_CRU" },
+            BusquedaDireccionHabilitada = true,
+            ModoCombinacionCriterios = "AND",
+            MapeoDireccionCompleta = new List<string> { "Localizacion" }
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.False(response.Found);
+        Assert.Equal(0, response.Count);
+        Assert.Equal("AND", response.CriteriosUsados?.ModoCombinacionCriterios);
+    }
 }

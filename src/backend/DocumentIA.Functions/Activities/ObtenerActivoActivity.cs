@@ -44,8 +44,18 @@ public class ObtenerActivoActivity
                 RequestedFields = input.CamposSolicitados,
                 IdufirOverride = input.IdufirOverride,
                 ReferenciaCatastralOverride = input.ReferenciaCatastralOverride,
+                ModoCombinacionCriterios = input.ModoCombinacionCriterios,
                 MapeoIdufir = input.MapeoIdufir,
-                MapeoReferenciaCatastral = input.MapeoReferenciaCatastral
+                MapeoReferenciaCatastral = input.MapeoReferenciaCatastral,
+                BusquedaIdufirHabilitada = input.BusquedaIdufirHabilitada,
+                BusquedaReferenciaCatastralHabilitada = input.BusquedaReferenciaCatastralHabilitada,
+                BusquedaDireccionHabilitada = input.BusquedaDireccionHabilitada,
+                MapeoDireccionCompleta = input.MapeoDireccionCompleta,
+                MapeoDireccionNombreVia = input.MapeoDireccionNombreVia,
+                MapeoDireccionNumero = input.MapeoDireccionNumero,
+                MapeoDireccionMunicipio = input.MapeoDireccionMunicipio,
+                MapeoDireccionCodigoPostal = input.MapeoDireccionCodigoPostal,
+                UmbralScoreDireccion = input.UmbralScoreDireccion
             };
 
             var response = await client.PostAsJsonAsync("api/assets/GetAAIIInfo", payload);
@@ -83,7 +93,22 @@ public class ObtenerActivoActivity
                 ? new CriteriosBusquedaActivo
                 {
                     Idufir = pluginResp.CriteriosUsados.Idufir,
-                    ReferenciaCatastral = pluginResp.CriteriosUsados.ReferenciaCatastral
+                    ReferenciaCatastral = pluginResp.CriteriosUsados.ReferenciaCatastral,
+                    ModoCombinacionCriterios = pluginResp.CriteriosUsados.ModoCombinacionCriterios ?? "OR",
+                    Direccion = pluginResp.CriteriosUsados.Direccion != null
+                        ? new DireccionCriterioActivo
+                        {
+                            DireccionCompleta    = pluginResp.CriteriosUsados.Direccion.DireccionCompleta,
+                            NombreVia           = pluginResp.CriteriosUsados.Direccion.NombreVia,
+                            Numero              = pluginResp.CriteriosUsados.Direccion.Numero,
+                            Municipio           = pluginResp.CriteriosUsados.Direccion.Municipio,
+                            CodigoPostal        = pluginResp.CriteriosUsados.Direccion.CodigoPostal,
+                            DireccionNormalizada = pluginResp.CriteriosUsados.Direccion.DireccionNormalizada,
+                            Score               = pluginResp.CriteriosUsados.Direccion.Score,
+                            CandidatosEvaluados = pluginResp.CriteriosUsados.Direccion.CandidatosEvaluados,
+                            Razon               = pluginResp.CriteriosUsados.Direccion.Razon
+                        }
+                        : null
                 }
                 : null;
             resultado.Activos = pluginResp.Activos?.Select(a => new ActivoEncontrado
@@ -133,6 +158,21 @@ public class ObtenerActivoActivity
     {
         public string? Idufir { get; set; }
         public string? ReferenciaCatastral { get; set; }
+        public string? ModoCombinacionCriterios { get; set; }
+        public PluginDireccionCriterio? Direccion { get; set; }
+    }
+
+    private class PluginDireccionCriterio
+    {
+        public string? DireccionCompleta { get; set; }
+        public string? NombreVia { get; set; }
+        public string? Numero { get; set; }
+        public string? Municipio { get; set; }
+        public string? CodigoPostal { get; set; }
+        public string? DireccionNormalizada { get; set; }
+        public double Score { get; set; }
+        public int CandidatosEvaluados { get; set; }
+        public string? Razon { get; set; }
     }
 
     private class PluginActivoEncontrado

@@ -241,9 +241,13 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 
 - La actividad `ObtenerActivo` se ejecuta entre Validar e Integrar, solo si esta habilitada.
 - Habilitacion por precedencia: `instrucciones.assetResolver.enabled ?? tipologia.assetResolver.enabled ?? false`.
-- Busqueda por IDUFIR: se busca en `DM_POSICION_AAII_TB.ID_IDUFIR` usando el valor del campo extraido mapeado por alias.
-- Busqueda por Referencia Catastral: se busca en `DM_POSICION_AAII_TB.ID_REF_CATAST` usando el valor del campo extraido mapeado por alias.
-- Los alias de campos se resuelven por precedencia: mapeos de la peticion > mapeo de la tipologia > configuracion global (`FieldAliases`).
+- **Tres criterios de busqueda independientes**, cada uno habilitado/deshabilitado por configuracion:
+  - **IDUFIR** (`busquedaIdufirHabilitada`, default `true`): busqueda exacta en `DM_POSICION_AAII_TB.ID_IDUFIR`.
+  - **Referencia Catastral** (`busquedaReferenciaCatastralHabilitada`, default `true`): busqueda exacta en `ID_REF_CATAST`.
+  - **Direccion** (`busquedaDireccionHabilitada`, default `false`): busqueda fuzzy con scoring en columnas de direccion.
+- **Modo de combinacion** (`modoCombinacionCriterios`): `OR` (union, default) o `AND` (interseccion de resultados).
+- Los alias de campos se resuelven por precedencia: mapeos de la tipologia > configuracion global (`FieldAliases`).
+- Si un criterio esta deshabilitado, no se intenta detectar ni usar, incluso si hay aliases globales.
 - Si se encuentra exactamente 1 activo, su `ID_ACTIVO_SAREB` se asigna como `IdActivo` del documento.
 - Si se encuentran 0 o multiples activos, no se resuelve IdActivo en este paso (puede ser resuelto por plugins posteriores).
 
@@ -270,7 +274,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 | **GDC SINTWS** | Servicio SOAP del Gestor Documental Corporativo de SAREB (host: srbwidd03.sareb.srb:8090). |
 | **Fallback** | Mecanismo automatico que redirige al proveedor alternativo (GPT) cuando el primario (DI/CU) tiene baja confianza o falla. |
 | **Plugin** | Componente de integracion extensible (REST, SOAP o DLL .NET custom) que enriquece datos extraidos con fuentes externas. |
-| **AssetResolver** | Plugin HTTP que consulta la tabla `DM_POSICION_AAII_TB` para resolver el activo inmobiliario (IdActivo) a partir de IDUFIR o Referencia Catastral extraidos del documento. |
+| **AssetResolver** | Plugin HTTP que consulta la tabla `DM_POSICION_AAII_TB` para resolver el activo inmobiliario (IdActivo). Soporta tres criterios: IDUFIR, Referencia Catastral y Direccion (fuzzy scoring). Criterios configurables con AND/OR. |
 | **DM_POSICION_AAII_TB** | Tabla SQL Server con la posicion de activos AAII de SAREB (~160 columnas). PK compuesta: `(ID_ACTIVO_SAREB, FCH_CIERRE_DT)`. Campos clave de busqueda: `ID_IDUFIR` (14 chars), `ID_REF_CATAST` (32 chars). |
 | **ObtenerActivoActivity** | Actividad del pipeline que invoca al AssetResolver via HTTP para resolver el activo asociado al documento. Se ejecuta entre Validar e Integrar. |
 | **Circuit Breaker** | Patron de resiliencia que abre el circuito tras N fallos consecutivos, impidiendo nuevas llamadas hasta que se restablezca el servicio. |
@@ -351,7 +355,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 | HU11 | Observabilidad | Como operador, quiero metricas y logs en Application Insights para diagnosticar problemas. | Structured logging, telemetria AI SDK, metricas por actividad en seguimiento. | IN PROGRESS |
 | HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | PLANNED |
 | HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Lifecycle rules en Storage + soft delete + archivado por antigüedad. | PLANNED |
-| HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR o Referencia Catastral extraidos. | `ObtenerActivoActivity` busca en AssetResolver. Si match unico, `IdActivo` se propaga. Configurable por tipologia/instrucciones. Resultado en `detalleEjecucion.assetResolver`. | DONE |
+| HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR, Referencia Catastral y/o Direccion. | `ObtenerActivoActivity` busca en AssetResolver con tres criterios configurables (habilitar/deshabilitar cada uno). Soporta AND/OR. Si match unico, `IdActivo` se propaga. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). | DONE |
 
 ---
 

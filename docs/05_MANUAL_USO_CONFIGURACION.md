@@ -600,6 +600,13 @@ Backoff exponencial: `delay = initialDelayMs * 2^(attempt - 1)`
 
 La actividad `ObtenerActivo` permite resolver automaticamente el `IdActivo` de un documento consultando la tabla `DM_POSICION_AAII_TB` del plugin AssetResolver. Se ejecuta **entre Validar e Integrar** y es **opcional** (deshabilitada por defecto).
 
+El AssetResolver soporta **tres criterios de busqueda** configurables:
+- **IDUFIR**: busqueda exacta por codigo IDUFIR (columna `ID_IDUFIR`).
+- **Referencia Catastral**: busqueda exacta por referencia (columna `ID_REF_CATAST`).
+- **Direccion**: busqueda fuzzy por direccion con scoring (columnas `NOM_VIA`, `NUM_VIA`, `NOM_MUNIC`, `COD_POST`).
+
+Cada criterio se puede habilitar/deshabilitar independientemente, y los resultados se combinan segun un **modo de combinacion configurable** (AND u OR).
+
 ### 5.7b.2 Habilitacion por Precedencia
 
 ```
@@ -610,27 +617,158 @@ instrucciones.assetResolver.enabled        (peticion HTTP)
 
 ### 5.7b.3 Configuracion en Tipologia
 
-En la tabla `TipologiasConfig`, el campo `ConfiguracionJson` puede incluir una seccion `assetResolver`:
+En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion `assetResolver`:
 
 ```json
 {
   "assetResolver": {
     "enabled": true,
+    "modoCombinacionCriterios": "OR",
+    "busquedaIdufirHabilitada": true,
+    "busquedaReferenciaCatastralHabilitada": true,
+    "busquedaDireccionHabilitada": false,
     "camposSolicitados": ["#ALL#"],
-    "mapeoIdufir": ["IDUFIR", "IDUFIR_CRU", "CRU", "CodigoRegistroUnico"],
-    "mapeoReferenciaCatastral": ["ReferenciaCatastral", "RefCatastral", "Catastral"]
+    "mapeoIdufir": ["IDUFIR", "IDUFIR_CRU", "CRU"],
+    "mapeoReferenciaCatastral": ["ReferenciaCatastral", "RefCatastral"],
+    "mapeoDireccionCompleta": ["Localizacion", "Direccion"],
+    "mapeoDireccionNombreVia": ["NombreVia", "Calle"],
+    "mapeoDireccionNumero": ["NumeroVia", "Numero"],
+    "mapeoDireccionMunicipio": ["Municipio", "Localidad"],
+    "mapeoDireccionCodigoPostal": ["CodigoPostal", "CP"],
+    "umbralScoreDireccion": 0.75
   }
 }
 ```
 
-| Campo | Tipo | Descripcion |
-|-------|------|------------|
-| `enabled` | bool | Activa/desactiva la resolucion de activo para esta tipologia. |
-| `camposSolicitados` | string[] | Columnas de `DM_POSICION_AAII_TB` a retornar usando el nombre real de columna. Soporta `#ALL#` para expandir a todas las columnas. Si se informa una lista explicita, `ID_ACTIVO_SAREB` y `FCH_CIERRE` se incluyen siempre. Si no se informa, el plugin mantiene el comportamiento actual y retorna solo los campos obligatorios. |
-| `mapeoIdufir` | string[] | Claves del diccionario `DatosExtraidos` donde buscar el IDUFIR. Se prueban en orden hasta encontrar valor no vacio. |
-| `mapeoReferenciaCatastral` | string[] | Claves del diccionario `DatosExtraidos` donde buscar la Referencia Catastral. |
+| Campo | Tipo | Default | Descripcion |
+|-------|------|---------|------------|
+| `enabled` | bool | `false` | Activa/desactiva la resolucion de activo para esta tipologia. |
+| `modoCombinacionCriterios` | string | `"OR"` | Como combinar resultados de multiples criterios: `AND` (interseccion) u `OR` (union). |
+| `busquedaIdufirHabilitada` | bool | `true` | Si `true`, incluye IDUFIR como criterio de busqueda. |
+| `busquedaReferenciaCatastralHabilitada` | bool | `true` | Si `true`, incluye Referencia Catastral como criterio. |
+| `busquedaDireccionHabilitada` | bool | `false` | Si `true`, habilita busqueda fuzzy por direccion. |
+| `camposSolicitados` | string[] | `null` | Columnas de `DM_POSICION_AAII_TB` a retornar. `#ALL#` expande a todas. |
+| `mapeoIdufir` | string[] | `[]` | Claves de `DatosExtraidos` donde buscar el IDUFIR. |
+| `mapeoReferenciaCatastral` | string[] | `[]` | Claves de `DatosExtraidos` donde buscar la Referencia Catastral. |
+| `mapeoDireccionCompleta` | string[] | `[]` | Claves para direccion completa (ej. "CALLE MAYOR 1, MADRID"). Se parsea automaticamente. |
+| `mapeoDireccionNombreVia` | string[] | `[]` | Claves para nombre de via. |
+| `mapeoDireccionNumero` | string[] | `[]` | Claves para numero de via. |
+| `mapeoDireccionMunicipio` | string[] | `[]` | Claves para municipio. |
+| `mapeoDireccionCodigoPostal` | string[] | `[]` | Claves para codigo postal. |
+| `umbralScoreDireccion` | double | `0.75` | Score minimo [0.0-1.0] para aceptar un match por direccion. |
 
-### 5.7b.4 Configuracion del Plugin AssetResolver
+### 5.7b.4 Logica de Deteccion de Criterios
+
+La resolucion de valores para cada criterio sigue esta logica:
+
+1. **Si el criterio esta deshabilitado** (`busquedaXxxHabilitada = false`): no se intenta detectar ni usar.
+2. **Si hay mapeo explicito en tipologia** (ej. `mapeoIdufir: ["IDUFIR_CRU"]`): solo se busca en esas claves de `DatosExtraidos`.
+3. **Si no hay mapeo pero el criterio esta habilitado**: se usan los aliases globales del plugin (`FieldAliases`).
+4. **Override por instrucciones**: `instrucciones.assetResolver.camposBusqueda.idufir` tiene precedencia absoluta.
+
+### 5.7b.5 Modo de Combinacion de Criterios
+
+| Modo | Comportamiento |
+|------|---------------|
+| `OR` (default) | Union de resultados. Si IDUFIR encuentra activo A y Direccion encuentra activo B, ambos se incluyen. |
+| `AND` | Interseccion de resultados. Solo devuelve activos que coincidan en **todos** los criterios resueltos. Si algun criterio devuelve 0 resultados, el resultado final es vacio. |
+
+**Ejemplo AND**: Si `busquedaIdufirHabilitada = true` y `busquedaDireccionHabilitada = true`, y el IDUFIR resuelve activo 5 pero la direccion no coincide con activo 5, el resultado sera `Found = false`.
+
+### 5.7b.6 Busqueda por Direccion
+
+Cuando `busquedaDireccionHabilitada = true`, el servicio:
+
+1. **Resuelve la direccion** desde `DatosExtraidos` usando los mapeos configurados.
+2. Si se usa `mapeoDireccionCompleta`, **parsea automaticamente** la cadena:
+   - Extrae codigo postal con regex `\b\d{5}\b`.
+   - Extrae numero de via con regex.
+   - Separa municipio y nombre de via por coma.
+3. **Calcula score fuzzy** contra cada fila de `DM_POSICION_AAII_TB` usando pesos:
+   - CodigoPostal: 30%
+   - Municipio: 30%  
+   - NombreVia: 30%
+   - Numero: 10%
+4. Solo incluye activos cuyo score >= `umbralScoreDireccion`.
+
+**Respuesta enriquecida** en `criteriosUsados.direccion`:
+```json
+{
+  "direccionCompleta": "CALLE MAYOR 1, 28013 MADRID",
+  "nombreVia": "CALLE MAYOR",
+  "numero": "1",
+  "municipio": "MADRID",
+  "codigoPostal": "28013",
+  "direccionNormalizada": "calle mayor 1 madrid 28013",
+  "score": 0.92,
+  "candidatosEvaluados": 1523,
+  "razon": "Match encontrado con score 0.92"
+}
+```
+
+### 5.7b.7 Ejemplos de Configuracion por Caso de Uso
+
+#### Solo IDUFIR (comportamiento clasico)
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "busquedaIdufirHabilitada": true,
+    "busquedaReferenciaCatastralHabilitada": false,
+    "busquedaDireccionHabilitada": false,
+    "mapeoIdufir": ["IDUFIR_CRU", "IDUFIR"]
+  }
+}
+```
+
+#### Solo Direccion (sin IDUFIR ni RefCatastral)
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "busquedaIdufirHabilitada": false,
+    "busquedaReferenciaCatastralHabilitada": false,
+    "busquedaDireccionHabilitada": true,
+    "mapeoDireccionCompleta": ["Localizacion"],
+    "umbralScoreDireccion": 0.75
+  }
+}
+```
+
+#### Todos los criterios con AND (alta precision)
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "modoCombinacionCriterios": "AND",
+    "busquedaIdufirHabilitada": true,
+    "busquedaReferenciaCatastralHabilitada": true,
+    "busquedaDireccionHabilitada": true,
+    "mapeoIdufir": ["IDUFIR_CRU"],
+    "mapeoReferenciaCatastral": ["ReferenciaCatastral"],
+    "mapeoDireccionCompleta": ["Localizacion"],
+    "umbralScoreDireccion": 0.8
+  }
+}
+```
+
+#### IDUFIR + Direccion como fallback (OR)
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "modoCombinacionCriterios": "OR",
+    "busquedaIdufirHabilitada": true,
+    "busquedaReferenciaCatastralHabilitada": false,
+    "busquedaDireccionHabilitada": true,
+    "mapeoIdufir": ["IDUFIR_CRU"],
+    "mapeoDireccionCompleta": ["Localizacion"],
+    "umbralScoreDireccion": 0.7
+  }
+}
+```
+
+### 5.7b.8 Configuracion del Plugin AssetResolver
 
 El plugin corre como proceso independiente (puerto 5006 en local). Su conexion y autenticacion se configuran en `local.settings.json` (local) o Key Vault (produccion):
 
@@ -643,22 +781,23 @@ El plugin corre como proceso independiente (puerto 5006 en local). Su conexion y
 
 El plugin lee la tabla `DM_POSICION_AAII_TB` usando la connection string `AssetResolverDb` configurada en su `appsettings.json`.
 
-### 5.7b.5 Alias de Campos (FieldAliases)
+### 5.7b.9 Alias de Campos Globales (FieldAliases)
 
-El plugin define aliases globales en `appsettings.json` que mapean nombres logicos a claves de `DatosExtraidos`:
+El plugin define aliases globales en `appsettings.json` que se usan cuando no hay mapeo explicito en la tipologia:
 
 ```json
 {
   "FieldAliases": {
     "Idufir": ["IDUFIR", "IDUFIR_CRU", "CRU", "CodigoRegistroUnico"],
-    "ReferenciaCatastral": ["ReferenciaCatastral", "RefCatastral", "Catastral"]
+    "ReferenciaCatastral": ["ReferenciaCatastral", "RefCatastral", "Catastral"],
+    "DireccionCompleta": ["Localizacion", "Direccion", "DireccionCompleta", "Domicilio"]
   }
 }
 ```
 
-La precedencia de aliases es: **aliases en la peticion** > **mapeo de tipologia** > **aliases globales del plugin**.
+**Precedencia de aliases**: mapeos de tipologia > aliases globales del plugin.
 
-### 5.7b.6 Resultado en ContratoSalida
+### 5.7b.10 Resultado en ContratoSalida
 
 Cuando AssetResolver se ejecuta, `detalleEjecucion.assetResolver` contiene:
 
@@ -667,14 +806,15 @@ Cuando AssetResolver se ejecuta, `detalleEjecucion.assetResolver` contiene:
 | `ejecutado` | bool | `true` si el paso se ejecuto (no fue skipped). |
 | `exitoso` | bool | `true` si se encontro al menos un activo. |
 | `activosEncontrados` | int | Numero de activos encontrados (tras deduplicacion). |
-| `criteriosUsados` | object | `{ idufir, referenciaCatastral }` — valores usados para la busqueda. |
+| `criteriosUsados` | object | Detalle de criterios: `idufir`, `referenciaCatastral`, `modoCombinacionCriterios`, `direccion`. |
 | `activos` | array | Lista de `{ idActivo, fchCierre, camposSolicitados: {} }`. |
 | `camposConError` | string[] | Columnas solicitadas que no existen en la tabla. |
 | `mensaje` | string | Mensaje descriptivo del resultado. |
 | `duracionMs` | long | Milisegundos de ejecucion. |
 | `error` | string? | Detalle de error si fallo la llamada HTTP. |
+| `criterioUtilizado` | string | Descripcion textual del criterio usado (ej. "Idufir OR Direccion"). |
 
-### 5.7b.7 Propagacion del IdActivo
+### 5.7b.11 Propagacion del IdActivo
 
 - Si se encuentra **exactamente 1 activo**, su `ID_ACTIVO_SAREB` se asigna como `IdActivo` y se propaga a Integracion y persistencia.
 - Si hay **0 o multiples activos**, el IdActivo no se modifica en este paso.

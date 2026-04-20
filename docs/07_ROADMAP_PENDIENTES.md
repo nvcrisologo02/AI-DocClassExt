@@ -1,6 +1,6 @@
 # 7. Roadmap y Pendientes — DocumentIA MVP
 
-> Ultima actualizacion: 2026-04-13
+> Ultima actualizacion: 2026-04-17
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -45,6 +45,7 @@ gantt
 | **EP8** | Mantenimiento Blob | PLANNED | 0% | Lifecycle management, limpieza automatica, retencion por tipologia. |
 | **EP9** | GDC integracion completa | IN PROGRESS | 75% | SubirGDC + ConsultarDocumento operativos. Pendiente: retry avanzado, reconciliacion DOC_OBJECT_EXISTS, idempotencia. |
 | **EP9** | GDC integracion completa | IN PROGRESS | 80% | SubirGDC + ConsultarDocumento operativos. Pendiente: retry Polly (G-1), idempotencia DOC_OBJECT_EXISTS (G-2), reconciliacion async (G-3). |
+| **EP10** | Resolucion de Activo | DONE | 100% | AssetResolver con 3 criterios (IDUFIR, RefCat, Direccion). AND/OR configurable. Flags de habilitacion por criterio. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 
 ---
 
@@ -75,7 +76,7 @@ gantt
 
 ## 7.3 Bloque 3 — Calidad, Pruebas y Observabilidad (Sprint actual)
 
-> **Estado 2026-04-17:** Bloques 1 (Infraestructura) y 2 (Codigo critico) completados al 100%. Sistema en produccion con Azure SQL, KV, MI, Admin Blazor y todos los fixes de fallback aplicados. Pipeline CI/CD operativo con migraciones EF al arrancar y fix de settings AssetResolver (az CLI Python). Admin Blazor mejorado con editor JSON en pantalla completa. Los proximos sprints se centran en calidad/pruebas y funcionalidad de negocio.
+> **Estado 2026-04-17:** Bloques 1 (Infraestructura) y 2 (Codigo critico) completados al 100%. Sistema en produccion con Azure SQL, KV, MI, Admin Blazor y todos los fixes de fallback aplicados. Pipeline CI/CD operativo con migraciones EF al arrancar y fix de settings AssetResolver (az CLI Python). Admin Blazor mejorado con editor JSON en pantalla completa. **AssetResolver mejorado** con busqueda por direccion fuzzy, flags de habilitacion por criterio (IDUFIR/RefCat/Direccion) y modo combinacion AND/OR. Los proximos sprints se centran en calidad/pruebas y funcionalidad de negocio.
 
 ### 7.3.1 Tests unitarios pendientes
 

@@ -181,14 +181,38 @@ namespace DocumentIA.Core.Configuration
         public List<string>? CamposSolicitados { get; set; }
         /// <summary>
         /// Posibles nombres de campo extraído que mapean al IDUFIR de la tabla (columna ID_IDUFIR).
-        /// El plugin busca en los datos extraídos usando estos aliases para detectar automáticamente el valor.
-        /// Ej: ["IDUFIR", "CRU", "CodigoRegistroUnico"]
         /// </summary>
         public List<string> MapeoIdufir { get; set; } = new();
         /// <summary>
         /// Posibles nombres de campo extraído que mapean a la referencia catastral (columna ID_REF_CATAST).
-        /// Ej: ["ReferenciaCatastral", "RefCatastral", "Catastral"]
         /// </summary>
         public List<string> MapeoReferenciaCatastral { get; set; } = new();
+
+        /// <summary>
+        /// Modo de combinación entre criterios resueltos de búsqueda.
+        /// Valores admitidos: AND, OR. Default: OR.
+        /// </summary>
+        public string ModoCombinacionCriterios { get; set; } = "OR";
+
+        // ── Búsqueda por dirección como criterio adicional ──
+
+        /// <summary>Si true, se incluye IDUFIR como criterio de búsqueda (se auto-detecta por aliases si no hay override). Default: true.</summary>
+        public bool BusquedaIdufirHabilitada { get; set; } = true;
+        /// <summary>Si true, se incluye ReferenciaCatastral como criterio de búsqueda. Default: true.</summary>
+        public bool BusquedaReferenciaCatastralHabilitada { get; set; } = true;
+        /// <summary>Si true, permite búsqueda fuzzy por dirección como criterio adicional.</summary>
+        public bool BusquedaDireccionHabilitada { get; set; } = false;
+        /// <summary>Aliases para auto-detectar una dirección libre/completa en datos extraídos.</summary>
+        public List<string> MapeoDireccionCompleta { get; set; } = new();
+        /// <summary>Aliases para auto-detectar nombre de vía en datos extraídos.</summary>
+        public List<string> MapeoDireccionNombreVia { get; set; } = new();
+        /// <summary>Aliases para auto-detectar número de vía en datos extraídos.</summary>
+        public List<string> MapeoDireccionNumero { get; set; } = new();
+        /// <summary>Aliases para auto-detectar municipio en datos extraídos.</summary>
+        public List<string> MapeoDireccionMunicipio { get; set; } = new();
+        /// <summary>Aliases para auto-detectar código postal en datos extraídos.</summary>
+        public List<string> MapeoDireccionCodigoPostal { get; set; } = new();
+        /// <summary>Umbral mínimo de score para aceptar un match por dirección (0.0–1.0, default 0.75).</summary>
+        public double UmbralScoreDireccion { get; set; } = 0.75;
     }
 }
