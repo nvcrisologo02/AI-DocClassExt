@@ -1,6 +1,6 @@
 # Especificacion Tecnica: Plugin AssetResolver
 
-> Ultima actualizacion: 2026-04-17  
+> Ultima actualizacion: 2026-04-20  
 > Proyecto: AI DocClassExt — SAREB  
 > Componente: `DocumentIA.AssetResolver`
 
@@ -8,7 +8,7 @@
 
 ## 1. Proposito
 
-El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **IdActivo** (codigo de activo inmobiliario SAREB) a partir de datos extraidos de documentos. Consulta la tabla maestra `DM_POSICION_AAII_TB` usando tres criterios de busqueda configurables: IDUFIR, Referencia Catastral y Direccion.
+El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **IdActivo** (codigo de activo inmobiliario SAREB) a partir de datos extraidos de documentos y/o criterios explicitos en request. Consulta la tabla maestra `DM_POSICION_AAII_TB` usando cuatro criterios de busqueda configurables: IDUFIR, Referencia Catastral, Direccion fuzzy y Direccion tipificada.
 
 ---
 
@@ -54,6 +54,21 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
   "busquedaIdufirHabilitada": true,
   "busquedaReferenciaCatastralHabilitada": false,
   "busquedaDireccionHabilitada": true,
+  "busquedaDireccionTipificadaHabilitada": false,
+  "direccionTipificada": {
+    "pais": null,
+    "provincia": null,
+    "comunidadAutonoma": null,
+    "municipio": "Madrid",
+    "poblacion": null,
+    "tipoVia": null,
+    "calle": "Mayor",
+    "numero": "1",
+    "bloque": null,
+    "puerta": null,
+    "codigoPostal": "28013",
+    "planta": null
+  },
   "mapeoIdufir": ["IDUFIR_CRU"],
   "mapeoReferenciaCatastral": [],
   "mapeoDireccionCompleta": ["Localizacion"],
@@ -79,6 +94,8 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
 | `busquedaIdufirHabilitada` | bool | `true` | Si `false`, IDUFIR no se usa aunque haya aliases. |
 | `busquedaReferenciaCatastralHabilitada` | bool | `true` | Si `false`, RefCat no se usa. |
 | `busquedaDireccionHabilitada` | bool | `false` | Si `true`, activa busqueda fuzzy por direccion. |
+| `busquedaDireccionTipificadaHabilitada` | bool | `false` | Si `true`, activa busqueda por campos tipificados con filtros AND. |
+| `direccionTipificada` | object | `null` | Campos directos de busqueda (no salen de extractedData): Pais, Provincia, ComunidadAutonoma, Municipio, Poblacion, TipoVia, Calle, Numero, Bloque, Puerta, CodigoPostal, Planta. |
 | `mapeoIdufir` | string[] | `[]` | Claves de extractedData para IDUFIR. |
 | `mapeoReferenciaCatastral` | string[] | `[]` | Claves de extractedData para RefCat. |
 | `mapeoDireccionCompleta` | string[] | `[]` | Claves para direccion completa (se parsea automaticamente). |
@@ -109,13 +126,29 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
       "score": 0.92,
       "candidatosEvaluados": 1523,
       "razon": "Match encontrado con score 0.92"
+    },
+    "direccionTipificada": {
+      "pais": null,
+      "provincia": null,
+      "comunidadAutonoma": null,
+      "municipio": "Madrid",
+      "poblacion": null,
+      "tipoVia": null,
+      "calle": "Mayor",
+      "numero": "1",
+      "bloque": null,
+      "puerta": null,
+      "codigoPostal": "28013",
+      "planta": null,
+      "candidatosEvaluados": 12,
+      "razon": "1 activos encontrados con filtros tipificados"
     }
   },
   "activos": [
     {
       "idActivo": "SAR-001234",
       "fchCierre": "2025-12-31",
-      "camposSolicitados": { "NOM_VIA": "CALLE MAYOR", "NUM_VIA": "1" }
+      "camposSolicitados": { "DES_NOMBRE_VIA": "CALLE MAYOR", "NUM_VIA": "1" }
     }
   ],
   "camposConError": [],
@@ -139,19 +172,22 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
 2. Resolver valores de cada criterio habilitado:
    └─ IDUFIR: override ?? detectar en extractedData via aliases
    └─ RefCat: override ?? detectar en extractedData via aliases
-   └─ Direccion: detectar componentes o parsear direccion completa
+  └─ Direccion: detectar componentes o parsear direccion completa
+  └─ DireccionTipificada: leer objeto request.direccionTipificada
 
 3. Si ningun criterio tiene valor resuelto:
-   └─ Retornar Found=false, mensaje "No se encontraron criterios"
+  └─ Retornar Found=false, mensaje "No se encontraron criterios"
 
 4. Ejecutar busquedas independientes:
    └─ IDUFIR: SELECT WHERE ID_IDUFIR = @valor
    └─ RefCat: SELECT WHERE ID_REF_CATAST = @valor
-   └─ Direccion: Scoring fuzzy sobre todos los registros
+  └─ Direccion: pre-filtro en BD (CP o prefijo municipio) + scoring fuzzy en memoria
+  └─ DireccionTipificada: filtros AND en BD solo para campos informados
 
 5. Combinar resultados segun modoCombinacionCriterios:
    └─ OR: UNION de resultados
    └─ AND: INTERSECT de resultados (si algun criterio = 0, resultado = 0)
+  └─ OR con todos los criterios a 0: resultado vacio (sin excepcion)
 
 6. Deduplicar por ID_ACTIVO_SAREB
 
@@ -175,24 +211,30 @@ string? DetectarValor(extractedData, override, aliases)
 }
 ```
 
-### 4.3 Algoritmo de Scoring por Direccion
+### 4.3 Algoritmo de Scoring por Direccion Fuzzy
 
 El algoritmo calcula un score [0.0-1.0] comparando la direccion de entrada contra cada fila de `DM_POSICION_AAII_TB`:
 
 ```
-Score = (CodigoPostal * 0.30) + (Municipio * 0.30) + (NombreVia * 0.30) + (Numero * 0.10)
+Score = (NombreVia * 0.40) + (Numero * 0.30) + (Municipio * 0.20) + (CodigoPostal * 0.10)
 ```
 
-Cada componente se evalua con similitud fuzzy (Levenshtein normalizado):
+Cada componente textual se evalua con similitud de Jaccard sobre tokens normalizados:
 
 | Componente | Peso | Columna BD | Comparacion |
 |------------|------|------------|-------------|
-| CodigoPostal | 30% | `COD_POST` | Exacta (1.0 o 0.0) |
-| Municipio | 30% | `NOM_MUNIC` | Fuzzy, normalizado a minusculas |
-| NombreVia | 30% | `NOM_VIA` | Fuzzy, normalizado |
-| Numero | 10% | `NUM_VIA` | Exacta |
+| NombreVia | 40% | `DES_NOMBRE_VIA` | Jaccard sobre texto normalizado |
+| Numero | 30% | `NUM_VIA` | Exacta tras normalizar numero |
+| Municipio | 20% | `DES_MUNICP` | Jaccard sobre texto normalizado |
+| CodigoPostal | 10% | `NUM_COD_POSTAL` | Exacta tras normalizar CP |
 
 **Normalizacion**: se eliminan tildes, se convierte a minusculas, y se remueven caracteres especiales.
+
+Pre-filtro BD antes del scoring:
+- Si hay codigo postal: `NUM_COD_POSTAL = @cp`
+- Si no hay CP y hay municipio: `DES_MUNICP LIKE '%prefijo6%'`
+
+Umbral por defecto: `0.75` (si `umbralScoreDireccion` no se informa o es `<= 0`).
 
 ### 4.4 Parseo de Direccion Completa
 
@@ -204,10 +246,16 @@ Entrada: "CALLE MAYOR 1, 28013 MADRID"
 1. Extraer CP: regex \b\d{5}\b → "28013"
 2. Remover CP de la cadena: "CALLE MAYOR 1, MADRID"
 3. Split por coma: ["CALLE MAYOR 1", "MADRID"]
-4. Ultimo segmento = Municipio: "MADRID"
+4. Municipio:
+  - 2 segmentos: ultimo segmento
+  - 3 o mas segmentos: penultimo (el ultimo suele ser provincia)
 5. Primer segmento = Via + Numero
-6. Extraer numero: regex \b\d+[A-Z]?\b → "1"
+6. Extraer numero de via: primer match regex \b\d+[A-Z]?\b → "1"
 7. Resto = NombreVia: "CALLE MAYOR"
+
+Caso real soportado:
+- Entrada: "calle torrente ballester 7, 4C Azuqueca de henares, Guadalajara"
+- Resultado parseado: NombreVia="calle torrente ballester", Numero="7", Municipio="Azuqueca de henares"
 
 Resultado:
   NombreVia: "CALLE MAYOR"
@@ -224,6 +272,9 @@ Resultado:
 
 ```
 ResultadoFinal = Idufir.Resultados ∪ RefCat.Resultados ∪ Direccion.Resultados
+
+Si DireccionTipificada esta resuelta, tambien participa en OR:
+ResultadoFinal = ... ∪ DireccionTipificada.Resultados
 ```
 
 Ejemplo:
@@ -249,6 +300,35 @@ Si cualquier criterio resuelto devuelve 0 resultados, el resultado final es vaci
 - IDUFIR encuentra: [A]
 - Direccion encuentra: [] (score < umbral)
 - Resultado AND: []
+
+En modo OR, si todos los criterios resueltos devuelven 0 resultados, el resultado final es [] y no se produce excepcion.
+
+---
+
+## 5.3 Direccion Tipificada (AND por campos informados)
+
+La busqueda tipificada no utiliza aliases de `extractedData`. Toma directamente `request.direccionTipificada`.
+
+Reglas:
+- Si `busquedaDireccionTipificadaHabilitada=false`, no participa.
+- Si el objeto viene vacio (todos null/whitespace), se ignora.
+- Cada campo informado agrega un `WHERE` adicional (logica AND).
+- Texto: `LIKE '%valor%'`.
+- Numero (`NUM_VIA`) y codigo postal (`NUM_COD_POSTAL`): igualdad exacta tras normalizacion.
+
+Mapeo de campos:
+- `Pais` -> `DES_PAIS`
+- `Provincia` -> `DES_PROVNC`
+- `ComunidadAutonoma` -> `DES_COMUNI_AUTO`
+- `Municipio` -> `DES_MUNICP`
+- `Poblacion` -> `DES_POBLCN`
+- `TipoVia` -> `DES_TIPO_VIA`
+- `Calle` -> `DES_NOMBRE_VIA`
+- `Numero` -> `NUM_VIA`
+- `Bloque` -> `DES_BLOQUE`
+- `Puerta` -> `DES_PUERTA`
+- `CodigoPostal` -> `NUM_COD_POSTAL`
+- `Planta` -> `DES_PLANTA`
 
 ---
 
@@ -282,6 +362,8 @@ Los aliases globales se usan como fallback cuando no hay mapeo explicito en la t
 | `ReferenciaCatastral` | Detectar RefCat | ReferenciaCatastral, RefCatastral, Catastral |
 | `DireccionCompleta` | Detectar direccion completa | Localizacion, Direccion, DireccionCompleta, Domicilio |
 
+Nota: no existen aliases para DireccionTipificada; se informa por objeto dedicado en request.
+
 ---
 
 ## 7. Tabla DM_POSICION_AAII_TB
@@ -293,10 +375,18 @@ Los aliases globales se usan como fallback cuando no hay mapeo explicito en la t
 | `ID_ACTIVO_SAREB` | varchar | Codigo unico del activo (PK logica). |
 | `ID_IDUFIR` | varchar | Codigo IDUFIR del Registro de la Propiedad. |
 | `ID_REF_CATAST` | varchar | Referencia Catastral. |
-| `NOM_VIA` | varchar | Nombre de la via (calle, avenida, etc.). |
+| `DES_NOMBRE_VIA` | varchar | Nombre de la via (calle, avenida, etc.). |
 | `NUM_VIA` | varchar | Numero de portal. |
-| `NOM_MUNIC` | varchar | Nombre del municipio. |
-| `COD_POST` | varchar | Codigo postal. |
+| `DES_MUNICP` | varchar | Nombre del municipio. |
+| `NUM_COD_POSTAL` | varchar | Codigo postal. |
+| `DES_PAIS` | varchar | Pais. |
+| `DES_PROVNC` | varchar | Provincia. |
+| `DES_COMUNI_AUTO` | varchar | Comunidad autonoma. |
+| `DES_POBLCN` | varchar | Poblacion. |
+| `DES_TIPO_VIA` | varchar | Tipo de via. |
+| `DES_BLOQUE` | varchar | Bloque. |
+| `DES_PUERTA` | varchar | Puerta. |
+| `DES_PLANTA` | varchar | Planta. |
 | `FCH_CIERRE` | date | Fecha de cierre del activo. |
 | `FCH_ALTA` | date | Fecha de alta. |
 | `FCH_BAJA` | date | Fecha de baja (null si activo). |
@@ -362,6 +452,21 @@ Siempre se incluyen en la respuesta:
 }
 ```
 
+### 8.4 Busqueda por Direccion Tipificada
+
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "modoCombinacionCriterios": "OR",
+    "busquedaIdufirHabilitada": false,
+    "busquedaReferenciaCatastralHabilitada": false,
+    "busquedaDireccionHabilitada": false,
+    "busquedaDireccionTipificadaHabilitada": true
+  }
+}
+```
+
 ---
 
 ## 9. Errores y Troubleshooting
@@ -371,11 +476,37 @@ Siempre se incluyen en la respuesta:
 | `Found=false`, mensaje "No se encontraron criterios" | Ningun criterio habilitado tiene valor en extractedData | Verificar mapeos y aliases. Revisar que extractedData contiene las claves esperadas. |
 | Score de direccion siempre bajo | Direccion mal parseada o datos BD incompletos | Revisar logs de `direccionNormalizada`. Verificar que `NOM_VIA`, `NOM_MUNIC` estan poblados en BD. |
 | Timeout en busqueda por direccion | Tabla muy grande + scoring en memoria | Considerar filtrar por provincia/municipio primero, o implementar busqueda en BD. |
+| Excepcion `Index was out of range` en combinacion OR | Todos los criterios devolvian 0 y no habia conjuntos para combinar | Corregido en `CombinarResultados`: devuelve lista vacia si no hay criterios con resultados. |
 | `camposConError` no vacio | Se solicitaron columnas inexistentes | Verificar nombres de columna en `requestedFields`. Usar `#ALL#` para descubrir columnas disponibles. |
 
 ---
 
-## 10. Tests Unitarios
+## 10. Tests Funcionales con Script
+
+Script principal:
+- `scripts/Test-AssetResolver.ps1`
+
+Escenarios actuales:
+- `idufir-alias-default`
+- `idufir-mapeo-personalizado`
+- `refcat-directa`
+- `idufir-override`
+- `modo-or-dos-criterios`
+- `modo-and-dos-criterios`
+- `direccion-fuzzy`
+- `campos-all`
+- `campos-limitados`
+- `direccion-tipificada`
+- `direccion-tipificada-combinada`
+- `sin-datos`
+
+Resumen de salida:
+- Tabla ASCII con columnas `Escenario`, `Descripcion`, `Resultado`, `IdsActivos`.
+- `IdsActivos` muestra los `IdActivo` resueltos por escenario (o `-` si no hay resultado).
+
+---
+
+## 11. Tests Unitarios
 
 El proyecto `DocumentIA.AssetResolver.Tests` incluye tests para:
 
@@ -393,10 +524,11 @@ dotnet test
 
 ---
 
-## 11. Changelog
+## 12. Changelog
 
 | Fecha | Version | Cambios |
 |-------|---------|---------|
+| 2026-04-20 | 1.3.0 | - Alta de busqueda por Direccion Tipificada (`busquedaDireccionTipificadaHabilitada` + objeto `direccionTipificada`).<br/>- Direccion fuzzy: parseo mejorado para cadenas con piso/puerta y provincia en tercer segmento.<br/>- Combinacion OR robusta cuando todos los criterios devuelven 0 resultados.<br/>- Script funcional actualizado con escenarios tipificados y columna `IdsActivos` en resumen. |
 | 2026-04-17 | 1.2.0 | - Busqueda por direccion como criterio de primera clase (no fallback).<br/>- Flags `busquedaIdufirHabilitada`, `busquedaReferenciaCatastralHabilitada`, `busquedaDireccionHabilitada`.<br/>- Modo combinacion AND/OR configurable.<br/>- Parseo automatico de direccion completa. |
 | 2026-03-15 | 1.1.0 | - Direccion como fallback cuando IDUFIR/RefCat no tienen resultados.<br/>- Scoring fuzzy por direccion. |
 | 2026-02-01 | 1.0.0 | - Busqueda por IDUFIR y Referencia Catastral.<br/>- Campos solicitados configurables.<br/>- Aliases globales y por tipologia. |

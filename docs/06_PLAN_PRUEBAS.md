@@ -1,6 +1,6 @@
 # 6. Plan de Pruebas — DocumentIA MVP
 
-> Ultima actualizacion: 2026-03-31  
+> Ultima actualizacion: 2026-04-20  
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -128,7 +128,7 @@ Componente mas critico: garantiza la calidad de los datos extraidos.
 
 ## 6.4 Tests API / E2E (Scripts PowerShell)
 
-Scripts ubicados en `tests/api-tests/`. Requieren Functions App en ejecucion (local o Azure).
+Scripts ubicados en `tests/api-tests/` y `scripts/`. Requieren Functions App o plugin correspondiente en ejecucion (local o Azure).
 
 | Script | Tipologia | Modo | Descripcion |
 |--------|-----------|------|-------------|
@@ -142,6 +142,42 @@ Scripts ubicados en `tests/api-tests/`. Requieren Functions App en ejecucion (lo
 | `test-ingest-resumen-documental-from-path.ps1` | resumen-documental | Desde disco | Tipologia resumen-documental desde fichero local |
 | `test-gdc-consultar-aislado.ps1` | — | Aislado | Test SOAP puro contra GDC: searchEntities + create. Diagnostica DOC_OBJECT_EXISTS. |
 | `test-azure-openai-clasificacion-fallback.ps1` | — | Aislado | Test conectividad Azure OpenAI para clasificacion fallback |
+| `scripts/Test-AssetResolver.ps1` | AssetResolver | Aislado | Bateria funcional del plugin AssetResolver: IDUFIR, RefCat, Direccion fuzzy, Direccion tipificada, OR/AND, requestedFields y caso sin datos. |
+
+### 6.4.1 Bateria Funcional AssetResolver
+
+Script principal:
+- `scripts/Test-AssetResolver.ps1`
+
+Escenarios cubiertos:
+- `idufir-alias-default`
+- `idufir-mapeo-personalizado`
+- `refcat-directa`
+- `idufir-override`
+- `modo-or-dos-criterios`
+- `modo-and-dos-criterios`
+- `direccion-fuzzy`
+- `campos-all`
+- `campos-limitados`
+- `direccion-tipificada`
+- `direccion-tipificada-combinada`
+- `sin-datos`
+
+Ejecucion recomendada (bateria completa):
+
+```powershell
+.\scripts\Test-AssetResolver.ps1 \
+    -SampleIdufir "46007001178211" \
+    -SampleRefCatastral "8519921XJ8681N0001JK" \
+    -SampleDireccion "calle torrente ballester 7, 4C Azuqueca de henares, Guadalajara" \
+    -SampleMunicipio "Azuqueca de Henares" \
+    -SampleCalle "Torrente Ballester" \
+    -SampleNumero "7"
+```
+
+Salida esperada:
+- Tabla resumen ASCII por escenario con columnas `Escenario`, `Descripcion`, `Resultado`, `IdsActivos`.
+- `IdsActivos` muestra los `IdActivo` resueltos (o `-` si no hay coincidencias).
 
 ### Scripts Integracion (carpeta `scripts/`)
 
@@ -231,9 +267,9 @@ typeof(CustomIntegrationPlugin)
 | Metodos de test C# | ~229 |
 | Clases de test Python | 1 |
 | Metodos de test Python | 2 |
-| Scripts E2E/API | 10 |
+| Scripts E2E/API | 11 |
 | Scripts integracion | 3 |
-| **Total artefactos de test** | **49** |
+| **Total artefactos de test** | **50** |
 | **Total tests automatizados** | **~231** |
 
 ### 6.6.2 Cobertura por Componente
@@ -318,6 +354,7 @@ pytest tests/ -v
 | RF-01 Recepcion PDF | IngestDocumentTrigger | test-ingest*.ps1 (E2E) | Media |
 | RF-02 Clasificacion | ClasificarActivity | ClasificarActivityTests (2) | Baja |
 | RF-03 Extraccion | ConfigurableExtraerDataProvider | ConfigurableExtraerDataProviderTests (4) | Media |
+| RF-XX Resolucion de Activo (AssetResolver) | Plugin `DocumentIA.AssetResolver` | `scripts/Test-AssetResolver.ps1` (12 escenarios) | Alta |
 | RF-04 Validacion | ValidationEngine + 11 validators | 115 tests | **Alta** |
 | RF-05 Integracion plugins | PluginManager + plugins | 14 tests + scripts | Media |
 | RF-06 Subida GDC | GdcService | GdcServiceTests (10) + GdcIntegrationTests (2) | **Alta** |
