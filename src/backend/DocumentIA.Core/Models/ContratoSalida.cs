@@ -272,6 +272,8 @@ public class CriteriosBusquedaActivo
     public string ModoCombinacionCriterios { get; set; } = "OR";
     /// <summary>Detalle del criterio de dirección utilizado (solo si se usó búsqueda fuzzy).</summary>
     public DireccionCriterioActivo? Direccion { get; set; }
+    /// <summary>Detalle del criterio de dirección tipificada utilizado (solo si se informó en request).</summary>
+    public DireccionTipificadaCriterioActivo? DireccionTipificada { get; set; }
 }
 
 /// <summary>
@@ -286,6 +288,27 @@ public class DireccionCriterioActivo
     public string? CodigoPostal { get; set; }
     public string? DireccionNormalizada { get; set; }
     public double Score { get; set; }
+    public int CandidatosEvaluados { get; set; }
+    public string? Razon { get; set; }
+}
+
+/// <summary>
+/// Detalle del criterio de búsqueda por dirección tipificada utilizado en AssetResolver.
+/// </summary>
+public class DireccionTipificadaCriterioActivo
+{
+    public string? Pais { get; set; }
+    public string? Provincia { get; set; }
+    public string? ComunidadAutonoma { get; set; }
+    public string? Municipio { get; set; }
+    public string? Poblacion { get; set; }
+    public string? TipoVia { get; set; }
+    public string? Calle { get; set; }
+    public string? Numero { get; set; }
+    public string? Bloque { get; set; }
+    public string? Puerta { get; set; }
+    public string? CodigoPostal { get; set; }
+    public string? Planta { get; set; }
     public int CandidatosEvaluados { get; set; }
     public string? Razon { get; set; }
 }
@@ -333,6 +356,10 @@ public class ObtenerActivoInput
     public bool BusquedaReferenciaCatastralHabilitada { get; set; } = true;
     /// <summary>Si true, habilita la búsqueda por dirección como un criterio adicional.</summary>
     public bool BusquedaDireccionHabilitada { get; set; } = false;
+    /// <summary>Si true, habilita búsqueda por dirección tipificada enviada en el request.</summary>
+    public bool BusquedaDireccionTipificadaHabilitada { get; set; } = false;
+    /// <summary>Campos explícitos de dirección tipificada para búsqueda (AND por campo informado).</summary>
+    public DireccionTipificadaInputActivo? DireccionTipificada { get; set; }
     /// <summary>Aliases para auto-detectar una dirección libre/completa en DatosExtraidos.</summary>
     public List<string> MapeoDireccionCompleta { get; set; } = new();
     /// <summary>Aliases para auto-detectar nombre de vía en DatosExtraidos.</summary>
@@ -345,4 +372,23 @@ public class ObtenerActivoInput
     public List<string> MapeoDireccionCodigoPostal { get; set; } = new();
     /// <summary>Umbral mínimo de score para aceptar un match por dirección (0.0–1.0, default 0.75).</summary>
     public double UmbralScoreDireccion { get; set; } = 0.75;
+}
+
+/// <summary>
+/// Dirección tipificada enviada explícitamente al AssetResolver.
+/// </summary>
+public class DireccionTipificadaInputActivo
+{
+    public string? Pais { get; set; }
+    public string? Provincia { get; set; }
+    public string? ComunidadAutonoma { get; set; }
+    public string? Municipio { get; set; }
+    public string? Poblacion { get; set; }
+    public string? TipoVia { get; set; }
+    public string? Calle { get; set; }
+    public string? Numero { get; set; }
+    public string? Bloque { get; set; }
+    public string? Puerta { get; set; }
+    public string? CodigoPostal { get; set; }
+    public string? Planta { get; set; }
 }

@@ -36,6 +36,34 @@ public class ObtenerActivoActivityTests
         return new ObtenerActivoActivity(_loggerMock.Object, factoryMock.Object);
     }
 
+    private ObtenerActivoActivity CreateSut(
+        HttpResponseMessage response,
+        Action<HttpRequestMessage> requestAssert)
+    {
+        var handlerMock = new Mock<HttpMessageHandler>(MockBehavior.Strict);
+        handlerMock
+            .Protected()
+            .Setup<Task<HttpResponseMessage>>(
+                "SendAsync",
+                ItExpr.IsAny<HttpRequestMessage>(),
+                ItExpr.IsAny<CancellationToken>())
+            .Returns<HttpRequestMessage, CancellationToken>((req, _) =>
+            {
+                requestAssert(req);
+                return Task.FromResult(response);
+            });
+
+        var httpClient = new HttpClient(handlerMock.Object)
+        {
+            BaseAddress = new Uri("http://localhost:5006/")
+        };
+
+        var factoryMock = new Mock<IHttpClientFactory>();
+        factoryMock.Setup(f => f.CreateClient("AssetResolver")).Returns(httpClient);
+
+        return new ObtenerActivoActivity(_loggerMock.Object, factoryMock.Object);
+    }
+
     private static ObtenerActivoInput CreateInput(
         string? idufirOverride = null,
         string? refCatOverride = null,
@@ -232,5 +260,112 @@ public class ObtenerActivoActivityTests
         resultado.Ejecutado.Should().BeTrue();
         resultado.Exitoso.Should().BeFalse();
         resultado.Error.Should().Contain("Connection refused");
+    }
+
+    [Fact]
+    public async Task Run_WithDireccionTipificada_SendsTypedFieldsToPlugin()
+    {
+        var pluginResponse = new
+        {
+            CorrelationId = "test-corr-001",
+            Found = true,
+            Count = 1,
+            CriteriosUsados = new { Idufir = "12345678901234", ReferenciaCatastral = (string?)null },
+            Activos = new[]
+            {
+                new { IdActivo = "100001", FchCierre = DateTime.UtcNow, CamposSolicitados = new Dictionary<string, object?>() }
+            },
+            CamposConError = new List<string>(),
+            Message = "ok",
+            DuracionMs = 25,
+            Error = (string?)null
+        };
+
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(pluginResponse), System.Text.Encoding.UTF8, "application/json")
+        };
+
+        var sut = CreateSut(response, req =>
+        {
+            var raw = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(raw);
+            var root = doc.RootElement;
+
+            root.GetProperty("busquedaDireccionTipificadaHabilitada").GetBoolean().Should().BeTrue();
+            var dt = root.GetProperty("direccionTipificada");
+            dt.GetProperty("municipio").GetString().Should().Be("Azuqueca de Henares");
+            dt.GetProperty("calle").GetString().Should().Be("Torrente Ballester");
+            dt.GetProperty("numero").GetString().Should().Be("7");
+        });
+
+        var input = CreateInput();
+        input.BusquedaDireccionTipificadaHabilitada = true;
+        input.DireccionTipificada = new DireccionTipificadaInputActivo
+        {
+            Municipio = "Azuqueca de Henares",
+            Calle = "Torrente Ballester",
+            Numero = "7"
+        };
+
+        var resultado = await sut.Run(input);
+
+        resultado.Exitoso.Should().BeTrue();
+        resultado.Count.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Run_PluginReturnsDireccionTipificadaCriterio_MapsToOutput()
+    {
+        var pluginResponse = new
+        {
+            CorrelationId = "test-corr-001",
+            Found = true,
+            Count = 1,
+            CriteriosUsados = new
+            {
+                Idufir = (string?)null,
+                ReferenciaCatastral = (string?)null,
+                ModoCombinacionCriterios = "OR",
+                DireccionTipificada = new
+                {
+                    Pais = "ESPANA",
+                    Provincia = "GUADALAJARA",
+                    ComunidadAutonoma = "CASTILLA-LA MANCHA",
+                    Municipio = "AZUQUECA DE HENARES",
+                    Poblacion = "AZUQUECA DE HENARES",
+                    TipoVia = "CALLE",
+                    Calle = "TORRENTE BALLESTER",
+                    Numero = "7",
+                    Bloque = (string?)null,
+                    Puerta = "4C",
+                    CodigoPostal = "19200",
+                    Planta = "4",
+                    CandidatosEvaluados = 3,
+                    Razon = "1 activos encontrados con filtros tipificados"
+                }
+            },
+            Activos = new[]
+            {
+                new { IdActivo = "2691", FchCierre = DateTime.UtcNow, CamposSolicitados = new Dictionary<string, object?>() }
+            },
+            CamposConError = new List<string>(),
+            Message = "ok",
+            DuracionMs = 32,
+            Error = (string?)null
+        };
+
+        var response = new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(JsonSerializer.Serialize(pluginResponse), System.Text.Encoding.UTF8, "application/json")
+        };
+
+        var sut = CreateSut(response);
+        var resultado = await sut.Run(CreateInput());
+
+        resultado.CriteriosUsados.DireccionTipificada.Should().NotBeNull();
+        resultado.CriteriosUsados.DireccionTipificada!.Municipio.Should().Be("AZUQUECA DE HENARES");
+        resultado.CriteriosUsados.DireccionTipificada.CandidatosEvaluados.Should().Be(3);
+        resultado.CriteriosUsados.DireccionTipificada.Razon.Should().Contain("tipificados");
     }
 }

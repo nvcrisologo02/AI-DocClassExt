@@ -50,6 +50,8 @@ public class ObtenerActivoActivity
                 BusquedaIdufirHabilitada = input.BusquedaIdufirHabilitada,
                 BusquedaReferenciaCatastralHabilitada = input.BusquedaReferenciaCatastralHabilitada,
                 BusquedaDireccionHabilitada = input.BusquedaDireccionHabilitada,
+                BusquedaDireccionTipificadaHabilitada = input.BusquedaDireccionTipificadaHabilitada,
+                DireccionTipificada = input.DireccionTipificada,
                 MapeoDireccionCompleta = input.MapeoDireccionCompleta,
                 MapeoDireccionNombreVia = input.MapeoDireccionNombreVia,
                 MapeoDireccionNumero = input.MapeoDireccionNumero,
@@ -108,6 +110,25 @@ public class ObtenerActivoActivity
                             CandidatosEvaluados = pluginResp.CriteriosUsados.Direccion.CandidatosEvaluados,
                             Razon               = pluginResp.CriteriosUsados.Direccion.Razon
                         }
+                        : null,
+                    DireccionTipificada = pluginResp.CriteriosUsados.DireccionTipificada != null
+                        ? new DireccionTipificadaCriterioActivo
+                        {
+                            Pais = pluginResp.CriteriosUsados.DireccionTipificada.Pais,
+                            Provincia = pluginResp.CriteriosUsados.DireccionTipificada.Provincia,
+                            ComunidadAutonoma = pluginResp.CriteriosUsados.DireccionTipificada.ComunidadAutonoma,
+                            Municipio = pluginResp.CriteriosUsados.DireccionTipificada.Municipio,
+                            Poblacion = pluginResp.CriteriosUsados.DireccionTipificada.Poblacion,
+                            TipoVia = pluginResp.CriteriosUsados.DireccionTipificada.TipoVia,
+                            Calle = pluginResp.CriteriosUsados.DireccionTipificada.Calle,
+                            Numero = pluginResp.CriteriosUsados.DireccionTipificada.Numero,
+                            Bloque = pluginResp.CriteriosUsados.DireccionTipificada.Bloque,
+                            Puerta = pluginResp.CriteriosUsados.DireccionTipificada.Puerta,
+                            CodigoPostal = pluginResp.CriteriosUsados.DireccionTipificada.CodigoPostal,
+                            Planta = pluginResp.CriteriosUsados.DireccionTipificada.Planta,
+                            CandidatosEvaluados = pluginResp.CriteriosUsados.DireccionTipificada.CandidatosEvaluados,
+                            Razon = pluginResp.CriteriosUsados.DireccionTipificada.Razon
+                        }
                         : null
                 }
                 : null;
@@ -160,6 +181,7 @@ public class ObtenerActivoActivity
         public string? ReferenciaCatastral { get; set; }
         public string? ModoCombinacionCriterios { get; set; }
         public PluginDireccionCriterio? Direccion { get; set; }
+        public PluginDireccionTipificadaCriterio? DireccionTipificada { get; set; }
     }
 
     private class PluginDireccionCriterio
@@ -171,6 +193,24 @@ public class ObtenerActivoActivity
         public string? CodigoPostal { get; set; }
         public string? DireccionNormalizada { get; set; }
         public double Score { get; set; }
+        public int CandidatosEvaluados { get; set; }
+        public string? Razon { get; set; }
+    }
+
+    private class PluginDireccionTipificadaCriterio
+    {
+        public string? Pais { get; set; }
+        public string? Provincia { get; set; }
+        public string? ComunidadAutonoma { get; set; }
+        public string? Municipio { get; set; }
+        public string? Poblacion { get; set; }
+        public string? TipoVia { get; set; }
+        public string? Calle { get; set; }
+        public string? Numero { get; set; }
+        public string? Bloque { get; set; }
+        public string? Puerta { get; set; }
+        public string? CodigoPostal { get; set; }
+        public string? Planta { get; set; }
         public int CandidatosEvaluados { get; set; }
         public string? Razon { get; set; }
     }

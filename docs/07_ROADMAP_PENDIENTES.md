@@ -1,6 +1,6 @@
 # 7. Roadmap y Pendientes — DocumentIA MVP
 
-> Ultima actualizacion: 2026-04-17
+> Ultima actualizacion: 2026-04-21
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -239,3 +239,59 @@ Impacto en tests: añadir ~15-20 tests nuevos en `ValidationEngineTests` cubrien
 | Retry GDC: Polly vs codigo manual | Polly vs IAsyncRetryPolicy custom | **PENDIENTE** | Polly recomendado (ya en dependencias transitivas de Functions). Ver G-1. |
 | Cache extraccion: Redis vs SQL | Redis Cache vs tabla `ExtraccionCache` en SQL | **PENDIENTE** | SQL suficiente para MVP (volumen bajo). Redis si latencia es problema. Ver R-1. |
 | Admin Blazor: auth cuándo | Antes o despues de GA | **PENDIENTE** | Bloquear sin auth si el Admin es accesible desde red corporativa sin restriccion de IP. |
+
+---
+
+## 7.8 Plan de Cierre — Work Items AssetResolver (99089–99103)
+
+Objetivo: cerrar de forma trazable los work items abiertos relacionados con AssetResolver, evitando cierres inconsistentes entre tarea/feature/epic.
+
+### 7.8.1 Estado de partida
+
+Abiertos en la revisión ADO:
+- 99103, 99102, 99101, 99100, 99098, 99097, 99092, 99091, 99089
+
+Cerrados con evidencia:
+- 99099, 99096, 99095, 99094, 99093
+
+### 7.8.2 Criterios de cierre por item abierto
+
+| WI | Qué falta para cierre | Evidencia mínima requerida |
+|----|------------------------|----------------------------|
+| 99097 (Integración activity) | Verificar mapeo request/response completo en `ObtenerActivoActivity` (incluyendo dirección tipificada) | Tests unitarios verdes + payload/response validados |
+| 99098 (Integración orquestador) | Verificar propagación de criterios desde orquestador a activity y resultado en salida | Test de integración unitario del paso ObtenerActivo en orquestador |
+| 99100 (Pruebas activity/orquestador) | Batería ampliada para casos feliz/no-found/error/AND-OR/dirección tipificada | Resultado de ejecución de tests y cobertura objetivo del módulo |
+| 99101 (Rendimiento/calidad) | Ejecutar pruebas de latencia y calidad de matching | Informe p95/p99 + tasa de acierto en dataset representativo |
+| 99102 (Documentación) | Publicar documentación funcional/técnica alineada al comportamiento actual | Documentos actualizados y revisados (AssetResolver + Plan de pruebas) |
+| 99103 (Hardening/telemetría) | Añadir telemetría operativa y criterios de alerta mínimos | Logs estructurados/métricas + checklist de observabilidad |
+| 99092 (Contrato de precedencia) | Formalizar y aprobar reglas de precedencia de criterios | Contrato API/funcional aprobado |
+| 99091 (Feature) | Cerrar tras completar tareas hijas críticas | Hijos en Done + comentario de consolidación |
+| 99089 (Epic) | Cerrar tras cierre de features dependientes | Features cerradas + validación final |
+
+### 7.8.3 Plan por tandas (ejecutable)
+
+1. Tanda A — Integración técnica (objetivo inmediato)
+- 99097, 99098, 99100
+- Acciones:
+    - Completar tests de `ObtenerActivoActivity` para dirección tipificada y combinación de criterios.
+    - Añadir tests del orquestador en el paso de AssetResolver (caso único activo/múltiples/no encontrado).
+    - Publicar evidencia de ejecución (`dotnet test`) en comentario de WI.
+
+2. Tanda B — Contrato y documentación
+- 99092, 99102
+- Acciones:
+    - Cerrar contrato de precedencia en documento contractual.
+    - Alinear documentación técnica/plan de pruebas con comportamiento actual y anexar ejemplo de request/response.
+
+3. Tanda C — Operación y cierre jerárquico
+- 99101, 99103, 99091, 99089
+- Acciones:
+    - Ejecutar validación de rendimiento/calidad.
+    - Aplicar checklist de observabilidad (métricas + alertas mínimas).
+    - Cerrar Feature y Epic con traza de evidencias previas.
+
+### 7.8.4 Avance ejecutado en esta iteración
+
+- Plan guardado en este roadmap.
+- Desarrollo: ampliación de `ObtenerActivoActivity` para soportar y mapear `DireccionTipificada` en payload/response.
+- Pruebas: alta de tests unitarios para validar envío y mapeo de dirección tipificada.
