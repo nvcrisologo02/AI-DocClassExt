@@ -227,6 +227,8 @@ var host = new HostBuilder()
                 provider.GetRequiredService<IMemoryCache>(),
                 provider.GetRequiredService<IServiceScopeFactory>()));
 
+        services.AddSingleton<PromptInstruccionesValidator>();
+
         services.AddSingleton<LayoutModelRegistryLoader>(provider =>
             new LayoutModelRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),

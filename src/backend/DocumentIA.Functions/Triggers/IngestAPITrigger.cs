@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
+using DocumentIA.Functions.Services;
 using System.Net;
 using System.Text.Json;
 
@@ -11,10 +12,14 @@ namespace DocumentIA.Functions.Triggers;
 public class IngestAPITrigger
 {
     private readonly ILogger<IngestAPITrigger> _logger;
+    private readonly PromptInstruccionesValidator _promptInstruccionesValidator;
 
-    public IngestAPITrigger(ILogger<IngestAPITrigger> logger)
+    public IngestAPITrigger(
+        ILogger<IngestAPITrigger> logger,
+        PromptInstruccionesValidator promptInstruccionesValidator)
     {
         _logger = logger;
+        _promptInstruccionesValidator = promptInstruccionesValidator;
     }
 
     [Function("IngestDocument")]
@@ -39,6 +44,13 @@ public class IngestAPITrigger
             {
                 var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badResponse.WriteStringAsync("Contrato de entrada inválido");
+                return badResponse;
+            }
+
+            if (!_promptInstruccionesValidator.TryValidate(contratoEntrada.Instrucciones.Prompt, out var promptValidationError))
+            {
+                var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badResponse.WriteStringAsync(promptValidationError ?? "instrucciones.prompt inválido.");
                 return badResponse;
             }
 

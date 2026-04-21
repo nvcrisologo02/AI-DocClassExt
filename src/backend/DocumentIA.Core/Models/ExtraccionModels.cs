@@ -91,6 +91,11 @@ public class PromptActivityInput
     /// directamente sin realizar ninguna llamada adicional al LLM.
     /// </summary>
     public string? ResultadoPromptCombinado { get; set; }
+    /// <summary>
+    /// Override opcional de prompt para esta petición.
+    /// Si no se informa, se usa PromptConfig de la tipología.
+    /// </summary>
+    public PromptInstrucciones? Prompt { get; set; }
 }
 
 /// <summary>
