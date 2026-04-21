@@ -295,3 +295,86 @@ Cerrados con evidencia:
 - Plan guardado en este roadmap.
 - Desarrollo: ampliación de `ObtenerActivoActivity` para soportar y mapear `DireccionTipificada` en payload/response.
 - Pruebas: alta de tests unitarios para validar envío y mapeo de dirección tipificada.
+- Pruebas unitarias en verde:
+    - `DocumentProcessOrchestratorTests`: 2/2 OK.
+    - `ObtenerActivoActivityTests`: 8/8 OK.
+- Evidencia E2E mínima de orquestador + AssetResolver (local):
+    - `RuntimeStatus=Completed` en `IngestDocument`.
+    - `DetalleEjecucion.AssetResolver.Ejecutado=true`.
+    - `DetalleEjecucion.AssetResolver.Exitoso=true`.
+    - Resultado final de la prueba: `PASS`.
+
+### 7.8.5 Resultado Tanda C (revision 2026-04-21)
+
+Estado revisado para los items de la tanda C: `99101`, `99103`, `99091`, `99089`.
+
+Evidencia comprobada en repositorio/ejecucion:
+- Existe prueba E2E local de orquestador con `RuntimeStatus=Completed`, `AssetResolver.Ejecutado=true` y `AssetResolver.Exitoso=true`.
+- Existe instrumentacion base en `PersistirActivity` con `TrackEvent("DocumentProcessed")` y metricas `DocumentIA.Duracion.*`.
+- Existe soporte tecnico de criterios y scoring en `ObtenerActivoActivity` (`Score`, `CandidatosEvaluados`, `Razon`) para salida funcional.
+
+Gap objetivo detectado para cierre:
+- `99101 (Rendimiento/calidad)`: no hay informe trazable de p95/p99 ni medicion de precision/recall sobre dataset representativo.
+- `99103 (Hardening/telemetria)`: no hay evidencia cerrable de telemetria operativa completa del matching (criterio usado, score, descartes y razon de seleccion/rechazo) ni checklist de alertado operativo verificado.
+
+Decision de estado aplicada en ADO:
+- `99101` y `99103`: mantener abiertos en `In Progress` con checklist de cierre.
+- `99091` y `99089`: mantener abiertos por dependencia jerarquica de los dos items anteriores.
+
+### 7.8.6 Checklist de cierre pendiente (Tanda C)
+
+1. `99101` (rendimiento y calidad):
+    - KPI de rendimiento obligatorios: p50/p95/p99 de latencia E2E (ms) por tipologia en ventana de 7 dias.
+    - Metodo de medicion reproducible (App Insights): ejecutar query Q3 de `4.12.4` en `04_MANUAL_EXPLOTACION.md` y guardar resultado (tabla o captura) con fecha/hora de consulta.
+    - KPI de calidad obligatorios: precision y recall de matching sobre dataset etiquetado.
+    - Metodo de calidad reproducible: para cada documento del dataset, comparar `IdActivo_esperado` vs `IdActivo_obtenido` y publicar matriz de conteo (`TP`, `FP`, `FN`) + calculo:
+        - `precision = TP / (TP + FP)`
+        - `recall = TP / (TP + FN)`
+    - Tuning documentado: registrar umbral final (`umbralScoreDireccion`) y razon de negocio/tecnica para mantener o ajustar.
+
+2. `99103` (hardening y telemetria):
+    - Telemetria minima operativa de matching (dedicada): criterio aplicado, score, candidatos evaluados, candidatos descartados y razon de seleccion/rechazo.
+    - Evidencia aceptable para cierre: query KQL guardada en App Insights (o captura equivalente) que muestre eventos de matching en una ventana temporal concreta.
+    - Alertas minimas operativas verificadas:
+        - Error rate de procesamiento (`DocumentProcessed` con `EstadoFinal=Error`) por ventana.
+        - p95 de latencia E2E por tipologia.
+        - Desviacion de calidad (precision/recall por debajo del umbral acordado en la tanda).
+    - Validacion de alertas: dejar constancia de regla, umbral y accion configurada (email/Teams/PagerDuty) en comentario de WI.
+
+3. Checklist de validacion para pasar a `Done`:
+    - `99101`: existe evidencia trazable de p50/p95/p99 + informe precision/recall + decision de tuning documentada.
+    - `99103`: existe evidencia de telemetria de matching + alertas minimas configuradas y verificadas.
+    - `99091` y `99089`: pasar a `Done` solo cuando `99101` y `99103` esten en `Done`.
+
+### 7.8.7 Ejecucion automatizada del paquete de evidencia (Tanda C)
+
+Script operativo disponible:
+- `scripts/collect-tandac-evidence.ps1`
+
+Uso recomendado:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\collect-tandac-evidence.ps1 \
+    -ResourceGroup "SRBRGDOCSAIPROD" \
+    -AppInsightsName "srbappiprodocai" \
+    -Subscription "<subscription-id-o-nombre>" \
+    -DatasetCsv ".\artifacts\dataset-matching.csv"
+```
+
+Formato esperado del dataset para calidad (`-DatasetCsv`):
+- Columnas obligatorias: `IdActivoEsperado`, `IdActivoObtenido`
+- El script calcula automaticamente `TP`, `FP`, `FN`, `precision`, `recall`.
+
+Artefactos generados por el script (en `artifacts/tandac-evidence-yyyymmdd-hhmmss`):
+- `Q1-EjecucionesRecientes.(json/csv)`
+- `Q2-TasaError.(json/csv)`
+- `Q3-LatenciaP50P95P99.(json/csv)`
+- `Q4-Fallback.(json/csv)`
+- `Q5-EventosAssetResolver.(json/csv)`
+- `Q6-MatchingDetallado.(json/csv)`
+- `Q7-PrecisionRecall.(json/csv)` (si se informa dataset)
+- `Resumen-TandaC.txt`
+
+Regla de cierre sugerida con estos artefactos:
+- `99101`: adjuntar `Q3` + `Q7` + decision final de umbral.
+- `99103`: adjuntar `Q5` + `Q6` + evidencia de alertas (regla, umbral, accion).
