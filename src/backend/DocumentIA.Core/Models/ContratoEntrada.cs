@@ -23,6 +23,25 @@ public class Instrucciones
     /// null = usar config de tipología; si se informa, sus valores tienen precedencia.
     /// </summary>
     public AssetResolverInstrucciones? AssetResolver { get; set; }
+    /// <summary>
+    /// Override opcional de prompt para esta petición.
+    /// Si no se informa, se mantiene la configuración de prompt de la tipología.
+    /// </summary>
+    public PromptInstrucciones? Prompt { get; set; }
+}
+
+/// <summary>
+/// Instrucciones opcionales para sobrescribir la configuración de prompt por petición.
+/// Todos los campos son opcionales para mantener compatibilidad hacia atrás.
+/// </summary>
+public class PromptInstrucciones
+{
+    public string? SystemPrompt { get; set; }
+    public string? UserPromptTemplate { get; set; }
+    public string? ModelKey { get; set; }
+    public double? Temperature { get; set; }
+    public int? MaxTokens { get; set; }
+    public string? ContentMode { get; set; }
 }
 
 /// <summary>
