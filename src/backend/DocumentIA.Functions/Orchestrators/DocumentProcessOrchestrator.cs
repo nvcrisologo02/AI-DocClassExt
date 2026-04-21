@@ -386,8 +386,9 @@ public class DocumentProcessOrchestrator
             salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
 
-            // Añadir actividad Prompt al seguimiento si la tipología la tiene habilitada
-            if (tipologiaResuelta.PromptEnabled)
+            // Añadir actividad Prompt al seguimiento si la tipología la tiene habilitada o si hay override en la petición
+            var promptActivoEnPeticion = tipologiaResuelta.PromptEnabled || entrada.Instrucciones.Prompt != null;
+            if (promptActivoEnPeticion)
             {
                 seguimiento.ActividadesTotales++;
                 seguimiento.Actividades.Add(new TrazaActividad { Nombre = "Prompt", Estado = "Pending" });
@@ -633,8 +634,8 @@ public class DocumentProcessOrchestrator
                 TiemposMs = resultadoExtraccion.TiemposMs
             };
 
-            // 4.5 Prompt libre (si la tipología lo tiene habilitado)
-            if (tipologiaResuelta.PromptEnabled)
+            // 4.5 Prompt libre (si la tipología lo tiene habilitado, o si la petición trae instrucciones de prompt ad-hoc)
+            if (tipologiaResuelta.PromptEnabled || entrada.Instrucciones.Prompt != null)
             {
                 var markdownParaPrompt = resultadoExtraccion.MarkdownExtraido;
                 if (string.IsNullOrWhiteSpace(markdownParaPrompt) && !string.IsNullOrWhiteSpace(markdownNormalizacion))
@@ -650,7 +651,8 @@ public class DocumentProcessOrchestrator
                     DocumentoBase64 = entrada.Documento.Content.Base64,
                     DatosExtraidos = resultadoExtraccion.DatosExtraidos,
                     // Optimización: si el fallback ya ejecutó el prompt en modo combinado, no hacer otra llamada
-                    ResultadoPromptCombinado = resultadoExtraccion.ResultadoPromptCombinado
+                    ResultadoPromptCombinado = resultadoExtraccion.ResultadoPromptCombinado,
+                    Prompt = entrada.Instrucciones.Prompt
                 };
 
                 var resultadoPrompt = await EjecutarPasoNegocio(
