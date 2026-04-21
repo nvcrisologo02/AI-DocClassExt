@@ -35,6 +35,9 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         PromptActivityInput input,
         CancellationToken cancellationToken = default)
     {
+        var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
+        var effectivePromptConfig = ResolvePromptConfig(tipologiaConfig.PromptConfig, input.Prompt);
+
         // Modo optimizado: resultado ya calculado en la llamada combinada con el fallback
         if (!string.IsNullOrWhiteSpace(input.ResultadoPromptCombinado))
         {
@@ -42,18 +45,16 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 "Prompt para tipología {Tipologia}: reutilizando resultado combinado del fallback de extracción.",
                 input.Tipologia);
 
-            var config = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
             return new PromptResultado
             {
-                Modelo = config.PromptConfig?.ModelKey ?? string.Empty,
+                Modelo = effectivePromptConfig?.ModelKey ?? string.Empty,
                 Resultado = input.ResultadoPromptCombinado,
                 TiempoMs = 0,
                 CombinedWithFallback = true
             };
         }
 
-        var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
-        var promptConfig = tipologiaConfig.PromptConfig;
+        var promptConfig = effectivePromptConfig;
 
         if (promptConfig == null || !promptConfig.Enabled)
         {
@@ -183,6 +184,57 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
     private static readonly Regex CampoPlaceholderRegex =
         new(@"\{campo:([^}]+)\}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    internal static PromptConfig? ResolvePromptConfig(PromptConfig? tipologiaPromptConfig, PromptInstrucciones? requestPrompt)
+    {
+        // Si no hay ningún prompt configurado, no hay nada que hacer
+        if (tipologiaPromptConfig is null && requestPrompt is null)
+        {
+            return null;
+        }
+
+        // Prompt ad-hoc: la tipología no tiene PromptConfig pero la petición trae instrucciones completas
+        if (tipologiaPromptConfig is null)
+        {
+            return new PromptConfig
+            {
+                Enabled = true,
+                ModelKey = requestPrompt!.ModelKey ?? string.Empty,
+                SystemPrompt = requestPrompt.SystemPrompt ?? string.Empty,
+                UserPromptTemplate = requestPrompt.UserPromptTemplate ?? string.Empty,
+                MaxTokens = requestPrompt.MaxTokens ?? 2000,
+                Temperature = requestPrompt.Temperature ?? 0.0,
+                ContentMode = requestPrompt.ContentMode ?? "markdown"
+            };
+        }
+
+        if (requestPrompt is null)
+        {
+            return tipologiaPromptConfig;
+        }
+
+        // Override campo a campo: request tiene precedencia sobre tipología
+        return new PromptConfig
+        {
+            Enabled = tipologiaPromptConfig.Enabled,
+            ModelKey = FirstNonEmpty(requestPrompt.ModelKey, tipologiaPromptConfig.ModelKey),
+            SystemPrompt = FirstNonEmpty(requestPrompt.SystemPrompt, tipologiaPromptConfig.SystemPrompt),
+            UserPromptTemplate = FirstNonEmpty(requestPrompt.UserPromptTemplate, tipologiaPromptConfig.UserPromptTemplate),
+            MaxTokens = requestPrompt.MaxTokens ?? tipologiaPromptConfig.MaxTokens,
+            Temperature = requestPrompt.Temperature ?? tipologiaPromptConfig.Temperature,
+            ContentMode = FirstNonEmpty(requestPrompt.ContentMode, tipologiaPromptConfig.ContentMode)
+        };
+    }
+
+    private static string FirstNonEmpty(string? preferred, string fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(preferred))
+        {
+            return preferred;
+        }
+
+        return fallback;
+    }
 
     internal static string InterpolateTemplate(
         string template,
