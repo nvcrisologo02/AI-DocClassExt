@@ -48,6 +48,14 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "extraction": {
       "provider": "auto",
       "model": "auto"
+    },
+    "prompt": {
+      "systemPrompt": "Eres un asistente experto en documentos inmobiliarios.",
+      "userPromptTemplate": "Resume el siguiente documento en 3 puntos clave:\n\n{{CONTENT}}",
+      "modelKey": "gpt-4o-mini",
+      "temperature": 0.2,
+      "maxTokens": 800,
+      "contentMode": "markdown"
     }
   },
   "documento": {
@@ -81,6 +89,23 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `extraction.provider` | string | `auto` \| `azure-content-understanding` \| `azure-cu` \| `azure-document-intelligence` \| `azure-di` \| `azure-openai` \| `gpt` \| `mock`. Si se especifica un valor distinto de `"auto"`, sobreescribe el proveedor configurado en la tipología para esta petición. Con `azure-openai` se activa extracción GPT directa (sin CU). |
 | `extraction.model` | string | Model key del registro de modelos de extracción. Si se especifica un valor distinto de `"auto"`, sobreescribe el `modelKey` configurado en la tipología para esta petición. Debe coincidir con una clave del registro de modelos (`extraction-models.json`). |
 | `extraction.umbral` | double? | _(Opcional)_ Ratio mínimo de campos para considerar la extracción CU suficiente. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor (`MinFieldsRatio`). |
+
+**`instrucciones.prompt`** _(opcional)_
+
+Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar la tipología en base de datos. Si la tipología ya tiene `PromptConfig` definida, los campos informados en este objeto tienen **precedencia** sobre la configuración de tipología (merge campo a campo).
+
+| Campo | Tipo | Validación | Descripción |
+|---|---|---|---|
+| `prompt.systemPrompt` | string? | ≤ 5000 chars | System message para el modelo. Si se omite, se usa el de la tipología o ninguno. |
+| `prompt.userPromptTemplate` | string? | ≤ 5000 chars | Plantilla de usuario. Puede incluir `{{CONTENT}}` como marcador del contenido del documento. Si se omite, se usa el de la tipología. |
+| `prompt.modelKey` | string? | Clave existente en registro de modelos | Modelo a usar. Si se omite, se usa el de la tipología o el default del sistema. |
+| `prompt.temperature` | double? | `[0.0 – 2.0]` | Temperatura de generación. Si se omite, se usa la de la tipología o `0.0`. |
+| `prompt.maxTokens` | int? | `[100 – 4000]` | Máximo de tokens en la respuesta. Si se omite, se usa el de la tipología o `2000`. |
+| `prompt.contentMode` | string? | `"markdown"` \| `"vision"` | Cómo se envía el contenido al modelo. `markdown` = texto extraído; `vision` = imagen del documento. Si se omite, se usa el de la tipología o `"markdown"`. |
+
+> **Nota:** Si la tipología tiene `PromptEnabled = false` y **no** existe `instrucciones.prompt` en la petición, el paso de prompt se omite. Si se envía `instrucciones.prompt`, el paso se ejecuta aunque la tipología no tenga `PromptConfig`.
+
+> **Resultado:** El resultado del prompt se almacena en `datosExtraidos["PromptResult"]` dentro del output final.
 
 **`instrucciones.assetResolver`** _(opcional)_
 
@@ -130,7 +155,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 
 | Código | Causa |
 |---|---|
-| `400 Bad Request` | Body inválido o `ContratoEntrada` no deserializable. |
+| `400 Bad Request` | Body inválido, `ContratoEntrada` no deserializable, o `instrucciones.prompt` con valores fuera de rango. |
 | `401 Unauthorized` | Function Key ausente o inválida. |
 | `500 Internal Server Error` | Error inesperado en el trigger. |
 
@@ -309,6 +334,7 @@ $status.output.resultado
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
 - Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. Si coincide, se devuelve la ejecución previa sin reprocesar (ver [MANUAL_DEDUPLICACION.md](MANUAL_DEDUPLICACION.md)).
+- Si se envía `instrucciones.prompt`, la validación ocurre en el trigger HTTP (respuesta `400` inmediata si inválido). No es necesario esperar al resultado de la orquestación para detectar errores de prompt.
 
 ---
 
