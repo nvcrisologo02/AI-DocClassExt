@@ -81,3 +81,5 @@ tmp_func_host_prompt_*.log
 
 # Azure CLI local extensions cache
 .azext/
+scripts/copy-table-bcp.ps1
+artifacts/bcp/DM_POSICION_AAFF_TB_10000_random.bcp

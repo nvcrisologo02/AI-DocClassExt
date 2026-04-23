@@ -185,7 +185,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
     private static readonly Regex CampoPlaceholderRegex =
         new(@"\{campo:([^}]+)\}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    internal static PromptConfig? ResolvePromptConfig(PromptConfig? tipologiaPromptConfig, PromptInstrucciones? requestPrompt)
+    public static PromptConfig? ResolvePromptConfig(PromptConfig? tipologiaPromptConfig, PromptInstrucciones? requestPrompt)
     {
         // Si no hay ningún prompt configurado, no hay nada que hacer
         if (tipologiaPromptConfig is null && requestPrompt is null)

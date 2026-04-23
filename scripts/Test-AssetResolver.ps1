@@ -3,21 +3,24 @@ param(
     [string]$ApiKey = "dev-local-api-key-replace-in-prod",
     [string]$Escenario = "all",
     [switch]$MostrarDetalle,
-    [string]$SampleIdufir = "",
-    [string]$SampleRefCatastral = "",
-    [string]$SampleDireccion = "",
+    [string]$SampleIdufir = "11012000632521",
+    [string]$SampleIdufirAacc = "30035000403354",
+    [string]$SampleRefCatastral = "1612401VK6611S0099GA",
+    [string]$SampleRefCatastralAacc = "8337302XG7683N0410HD",
+    [string]$SampleDireccion = "SAN ROQUE CLUB 35, San Roque, 11310",
+    [string]$SampleDireccionAacc = "GISBERT 7, Cartagena, 30202",
     # Campos para busqueda tipificada (todos opcionales, solo se filtran los informados)
     [string]$SamplePais = "",
     [string]$SampleProvincia = "",
     [string]$SampleComunidadAutonoma = "",
-    [string]$SampleMunicipio = "",
+    [string]$SampleMunicipio = "Cartagena",
     [string]$SamplePoblacion = "",
     [string]$SampleTipoVia = "",
-    [string]$SampleCalle = "",
-    [string]$SampleNumero = "",
+    [string]$SampleCalle = "GISBERT",
+    [string]$SampleNumero = "7",
     [string]$SampleBloque = "",
     [string]$SamplePuerta = "",
-    [string]$SampleCodigoPostal = "",
+    [string]$SampleCodigoPostal = "30202",
     [string]$SamplePlanta = "",
     [switch]$DryRun
 )
@@ -45,6 +48,8 @@ function Build-BaseRequest {
         DocumentType = "nota.simple.1_3"
         ExtractedData = @{}
         ModoCombinacionCriterios = "OR"
+        AAII_Search = $true
+        AACC_Search = $true
         BusquedaIdufirHabilitada = $true
         BusquedaReferenciaCatastralHabilitada = $true
         BusquedaDireccionHabilitada = $false
@@ -72,7 +77,13 @@ function Invoke-AssetResolverRequest {
                 Message = "DryRun enabled, request not sent"
                 Error = $null
                 Activos = @()
+                ActivosAAII = @()
+                ActivosAACC = @()
+                CountAAII = 0
+                CountAACC = 0
                 CamposConError = @()
+                CamposConErrorAAII = @()
+                CamposConErrorAACC = @()
             }
             ErrorText = $null
         }
@@ -121,11 +132,19 @@ function Invoke-AssetResolverRequest {
 function Get-OutcomeFromResponse {
     param(
         [hashtable]$InvocationResult,
-        [bool]$ExpectedFound
+        [AllowNull()]$ExpectedFound
     )
 
     if ($InvocationResult.IsError) {
         return "failed"
+    }
+
+    if ($null -ne $InvocationResult.Response -and $InvocationResult.Response.Message -eq "DryRun enabled, request not sent") {
+        return "passed"
+    }
+
+    if ($null -eq $ExpectedFound) {
+        return "passed"
     }
 
     $found = [bool]$InvocationResult.Response.Found
@@ -134,6 +153,44 @@ function Get-OutcomeFromResponse {
     }
 
     return "failed"
+}
+
+function Test-SplitResponseShape {
+    param($Response)
+
+    $props = @($Response.PSObject.Properties.Name)
+    $required = @("ActivosAAII", "ActivosAACC", "CountAAII", "CountAACC", "Activos", "Count")
+
+    foreach ($name in $required) {
+        if ($props -notcontains $name) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Test-SplitResponseConsistency {
+    param($Response)
+
+    if (-not (Test-SplitResponseShape -Response $Response)) {
+        return $false
+    }
+
+    $activosAaii = @($Response.ActivosAAII).Count
+    $activosAacc = @($Response.ActivosAACC).Count
+    $activosAgg = @($Response.Activos).Count
+
+    $countAaii = [int]$Response.CountAAII
+    $countAacc = [int]$Response.CountAACC
+    $countAgg = [int]$Response.Count
+
+    if ($countAaii -ne $activosAaii) { return $false }
+    if ($countAacc -ne $activosAacc) { return $false }
+    if ($countAgg -ne $activosAgg) { return $false }
+    if ($countAgg -ne ($countAaii + $countAacc)) { return $false }
+
+    return $true
 }
 
 function Get-ResolvedAssetIdsText {
@@ -202,6 +259,18 @@ if ([string]::IsNullOrWhiteSpace($SampleIdufir) -or [string]::IsNullOrWhiteSpace
     Write-Host "Aviso: faltan valores de muestra (SampleIdufir/SampleRefCatastral/SampleDireccion). Algunos escenarios pueden fallar por datos." -ForegroundColor Yellow
 }
 
+if ([string]::IsNullOrWhiteSpace($SampleIdufirAacc)) {
+    Write-Host "Aviso: SampleIdufirAacc no informado. Se reutilizara SampleIdufir para escenarios AACC." -ForegroundColor Yellow
+}
+
+if ([string]::IsNullOrWhiteSpace($SampleRefCatastralAacc)) {
+    Write-Host "Aviso: SampleRefCatastralAacc no informado. Se reutilizara SampleRefCatastral para escenarios AACC." -ForegroundColor Yellow
+}
+
+if ([string]::IsNullOrWhiteSpace($SampleDireccionAacc)) {
+    Write-Host "Aviso: SampleDireccionAacc no informado. Se reutilizara SampleDireccion para escenarios AACC." -ForegroundColor Yellow
+}
+
 # Para el escenario tipificado, si no se pasan campos explícitos, construye un objeto de ejemplo
 # con los campos que tenga informados (null = ignorado en el filtro SQL)
 function Build-DireccionTipificadaObject {
@@ -235,6 +304,36 @@ $hasCamposTipificados = (
     (-not [string]::IsNullOrWhiteSpace($SamplePuerta)) -or
     (-not [string]::IsNullOrWhiteSpace($SamplePlanta))
 )
+
+$sampleIdufirForAacc = if (-not [string]::IsNullOrWhiteSpace($SampleIdufirAacc)) { $SampleIdufirAacc } else { $SampleIdufir }
+$sampleRefCatForAacc = if (-not [string]::IsNullOrWhiteSpace($SampleRefCatastralAacc)) { $SampleRefCatastralAacc } else { $SampleRefCatastral }
+$sampleDireccionForAacc = if (-not [string]::IsNullOrWhiteSpace($SampleDireccionAacc)) { $SampleDireccionAacc } else { $SampleDireccion }
+$hasIdufirForOrigenScenarios = -not [string]::IsNullOrWhiteSpace($sampleIdufirForAacc)
+
+function Set-OrigenEnRequest {
+    param(
+        [hashtable]$Request,
+        [ValidateSet("AAII", "AACC", "AMBOS")]
+        [string]$Origen
+    )
+
+    switch ($Origen) {
+        "AAII" {
+            $Request.AAII_Search = $true
+            $Request.AACC_Search = $false
+        }
+        "AACC" {
+            $Request.AAII_Search = $false
+            $Request.AACC_Search = $true
+        }
+        default {
+            $Request.AAII_Search = $true
+            $Request.AACC_Search = $true
+        }
+    }
+
+    return $Request
+}
 
 $endpoint = "$BaseUrl/api/assets/GetAAIIInfo"
 
@@ -399,6 +498,235 @@ $scenarios = @(
             $req.BusquedaDireccionTipificadaHabilitada = $false
             return $req
         }
+    },
+    @{
+        Key = "origen-aaii-solo"
+        Name = "Origen AAII habilitado y AACC deshabilitado"
+        ExpectedFound = $null
+        Blocked = [string]::IsNullOrWhiteSpace($SampleIdufir)
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAACC -eq 0) -and (@($resp.ActivosAACC).Count -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req.AAII_Search = $true
+            $req.AACC_Search = $false
+            $req.ExtractedData["IDUFIR"] = $SampleIdufir
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "origen-aacc-solo"
+        Name = "Origen AACC habilitado y AAII deshabilitado"
+        ExpectedFound = $null
+        Blocked = -not $hasIdufirForOrigenScenarios
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAAII -eq 0) -and (@($resp.ActivosAAII).Count -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req.AAII_Search = $false
+            $req.AACC_Search = $true
+            $req.ExtractedData["IDUFIR"] = $sampleIdufirForAacc
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "origen-ambos-consistencia"
+        Name = "Ambos origenes y consistencia de respuesta agregada"
+        ExpectedFound = $null
+        Blocked = -not $hasIdufirForOrigenScenarios
+        AssertResponse = {
+            param($resp)
+            Test-SplitResponseConsistency -Response $resp
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req.AAII_Search = $true
+            $req.AACC_Search = $true
+            $req.ExtractedData["IDUFIR"] = $sampleIdufirForAacc
+            $req.RequestedFields = @("ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "refcat-aaii-solo"
+        Name = "Referencia catastral en origen AAII"
+        ExpectedFound = $null
+        Blocked = [string]::IsNullOrWhiteSpace($SampleRefCatastral)
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAACC -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AAII"
+            $req.ExtractedData["ReferenciaCatastral"] = $SampleRefCatastral
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "refcat-aacc-solo"
+        Name = "Referencia catastral en origen AACC"
+        ExpectedFound = $null
+        Blocked = [string]::IsNullOrWhiteSpace($sampleRefCatForAacc)
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAAII -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AACC"
+            $req.ExtractedData["ReferenciaCatastral"] = $sampleRefCatForAacc
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "idufir-override-aaii-solo"
+        Name = "IDUFIR override en origen AAII"
+        ExpectedFound = $null
+        Blocked = [string]::IsNullOrWhiteSpace($SampleIdufir)
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAACC -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AAII"
+            $req.IdufirOverride = $SampleIdufir
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "idufir-override-aacc-solo"
+        Name = "IDUFIR override en origen AACC"
+        ExpectedFound = $null
+        Blocked = [string]::IsNullOrWhiteSpace($sampleIdufirForAacc)
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAAII -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AACC"
+            $req.IdufirOverride = $sampleIdufirForAacc
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "direccion-fuzzy-aaii-solo"
+        Name = "Direccion fuzzy en origen AAII"
+        ExpectedFound = $null
+        Blocked = [string]::IsNullOrWhiteSpace($SampleDireccion)
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAACC -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AAII"
+            $req.BusquedaDireccionHabilitada = $true
+            $req.ExtractedData["Localizacion"] = $SampleDireccion
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "direccion-fuzzy-aacc-solo"
+        Name = "Direccion fuzzy en origen AACC"
+        ExpectedFound = $null
+        Blocked = [string]::IsNullOrWhiteSpace($sampleDireccionForAacc)
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAAII -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AACC"
+            $req.BusquedaDireccionHabilitada = $true
+            $req.ExtractedData["Localizacion"] = $sampleDireccionForAacc
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "direccion-tipificada-aaii-solo"
+        Name = "Direccion tipificada en origen AAII"
+        ExpectedFound = $null
+        Blocked = -not $hasCamposTipificados
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAACC -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AAII"
+            $req.BusquedaIdufirHabilitada = $false
+            $req.BusquedaReferenciaCatastralHabilitada = $false
+            $req.BusquedaDireccionHabilitada = $false
+            $req.BusquedaDireccionTipificadaHabilitada = $true
+            $req.DireccionTipificada = Build-DireccionTipificadaObject
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "direccion-tipificada-aacc-solo"
+        Name = "Direccion tipificada en origen AACC"
+        ExpectedFound = $null
+        Blocked = -not $hasCamposTipificados
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAAII -eq 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AACC"
+            $req.BusquedaIdufirHabilitada = $false
+            $req.BusquedaReferenciaCatastralHabilitada = $false
+            $req.BusquedaDireccionHabilitada = $false
+            $req.BusquedaDireccionTipificadaHabilitada = $true
+            $req.DireccionTipificada = Build-DireccionTipificadaObject
+            $req.RequestedFields = @("DES_SERVICER", "ID_ACTIVO_SAREB")
+            return $req
+        }
+    },
+    @{
+        Key = "campos-all-aacc"
+        Name = "RequestedFields #ALL# en origen AACC"
+        ExpectedFound = $null
+        Blocked = [string]::IsNullOrWhiteSpace($sampleIdufirForAacc)
+        AssertResponse = {
+            param($resp)
+            (Test-SplitResponseShape -Response $resp) -and ([int]$resp.CountAAII -eq 0) -and ([int]$resp.CountAACC -ge 0)
+        }
+        BuildBody = {
+            param($cid)
+            $req = Build-BaseRequest -CorrelationId $cid
+            $req = Set-OrigenEnRequest -Request $req -Origen "AACC"
+            $req.ExtractedData["IDUFIR"] = $sampleIdufirForAacc
+            $req.RequestedFields = @("#ALL#")
+            return $req
+        }
     }
 )
 
@@ -437,7 +765,15 @@ foreach ($scenario in $selectedScenarios) {
     }
 
     $invocation = Invoke-AssetResolverRequest -Body $body -ScenarioKey $scenarioKey -DryRunMode:$DryRun
-    $outcome = Get-OutcomeFromResponse -InvocationResult $invocation -ExpectedFound ([bool]$scenario.ExpectedFound)
+    $outcome = Get-OutcomeFromResponse -InvocationResult $invocation -ExpectedFound $scenario.ExpectedFound
+
+    if ($outcome -eq "passed" -and -not $invocation.IsError -and $scenario.ContainsKey("AssertResponse")) {
+        $assertion = & $scenario.AssertResponse $invocation.Response
+        if (-not [bool]$assertion) {
+            $outcome = "failed"
+        }
+    }
+
     $idsActivos = Get-ResolvedAssetIdsText -InvocationResult $invocation
 
     Show-ScenarioResult -ScenarioKey $scenarioKey -ScenarioName $scenarioName -Outcome $outcome -InvocationResult $invocation

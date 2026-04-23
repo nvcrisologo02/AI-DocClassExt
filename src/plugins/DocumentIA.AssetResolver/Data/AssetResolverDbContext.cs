@@ -14,6 +14,7 @@ public class AssetResolverDbContext : DbContext
     }
 
     public DbSet<DmPosicionAAII> DmPosicionAAII { get; set; } = null!;
+    public DbSet<DmPosicionAACC> DmPosicionAACC { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,6 +24,12 @@ public class AssetResolverDbContext : DbContext
         {
             entity.HasKey(e => new { e.IdActivoSareb, e.FchCierreDt });
             entity.ToTable("DM_POSICION_AAII_TB");
+        });
+
+        modelBuilder.Entity<DmPosicionAACC>(entity =>
+        {
+            entity.HasKey(e => new { e.IdActivoSareb, e.FchCierreDt });
+            entity.ToTable("DM_POSICION_AACC_TB");
         });
     }
 }

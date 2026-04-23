@@ -1,6 +1,6 @@
 # 7. Roadmap y Pendientes — DocumentIA MVP
 
-> Ultima actualizacion: 2026-04-17
+> Ultima actualizacion: 2026-04-21
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -239,3 +239,142 @@ Impacto en tests: añadir ~15-20 tests nuevos en `ValidationEngineTests` cubrien
 | Retry GDC: Polly vs codigo manual | Polly vs IAsyncRetryPolicy custom | **PENDIENTE** | Polly recomendado (ya en dependencias transitivas de Functions). Ver G-1. |
 | Cache extraccion: Redis vs SQL | Redis Cache vs tabla `ExtraccionCache` en SQL | **PENDIENTE** | SQL suficiente para MVP (volumen bajo). Redis si latencia es problema. Ver R-1. |
 | Admin Blazor: auth cuándo | Antes o despues de GA | **PENDIENTE** | Bloquear sin auth si el Admin es accesible desde red corporativa sin restriccion de IP. |
+
+---
+
+## 7.8 Plan de Cierre — Work Items AssetResolver (99089–99103)
+
+Objetivo: cerrar de forma trazable los work items abiertos relacionados con AssetResolver, evitando cierres inconsistentes entre tarea/feature/epic.
+
+### 7.8.1 Estado de partida
+
+Abiertos en la revisión ADO:
+- 99103, 99102, 99101, 99100, 99098, 99097, 99092, 99091, 99089
+
+Cerrados con evidencia:
+- 99099, 99096, 99095, 99094, 99093
+
+### 7.8.2 Criterios de cierre por item abierto
+
+| WI | Qué falta para cierre | Evidencia mínima requerida |
+|----|------------------------|----------------------------|
+| 99097 (Integración activity) | Verificar mapeo request/response completo en `ObtenerActivoActivity` (incluyendo dirección tipificada) | Tests unitarios verdes + payload/response validados |
+| 99098 (Integración orquestador) | Verificar propagación de criterios desde orquestador a activity y resultado en salida | Test de integración unitario del paso ObtenerActivo en orquestador |
+| 99100 (Pruebas activity/orquestador) | Batería ampliada para casos feliz/no-found/error/AND-OR/dirección tipificada | Resultado de ejecución de tests y cobertura objetivo del módulo |
+| 99101 (Rendimiento/calidad) | Ejecutar pruebas de latencia y calidad de matching | Informe p95/p99 + tasa de acierto en dataset representativo |
+| 99102 (Documentación) | Publicar documentación funcional/técnica alineada al comportamiento actual | Documentos actualizados y revisados (AssetResolver + Plan de pruebas) |
+| 99103 (Hardening/telemetría) | Añadir telemetría operativa y criterios de alerta mínimos | Logs estructurados/métricas + checklist de observabilidad |
+| 99092 (Contrato de precedencia) | Formalizar y aprobar reglas de precedencia de criterios | Contrato API/funcional aprobado |
+| 99091 (Feature) | Cerrar tras completar tareas hijas críticas | Hijos en Done + comentario de consolidación |
+| 99089 (Epic) | Cerrar tras cierre de features dependientes | Features cerradas + validación final |
+
+### 7.8.3 Plan por tandas (ejecutable)
+
+1. Tanda A — Integración técnica (objetivo inmediato)
+- 99097, 99098, 99100
+- Acciones:
+    - Completar tests de `ObtenerActivoActivity` para dirección tipificada y combinación de criterios.
+    - Añadir tests del orquestador en el paso de AssetResolver (caso único activo/múltiples/no encontrado).
+    - Publicar evidencia de ejecución (`dotnet test`) en comentario de WI.
+
+2. Tanda B — Contrato y documentación
+- 99092, 99102
+- Acciones:
+    - Cerrar contrato de precedencia en documento contractual.
+    - Alinear documentación técnica/plan de pruebas con comportamiento actual y anexar ejemplo de request/response.
+
+3. Tanda C — Operación y cierre jerárquico
+- 99101, 99103, 99091, 99089
+- Acciones:
+    - Ejecutar validación de rendimiento/calidad.
+    - Aplicar checklist de observabilidad (métricas + alertas mínimas).
+    - Cerrar Feature y Epic con traza de evidencias previas.
+
+### 7.8.4 Avance ejecutado en esta iteración
+
+- Plan guardado en este roadmap.
+- Desarrollo: ampliación de `ObtenerActivoActivity` para soportar y mapear `DireccionTipificada` en payload/response.
+- Pruebas: alta de tests unitarios para validar envío y mapeo de dirección tipificada.
+- Pruebas unitarias en verde:
+    - `DocumentProcessOrchestratorTests`: 2/2 OK.
+    - `ObtenerActivoActivityTests`: 8/8 OK.
+- Evidencia E2E mínima de orquestador + AssetResolver (local):
+    - `RuntimeStatus=Completed` en `IngestDocument`.
+    - `DetalleEjecucion.AssetResolver.Ejecutado=true`.
+    - `DetalleEjecucion.AssetResolver.Exitoso=true`.
+    - Resultado final de la prueba: `PASS`.
+
+### 7.8.5 Resultado Tanda C (revision 2026-04-21)
+
+Estado revisado para los items de la tanda C: `99101`, `99103`, `99091`, `99089`.
+
+Evidencia comprobada en repositorio/ejecucion:
+- Existe prueba E2E local de orquestador con `RuntimeStatus=Completed`, `AssetResolver.Ejecutado=true` y `AssetResolver.Exitoso=true`.
+- Existe instrumentacion base en `PersistirActivity` con `TrackEvent("DocumentProcessed")` y metricas `DocumentIA.Duracion.*`.
+- Existe soporte tecnico de criterios y scoring en `ObtenerActivoActivity` (`Score`, `CandidatosEvaluados`, `Razon`) para salida funcional.
+
+Gap objetivo detectado para cierre:
+- `99101 (Rendimiento/calidad)`: no hay informe trazable de p95/p99 ni medicion de precision/recall sobre dataset representativo.
+- `99103 (Hardening/telemetria)`: no hay evidencia cerrable de telemetria operativa completa del matching (criterio usado, score, descartes y razon de seleccion/rechazo) ni checklist de alertado operativo verificado.
+
+Decision de estado aplicada en ADO:
+- `99101` y `99103`: mantener abiertos en `In Progress` con checklist de cierre.
+- `99091` y `99089`: mantener abiertos por dependencia jerarquica de los dos items anteriores.
+
+### 7.8.6 Checklist de cierre pendiente (Tanda C)
+
+1. `99101` (rendimiento y calidad):
+    - KPI de rendimiento obligatorios: p50/p95/p99 de latencia E2E (ms) por tipologia en ventana de 7 dias.
+    - Metodo de medicion reproducible (App Insights): ejecutar query Q3 de `4.12.4` en `04_MANUAL_EXPLOTACION.md` y guardar resultado (tabla o captura) con fecha/hora de consulta.
+    - KPI de calidad obligatorios: precision y recall de matching sobre dataset etiquetado.
+    - Metodo de calidad reproducible: para cada documento del dataset, comparar `IdActivo_esperado` vs `IdActivo_obtenido` y publicar matriz de conteo (`TP`, `FP`, `FN`) + calculo:
+        - `precision = TP / (TP + FP)`
+        - `recall = TP / (TP + FN)`
+    - Tuning documentado: registrar umbral final (`umbralScoreDireccion`) y razon de negocio/tecnica para mantener o ajustar.
+
+2. `99103` (hardening y telemetria):
+    - Telemetria minima operativa de matching (dedicada): criterio aplicado, score, candidatos evaluados, candidatos descartados y razon de seleccion/rechazo.
+    - Evidencia aceptable para cierre: query KQL guardada en App Insights (o captura equivalente) que muestre eventos de matching en una ventana temporal concreta.
+    - Alertas minimas operativas verificadas:
+        - Error rate de procesamiento (`DocumentProcessed` con `EstadoFinal=Error`) por ventana.
+        - p95 de latencia E2E por tipologia.
+        - Desviacion de calidad (precision/recall por debajo del umbral acordado en la tanda).
+    - Validacion de alertas: dejar constancia de regla, umbral y accion configurada (email/Teams/PagerDuty) en comentario de WI.
+
+3. Checklist de validacion para pasar a `Done`:
+    - `99101`: existe evidencia trazable de p50/p95/p99 + informe precision/recall + decision de tuning documentada.
+    - `99103`: existe evidencia de telemetria de matching + alertas minimas configuradas y verificadas.
+    - `99091` y `99089`: pasar a `Done` solo cuando `99101` y `99103` esten en `Done`.
+
+### 7.8.7 Ejecucion automatizada del paquete de evidencia (Tanda C)
+
+Script operativo disponible:
+- `scripts/collect-tandac-evidence.ps1`
+
+Uso recomendado:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\collect-tandac-evidence.ps1 \
+    -ResourceGroup "SRBRGDOCSAIPROD" \
+    -AppInsightsName "srbappiprodocai" \
+    -Subscription "<subscription-id-o-nombre>" \
+    -DatasetCsv ".\artifacts\dataset-matching.csv"
+```
+
+Formato esperado del dataset para calidad (`-DatasetCsv`):
+- Columnas obligatorias: `IdActivoEsperado`, `IdActivoObtenido`
+- El script calcula automaticamente `TP`, `FP`, `FN`, `precision`, `recall`.
+
+Artefactos generados por el script (en `artifacts/tandac-evidence-yyyymmdd-hhmmss`):
+- `Q1-EjecucionesRecientes.(json/csv)`
+- `Q2-TasaError.(json/csv)`
+- `Q3-LatenciaP50P95P99.(json/csv)`
+- `Q4-Fallback.(json/csv)`
+- `Q5-EventosAssetResolver.(json/csv)`
+- `Q6-MatchingDetallado.(json/csv)`
+- `Q7-PrecisionRecall.(json/csv)` (si se informa dataset)
+- `Resumen-TandaC.txt`
+
+Regla de cierre sugerida con estos artefactos:
+- `99101`: adjuntar `Q3` + `Q7` + decision final de umbral.
+- `99103`: adjuntar `Q5` + `Q6` + evidencia de alertas (regla, umbral, accion).

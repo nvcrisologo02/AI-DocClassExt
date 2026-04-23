@@ -598,12 +598,15 @@ Backoff exponencial: `delay = initialDelayMs * 2^(attempt - 1)`
 
 ### 5.7b.1 Descripcion
 
-La actividad `ObtenerActivo` permite resolver automaticamente el `IdActivo` de un documento consultando la tabla `DM_POSICION_AAII_TB` del plugin AssetResolver. Se ejecuta **entre Validar e Integrar** y es **opcional** (deshabilitada por defecto).
+La actividad `ObtenerActivo` permite resolver automaticamente el `IdActivo` de un documento consultando las tablas `DM_POSICION_AAII_TB` y/o `DM_POSICION_AACC_TB` del plugin AssetResolver. Se ejecuta **entre Validar e Integrar** y es **opcional** (deshabilitada por defecto).
 
-El AssetResolver soporta **tres criterios de busqueda** configurables:
+El AssetResolver soporta **cuatro criterios de busqueda** configurables:
 - **IDUFIR**: busqueda exacta por codigo IDUFIR (columna `ID_IDUFIR`).
 - **Referencia Catastral**: busqueda exacta por referencia (columna `ID_REF_CATAST`).
-- **Direccion**: busqueda fuzzy por direccion con scoring (columnas `NOM_VIA`, `NUM_VIA`, `NOM_MUNIC`, `COD_POST`).
+- **Direccion fuzzy**: busqueda fuzzy por direccion con scoring (columnas `DES_NOMBRE_VIA`, `NUM_VIA`, `DES_MUNICP`, `NUM_COD_POSTAL`).
+- **Direccion tipificada**: busqueda exacta/parcial por campos de direccion estructurados (filtros AND independientes en BD).
+
+Ver contrato funcional de precedencia en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md#13-contrato-funcional-de-precedencia-de-criterios-y-propagacion-de-idactivo).
 
 Cada criterio se puede habilitar/deshabilitar independientemente, y los resultados se combinan segun un **modo de combinacion configurable** (AND u OR).
 
@@ -627,6 +630,8 @@ En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion
     "busquedaIdufirHabilitada": true,
     "busquedaReferenciaCatastralHabilitada": true,
     "busquedaDireccionHabilitada": false,
+    "AAII_Search": true,
+    "AACC_Search": true,
     "camposSolicitados": ["#ALL#"],
     "mapeoIdufir": ["IDUFIR", "IDUFIR_CRU", "CRU"],
     "mapeoReferenciaCatastral": ["ReferenciaCatastral", "RefCatastral"],
@@ -647,7 +652,10 @@ En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion
 | `busquedaIdufirHabilitada` | bool | `true` | Si `true`, incluye IDUFIR como criterio de busqueda. |
 | `busquedaReferenciaCatastralHabilitada` | bool | `true` | Si `true`, incluye Referencia Catastral como criterio. |
 | `busquedaDireccionHabilitada` | bool | `false` | Si `true`, habilita busqueda fuzzy por direccion. |
-| `camposSolicitados` | string[] | `null` | Columnas de `DM_POSICION_AAII_TB` a retornar. `#ALL#` expande a todas. |
+| `AAII_Search` | bool | `true` | Si `true`, consulta el origen AAII (`DM_POSICION_AAII_TB`). |
+| `AACC_Search` | bool | `true` | Si `true`, consulta el origen AACC (`DM_POSICION_AACC_TB`). |
+| `busquedaDireccionTipificadaHabilitada` | bool | `false` | Si `true`, habilita busqueda por campos tipificados (AND en BD). Requiere que el request incluya el objeto `direccionTipificada`. |
+| `camposSolicitados` | string[] | `null` | Columnas a retornar por origen consultado. `#ALL#` expande a todas las columnas del origen. |
 | `mapeoIdufir` | string[] | `[]` | Claves de `DatosExtraidos` donde buscar el IDUFIR. |
 | `mapeoReferenciaCatastral` | string[] | `[]` | Claves de `DatosExtraidos` donde buscar la Referencia Catastral. |
 | `mapeoDireccionCompleta` | string[] | `[]` | Claves para direccion completa (ej. "CALLE MAYOR 1, MADRID"). Se parsea automaticamente. |
@@ -806,7 +814,7 @@ Cuando AssetResolver se ejecuta, `detalleEjecucion.assetResolver` contiene:
 | `ejecutado` | bool | `true` si el paso se ejecuto (no fue skipped). |
 | `exitoso` | bool | `true` si se encontro al menos un activo. |
 | `activosEncontrados` | int | Numero de activos encontrados (tras deduplicacion). |
-| `criteriosUsados` | object | Detalle de criterios: `idufir`, `referenciaCatastral`, `modoCombinacionCriterios`, `direccion`. |
+| `criteriosUsados` | object | Detalle de criterios: `idufir`, `referenciaCatastral`, `modoCombinacionCriterios`, `direccion`, `direccionTipificada`. |
 | `activos` | array | Lista de `{ idActivo, fchCierre, camposSolicitados: {} }`. |
 | `camposConError` | string[] | Columnas solicitadas que no existen en la tabla. |
 | `mensaje` | string | Mensaje descriptivo del resultado. |
@@ -863,7 +871,19 @@ R: La actividad `SubirGDCActivity` tiene un timeout hardcoded de 120s en el orch
 
 **P: "Cold start" lento en Azure.**
 R: Normal en Consumption Plan (2-10s). Para reducirlo: considerar Premium Plan con warm instances, o mantener un health check periodico.
+**P: AssetResolver devuelve `Found=false` con mensaje "No se encontraron criterios".**
+R: Ningun criterio habilitado pudo resolver un valor desde `DatosExtraidos`. Verificar que:
+- Los mapeos (`mapeoIdufir`, `mapeoDireccionCompleta`, etc.) incluyen las claves exactas que devuelve el extractor.
+- O bien que `instrucciones.assetResolver.camposBusqueda.idufir` contiene el valor override.
 
+**P: Score de direccion siempre <= 0.3.**
+R: Probable discrepancia entre la cadena de entrada y los datos en `DM_POSICION_AAII_TB`. Verificar el campo `criteriosUsados.direccion.direccionNormalizada` en la respuesta. Considerar reducir `umbralScoreDireccion` a `0.5` para diagnostico o usar `mapeoDireccionNombreVia` + `mapeoDireccionMunicipio` por separado en lugar de `mapeoDireccionCompleta`.
+
+**P: AssetResolver encuentra N>1 activos y el IdActivo no se propaga.**
+R: Por diseno. La propagacion automatica solo se produce con match unico (`Count=1`). Con multiples activos, el sistema es conservador y no sobreescribe el IdActivo. Los activos encontrados estan en `detalleEjecucion.assetResolver.activos` para revision manual.
+
+**P: La busqueda tipificada no filtra aunque se informen campos.**
+R: Verificar que `busquedaDireccionTipificadaHabilitada: true` en la config de tipologia O en `instrucciones.assetResolver`. El objeto `direccionTipificada` debe llegar en el request al plugin (el orquestador lo propaga desde `instrucciones.assetResolver.camposBusqueda.direccionTipificada`).
 **P: Migraciones EF no se aplican.**
 R: Verificar que `RunDatabaseMigrationsOnStartup=true` en la configuracion. Si falla, aplicar manualmente:
 ```powershell

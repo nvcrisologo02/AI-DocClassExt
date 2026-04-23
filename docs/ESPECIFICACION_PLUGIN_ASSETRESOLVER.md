@@ -8,7 +8,7 @@
 
 ## 1. Proposito
 
-El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **IdActivo** (codigo de activo inmobiliario SAREB) a partir de datos extraidos de documentos y/o criterios explicitos en request. Consulta la tabla maestra `DM_POSICION_AAII_TB` usando cuatro criterios de busqueda configurables: IDUFIR, Referencia Catastral, Direccion fuzzy y Direccion tipificada.
+El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **IdActivo** (codigo de activo inmobiliario SAREB) a partir de datos extraidos de documentos y/o criterios explicitos en request. Consulta las tablas maestras `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB` usando cuatro criterios de busqueda configurables: IDUFIR, Referencia Catastral, Direccion fuzzy y Direccion tipificada.
 
 ---
 
@@ -22,7 +22,7 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
                                                                     │
                                                                     ▼
                                                        ┌──────────────────────────┐
-                                                       │   DM_POSICION_AAII_TB    │
+                                                       │ DM_POSICION_AAII_TB/AACC │
                                                        │   (SQL Server / Azure)   │
                                                        └──────────────────────────┘
 ```
@@ -48,6 +48,8 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
     "Localizacion": "CALLE MAYOR 1, 28013 MADRID"
   },
   "requestedFields": ["#ALL#"],
+  "AAII_Search": true,
+  "AACC_Search": true,
   "idufirOverride": null,
   "referenciaCatastralOverride": null,
   "modoCombinacionCriterios": "OR",
@@ -87,7 +89,9 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
 | `correlationId` | string | **required** | ID de correlacion para trazabilidad. |
 | `documentType` | string | `null` | Tipologia del documento (informativo). |
 | `extractedData` | dict | `{}` | Campos extraidos del documento (clave-valor). |
-| `requestedFields` | string[] | `null` | Columnas a retornar. `#ALL#` = todas. `null` = solo obligatorias. |
+| `requestedFields` | string[] | `null` | Columnas a retornar. `#ALL#` = todas las columnas del origen consultado. `null` = solo obligatorias. |
+| `AAII_Search` | bool | `true` | Si `true`, consulta origen AAII (`DM_POSICION_AAII_TB`). |
+| `AACC_Search` | bool | `true` | Si `true`, consulta origen AACC (`DM_POSICION_AACC_TB`). |
 | `idufirOverride` | string | `null` | Valor IDUFIR explicito (ignora extractedData). |
 | `referenciaCatastralOverride` | string | `null` | Valor RefCat explicito. |
 | `modoCombinacionCriterios` | string | `"OR"` | `AND` = interseccion, `OR` = union. |
@@ -151,6 +155,10 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
       "camposSolicitados": { "DES_NOMBRE_VIA": "CALLE MAYOR", "NUM_VIA": "1" }
     }
   ],
+  "activosAAII": [],
+  "activosAACC": [],
+  "countAAII": 0,
+  "countAACC": 1,
   "camposConError": [],
   "message": "Encontrado 1 activo con criterio: Idufir OR Direccion",
   "duracionMs": 45,
@@ -191,7 +199,7 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
 
 6. Deduplicar por ID_ACTIVO_SAREB
 
-7. Construir response con campos solicitados
+7. Construir response con campos solicitados por origen (AAII/AACC)
 ```
 
 ### 4.2 Deteccion de Valores
@@ -520,6 +528,85 @@ Ejecutar:
 ```powershell
 cd src\plugins\DocumentIA.AssetResolver.Tests
 dotnet test
+```
+
+---
+
+## 13. Contrato Funcional de Precedencia de Criterios y Propagacion de IdActivo
+
+> **Estado**: Aprobado — 2026-04-21
+
+Este apartado formaliza las reglas de precedencia y propagacion que rigen el comportamiento del plugin AssetResolver. Sirve como contrato funcional de referencia para desarrollo, pruebas y operaciones.
+
+### 13.1 Precedencia en la Resolucion del Valor de Cada Criterio
+
+Cada criterio (IDUFIR, ReferenciaCatastral, Direccion, DireccionTipificada) resuelve su valor de forma independiente siguiendo este orden de precedencia:
+
+```
+1. Override explicito de la peticion HTTP
+   (instrucciones.assetResolver.camposBusqueda.idufir / .referenciaCatastral)
+
+2. Valor en extractedData via aliases de tipologia
+   (configuracion.mapeoIdufir, .mapeoReferenciaCatastral, .mapeoDireccionCompleta, ...)
+
+3. Valor en extractedData via aliases globales del plugin
+   (FieldAliases: Idufir, ReferenciaCatastral, DireccionCompleta)
+
+4. Sin valor → criterio no participa en la busqueda
+```
+
+Nota: DireccionTipificada no usa aliases; su valor proviene siempre del objeto `request.direccionTipificada` (path 1 o directamente del campo `instrucciones.assetResolver.camposBusqueda.direccionTipificada` si se informa).
+
+### 13.2 Orden de Fiabilidad de Criterios
+
+Desde el punto de vista funcional, los criterios tienen la siguiente fiabilidad decreciente para identificar univocamente un activo:
+
+| Prioridad | Criterio | Tipo de busqueda | Fiabilidad |
+|-----------|----------|-----------------|------------|
+| 1 | IDUFIR | Exacta (`ID_IDUFIR = @valor`) | Alta — identificador registral unico |
+| 2 | Referencia Catastral | Exacta (`ID_REF_CATAST = @valor`) | Alta — identificador catastral unico |
+| 3 | Direccion fuzzy | Scoring Jaccard en memoria | Media — sujeto a normalizacion y umbral |
+| 4 | Direccion tipificada | Filtros AND en BD | Media — precision dependiente de campos informados |
+
+Esta tabla de fiabilidad **no implica un orden de ejecucion**: todos los criterios habilitados se ejecutan en paralelo. Su combinacion se controla mediante `modoCombinacionCriterios` (OR / AND).
+
+### 13.3 Reglas de Propagacion de IdActivo
+
+El orquestador aplica las siguientes reglas tras recibir la respuesta del plugin:
+
+| Escenario | Comportamiento |
+|-----------|---------------|
+| `Count = 0` (no encontrado) | IdActivo **no se modifica**. Se mantiene el valor de `trazabilidad.idActivo` de entrada. |
+| `Count = 1` (match unico) | IdActivo **se reemplaza** por `activos[0].idActivo`. Este valor se propaga a IntegrarActivity y a `salida.Integridad.IdActivo`. |
+| `Count > 1` (ambiguo) | IdActivo **no se modifica**. La lista de activos encontrados se incluye en `detalleEjecucion.assetResolver.activos` para consulta pero ninguno se selecciona automaticamente. |
+
+**Regla de oro**: la propagacion automatica de IdActivo solo se produce con match unico inequivoco (`Count = 1`). Para los demas casos, el sistema es conservador y no sobreescribe el IdActivo de entrada.
+
+### 13.4 Umbral de Scoring por Defecto
+
+El umbral de scoring para busqueda por direccion fuzzy se rige por:
+
+```
+umbralScoreDireccion:
+  configuracion tipologia  (si informado y > 0)
+  ?? 0.75                  (valor por defecto)
+```
+
+El umbral de 0.75 es el valor inicial acordado. Puede ajustarse por tipologia en `ConfiguracionJson.assetResolver.umbralScoreDireccion`. Un valor de `0` o negativo se trata como `0.75` (evita umbral nulo).
+
+### 13.5 Resumen del Contrato
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  CONTRATO FUNCIONAL ASSETRESOLVER — v1.0                        │
+│                                                                 │
+│  1. Precedencia valor: override > tipologia > global > nulo     │
+│  2. Criterios: IDUFIR > RefCat > Direccion > DirecTipificada    │
+│     (fiabilidad decreciente; ejecucion en paralelo)             │
+│  3. Combinacion: OR (union) o AND (interseccion) configurable   │
+│  4. Propagacion IdActivo: solo si Count == 1                    │
+│  5. Umbral scoring direccion: 0.75 (ajustable por tipologia)    │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---

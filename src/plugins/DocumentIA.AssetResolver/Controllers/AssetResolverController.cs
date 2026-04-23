@@ -91,6 +91,16 @@ public class AssetResolverController : ControllerBase
         /// </summary>
         public string ModoCombinacionCriterios { get; set; } = "OR";
 
+        /// <summary>
+        /// Si true, se consulta el origen AAII (DM_POSICION_AAII_TB).
+        /// </summary>
+        public bool AAII_Search { get; set; } = true;
+
+        /// <summary>
+        /// Si true, se consulta el origen AACC (DM_POSICION_AACC_TB).
+        /// </summary>
+        public bool AACC_Search { get; set; } = true;
+
         // ── Búsqueda por dirección como criterio adicional ──
 
         /// <summary>Si true, se incluye IDUFIR como criterio de búsqueda. Default: true.</summary>
@@ -151,8 +161,15 @@ public class AssetResolverController : ControllerBase
         public bool Found { get; set; }
         public int Count { get; set; }
         public AssetResolverService.CriteriosUsados? CriteriosUsados { get; set; }
+        /// <summary>Agregado legacy de resultados (AAII + AACC) para compatibilidad hacia atrás.</summary>
         public List<AssetResolverService.ActivoEncontrado> Activos { get; set; } = [];
         public List<string> CamposConError { get; set; } = [];
+        public int CountAAII { get; set; }
+        public int CountAACC { get; set; }
+        public List<AssetResolverService.ActivoEncontrado> ActivosAAII { get; set; } = [];
+        public List<AssetResolverService.ActivoEncontrado> ActivosAACC { get; set; } = [];
+        public List<string> CamposConErrorAAII { get; set; } = [];
+        public List<string> CamposConErrorAACC { get; set; } = [];
         public string Message { get; set; } = string.Empty;
         public int DuracionMs { get; set; }
         public string? Error { get; set; }

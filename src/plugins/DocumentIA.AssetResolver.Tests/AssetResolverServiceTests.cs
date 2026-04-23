@@ -71,6 +71,7 @@ public class AssetResolverServiceTests
         Assert.Contains("FCH_ALTA", campos.Keys, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("FCH_BAJA", campos.Keys, StringComparer.OrdinalIgnoreCase);
         Assert.Contains("DES_SERVICER", campos.Keys, StringComparer.OrdinalIgnoreCase);
+        Assert.Contains("IND_STATUS", campos.Keys, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -199,7 +200,7 @@ public class AssetResolverServiceTests
 
         Assert.True(response.Found);
         Assert.Equal(1, response.Count);
-        Assert.Equal("Direccion", response.CriterioUtilizado, ignoreCase: true);
+        Assert.Contains("Direccion", response.CriterioUtilizado ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         Assert.Equal("CALLE MAYOR", response.CriteriosUsados?.Direccion?.NombreVia, ignoreCase: true);
         Assert.Equal("1", response.CriteriosUsados?.Direccion?.Numero, ignoreCase: true);
         Assert.Equal("MADRID", response.CriteriosUsados?.Direccion?.Municipio, ignoreCase: true);
@@ -261,5 +262,109 @@ public class AssetResolverServiceTests
         Assert.False(response.Found);
         Assert.Equal(0, response.Count);
         Assert.Equal("AND", response.CriteriosUsados?.ModoCombinacionCriterios);
+    }
+
+    [Fact]
+    public async Task BuscarActivos_ConOrigenAacc_DevuelveResultadosSeparadosPorTipo()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateInMemoryDb(dbName, d =>
+        {
+            d.DmPosicionAAII.Add(new DmPosicionAAII
+            {
+                IdActivoSareb = 100m,
+                FchCierreDt = new DateTime(2026, 1, 1),
+                IdIdufir = "ID-MIX",
+                DesServicer = "S-AAII",
+                IndStatus = "A",
+                FchCierre = new DateTime(2026, 1, 1)
+            });
+
+            d.DmPosicionAACC.Add(new DmPosicionAACC
+            {
+                IdActivoSareb = 200m,
+                FchCierreDt = new DateTime(2026, 1, 1),
+                IdIdufir = "ID-MIX",
+                DesServicer = "S-AACC",
+                IndStatus = "A",
+                FchCierre = new DateTime(2026, 1, 1)
+            });
+
+            d.SaveChanges();
+        });
+
+        var options = Options.Create(new FieldAliasesConfig());
+        var service = new AssetResolverService(db, options, NullLogger<AssetResolverService>.Instance);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "c6",
+            MapeoIdufir = new List<string> { "IDUFIR" },
+            ExtractedData = new Dictionary<string, string?> { ["IDUFIR"] = "ID-MIX" },
+            RequestedFields = new List<string> { "ID_ACTIVO_SAREB" },
+            AAII_Search = true,
+            AACC_Search = true
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.True(response.Found);
+        Assert.Equal(2, response.Count);
+        Assert.Equal(1, response.CountAAII);
+        Assert.Equal(1, response.CountAACC);
+        Assert.Single(response.ActivosAAII);
+        Assert.Single(response.ActivosAACC);
+    }
+
+    [Fact]
+    public async Task BuscarActivos_OrigenSoloAacc_FiltraYNoConsultaAaii()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        using var db = CreateInMemoryDb(dbName, d =>
+        {
+            d.DmPosicionAAII.Add(new DmPosicionAAII
+            {
+                IdActivoSareb = 300m,
+                FchCierreDt = new DateTime(2026, 1, 1),
+                IdIdufir = "ID-SOLO-AAII",
+                DesServicer = "S-AAII",
+                IndStatus = "A",
+                FchCierre = new DateTime(2026, 1, 1)
+            });
+
+            d.DmPosicionAACC.Add(new DmPosicionAACC
+            {
+                IdActivoSareb = 400m,
+                FchCierreDt = new DateTime(2026, 1, 1),
+                IdIdufir = "ID-SOLO-AACC",
+                DesServicer = "S-AACC",
+                IndStatus = "A",
+                FchCierre = new DateTime(2026, 1, 1)
+            });
+
+            d.SaveChanges();
+        });
+
+        var options = Options.Create(new FieldAliasesConfig());
+        var service = new AssetResolverService(db, options, NullLogger<AssetResolverService>.Instance);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "c7",
+            MapeoIdufir = new List<string> { "IDUFIR" },
+            ExtractedData = new Dictionary<string, string?> { ["IDUFIR"] = "ID-SOLO-AACC" },
+            RequestedFields = new List<string> { "ID_ACTIVO_SAREB" },
+            AAII_Search = false,
+            AACC_Search = true
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.True(response.Found);
+        Assert.Equal(1, response.Count);
+        Assert.Equal(0, response.CountAAII);
+        Assert.Equal(1, response.CountAACC);
+        Assert.Empty(response.ActivosAAII);
+        Assert.Single(response.ActivosAACC);
     }
 }
