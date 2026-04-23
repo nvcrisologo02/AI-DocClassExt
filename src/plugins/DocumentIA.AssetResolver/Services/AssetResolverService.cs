@@ -25,7 +25,8 @@ public class AssetResolverService
         "FCH_CIERRE",
         "FCH_ALTA",
         "FCH_BAJA",
-        "DES_SERVICER"
+        "DES_SERVICER",
+        "IND_STATUS"
     };
 
     private sealed record FieldProjection(PropertyInfo Property, string ColumnName);
@@ -40,6 +41,12 @@ public class AssetResolverService
 
     private sealed record DireccionSearchResult(
         List<DmPosicionAAII> Resultados,
+        double MejorScore,
+        int CandidatosEvaluados,
+        string Razon);
+
+    private sealed record DireccionSearchResultAacc(
+        List<DmPosicionAACC> Resultados,
         double MejorScore,
         int CandidatosEvaluados,
         string Razon);
@@ -69,6 +76,11 @@ public class AssetResolverService
         int CandidatosEvaluados,
         string Razon);
 
+    private sealed record DireccionTipificadaSearchResultAacc(
+        List<DmPosicionAACC> Resultados,
+        int CandidatosEvaluados,
+        string Razon);
+
     private static readonly Dictionary<string, FieldProjection> ValidFieldsByRequestName = BuildValidFieldsByRequestName();
 
     private static readonly Dictionary<string, FieldProjection> ValidFieldsByColumnName =
@@ -78,6 +90,18 @@ public class AssetResolverService
 
     private static readonly List<string> AllColumnNames =
         ValidFieldsByColumnName.Keys
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static readonly Dictionary<string, FieldProjection> ValidFieldsByRequestNameAacc = BuildValidFieldsByRequestName(typeof(DmPosicionAACC));
+
+    private static readonly Dictionary<string, FieldProjection> ValidFieldsByColumnNameAacc =
+        ValidFieldsByRequestNameAacc.Values
+            .GroupBy(v => v.ColumnName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+    private static readonly List<string> AllColumnNamesAacc =
+        ValidFieldsByColumnNameAacc.Keys
             .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -170,6 +194,12 @@ public class AssetResolverService
             return response;
         }
 
+        if (!request.AAII_Search && !request.AACC_Search)
+        {
+            response.Message = "No hay ningún origen habilitado para búsqueda. Activa AAII_Search y/o AACC_Search.";
+            return response;
+        }
+
         response.CriteriosUsados = new CriteriosUsados
         {
             Idufir = idufir,
@@ -205,62 +235,125 @@ public class AssetResolverService
                 }
         };
 
-        // 2. Resolver campos solicitados por nombre de columna; #ALL# expande a todas las columnas.
-        var camposValidos = ResolveRequestedFields(request.RequestedFields, out var camposConError);
-        response.CamposConError = camposConError;
+        // 2. Resolver campos solicitados por origen; #ALL# expande a todas las columnas de ese origen.
+        List<string> erroresAaii = [];
+        List<string> erroresAacc = [];
 
-        // 3. Consultar BD por cada criterio resuelto y combinar resultados
-        var resultadosPorCriterio = new List<(string Nombre, List<DmPosicionAAII> Resultados)>();
+        var camposValidosAaii = request.AAII_Search
+            ? ResolveRequestedFields(request.RequestedFields, ValidFieldsByRequestName, AllColumnNames, out erroresAaii)
+            : [];
 
-        if (!string.IsNullOrWhiteSpace(idufir))
+        var camposValidosAacc = request.AACC_Search
+            ? ResolveRequestedFields(request.RequestedFields, ValidFieldsByRequestNameAacc, AllColumnNamesAacc, out erroresAacc)
+            : [];
+
+        response.CamposConErrorAAII = erroresAaii;
+        response.CamposConErrorAACC = erroresAacc;
+        response.CamposConError = [.. erroresAaii.Concat(erroresAacc).Distinct(StringComparer.OrdinalIgnoreCase)];
+
+        // 3. Consultar BD por origen habilitado y combinar resultados por criterio en cada origen.
+        List<(string Nombre, List<DmPosicionAAII> Resultados)> resultadosAaiiPorCriterio = [];
+        List<(string Nombre, List<DmPosicionAACC> Resultados)> resultadosAaccPorCriterio = [];
+
+        if (request.AAII_Search)
         {
-            resultadosPorCriterio.Add(("Idufir", await ConsultarPorIdufirAsync(idufir, ct)));
+            if (!string.IsNullOrWhiteSpace(idufir))
+                resultadosAaiiPorCriterio.Add(("Idufir", await ConsultarPorIdufirAsync(idufir, ct)));
+
+            if (!string.IsNullOrWhiteSpace(refCatastral))
+                resultadosAaiiPorCriterio.Add(("ReferenciaCatastral", await ConsultarPorRefCatastralAsync(refCatastral, ct)));
+
+            if (direccionResuelta is not null)
+            {
+                var direccionResultado = await BuscarPorDireccionAsync(
+                    direccionResuelta.Query,
+                    request.UmbralScoreDireccion > 0.0 ? request.UmbralScoreDireccion : 0.75,
+                    ct);
+
+                response.CriteriosUsados!.Direccion!.Score = direccionResultado.MejorScore;
+                response.CriteriosUsados.Direccion.CandidatosEvaluados = direccionResultado.CandidatosEvaluados;
+                response.CriteriosUsados.Direccion.Razon = direccionResultado.Razon;
+                resultadosAaiiPorCriterio.Add(("Direccion", direccionResultado.Resultados));
+            }
+
+            if (direccionTipificadaResuelta is not null)
+            {
+                var direccionTipificadaResultado = await BuscarPorDireccionTipificadaAsync(direccionTipificadaResuelta, ct);
+                response.CriteriosUsados!.DireccionTipificada!.CandidatosEvaluados = direccionTipificadaResultado.CandidatosEvaluados;
+                response.CriteriosUsados.DireccionTipificada.Razon = direccionTipificadaResultado.Razon;
+                resultadosAaiiPorCriterio.Add(("DireccionTipificada", direccionTipificadaResultado.Resultados));
+            }
         }
 
-        if (!string.IsNullOrWhiteSpace(refCatastral))
+        if (request.AACC_Search)
         {
-            resultadosPorCriterio.Add(("ReferenciaCatastral", await ConsultarPorRefCatastralAsync(refCatastral, ct)));
+            if (!string.IsNullOrWhiteSpace(idufir))
+                resultadosAaccPorCriterio.Add(("Idufir", await ConsultarPorIdufirAaccAsync(idufir, ct)));
+
+            if (!string.IsNullOrWhiteSpace(refCatastral))
+                resultadosAaccPorCriterio.Add(("ReferenciaCatastral", await ConsultarPorRefCatastralAaccAsync(refCatastral, ct)));
+
+            if (direccionResuelta is not null)
+            {
+                var direccionResultado = await BuscarPorDireccionAaccAsync(
+                    direccionResuelta.Query,
+                    request.UmbralScoreDireccion > 0.0 ? request.UmbralScoreDireccion : 0.75,
+                    ct);
+
+                if (response.CriteriosUsados?.Direccion is not null
+                    && direccionResultado.MejorScore > response.CriteriosUsados.Direccion.Score)
+                {
+                    response.CriteriosUsados.Direccion.Score = direccionResultado.MejorScore;
+                    response.CriteriosUsados.Direccion.CandidatosEvaluados = direccionResultado.CandidatosEvaluados;
+                    response.CriteriosUsados.Direccion.Razon = direccionResultado.Razon;
+                }
+
+                resultadosAaccPorCriterio.Add(("Direccion", direccionResultado.Resultados));
+            }
+
+            if (direccionTipificadaResuelta is not null)
+            {
+                var direccionTipificadaResultado = await BuscarPorDireccionTipificadaAaccAsync(direccionTipificadaResuelta, ct);
+
+                if (response.CriteriosUsados?.DireccionTipificada is not null
+                    && direccionTipificadaResultado.CandidatosEvaluados > response.CriteriosUsados.DireccionTipificada.CandidatosEvaluados)
+                {
+                    response.CriteriosUsados.DireccionTipificada.CandidatosEvaluados = direccionTipificadaResultado.CandidatosEvaluados;
+                    response.CriteriosUsados.DireccionTipificada.Razon = direccionTipificadaResultado.Razon;
+                }
+
+                resultadosAaccPorCriterio.Add(("DireccionTipificada", direccionTipificadaResultado.Resultados));
+            }
         }
 
-        if (direccionResuelta is not null)
+        var resultadosAaii = CombinarResultados(resultadosAaiiPorCriterio, modoCombinacion);
+        var resultadosAacc = CombinarResultadosAacc(resultadosAaccPorCriterio, modoCombinacion);
+
+        response.ActivosAAII = resultadosAaii.Select(r => BuildActivoEncontrado(r, camposValidosAaii)).ToList();
+        response.ActivosAACC = resultadosAacc.Select(r => BuildActivoEncontradoAacc(r, camposValidosAacc)).ToList();
+        response.CountAAII = response.ActivosAAII.Count;
+        response.CountAACC = response.ActivosAACC.Count;
+
+        response.Activos =
+        [
+            .. response.ActivosAAII,
+            .. response.ActivosAACC
+        ];
+
+        response.Count = response.Activos.Count;
+        response.Found = response.Count > 0;
+
+        var criterioAaii = BuildCriterioUtilizado(resultadosAaiiPorCriterio, modoCombinacion);
+        var criterioAacc = BuildCriterioUtilizadoAacc(resultadosAaccPorCriterio, modoCombinacion);
+        response.CriterioUtilizado = string.Join(" | ", new[]
         {
-            var direccionResultado = await BuscarPorDireccionAsync(
-                direccionResuelta.Query,
-                request.UmbralScoreDireccion > 0.0 ? request.UmbralScoreDireccion : 0.75,
-                ct);
+            request.AAII_Search ? $"AAII:{(string.IsNullOrWhiteSpace(criterioAaii) ? "-" : criterioAaii)}" : null,
+            request.AACC_Search ? $"AACC:{(string.IsNullOrWhiteSpace(criterioAacc) ? "-" : criterioAacc)}" : null
+        }.Where(x => !string.IsNullOrWhiteSpace(x)));
 
-            response.CriteriosUsados.Direccion!.Score = direccionResultado.MejorScore;
-            response.CriteriosUsados.Direccion.CandidatosEvaluados = direccionResultado.CandidatosEvaluados;
-            response.CriteriosUsados.Direccion.Razon = direccionResultado.Razon;
-
-            resultadosPorCriterio.Add(("Direccion", direccionResultado.Resultados));
-        }
-
-        if (direccionTipificadaResuelta is not null)
-        {
-            var direccionTipificadaResultado = await BuscarPorDireccionTipificadaAsync(direccionTipificadaResuelta, ct);
-            response.CriteriosUsados.DireccionTipificada!.CandidatosEvaluados = direccionTipificadaResultado.CandidatosEvaluados;
-            response.CriteriosUsados.DireccionTipificada.Razon = direccionTipificadaResultado.Razon;
-            resultadosPorCriterio.Add(("DireccionTipificada", direccionTipificadaResultado.Resultados));
-        }
-
-        var resultados = CombinarResultados(resultadosPorCriterio, modoCombinacion);
-
-        if (resultados.Count == 0)
-        {
-            response.CriterioUtilizado = BuildCriterioUtilizado(resultadosPorCriterio, modoCombinacion);
-            response.Message = $"No se encontraron activos con los criterios proporcionados ({response.CriterioUtilizado}).";
-            return response;
-        }
-
-        // 4. Construir respuesta con campos solicitados
-        response.Found = true;
-        response.Count = resultados.Count;
-        response.Activos = resultados.Select(r => BuildActivoEncontrado(r, camposValidos)).ToList();
-        response.CriterioUtilizado = BuildCriterioUtilizado(resultadosPorCriterio, modoCombinacion);
-        response.Message = resultados.Count == 1
-            ? "Se encontró 1 activo."
-            : $"Se encontraron {resultados.Count} activos.";
+        response.Message = response.Count == 0
+            ? $"No se encontraron activos con los criterios proporcionados ({response.CriterioUtilizado})."
+            : $"Se encontraron {response.Count} activos (AAII={response.CountAAII}, AACC={response.CountAACC}).";
 
         return response;
     }
@@ -390,6 +483,63 @@ public class AssetResolverService
         return new DireccionSearchResult(resultados, mejorScore, candidatos.Count, razon);
     }
 
+    private async Task<DireccionSearchResultAacc> BuscarPorDireccionAaccAsync(
+        DireccionQuery query,
+        double umbral,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(query.NombreVia)
+            && string.IsNullOrEmpty(query.Numero)
+            && string.IsNullOrEmpty(query.Municipio)
+            && string.IsNullOrEmpty(query.CodigoPostal))
+        {
+            return new DireccionSearchResultAacc([], 0.0, 0, "Sin datos de dirección resolubles");
+        }
+
+        IQueryable<DmPosicionAACC> baseQuery = _db.DmPosicionAACC.AsNoTracking();
+
+        if (!string.IsNullOrEmpty(query.CodigoPostal))
+        {
+            baseQuery = baseQuery.Where(x => x.NumCodPostal != null && x.NumCodPostal == query.CodigoPostal);
+        }
+        else if (!string.IsNullOrEmpty(query.Municipio))
+        {
+            var municipioPrefix = query.Municipio[..Math.Min(query.Municipio.Length, 6)];
+            var municipioLikePattern = $"%{municipioPrefix}%";
+            baseQuery = baseQuery.Where(x => x.DesMunicp != null &&
+                EF.Functions.Like(x.DesMunicp, municipioLikePattern));
+        }
+
+        var candidatos = await baseQuery.ToListAsync(ct);
+
+        var conScore = candidatos
+            .Select(c =>
+            {
+                var cand = new DireccionCandidate(
+                    NombreVia: DireccionNormalizer.NormalizeNombreVia(c.DesNombreVia),
+                    Numero: DireccionNormalizer.NormalizeNumero(c.NumVia),
+                    Municipio: DireccionNormalizer.NormalizeMunicipio(c.DesMunicp),
+                    CodigoPostal: DireccionNormalizer.NormalizeCodigoPostal(c.NumCodPostal));
+                var score = DireccionNormalizer.ScoreDireccion(query, cand);
+                return (Entidad: c, Score: score);
+            })
+            .Where(x => x.Score >= umbral)
+            .OrderByDescending(x => x.Score)
+            .ToList();
+
+        var resultados = DeduplicarPorActivoAacc(conScore.Select(x => x.Entidad));
+        var mejorScore = conScore.Count == 0 ? 0.0 : conScore[0].Score;
+        var razon = conScore.Count == 0
+            ? (candidatos.Count == 0
+                ? "Sin candidatos tras pre-filtro"
+                : $"Ningún candidato superó el umbral de score {umbral:F2}")
+            : (resultados.Count == 1
+                ? $"1 activo superó el umbral {umbral:F2}"
+                : $"{resultados.Count} activos superaron el umbral {umbral:F2}");
+
+        return new DireccionSearchResultAacc(resultados, mejorScore, candidatos.Count, razon);
+    }
+
     private string? DetectarValor(
         Dictionary<string, string?> extractedData,
         string? overrideValue,
@@ -431,6 +581,28 @@ public class AssetResolverService
 
         _logger.LogInformation("Búsqueda por RefCatastral={RefCat}: {Count} registros", refCatastral, resultados.Count);
         return DeduplicarPorActivo(resultados);
+    }
+
+    private async Task<List<DmPosicionAACC>> ConsultarPorIdufirAaccAsync(string idufir, CancellationToken ct)
+    {
+        var resultados = await _db.DmPosicionAACC
+            .AsNoTracking()
+            .Where(x => x.IdIdufir == idufir)
+            .ToListAsync(ct);
+
+        _logger.LogInformation("Búsqueda AACC por IDUFIR={Idufir}: {Count} registros", idufir, resultados.Count);
+        return DeduplicarPorActivoAacc(resultados);
+    }
+
+    private async Task<List<DmPosicionAACC>> ConsultarPorRefCatastralAaccAsync(string refCatastral, CancellationToken ct)
+    {
+        var resultados = await _db.DmPosicionAACC
+            .AsNoTracking()
+            .Where(x => x.IdRefCatast == refCatastral)
+            .ToListAsync(ct);
+
+        _logger.LogInformation("Búsqueda AACC por RefCatastral={RefCat}: {Count} registros", refCatastral, resultados.Count);
+        return DeduplicarPorActivoAacc(resultados);
     }
 
     private static List<DmPosicionAAII> CombinarResultados(
@@ -494,8 +666,86 @@ public class AssetResolverService
             .ToList();
     }
 
+    private static List<DmPosicionAACC> CombinarResultadosAacc(
+        List<(string Nombre, List<DmPosicionAACC> Resultados)> resultadosPorCriterio,
+        string modoCombinacion)
+    {
+        var criteriosNormalizados = resultadosPorCriterio
+            .Select(x => (x.Nombre, Resultados: DeduplicarPorActivoAacc(x.Resultados)))
+            .ToList();
+
+        if (criteriosNormalizados.Count == 0)
+        {
+            return [];
+        }
+
+        if (string.Equals(modoCombinacion, "AND", StringComparison.OrdinalIgnoreCase)
+            && criteriosNormalizados.Any(x => x.Resultados.Count == 0))
+        {
+            return [];
+        }
+
+        var criteriosConResultados = string.Equals(modoCombinacion, "AND", StringComparison.OrdinalIgnoreCase)
+            ? criteriosNormalizados
+            : criteriosNormalizados.Where(x => x.Resultados.Count > 0).ToList();
+
+        if (criteriosConResultados.Count == 0)
+        {
+            return [];
+        }
+
+        var conjuntosPorCriterio = criteriosConResultados
+            .Select(x => x.Resultados.Select(GetAssetKeyAacc).ToHashSet(StringComparer.OrdinalIgnoreCase))
+            .ToList();
+
+        HashSet<string> idsFinales = new(conjuntosPorCriterio[0], StringComparer.OrdinalIgnoreCase);
+        foreach (var conjunto in conjuntosPorCriterio.Skip(1))
+        {
+            if (string.Equals(modoCombinacion, "AND", StringComparison.OrdinalIgnoreCase))
+            {
+                idsFinales.IntersectWith(conjunto);
+            }
+            else
+            {
+                idsFinales.UnionWith(conjunto);
+            }
+        }
+
+        return criteriosConResultados
+            .SelectMany(x => x.Resultados)
+            .Where(x => idsFinales.Contains(GetAssetKeyAacc(x)))
+            .GroupBy(GetAssetKeyAacc, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(x => x.FchCierreDt).First())
+            .ToList();
+    }
+
+    private static List<DmPosicionAACC> DeduplicarPorActivoAacc(IEnumerable<DmPosicionAACC> resultados)
+    {
+        return resultados
+            .GroupBy(GetAssetKeyAacc, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.OrderByDescending(x => x.FchCierreDt).First())
+            .ToList();
+    }
+
     private static string BuildCriterioUtilizado(
         List<(string Nombre, List<DmPosicionAAII> Resultados)> resultadosPorCriterio,
+        string modoCombinacion)
+    {
+        var nombres = resultadosPorCriterio
+            .Select(x => x.Nombre)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return nombres.Count switch
+        {
+            0 => string.Empty,
+            1 => nombres[0],
+            _ => string.Join($" {modoCombinacion} ", nombres)
+        };
+    }
+
+    private static string BuildCriterioUtilizadoAacc(
+        List<(string Nombre, List<DmPosicionAACC> Resultados)> resultadosPorCriterio,
         string modoCombinacion)
     {
         var nombres = resultadosPorCriterio
@@ -515,6 +765,9 @@ public class AssetResolverService
         => string.Equals(modo, "AND", StringComparison.OrdinalIgnoreCase) ? "AND" : "OR";
 
     private static string GetAssetKey(DmPosicionAAII entity)
+        => entity.IdActivoSareb.ToString("F0");
+
+    private static string GetAssetKeyAacc(DmPosicionAACC entity)
         => entity.IdActivoSareb.ToString("F0");
 
     private static DireccionParseResult ParseDireccionCompleta(string? direccionCompleta)
@@ -655,6 +908,46 @@ public class AssetResolverService
         return new DireccionTipificadaSearchResult(deduplicados, resultados.Count, razon);
     }
 
+    private async Task<DireccionTipificadaSearchResultAacc> BuscarPorDireccionTipificadaAaccAsync(
+        DireccionTipificadaResolvedValues direccion,
+        CancellationToken ct)
+    {
+        IQueryable<DmPosicionAACC> query = _db.DmPosicionAACC.AsNoTracking();
+
+        if (!string.IsNullOrEmpty(direccion.Pais))
+        { var p = $"%{direccion.Pais}%"; query = query.Where(x => x.DesPais != null && EF.Functions.Like(x.DesPais, p)); }
+        if (!string.IsNullOrEmpty(direccion.Provincia))
+        { var p = $"%{direccion.Provincia}%"; query = query.Where(x => x.DesProvnc != null && EF.Functions.Like(x.DesProvnc, p)); }
+        if (!string.IsNullOrEmpty(direccion.ComunidadAutonoma))
+        { var p = $"%{direccion.ComunidadAutonoma}%"; query = query.Where(x => x.DesComuniAuto != null && EF.Functions.Like(x.DesComuniAuto, p)); }
+        if (!string.IsNullOrEmpty(direccion.Municipio))
+        { var p = $"%{direccion.Municipio}%"; query = query.Where(x => x.DesMunicp != null && EF.Functions.Like(x.DesMunicp, p)); }
+        if (!string.IsNullOrEmpty(direccion.Poblacion))
+        { var p = $"%{direccion.Poblacion}%"; query = query.Where(x => x.DesPoblcn != null && EF.Functions.Like(x.DesPoblcn, p)); }
+        if (!string.IsNullOrEmpty(direccion.TipoVia))
+        { var p = $"%{direccion.TipoVia}%"; query = query.Where(x => x.DesTipoVia != null && EF.Functions.Like(x.DesTipoVia, p)); }
+        if (!string.IsNullOrEmpty(direccion.Calle))
+        { var p = $"%{direccion.Calle}%"; query = query.Where(x => x.DesNombreVia != null && EF.Functions.Like(x.DesNombreVia, p)); }
+        if (!string.IsNullOrEmpty(direccion.Numero))
+            query = query.Where(x => x.NumVia != null && x.NumVia == direccion.Numero);
+        if (!string.IsNullOrEmpty(direccion.Bloque))
+        { var p = $"%{direccion.Bloque}%"; query = query.Where(x => x.DesBloque != null && EF.Functions.Like(x.DesBloque, p)); }
+        if (!string.IsNullOrEmpty(direccion.Puerta))
+        { var p = $"%{direccion.Puerta}%"; query = query.Where(x => x.DesPuerta != null && EF.Functions.Like(x.DesPuerta, p)); }
+        if (!string.IsNullOrEmpty(direccion.CodigoPostal))
+            query = query.Where(x => x.NumCodPostal != null && x.NumCodPostal == direccion.CodigoPostal);
+        if (!string.IsNullOrEmpty(direccion.Planta))
+        { var p = $"%{direccion.Planta}%"; query = query.Where(x => x.DesPlanta != null && EF.Functions.Like(x.DesPlanta, p)); }
+
+        var resultados = await query.ToListAsync(ct);
+        var deduplicados = DeduplicarPorActivoAacc(resultados);
+        var razon = deduplicados.Count == 0
+            ? "Sin resultados para los filtros tipificados indicados"
+            : $"{deduplicados.Count} activos encontrados con filtros tipificados";
+
+        return new DireccionTipificadaSearchResultAacc(deduplicados, resultados.Count, razon);
+    }
+
     private static string? NormalizeTextForFilter(string? input)
     {
         if (string.IsNullOrWhiteSpace(input))
@@ -666,10 +959,13 @@ public class AssetResolverService
     }
 
     private static Dictionary<string, FieldProjection> BuildValidFieldsByRequestName()
+        => BuildValidFieldsByRequestName(typeof(DmPosicionAAII));
+
+    private static Dictionary<string, FieldProjection> BuildValidFieldsByRequestName(Type entityType)
     {
         var fields = new Dictionary<string, FieldProjection>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var property in typeof(DmPosicionAAII).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+        foreach (var property in entityType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
         {
             var columnName = property.GetCustomAttribute<ColumnAttribute>()?.Name ?? property.Name;
             var projection = new FieldProjection(property, columnName);
@@ -685,7 +981,11 @@ public class AssetResolverService
         return fields;
     }
 
-    private static List<string> ResolveRequestedFields(List<string>? requestedFields, out List<string> camposConError)
+    private static List<string> ResolveRequestedFields(
+        List<string>? requestedFields,
+        Dictionary<string, FieldProjection> validFieldsByRequestName,
+        List<string> allColumnNames,
+        out List<string> camposConError)
     {
         camposConError = new List<string>();
 
@@ -696,7 +996,7 @@ public class AssetResolverService
 
         if (requestedFields.Any(field => string.Equals(field?.Trim(), AllFieldsToken, StringComparison.OrdinalIgnoreCase)))
         {
-            return [.. AllColumnNames];
+            return [.. allColumnNames];
         }
 
         var camposValidos = new List<string>();
@@ -709,7 +1009,7 @@ public class AssetResolverService
                 continue;
             }
 
-            if (ValidFieldsByRequestName.TryGetValue(normalized, out var fieldProjection))
+            if (validFieldsByRequestName.TryGetValue(normalized, out var fieldProjection))
             {
                 if (!camposValidos.Contains(fieldProjection.ColumnName, StringComparer.OrdinalIgnoreCase))
                 {
@@ -745,6 +1045,27 @@ public class AssetResolverService
         foreach (var campo in camposValidos)
         {
             if (ValidFieldsByColumnName.TryGetValue(campo, out var fieldProjection))
+            {
+                campos[fieldProjection.ColumnName] = fieldProjection.Property.GetValue(entity);
+            }
+        }
+        activo.CamposSolicitados = campos;
+
+        return activo;
+    }
+
+    private static ActivoEncontrado BuildActivoEncontradoAacc(DmPosicionAACC entity, List<string> camposValidos)
+    {
+        var activo = new ActivoEncontrado
+        {
+            IdActivo = entity.IdActivoSareb.ToString("F0"),
+            FchCierre = entity.FchCierre
+        };
+
+        var campos = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var campo in camposValidos)
+        {
+            if (ValidFieldsByColumnNameAacc.TryGetValue(campo, out var fieldProjection))
             {
                 campos[fieldProjection.ColumnName] = fieldProjection.Property.GetValue(entity);
             }

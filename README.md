@@ -90,7 +90,9 @@ Uso interno - Proyecto MVP
 
 - **Plugin AssetResolver (DocumentIA.AssetResolver)**
   - `appsettings.Development.json` actualizado para apuntar a un SQL local (ejemplo: `Server=127.0.0.1,1433;Database=DocumentIA;User Id=sa;Password=COMPLETAR_SQL_PASSWORD;TrustServerCertificate=True;`).
-  - Se añadieron campos obligatorios que siempre se devuelven: `FCH_ALTA`, `FCH_BAJA`, `DES_SERVICER`.
+  - Búsqueda dual por origen: `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB`, configurable con `AAII_Search` y `AACC_Search`.
+  - Respuesta separada por origen (`ActivosAAII` y `ActivosAACC`) manteniendo `Activos` como agregado de compatibilidad.
+  - Se añadieron campos obligatorios que siempre se devuelven: `FCH_ALTA`, `FCH_BAJA`, `DES_SERVICER`, `IND_STATUS`.
   - Cambio en la resolución por *aliases*: la resolución por aliases solo se ejecuta si ambos campos (IDUFIR y ReferenciaCatastral) vienen vacíos. Si alguno está **indicado** (por override o por mapeo en la tipología), la búsqueda se realiza únicamente por ese campo.
   - Proyecto de tests unitarios añadido: [src/plugins/DocumentIA.AssetResolver.Tests](src/plugins/DocumentIA.AssetResolver.Tests) con pruebas para `AssetResolverService`.
 

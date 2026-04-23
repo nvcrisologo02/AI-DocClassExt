@@ -8,7 +8,7 @@
 
 ## 1. Proposito
 
-El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **IdActivo** (codigo de activo inmobiliario SAREB) a partir de datos extraidos de documentos y/o criterios explicitos en request. Consulta la tabla maestra `DM_POSICION_AAII_TB` usando cuatro criterios de busqueda configurables: IDUFIR, Referencia Catastral, Direccion fuzzy y Direccion tipificada.
+El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **IdActivo** (codigo de activo inmobiliario SAREB) a partir de datos extraidos de documentos y/o criterios explicitos en request. Consulta las tablas maestras `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB` usando cuatro criterios de busqueda configurables: IDUFIR, Referencia Catastral, Direccion fuzzy y Direccion tipificada.
 
 ---
 
@@ -22,7 +22,7 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
                                                                     │
                                                                     ▼
                                                        ┌──────────────────────────┐
-                                                       │   DM_POSICION_AAII_TB    │
+                                                       │ DM_POSICION_AAII_TB/AACC │
                                                        │   (SQL Server / Azure)   │
                                                        └──────────────────────────┘
 ```
@@ -48,6 +48,8 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
     "Localizacion": "CALLE MAYOR 1, 28013 MADRID"
   },
   "requestedFields": ["#ALL#"],
+  "AAII_Search": true,
+  "AACC_Search": true,
   "idufirOverride": null,
   "referenciaCatastralOverride": null,
   "modoCombinacionCriterios": "OR",
@@ -87,7 +89,9 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
 | `correlationId` | string | **required** | ID de correlacion para trazabilidad. |
 | `documentType` | string | `null` | Tipologia del documento (informativo). |
 | `extractedData` | dict | `{}` | Campos extraidos del documento (clave-valor). |
-| `requestedFields` | string[] | `null` | Columnas a retornar. `#ALL#` = todas. `null` = solo obligatorias. |
+| `requestedFields` | string[] | `null` | Columnas a retornar. `#ALL#` = todas las columnas del origen consultado. `null` = solo obligatorias. |
+| `AAII_Search` | bool | `true` | Si `true`, consulta origen AAII (`DM_POSICION_AAII_TB`). |
+| `AACC_Search` | bool | `true` | Si `true`, consulta origen AACC (`DM_POSICION_AACC_TB`). |
 | `idufirOverride` | string | `null` | Valor IDUFIR explicito (ignora extractedData). |
 | `referenciaCatastralOverride` | string | `null` | Valor RefCat explicito. |
 | `modoCombinacionCriterios` | string | `"OR"` | `AND` = interseccion, `OR` = union. |
@@ -151,6 +155,10 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
       "camposSolicitados": { "DES_NOMBRE_VIA": "CALLE MAYOR", "NUM_VIA": "1" }
     }
   ],
+  "activosAAII": [],
+  "activosAACC": [],
+  "countAAII": 0,
+  "countAACC": 1,
   "camposConError": [],
   "message": "Encontrado 1 activo con criterio: Idufir OR Direccion",
   "duracionMs": 45,
@@ -191,7 +199,7 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
 
 6. Deduplicar por ID_ACTIVO_SAREB
 
-7. Construir response con campos solicitados
+7. Construir response con campos solicitados por origen (AAII/AACC)
 ```
 
 ### 4.2 Deteccion de Valores

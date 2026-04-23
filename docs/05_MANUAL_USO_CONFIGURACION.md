@@ -598,7 +598,7 @@ Backoff exponencial: `delay = initialDelayMs * 2^(attempt - 1)`
 
 ### 5.7b.1 Descripcion
 
-La actividad `ObtenerActivo` permite resolver automaticamente el `IdActivo` de un documento consultando la tabla `DM_POSICION_AAII_TB` del plugin AssetResolver. Se ejecuta **entre Validar e Integrar** y es **opcional** (deshabilitada por defecto).
+La actividad `ObtenerActivo` permite resolver automaticamente el `IdActivo` de un documento consultando las tablas `DM_POSICION_AAII_TB` y/o `DM_POSICION_AACC_TB` del plugin AssetResolver. Se ejecuta **entre Validar e Integrar** y es **opcional** (deshabilitada por defecto).
 
 El AssetResolver soporta **cuatro criterios de busqueda** configurables:
 - **IDUFIR**: busqueda exacta por codigo IDUFIR (columna `ID_IDUFIR`).
@@ -630,6 +630,8 @@ En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion
     "busquedaIdufirHabilitada": true,
     "busquedaReferenciaCatastralHabilitada": true,
     "busquedaDireccionHabilitada": false,
+    "AAII_Search": true,
+    "AACC_Search": true,
     "camposSolicitados": ["#ALL#"],
     "mapeoIdufir": ["IDUFIR", "IDUFIR_CRU", "CRU"],
     "mapeoReferenciaCatastral": ["ReferenciaCatastral", "RefCatastral"],
@@ -650,8 +652,10 @@ En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion
 | `busquedaIdufirHabilitada` | bool | `true` | Si `true`, incluye IDUFIR como criterio de busqueda. |
 | `busquedaReferenciaCatastralHabilitada` | bool | `true` | Si `true`, incluye Referencia Catastral como criterio. |
 | `busquedaDireccionHabilitada` | bool | `false` | Si `true`, habilita busqueda fuzzy por direccion. |
+| `AAII_Search` | bool | `true` | Si `true`, consulta el origen AAII (`DM_POSICION_AAII_TB`). |
+| `AACC_Search` | bool | `true` | Si `true`, consulta el origen AACC (`DM_POSICION_AACC_TB`). |
 | `busquedaDireccionTipificadaHabilitada` | bool | `false` | Si `true`, habilita busqueda por campos tipificados (AND en BD). Requiere que el request incluya el objeto `direccionTipificada`. |
-| `camposSolicitados` | string[] | `null` | Columnas de `DM_POSICION_AAII_TB` a retornar. `#ALL#` expande a todas. |
+| `camposSolicitados` | string[] | `null` | Columnas a retornar por origen consultado. `#ALL#` expande a todas las columnas del origen. |
 | `mapeoIdufir` | string[] | `[]` | Claves de `DatosExtraidos` donde buscar el IDUFIR. |
 | `mapeoReferenciaCatastral` | string[] | `[]` | Claves de `DatosExtraidos` donde buscar la Referencia Catastral. |
 | `mapeoDireccionCompleta` | string[] | `[]` | Claves para direccion completa (ej. "CALLE MAYOR 1, MADRID"). Se parsea automaticamente. |

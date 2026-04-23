@@ -1,14 +1,18 @@
 # DocumentIA.AssetResolver
 
-Plugin responsable de resolver identificación de activos contra la tabla `DM_POSICION_AAII_TB` (ODS).
+Plugin responsable de resolver identificación de activos contra las tablas `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB` (ODS).
 
 ## Propósito
 
 Consumir datos extraídos (IDUFIR, Referencia Catastral u otros aliases) y devolver información de activos desde la base de datos de posiciones.
 
+- Soporta búsqueda en uno o ambos orígenes mediante flags de request: `AAII_Search` y `AACC_Search`.
+- Devuelve resultados separados por origen: `ActivosAAII` y `ActivosAACC`.
+- Mantiene `Activos` como agregado legacy para compatibilidad.
+
 ## Últimos cambios (2026-04-15)
 
-- Se añadieron campos obligatorios que siempre se incluyen en la respuesta: `FCH_ALTA`, `FCH_BAJA`, `DES_SERVICER`.
+- Se añadieron campos obligatorios que siempre se incluyen en la respuesta: `FCH_ALTA`, `FCH_BAJA`, `DES_SERVICER`, `IND_STATUS`.
 - Resolución por aliases: ahora solo se usa cuando *ambos* campos (IDUFIR y ReferenciaCatastral) vienen vacíos. Si alguno está indicado por override (`IdufirOverride` / `ReferenciaCatastralOverride`) o por mapeo en la tipología (`MapeoIdufir` / `MapeoReferenciaCatastral`), la búsqueda se realiza únicamente por el/los campos indicados.
 - `appsettings.Development.json` actualizado para permitir conexión a SQL local durante desarrollo (ejemplo: `127.0.0.1,1433`).
 - Añadido proyecto de tests unitarios: `src/plugins/DocumentIA.AssetResolver.Tests`.
@@ -16,7 +20,7 @@ Consumir datos extraídos (IDUFIR, Referencia Catastral u otros aliases) y devol
 ## Requisitos (desarrollo)
 
 - .NET 8.0 SDK
-- Base de datos con la tabla `DM_POSICION_AAII_TB` accesible desde la cadena de conexión configurada.
+- Base de datos con las tablas `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB` accesibles desde la cadena de conexión configurada.
 
 ## Ejecutar en modo Development
 
@@ -44,6 +48,8 @@ Consumir datos extraídos (IDUFIR, Referencia Catastral u otros aliases) y devol
 {
   "CorrelationId": "c1",
   "ExtractedData": { "IDUFIR": "ID123" },
+  "AAII_Search": true,
+  "AACC_Search": true,
   "RequestedFields": ["ID_ACTIVO_SAREB"]
 }
 ```
@@ -59,7 +65,7 @@ Consumir datos extraídos (IDUFIR, Referencia Catastral u otros aliases) y devol
 
 ## Notas
 
-- Asegúrate de que la cadena de conexión `ConnectionStrings:AssetResolverDb` en `appsettings.Development.json` apunta a la base correcta que contiene `DM_POSICION_AAII_TB`.
+- Asegúrate de que la cadena de conexión `ConnectionStrings:AssetResolverDb` en `appsettings.Development.json` apunta a la base correcta que contiene `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB`.
 - Si aparecen errores de tabla no encontrada, verifica el entorno y privilegios del usuario de la cadena de conexión.
 
 ---
