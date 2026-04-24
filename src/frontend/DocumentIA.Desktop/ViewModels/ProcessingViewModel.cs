@@ -260,6 +260,21 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
+        private string _inputObjectIdGdc = string.Empty;
+        public string InputObjectIdGdc
+        {
+            get => _inputObjectIdGdc;
+            set
+            {
+                if (_inputObjectIdGdc != value)
+                {
+                    _inputObjectIdGdc = value;
+                    OnPropertyChanged(nameof(InputObjectIdGdc));
+                    OnPropertyChanged(nameof(IsExecuteEnabled));
+                }
+            }
+        }
+
         private string _classificationProvider = "auto";
         public string ClassificationProvider
         {
@@ -433,7 +448,15 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        public bool IsExecuteEnabled => !IsProcessing && !string.IsNullOrWhiteSpace(SelectedDocumentPath) && IsApiConnected;
+        public bool IsExecuteEnabled
+        {
+            get
+            {
+                var hasObjectId = !string.IsNullOrWhiteSpace(InputObjectIdGdc);
+                var hasFile = !string.IsNullOrWhiteSpace(SelectedDocumentPath);
+                return !IsProcessing && IsApiConnected && (hasObjectId || hasFile);
+            }
+        }
 
         // ─── Entorno (Local / Azure) ──────────────────────────────────────────
         private const string LocalUrl  = "http://localhost:7071";
@@ -583,9 +606,12 @@ namespace DocumentIA.Desktop.ViewModels
 
         private async Task ExecuteAsync()
         {
-            if (string.IsNullOrWhiteSpace(SelectedDocumentPath) || !File.Exists(SelectedDocumentPath))
+            var objectIdGdc = NormalizeOptionalText(InputObjectIdGdc);
+
+            if (string.IsNullOrWhiteSpace(objectIdGdc) &&
+                (string.IsNullOrWhiteSpace(SelectedDocumentPath) || !File.Exists(SelectedDocumentPath)))
             {
-                ActivityLogs.Add(new ActivityLogEntry("Error", ActivityStatusEnum.Failed, message: "Documento no encontrado"));
+                ActivityLogs.Add(new ActivityLogEntry("Error", ActivityStatusEnum.Failed, message: "Debe seleccionar un PDF o informar objectIdGDC."));
                 return;
             }
 
@@ -597,18 +623,30 @@ namespace DocumentIA.Desktop.ViewModels
 
             try
             {
-                ActivityLogs.Add(new ActivityLogEntry("Inicio", ActivityStatusEnum.Running, message: "Leyendo documento..."));
+                string documentName = string.Empty;
+                string? documentBase64 = null;
 
-                // Read document
-                var documentBytes = File.ReadAllBytes(SelectedDocumentPath);
-                var documentBase64 = Convert.ToBase64String(documentBytes);
-                var documentName = Path.GetFileName(SelectedDocumentPath);
+                if (string.IsNullOrWhiteSpace(objectIdGdc))
+                {
+                    ActivityLogs.Add(new ActivityLogEntry("Inicio", ActivityStatusEnum.Running, message: "Leyendo documento local..."));
+
+                    var documentBytes = File.ReadAllBytes(SelectedDocumentPath!);
+                    documentBase64 = Convert.ToBase64String(documentBytes);
+                    documentName = Path.GetFileName(SelectedDocumentPath) ?? string.Empty;
+
+                    ActivityLogs.Add(new ActivityLogEntry("Lectura", ActivityStatusEnum.Completed, message: $"{documentName}"));
+                }
+                else
+                {
+                    documentName = !string.IsNullOrWhiteSpace(SelectedDocumentPath)
+                        ? Path.GetFileName(SelectedDocumentPath) ?? string.Empty
+                        : string.Empty;
+                    ActivityLogs.Add(new ActivityLogEntry("Inicio", ActivityStatusEnum.Running, message: $"Usando objectIdGDC={objectIdGdc}"));
+                }
 
                 // Build request
-                var request = BuildRequest(documentName, documentBase64);
+                var request = BuildRequest(documentName, documentBase64, objectIdGdc);
                 CorrelationId = request.Traceability?.CorrelationId;
-
-                ActivityLogs.Add(new ActivityLogEntry("Lectura", ActivityStatusEnum.Completed, message: $"{documentName}"));
                 ActivityLogs.Add(new ActivityLogEntry("Envío", ActivityStatusEnum.Running, message: "Enviando a servidor..."));
 
                 // Send request
@@ -636,7 +674,7 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
-        private ProcessingRequest BuildRequest(string documentName, string documentBase64)
+        private ProcessingRequest BuildRequest(string documentName, string? documentBase64, string? objectIdGdc)
         {
             var expectedType = BuildExpectedTypeFromSelectedTipologia(SelectedClassificationType);
 
@@ -654,12 +692,12 @@ namespace DocumentIA.Desktop.ViewModels
                 {
                     CorrelationId = $"DESKTOP-{SelectedClassificationType}-{DateTime.Now:yyyyMMdd-HHmmss}",
                     SubmittedBy = submittedBy,
-                    IdGdc = null,
                     IdActivo = idActivo
                 },
                 Document = new DocumentInfo
                 {
-                    Name = documentName,
+                    Name = string.IsNullOrWhiteSpace(documentName) ? null : documentName,
+                    ObjectIdGDC = objectIdGdc,
                     Content = new DocumentContent
                     {
                         Base64 = documentBase64

@@ -27,7 +27,7 @@ namespace DocumentIA.Desktop.Models
         [JsonProperty("forceReprocess")]
         public bool ForceReprocess { get; set; }
 
-        [JsonProperty("SkipGDCUpload")]
+        [JsonProperty("skipGDCUpload")]
         public bool SkipGDCUpload { get; set; }
 
         [JsonProperty("classification")]
@@ -101,8 +101,11 @@ namespace DocumentIA.Desktop.Models
         [JsonProperty("name")]
         public string? Name { get; set; }
 
+        [JsonProperty("objectIdGDC")]
+        public string? ObjectIdGDC { get; set; }
+
         [JsonProperty("content")]
-        public DocumentContent? Content { get; set; }
+        public DocumentContent? Content { get; set; } = new();
     }
 
     public class DocumentContent
@@ -118,9 +121,6 @@ namespace DocumentIA.Desktop.Models
 
         [JsonProperty("submittedBy")]
         public string? SubmittedBy { get; set; }
-
-        [JsonProperty("idGDC")]
-        public string? IdGdc { get; set; }
 
         [JsonProperty("idActivo")]
         public string? IdActivo { get; set; }

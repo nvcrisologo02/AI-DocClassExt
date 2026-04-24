@@ -138,6 +138,10 @@
                             <TextBlock Text="submittedBy" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
                             <TextBox Text="{Binding InputSubmittedBy, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
 
+                            <TextBlock Text="documento.objectIdGDC" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,2"/>
+                            <TextBlock Text="Si se informa, se enviará por ObjectIdGDC (sin Base64). El fichero local pasa a ser opcional." Foreground="#556070" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"/>
+                            <TextBox Text="{Binding InputObjectIdGdc, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
+
                             <TextBlock Text="classification.provider" Foreground="{StaticResource BrushTextMuted}" FontSize="11" Margin="0,0,0,4"/>
                             <TextBox Text="{Binding ClassificationProvider, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,8" Padding="6" Background="#131A26" Foreground="{StaticResource BrushTextPrimary}" BorderBrush="#3A4458"/>
 
