@@ -426,6 +426,77 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
 | 7 | Publicar tipologia | `POST /management/tipologias/{id}/publicar` | Estado = Published |
 | 8 | Verificar en catalogo | `GET /api/tipologias` debe incluir la nueva tipologia | Aparece en lista |
 | 9 | Test de ingesta | Enviar documento de prueba con la nueva tipologia | Estado final = OK o REVISION |
+| 10 | Comparar version vs base (A-2) | En detalle de tipologia: seleccionar versiones y revisar cambios | Diff revisado (added/removed/modified) |
+| 11 | Revisar trazabilidad (A-3) | `GET /management/tipologias/{id}/audit` o vista de auditoria en Admin | Eventos registrados (usuario/accion/fecha) |
+
+---
+
+### 5.6.1a Crear una Nueva Tipologia Basada en una Existente
+
+Objetivo: generar una nueva version o variante minimizando errores de copia manual.
+
+#### Opcion A (recomendada): flujo Admin con export/import
+
+1. Abrir la tipologia base en Admin.
+2. Exportar ZIP (accion **Exportar**).
+3. En listado de tipologias, usar **Importar ZIP** y cargar el archivo.
+4. Editar la nueva tipologia importada en estado `Draft`:
+   - `codigo` (si es nueva familia) o mantener familia y subir `version`.
+   - `nombre` descriptivo.
+   - `ConfiguracionJson` y plugins segun cambios requeridos.
+5. Publicar cuando la comparacion de versiones y el test de ingesta sean correctos.
+
+#### Opcion B: API directa (automatizacion)
+
+Exportar base:
+
+```powershell
+$baseId = 1201
+$headers = @{ "x-functions-key" = "<FUNCTION_KEY>" }
+
+$export = Invoke-RestMethod \
+  -Method Get \
+  -Uri "http://localhost:7071/api/management/tipologias/$baseId/export" \
+  -Headers $headers
+
+$zipBase64 = $export.zipBase64
+```
+
+Importar como borrador:
+
+```powershell
+$body = @{ zipBase64 = $zipBase64 } | ConvertTo-Json
+
+$import = Invoke-RestMethod \
+  -Method Post \
+  -Uri "http://localhost:7071/api/management/tipologias/import" \
+  -Headers $headers \
+  -ContentType "application/json" \
+  -Body $body
+
+$newId = $import.id
+```
+
+Actualizar metadatos/version:
+
+```powershell
+$tipologia = Invoke-RestMethod \
+  -Method Get \
+  -Uri "http://localhost:7071/api/management/tipologias/$newId" \
+  -Headers $headers
+
+$tipologia.version = "1.5"
+$tipologia.nombre = "Nota simple v1.5"
+
+Invoke-RestMethod \
+  -Method Put \
+  -Uri "http://localhost:7071/api/management/tipologias/$newId" \
+  -Headers $headers \
+  -ContentType "application/json" \
+  -Body ($tipologia | ConvertTo-Json -Depth 20)
+```
+
+> Recomendacion: no publicar hasta revisar `GET /management/tipologias/{id}/diff/{otherId}` contra la version base y validar ingesta E2E.
 
 ---
 
@@ -953,6 +1024,37 @@ Permite ver, crear, editar, publicar y archivar tipologias. Cada tipologia dispo
 | **Config JSON** | JSON de configuracion completo (proveedor extraccion, clasificacion, campos esperados, umbrales). |
 | **Validacion JSON** | JSON de reglas de validacion (tipos de regla, severidades, campos requeridos). |
 | **Prompt** | Prompt GPT usado en extraccion o clasificacion por fallback. |
+
+Ademas, en el detalle se incluyen capacidades EP5:
+
+| Bloque | Objetivo |
+|--------|----------|
+| **Comparar versiones (A-2)** | Ver diferencias entre dos versiones de la misma familia. |
+| **Auditoria (A-3)** | Revisar cambios por usuario/accion con timestamp UTC. |
+
+### 5.9.1a Comparar Versiones con Filtro Rapido (A-2)
+
+El comparador permite:
+
+1. Seleccionar version izquierda y derecha.
+2. Ejecutar **Comparar** para obtener resumen (`Total`, `Added`, `Removed`, `Modified`).
+3. Aplicar **Filtro rapido por ChangeType**:
+  - `Todos`
+  - `Añadidos` (`added`)
+  - `Eliminados` (`removed`)
+  - `Modificados` (`modified`)
+4. Expandir una fila con **Ver** para inspeccionar valores `Izquierda` y `Derecha`.
+
+Endpoints implicados:
+
+- `GET /management/tipologias/{id}/versions`
+- `GET /management/tipologias/{id}/diff/{otherId}`
+
+Notas operativas:
+
+- El filtro actua en cliente sobre el resultado ya recibido del endpoint diff.
+- Si el filtro no tiene resultados, se muestra el mensaje "No hay cambios para el filtro seleccionado".
+- Al lanzar una nueva comparacion, el filtro vuelve a `Todos` para evitar confusiones.
 
 ### 5.9.2 Editor JSON — Modo Pantalla Completa
 
