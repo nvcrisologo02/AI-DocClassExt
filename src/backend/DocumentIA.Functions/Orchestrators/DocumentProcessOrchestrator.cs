@@ -292,6 +292,7 @@ public class DocumentProcessOrchestrator
                             salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente (checksum GDC). Se reutiliza la última ejecución.";
 
                             FinalizarSeguimiento("Completed", "Documento duplicado detectado por checksum GDC. Devolviendo última ejecución");
+                            salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
                             return salidaDuplicado;
                         }
                     }
@@ -352,6 +353,7 @@ public class DocumentProcessOrchestrator
                         salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
 
                         FinalizarSeguimiento("Completed", "Documento duplicado detectado. Devolviendo última ejecución");
+                        salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
                         return salidaDuplicado;
                     }
 
@@ -1039,6 +1041,7 @@ public class DocumentProcessOrchestrator
                     entrada.Instrucciones.SkipGDCUpload.HasValue ? "instrucciones" : "config-tipologia");
                 MarcarInicioActividad("SubirGDC");
                 MarcarFinActividad("SubirGDC", "Skipped", "SkipGDCUpload activo");
+                salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = true, Mensaje = "Skipped" };
             }
 
             // 8. Persistencia
