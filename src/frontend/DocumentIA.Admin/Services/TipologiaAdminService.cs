@@ -71,12 +71,56 @@ public class TipologiaAdminService
 
     public async Task RetireTipologiaAsync(int id)
     {
-        await SendRequiredAsync<TipologiaEntity>(HttpMethod.Post, $"management/tipologias/{id}/retirar", new { });
+        await SendRequiredAsync<TipologiaEntity>(
+            HttpMethod.Post,
+            $"management/tipologias/{id}/retirar",
+            new UsuarioRequest { Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui" });
     }
 
     public async Task PasarTipologiaADraftAsync(int id)
     {
-        await SendRequiredAsync<TipologiaEntity>(HttpMethod.Post, $"management/tipologias/{id}/draft", new { });
+        await SendRequiredAsync<TipologiaEntity>(
+            HttpMethod.Post,
+            $"management/tipologias/{id}/draft",
+            new UsuarioRequest { Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui" });
+    }
+
+    public async Task<IReadOnlyCollection<TipologiaAuditEntry>> GetTipologiaAuditAsync(int id, int take = 200)
+    {
+        var safeTake = Math.Clamp(take, 1, 1000);
+        return await GetRequiredAsync<List<TipologiaAuditEntry>>($"management/tipologias/{id}/audit?take={safeTake}") ?? [];
+    }
+
+    public async Task<IReadOnlyCollection<TipologiaVersionItem>> GetTipologiaVersionsAsync(int id)
+    {
+        return await GetRequiredAsync<List<TipologiaVersionItem>>($"management/tipologias/{id}/versions") ?? [];
+    }
+
+    public async Task<TipologiaDiffResult> GetTipologiaDiffAsync(int leftId, int rightId)
+    {
+        return await GetRequiredAsync<TipologiaDiffResult>($"management/tipologias/{leftId}/diff/{rightId}")
+            ?? new TipologiaDiffResult();
+    }
+
+    public async Task<byte[]> ExportTipologiaZipAsync(int id)
+    {
+        using var response = await _httpClient.GetAsync($"management/tipologias/{id}/export");
+        await EnsureSuccessAsync(response);
+        return await response.Content.ReadAsByteArrayAsync();
+    }
+
+    public async Task<TipologiaEntity> ImportTipologiaZipAsync(byte[] zipBytes, string usuario)
+    {
+        var payload = new
+        {
+            ZipBase64 = Convert.ToBase64String(zipBytes),
+            Usuario = usuario
+        };
+
+        return await SendRequiredAsync<TipologiaEntity>(
+            HttpMethod.Post,
+            "management/tipologias/import",
+            payload);
     }
 
     public async Task<IReadOnlyCollection<ModeloConfigEntity>> GetModelosByTipoAsync(TipoModelo tipo)
@@ -386,5 +430,55 @@ public class TipologiaAdminService
     private sealed class UsuarioRequest
     {
         public string? Usuario { get; set; }
+    }
+
+    public sealed class TipologiaAuditEntry
+    {
+        public int Id { get; set; }
+        public int TipologiaId { get; set; }
+        public string Accion { get; set; } = string.Empty;
+        public string? Usuario { get; set; }
+        public DateTime FechaHora { get; set; }
+        public string? DetallesJson { get; set; }
+    }
+
+    public sealed class TipologiaVersionItem
+    {
+        public int Id { get; set; }
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Version { get; set; } = string.Empty;
+        public EstadoTipologia Estado { get; set; }
+        public string Family { get; set; } = string.Empty;
+        public bool IsCurrent { get; set; }
+    }
+
+    public sealed class TipologiaDiffResult
+    {
+        public TipologiaDiffEndpoint Left { get; set; } = new();
+        public TipologiaDiffEndpoint Right { get; set; } = new();
+        public IReadOnlyCollection<TipologiaDiffChange> Changes { get; set; } = Array.Empty<TipologiaDiffChange>();
+        public int TotalChanges { get; set; }
+        public int Added { get; set; }
+        public int Removed { get; set; }
+        public int Modified { get; set; }
+    }
+
+    public sealed class TipologiaDiffEndpoint
+    {
+        public int Id { get; set; }
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Version { get; set; } = string.Empty;
+        public string Family { get; set; } = string.Empty;
+    }
+
+    public sealed class TipologiaDiffChange
+    {
+        public string Section { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
+        public string ChangeType { get; set; } = string.Empty;
+        public string? LeftValue { get; set; }
+        public string? RightValue { get; set; }
     }
 }

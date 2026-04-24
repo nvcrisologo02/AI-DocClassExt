@@ -19,6 +19,7 @@ public class DocumentIADbContext : DbContext
     public DbSet<ValidacionResultadoEntity> ValidacionResultados { get; set; } = null!;
     public DbSet<ModeloConfigEntity> ModeloConfigs { get; set; } = null!;
     public DbSet<PluginTipologiaConfigEntity> PluginTipologiaConfigs { get; set; } = null!;
+    public DbSet<TipologiaConfigAuditEntity> TipologiaConfigAudit { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -51,6 +52,12 @@ public class DocumentIADbContext : DbContext
         modelBuilder.Entity<TipologiaEntity>()
             .HasIndex(t => t.Codigo)
             .IsUnique();
+
+        modelBuilder.Entity<TipologiaConfigAuditEntity>()
+            .HasIndex(t => t.TipologiaId);
+
+        modelBuilder.Entity<TipologiaConfigAuditEntity>()
+            .HasIndex(t => t.FechaHora);
 
         modelBuilder.Entity<ModeloConfigEntity>()
             .HasIndex(m => m.Key)

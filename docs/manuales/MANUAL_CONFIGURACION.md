@@ -296,3 +296,41 @@ AzureWebJobsStorage                                = DefaultEndpointsProtocol=ht
 ## 10. Autenticación con Managed Identity
 
 Para evitar API Keys, establecer `AuthMode = "DefaultAzureCredential"` en las secciones de clasificación y extracción. Requiere rol `Cognitive Services User` sobre el recurso AI y `Cognitive Services OpenAI User` sobre Azure OpenAI asignados a la Managed Identity de la Function App.
+
+---
+
+## 11. Operativa EP5 en Tipologías (versionado, diff y clonado)
+
+### 11.1 Comparación de versiones con filtro rápido
+
+En `DocumentIA.Admin`, el detalle de tipología incluye el bloque **Comparar versiones (A-2)**:
+
+- Selección de versión izquierda/derecha dentro de la misma familia.
+- Resumen agregado (`Total`, `Added`, `Removed`, `Modified`).
+- Filtro rápido por `ChangeType`: `Todos`, `Añadidos`, `Eliminados`, `Modificados`.
+- Expansión por fila para revisar `LeftValue` vs `RightValue` sin desbordamiento horizontal.
+
+APIs asociadas:
+
+- `GET /api/management/tipologias/{id}/versions`
+- `GET /api/management/tipologias/{id}/diff/{otherId}`
+
+### 11.2 Clonar una tipología existente para crear una nueva
+
+Patrón recomendado: **exportar -> importar -> ajustar -> publicar**.
+
+1. Exportar tipología base (`GET /api/management/tipologias/{id}/export`).
+2. Importar ZIP (`POST /api/management/tipologias/import` con `zipBase64`).
+3. Ajustar en `Draft`:
+  - `codigo` (si cambia familia),
+  - `version`,
+  - `nombre`,
+  - `ConfiguracionJson` y plugins.
+4. Validar diff contra versión base y ejecutar prueba de ingesta.
+5. Publicar (`POST /api/management/tipologias/{id}/publicar`).
+
+### 11.3 Recomendaciones de control de cambios
+
+- Mantener una única modificación funcional por versión cuando sea posible.
+- Revisar `A-3` (auditoría) tras cada publicación para garantizar trazabilidad.
+- Evitar edición manual de JSON seed para cambios productivos; la fuente de verdad es BD.
