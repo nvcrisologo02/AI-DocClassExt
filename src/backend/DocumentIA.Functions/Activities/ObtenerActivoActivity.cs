@@ -131,7 +131,7 @@ public class ObtenerActivoActivity
                         }
                         : null
                 }
-                : null;
+                : new CriteriosBusquedaActivo();
             resultado.Activos = pluginResp.Activos?.Select(a => new ActivoEncontrado
             {
                 IdActivo = a.IdActivo,

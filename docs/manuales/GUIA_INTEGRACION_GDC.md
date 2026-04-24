@@ -95,7 +95,7 @@ DocumentProcessOrchestrator (Durable Function)
 ```
 [Entrada]
   ├─ entrada.Trazabilidad.IdActivo   (puede venir del ingest o resolverse via plugin)
-  ├─ entrada.Documento.Content.Base64
+  ├─ entrada.Documento.Content.Base64 (directo o hidratado desde `documento.objectIdGDC`)
   ├─ entrada.Documento.Name
   └─ entrada.Instrucciones.SkipGDCUpload (null/omitido = usar config de tipología)
 

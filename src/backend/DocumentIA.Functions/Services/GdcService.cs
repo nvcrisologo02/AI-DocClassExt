@@ -262,6 +262,68 @@ namespace DocumentIA.Functions.Services
                 "</ns1:searchEntities>";
         }
 
+        private string BuildGetRequest(string objectId, bool includeContent)
+        {
+            var safeObjectId = SecurityElement.Escape(objectId) ?? string.Empty;
+
+            return
+                "<ns1:get xmlns:ns1=\"http://services.api.sint.sareb.es/\"" +
+                " xmlns:ns0=\"http://auth.model.api.sint.sareb.es\"" +
+                " xmlns:ns2=\"http://data.model.api.sint.sareb.es\"" +
+                " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
+                "<ns1:arg0 xsi:type=\"ns0:Identity\">" + BuildIdentityElement() + "</ns1:arg0>" +
+                "<ns1:arg1>" + safeObjectId + "</ns1:arg1>" +
+                "<ns1:arg2 xsi:type=\"ns2:EntityProfile\">" +
+                "<ns2:fieldNames/>" +
+                "<ns2:ignoreContent>" + (!includeContent).ToString().ToLowerInvariant() + "</ns2:ignoreContent>" +
+                "<ns2:ignoreMetadata>false</ns2:ignoreMetadata>" +
+                "</ns1:arg2>" +
+                "</ns1:get>";
+        }
+
+        private static XmlNode? FindFieldNodeByName(XmlDocument doc, string fieldName)
+        {
+            var fields = doc.SelectNodes("//*[local-name()='Field']");
+            if (fields == null)
+            {
+                return null;
+            }
+
+            foreach (XmlNode field in fields)
+            {
+                var nameNode = field.SelectSingleNode("./*[local-name()='name']");
+                if (nameNode != null &&
+                    string.Equals(nameNode.InnerText, fieldName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return field;
+                }
+            }
+
+            return null;
+        }
+
+        private static string? ReadFieldStringValue(XmlNode? fieldNode)
+        {
+            if (fieldNode == null)
+            {
+                return null;
+            }
+
+            var valueNode = fieldNode.SelectSingleNode(".//*[local-name()='value']");
+            return string.IsNullOrWhiteSpace(valueNode?.InnerText) ? null : valueNode.InnerText;
+        }
+
+        private static string? ReadFieldFileDataSource(XmlNode? fieldNode)
+        {
+            if (fieldNode == null)
+            {
+                return null;
+            }
+
+            var dataSourceNode = fieldNode.SelectSingleNode(".//*[local-name()='dataSource']");
+            return string.IsNullOrWhiteSpace(dataSourceNode?.InnerText) ? null : dataSourceNode.InnerText;
+        }
+
         private static string? ExtractFirstNonEmptyTagValue(XmlDocument doc, params string[] tagNames)
         {
             foreach (var tag in tagNames)
@@ -396,6 +458,123 @@ namespace DocumentIA.Functions.Services
             }
 
             return result;
+        }
+
+        public async Task<GdcDocumentoMetadatos> ObtenerMetadatosDocumentoAsync(string objectId, CancellationToken cancellationToken = default)
+        {
+            var result = new GdcDocumentoMetadatos
+            {
+                ObjectId = objectId ?? string.Empty,
+                Exitoso = false
+            };
+
+            if (string.IsNullOrWhiteSpace(objectId))
+            {
+                result.Mensaje = "ObjectId vacío";
+                return result;
+            }
+
+            var body = BuildGetRequest(objectId, includeContent: false);
+            var envelope = WrapSoapEnvelope(body);
+            var content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
+
+            using var resp = await httpClient.PostAsync(this.settings.Endpoint ?? string.Empty, content, cancellationToken);
+            var xml = await resp.Content.ReadAsStringAsync(cancellationToken);
+
+            var doc = new XmlDocument();
+            doc.LoadXml(xml);
+
+            var fault = doc.GetElementsByTagName("Fault", "http://www.w3.org/2003/05/soap-envelope");
+            if (fault.Count == 0)
+                fault = doc.GetElementsByTagName("Fault", "http://schemas.xmlsoap.org/soap/envelope/");
+            if (fault.Count == 0)
+                fault = doc.GetElementsByTagName("Fault");
+
+            if (fault.Count > 0)
+            {
+                var reasonText = doc.GetElementsByTagName("Text", "http://www.w3.org/2003/05/soap-envelope");
+                if (reasonText.Count == 0)
+                    reasonText = doc.GetElementsByTagName("faultstring");
+
+                var mensaje = reasonText.Count > 0 ? reasonText[0]?.InnerText : "SoapFault";
+                throw new InvalidOperationException($"Error GDC obteniendo metadatos ObjectId={objectId}: {mensaje}");
+            }
+
+            result.ObjectId = ExtractFirstNonEmptyTagValue(doc, "id") ?? objectId;
+
+            var checksumField = FindFieldNodeByName(doc, "checksum");
+            var nombreFicheroField = FindFieldNodeByName(doc, "nombre_fichero");
+            var nombreDocumentoField = FindFieldNodeByName(doc, "nombre_documento");
+
+            result.MD5 = ReadFieldStringValue(checksumField) ?? string.Empty;
+            result.NombreArchivo =
+                ReadFieldStringValue(nombreFicheroField)
+                ?? ReadFieldStringValue(nombreDocumentoField)
+                ?? string.Empty;
+            result.Exitoso = true;
+            result.Mensaje = "OK";
+
+            return result;
+        }
+
+        public async Task<ObtenerDocumentoGDCResult> ObtenerDocumentoAsync(string objectId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(objectId))
+            {
+                throw new ArgumentException("ObjectIdGDC vacío", nameof(objectId));
+            }
+
+            var body = BuildGetRequest(objectId, includeContent: true);
+            var envelope = WrapSoapEnvelope(body);
+            var content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
+
+            using var resp = await httpClient.PostAsync(this.settings.Endpoint ?? string.Empty, content, cancellationToken);
+            var xml = await resp.Content.ReadAsStringAsync(cancellationToken);
+
+            var doc = new XmlDocument();
+            doc.LoadXml(xml);
+
+            var fault = doc.GetElementsByTagName("Fault", "http://www.w3.org/2003/05/soap-envelope");
+            if (fault.Count == 0)
+                fault = doc.GetElementsByTagName("Fault", "http://schemas.xmlsoap.org/soap/envelope/");
+            if (fault.Count == 0)
+                fault = doc.GetElementsByTagName("Fault");
+
+            if (fault.Count > 0)
+            {
+                var reasonText = doc.GetElementsByTagName("Text", "http://www.w3.org/2003/05/soap-envelope");
+                if (reasonText.Count == 0)
+                    reasonText = doc.GetElementsByTagName("faultstring");
+
+                var mensaje = reasonText.Count > 0 ? reasonText[0]?.InnerText : "SoapFault";
+                throw new InvalidOperationException($"Error GDC descargando documento ObjectId={objectId}: {mensaje}");
+            }
+
+            var checksumField = FindFieldNodeByName(doc, "checksum");
+            var nombreFicheroField = FindFieldNodeByName(doc, "nombre_fichero");
+            var nombreDocumentoField = FindFieldNodeByName(doc, "nombre_documento");
+            var contentField = FindFieldNodeByName(doc, settings.ContentFieldName);
+
+            if (contentField == null)
+            {
+                contentField = FindFieldNodeByName(doc, "Content");
+            }
+
+            var base64 = contentField != null ? ReadFieldFileDataSource(contentField) : null;
+            if (string.IsNullOrWhiteSpace(base64))
+            {
+                throw new InvalidOperationException($"GDC no devolvió contenido para ObjectId={objectId}");
+            }
+
+            return new ObtenerDocumentoGDCResult
+            {
+                Base64 = base64,
+                MD5 = ReadFieldStringValue(checksumField) ?? string.Empty,
+                NombreArchivo =
+                    ReadFieldStringValue(nombreFicheroField)
+                    ?? ReadFieldStringValue(nombreDocumentoField)
+                    ?? string.Empty
+            };
         }
     }
 }

@@ -88,6 +88,8 @@ Implementa la llamada real al servicio Azure AI Content Understanding:
 1. Carga la configuración de la tipología para obtener `ModelKey`.
 2. Resuelve el modelo en `ExtractionModelRegistryLoader` para obtener `AnalyzerId`, `ContentType`, etc.
 3. Decodifica el campo `Documento.Content.Base64` del contrato de entrada.
+
+> Nota: cuando la petición llega por `documento.objectIdGDC`, el orquestador recupera previamente el binario desde GDC y lo hidrata en `Documento.Content.Base64` antes de entrar en las actividades de normalización/extracción.
 4. Llama a `ContentUnderstandingClient.AnalyzeBinaryAsync` con `WaitUntil.Completed` (operación de larga duración, espera hasta que Azure finaliza el análisis).
 5. Parsea el JSON de respuesta y lo pasa al mapper.
 

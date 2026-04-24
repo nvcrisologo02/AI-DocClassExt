@@ -349,6 +349,29 @@ $resp.instanceId
 $resp.statusQueryUri
 ```
 
+Alternativa: enviar por `objectIdGDC` (sin Base64)
+
+```powershell
+$body = @{
+    documento = @{
+        objectIdGDC = "4526609"
+    }
+    trazabilidad = @{
+        correlationId = [guid]::NewGuid().ToString()
+        submittedBy = "manual-test"
+    }
+} | ConvertTo-Json -Depth 5
+
+$resp = Invoke-RestMethod -Method POST -Uri "http://localhost:7071/api/IngestDocument" `
+    -ContentType "application/json" -Body $body
+```
+
+Reglas del contrato de entrada:
+
+- `documento.objectIdGDC` y `documento.content.base64` no pueden enviarse juntos.
+- Debe enviarse exactamente una fuente de documento.
+- Con `objectIdGDC`, el backend fuerza `skipGDCUpload=true`.
+
 ### 4.6.3 Consultar Estado de Procesamiento
 
 ```powershell

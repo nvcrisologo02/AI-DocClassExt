@@ -270,13 +270,13 @@ classDiagram
 
     class Documento {
         +string Name
+      +string? ObjectIdGDC
         +ContenidoDocumento Content
     }
 
     class Trazabilidad {
         +string CorrelationId
         +string SubmittedBy
-        +string? IdGDC
         +string? IdActivo
     }
 
@@ -328,7 +328,10 @@ classDiagram
 
     class IGdcService {
         <<interface>>
-        +CreateDocumentAsync(SubirGDCInput input) ResultadoGDC
+      +ConsultarDocumentoAsync(idActivo, md5, matricula) (exists, objectId)
+      +SubirDocumentoAsync(SubirGDCInput input) ResultadoGDC
+      +ObtenerMetadatosDocumentoAsync(objectId) GdcDocumentoMetadatos
+      +ObtenerDocumentoAsync(objectId) ObtenerDocumentoGDCResult
     }
 
     class ConfigurableClasificarDataProvider {
@@ -345,7 +348,10 @@ classDiagram
         -IGdcService inner
         -RetryPolicy retryPolicy
         -CircuitBreakerState state
-        +CreateDocumentAsync()
+      +ConsultarDocumentoAsync()
+      +SubirDocumentoAsync()
+      +ObtenerMetadatosDocumentoAsync()
+      +ObtenerDocumentoAsync()
     }
 
     IClasificarDataProvider <|.. ConfigurableClasificarDataProvider
@@ -1064,6 +1070,7 @@ stateDiagram-v2
   },
   "documento": {
     "name": "nota_simple_finca_12345.pdf",
+    "objectIdGDC": null,
     "content": {
       "base64": "JVBERi0xLjcKMSAw..."
     }
@@ -1071,11 +1078,16 @@ stateDiagram-v2
   "trazabilidad": {
     "correlationId": "a1b2c3d4-0000-0000-0000-000000000000",
     "submittedBy": "sistema-batch-sareb",
-    "idGDC": null,
     "idActivo": "ACT-2026-00123"
   }
 }
 ```
+
+Reglas de validación del trigger:
+
+- `documento.objectIdGDC` y `documento.content.base64` son mutuamente excluyentes.
+- Debe informarse exactamente una fuente de documento.
+- Si se usa `documento.objectIdGDC`, el backend fuerza `instrucciones.skipGDCUpload = true`.
 
 ### 3.12.2 POST /api/IngestDocument — Response 202
 

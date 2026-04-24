@@ -36,6 +36,13 @@ public class DocumentoRepository : IDocumentoRepository
             .FirstOrDefaultAsync(d => d.SHA256 == sha256);
     }
 
+    public async Task<DocumentoEntity?> GetByMD5Async(string md5)
+    {
+        return await _context.Documentos
+            .Include(d => d.Resultado)
+            .FirstOrDefaultAsync(d => d.MD5 == md5);
+    }
+
     public async Task<DocumentoEntity?> GetByCorrelationIdAsync(string correlationId)
     {
         return await _context.Documentos
