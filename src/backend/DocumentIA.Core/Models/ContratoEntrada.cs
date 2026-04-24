@@ -98,6 +98,7 @@ public class ConfiguracionIA
 public class Documento
 {
     public string Name { get; set; } = string.Empty;
+    public string? ObjectIdGDC { get; set; }
     public ContenidoDocumento Content { get; set; } = new();
 }
 
@@ -110,6 +111,5 @@ public class Trazabilidad
 {
     public string CorrelationId { get; set; } = Guid.NewGuid().ToString();
     public string SubmittedBy { get; set; } = string.Empty;
-    public string? IdGDC { get; set; }
     public string? IdActivo { get; set; }
 }

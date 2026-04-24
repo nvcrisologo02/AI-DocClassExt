@@ -245,6 +245,29 @@ public class ResultadoGDC
     }
 }
 
+public class GdcDocumentoMetadatos
+{
+    public bool Exitoso { get; set; }
+    public string ObjectId { get; set; } = string.Empty;
+    public string MD5 { get; set; } = string.Empty;
+    public string NombreArchivo { get; set; } = string.Empty;
+    public string Mensaje { get; set; } = string.Empty;
+    public string ErrorDetalle { get; set; } = string.Empty;
+}
+
+public class ObtenerDocumentoGDCResult
+{
+    public string Base64 { get; set; } = string.Empty;
+    public string NombreArchivo { get; set; } = string.Empty;
+    public string MD5 { get; set; } = string.Empty;
+}
+
+public class VerificarDuplicadoMd5Result
+{
+    public bool Existe { get; set; }
+    public string SHA256 { get; set; } = string.Empty;
+}
+
 /// <summary>
 /// Resultado de la actividad ObtenerActivo que consulta DM_POSICION_AAII_TB vía AssetResolver.
 /// </summary>

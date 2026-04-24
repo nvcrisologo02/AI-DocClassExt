@@ -104,5 +104,15 @@ namespace DocumentIA.Functions.Services
         {
             return ExecuteWithRetryAsync(ct => inner.SubirDocumentoAsync(input, ct), cancellationToken);
         }
+
+        public Task<GdcDocumentoMetadatos> ObtenerMetadatosDocumentoAsync(string objectId, CancellationToken cancellationToken = default)
+        {
+            return ExecuteWithRetryAsync(ct => inner.ObtenerMetadatosDocumentoAsync(objectId, ct), cancellationToken);
+        }
+
+        public Task<ObtenerDocumentoGDCResult> ObtenerDocumentoAsync(string objectId, CancellationToken cancellationToken = default)
+        {
+            return ExecuteWithRetryAsync(ct => inner.ObtenerDocumentoAsync(objectId, ct), cancellationToken);
+        }
     }
 }

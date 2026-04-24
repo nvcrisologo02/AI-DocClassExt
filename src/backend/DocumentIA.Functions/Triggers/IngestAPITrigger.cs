@@ -54,6 +54,38 @@ public class IngestAPITrigger
                 return badResponse;
             }
 
+            if (contratoEntrada.Documento == null || contratoEntrada.Documento.Content == null)
+            {
+                var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badResponse.WriteStringAsync("documento/content inválido.");
+                return badResponse;
+            }
+
+            var objectIdGdc = contratoEntrada.Documento.ObjectIdGDC?.Trim();
+            var base64 = contratoEntrada.Documento.Content.Base64?.Trim();
+            var hasObjectIdGdc = !string.IsNullOrWhiteSpace(objectIdGdc);
+            var hasBase64 = !string.IsNullOrWhiteSpace(base64);
+
+            if (hasObjectIdGdc && hasBase64)
+            {
+                var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badResponse.WriteStringAsync("No se puede enviar Documento.ObjectIdGDC y Documento.Content.Base64 simultáneamente.");
+                return badResponse;
+            }
+
+            if (!hasObjectIdGdc && !hasBase64)
+            {
+                var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badResponse.WriteStringAsync("Debe proporcionarse Documento.Content.Base64 o Documento.ObjectIdGDC.");
+                return badResponse;
+            }
+
+            if (hasObjectIdGdc)
+            {
+                contratoEntrada.Documento.ObjectIdGDC = objectIdGdc;
+                contratoEntrada.Instrucciones.SkipGDCUpload = true;
+            }
+
             // Iniciar orquestación
             var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
                 "DocumentProcessOrchestrator",

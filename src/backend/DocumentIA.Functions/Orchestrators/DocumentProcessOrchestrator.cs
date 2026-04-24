@@ -64,8 +64,8 @@ public class DocumentProcessOrchestrator
             IdufirOverride = idufirOverride,
             ReferenciaCatastralOverride = refCatastralOverride,
             ModoCombinacionCriterios = modoCombinacionCriterios,
-            MapeoIdufir = mapeoIdufir,
-            MapeoReferenciaCatastral = mapeoRefCatastral,
+            MapeoIdufir = mapeoIdufir?.ToList() ?? new List<string>(),
+            MapeoReferenciaCatastral = mapeoRefCatastral?.ToList() ?? new List<string>(),
             BusquedaIdufirHabilitada = busquedaIdufirHabilitada,
             BusquedaReferenciaCatastralHabilitada = busquedaReferenciaCatastralHabilitada,
             BusquedaDireccionHabilitada = busquedaDireccionHabilitada,
@@ -102,12 +102,19 @@ public class DocumentProcessOrchestrator
         };
 
         var inicioOrquestacion = context.CurrentUtcDateTime;
-        var actividadesNegocio = new[] { "Clasificar", "Extraer", "Validar", "ObtenerActivo", "Integrar", "SubirGDC", "Persistir" };
+        var entradaPorObjectIdGdc = !string.IsNullOrWhiteSpace(entrada.Documento.ObjectIdGDC);
+        var actividadesNegocio = new List<string>();
+        if (entradaPorObjectIdGdc)
+        {
+            actividadesNegocio.AddRange(new[] { "ObtenerMetadatosGDC", "VerificarDuplicadoPreGDC", "ObtenerDocumentoGDC" });
+        }
+
+        actividadesNegocio.AddRange(new[] { "Clasificar", "Extraer", "Validar", "ObtenerActivo", "Integrar", "SubirGDC", "Persistir" });
 
         var seguimiento = salida.DetalleEjecucion.Seguimiento;
         seguimiento.Estado = "Pending";
         seguimiento.ActividadActual = string.Empty;
-        seguimiento.ActividadesTotales = actividadesNegocio.Length;
+        seguimiento.ActividadesTotales = actividadesNegocio.Count;
         seguimiento.Actividades.Clear();
         seguimiento.ActividadesCompletadas.Clear();
 
@@ -236,6 +243,81 @@ public class DocumentProcessOrchestrator
 
         try
         {
+            if (entradaPorObjectIdGdc)
+            {
+                entrada.Instrucciones.SkipGDCUpload = true;
+
+                GdcDocumentoMetadatos? metadatosGdc = null;
+
+                MarcarInicioActividad("ObtenerMetadatosGDC");
+                try
+                {
+                    metadatosGdc = await context.CallActivityAsync<GdcDocumentoMetadatos>(
+                        "ObtenerMetadatosDocumentoGDCActivity",
+                        entrada.Documento.ObjectIdGDC);
+                    MarcarFinActividad("ObtenerMetadatosGDC", "Completed", string.IsNullOrWhiteSpace(metadatosGdc?.MD5)
+                        ? "Metadatos recuperados sin checksum"
+                        : "Metadatos recuperados");
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "No se pudieron recuperar metadatos desde GDC. Se continúa con descarga directa.");
+                    MarcarFinActividad("ObtenerMetadatosGDC", "Skipped", "Metadatos no disponibles");
+                }
+
+                if (entrada.Instrucciones.SkipDuplicateCheck)
+                {
+                    MarcarInicioActividad("VerificarDuplicadoPreGDC");
+                    MarcarFinActividad("VerificarDuplicadoPreGDC", "Skipped", "SkipDuplicateCheck activo");
+                }
+                else if (!string.IsNullOrWhiteSpace(metadatosGdc?.MD5))
+                {
+                    var duplicadoPorMd5 = await EjecutarPasoNegocio(
+                        "VerificarDuplicadoPreGDC",
+                        () => context.CallActivityAsync<VerificarDuplicadoMd5Result>(
+                            "VerificarDuplicadoPorMD5Activity",
+                            metadatosGdc.MD5));
+
+                    if (duplicadoPorMd5.Existe && !entrada.Instrucciones.ForceReprocess && !string.IsNullOrWhiteSpace(duplicadoPorMd5.SHA256))
+                    {
+                        logger.LogWarning("Documento duplicado detectado por MD5 GDC. Recuperando última ejecución persistida");
+
+                        var salidaDuplicado = await context.CallActivityAsync<ContratoSalida?>(
+                            "ObtenerUltimaEjecucionDuplicadoActivity",
+                            duplicadoPorMd5.SHA256);
+
+                        if (salidaDuplicado is not null)
+                        {
+                            salidaDuplicado.Resultado.ReutilizadaPorDuplicado = true;
+                            salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente (checksum GDC). Se reutiliza la última ejecución.";
+
+                            FinalizarSeguimiento("Completed", "Documento duplicado detectado por checksum GDC. Devolviendo última ejecución");
+                            return salidaDuplicado;
+                        }
+                    }
+                }
+                else
+                {
+                    MarcarInicioActividad("VerificarDuplicadoPreGDC");
+                    MarcarFinActividad("VerificarDuplicadoPreGDC", "Skipped", "Checksum MD5 no disponible en metadatos GDC");
+                }
+
+                var documentoGdc = await EjecutarPasoNegocio(
+                    "ObtenerDocumentoGDC",
+                    () => context.CallActivityAsync<ObtenerDocumentoGDCResult>(
+                        "ObtenerDocumentoGDCActivity",
+                        entrada.Documento.ObjectIdGDC));
+
+                entrada.Documento.Content.Base64 = documentoGdc.Base64;
+
+                if (string.IsNullOrWhiteSpace(entrada.Documento.Name))
+                {
+                    entrada.Documento.Name = !string.IsNullOrWhiteSpace(documentoGdc.NombreArchivo)
+                        ? documentoGdc.NombreArchivo
+                        : metadatosGdc?.NombreArchivo ?? string.Empty;
+                }
+            }
+
             // 1. Normalizacion y calculo de hashes
             logger.LogInformation("Paso 1: Normalizando documento");
             var datosNormalizados = await context.CallActivityAsync<Dictionary<string, object>>(

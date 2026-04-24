@@ -16,5 +16,15 @@ namespace DocumentIA.Core.Services
         /// Sube un documento al GDC y devuelve el resultado detallado.
         /// </summary>
         Task<ResultadoGDC> SubirDocumentoAsync(SubirGDCInput input, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Obtiene metadatos de un documento en GDC por object id sin descargar contenido.
+        /// </summary>
+        Task<GdcDocumentoMetadatos> ObtenerMetadatosDocumentoAsync(string objectId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Descarga un documento de GDC por object id incluyendo el contenido Base64.
+        /// </summary>
+        Task<ObtenerDocumentoGDCResult> ObtenerDocumentoAsync(string objectId, CancellationToken cancellationToken = default);
     }
 }

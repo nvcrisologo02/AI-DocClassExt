@@ -50,6 +50,64 @@ namespace DocumentIA.Tests.Unit.Services
                 return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(xmlNo) });
             }
 
+            if (content.Contains(":get") || content.Contains("ns1:get"))
+            {
+                if (content.Contains("bad-object"))
+                {
+                    var fault12 = "<?xml version=\"1.0\"?>" +
+                                  "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"><soap:Body>" +
+                                  "<soap:Fault>" +
+                                  "<soap:Code><soap:Value>soap:Receiver</soap:Value></soap:Code>" +
+                                  "<soap:Reason><soap:Text xml:lang=\"en\">Object not found</soap:Text></soap:Reason>" +
+                                  "</soap:Fault></soap:Body></soap:Envelope>";
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(fault12) });
+                }
+
+                var ignoreContent = content.Contains("<ns2:ignoreContent>true</ns2:ignoreContent>");
+                var xml = ignoreContent
+                    ? "<?xml version=\"1.0\"?>" +
+                      "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"><soap:Body>" +
+                      "<ns1:getResponse xmlns:ns1=\"http://services.api.sint.sareb.es/\">" +
+                      "<ns1:return xmlns:ns2=\"http://data.model.api.sint.sareb.es\" xsi:type=\"ns2:Entity\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
+                      "<ns2:id>4526609</ns2:id>" +
+                      "<ns2:fields>" +
+                      "<ns3:Field xmlns:ns3=\"http://field.data.model.api.sint.sareb.es\">" +
+                      "<ns3:name>checksum</ns3:name>" +
+                      "<ns3:fieldValue xmlns:ns4=\"http://fieldvalue.data.model.api.sint.sareb.es\" xsi:type=\"ns4:StringFieldValue\">" +
+                      "<ns4:value>md5-from-get</ns4:value>" +
+                      "</ns3:fieldValue></ns3:Field>" +
+                      "<ns3:Field xmlns:ns3=\"http://field.data.model.api.sint.sareb.es\">" +
+                      "<ns3:name>nombre_fichero</ns3:name>" +
+                      "<ns3:fieldValue xmlns:ns4=\"http://fieldvalue.data.model.api.sint.sareb.es\" xsi:type=\"ns4:StringFieldValue\">" +
+                      "<ns4:value>nota_simple_gdc.pdf</ns4:value>" +
+                      "</ns3:fieldValue></ns3:Field>" +
+                      "</ns2:fields></ns1:return></ns1:getResponse></soap:Body></soap:Envelope>"
+                    : "<?xml version=\"1.0\"?>" +
+                      "<soap:Envelope xmlns:soap=\"http://www.w3.org/2003/05/soap-envelope\"><soap:Body>" +
+                      "<ns1:getResponse xmlns:ns1=\"http://services.api.sint.sareb.es/\">" +
+                      "<ns1:return xmlns:ns2=\"http://data.model.api.sint.sareb.es\" xsi:type=\"ns2:Entity\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\">" +
+                      "<ns2:id>4526609</ns2:id>" +
+                      "<ns2:fields>" +
+                      "<ns3:Field xmlns:ns3=\"http://field.data.model.api.sint.sareb.es\">" +
+                      "<ns3:name>checksum</ns3:name>" +
+                      "<ns3:fieldValue xmlns:ns4=\"http://fieldvalue.data.model.api.sint.sareb.es\" xsi:type=\"ns4:StringFieldValue\">" +
+                      "<ns4:value>md5-from-get</ns4:value>" +
+                      "</ns3:fieldValue></ns3:Field>" +
+                      "<ns3:Field xmlns:ns3=\"http://field.data.model.api.sint.sareb.es\">" +
+                      "<ns3:name>nombre_fichero</ns3:name>" +
+                      "<ns3:fieldValue xmlns:ns4=\"http://fieldvalue.data.model.api.sint.sareb.es\" xsi:type=\"ns4:StringFieldValue\">" +
+                      "<ns4:value>nota_simple_gdc.pdf</ns4:value>" +
+                      "</ns3:fieldValue></ns3:Field>" +
+                      "<ns3:Field xmlns:ns3=\"http://field.data.model.api.sint.sareb.es\">" +
+                      "<ns3:name>Content</ns3:name>" +
+                      "<ns3:fieldValue xmlns:ns4=\"http://fieldvalue.data.model.api.sint.sareb.es\" xsi:type=\"ns4:FileContentFieldValue\">" +
+                      "<ns4:dataSource>ZmljaGVyby10ZXN0</ns4:dataSource>" +
+                      "</ns3:fieldValue></ns3:Field>" +
+                      "</ns2:fields></ns1:return></ns1:getResponse></soap:Body></soap:Envelope>";
+
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(xml) });
+            }
+
             if (content.Contains(":create") || content.Contains("ns1:create"))
             {
                 if (content.Contains("already") || content.Contains("Already"))
@@ -264,6 +322,42 @@ namespace DocumentIA.Tests.Unit.Services
             // nombre_documento should fall back to NombreArchivo
             Assert.Contains("nombre_documento", body);
             Assert.Contains("nota_simple.pdf", body);
+        }
+
+        [Fact]
+        public async Task ObtenerMetadatosDocumento_ReturnsMd5AndFilename()
+        {
+            var svc = CreateService(new FakeHttpMessageHandler());
+
+            var res = await svc.ObtenerMetadatosDocumentoAsync("4526609");
+
+            Assert.True(res.Exitoso);
+            Assert.Equal("4526609", res.ObjectId);
+            Assert.Equal("md5-from-get", res.MD5);
+            Assert.Equal("nota_simple_gdc.pdf", res.NombreArchivo);
+        }
+
+        [Fact]
+        public async Task ObtenerDocumento_ReturnsContentAndMetadata()
+        {
+            var svc = CreateService(new FakeHttpMessageHandler());
+
+            var res = await svc.ObtenerDocumentoAsync("4526609");
+
+            Assert.Equal("ZmljaGVyby10ZXN0", res.Base64);
+            Assert.Equal("md5-from-get", res.MD5);
+            Assert.Equal("nota_simple_gdc.pdf", res.NombreArchivo);
+        }
+
+        [Fact]
+        public async Task ObtenerDocumento_Throws_OnSoapFault()
+        {
+            var svc = CreateService(new FakeHttpMessageHandler());
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.ObtenerDocumentoAsync("bad-object"));
+
+            Assert.Contains("Object not found", ex.Message);
         }
     }
 }
