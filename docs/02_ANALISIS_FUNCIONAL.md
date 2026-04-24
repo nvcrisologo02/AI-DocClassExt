@@ -86,11 +86,11 @@ flowchart TB
 | Campo | Detalle |
 |-------|---------|
 | **Actor principal** | Sistema Cliente API |
-| **Precondicion** | Documento en formato PDF, codificado en Base64. Function Key valida (si endpoint protegido). |
+| **Precondicion** | Debe informarse exactamente una fuente de documento: `documento.content.base64` (PDF en Base64) **o** `documento.objectIdGDC` (documento ya archivado en GDC). Function Key valida (si endpoint protegido). |
 | **Postcondicion** | Documento clasificado, datos extraidos, validados, enriquecidos, archivado en GDC, persistido en BD. |
 
 **Flujo normal:**
-1. Cliente envia `POST /api/IngestDocument` con documento PDF (base64) e instrucciones opcionales.
+1. Cliente envia `POST /api/IngestDocument` con documento en Base64 **o** `objectIdGDC`, e instrucciones opcionales.
 2. Sistema genera `instanceId` y devuelve `statusQueryUri` para polling.
 3. Orchestrator ejecuta pipeline: Normalizar → Verificar duplicado → Subir blob → Clasificar → Resolver tipologia → Extraer → Prompt → Validar → ObtenerActivo → Integrar → Subir GDC → Persistir.
 4. Cliente consulta `statusQueryUri` hasta obtener estado `Completed`.
@@ -100,6 +100,8 @@ flowchart TB
 
 | Condicion | Comportamiento |
 |-----------|---------------|
+| Entrada por `objectIdGDC` con checksum existente en BD | Pre-dedupe por MD5 (metadata GDC) y retorno temprano con última ejecución si `forceReprocess=false`. |
+| Entrada por `objectIdGDC` sin checksum/duplicado en BD | Descarga documento desde GDC y continúa pipeline normal. |
 | Documento duplicado (SHA256 ya existe en BD) | Si `forceReprocess=false`: retorna resultado anterior cacheado con `ReutilizadaPorDuplicado=true`. |
 | ExpectedType informado | Omite clasificacion (confianza=1.0), usa la tipologia indicada directamente. |
 | Confianza clasificacion < umbral | Estado final `BAJA_CONFIANZA_CLASIFICACION`. No extrae ni valida. |
@@ -342,7 +344,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 
 | ID | Titulo | Descripcion | Criterio de Aceptacion | Estado |
 |----|--------|------------|----------------------|--------|
-| HU1 | Ingesta de documentos via API | Como sistema cliente, quiero enviar un documento PDF via POST para que sea procesado automaticamente. | Endpoint acepta JSON con base64, devuelve instanceId y statusQueryUri. | DONE |
+| HU1 | Ingesta de documentos via API | Como sistema cliente, quiero enviar un documento via POST para que sea procesado automaticamente. | Endpoint acepta JSON con `documento.content.base64` o `documento.objectIdGDC`, devuelve `instanceId` y `statusQueryUri`. | DONE |
 | HU2 | Seguimiento en tiempo real | Como usuario del Desktop, quiero ver el progreso del procesamiento con actividades en tiempo real. | customStatus muestra timeline con estado/duracion por actividad. Polling cada 2s. | DONE |
 | HU3 | Clasificacion con fallback | Como sistema, quiero que la clasificacion use DI y si la confianza es baja, recurra a GPT. | Fallback automatico cuando confianza < umbral. Flag `FallbackLLM=true` en resultado. | DONE |
 | HU4 | Extraccion multi-proveedor | Como sistema, quiero extraer campos usando CU con fallback a GPT si la completitud es baja. | ConfigurableExtraerDataProvider enruta segun config. Fallback automatico. | DONE |
@@ -364,7 +366,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 | Restriccion | Detalle |
 |------------|---------|
 | **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Se requiere cifrado en reposo (AES-256-GCM), masking en logs, y retencion configurable. EP7 PLANNED. |
-| **Formatos aceptados** | Solo PDF. El sistema espera base64 sin saltos de linea (RFC 4648). Otros formatos no estan soportados en el MVP. |
+| **Formatos aceptados** | Solo PDF. Puede recibirse como Base64 sin saltos de línea (RFC 4648) o recuperarse desde GDC vía `documento.objectIdGDC`. |
 | **Tamaño maximo** | Limitado por el tamaño maximo de input de Durable Functions (~60 KB entity size en Storage). Documentos grandes pueden requerir blob-reference pattern (no implementado). |
 | **Timeouts** | GDC: 120s (hardcoded en orchestrator). Servicios AI: configurable por proveedor (DI: 120s, GPT: 30-60s, CU: configurable). |
 | **Conectividad GDC** | Requiere acceso de red a `srbwidd03.sareb.srb:8090`. SSL bypass configurable para certificado CA corporativo no confiado en Linux. |

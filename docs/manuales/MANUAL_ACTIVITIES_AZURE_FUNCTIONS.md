@@ -163,7 +163,9 @@ Campos relevantes:
 - `Instrucciones.Classification.Provider`: override opcional del proveedor (`auto`, `azure-document-intelligence`, `mock`).
 - `Instrucciones.Classification.Model`: override opcional del modelo (`auto` para usar default global).
 - `Instrucciones.Classification.Umbral`: umbral mínimo de confianza para continuar.
-- `Documento.Name` y `Documento.Content.Base64`: contenido a procesar.
+- `Documento.Name`: nombre de fichero.
+- `Documento.Content.Base64` o `Documento.ObjectIdGDC`: exactamente una fuente de documento.
+- Si llega `Documento.ObjectIdGDC`, el orquestador intenta pre-dedupe por metadatos GDC y descarga contenido antes de normalizar.
 - `Trazabilidad.CorrelationId`, `SubmittedBy`: metadata operativa.
 
 ## Salida (`ContratoSalida`)
@@ -188,7 +190,7 @@ Bloques principales:
 
 Responsabilidad:
 
-- Decodificar Base64 del documento.
+- Decodificar Base64 del documento (si la entrada original vino por `ObjectIdGDC`, el binario ya habrá sido hidratado previamente en el orquestador).
 - Calcular `SHA256` y `CRC32`.
 
 Salida:

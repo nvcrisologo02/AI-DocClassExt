@@ -135,6 +135,14 @@ $body = @{
     }
     documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
 } | ConvertTo-Json -Depth 5
+
+  # Documento ya archivado en GDC (sin Base64)
+  $body = @{
+    documento = @{
+      objectIdGDC = "4526609"
+    }
+    trazabilidad = @{ submittedBy = "batch" }
+  } | ConvertTo-Json -Depth 5
 ```
 
 ### 5.1.4 Consultar Tipologias Publicadas
@@ -174,13 +182,19 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.assetResolver.camposBusqueda.referenciaCatastral` | string? | No | Referencia Catastral a buscar (sobreescribe la extraida). |
 | `instrucciones.assetResolver.camposSolicitados` | string[]? | No | Columnas de `DM_POSICION_AAII_TB` a retornar. Si `null`, usa config tipologia o default (`ID_ACTIVO_SAREB`). |
 | `documento` | object | **Si** | Documento a procesar. |
-| `documento.name` | string | **Si** | Nombre del archivo con extension. Ej: `"nota_simple.pdf"`. |
-| `documento.content.base64` | string | **Si** | Contenido PDF codificado en Base64 (RFC 4648, sin saltos de linea). |
+| `documento.name` | string | No | Nombre del archivo con extension. Si viene vacio con `documento.objectIdGDC`, se intenta completar desde metadatos GDC. |
+| `documento.content.base64` | string | Condicional | Requerido cuando NO se informa `documento.objectIdGDC`. |
+| `documento.objectIdGDC` | string? | Condicional | ObjectId del documento ya archivado en GDC. Requerido cuando NO se informa `documento.content.base64`. |
 | `trazabilidad` | object | No | Informacion de trazabilidad. |
 | `trazabilidad.correlationId` | string | No | UUID de correlacion. Auto-generado si no se informa. |
 | `trazabilidad.submittedBy` | string | No | Identificador del sistema/usuario que envia. |
-| `trazabilidad.idGDC` | string? | No | ID existente en GDC (si el documento ya esta archivado). |
 | `trazabilidad.idActivo` | string? | No | ID del activo inmobiliario. Puede ser resuelto por plugins. |
+
+### Reglas de validacion de entrada
+
+- `documento.objectIdGDC` y `documento.content.base64` son mutuamente excluyentes.
+- Debe venir exactamente una fuente de documento: `objectIdGDC` o `content.base64`.
+- Si se usa `documento.objectIdGDC`, el sistema fuerza `instrucciones.skipGDCUpload = true`.
 
 ### Jerarquia de Umbrales
 

@@ -60,6 +60,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
   },
   "documento": {
     "name": "nota_simple_finca_123.pdf",
+    "objectIdGDC": null,
     "content": {
       "base64": "<contenido-en-base64>"
     }
@@ -67,7 +68,6 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
   "trazabilidad": {
     "correlationId": "a1b2c3d4-0000-0000-0000-000000000000",
     "submittedBy": "sistema-origen",
-    "idGDC": null,
     "idActivo": null
   }
 }
@@ -121,8 +121,9 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `name` | string | Nombre del fichero (con extensión). Ej: `"nota_simple.pdf"`. |
-| `content.base64` | string | Contenido del documento codificado en Base64. |
+| `name` | string | Nombre del fichero (con extensión). Recomendado; si llega vacío con `objectIdGDC`, se intenta completar desde metadatos de GDC. |
+| `objectIdGDC` | string? | ObjectId del documento ya archivado en GDC. Si se informa, no debe enviarse `content.base64`. |
+| `content.base64` | string | Contenido del documento codificado en Base64. Requerido cuando no se informa `objectIdGDC`. |
 
 **`trazabilidad`**
 
@@ -130,8 +131,13 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 |---|---|---|
 | `correlationId` | string | ID de correlación para trazabilidad. Si no se envía, el sistema genera un UUID. |
 | `submittedBy` | string | Identificador del sistema o usuario que envía el documento. |
-| `idGDC` | string? | ID del documento en el GDC (si ya existe previamente). Opcional. |
 | `idActivo` | string? | ID del activo al que pertenece el documento. Opcional; puede ser resuelto por plugins. |
+
+Reglas de validación de entrada:
+
+- `documento.objectIdGDC` y `documento.content.base64` son mutuamente excluyentes.
+- Debe enviarse exactamente una fuente de documento.
+- Si se usa `documento.objectIdGDC`, el backend fuerza `instrucciones.skipGDCUpload = true`.
 
 ---
 
@@ -155,7 +161,7 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 
 | Código | Causa |
 |---|---|
-| `400 Bad Request` | Body inválido, `ContratoEntrada` no deserializable, o `instrucciones.prompt` con valores fuera de rango. |
+| `400 Bad Request` | Body inválido, `ContratoEntrada` no deserializable, `instrucciones.prompt` fuera de rango, o violación de reglas de entrada (`objectIdGDC` + `base64` simultáneos / ninguno informado). |
 | `401 Unauthorized` | Function Key ausente o inválida. |
 | `500 Internal Server Error` | Error inesperado en el trigger. |
 
@@ -302,7 +308,6 @@ $body = @{
     trazabilidad = @{
         correlationId = [guid]::NewGuid().ToString()
         submittedBy   = "test-script"
-        idGDC         = $null
         idActivo      = "ACTIVO-001"
     }
 } | ConvertTo-Json -Depth 10
@@ -330,7 +335,7 @@ $status.output.resultado
 
 ## 8. Notas de integración
 
-- El contenido del documento debe enviarse en Base64 **sin** saltos de línea (Base64 estándar RFC 4648).
+- El documento puede enviarse en Base64 (RFC 4648, sin saltos de línea) o por referencia `objectIdGDC`.
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
 - Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. Si coincide, se devuelve la ejecución previa sin reprocesar (ver [MANUAL_DEDUPLICACION.md](MANUAL_DEDUPLICACION.md)).
