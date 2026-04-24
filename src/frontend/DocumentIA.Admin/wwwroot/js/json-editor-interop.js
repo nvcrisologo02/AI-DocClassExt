@@ -165,3 +165,19 @@ window.jsonEditorInterop = {
         return elementId in this.editors;
     }
 };
+
+window.fileInterop = {
+    downloadBase64File: function(contentType, fileName, base64Content) {
+        if (!base64Content || !fileName) {
+            return;
+        }
+
+        const anchor = document.createElement('a');
+        anchor.href = `data:${contentType || 'application/octet-stream'};base64,${base64Content}`;
+        anchor.download = fileName;
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+    }
+};

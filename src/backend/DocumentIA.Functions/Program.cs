@@ -80,6 +80,7 @@ var host = new HostBuilder()
         services.AddScoped<IModeloConfigRepository, ModeloConfigRepository>();
         services.AddScoped<IPluginTipologiaConfigRepository, PluginTipologiaConfigRepository>();
         services.AddScoped<IAuditoriaRepository, AuditoriaRepository>();
+        services.AddScoped<ITipologiaConfigAuditRepository, TipologiaConfigAuditRepository>();
         services.AddScoped<IDocumentoEjecucionRepository, DocumentoEjecucionRepository>();
         services.AddMemoryCache();
 
