@@ -3,6 +3,9 @@
 > Ultima actualizacion: 2026-04-16  
 > Proyecto: AI DocClassExt — SAREB
 
+> Alcance de este manual: instalacion, despliegue, infraestructura y operacion tecnica del entorno.
+> Para uso funcional de APIs y configuracion de consumo, ver `docs/05_MANUAL_USO_CONFIGURACION.md`.
+
 ---
 
 ## 4.1 Requisitos de Infraestructura

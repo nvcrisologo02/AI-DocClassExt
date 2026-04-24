@@ -1,5 +1,8 @@
 # Análisis Funcional – EP 9: Mantenimiento y Limpieza de Blob Storage
 
+> **BORRADOR NO PRODUCTIVO**
+> Documento en elaboración para roadmap. No representa funcionalidad completada ni comportamiento vigente en producción.
+
 **Versión:** 1.1
 **Fecha:** 2026-02-26
 **Épica:** EP 9 – Mantenimiento y limpieza de Blob Storage

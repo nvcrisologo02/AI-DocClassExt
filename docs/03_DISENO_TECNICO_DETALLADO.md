@@ -1,6 +1,6 @@
 # 3. Diseno Tecnico Detallado — DocumentIA MVP
 
-> Ultima actualizacion: 2026-03-31  
+> Ultima actualizacion: 2026-04-24  
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -86,10 +86,46 @@ flowchart TD
 | 8 | ExtraerMarkdownLayout | `ExtraerMarkdownLayoutActivity` | byte[] PDF | Markdown texto | Layout extraction con DI (opcional) |
 | 9 | Prompt | `PromptActivity` | datos + markdown + prompt config | Datos prompt enriquecidos | GPT-4o-mini con prompt libre (opcional) |
 | 10 | Validar | `ValidarActivity` | DatosExtraidos + reglas JSON | ValidationReport | 11 tipos de validador |
-| 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
+| 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 | 12 | Integrar | `IntegrarActivity` | datos + tipologia + plugins config | DatosFinales + plugins results | Ejecucion por prioridad |
-| 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP con timeout 120s |
+| 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP (`searchEntities` + `create`) con timeout 120s |
 | 14 | Persistir | `PersistirActivity` | ContratoSalida completo | void | BD + auditoria |
+
+### Preflujo adicional cuando se usa `documento.objectIdGDC`
+
+Cuando la entrada viene por referencia GDC (`objectIdGDC`), antes del pipeline estándar se ejecuta un preflujo con operaciones SOAP `get`:
+
+1. `ObtenerMetadatosDocumentoGDCActivity` (lectura de metadatos sin contenido).
+2. `VerificarDuplicadoPorMD5Activity` (deduplicación temprana por checksum MD5 en BD local).
+3. `ObtenerDocumentoGDCActivity` (descarga de contenido Base64 para hidratar el documento).
+
+En este modo se fuerza `SkipGDCUpload=true` para evitar re-subida del mismo documento origen.
+
+### Anexo integrado: detalle operativo de Activities
+
+El contenido operativo del antiguo `docs/not in use/MANUAL_ACTIVITIES_AZURE_FUNCTIONS.md` queda integrado en este documento canonico.
+
+Resumen de comportamiento por activity:
+
+- `NormalizarActivity`: hidrata/decodifica documento y calcula integridad (`SHA256`, `MD5`, `CRC32`) y metadatos de páginas.
+- `VerificarDuplicadoActivity`: consulta duplicidad por `SHA256`; con `forceReprocess=false` permite retorno temprano de ejecución previa.
+- `SubirBlobActivity`: persiste binario en blob (`documents/`) para trazabilidad operativa.
+- `ClasificarActivity`: usa DI primario y fallback GPT según umbral/resultado; puede terminar anticipadamente en baja confianza o error de clasificación.
+- `ResolverTipologiaActivity`: resuelve configuración efectiva por familia/version.
+- `ExtraerActivity`: ejecuta extracción principal y fallback cuando aplica.
+- `ValidarActivity`: ejecuta motor de reglas y produce reporte de validación.
+- `ObtenerActivoActivity`: resuelve activo vía AssetResolver según criterios configurados.
+- `IntegrarActivity`: aplica plugins por prioridad y consolida `DatosFinales`.
+- `SubirGDCActivity`: gestiona deduplicación previa (`searchEntities`) y subida (`create`) con timeout de 120s en orquestación.
+- `PersistirActivity`: persiste resultado integral y auditoría.
+
+Estados funcionales de cierre del pipeline:
+
+- `OK`
+- `VALIDACION_CON_ERRORES`
+- `DUPLICADO`
+- `BAJA_CONFIANZA_CLASIFICACION`
+- `ERROR`
 
 ---
 
@@ -186,7 +222,7 @@ sequenceDiagram
     INT-->>-O: DatosFinales + PluginResults
 
     O->>+GDC: CallActivityAsync("SubirGDC")
-    GDC->>GDC: ResilientGdcService.Create (SOAP)
+    GDC->>GDC: ResilientGdcService (SOAP: searchEntities + create)
     GDC-->>-O: ResultadoGDC { ObjectId }
 
     O->>+PER: CallActivityAsync("Persistir")
@@ -1331,7 +1367,6 @@ Reglas de validación del trigger:
 | Documento | Contenido |
 |-----------|-----------|
 | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Arquitectura, ADRs, patrones |
-| [02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md) | Requisitos, casos de uso, reglas negocio |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API detallado (original) |
-| [CONFIANZA_AGREGADA.md](CONFIANZA_AGREGADA.md) | Logica de confianza |
-| [TIPOLOGIAS_REFERENCIA.md](TIPOLOGIAS_REFERENCIA.md) | Catalogo de tipologias |
+| [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de confianza |
+| [TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Catalogo de tipologias |

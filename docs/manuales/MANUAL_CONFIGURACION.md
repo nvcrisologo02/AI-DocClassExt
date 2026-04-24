@@ -68,7 +68,7 @@ Sección: `Classification:GptFallback`
 | `ApiKey` | string | API Key Azure OpenAI. | — |
 | `AuthMode` | string | `ApiKey` \| `DefaultAzureCredential` | `ApiKey` |
 | `DeploymentName` | string | Nombre del deployment GPT. Ej: `gpt-4o-mini` | — |
-| `FallbackThreshold` | double | **Nivel 3 de la jerarquía de umbrales** (ver `CONFIANZA_AGREGADA.md §5.1`). Umbral de confianza DI de último recurso para activar fallback GPT cuando la petición y la tipología no especifican umbral. Rango `[0.0–1.0]`. `0.0` = solo en excepción. `1.0` = siempre. | `0.6` |
+| `FallbackThreshold` | double | **Nivel 3 de la jerarquía de umbrales** (ver `../referencias/CONFIANZA_AGREGADA.md §5.1`). Umbral de confianza DI de último recurso para activar fallback GPT cuando la petición y la tipología no especifican umbral. Rango `[0.0–1.0]`. `0.0` = solo en excepción. `1.0` = siempre. | `0.6` |
 | `Temperature` | double | Temperatura del modelo. `0.0` = máximo determinismo. | `0.0` |
 | `MaxTokens` | int | Máximo tokens en respuesta GPT. | `150` |
 | `TimeoutSeconds` | int | Timeout de la llamada GPT. | `30` |
@@ -112,7 +112,7 @@ Sección: `Extraction:GptFallback`
 | `ApiKey` | string | API Key Azure OpenAI. | — |
 | `AuthMode` | string | `ApiKey` \| `DefaultAzureCredential` | `ApiKey` |
 | `DeploymentName` | string | Nombre del deployment GPT. | — |
-| `MinFieldsRatio` | double | **Nivel 3 de la jerarquía de umbrales** (ver `CONFIANZA_AGREGADA.md §5.1`). Ratio mínimo de campos rellenos de último recurso cuando la petición y la tipología no especifican umbral. Si CU no llega, se activa GPT. Rango `[0.0–1.0]`. | `0.5` |
+| `MinFieldsRatio` | double | **Nivel 3 de la jerarquía de umbrales** (ver `../referencias/CONFIANZA_AGREGADA.md §5.1`). Ratio mínimo de campos rellenos de último recurso cuando la petición y la tipología no especifican umbral. Si CU no llega, se activa GPT. Rango `[0.0–1.0]`. | `0.5` |
 | `Temperature` | double | Temperatura del modelo. | `0.0` |
 | `MaxTokens` | int | Máximo tokens en respuesta GPT. | `2000` |
 | `TimeoutSeconds` | int | Timeout de la llamada GPT. | `60` |

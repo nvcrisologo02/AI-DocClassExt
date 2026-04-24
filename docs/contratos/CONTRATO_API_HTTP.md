@@ -4,6 +4,8 @@
 
 El sistema expone una única Function HTTP de entrada: `IngestDocument`. El procesamiento es **asíncrono** (Durable Functions): la petición `POST` devuelve inmediatamente un `202 Accepted` con un `instanceId`, y el cliente hace polling sobre la URL de estado para conocer el resultado final.
 
+Este documento define el contrato formal de la API (campos, validaciones y semántica). Para guía de uso paso a paso y ejemplos operativos, ver `docs/05_MANUAL_USO_CONFIGURACION.md`.
+
 ---
 
 ## 2. Autenticación
@@ -282,9 +284,10 @@ La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Fun
 | `detalleEjecucion.assetResolver.activos` | Array de `{ idActivo, fchCierre, camposSolicitados }`. |
 | `detalleEjecucion.assetResolver.duracionMs` | Milisegundos de ejecucion. |
 | `detalleEjecucion.assetResolver.error` | Detalle de error si fallo la llamada. |
-| `detalleEjecucion.gdc.exitoso` | `true` si la subida al GDC fue exitosa. |
+| `detalleEjecucion.gdc.exitoso` | `true` si la operación GDC fue satisfactoria (subida OK/AlreadyExists o subida omitida intencionalmente con `Skipped`). |
 | `detalleEjecucion.gdc.objectId` | ID del objeto creado en el GDC. |
 | `detalleEjecucion.gdc.yaExistia` | `true` si el documento ya existía en GDC. |
+| `detalleEjecucion.gdc.mensaje` | Estado textual del paso GDC: `OK`, `AlreadyExists`, `Skipped`, `Timeout`, etc. |
 | `detalleEjecucion.seguimiento` | Timeline de actividades con tiempos individuales. |
 
 ---
@@ -339,7 +342,16 @@ $status.output.resultado
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
 - Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. Si coincide, se devuelve la ejecución previa sin reprocesar (ver [MANUAL_DEDUPLICACION.md](MANUAL_DEDUPLICACION.md)).
+- Si `skipGDCUpload=true` (o se fuerza automáticamente por entrada `objectIdGDC`), el paso GDC finaliza como `Skipped` y se reporta como exitoso (`detalleEjecucion.gdc.exitoso=true`).
 - Si se envía `instrucciones.prompt`, la validación ocurre en el trigger HTTP (respuesta `400` inmediata si inválido). No es necesario esperar al resultado de la orquestación para detectar errores de prompt.
+
+### Endpoints externos GDC consumidos
+
+El backend consume un único endpoint configurable `GDC:Endpoint` de SINTWS `IDocService` y ejecuta sobre él las operaciones SOAP:
+
+- `searchEntities` (deduplicación previa a subida)
+- `create` (alta documental)
+- `get` (metadatos/descarga por `objectIdGDC`)
 
 ---
 

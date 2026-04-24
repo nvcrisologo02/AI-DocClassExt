@@ -3,6 +3,10 @@
 > Ultima actualizacion: 2026-03-31  
 > Proyecto: AI DocClassExt — SAREB
 
+> Alcance de este manual: uso funcional de APIs, ejemplos de invocacion y configuracion de consumo.
+> Para instalacion, infraestructura y despliegue, ver `docs/04_MANUAL_EXPLOTACION.md`.
+> Para especificación contractual de request/response y semántica de campos, ver `docs/contratos/CONTRATO_API_HTTP.md`.
+
 ---
 
 ## 5.1 Guia de la API REST
@@ -620,7 +624,7 @@ El AssetResolver soporta **cuatro criterios de busqueda** configurables:
 - **Direccion fuzzy**: busqueda fuzzy por direccion con scoring (columnas `DES_NOMBRE_VIA`, `NUM_VIA`, `DES_MUNICP`, `NUM_COD_POSTAL`).
 - **Direccion tipificada**: busqueda exacta/parcial por campos de direccion estructurados (filtros AND independientes en BD).
 
-Ver contrato funcional de precedencia en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md#13-contrato-funcional-de-precedencia-de-criterios-y-propagacion-de-idactivo).
+Ver contrato funcional de precedencia en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md#13-contrato-funcional-de-precedencia-de-criterios-y-propagacion-de-idactivo).
 
 Cada criterio se puede habilitar/deshabilitar independientemente, y los resultados se combinan segun un **modo de combinacion configurable** (AND u OR).
 
@@ -976,4 +980,4 @@ Permite editar la configuracion global de consulta del sistema (umbrales, timeou
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Contratos API completos con JSON de ejemplo |
 | [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Instalacion, despliegue, variables de entorno |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API original detallado |
-| [CONFIANZA_AGREGADA.md](CONFIANZA_AGREGADA.md) | Logica de calculo de confianza |
+| [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de calculo de confianza |

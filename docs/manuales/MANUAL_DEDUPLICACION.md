@@ -4,7 +4,7 @@
 
 El sistema incluye un mecanismo de deduplicación basado en hash SHA256 del contenido del documento. Su objetivo es **evitar reprocesar el mismo documento dos veces** y reutilizar el resultado de la ejecución anterior, ahorrando tiempo de procesamiento y costes de llamadas a servicios IA.
 
-Este mecanismo es **independiente** de la detección de duplicados en el GDC (Gestor Documental), que se describe en [GUIA_INTEGRACION_GDC.md](GUIA_INTEGRACION_GDC.md).
+Este mecanismo es **independiente** de la deteccion de duplicados en el GDC (Gestor Documental), que se describe en [ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md](../especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md).
 
 ---
 
@@ -141,4 +141,4 @@ Los documentos se persisten al final del pipeline por `PersistirActivity`. El SH
 | Momento | Paso 2 del pipeline (antes de clasificar) | Paso subida GDC (`SubirGDCActivity`) |
 | Efecto en duplicado | Short-circuit completo del pipeline | Subida omitida; `GDC.YaExistia = true` |
 | Control | `SkipDuplicateCheck` / `ForceReprocess` | No configurable desde el contrato de entrada |
-| Documentado en | Este documento | [GUIA_INTEGRACION_GDC.md](GUIA_INTEGRACION_GDC.md) |
+| Documentado en | Este documento | [ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md](../especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md) |

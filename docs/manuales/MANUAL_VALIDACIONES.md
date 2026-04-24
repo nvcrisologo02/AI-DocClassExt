@@ -323,4 +323,4 @@ public class MiReglaValidator : ValidationRuleBase
 - Cargador de config: `src/backend/DocumentIA.Core/Configuration/TipologiaConfigLoader.cs`
 - Archivos JSON: `src/backend/DocumentIA.Functions/config/tipologias/*.validation.json`
 - Activity de validación: `src/backend/DocumentIA.Functions/Activities/ValidarActivity.cs`
-- Manual de activities relacionado: `docs/manuales/MANUAL_ACTIVITIES_AZURE_FUNCTIONS.md`
+- Manual de activities relacionado: `docs/03_DISENO_TECNICO_DETALLADO.md` (anexo integrado)

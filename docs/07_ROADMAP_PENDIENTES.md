@@ -45,7 +45,7 @@ gantt
 | **EP8** | Mantenimiento Blob | PLANNED | 0% | Lifecycle management, limpieza automatica, retencion por tipologia. |
 | **EP9** | GDC integracion completa | IN PROGRESS | 75% | SubirGDC + ConsultarDocumento operativos. Pendiente: retry avanzado, reconciliacion DOC_OBJECT_EXISTS, idempotencia. |
 | **EP9** | GDC integracion completa | IN PROGRESS | 80% | SubirGDC + ConsultarDocumento operativos. Pendiente: retry Polly (G-1), idempotencia DOC_OBJECT_EXISTS (G-2), reconciliacion async (G-3). |
-| **EP10** | Resolucion de Activo | DONE | 100% | AssetResolver con 3 criterios (IDUFIR, RefCat, Direccion). AND/OR configurable. Flags de habilitacion por criterio. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
+| **EP10** | Resolucion de Activo | DONE | 100% | AssetResolver con 3 criterios (IDUFIR, RefCat, Direccion). AND/OR configurable. Flags de habilitacion por criterio. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 
 ---
 

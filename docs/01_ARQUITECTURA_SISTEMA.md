@@ -493,9 +493,9 @@ flowchart TB
 
 | Documento | Contenido |
 |-----------|-----------|
-| [02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md) | Problema de negocio, casos de uso, requisitos |
+| [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Problema de negocio, casos de uso, requisitos y diseno tecnico |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Flujo pipeline, secuencias, modelo ER, contratos |
 | [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Instalacion, despliegue, operacion |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato de API REST detallado |
 | [MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Guia de desarrollo de plugins |
-| [GUIA_INTEGRACION_GDC.md](manuales/GUIA_INTEGRACION_GDC.md) | Integracion con GDC SINTWS |
+| [ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md](especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md) | Integracion con GDC SINTWS |
