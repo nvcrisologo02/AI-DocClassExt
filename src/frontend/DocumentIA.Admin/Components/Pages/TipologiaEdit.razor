@@ -19,7 +19,11 @@
 
 <div class="mb-3">
     <label class="form-label">Codigo</label>
-    <InputText class="form-control" @bind-Value="_model.Codigo" disabled="@(!_isEditable)" />
+    <InputText class="form-control" @bind-Value="_model.Codigo" disabled="@(!_isEditable || Id.HasValue)" />
+    @if (Id.HasValue)
+    {
+        <small class="text-muted">El código queda bloqueado tras el primer guardado.</small>
+    }
 </div>
 
 <div class="mb-3">
@@ -111,7 +115,7 @@
             }
         }
 
-        var errors = TipologiaAdminService.ValidarConfiguracionJson(_model.ConfiguracionJson ?? string.Empty);
+        var errors = await AdminService.ValidateTipologiaAsync(_model, Id);
         if (errors.Count > 0)
         {
             _error = true;

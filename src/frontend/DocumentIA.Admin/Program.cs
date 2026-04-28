@@ -36,6 +36,7 @@ builder.Services.AddHttpClient(nameof(SystemConfigService), (serviceProvider, cl
 });
 
 builder.Services.AddScoped<SystemConfigService>();
+builder.Services.AddScoped<TipologiaWizardStateService>();
 
 builder.Services.AddHttpClient<MonitorService>((serviceProvider, client) =>
 {

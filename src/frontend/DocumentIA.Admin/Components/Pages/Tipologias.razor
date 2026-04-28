@@ -13,7 +13,8 @@
 }
 
 <p>
-    <button class="btn btn-primary" @onclick="CreateTipologia">Nueva tipología</button>
+    <button class="btn btn-primary" @onclick="CreateTipologiaWizard">Nueva tipología (wizard)</button>
+    <button class="btn btn-outline-secondary ms-2" @onclick="CreateTipologiaClassic">Nueva tipología (editor clásico)</button>
 </p>
 
 <div class="card mb-3">
@@ -89,7 +90,12 @@ else
         _loading = false;
     }
 
-    private void CreateTipologia()
+    private void CreateTipologiaWizard()
+    {
+        Navigation.NavigateTo("/tipologias/wizard");
+    }
+
+    private void CreateTipologiaClassic()
     {
         Navigation.NavigateTo("/tipologias/edit");
     }

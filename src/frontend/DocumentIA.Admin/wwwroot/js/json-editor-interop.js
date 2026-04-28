@@ -17,7 +17,7 @@ window.jsonEditorInterop = {
             search: true,
             navigationBar: true,
             statusBar: true,
-            readOnly: readOnly || false,
+            onEditable: readOnly ? function() { return false; } : undefined,
             onChangeText: function(jsonString) {
                 // Trigger change event that can be listened from Blazor
                 const element = document.getElementById(elementId);
@@ -179,5 +179,31 @@ window.fileInterop = {
         document.body.appendChild(anchor);
         anchor.click();
         document.body.removeChild(anchor);
+    }
+};
+
+window.wizardDraftInterop = {
+    set: function(key, value) {
+        if (!key) {
+            return;
+        }
+
+        localStorage.setItem(key, value || '');
+    },
+
+    get: function(key) {
+        if (!key) {
+            return null;
+        }
+
+        return localStorage.getItem(key);
+    },
+
+    remove: function(key) {
+        if (!key) {
+            return;
+        }
+
+        localStorage.removeItem(key);
     }
 };

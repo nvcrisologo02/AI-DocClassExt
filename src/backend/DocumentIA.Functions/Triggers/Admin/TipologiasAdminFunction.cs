@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
@@ -16,6 +17,13 @@ namespace DocumentIA.Functions.Triggers.Admin;
 
 public class TipologiasAdminFunction
 {
+    private static readonly Regex CodigoRegex = new("^[a-z0-9][a-z0-9_.-]{2,99}$", RegexOptions.Compiled);
+    private static readonly Regex VersionRegex = new("^\\d+\\.\\d+(\\.\\d+)?(-[0-9A-Za-z-.]+)?(\\+[0-9A-Za-z-.]+)?$", RegexOptions.Compiled);
+    private static readonly HashSet<string> SupportedFieldTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "string", "decimal", "number", "integer", "int", "date", "datetime", "boolean", "bool", "array", "object"
+    };
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -106,9 +114,15 @@ public class TipologiasAdminFunction
             return await CreateError(req, HttpStatusCode.BadRequest, "Codigo, Nombre y Version son obligatorios.");
         }
 
-        if (!TryValidateConfig(payload.ConfiguracionJson, out var configError))
+        if (!TryValidateConfig(payload.ConfiguracionJson, out var configError, out var config))
         {
             return await CreateError(req, HttpStatusCode.BadRequest, configError!);
+        }
+
+        var validationError = await ValidateTipologiaRequestAsync(payload, config!, null);
+        if (!string.IsNullOrWhiteSpace(validationError))
+        {
+            return await CreateError(req, HttpStatusCode.BadRequest, validationError);
         }
 
         var exists = await _dbContext.Tipologias.AnyAsync(t => t.Codigo == payload.Codigo);
@@ -159,12 +173,22 @@ public class TipologiasAdminFunction
             return await CreateError(req, HttpStatusCode.BadRequest, "Body invalido.");
         }
 
-        if (!TryValidateConfig(payload.ConfiguracionJson, out var configError))
+        if (string.IsNullOrWhiteSpace(payload.Codigo) || string.IsNullOrWhiteSpace(payload.Nombre) || string.IsNullOrWhiteSpace(payload.Version))
+        {
+            return await CreateError(req, HttpStatusCode.BadRequest, "Codigo, Nombre y Version son obligatorios.");
+        }
+
+        if (!TryValidateConfig(payload.ConfiguracionJson, out var configError, out var config))
         {
             return await CreateError(req, HttpStatusCode.BadRequest, configError!);
         }
 
-        entity.Codigo = payload.Codigo?.Trim() ?? entity.Codigo;
+        var validationError = await ValidateTipologiaRequestAsync(payload, config!, entity);
+        if (!string.IsNullOrWhiteSpace(validationError))
+        {
+            return await CreateError(req, HttpStatusCode.BadRequest, validationError);
+        }
+
         entity.Nombre = payload.Nombre?.Trim() ?? entity.Nombre;
         entity.Version = payload.Version?.Trim() ?? entity.Version;
         entity.ConfiguracionJson = payload.ConfiguracionJson;
@@ -634,6 +658,162 @@ public class TipologiasAdminFunction
 
         return null;
     }
+
+    private async Task<string?> ValidateTipologiaRequestAsync(
+        TipologiaUpsertRequest payload,
+        TipologiaValidationConfig config,
+        TipologiaEntity? existingEntity)
+    {
+        var codigo = payload.Codigo?.Trim() ?? string.Empty;
+        var nombre = payload.Nombre?.Trim() ?? string.Empty;
+        var version = payload.Version?.Trim() ?? string.Empty;
+
+        if (!CodigoRegex.IsMatch(codigo))
+        {
+            return "Codigo debe tener entre 3 y 100 caracteres y usar solo minúsculas, números, punto, guion o guion bajo.";
+        }
+
+        if (string.IsNullOrWhiteSpace(nombre))
+        {
+            return "Nombre es obligatorio.";
+        }
+
+        if (!VersionRegex.IsMatch(version))
+        {
+            return "Version debe usar formato tipo 1.0 o 1.0.0.";
+        }
+
+        if (existingEntity is not null
+            && !string.Equals(existingEntity.Codigo, codigo, StringComparison.OrdinalIgnoreCase))
+        {
+            return "Codigo no puede modificarse tras el primer guardado.";
+        }
+
+        if (!string.Equals(config.TipologiaId?.Trim(), codigo, StringComparison.OrdinalIgnoreCase))
+        {
+            return "La configuracion debe incluir un tipologiaId que coincida con Codigo.";
+        }
+
+        if (!string.Equals(config.Version?.Trim(), version, StringComparison.OrdinalIgnoreCase))
+        {
+            return "La configuracion debe incluir una version que coincida con Version.";
+        }
+
+        var configError = ValidateBusinessRules(config);
+        if (!string.IsNullOrWhiteSpace(configError))
+        {
+            return configError;
+        }
+
+        return await ValidateReferencedModels(config);
+    }
+
+    private static string? ValidateBusinessRules(TipologiaValidationConfig config)
+    {
+        if (config.ConfidenceConfig is not null)
+        {
+            if (!IsProbability(config.ConfidenceConfig.ClasifUmbralFallback)
+                || !IsProbability(config.ConfidenceConfig.ExtracWeightCampos)
+                || !IsProbability(config.ConfidenceConfig.ExtracWeightRequeridos)
+                || !IsProbability(config.ConfidenceConfig.ExtracWeightWarnings)
+                || !IsProbability(config.ConfidenceConfig.UmbralOK)
+                || !IsProbability(config.ConfidenceConfig.UmbralRevision)
+                || !IsNullableProbability(config.ConfidenceConfig.ExtracUmbralFallback)
+                || !IsNullableProbability(config.ConfidenceConfig.ExtracUmbralFallbackCompletitud)
+                || !IsNullableProbability(config.ConfidenceConfig.ExtracUmbralFallbackConfianza))
+            {
+                return "Los umbrales y pesos de confidenceConfig deben estar entre 0 y 1.";
+            }
+
+            if (config.ConfidenceConfig.UmbralRevision > config.ConfidenceConfig.UmbralOK)
+            {
+                return "confidenceConfig.umbralRevision no puede ser mayor que confidenceConfig.umbralOK.";
+            }
+        }
+
+        if (config.Extraction.Enabled)
+        {
+            if (string.IsNullOrWhiteSpace(config.Extraction.Provider))
+            {
+                return "extraction.provider es obligatorio cuando extraction.enabled=true.";
+            }
+
+            if (string.IsNullOrWhiteSpace(config.Extraction.ModelKey))
+            {
+                return "extraction.modelKey es obligatorio cuando extraction.enabled=true.";
+            }
+        }
+
+        if (!config.SkipGDCUpload)
+        {
+            if (string.IsNullOrWhiteSpace(config.GdcTipoDocumento))
+            {
+                return "gdcTipoDocumento es obligatorio cuando skipGDCUpload=false.";
+            }
+
+            if (string.IsNullOrWhiteSpace(config.GdcSerie))
+            {
+                return "gdcSerie es obligatorio cuando skipGDCUpload=false.";
+            }
+        }
+
+        var fieldNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in config.Fields)
+        {
+            if (string.IsNullOrWhiteSpace(field.Name))
+            {
+                return "fields.name es obligatorio.";
+            }
+
+            if (!fieldNames.Add(field.Name.Trim()))
+            {
+                return $"fields contiene nombres duplicados: {field.Name}.";
+            }
+
+            if (string.IsNullOrWhiteSpace(field.Type) || !SupportedFieldTypes.Contains(field.Type.Trim()))
+            {
+                return $"fields[{field.Name}].type no soportado: {field.Type}.";
+            }
+
+            if (string.Equals(field.Type.Trim(), "array", StringComparison.OrdinalIgnoreCase))
+            {
+                if (field.Items is null || string.IsNullOrWhiteSpace(field.Items.Type))
+                {
+                    return $"fields[{field.Name}] de tipo array requiere items.type.";
+                }
+            }
+        }
+
+        var mappedTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var mapping in config.Extraction.FieldMappings)
+        {
+            if (string.IsNullOrWhiteSpace(mapping.TargetField))
+            {
+                return "extraction.fieldMappings.targetField es obligatorio.";
+            }
+
+            if (string.IsNullOrWhiteSpace(mapping.SourcePath))
+            {
+                return $"extraction.fieldMappings[{mapping.TargetField}].sourcePath es obligatorio.";
+            }
+
+            if (!mappedTargets.Add(mapping.TargetField.Trim()))
+            {
+                return $"extraction.fieldMappings contiene targetField duplicado: {mapping.TargetField}.";
+            }
+
+            if (fieldNames.Count > 0 && !fieldNames.Contains(mapping.TargetField.Trim()))
+            {
+                return $"extraction.fieldMappings referencia un field inexistente: {mapping.TargetField}.";
+            }
+        }
+
+        return null;
+    }
+
+    private static bool IsProbability(double value) => value is >= 0 and <= 1;
+
+    private static bool IsNullableProbability(double? value) => !value.HasValue || IsProbability(value.Value);
 
     private static bool TryValidateConfig(string? configJson, out string? error)
     {
