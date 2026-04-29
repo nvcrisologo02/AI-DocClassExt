@@ -83,3 +83,9 @@ tmp_func_host_prompt_*.log
 .azext/
 scripts/copy-table-bcp.ps1
 artifacts/bcp/DM_POSICION_AAFF_TB_10000_random.bcp
+
+# Generated validation artifacts
+artifacts/superpowers-validation/
+artifacts/superpowers-*.jsonl
+scripts/validate-superpowers-copilot.ps1
+docs/superpowers/plans/2026-04-29-healthcheck-endpoint.md
