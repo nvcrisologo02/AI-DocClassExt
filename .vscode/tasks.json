@@ -7,7 +7,7 @@
       "type": "func",
       "dependsOn": "build (functions)",
       "options": {
-        "cwd": "${workspaceFolder}/src/backend/DocumentIA.Functions/bin/Debug/net8.0"
+        "cwd": "${workspaceFolder}/src/backend/DocumentIA.Functions"
       },
       "command": "host start",
       "isBackground": true,
