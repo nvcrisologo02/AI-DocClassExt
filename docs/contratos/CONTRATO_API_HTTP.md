@@ -260,17 +260,17 @@ Sin body (o body vacío). Sin headers obligatorios.
 ```json
 {
   "ok": true,
-  "status": "Healthy",
+  "status": "healthy",
   "timestamp": "2026-05-01T08:30:00Z",
   "components": {
-    "functions": { "status": "Healthy", "details": { ... } },
-    "assetResolver": { "status": "Healthy", "details": { ... } },
-    "gdc": { "status": "Healthy", "details": { ... } },
+    "functions":     { "status": "healthy", "message": "Running" },
+    "assetResolver": { "status": "healthy", "message": "HTTP 200" },
+    "gdc":           { "status": "healthy", "message": "Reachable (document not found)" },
     "modelProviders": {
-      "status": "Healthy",
-      "classification": [ { "key": "...", "status": "Healthy", "details": { ... } } ],
-      "extraction":     [ { "key": "...", "status": "Healthy", "details": { ... } } ],
-      "prompt":         [ { "key": "...", "status": "Healthy", "details": { ... } } ]
+      "status": "healthy",
+      "classification": { "status": "healthy", "message": "Loader registered" },
+      "extraction":     { "status": "healthy", "message": "Loader registered" },
+      "prompt":         { "status": "healthy", "message": "Loader registered" }
     }
   }
 }
@@ -278,17 +278,19 @@ Sin body (o body vacío). Sin headers obligatorios.
 
 | Campo | Descripción |
 |---|---|
-| `ok` | Booleano agregado. `false` solo si `status == "Unhealthy"`. |
-| `status` | Estado agregado: `"Healthy"` \| `"Degraded"` \| `"Unhealthy"`. |
+| `ok` | Booleano agregado. `false` solo si `status == "unhealthy"`. |
+| `status` | Estado agregado: `"healthy"` \| `"degraded"` \| `"unhealthy"` \| `"unconfigured"`. Calculado por precedencia `unhealthy > degraded > unconfigured > healthy`. |
 | `timestamp` | Timestamp UTC del muestreo. |
-| `components.functions` | Salud del runtime Functions (DB, configuración base). |
-| `components.assetResolver` | Salud del Web App `srbwebpluginassetresolver` (probe HTTP). |
-| `components.gdc` | Salud del endpoint GDC SOAP (probe `consultarObjetoExiste` con MD5 sintético). |
-| `components.modelProviders` | Salud por proveedor configurado en BBDD (clasificación / extracción / prompt). |
+| `components.functions` | Salud del runtime Functions (siempre `healthy` si la respuesta sale). |
+| `components.assetResolver` | Probe HTTP a `GET {AssetResolver:BaseUrl}/api/assets/ping` (timeout 8 s). |
+| `components.gdc` | Probe SOAP a `consultarObjetoExiste` con `idObjeto=HEALTHCHECK_PROBE` y MD5 sintético (timeout 5 s). |
+| `components.modelProviders.classification\|extraction\|prompt` | Verifica que el `*ModelRegistryLoader` esté registrado en DI. **Es un objeto único, no un array.** |
+
+> **Cache**: el snapshot se cachea 45 s en `IMemoryCache` (clave `SystemHealthService:ComponentsHealthSnapshot`). Llamadas concurrentes en esa ventana devuelven el mismo resultado.
 
 #### Respuesta — `503 Service Unavailable`
 
-Mismo payload que `200 OK` pero con `status == "Unhealthy"` y `ok: false`. Devuelto cuando alguno de los componentes críticos falla.
+Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devuelto cuando alguno de los componentes críticos falla.
 
 > **Compatibilidad legacy**: si la inyección de `ISystemHealthService` no está disponible (tests aislados), el endpoint responde con un payload mínimo `{ "ok": true, "timestamp": "..." }`. En producción siempre se devuelve el payload extendido.
 

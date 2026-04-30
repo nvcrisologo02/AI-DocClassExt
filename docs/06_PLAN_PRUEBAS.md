@@ -1,6 +1,6 @@
 # 6. Plan de Pruebas — DocumentIA MVP
 
-> Ultima actualizacion: 2026-04-20  
+> Ultima actualizacion: 2026-05-01  
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -13,9 +13,9 @@
 graph TB
     subgraph Piramide["Piramide de Pruebas"]
         direction TB
-        E2E["API / E2E<br/>10 scripts PS1 + 1 .http<br/>Validacion flujo completo"]
+        E2E["API / E2E<br/>10 scripts PS1 + 1 .http + 10 tests Playwright<br/>Validacion flujo completo"]
         INT["Integracion<br/>5 tests (GDC fakes, plugins E2E)<br/>+ 3 scripts integracion"]
-        UNIT["Unit Tests<br/>~229 tests C# (xUnit)<br/>+ 2 tests Python (pytest)"]
+        UNIT["Unit Tests<br/>~554 tests C# (xUnit) en 4 proyectos<br/>+ 2 tests Python (pytest)"]
     end
     UNIT --> INT --> E2E
 
@@ -45,6 +45,18 @@ graph TB
 ---
 
 ## 6.2 Tests Unitarios C# — Inventario Detallado
+
+> **Conteo real verificado el 2026-05-01** (`dotnet test --list-tests`):
+>
+> | Proyecto | Clases | Tests | Tipo |
+> |----------|--------|-------|------|
+> | `src/backend/DocumentIA.Tests.Unit` | 42 | 496 | Unit / Integracion in-proc (xUnit + Moq + FakeHttpHandler) |
+> | `src/backend/DocumentIA.Tests.Admin` | 5 | 41 | Unit del wizard de tipologias del Admin (Blazor) |
+> | `src/plugins/DocumentIA.AssetResolver.Tests` | 1 | 7 | Unit del plugin AssetResolver (HTTP mockeado) |
+> | `src/backend/DocumentIA.Tests.E2E` | 3 | 10 | E2E Admin via Playwright (skips si `DOCUMENTIA_ADMIN_URL` no responde) |
+> | **Total C#** | **51** | **554** | |
+>
+> El inventario detallado por validador / servicio / activity que sigue describe los **modulos historicos** del proyecto `DocumentIA.Tests.Unit` y puede no reflejar el conteo `[Fact]+[Theory]+[InlineData]` exacto tras adiciones recientes (Healthcheck, ResolverTipologia, Wizard, etc.). Para la cifra canonica usar `dotnet test --list-tests`.
 
 ### 6.2.1 Validacion (12 clases, ~115 tests)
 
@@ -261,29 +273,37 @@ typeof(CustomIntegrationPlugin)
 
 ### 6.6.1 Resumen Cuantitativo
 
+Verificado el 2026-05-01 con `dotnet test --list-tests`.
+
 | Metrica | Valor |
 |---------|-------|
-| Clases de test C# | 33 |
-| Metodos de test C# | ~229 |
+| Proyectos de test C# | 4 |
+| Clases de test C# | 51 |
+| Tests C# (xUnit, expandiendo `[Theory]+[InlineData]`) | 554 |
+| · `DocumentIA.Tests.Unit` | 496 |
+| · `DocumentIA.Tests.Admin` (wizard tipologias Blazor) | 41 |
+| · `DocumentIA.AssetResolver.Tests` | 7 |
+| · `DocumentIA.Tests.E2E` (Playwright Admin) | 10 |
 | Clases de test Python | 1 |
 | Metodos de test Python | 2 |
-| Scripts E2E/API | 11 |
+| Scripts E2E/API (PS1 + .http) | 11 |
 | Scripts integracion | 3 |
-| **Total artefactos de test** | **50** |
-| **Total tests automatizados** | **~231** |
+| **Total artefactos de test** | **70** |
+| **Total tests automatizados** | **~556** |
+
+> Nota: el desglose 6.2.x por categoria (validacion, configuracion, servicios, plugins, activities, triggers, integracion) se mantiene como guia funcional pero no suma exactamente 554 — los conteos historicos son por metodos `[Fact]/[Theory]` mientras la cifra canonica expande cada `[InlineData]` como test independiente.
 
 ### 6.6.2 Cobertura por Componente
 
 ```mermaid
-pie title Distribucion de Tests Unitarios (~229)
-    "Validacion (115)" : 115
-    "Configuracion (54)" : 54
-    "Servicios (33)" : 33
-    "Plugins (14)" : 14
-    "Activities (8)" : 8
-    "GDC Integracion (2)" : 2
-    "Triggers/Admin (3)" : 3
+pie title Distribucion de Tests por Proyecto (554 C#)
+    "DocumentIA.Tests.Unit (496)" : 496
+    "DocumentIA.Tests.Admin (41)" : 41
+    "DocumentIA.Tests.E2E Playwright (10)" : 10
+    "DocumentIA.AssetResolver.Tests (7)" : 7
 ```
+
+> El detalle por categoria funcional historica (validacion / configuracion / servicios / plugins / activities / triggers) esta en 6.2.x.
 
 ### 6.6.3 Ejecucion
 
@@ -311,15 +331,18 @@ pytest tests/ -v
 
 ### 6.7.1 Gaps Criticos
 
+> Revisado el 2026-05-01: varios gaps marcados como _Alta_ ya tienen cobertura. Se mantiene el resto.
+
 | Area | Gap | Prioridad | Razon |
 |------|-----|-----------|-------|
-| **Orchestrator** | Sin tests unitarios para DocumentProcessOrchestrator | **Alta** | Es el componente central. Cualquier cambio en el flujo puede romper la cadena. |
+| ~~**Orchestrator**~~ | ~~Sin tests unitarios para DocumentProcessOrchestrator~~ | _Cubierto_ | `DocumentProcessOrchestratorTests` existe (2 tests). Sigue siendo deseable ampliar cobertura por ramas. |
 | **NormalizarActivity** | Sin tests | Alta | Calcula hashes, paginas, nombres. Error aqui = deduplicacion rota. |
 | **SubirBlobActivity** | Sin tests | Media | Subida a Blob Storage no testeada (dependeria de mock BlobClient). |
 | **PersistirActivity** | Sin tests | Media | Persistencia final en BD no testeada unitariamente. |
-| **Admin Functions** | Solo 3 tests basicos (validacion JSON) | Media | CRUD de tipologias, modelos y plugins sin tests de logica negocio. |
+| **Admin Functions** | Cobertura parcial — solo `PluginsTipologiaAdminFunction` y `TipologiasAdminFunction` tienen tests; falta CRUD de modelos y plugins | Media | Hay `TipologiasAdminFunctionIntegrationTests` (12 tests) y `TipologiasAdminFunctionValidationTests` (3 tests); resto sin tests de logica negocio. |
 | **Frontend Desktop** | Sin tests | Baja | WPF MVVM. Testeable via ViewModels pero no prioritario para MVP. |
-| **Frontend Admin** | Sin tests | Baja | Blazor Server. Validar CRUD de tipologias. |
+| ~~**Frontend Admin**~~ | ~~Sin tests~~ | _Cubierto parcial_ | `DocumentIA.Tests.Admin` (41 tests del wizard de tipologias) + `DocumentIA.Tests.E2E` (10 tests Playwright). Falta cobertura de paginas Monitor / Modelos / Plugins. |
+| **Healthcheck** | Cubierto | _Cubierto_ | `HealthcheckFunctionTests` (8 tests). |
 
 ### 6.7.2 Gaps de Integracion
 

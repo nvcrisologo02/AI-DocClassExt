@@ -41,7 +41,7 @@ gantt
 | **EP3** | Validacion y motor de reglas | IN PROGRESS | 88% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field (V-1), reglas condicionales (V-2). |
 | **EP4** | Persistencia y auditoria | DONE | 100% | 9 entidades EF Core, migraciones auto, auditoria por ejecucion, validaciones por campo. |
 | **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
-| **EP6** | Observabilidad y pruebas | IN PROGRESS | 65% | ~231 tests automatizados, customStatus, seguimiento orquestacion. Pendiente: tests CI/CD pipeline (T-4), tests orchestrator (T-1), NormalizarActivity (T-2), EF tests (T-3), dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
+| **EP6** | Observabilidad y pruebas | IN PROGRESS | 75% | ~556 tests automatizados (verificado 2026-05-01: 554 C# + 2 Python), customStatus, seguimiento orquestacion, pipeline ejecuta `dotnet test` (T-4 cubierto parcialmente, solo `DocumentIA.Tests.Unit`). Pendiente: extender pipeline a Admin/E2E/AssetResolver, tests NormalizarActivity (T-2), EF tests (T-3), dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
 | **EP7** | Proteccion datos / GDPR (ADO Epic 98519) | NEW | 0% | Cifrado en reposo (AES-256-GCM), masking PII en logs, retencion configurable, KV para secrets. Features ADO: 98520 F7.1, 98524 F7.2, 98529 F7.3, 98534 F7.4. |
 | **EP8** | Sistema de Plugins de Integracion (ADO Epic 98628) | DONE | 100% | Arquitectura plugins + plugin REST generico + plugins Atlas/Catastro/GDC + resiliencia y observabilidad. Features 98634-98637 todas Done. |
 | **EP9** | Mantenimiento y limpieza de Blob Storage (ADO Epic 98692) | NEW | 0% | Politica de retencion por tipologia (F9.1), motor de limpieza automatica (F9.2), inventario y reporting (F9.3), observabilidad/auditoria (F9.4). Features 98693-98696 todas New. |
@@ -103,7 +103,16 @@ Normalizar_PDFValido_RetornaHashesYPaginas()
 
 ### 7.3.2 Integracion CI/CD — `dotnet test` en pipeline
 
-Actualmente `azure-pipelines.yml` tiene build y deploy pero **no ejecuta tests**. Añadir en el Stage `Build`:
+**Estado 2026-05-01:** parcialmente cubierto. `azure-pipelines.yml` (lineas 31-32 / 63-68) define `testsProject = src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj` y ejecuta tarea `Test` con `command: test` tras el `Build`. Los tests del proyecto Unit (~496) corren en cada build.
+
+**Pendiente:**
+
+1. Extender el pipeline para ejecutar tambien `DocumentIA.Tests.Admin` (41 tests) y `DocumentIA.AssetResolver.Tests` (7 tests).
+2. Anadir publicacion de resultados (`PublishTestResults@2`) y cobertura (`--collect:"XPlat Code Coverage"` + `PublishCodeCoverageResults`).
+3. `DocumentIA.Tests.E2E` (Playwright) debe quedar fuera del pipeline o en un stage opcional, ya que requiere Admin frontend levantado.
+4. Configurar `failTaskOnFailedTests: true` para que el pipeline falle si algun test falla.
+
+Propuesta de tarea ampliada:
 
 ```yaml
 # Tras el paso de build, antes del publish:
@@ -111,7 +120,10 @@ Actualmente `azure-pipelines.yml` tiene build y deploy pero **no ejecuta tests**
     displayName: 'Run unit tests'
     inputs:
         command: test
-        projects: 'src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj'
+        projects: |
+            src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
+            src/backend/DocumentIA.Tests.Admin/DocumentIA.Tests.Admin.csproj
+            src/plugins/DocumentIA.AssetResolver.Tests/DocumentIA.AssetResolver.Tests.csproj
         arguments: >
             --configuration Release
             --collect:"XPlat Code Coverage"
