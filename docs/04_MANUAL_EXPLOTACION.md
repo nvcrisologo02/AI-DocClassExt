@@ -290,9 +290,10 @@ El script aplica en 3 bloques:
 2. **AI**: Classification (DI + GPT fallback) + Extraction (CU + GPT fallback)
 3. **GDC**: Endpoint SOAP, credenciales, campos taxonomia
 
-> **Key Vault activo** (`srbkvprodocai`): los siguientes secretos ya estan almacenados en Key Vault y referenciados en la Function App via `@Microsoft.KeyVault(...)`:
+> **Key Vault activo** (`srbkvprodocai`): los siguientes secretos ya estan almacenados en Key Vault y referenciados via `@Microsoft.KeyVault(...)` desde la Function App o el Web App del AssetResolver:
 > - `SqlConnectionString`
 > - `GDC__Password`, `GDC__HttpBasicPassword`
+> - `user-ods-dwh` para la connection string `ConnectionStrings__AssetResolverDb` del AssetResolver
 >
 > Las API Keys de servicios AI (Document Intelligence, Content Understanding, Azure OpenAI) se gestionan en la base de datos dentro de `ModeloConfigs.ConfiguracionJson`. Si se desea centralizarlas en Key Vault, usar referencias KV (`@Microsoft.KeyVault(...)`) en los campos `apiKey` de cada modelo via la interfaz de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración.
 
@@ -512,7 +513,7 @@ Acceder desde Azure Portal → Application Insights → Live Metrics para monito
 
 ### 4.9.1 Estado Actual
 
-Key Vault `srbkvprodocai` esta activo y operativo. Los secretos criticos (`SqlConnectionString`, `GDC__Password`, `GDC__HttpBasicPassword`) se almacenan en Key Vault y se referencian desde los App Settings de la Function App via `@Microsoft.KeyVault(SecretUri=...)`. El resto de settings no sensibles permanecen como App Settings directos.
+Key Vault `srbkvprodocai` esta activo y operativo. Los secretos criticos (`SqlConnectionString`, `GDC__Password`, `GDC__HttpBasicPassword`, `user-ods-dwh`) se almacenan en Key Vault y se referencian desde los App Settings de la Function App o del Web App del AssetResolver via `@Microsoft.KeyVault(...)`. El resto de settings no sensibles permanecen como App Settings directos.
 
 ### 4.9.2 Claves a Rotar Periodicamente
 
@@ -522,17 +523,18 @@ Key Vault `srbkvprodocai` esta activo y operativo. Los secretos criticos (`SqlCo
 | API Key Azure OpenAI | `upe48-mm2avmdm` | App Settings | 90 dias |
 | API Key Content Understanding | `upe48-mm2avmdm` | App Settings | 90 dias |
 | Password SQL Server | Azure SQL | Key Vault `srbkvprodocai` | 90 dias |
+| Connection string ODS AssetResolver | ODS DWH | Key Vault `srbkvprodocai`, secret `user-ods-dwh` | Segun politica SAREB |
 | Credenciales GDC | GDC SINTWS | Key Vault `srbkvprodocai` | Segun politica SAREB |
 | Function Key | `srbappprodocai` | Azure Portal | 180 dias |
 | Storage Account Keys | `srbstgprodocai`, `srbstgproapppdocai` | App Settings | 90 dias |
 
 ### 4.9.3 Procedimiento de Rotacion
 
-**Para secretos en Key Vault** (`SqlConnectionString`, `GDC__Password`, `GDC__HttpBasicPassword`):
+**Para secretos en Key Vault** (`SqlConnectionString`, `GDC__Password`, `GDC__HttpBasicPassword`, `user-ods-dwh`):
 
 1. Generar nueva version del secreto en Key Vault `srbkvprodocai` (Azure Portal → Key Vault → Secrets → New Version).
-2. La Function App resolvera automaticamente la nueva version si la referencia usa la URI sin version; si usa URI con version, actualizar el App Setting correspondiente.
-3. Verificar que la Function App funciona correctamente tras la rotacion.
+2. La Function App o el Web App del AssetResolver resolveran automaticamente la nueva version si la referencia usa la URI sin version; si usa URI con version, actualizar el App Setting correspondiente.
+3. Verificar que la Function App o el Web App del AssetResolver funcionan correctamente tras la rotacion.
 4. Deshabilitar la version anterior del secreto en Key Vault.
 
 **Para secretos en App Settings directos** (API Keys de servicios AI):

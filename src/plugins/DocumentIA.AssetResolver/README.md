@@ -66,6 +66,7 @@ Consumir datos extraídos (IDUFIR, Referencia Catastral u otros aliases) y devol
 ## Notas
 
 - Asegúrate de que la cadena de conexión `ConnectionStrings:AssetResolverDb` en `appsettings.Development.json` apunta a la base correcta que contiene `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB`.
+- En produccion, `ConnectionStrings:AssetResolverDb` se configura como Key Vault reference al secret `user-ods-dwh` en `srbkvprodocai`.
 - Si aparecen errores de tabla no encontrada, verifica el entorno y privilegios del usuario de la cadena de conexión.
 
 ---

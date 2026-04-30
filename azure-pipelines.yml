@@ -289,7 +289,7 @@ stages:
                         throw "Azure CLI python executable not found at '$azPython'"
                       }
 
-                      $assetResolverDbSetting = "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverDbConnectionString)"
+                      $assetResolverDbSetting = "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=user-ods-dwh)"
                       $assetResolverApiKeySetting = "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
 
                       & $azPython -IBm azure.cli webapp config appsettings set `

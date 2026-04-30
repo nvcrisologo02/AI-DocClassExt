@@ -74,6 +74,7 @@ Secretos requeridos en KV:
 | `AzureWebJobsStorage` | Connection string Storage Durable hub |
 | `AzureStorageConnectionString` | Connection string Storage documentos |
 | `SqlConnectionString` | Connection string Azure SQL (o Docker temporal) |
+| `user-ods-dwh` | Connection string ODS DWH usada por `ConnectionStrings__AssetResolverDb` del AssetResolver |
 | `Extraction--AzureContentUnderstanding--ApiKey` | API Key Content Understanding |
 | `Extraction--GptFallback--ApiKey` | API Key Azure OpenAI (extraccion fallback) |
 | `Classification--AzureDocumentIntelligence--ApiKey` | API Key Document Intelligence |

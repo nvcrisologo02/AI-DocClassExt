@@ -876,7 +876,7 @@ El plugin corre como proceso independiente (puerto 5006 en local). Su conexion y
 }
 ```
 
-El plugin lee la tabla `DM_POSICION_AAII_TB` usando la connection string `AssetResolverDb` configurada en su `appsettings.json`.
+El plugin lee las tablas `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB` usando la connection string `AssetResolverDb`. En produccion, el App Setting `ConnectionStrings__AssetResolverDb` se resuelve desde Key Vault `srbkvprodocai` mediante el secret `user-ods-dwh`.
 
 ### 5.7b.9 Alias de Campos Globales (FieldAliases)
 
