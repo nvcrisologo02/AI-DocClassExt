@@ -12,6 +12,7 @@ namespace DocumentIA.Desktop.Services
     public interface IOrchestratorApiClient
     {
         Task<bool> CheckConnectionAsync();
+        Task<SystemHealthResponse?> GetSystemHealthAsync();
         Task<ProcessingResponse> IngestDocumentAsync(ProcessingRequest request);
         Task<ProcessingStatus> GetStatusAsync(string statusUri);
         Task<List<TipologiaPublicadaDto>> GetTipologiasPublicadasAsync();
@@ -68,12 +69,15 @@ namespace DocumentIA.Desktop.Services
         {
             try
             {
-                // Usamos /api/tipologias (Anonymous) como health check
+                var health = await GetSystemHealthAsync();
+                if (health != null)
+                {
+                    return true;
+                }
+
                 var request = new RestRequest("/api/tipologias", Method.Get);
                 AddFunctionKey(request);
                 var response = await _client.ExecuteAsync(request);
-                
-                // If we got any response at all, the server is reachable
                 return response != null && !string.IsNullOrEmpty(response.Content);
             }
             catch (HttpRequestException ex)
@@ -85,6 +89,35 @@ namespace DocumentIA.Desktop.Services
             {
                 System.Diagnostics.Debug.WriteLine($"Exception in CheckConnection: {ex.Message}");
                 return false;
+            }
+        }
+
+        public async Task<SystemHealthResponse?> GetSystemHealthAsync()
+        {
+            try
+            {
+                var request = new RestRequest("/api/healthcheck", Method.Post);
+                AddFunctionKey(request);
+                var response = await _client.ExecuteAsync(request);
+
+                // El endpoint puede devolver 503 cuando hay componentes unhealthy.
+                if (response == null || string.IsNullOrWhiteSpace(response.Content))
+                {
+                    return null;
+                }
+
+                var statusCode = (int)response.StatusCode;
+                if (statusCode != 200 && statusCode != 503)
+                {
+                    return null;
+                }
+
+                return JsonConvert.DeserializeObject<SystemHealthResponse>(response.Content, _jsonSettings);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"GetSystemHealthAsync Exception: {ex.Message}");
+                return null;
             }
         }
 

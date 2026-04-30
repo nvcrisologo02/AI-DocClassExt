@@ -9,6 +9,7 @@
     <local:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter"/>
     <local:EqualsConverter x:Key="EqualsConverter"/>
     <local:DurationToDisplayConverter x:Key="DurationToDisplayConverter"/>
+    <local:HealthStatusToBrushConverter x:Key="HealthStatusToBrushConverter"/>
 
     <!-- Colors -->
     <Color x:Key="ColorSuccess">#7DFF62</Color>

@@ -17,6 +17,7 @@ namespace DocumentIA.Functions.Services
     {
         private readonly HttpClient httpClient;
         private readonly GdcSettings settings;
+        private readonly string operationEndpoint;
         private readonly ILogger<GdcService> logger;
 
         public GdcService(IHttpClientFactory httpClientFactory, IOptions<GdcSettings> options, ILogger<GdcService> logger)
@@ -24,12 +25,41 @@ namespace DocumentIA.Functions.Services
             this.httpClient = httpClientFactory.CreateClient("GDC");
             this.settings = options.Value;
             this.logger = logger;
+            this.operationEndpoint = NormalizeEndpointForOperations(this.settings.Endpoint);
 
-            if (!string.IsNullOrEmpty(this.settings.Endpoint))
+            if (!string.IsNullOrEmpty(this.operationEndpoint))
             {
-                try { this.httpClient.BaseAddress = new Uri(this.settings.Endpoint); } catch { }
+                try { this.httpClient.BaseAddress = new Uri(this.operationEndpoint); } catch { }
             }
+
+            if (!string.Equals(this.settings.Endpoint, this.operationEndpoint, StringComparison.OrdinalIgnoreCase))
+            {
+                this.logger.LogWarning("GDC endpoint contains metadata query (e.g. ?wsdl). Using normalized endpoint for SOAP operations: {Endpoint}", this.operationEndpoint);
+            }
+
             this.httpClient.Timeout = TimeSpan.FromSeconds(this.settings.TimeoutSeconds);
+        }
+
+        private static string NormalizeEndpointForOperations(string endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(endpoint))
+            {
+                return string.Empty;
+            }
+
+            var trimmed = endpoint.Trim();
+            if (!Uri.TryCreate(trimmed, UriKind.Absolute, out var uri))
+            {
+                return trimmed;
+            }
+
+            var builder = new UriBuilder(uri);
+            if (string.Equals(builder.Query.TrimStart('?'), "wsdl", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.Query = string.Empty;
+            }
+
+            return builder.Uri.ToString();
         }
 
         private static string WrapSoapEnvelope(string body)
@@ -351,7 +381,7 @@ namespace DocumentIA.Functions.Services
             var envelope = WrapSoapEnvelope(body);
             var content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
 
-            using var resp = await httpClient.PostAsync(this.settings.Endpoint ?? string.Empty, content, cancellationToken);
+            using var resp = await httpClient.PostAsync(this.operationEndpoint ?? string.Empty, content, cancellationToken);
             var xml = await resp.Content.ReadAsStringAsync(cancellationToken);
 
             try
@@ -392,7 +422,7 @@ namespace DocumentIA.Functions.Services
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
-                using var resp = await httpClient.PostAsync(this.settings.Endpoint ?? string.Empty, content, cancellationToken);
+                using var resp = await httpClient.PostAsync(this.operationEndpoint ?? string.Empty, content, cancellationToken);
                 var xml = await resp.Content.ReadAsStringAsync(cancellationToken);
                 sw.Stop();
                 result.DuracionMs = (int)sw.ElapsedMilliseconds;
@@ -478,7 +508,7 @@ namespace DocumentIA.Functions.Services
             var envelope = WrapSoapEnvelope(body);
             var content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
 
-            using var resp = await httpClient.PostAsync(this.settings.Endpoint ?? string.Empty, content, cancellationToken);
+            using var resp = await httpClient.PostAsync(this.operationEndpoint ?? string.Empty, content, cancellationToken);
             var xml = await resp.Content.ReadAsStringAsync(cancellationToken);
 
             var doc = new XmlDocument();
@@ -528,7 +558,7 @@ namespace DocumentIA.Functions.Services
             var envelope = WrapSoapEnvelope(body);
             var content = new StringContent(envelope, Encoding.UTF8, "application/soap+xml");
 
-            using var resp = await httpClient.PostAsync(this.settings.Endpoint ?? string.Empty, content, cancellationToken);
+            using var resp = await httpClient.PostAsync(this.operationEndpoint ?? string.Empty, content, cancellationToken);
             var xml = await resp.Content.ReadAsStringAsync(cancellationToken);
 
             var doc = new XmlDocument();

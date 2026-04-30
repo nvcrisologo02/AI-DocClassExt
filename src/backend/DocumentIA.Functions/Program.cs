@@ -234,6 +234,7 @@ var host = new HostBuilder()
             new LayoutModelRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),
                 provider.GetRequiredService<IServiceScopeFactory>()));
+        services.AddScoped<ISystemHealthService, SystemHealthService>();
 
 
     })

@@ -182,6 +182,36 @@ public class DashboardAgregadosDto
     public List<AgregadoGrupoDto> PorModelo { get; set; } = [];
 }
 
+public class HealthComponentDto
+{
+    public string Status { get; set; } = "unconfigured";
+    public string? Message { get; set; }
+}
+
+public class ModelProvidersHealthDto
+{
+    public string Status { get; set; } = "unconfigured";
+    public HealthComponentDto Classification { get; set; } = new();
+    public HealthComponentDto Extraction { get; set; } = new();
+    public HealthComponentDto Prompt { get; set; } = new();
+}
+
+public class HealthComponentsDto
+{
+    public HealthComponentDto Functions { get; set; } = new();
+    public HealthComponentDto AssetResolver { get; set; } = new();
+    public HealthComponentDto Gdc { get; set; } = new();
+    public ModelProvidersHealthDto ModelProviders { get; set; } = new();
+}
+
+public class SystemHealthDto
+{
+    public bool Ok { get; set; }
+    public string Status { get; set; } = "unconfigured";
+    public DateTimeOffset Timestamp { get; set; }
+    public HealthComponentsDto Components { get; set; } = new();
+}
+
 // ─── Servicio ─────────────────────────────────────────────────────────────────
 
 public class MonitorService
@@ -231,6 +261,25 @@ public class MonitorService
         {
             return await _httpClient.GetFromJsonAsync<DashboardAgregadosDto>(
                 $"management/ejecuciones/agregados?dias={dias}", JsonOptions);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<SystemHealthDto?> GetSystemHealthAsync()
+    {
+        try
+        {
+            using var response = await _httpClient.PostAsync("healthcheck", content: null);
+            if (!response.IsSuccessStatusCode && (int)response.StatusCode != 503)
+            {
+                return null;
+            }
+
+            var payload = await response.Content.ReadFromJsonAsync<SystemHealthDto>(JsonOptions);
+            return payload;
         }
         catch
         {

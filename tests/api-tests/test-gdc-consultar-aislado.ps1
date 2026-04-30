@@ -159,22 +159,6 @@ function Invoke-Soap([string]$soapAction, [string]$bodyXml, [string]$operacion) 
     Write-Section "REQUEST: $operacion"
     Write-Host (PrettyXml $envelope) -ForegroundColor DarkCyan
 
-    # Skip SSL for dev (same as DangerousAcceptAnyServerCertificateValidator in code)
-    if (-not ("TrustAll" -as [type])) {
-        Add-Type @"
-using System.Net;
-using System.Net.Security;
-using System.Security.Cryptography.X509Certificates;
-public class TrustAll {
-    public static void Enable() {
-        ServicePointManager.ServerCertificateValidationCallback =
-            (object s, X509Certificate c, X509Chain ch, SslPolicyErrors e) => true;
-    }
-}
-"@
-    }
-    [TrustAll]::Enable()
-
     $headers = @{ "Content-Type" = "application/soap+xml; charset=utf-8"; "SOAPAction" = $soapAction }
 
     # HTTP Basic Auth if configured
@@ -185,18 +169,19 @@ public class TrustAll {
         $headers["Authorization"] = "Basic $b64"
     }
 
+    # -SkipCertificateCheck equivale a BypassSslValidation (PS 6+)
     try {
         $response = Invoke-WebRequest -Uri $Endpoint -Method POST -Body $envelope `
-            -Headers $headers -UseBasicParsing -TimeoutSec 30
+            -Headers $headers -UseBasicParsing -TimeoutSec 30 -SkipCertificateCheck
         return $response.Content
     } catch {
-        $statusCode = $_.Exception.Response.StatusCode.Value__
+        $statusCode = $_.Exception.Response?.StatusCode.Value__
         $rawResp    = $null
         try {
             $reader  = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
             $rawResp = $reader.ReadToEnd()
         } catch {}
-        Write-Warn "HTTP $statusCode devuelto por el servidor"
+        Write-Warn "HTTP ${statusCode}: $($_.Exception.Message)"
         if ($rawResp) { return $rawResp }
         throw
     }
@@ -207,9 +192,11 @@ public class TrustAll {
 $safeAppId  = XmlEscape $ApplicationId
 $safeUser   = XmlEscape $Username
 $safeNominal= XmlEscape $NominalUser
+$safePass   = XmlEscape $Password
 
 $identityXml = "<ns0:applicationId>$safeAppId</ns0:applicationId>" +
                "<ns0:nominalUser>$safeNominal</ns0:nominalUser>" +
+               "<ns0:password>$safePass</ns0:password>" +
                "<ns0:username>$safeUser</ns0:username>"
 
 # -- BUILD: searchEntities filter (mirrors GdcService.cs logic) --------------

@@ -256,4 +256,58 @@ namespace DocumentIA.Desktop.Models
         public long? GetDuration() => DurationMs.HasValue ? DurationMs : DurationMsAlt;
         public string? GetMessage() => !string.IsNullOrEmpty(Message) ? Message : MessageAlt;
     }
+
+    public class SystemHealthResponse
+    {
+        [JsonProperty("ok")]
+        public bool Ok { get; set; }
+
+        [JsonProperty("status")]
+        public string Status { get; set; } = "unconfigured";
+
+        [JsonProperty("timestamp")]
+        public string? Timestamp { get; set; }
+
+        [JsonProperty("components")]
+        public HealthComponents? Components { get; set; }
+    }
+
+    public class HealthComponents
+    {
+        [JsonProperty("functions")]
+        public HealthComponent Functions { get; set; } = new();
+
+        [JsonProperty("assetResolver")]
+        public HealthComponent AssetResolver { get; set; } = new();
+
+        [JsonProperty("gdc")]
+        public HealthComponent Gdc { get; set; } = new();
+
+        [JsonProperty("modelProviders")]
+        public ModelProvidersHealth ModelProviders { get; set; } = new();
+    }
+
+    public class ModelProvidersHealth
+    {
+        [JsonProperty("status")]
+        public string Status { get; set; } = "unconfigured";
+
+        [JsonProperty("classification")]
+        public HealthComponent Classification { get; set; } = new();
+
+        [JsonProperty("extraction")]
+        public HealthComponent Extraction { get; set; } = new();
+
+        [JsonProperty("prompt")]
+        public HealthComponent Prompt { get; set; } = new();
+    }
+
+    public class HealthComponent
+    {
+        [JsonProperty("status")]
+        public string Status { get; set; } = "unconfigured";
+
+        [JsonProperty("message")]
+        public string? Message { get; set; }
+    }
 }
