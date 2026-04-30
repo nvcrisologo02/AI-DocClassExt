@@ -73,6 +73,59 @@
         </div>
     }
 
+    <div class="card shadow-sm mb-4">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <div>
+                    <h6 class="mb-0">Salud del sistema</h6>
+                    <small class="text-muted">Estado de componentes backend</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    @if (_loadingSystemHealth)
+                    {
+                        <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                    }
+                    @if (_systemHealth != null)
+                    {
+                        <span class="badge @HealthBadgeClass(_systemHealth.Status)">@_systemHealth.Status</span>
+                        <small class="text-muted">@_systemHealth.Timestamp.LocalDateTime.ToString("HH:mm:ss")</small>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">sin datos</span>
+                    }
+                </div>
+            </div>
+
+            @if (_systemHealth != null)
+            {
+                <div class="row g-2" style="font-size:0.85rem">
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.Functions.Status)">functions</span> @_systemHealth.Components.Functions.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.AssetResolver.Status)">assetResolver</span> @_systemHealth.Components.AssetResolver.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.Gdc.Status)">gdc</span> @_systemHealth.Components.Gdc.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.ModelProviders.Status)">modelProviders</span> @_systemHealth.Components.ModelProviders.Status</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.ModelProviders.Classification.Status)">classification</span> @_systemHealth.Components.ModelProviders.Classification.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.ModelProviders.Extraction.Status)">extraction</span> @_systemHealth.Components.ModelProviders.Extraction.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.ModelProviders.Prompt.Status)">prompt</span> @_systemHealth.Components.ModelProviders.Prompt.Message</div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
     <!-- Tarjetas de resumen -->
     @if (_ejecuciones.Count > 0)
     {
@@ -726,6 +779,8 @@
     private Timer? _timer;
     private DateTime? _ultimaActualizacion;
     private string _proximoRefresh = "—";
+    private SystemHealthDto? _systemHealth;
+    private bool _loadingSystemHealth;
 
     // ── Dashboard ──────────────────────────────────────────────────────────────
     private DashboardAgregadosDto? _dashboard;
@@ -746,6 +801,7 @@
     {
         await RefreshAsync();
         await LoadDashboardAsync();
+        await LoadSystemHealthAsync();
         StartTimer();
     }
 
@@ -756,6 +812,7 @@
         try
         {
             _ejecuciones = await MonitorService.GetUltimasEjecucionesAsync(_top);
+            await LoadSystemHealthAsync();
             _ultimaActualizacion = DateTime.Now;
         }
         catch (Exception ex)
@@ -797,6 +854,19 @@
         finally
         {
             _loadingDashboard = false;
+        }
+    }
+
+    private async Task LoadSystemHealthAsync()
+    {
+        _loadingSystemHealth = true;
+        try
+        {
+            _systemHealth = await MonitorService.GetSystemHealthAsync();
+        }
+        finally
+        {
+            _loadingSystemHealth = false;
         }
     }
 
@@ -890,6 +960,15 @@
         "Duplicado"                         => "bg-secondary",
         "Running" or "Pending"              => "bg-warning text-dark",
         _                                   => "bg-info text-dark"
+    };
+
+    private static string HealthBadgeClass(string? status) => status?.ToLowerInvariant() switch
+    {
+        "healthy" => "bg-success",
+        "degraded" => "bg-warning text-dark",
+        "unhealthy" => "bg-danger",
+        "unconfigured" => "bg-secondary",
+        _ => "bg-secondary"
     };
 
     private static string CalidadBadgeClass(string calidad) => calidad switch

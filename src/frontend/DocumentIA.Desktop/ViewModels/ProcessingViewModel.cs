@@ -190,6 +190,90 @@ namespace DocumentIA.Desktop.ViewModels
             }
         }
 
+        private string _healthAggregateStatus = "unknown";
+        public string HealthAggregateStatus
+        {
+            get => _healthAggregateStatus;
+            set
+            {
+                if (_healthAggregateStatus != value)
+                {
+                    _healthAggregateStatus = value;
+                    OnPropertyChanged(nameof(HealthAggregateStatus));
+                }
+            }
+        }
+
+        private string _healthFunctions = "unknown";
+        public string HealthFunctions
+        {
+            get => _healthFunctions;
+            set
+            {
+                if (_healthFunctions != value)
+                {
+                    _healthFunctions = value;
+                    OnPropertyChanged(nameof(HealthFunctions));
+                }
+            }
+        }
+
+        private string _healthAssetResolver = "unknown";
+        public string HealthAssetResolver
+        {
+            get => _healthAssetResolver;
+            set
+            {
+                if (_healthAssetResolver != value)
+                {
+                    _healthAssetResolver = value;
+                    OnPropertyChanged(nameof(HealthAssetResolver));
+                }
+            }
+        }
+
+        private string _healthGdc = "unknown";
+        public string HealthGdc
+        {
+            get => _healthGdc;
+            set
+            {
+                if (_healthGdc != value)
+                {
+                    _healthGdc = value;
+                    OnPropertyChanged(nameof(HealthGdc));
+                }
+            }
+        }
+
+        private string _healthModelProviders = "unknown";
+        public string HealthModelProviders
+        {
+            get => _healthModelProviders;
+            set
+            {
+                if (_healthModelProviders != value)
+                {
+                    _healthModelProviders = value;
+                    OnPropertyChanged(nameof(HealthModelProviders));
+                }
+            }
+        }
+
+        private string _healthUpdatedAt = "—";
+        public string HealthUpdatedAt
+        {
+            get => _healthUpdatedAt;
+            set
+            {
+                if (_healthUpdatedAt != value)
+                {
+                    _healthUpdatedAt = value;
+                    OnPropertyChanged(nameof(HealthUpdatedAt));
+                }
+            }
+        }
+
         private bool _skipDuplicateCheck = true;
         public bool SkipDuplicateCheck
         {
@@ -562,12 +646,36 @@ namespace DocumentIA.Desktop.ViewModels
         {
             try
             {
+                var health = await _apiClient.GetSystemHealthAsync();
+                if (health != null)
+                {
+                    IsApiConnected = true;
+                    HealthAggregateStatus = health.Status;
+                    HealthFunctions = health.Components?.Functions?.Status ?? "unknown";
+                    HealthAssetResolver = health.Components?.AssetResolver?.Status ?? "unknown";
+                    HealthGdc = health.Components?.Gdc?.Status ?? "unknown";
+                    HealthModelProviders = health.Components?.ModelProviders?.Status ?? "unknown";
+                    HealthUpdatedAt = DateTime.Now.ToString("HH:mm:ss");
+                    ApiStatusMessage = $"API {health.Status}";
+                    return;
+                }
+
                 IsApiConnected = await _apiClient.CheckConnectionAsync();
-                ApiStatusMessage = IsApiConnected ? "API Conectada ✓" : "API No Disponible ✗";
+                if (IsApiConnected)
+                {
+                    HealthAggregateStatus = "unknown";
+                    ApiStatusMessage = "API Conectada ✓ (sin detalle healthcheck)";
+                }
+                else
+                {
+                    HealthAggregateStatus = "unhealthy";
+                    ApiStatusMessage = "API No Disponible ✗";
+                }
             }
             catch (Exception ex)
             {
                 IsApiConnected = false;
+                HealthAggregateStatus = "unhealthy";
                 ApiStatusMessage = $"Error: {ex.Message}";
             }
         }

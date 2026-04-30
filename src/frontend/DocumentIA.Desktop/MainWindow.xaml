@@ -239,6 +239,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
@@ -261,7 +262,42 @@
                     <Button Grid.Column="2" Content="Copiar" Style="{StaticResource ButtonSecondary}" Height="26" MinWidth="58"/>
                 </Grid>
 
-                <Grid Grid.Row="2">
+                <Border Grid.Row="2" Margin="0,0,0,12" Background="#0F1520" BorderBrush="#2A3140" BorderThickness="1" CornerRadius="6" Padding="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="AGG" Foreground="{StaticResource BrushTextMuted}" FontSize="10" Margin="0,0,6,0"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding HealthAggregateStatus}" Foreground="{Binding HealthAggregateStatus, Converter={StaticResource HealthStatusToBrushConverter}}" FontSize="10" FontWeight="SemiBold"/>
+
+                        <TextBlock Grid.Row="0" Grid.Column="2" Text="FUNCTIONS" Foreground="{StaticResource BrushTextMuted}" FontSize="10" Margin="14,0,6,0"/>
+                        <TextBlock Grid.Row="0" Grid.Column="3" Text="{Binding HealthFunctions}" Foreground="{Binding HealthFunctions, Converter={StaticResource HealthStatusToBrushConverter}}" FontSize="10" FontWeight="SemiBold"/>
+
+                        <TextBlock Grid.Row="0" Grid.Column="4" Text="ASSET" Foreground="{StaticResource BrushTextMuted}" FontSize="10" Margin="14,0,6,0"/>
+                        <TextBlock Grid.Row="0" Grid.Column="5" Text="{Binding HealthAssetResolver}" Foreground="{Binding HealthAssetResolver, Converter={StaticResource HealthStatusToBrushConverter}}" FontSize="10" FontWeight="SemiBold"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="GDC" Foreground="{StaticResource BrushTextMuted}" FontSize="10" Margin="0,4,6,0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding HealthGdc}" Foreground="{Binding HealthGdc, Converter={StaticResource HealthStatusToBrushConverter}}" FontSize="10" FontWeight="SemiBold" Margin="0,4,0,0"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="2" Text="MODELS" Foreground="{StaticResource BrushTextMuted}" FontSize="10" Margin="14,4,6,0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding HealthModelProviders}" Foreground="{Binding HealthModelProviders, Converter={StaticResource HealthStatusToBrushConverter}}" FontSize="10" FontWeight="SemiBold" Margin="0,4,0,0"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="4" Text="UPDATED" Foreground="{StaticResource BrushTextMuted}" FontSize="10" Margin="14,4,6,0"/>
+                        <TextBlock Grid.Row="1" Grid.Column="5" Text="{Binding HealthUpdatedAt}" Foreground="{StaticResource BrushTextMuted}" FontSize="10" Margin="0,4,0,0"/>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="3">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>

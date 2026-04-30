@@ -107,4 +107,22 @@ namespace DocumentIA.Desktop.Converters
 
         public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) => throw new NotImplementedException();
     }
+
+    public class HealthStatusToBrushConverter : IValueConverter
+    {
+        public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+        {
+            var status = value?.ToString()?.Trim().ToLowerInvariant();
+            return status switch
+            {
+                "healthy" => new SolidColorBrush(Color.FromRgb(16, 185, 129)),
+                "degraded" => new SolidColorBrush(Color.FromRgb(245, 158, 11)),
+                "unhealthy" => new SolidColorBrush(Color.FromRgb(239, 68, 68)),
+                "unconfigured" => new SolidColorBrush(Color.FromRgb(148, 163, 184)),
+                _ => new SolidColorBrush(Color.FromRgb(148, 163, 184))
+            };
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => throw new NotImplementedException();
+    }
 }

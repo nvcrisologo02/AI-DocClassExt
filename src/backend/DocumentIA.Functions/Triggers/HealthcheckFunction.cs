@@ -30,18 +30,16 @@ public class HealthcheckFunction
     public async Task<HttpResponseData> PostHealthcheck(
         [HttpTrigger(AuthorizationLevel.Anonymous, "post", Route = "healthcheck")] HttpRequestData req)
     {
-        var response = req.CreateResponse(HttpStatusCode.OK);
-        response.Headers.Add("Content-Type", "application/json; charset=utf-8");
-
         if (_healthService is null)
         {
+            var fallbackResponse = req.CreateResponse(HttpStatusCode.OK);
             // Fallback: respuesta mínima compatible con el contrato anterior
-            await response.WriteStringAsync(JsonSerializer.Serialize(new
+            await WriteJsonAsync(fallbackResponse, new
             {
                 ok = true,
                 timestamp = DateTimeOffset.UtcNow
-            }, JsonOptions));
-            return response;
+            });
+            return fallbackResponse;
         }
 
         var snapshot = await _healthService.GetHealthAsync(req.FunctionContext.CancellationToken);
@@ -71,9 +69,15 @@ public class HealthcheckFunction
             ? HttpStatusCode.ServiceUnavailable
             : HttpStatusCode.OK;
 
-        response = req.CreateResponse(httpStatus);
+        var response = req.CreateResponse(httpStatus);
+        await WriteJsonAsync(response, payload);
+        return response;
+    }
+
+    private static async Task WriteJsonAsync(HttpResponseData response, object payload)
+    {
+        response.Headers.Remove("Content-Type");
         response.Headers.Add("Content-Type", "application/json; charset=utf-8");
         await response.WriteStringAsync(JsonSerializer.Serialize(payload, JsonOptions));
-        return response;
     }
 }

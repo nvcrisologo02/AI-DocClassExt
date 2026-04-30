@@ -40,6 +40,46 @@ function Get-CorrelationId {
     return [Guid]::NewGuid().ToString()
 }
 
+function Resolve-ApiKeyValue {
+    param([string]$ApiKeyValue)
+
+    if ([string]::IsNullOrWhiteSpace($ApiKeyValue)) {
+        throw "ApiKey no puede estar vacio."
+    }
+
+    $match = [regex]::Match($ApiKeyValue.Trim(), '^@Microsoft\.KeyVault\((?<args>.+)\)$', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    if (-not $match.Success) {
+        return $ApiKeyValue
+    }
+
+    $kvArgs = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::OrdinalIgnoreCase)
+    foreach ($part in ($match.Groups["args"].Value -split ';')) {
+        $partMatch = [regex]::Match($part, '^\s*(?<key>[^=]+)\s*=\s*(?<value>.*?)\s*$')
+        if ($partMatch.Success) {
+            $kvArgs[$partMatch.Groups["key"].Value] = $partMatch.Groups["value"].Value
+        }
+    }
+
+    $vaultName = $kvArgs["VaultName"]
+    $secretName = $kvArgs["SecretName"]
+
+    if ([string]::IsNullOrWhiteSpace($vaultName) -or [string]::IsNullOrWhiteSpace($secretName)) {
+        throw "Referencia Key Vault no soportada. Usa @Microsoft.KeyVault(VaultName=<vault>;SecretName=<secret>)."
+    }
+
+    if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
+        throw "No se encontro Azure CLI ('az'). Instala Azure CLI o pasa -ApiKey con el valor real del secreto."
+    }
+
+    Write-Host "Resolviendo ApiKey desde Key Vault '$vaultName' / secreto '$secretName'..." -ForegroundColor Gray
+    $secretValue = az keyvault secret show --vault-name $vaultName --name $secretName --query value -o tsv 2>$null
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($secretValue)) {
+        throw "No se pudo resolver el secreto '$secretName' en Key Vault '$vaultName'. Verifica 'az login' y permisos de lectura de secretos."
+    }
+
+    return $secretValue.Trim()
+}
+
 function Build-BaseRequest {
     param([string]$CorrelationId)
 
@@ -254,6 +294,8 @@ function Show-ScenarioResult {
 Write-Title "ASSETRESOLVER TEST TOOL"
 Write-Host "BaseUrl: $BaseUrl" -ForegroundColor Gray
 Write-Host "DryRun: $DryRun" -ForegroundColor Gray
+
+$ApiKey = Resolve-ApiKeyValue -ApiKeyValue $ApiKey
 
 if ([string]::IsNullOrWhiteSpace($SampleIdufir) -or [string]::IsNullOrWhiteSpace($SampleRefCatastral) -or [string]::IsNullOrWhiteSpace($SampleDireccion)) {
     Write-Host "Aviso: faltan valores de muestra (SampleIdufir/SampleRefCatastral/SampleDireccion). Algunos escenarios pueden fallar por datos." -ForegroundColor Yellow
