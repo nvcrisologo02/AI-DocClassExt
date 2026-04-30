@@ -234,6 +234,18 @@ var host = new HostBuilder()
             new LayoutModelRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),
                 provider.GetRequiredService<IServiceScopeFactory>()));
+            
+            // Health monitoring
+                services.AddSingleton<ISystemHealthService>(provider =>
+                new SystemHealthService(
+                    provider.GetRequiredService<IHttpClientFactory>(),
+                    provider.GetRequiredService<IGdcService>(),
+                    provider.GetRequiredService<IConfiguration>(),
+                    provider.GetRequiredService<IMemoryCache>(),
+                    provider.GetRequiredService<ILogger<SystemHealthService>>(),
+                    provider.GetService<ExtractionModelRegistryLoader>(),
+                    provider.GetService<ClassificationModelRegistryLoader>(),
+                    provider.GetService<PromptModelRegistryLoader>()));
 
 
     })
