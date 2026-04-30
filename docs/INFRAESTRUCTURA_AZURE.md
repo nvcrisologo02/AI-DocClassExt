@@ -1,5 +1,5 @@
 # DocumentIA — Infraestructura Azure
-> Resource Group: **rg-documentia-mvp** · West Europe | Abril 2026
+> Resource Group: **SRBRGDOCSAIPROD** · West Europe | Abril 2026
 
 ---
 
@@ -11,7 +11,7 @@ flowchart TB
         USR["👤 Administrador"]
     end
 
-    subgraph AZURE["☁️ Azure — rg-documentia-mvp"]
+    subgraph AZURE["☁️ Azure — SRBRGDOCSAIPROD"]
 
         subgraph COMPUTE["⚙️ Cómputo  ·  App Service Plan: srbspprodocai"]
             FUNC["srbappprodocai\nFunction App · .NET 8\nDurable Functions v4"]

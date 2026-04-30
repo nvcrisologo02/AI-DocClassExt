@@ -55,14 +55,15 @@ python training/train_classifier.py
 
 ## Deploy
 
-```bash
-# Infraestructura
-az deployment group create --resource-group rg-documentia-mvp \
-  --template-file infrastructure/bicep/main.bicep
+Despliegue productivo gestionado por el pipeline `azure-pipelines.yml` (rama `main`) sobre el Resource Group **`SRBRGDOCSAIPROD`** (West Europe). Detalle completo en [docs/INFRAESTRUCTURA_AZURE.md](docs/INFRAESTRUCTURA_AZURE.md) y [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md).
 
-# Functions
-func azure functionapp publish <function-app-name>
+Despliegue manual (Functions) sobre la Function App existente:
+
+```bash
+func azure functionapp publish srbappprodocai
 ```
+
+> Nota: actualmente el repositorio no incluye plantillas Bicep/Terraform productivas; los recursos se crearon previamente y el pipeline sólo despliega código.
 
 ## Documentacion
 
@@ -70,10 +71,9 @@ Ver carpeta docs/ para:
 - Arquitectura detallada
 - Contratos de entrada/salida
 - Manuales de operacion
-- Manual de plugins: `docs/manuales/MANUAL_PLUGINS.md`
-- Manual de activities (Azure Functions): `docs/manuales/MANUAL_ACTIVITIES_AZURE_FUNCTIONS.md`
-- Manual del motor de validaciones: `docs/manuales/MANUAL_VALIDACIONES.md`
-- Plantillas de plugins: `docs/contratos/PLANTILLA_PLUGINS_JSON.md`
+- Manual de plugins: [docs/manuales/MANUAL_PLUGINS.md](docs/manuales/MANUAL_PLUGINS.md)
+- Manual del motor de validaciones: [docs/manuales/MANUAL_VALIDACIONES.md](docs/manuales/MANUAL_VALIDACIONES.md)
+- Plantillas de plugins: [docs/contratos/PLANTILLA_PLUGINS_JSON.md](docs/contratos/PLANTILLA_PLUGINS_JSON.md)
 
 ## Licencia
 

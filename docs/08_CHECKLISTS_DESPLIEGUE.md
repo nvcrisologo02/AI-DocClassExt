@@ -34,11 +34,11 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 | 3.6 | Azure OpenAI + Content Understanding | `upe48-mm2avmdm` | Sweden Central | Verificar deployment `gpt-4o-mini` activo | ☐ |
 | 3.7 | Application Insights | `srbappiprodocai` | West Europe | Existente | ☐ |
 | 3.8 | Key Vault | `srbkvprodocai` | West Europe | Existente | ☐ |
-| 3.9 | **Azure SQL Server + Database** | `srbsqlprodocai` / `DocumentIA` | West Europe | **PENDIENTE DE CREAR** | ☐ |
-| 3.10 | Web App Admin | `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | West Europe | **PENDIENTE DE CREAR** (EP5 roadmap) | ☐ |
+| 3.9 | **Azure SQL Server + Database** | `srbsqlprodocai` / `DocumentIA` | West Europe | Existente (Operativo) — verificado 2026-04-30 (ver `docs/09_AUDITORIA_CONFIGURACION_2026-04-30.md`) | ☑ |
+| 3.10 | Web App Admin | `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
+| 3.11 | App Service AssetResolver | `srbwebpluginassetresolver` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
 
-> Mientras Azure SQL no esté disponible, la BD se sirve desde Docker SQL local.  
-> Connection string temporal: `Server=<IP-MAQUINA>,1433;Database=DocumentIA;User Id=sa;Password=COMPLETAR_SQL_PASSWORD;TrustServerCertificate=True;`
+> Para entornos de desarrollo local sigue usándose Docker SQL (`Server=localhost,1433;Database=DocumentIA;User Id=sa;Password=<dev>;TrustServerCertificate=True;`).
 
 ---
 

@@ -17,17 +17,19 @@ gantt
     EP1 Ingesta y orquestacion         :done, ep1, 2025-12-01, 2026-01-15
     EP2 Clasificacion y extraccion AI   :done, ep2, 2026-01-15, 2026-04-13
     EP4 Persistencia y auditoria        :done, ep4, 2026-02-01, 2026-02-28
+    EP8 Sistema de Plugins              :done, ep8, 2026-02-15, 2026-04-13
     INFRA Infraestructura produccion    :done, infra, 2026-03-01, 2026-04-13
 
     section En progreso
     EP3 Validacion y motor de reglas    :active, ep3, 2026-02-15, 2026-04-15
     EP5 Configuracion y tipologias      :active, ep5, 2026-03-01, 2026-04-30
     EP6 Observabilidad y pruebas        :active, ep6, 2026-03-15, 2026-04-30
-    EP9 GDC integracion completa        :active, ep9, 2026-03-01, 2026-04-30
+    EP10 AssetResolver                  :active, ep10, 2026-04-01, 2026-05-15
+    EP-GDC Integracion GDC (transversal) :active, epgdc, 2026-03-01, 2026-04-30
 
     section Planificado
     EP7 Proteccion datos GDPR           :ep7, 2026-05-01, 2026-06-15
-    EP8 Mantenimiento Blob              :ep8, 2026-05-15, 2026-06-30
+    EP9 Mantenimiento Blob              :ep9, 2026-05-15, 2026-06-30
 ```
 
 ### Detalle por Epic
@@ -36,16 +38,15 @@ gantt
 |------|--------|--------|-------------|-------|
 | **EP1** | Ingesta y orquestacion | DONE | 100% | Orquestador con 13 actividades, timeout GDC, early exits, customStatus, seguimiento timeline |
 | **EP2** | Clasificacion y extraccion AI | DONE | 100% | DI clasificacion + CU extraccion + fallback GPT. Fix preproceso markdown aplicado. Degradacion segura activa. |
-| **EP3** | Validacion y motor de reglas | IN PROGRESS | 85% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field, reglas condicionales. |
 | **EP3** | Validacion y motor de reglas | IN PROGRESS | 88% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field (V-1), reglas condicionales (V-2). |
 | **EP4** | Persistencia y auditoria | DONE | 100% | 9 entidades EF Core, migraciones auto, auditoria por ejecucion, validaciones por campo. |
 | **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
 | **EP6** | Observabilidad y pruebas | IN PROGRESS | 65% | ~231 tests automatizados, customStatus, seguimiento orquestacion. Pendiente: tests CI/CD pipeline (T-4), tests orchestrator (T-1), NormalizarActivity (T-2), EF tests (T-3), dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
-| **EP7** | Proteccion datos / GDPR | PLANNED | 0% | Cifrado en reposo (AES-256-GCM), masking PII en logs, retencion configurable, KV para secrets. |
-| **EP8** | Mantenimiento Blob | PLANNED | 0% | Lifecycle management, limpieza automatica, retencion por tipologia. |
-| **EP9** | GDC integracion completa | IN PROGRESS | 75% | SubirGDC + ConsultarDocumento operativos. Pendiente: retry avanzado, reconciliacion DOC_OBJECT_EXISTS, idempotencia. |
-| **EP9** | GDC integracion completa | IN PROGRESS | 80% | SubirGDC + ConsultarDocumento operativos. Pendiente: retry Polly (G-1), idempotencia DOC_OBJECT_EXISTS (G-2), reconciliacion async (G-3). |
-| **EP10** | Resolucion de Activo | DONE | 100% | AssetResolver con 3 criterios (IDUFIR, RefCat, Direccion). AND/OR configurable. Flags de habilitacion por criterio. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
+| **EP7** | Proteccion datos / GDPR (ADO Epic 98519) | NEW | 0% | Cifrado en reposo (AES-256-GCM), masking PII en logs, retencion configurable, KV para secrets. Features ADO: 98520 F7.1, 98524 F7.2, 98529 F7.3, 98534 F7.4. |
+| **EP8** | Sistema de Plugins de Integracion (ADO Epic 98628) | DONE | 100% | Arquitectura plugins + plugin REST generico + plugins Atlas/Catastro/GDC + resiliencia y observabilidad. Features 98634-98637 todas Done. |
+| **EP9** | Mantenimiento y limpieza de Blob Storage (ADO Epic 98692) | NEW | 0% | Politica de retencion por tipologia (F9.1), motor de limpieza automatica (F9.2), inventario y reporting (F9.3), observabilidad/auditoria (F9.4). Features 98693-98696 todas New. |
+| **EP10** | Resolucion de Activo por Direccion en AssetResolver (ADO Epic 99089) | IN PROGRESS | 90% | Core operativo: 3 criterios (IDUFIR, RefCat, Direccion) + doble origen AAII/AACC + flags por criterio. Pendiente Tanda C: AR-10 evaluacion rendimiento/calidad matching (Task 99101), AR-12 hardening operativo + telemetria (Task 99103). Feature AR-F1 (99091) In Progress. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
+| **EP-GDC** | Integracion GDC — trabajo tecnico transversal (no es Epic en ADO) | IN PROGRESS | 80% | SubirGDC + ConsultarDocumento operativos (HU 8.4 = PBI 98632 Committed; HU 8.5 endpoint DEV real = PBI 98871 To Validate). Pendiente: retry Polly (G-1), idempotencia DOC_OBJECT_EXISTS (G-2), reconciliacion async (G-3). |
 
 ---
 

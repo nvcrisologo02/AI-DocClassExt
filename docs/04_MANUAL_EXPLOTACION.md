@@ -34,7 +34,7 @@
 | Content Understanding | `upe48-mm2avmdm` | Sweden Central | Extraccion de campos |
 | Application Insights | `srbappiprodocai` | West Europe | Telemetria y monitorizacion |
 | Key Vault | `srbkvprodocai` | West Europe | Secretos (connection strings, credenciales GDC) |
-| Azure SQL | (pendiente) | — | BD productiva (actualmente Docker SQL local) |
+| Azure SQL Server / DB | `srbsqlprodocai` / `DocumentIA` | West Europe | BD productiva (operativa). Para desarrollo local se sigue usando Docker SQL. |
 
 ---
 
