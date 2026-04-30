@@ -75,6 +75,7 @@ Secretos requeridos en KV:
 | `AzureStorageConnectionString` | Connection string Storage documentos |
 | `SqlConnectionString` | Connection string Azure SQL (o Docker temporal) |
 | `user-ods-dwh` | Connection string ODS DWH usada por `ConnectionStrings__AssetResolverDb` del AssetResolver |
+| `AssetResolverApiKey` | API key compartida entre Function App (`AssetResolver__ApiKey`) y Web App del AssetResolver (`ApiKey`) |
 | `Extraction--AzureContentUnderstanding--ApiKey` | API Key Content Understanding |
 | `Extraction--GptFallback--ApiKey` | API Key Azure OpenAI (extraccion fallback) |
 | `Classification--AzureDocumentIntelligence--ApiKey` | API Key Document Intelligence |
@@ -107,6 +108,8 @@ Settings clave a confirmar (ver detalle completo en `docs/04_MANUAL_EXPLOTACION.
 | `Extraction__GptFallback__DeploymentName` | `gpt-4o-mini` |
 | `Classification__GptFallback__DeploymentName` | `gpt-4o-mini` |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Connection string `srbappiprodocai` |
+| `AssetResolver__BaseUrl` | `https://srbwebpluginassetresolver.azurewebsites.net/` |
+| `AssetResolver__ApiKey` | Key Vault reference a `AssetResolverApiKey` |
 
 ---
 

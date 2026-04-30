@@ -92,6 +92,74 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
     }
 
     [Fact]
+    public async Task Run_WhenSerializedOutputHasDefaultResultado_RehydratesResultadoFromExecution()
+    {
+        var documento = new DocumentoEntity
+        {
+            Id = 56,
+            SHA256 = "sha-historic"
+        };
+
+        var salidaHistorica = new ContratoSalida
+        {
+            Identificacion = new Identificacion
+            {
+                Documento = "doc-historic.pdf"
+            },
+            Resultado = new ResultadoFinal
+            {
+                Estado = "OK",
+                ConfianzaGlobal = 0,
+                EstadoCalidad = string.Empty,
+                ConfianzaClasificacion = 0,
+                ConfianzaExtraccion = 0,
+                ConfianzaValidacion = 0
+            },
+            DetalleEjecucion = new DetalleEjecucion
+            {
+                Extraccion = new ResultadoExtraccion
+                {
+                    ConfianzaExtraccion = 0.81
+                },
+                Postproceso = new InformacionPostproceso
+                {
+                    ConfianzaValidacion = 0.73
+                }
+            }
+        };
+
+        var ejecucion = new DocumentoEjecucionEntity
+        {
+            Id = 1000,
+            DocumentoId = documento.Id,
+            EstadoFinal = "OK",
+            ConfianzaGlobal = 0,
+            ConfianzaClasificacion = 0.92,
+            ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaHistorica)
+        };
+
+        _documentoRepository
+            .Setup(r => r.GetBySHA256Async("sha-historic"))
+            .ReturnsAsync(documento);
+
+        _documentoEjecucionRepository
+            .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
+            .ReturnsAsync(new[] { ejecucion });
+
+        var result = await _sut.Run("sha-historic");
+
+        result.Should().NotBeNull();
+        result!.Resultado.Estado.Should().Be("OK");
+        result.Resultado.ConfianzaGlobal.Should().Be(0.73);
+        result.Resultado.EstadoCalidad.Should().Be("REVISION");
+        result.Resultado.ConfianzaClasificacion.Should().Be(0.92);
+        result.Resultado.ConfianzaExtraccion.Should().Be(0.81);
+        result.Resultado.ConfianzaValidacion.Should().Be(0.73);
+        result.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        result.Resultado.MensajeReutilizacion.Should().Contain("ya procesado");
+    }
+
+    [Fact]
     public async Task Run_WhenNoExecutionHasSerializedOutput_ReturnsNull()
     {
         var documento = new DocumentoEntity

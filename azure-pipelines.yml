@@ -12,6 +12,8 @@ variables:
     value: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
   - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
     value: srbwebpluginassetresolver
+  - name: AZURE_ASSET_RESOLVER_BASE_URL
+    value: https://srbwebpluginassetresolver.azurewebsites.net/
   - name: AZURE_RESOURCE_GROUP
     value: SRBRGDOCSAIPROD
   - name: KEY_VAULT_NAME
@@ -198,7 +200,7 @@ stages:
                     scriptType: pscore
                     scriptLocation: inlineScript
                     inlineScript: |
-                      az functionapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --settings SecretsSource=AzureVault KeyVaultName=$(KEY_VAULT_NAME) RunDatabaseMigrationsOnStartup=true "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)" "SqlConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=SqlConnectionString)" --only-show-errors --output none
+                      az functionapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --settings SecretsSource=AzureVault KeyVaultName=$(KEY_VAULT_NAME) RunDatabaseMigrationsOnStartup=true "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)" "SqlConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=SqlConnectionString)" "AssetResolver__BaseUrl=$(AZURE_ASSET_RESOLVER_BASE_URL)" "AssetResolver__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)" --only-show-errors --output none
                       az functionapp config appsettings delete --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --setting-names AzureWebJobsStorage__accountName AzureWebJobsStorage__credential --only-show-errors --output none
 
                 - task: AzureCLI@2

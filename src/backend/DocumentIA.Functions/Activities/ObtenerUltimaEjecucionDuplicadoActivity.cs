@@ -3,6 +3,8 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
+using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
@@ -65,6 +67,8 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
                 return null;
             }
 
+            RehidratarResultadoSiIncompleto(salida, ultimaConSalida);
+
             salida.Resultado.ReutilizadaPorDuplicado = true;
             salida.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
 
@@ -74,6 +78,56 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
         {
             _logger.LogError(ex, "JSON inválido al recuperar salida de ejecución {EjecucionId}", ultimaConSalida.Id);
             return null;
+        }
+    }
+
+    private static void RehidratarResultadoSiIncompleto(ContratoSalida salida, DocumentoEjecucionEntity ejecucion)
+    {
+        if (!string.IsNullOrWhiteSpace(ejecucion.EstadoFinal))
+        {
+            salida.Resultado.Estado = ejecucion.EstadoFinal;
+        }
+
+        if (salida.Resultado.ConfianzaClasificacion <= 0 && ejecucion.ConfianzaClasificacion > 0)
+        {
+            salida.Resultado.ConfianzaClasificacion = ejecucion.ConfianzaClasificacion;
+        }
+
+        if (salida.Resultado.ConfianzaExtraccion <= 0 && salida.DetalleEjecucion.Extraccion.ConfianzaExtraccion > 0)
+        {
+            salida.Resultado.ConfianzaExtraccion = salida.DetalleEjecucion.Extraccion.ConfianzaExtraccion;
+        }
+
+        if (salida.Resultado.ConfianzaValidacion <= 0 && salida.DetalleEjecucion.Postproceso.ConfianzaValidacion > 0)
+        {
+            salida.Resultado.ConfianzaValidacion = salida.DetalleEjecucion.Postproceso.ConfianzaValidacion;
+        }
+
+        if (salida.Resultado.ConfianzaGlobal <= 0 && ejecucion.ConfianzaGlobal > 0)
+        {
+            salida.Resultado.ConfianzaGlobal = ejecucion.ConfianzaGlobal;
+        }
+
+        if (salida.Resultado.ConfianzaGlobal <= 0 &&
+            salida.Resultado.ConfianzaClasificacion > 0 &&
+            salida.Resultado.ConfianzaValidacion > 0)
+        {
+            var confianzaExtraccion = salida.Resultado.ConfianzaExtraccion > 0
+                ? salida.Resultado.ConfianzaExtraccion
+                : (double?)null;
+
+            salida.Resultado.ConfianzaGlobal = Math.Round(
+                ConfidenceCalculator.Global(
+                    salida.Resultado.ConfianzaClasificacion,
+                    confianzaExtraccion,
+                    salida.Resultado.ConfianzaValidacion),
+                3,
+                MidpointRounding.AwayFromZero);
+        }
+
+        if (string.IsNullOrWhiteSpace(salida.Resultado.EstadoCalidad) && salida.Resultado.ConfianzaGlobal > 0)
+        {
+            salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(salida.Resultado.ConfianzaGlobal);
         }
     }
 }

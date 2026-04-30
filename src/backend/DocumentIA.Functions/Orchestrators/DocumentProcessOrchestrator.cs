@@ -1044,14 +1044,6 @@ public class DocumentProcessOrchestrator
                 salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = true, Mensaje = "Skipped" };
             }
 
-            // 8. Persistencia
-            logger.LogInformation("Paso 8: Persistiendo resultados");
-            await EjecutarPasoNegocioSinResultado(
-                "Persistir",
-                () => context.CallActivityAsync(
-                    "PersistirActivity",
-                    salida));
-
             // Resultado final
             if (conErroresValidacion)
             {
@@ -1086,6 +1078,14 @@ public class DocumentProcessOrchestrator
                 confClasif,
                 confExtrac ?? 0.0,
                 confValid);
+
+            // 8. Persistencia
+            logger.LogInformation("Paso 8: Persistiendo resultados");
+            await EjecutarPasoNegocioSinResultado(
+                "Persistir",
+                () => context.CallActivityAsync(
+                    "PersistirActivity",
+                    salida));
 
             FinalizarSeguimiento("Completed");
         }

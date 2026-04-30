@@ -878,6 +878,17 @@ El plugin corre como proceso independiente (puerto 5006 en local). Su conexion y
 
 El plugin lee las tablas `DM_POSICION_AAII_TB` y `DM_POSICION_AACC_TB` usando la connection string `AssetResolverDb`. En produccion, el App Setting `ConnectionStrings__AssetResolverDb` se resuelve desde Key Vault `srbkvprodocai` mediante el secret `user-ods-dwh`.
 
+En produccion, la Function App `srbappprodocai` debe llamar al plugin con estos App Settings:
+
+```json
+{
+  "AssetResolver__BaseUrl": "https://srbwebpluginassetresolver.azurewebsites.net/",
+  "AssetResolver__ApiKey": "@Microsoft.KeyVault(VaultName=srbkvprodocai;SecretName=AssetResolverApiKey)"
+}
+```
+
+El Web App `srbwebpluginassetresolver` valida el header `X-Api-Key` contra su setting `ApiKey`, que a su vez se resuelve desde el mismo secret `AssetResolverApiKey` en Key Vault.
+
 ### 5.7b.9 Alias de Campos Globales (FieldAliases)
 
 El plugin define aliases globales en `appsettings.json` que se usan cuando no hay mapeo explicito en la tipologia:
