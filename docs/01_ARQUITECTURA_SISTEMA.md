@@ -48,9 +48,15 @@ flowchart TB
 
     subgraph AzureFunctions["Azure Functions — srbappprodocai"]
         TRIGGER["HTTP Trigger<br/>POST /api/IngestDocument"]
+        HEALTH["HTTP Trigger<br/>POST /api/healthcheck"]
         ORCH["Durable Orchestrator<br/>DocumentProcessOrchestrator"]
         ACT_NORM["NormalizarActivity"]
+        ACT_LAY["ExtraerMarkdownLayoutActivity"]
         ACT_DUP["VerificarDuplicadoActivity"]
+        ACT_DUP_MD5["VerificarDuplicadoPorMD5Activity"]
+        ACT_LAST["ObtenerUltimaEjecucionDuplicadoActivity"]
+        ACT_GDC_DOC["ObtenerDocumentoGDCActivity"]
+        ACT_GDC_META["ObtenerMetadatosDocumentoGDCActivity"]
         ACT_BLOB["SubirBlobActivity"]
         ACT_CLAS["ClasificarActivity"]
         ACT_RES["ResolverTipologiaActivity"]
@@ -58,6 +64,7 @@ flowchart TB
         ACT_PROMPT["PromptActivity"]
         ACT_VAL["ValidarActivity"]
         ACT_INT["IntegrarActivity"]
+        ACT_ASSET["ObtenerActivoActivity"]
         ACT_GDC["SubirGDCActivity"]
         ACT_PERS["PersistirActivity"]
     end
@@ -151,7 +158,7 @@ flowchart LR
 
 | Proyecto | Responsabilidad |
 |----------|----------------|
-| **DocumentIA.Functions** | Triggers HTTP, Orchestrator Durable, 13 Activities, Providers de IA (DI, CU, GPT), servicios GDC, autenticacion |
+| **DocumentIA.Functions** | Triggers HTTP (`IngestDocument`, `healthcheck`), Orchestrator Durable, **17 Activities**, Providers de IA (DI, CU, GPT), servicios GDC y AssetResolver, autenticacion |
 | **DocumentIA.Core** | Modelos de dominio (ContratoEntrada/Salida), motor de validacion (11 reglas), configuracion de tipologias, interfaces de servicio |
 | **DocumentIA.Data** | DbContext EF Core, 9 entidades, repositorios, migraciones, seed data |
 | **DocumentIA.Plugins** | Infraestructura de plugins: IIntegrationPlugin, PluginFactory, PluginManager, ResilientPlugin, RestPlugin, SoapPlugin, CustomPlugin |
@@ -166,7 +173,7 @@ flowchart LR
 
 ### 1.4.1 Durable Functions — Orquestacion tipo Saga
 
-El pipeline de procesamiento se implementa como un **Durable Function Orchestrator** (`DocumentProcessOrchestrator`) que coordina 13 activities en secuencia. Las ventajas:
+El pipeline de procesamiento se implementa como un **Durable Function Orchestrator** (`DocumentProcessOrchestrator`) que coordina **17 activities** (no todas se ejecutan en cada peticion: hay early exits por duplicado, fallos GDC, skip de pasos opcionales como Prompt/AssetResolver). Las ventajas:
 
 - **Durabilidad**: el estado de la orquestacion persiste automaticamente en Azure Storage. Si el host se reinicia, el orquestador resume donde quedo.
 - **Replay-safe logging**: usa `context.CreateReplaySafeLogger` para evitar logs duplicados durante replays.
@@ -414,7 +421,7 @@ flowchart TB
     ADMIN_USER["fa:fa-user-cog Administrador"]
 
     subgraph DocumentIA["DocumentIA MVP"]
-        FUNCAPP["Azure Functions<br/>.NET 8 Isolated<br/>Durable Orchestrator<br/>+ 13 Activities<br/>+ HTTP Triggers"]
+        FUNCAPP["Azure Functions<br/>.NET 8 Isolated<br/>Durable Orchestrator<br/>+ 17 Activities<br/>+ HTTP Triggers (Ingest + Healthcheck)"]
         SQLDB["SQL Server 2022<br/>DocumentIA DB<br/>9 tablas EF Core"]
         BLOBST["Azure Blob Storage<br/>Contenedor: documents<br/>PDFs originales"]
         DESKTOP_APP["DocumentIA Desktop<br/>WPF .NET 8<br/>MVVM + RestSharp"]

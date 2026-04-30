@@ -119,13 +119,13 @@
 
 ### 5.2 Mid-term (1-2 sprints)
 
-1. Reconciliar Plan de Pruebas: alinear `docs/06_PLAN_PRUEBAS.md`, seccion 7.3.2 de `07_ROADMAP_PENDIENTES.md`, conteo real de tests y task `Test` del pipeline.
-2. Diff `CONTRATO_API_HTTP.md` vs DTOs: confirmar `PromptInstrucciones`, `objectIdGDC`, healthcheck, AAII/AACC dual.
-3. Redisenar diagrama orquestador con las 17 activities reales.
-4. Crear manual de healthcheck por componentes (probes, payload, contrato, consumo Admin/Desktop).
-5. Crear catalogo vivo de App Settings generado automaticamente desde codigo (quien lee que) con script en `scripts/`.
-6. Plantilla `.env.example` regenerada desde el listado real de secretos KV.
-7. Verificacion oficial de WI en ADO (subagente) y reescritura de tabla de Epics con datos reales.
+1. Reconciliar Plan de Pruebas: alinear `docs/06_PLAN_PRUEBAS.md`, seccion 7.3.2 de `07_ROADMAP_PENDIENTES.md`, conteo real de tests y task `Test` del pipeline. _(PENDIENTE)_
+2. Diff `CONTRATO_API_HTTP.md` vs DTOs: confirmar `PromptInstrucciones`, `objectIdGDC`, healthcheck, AAII/AACC dual. _(DONE 2026-05-01: añadida sección healthcheck; resto ya documentado)_
+3. Redisenar diagrama orquestador con las 17 activities reales. _(DONE 2026-05-01: actualizado `01_ARQUITECTURA_SISTEMA.md`)_
+4. Crear manual de healthcheck por componentes (probes, payload, contrato, consumo Admin/Desktop). _(PENDIENTE)_
+5. Crear catalogo vivo de App Settings generado automaticamente desde codigo (quien lee que) con script en `scripts/`. _(PENDIENTE - decisión usuario)_
+6. Plantilla `.env.example` regenerada desde el listado real de secretos KV. _(DONE 2026-05-01)_
+7. Verificacion oficial de WI en ADO (subagente) y reescritura de tabla de Epics con datos reales. _(DONE 2026-05-01: doc 11 + alineación EP7-EP10 en doc 07)_
 
 ### 5.3 Structural governance
 

@@ -245,6 +245,57 @@ La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Fun
 
 ---
 
+## 4.bis. Healthcheck
+
+### `POST /api/healthcheck`
+
+Endpoint de salud para probes/monitoring (Application Insights, balanceadores, Admin UI, Desktop). No requiere Function Key (`AuthorizationLevel.Anonymous`). Solo método `POST`.
+
+#### Request
+
+Sin body (o body vacío). Sin headers obligatorios.
+
+#### Respuesta — `200 OK`
+
+```json
+{
+  "ok": true,
+  "status": "Healthy",
+  "timestamp": "2026-05-01T08:30:00Z",
+  "components": {
+    "functions": { "status": "Healthy", "details": { ... } },
+    "assetResolver": { "status": "Healthy", "details": { ... } },
+    "gdc": { "status": "Healthy", "details": { ... } },
+    "modelProviders": {
+      "status": "Healthy",
+      "classification": [ { "key": "...", "status": "Healthy", "details": { ... } } ],
+      "extraction":     [ { "key": "...", "status": "Healthy", "details": { ... } } ],
+      "prompt":         [ { "key": "...", "status": "Healthy", "details": { ... } } ]
+    }
+  }
+}
+```
+
+| Campo | Descripción |
+|---|---|
+| `ok` | Booleano agregado. `false` solo si `status == "Unhealthy"`. |
+| `status` | Estado agregado: `"Healthy"` \| `"Degraded"` \| `"Unhealthy"`. |
+| `timestamp` | Timestamp UTC del muestreo. |
+| `components.functions` | Salud del runtime Functions (DB, configuración base). |
+| `components.assetResolver` | Salud del Web App `srbwebpluginassetresolver` (probe HTTP). |
+| `components.gdc` | Salud del endpoint GDC SOAP (probe `consultarObjetoExiste` con MD5 sintético). |
+| `components.modelProviders` | Salud por proveedor configurado en BBDD (clasificación / extracción / prompt). |
+
+#### Respuesta — `503 Service Unavailable`
+
+Mismo payload que `200 OK` pero con `status == "Unhealthy"` y `ok: false`. Devuelto cuando alguno de los componentes críticos falla.
+
+> **Compatibilidad legacy**: si la inyección de `ISystemHealthService` no está disponible (tests aislados), el endpoint responde con un payload mínimo `{ "ok": true, "timestamp": "..." }`. En producción siempre se devuelve el payload extendido.
+
+> **Origen dual AAII / AACC**: el healthcheck no expone subcomponente específico para origen AACC. La consulta dual (`DM_POSICION_AAII_TB` + `DM_POSICION_AACC_TB`) se ejecuta dentro del componente `assetResolver`. Las precedencias y flags de habilitación se documentan en `docs/especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md`.
+
+---
+
 ## 5. Estados posibles en `resultado.estado`
 
 | Estado | Descripción |
