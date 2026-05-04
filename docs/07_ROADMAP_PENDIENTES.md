@@ -1,6 +1,6 @@
 # 7. Roadmap y Pendientes — DocumentIA MVP
 
-> Ultima actualizacion: 2026-04-21
+> Ultima actualizacion: 2026-05-04
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -41,7 +41,7 @@ gantt
 | **EP3** | Validacion y motor de reglas | IN PROGRESS | 88% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field (V-1), reglas condicionales (V-2). |
 | **EP4** | Persistencia y auditoria | DONE | 100% | 9 entidades EF Core, migraciones auto, auditoria por ejecucion, validaciones por campo. |
 | **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
-| **EP6** | Observabilidad y pruebas | IN PROGRESS | 75% | ~556 tests automatizados (verificado 2026-05-01: 554 C# + 2 Python), customStatus, seguimiento orquestacion, pipeline ejecuta `dotnet test` (T-4 cubierto parcialmente, solo `DocumentIA.Tests.Unit`). Pendiente: extender pipeline a Admin/E2E/AssetResolver, tests NormalizarActivity (T-2), EF tests (T-3), dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
+| **EP6** | Observabilidad y pruebas | IN PROGRESS | 85% | 536 tests C# en verde (verificado 2026-05-04 en `DocumentIA.Tests.Unit`), customStatus y seguimiento de orquestacion activos. Completados T-1/T-2/T-3/T-4/T-5/T-6. Pendiente: extender pipeline a Admin/E2E/AssetResolver, dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
 | **EP7** | Proteccion datos / GDPR (ADO Epic 98519) | NEW | 0% | Cifrado en reposo (AES-256-GCM), masking PII en logs, retencion configurable, KV para secrets. Features ADO: 98520 F7.1, 98524 F7.2, 98529 F7.3, 98534 F7.4. |
 | **EP8** | Sistema de Plugins de Integracion (ADO Epic 98628) | DONE | 100% | Arquitectura plugins + plugin REST generico + plugins Atlas/Catastro/GDC + resiliencia y observabilidad. Features 98634-98637 todas Done. |
 | **EP9** | Mantenimiento y limpieza de Blob Storage (ADO Epic 98692) | NEW | 0% | Politica de retencion por tipologia (F9.1), motor de limpieza automatica (F9.2), inventario y reporting (F9.3), observabilidad/auditoria (F9.4). Features 98693-98696 todas New. |
@@ -79,18 +79,18 @@ gantt
 
 > **Estado 2026-04-17:** Bloques 1 (Infraestructura) y 2 (Codigo critico) completados al 100%. Sistema en produccion con Azure SQL, KV, MI, Admin Blazor y todos los fixes de fallback aplicados. Pipeline CI/CD operativo con migraciones EF al arrancar y fix de settings AssetResolver (az CLI Python). Admin Blazor mejorado con editor JSON en pantalla completa. **AssetResolver mejorado** con busqueda por direccion fuzzy, flags de habilitacion por criterio (IDUFIR/RefCat/Direccion) y modo combinacion AND/OR. Los proximos sprints se centran en calidad/pruebas y funcionalidad de negocio.
 
-### 7.3.1 Tests unitarios pendientes
+### 7.3.1 Tests unitarios EP6 (estado)
 
-Gap principal: el orchestrator y varias activities core no tienen cobertura unitaria.
+Estado 2026-05-04: suite EP6 implementada y validada en `develop` (merge fast-forward de `feature/ep6-tests-activities`, commit `c0982c0`).
 
 | # | Test a implementar | Tipo | Componente | Prioridad | Detalle tecnico |
 |---|-------------------|------|-----------|-----------|----------------|
-| T-1 | `OrchestratorTests` — flujo completo | Unit | `DocumentProcessOrchestrator` | **Alta** | Usar `Moq` para mockear las 13 activities via `IDurableOrchestrationContext`. Cubrir: flujo feliz, duplicado cacheado, baja confianza clasificacion, tipologia no resuelta, early exit GDC. |
-| T-2 | `NormalizarActivityTests` — hashes y paginas | Unit | `NormalizarActivity` | **Alta** | Verificar SHA256 / MD5 / CRC32 correctos con PDFs de referencia. Paginas: PDF valido, PDF corrupto, PDF 0 paginas, fallback nombre. |
-| T-3 | Tests EF Core InMemory — CRUD completo | Integracion | `DocumentIA.Data` | **Alta** | Usar provider `InMemory` o `Sqlite` en memoria. Cubrir: insercion ejecucion, validaciones, duplicado SHA256 (unique constraint), paginacion historial. |
-| T-4 | `PersistirActivityTests` — mock DbContext | Unit | `PersistirActivity` | Media | Mockear `IDocumentIADbContext`. Escenarios: persistencia OK, excepcion BD → no debe tumbar orquestacion (degradacion). |
-| T-5 | `SubirBlobActivityTests` — mock BlobClient | Unit | `SubirBlobActivity` | Media | Mockear `BlobContainerClient`. Escenarios: subida OK, contenedor no existe (auto-create), error transitorio → excepcion propagada. |
-| T-6 | `TipologiaAdminCrudTests` — crear, publicar, archivar | Unit | Admin Functions | Media | Cubrir estados: Borrador → Publicada → Archivada. Validar que no se puede publicar tipologia sin campos requeridos. |
+| T-1 | `OrchestratorTests` — flujo completo | Unit | `DocumentProcessOrchestrator` | **Completado** | Implementado en `DocumentProcessOrchestratorTests` (4 casos: duplicado cacheado, baja confianza, tipologia no resuelta, clasificacion no identificada). WI: AB#99262. |
+| T-2 | `NormalizarActivityTests` — hashes y paginas | Unit | `NormalizarActivity` | **Completado** | Implementado y consolidado en rama principal. Cobertura de hashes/paginas y escenarios de degradacion. |
+| T-3 | Tests EF Core InMemory — CRUD completo | Integracion | `DocumentIA.Data` | **Completado** | Implementado en `EFInMemoryCrudTests` (6 tests CRUD y aislamiento de contexto InMemory). WI: AB#99261. |
+| T-4 | `PersistirActivityTests` — mock DbContext | Unit | `PersistirActivity` | **Completado** | Implementado y validado en suite unitaria de activities. |
+| T-5 | `SubirBlobActivityTests` — mock BlobClient | Unit | `SubirBlobActivity` | **Completado** | Implementado y validado en suite unitaria de activities. |
+| T-6 | `TipologiaAdminCrudTests` — crear, publicar, archivar | Unit | Admin Functions | **Completado** | Implementado en `TipologiasAdminFunctionTests` (9 tests GET/POST/PUT/DELETE con validaciones y conflictos). WI: AB#99260. |
 
 **Convencion de naming a seguir:**
 ```
@@ -103,7 +103,7 @@ Normalizar_PDFValido_RetornaHashesYPaginas()
 
 ### 7.3.2 Integracion CI/CD — `dotnet test` en pipeline
 
-**Estado 2026-05-01:** parcialmente cubierto. `azure-pipelines.yml` (lineas 31-32 / 63-68) define `testsProject = src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj` y ejecuta tarea `Test` con `command: test` tras el `Build`. Los tests del proyecto Unit (~496) corren en cada build.
+**Estado 2026-05-04:** parcialmente cubierto. `azure-pipelines.yml` (lineas 31-32 / 63-68) define `testsProject = src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj` y ejecuta tarea `Test` con `command: test` tras el `Build`. Los tests del proyecto Unit (536) corren en cada build.
 
 **Pendiente:**
 
@@ -235,7 +235,7 @@ Impacto en tests: añadir ~15-20 tests nuevos en `ValidationEngineTests` cubrien
 | CU (preview) cambia API | Baja | Alto | Abstraccion via `IExtraerDataProvider`. Adapter pattern permite cambiar implementacion sin afectar pipeline. |
 | GDC sin disponibilidad | Baja | Medio | `skipGDCUpload` permite continuar sin GDC. Documento se persiste en BD igualmente. Mitigacion adicional: G-3 (reconciliacion async). |
 | GDC `DOC_OBJECT_EXISTS` sin resolver | Media | Medio | Exige implementar G-2 (idempotencia). Mientras tanto, la ejecucion termina en error de GDC pero el documento se persiste en BD. |
-| Tests unitarios insuficientes en orchestrator | Alta | Medio | Cualquier refactor del orquestador puede romper flujos sin detection. Mitigacion: T-1 (prioridad alta). |
+| ~~Tests unitarios insuficientes en orchestrator~~ | ~~Alta~~ | ~~Medio~~ | **RESUELTO (parcial EP6).** Implementados T-1/T-2/T-3/T-4/T-5/T-6 y validados con 536 tests en verde (2026-05-04). |
 | Volumen excesivo sin plan de escalado | Baja | Medio | Consumption Plan escala automaticamente. Monitorizacion via App Insights (pendiente T-3.3/T-3.4). Premium Plan si P95 >60s. |
 
 ---
