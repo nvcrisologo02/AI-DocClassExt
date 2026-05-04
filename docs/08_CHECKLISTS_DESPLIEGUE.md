@@ -251,13 +251,15 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 | Item | Estado |
 |------|--------|
-| Azure SQL `srbsqlprodocai` | **Pendiente de crear** — usando Docker SQL local temporalmente |
-| Web App Admin `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | **Pendiente de crear** — Stage DeployAdmin desactivado (`condition: false`) |
-| Stage Deploy Admin en pipeline | Desactivado hasta que exista `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` |
-| Key Vault `srbkvprodocai` | Existente — secretos pendientes de cargar con `set-keyvault-secrets.ps1` |
+| Azure SQL `srbsqlprodocai` | Existente y operativo en produccion |
+| Web App Admin `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | Existente y desplegado via pipeline |
+| Web App AssetResolver `srbwebpluginassetresolver` | Existente y desplegado via pipeline |
+| Stage Deploy Admin en pipeline | Activo |
+| Stage Deploy AssetResolver en pipeline | Activo |
+| Key Vault `srbkvprodocai` | Existente, usado como fuente de secretos por referencia Key Vault |
 | Managed Identity RBAC | Parcialmente configurado — revisar Bloque 3 |
-| Function App App Settings | Configurados en FASE 3 (2026-03-31) |
-| Migraciones EF Core en Docker SQL | Aplicadas y verificadas |
+| Function App App Settings | Alineados con contrato canonico `scripts/config/azure-appsettings-contract.json` |
+| Migraciones EF Core en runtime | Desactivadas por defecto (`RunDatabaseMigrationsOnStartup=false`) |
 
 ---
 
@@ -286,6 +288,6 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Arquitectura completa y diagrama de despliegue |
 | [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Procedimientos paso a paso, variables de entorno, scripts |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Configuracion tecnica detallada |
-| [07_ROADMAP_PENDIENTES.md](07_ROADMAP_PENDIENTES.md) | Pendientes: Azure SQL, KV completo, Admin Web App |
+| [11_PLAN_CONFIGURACION_LIMPIA.md](11_PLAN_CONFIGURACION_LIMPIA.md) | Plan de remediacion y gobierno de configuracion |
 | [../scripts/README-activate-pim.md](../scripts/README-activate-pim.md) | Guia de activacion PIM |
-| [../azure-pipelines.yml](../azure-pipelines.yml) | Pipeline CI/CD: Build + DeployFunctions + DeployAdmin |
+| [../azure-pipelines.yml](../azure-pipelines.yml) | Pipeline CI/CD: Build + DeployFunctions + DeployAdmin + DeployAssetResolver + ValidateConfiguration |
