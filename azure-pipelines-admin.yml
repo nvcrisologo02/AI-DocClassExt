@@ -69,6 +69,8 @@ stages:
           runOnce:
             deploy:
               steps:
+                - checkout: self
+
                 - download: current
                   artifact: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
 
