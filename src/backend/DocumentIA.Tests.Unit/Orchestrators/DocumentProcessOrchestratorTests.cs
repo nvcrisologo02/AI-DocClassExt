@@ -2,11 +2,145 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Orchestrators;
 using FluentAssertions;
+using Microsoft.DurableTask;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace DocumentIA.Tests.Unit.Orchestrators;
 
+/// <summary>
+/// Implementación fake de TaskOrchestrationContext para pruebas unitarias del orquestador.
+/// Permite inyectar resultados o excepciones por nombre de actividad.
+/// </summary>
+internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
+{
+    private readonly ContratoEntrada? _input;
+    private readonly Dictionary<string, object?> _activityResults = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Exception> _activityThrows = new(StringComparer.Ordinal);
+
+    public FakeTaskOrchestrationContext(ContratoEntrada? input = null)
+    {
+        _input = input;
+    }
+
+    /// <summary>Configura el resultado para una actividad por nombre.</summary>
+    public void SetupActivity<T>(string activityName, T result)
+        => _activityResults[activityName] = result;
+
+    /// <summary>Configura que una actividad lance una excepción.</summary>
+    public void SetupActivityThrow(string activityName, Exception ex)
+        => _activityThrows[activityName] = ex;
+
+    // ── Abstract overrides ──────────────────────────────────────────────────
+    public override TaskName Name => new TaskName("DocumentProcessOrchestrator");
+    public override string InstanceId => "fake-instance-001";
+    public override DateTime CurrentUtcDateTime => new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
+    public override bool IsReplaying => false;
+
+    public override T? GetInput<T>() where T : default => (T?)(object?)_input;
+
+    public override Task<TResult> CallActivityAsync<TResult>(
+        TaskName name, object? input = null, TaskOptions? options = null)
+    {
+        if (_activityThrows.TryGetValue(name.Name, out var ex)) throw ex;
+        if (_activityResults.TryGetValue(name.Name, out var result))
+            return Task.FromResult((TResult)result!);
+        return Task.FromResult(default(TResult)!);
+    }
+
+    public override Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
+        // Para pruebas, el timer "nunca" completa solo para que WhenAny use la actividad real.
+        => Task.Delay(Timeout.Infinite, cancellationToken);
+
+    public override void SetCustomStatus(object? customStatus) { }
+
+    public override ILogger CreateReplaySafeLogger(string categoryName)
+        => NullLogger.Instance;
+
+    // Void variant of CallActivityAsync
+    public override Task CallActivityAsync(TaskName name, object? input = null, TaskOptions? options = null)
+    {
+        if (_activityThrows.TryGetValue(name.Name, out var ex)) throw ex;
+        return Task.CompletedTask;
+    }
+
+    // ── Members not used by the orchestrator under test ──────────────────────
+    protected override ILoggerFactory LoggerFactory => NullLoggerFactory.Instance;
+    public override Guid NewGuid() => Guid.NewGuid();
+    public override ParentOrchestrationInstance? Parent => null;
+
+    public override Task<TResult> CallSubOrchestratorAsync<TResult>(
+        TaskName orchestratorName, object? input = null, TaskOptions? options = null)
+        => throw new NotImplementedException();
+
+    public override void SendEvent(string instanceId, string eventName, object? payload = null)
+        => throw new NotImplementedException();
+
+    public override void ContinueAsNew(object? newInput = null, bool preserveUnprocessedEvents = true)
+        => throw new NotImplementedException();
+
+    public override Task<T> WaitForExternalEvent<T>(string eventName, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
+}
+
 public class DocumentProcessOrchestratorTests
 {
+    // ── Helpers ──────────────────────────────────────────────────────────────
+    private static DocumentProcessOrchestrator CreateOrchestrator()
+    {
+        // El constructor string solo carga el fichero cuando se llama Load().
+        // Para los escenarios que no llegan a la extracción, nunca se invoca.
+        var loader = new ExtractionModelRegistryLoader("dummy.json");
+        return new DocumentProcessOrchestrator(loader);
+    }
+
+    private static ContratoEntrada BuildEntrada(
+        string nombre = "test.pdf",
+        string? expectedType = null,
+        bool skipDuplicateCheck = false)
+        => new()
+        {
+            Documento = new Documento
+            {
+                Name = nombre,
+                Content = new ContenidoDocumento { Base64 = "dGVzdA==" }
+            },
+            Instrucciones = new Instrucciones
+            {
+                ExpectedType = expectedType,
+                SkipDuplicateCheck = skipDuplicateCheck,
+                SkipGDCUpload = true
+            },
+            Trazabilidad = new Trazabilidad
+            {
+                CorrelationId = "test-corr-001",
+                SubmittedBy = "test-user"
+            }
+        };
+
+    private static Dictionary<string, object> BuildNormalizarResult() => new()
+    {
+        ["SHA256"] = "sha256abc",
+        ["MD5"]    = "md5abc",
+        ["CRC32"]  = "crc32abc",
+        ["Paginas"] = 1
+    };
+
+    private static ResolvedTipologia BuildTipologia(
+        bool extractionEnabled = false,
+        bool skipGdc = true,
+        bool assetResolverEnabled = false)
+        => new(
+            RequestedValue: "nota.simple",
+            TipologiaId: "nota.simple",
+            Version: "1.0",
+            TechnicalKey: "nota.simple.1_0",
+            IsDefault: true,
+            ExtractionEnabled: extractionEnabled,
+            SkipGDCUpload: skipGdc,
+            AssetResolverEnabled: assetResolverEnabled);
+
+    // ── Static helper tests (pre-existing) ──────────────────────────────────
     [Fact]
     public void BuildObtenerActivoInput_WithInstructionOverrides_PrioritizesRequestValues()
     {
@@ -121,5 +255,87 @@ public class DocumentProcessOrchestratorTests
         input.MapeoDireccionMunicipio.Should().NotBeNull().And.BeEmpty();
         input.MapeoDireccionCodigoPostal.Should().NotBeNull().And.BeEmpty();
         input.UmbralScoreDireccion.Should().Be(0.75);
+    }
+
+    // ── Full orchestrator flow tests (T-1) ───────────────────────────────────
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoDetectado_RetornaSalidaReutilizada()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        var salidaPrevia = new ContratoSalida
+        {
+            Resultado = new ResultadoFinal { Estado = "OK" }
+        };
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", salidaPrevia);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        salida.Resultado.MensajeReutilizacion.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoError()
+    {
+        var orchestrator = CreateOrchestrator();
+        // Sin ExpectedType → el orquestador llama a ClasificarActivity
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ClasificarActivity",
+            new Exception("No se ha podido identificar la tipologia del documento"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Contain("tipologia");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaNoResuelta_RetornaEstadoError()
+    {
+        var orchestrator = CreateOrchestrator();
+        // Con ExpectedType → el orquestador salta ClasificarActivity y llama ResolverTipologiaActivity
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ResolverTipologiaActivity",
+            new KeyNotFoundException("No existe la tipologia: nota.simple"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Contain("tipologia");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_BajaConfianzaClasificacion_RetornaEstadoBajaConfianza()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.1,          // por debajo del umbral 0.6
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("BAJA_CONFIANZA_CLASIFICACION");
     }
 }
