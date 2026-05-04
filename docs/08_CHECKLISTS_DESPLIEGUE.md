@@ -38,8 +38,6 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 | 3.10 | Web App Admin | `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
 | 3.11 | App Service AssetResolver | `srbwebpluginassetresolver` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
 
-> Para entornos de desarrollo local sigue usándose Docker SQL (`Server=localhost,1433;Database=DocumentIA;User Id=sa;Password=<dev>;TrustServerCertificate=True;`).
-
 ---
 
 ### BLOQUE 3 — Managed Identity + RBAC
@@ -244,6 +242,8 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | `scripts\check-database.ps1` | Verificar conectividad BD y estado tablas | Post migraciones |
 | `scripts\list-analyzers.ps1` | Listar modelos disponibles en Document Intelligence | Diagnostico de clasificacion |
 | `scripts\check-azure-permissions.ps1` | Verificar permisos del SP / usuario sobre el RG | Antes del primer deploy |
+
+> `set-keyvault-secrets.ps1` no contiene valores secretos versionados. Los valores deben aportarse mediante variables `DOCIA_SECRET_*` o mediante `-PreferLocalSettings -LocalSettingsPath <ruta local no versionada>`.
 
 ---
 

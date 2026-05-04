@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Mvc;
 using Xunit;
 using DocumentIA.AssetResolver.Data;
 using DocumentIA.AssetResolver.Data.Entities;
@@ -15,6 +16,23 @@ namespace DocumentIA.AssetResolver.Tests;
 
 public class AssetResolverServiceTests
 {
+    [Fact]
+    public void Ping_ReturnsOk()
+    {
+        using var db = CreateInMemoryDb(Guid.NewGuid().ToString());
+        var service = new AssetResolverService(
+            db,
+            Options.Create(new FieldAliasesConfig()),
+            NullLogger<AssetResolverService>.Instance);
+        var controller = new AssetResolverController(
+            service,
+            NullLogger<AssetResolverController>.Instance);
+
+        var result = controller.Ping();
+
+        Assert.IsType<OkObjectResult>(result);
+    }
+
     private static AssetResolverDbContext CreateInMemoryDb(string dbName, Action<AssetResolverDbContext>? seed = null)
     {
         var options = new DbContextOptionsBuilder<AssetResolverDbContext>()

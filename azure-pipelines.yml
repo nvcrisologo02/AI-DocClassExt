@@ -200,8 +200,98 @@ stages:
                     scriptType: pscore
                     scriptLocation: inlineScript
                     inlineScript: |
-                      az functionapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --settings SecretsSource=AzureVault KeyVaultName=$(KEY_VAULT_NAME) RunDatabaseMigrationsOnStartup=true "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)" "SqlConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=SqlConnectionString)" "AssetResolver__BaseUrl=$(AZURE_ASSET_RESOLVER_BASE_URL)" "AssetResolver__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)" --only-show-errors --output none
-                      az functionapp config appsettings delete --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --setting-names AzureWebJobsStorage__accountName AzureWebJobsStorage__credential --only-show-errors --output none
+                      $settings = @(
+                        "FUNCTIONS_WORKER_RUNTIME=dotnet-isolated",
+                        "SecretsSource=AzureVault",
+                        "KeyVaultName=$(KEY_VAULT_NAME)",
+                        "RunDatabaseMigrationsOnStartup=false",
+                        "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)",
+                        "AzureStorageConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureStorageConnectionString)",
+                        "SqlConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=SqlConnectionString)",
+                        "AssetResolver__BaseUrl=$(AZURE_ASSET_RESOLVER_BASE_URL)",
+                        "AssetResolver__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)",
+                        "Extraction__DefaultProvider=azure-content-understanding",
+                        "Extraction__AzureContentUnderstanding__Endpoint=https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/",
+                        "Extraction__AzureContentUnderstanding__AuthMode=ApiKey",
+                        "Extraction__AzureContentUnderstanding__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--AzureContentUnderstanding--ApiKey)",
+                        "Extraction__AzureContentUnderstanding__DefaultProcessingLocation=geography",
+                        "Extraction__GptFallback__Enabled=true",
+                        "Extraction__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+                        "Extraction__GptFallback__AuthMode=ApiKey",
+                        "Extraction__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--GptFallback--ApiKey)",
+                        "Extraction__GptFallback__DeploymentName=gpt-4o-mini",
+                        "Extraction__GptFallback__MinFieldsRatio=0.9",
+                        "Extraction__GptFallback__Temperature=0.0",
+                        "Extraction__GptFallback__MaxTokens=2000",
+                        "Extraction__GptFallback__TimeoutSeconds=60",
+                        "Classification__DefaultProvider=azure-document-intelligence",
+                        "Classification__DefaultModelKey=default.azure-di",
+                        "Classification__AzureDocumentIntelligence__Endpoint=https://srbdiprodocai.cognitiveservices.azure.com/",
+                        "Classification__AzureDocumentIntelligence__AuthMode=ApiKey",
+                        "Classification__AzureDocumentIntelligence__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--AzureDocumentIntelligence--ApiKey)",
+                        "Classification__AzureDocumentIntelligence__ApiVersion=2024-11-30",
+                        "Classification__GptFallback__Enabled=true",
+                        "Classification__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+                        "Classification__GptFallback__AuthMode=ApiKey",
+                        "Classification__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--GptFallback--ApiKey)",
+                        "Classification__GptFallback__DeploymentName=gpt-4o-mini",
+                        "Classification__GptFallback__FallbackThreshold=0.5",
+                        "Classification__GptFallback__Temperature=0.0",
+                        "Classification__GptFallback__MaxTokens=150",
+                        "Classification__GptFallback__TimeoutSeconds=30",
+                        "GDC__Endpoint=https://srbwidd03.sareb.srb:8090/sintws/IDocService",
+                        "GDC__TimeoutSeconds=60",
+                        "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicUsername)",
+                        "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicPassword)",
+                        "GDC__ApplicationId=CKP1",
+                        "GDC__NominalUser=",
+                        "GDC__DocumentTypeId=document",
+                        "GDC__ContentFieldName=Content",
+                        "GDC__OrigenDocumento=8878",
+                        "GDC__RepositoryId=",
+                        "GDC__RepositoryName=",
+                        "GDC__ClaseExpediente=AI04",
+                        "GDC__DefaultMatricula=AI-99-SCXX-00",
+                        "GDC__Servicer=9999",
+                        "GDC__EntidadOrigen=9999",
+                        "GDC__ProcesoCarga=PC01",
+                        "GDC__TipoExpediente=AI",
+                        "GDC__Publico=verdadero",
+                        "GDC__BypassSslValidation=true"
+                      )
+
+                      az functionapp config appsettings set `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                        --settings $settings `
+                        --only-show-errors `
+                        --output none
+
+                      az functionapp config appsettings delete `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                        --setting-names AzureWebJobsStorage__accountName AzureWebJobsStorage__credential `
+                        --only-show-errors `
+                        --output none
+
+                      $appliedSettings = az functionapp config appsettings list `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                        --query "[].name" `
+                        -o tsv
+
+                      $requiredSettings = @(
+                        "AssetResolver__BaseUrl",
+                        "AssetResolver__ApiKey"
+                      )
+
+                      foreach ($requiredSetting in $requiredSettings) {
+                        if ($appliedSettings -notcontains $requiredSetting) {
+                          throw "Required Function App setting '$requiredSetting' was not found after deployment."
+                        }
+                      }
+
+                      Write-Host "[OK] AssetResolver settings are present on $(AZURE_FUNCTIONS_APP_NAME)."
 
                 - task: AzureCLI@2
                   displayName: Resolve Function App host name
@@ -247,13 +337,13 @@ stages:
                     deploymentMethod: zipDeploy
 
                 - task: AzureCLI@2
-                  displayName: Set Admin App settings (Functions API base URL)
+                  displayName: Set Admin App settings (Functions API)
                   inputs:
                     azureSubscription: $(AZURE_SERVICE_CONNECTION)
                     scriptType: pscore
                     scriptLocation: inlineScript
                     inlineScript: |
-                      az webapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --settings "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/" --only-show-errors --output none
+                      az webapp config appsettings set --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --settings "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/" "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)" --only-show-errors --output none
 
   - stage: DeployAssetResolver
     displayName: Deploy AssetResolver Plugin
@@ -300,4 +390,31 @@ stages:
                         --settings $assetResolverDbSetting $assetResolverApiKeySetting `
                         --only-show-errors `
                         --output none
+
+  - stage: ValidateConfiguration
+    displayName: Validate Azure configuration contract
+    dependsOn:
+      - DeployAdmin
+      - DeployAssetResolver
+    condition: succeeded()
+    jobs:
+      - job: ValidateConfigurationJob
+        displayName: Validate App Settings contract
+        pool:
+          vmImage: windows-latest
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: Validate App Settings contract
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                ./scripts/validate-azure-appsettings-contract.ps1 `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
+                  -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                  -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)"
 

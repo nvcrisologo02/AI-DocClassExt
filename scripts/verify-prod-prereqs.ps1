@@ -30,7 +30,23 @@ function Invoke-AzJson {
         throw "az $($AzArgs -join ' ')`n$result"
     }
 
-    $text = ($result | Out-String).Trim()
+    $lines = @($result | ForEach-Object { [string]$_ })
+    $jsonStartIndex = -1
+    for ($index = 0; $index -lt $lines.Count; $index++) {
+        $trimmed = $lines[$index].TrimStart()
+        if ($trimmed.StartsWith("{") -or $trimmed.StartsWith("[")) {
+            $jsonStartIndex = $index
+            break
+        }
+    }
+
+    $text = if ($jsonStartIndex -ge 0) {
+        ($lines[$jsonStartIndex..($lines.Count - 1)] -join [Environment]::NewLine).Trim()
+    }
+    else {
+        ($lines | Out-String).Trim()
+    }
+
     if ([string]::IsNullOrWhiteSpace($text)) {
         return $null
     }
@@ -74,6 +90,8 @@ $requiredSecrets = @(
     "Extraction--GptFallback--ApiKey",
     "Classification--AzureDocumentIntelligence--ApiKey",
     "Classification--GptFallback--ApiKey",
+    "AssetResolverApiKey",
+    "FunctionsAdminApiFunctionKey",
     "GDC--Username",
     "GDC--Password",
     "GDC--HttpBasicUsername",

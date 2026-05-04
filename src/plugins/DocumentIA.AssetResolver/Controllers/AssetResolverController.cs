@@ -17,6 +17,13 @@ public class AssetResolverController : ControllerBase
         _logger = logger;
     }
 
+    [HttpGet("ping")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public IActionResult Ping()
+    {
+        return Ok(new { status = "ok" });
+    }
+
     [HttpPost("GetAAIIInfo")]
     [ProducesResponseType(typeof(GetAAIIInfoResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
