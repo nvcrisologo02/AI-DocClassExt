@@ -54,7 +54,7 @@ La auditoria original se ejecuto en modo lectura. Este documento no aplica cambi
 |---|---|
 | `azure-pipelines.yml` | Pipeline principal activo en Azure DevOps, trigger en `main` |
 | Pipeline ADO `AI DocClassExt` id `799` | Ultimo run revisado `20260430.2` / `78011`, succeeded |
-| `.github/workflows/infrastructure.yml` | Probablemente obsoleto o roto; apunta a infraestructura inexistente |
+| `.github/workflows/infrastructure.yml` | **Confirmado no existente** — el fichero no existe en el repositorio. No requiere acción. *(Verificado 2026-05-04)* |
 | Stage `RunMigrations` | Definido pero deshabilitado con `condition: false` |
 
 ## Inventario De Ficheros De Configuracion Y Uso
@@ -280,7 +280,7 @@ Queda pendiente una consulta de solo lectura aprobada sobre SQL para validar:
 ### Fase 4 - CI/CD Y Automatizacion
 
 1. Decidir si `RunMigrations` sera stage real, tarea manual o responsabilidad del arranque.
-2. Eliminar o reparar `.github/workflows/infrastructure.yml`.
+2. ~~Eliminar o reparar `.github/workflows/infrastructure.yml`.~~ **RESUELTO**: fichero confirmado no existente en el repositorio *(2026-05-04)*.
 3. Documentar pipeline activo unico y su service connection.
 4. Validar que `azure-pipelines.yml` aplica todos los settings requeridos por codigo.
 5. Añadir comprobacion post-deploy de settings criticos sin imprimir valores.
@@ -291,7 +291,7 @@ Queda pendiente una consulta de solo lectura aprobada sobre SQL para validar:
 2. Actualizar `docs/08_CHECKLISTS_DESPLIEGUE.md` para reflejar Azure SQL existente, Admin Web App existente y endpoint CU real.
 3. Actualizar `docs/01_ARQUITECTURA_SISTEMA.md` con estado real de MI/RBAC.
 4. Actualizar `docs/04_MANUAL_EXPLOTACION.md` con estrategia actual de migraciones y secretos.
-5. Crear una plantilla segura de configuracion local sin secretos reales.
+5. ~~Crear una plantilla segura de configuracion local sin secretos reales.~~ **RESUELTO**: `src/backend/DocumentIA.Functions/local.settings.template.json` creado con placeholders vacíos, sin secretos. `local.settings.json` sigue ignorado por Git. *(2026-05-04)*.
 
 ### Fase 6 - Validacion Final
 

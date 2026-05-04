@@ -867,6 +867,8 @@ Cuando `busquedaDireccionHabilitada = true`, el servicio:
 
 ### 5.7b.8 Configuracion del Plugin AssetResolver
 
+> **Onboarding local**: copia `src/backend/DocumentIA.Functions/local.settings.template.json` como `local.settings.json` y rellena los valores marcados como `""`. El fichero `local.settings.json` está ignorado por Git y nunca se versiona.
+
 El plugin corre como proceso independiente (puerto 5006 en local). Su conexion y autenticacion se configuran en `local.settings.json` (local) o Key Vault (produccion):
 
 ```json
