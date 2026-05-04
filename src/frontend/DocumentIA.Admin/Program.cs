@@ -7,50 +7,34 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
-builder.Services.AddHttpClient<TipologiaAdminService>((serviceProvider, client) =>
+// Azure App Service expone variables de entorno con "_" simple (ej: FunctionsAdminApi_BaseUrl).
+// .NET solo convierte "__" (doble guión) a ":" en la jerarquía de configuración.
+// Este helper lee primero la clave jerárquica (:) y, como fallback, la plana con _ simple.
+static string? GetConfig(IConfiguration cfg, string section, string key)
+    => cfg[$"{section}:{key}"] ?? cfg[$"{section}_{key}"];
+
+void ConfigureFunctionsHttpClient(IServiceProvider serviceProvider, HttpClient client)
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-    var baseUrl = configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071/api/";
+    var baseUrl = GetConfig(configuration, "FunctionsAdminApi", "BaseUrl") ?? "http://localhost:7071/api/";
 
     client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
 
-    var functionKey = configuration["FunctionsAdminApi:FunctionKey"];
+    var functionKey = GetConfig(configuration, "FunctionsAdminApi", "FunctionKey");
     if (!string.IsNullOrWhiteSpace(functionKey))
     {
         client.DefaultRequestHeaders.Add("x-functions-key", functionKey);
     }
-});
+}
 
-builder.Services.AddHttpClient(nameof(SystemConfigService), (serviceProvider, client) =>
-{
-    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-    var baseUrl = configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071/api/";
-    
-    client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
-    
-    var functionKey = configuration["FunctionsAdminApi:FunctionKey"];
-    if (!string.IsNullOrWhiteSpace(functionKey))
-    {
-        client.DefaultRequestHeaders.Add("x-functions-key", functionKey);
-    }
-});
+builder.Services.AddHttpClient<TipologiaAdminService>(ConfigureFunctionsHttpClient);
+
+builder.Services.AddHttpClient(nameof(SystemConfigService), ConfigureFunctionsHttpClient);
 
 builder.Services.AddScoped<SystemConfigService>();
 builder.Services.AddScoped<TipologiaWizardStateService>();
 
-builder.Services.AddHttpClient<MonitorService>((serviceProvider, client) =>
-{
-    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-    var baseUrl = configuration["FunctionsAdminApi:BaseUrl"] ?? "http://localhost:7071/api/";
-
-    client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
-
-    var functionKey = configuration["FunctionsAdminApi:FunctionKey"];
-    if (!string.IsNullOrWhiteSpace(functionKey))
-    {
-        client.DefaultRequestHeaders.Add("x-functions-key", functionKey);
-    }
-});
+builder.Services.AddHttpClient<MonitorService>(ConfigureFunctionsHttpClient);
 
 var app = builder.Build();
 
