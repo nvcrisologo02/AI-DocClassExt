@@ -135,7 +135,7 @@ public class SystemHealthService : ISystemHealthService
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(TimeSpan.FromSeconds(5));
+            cts.CancelAfter(TimeSpan.FromSeconds(30));
 
             var (exists, _) = await _gdcService.ConsultarDocumentoAsync(
                 "HEALTHCHECK_PROBE", "00000000000000000000000000000000", "HLTH", cts.Token)
