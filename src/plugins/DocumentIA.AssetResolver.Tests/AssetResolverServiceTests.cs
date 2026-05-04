@@ -19,15 +19,7 @@ public class AssetResolverServiceTests
     [Fact]
     public void Ping_ReturnsOk()
     {
-        using var db = CreateInMemoryDb(Guid.NewGuid().ToString());
-        var service = new AssetResolverService(
-            db,
-            Options.Create(new FieldAliasesConfig()),
-            NullLogger<AssetResolverService>.Instance);
-        var controller = new AssetResolverController(
-            service,
-            NullLogger<AssetResolverController>.Instance);
-
+        var controller = new PingController();
         var result = controller.Ping();
 
         Assert.IsType<OkObjectResult>(result);
