@@ -337,6 +337,60 @@ stages:
                     deploymentMethod: zipDeploy
 
                 - task: AzureCLI@2
+                  displayName: Ensure Admin Web App identity + Key Vault RBAC
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az webapp identity assign \
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" \
+                        --name "$(AZURE_ADMIN_WEB_APP_NAME)" \
+                        --only-show-errors \
+                        --output none
+
+                      $principalId = az webapp identity show \
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" \
+                        --name "$(AZURE_ADMIN_WEB_APP_NAME)" \
+                        --query principalId \
+                        -o tsv
+
+                      if (-not $principalId) {
+                        throw "No se pudo resolver principalId para $(AZURE_ADMIN_WEB_APP_NAME)."
+                      }
+
+                      $keyVaultScope = az keyvault show \
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" \
+                        --name "$(KEY_VAULT_NAME)" \
+                        --query id \
+                        -o tsv
+
+                      if (-not $keyVaultScope) {
+                        throw "No se pudo resolver el recurso de Key Vault $(KEY_VAULT_NAME)."
+                      }
+
+                      $existingRole = az role assignment list \
+                        --scope $keyVaultScope \
+                        --assignee $principalId \
+                        --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" \
+                        -o tsv
+
+                      if ($existingRole -eq "0") {
+                        az role assignment create \
+                          --role "Key Vault Secrets User" \
+                          --assignee-object-id $principalId \
+                          --assignee-principal-type ServicePrincipal \
+                          --scope $keyVaultScope \
+                          --only-show-errors \
+                          --output none
+
+                        Write-Host "[OK] Assigned 'Key Vault Secrets User' to $(AZURE_ADMIN_WEB_APP_NAME)."
+                      }
+                      else {
+                        Write-Host "[OK] $(AZURE_ADMIN_WEB_APP_NAME) already has 'Key Vault Secrets User' on $(KEY_VAULT_NAME)."
+                      }
+
+                - task: AzureCLI@2
                   displayName: Set Admin App settings (Functions API)
                   inputs:
                     azureSubscription: $(AZURE_SERVICE_CONNECTION)
