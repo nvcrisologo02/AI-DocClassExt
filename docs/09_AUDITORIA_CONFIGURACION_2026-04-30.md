@@ -319,3 +319,59 @@ Antes de corregir, conviene confirmar:
 3. Si las migraciones deben ejecutarse en arranque, pipeline o manualmente.
 4. Si los artefactos `publish/` y `scripts/seeds/` deben conservarse historicamente o regenerarse limpios.
 5. Si las apps deben cerrar acceso publico ahora o tras una prueba de conectividad privada.
+
+---
+
+## Validacion Final — PBI 99267 (2026-05-04)
+
+Ejecutada por: GitHub Copilot  
+Fecha: 2026-05-04  
+Rama: develop (last commit: 0808e5c)
+
+### AC1 — Build y tests
+
+- `dotnet test DocumentIA.AssetResolver.Tests`: **8/8 passed**, 0 errores, 0 skipped.
+- `dotnet build DocumentIA.Functions --configuration Release`: **Compilacion correcta**, 0 advertencias, 0 errores.
+
+### AC2 — Smoke test Functions + healthcheck
+
+- `POST https://srbappprodocai.azurewebsites.net/api/healthcheck` → **HTTP 200**
+- `ok: true`, `status: degraded` (GDC: Timeout — comportamiento esperado, servicio externo)
+- `functions: healthy (Running)`
+- `modelProviders: healthy` (classification, extraction, prompt — todos con Loader registered)
+
+### AC3 — Integracion AssetResolver
+
+- `assetResolver: healthy (HTTP 200)` — confirmado via healthcheck de Functions
+- Componente verificado desde el runtime de produccion sin acceso directo al endpoint privado
+
+### AC4 — Escaneo de secretos en fuentes versionadas
+
+- `git grep AccountKey` en repo versionado: **sin resultados**
+- `git grep '"ApiKey":<valor_real>'` en fuentes: **sin resultados**
+- `local.settings.template.json`: todos los campos Azure con valor `""`. Unico no-vacio: `SqlConnectionString` con password Docker local estandar (`COMPLETAR_SQL_PASSWORD`) — no es secreto de produccion.
+- Seeds JSON (`src/backend/DocumentIA.Functions/config/**`): **16/16 OK** — sin secretos embebidos
+- Docs manuales: hallazgo en `docs/manuales/MANUAL_CONFIGURACION.md:289` — formato `DefaultEndpointsProtocol=https;...` con `...` — es documentacion, no valor real
+- **Excepcion documentada**: ApiKeys embebidas en tabla SQL `ModeloConfigs` (base de datos, fuera del scope del repo). Tracked en PBI 99275.
+
+### AC5 — App Settings validados por nombre, tipo y presencia
+
+Script: `scripts/validate-azure-appsettings-contract.ps1`  
+Resultado: **`Contrato de App Settings cumplido.`**
+
+- `srbappprodocai` (Functions): 26 settings validados (LiteralOrNonSecret + KeyVaultRef). Settings prohibidos: ausentes.
+- `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` (Admin): 2 settings validados.
+- `srbwebpluginassetresolver` (AssetResolver): 3 settings validados.
+- Ningun valor impreso en la validacion — solo nombres de setting y tipo de referencia.
+
+### Resultado Global
+
+| Criterio | Estado |
+|---|---|
+| AC1 Build y tests | PASS |
+| AC2 Smoke test Functions | PASS |
+| AC3 AssetResolver integrado | PASS |
+| AC4 Escaneo secretos repo | PASS (excepcion 99275) |
+| AC5 App Settings contrato | PASS |
+
+**Remediacion de configuracion: CERRADA.** PBI pendiente: 99275 (ApiKeys SQL a ProviderConfigs).
