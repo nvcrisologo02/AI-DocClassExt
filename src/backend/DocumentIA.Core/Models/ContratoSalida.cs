@@ -42,6 +42,10 @@ public class Integridad
 
 public class DetalleEjecucion
 {
+    /// <summary>ID de la instancia de orquestación Durable Functions. Permite localizar la ejecución en Azure Portal y mediante polling.</summary>
+    public string? InstanceId { get; set; }
+    /// <summary>operation_Id de Application Insights (W3C TraceId). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
+    public string? OperationId { get; set; }
     public string RunTipologia { get; set; } = string.Empty;
     public ResultadoClasificacion Clasificacion { get; set; } = new();
     public ResultadoExtraccion Extraccion { get; set; } = new();

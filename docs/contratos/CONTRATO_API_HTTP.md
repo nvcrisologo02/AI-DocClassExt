@@ -239,6 +239,11 @@ La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Fun
       "mensajeReutilizacion": null
     },
     "detalleEjecucion": { ... }
+      "detalleEjecucion": {
+        "instanceId": "abc123def456...",
+        "operationId": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+        "..."
+      }
   }
 }
 ```
@@ -314,6 +319,8 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 
 | Campo | Descripción |
 |---|---|
+| `detalleEjecucion.instanceId` | ID de la instancia de orquestación Durable Functions. Permite hacer polling de estado y localizar la ejecución en Azure Portal. |
+| `detalleEjecucion.operationId` | `operation_Id` de Application Insights (W3C TraceId). Usar en KQL: `union traces,requests,exceptions \| where operation_Id == "<operationId>"` para obtener la traza completa. |
 | `detalleEjecucion.runTipologia` | Clave de tipología usada en la ejecución. |
 | `detalleEjecucion.clasificacion.modelo` | Modelo de clasificación usado. |
 | `detalleEjecucion.clasificacion.confianza` | Confianza final (DI o GPT si hubo fallback). |

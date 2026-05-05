@@ -102,6 +102,10 @@ public class DocumentProcessOrchestrator
         };
 
         var inicioOrquestacion = context.CurrentUtcDateTime;
+        // Poblar identificadores de correlación (instanceId es determinista y replay-safe)
+        salida.DetalleEjecucion.InstanceId = context.InstanceId;
+        salida.DetalleEjecucion.OperationId = entrada.Trazabilidad.OperationId;
+
         var entradaPorObjectIdGdc = !string.IsNullOrWhiteSpace(entrada.Documento.ObjectIdGDC);
         var actividadesNegocio = new List<string>();
         if (entradaPorObjectIdGdc)

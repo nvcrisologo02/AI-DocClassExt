@@ -6,6 +6,7 @@ using DocumentIA.Core.Models;
 using DocumentIA.Functions.Services;
 using System.Net;
 using System.Text.Json;
+using System.Diagnostics;
 
 namespace DocumentIA.Functions.Triggers;
 
@@ -87,6 +88,9 @@ public class IngestAPITrigger
             }
 
             // Iniciar orquestación
+            // Capturar el operation_Id de App Insights (W3C TraceId) en el contexto del trigger HTTP
+            contratoEntrada.Trazabilidad.OperationId = Activity.Current?.TraceId.ToString();
+
             var instanceId = await client.ScheduleNewOrchestrationInstanceAsync(
                 "DocumentProcessOrchestrator",
                 contratoEntrada);

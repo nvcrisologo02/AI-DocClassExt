@@ -19,6 +19,14 @@ namespace DocumentIA.Data.Entities
         public string EjecucionGuid { get; set; } = Guid.NewGuid().ToString();
         
         public DateTime FechaEjecucion { get; set; } = DateTime.UtcNow;
+
+        /// <summary>ID de instancia Durable Functions. Correlaciona con el estado en el portal de Azure.</summary>
+        [MaxLength(200)]
+        public string? InstanceId { get; set; }
+
+        /// <summary>W3C TraceId de App Insights (operation_Id). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
+        [MaxLength(100)]
+        public string? OperationId { get; set; }
         
         [MaxLength(100)]
         public string? Tipologia { get; set; }

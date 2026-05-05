@@ -112,4 +112,6 @@ public class Trazabilidad
     public string CorrelationId { get; set; } = Guid.NewGuid().ToString();
     public string SubmittedBy { get; set; } = string.Empty;
     public string? IdActivo { get; set; }
+    /// <summary>W3C TraceId capturado en el trigger HTTP (operation_Id de App Insights). Propagado al output para facilitar correlación en Insights.</summary>
+    public string? OperationId { get; set; }
 }

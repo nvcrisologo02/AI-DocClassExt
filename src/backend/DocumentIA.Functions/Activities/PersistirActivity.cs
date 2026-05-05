@@ -162,6 +162,8 @@ namespace DocumentIA.Functions.Activities
                     DocumentoId = documento.Id,
                     EjecucionGuid = Guid.NewGuid().ToString(),
                     FechaEjecucion = DateTime.UtcNow,
+                    InstanceId = salida.DetalleEjecucion.InstanceId,
+                    OperationId = salida.DetalleEjecucion.OperationId,
                     Tipologia = salida.Identificacion.Tipologia,
                     EstadoFinal = salida.Resultado.Estado,
                     ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
