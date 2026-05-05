@@ -3,7 +3,7 @@ param(
     [string]$ApiKey = "dev-local-api-key-replace-in-prod",
     [string]$Escenario = "all",
     [switch]$MostrarDetalle,
-    [string]$SampleIdufir = "11012000632521",
+    [string]$SampleIdufir = "36017001149435",
     [string]$SampleIdufirAacc = "30035000403354",
     [string]$SampleRefCatastral = "1612401VK6611S0099GA",
     [string]$SampleRefCatastralAacc = "8337302XG7683N0410HD",

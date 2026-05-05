@@ -16,6 +16,7 @@ public class AssetResolverService
 
     private readonly AssetResolverDbContext _db;
     private readonly FieldAliasesConfig _aliases;
+    private readonly AssetResolverPerformanceOptions _performance;
     private readonly ILogger<AssetResolverService> _logger;
 
     // Columnas obligatorias que siempre se devuelven
@@ -114,10 +115,12 @@ public class AssetResolverService
     public AssetResolverService(
         AssetResolverDbContext db,
         IOptions<FieldAliasesConfig> aliases,
-        ILogger<AssetResolverService> logger)
+        ILogger<AssetResolverService> logger,
+        IOptions<AssetResolverPerformanceOptions>? performanceOptions = null)
     {
         _db = db;
         _aliases = aliases.Value;
+        _performance = performanceOptions?.Value ?? new AssetResolverPerformanceOptions();
         _logger = logger;
     }
 
@@ -257,11 +260,26 @@ public class AssetResolverService
 
         if (request.AAII_Search)
         {
-            if (!string.IsNullOrWhiteSpace(idufir))
-                resultadosAaiiPorCriterio.Add(("Idufir", await ConsultarPorIdufirAsync(idufir, ct)));
+            Task<List<DmPosicionAAII>>? aaiiIdufirTask =
+                !string.IsNullOrWhiteSpace(idufir) ? ConsultarPorIdufirAsync(idufir, ct) : null;
 
-            if (!string.IsNullOrWhiteSpace(refCatastral))
-                resultadosAaiiPorCriterio.Add(("ReferenciaCatastral", await ConsultarPorRefCatastralAsync(refCatastral, ct)));
+            Task<List<DmPosicionAAII>>? aaiiRefTask =
+                !string.IsNullOrWhiteSpace(refCatastral) ? ConsultarPorRefCatastralAsync(refCatastral, ct) : null;
+
+            if (aaiiIdufirTask is not null || aaiiRefTask is not null)
+            {
+                await Task.WhenAll(new Task[]
+                {
+                    aaiiIdufirTask ?? Task.CompletedTask,
+                    aaiiRefTask ?? Task.CompletedTask
+                });
+
+                if (aaiiIdufirTask is not null)
+                    resultadosAaiiPorCriterio.Add(("Idufir", aaiiIdufirTask.Result));
+
+                if (aaiiRefTask is not null)
+                    resultadosAaiiPorCriterio.Add(("ReferenciaCatastral", aaiiRefTask.Result));
+            }
 
             if (direccionResuelta is not null)
             {
@@ -287,11 +305,26 @@ public class AssetResolverService
 
         if (request.AACC_Search)
         {
-            if (!string.IsNullOrWhiteSpace(idufir))
-                resultadosAaccPorCriterio.Add(("Idufir", await ConsultarPorIdufirAaccAsync(idufir, ct)));
+            Task<List<DmPosicionAACC>>? aaccIdufirTask =
+                !string.IsNullOrWhiteSpace(idufir) ? ConsultarPorIdufirAaccAsync(idufir, ct) : null;
 
-            if (!string.IsNullOrWhiteSpace(refCatastral))
-                resultadosAaccPorCriterio.Add(("ReferenciaCatastral", await ConsultarPorRefCatastralAaccAsync(refCatastral, ct)));
+            Task<List<DmPosicionAACC>>? aaccRefTask =
+                !string.IsNullOrWhiteSpace(refCatastral) ? ConsultarPorRefCatastralAaccAsync(refCatastral, ct) : null;
+
+            if (aaccIdufirTask is not null || aaccRefTask is not null)
+            {
+                await Task.WhenAll(new Task[]
+                {
+                    aaccIdufirTask ?? Task.CompletedTask,
+                    aaccRefTask ?? Task.CompletedTask
+                });
+
+                if (aaccIdufirTask is not null)
+                    resultadosAaccPorCriterio.Add(("Idufir", aaccIdufirTask.Result));
+
+                if (aaccRefTask is not null)
+                    resultadosAaccPorCriterio.Add(("ReferenciaCatastral", aaccRefTask.Result));
+            }
 
             if (direccionResuelta is not null)
             {
@@ -452,7 +485,7 @@ public class AssetResolverService
                 EF.Functions.Like(x.DesMunicp, municipioLikePattern));
         }
 
-        var candidatos = await baseQuery.ToListAsync(ct);
+        var candidatos = await LimitQuery(baseQuery, _performance.MaxCandidatesDireccion).ToListAsync(ct);
         _logger.LogInformation("Candidatos pre-filtrados para scoring: {Count}", candidatos.Count);
 
         var conScore = candidatos
@@ -510,7 +543,7 @@ public class AssetResolverService
                 EF.Functions.Like(x.DesMunicp, municipioLikePattern));
         }
 
-        var candidatos = await baseQuery.ToListAsync(ct);
+        var candidatos = await LimitQuery(baseQuery, _performance.MaxCandidatesDireccion).ToListAsync(ct);
 
         var conScore = candidatos
             .Select(c =>
@@ -566,6 +599,8 @@ public class AssetResolverService
         var resultados = await _db.DmPosicionAAII
             .AsNoTracking()
             .Where(x => x.IdIdufir == idufir)
+            .OrderByDescending(x => x.FchCierreDt)
+            .Take(NormalizeMax(_performance.MaxRowsPerExactSearch, 500))
             .ToListAsync(ct);
 
         _logger.LogInformation("Búsqueda por IDUFIR={Idufir}: {Count} registros", idufir, resultados.Count);
@@ -577,6 +612,8 @@ public class AssetResolverService
         var resultados = await _db.DmPosicionAAII
             .AsNoTracking()
             .Where(x => x.IdRefCatast == refCatastral)
+            .OrderByDescending(x => x.FchCierreDt)
+            .Take(NormalizeMax(_performance.MaxRowsPerExactSearch, 500))
             .ToListAsync(ct);
 
         _logger.LogInformation("Búsqueda por RefCatastral={RefCat}: {Count} registros", refCatastral, resultados.Count);
@@ -588,6 +625,8 @@ public class AssetResolverService
         var resultados = await _db.DmPosicionAACC
             .AsNoTracking()
             .Where(x => x.IdIdufir == idufir)
+            .OrderByDescending(x => x.FchCierreDt)
+            .Take(NormalizeMax(_performance.MaxRowsPerExactSearch, 500))
             .ToListAsync(ct);
 
         _logger.LogInformation("Búsqueda AACC por IDUFIR={Idufir}: {Count} registros", idufir, resultados.Count);
@@ -599,6 +638,8 @@ public class AssetResolverService
         var resultados = await _db.DmPosicionAACC
             .AsNoTracking()
             .Where(x => x.IdRefCatast == refCatastral)
+            .OrderByDescending(x => x.FchCierreDt)
+            .Take(NormalizeMax(_performance.MaxRowsPerExactSearch, 500))
             .ToListAsync(ct);
 
         _logger.LogInformation("Búsqueda AACC por RefCatastral={RefCat}: {Count} registros", refCatastral, resultados.Count);
@@ -899,7 +940,7 @@ public class AssetResolverService
         if (!string.IsNullOrEmpty(direccion.Planta))
         { var p = $"%{direccion.Planta}%"; query = query.Where(x => x.DesPlanta != null && EF.Functions.Like(x.DesPlanta, p)); }
 
-        var resultados = await query.ToListAsync(ct);
+        var resultados = await LimitQuery(query, _performance.MaxCandidatesDireccionTipificada).ToListAsync(ct);
         var deduplicados = DeduplicarPorActivo(resultados);
         var razon = deduplicados.Count == 0
             ? "Sin resultados para los filtros tipificados indicados"
@@ -939,7 +980,7 @@ public class AssetResolverService
         if (!string.IsNullOrEmpty(direccion.Planta))
         { var p = $"%{direccion.Planta}%"; query = query.Where(x => x.DesPlanta != null && EF.Functions.Like(x.DesPlanta, p)); }
 
-        var resultados = await query.ToListAsync(ct);
+        var resultados = await LimitQuery(query, _performance.MaxCandidatesDireccionTipificada).ToListAsync(ct);
         var deduplicados = DeduplicarPorActivoAacc(resultados);
         var razon = deduplicados.Count == 0
             ? "Sin resultados para los filtros tipificados indicados"
@@ -956,6 +997,15 @@ public class AssetResolverService
         }
 
         return Regex.Replace(input.Trim(), "\\s+", " ");
+    }
+
+    private static int NormalizeMax(int value, int fallback)
+        => value > 0 ? value : fallback;
+
+    private static IQueryable<T> LimitQuery<T>(IQueryable<T> query, int maxRows)
+    {
+        var normalizedMax = NormalizeMax(maxRows, 2000);
+        return query.Take(normalizedMax);
     }
 
     private static Dictionary<string, FieldProjection> BuildValidFieldsByRequestName()

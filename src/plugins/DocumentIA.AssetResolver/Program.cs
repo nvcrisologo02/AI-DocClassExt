@@ -29,8 +29,18 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.Configure<FieldAliasesConfig>(
     builder.Configuration.GetSection("FieldAliases"));
 
+builder.Services.Configure<AssetResolverPerformanceOptions>(
+    builder.Configuration.GetSection("Performance"));
+
 builder.Services.AddDbContext<AssetResolverDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("AssetResolverDb")));
+{
+    var commandTimeoutSeconds = builder.Configuration
+        .GetValue<int?>("Performance:SqlCommandTimeoutSeconds") ?? 15;
+
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("AssetResolverDb"),
+        sqlOptions => sqlOptions.CommandTimeout(commandTimeoutSeconds));
+});
 
 builder.Services.AddScoped<AssetResolverService>();
 
