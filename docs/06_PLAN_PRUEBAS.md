@@ -335,10 +335,10 @@ pytest tests/ -v
 
 | Area | Gap | Prioridad | Razon |
 |------|-----|-----------|-------|
-| ~~**Orchestrator**~~ | ~~Sin tests unitarios para DocumentProcessOrchestrator~~ | _Cubierto_ | `DocumentProcessOrchestratorTests` existe (2 tests). Sigue siendo deseable ampliar cobertura por ramas. |
-| **NormalizarActivity** | Sin tests | Alta | Calcula hashes, paginas, nombres. Error aqui = deduplicacion rota. |
-| **SubirBlobActivity** | Sin tests | Media | Subida a Blob Storage no testeada (dependeria de mock BlobClient). |
-| **PersistirActivity** | Sin tests | Media | Persistencia final en BD no testeada unitariamente. |
+| ~~**Orchestrator**~~ | ~~Sin tests unitarios para DocumentProcessOrchestrator~~ | _Cubierto_ | `DocumentProcessOrchestratorTests` existe y cubre ramas clave (duplicado, baja confianza, tipologia no resuelta, clasificacion no identificada, sincronizacion de nombre en `objectIdGDC`). |
+| ~~**NormalizarActivity**~~ | ~~Sin tests~~ | _Cubierto_ | `NormalizarActivityTests` implementado en suite unitaria. |
+| ~~**SubirBlobActivity**~~ | ~~Sin tests~~ | _Cubierto_ | `SubirBlobActivityTests` implementado con mocks. |
+| ~~**PersistirActivity**~~ | ~~Sin tests~~ | _Cubierto_ | `PersistirActivityTests` implementado, incluyendo regresion de `NombreArchivo` no nulo. |
 | **Admin Functions** | Cobertura parcial — solo `PluginsTipologiaAdminFunction` y `TipologiasAdminFunction` tienen tests; falta CRUD de modelos y plugins | Media | Hay `TipologiasAdminFunctionIntegrationTests` (12 tests) y `TipologiasAdminFunctionValidationTests` (3 tests); resto sin tests de logica negocio. |
 | **Frontend Desktop** | Sin tests | Baja | WPF MVVM. Testeable via ViewModels pero no prioritario para MVP. |
 | ~~**Frontend Admin**~~ | ~~Sin tests~~ | _Cubierto parcial_ | `DocumentIA.Tests.Admin` (41 tests del wizard de tipologias) + `DocumentIA.Tests.E2E` (10 tests Playwright). Falta cobertura de paginas Monitor / Modelos / Plugins. |
@@ -357,12 +357,12 @@ pytest tests/ -v
 
 | # | Test propuesto | Tipo | Componente | Prioridad |
 |---|---------------|------|-----------|-----------|
-| 1 | OrchestratorTests — flujo completo con Moq de todas las Activities | Unit | Orchestrator | Alta |
-| 2 | NormalizarActivityTests — hashes, paginas, nombres | Unit | Activity | Alta |
+| 1 | OrchestratorTests — ampliar cobertura a excepciones transversales y escenarios con retries | Unit | Orchestrator | Media |
+| 2 | NormalizarActivityTests — ampliar casos de PDFs anómalos y entradas degradadas | Unit | Activity | Media |
 | 3 | Tests EF Core InMemory — CRUD completo | Integracion | Data | Alta |
 | 4 | Integracion CI/CD — `dotnet test` en azure-pipelines.yml | Pipeline | CI | Alta |
-| 5 | SubirBlobActivityTests — mock BlobClient | Unit | Activity | Media |
-| 6 | PersistirActivityTests — mock DbContext | Unit | Activity | Media |
+| 5 | SubirBlobActivityTests — ampliar cobertura de errores/reintentos de storage | Unit | Activity | Baja |
+| 6 | PersistirActivityTests — ampliar cobertura de actualizacion y fallbacks adicionales | Unit | Activity | Baja |
 | 7 | TipologiaAdminCrudTests — crear, publicar, archivar | Unit | Admin | Media |
 | 8 | Smoke test Azure: CU + DI con documento real | E2E | AI | Baja |
 | 9 | Frontend ViewModel tests (WPF) | Unit | Desktop | Baja |
@@ -381,7 +381,7 @@ pytest tests/ -v
 | RF-04 Validacion | ValidationEngine + 11 validators | 115 tests | **Alta** |
 | RF-05 Integracion plugins | PluginManager + plugins | 14 tests + scripts | Media |
 | RF-06 Subida GDC | GdcService | GdcServiceTests (10) + GdcIntegrationTests (2) | **Alta** |
-| RF-07 Persistencia BD | PersistirActivity | *(sin tests)* | **Ninguna** |
+| RF-07 Persistencia BD | PersistirActivity | `PersistirActivityTests` (incluye regresion `NombreArchivo` en flujo `objectIdGDC`) | **Media-Alta** |
 | RF-08 Deduplicacion | ObtenerUltimaEjecucion | ObtenerUltimaEjecucionTests (3) | Media |
 | RF-09 Confianza | ConfidenceCalculator | ConfidenceCalculatorTests (24) | **Alta** |
 | RF-10 Configuracion tipologia | TipologiaConfigLoader + VersionResolver | ~57 tests | **Alta** |

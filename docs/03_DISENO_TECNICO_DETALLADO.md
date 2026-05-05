@@ -101,6 +101,8 @@ Cuando la entrada viene por referencia GDC (`objectIdGDC`), antes del pipeline e
 
 En este modo se fuerza `SkipGDCUpload=true` para evitar re-subida del mismo documento origen.
 
+Adicionalmente, cuando `documento.name` llega vacio y se resuelve desde GDC durante este preflujo, el nombre se sincroniza en `salida.Identificacion.Documento` antes de persistir. Como defensa final, `PersistirActivity` aplica fallback determinista si el nombre siguiera vacio para cumplir la restriccion `NOT NULL` de `Documentos.NombreArchivo`.
+
 ### Anexo integrado: detalle operativo de Activities
 
 El contenido operativo del antiguo `docs/not in use/MANUAL_ACTIVITIES_AZURE_FUNCTIONS.md` queda integrado en este documento canonico.

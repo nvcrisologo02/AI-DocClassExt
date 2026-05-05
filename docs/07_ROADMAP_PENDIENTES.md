@@ -1,6 +1,6 @@
 # 7. Roadmap y Pendientes — DocumentIA MVP
 
-> Ultima actualizacion: 2026-05-04
+> Ultima actualizacion: 2026-05-05
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -72,6 +72,7 @@ gantt
 | C-3 | Persistir markdown sidecar en Blob | **DONE** | Markdown `{sha256}.md` guardado en Blob junto al PDF original. | estado-fallback-preproceso |
 | C-4 | Degradacion segura fallback GPT | **DONE** | Si GPT fallback falla, orquestacion devuelve resultado parcial sin tumbar el flujo. | estado-fallback-preproceso |
 | C-5 | Propagacion idActivo en IntegrarActivity | **DONE** | Payload plugins usa `DatosFinales.idActivo`; valor enriquecido ya no es pisado. | estado-fallback-preproceso (2026-03-27) |
+| C-6 | Fix `NombreArchivo` null en flujo `objectIdGDC` | **DONE** | Sincronizacion `entrada.Documento.Name -> salida.Identificacion.Documento` en orquestador + fallback defensivo en `PersistirActivity` para no persistir null. Incluye regresion unitaria en orquestador y persistencia. Work items `99297`, `99298`, `99299`, `99300` en `Done`. | AB#99297 AB#99298 AB#99299 AB#99300 |
 
 ---
 
