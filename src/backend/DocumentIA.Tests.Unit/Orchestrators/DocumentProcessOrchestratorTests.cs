@@ -17,6 +17,7 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
     private readonly ContratoEntrada? _input;
     private readonly Dictionary<string, object?> _activityResults = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Exception> _activityThrows = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, List<object?>> _activityInputs = new(StringComparer.Ordinal);
 
     public FakeTaskOrchestrationContext(ContratoEntrada? input = null)
     {
@@ -31,6 +32,16 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
     public void SetupActivityThrow(string activityName, Exception ex)
         => _activityThrows[activityName] = ex;
 
+    public T? GetLastActivityInput<T>(string activityName)
+    {
+        if (!_activityInputs.TryGetValue(activityName, out var inputs) || inputs.Count == 0)
+        {
+            return default;
+        }
+
+        return (T?)inputs[^1];
+    }
+
     // ── Abstract overrides ──────────────────────────────────────────────────
     public override TaskName Name => new TaskName("DocumentProcessOrchestrator");
     public override string InstanceId => "fake-instance-001";
@@ -42,6 +53,14 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
     public override Task<TResult> CallActivityAsync<TResult>(
         TaskName name, object? input = null, TaskOptions? options = null)
     {
+        if (!_activityInputs.TryGetValue(name.Name, out var inputs))
+        {
+            inputs = new List<object?>();
+            _activityInputs[name.Name] = inputs;
+        }
+
+        inputs.Add(input);
+
         if (_activityThrows.TryGetValue(name.Name, out var ex)) throw ex;
         if (_activityResults.TryGetValue(name.Name, out var result))
             return Task.FromResult((TResult)result!);
@@ -60,6 +79,14 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
     // Void variant of CallActivityAsync
     public override Task CallActivityAsync(TaskName name, object? input = null, TaskOptions? options = null)
     {
+        if (!_activityInputs.TryGetValue(name.Name, out var inputs))
+        {
+            inputs = new List<object?>();
+            _activityInputs[name.Name] = inputs;
+        }
+
+        inputs.Add(input);
+
         if (_activityThrows.TryGetValue(name.Name, out var ex)) throw ex;
         return Task.CompletedTask;
     }
@@ -96,6 +123,7 @@ public class DocumentProcessOrchestratorTests
 
     private static ContratoEntrada BuildEntrada(
         string nombre = "test.pdf",
+        string? objectIdGdc = null,
         string? expectedType = null,
         bool skipDuplicateCheck = false)
         => new()
@@ -103,11 +131,12 @@ public class DocumentProcessOrchestratorTests
             Documento = new Documento
             {
                 Name = nombre,
+                ObjectIdGDC = objectIdGdc,
                 Content = new ContenidoDocumento { Base64 = "dGVzdA==" }
             },
             Instrucciones = new Instrucciones
             {
-                ExpectedType = expectedType,
+                ExpectedType = expectedType ?? string.Empty,
                 SkipDuplicateCheck = skipDuplicateCheck,
                 SkipGDCUpload = true
             },
@@ -337,5 +366,23 @@ public class DocumentProcessOrchestratorTests
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.Resultado.Estado.Should().Be("BAJA_CONFIANZA_CLASIFICACION");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ObjectIdGdc_SincronizaNombreEnSalidaParaPersistencia()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(nombre: string.Empty, objectIdGdc: "GDC-123"));
+
+        context.SetupActivity("ObtenerDocumentoGDCActivity", new ObtenerDocumentoGDCResult
+        {
+            Base64 = "dGVzdA==",
+            NombreArchivo = "nota_simple_gdc.pdf"
+        });
+        context.SetupActivityThrow("NormalizarActivity", new Exception("stop test"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Identificacion.Documento.Should().Be("nota_simple_gdc.pdf");
     }
 }

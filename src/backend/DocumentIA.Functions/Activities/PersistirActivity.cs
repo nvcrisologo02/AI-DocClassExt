@@ -45,8 +45,10 @@ namespace DocumentIA.Functions.Activities
         [Function(nameof(PersistirActivity))]
         public async Task Run([ActivityTrigger] ContratoSalida salida)
         {
+            var nombreArchivoPersistible = ResolveNombreArchivoPersistible(salida.Identificacion.Documento, salida.Identificacion.Guid);
+
             _logger.LogInformation("Persistiendo resultado para documento {Documento}", 
-                salida.Identificacion.Documento);
+                nombreArchivoPersistible);
 
             try
             {
@@ -58,7 +60,7 @@ namespace DocumentIA.Functions.Activities
                     documento = new DocumentoEntity
                     {
                         Guid = salida.Identificacion.Guid,
-                        NombreArchivo = salida.Identificacion.Documento,
+                        NombreArchivo = nombreArchivoPersistible,
                         SHA256 = salida.Integridad.SHA256,
                         MD5 = salida.Integridad.MD5,
                         CRC32 = salida.Integridad.CRC32,
@@ -82,6 +84,11 @@ namespace DocumentIA.Functions.Activities
                 }
                 else
                 {
+                    if (string.IsNullOrWhiteSpace(documento.NombreArchivo))
+                    {
+                        documento.NombreArchivo = nombreArchivoPersistible;
+                    }
+
                     documento.Estado = salida.Resultado.Estado;
                     documento.ConfianzaGlobal = salida.Resultado.ConfianzaGlobal;
                     documento.MD5 = salida.Integridad.MD5;
@@ -295,6 +302,20 @@ namespace DocumentIA.Functions.Activities
                 return null;
             
             return tiempos[clave];
+        }
+
+        private static string ResolveNombreArchivoPersistible(string? nombreArchivo, string? guid)
+        {
+            if (!string.IsNullOrWhiteSpace(nombreArchivo))
+            {
+                return nombreArchivo;
+            }
+
+            var suffix = !string.IsNullOrWhiteSpace(guid)
+                ? guid
+                : Guid.NewGuid().ToString();
+
+            return $"documento-{suffix}.pdf";
         }
 
         private int? GetDuracionActividad(ContratoSalida salida, string nombreActividad)

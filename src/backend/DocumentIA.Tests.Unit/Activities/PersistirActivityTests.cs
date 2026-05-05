@@ -93,6 +93,39 @@ public class PersistirActivityTests : IDisposable
     }
 
     [Fact]
+    public async Task Run_IdentificacionDocumentoVacio_UsaFallbackEnNombreArchivo()
+    {
+        const string sha256 = "sha256_nombre_fallback";
+        var salida = BuildSalidaMinima(sha256);
+        salida.Identificacion.Documento = string.Empty;
+
+        DocumentoEntity? documentoCapturado = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) =>
+            {
+                documentoCapturado = d;
+                d.Id = 42;
+                return d;
+            });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(salida);
+
+        documentoCapturado.Should().NotBeNull();
+        documentoCapturado!.NombreArchivo.Should().Be($"documento-{salida.Identificacion.Guid}.pdf");
+    }
+
+    [Fact]
     public async Task Run_DocumentoExistente_LlamaUpdateAsync()
     {
         const string sha256 = "sha256_existente";

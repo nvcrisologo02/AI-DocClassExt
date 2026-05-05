@@ -321,6 +321,9 @@ public class DocumentProcessOrchestrator
                         ? documentoGdc.NombreArchivo
                         : metadatosGdc?.NombreArchivo ?? string.Empty;
                 }
+
+                // Sincronizar el nombre resuelto desde GDC en la salida persistible.
+                salida.Identificacion.Documento = entrada.Documento.Name;
             }
 
             // 1. Normalizacion y calculo de hashes
@@ -1085,6 +1088,12 @@ public class DocumentProcessOrchestrator
 
             // 8. Persistencia
             logger.LogInformation("Paso 8: Persistiendo resultados");
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Documento) &&
+                !string.IsNullOrWhiteSpace(entrada.Documento.Name))
+            {
+                salida.Identificacion.Documento = entrada.Documento.Name;
+            }
+
             await EjecutarPasoNegocioSinResultado(
                 "Persistir",
                 () => context.CallActivityAsync(
