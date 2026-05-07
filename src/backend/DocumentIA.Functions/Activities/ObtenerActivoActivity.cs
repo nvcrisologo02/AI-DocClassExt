@@ -140,6 +140,7 @@ public class ObtenerActivoActivity
             }).ToList() ?? [];
             resultado.CamposConError = pluginResp.CamposConError ?? [];
             resultado.Mensaje = pluginResp.Message ?? string.Empty;
+            resultado.Error = pluginResp.Error ?? resultado.Error;
             resultado.DuracionMs = pluginResp.DuracionMs > 0 ? pluginResp.DuracionMs : (int)sw.ElapsedMilliseconds;
 
             _logger.LogInformation(

@@ -260,25 +260,16 @@ public class AssetResolverService
 
         if (request.AAII_Search)
         {
-            Task<List<DmPosicionAAII>>? aaiiIdufirTask =
-                !string.IsNullOrWhiteSpace(idufir) ? ConsultarPorIdufirAsync(idufir, ct) : null;
-
-            Task<List<DmPosicionAAII>>? aaiiRefTask =
-                !string.IsNullOrWhiteSpace(refCatastral) ? ConsultarPorRefCatastralAsync(refCatastral, ct) : null;
-
-            if (aaiiIdufirTask is not null || aaiiRefTask is not null)
+            if (!string.IsNullOrWhiteSpace(idufir))
             {
-                await Task.WhenAll(new Task[]
-                {
-                    aaiiIdufirTask ?? Task.CompletedTask,
-                    aaiiRefTask ?? Task.CompletedTask
-                });
+                var aaiiIdufirResults = await ConsultarPorIdufirAsync(idufir, ct);
+                resultadosAaiiPorCriterio.Add(("Idufir", aaiiIdufirResults));
+            }
 
-                if (aaiiIdufirTask is not null)
-                    resultadosAaiiPorCriterio.Add(("Idufir", aaiiIdufirTask.Result));
-
-                if (aaiiRefTask is not null)
-                    resultadosAaiiPorCriterio.Add(("ReferenciaCatastral", aaiiRefTask.Result));
+            if (!string.IsNullOrWhiteSpace(refCatastral))
+            {
+                var aaiiRefResults = await ConsultarPorRefCatastralAsync(refCatastral, ct);
+                resultadosAaiiPorCriterio.Add(("ReferenciaCatastral", aaiiRefResults));
             }
 
             if (direccionResuelta is not null)
@@ -305,25 +296,16 @@ public class AssetResolverService
 
         if (request.AACC_Search)
         {
-            Task<List<DmPosicionAACC>>? aaccIdufirTask =
-                !string.IsNullOrWhiteSpace(idufir) ? ConsultarPorIdufirAaccAsync(idufir, ct) : null;
-
-            Task<List<DmPosicionAACC>>? aaccRefTask =
-                !string.IsNullOrWhiteSpace(refCatastral) ? ConsultarPorRefCatastralAaccAsync(refCatastral, ct) : null;
-
-            if (aaccIdufirTask is not null || aaccRefTask is not null)
+            if (!string.IsNullOrWhiteSpace(idufir))
             {
-                await Task.WhenAll(new Task[]
-                {
-                    aaccIdufirTask ?? Task.CompletedTask,
-                    aaccRefTask ?? Task.CompletedTask
-                });
+                var aaccIdufirResults = await ConsultarPorIdufirAaccAsync(idufir, ct);
+                resultadosAaccPorCriterio.Add(("Idufir", aaccIdufirResults));
+            }
 
-                if (aaccIdufirTask is not null)
-                    resultadosAaccPorCriterio.Add(("Idufir", aaccIdufirTask.Result));
-
-                if (aaccRefTask is not null)
-                    resultadosAaccPorCriterio.Add(("ReferenciaCatastral", aaccRefTask.Result));
+            if (!string.IsNullOrWhiteSpace(refCatastral))
+            {
+                var aaccRefResults = await ConsultarPorRefCatastralAaccAsync(refCatastral, ct);
+                resultadosAaccPorCriterio.Add(("ReferenciaCatastral", aaccRefResults));
             }
 
             if (direccionResuelta is not null)
