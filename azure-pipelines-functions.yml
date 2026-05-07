@@ -1,0 +1,64 @@
+name: Functions-CI-CD
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/backend/DocumentIA.Functions/**
+
+pool:
+  vmImage: 'windows-latest'
+
+variables:
+  buildConfiguration: 'Release'
+  azureSubscription: '' # set this pipeline variable to an Azure service connection
+  functionAppName: '' # set this pipeline variable to the target Function App name
+
+stages:
+- stage: Build
+  displayName: Build
+  jobs:
+  - job: Build
+    displayName: Build
+    steps:
+    - task: UseDotNet@2
+      inputs:
+        packageType: 'sdk'
+        version: '8.0.x'
+    - script: dotnet restore src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj
+      displayName: 'dotnet restore'
+    - script: dotnet build src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj --configuration $(buildConfiguration) --no-restore
+      displayName: 'dotnet build'
+    - script: dotnet publish src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/publish --no-build
+      displayName: 'dotnet publish'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/publish'
+        ArtifactName: 'FunctionsPublish'
+        publishLocation: 'Container'
+
+- stage: Deploy
+  displayName: Deploy
+  dependsOn: Build
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: Deploy
+    displayName: Deploy to Azure Functions
+    environment: 'functions'
+    pool:
+      vmImage: 'windows-latest'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: FunctionsPublish
+          - task: AzureFunctionApp@1
+            displayName: 'Deploy to Azure Function App'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              appType: 'functionApp'
+              appName: '$(functionAppName)'
+              package: '$(Pipeline.Workspace)/FunctionsPublish/publish'
