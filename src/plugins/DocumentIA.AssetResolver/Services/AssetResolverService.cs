@@ -143,9 +143,11 @@ public class AssetResolverService
         // Nota: no consideramos presencia directa en `ExtractedData` como indicador;
         // en su lugar, el hecho de que exista un mapeo en la tipología indica que
         // la intención es buscar por ese campo.
-        bool indicatedIdufir = !string.IsNullOrWhiteSpace(request.IdufirOverride)
+        bool indicatedIdufir = (!string.IsNullOrWhiteSpace(request.IdufirOverride)
+            && !request.IdufirOverride.Trim().Equals("No consta", StringComparison.OrdinalIgnoreCase))
             || (request.MapeoIdufir is { Count: > 0 });
-        bool indicatedRefCat = !string.IsNullOrWhiteSpace(request.ReferenciaCatastralOverride)
+        bool indicatedRefCat = (!string.IsNullOrWhiteSpace(request.ReferenciaCatastralOverride)
+            && !request.ReferenciaCatastralOverride.Trim().Equals("No consta", StringComparison.OrdinalIgnoreCase))
             || (request.MapeoReferenciaCatastral is { Count: > 0 });
 
         // Respetar flags de habilitación: si un criterio está deshabilitado, vaciar aliases
@@ -561,7 +563,8 @@ public class AssetResolverService
         List<string> aliases)
     {
         // Override del llamante tiene prioridad
-        if (!string.IsNullOrWhiteSpace(overrideValue))
+        if (!string.IsNullOrWhiteSpace(overrideValue)
+            && !overrideValue.Trim().Equals("No consta", StringComparison.OrdinalIgnoreCase))
             return overrideValue.Trim();
 
         // Buscar en datos extraídos por aliases (case-insensitive)
@@ -569,7 +572,8 @@ public class AssetResolverService
         {
             var match = extractedData
                 .FirstOrDefault(kv => string.Equals(kv.Key, alias, StringComparison.OrdinalIgnoreCase));
-            if (!string.IsNullOrWhiteSpace(match.Value))
+            if (!string.IsNullOrWhiteSpace(match.Value)
+                && !match.Value!.Trim().Equals("No consta", StringComparison.OrdinalIgnoreCase))
                 return match.Value.Trim();
         }
 
