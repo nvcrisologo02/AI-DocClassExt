@@ -90,3 +90,16 @@ artifacts/superpowers-*.jsonl
 scripts/validate-superpowers-copilot.ps1
 docs/superpowers/plans/2026-04-29-healthcheck-endpoint.md
 docs/superpowers/plans/
+# Generated PDFs from Markdown (do not commit)
+docs/**/pdf/
+ado-add-branch-link.json
+.vscode/launch.json
+artifacts/documentIA.png
+docs/riesgos-ia/build_word_pdf.py
+scripts/assetresolver-indexes-dba.sql
+scripts/assetresolver-indexes-dev.md
+scripts/convert-md-to-pdf.ps1
+scripts/diagnose-assetresolver-sql.ps1
+src/backend/DocumentIA.Functions/azure-pipelines-functions.yml
+docs/riesgos-ia/build_word_pdf.py
+.vscode/launch.json
