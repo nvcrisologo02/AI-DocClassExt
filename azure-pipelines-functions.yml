@@ -46,7 +46,7 @@ stages:
   jobs:
   - deployment: Deploy
     displayName: Deploy to Azure Functions
-    environment: 'functions'
+    environment: 'prod'
     pool:
       vmImage: 'windows-latest'
     strategy:

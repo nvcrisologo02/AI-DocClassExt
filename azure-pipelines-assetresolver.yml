@@ -62,7 +62,7 @@ stages:
     jobs:
       - deployment: DeployToAppService
         displayName: 'Deploy to Azure App Service (optional)'
-        environment: 'AssetResolver/production'
+        environment: prod
         strategy:
           runOnce:
             deploy:
