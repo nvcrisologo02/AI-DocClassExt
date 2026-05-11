@@ -1,12 +1,7 @@
 name: Functions-CI-CD
 
-trigger:
-  branches:
-    include:
-      - main
-  paths:
-    include:
-      - src/backend/DocumentIA.Functions/**
+trigger: none
+pr: none
 
 pool:
   vmImage: 'windows-latest'

@@ -1,12 +1,7 @@
 name: AssetResolver-CI-CD
 
-trigger:
-  branches:
-    include:
-      - main
-  paths:
-    include:
-      - src/plugins/DocumentIA.AssetResolver/**
+trigger: none
+pr: none
 
 pool:
   vmImage: 'windows-latest'

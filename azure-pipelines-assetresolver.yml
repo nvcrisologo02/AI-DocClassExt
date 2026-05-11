@@ -1,20 +1,7 @@
 name: assetresolver-$(Date:yyyyMMdd)$(Rev:.r)
 
-trigger:
-  branches:
-    include:
-      - main
-  paths:
-    include:
-      - src/plugins/DocumentIA.AssetResolver/**
-
-pr:
-  branches:
-    include:
-      - main
-  paths:
-    include:
-      - src/plugins/DocumentIA.AssetResolver/**
+trigger: none
+pr: none
 
 variables:
   buildConfiguration: 'Release'
