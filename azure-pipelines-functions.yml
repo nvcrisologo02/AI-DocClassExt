@@ -62,4 +62,4 @@ stages:
               azureSubscription: '$(azureSubscription)'
               appType: 'functionApp'
               appName: '$(functionAppName)'
-              package: '$(Pipeline.Workspace)/FunctionsPublish/publish'
+              package: '$(Pipeline.Workspace)/FunctionsPublish'
