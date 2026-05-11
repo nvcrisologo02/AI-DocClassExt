@@ -177,6 +177,7 @@ namespace DocumentIA.Functions.Activities
                     ModeloClasificacion = salida.DetalleEjecucion.Clasificacion.Modelo,
                     ConfianzaClasificacion = salida.DetalleEjecucion.Clasificacion.Confianza,
                     UseFallbackLLM = salida.DetalleEjecucion.Clasificacion.FallbackLLM,
+                    ClassificationOnly = salida.DetalleEjecucion.ClassificationOnly,
                     
                     // NUEVO: Guardar respuesta completa para auditoria
                     ContratoSalidaCompletoJson = JsonSerializer.Serialize(salida, new JsonSerializerOptions 
