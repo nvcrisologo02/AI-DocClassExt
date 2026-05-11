@@ -100,6 +100,7 @@ public class DocumentProcessOrchestrator
             },
             Integridad = new Integridad()
         };
+        salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
 
         var inicioOrquestacion = context.CurrentUtcDateTime;
         // Poblar identificadores de correlación (instanceId es determinista y replay-safe)
@@ -205,6 +206,12 @@ public class DocumentProcessOrchestrator
             PublicarEstado("Running", string.Empty, mensaje);
         }
 
+        void MarcarActividadSkipped(string nombre, string mensaje)
+        {
+            MarcarInicioActividad(nombre);
+            MarcarFinActividad(nombre, "Skipped", mensaje);
+        }
+
         async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
         {
             MarcarInicioActividad(nombre);
@@ -288,7 +295,11 @@ public class DocumentProcessOrchestrator
 
                         var salidaDuplicado = await context.CallActivityAsync<ContratoSalida?>(
                             "ObtenerUltimaEjecucionDuplicadoActivity",
-                            duplicadoPorMd5.SHA256);
+                            new ObtenerUltimaEjecucionDuplicadoInput
+                            {
+                                SHA256 = duplicadoPorMd5.SHA256,
+                                ClassificationOnly = entrada.Instrucciones.ClassificationOnly
+                            });
 
                         if (salidaDuplicado is not null)
                         {
@@ -352,7 +363,11 @@ public class DocumentProcessOrchestrator
 
                     var salidaDuplicado = await context.CallActivityAsync<ContratoSalida?>(
                         "ObtenerUltimaEjecucionDuplicadoActivity",
-                        salida.Integridad.SHA256);
+                        new ObtenerUltimaEjecucionDuplicadoInput
+                        {
+                            SHA256 = salida.Integridad.SHA256,
+                            ClassificationOnly = entrada.Instrucciones.ClassificationOnly
+                        });
 
                     if (salidaDuplicado is not null)
                     {
@@ -557,6 +572,184 @@ public class DocumentProcessOrchestrator
             resultadoClasificacion.Confianza = RedondearSalida(resultadoClasificacion.Confianza);
             resultadoClasificacion.ConfianzaDI = RedondearSalida(resultadoClasificacion.ConfianzaDI);
             resultadoClasificacion.ConfianzaGPT = RedondearSalida(resultadoClasificacion.ConfianzaGPT);
+
+            if (entrada.Instrucciones.ClassificationOnly)
+            {
+                MarcarActividadSkipped("Extraer", "ClassificationOnly activo");
+
+                if (promptActivoEnPeticion)
+                {
+                    MarcarActividadSkipped("Prompt", "ClassificationOnly activo");
+                }
+
+                MarcarActividadSkipped("Validar", "ClassificationOnly activo");
+                MarcarActividadSkipped("ObtenerActivo", "ClassificationOnly activo");
+
+                salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
+                {
+                    Normalizaciones = new List<string>
+                    {
+                        "ClassificationOnly activo: extracción y validación omitidas"
+                    },
+                    Validaciones = new List<string>(),
+                    Inconsistencias = new List<string>(),
+                    ConfianzaValidacion = 0
+                };
+
+                salida.Resultado.ConfianzaClasificacion = resultadoClasificacion.Confianza;
+                salida.Resultado.ConfianzaExtraccion = 0;
+                salida.Resultado.ConfianzaValidacion = 0;
+                salida.Resultado.ConfianzaGlobal = resultadoClasificacion.Confianza;
+
+                var confidenceCfgClassificationOnly = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
+                salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
+                    salida.Resultado.ConfianzaGlobal,
+                    confidenceCfgClassificationOnly);
+
+                var tieneIdActivoEntrada = !string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo);
+                var ejecutarIntegrar = entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly ?? false;
+
+                if (tieneIdActivoEntrada && ejecutarIntegrar)
+                {
+                    logger.LogInformation("Paso 6: Integrando con sistemas externos (ClassificationOnly con override Integrar)");
+                    var integrarInputClassificationOnly = new IntegrarInput
+                    {
+                        Tipologia = salida.Identificacion.Tipologia,
+                        DocumentoId = salida.Identificacion.Guid,
+                        DatosExtraidos = salida.DatosExtraidos,
+                        IdActivo = entrada.Trazabilidad.IdActivo,
+                        Metadata = new Dictionary<string, object>
+                        {
+                            ["correlationId"] = entrada.Trazabilidad.CorrelationId,
+                            ["submittedBy"] = entrada.Trazabilidad.SubmittedBy
+                        }
+                    };
+
+                    var resultadoIntegracionClassificationOnly = await EjecutarPasoNegocio(
+                        "Integrar",
+                        () => context.CallActivityAsync<ResultadoIntegracion>(
+                            "IntegrarActivity",
+                            integrarInputClassificationOnly));
+
+                    salida.DetalleEjecucion.Integracion = resultadoIntegracionClassificationOnly;
+
+                    if (resultadoIntegracionClassificationOnly.Estado == "OK" && resultadoIntegracionClassificationOnly.DatosFinales.Count > 0)
+                    {
+                        salida.DatosExtraidos = resultadoIntegracionClassificationOnly.DatosFinales;
+                    }
+
+                    salida.Integridad.IdActivoEntrada = resultadoIntegracionClassificationOnly.IdActivoEntrada;
+                    salida.Integridad.IdActivo = resultadoIntegracionClassificationOnly.IdActivoResuelto ?? entrada.Trazabilidad.IdActivo;
+                    salida.Integridad.IdActivoCambiado = resultadoIntegracionClassificationOnly.IdActivoCambiado;
+                }
+                else
+                {
+                    var motivoIntegrar = !tieneIdActivoEntrada
+                        ? "ClassificationOnly sin IdActivo"
+                        : "ClassificationOnly: Integrar deshabilitado por instrucciones";
+                    MarcarActividadSkipped("Integrar", motivoIntegrar);
+
+                    salida.DetalleEjecucion.Integracion = new ResultadoIntegracion
+                    {
+                        Tipologia = salida.Identificacion.Tipologia,
+                        Estado = "OK",
+                        Mensaje = motivoIntegrar,
+                        Timestamp = context.CurrentUtcDateTime,
+                        IdActivoEntrada = entrada.Trazabilidad.IdActivo,
+                        IdActivoResuelto = entrada.Trazabilidad.IdActivo,
+                        IdActivoCambiado = false
+                    };
+
+                    salida.Integridad.IdActivoEntrada = entrada.Trazabilidad.IdActivo;
+                    salida.Integridad.IdActivo = entrada.Trazabilidad.IdActivo;
+                    salida.Integridad.IdActivoCambiado = false;
+                }
+
+                var skipGDCClassificationOnly = entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload;
+
+                if (skipGDCClassificationOnly)
+                {
+                    MarcarActividadSkipped("SubirGDC", "SkipGDCUpload activo");
+                    salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = true, Mensaje = "Skipped" };
+                }
+                else if (string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
+                {
+                    MarcarActividadSkipped("SubirGDC", "IdActivo no disponible");
+                    salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = false, Mensaje = "IdActivo no disponible" };
+                }
+                else
+                {
+                    MarcarInicioActividad("SubirGDC");
+                    logger.LogInformation(
+                        "Paso 7: Intentando subir a GDC (ClassificationOnly) IdActivo={IdActivo}",
+                        salida.Integridad.IdActivo);
+
+                    var subirInput = new SubirGDCActivity.SubirGDCActivityInput
+                    {
+                        Tipologia = salida.Identificacion.Tipologia,
+                        Input = new SubirGDCInput
+                        {
+                            IdActivo = salida.Integridad.IdActivo ?? string.Empty,
+                            ContenidoBase64 = entrada.Documento.Content.Base64,
+                            NombreArchivo = entrada.Documento.Name,
+                            SHA256 = salida.Integridad.SHA256,
+                            MD5 = salida.Integridad.MD5,
+                            CorrelationId = entrada.Trazabilidad.CorrelationId ?? string.Empty
+                        }
+                    };
+
+                    const int GdcActivityTimeoutSeconds = 120;
+                    using var cts = new System.Threading.CancellationTokenSource();
+                    var activityTask = context.CallActivityAsync<ResultadoGDC>(
+                        "SubirGDCActivity",
+                        subirInput);
+                    var timeoutTask = context.CreateTimer(
+                        context.CurrentUtcDateTime.AddSeconds(GdcActivityTimeoutSeconds),
+                        cts.Token);
+
+                    var winner = await Task.WhenAny(activityTask, timeoutTask);
+                    ResultadoGDC? resultadoGdc;
+                    if (winner == timeoutTask)
+                    {
+                        logger.LogWarning(
+                            "SubirGDCActivity timeout after {TimeoutSeconds}s for IdActivo={IdActivo}",
+                            GdcActivityTimeoutSeconds,
+                            salida.Integridad.IdActivo);
+                        resultadoGdc = new ResultadoGDC { Exitoso = false, Mensaje = "Timeout" };
+                        MarcarFinActividad("SubirGDC", "Timeout", "Timeout en SubirGDCActivity");
+                    }
+                    else
+                    {
+                        cts.Cancel();
+                        resultadoGdc = await activityTask;
+                        MarcarFinActividad("SubirGDC", "Completed", resultadoGdc?.Mensaje);
+                    }
+
+                    salida.DetalleEjecucion.GDC = resultadoGdc ?? new ResultadoGDC();
+                    if (resultadoGdc != null && resultadoGdc.Exitoso && !string.IsNullOrWhiteSpace(resultadoGdc.ObjectId))
+                    {
+                        salida.Integridad.GestorDocumental = resultadoGdc.ObjectId;
+                    }
+                }
+
+                salida.Resultado.Estado = "OK";
+
+                logger.LogInformation("Paso 8: Persistiendo resultados");
+                if (string.IsNullOrWhiteSpace(salida.Identificacion.Documento) &&
+                    !string.IsNullOrWhiteSpace(entrada.Documento.Name))
+                {
+                    salida.Identificacion.Documento = entrada.Documento.Name;
+                }
+
+                await EjecutarPasoNegocioSinResultado(
+                    "Persistir",
+                    () => context.CallActivityAsync(
+                        "PersistirActivity",
+                        salida));
+
+                FinalizarSeguimiento("Completed", "ClassificationOnly activo");
+                return salida;
+            }
 
             ExtraccionResultado resultadoExtraccion;
             if (tipologiaResuelta.ExtractionEnabled)

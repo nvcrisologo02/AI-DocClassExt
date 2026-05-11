@@ -28,8 +28,11 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
     }
 
     [Function("ObtenerUltimaEjecucionDuplicadoActivity")]
-    public async Task<ContratoSalida?> Run([ActivityTrigger] string sha256)
+    public async Task<ContratoSalida?> Run([ActivityTrigger] object input)
     {
+        var request = ParseInput(input);
+        var sha256 = request.SHA256;
+
         if (string.IsNullOrWhiteSpace(sha256))
         {
             _logger.LogWarning("SHA256 vacío en recuperación de duplicado");
@@ -44,7 +47,9 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
         }
 
         var ejecuciones = await _documentoEjecucionRepository.GetByDocumentoIdAsync(documento.Id);
-        var ultimaConSalida = ejecuciones.FirstOrDefault(e => !string.IsNullOrWhiteSpace(e.ContratoSalidaCompletoJson));
+        var ultimaConSalida = ejecuciones.FirstOrDefault(e =>
+            e.ClassificationOnly == request.ClassificationOnly &&
+            !string.IsNullOrWhiteSpace(e.ContratoSalidaCompletoJson));
 
         if (ultimaConSalida is null)
         {
@@ -79,6 +84,33 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
             _logger.LogError(ex, "JSON inválido al recuperar salida de ejecución {EjecucionId}", ultimaConSalida.Id);
             return null;
         }
+    }
+
+    private static ObtenerUltimaEjecucionDuplicadoInput ParseInput(object input)
+    {
+        if (input is ObtenerUltimaEjecucionDuplicadoInput typed)
+        {
+            return typed;
+        }
+
+        if (input is string sha)
+        {
+            return new ObtenerUltimaEjecucionDuplicadoInput
+            {
+                SHA256 = sha,
+                ClassificationOnly = false
+            };
+        }
+
+        var json = JsonSerializer.Serialize(input);
+        var parsed = JsonSerializer.Deserialize<ObtenerUltimaEjecucionDuplicadoInput>(
+            json,
+            new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+        return parsed ?? new ObtenerUltimaEjecucionDuplicadoInput();
     }
 
     private static void RehidratarResultadoSiIncompleto(ContratoSalida salida, DocumentoEjecucionEntity ejecucion)

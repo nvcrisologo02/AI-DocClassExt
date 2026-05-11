@@ -46,6 +46,8 @@ public class DetalleEjecucion
     public string? InstanceId { get; set; }
     /// <summary>operation_Id de Application Insights (W3C TraceId). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
     public string? OperationId { get; set; }
+    /// <summary>Indica si la ejecución se procesó en modo solo clasificación.</summary>
+    public bool ClassificationOnly { get; set; }
     public string RunTipologia { get; set; } = string.Empty;
     public ResultadoClasificacion Clasificacion { get; set; } = new();
     public ResultadoExtraccion Extraccion { get; set; } = new();
