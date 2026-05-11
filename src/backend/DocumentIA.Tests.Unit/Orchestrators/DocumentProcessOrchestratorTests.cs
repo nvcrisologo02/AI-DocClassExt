@@ -309,6 +309,28 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_DuplicadoSinHistorialReutilizable_ContinuaProcesamiento()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "nota.simple");
+        entrada.Instrucciones.ClassificationOnly = true;
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity<ContratoSalida?>("ObtenerUltimaEjecucionDuplicadoActivity", null);
+        context.SetupActivity("SubirBlobActivity", "documents/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: false, skipGdc: true));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeFalse();
+        context.GetLastActivityInput<object>("SubirBlobActivity").Should().NotBeNull();
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoError()
     {
         var orchestrator = CreateOrchestrator();

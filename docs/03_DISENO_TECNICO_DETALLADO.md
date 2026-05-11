@@ -101,6 +101,23 @@ Cuando la entrada viene por referencia GDC (`objectIdGDC`), antes del pipeline e
 
 En este modo se fuerza `SkipGDCUpload=true` para evitar re-subida del mismo documento origen.
 
+### Rama ClassificationOnly (nuevo)
+
+Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTipologia` se aplica una rama reducida:
+
+- `Extraer`, `Prompt`, `Validar` y `ObtenerActivo` no se ejecutan y quedan como `Skipped` en `detalleEjecucion.seguimiento`.
+- `Integrar` solo se ejecuta si `instrucciones.executeIntegrarWhenClassificationOnly=true` y existe `trazabilidad.idActivo`.
+- `SubirGDC` mantiene la prioridad de `SkipGDCUpload` y requiere `idActivo` resuelto/disponible.
+- `Persistir` siempre se ejecuta.
+
+Restricción de entrada:
+
+- `classificationOnly=true` es incompatible con `expectedType` informado (validación en trigger HTTP, respuesta `400`).
+
+Deduplicación:
+
+- La reutilización de ejecuciones previas se confronta por `SHA256 + ClassificationOnly` para evitar mezclar procesos completos con procesos de solo clasificación.
+
 Adicionalmente, cuando `documento.name` llega vacio y se resuelve desde GDC durante este preflujo, el nombre se sincroniza en `salida.Identificacion.Documento` antes de persistir. Como defensa final, `PersistirActivity` aplica fallback determinista si el nombre siguiera vacio para cumplir la restriccion `NOT NULL` de `Documentos.NombreArchivo`.
 
 ### Anexo integrado: detalle operativo de Activities

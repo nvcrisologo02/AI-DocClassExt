@@ -379,12 +379,9 @@ public class DocumentProcessOrchestrator
                         return salidaDuplicado;
                     }
 
-                    salida.Resultado.Estado = "DUPLICADO";
-                    salida.Resultado.ReutilizadaPorDuplicado = true;
-                    salida.Resultado.MensajeReutilizacion = "Documento duplicado detectado sin ejecución histórica reutilizable.";
-
-                    FinalizarSeguimiento("Completed", "Documento detectado como duplicado");
-                    return salida;
+                    logger.LogInformation(
+                        "Documento duplicado detectado sin ejecución histórica reutilizable para ClassificationOnly={ClassificationOnly}. Se continuará con el procesamiento.",
+                        entrada.Instrucciones.ClassificationOnly);
                 }
             }
 

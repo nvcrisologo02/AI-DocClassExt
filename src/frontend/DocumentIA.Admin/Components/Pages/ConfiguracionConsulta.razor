@@ -22,8 +22,16 @@
             <p>@_errorMessage</p>
         </div>
     }
+    else if (_config is null)
+    {
+        <div class="alert alert-warning" role="alert">
+            <h4 class="alert-heading">Sin configuración</h4>
+            <p>No se pudo cargar la configuración del sistema.</p>
+        </div>
+    }
     else
     {
+        var config = _config!;
         <div class="row">
             <!-- TIPOLOGÍAS -->
             <div class="col-12 col-md-6 mb-3">
@@ -208,77 +216,77 @@
                                 <tbody>
                                     <tr>
                                         <td class="text-muted"><small><strong>Entorno:</strong></small></td>
-                                        <td class="text-end"><span class="badge bg-primary">@_config.Environment</span></td>
+                                        <td class="text-end"><span class="badge bg-primary">@(config.Environment ?? "N/D")</span></td>
                                     </tr>
                                     <tr>
                                         <td class="text-muted"><small>.NET Runtime:</small></td>
-                                        <td class="text-end"><small>@_config.DotNetVersion</small></td>
+                                        <td class="text-end"><small>@config.DotNetVersion</small></td>
                                     </tr>
                                     <tr>
                                         <td class="text-muted"><small>Sistema Operativo:</small></td>
-                                        <td class="text-end"><small>@_config.OS</small></td>
+                                        <td class="text-end"><small>@config.OS</small></td>
                                     </tr>
                                     <tr>
                                         <td class="text-muted"><small>Zona Horaria:</small></td>
-                                        <td class="text-end"><small>@_config.TimeZone</small></td>
+                                        <td class="text-end"><small>@config.TimeZone</small></td>
                                     </tr>
-                                    @if (!string.IsNullOrWhiteSpace(_config.FunctionsBaseUrl))
+                                    @if (!string.IsNullOrWhiteSpace(config.FunctionsBaseUrl))
                                     {
                                         <tr>
                                             <td class="text-muted"><small>API Functions:</small></td>
-                                            <td class="text-end"><small class="text-break"><code style="font-size: 0.75rem;">@_config.FunctionsBaseUrl</code></small></td>
+                                            <td class="text-end"><small class="text-break"><code style="font-size: 0.75rem;">@config.FunctionsBaseUrl</code></small></td>
                                         </tr>
                                     }
-                                    @if (_config.FunctionsConfiguration != null)
+                                    @if (config.FunctionsConfiguration != null)
                                     {
                                         <tr class="table-light">
                                             <td colspan="2"><small class="text-muted"><strong>Configuración de Azure Functions</strong></small></td>
                                         </tr>
-                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.Environment))
+                                        @if (!string.IsNullOrWhiteSpace(config.FunctionsConfiguration.Environment))
                                         {
                                             <tr>
                                                 <td class="text-muted"><small>Environment:</small></td>
-                                                <td class="text-end"><small><span class="badge bg-info">@_config.FunctionsConfiguration.Environment</span></small></td>
+                                                <td class="text-end"><small><span class="badge bg-info">@config.FunctionsConfiguration.Environment</span></small></td>
                                             </tr>
                                         }
-                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.SqlConnectionString))
+                                        @if (!string.IsNullOrWhiteSpace(config.FunctionsConfiguration.SqlConnectionString))
                                         {
                                             <tr>
                                                 <td class="text-muted"><small>SQL Connection:</small></td>
-                                                <td class="text-end"><small class="text-break"><code style="font-size: 0.7rem;">@_config.FunctionsConfiguration.SqlConnectionString</code></small></td>
+                                                <td class="text-end"><small class="text-break"><code style="font-size: 0.7rem;">@config.FunctionsConfiguration.SqlConnectionString</code></small></td>
                                             </tr>
                                         }
-                                        @if (!string.IsNullOrWhiteSpace(_config.FunctionsConfiguration.TimestampUtc))
+                                        @if (!string.IsNullOrWhiteSpace(config.FunctionsConfiguration.TimestampUtc))
                                         {
                                             <tr>
                                                 <td class="text-muted"><small>Timestamp:</small></td>
-                                                <td class="text-end"><small>@_config.FunctionsConfiguration.TimestampUtc</small></td>
+                                                <td class="text-end"><small>@config.FunctionsConfiguration.TimestampUtc</small></td>
                                             </tr>
                                         }
-                                        @if (_config.FunctionsConfiguration.SettingsList?.Any() == true)
+                                        @if (config.FunctionsConfiguration.SettingsList is { } settingsList && settingsList.Any())
                                         {
                                             <tr class="table-light">
                                                 <td colspan="2" style="padding: 0.5rem 0.75rem;">
                                                     <small class="text-muted"><strong>Configuración Cargada:</strong></small>
                                                 </td>
                                             </tr>
-                                            @foreach (var setting in _config.FunctionsConfiguration.SettingsList.Take(5))
+                                            @foreach (var setting in settingsList.Take(5))
                                             {
                                                 <tr>
                                                     <td colspan="2"><small class="text-break">@setting</small></td>
                                                 </tr>
                                             }
-                                            @if (_config.FunctionsConfiguration.SettingsList.Count > 5)
+                                            @if (settingsList.Count > 5)
                                             {
                                                 <tr>
-                                                    <td colspan="2" class="text-center"><small class="text-muted">+@(_config.FunctionsConfiguration.SettingsList.Count - 5) más...</small></td>
+                                                    <td colspan="2" class="text-center"><small class="text-muted">+@(settingsList.Count - 5) más...</small></td>
                                                 </tr>
                                             }
                                         }
                                     }
                                     <tr>
                                         <td class="text-muted"><small>Actualizado:</small></td>
-                                        <td class="text-end"><small>@_config.Timestamp.ToString("HH:mm:ss")</small></td>
+                                        <td class="text-end"><small>@config.Timestamp.ToString("HH:mm:ss")</small></td>
                                     </tr>
                                 </tbody>
                             </table>

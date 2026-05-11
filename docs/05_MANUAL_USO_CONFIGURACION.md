@@ -114,6 +114,25 @@ $body = @{
     documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
 } | ConvertTo-Json -Depth 5
 
+# ClassificationOnly (sin integrar por defecto)
+$body = @{
+  instrucciones = @{
+    classificationOnly = $true
+  }
+  documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
+  trazabilidad = @{ submittedBy = "batch"; idActivo = "ACTIVO-001" }
+} | ConvertTo-Json -Depth 5
+
+# ClassificationOnly forzando Integrar (requiere idActivo)
+$body = @{
+  instrucciones = @{
+    classificationOnly = $true
+    executeIntegrarWhenClassificationOnly = $true
+  }
+  documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
+  trazabilidad = @{ submittedBy = "batch"; idActivo = "ACTIVO-001" }
+} | ConvertTo-Json -Depth 5
+
 # Proveedor y umbral custom
 $body = @{
     instrucciones = @{
@@ -168,6 +187,8 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.expectedType` | string | No | Tipologia conocida (omite clasificacion). Ej: `"nota-simple"`, `"nota-simple@1.4"`. Vacio = clasificacion automatica. |
 | `instrucciones.skipDuplicateCheck` | bool | No | `true` = no verificar duplicados. Default: `false`. |
 | `instrucciones.forceReprocess` | bool | No | `true` = reprocesar aunque sea duplicado. Default: `false`. |
+| `instrucciones.classificationOnly` | bool | No | `true` = ejecutar solo clasificación + resolución de tipología. Omite extracción/validación/asset resolver. |
+| `instrucciones.executeIntegrarWhenClassificationOnly` | bool? | No | Solo aplica con `classificationOnly=true`. `null/false` = no integrar (default). `true` = ejecutar Integrar si hay `trazabilidad.idActivo`. |
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
 | `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |
@@ -199,6 +220,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 - `documento.objectIdGDC` y `documento.content.base64` son mutuamente excluyentes.
 - Debe venir exactamente una fuente de documento: `objectIdGDC` o `content.base64`.
 - Si se usa `documento.objectIdGDC`, el sistema fuerza `instrucciones.skipGDCUpload = true`.
+- `instrucciones.classificationOnly=true` y `instrucciones.expectedType` informado son incompatibles (`400 Bad Request`).
 
 ### Jerarquia de Umbrales
 

@@ -52,6 +52,35 @@
             "type": "coreclr",
             "request": "attach",
             "processId": "${command:azureFunctions.pickProcess}"
+        },
+        {
+            "name": "DocumentIA.Batch: Launch (startup break)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch/bin/Debug/net8.0-windows/DocumentIA.Batch.dll",
+            "cwd": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "justMyCode": true,
+            "env": {
+                "DOCIA_BATCH_DEBUG_BREAK_ON_STARTUP": "1"
+            }
+        },
+        {
+            "name": "DocumentIA.Batch: Launch (normal)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch/bin/Debug/net8.0-windows/DocumentIA.Batch.dll",
+            "cwd": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "justMyCode": true
+        },
+        {
+            "name": "DocumentIA.Batch: Attach",
+            "type": "coreclr",
+            "request": "attach",
+            "processId": "${command:pickProcess}"
         }
     ]
 }
