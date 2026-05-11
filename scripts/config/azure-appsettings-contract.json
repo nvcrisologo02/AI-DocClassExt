@@ -1,0 +1,66 @@
+{
+  "version": 1,
+  "description": "Contrato canonico de App Settings Azure para DocumentIA. No contiene valores secretos.",
+  "apps": [
+    {
+      "id": "functions",
+      "displayName": "DocumentIA Functions",
+      "kind": "functionapp",
+      "defaultName": "srbappprodocai",
+      "requiredSettings": [
+        { "name": "FUNCTIONS_WORKER_RUNTIME", "kind": "LiteralOrNonSecret", "owner": "pipeline", "requiredValue": "dotnet-isolated" },
+        { "name": "FUNCTIONS_EXTENSION_VERSION", "kind": "LiteralOrNonSecret", "owner": "platform" },
+        { "name": "APPLICATIONINSIGHTS_CONNECTION_STRING", "kind": "LiteralOrNonSecret", "owner": "platform" },
+        { "name": "SecretsSource", "kind": "LiteralOrNonSecret", "owner": "pipeline", "requiredValue": "AzureVault" },
+        { "name": "KeyVaultName", "kind": "LiteralOrNonSecret", "owner": "pipeline", "requiredValue": "srbkvprodocai" },
+        { "name": "AzureWebJobsStorage", "kind": "KeyVaultRef", "owner": "pipeline", "secretName": "AzureWebJobsStorage" },
+        { "name": "AzureStorageConnectionString", "kind": "KeyVaultRef", "owner": "platform", "secretName": "AzureStorageConnectionString" },
+        { "name": "SqlConnectionString", "kind": "KeyVaultRef", "owner": "pipeline", "secretName": "SqlConnectionString" },
+        { "name": "RunDatabaseMigrationsOnStartup", "kind": "LiteralOrNonSecret", "owner": "pipeline", "allowedValues": ["true", "false"] },
+        { "name": "AssetResolver__BaseUrl", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "AssetResolver__ApiKey", "kind": "KeyVaultRef", "owner": "pipeline", "secretName": "AssetResolverApiKey" },
+        { "name": "Extraction__DefaultProvider", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "Extraction__AzureContentUnderstanding__Endpoint", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "Extraction__AzureContentUnderstanding__AuthMode", "kind": "LiteralOrNonSecret", "owner": "pipeline", "allowedValues": ["ApiKey", "ManagedIdentity"] },
+        { "name": "Extraction__AzureContentUnderstanding__ApiKey", "kind": "KeyVaultRef", "owner": "platform", "secretName": "Extraction--AzureContentUnderstanding--ApiKey" },
+        { "name": "Extraction__GptFallback__ApiKey", "kind": "KeyVaultRef", "owner": "platform", "secretName": "Extraction--GptFallback--ApiKey" },
+        { "name": "Classification__DefaultProvider", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "Classification__AzureDocumentIntelligence__Endpoint", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "Classification__AzureDocumentIntelligence__AuthMode", "kind": "LiteralOrNonSecret", "owner": "pipeline", "allowedValues": ["ApiKey", "ManagedIdentity"] },
+        { "name": "Classification__AzureDocumentIntelligence__ApiKey", "kind": "KeyVaultRef", "owner": "platform", "secretName": "Classification--AzureDocumentIntelligence--ApiKey" },
+        { "name": "Classification__GptFallback__ApiKey", "kind": "KeyVaultRef", "owner": "platform", "secretName": "Classification--GptFallback--ApiKey" },
+        { "name": "GDC__Endpoint", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "GDC__TimeoutSeconds", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "GDC__HttpBasicUsername", "kind": "KeyVaultRef", "owner": "platform", "secretName": "GDC--HttpBasicUsername" },
+        { "name": "GDC__HttpBasicPassword", "kind": "KeyVaultRef", "owner": "platform", "secretName": "GDC--HttpBasicPassword" }
+      ],
+      "forbiddenSettings": [
+        { "name": "AzureWebJobsStorage__accountName", "reason": "Conflicts with AzureWebJobsStorage Key Vault reference." },
+        { "name": "AzureWebJobsStorage__credential", "reason": "Conflicts with AzureWebJobsStorage Key Vault reference." }
+      ]
+    },
+    {
+      "id": "COMPLETAR_GDC_HTTP_BASIC_USERNAME",
+      "displayName": "DocumentIA Admin",
+      "kind": "webapp",
+      "defaultName": "srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai",
+      "requiredSettings": [
+        { "name": "FunctionsAdminApi__BaseUrl", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "FunctionsAdminApi__FunctionKey", "kind": "KeyVaultRef", "owner": "pipeline", "secretName": "FunctionsAdminApiFunctionKey" }
+      ],
+      "forbiddenSettings": []
+    },
+    {
+      "id": "assetresolver",
+      "displayName": "DocumentIA AssetResolver",
+      "kind": "webapp",
+      "defaultName": "srbwebpluginassetresolver",
+      "requiredSettings": [
+        { "name": "APPLICATIONINSIGHTS_CONNECTION_STRING", "kind": "LiteralOrNonSecret", "owner": "platform" },
+        { "name": "ConnectionStrings__AssetResolverDb", "kind": "KeyVaultRef", "owner": "pipeline", "secretName": "user-ods-dwh" },
+        { "name": "ApiKey", "kind": "KeyVaultRef", "owner": "pipeline", "secretName": "AssetResolverApiKey" }
+      ],
+      "forbiddenSettings": []
+    }
+  ]
+}

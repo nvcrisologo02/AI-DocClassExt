@@ -1,0 +1,137 @@
+@page "/tipologias/edit"
+@page "/tipologias/edit/{Id:int}"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Editar Tipología</PageTitle>
+
+<h1>@(Id.HasValue ? "Editar Tipología" : "Nueva Tipología")</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+}
+
+@if (Id.HasValue && !_isEditable)
+{
+    <div class="alert alert-warning">Solo se pueden editar tipologías en estado Draft. Esta tipología está en estado <strong>@_model.Estado</strong>.</div>
+}
+
+<div class="mb-3">
+    <label class="form-label">Codigo</label>
+    <InputText class="form-control" @bind-Value="_model.Codigo" disabled="@(!_isEditable || Id.HasValue)" />
+    @if (Id.HasValue)
+    {
+        <small class="text-muted">El código queda bloqueado tras el primer guardado.</small>
+    }
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Nombre</label>
+    <InputText class="form-control" @bind-Value="_model.Nombre" disabled="@(!_isEditable)" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Version</label>
+    <InputText class="form-control" @bind-Value="_model.Version" disabled="@(!_isEditable)" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Configuración JSON</label>
+    <JsonEditorComponent 
+        @ref="_jsonEditor"
+        JsonContent="@_model.ConfiguracionJson"
+        Mode="form"
+        ReadOnly="@(!_isEditable)"
+        Height="450px"
+        SupportedModes="@(new List<string> { "tree", "form", "code" })" />
+</div>
+
+<div class="mb-3">
+    <button class="btn btn-outline-primary" type="button" @onclick="ValidateJsonAsync" disabled="@(!_isEditable)">Validar JSON</button>
+    <button class="btn btn-primary ms-2" type="button" @onclick="SaveAsync" disabled="@(!_isEditable)">Guardar</button>
+    <a class="btn btn-secondary ms-2" href="/tipologias">Volver</a>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private TipologiaEntity _model = new();
+    private bool _error;
+    private string? _message;
+    private bool _isEditable = true;
+    private JsonEditorComponent? _jsonEditor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _isEditable = true;
+        _message = null;
+        _error = false;
+
+        if (Id.HasValue)
+        {
+            var existing = await AdminService.GetTipologiaAsync(Id.Value);
+            if (existing is not null)
+            {
+                _model = existing;
+                _isEditable = existing.Estado == EstadoTipologia.Draft;
+            }
+        }
+    }
+
+    private async Task ValidateJsonAsync()
+    {
+        if (_jsonEditor == null) return;
+
+        var isValid = await _jsonEditor.ValidateAsync();
+        if (isValid)
+        {
+            _error = false;
+            _message = "Configuración válida.";
+        }
+        else
+        {
+            _error = true;
+            _message = "El JSON contiene errores. Revisalo en el editor.";
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_isEditable)
+        {
+            _error = true;
+            _message = "Solo se pueden editar tipologías en estado Draft.";
+            return;
+        }
+
+        // Obtener JSON del editor
+        if (_jsonEditor != null)
+        {
+            var jsonFromEditor = await _jsonEditor.GetJsonAsync();
+            if (!string.IsNullOrWhiteSpace(jsonFromEditor))
+            {
+                _model.ConfiguracionJson = jsonFromEditor;
+            }
+        }
+
+        var errors = await AdminService.ValidateTipologiaAsync(_model, Id);
+        if (errors.Count > 0)
+        {
+            _error = true;
+            _message = string.Join("\n", errors);
+            return;
+        }
+
+        try
+        {
+            await AdminService.SaveTipologiaAsync(_model);
+            Navigation.NavigateTo("/tipologias");
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

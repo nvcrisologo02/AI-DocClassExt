@@ -1,0 +1,34 @@
+{
+  "tipologiaId": "resumen-documental",
+  "tipologiaNombre": "Resumen Documental Estandar",
+  "tipologiaMGDCMatricula": "",
+  "gdcTipoDocumento": "",
+  "gdcSubtipoDocumento": "",
+  "gdcSerie": "",
+  "skipGDCUpload": true,
+  "gptDescripcion": "Tipología orientada a generar un resumen estandarizado del documento de entrada.",
+  "version": "1.0",
+  "isDefault": true,
+  "extraction": {
+    "enabled": false,
+    "provider": "mock",
+    "modelKey": "unused",
+    "autoMapUnmappedFields": true,
+    "fieldMappings": []
+  },
+  "promptConfig": {
+    "enabled": true,
+    "modelKey": "default.gpt4o-mini",
+    "systemPrompt": "Eres un analista documental. Responde en espanol neutro, sin inventar datos y con formato estructurado.",
+    "userPromptTemplate": "Genera un resumen ejecutivo del documento usando esta estructura exacta:\n1) Objetivo del documento\n2) Datos clave\n3) Riesgos o alertas\n4) Acciones recomendadas\n\nContenido:\n{contenido}",
+    "maxTokens": 600,
+    "temperature": 0.0,
+    "contentMode": "vision"
+  },
+  "confidenceConfig": {
+    "clasifUmbralFallback": 0.85,
+    "umbralOK": 0.85,
+    "umbralRevision": 0.70
+  },
+  "fields": []
+}

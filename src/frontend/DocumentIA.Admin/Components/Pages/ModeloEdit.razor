@@ -1,0 +1,125 @@
+@page "/modelos/edit"
+@page "/modelos/edit/{Id:int}"
+@using Microsoft.AspNetCore.Components.Forms
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Editar Modelo</PageTitle>
+
+<h1>@(Id.HasValue ? "Editar Modelo" : "Nuevo Modelo")</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+}
+
+<div class="mb-3">
+    <label class="form-label">Tipo</label>
+    <InputSelect class="form-select" @bind-Value="_model.Tipo">
+        <option value="@TipoModelo.Clasificacion">Clasificación</option>
+        <option value="@TipoModelo.Extraccion">Extracción</option>
+        <option value="@TipoModelo.Prompt">Prompt</option>
+        <option value="@TipoModelo.Layout">Layout</option>
+    </InputSelect>
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Key</label>
+    <InputText class="form-control" @bind-Value="_model.Key" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Provider</label>
+    <InputText class="form-control" @bind-Value="_model.Provider" />
+</div>
+
+<div class="form-check mb-3">
+    <InputCheckbox class="form-check-input" @bind-Value="_model.Activo" />
+    <label class="form-check-label">Activo</label>
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Configuración JSON</label>
+    <JsonEditorComponent 
+        @ref="_jsonEditor"
+        JsonContent="@_model.ConfiguracionJson"
+        Mode="form"
+        Height="450px"
+        SupportedModes="@(new List<string> { "tree", "form", "code" })" />
+</div>
+
+<div class="mb-3">
+    <button class="btn btn-outline-primary" type="button" @onclick="ValidateJsonAsync">Validar JSON</button>
+    <button class="btn btn-primary ms-2" type="button" @onclick="SaveAsync">Guardar</button>
+    <a class="btn btn-secondary ms-2" href="/modelos">Volver</a>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private ModeloConfigEntity _model = new();
+    private bool _error;
+    private string? _message;
+    private JsonEditorComponent? _jsonEditor;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Id.HasValue)
+        {
+            var existing = await AdminService.GetModeloByIdAsync(Id.Value);
+            if (existing is not null)
+            {
+                _model = existing;
+            }
+        }
+    }
+
+    private async Task ValidateJsonAsync()
+    {
+        if (_jsonEditor == null) return;
+
+        var isValid = await _jsonEditor.ValidateAsync();
+        if (isValid)
+        {
+            _error = false;
+            _message = "Configuración válida.";
+        }
+        else
+        {
+            _error = true;
+            _message = "El JSON contiene errores. Revisalo en el editor.";
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        // Obtener JSON del editor
+        if (_jsonEditor != null)
+        {
+            var jsonFromEditor = await _jsonEditor.GetJsonAsync();
+            if (!string.IsNullOrWhiteSpace(jsonFromEditor))
+            {
+                _model.ConfiguracionJson = jsonFromEditor;
+            }
+        }
+
+        var errors = TipologiaAdminService.ValidarModeloConfigJson(_model.ConfiguracionJson ?? string.Empty);
+        if (errors.Count > 0)
+        {
+            _error = true;
+            _message = string.Join("\n", errors);
+            return;
+        }
+
+        try
+        {
+            await AdminService.SaveModeloAsync(_model);
+            Navigation.NavigateTo("/modelos");
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

@@ -1,0 +1,465 @@
+trigger:
+  branches:
+    include:
+      - main
+
+variables:
+  - name: AZURE_SERVICE_CONNECTION
+    value: AI DocClassExt
+  - name: AZURE_FUNCTIONS_APP_NAME
+    value: srbappprodocai
+  - name: AZURE_ADMIN_WEB_APP_NAME
+    value: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+  - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+    value: srbwebpluginassetresolver
+  - name: AZURE_ASSET_RESOLVER_BASE_URL
+    value: https://srbwebpluginassetresolver.azurewebsites.net/
+  - name: AZURE_RESOURCE_GROUP
+    value: SRBRGDOCSAIPROD
+  - name: KEY_VAULT_NAME
+    value: srbkvprodocai
+  - name: buildConfiguration
+    value: Release
+  - name: solutionPath
+    value: src/backend/DocumentIA.sln
+  - name: functionsProject
+    value: src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj
+  - name: COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject
+    value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
+  - name: assetResolverProject
+    value: src/plugins/DocumentIA.AssetResolver/DocumentIA.AssetResolver.csproj
+  - name: testsProject
+    value: src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
+
+pool:
+  vmImage: windows-latest
+
+stages:
+  - stage: Build
+    displayName: Build & Test
+    jobs:
+      - job: BuildJob
+        displayName: Build solution
+        steps:
+          - task: UseDotNet@2
+            displayName: Use .NET 9 SDK
+            inputs:
+              packageType: sdk
+              version: 9.x
+
+          - task: DotNetCoreCLI@2
+            displayName: Restore
+            inputs:
+              command: restore
+              projects: $(solutionPath)
+
+          - task: DotNetCoreCLI@2
+            displayName: Build
+            inputs:
+              command: build
+              projects: $(solutionPath)
+              arguments: --configuration $(buildConfiguration) --no-restore
+
+          - task: DotNetCoreCLI@2
+            displayName: Test
+            inputs:
+              command: test
+              projects: $(testsProject)
+              arguments: --configuration $(buildConfiguration) --no-build
+
+          - task: DotNetCoreCLI@2
+            displayName: Publish Functions
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: $(functionsProject)
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/functions
+              zipAfterPublish: false
+              modifyOutputPath: false
+
+          - task: DotNetCoreCLI@2
+            displayName: Publish Admin
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: $(COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject)
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
+              zipAfterPublish: false
+              modifyOutputPath: false
+
+          - task: DotNetCoreCLI@2
+            displayName: Publish AssetResolver
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: $(assetResolverProject)
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/assetresolver
+              zipAfterPublish: false
+              modifyOutputPath: false
+
+          - task: PublishBuildArtifacts@1
+            displayName: Upload artifact - functions
+            inputs:
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/functions
+              ArtifactName: drop-functions
+
+          - task: PublishBuildArtifacts@1
+            displayName: Upload artifact - COMPLETAR_GDC_HTTP_BASIC_USERNAME
+            inputs:
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
+              ArtifactName: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+
+          - task: PublishBuildArtifacts@1
+            displayName: Upload artifact - assetresolver
+            inputs:
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/assetresolver
+              ArtifactName: drop-assetresolver
+
+  - stage: RunMigrations
+    displayName: Run Database Migrations
+    dependsOn: Build
+    condition: false
+    jobs:
+      - job: MigrateJob
+        displayName: Apply EF Core migrations
+        pool:
+          vmImage: windows-latest
+        steps:
+          - task: UseDotNet@2
+            displayName: Use .NET 9 SDK
+            inputs:
+              packageType: sdk
+              version: 9.x
+
+          - task: AzureKeyVault@2
+            displayName: Fetch SQL connection string from Key Vault
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              KeyVaultName: $(KEY_VAULT_NAME)
+              SecretsFilter: SqlConnectionString
+              RunAsPreJob: false
+
+          - pwsh: |
+              $ErrorActionPreference = 'Stop'
+
+              Write-Host "Installing dotnet-ef..."
+              dotnet tool update --global dotnet-ef --version 9.* || dotnet tool install --global dotnet-ef --version 9.*
+
+              $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
+
+              Write-Host "Dotnet info:"
+              dotnet --info
+
+              Write-Host "dotnet-ef version:"
+              dotnet ef --version
+
+              Write-Host "Restoring solution..."
+              dotnet restore $(solutionPath)
+
+              Write-Host "Building solution..."
+              dotnet build $(solutionPath) --configuration $(buildConfiguration) --no-restore
+
+              Write-Host "Applying EF Core migrations against database..."
+              dotnet ef database update `
+                --project src/backend/DocumentIA.Data/ `
+                --startup-project src/backend/DocumentIA.Functions/ `
+                --configuration $(buildConfiguration) `
+                --connection "$(SqlConnectionString)"
+            displayName: Apply EF Core migrations
+
+  - stage: DeployFunctions
+    displayName: Deploy Functions
+    dependsOn: Build
+    condition: succeeded()
+    jobs:
+      - deployment: DeployFunctionsJob
+        displayName: Deploy to srbappprodocai
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - download: current
+                  artifact: drop-functions
+
+                - task: AzureFunctionApp@2
+                  displayName: Deploy Function App
+                  inputs:
+                    connectedServiceNameARM: $(AZURE_SERVICE_CONNECTION)
+                    appType: functionApp
+                    appName: $(AZURE_FUNCTIONS_APP_NAME)
+                    package: $(Pipeline.Workspace)/drop-functions
+                    deploymentMethod: zipDeploy
+
+                - task: AzureCLI@2
+                  displayName: Set Function App settings (Key Vault mode)
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $settings = @(
+                        "FUNCTIONS_WORKER_RUNTIME=dotnet-isolated",
+                        "SecretsSource=AzureVault",
+                        "KeyVaultName=$(KEY_VAULT_NAME)",
+                        "RunDatabaseMigrationsOnStartup=false",
+                        "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)",
+                        "AzureStorageConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureStorageConnectionString)",
+                        "SqlConnectionString=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=SqlConnectionString)",
+                        "AssetResolver__BaseUrl=$(AZURE_ASSET_RESOLVER_BASE_URL)",
+                        "AssetResolver__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)",
+                        "Extraction__DefaultProvider=azure-content-understanding",
+                        "Extraction__AzureContentUnderstanding__Endpoint=https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/",
+                        "Extraction__AzureContentUnderstanding__AuthMode=ApiKey",
+                        "Extraction__AzureContentUnderstanding__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--AzureContentUnderstanding--ApiKey)",
+                        "Extraction__AzureContentUnderstanding__DefaultProcessingLocation=geography",
+                        "Extraction__GptFallback__Enabled=true",
+                        "Extraction__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+                        "Extraction__GptFallback__AuthMode=ApiKey",
+                        "Extraction__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--GptFallback--ApiKey)",
+                        "Extraction__GptFallback__DeploymentName=gpt-4o-mini",
+                        "Extraction__GptFallback__MinFieldsRatio=0.9",
+                        "Extraction__GptFallback__Temperature=0.0",
+                        "Extraction__GptFallback__MaxTokens=2000",
+                        "Extraction__GptFallback__TimeoutSeconds=60",
+                        "Classification__DefaultProvider=azure-document-intelligence",
+                        "Classification__DefaultModelKey=default.azure-di",
+                        "Classification__AzureDocumentIntelligence__Endpoint=https://srbdiprodocai.cognitiveservices.azure.com/",
+                        "Classification__AzureDocumentIntelligence__AuthMode=ApiKey",
+                        "Classification__AzureDocumentIntelligence__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--AzureDocumentIntelligence--ApiKey)",
+                        "Classification__AzureDocumentIntelligence__ApiVersion=2024-11-30",
+                        "Classification__GptFallback__Enabled=true",
+                        "Classification__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+                        "Classification__GptFallback__AuthMode=ApiKey",
+                        "Classification__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--GptFallback--ApiKey)",
+                        "Classification__GptFallback__DeploymentName=gpt-4o-mini",
+                        "Classification__GptFallback__FallbackThreshold=0.5",
+                        "Classification__GptFallback__Temperature=0.0",
+                        "Classification__GptFallback__MaxTokens=150",
+                        "Classification__GptFallback__TimeoutSeconds=30",
+                        "GDC__Endpoint=https://srbwidd03.sareb.srb:8090/sintws/IDocService",
+                        "GDC__TimeoutSeconds=60",
+                        "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicUsername)",
+                        "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicPassword)",
+                        "GDC__ApplicationId=CKP1",
+                        "GDC__NominalUser=",
+                        "GDC__DocumentTypeId=document",
+                        "GDC__ContentFieldName=Content",
+                        "GDC__OrigenDocumento=8878",
+                        "GDC__RepositoryId=",
+                        "GDC__RepositoryName=",
+                        "GDC__ClaseExpediente=AI04",
+                        "GDC__DefaultMatricula=AI-99-SCXX-00",
+                        "GDC__Servicer=9999",
+                        "GDC__EntidadOrigen=9999",
+                        "GDC__ProcesoCarga=PC01",
+                        "GDC__TipoExpediente=AI",
+                        "GDC__Publico=verdadero",
+                        "GDC__BypassSslValidation=true"
+                      )
+
+                      az functionapp config appsettings set `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                        --settings $settings `
+                        --only-show-errors `
+                        --output none
+
+                      az functionapp config appsettings delete `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                        --setting-names AzureWebJobsStorage__accountName AzureWebJobsStorage__credential `
+                        --only-show-errors `
+                        --output none
+
+                      $appliedSettings = az functionapp config appsettings list `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                        --query "[].name" `
+                        -o tsv
+
+                      $requiredSettings = @(
+                        "AssetResolver__BaseUrl",
+                        "AssetResolver__ApiKey"
+                      )
+
+                      foreach ($requiredSetting in $requiredSettings) {
+                        if ($appliedSettings -notcontains $requiredSetting) {
+                          throw "Required Function App setting '$requiredSetting' was not found after deployment."
+                        }
+                      }
+
+                      Write-Host "[OK] AssetResolver settings are present on $(AZURE_FUNCTIONS_APP_NAME)."
+
+                - task: AzureCLI@2
+                  displayName: Resolve Function App host name
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $hostName = az functionapp show --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --query defaultHostName -o tsv
+                      if (-not $hostName) { throw "No se pudo resolver defaultHostName de $(AZURE_FUNCTIONS_APP_NAME)" }
+                      Write-Host "##vso[task.setvariable variable=FUNCTIONS_HOST_NAME]$hostName"
+
+                - task: PowerShell@2
+                  displayName: Smoke test Functions endpoint
+                  inputs:
+                    targetType: filePath
+                    filePath: scripts/smoke-test-functions.ps1
+                    arguments: -HostName $(FUNCTIONS_HOST_NAME)
+                    pwsh: true
+
+  - stage: DeployAdmin
+    displayName: Deploy Admin Blazor
+    dependsOn: DeployFunctions
+    condition: succeeded()
+    jobs:
+      - deployment: DeployAdminJob
+        displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+
+                - task: AzureWebApp@1
+                  displayName: Deploy Admin Web App
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    appType: webApp
+                    appName: $(AZURE_ADMIN_WEB_APP_NAME)
+                    package: $(Pipeline.Workspace)/drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+                    deploymentMethod: zipDeploy
+
+                - task: AzureCLI@2
+                  displayName: Ensure Admin Web App identity + Key Vault RBAC
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az webapp identity assign --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --only-show-errors --output none
+
+                      $principalId = az webapp identity show --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --query principalId -o tsv
+
+                      if (-not $principalId) {
+                        throw "No se pudo resolver principalId para $(AZURE_ADMIN_WEB_APP_NAME)."
+                      }
+
+                      $keyVaultScope = az keyvault show --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(KEY_VAULT_NAME)" --query id -o tsv
+
+                      if (-not $keyVaultScope) {
+                        throw "No se pudo resolver el recurso de Key Vault $(KEY_VAULT_NAME)."
+                      }
+
+                      $existingRole = az role assignment list --scope $keyVaultScope --assignee $principalId --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" -o tsv
+
+                      if ($existingRole -eq "0") {
+                        az role assignment create --role "Key Vault Secrets User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $keyVaultScope --only-show-errors --output none
+
+                        Write-Host "[OK] Assigned 'Key Vault Secrets User' to $(AZURE_ADMIN_WEB_APP_NAME)."
+                      }
+                      else {
+                        Write-Host "[OK] $(AZURE_ADMIN_WEB_APP_NAME) already has 'Key Vault Secrets User' on $(KEY_VAULT_NAME)."
+                      }
+
+                - task: AzureCLI@2
+                  displayName: Set Admin App settings (Functions API)
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $azPython = Join-Path $env:ProgramFiles "Microsoft SDKs\Azure\CLI2\python.exe"
+                      if (-not (Test-Path $azPython)) {
+                        throw "Azure CLI python executable not found at '$azPython'"
+                      }
+
+                      $COMPLETAR_GDC_HTTP_BASIC_USERNAMEBaseUrlSetting = "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/"
+                      $COMPLETAR_GDC_HTTP_BASIC_USERNAMEFunctionKeySetting = "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
+
+                      & $azPython -IBm azure.cli webapp config appsettings set `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                        --settings $COMPLETAR_GDC_HTTP_BASIC_USERNAMEBaseUrlSetting $COMPLETAR_GDC_HTTP_BASIC_USERNAMEFunctionKeySetting `
+                        --only-show-errors `
+                        --output none
+
+  - stage: DeployAssetResolver
+    displayName: Deploy AssetResolver Plugin
+    dependsOn: DeployFunctions
+    condition: succeeded()
+    jobs:
+      - deployment: DeployAssetResolverJob
+        displayName: Deploy to $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: drop-assetresolver
+
+                - task: AzureWebApp@1
+                  displayName: Deploy AssetResolver Web App
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    appType: webApp
+                    appName: $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
+                    package: $(Pipeline.Workspace)/drop-assetresolver
+                    deploymentMethod: zipDeploy
+
+                - task: AzureCLI@2
+                  displayName: Set AssetResolver App settings
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $azPython = Join-Path $env:ProgramFiles "Microsoft SDKs\Azure\CLI2\python.exe"
+                      if (-not (Test-Path $azPython)) {
+                        throw "Azure CLI python executable not found at '$azPython'"
+                      }
+
+                      $assetResolverDbSetting = "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=user-ods-dwh)"
+                      $assetResolverApiKeySetting = "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
+
+                      & $azPython -IBm azure.cli webapp config appsettings set `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
+                        --settings $assetResolverDbSetting $assetResolverApiKeySetting `
+                        --only-show-errors `
+                        --output none
+
+  - stage: ValidateConfiguration
+    displayName: Validate Azure configuration contract
+    dependsOn:
+      - DeployAdmin
+      - DeployAssetResolver
+    condition: succeeded()
+    jobs:
+      - job: ValidateConfigurationJob
+        displayName: Validate App Settings contract
+        pool:
+          vmImage: windows-latest
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: Validate App Settings contract
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                ./scripts/validate-azure-appsettings-contract.ps1 `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
+                  -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                  -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)"
+

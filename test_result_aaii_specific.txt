@@ -1,0 +1,27 @@
+
+========================================
+ ASSETRESOLVER TEST TOOL
+========================================
+BaseUrl: http://localhost:5006
+DryRun: False
+Aviso: faltan valores de muestra (SampleIdufir/SampleRefCatastral/SampleDireccion). Algunos escenarios pueden fallar por datos.
+Aviso: SampleIdufirAacc no informado. Se reutilizara SampleIdufir para escenarios AACC.
+
+Ejecutando escenario: origen-aaii-solo
+[OK] origen-aaii-solo - Origen AAII habilitado y AACC deshabilitado
+  Found: True
+  Count: 1
+  Criterio: AAII:Idufir
+  DuracionMs: 1025
+
+========================================
+ RESUMEN
+========================================
++------------------+---------------------------------------------+------------+------------+
+| Escenario        | Descripcion                                 | Resultado  | IdsActivos |
++------------------+---------------------------------------------+------------+------------+
+| origen-aaii-solo | Origen AAII habilitado y AACC deshabilitado | OK         | 1          |
++------------------+---------------------------------------------+------------+------------+
+
+  Total: 1   Passed: 1   Failed: 0   Blocked: 0
++------------------+---------------------------------------------+------------+------------+

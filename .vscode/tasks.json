@@ -1,0 +1,225 @@
+
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "func: host start",
+      "type": "func",
+      "dependsOn": "build (functions)",
+      "options": {
+        "cwd": "${workspaceFolder}/src/backend/DocumentIA.Functions"
+      },
+      "command": "host start",
+      "isBackground": true,
+      "problemMatcher": "$func-dotnet-watch"
+    },
+    {
+      "label": "clean (functions)",
+      "command": "dotnet",
+      "args": [
+        "clean",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "type": "process",
+      "problemMatcher": "$msCompile",
+      "options": {
+        "cwd": "${workspaceFolder}/src\\backend\\DocumentIA.Functions"
+      }
+    },
+    {
+      "label": "build (functions)",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "type": "process",
+      "dependsOn": "clean (functions)",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$msCompile",
+      "options": {
+        "cwd": "${workspaceFolder}/src\\backend\\DocumentIA.Functions"
+      }
+    },
+    {
+      "label": "clean release (functions)",
+      "command": "dotnet",
+      "args": [
+        "clean",
+        "--configuration",
+        "Release",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "type": "process",
+      "problemMatcher": "$msCompile",
+      "options": {
+        "cwd": "${workspaceFolder}/src\\backend\\DocumentIA.Functions"
+      }
+    },
+    {
+      "label": "publish (functions)",
+      "command": "dotnet",
+      "args": [
+        "publish",
+        "--configuration",
+        "Release",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary"
+      ],
+      "type": "process",
+      "dependsOn": "clean release (functions)",
+      "problemMatcher": "$msCompile",
+      "options": {
+        "cwd": "${workspaceFolder}/src\\backend\\DocumentIA.Functions"
+      }
+    },
+    {
+      "label": "start (mock servers)",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Mock Servers\\start-mock-servers.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "stop (mock servers)",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\Mock Servers\\stop-mock-servers.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+        "label": "build",
+        "command": "dotnet",
+        "type": "process",
+        "args": [
+            "build",
+            "/property:GenerateFullPaths=true",
+            "/consoleloggerparameters:NoSummary;ForceNoAlign"
+        ],
+        "problemMatcher": "$msCompile"
+    },
+    {
+        "label": "publish",
+        "command": "dotnet",
+        "type": "process",
+        "args": [
+            "publish",
+            "/property:GenerateFullPaths=true",
+            "/consoleloggerparameters:NoSummary;ForceNoAlign"
+        ],
+        "problemMatcher": "$msCompile"
+    },
+    {
+        "label": "watch",
+        "command": "dotnet",
+        "type": "process",
+        "args": [
+            "watch",
+            "run"
+        ],
+        "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "run (frontend desktop)",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Desktop"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "run (frontend web)",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run",
+        "--launch-profile",
+        "http"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Admin"
+      },
+      "problemMatcher": "$msCompile"
+    }, 
+
+    {
+      "label": "Activate PIM role (user - device code)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\activate-pim.ps1",
+        "-UseUser"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+    ,
+    {
+      "label": "List PIM eligible assignments (user)",
+      "type": "shell",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\list-pim-eligible.ps1",
+        "-UseUser"
+      ],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "run (AssetResolver)",
+      "command": "dotnet",
+      "type": "process",
+      "args": [
+        "run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/plugins/DocumentIA.AssetResolver"
+      },
+      "isBackground": true,
+      "problemMatcher": "$msCompile",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "plugins"
+      }
+    }
+  ]
+}

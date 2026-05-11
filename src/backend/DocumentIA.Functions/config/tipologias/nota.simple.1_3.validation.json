@@ -1,0 +1,729 @@
+{
+  "tipologiaId": "nota-simple",
+  "tipologiaNombre": "Nota Simple",
+  "tipologiaMGDCMatricula": "AI-01-NOTS-01",
+  "gdcTipoDocumento": "NOTS",
+  "gdcSubtipoDocumento": "NOTS01",
+  "gdcSerie": "AI01",
+  "skipGDCUpload": false,
+  "version": "1.3",
+  "isDefault": false,
+  "confidenceConfig": {
+    "clasifUmbralFallback": 0.85,
+    "extracUmbralFallback": 0.9,
+    "extracWeightCampos": 0.5,
+    "extracWeightRequeridos": 0.3,
+    "extracWeightWarnings": 0.2,
+    "umbralOK": 0.85,
+    "umbralRevision": 0.70
+  },
+  "fields": [
+    {
+      "name": "FincaRegistral",
+      "type": "string",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "minLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 1
+          }
+        },
+        {
+          "ruleType": "maxLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 30
+          }
+        }
+      ]
+    },
+    {
+      "name": "RegistroPropiedad",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "minLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 3
+          }
+        },
+        {
+          "ruleType": "maxLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 120
+          }
+        }
+      ]
+    },
+    {
+      "name": "MunicipioRegistro",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 80
+          }
+        }
+      ]
+    },
+    {
+      "name": "IDUFIR_CRU",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^[0-9]{14}$"
+          }
+        }
+      ]
+    },
+    {
+      "name": "FechaDocumento",
+      "type": "date",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "date",
+          "severity": "Error",
+          "parameters": {
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
+            "allowFuture": false,
+            "allowPast": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "NumeroAsientoPresentacion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 40
+          }
+        }
+      ]
+    },
+    {
+      "name": "Direccion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "address",
+          "severity": "Warning",
+          "parameters": {
+            "minLength": 6,
+            "maxLength": 160,
+            "requireStreetNumber": true,
+            "requireMunicipality": true,
+            "requireProvince": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "ReferenciaCatastral",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^[0-9]{7}[A-Z]{2}[0-9]{4}[A-Z]{1}[0-9]{4}[A-Z]{2}$"
+          }
+        }
+      ]
+    },
+    {
+      "name": "CodigoPostal",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^[0-9]{5}$"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Provincia",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "Municipio",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 80
+          }
+        }
+      ]
+    },
+    {
+      "name": "TipologiaInmueble",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "enum",
+          "severity": "Warning",
+          "parameters": {
+            "values": [
+              "Vivienda",
+              "Local",
+              "Trastero",
+              "Garaje",
+              "Edificio",
+              "Suelo",
+              "Oficina",
+              "Nave",
+              "Finca r\u00FAstica",
+              "Otro"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "superficie",
+      "type": "decimal",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Error",
+          "parameters": {
+            "min": 0,
+            "max": 200000000
+          }
+        }
+      ]
+    },
+    {
+      "name": "UnidadSuperficie",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "enum",
+          "severity": "Warning",
+          "parameters": {
+            "values": [
+              "m2_construidos",
+              "m2_utiles",
+              "m2_suelo",
+              "otro"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Anejos",
+      "type": "array",
+      "required": false,
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "tipo",
+            "type": "string",
+            "rules": [
+              {
+                "ruleType": "maxLength",
+                "severity": "Warning",
+                "parameters": {
+                  "value": 40
+                }
+              }
+            ]
+          },
+          {
+            "name": "descripcion",
+            "type": "string",
+            "rules": [
+              {
+                "ruleType": "maxLength",
+                "severity": "Warning",
+                "parameters": {
+                  "value": 200
+                }
+              }
+            ]
+          },
+          {
+            "name": "superficie",
+            "type": "decimal",
+            "rules": [
+              {
+                "ruleType": "range",
+                "severity": "Warning",
+                "parameters": {
+                  "min": 0,
+                  "max": 200000000
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Linderos",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 500
+          }
+        }
+      ]
+    },
+    {
+      "name": "CalificacionUrbanistica",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "enum",
+          "severity": "Warning",
+          "parameters": {
+            "values": [
+              "Suelo urbano",
+              "Suelo urbanizable",
+              "Suelo r\u00FAstico",
+              "Suelo no urbanizable",
+              "No consta",
+              "Otros"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Titular",
+      "type": "string",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 160
+          }
+        }
+      ]
+    },
+    {
+      "name": "NIF",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "nif",
+          "severity": "Warning",
+          "parameters": {}
+        }
+      ]
+    },
+    {
+      "name": "DerechoTitularidad",
+      "type": "string",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "enum",
+          "severity": "Error",
+          "parameters": {
+            "values": [
+              "Pleno dominio",
+              "Nuda propiedad",
+              "Usufructo",
+              "Copropiedad",
+              "Otro"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "CuotaParticipacion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^[0-9]\u002B\\/[0-9]\u002B$"
+          }
+        }
+      ]
+    },
+    {
+      "name": "FechaAdquisicion",
+      "type": "date",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "date",
+          "severity": "Warning",
+          "parameters": {
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
+            "allowFuture": false,
+            "allowPast": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "TituloAdquisicion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "enum",
+          "severity": "Warning",
+          "parameters": {
+            "values": [
+              "Compraventa",
+              "Herencia",
+              "Adjudicacion",
+              "Dacion",
+              "Donacion",
+              "Otros",
+              "Acta de Manifestaciones"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "FechaInscripcion",
+      "type": "date",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "date",
+          "severity": "Warning",
+          "parameters": {
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
+            "allowFuture": false,
+            "allowPast": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "TomoLibroFolio",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 60
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cargas",
+      "type": "array",
+      "required": false,
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "tipo",
+            "type": "string",
+            "rules": [
+              {
+                "ruleType": "enum",
+                "severity": "Warning",
+                "parameters": {
+                  "values": [
+                    "Hipoteca",
+                    "Embargo",
+                    "Servidumbre",
+                    "Condicion resolutoria",
+                    "Afeccion fiscal",
+                    "Otra"
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "name": "descripcion",
+            "type": "string",
+            "rules": [
+              {
+                "ruleType": "maxLength",
+                "severity": "Warning",
+                "parameters": {
+                  "value": 300
+                }
+              }
+            ]
+          },
+          {
+            "name": "importeMaxResponsabilidad",
+            "type": "decimal",
+            "rules": [
+              {
+                "ruleType": "range",
+                "severity": "Warning",
+                "parameters": {
+                  "min": 0,
+                  "max": 999999999999
+                }
+              }
+            ]
+          },
+          {
+            "name": "fechaInscripcion",
+            "type": "date",
+            "rules": [
+              {
+                "ruleType": "date",
+                "severity": "Warning",
+                "parameters": {
+                  "formats": [
+                    "dd/MM/yyyy",
+                    "yyyy-MM-dd"
+                  ],
+                  "allowFuture": false,
+                  "allowPast": true
+                }
+              }
+            ]
+          },
+          {
+            "name": "acreedor",
+            "type": "string",
+            "rules": [
+              {
+                "ruleType": "maxLength",
+                "severity": "Warning",
+                "parameters": {
+                  "value": 160
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "VPO",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "name": "LimitacionesAdministrativas",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 300
+          }
+        }
+      ]
+    },
+    {
+      "name": "AfeccionesFiscales",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 200
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ocupacion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "enum",
+          "severity": "Warning",
+          "parameters": {
+            "values": [
+              "No consta",
+              "Libre",
+              "Arrendado inscrito",
+              "Ocupado",
+              "Otro"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "ArrendamientosInscritos",
+      "type": "array",
+      "required": false,
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "arrendatario",
+            "type": "string"
+          },
+          {
+            "name": "fechaInicio",
+            "type": "date"
+          },
+          {
+            "name": "fechaFin",
+            "type": "date"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HistorialInscripciones",
+      "type": "array",
+      "required": false,
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "tipo",
+            "type": "string"
+          },
+          {
+            "name": "fecha",
+            "type": "date"
+          },
+          {
+            "name": "descripcion",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Observaciones",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 500
+          }
+        }
+      ]
+    },
+    {
+      "name": "NotificacionesJudiciales",
+      "type": "boolean",
+      "required": false
+    },
+    {
+      "name": "ValoracionCatastral",
+      "type": "decimal",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 999999999
+          }
+        }
+      ]
+    },
+    {
+      "name": "DeudaIBI",
+      "type": "decimal",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 99999999
+          }
+        }
+      ]
+    },
+    {
+      "name": "DeudaComunidad",
+      "type": "decimal",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 99999999
+          }
+        }
+      ]
+    }
+  ],
+  "TipologiaId": "nota.simple.1_3",
+  "TipologiaNombre": "Nota Simple",
+  "Version": "1.3"
+}

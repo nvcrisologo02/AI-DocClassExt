@@ -1,0 +1,109 @@
+// App Insights queries for full validation
+// Current run
+let instanceId = "00c2722656624b97bc8cc70199405551";
+let correlationId = "PROD-STEP-VALIDATE-20260401-131206";
+let fromTs = ago(2h);
+
+// 1) Functional trace timeline
+traces
+| where timestamp > fromTs
+| where message has instanceId or message has correlationId
+| project timestamp, severityLevel, operation_Id, message
+| order by timestamp asc
+
+
+// 2) Exceptions for this execution
+exceptions
+| where timestamp > fromTs
+| where outerMessage has instanceId
+    or innermostMessage has instanceId
+    or outerMessage has correlationId
+    or innermostMessage has correlationId
+| project timestamp, operation_Id, type, outerMessage, innermostMessage
+| order by timestamp asc
+
+
+// 3) Related HTTP requests (including IngestDocument)
+requests
+| where timestamp > fromTs
+| where operation_Id in (
+    traces
+    | where timestamp > fromTs
+    | where message has instanceId or message has correlationId
+    | distinct operation_Id
+)
+or tostring(customDimensions) has instanceId
+or tostring(customDimensions) has correlationId
+| project timestamp, operation_Id, name, url, resultCode, success, duration, customDimensions
+| order by timestamp asc
+
+
+// 4) External dependencies (Azure/CU/GDC/SQL/Storage)
+dependencies
+| where timestamp > fromTs
+| where operation_Id in (
+    traces
+    | where timestamp > fromTs
+    | where message has instanceId or message has correlationId
+    | distinct operation_Id
+)
+| project timestamp, operation_Id, type, target, name, data, resultCode, success, duration
+| order by timestamp asc
+
+
+// 5) Failed dependencies only (quick troubleshooting)
+dependencies
+| where timestamp > fromTs
+| where operation_Id in (
+    traces
+    | where timestamp > fromTs
+    | where message has instanceId or message has correlationId
+    | distinct operation_Id
+)
+| where success == false or toint(resultCode) >= 400
+| project timestamp, operation_Id, type, target, name, data, resultCode, success, duration
+| order by timestamp asc
+
+
+// 6) Unified view (trace + exceptions + requests + dependencies)
+union isfuzzy=true
+(
+    traces
+     | where timestamp > fromTs
+     | where message has instanceId or message has correlationId
+    | project timestamp, itemType="trace", operation_Id, message, severityLevel, resultCode="", success=bool(null), target="", name=""
+),
+(
+    exceptions
+     | where timestamp > fromTs
+     | where outerMessage has instanceId
+         or innermostMessage has instanceId
+         or outerMessage has correlationId
+         or innermostMessage has correlationId
+    | project timestamp, itemType="exception", operation_Id, message=coalesce(outerMessage, innermostMessage), severityLevel=int(null), resultCode="", success=bool(null), target="", name=type
+),
+(
+    requests
+     | where timestamp > fromTs
+     | where tostring(customDimensions) has instanceId
+         or tostring(customDimensions) has correlationId
+       or operation_Id in (
+            traces
+                | where timestamp > fromTs
+                | where message has instanceId or message has correlationId
+            | distinct operation_Id
+       )
+    | project timestamp, itemType="request", operation_Id, message=tostring(url), severityLevel=int(null), resultCode=tostring(resultCode), success, target="", name
+),
+(
+    dependencies
+    | where timestamp > fromTs
+    | where operation_Id in (
+        traces
+        | where timestamp > fromTs
+        | where message has instanceId or message has correlationId
+        | distinct operation_Id
+    )
+    | project timestamp, itemType="dependency", operation_Id, message=tostring(data), severityLevel=int(null), resultCode=tostring(resultCode), success, target, name
+)
+| order by timestamp asc

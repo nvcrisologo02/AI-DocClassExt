@@ -1,0 +1,231 @@
+@page "/plugins-tipologias"
+@inject TipologiaAdminService AdminService
+
+<PageTitle>Plugins por Tipología</PageTitle>
+
+<h1>Plugins por Tipología</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+}
+
+<div class="row">
+    <div class="col-12 col-md-4">
+        <h4>Tipologías con config de plugins</h4>
+        <ul class="list-group">
+            @foreach (var item in _items)
+            {
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <button class="btn btn-link p-0" @onclick="() => Select(item.TipologiaCodigo)">@item.TipologiaCodigo</button>
+                    <span class="badge bg-secondary">@item.Estado</span>
+                </li>
+            }
+        </ul>
+    </div>
+
+    <div class="col-12 col-md-8">
+        <h4>Editor</h4>
+        <div class="mb-2">
+            <label class="form-label">Seleccionar tipología</label>
+            <div class="d-flex gap-2">
+                <InputSelect class="form-select" @bind-Value="_selectedTipologiaCodigo">
+                    <option value="">Selecciona una tipología</option>
+                    @foreach (var tipologia in _tipologias)
+                    {
+                        <option value="@tipologia.Codigo">@tipologia.Codigo</option>
+                    }
+                </InputSelect>
+                <button class="btn btn-outline-secondary" @onclick="PrepareNewConfig">Cargar</button>
+            </div>
+            <div class="form-text">Puedes crear una configuración nueva aunque la tipología aún no tenga plugins configurados.</div>
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Tipologia Codigo</label>
+            <InputText class="form-control" @bind-Value="_tipologiaCodigo" />
+        </div>
+        <div class="mb-2">
+            <label class="form-label">Configuración JSON</label>
+            <JsonEditorComponent 
+                @ref="_jsonEditor"
+                JsonContent="@_json"
+                Mode="code"
+                Height="400px"
+                SupportedModes="@(new List<string> { "tree", "form", "code" })" />
+        </div>
+        <div class="mb-2">
+            <button class="btn btn-outline-primary" @onclick="ValidateAsync">Validar</button>
+            <button class="btn btn-primary ms-2" @onclick="SaveDraftAsync">Guardar Draft</button>
+            <button class="btn btn-success ms-2" @onclick="PublishAsync">Publicar</button>
+            <button class="btn btn-warning ms-2" @onclick="RetireAsync">Retirar</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IReadOnlyCollection<PluginTipologiaConfigEntity> _items = Array.Empty<PluginTipologiaConfigEntity>();
+    private IReadOnlyCollection<TipologiaEntity> _tipologias = Array.Empty<TipologiaEntity>();
+    private string _selectedTipologiaCodigo = string.Empty;
+    private string _tipologiaCodigo = string.Empty;
+    private string _json = "{\n  \"tipologiaId\": \"\",\n  \"plugins\": []\n}";
+    private bool _error;
+    private string? _message;
+    private JsonEditorComponent? _jsonEditor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Reload();
+    }
+
+    private async Task Reload()
+    {
+        _items = await AdminService.GetPluginConfigsAsync();
+        _tipologias = await AdminService.GetTipologiasAsync();
+    }
+
+    private async Task Select(string tipologiaCodigo)
+    {
+        _tipologiaCodigo = tipologiaCodigo;
+        _selectedTipologiaCodigo = tipologiaCodigo;
+        var row = await AdminService.GetPluginConfigAsync(tipologiaCodigo);
+        _json = row?.ConfiguracionJson ?? BuildEmptyPluginConfigJson(tipologiaCodigo);
+        if (_jsonEditor != null)
+        {
+            await _jsonEditor.SetJsonAsync(_json);
+        }
+    }
+
+    private async Task PrepareNewConfig()
+    {
+        if (string.IsNullOrWhiteSpace(_selectedTipologiaCodigo))
+        {
+            _error = true;
+            _message = "Selecciona una tipología.";
+            return;
+        }
+
+        _tipologiaCodigo = _selectedTipologiaCodigo.Trim();
+        var existing = await AdminService.GetPluginConfigAsync(_tipologiaCodigo);
+        _json = existing?.ConfiguracionJson ?? BuildEmptyPluginConfigJson(_tipologiaCodigo);
+        
+        if (_jsonEditor != null)
+        {
+            await _jsonEditor.SetJsonAsync(_json);
+        }
+        
+        _error = false;
+        _message = existing is null
+            ? $"Nueva configuración inicializada para '{_tipologiaCodigo}'."
+            : $"Configuración existente cargada para '{_tipologiaCodigo}'.";
+    }
+
+    private async Task ValidateAsync()
+    {
+        if (_jsonEditor == null) return;
+
+        var isValid = await _jsonEditor.ValidateAsync();
+        if (isValid)
+        {
+            _error = false;
+            _message = "Configuración de plugins válida.";
+        }
+        else
+        {
+            _error = true;
+            _message = "El JSON contiene errores. Revisalo en el editor.";
+        }
+    }
+
+    private async Task SaveDraftAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_tipologiaCodigo))
+        {
+            _error = true;
+            _message = "TipologiaCodigo es obligatorio.";
+            return;
+        }
+
+        // Obtener JSON del editor
+        if (_jsonEditor != null)
+        {
+            var jsonFromEditor = await _jsonEditor.GetJsonAsync();
+            if (!string.IsNullOrWhiteSpace(jsonFromEditor))
+            {
+                _json = jsonFromEditor;
+            }
+        }
+
+        var errors = TipologiaAdminService.ValidarPluginConfigJson(_json);
+        if (errors.Count > 0)
+        {
+            _error = true;
+            _message = string.Join("\n", errors);
+            return;
+        }
+
+        try
+        {
+            await AdminService.SavePluginDraftAsync(_tipologiaCodigo.Trim(), _json);
+            _error = false;
+            _message = "Draft guardado.";
+            await Reload();
+            _selectedTipologiaCodigo = _tipologiaCodigo.Trim();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private async Task PublishAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_tipologiaCodigo))
+        {
+            _error = true;
+            _message = "TipologiaCodigo es obligatorio.";
+            return;
+        }
+
+        try
+        {
+            await AdminService.PublishPluginConfigAsync(_tipologiaCodigo.Trim(), "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui");
+            _error = false;
+            _message = "Configuración publicada.";
+            await Reload();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private async Task RetireAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_tipologiaCodigo))
+        {
+            _error = true;
+            _message = "TipologiaCodigo es obligatorio.";
+            return;
+        }
+
+        try
+        {
+            await AdminService.RetirePluginConfigAsync(_tipologiaCodigo.Trim());
+            _error = false;
+            _message = "Configuración retirada.";
+            await Reload();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private static string BuildEmptyPluginConfigJson(string tipologiaCodigo)
+    {
+        return "{\n  \"tipologiaId\": \"" + tipologiaCodigo + "\",\n  \"plugins\": []\n}";
+    }
+}

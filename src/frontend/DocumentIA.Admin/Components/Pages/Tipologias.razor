@@ -1,0 +1,165 @@
+@page "/tipologias"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>Tipologías</PageTitle>
+
+<h1>Tipologías</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+}
+
+<p>
+    <button class="btn btn-primary" @onclick="CreateTipologiaWizard">Nueva tipología (wizard)</button>
+    <button class="btn btn-outline-secondary ms-2" @onclick="CreateTipologiaClassic">Nueva tipología (editor clásico)</button>
+</p>
+
+<div class="card mb-3">
+    <div class="card-header">Importar tipología (ZIP)</div>
+    <div class="card-body d-flex flex-wrap align-items-center gap-2">
+        <InputFile OnChange="OnImportFileSelected" accept=".zip" />
+        <button class="btn btn-outline-primary" @onclick="ImportTipologiaAsync" disabled="@(_importFile is null || _importing)">
+            @(_importing ? "Importando..." : "Importar")
+        </button>
+        @if (!string.IsNullOrWhiteSpace(_importFileName))
+        {
+            <span class="text-muted">@_importFileName</span>
+        }
+    </div>
+</div>
+
+@if (_loading)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Codigo</th>
+                <th>Nombre</th>
+                <th>Version</th>
+                <th>Estado</th>
+                <th>Actualizado</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var tipologia in _tipologias)
+            {
+                <tr>
+                    <td>@tipologia.Codigo</td>
+                    <td>@tipologia.Nombre</td>
+                    <td>@tipologia.Version</td>
+                    <td>@tipologia.Estado</td>
+                    <td>@(tipologia.FechaActualizacion?.ToString("u") ?? "-")</td>
+                    <td>
+                        <a class="btn btn-sm btn-outline-primary" href="/tipologias/@tipologia.Id">Detalle</a>
+                            @if (tipologia.Estado is EstadoTipologia.Draft or EstadoTipologia.Retired)
+                        {
+                            <a class="btn btn-sm btn-outline-secondary ms-2" href="/tipologias/edit/@tipologia.Id">Editar</a>
+                        }
+                        else
+                        {
+                                <button class="btn btn-sm btn-outline-secondary ms-2" disabled title="Solo se pueden editar tipologías en estado Draft o Retired.">Editar</button>
+                        }
+                        <button class="btn btn-sm btn-outline-success ms-2" @onclick="() => ExportTipologiaAsync(tipologia)">Exportar</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _error;
+    private string? _message;
+    private bool _importing;
+    private IBrowserFile? _importFile;
+    private string? _importFileName;
+    private IReadOnlyCollection<TipologiaEntity> _tipologias = Array.Empty<TipologiaEntity>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _tipologias = await AdminService.GetTipologiasAsync();
+        _loading = false;
+    }
+
+    private void CreateTipologiaWizard()
+    {
+        Navigation.NavigateTo("/tipologias/wizard");
+    }
+
+    private void CreateTipologiaClassic()
+    {
+        Navigation.NavigateTo("/tipologias/edit");
+    }
+
+    private void OnImportFileSelected(InputFileChangeEventArgs e)
+    {
+        _importFile = e.File;
+        _importFileName = e.File.Name;
+    }
+
+    private async Task ImportTipologiaAsync()
+    {
+        if (_importFile is null)
+        {
+            return;
+        }
+
+        _importing = true;
+        _message = null;
+
+        try
+        {
+            await using var stream = _importFile.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+
+            var entity = await AdminService.ImportTipologiaZipAsync(ms.ToArray(), "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui");
+            _tipologias = await AdminService.GetTipologiasAsync();
+
+            _error = false;
+            _message = $"Tipología importada en Draft: {entity.Codigo}.";
+            _importFile = null;
+            _importFileName = null;
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+        finally
+        {
+            _importing = false;
+        }
+    }
+
+    private async Task ExportTipologiaAsync(TipologiaEntity tipologia)
+    {
+        _message = null;
+
+        try
+        {
+            var zipBytes = await AdminService.ExportTipologiaZipAsync(tipologia.Id);
+            var fileName = $"tipologia-{tipologia.Codigo}-v{tipologia.Version}.zip";
+            var base64 = Convert.ToBase64String(zipBytes);
+
+            await JS.InvokeVoidAsync("fileInterop.downloadBase64File", "application/zip", fileName, base64);
+
+            _error = false;
+            _message = $"Exportación generada: {fileName}.";
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

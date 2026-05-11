@@ -1,0 +1,89 @@
+{
+  "tipologiaId": "nota-simple",
+  "plugins": [
+    {
+      "pluginKey": "mock-enrichment",
+      "pluginType": "rest",
+      "enabled": true,
+      "priority": 1,
+      "configuration": {
+        "baseUrl": "http://localhost:8080",
+        "authType": "None",
+        "timeoutSeconds": 10,
+        "endpoint": "/"
+      },
+      "retryPolicy": {
+        "maxRetries": 2,
+        "initialDelayMs": 500,
+        "exponentialBackoff": true,
+        "retryOnStatusCodes": [
+          408,
+          429,
+          500,
+          502,
+          503,
+          504
+        ]
+      }
+    },
+    {
+      "pluginKey": "mock-soap-catastro",
+      "pluginType": "soap",
+      "returnsIdActivo": true,
+      "enabled": true,
+      "priority": 2,
+      "configuration": {
+        "endpoint": "http://localhost:8081",
+        "soapVersion": "1.1",
+        "action": "ConsultarReferenciaCatastral",
+        "namespace": "http://tempuri.org/",
+        "authType": "None",
+        "timeoutSeconds": 15
+      },
+      "retryPolicy": {
+        "maxRetries": 2,
+        "initialDelayMs": 1000,
+        "exponentialBackoff": false
+      }
+    },
+    {
+      "pluginKey": "sareb-business-rules",
+      "pluginType": "custom",
+      "returnsIdActivo": true,
+      "enabled": true,
+      "priority": 3,
+      "configuration": {
+        "assemblyPath": "C:\\temp\\MVP\\documento-ia-clasificacion-mvp\\plugins\\SarebEnrichments.dll",
+        "className": "Sareb.Enrichments.NotaSimpleEnricher",
+        "customConfig": {
+          "enableCaching": true
+        }
+      }
+    },
+    {
+      "pluginKey": "httpbin-test",
+      "pluginType": "rest",
+      "enabled": false,
+      "priority": 4,
+      "configuration": {
+        "baseUrl": "https://httpbin.org",
+        "authType": "None",
+        "endpoint": "/post",
+        "timeoutSeconds": 10
+      },
+      "retryPolicy": {
+        "maxRetries": 2,
+        "initialDelayMs": 500,
+        "exponentialBackoff": true,
+        "retryOnStatusCodes": [
+          408,
+          429,
+          500,
+          502,
+          503,
+          504
+        ]
+      }
+    }
+  ]
+}

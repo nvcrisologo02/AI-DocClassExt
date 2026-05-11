@@ -1,0 +1,30 @@
+{
+  "tipologiaId": "tasacion",
+  "plugins": [
+    {
+      "pluginKey": "httpbin-test",
+      "pluginType": "rest",
+      "enabled": true,
+      "priority": 2,
+      "configuration": {
+        "baseUrl": "https://httpbin.org",
+        "endpoint": "/post",
+        "authType": "None",
+        "timeoutSeconds": 10
+      },
+      "retryPolicy": {
+        "maxRetries": 2,
+        "initialDelayMs": 500,
+        "exponentialBackoff": true,
+        "retryOnStatusCodes": [
+          408,
+          429,
+          500,
+          502,
+          503,
+          504
+        ]
+      }
+    }
+  ]
+}

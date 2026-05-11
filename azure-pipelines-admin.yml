@@ -1,0 +1,173 @@
+trigger: none
+pr: none
+
+variables:
+  - name: AZURE_SERVICE_CONNECTION
+    value: AI DocClassExt
+  - name: AZURE_RESOURCE_GROUP
+    value: SRBRGDOCSAIPROD
+  - name: AZURE_ADMIN_WEB_APP_NAME
+    value: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+  - name: AZURE_FUNCTIONS_APP_NAME
+    value: srbappprodocai
+  - name: KEY_VAULT_NAME
+    value: srbkvprodocai
+  - name: buildConfiguration
+    value: Release
+  - name: COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject
+    value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
+
+pool:
+  vmImage: windows-latest
+
+stages:
+  - stage: BuildAdmin
+    displayName: Build Admin Artifact
+    jobs:
+      - job: Build
+        displayName: Build Admin
+        steps:
+          - checkout: self
+
+          - task: UseDotNet@2
+            displayName: Use .NET 9 SDK
+            inputs:
+              packageType: sdk
+              version: 9.x
+
+          - task: DotNetCoreCLI@2
+            displayName: Restore Admin
+            inputs:
+              command: restore
+              projects: $(COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject)
+
+          - task: DotNetCoreCLI@2
+            displayName: Publish Admin
+            inputs:
+              command: publish
+              publishWebProjects: false
+              projects: $(COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject)
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
+              zipAfterPublish: false
+              modifyOutputPath: false
+
+          - task: PublishBuildArtifacts@1
+            displayName: Upload artifact - COMPLETAR_GDC_HTTP_BASIC_USERNAME
+            inputs:
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
+              ArtifactName: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+
+  - stage: DeployAdmin
+    displayName: Deploy Admin Blazor
+    dependsOn: BuildAdmin
+    condition: succeeded()
+    jobs:
+      - deployment: DeployAdminJob
+        displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - download: current
+                  artifact: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+
+                - task: AzureWebApp@1
+                  displayName: Deploy Admin Web App
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    appType: webApp
+                    appName: $(AZURE_ADMIN_WEB_APP_NAME)
+                    package: $(Pipeline.Workspace)/drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+                    deploymentMethod: zipDeploy
+
+                - task: AzureCLI@2
+                  displayName: Ensure Admin Web App identity + Key Vault RBAC
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az webapp identity assign `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                        --only-show-errors `
+                        --output none
+
+                      $principalId = az webapp identity show `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                        --query principalId `
+                        -o tsv
+
+                      if (-not $principalId) {
+                        throw "No se pudo resolver principalId para $(AZURE_ADMIN_WEB_APP_NAME)."
+                      }
+
+                      $keyVaultScope = az keyvault show `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(KEY_VAULT_NAME)" `
+                        --query id `
+                        -o tsv
+
+                      if (-not $keyVaultScope) {
+                        throw "No se pudo resolver el recurso de Key Vault $(KEY_VAULT_NAME)."
+                      }
+
+                      $existingRole = az role assignment list `
+                        --scope $keyVaultScope `
+                        --assignee $principalId `
+                        --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" `
+                        -o tsv
+
+                      if ($existingRole -eq "0") {
+                        az role assignment create `
+                          --role "Key Vault Secrets User" `
+                          --assignee-object-id $principalId `
+                          --assignee-principal-type ServicePrincipal `
+                          --scope $keyVaultScope `
+                          --only-show-errors `
+                          --output none
+
+                        Write-Host "[OK] Assigned 'Key Vault Secrets User' to $(AZURE_ADMIN_WEB_APP_NAME)."
+                      }
+                      else {
+                        Write-Host "[OK] $(AZURE_ADMIN_WEB_APP_NAME) already has 'Key Vault Secrets User' on $(KEY_VAULT_NAME)."
+                      }
+
+                - task: AzureCLI@2
+                  displayName: Set Admin App settings (Functions API)
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      $azPython = Join-Path $env:ProgramFiles "Microsoft SDKs\Azure\CLI2\python.exe"
+                      if (-not (Test-Path $azPython)) {
+                        throw "Azure CLI python executable not found at '$azPython'"
+                      }
+
+                      $COMPLETAR_GDC_HTTP_BASIC_USERNAMEBaseUrlSetting = "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/"
+                      $COMPLETAR_GDC_HTTP_BASIC_USERNAMEFunctionKeySetting = "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
+
+                      & $azPython -IBm azure.cli webapp config appsettings set `
+                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                        --name "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                        --settings $COMPLETAR_GDC_HTTP_BASIC_USERNAMEBaseUrlSetting $COMPLETAR_GDC_HTTP_BASIC_USERNAMEFunctionKeySetting `
+                        --only-show-errors `
+                        --output none
+
+                - task: AzureCLI@2
+                  displayName: Validate Admin App settings contract
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      ./scripts/validate-azure-appsettings-contract.ps1 `
+                        -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                        -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                        -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
+                        -AssetResolverWebAppName "srbwebpluginassetresolver"

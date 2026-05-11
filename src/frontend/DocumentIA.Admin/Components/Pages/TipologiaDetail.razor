@@ -1,0 +1,472 @@
+@page "/tipologias/{Id:int}"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Detalle Tipología</PageTitle>
+
+@if (_tipologia is null)
+{
+    <p>No existe la tipología.</p>
+}
+else
+{
+    <h1>@_tipologia.Nombre</h1>
+
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+    }
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5 class="mb-0">Información General</h5>
+        </div>
+        <div class="card-body">
+            <dl class="row">
+                <dt class="col-sm-3">Codigo</dt>
+                <dd class="col-sm-9">@_tipologia.Codigo</dd>
+
+                <dt class="col-sm-3">Version</dt>
+                <dd class="col-sm-9">@_tipologia.Version</dd>
+
+                <dt class="col-sm-3">Estado</dt>
+                <dd class="col-sm-9">@_tipologia.Estado</dd>
+
+                <dt class="col-sm-3">Publicada</dt>
+                <dd class="col-sm-9">@(_tipologia.PublicadaEn?.ToString("u") ?? "-")</dd>
+
+                <dt class="col-sm-3">Activa</dt>
+                <dd class="col-sm-9">@(_tipologia.Activa ? "Sí" : "No")</dd>
+            </dl>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_tipologia.ConfiguracionJson))
+    {
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Configuración JSON</h5>
+            </div>
+            <div class="card-body">
+                <JsonEditorComponent 
+                    JsonContent="@_tipologia.ConfiguracionJson"
+                    Mode="tree"
+                    ReadOnly="true"
+                    Height="450px"
+                    SupportedModes="@(new List<string> { "tree", "code", "preview" })" />
+            </div>
+        </div>
+    }
+
+    <div class="mb-3">
+        @if (_tipologia.Estado != EstadoTipologia.Draft)
+        {
+            <button class="btn btn-outline-primary" @onclick="PasarADraftAsync">Pasar a Draft</button>
+        }
+        <button class="btn btn-success" @onclick="PublishAsync">Publicar</button>
+        <button class="btn btn-warning ms-2" @onclick="RetireAsync">Retirar</button>
+        @if (_tipologia.Estado is EstadoTipologia.Draft or EstadoTipologia.Retired)
+        {
+            <a class="btn btn-outline-secondary ms-2" href="/tipologias/edit/@_tipologia.Id">Editar</a>
+        }
+        <a class="btn btn-secondary ms-2" href="/tipologias">Volver</a>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header">
+            <h5 class="mb-0">Comparar versiones (A-2)</h5>
+        </div>
+        <div class="card-body">
+            @if (_versionsLoading)
+            {
+                <p>Cargando versiones...</p>
+            }
+            else if (!string.IsNullOrWhiteSpace(_versionsError))
+            {
+                <div class="alert alert-warning">@_versionsError</div>
+            }
+            else if (_versionOptions.Count <= 1)
+            {
+                <p class="mb-0">No hay suficientes versiones para comparar en esta familia.</p>
+            }
+            else
+            {
+                <div class="row g-2 align-items-end mb-3">
+                    <div class="col-md-5">
+                        <label class="form-label">Versión izquierda</label>
+                        <select class="form-select" @bind="_leftCompareId">
+                            @foreach (var item in _versionOptions)
+                            {
+                                <option value="@item.Id">@item.Version (@item.Codigo)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label class="form-label">Versión derecha</label>
+                        <select class="form-select" @bind="_rightCompareId">
+                            @foreach (var item in _versionOptions)
+                            {
+                                <option value="@item.Id">@item.Version (@item.Codigo)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <button class="btn btn-outline-primary w-100" @onclick="LoadDiffAsync" disabled="@_diffLoading">Comparar</button>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_diffError))
+                {
+                    <div class="alert alert-warning">@_diffError</div>
+                }
+                else if (_diffResult is not null)
+                {
+                    <div class="d-flex gap-3 mb-2">
+                        <span><strong>Total:</strong> @_diffResult.TotalChanges</span>
+                        <span><strong>Añadidos:</strong> @_diffResult.Added</span>
+                        <span><strong>Eliminados:</strong> @_diffResult.Removed</span>
+                        <span><strong>Modificados:</strong> @_diffResult.Modified</span>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+                        <span class="small text-muted">Filtro rápido:</span>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Filtro tipo de cambio">
+                            <button class='@GetDiffFilterButtonClass("all")' @onclick='() => SetDiffFilter("all")'>Todos</button>
+                            <button class='@GetDiffFilterButtonClass("added")' @onclick='() => SetDiffFilter("added")'>Añadidos</button>
+                            <button class='@GetDiffFilterButtonClass("removed")' @onclick='() => SetDiffFilter("removed")'>Eliminados</button>
+                            <button class='@GetDiffFilterButtonClass("modified")' @onclick='() => SetDiffFilter("modified")'>Modificados</button>
+                        </div>
+                        <span class="small text-muted">Mostrando @GetFilteredDiffChanges().Count de @_diffResult.TotalChanges</span>
+                    </div>
+
+                    @if (_diffResult.Changes.Count == 0)
+                    {
+                        <p class="mb-0">No hay diferencias entre las versiones seleccionadas.</p>
+                    }
+                    else if (GetFilteredDiffChanges().Count == 0)
+                    {
+                        <p class="mb-0">No hay cambios para el filtro seleccionado.</p>
+                    }
+                    else
+                    {
+                        <table class="table table-sm table-striped align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 12%;">Sección</th>
+                                    <th style="width: 12%;">Tipo</th>
+                                    <th style="width: 56%;">Ruta JSON</th>
+                                    <th class="text-end" style="width: 20%;">Valores</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var change in GetFilteredDiffChanges())
+                                {
+                                    var key = $"{change.Section}|{change.Path}|{change.ChangeType}";
+                                    var expanded = _expandedDiffKey == key;
+                                    <tr>
+                                        <td>@change.Section</td>
+                                        <td>
+                                            <span class="badge @GetDiffBadgeClass(change.ChangeType)">@change.ChangeType</span>
+                                        </td>
+                                        <td>
+                                            <code class="d-block text-wrap" style="white-space: normal; word-break: break-word;">@change.Path</code>
+                                        </td>
+                                        <td class="text-end">
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleDiffDetails(key)">
+                                                @(expanded ? "Ocultar" : "Ver")
+                                            </button>
+                                        </td>
+                                    </tr>
+
+                                    @if (expanded)
+                                    {
+                                        <tr>
+                                            <td colspan="4">
+                                                <div class="row g-2">
+                                                    <div class="col-12 col-lg-6">
+                                                        <div class="border rounded p-2 bg-light">
+                                                            <div class="small text-muted mb-1">Izquierda</div>
+                                                            <pre class="mb-0" style="max-height:180px; overflow:auto;">@change.LeftValue</pre>
+                                                        </div>
+                                                    </div>
+                                                    <div class="col-12 col-lg-6">
+                                                        <div class="border rounded p-2 bg-light">
+                                                            <div class="small text-muted mb-1">Derecha</div>
+                                                            <pre class="mb-0" style="max-height:180px; overflow:auto;">@change.RightValue</pre>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    }
+                }
+            }
+        </div>
+    </div>
+
+    <div class="card mb-3">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Auditoría de cambios</h5>
+            <button class="btn btn-sm btn-outline-primary" @onclick="LoadAuditAsync" disabled="@_auditLoading">Recargar</button>
+        </div>
+        <div class="card-body">
+            @if (_auditLoading)
+            {
+                <p class="mb-0">Cargando auditoría...</p>
+            }
+            else if (!string.IsNullOrWhiteSpace(_auditError))
+            {
+                <div class="alert alert-warning mb-0">@_auditError</div>
+            }
+            else if (_auditEntries.Count == 0)
+            {
+                <p class="mb-0">Sin eventos de auditoría para esta tipología.</p>
+            }
+            else
+            {
+                <table class="table table-sm table-striped align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Fecha (UTC)</th>
+                            <th>Acción</th>
+                            <th>Usuario</th>
+                            <th class="text-end">Detalle</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var audit in _auditEntries)
+                        {
+                            var isExpanded = _expandedAuditId == audit.Id;
+                            <tr>
+                                <td>@audit.FechaHora.ToString("u")</td>
+                                <td>@audit.Accion</td>
+                                <td>@(string.IsNullOrWhiteSpace(audit.Usuario) ? "-" : audit.Usuario)</td>
+                                <td class="text-end">
+                                    @if (!string.IsNullOrWhiteSpace(audit.DetallesJson))
+                                    {
+                                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => ToggleAuditDetails(audit.Id)">
+                                            @(isExpanded ? "Ocultar" : "Ver")
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+
+                            @if (isExpanded && !string.IsNullOrWhiteSpace(audit.DetallesJson))
+                            {
+                                <tr>
+                                    <td colspan="4">
+                                        <pre class="bg-light border rounded p-2 mb-0" style="max-height:300px; overflow:auto;">@audit.DetallesJson</pre>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private TipologiaEntity? _tipologia;
+    private bool _error;
+    private string? _message;
+    private bool _auditLoading;
+    private string? _auditError;
+    private int? _expandedAuditId;
+    private IReadOnlyCollection<TipologiaAdminService.TipologiaAuditEntry> _auditEntries = Array.Empty<TipologiaAdminService.TipologiaAuditEntry>();
+    private bool _versionsLoading;
+    private string? _versionsError;
+    private bool _diffLoading;
+    private string? _diffError;
+    private int _leftCompareId;
+    private int _rightCompareId;
+    private string? _expandedDiffKey;
+    private string _diffChangeTypeFilter = "all";
+    private IReadOnlyCollection<TipologiaAdminService.TipologiaVersionItem> _versionOptions = Array.Empty<TipologiaAdminService.TipologiaVersionItem>();
+    private TipologiaAdminService.TipologiaDiffResult? _diffResult;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _tipologia = await AdminService.GetTipologiaAsync(Id);
+        await LoadAuditAsync();
+        await LoadVersionsAsync();
+    }
+
+    private async Task LoadVersionsAsync()
+    {
+        _versionsLoading = true;
+        _versionsError = null;
+
+        try
+        {
+            _versionOptions = await AdminService.GetTipologiaVersionsAsync(Id);
+            if (_versionOptions.Count > 0)
+            {
+                _leftCompareId = _versionOptions.FirstOrDefault(x => x.IsCurrent)?.Id ?? _versionOptions.First().Id;
+                _rightCompareId = _versionOptions.FirstOrDefault(x => !x.IsCurrent)?.Id ?? _versionOptions.Last().Id;
+            }
+        }
+        catch (Exception ex)
+        {
+            _versionsError = ex.Message;
+        }
+        finally
+        {
+            _versionsLoading = false;
+        }
+    }
+
+    private async Task LoadDiffAsync()
+    {
+        if (_leftCompareId <= 0 || _rightCompareId <= 0)
+        {
+            return;
+        }
+
+        _diffLoading = true;
+        _diffError = null;
+        _expandedDiffKey = null;
+        _diffChangeTypeFilter = "all";
+
+        try
+        {
+            _diffResult = await AdminService.GetTipologiaDiffAsync(_leftCompareId, _rightCompareId);
+        }
+        catch (Exception ex)
+        {
+            _diffError = ex.Message;
+        }
+        finally
+        {
+            _diffLoading = false;
+        }
+    }
+
+    private void ToggleDiffDetails(string key)
+    {
+        _expandedDiffKey = _expandedDiffKey == key ? null : key;
+    }
+
+    private void SetDiffFilter(string filter)
+    {
+        _diffChangeTypeFilter = filter;
+        _expandedDiffKey = null;
+    }
+
+    private IReadOnlyList<TipologiaAdminService.TipologiaDiffChange> GetFilteredDiffChanges()
+    {
+        if (_diffResult is null)
+        {
+            return Array.Empty<TipologiaAdminService.TipologiaDiffChange>();
+        }
+
+        if (string.Equals(_diffChangeTypeFilter, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            return _diffResult.Changes.ToList();
+        }
+
+        return _diffResult.Changes
+            .Where(x => string.Equals(x.ChangeType, _diffChangeTypeFilter, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+    }
+
+    private string GetDiffFilterButtonClass(string filter)
+    {
+        return string.Equals(_diffChangeTypeFilter, filter, StringComparison.OrdinalIgnoreCase)
+            ? "btn btn-primary"
+            : "btn btn-outline-primary";
+    }
+
+    private static string GetDiffBadgeClass(string changeType)
+    {
+        return changeType switch
+        {
+            "added" => "bg-success-subtle text-success",
+            "removed" => "bg-danger-subtle text-danger",
+            "modified" => "bg-warning-subtle text-dark",
+            _ => "bg-secondary-subtle text-secondary"
+        };
+    }
+
+    private async Task LoadAuditAsync()
+    {
+        _auditLoading = true;
+        _auditError = null;
+
+        try
+        {
+            _auditEntries = await AdminService.GetTipologiaAuditAsync(Id, take: 200);
+        }
+        catch (Exception ex)
+        {
+            _auditError = ex.Message;
+        }
+        finally
+        {
+            _auditLoading = false;
+        }
+    }
+
+    private void ToggleAuditDetails(int auditId)
+    {
+        _expandedAuditId = _expandedAuditId == auditId ? null : auditId;
+    }
+
+    private async Task PublishAsync()
+    {
+        try
+        {
+            await AdminService.PublishTipologiaAsync(Id, "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui");
+            _error = false;
+            _message = "Tipología publicada.";
+            _tipologia = await AdminService.GetTipologiaAsync(Id);
+            await LoadAuditAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private async Task PasarADraftAsync()
+    {
+        try
+        {
+            await AdminService.PasarTipologiaADraftAsync(Id);
+            _error = false;
+            _message = "Tipología movida a Draft.";
+            _tipologia = await AdminService.GetTipologiaAsync(Id);
+            await LoadAuditAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private async Task RetireAsync()
+    {
+        try
+        {
+            await AdminService.RetireTipologiaAsync(Id);
+            _error = false;
+            _message = "Tipología retirada.";
+            _tipologia = await AdminService.GetTipologiaAsync(Id);
+            await LoadAuditAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

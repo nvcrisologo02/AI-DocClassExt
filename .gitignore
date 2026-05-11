@@ -1,6 +1,10 @@
 ﻿# .NET
 bin/
 obj/
+publish/
+*.dll
+*.pdb
+*.exe
 *.user
 *.suo
 .vs/
@@ -26,7 +30,7 @@ env/
 .ipynb_checkpoints/
 
 # IDE
-.vscode/
+
 .idea/
 *.swp
 *.swo
@@ -39,3 +43,71 @@ Thumbs.db
 *.pfx
 *.key
 appsettings.Development.json
+last-instance-id.txt
+commit-motor-validacion.ps1
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id-notasimple13.txt
+tests/api-tests/last-instance-id-notasimple.txt
+tests/api-tests/last-instance-id-notasimple14.txt
+docs/backlog_revisado.csv
+docs/difs.csv
+scripts/ado-reset-hierarchy-relations-rest.ps1
+scripts/ado-reset-hierarchy-relations.ps1
+docs/Backlog/backlog_revisado.csv
+docs/Backlog/backlog.xlsx
+docs/Backlog/difs.csv
+scripts/Mock Servers/.mock-servers.pids.json
+docs/manuales/GUIA_DEMO_NOTA_SIMPLE_1_4.md
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id.txt
+tests/api-tests/last-instance-id.txt
+docs/manuales/GUIA_DEMO_NOTA_SIMPLE_1_4 copy.md
+tmp_notasimple_output_pretty.json
+tmp_notasimple_output.json
+tmp_tasacion_output_pretty.json
+tmp_tasacion_output.json
+tmp_analyzers.json
+tmp_analyze_result.json
+tests/api-tests/tmp_final_status.json
+docs/manuales/salidas-demo/salida_nota_simple_1_4.json
+docs/manuales/salidas-demo/salida_test_ingest_tasacion.json
+tests/api-tests/last-instance-id.txt
+docs/auxiliares/
+tests/api-tests/last-instance-id-notasimple14-classify.txt
+tests/api-tests/last-instance-id-*.txt
+tmp_func_host_prompt_*.log
+
+# Azure CLI local extensions cache
+.azext/
+scripts/copy-table-bcp.ps1
+artifacts/bcp/DM_POSICION_AAFF_TB_10000_random.bcp
+
+# Generated validation artifacts
+artifacts/superpowers-validation/
+artifacts/superpowers-*.jsonl
+scripts/validate-superpowers-copilot.ps1
+docs/superpowers/plans/2026-04-29-healthcheck-endpoint.md
+docs/superpowers/plans/
+artifacts/
+# Generated PDFs from Markdown (do not commit)
+docs/**/pdf/
+ado-add-branch-link.json
+.vscode/launch.json
+artifacts/documentIA.png
+docs/riesgos-ia/build_word_pdf.py
+scripts/assetresolver-indexes-dba.sql
+scripts/assetresolver-indexes-dev.md
+scripts/convert-md-to-pdf.ps1
+scripts/diagnose-assetresolver-sql.ps1
+src/backend/DocumentIA.Functions/azure-pipelines-functions.yml
+docs/riesgos-ia/build_word_pdf.py
+.vscode/launch.json
+docs/riesgos-ia/build_word_pdf.py
+docs/riesgos-ia/build_word_pdf.py
+scripts/build-impacto-infra-8-10-mayo.ps1
+scripts/generate-real-cost-report-from-csv.ps1
+scripts/report-coste-documento-ultimo-mes.sql
+scripts/report-coste-real-desde-csv.sql
+cost-analysis.csv
+cost-analysis-full.csv
+docs/riesgos-ia/build_word_pdf.py

@@ -1,0 +1,1018 @@
+@page "/monitor"
+@inject MonitorService MonitorService
+@rendermode InteractiveServer
+@implements IDisposable
+
+<PageTitle>Monitor — DocumentIA</PageTitle>
+
+<style>
+    .detail-section-label {
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #6c757d;
+        margin-bottom: 0.35rem;
+    }
+    .activity-dot {
+        font-size: 0.85rem;
+        font-weight: 700;
+        min-width: 1rem;
+        text-align: center;
+    }
+    .activity-bar-bg {
+        background-color: #e9ecef;
+        flex: 1;
+    }
+    .detail-panel {
+        border-left: 3px solid #dee2e6;
+        padding-left: 0.75rem;
+    }
+</style>
+
+<div class="container-fluid mt-4">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h1 class="mb-0">Monitor de Ejecuciones</h1>
+            <p class="text-muted mb-0">Últimas ejecuciones procesadas por el sistema</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <label class="text-muted small mb-0">Mostrar:</label>
+            <select class="form-select form-select-sm" style="width:auto" @bind="_top" @bind:after="RefreshAsync">
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+            </select>
+
+            <label class="text-muted small mb-0">Auto-refresh:</label>
+            <select class="form-select form-select-sm" style="width:auto" @onchange="OnRefreshIntervalChanged">
+                <option value="0">Off</option>
+                <option value="30" selected>30 s</option>
+                <option value="60">60 s</option>
+            </select>
+
+            <button class="btn btn-outline-primary btn-sm" @onclick="RefreshAsync" disabled="@_isLoading">
+                @if (_isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                }
+                else
+                {
+                    <span class="bi bi-arrow-clockwise me-1"></span>
+                }
+                Actualizar
+            </button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible" role="alert">
+            <strong>Error</strong>: @_errorMessage
+            <button type="button" class="btn-close" @onclick="() => _errorMessage = null"></button>
+        </div>
+    }
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-body py-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+                <div>
+                    <h6 class="mb-0">Salud del sistema</h6>
+                    <small class="text-muted">Estado de componentes backend</small>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    @if (_loadingSystemHealth)
+                    {
+                        <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+                    }
+                    @if (_systemHealth != null)
+                    {
+                        <span class="badge @HealthBadgeClass(_systemHealth.Status)">@_systemHealth.Status</span>
+                        <small class="text-muted">@_systemHealth.Timestamp.LocalDateTime.ToString("HH:mm:ss")</small>
+                    }
+                    else
+                    {
+                        <span class="badge bg-secondary">sin datos</span>
+                    }
+                </div>
+            </div>
+
+            @if (_systemHealth != null)
+            {
+                <div class="row g-2" style="font-size:0.85rem">
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.Functions.Status)">functions</span> @_systemHealth.Components.Functions.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.AssetResolver.Status)">assetResolver</span> @_systemHealth.Components.AssetResolver.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.Gdc.Status)">gdc</span> @_systemHealth.Components.Gdc.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.ModelProviders.Status)">modelProviders</span> @_systemHealth.Components.ModelProviders.Status</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.ModelProviders.Classification.Status)">classification</span> @_systemHealth.Components.ModelProviders.Classification.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.ModelProviders.Extraction.Status)">extraction</span> @_systemHealth.Components.ModelProviders.Extraction.Message</div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div><span class="badge @HealthBadgeClass(_systemHealth.Components.ModelProviders.Prompt.Status)">prompt</span> @_systemHealth.Components.ModelProviders.Prompt.Message</div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Tarjetas de resumen -->
+    @if (_ejecuciones.Count > 0)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-0 shadow-sm">
+                    <div class="card-body py-3">
+                        <div class="h3 mb-0">@_ejecuciones.Count</div>
+                        <small class="text-muted">Ejecuciones</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-0 shadow-sm @(_errores > 0 ? "border-danger border" : "")">
+                    <div class="card-body py-3">
+                        <div class="h3 mb-0 @(_errores > 0 ? "text-danger" : "text-success")">@_errores</div>
+                        <small class="text-muted">Errores</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-0 shadow-sm">
+                    <div class="card-body py-3">
+                        <div class="h3 mb-0">@(_mediaDuracion > 0 ? $"{_mediaDuracion / 1000.0:F1} s" : "—")</div>
+                        <small class="text-muted">Duración media</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="card text-center border-0 shadow-sm @(_pctFallback > 30 ? "border-warning border" : "")">
+                    <div class="card-body py-3">
+                        <div class="h3 mb-0 @(_pctFallback > 30 ? "text-warning" : "")">@_pctFallback %</div>
+                        <small class="text-muted">% Fallback LLM</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Cuadro de Mando -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-header d-flex align-items-center justify-content-between py-2"
+             style="cursor:pointer" @onclick="ToggleDashboard">
+            <div class="d-flex align-items-center gap-2">
+                <span class="fw-semibold">📊 Cuadro de Mando</span>
+                @if (_dashboard != null)
+                {
+                    <span class="badge bg-secondary" style="font-size:0.72rem">últimos @_dashboardDias días</span>
+                }
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <select class="form-select form-select-sm" style="width:auto"
+                        @bind="_dashboardDias" @bind:after="LoadDashboardAsync"
+                        @onclick:stopPropagation>
+                    <option value="7">7 días</option>
+                    <option value="30">30 días</option>
+                    <option value="90">90 días</option>
+                    <option value="365">1 año</option>
+                </select>
+                <button class="btn btn-outline-secondary btn-sm"
+                        @onclick="LoadDashboardAsync" @onclick:stopPropagation
+                        disabled="@_loadingDashboard">
+                    @if (_loadingDashboard)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status"></span>
+                    }
+                    else
+                    {
+                        <span>↻</span>
+                    }
+                </button>
+                <span class="text-muted small">@(_dashboardVisible ? "▾" : "▸")</span>
+            </div>
+        </div>
+        @if (_dashboardVisible)
+        {
+            <div class="card-body">
+                @if (_loadingDashboard && _dashboard == null)
+                {
+                    <div class="d-flex justify-content-center py-3">
+                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                    </div>
+                }
+                else if (_dashboard != null)
+                {
+                    var dbTotal  = _dashboard.TotalEjecuciones;
+                    var dbPctOk  = dbTotal > 0 ? (int)Math.Round(100.0 * _dashboard.Ok              / dbTotal) : 0;
+                    var dbPctRev = dbTotal > 0 ? (int)Math.Round(100.0 * _dashboard.Revision        / dbTotal) : 0;
+                    var dbPctErr = dbTotal > 0 ? (int)Math.Round(100.0 * _dashboard.Error           / dbTotal) : 0;
+                    var dbPctFb  = dbTotal > 0 ? (int)Math.Round(100.0 * _dashboard.FallbacksTotal  / dbTotal) : 0;
+                    @* KPIs globales *@
+                    <div class="row g-2 mb-3">
+                        <div class="col-6 col-md-2">
+                            <div class="card text-center border-0 bg-light h-100">
+                                <div class="card-body py-2 px-1">
+                                    <div class="h4 mb-0 fw-bold">@dbTotal</div>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="card text-center border-0 h-100" style="background:rgba(25,135,84,.1)">
+                                <div class="card-body py-2 px-1">
+                                    <div class="h4 mb-0 fw-bold text-success">@_dashboard.Ok</div>
+                                    <small class="text-success fw-semibold">✓ OK</small>
+                                    <div class="small text-muted">@dbPctOk%</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="card text-center border-0 h-100" style="background:rgba(255,193,7,.1)">
+                                <div class="card-body py-2 px-1">
+                                    <div class="h4 mb-0 fw-bold text-warning">@_dashboard.Revision</div>
+                                    <small class="text-warning fw-semibold">⚠ Revisión</small>
+                                    <div class="small text-muted">@dbPctRev%</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="card text-center border-0 h-100" style="background:rgba(220,53,69,.1)">
+                                <div class="card-body py-2 px-1">
+                                    <div class="h4 mb-0 fw-bold text-danger">@_dashboard.Error</div>
+                                    <small class="text-danger fw-semibold">✗ Error</small>
+                                    <div class="small text-muted">@dbPctErr%</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="card text-center border-0 h-100" style="background:rgba(13,110,253,.1)">
+                                <div class="card-body py-2 px-1">
+                                    <div class="h4 mb-0 fw-bold text-primary">@_dashboard.FallbacksTotal</div>
+                                    <small class="text-primary fw-semibold">↷ Fallback</small>
+                                    <div class="small text-muted">@dbPctFb%</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-2">
+                            <div class="card text-center border-0 bg-light h-100">
+                                <div class="card-body py-2 px-1">
+                                    <div class="h4 mb-0 fw-bold @ConfianzaClass(_dashboard.ConfianzaGlobalMedia)">
+                                        @(_dashboard.ConfianzaGlobalMedia > 0 ? _dashboard.ConfianzaGlobalMedia.ToString("P0") : "—")
+                                    </div>
+                                    <small class="text-muted">Conf. media</small>
+                                    <div class="small text-muted">@FormatDuracion((int)_dashboard.DuracionMediaMs)</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tablas por Tipología y por Modelo -->
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="detail-section-label">Por Tipología</div>
+                            @if (_dashboard.PorTipologia.Count > 0)
+                            {
+                                <div style="max-height:260px;overflow-y:auto">
+                                    <table class="table table-sm table-hover mb-0" style="font-size:0.82rem">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Tipología</th>
+                                                <th class="text-end">Total</th>
+                                                <th style="min-width:90px">OK / Rev / Err</th>
+                                                <th class="text-end">Conf.</th>
+                                                <th class="text-end">Dur. media</th>
+                                                <th class="text-center">FB</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var tip in _dashboard.PorTipologia)
+                                            {
+                                                var tOk  = tip.Total > 0 ? (int)Math.Round(100.0 * tip.Ok       / tip.Total) : 0;
+                                                var tRev = tip.Total > 0 ? (int)Math.Round(100.0 * tip.Revision / tip.Total) : 0;
+                                                var tErr = tip.Total > 0 ? (int)Math.Round(100.0 * tip.Error    / tip.Total) : 0;
+                                                <tr>
+                                                    <td class="text-truncate" style="max-width:140px" title="@tip.Grupo">@tip.Grupo</td>
+                                                    <td class="text-end fw-semibold">@tip.Total</td>
+                                                    <td>
+                                                        <div class="d-flex rounded overflow-hidden" style="height:10px;background:#e9ecef">
+                                                            @if (tOk  > 0) { <div class="bg-success" style="width:@(tOk)%"  title="@tip.Ok OK"></div> }
+                                                            @if (tRev > 0) { <div class="bg-warning" style="width:@(tRev)%" title="@tip.Revision Rev."></div> }
+                                                            @if (tErr > 0) { <div class="bg-danger"  style="width:@(tErr)%" title="@tip.Error Err."></div> }
+                                                        </div>
+                                                        <div class="d-flex gap-1 mt-1" style="font-size:0.7rem">
+                                                            @if (tip.Ok       > 0) { <span class="text-success">@tip.Ok</span> }
+                                                            @if (tip.Revision > 0) { <span class="text-warning">@tip.Revision</span> }
+                                                            @if (tip.Error    > 0) { <span class="text-danger">@tip.Error</span> }
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-end @ConfianzaClass(tip.ConfianzaMedia)">@(tip.ConfianzaMedia > 0 ? tip.ConfianzaMedia.ToString("P0") : "—")</td>
+                                                    <td class="text-end text-nowrap">@FormatDuracion((int)tip.DuracionMediaMs)</td>
+                                                    <td class="text-center">
+                                                        @if (tip.Fallbacks > 0)
+                                                        {
+                                                            <span class="badge bg-warning text-dark" style="font-size:0.65rem">@tip.Fallbacks</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Sin datos en el período</span>
+                            }
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="detail-section-label">Por Modelo</div>
+                            @if (_dashboard.PorModelo.Count > 0)
+                            {
+                                <div style="max-height:260px;overflow-y:auto">
+                                    <table class="table table-sm table-hover mb-0" style="font-size:0.82rem">
+                                        <thead class="table-light">
+                                            <tr>
+                                                <th>Modelo</th>
+                                                <th class="text-end">Total</th>
+                                                <th style="min-width:90px">OK / Rev / Err</th>
+                                                <th class="text-end">Conf.</th>
+                                                <th class="text-end">Dur. media</th>
+                                                <th class="text-center">FB</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var mod in _dashboard.PorModelo)
+                                            {
+                                                var mOk  = mod.Total > 0 ? (int)Math.Round(100.0 * mod.Ok       / mod.Total) : 0;
+                                                var mRev = mod.Total > 0 ? (int)Math.Round(100.0 * mod.Revision / mod.Total) : 0;
+                                                var mErr = mod.Total > 0 ? (int)Math.Round(100.0 * mod.Error    / mod.Total) : 0;
+                                                <tr>
+                                                    <td class="text-truncate" style="max-width:140px" title="@mod.Grupo">@mod.Grupo</td>
+                                                    <td class="text-end fw-semibold">@mod.Total</td>
+                                                    <td>
+                                                        <div class="d-flex rounded overflow-hidden" style="height:10px;background:#e9ecef">
+                                                            @if (mOk  > 0) { <div class="bg-success" style="width:@(mOk)%"  title="@mod.Ok OK"></div> }
+                                                            @if (mRev > 0) { <div class="bg-warning" style="width:@(mRev)%" title="@mod.Revision Rev."></div> }
+                                                            @if (mErr > 0) { <div class="bg-danger"  style="width:@(mErr)%" title="@mod.Error Err."></div> }
+                                                        </div>
+                                                        <div class="d-flex gap-1 mt-1" style="font-size:0.7rem">
+                                                            @if (mod.Ok       > 0) { <span class="text-success">@mod.Ok</span> }
+                                                            @if (mod.Revision > 0) { <span class="text-warning">@mod.Revision</span> }
+                                                            @if (mod.Error    > 0) { <span class="text-danger">@mod.Error</span> }
+                                                        </div>
+                                                    </td>
+                                                    <td class="text-end @ConfianzaClass(mod.ConfianzaMedia)">@(mod.ConfianzaMedia > 0 ? mod.ConfianzaMedia.ToString("P0") : "—")</td>
+                                                    <td class="text-end text-nowrap">@FormatDuracion((int)mod.DuracionMediaMs)</td>
+                                                    <td class="text-center">
+                                                        @if (mod.Fallbacks > 0)
+                                                        {
+                                                            <span class="badge bg-warning text-dark" style="font-size:0.65rem">@mod.Fallbacks</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">Sin datos en el período</span>
+                            }
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-muted small py-2">Sin datos de agregados disponibles.</div>
+                }
+            </div>
+        }
+    </div>
+
+    <!-- Tabla de ejecuciones -->
+    @if (_isLoading && _ejecuciones.Count == 0)
+    {
+        <div class="d-flex justify-content-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+    else if (_ejecuciones.Count == 0)
+    {
+        <div class="alert alert-info">No hay ejecuciones registradas.</div>
+    }
+    else
+    {
+        <div class="card shadow-sm">
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover table-sm mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width:1rem"></th>
+                                <th>Fecha (UTC+1)</th>
+                                <th>Documento</th>
+                                <th>Tipología</th>
+                                <th>Estado</th>
+                                <th class="text-end">Confianza</th>
+                                <th class="text-end">Duración E2E</th>
+                                <th class="text-center">Fallback</th>
+                                <th>GUID</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var e in _ejecuciones)
+                            {
+                                bool expanded = _expanded.Contains(e.Id);
+                                <tr class="@(expanded ? "table-active" : "")" style="cursor:pointer" @onclick="async () => await ToggleExpand(e.Id)">
+                                    <td class="text-center text-muted small">@(expanded ? "▾" : "▸")</td>
+                                    <td class="text-nowrap small">@ToSpainTime(e.FechaEjecucion).ToString("dd/MM/yyyy HH:mm:ss")</td>
+                                    <td class="small text-truncate" style="max-width:150px" title="@e.NombreDocumento">@(e.NombreDocumento ?? "—")</td>
+                                    <td class="small">@(e.Tipologia ?? "—")</td>
+                                    <td>
+                                        <span class="badge @EstadoBadgeClass(e.EstadoFinal)">@e.EstadoFinal</span>
+                                    </td>
+                                    <td class="text-end small">
+                                        @if (e.ConfianzaGlobal > 0)
+                                        {
+                                            <span class="@ConfianzaClass(e.ConfianzaGlobal)">@e.ConfianzaGlobal.ToString("P0")</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                    <td class="text-end small text-nowrap fw-semibold">@FormatDuracion(e.DuracionTotalMs)</td>
+                                    <td class="text-center">
+                                        @if (e.UseFallbackLLM)
+                                        {
+                                            <span class="badge bg-warning text-dark">Fallback</span>
+                                        }
+                                    </td>
+                                    <td class="small text-muted" style="font-family:monospace;font-size:0.7rem" title="@e.EjecucionGuid">@e.EjecucionGuid[..8]…</td>
+                                </tr>
+                                @if (expanded)
+                                {
+                                    <tr class="table-active">
+                                        <td colspan="9" class="p-3">
+                                            @if (_loadingDetails.Contains(e.Id))
+                                            {
+                                                <div class="d-flex align-items-center gap-2 py-2 text-muted small">
+                                                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                                                    Cargando detalle…
+                                                </div>
+                                            }
+                                            else if (_details.TryGetValue(e.Id, out var det) && det != null)
+                                            {
+                                                <!-- ── BLOQUE DETALLE RICO ── -->
+                                                <div class="detail-panel">
+
+                                                    <!-- Fila 1: Timeline · Resultado · Clasificación -->
+                                                    <div class="row g-3 mb-3">
+
+                                                        <!-- Timeline de actividades -->
+                                                        <div class="col-md-5">
+                                                            <div class="detail-section-label">Timeline de actividades</div>
+                                                            @if (det.Timeline.Count > 0)
+                                                            {
+                                                                <div>
+                                                                    @foreach (var act in det.Timeline)
+                                                                    {
+                                                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                                                            <span class="activity-dot @ActivityDotClass(act.Estado)" title="@act.Estado">@ActivityIcon(act.Estado)</span>
+                                                                            <span class="small fw-semibold" style="min-width:8rem">@act.Nombre</span>
+                                                                            <div class="flex-grow-1 activity-bar-bg rounded" style="height:4px">
+                                                                                <div class="rounded @ActivityBarClass(act.Estado)" style="height:4px;width:@(BarWidth(act.DuracionMs, e.DuracionTotalMs))%"></div>
+                                                                            </div>
+                                                                            <span class="small text-nowrap @DuracionClass(act.DuracionMs)" style="min-width:4rem;text-align:right">@FormatDuracion(act.DuracionMs)</span>
+                                                                            @if (act.FallbackActivado)
+                                                                            {
+                                                                                <span class="badge bg-warning text-dark" style="font-size:0.6rem">Fallback</span>
+                                                                            }
+                                                                        </div>
+                                                                        @if (!string.IsNullOrWhiteSpace(act.Mensaje))
+                                                                        {
+                                                                            <div class="text-muted ps-4 mb-1" style="font-size:0.72rem">@act.Mensaje</div>
+                                                                        }
+                                                                        @if (!string.IsNullOrWhiteSpace(act.FallbackRazon))
+                                                                        {
+                                                                            <div class="text-warning ps-4 mb-1" style="font-size:0.72rem">↳ @act.FallbackRazon</div>
+                                                                        }
+                                                                    }
+                                                                </div>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="text-muted small">Sin datos de timeline</span>
+                                                            }
+                                                        </div>
+
+                                                        <!-- Resultado + Confianza -->
+                                                        <div class="col-md-3">
+                                                            <div class="detail-section-label">Resultado</div>
+                                                            @if (det.Resultado != null)
+                                                            {
+                                                                <div class="mb-2 d-flex flex-wrap gap-1">
+                                                                    <span class="badge @EstadoBadgeClass(det.Resultado.Estado)">@det.Resultado.Estado</span>
+                                                                    @if (!string.IsNullOrEmpty(det.Resultado.EstadoCalidad))
+                                                                    {
+                                                                        <span class="badge @CalidadBadgeClass(det.Resultado.EstadoCalidad)">@det.Resultado.EstadoCalidad</span>
+                                                                    }
+                                                                    @if (det.Resultado.ReutilizadaPorDuplicado)
+                                                                    {
+                                                                        <span class="badge bg-secondary">Duplicado</span>
+                                                                    }
+                                                                </div>
+                                                                @if (!string.IsNullOrEmpty(det.Resultado.MensajeError))
+                                                                {
+                                                                    <div class="text-danger small mb-2">@det.Resultado.MensajeError</div>
+                                                                }
+                                                                <table class="table table-sm table-borderless mb-0" style="width:auto;font-size:0.82rem">
+                                                                    <tbody>
+                                                                        @foreach (var (lbl, c) in new (string, double)[] {
+                                                                            ("Global",        det.Resultado.ConfianzaGlobal),
+                                                                            ("Clasificación", det.Resultado.ConfianzaClasificacion),
+                                                                            ("Extracción",    det.Resultado.ConfianzaExtraccion),
+                                                                            ("Validación",    det.Resultado.ConfianzaValidacion)
+                                                                        })
+                                                                        {
+                                                                            <tr>
+                                                                                <td class="text-muted py-0 pe-2">@lbl</td>
+                                                                                <td class="py-0 fw-semibold @ConfianzaClass(c)">@(c > 0 ? c.ToString("P1") : "—")</td>
+                                                                                @if (c > 0)
+                                                                                {
+                                                                                    <td class="py-0 ps-1">
+                                                                                        <div style="width:60px;height:5px;background:#e9ecef;border-radius:3px">
+                                                                                            <div style="width:@((int)(c * 60))px;height:5px;border-radius:3px" class="@ConfianzaBarClass(c)"></div>
+                                                                                        </div>
+                                                                                    </td>
+                                                                                }
+                                                                            </tr>
+                                                                        }
+                                                                    </tbody>
+                                                                </table>
+                                                            }
+                                                        </div>
+
+                                                        <!-- Clasificación + Extracción -->
+                                                        <div class="col-md-4">
+                                                            @if (det.Clasificacion != null)
+                                                            {
+                                                                <div class="detail-section-label">Clasificación</div>
+                                                                <div class="small mb-2">
+                                                                    @if (!string.IsNullOrEmpty(det.Clasificacion.ProveedorClasif))
+                                                                    {
+                                                                        <div><span class="text-muted">Proveedor:</span> <span class="fw-semibold">@det.Clasificacion.ProveedorClasif</span></div>
+                                                                    }
+                                                                    @if (!string.IsNullOrEmpty(det.Clasificacion.Modelo))
+                                                                    {
+                                                                        <div><span class="text-muted">Modelo:</span> @det.Clasificacion.Modelo</div>
+                                                                    }
+                                                                    <div>
+                                                                        <span class="text-muted">Confianza:</span>
+                                                                        @if (det.Clasificacion.ConfianzaDI > 0) { <span class="text-muted" style="font-size:0.75rem">DI:</span><span class="ms-1 @ConfianzaClass(det.Clasificacion.ConfianzaDI)">@det.Clasificacion.ConfianzaDI.ToString("P1")</span> }
+                                                                        @if (det.Clasificacion.ConfianzaGPT > 0) { <span class="text-muted ms-2" style="font-size:0.75rem">GPT:</span><span class="ms-1 @ConfianzaClass(det.Clasificacion.ConfianzaGPT)">@det.Clasificacion.ConfianzaGPT.ToString("P1")</span> }
+                                                                    </div>
+                                                                    @if (det.Clasificacion.FallbackLLM)
+                                                                    {
+                                                                        <div class="text-warning mt-1">⚠ Fallback GPT@(!string.IsNullOrEmpty(det.Clasificacion.FallbackRazon) ? $": {det.Clasificacion.FallbackRazon}" : "")</div>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                            @if (det.Extraccion != null && !string.IsNullOrEmpty(det.Extraccion.ProveedorExtrac))
+                                                            {
+                                                                <div class="detail-section-label">Extracción</div>
+                                                                <div class="small">
+                                                                    <div><span class="text-muted">Proveedor:</span> <span class="fw-semibold">@det.Extraccion.ProveedorExtrac</span></div>
+                                                                    @if (!string.IsNullOrEmpty(det.Extraccion.Modelo)) { <div><span class="text-muted">Modelo:</span> @det.Extraccion.Modelo</div> }
+                                                                    @if (det.Extraccion.FallbackUsado)
+                                                                    {
+                                                                        <div class="text-warning">⚠ Fallback@(!string.IsNullOrEmpty(det.Extraccion.FallbackRazon) ? $": {det.Extraccion.FallbackRazon}" : "")</div>
+                                                                    }
+                                                                    @if (det.Extraccion.CamposConDuda.Count > 0)
+                                                                    {
+                                                                        <div class="text-warning" style="font-size:0.75rem">⚠ Duda: @string.Join(", ", det.Extraccion.CamposConDuda)</div>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                        </div>
+                                                    </div>
+
+                                                    <!-- Fila 2: Datos extraídos · Validaciones · Plugins/GDC/Integridad -->
+                                                    <div class="row g-3">
+
+                                                        <!-- Datos extraídos -->
+                                                        <div class="col-md-5">
+                                                            <div class="detail-section-label">Campos extraídos (@det.DatosExtraidos.Count)</div>
+                                                            @if (det.DatosExtraidos.Count > 0)
+                                                            {
+                                                                <div style="max-height:220px;overflow-y:auto">
+                                                                    <table class="table table-sm table-borderless mb-0" style="font-size:0.82rem">
+                                                                        <tbody>
+                                                                            @foreach (var campo in det.DatosExtraidos)
+                                                                            {
+                                                                                var conDuda = det.Extraccion?.CamposConDuda?.Contains(campo.Campo, StringComparer.OrdinalIgnoreCase) == true;
+                                                                                var tieneConf = det.Extraccion?.ConfianzaPorCampo?.TryGetValue(campo.Campo, out var confVal) == true;
+                                                                                <tr class="@(conDuda ? "table-warning" : "")">
+                                                                                    <td class="text-muted py-0 pe-2 text-nowrap" style="max-width:9rem;overflow:hidden;text-overflow:ellipsis" title="@campo.Campo">@campo.Campo</td>
+                                                                                    <td class="py-0" style="word-break:break-word">@(string.IsNullOrEmpty(campo.Valor) ? "—" : campo.Valor)</td>
+                                                                                    @if (tieneConf)
+                                                                                    {
+                                                                                        det.Extraccion!.ConfianzaPorCampo.TryGetValue(campo.Campo, out var cv);
+                                                                                        <td class="py-0 ps-1 text-muted text-nowrap" style="font-size:0.72rem">@cv.ToString("P0")</td>
+                                                                                    }
+                                                                                </tr>
+                                                                            }
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="text-muted small">Sin campos extraídos</span>
+                                                            }
+                                                        </div>
+
+                                                        <!-- Validaciones -->
+                                                        <div class="col-md-4">
+                                                            @{
+                                                                var erroresV = det.Validaciones.Where(v => !v.Pasado).ToList();
+                                                                var okV = det.Validaciones.Where(v => v.Pasado).ToList();
+                                                                var numErrV = erroresV.Count(v => v.Severidad == "Error");
+                                                                var numWarnV = erroresV.Count(v => v.Severidad != "Error");
+                                                            }
+                                                            <div class="detail-section-label">
+                                                                Validaciones
+                                                                @if (numErrV > 0) { <span class="badge bg-danger ms-1">@numErrV err</span> }
+                                                                @if (numWarnV > 0) { <span class="badge bg-warning text-dark ms-1">@numWarnV warn</span> }
+                                                                @if (okV.Count > 0) { <span class="badge bg-success ms-1">@okV.Count ok</span> }
+                                                            </div>
+                                                            @if (erroresV.Count > 0)
+                                                            {
+                                                                <div style="max-height:220px;overflow-y:auto">
+                                                                    @foreach (var v in erroresV)
+                                                                    {
+                                                                        <div class="d-flex align-items-start gap-1 mb-1 small">
+                                                                            <span class="@(v.Severidad == "Error" ? "text-danger" : "text-warning") fw-bold" style="min-width:1rem">@(v.Severidad == "Error" ? "✗" : "⚠")</span>
+                                                                            <div>
+                                                                                <span class="fw-semibold">@v.Campo</span>
+                                                                                @if (!string.IsNullOrEmpty(v.Mensaje)) { <span class="text-muted">: @v.Mensaje</span> }
+                                                                                @if (!string.IsNullOrEmpty(v.ValorOriginal)) { <div class="text-muted" style="font-size:0.72rem">Valor: @v.ValorOriginal</div> }
+                                                                            </div>
+                                                                        </div>
+                                                                    }
+                                                                </div>
+                                                            }
+                                                            else if (det.Validaciones.Count > 0)
+                                                            {
+                                                                <div class="text-success small">✓ Todas las validaciones pasadas (@okV.Count)</div>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="text-muted small">Sin datos de validación</span>
+                                                            }
+                                                        </div>
+
+                                                        <!-- Plugins · GDC · Integridad -->
+                                                        <div class="col-md-3">
+
+                                                            @if (det.Plugins.Count > 0)
+                                                            {
+                                                                <div class="detail-section-label">Plugins (@det.Plugins.Count)</div>
+                                                                @foreach (var p in det.Plugins)
+                                                                {
+                                                                    <div class="d-flex align-items-center gap-1 mb-1 small">
+                                                                        <span class="@(p.Success ? "text-success" : "text-danger") fw-bold" style="min-width:1rem">@(p.Success ? "✓" : "✗")</span>
+                                                                        <span class="text-truncate" title="@p.PluginKey">@p.PluginKey</span>
+                                                                        <span class="text-muted ms-auto text-nowrap">@FormatDuracion(p.DurationMs)</span>
+                                                                    </div>
+                                                                    @if (!p.Success && !string.IsNullOrEmpty(p.Error))
+                                                                    {
+                                                                        <div class="text-danger ps-3" style="font-size:0.72rem">@p.Error</div>
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            @if (det.GDC != null)
+                                                            {
+                                                                <div class="detail-section-label @(det.Plugins.Count > 0 ? "mt-2" : "")">GDC</div>
+                                                                <div class="small">
+                                                                    <div class="d-flex align-items-center gap-1">
+                                                                        <span class="@(det.GDC.Exitoso ? "text-success" : "text-danger") fw-bold">@(det.GDC.Exitoso ? "✓" : "✗")</span>
+                                                                        <span>@(det.GDC.Exitoso ? "Subido" : "Error")</span>
+                                                                        @if (det.GDC.YaExistia) { <span class="badge bg-secondary" style="font-size:0.62rem">Ya existía</span> }
+                                                                        @if (det.GDC.Intentos > 1) { <span class="text-muted" style="font-size:0.72rem">@det.GDC.Intentos intentos</span> }
+                                                                    </div>
+                                                                    @if (!string.IsNullOrEmpty(det.GDC.ObjectId)) { <div class="text-muted" style="font-size:0.72rem">ID: @det.GDC.ObjectId</div> }
+                                                                    @if (!string.IsNullOrEmpty(det.GDC.ErrorDetalle)) { <div class="text-danger" style="font-size:0.72rem">@det.GDC.ErrorDetalle</div> }
+                                                                </div>
+                                                            }
+
+                                                            @if (det.Integridad != null)
+                                                            {
+                                                                <div class="detail-section-label mt-2">Integridad</div>
+                                                                <div class="small">
+                                                                    @if (!string.IsNullOrEmpty(det.Integridad.IdActivo))
+                                                                    {
+                                                                        <div>
+                                                                            <span class="text-muted">IdActivo:</span> @det.Integridad.IdActivo
+                                                                            @if (det.Integridad.IdActivoCambiado)
+                                                                            {
+                                                                                <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem">cambiado</span>
+                                                                            }
+                                                                        </div>
+                                                                    }
+                                                                    @if (!string.IsNullOrEmpty(det.Identificacion?.TipologiaVersion)) { <div><span class="text-muted">Versión:</span> @det.Identificacion.TipologiaVersion</div> }
+                                                                    @if (det.Identificacion?.Paginas > 0) { <div><span class="text-muted">Páginas:</span> @det.Identificacion.Paginas</div> }
+                                                                    @if (!string.IsNullOrEmpty(det.Integridad.SHA256)) { <div class="text-muted" style="font-size:0.65rem;word-break:break-all">SHA: @det.Integridad.SHA256[..12]…</div> }
+                                                                </div>
+                                                            }
+
+                                                            <div class="detail-section-label mt-2">GUID</div>
+                                                            <code style="font-size:0.65rem;word-break:break-all;user-select:all">@e.EjecucionGuid</code>
+                                                        </div>
+                                                    </div>
+
+                                                </div><!-- /detail-panel -->
+                                            }
+                                            else
+                                            {
+                                                <div class="text-muted small">No se pudo cargar el detalle.</div>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <p class="text-muted small mt-2 text-end">
+            Última actualización: @_ultimaActualizacion?.ToString("HH:mm:ss") &nbsp;|&nbsp;
+            Próximo refresh: @_proximoRefresh
+        </p>
+    }
+</div>
+
+@code {
+    private List<EjecucionResumenDto> _ejecuciones = [];
+    private HashSet<int> _expanded = [];
+    private Dictionary<int, EjecucionDetalleDto?> _details = new();
+    private HashSet<int> _loadingDetails = [];
+    private bool _isLoading = false;
+    private string? _errorMessage;
+    private int _top = 50;
+    private int _refreshIntervalSeconds = 30;
+    private Timer? _timer;
+    private DateTime? _ultimaActualizacion;
+    private string _proximoRefresh = "—";
+    private SystemHealthDto? _systemHealth;
+    private bool _loadingSystemHealth;
+
+    // ── Dashboard ──────────────────────────────────────────────────────────────
+    private DashboardAgregadosDto? _dashboard;
+    private bool _dashboardVisible = true;
+    private bool _loadingDashboard = false;
+    private int _dashboardDias = 30;
+
+    private int _errores => _ejecuciones.Count(e => e.EstadoFinal is "Error" or "Fallido");
+    private int _mediaDuracion => _ejecuciones.Count > 0 ? (int)_ejecuciones.Average(e => e.DuracionTotalMs) : 0;
+    private int _pctFallback => _ejecuciones.Count > 0
+        ? (int)Math.Round(100.0 * _ejecuciones.Count(e => e.UseFallbackLLM) / _ejecuciones.Count)
+        : 0;
+
+    private static readonly TimeZoneInfo _spainTz =
+        TimeZoneInfo.FindSystemTimeZoneById("Romance Standard Time");
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        await LoadDashboardAsync();
+        await LoadSystemHealthAsync();
+        StartTimer();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _isLoading = true;
+        _errorMessage = null;
+        try
+        {
+            _ejecuciones = await MonitorService.GetUltimasEjecucionesAsync(_top);
+            await LoadSystemHealthAsync();
+            _ultimaActualizacion = DateTime.Now;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = ex.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task ToggleExpand(int id)
+    {
+        if (!_expanded.Add(id))
+        {
+            _expanded.Remove(id);
+        }
+        else if (!_details.ContainsKey(id))
+        {
+            await LoadDetalleAsync(id);
+        }
+    }
+
+    private void ToggleDashboard() => _dashboardVisible = !_dashboardVisible;
+
+    private async Task LoadDashboardAsync()
+    {
+        _loadingDashboard = true;
+        StateHasChanged();
+        try
+        {
+            _dashboard = await MonitorService.GetAgregadosAsync(_dashboardDias);
+        }
+        catch
+        {
+            // dashboard is optional, silent fail
+        }
+        finally
+        {
+            _loadingDashboard = false;
+        }
+    }
+
+    private async Task LoadSystemHealthAsync()
+    {
+        _loadingSystemHealth = true;
+        try
+        {
+            _systemHealth = await MonitorService.GetSystemHealthAsync();
+        }
+        finally
+        {
+            _loadingSystemHealth = false;
+        }
+    }
+
+    private async Task LoadDetalleAsync(int id)
+    {
+        _loadingDetails.Add(id);
+        StateHasChanged();
+        try
+        {
+            var detalle = await MonitorService.GetEjecucionDetalleAsync(id);
+            _details[id] = detalle;
+        }
+        catch
+        {
+            _details[id] = null;
+        }
+        finally
+        {
+            _loadingDetails.Remove(id);
+        }
+    }
+
+    private void OnRefreshIntervalChanged(ChangeEventArgs e)
+    {
+        _refreshIntervalSeconds = int.TryParse(e.Value?.ToString(), out int v) ? v : 0;
+        StopTimer();
+        if (_refreshIntervalSeconds > 0)
+            StartTimer();
+        _proximoRefresh = _refreshIntervalSeconds > 0 ? $"{_refreshIntervalSeconds} s" : "Off";
+    }
+
+    private void StartTimer()
+    {
+        if (_refreshIntervalSeconds <= 0) return;
+        _timer = new Timer(async _ =>
+        {
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(_refreshIntervalSeconds), TimeSpan.FromSeconds(_refreshIntervalSeconds));
+        _proximoRefresh = $"{_refreshIntervalSeconds} s";
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    public void Dispose() => StopTimer();
+
+    private static DateTime ToSpainTime(DateTime utc) =>
+        TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _spainTz);
+
+    // ── Activity timeline ──────────────────────────────────────────────────────
+
+    private static string ActivityIcon(string estado) => estado?.ToLowerInvariant() switch
+    {
+        "completed" or "completado" => "✓",
+        "running" or "ejecutando"   => "▶",
+        "skipped" or "omitido"      => "↷",
+        "failed" or "fallido" or "error" => "✗",
+        "timeout"                   => "⏱",
+        _                           => "◯"
+    };
+
+    private static string ActivityDotClass(string estado) => estado?.ToLowerInvariant() switch
+    {
+        "completed" or "completado"      => "text-success",
+        "running" or "ejecutando"        => "text-warning",
+        "skipped" or "omitido"           => "text-primary",
+        "failed" or "fallido" or "error" => "text-danger",
+        "timeout"                        => "text-danger",
+        _                                => "text-secondary"
+    };
+
+    private static string ActivityBarClass(string estado) => estado?.ToLowerInvariant() switch
+    {
+        "completed" or "completado"      => "bg-success",
+        "running" or "ejecutando"        => "bg-warning",
+        "skipped" or "omitido"           => "bg-primary",
+        "failed" or "fallido" or "error" => "bg-danger",
+        _                                => "bg-secondary"
+    };
+
+    // ── Estado / calidad badges ────────────────────────────────────────────────
+
+    private static string EstadoBadgeClass(string estado) => estado switch
+    {
+        "Completado" or "Completed" or "OK" => "bg-success",
+        "Error" or "Fallido"                => "bg-danger",
+        "Duplicado"                         => "bg-secondary",
+        "Running" or "Pending"              => "bg-warning text-dark",
+        _                                   => "bg-info text-dark"
+    };
+
+    private static string HealthBadgeClass(string? status) => status?.ToLowerInvariant() switch
+    {
+        "healthy" => "bg-success",
+        "degraded" => "bg-warning text-dark",
+        "unhealthy" => "bg-danger",
+        "unconfigured" => "bg-secondary",
+        _ => "bg-secondary"
+    };
+
+    private static string CalidadBadgeClass(string calidad) => calidad switch
+    {
+        "OK"       => "bg-success",
+        "REVISION" => "bg-warning text-dark",
+        "ERROR"    => "bg-danger",
+        _          => "bg-secondary"
+    };
+
+    // ── Confianza ──────────────────────────────────────────────────────────────
+
+    private static string ConfianzaClass(double c) => c switch
+    {
+        >= 0.7 => "text-success fw-semibold",
+        >= 0.5 => "text-warning fw-semibold",
+        > 0    => "text-danger fw-semibold",
+        _      => "text-muted"
+    };
+
+    private static string ConfianzaBarClass(double c) => c switch
+    {
+        >= 0.7 => "bg-success",
+        >= 0.5 => "bg-warning",
+        > 0    => "bg-danger",
+        _      => "bg-secondary"
+    };
+
+    // ── Duraciones ─────────────────────────────────────────────────────────────
+
+    private static string DuracionClass(int ms) => ms switch
+    {
+        > 60000 => "text-danger",
+        > 30000 => "text-warning",
+        _       => ""
+    };
+
+    private static int BarWidth(int ms, int total) =>
+        total > 0 ? (int)Math.Clamp(Math.Round(100.0 * ms / total), 2, 100) : 0;
+
+    private static string FormatDuracion(int ms)
+    {
+        if (ms < 1000) return $"{ms} ms";
+        if (ms < 60000) return $"{ms / 1000.0:F1} s";
+        return $"{ms / 60000}m {(ms % 60000) / 1000}s";
+    }
+}

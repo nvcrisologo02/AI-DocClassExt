@@ -1,0 +1,102 @@
+{
+  "tipologiaId": "IBI",
+  "tipologiaNombre": "IBI",
+  "tipologiaMGDCMatricula": "IBI",
+  "gdcTipoDocumento": "",
+  "gdcSubtipoDocumento": "",
+  "gdcSerie": "",
+  "skipGDCUpload": true,
+  "gptDescripcion": "Documento correspondiente al recibo del Impuesto sobre Bienes Inmuebles (IBI) en Espa\u00F1a, emitido por el ayuntamiento competente, relativo al inmueble identificado y al ejercicio fiscal indicado.",
+  "version": "1.0",
+  "isDefault": true,
+  "extraction": {
+    "enabled": true,
+    "provider": "azure-content-understanding",
+    "modelKey": "nota.simple.1_4.azure-cu",
+    "autoMapUnmappedFields": true,
+    "fieldMappings": []
+  },
+  "promptConfig": {
+    "enabled": false,
+    "modelKey": "default.gpt4o-mini",
+    "systemPrompt": "",
+    "userPromptTemplate": "",
+    "maxTokens": 2000,
+    "temperature": 0.0,
+    "contentMode": "markdown"
+  },
+  "confidenceConfig": {
+    "clasifUmbralFallback": 0.85,
+    "extracUmbralFallback": 0.6,
+    "extracWeightCampos": 0.5,
+    "extracWeightRequeridos": 0.3,
+    "extracWeightWarnings": 0.2,
+    "umbralOK": 0.85,
+    "umbralRevision": 0.70
+  },
+  "fields": [
+    {
+      "name": "FechaDocumento",
+      "type": "date",
+      "required": true,
+      "rules": [
+        {
+          "ruleType": "date",
+          "severity": "Error",
+          "parameters": {
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
+            "allowFuture": false,
+            "allowPast": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Direccion",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "address",
+          "parameters": {
+            "minLength": 6,
+            "maxLength": 160,
+            "requireStreetNumber": true,
+            "requireMunicipality": true,
+            "requireProvince": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "NIF",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "nif",
+          "severity": "Warning",
+          "parameters": {}
+        }
+      ]
+    },
+    {
+      "name": "ReferenciaCatastral",
+      "type": "string",
+      "required": false,
+      "rules": [
+        {
+          "ruleType": "catastral",
+          "severity": "Warning",
+          "parameters": {}
+        }
+      ]
+    }
+  ],
+  "TipologiaId": "IBI",
+  "TipologiaNombre": "IBI",
+  "Version": "1.0"
+}

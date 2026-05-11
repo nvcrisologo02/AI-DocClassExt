@@ -1,0 +1,338 @@
+{
+  "tipologiaId": "IBI",
+  "tipologiaNombre": "IBI",
+  "tipologiaMGDCMatricula": "IBI",
+  "gdcTipoDocumento": "",
+  "gdcSubtipoDocumento": "",
+  "gdcSerie": "",
+  "skipGDCUpload": true,
+  "gptDescripcion": "Recibo del Impuesto sobre Bienes Inmuebles (IBI) emitido por ayuntamiento espa\u00F1ol. Incluye referencia catastral, valor catastral, base imponible, cuota tributaria, periodo impositivo y datos del titular.",
+  "version": "1.1",
+  "isDefault": true,
+  "extraction": {
+    "enabled": true,
+    "provider": "azure-openai",
+    "modelKey": "default.gpt4o-mini_ex",
+    "autoMapUnmappedFields": true,
+    "fieldMappings": []
+  },
+  "promptConfig": {
+    "enabled": true,
+    "modelKey": "default.gpt4o-mini",
+    "systemPrompt": "Eres un experto en documentos fiscales espa\u00F1oles. Analiza recibos IBI con precisi\u00F3n, extrayendo datos num\u00E9ricos y catastrales sin inventar nada.",
+    "userPromptTemplate": "Extrae y resume el recibo IBI usando esta estructura:\n1) Datos identificativos (ref catastral, ayuntamiento, titular)\n2) Valores fiscales (valor catastral, base imponible, cuota, importe pagado)\n3) Periodo y fechas\n4) Alertas (deudas, bonificaciones, recargos)\n\nDocumento: {contenido}",
+    "maxTokens": 1200,
+    "temperature": 0,
+    "contentMode": "markdown"
+  },
+  "confidenceConfig": {
+    "clasifUmbralFallback": 0.85,
+    "extracUmbralFallback": 0.75,
+    "extracWeightCampos": 0.5,
+    "extracWeightRequeridos": 0.3,
+    "extracWeightWarnings": 0.2,
+    "umbralOK": 0.85,
+    "umbralRevision": 0.7,
+    "extracUmbralFallbackCompletitud": 0.85,
+    "extracUmbralFallbackConfianza": 0.8
+  },
+  "fields": [
+    {
+      "name": "ReferenciaCatastral",
+      "type": "string",
+      "required": true,
+      "description": "Referencia catastral \u00FAnica del inmueble sujeta a IBI. Buscar junto a etiquetas como \u0027Referencia catastral\u0027, \u0027Ref. catastral\u0027, \u0027RC\u0027 o similar. Devolver el c\u00F3digo completo sin espacios ni separadores adicionales.",
+      "rules": [
+        {
+          "ruleType": "catastral",
+          "severity": "Error",
+          "parameters": {}
+        }
+      ]
+    },
+    {
+      "name": "ValorCatastralSuelo",
+      "type": "decimal",
+      "required": false,
+      "description": "Valor catastral del suelo del inmueble seg\u00FAn el catastro. Extraer el importe num\u00E9rico que aparece en la secci\u00F3n de \u0027valor del suelo\u0027 o \u0027valor catastral de suelo\u0027. No incluir el s\u00EDmbolo de moneda ni texto. Rango esperado: 0-50000000 euros.",
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 50000000
+          }
+        }
+      ]
+    },
+    {
+      "name": "ValorCatastralConstruccion",
+      "type": "decimal",
+      "required": false,
+      "description": "Valor catastral de la construcci\u00F3n del inmueble. Extraer el importe num\u00E9rico que aparece en la casilla de \u0027valor de la construcci\u00F3n\u0027 o \u0027valor catastral de construcci\u00F3n\u0027. No incluir texto ni s\u00EDmbolo de moneda. Rango esperado: 0-50000000 euros.",
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 50000000
+          }
+        }
+      ]
+    },
+    {
+      "name": "ValorCatastralTotal",
+      "type": "decimal",
+      "required": true,
+      "description": "Valor catastral total del inmueble (suelo \u002B construcci\u00F3n). Extraer el importe total catastral que aparece como resultado global. Si no viene expl\u00EDcito, sumar ValorCatastralSuelo \u002B ValorCatastralConstruccion. Rango permitido: 0-100000000 euros.",
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Error",
+          "parameters": {
+            "min": 0,
+            "max": 100000000
+          }
+        }
+      ]
+    },
+    {
+      "name": "BaseImponible",
+      "type": "decimal",
+      "required": true,
+      "description": "Base imponible del recibo IBI, es decir, el valor sobre el que se aplica el tipo impositivo. Extraer el importe num\u00E9rico de la casilla de \u0027base imponible\u0027. No incluir s\u00EDmbolo de moneda ni texto. Rango esperado: 0-100000000 euros.",
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Error",
+          "parameters": {
+            "min": 0,
+            "max": 100000000
+          }
+        }
+      ]
+    },
+    {
+      "name": "TipoImpositivo",
+      "type": "decimal",
+      "required": true,
+      "description": "Tipo impositivo aplicado sobre la base imponible para calcular la cuota IBI. Debe ser un valor entre 0.1% y 1.5%, normalmente expresado como decimal (p.ej. 0.5 para 0.5%). Convertir porcentajes visibles en decimales dividiendo entre 100.",
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Error",
+          "parameters": {
+            "min": 0.1,
+            "max": 1.5
+          }
+        }
+      ]
+    },
+    {
+      "name": "CuotaTributaria",
+      "type": "decimal",
+      "required": true,
+      "description": "Cuota total a ingresar por el IBI, antes de recargos o bonificaciones. Extraer el importe final de la cuota tal como aparece en el recibo, sin incluir recargos ni bonificaciones. Rango esperado: 0-50000 euros.",
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Error",
+          "parameters": {
+            "min": 0,
+            "max": 50000
+          }
+        }
+      ]
+    },
+    {
+      "name": "PeriodoImpositivo",
+      "type": "string",
+      "required": true,
+      "description": "A\u00F1o o periodo impositivo del recibo IBI (p.ej. \u00272025\u0027). Si aparece un rango de a\u00F1os, tomar solo el \u00FAltimo a\u00F1o. Formato esperado: 4 d\u00EDgitos (aaaa).",
+      "rules": [
+        {
+          "ruleType": "regex",
+          "severity": "Warning",
+          "parameters": {
+            "pattern": "^\\d{4}$"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AyuntamientoEmisor",
+      "type": "string",
+      "required": true,
+      "description": "Nombre del ayuntamiento o entidad local que emite el recibo IBI. Debe coincidir con el nombre que aparece en el encabezado del recibo (p.ej. \u0027AYUNTAMIENTO DE MADRID\u0027). Longitud m\u00EDnima: 3 caracteres.",
+      "rules": [
+        {
+          "ruleType": "minLength",
+          "severity": "Error",
+          "parameters": {
+            "value": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "Titular",
+      "type": "string",
+      "required": true,
+      "description": "Nombre completo del titular o contribuyente del recibo IBI. Extraer el nombre tal como aparece en la secci\u00F3n de \u0027titular\u0027, \u0027contribuyente\u0027 o \u0027persona obligada\u0027. Longitud m\u00E1xima: 160 caracteres.",
+      "rules": [
+        {
+          "ruleType": "maxLength",
+          "severity": "Warning",
+          "parameters": {
+            "value": 160
+          }
+        }
+      ]
+    },
+    {
+      "name": "NIF",
+      "type": "string",
+      "required": false,
+      "description": "NIF, DNI o NIE del titular del recibo IBI. Buscar junto a etiquetas \u0027NIF\u0027, \u0027DNI\u0027, \u0027NIE\u0027 o similares. Devolver solo el identificador sin puntos ni espacios.",
+      "rules": [
+        {
+          "ruleType": "nif",
+          "severity": "Warning",
+          "parameters": {}
+        }
+      ]
+    },
+    {
+      "name": "ImportePagado",
+      "type": "decimal",
+      "required": false,
+      "description": "Importe realmente pagado en el recibo IBI, que puede ser menor si existen bonificaciones o mayor si hay recargos. Extraer el importe final Cobrado/Pagado tal como aparece en el recibo. Rango: 0-50000 euros.",
+      "rules": [
+        {
+          "ruleType": "range",
+          "severity": "Warning",
+          "parameters": {
+            "min": 0,
+            "max": 50000
+          }
+        }
+      ]
+    },
+    {
+      "name": "FechaPago",
+      "type": "date",
+      "required": false,
+      "description": "Fecha en que se ha realizado el pago del recibo IBI. Buscar en la secci\u00F3n de \u0027fecha de pago\u0027, \u0027fecha de domiciliaci\u00F3n\u0027 o similar. Formato de entrada: \u0027dd/MM/yyyy\u0027 o \u0027yyyy-MM-dd\u0027. No permitir fechas futuras.",
+      "rules": [
+        {
+          "ruleType": "date",
+          "severity": "Warning",
+          "parameters": {
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
+            "allowFuture": false,
+            "allowPast": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "FechaEmision",
+      "type": "date",
+      "required": true,
+      "description": "Fecha de emisi\u00F3n del recibo IBI. Buscar en el encabezado o secci\u00F3n de \u0027fecha de emisi\u00F3n\u0027 o \u0027fecha de notificaci\u00F3n\u0027. Formato de entrada: \u0027dd/MM/yyyy\u0027 o \u0027yyyy-MM-dd\u0027. No permitir fechas futuras.",
+      "rules": [
+        {
+          "ruleType": "date",
+          "severity": "Error",
+          "parameters": {
+            "formats": [
+              "dd/MM/yyyy",
+              "yyyy-MM-dd"
+            ],
+            "allowFuture": false,
+            "allowPast": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Direccion",
+      "type": "string",
+      "required": false,
+      "description": "Direcci\u00F3n completa del inmueble afectado por el IBI. Debe incluir tipo de v\u00EDa, nombre de v\u00EDa, n\u00FAmero, municipio y provincia. Longitud esperada: 6-160 caracteres, con n\u00FAmero de v\u00EDa y municipio obligatorios.",
+      "rules": [
+        {
+          "ruleType": "address",
+          "severity": "Warning",
+          "parameters": {
+            "minLength": 6,
+            "maxLength": 160,
+            "requireStreetNumber": true,
+            "requireMunicipality": true,
+            "requireProvince": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "Bonificaciones",
+      "type": "array",
+      "required": false,
+      "description": "Lista de bonificaciones aplicadas al recibo IBI. Para cada bonificaci\u00F3n, extraer: concepto (descripci\u00F3n del tipo de bonificaci\u00F3n), porcentaje aplicado (como n\u00FAmero decimal) e importe reducido (cuant\u00EDa en euros). Si no hay bonificaciones, devolver array vac\u00EDo.",
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "concepto",
+            "type": "string",
+            "description": "Descripci\u00F3n del tipo de bonificaci\u00F3n (p.ej. \u0027Bonificaci\u00F3n jubilados\u0027, \u0027Bonificaci\u00F3n 50% joven\u0027, \u0027Bonificaci\u00F3n discapacidad\u0027). Texto literal tal como aparece en el recibo."
+          },
+          {
+            "name": "porcentaje",
+            "type": "decimal",
+            "description": "Porcentaje de bonificaci\u00F3n aplicado, expresado como n\u00FAmero decimal (p.ej. 0.5 para 50%). Si el recibo muestra \u0027%\u0027, convertirlo a decimal dividiendo entre 100."
+          },
+          {
+            "name": "importe",
+            "type": "decimal",
+            "description": "Importe de la reducci\u00F3n en euros debido a la bonificaci\u00F3n. Extraer el valor num\u00E9rico sin signo de moneda. Puede ser 0 si el recibo no lo detalla."
+          }
+        ]
+      }
+    },
+    {
+      "name": "Recargos",
+      "type": "array",
+      "required": false,
+      "description": "Lista de recargos aplicados al recibo IBI (por impago, instar de pago, etc.). Para cada recargo, extraer: concepto, porcentaje aplicado y importe en euros. Si no hay recargos, devolver array vac\u00EDo.",
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "concepto",
+            "type": "string",
+            "description": "Descripci\u00F3n del tipo de recargo (p.ej. \u0027Recargo por impago\u0027, \u0027Recargo de 10% por incumplimiento\u0027, \u0027Recargo por instar de pago\u0027). Texto literal tal como aparece en el recibo."
+          },
+          {
+            "name": "porcentaje",
+            "type": "decimal",
+            "description": "Porcentaje de recargo aplicado, expresado como n\u00FAmero decimal (p.ej. 0.10 para 10%). Si el recibo muestra \u0027%\u0027, convertirlo a decimal dividiendo entre 100."
+          },
+          {
+            "name": "importe",
+            "type": "decimal",
+            "description": "Importe a\u00F1adido en euros debido al recargo. Extraer el valor num\u00E9rico sin signo de moneda. Puede ser 0 si el recibo no lo detalla."
+          }
+        ]
+      }
+    }
+  ],
+  "TipologiaId": "IBI_1.1",
+  "TipologiaNombre": "IBI",
+  "Version": "1.1"
+}

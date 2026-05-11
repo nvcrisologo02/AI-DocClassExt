@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>DocumentIA.Desktop</AssemblyName>
+    <RootNamespace>DocumentIA.Desktop</RootNamespace>
+    <Version>1.0.0</Version>
+    <Authors>GDC SAREB</Authors>
+    <Description>Visual WPF desktop application for document processing test runner with AI classification and extraction</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="RestSharp" Version="114.0.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Serilog" Version="3.1.1" />
+    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\backend\DocumentIA.Core\DocumentIA.Core.csproj" />
+  </ItemGroup>
+
+</Project>

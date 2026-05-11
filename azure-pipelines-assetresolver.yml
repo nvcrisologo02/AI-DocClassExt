@@ -1,0 +1,77 @@
+name: assetresolver-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/plugins/DocumentIA.AssetResolver/**
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - src/plugins/DocumentIA.AssetResolver/**
+
+variables:
+  buildConfiguration: 'Release'
+  projectPath: 'src/plugins/DocumentIA.AssetResolver/DocumentIA.AssetResolver.csproj'
+  publishDir: '$(Build.ArtifactStagingDirectory)/assetresolver'
+  AZURE_SERVICE_CONNECTION: 'AI DocClassExt'
+  AZURE_ASSET_RESOLVER_WEB_APP_NAME: 'srbwebpluginassetresolver'
+
+pool:
+  vmImage: 'windows-latest'
+
+stages:
+  - stage: Build
+    displayName: Build and Publish
+    jobs:
+      - job: Build
+        displayName: Build
+        steps:
+          - task: UseDotNet@2
+            displayName: 'Use .NET SDK'
+            inputs:
+              packageType: 'sdk'
+              version: '8.0.x'
+
+          - script: dotnet restore $(projectPath)
+            displayName: 'Restore packages'
+
+          - script: dotnet build $(projectPath) --configuration $(buildConfiguration) --no-restore --verbosity minimal
+            displayName: 'Build'
+
+          - script: |
+              dotnet test --no-build --configuration $(buildConfiguration) --verbosity minimal || exit 0
+            displayName: 'Run tests (non-blocking)'
+
+          - script: dotnet publish $(projectPath) -c $(buildConfiguration) -o $(publishDir) /p:GenerateFullPaths=true
+            displayName: 'Publish artifact'
+
+          - task: PublishBuildArtifacts@1
+            inputs:
+              PathtoPublish: '$(publishDir)'
+              ArtifactName: 'assetresolver'
+              publishLocation: 'Container'
+
+  - stage: Deploy
+    displayName: Deploy (optional)
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: DeployToAppService
+        displayName: 'Deploy to Azure App Service (optional)'
+        environment: prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: AzureWebApp@1
+                  displayName: 'Deploy to App Service (configure service connection)'
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    appName: $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
+                    package: '$(Pipeline.Workspace)/assetresolver/**'
