@@ -388,6 +388,13 @@ public class DocumentProcessOrchestratorTests
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.Resultado.Estado.Should().Be("BAJA_CONFIANZA_CLASIFICACION");
+        salida.Resultado.ConfianzaClasificacion.Should().Be(0.1);
+        salida.Resultado.ConfianzaGlobal.Should().Be(0.1);
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("Completed");
+        salida.DetalleEjecucion.Seguimiento.Actividades
+            .Where(a => a.Nombre is "Extraer" or "Validar" or "ObtenerActivo" or "Integrar" or "SubirGDC" or "Persistir")
+            .All(a => a.Estado == "Skipped")
+            .Should().BeTrue();
     }
 
     [Fact]

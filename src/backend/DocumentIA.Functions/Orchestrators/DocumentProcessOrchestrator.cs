@@ -560,6 +560,22 @@ public class DocumentProcessOrchestrator
             if (resultadoClasificacion.Confianza < umbralBajaConfianza)
             {
                 salida.Resultado.Estado = "BAJA_CONFIANZA_CLASIFICACION";
+                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                salida.Resultado.ConfianzaExtraccion = 0;
+                salida.Resultado.ConfianzaValidacion = 0;
+                salida.Resultado.ConfianzaGlobal = salida.Resultado.ConfianzaClasificacion;
+                salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
+                    salida.Resultado.ConfianzaGlobal,
+                    tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig());
+
+                foreach (var actividadPendiente in seguimiento.Actividades
+                    .Where(a => string.Equals(a.Estado, "Pending", StringComparison.Ordinal))
+                    .Select(a => a.Nombre)
+                    .ToList())
+                {
+                    MarcarActividadSkipped(actividadPendiente, "Clasificación por debajo de umbral");
+                }
+
                 logger.LogWarning($"Confianza de clasificacion baja: {resultadoClasificacion.Confianza} (umbral: {umbralBajaConfianza})");
 
                 FinalizarSeguimiento("Completed", "Clasificación por debajo de umbral");
