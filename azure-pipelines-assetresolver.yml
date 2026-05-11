@@ -20,6 +20,8 @@ variables:
   buildConfiguration: 'Release'
   projectPath: 'src/plugins/DocumentIA.AssetResolver/DocumentIA.AssetResolver.csproj'
   publishDir: '$(Build.ArtifactStagingDirectory)/assetresolver'
+  AZURE_SERVICE_CONNECTION: 'AI DocClassExt'
+  AZURE_ASSET_RESOLVER_WEB_APP_NAME: 'srbwebpluginassetresolver'
 
 pool:
   vmImage: 'windows-latest'
@@ -70,6 +72,6 @@ stages:
                 - task: AzureWebApp@1
                   displayName: 'Deploy to App Service (configure service connection)'
                   inputs:
-                    azureSubscription: '$(serviceConnection)'
-                    appName: 'srbwebpluginassetresolver'
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    appName: $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
                     package: '$(Pipeline.Workspace)/assetresolver/**'

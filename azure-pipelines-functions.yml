@@ -13,8 +13,9 @@ pool:
 
 variables:
   buildConfiguration: 'Release'
-  azureSubscription: '' # set this pipeline variable to an Azure service connection
-  functionAppName: '' # set this pipeline variable to the target Function App name
+  azureSubscription: 'AI DocClassExt'
+  functionAppName: 'srbappprodocai'
+  azureResourceGroup: 'SRBRGDOCSAIPROD'
 
 stages:
 - stage: Build
