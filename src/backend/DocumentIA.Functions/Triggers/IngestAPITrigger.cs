@@ -63,6 +63,13 @@ public class IngestAPITrigger
                 return badResponse;
             }
 
+            if (contratoEntrada.Instrucciones.MaxPagesForClassificationOnly < 0)
+            {
+                var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badResponse.WriteStringAsync("instrucciones.maxPagesForClassificationOnly debe ser 0 o mayor.");
+                return badResponse;
+            }
+
             if (contratoEntrada.Documento == null || contratoEntrada.Documento.Content == null)
             {
                 var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);

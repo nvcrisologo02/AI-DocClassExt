@@ -22,6 +22,11 @@ public class Instrucciones
     /// null = comportamiento por defecto (false).
     /// </summary>
     public bool? ExecuteIntegrarWhenClassificationOnly { get; set; }
+    /// <summary>
+    /// Número máximo de páginas a usar en clasificación cuando ClassificationOnly=true.
+    /// 0 o menor = sin límite.
+    /// </summary>
+    public int MaxPagesForClassificationOnly { get; set; }
     // Controla si se sube el documento al GDC. Si no se especifica (null), se usa el valor por defecto
     // configurado en la tipología detectada (tipologiaConfig.SkipGDCUpload).
     // true = omitir subida; false = forzar subida; null = respetar config de tipología.

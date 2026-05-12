@@ -349,6 +349,40 @@ public class DocumentProcessOrchestrator
             salida.Integridad.RutaBlobStorage = null;
             salida.Identificacion.Paginas = ObtenerEntero(datosNormalizados, "Paginas");
 
+            if (entrada.Instrucciones.ClassificationOnly
+                && entrada.Instrucciones.MaxPagesForClassificationOnly > 0
+                && !string.IsNullOrWhiteSpace(entrada.Documento.Content.Base64))
+            {
+                try
+                {
+                    var pageLimit = entrada.Instrucciones.MaxPagesForClassificationOnly;
+                    var pageLimitResult = await context.CallActivityAsync<PdfPageLimitResult>(
+                        "ApplyPdfPageLimitActivity",
+                        new ApplyPdfPageLimitInput
+                        {
+                            DocumentoBase64 = entrada.Documento.Content.Base64,
+                            MaxPages = pageLimit
+                        });
+
+                    entrada.Documento.Content.Base64 = pageLimitResult.Base64;
+                    datosNormalizados["PaginasClasificacionOriginales"] = pageLimitResult.OriginalPages;
+                    datosNormalizados["PaginasClasificacionUsadas"] = pageLimitResult.UsedPages;
+                    datosNormalizados["PaginasClasificacionLimite"] = pageLimit;
+                    datosNormalizados["PaginasClasificacionRecorteAplicado"] = pageLimitResult.Applied;
+
+                    logger.LogInformation(
+                        "ClassificationOnly page limit applied. OriginalPages={OriginalPages}, UsedPages={UsedPages}, Limit={Limit}, Applied={Applied}",
+                        pageLimitResult.OriginalPages,
+                        pageLimitResult.UsedPages,
+                        pageLimit,
+                        pageLimitResult.Applied);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "No se pudo aplicar limit pages para clasificación. Se continúa con el documento completo.");
+                }
+            }
+
             // 2. Verificar duplicados (si esta habilitado)
             if (!entrada.Instrucciones.SkipDuplicateCheck)
             {

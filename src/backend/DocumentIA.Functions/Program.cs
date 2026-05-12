@@ -104,6 +104,7 @@ var host = new HostBuilder()
         services.AddSingleton<AzureDocumentIntelligenceLayoutMarkdownProvider>();
         services.AddSingleton<ClassificationTipologiaPromptBuilder>();
         services.AddSingleton<GptClasificarDataProvider>();
+        services.AddSingleton<PdfPageLimiterService>();
         services.AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>();
 
         // Logging
