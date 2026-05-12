@@ -338,6 +338,20 @@ Decision de estado aplicada en ADO:
 ### 7.8.6 Checklist de cierre pendiente (Tanda C)
 
 1. `99101` (rendimiento y calidad):
+
+## 7.9 ClassificationOnly - Limit pages (Feature 99339)
+
+Implementación iniciada para limitar páginas procesadas en modo `ClassificationOnly`.
+
+- Feature ADO: `99339`.
+- Tasks ADO asociadas: `99340`, `99341`, `99342`, `99343`, `99344`, `99345`, `99346`, `99347`, `99348`, `99349`.
+
+Alcance funcional:
+
+- Batch general y Batch Classification exponen campo `Limit pages`.
+- Cuando `classificationOnly=true` y `maxPagesForClassificationOnly>0`, clasificación usa solo primeras `N` páginas.
+- Backend aplica recorte defensivo previo a `Clasificar` para cubrir llamadas API directas.
+- Se mantiene compatibilidad: `0` = sin límite.
     - KPI de rendimiento obligatorios: p50/p95/p99 de latencia E2E (ms) por tipologia en ventana de 7 dias.
     - Metodo de medicion reproducible (App Insights): ejecutar query Q3 de `4.12.4` en `04_MANUAL_EXPLOTACION.md` y guardar resultado (tabla o captura) con fecha/hora de consulta.
     - KPI de calidad obligatorios: precision y recall de matching sobre dataset etiquetado.

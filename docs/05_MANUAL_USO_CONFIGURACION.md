@@ -118,6 +118,7 @@ $body = @{
 $body = @{
   instrucciones = @{
     classificationOnly = $true
+    maxPagesForClassificationOnly = 5
   }
   documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
   trazabilidad = @{ submittedBy = "batch"; idActivo = "ACTIVO-001" }
@@ -189,6 +190,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.forceReprocess` | bool | No | `true` = reprocesar aunque sea duplicado. Default: `false`. |
 | `instrucciones.classificationOnly` | bool | No | `true` = ejecutar solo clasificación + resolución de tipología. Omite extracción/validación/asset resolver. |
 | `instrucciones.executeIntegrarWhenClassificationOnly` | bool? | No | Solo aplica con `classificationOnly=true`. `null/false` = no integrar (default). `true` = ejecutar Integrar si hay `trazabilidad.idActivo`. |
+| `instrucciones.maxPagesForClassificationOnly` | int | No | Solo aplica con `classificationOnly=true`. `0` = sin límite; `N > 0` = clasificar con las primeras N páginas. |
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
 | `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |

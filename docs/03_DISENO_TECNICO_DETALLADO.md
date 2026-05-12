@@ -118,6 +118,12 @@ Deduplicación:
 
 - La reutilización de ejecuciones previas se confronta por `SHA256 + ClassificationOnly` para evitar mezclar procesos completos con procesos de solo clasificación.
 
+Limit pages en ClassificationOnly:
+
+- Si `instrucciones.maxPagesForClassificationOnly > 0`, la orquestación aplica recorte defensivo del PDF a las primeras N páginas justo antes de `Clasificar`.
+- El documento original completo se mantiene para integridad, blob y trazabilidad; el recorte afecta solo al payload utilizado en clasificación.
+- Se registran métricas operativas: páginas originales, páginas usadas, límite configurado y si el recorte fue aplicado.
+
 Adicionalmente, cuando `documento.name` llega vacio y se resuelve desde GDC durante este preflujo, el nombre se sincroniza en `salida.Identificacion.Documento` antes de persistir. Como defensa final, `PersistirActivity` aplica fallback determinista si el nombre siguiera vacio para cumplir la restriccion `NOT NULL` de `Documentos.NombreArchivo`.
 
 ### Anexo integrado: detalle operativo de Activities

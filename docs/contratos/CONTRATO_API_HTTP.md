@@ -44,6 +44,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "forceReprocess": false,
     "classificationOnly": false,
     "executeIntegrarWhenClassificationOnly": null,
+    "maxPagesForClassificationOnly": 0,
     "skipGDCUpload": null,
     "classification": {
       "provider": "auto",
@@ -88,6 +89,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `forceReprocess` | bool | `true` = aunque el documento sea duplicado, procesar igualmente (no reutilizar ejecución anterior). Default: `false`. |
 | `classificationOnly` | bool | `true` = ejecutar solo clasificación/resolución de tipología. Omite `Extraer`, `Prompt`, `Validar` y `ObtenerActivo` (marcadas como `Skipped` en seguimiento). Default: `false`. |
 | `executeIntegrarWhenClassificationOnly` | bool? | Solo aplica cuando `classificationOnly=true`. `null/false` = no ejecutar `Integrar`. `true` = ejecutar `Integrar` si hay `trazabilidad.idActivo`. |
+| `maxPagesForClassificationOnly` | int | Solo aplica cuando `classificationOnly=true`. `0` = sin límite. `N > 0` = usa solo las primeras N páginas para clasificación. |
 | `skipGDCUpload` | bool? | `null` = respetar la configuración de la tipología. `true` = no subir al GDC. `false` = forzar subida. |
 | `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `mock` |
 | `classification.model` | string | Reservado. Usar `"auto"`. El model key se resuelve desde la configuración de la tipología. |
