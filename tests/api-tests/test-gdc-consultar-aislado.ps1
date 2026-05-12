@@ -17,8 +17,14 @@
 .PARAMETER Matricula
     Matrícula del documento. Default: "AI-01-NOTS-01"
 
+.PARAMETER ObjectId
+    ObjectId GDC a consultar directamente con la operación get.
+
 .PARAMETER SettingsFile
     Ruta al local.settings.json. Por defecto busca en la ubicación estándar del proyecto.
+
+.PARAMETER OnlyObjectId
+    Si se especifica junto a ObjectId, solo ejecuta consulta por objectId.
 
 .PARAMETER AlsoCreate
     Si se especifica, también prueba la operación create (con contenido dummy)
@@ -30,20 +36,28 @@
 .EXAMPLE
     .\test-gdc-consultar-aislado.ps1
     .\test-gdc-consultar-aislado.ps1 -IdActivo "9988776655" -MD5 "b708a49a16515f4062e41c529ec22c45" -AlsoCreate
+    .\test-gdc-consultar-aislado.ps1 -ObjectId "4526609" -OnlyObjectId
     .\test-gdc-consultar-aislado.ps1 -UseMock
 #>
 [CmdletBinding()]
 param(
-    [string]$IdActivo  = "9988776655",
+    [string]$IdActivo  = "15235400",
     [string]$MD5       = "b708a49a16515f4062e41c529ec22c45",
     [string]$Matricula = "AI-01-NOTS-01",
+    [string]$ObjectId  = "",
     [string]$SettingsFile = "",
     [switch]$AlsoCreate,
+    [switch]$OnlyObjectId,
     [switch]$UseMock
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
+
+if ($OnlyObjectId -and [string]::IsNullOrWhiteSpace($ObjectId)) {
+    Write-Host "  [FAIL] Debes indicar -ObjectId cuando uses -OnlyObjectId" -ForegroundColor Red
+    exit 1
+}
 
 # -- Helpers ------------------------------------------------------------------
 
@@ -137,22 +151,46 @@ Write-Section "PARAMETROS DE PRUEBA"
 Write-Info "Endpoint         : $Endpoint"
 Write-Info "ApplicationId    : $ApplicationId"
 Write-Info "Username         : $Username"
+Write-Info "NominalUser      : '$NominalUser'"
+Write-Info "Password set     : $(-not [string]::IsNullOrWhiteSpace($Password))"
 Write-Info "ClaseExpediente  : '$ClaseExpediente'"
 Write-Info "RepositoryId     : '$RepositoryId'"
 Write-Info ""
 Write-Info "IdActivo         : $IdActivo"
 Write-Info "MD5/checksum     : $MD5"
 Write-Info "Matricula        : $Matricula"
+Write-Info "ObjectId         : $ObjectId"
 
 $estrategia = if ([string]::IsNullOrWhiteSpace($ClaseExpediente)) { "checksum-only (ClaseExpediente vacio)" } else { "EntityExpression IN expediente.id_expediente + EQUALS checksum" }
 Write-Info ""
 Write-Info "Estrategia filtro: $estrategia"
+if (-not [string]::IsNullOrWhiteSpace($ObjectId)) {
+    Write-Info "Modo ObjectId    : habilitado (consulta global en todos los repositorios)"
+}
+
+# Effective inputs for searchEntities (can be overridden by metadata recovered from get(objectId))
+$effectiveIdActivo = $IdActivo
+$effectiveMd5 = $MD5
+$effectiveClaseExpediente = $ClaseExpediente
+
+# Comparative diagnostics state (searchEntities vs get by objectId)
+$diagSearchRan = $false
+$diagSearchAuthorized = $true
+$diagSearchFound = $false
+$diagSearchErrorCode = ""
+$diagSearchErrorMessage = ""
+
+$diagGetRan = $false
+$diagGetAuthorized = $true
+$diagGetFound = $false
+$diagGetErrorCode = ""
+$diagGetErrorMessage = ""
 
 # -- HTTP helper --------------------------------------------------------------
 
 function Invoke-Soap([string]$soapAction, [string]$bodyXml, [string]$operacion) {
     $envelope = '<?xml version="1.0" encoding="utf-8"?>' +
-        '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">' +
+        '<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">' +
         '<soap:Body>' + $bodyXml + '</soap:Body>' +
         '</soap:Envelope>'
 
@@ -169,19 +207,40 @@ function Invoke-Soap([string]$soapAction, [string]$bodyXml, [string]$operacion) 
         $headers["Authorization"] = "Basic $b64"
     }
 
+    # -SkipHttpErrorCheck (PS7+) evita excepcion en 4xx/5xx y permite leer el SOAP Fault completo.
     # -SkipCertificateCheck equivale a BypassSslValidation (PS 6+)
     try {
-        $response = Invoke-WebRequest -Uri $Endpoint -Method POST -Body $envelope `
-            -Headers $headers -UseBasicParsing -TimeoutSec 30 -SkipCertificateCheck
+        $invokeParams = @{
+            Uri = $Endpoint
+            Method = "POST"
+            Body = $envelope
+            Headers = $headers
+            TimeoutSec = 30
+            SkipCertificateCheck = $true
+        }
+
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            $invokeParams.SkipHttpErrorCheck = $true
+        } else {
+            $invokeParams.UseBasicParsing = $true
+        }
+
+        $response = Invoke-WebRequest @invokeParams
+
+        if ($response.StatusCode -ge 400) {
+            Write-Warn "HTTP $($response.StatusCode): $($response.StatusDescription)"
+        }
+
         return $response.Content
     } catch {
         $statusCode = $_.Exception.Response?.StatusCode.Value__
+        $statusDesc = $_.Exception.Response?.StatusDescription
         $rawResp    = $null
         try {
             $reader  = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
             $rawResp = $reader.ReadToEnd()
         } catch {}
-        Write-Warn "HTTP ${statusCode}: $($_.Exception.Message)"
+        Write-Warn "HTTP ${statusCode} ${statusDesc}: $($_.Exception.Message)"
         if ($rawResp) { return $rawResp }
         throw
     }
@@ -199,12 +258,153 @@ $identityXml = "<ns0:applicationId>$safeAppId</ns0:applicationId>" +
                "<ns0:password>$safePass</ns0:password>" +
                "<ns0:username>$safeUser</ns0:username>"
 
+function BuildGetByObjectIdBody([string]$objectId) {
+    $safeObjectId = XmlEscape $objectId
+    return (
+        '<ns1:get xmlns:ns1="http://services.api.sint.sareb.es/"' +
+        ' xmlns:ns0="http://auth.model.api.sint.sareb.es"' +
+        ' xmlns:ns2="http://data.model.api.sint.sareb.es"' +
+        ' xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">' +
+        '<ns1:arg0 xsi:type="ns0:Identity">' + $identityXml + '</ns1:arg0>' +
+        "<ns1:arg1>$safeObjectId</ns1:arg1>" +
+        '<ns1:arg2 xsi:type="ns2:EntityProfile">' +
+        '<ns2:fieldNames/>' +
+        '<ns2:ignoreContent>true</ns2:ignoreContent>' +
+        '<ns2:ignoreMetadata>false</ns2:ignoreMetadata>' +
+        '</ns1:arg2>' +
+        '</ns1:get>'
+    )
+}
+
+function ReadFieldValue([System.Xml.XmlDocument]$xmlDoc, [string]$fieldName) {
+    $fields = $xmlDoc.SelectNodes("//*[local-name()='Field']")
+    foreach ($field in $fields) {
+        $nameNode = $field.SelectSingleNode("./*[local-name()='name']")
+        if ($nameNode -and $nameNode.InnerText -ieq $fieldName) {
+            $valueNode = $field.SelectSingleNode(".//*[local-name()='value']")
+            if ($valueNode -and -not [string]::IsNullOrWhiteSpace($valueNode.InnerText)) {
+                return $valueNode.InnerText
+            }
+        }
+    }
+
+    return ""
+}
+
+function ReadEntityExtraFieldValue([System.Xml.XmlDocument]$xmlDoc, [string]$entityFieldName, [string]$extraFieldName) {
+    $fields = $xmlDoc.SelectNodes("//*[local-name()='Field']")
+    foreach ($field in $fields) {
+        $nameNode = $field.SelectSingleNode("./*[local-name()='name']")
+        if (-not $nameNode -or $nameNode.InnerText -ine $entityFieldName) {
+            continue
+        }
+
+        $extraFields = $field.SelectNodes(".//*[local-name()='Field']")
+        foreach ($extraField in $extraFields) {
+            $extraNameNode = $extraField.SelectSingleNode("./*[local-name()='name']")
+            if ($extraNameNode -and $extraNameNode.InnerText -ieq $extraFieldName) {
+                $extraValueNode = $extraField.SelectSingleNode(".//*[local-name()='value']")
+                if ($extraValueNode -and -not [string]::IsNullOrWhiteSpace($extraValueNode.InnerText)) {
+                    return $extraValueNode.InnerText
+                }
+            }
+        }
+    }
+
+    return ""
+}
+
+if (-not [string]::IsNullOrWhiteSpace($ObjectId)) {
+    $diagGetRan = $true
+    Write-Section "REQUEST: get by objectId (ALL REPOSITORIES)"
+    Write-Info "La operación get no lleva DocRepository (arg2 de repo), por lo que no limita por repositorio."
+
+    $getBody = BuildGetByObjectIdBody $ObjectId
+    $rawGet = Invoke-Soap "" $getBody "get(objectId=$ObjectId)"
+
+    Write-Section "RESPONSE: get(objectId) (RAW)"
+    Write-Host (PrettyXml $rawGet) -ForegroundColor White
+
+    Write-Section "ANALISIS get(objectId)"
+    $xdocGet = New-Object System.Xml.XmlDocument
+    try {
+        $xdocGet.LoadXml($rawGet)
+        $faultGet = $xdocGet.GetElementsByTagName("Fault")
+        if ($faultGet.Count -gt 0) {
+            $errCode = $xdocGet.GetElementsByTagName("errorCode")
+            $errMsg = $xdocGet.GetElementsByTagName("faultstring")
+            $errReasonText = $xdocGet.GetElementsByTagName("Text")
+            $code = if ($errCode.Count -gt 0) { $errCode[0].InnerText } else { "" }
+            $msg = if ($errMsg.Count -gt 0) {
+                $errMsg[0].InnerText
+            } elseif ($errReasonText.Count -gt 0) {
+                $errReasonText[0].InnerText
+            } else {
+                $faultGet[0].InnerText
+            }
+
+            Write-Fail "get por ObjectId devolvió SOAP Fault."
+            Write-Info "errorCode  : $code"
+            Write-Info "fault      : $msg"
+
+            $diagGetErrorCode = $code
+            $diagGetErrorMessage = $msg
+            if ($code -eq "NOT_AUTHORIZED") {
+                $diagGetAuthorized = $false
+            }
+        } else {
+            $idNodes = $xdocGet.GetElementsByTagName("id")
+            $objId = if ($idNodes.Count -gt 0) { $idNodes[0].InnerText } else { "(sin <id>)" }
+            $checksum = ReadFieldValue $xdocGet "checksum"
+            $nombre = ReadFieldValue $xdocGet "nombre_fichero"
+            $idExpediente = ReadEntityExtraFieldValue $xdocGet "expediente" "id_expediente"
+            if ([string]::IsNullOrWhiteSpace($nombre)) {
+                $nombre = ReadFieldValue $xdocGet "nombre_documento"
+            }
+
+            Write-Ok "Documento encontrado por ObjectId en consulta global."
+            Write-Info "ObjectId      : $objId"
+            Write-Info "checksum      : $checksum"
+            Write-Info "nombre_fichero: $nombre"
+            Write-Info "id_expediente : $idExpediente"
+
+            if (-not [string]::IsNullOrWhiteSpace($checksum)) {
+                $effectiveMd5 = $checksum
+            }
+
+            if (-not [string]::IsNullOrWhiteSpace($idExpediente)) {
+                $effectiveIdActivo = $idExpediente
+            } else {
+                # If metadata does not include expediente linkage, force checksum-only search strategy.
+                $effectiveClaseExpediente = ""
+                Write-Warn "get(objectId) no devolvió id_expediente; searchEntities se ejecutará por checksum-only."
+            }
+
+            Write-Info ""
+            Write-Info "Search derivado de metadata -> IdActivo=$effectiveIdActivo, MD5=$effectiveMd5, ClaseExpediente='$effectiveClaseExpediente'"
+
+            $diagGetFound = $true
+        }
+    } catch {
+        Write-Fail "No se pudo parsear el XML de respuesta get(objectId): $_"
+        $diagGetAuthorized = $false
+        $diagGetErrorCode = "PARSE_ERROR"
+        $diagGetErrorMessage = "No se pudo parsear respuesta get(objectId)"
+    }
+
+    if ($OnlyObjectId) {
+        Write-Section "FIN"
+        Write-Info "Modo -OnlyObjectId activo: no se ejecuta searchEntities/create."
+        exit 0
+    }
+}
+
 # -- BUILD: searchEntities filter (mirrors GdcService.cs logic) --------------
 
-$safeIdActivo = XmlEscape $IdActivo
-$safeMd5      = XmlEscape $MD5
+$safeIdActivo = XmlEscape $effectiveIdActivo
+$safeMd5      = XmlEscape $effectiveMd5
 
-if (-not [string]::IsNullOrWhiteSpace($ClaseExpediente)) {
+if (-not [string]::IsNullOrWhiteSpace($effectiveClaseExpediente)) {
     $filterXml =
         '<ns2:filter xsi:type="ns2:SetExpression">' +
         '<ns2:expressions>' +
@@ -274,6 +474,14 @@ $searchBody =
 
 # -- CALL: searchEntities -----------------------------------------------------
 
+$effectiveStrategy = if ([string]::IsNullOrWhiteSpace($effectiveClaseExpediente)) { "checksum-only" } else { "expediente+checksum" }
+Write-Section "SEARCH INPUT EFECTIVO"
+Write-Info "Strategy         : $effectiveStrategy"
+Write-Info "IdActivo         : $effectiveIdActivo"
+Write-Info "MD5/checksum     : $effectiveMd5"
+Write-Info "ClaseExpediente  : '$effectiveClaseExpediente'"
+
+$diagSearchRan = $true
 $rawSearch = Invoke-Soap "" $searchBody "searchEntities"
 
 Write-Section "RESPONSE: searchEntities (RAW)"
@@ -292,6 +500,14 @@ try {
     if ($faults.Count -gt 0) {
         Write-Fail "Respuesta contiene SOAP Fault -> ConsultarDocumento devolveria (false, null)"
         Write-Info "Fault text: $($faults[0].InnerText)"
+
+        $errCodeNodes = $xdoc.GetElementsByTagName("errorCode")
+        $errMsgNodes = $xdoc.GetElementsByTagName("faultstring")
+        $diagSearchErrorCode = if ($errCodeNodes.Count -gt 0) { $errCodeNodes[0].InnerText } else { "SOAP_FAULT" }
+        $diagSearchErrorMessage = if ($errMsgNodes.Count -gt 0) { $errMsgNodes[0].InnerText } else { $faults[0].InnerText }
+        if ($diagSearchErrorCode -eq "NOT_AUTHORIZED") {
+            $diagSearchAuthorized = $false
+        }
     } else {
         # Check totalItemsResult (current parsing logic)
         $totalNodes = $xdoc.GetElementsByTagName("totalItemsResult")
@@ -302,6 +518,7 @@ try {
                 $idNodes = $xdoc.GetElementsByTagName("id")
                 $objId   = if ($idNodes.Count -gt 0) { $idNodes[0].InnerText } else { "(no id tag)" }
                 Write-Ok  "Documento ENCONTRADO - ObjectId = $objId"
+                $diagSearchFound = $true
             } else {
                 Write-Fail "totalItemsResult = 0 -> GdcService dice: NO EXISTE"
                 Write-Warn "Esto es el bug: searchEntities no encuentra el documento."
@@ -327,6 +544,9 @@ try {
     }
 } catch {
     Write-Fail "No se pudo parsear el XML de respuesta: $_"
+    $diagSearchAuthorized = $false
+    $diagSearchErrorCode = "PARSE_ERROR"
+    $diagSearchErrorMessage = "No se pudo parsear respuesta searchEntities"
 }
 
 # -- OPTIONAL: create ---------------------------------------------------------
@@ -436,6 +656,18 @@ if ($AlsoCreate) {
 }
 
 Write-Section "FIN"
+
+if ($diagSearchRan -and $diagGetRan) {
+    Write-Section "RESUMEN COMPARATIVO (searchEntities vs get(objectId))"
+    Write-Info "searchEntities: authorized=$diagSearchAuthorized found=$diagSearchFound errorCode='$diagSearchErrorCode'"
+    Write-Info "get(objectId):  authorized=$diagGetAuthorized found=$diagGetFound errorCode='$diagGetErrorCode'"
+
+    if ($diagSearchAuthorized -and -not $diagGetAuthorized -and $diagGetErrorCode -eq "NOT_AUTHORIZED") {
+        Write-Warn "DIAGNOSTICO: mismatch de permisos por operación."
+        Write-Warn "El mismo contexto autentica en searchEntities, pero get(objectId) falla por autorización."
+    }
+}
+
 Write-Info "Si searchEntities devolvio 0 resultados pero create dice DOC_OBJECT_EXISTS, las causas posibles son:"
 Write-Info "  1) El documento fue creado SIN campo expediente (ClaseExpediente estaba vacio entonces)"
 Write-Info "     -> Fix: buscar tambien por checksum-only y unir resultados (OR), o usar checksum solo."
