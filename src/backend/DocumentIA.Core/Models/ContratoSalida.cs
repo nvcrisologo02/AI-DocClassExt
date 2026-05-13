@@ -25,6 +25,14 @@ public class Identificacion
     public string TipologiaVersion { get; set; } = string.Empty;
     public DateTime FechaProceso { get; set; } = DateTime.UtcNow;
     public int Paginas { get; set; }
+    
+    // === Clasificación jerárquica TDN ===
+    /// <summary>Primer nivel de tipología (familia).</summary>
+    public string? Tdn1 { get; set; }
+    /// <summary>Segundo nivel de tipología (subtipo).</summary>
+    public string? Tdn2 { get; set; }
+    /// <summary>Matrícula de la propiedad si aplica.</summary>
+    public string? Matricula { get; set; }
 }
 
 public class Integridad
@@ -104,7 +112,7 @@ public class ResultadoClasificacion
     public double ConfianzaDI { get; set; }
     /// <summary>Confianza reportada por GPT fallback (0 si no se activó).</summary>
     public double ConfianzaGPT { get; set; }
-    /// <summary>Proveedor que produjo la clasificación final: "DocumentIntelligence" | "GPT4oMini".</summary>
+    /// <summary>Proveedor que produjo la clasificación final: "DocumentIntelligence" | "GPT4oMini" | "HybridTDN" | "RuleBasedTDN" | "FoundryRescue".</summary>
     public string ProveedorClasif { get; set; } = string.Empty;
     public bool FallbackLLM { get; set; }
     public string? FallbackRazon { get; set; }
@@ -113,6 +121,24 @@ public class ResultadoClasificacion
 
     /// <summary>Texto extraído por DI durante la clasificación. El orquestador lo usa para propagar a DatosNormalizados["Markdown"] y luego lo limpia antes de incluirlo en la respuesta.</summary>
     public string? ContentExtraido { get; set; }
+
+    // === Campos jerárquicos TDN ===
+    /// <summary>Primer nivel de la clasificación jerárquica (familia: DOCN, ESCR, SERE, etc.).</summary>
+    public string? Tdn1 { get; set; }
+    /// <summary>Segundo nivel de la clasificación jerárquica (subtipo dentro de la familia).</summary>
+    public string? Tdn2 { get; set; }
+    /// <summary>Matrícula de la propiedad asociada, si aplica.</summary>
+    public string? Matricula { get; set; }
+
+    // === Trazabilidad y auditoría ===
+    /// <summary>URI o referencia a la evidencia almacenada (ej: blob path en Asset Resolver).</summary>
+    public string? EvidenceUri { get; set; }
+    /// <summary>Versión del clasificador usado en HybridTDN (para rastreabilidad de cambios en reglas).</summary>
+    public string? ClassifierVersion { get; set; }
+    /// <summary>Número de páginas procesadas en la clasificación (para auditoría y optimización de costos).</summary>
+    public int PagesProcessed { get; set; } = 0;
+    /// <summary>Clasificador específico usado en esta ejecución (RuleBasedTDN, DocumentIntelligence, FoundryRescue, etc.).</summary>
+    public string? Clasificador { get; set; }
 }
 
 public class ResultadoExtraccion

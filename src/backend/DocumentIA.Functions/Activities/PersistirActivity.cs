@@ -75,6 +75,13 @@ namespace DocumentIA.Functions.Activities
                         // Registrar IdGDC e IdActivo si están disponibles
                         IdGDC = salida.Integridad.GestorDocumental,
                         IdActivo = salida.Integridad.IdActivo,
+                        // === Campos TDN jerárquicos ===
+                        Tdn1 = salida.Identificacion.Tdn1,
+                        Tdn2 = salida.Identificacion.Tdn2,
+                        Matricula = salida.Identificacion.Matricula,
+                        EvidenceUri = salida.DetalleEjecucion.Clasificacion.EvidenceUri,
+                        ClassifierVersion = salida.DetalleEjecucion.Clasificacion.ClassifierVersion,
+                        PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed,
                         FechaCreacion = DateTime.UtcNow,
                         FechaProceso = salida.Identificacion.FechaProceso
                     };
@@ -107,6 +114,21 @@ namespace DocumentIA.Functions.Activities
                     {
                         documento.IdActivo = salida.Integridad.IdActivo;
                     }
+                    
+                    // === Actualizar campos TDN ===
+                    if (!string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1))
+                        documento.Tdn1 = salida.Identificacion.Tdn1;
+                    if (!string.IsNullOrWhiteSpace(salida.Identificacion.Tdn2))
+                        documento.Tdn2 = salida.Identificacion.Tdn2;
+                    if (!string.IsNullOrWhiteSpace(salida.Identificacion.Matricula))
+                        documento.Matricula = salida.Identificacion.Matricula;
+                    if (!string.IsNullOrWhiteSpace(salida.DetalleEjecucion.Clasificacion.EvidenceUri))
+                        documento.EvidenceUri = salida.DetalleEjecucion.Clasificacion.EvidenceUri;
+                    if (!string.IsNullOrWhiteSpace(salida.DetalleEjecucion.Clasificacion.ClassifierVersion))
+                        documento.ClassifierVersion = salida.DetalleEjecucion.Clasificacion.ClassifierVersion;
+                    if (salida.DetalleEjecucion.Clasificacion.PagesProcessed > 0)
+                        documento.PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed;
+                    
                     documento.NormalizacionMarkdownCompressed = CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown);
                     documento.FechaActualizacion = DateTime.UtcNow;
                     await _documentoRepo.UpdateAsync(documento);

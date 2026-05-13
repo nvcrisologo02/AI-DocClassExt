@@ -13,6 +13,7 @@ using DocumentIA.Functions.Mocks;
 using DocumentIA.Plugins.Integration;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Functions.Services;
+using DocumentIA.Functions.Services.Classification;
 using Microsoft.Extensions.Options;
 using System.IO;
 using Azure.Identity;
@@ -104,6 +105,14 @@ var host = new HostBuilder()
         services.AddSingleton<AzureDocumentIntelligenceLayoutMarkdownProvider>();
         services.AddSingleton<ClassificationTipologiaPromptBuilder>();
         services.AddSingleton<GptClasificarDataProvider>();
+
+        // === HybridTdn Classification Provider ===
+        services.Configure<HybridTdnOptions>(context.Configuration.GetSection("HybridTdn"));
+        services.AddSingleton<DocumentWindowExtractor>();
+        services.AddSingleton<RuleBasedTdnClassifier>();
+        services.AddSingleton<FoundryTdnRescueClassifier>();
+        services.AddSingleton<HybridTdnClasificarProvider>();
+
         services.AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>();
 
         // Logging

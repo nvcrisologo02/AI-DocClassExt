@@ -1,5 +1,6 @@
 ﻿using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Services.Classification;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using DocumentIA.Core.Configuration;
@@ -11,6 +12,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
     private readonly MockClasificarDataProvider _mockProvider;
     private readonly AzureDocumentIntelligenceClasificarProvider _azureProvider;
     private readonly GptClasificarDataProvider _gptProvider;
+    private readonly HybridTdnClasificarProvider _hybridTdnProvider;
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
     private readonly ClassificationRoutingSettings _routingSettings;
     private readonly ILogger<ConfigurableClasificarDataProvider> _logger;
@@ -19,6 +21,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         MockClasificarDataProvider mockProvider,
         AzureDocumentIntelligenceClasificarProvider azureProvider,
         GptClasificarDataProvider gptProvider,
+        HybridTdnClasificarProvider hybridTdnProvider,
         ClassificationModelRegistryLoader modelRegistryLoader,
         IOptions<ClassificationRoutingSettings> routingSettings,
         ILogger<ConfigurableClasificarDataProvider> logger)
@@ -26,6 +29,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         _mockProvider = mockProvider;
         _azureProvider = azureProvider;
         _gptProvider = gptProvider;
+        _hybridTdnProvider = hybridTdnProvider;
         _modelRegistryLoader = modelRegistryLoader;
         _routingSettings = routingSettings.Value;
         _logger = logger;
@@ -52,8 +56,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             return provider.ToLowerInvariant() switch
             {
                 "mock" => await _mockProvider.ClasificarAsync(input, cancellationToken),
-                "azure-openai" or "gpt" => await _gptProvider.ClasificarAsync(input, cancellationToken),
-                _ => throw new NotSupportedException($"Proveedor de clasificaciÃ³n '{provider}' no soportado")
+                "azure-openai" or "gpt" => await _gptProvider.ClasificarAsync(input, cancellationToken),                "hybrid-tdn" or "hybrid" => await _hybridTdnProvider.ClasificarAsync(input, cancellationToken),                _ => throw new NotSupportedException($"Proveedor de clasificaciÃ³n '{provider}' no soportado")
             };
         }
 
