@@ -1,0 +1,12 @@
+{
+  "cu_endpoint": "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/",
+  "cu_key": "",
+  "cu_analyzer": "CU_NS_1.4_2",
+
+  "di_endpoint": "https://srbdiprodocai.cognitiveservices.azure.com/",
+  "di_key": "",
+  "di_classifier": "DocumentAICC_v0",
+
+  "di_layout_model": "DI_NS_1.4_v1",
+  "di_api_version": "2024-11-30"
+}
