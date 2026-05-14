@@ -115,6 +115,11 @@ public class Documento
 public class ContenidoDocumento
 {
     public string Base64 { get; set; } = string.Empty;
+    /// <summary>
+    /// Markdown opcional aportado por el cliente (OCR externo/preprocesado).
+    /// Si se informa, el orquestador lo prioriza para clasificación/extracción y evita la extracción inicial de markdown.
+    /// </summary>
+    public string? Markdown { get; set; }
 }
 
 public class Trazabilidad

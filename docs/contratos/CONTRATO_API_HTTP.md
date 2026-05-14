@@ -66,7 +66,8 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "name": "nota_simple_finca_123.pdf",
     "objectIdGDC": null,
     "content": {
-      "base64": "<contenido-en-base64>"
+      "base64": "<contenido-en-base64>",
+      "markdown": "# Markdown opcional aportado por cliente"
     }
   },
   "trazabilidad": {
@@ -130,6 +131,7 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 | `name` | string | Nombre del fichero (con extensión). Recomendado; si llega vacío con `objectIdGDC`, se intenta completar desde metadatos de GDC. |
 | `objectIdGDC` | string? | ObjectId del documento ya archivado en GDC. Si se informa, no debe enviarse `content.base64`. |
 | `content.base64` | string | Contenido del documento codificado en Base64. Requerido cuando no se informa `objectIdGDC`. |
+| `content.markdown` | string? | Markdown opcional preprocesado por el cliente. Si se informa y no está vacío, el orquestador lo prioriza y evita la extracción inicial de markdown. |
 
 **`trazabilidad`**
 
@@ -144,6 +146,7 @@ Reglas de validación de entrada:
 - `documento.objectIdGDC` y `documento.content.base64` son mutuamente excluyentes.
 - Debe enviarse exactamente una fuente de documento.
 - Si se usa `documento.objectIdGDC`, el backend fuerza `instrucciones.skipGDCUpload = true`.
+- Si se envía `documento.content.markdown` y supera los 2.000.000 caracteres, el backend lo **trunca automáticamente** al máximo permitido (no rechaza la petición).
 - `classificationOnly=true` es incompatible con `expectedType` informado. El trigger HTTP devuelve `400`.
 
 ---

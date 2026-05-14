@@ -18,11 +18,17 @@ using Microsoft.Extensions.Options;
 using System.IO;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
+using Microsoft.ApplicationInsights;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
     .ConfigureAppConfiguration((context, config) =>
     {
+        if (context.HostingEnvironment.IsDevelopment())
+        {
+            config.AddJsonFile("local.settings.json", optional: true, reloadOnChange: true);
+        }
+
         var built = config.Build();
         var secretsSource = built["SecretsSource"] ?? "Config";
         var useAzureVault = string.Equals(secretsSource, "AzureVault", StringComparison.OrdinalIgnoreCase);
@@ -111,7 +117,15 @@ var host = new HostBuilder()
         services.AddSingleton<DocumentWindowExtractor>();
         services.AddSingleton<RuleBasedTdnClassifier>();
         services.AddSingleton<FoundryTdnRescueClassifier>();
-        services.AddSingleton<HybridTdnClasificarProvider>();
+        services.AddSingleton<HybridTdnClasificarProvider>(sp =>
+            new HybridTdnClasificarProvider(
+                sp.GetRequiredService<ILogger<HybridTdnClasificarProvider>>(),
+                sp.GetRequiredService<AzureDocumentIntelligenceClasificarProvider>(),
+                sp.GetRequiredService<DocumentWindowExtractor>(),
+                sp.GetRequiredService<RuleBasedTdnClassifier>(),
+                sp.GetRequiredService<FoundryTdnRescueClassifier>(),
+                sp.GetRequiredService<IOptions<HybridTdnOptions>>(),
+                sp.GetRequiredService<TelemetryClient>()));
 
         services.AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>();
 

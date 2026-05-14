@@ -132,3 +132,18 @@ Alcance operativo Dia 1:
 Trazabilidad:
 - La nota de kickoff se dejo registrada en la descripcion de la epica, features y tasks de Dia 1.
 - Referencias base: PRD de clasificacion y este plan aprobado.
+
+## 11) Actualizacion de avance (2026-05-13)
+
+Resumen tecnico aplicado:
+- Se consolida el enfoque markdown-first previo a clasificacion para reducir reextracciones posteriores.
+- El proveedor inicial de markdown queda restringido a `di-layout` (Azure Document Intelligence Layout).
+- Se retira la alternativa `local-pdf` y fallback OCR local por `tesseract` del runtime de Azure Functions.
+
+Estado de work items relacionados:
+- 99403: Done.
+- 99404: Done.
+- 99405: Done.
+
+Pendiente operativo:
+- Ejecutar smoke de ingestion HybridTDN en entorno con infraestructura local completa (SQL + Storage + host Functions) y adjuntar evidencia de trazabilidad en ADO.

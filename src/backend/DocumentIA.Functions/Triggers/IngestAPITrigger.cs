@@ -12,6 +12,7 @@ namespace DocumentIA.Functions.Triggers;
 
 public class IngestAPITrigger
 {
+    private const int MaxMarkdownLength = 2_000_000;
     private readonly ILogger<IngestAPITrigger> _logger;
     private readonly PromptInstruccionesValidator _promptInstruccionesValidator;
 
@@ -72,6 +73,7 @@ public class IngestAPITrigger
 
             var objectIdGdc = contratoEntrada.Documento.ObjectIdGDC?.Trim();
             var base64 = contratoEntrada.Documento.Content.Base64?.Trim();
+            var markdown = contratoEntrada.Documento.Content.Markdown?.Trim();
             var hasObjectIdGdc = !string.IsNullOrWhiteSpace(objectIdGdc);
             var hasBase64 = !string.IsNullOrWhiteSpace(base64);
 
@@ -93,6 +95,21 @@ public class IngestAPITrigger
             {
                 contratoEntrada.Documento.ObjectIdGDC = objectIdGdc;
                 contratoEntrada.Instrucciones.SkipGDCUpload = true;
+            }
+
+
+            if (!string.IsNullOrWhiteSpace(markdown))
+            {
+                if (markdown.Length > MaxMarkdownLength)
+                {
+                    _logger.LogWarning($"documento.content.markdown excede el máximo permitido de {MaxMarkdownLength} caracteres. Se truncará automáticamente.");
+                    markdown = markdown.Substring(0, MaxMarkdownLength);
+                }
+                contratoEntrada.Documento.Content.Markdown = markdown;
+            }
+            else
+            {
+                contratoEntrada.Documento.Content.Markdown = null;
             }
 
             // Iniciar orquestación

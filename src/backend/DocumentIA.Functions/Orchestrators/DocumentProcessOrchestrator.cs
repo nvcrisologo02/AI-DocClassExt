@@ -11,17 +11,21 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
 
 namespace DocumentIA.Functions.Orchestrators;
 
 public class DocumentProcessOrchestrator
 {
     private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
+    private readonly ExtractionRoutingSettings _extractionRoutingSettings;
 
     public DocumentProcessOrchestrator(
-        ExtractionModelRegistryLoader extractionModelRegistryLoader)
+        ExtractionModelRegistryLoader extractionModelRegistryLoader,
+        IOptions<ExtractionRoutingSettings> extractionRoutingSettings)
     {
         _extractionModelRegistryLoader = extractionModelRegistryLoader;
+        _extractionRoutingSettings = extractionRoutingSettings.Value;
     }
 
     internal static ObtenerActivoInput BuildObtenerActivoInput(
@@ -349,6 +353,15 @@ public class DocumentProcessOrchestrator
             salida.Integridad.RutaBlobStorage = null;
             salida.Identificacion.Paginas = ObtenerEntero(datosNormalizados, "Paginas");
 
+            var markdownEntrada = entrada.Documento.Content.Markdown?.Trim();
+            if (!string.IsNullOrWhiteSpace(markdownEntrada))
+            {
+                datosNormalizados["Markdown"] = markdownEntrada;
+                logger.LogInformation(
+                    "Markdown recibido en la entrada ({Len} chars). Se omite extracción inicial de markdown.",
+                    markdownEntrada.Length);
+            }
+
             // 2. Verificar duplicados (si esta habilitado)
             if (!entrada.Instrucciones.SkipDuplicateCheck)
             {
@@ -398,6 +411,57 @@ public class DocumentProcessOrchestrator
             if (!string.IsNullOrWhiteSpace(blobPath))
             {
                 salida.Integridad.RutaBlobStorage = blobPath;
+            }
+
+            if (_extractionRoutingSettings.InitialMarkdown.Enabled && !datosNormalizados.ContainsKey("Markdown"))
+            {
+                var providerInicial = (_extractionRoutingSettings.InitialMarkdown.Provider ?? "none").Trim().ToLowerInvariant();
+
+                if (providerInicial == "di-layout")
+                {
+                    try
+                    {
+                        logger.LogInformation(
+                            "Paso 2.6: Extracción inicial de markdown habilitada. Provider={Provider}",
+                            providerInicial);
+
+                        var markdownInicial = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                            "ExtraerMarkdownLayoutActivity",
+                            new ExtraerMarkdownLayoutInput
+                            {
+                                Tipologia = "preclassify",
+                                DocumentoBase64 = entrada.Documento.Content.Base64,
+                                NombreDocumento = entrada.Documento.Name
+                            });
+
+                        if (!string.IsNullOrWhiteSpace(markdownInicial.Markdown))
+                        {
+                            datosNormalizados["Markdown"] = markdownInicial.Markdown;
+                            logger.LogInformation(
+                                "Markdown inicial listo para clasificación ({Len} chars). Modelo={Modelo}",
+                                markdownInicial.Markdown.Length,
+                                markdownInicial.Modelo);
+                        }
+
+                        if (salida.Identificacion.Paginas <= 0 && markdownInicial.Paginas > 0)
+                        {
+                            salida.Identificacion.Paginas = markdownInicial.Paginas;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(
+                            ex,
+                            "Extracción inicial de markdown falló con provider {Provider}. Se continúa con flujo normal.",
+                            providerInicial);
+                    }
+                }
+                else if (providerInicial != "none")
+                {
+                    logger.LogWarning(
+                        "Provider inicial de markdown no soportado: {Provider}. Valores permitidos: none, di-layout.",
+                        providerInicial);
+                }
             }
 
             // 3. Clasificacion
@@ -880,6 +944,14 @@ public class DocumentProcessOrchestrator
                 && !string.IsNullOrWhiteSpace(markdownDetectado))
             {
                 markdownNormalizacion = markdownDetectado;
+            }
+
+            if (string.IsNullOrWhiteSpace(markdownNormalizacion)
+                && datosNormalizados.TryGetValue("Markdown", out var markdownPrevio)
+                && markdownPrevio is string markdownPrevioTexto
+                && !string.IsNullOrWhiteSpace(markdownPrevioTexto))
+            {
+                markdownNormalizacion = markdownPrevioTexto;
             }
 
             if (!string.IsNullOrWhiteSpace(markdownNormalizacion))

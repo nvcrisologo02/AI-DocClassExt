@@ -114,25 +114,6 @@ $body = @{
     documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
 } | ConvertTo-Json -Depth 5
 
-# ClassificationOnly (sin integrar por defecto)
-$body = @{
-  instrucciones = @{
-    classificationOnly = $true
-  }
-  documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
-  trazabilidad = @{ submittedBy = "batch"; idActivo = "ACTIVO-001" }
-} | ConvertTo-Json -Depth 5
-
-# ClassificationOnly forzando Integrar (requiere idActivo)
-$body = @{
-  instrucciones = @{
-    classificationOnly = $true
-    executeIntegrarWhenClassificationOnly = $true
-  }
-  documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
-  trazabilidad = @{ submittedBy = "batch"; idActivo = "ACTIVO-001" }
-} | ConvertTo-Json -Depth 5
-
 # Proveedor y umbral custom
 $body = @{
     instrucciones = @{
@@ -187,11 +168,9 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.expectedType` | string | No | Tipologia conocida (omite clasificacion). Ej: `"nota-simple"`, `"nota-simple@1.4"`. Vacio = clasificacion automatica. |
 | `instrucciones.skipDuplicateCheck` | bool | No | `true` = no verificar duplicados. Default: `false`. |
 | `instrucciones.forceReprocess` | bool | No | `true` = reprocesar aunque sea duplicado. Default: `false`. |
-| `instrucciones.classificationOnly` | bool | No | `true` = ejecutar solo clasificación + resolución de tipología. Omite extracción/validación/asset resolver. |
-| `instrucciones.executeIntegrarWhenClassificationOnly` | bool? | No | Solo aplica con `classificationOnly=true`. `null/false` = no integrar (default). `true` = ejecutar Integrar si hay `trazabilidad.idActivo`. |
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
-| `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |
+| `instrucciones.classification.provider` | string | No | `"auto"` / `"hybrid-tdn"` / `"hybrid"` / `"azure-document-intelligence"` / `"mock"`. `"hybrid-tdn"` aplica cadena Reglas -> DI -> Rescue. Default: `"auto"`. |
 | `instrucciones.classification.model` | string | No | Reservado. Usar `"auto"`. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
 | `instrucciones.extraction` | object | No | Config extraccion para esta peticion. |
@@ -209,6 +188,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `documento` | object | **Si** | Documento a procesar. |
 | `documento.name` | string | No | Nombre del archivo con extension. Si viene vacio con `documento.objectIdGDC`, se intenta completar desde metadatos GDC. |
 | `documento.content.base64` | string | Condicional | Requerido cuando NO se informa `documento.objectIdGDC`. |
+| `documento.content.markdown` | string? | No | Markdown preprocesado opcional aportado por cliente (OCR externo). Si viene informado y no vacío, se prioriza y evita la extracción inicial DI Layout. |
 | `documento.objectIdGDC` | string? | Condicional | ObjectId del documento ya archivado en GDC. Requerido cuando NO se informa `documento.content.base64`. |
 | `trazabilidad` | object | No | Informacion de trazabilidad. |
 | `trazabilidad.correlationId` | string | No | UUID de correlacion. Auto-generado si no se informa. |
@@ -220,7 +200,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 - `documento.objectIdGDC` y `documento.content.base64` son mutuamente excluyentes.
 - Debe venir exactamente una fuente de documento: `objectIdGDC` o `content.base64`.
 - Si se usa `documento.objectIdGDC`, el sistema fuerza `instrucciones.skipGDCUpload = true`.
-- `instrucciones.classificationOnly=true` y `instrucciones.expectedType` informado son incompatibles (`400 Bad Request`).
+- Si `documento.content.markdown` viene informado y no vacío, tiene prioridad para los pasos de clasificación/extracción sobre la extracción inicial de markdown.
 
 ### Jerarquia de Umbrales
 
@@ -245,7 +225,7 @@ Clasificación:
     ?? modelo.fallbackThreshold
 ```
 
-En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el específico de ese criterio es `null`.
+En cada capa (instrucciones/tipologia), el umbral legado se usa solo cuando el específico de ese criterio es `null`.
 
 ---
 
@@ -320,8 +300,8 @@ En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el 
 | Campo | Valor | Significado |
 |-------|-------|------------|
 | `clasificacion.fallbackLLM` | `true` | Clasificacion fue hecha por GPT (DI tuvo baja confianza) |
-| `extraccion.fallbackUsado` | `true` | Extracción complementada por GPT (CU tuvo baja completitud/confianza) |
-| `extraccion.fallbackUsado` | `false` | Extracción directa GPT (`azure-openai`) o CU suficiente sin activar fallback |
+| `extraccion.fallbackUsado` | `true` | Extraccion complementada por GPT (CU tuvo baja completitud/confianza) |
+| `extraccion.fallbackUsado` | `false` | Extraccion directa GPT (`azure-openai`) o CU suficiente sin activar fallback |
 | `clasificacion.fallbackRazon` | string | Motivo del fallback |
 | `seguimiento.actividades[].fallbackActivado` | `true` | Actividad especifica uso fallback |
 
@@ -435,7 +415,7 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
 
 ## 5.6 Checklist: Anadir Nueva Tipologia
 
-> Los archivos JSON de `config/tipologias/` son **solo seed**. En runtime la Function App usa BD. El proceso recomendado crea la tipología directamente en BD via Admin API.
+> Los archivos JSON de `config/tipologias/` son **solo seed**. En runtime la Function App usa BD. El proceso recomendado crea la tipologia directamente en BD via Admin API.
 
 | # | Paso | Detalle | Verificacion |
 |---|------|---------|-------------|
@@ -552,6 +532,81 @@ Invoke-RestMethod \
 | `timeoutSeconds` | int | No | Timeout total. Default: `120` |
 | `isDefault` | bool | No | Marca como modelo de clasificacion por defecto |
 | `fallbackThreshold` | double | No | Confianza mínima DI para no activar fallback GPT |
+
+#### Configuracion `HybridTdn` (appsettings / local.settings)
+
+> `HybridTdn` no se almacena en `ModeloConfigs`. Es configuracion de servidor (appsettings o variables de entorno) usada por `HybridTdnClasificarProvider`.
+
+`appsettings.json`:
+
+```json
+{
+  "Classification": {
+    "DefaultProvider": "hybrid-tdn"
+  },
+  "HybridTdn": {
+    "RuleConfidenceThreshold": 0.75,
+    "DiConfidenceThreshold": 0.85,
+    "MaxCharactersPerWindow": 8000,
+    "PagesToInspect": 3,
+    "RescueTimeoutMs": 8000,
+    "MaxRetries": 1
+  }
+}
+```
+
+`local.settings.json` (seccion `Values`, formato variable de entorno):
+
+```json
+{
+  "Classification__DefaultProvider": "hybrid-tdn",
+  "HybridTdn__RuleConfidenceThreshold": "0.75",
+  "HybridTdn__DiConfidenceThreshold": "0.85",
+  "HybridTdn__MaxCharactersPerWindow": "8000",
+  "HybridTdn__PagesToInspect": "3",
+  "HybridTdn__RescueTimeoutMs": "8000",
+  "HybridTdn__MaxRetries": "1"
+}
+```
+
+| Campo | Tipo | Default | Descripcion |
+|-------|------|---------|-------------|
+| `RuleConfidenceThreshold` | double | `0.75` | Umbral para aceptar clasificacion por reglas sin escalar |
+| `DiConfidenceThreshold` | double | `0.85` | Umbral para aceptar resultado DI sin rescue |
+| `MaxCharactersPerWindow` | int | `8000` | Maximo de caracteres enviados al clasificador |
+| `PagesToInspect` | int | `3` | Numero de paginas a inspeccionar para la ventana |
+| `RescueTimeoutMs` | int | `8000` | Timeout del rescue LLM |
+| `MaxRetries` | int | `1` | Reintentos del rescue LLM |
+
+#### Configuracion `Extraction:InitialMarkdown` (solo DI Layout)
+
+La extraccion inicial de markdown previa a clasificacion se configura en servidor y admite exclusivamente:
+- `none`: desactivado
+- `di-layout`: usa `ExtraerMarkdownLayoutActivity` (Azure Document Intelligence Layout)
+
+`appsettings.json`:
+
+```json
+{
+  "Extraction": {
+    "InitialMarkdown": {
+      "Enabled": true,
+      "Provider": "di-layout"
+    }
+  }
+}
+```
+
+`local.settings.json` (seccion `Values`):
+
+```json
+{
+  "Extraction__InitialMarkdown__Enabled": "true",
+  "Extraction__InitialMarkdown__Provider": "di-layout"
+}
+```
+
+> Nota: la ruta `local-pdf` y cualquier fallback OCR local por `tesseract` se retiraron del flujo de Azure Functions para evitar dependencias de binarios locales en runtime cloud.
 
 #### Proveedor `azure-document-intelligence` (Extraccion)
 

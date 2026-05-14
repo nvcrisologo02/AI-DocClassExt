@@ -17,6 +17,9 @@ __blobstorage__/
 __queuestorage__/
 __azurite_db*__.json
 
+# Azurite local emulator
+.azurite/
+
 # Python
 __pycache__/
 *.py[cod]
