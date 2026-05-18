@@ -13,10 +13,15 @@ namespace DocumentIA.Functions.Services.Classification
     public class RuleBasedTdnClassifier
     {
         private readonly ILogger<RuleBasedTdnClassifier> _logger;
+        private readonly IReadOnlyList<TipologiaClassificationProfile> _profiles;
+        private const int ImmediateClassificationMaxCharsDefault = 600;
 
-        public RuleBasedTdnClassifier(ILogger<RuleBasedTdnClassifier> logger)
+        public RuleBasedTdnClassifier(
+            ILogger<RuleBasedTdnClassifier> logger,
+            ITipologiaClassificationProfileProvider? profileProvider = null)
         {
             _logger = logger;
+            _profiles = profileProvider?.GetProfiles() ?? Array.Empty<TipologiaClassificationProfile>();
         }
 
         /// <summary>
@@ -24,6 +29,237 @@ namespace DocumentIA.Functions.Services.Classification
         /// Devuelve un resultado con tipología detectada y confianza basada en scoring de reglas.
         /// </summary>
         public RuleBasedClassificationResult Classify(DocumentClassificationWindow window)
+        {
+            if (_profiles.Count == 0)
+            {
+                return ClassifyLegacy(window);
+            }
+
+            var textoNormalizado = NormalizeText(window.ExtractedText ?? string.Empty);
+
+            var evaluated = new List<ProfileScore>();
+            foreach (var profile in _profiles.OrderByDescending(profile => profile.Priority))
+            {
+                var maxChars = profile.ImmediateClassificationTriggers?.MaxCharsToScan > 0
+                    ? profile.ImmediateClassificationTriggers.MaxCharsToScan
+                    : ImmediateClassificationMaxCharsDefault;
+                var firstPageText = GetFirstPageText(textoNormalizado, maxChars);
+
+                if (TryEvaluateImmediateProfile(profile, firstPageText, out var immediateEvaluation))
+                {
+                    evaluated.Add(immediateEvaluation);
+                    continue;
+                }
+
+                var evaluation = EvaluateProfile(profile, textoNormalizado, firstPageText, window.TotalPaginas, window.CharsTextoNativo);
+                if (evaluation is not null)
+                {
+                    evaluated.Add(evaluation);
+                }
+            }
+
+            if (evaluated.Count == 0)
+            {
+                return new RuleBasedClassificationResult
+                {
+                    TipologiaDetectada = "Desconocido",
+                    Confianza = 0.0,
+                    Razon = "below_minimum_signal_score",
+                    ClasificacionMetodo = "indeterminate",
+                    RouteToReview = true,
+                    SeñalesEncontradas = new Dictionary<string, int>(),
+                    Score = new HeuristicScore()
+                };
+            }
+
+            var ordered = evaluated
+                .OrderByDescending(x => x.Score)
+                .ThenByDescending(x => x.Profile.Priority)
+                .ToList();
+
+            var best = ordered[0];
+            var secondScore = ordered.Count > 1 ? ordered[1].Score : 0.0;
+            var margin = best.Score - secondScore;
+            var routeToReview = margin < best.Profile.MinimumMarginOverSecond;
+
+            _logger.LogInformation(
+                "Clasificación por reglas v1.4 para {Documento}: tipologia={Tipologia}, confianza={Confianza}, score={Score}, margin={Margin}, metodo={Metodo}",
+                window.DocumentName,
+                best.Profile.Codigo,
+                best.Score,
+                best.Score,
+                margin,
+                best.ClasificacionMetodo);
+
+            return new RuleBasedClassificationResult
+            {
+                TipologiaDetectada = best.Profile.Codigo,
+                Confianza = best.Score,
+                Razon = best.Razon,
+                ClasificacionMetodo = best.ClasificacionMetodo,
+                TriggerActivado = best.TriggerActivado,
+                RouteToReview = routeToReview || best.RouteToReview,
+                Margin = margin,
+                SeñalesEncontradas = best.SeñalesDetectadas,
+                Score = best.HeuristicScore
+            };
+        }
+
+        private ProfileScore? EvaluateProfile(
+            TipologiaClassificationProfile profile,
+            string normalizedText,
+            string firstPageText,
+            int totalPaginas,
+            int charsTextoNativo)
+        {
+            var sinais = new Dictionary<string, int>();
+
+            if (IsVetoedByOutOfScope(profile, firstPageText, out var vetoSignals))
+            {
+                foreach (var item in vetoSignals)
+                {
+                    sinais[item.Key] = item.Value;
+                }
+
+                return null;
+            }
+
+            var strongHits = CountHits(normalizedText, profile.StrongSignals, sinais);
+            var positiveHits = CountHits(normalizedText, profile.PositiveSignals, sinais);
+            var negativeHits = CountHits(normalizedText, profile.NegativeSignals, sinais);
+            var outOfScopeHits = CountHits(normalizedText, profile.OutOfScopeSignals, sinais);
+
+            var rawScore = (strongHits * 1.0) + (positiveHits * 0.3) - (negativeHits * 0.8) - (outOfScopeHits * 2.0);
+            var denominator = Math.Max(profile.StrongSignals.Count + profile.PositiveSignals.Count, 1);
+            var normalizedScore = Math.Max(0.0, Math.Min(1.0, rawScore / denominator));
+            var metadataBonus = profile.MetadataBonus
+                .Where(rule => rule.Matches(totalPaginas, charsTextoNativo))
+                .Sum(rule => rule.Score);
+
+            var total = Math.Max(0.0, Math.Min(1.0, normalizedScore + metadataBonus));
+
+            if (total < profile.MinimumSignalScore)
+            {
+                return null;
+            }
+
+            return new ProfileScore
+            {
+                Profile = profile,
+                Score = total,
+                SeñalesDetectadas = sinais,
+                ClasificacionMetodo = "signalScoring",
+                Razon = "rule_based_match",
+                RouteToReview = false,
+                HeuristicScore = new HeuristicScore
+                {
+                    StrongSignalScore = strongHits,
+                    PositiveSignalScore = positiveHits,
+                    NegativeSignalScore = negativeHits + outOfScopeHits,
+                    TotalScore = total
+                }
+            };
+        }
+
+        private bool TryEvaluateImmediateProfile(
+            TipologiaClassificationProfile profile,
+            string firstPageText,
+            out ProfileScore evaluation)
+        {
+            evaluation = null!;
+
+            var triggerConfig = profile.ImmediateClassificationTriggers;
+            if (triggerConfig is null || !triggerConfig.Enabled)
+            {
+                return false;
+            }
+
+            if (triggerConfig.VetoedByOutOfScope && IsVetoedByOutOfScope(profile, firstPageText, out var vetoDetails))
+            {
+                return false;
+            }
+
+            foreach (var trigger in triggerConfig.Triggers)
+            {
+                if (firstPageText.Contains(trigger, StringComparison.Ordinal))
+                {
+                    var signals = new Dictionary<string, int>
+                    {
+                        [trigger] = 1
+                    };
+
+                    evaluation = new ProfileScore
+                    {
+                        Profile = profile,
+                        Score = Math.Max(0.0, Math.Min(1.0, triggerConfig.ResultScore)),
+                        SeñalesDetectadas = signals,
+                        ClasificacionMetodo = "immediateClassificationTrigger",
+                        TriggerActivado = trigger,
+                        Razon = "immediate_trigger",
+                        RouteToReview = false,
+                        HeuristicScore = new HeuristicScore
+                        {
+                            StrongSignalScore = 1,
+                            PositiveSignalScore = 0,
+                            NegativeSignalScore = 0,
+                            TotalScore = Math.Max(0.0, Math.Min(1.0, triggerConfig.ResultScore))
+                        }
+                    };
+
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsVetoedByOutOfScope(
+            TipologiaClassificationProfile profile,
+            string normalizedText,
+            out Dictionary<string, int> matchedSignals)
+        {
+            matchedSignals = new Dictionary<string, int>();
+
+            foreach (var signal in profile.OutOfScopeSignals)
+            {
+                if (normalizedText.Contains(signal, StringComparison.Ordinal))
+                {
+                    matchedSignals[signal] = 1;
+                }
+            }
+
+            return matchedSignals.Count > 0;
+        }
+
+        private static string GetFirstPageText(string normalizedText, int maxChars)
+        {
+            var effectiveMaxChars = maxChars > 0 ? maxChars : ImmediateClassificationMaxCharsDefault;
+            return normalizedText.Length > effectiveMaxChars
+                ? normalizedText[..effectiveMaxChars]
+                : normalizedText;
+        }
+
+        private string NormalizeText(string text)
+        {
+            return text.ToLowerInvariant();
+        }
+
+        private static int CountHits(string text, IEnumerable<string> signals, IDictionary<string, int> foundSignals)
+        {
+            var hits = 0;
+            foreach (var signal in signals)
+            {
+                if (text.Contains(signal, StringComparison.Ordinal))
+                {
+                    hits++;
+                    foundSignals[signal] = foundSignals.TryGetValue(signal, out var count) ? count + 1 : 1;
+                }
+            }
+
+            return hits;
+        }
+
+        private RuleBasedClassificationResult ClassifyLegacy(DocumentClassificationWindow window)
         {
             if (string.IsNullOrWhiteSpace(window.ExtractedText))
             {
@@ -38,13 +274,12 @@ namespace DocumentIA.Functions.Services.Classification
             }
 
             var textoNormalizado = NormalizeText(window.ExtractedText);
-            var score = CalculateScore(textoNormalizado, out var señalesDetectadas);
+            var score = CalculateLegacyScore(textoNormalizado, out var señalesDetectadas);
 
-            // Resolver tipología basada en score
-            var tipologia = ResolveTypologyFromScore(score, textoNormalizado);
+            var tipologia = ResolveLegacyTypologyFromScore(score, textoNormalizado);
 
             _logger.LogInformation(
-                "Clasificación por reglas para {Documento}: tipologia={Tipologia}, confianza={Confianza}, score={Score}",
+                "Clasificación por reglas legacy para {Documento}: tipologia={Tipologia}, confianza={Confianza}, score={Score}",
                 window.DocumentName,
                 tipologia,
                 score.TotalScore,
@@ -55,17 +290,14 @@ namespace DocumentIA.Functions.Services.Classification
                 TipologiaDetectada = tipologia,
                 Confianza = Math.Min(score.TotalScore, 1.0),
                 Razon = score.TotalScore >= 0.6 ? "rule_based_match" : "rule_based_low_confidence",
+                ClasificacionMetodo = "legacy",
+                RouteToReview = score.TotalScore < 0.6,
                 SeñalesEncontradas = señalesDetectadas,
                 Score = score
             };
         }
 
-        private string NormalizeText(string text)
-        {
-            return text.ToLowerInvariant();
-        }
-
-        private HeuristicScore CalculateScore(string texto, out Dictionary<string, int> señalesDetectadas)
+        private HeuristicScore CalculateLegacyScore(string texto, out Dictionary<string, int> señalesDetectadas)
         {
             señalesDetectadas = new Dictionary<string, int>();
             var score = new HeuristicScore();
@@ -120,7 +352,7 @@ namespace DocumentIA.Functions.Services.Classification
             return score;
         }
 
-        private string ResolveTypologyFromScore(HeuristicScore score, string texto)
+        private string ResolveLegacyTypologyFromScore(HeuristicScore score, string texto)
         {
             if (score.TotalScore >= 0.85)
             {
@@ -143,6 +375,18 @@ namespace DocumentIA.Functions.Services.Classification
 
             return "Desconocido";
         }
+
+        private sealed class ProfileScore
+        {
+            public required TipologiaClassificationProfile Profile { get; init; }
+            public required double Score { get; init; }
+            public required Dictionary<string, int> SeñalesDetectadas { get; init; }
+            public required HeuristicScore HeuristicScore { get; init; }
+            public string ClasificacionMetodo { get; init; } = string.Empty;
+            public string? TriggerActivado { get; init; }
+            public string Razon { get; init; } = string.Empty;
+            public bool RouteToReview { get; init; }
+        }
     }
 
     /// <summary>
@@ -153,6 +397,10 @@ namespace DocumentIA.Functions.Services.Classification
         public string? TipologiaDetectada { get; set; }
         public double Confianza { get; set; }
         public string? Razon { get; set; }
+        public string? ClasificacionMetodo { get; set; }
+        public string? TriggerActivado { get; set; }
+        public bool RouteToReview { get; set; }
+        public double Margin { get; set; }
         public Dictionary<string, int> SeñalesEncontradas { get; set; } = new();
         public HeuristicScore? Score { get; set; }
     }
