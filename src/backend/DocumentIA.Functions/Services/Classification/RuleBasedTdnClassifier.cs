@@ -181,7 +181,7 @@ namespace DocumentIA.Functions.Services.Classification
 
             foreach (var trigger in triggerConfig.Triggers)
             {
-                if (firstPageText.Contains(trigger, StringComparison.Ordinal))
+                if (firstPageText.Contains(trigger, StringComparison.OrdinalIgnoreCase))
                 {
                     var signals = new Dictionary<string, int>
                     {
