@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DocumentIA.Core.Models;
 using Microsoft.Extensions.Logging;
+using UglyToad.PdfPig;
 
 namespace DocumentIA.Functions.Services.Classification
 {
@@ -32,8 +33,11 @@ namespace DocumentIA.Functions.Services.Classification
             {
                 DocumentName = input.Entrada.Documento.Name,
                 PagesToInspect = pagesToInspect,
-                ExtractedText = ExtractTextContent(input.DatosNormalizados, maxCharacters),
+                ExtractedText = ExtractTextContent(input.DatosNormalizados, maxCharacters)
+                    ?? ExtractPdfTextContent(input.Entrada.Documento.Content.Base64, maxCharacters, pagesToInspect),
                 Tipologia = input.Entrada.Instrucciones?.Classification?.Model ?? "unknown",
+                TotalPaginas = input.TotalPaginas,
+                CharsTextoNativo = input.CharsTextoNativo,
                 Timestamp = DateTime.UtcNow
             };
 
@@ -77,6 +81,37 @@ namespace DocumentIA.Functions.Services.Classification
 
             return null;
         }
+
+        private string? ExtractPdfTextContent(string? documentoBase64, int maxChars, int pagesToInspect)
+        {
+            if (string.IsNullOrWhiteSpace(documentoBase64))
+            {
+                return null;
+            }
+
+            try
+            {
+                var pdfBytes = Convert.FromBase64String(documentoBase64);
+                using var document = PdfDocument.Open(pdfBytes);
+
+                var pages = Math.Max(1, pagesToInspect);
+                var text = string.Concat(
+                    Enumerable.Range(1, Math.Min(document.NumberOfPages, pages))
+                        .Select(pageNumber => document.GetPage(pageNumber).Text ?? string.Empty));
+
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    return null;
+                }
+
+                return text.Length > maxChars ? text.Substring(0, maxChars) : text;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "No se pudo extraer texto nativo del PDF para clasificación.");
+                return null;
+            }
+        }
     }
 
     /// <summary>
@@ -87,6 +122,8 @@ namespace DocumentIA.Functions.Services.Classification
         public string? DocumentName { get; set; }
         public string? ExtractedText { get; set; }
         public string? Tipologia { get; set; }
+        public int TotalPaginas { get; set; }
+        public int CharsTextoNativo { get; set; }
         public int PagesToInspect { get; set; }
         public DateTime Timestamp { get; set; }
     }

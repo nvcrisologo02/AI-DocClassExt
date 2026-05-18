@@ -38,7 +38,7 @@ La auditoria original se ejecuto en modo lectura. Este documento no aplica cambi
 | Suscripcion | Produccion Central | Default, enabled |
 | Resource Group | `SRBRGDOCSAIPROD` | Activo |
 | Function App | `srbappprodocai` | Running, Linux, SystemAssigned MI |
-| Admin Web App | `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | Running, Linux, SystemAssigned MI |
+| Admin Web App | `srbwebadminprodocai` | Running, Linux, SystemAssigned MI |
 | AssetResolver Web App | `srbwebpluginassetresolver` | Running, Linux, SystemAssigned MI |
 | Key Vault | `srbkvprodocai` | RBAC enabled, public access enabled |
 | SQL Server / DB | `srbsqlprodocai` / `DocumentIA` | Ready / Online, public network disabled |
@@ -199,7 +199,7 @@ Esta seccion responde especificamente a que ficheros de configuracion existen, c
 - `WEBSITE_VNET_ROUTE_ALL=1`.
 - Identidad: SystemAssigned `e700ab11-6478-4aa3-ad3c-b6b7a92279ab`.
 
-### Admin Web App `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai`
+### Admin Web App `srbwebadminprodocai`
 
 - `FunctionsAdminApi__BaseUrl=https://srbappprodocai.azurewebsites.net/api/`.
 - `FunctionsAdminApi__FunctionKey` configurada como literal sensible.
@@ -349,7 +349,7 @@ Rama: develop (last commit: 0808e5c)
 
 - `git grep AccountKey` en repo versionado: **sin resultados**
 - `git grep '"ApiKey":<valor_real>'` en fuentes: **sin resultados**
-- `local.settings.template.json`: todos los campos Azure con valor `""`. Unico no-vacio: `SqlConnectionString` con password Docker local estandar (`COMPLETAR_SQL_PASSWORD`) — no es secreto de produccion.
+- `local.settings.template.json`: todos los campos Azure con valor `""`. Unico no-vacio: `SqlConnectionString` con password Docker local estandar (`YourStrong@Passw0rd`) — no es secreto de produccion.
 - Seeds JSON (`src/backend/DocumentIA.Functions/config/**`): **16/16 OK** — sin secretos embebidos
 - Docs manuales: hallazgo en `docs/manuales/MANUAL_CONFIGURACION.md:289` — formato `DefaultEndpointsProtocol=https;...` con `...` — es documentacion, no valor real
 - **Excepcion documentada**: ApiKeys embebidas en tabla SQL `ModeloConfigs` (base de datos, fuera del scope del repo). Tracked en PBI 99275.
@@ -360,7 +360,7 @@ Script: `scripts/validate-azure-appsettings-contract.ps1`
 Resultado: **`Contrato de App Settings cumplido.`**
 
 - `srbappprodocai` (Functions): 26 settings validados (LiteralOrNonSecret + KeyVaultRef). Settings prohibidos: ausentes.
-- `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` (Admin): 2 settings validados.
+- `srbwebadminprodocai` (Admin): 2 settings validados.
 - `srbwebpluginassetresolver` (AssetResolver): 3 settings validados.
 - Ningun valor impreso en la validacion — solo nombres de setting y tipo de referencia.
 

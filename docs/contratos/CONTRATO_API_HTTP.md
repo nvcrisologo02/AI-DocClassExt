@@ -42,8 +42,6 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "expectedType": "",
     "skipDuplicateCheck": false,
     "forceReprocess": false,
-    "classificationOnly": false,
-    "executeIntegrarWhenClassificationOnly": null,
     "skipGDCUpload": null,
     "classification": {
       "provider": "auto",
@@ -66,8 +64,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "name": "nota_simple_finca_123.pdf",
     "objectIdGDC": null,
     "content": {
-      "base64": "<contenido-en-base64>",
-      "markdown": "# Markdown opcional aportado por cliente"
+      "base64": "<contenido-en-base64>"
     }
   },
   "trazabilidad": {
@@ -87,8 +84,6 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `expectedType` | string | Si se especifica, omite la clasificación IA y usa este valor como tipología. Ej: `"nota-simple"`. Vacío = clasificación automática. |
 | `skipDuplicateCheck` | bool | `true` = omitir la verificación de duplicados por SHA256. Default: `false`. |
 | `forceReprocess` | bool | `true` = aunque el documento sea duplicado, procesar igualmente (no reutilizar ejecución anterior). Default: `false`. |
-| `classificationOnly` | bool | `true` = ejecutar solo clasificación/resolución de tipología. Omite `Extraer`, `Prompt`, `Validar` y `ObtenerActivo` (marcadas como `Skipped` en seguimiento). Default: `false`. |
-| `executeIntegrarWhenClassificationOnly` | bool? | Solo aplica cuando `classificationOnly=true`. `null/false` = no ejecutar `Integrar`. `true` = ejecutar `Integrar` si hay `trazabilidad.idActivo`. |
 | `skipGDCUpload` | bool? | `null` = respetar la configuración de la tipología. `true` = no subir al GDC. `false` = forzar subida. |
 | `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `mock` |
 | `classification.model` | string | Reservado. Usar `"auto"`. El model key se resuelve desde la configuración de la tipología. |
@@ -131,7 +126,6 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 | `name` | string | Nombre del fichero (con extensión). Recomendado; si llega vacío con `objectIdGDC`, se intenta completar desde metadatos de GDC. |
 | `objectIdGDC` | string? | ObjectId del documento ya archivado en GDC. Si se informa, no debe enviarse `content.base64`. |
 | `content.base64` | string | Contenido del documento codificado en Base64. Requerido cuando no se informa `objectIdGDC`. |
-| `content.markdown` | string? | Markdown opcional preprocesado por el cliente. Si se informa y no está vacío, el orquestador lo prioriza y evita la extracción inicial de markdown. |
 
 **`trazabilidad`**
 
@@ -146,8 +140,6 @@ Reglas de validación de entrada:
 - `documento.objectIdGDC` y `documento.content.base64` son mutuamente excluyentes.
 - Debe enviarse exactamente una fuente de documento.
 - Si se usa `documento.objectIdGDC`, el backend fuerza `instrucciones.skipGDCUpload = true`.
-- Si se envía `documento.content.markdown` y supera los 2.000.000 caracteres, el backend lo **trunca automáticamente** al máximo permitido (no rechaza la petición).
-- `classificationOnly=true` es incompatible con `expectedType` informado. El trigger HTTP devuelve `400`.
 
 ---
 
@@ -171,7 +163,7 @@ Reglas de validación de entrada:
 
 | Código | Causa |
 |---|---|
-| `400 Bad Request` | Body inválido, `ContratoEntrada` no deserializable, `instrucciones.prompt` fuera de rango, o violación de reglas de entrada (`objectIdGDC` + `base64` simultáneos / ninguno informado, `classificationOnly` + `expectedType`). |
+| `400 Bad Request` | Body inválido, `ContratoEntrada` no deserializable, `instrucciones.prompt` fuera de rango, o violación de reglas de entrada (`objectIdGDC` + `base64` simultáneos / ninguno informado). |
 | `401 Unauthorized` | Function Key ausente o inválida. |
 | `500 Internal Server Error` | Error inesperado en el trigger. |
 
@@ -368,8 +360,6 @@ $body = @{
         expectedType      = ""
         skipDuplicateCheck = $false
         forceReprocess    = $false
-      classificationOnly = $false
-      executeIntegrarWhenClassificationOnly = $null
         skipGDCUpload     = $null
         classification    = @{ provider = "auto"; model = "auto" }
         extraction        = @{ provider = "auto"; model = "auto" }
@@ -411,10 +401,9 @@ $status.output.resultado
 - El documento puede enviarse en Base64 (RFC 4648, sin saltos de línea) o por referencia `objectIdGDC`.
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
-- Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización exige compatibilidad por `hash + classificationOnly`.
+- Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. Si coincide, se devuelve la ejecución previa sin reprocesar (ver [MANUAL_DEDUPLICACION.md](MANUAL_DEDUPLICACION.md)).
 - Si `skipGDCUpload=true` (o se fuerza automáticamente por entrada `objectIdGDC`), el paso GDC finaliza como `Skipped` y se reporta como exitoso (`detalleEjecucion.gdc.exitoso=true`).
 - Si se envía `instrucciones.prompt`, la validación ocurre en el trigger HTTP (respuesta `400` inmediata si inválido). No es necesario esperar al resultado de la orquestación para detectar errores de prompt.
-- En `classificationOnly=true`, `Integrar` solo se ejecuta con `executeIntegrarWhenClassificationOnly=true` y `trazabilidad.idActivo` informado.
 
 ### Endpoints externos GDC consumidos
 
@@ -426,7 +415,7 @@ El backend consume un único endpoint configurable `GDC:Endpoint` de SINTWS `IDo
 
 ---
 
-## 9. Endpoints COMPLETAR_GDC_HTTP_BASIC_USERNAME de configuración dinámica
+## 9. Endpoints admin de configuración dinámica
 
 Estos endpoints gestionan configuración de tipologías, modelos y plugins en base de datos. Todos son `AuthorizationLevel.Function`.
 

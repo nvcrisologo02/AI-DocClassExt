@@ -17,7 +17,7 @@ $keyVaultName    = "srbkvprodocai"
 $assetResolverBaseUrl = "https://srbwebpluginassetresolver.azurewebsites.net/"
 
 # Obtenido via: az monitor app-insights component show --resource-group SRBRGDOCSAIPROD --app srbappiprodocai --query connectionString -o tsv
-$appInsightsConnectionString = "COMPLETAR_APPLICATIONINSIGHTS_CONNECTION_STRING"
+$appInsightsConnectionString = "InstrumentationKey=c57c6166-c5ac-4584-a4d6-13fbb37860c4;IngestionEndpoint=https://westeurope-5.in.applicationinsights.azure.com/;LiveEndpoint=https://westeurope.livediagnostics.monitor.azure.com/;ApplicationId=19eeb2fb-8544-41c5-931a-b0983a26e92e"
 
 # =============================================================================
 # NO modificar a partir de aqui salvo cambio de entorno

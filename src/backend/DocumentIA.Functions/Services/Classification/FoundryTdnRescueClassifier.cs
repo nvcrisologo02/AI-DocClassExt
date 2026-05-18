@@ -13,10 +13,12 @@ namespace DocumentIA.Functions.Services.Classification
     public class FoundryTdnRescueClassifier
     {
         private readonly ILogger<FoundryTdnRescueClassifier> _logger;
+        private readonly GptClasificarDataProvider _gptProvider;
 
-        public FoundryTdnRescueClassifier(ILogger<FoundryTdnRescueClassifier> logger)
+        public FoundryTdnRescueClassifier(ILogger<FoundryTdnRescueClassifier> logger, GptClasificarDataProvider gptProvider)
         {
             _logger = logger;
+            _gptProvider = gptProvider;
         }
 
         /// <summary>
@@ -42,31 +44,50 @@ namespace DocumentIA.Functions.Services.Classification
                     try
                     {
                         _logger.LogInformation(
-                            "Rescate Foundry para {Documento}, intento {Attempt}/{MaxRetries}",
+                            "Rescate Foundry (GPT) para {Documento}, intento {Attempt}/{MaxRetries}",
                             window.DocumentName,
                             attempt + 1,
                             maxRetries + 1);
 
-                        // Simular llamada a LLM (en producción sería Azure OpenAI vía SDK Foundry)
-                        var tipoResuelto = await SimulateLlmClassificationAsync(window, cts.Token);
+                        // Construir input para GptClasificarDataProvider
+                        var input = new ClasificacionInput
+                        {
+                            Entrada = new ContratoEntrada
+                            {
+                                Documento = new Documento
+                                {
+                                    Name = window.DocumentName ?? string.Empty,
+                                    Content = new ContenidoDocumento { Base64 = string.Empty }
+                                },
+                                Instrucciones = new Instrucciones()
+                            },
+                            DatosNormalizados = new System.Collections.Generic.Dictionary<string, object>
+                            {
+                                { "Markdown", window.ExtractedText ?? string.Empty }
+                            },
+                            TotalPaginas = window.TotalPaginas,
+                            CharsTextoNativo = window.CharsTextoNativo
+                        };
 
-                        result.TipologiaDetectada = tipoResuelto;
-                        result.Confianza = 0.65; // Confianza base para rescate LLM
+                        var gptResult = await _gptProvider.ClasificarAsync(input, cts.Token);
+
+                        result.TipologiaDetectada = gptResult.TipologiaDetectada;
+                        result.Confianza = gptResult.Confianza;
                         result.Razon = "foundry_llm_classification";
                         result.ExitoDespuesIntento = attempt;
 
                         _logger.LogInformation(
-                            "Clasificación de rescate exitosa para {Documento}: {Tipologia}, confianza={Confianza}",
+                            "Clasificación de rescate GPT exitosa para {Documento}: {Tipologia}, confianza={Confianza}",
                             window.DocumentName,
-                            tipoResuelto,
-                            0.65);
+                            gptResult.TipologiaDetectada,
+                            gptResult.Confianza);
 
                         return result;
                     }
                     catch (OperationCanceledException)
                     {
                         result.Razon = "timeout_exceeded";
-                        _logger.LogWarning("Timeout en rescate LLM para {Documento} después de {TimeoutMs}ms",
+                        _logger.LogWarning("Timeout en rescate GPT para {Documento} después de {TimeoutMs}ms",
                             window.DocumentName, timeoutMs);
                         break;
                     }
@@ -78,7 +99,7 @@ namespace DocumentIA.Functions.Services.Classification
                         {
                             int backoffMs = 500 * (attempt + 1); // 500ms, 1000ms, ...
                             _logger.LogWarning(
-                                "Error en rescate LLM (intento {Attempt}): {Error}. Reintentando en {BackoffMs}ms",
+                                "Error en rescate GPT (intento {Attempt}): {Error}. Reintentando en {BackoffMs}ms",
                                 attempt + 1, ex.Message, backoffMs);
 
                             await Task.Delay(backoffMs, cts.Token);
@@ -86,7 +107,7 @@ namespace DocumentIA.Functions.Services.Classification
                         else
                         {
                             result.Razon = "max_retries_exceeded";
-                            _logger.LogError("Rescate LLM falló después de {MaxRetries} reintentos: {Error}",
+                            _logger.LogError("Rescate GPT falló después de {MaxRetries} reintentos: {Error}",
                                 maxRetries + 1, ex.Message);
                         }
                     }
@@ -102,23 +123,7 @@ namespace DocumentIA.Functions.Services.Classification
             return result;
         }
 
-        private async Task<string> SimulateLlmClassificationAsync(DocumentClassificationWindow window, CancellationToken cancellationToken)
-        {
-            // En producción, esto llamaría a Azure OpenAI Foundry SDK
-            // Por ahora simulamos una clasificación simple basada en palabras clave
-            await Task.Delay(100, cancellationToken); // Simular latencia de red
-
-            var texto = window.ExtractedText?.ToLowerInvariant() ?? string.Empty;
-
-            if (texto.Contains("compraventa"))
-                return "escr.compraventa";
-            if (texto.Contains("hipoteca"))
-                return "escr.prestamo-originario";
-            if (texto.Contains("cancelacion"))
-                return "escr.cancelacion-hipotecaria";
-
-            return "escr.titularidad.otro";
-        }
+        // Eliminado: SimulateLlmClassificationAsync. Ahora delega en GptClasificarDataProvider.
     }
 
     /// <summary>

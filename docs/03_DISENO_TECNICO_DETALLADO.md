@@ -101,6 +101,31 @@ Cuando la entrada viene por referencia GDC (`objectIdGDC`), antes del pipeline e
 
 En este modo se fuerza `SkipGDCUpload=true` para evitar re-subida del mismo documento origen.
 
+### Actualizacion PRD v2.1: Paso 2.7 (Preparacion para clasificacion)
+
+Se incorpora una preparacion explicita del PDF para clasificacion entre `SubirBlobActivity` y `ClasificarActivity`.
+
+Implementacion:
+
+- Activity: `PrepararDocumentoClasificacionActivity`
+- Servicio: `PdfRecorteService`
+- Contrato: `PrepararDocumentoClasificacionInput` / `PrepararDocumentoClasificacionResultado`
+
+Comportamiento:
+
+1. Si `ClassificationPreparation.Enabled=true`, se calcula `MaxPaginas` efectivo con precedencia `tipologia > familia > default`.
+2. Se recorta el PDF para clasificacion cuando el total de paginas excede `MaxPaginas`.
+3. Se propagan metadatos a clasificacion mediante `ClasificacionInput`:
+  - `DocumentoBase64Override`
+  - `CharsTextoNativo`
+  - `TotalPaginas`
+4. Si la preparacion falla, el orquestador continua con documento completo (fallback seguro).
+
+Alcance:
+
+- Impacta solo la etapa de clasificacion.
+- `ExtraerActivity` y `SubirGDCActivity` siguen usando el documento completo.
+
 ### Rama ClassificationOnly (nuevo)
 
 Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTipologia` se aplica una rama reducida:
@@ -109,6 +134,14 @@ Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTip
 - `Integrar` solo se ejecuta si `instrucciones.executeIntegrarWhenClassificationOnly=true` y existe `trazabilidad.idActivo`.
 - `SubirGDC` mantiene la prioridad de `SkipGDCUpload` y requiere `idActivo` resuelto/disponible.
 - `Persistir` siempre se ejecuta.
+
+Trazas operativas expuestas en salida:
+
+- `detalleEjecucion.classificationOnly`: confirma si la ejecución quedó en rama reducida.
+- `detalleEjecucion.recorteAplicado` y `detalleEjecucion.paginasIncluidas`: auditan el recorte real usado para clasificación.
+- `detalleEjecucion.markdownGenerado` y `detalleEjecucion.origenMarkdown`: indican si se generó markdown y en qué etapa quedó fijado.
+- `detalleEjecucion.modeloLLMUsado`: refleja el modelo LLM efectivo cuando hubo fallback/prompt.
+- `detalleEjecucion.motivoErrorTipologia`: registra el motivo cuando la tipología no pudo resolverse.
 
 Restricción de entrada:
 

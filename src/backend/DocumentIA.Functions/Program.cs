@@ -96,6 +96,7 @@ var host = new HostBuilder()
 
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
+        services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
@@ -108,19 +109,25 @@ var host = new HostBuilder()
 
         services.AddSingleton<MockClasificarDataProvider>();
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
-        services.AddSingleton<AzureDocumentIntelligenceLayoutMarkdownProvider>();
+        services.AddSingleton<ILayoutMarkdownProvider, AzureDocumentIntelligenceLayoutMarkdownProvider>();
+        services.AddSingleton<PdfRecorteService>();
         services.AddSingleton<ClassificationTipologiaPromptBuilder>();
         services.AddSingleton<GptClasificarDataProvider>();
 
         // === HybridTdn Classification Provider ===
         services.Configure<HybridTdnOptions>(context.Configuration.GetSection("HybridTdn"));
+        services.AddSingleton<ITipologiaClassificationProfileProvider, DbTipologiaClassificationProfileProvider>();
         services.AddSingleton<DocumentWindowExtractor>();
         services.AddSingleton<RuleBasedTdnClassifier>();
-        services.AddSingleton<FoundryTdnRescueClassifier>();
+        services.AddSingleton<FoundryTdnRescueClassifier>(sp =>
+            new FoundryTdnRescueClassifier(
+                sp.GetRequiredService<ILogger<FoundryTdnRescueClassifier>>(),
+                sp.GetRequiredService<GptClasificarDataProvider>()));
         services.AddSingleton<HybridTdnClasificarProvider>(sp =>
             new HybridTdnClasificarProvider(
                 sp.GetRequiredService<ILogger<HybridTdnClasificarProvider>>(),
                 sp.GetRequiredService<AzureDocumentIntelligenceClasificarProvider>(),
+                sp.GetRequiredService<ILayoutMarkdownProvider>(),
                 sp.GetRequiredService<DocumentWindowExtractor>(),
                 sp.GetRequiredService<RuleBasedTdnClassifier>(),
                 sp.GetRequiredService<FoundryTdnRescueClassifier>(),

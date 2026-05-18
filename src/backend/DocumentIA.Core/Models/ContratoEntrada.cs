@@ -10,18 +10,11 @@ public class ContratoEntrada
 public class Instrucciones
 {
     public string ExpectedType { get; set; } = string.Empty;
+    public bool ClassificationOnly { get; set; }
+    public bool? ExecuteIntegrarWhenClassificationOnly { get; set; }
+    public int MaxPagesForClassificationOnly { get; set; }
     public bool SkipDuplicateCheck { get; set; }
     public bool ForceReprocess { get; set; }
-    /// <summary>
-    /// Si true, se ejecuta solo clasificación y se omiten extracción/validación/asset resolver.
-    /// Incompatible con ExpectedType.
-    /// </summary>
-    public bool ClassificationOnly { get; set; }
-    /// <summary>
-    /// Override para ejecutar Integrar cuando ClassificationOnly=true.
-    /// null = comportamiento por defecto (false).
-    /// </summary>
-    public bool? ExecuteIntegrarWhenClassificationOnly { get; set; }
     // Controla si se sube el documento al GDC. Si no se especifica (null), se usa el valor por defecto
     // configurado en la tipología detectada (tipologiaConfig.SkipGDCUpload).
     // true = omitir subida; false = forzar subida; null = respetar config de tipología.
@@ -115,11 +108,6 @@ public class Documento
 public class ContenidoDocumento
 {
     public string Base64 { get; set; } = string.Empty;
-    /// <summary>
-    /// Markdown opcional aportado por el cliente (OCR externo/preprocesado).
-    /// Si se informa, el orquestador lo prioriza para clasificación/extracción y evita la extracción inicial de markdown.
-    /// </summary>
-    public string? Markdown { get; set; }
 }
 
 public class Trazabilidad
@@ -129,10 +117,4 @@ public class Trazabilidad
     public string? IdActivo { get; set; }
     /// <summary>W3C TraceId capturado en el trigger HTTP (operation_Id de App Insights). Propagado al output para facilitar correlación en Insights.</summary>
     public string? OperationId { get; set; }
-}
-
-public class ObtenerUltimaEjecucionDuplicadoInput
-{
-    public string SHA256 { get; set; } = string.Empty;
-    public bool ClassificationOnly { get; set; }
 }

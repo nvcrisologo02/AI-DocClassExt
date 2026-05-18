@@ -229,6 +229,36 @@ En cada capa (instrucciones/tipologia), el umbral legado se usa solo cuando el e
 
 ---
 
+## 5.2.1 Actualizacion PRD v2.1 (2026-05-18) — Preparacion de clasificacion
+
+Se introduce una preparación previa para clasificación (paso 2.7) configurable por `appsettings`.
+
+Ejemplo:
+
+```json
+"ClassificationPreparation": {
+  "Enabled": true,
+  "MaxPaginasClasificacionDefault": 3,
+  "OverridesPorFamilia": {
+    "sere": 5
+  },
+  "OverridesPorTipologia": {}
+}
+```
+
+Precedencia para `MaxPaginasClasificacion`:
+
+1. `OverridesPorTipologia[tipologia]`
+2. `OverridesPorFamilia[familia]`
+3. `MaxPaginasClasificacionDefault`
+
+Notas:
+
+- Si la preparación falla (PDF cifrado/malformado), el flujo continúa usando documento completo para clasificación.
+- El recorte afecta clasificación y markdown de apoyo de clasificación, no extracción funcional ni GDC.
+
+---
+
 ## 5.3 Contrato de Salida Detallado
 
 ### ContratoSalida (output en statusQueryUri cuando runtimeStatus = Completed)
@@ -1082,10 +1112,10 @@ R: Los campos solicitados (`camposSolicitados`) no existen como columnas en `DM_
 
 ## 5.9 Aplicacion de Administracion (Admin Blazor)
 
-La aplicacion de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistracion `DocumentIA.Admin` es una web Blazor Server accesible en produccion en la URL:
+La aplicacion de administracion `DocumentIA.Admin` es una web Blazor Server accesible en produccion en la URL:
 
 ```
-https://srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai.azurewebsites.net
+https://srbwebadminprodocai.azurewebsites.net
 ```
 
 En desarrollo local se levanta con:

@@ -28,6 +28,22 @@
         border-left: 3px solid #dee2e6;
         padding-left: 0.75rem;
     }
+    .filter-strip {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.5rem;
+        padding: 0.75rem;
+    }
+    .activity-pill {
+        font-size: 0.72rem;
+        border: 1px solid #dee2e6;
+        border-radius: 999px;
+        padding: 0.1rem 0.45rem;
+        background: #fff;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+    }
 </style>
 
 <div class="container-fluid mt-4">
@@ -72,6 +88,45 @@
             <button type="button" class="btn-close" @onclick="() => _errorMessage = null"></button>
         </div>
     }
+
+    <div class="filter-strip mb-4">
+        <div class="row g-2 align-items-end">
+            <div class="col-12 col-md-3 col-lg-2">
+                <label class="form-label form-label-sm text-muted mb-1">Tipo de flujo</label>
+                <select class="form-select form-select-sm" @bind="_flowFilter">
+                    <option value="all">Todos</option>
+                    <option value="classification-only">Solo clasificación</option>
+                    <option value="full">Completo</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label class="form-label form-label-sm text-muted mb-1">Actividad</label>
+                <select class="form-select form-select-sm" @bind="_activityFilter">
+                    <option value="">Todas</option>
+                    @foreach (var activityName in _activityOptions)
+                    {
+                        <option value="@activityName">@activityName</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-3 col-lg-2">
+                <label class="form-label form-label-sm text-muted mb-1">Estado actividad</label>
+                <select class="form-select form-select-sm" @bind="_activityStateFilter">
+                    <option value="">Todos</option>
+                    @foreach (var activityState in _activityStateOptions)
+                    {
+                        <option value="@activityState">@activityState</option>
+                    }
+                </select>
+            </div>
+            <div class="col-12 col-md-2 col-lg-2">
+                <button class="btn btn-outline-secondary btn-sm w-100" @onclick="ClearFilters">Limpiar filtros</button>
+            </div>
+            <div class="col-12 col-lg-3 text-lg-end small text-muted">
+                Mostrando @_filteredEjecuciones.Count de @_ejecuciones.Count ejecuciones cargadas
+            </div>
+        </div>
+    </div>
 
     <div class="card shadow-sm mb-4">
         <div class="card-body py-3">
@@ -127,13 +182,13 @@
     </div>
 
     <!-- Tarjetas de resumen -->
-    @if (_ejecuciones.Count > 0)
+    @if (_filteredEjecuciones.Count > 0)
     {
         <div class="row g-3 mb-4">
             <div class="col-6 col-md-3">
                 <div class="card text-center border-0 shadow-sm">
                     <div class="card-body py-3">
-                        <div class="h3 mb-0">@_ejecuciones.Count</div>
+                        <div class="h3 mb-0">@_filteredEjecuciones.Count</div>
                         <small class="text-muted">Ejecuciones</small>
                     </div>
                 </div>
@@ -409,9 +464,9 @@
             </div>
         </div>
     }
-    else if (_ejecuciones.Count == 0)
+    else if (_filteredEjecuciones.Count == 0)
     {
-        <div class="alert alert-info">No hay ejecuciones registradas.</div>
+        <div class="alert alert-info">No hay ejecuciones para los filtros aplicados.</div>
     }
     else
     {
@@ -425,6 +480,7 @@
                                 <th>Fecha (UTC+1)</th>
                                 <th>Documento</th>
                                 <th>Tipología</th>
+                                <th>Flujo</th>
                                 <th>Estado</th>
                                 <th class="text-end">Confianza</th>
                                 <th class="text-end">Duración E2E</th>
@@ -433,7 +489,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach (var e in _ejecuciones)
+                            @foreach (var e in _filteredEjecuciones)
                             {
                                 bool expanded = _expanded.Contains(e.Id);
                                 <tr class="@(expanded ? "table-active" : "")" style="cursor:pointer" @onclick="async () => await ToggleExpand(e.Id)">
@@ -441,6 +497,9 @@
                                     <td class="text-nowrap small">@ToSpainTime(e.FechaEjecucion).ToString("dd/MM/yyyy HH:mm:ss")</td>
                                     <td class="small text-truncate" style="max-width:150px" title="@e.NombreDocumento">@(e.NombreDocumento ?? "—")</td>
                                     <td class="small">@(e.Tipologia ?? "—")</td>
+                                    <td class="small">
+                                        <span class="badge @(e.ClassificationOnly ? "bg-primary" : "bg-secondary")">@e.TipoFlujo</span>
+                                    </td>
                                     <td>
                                         <span class="badge @EstadoBadgeClass(e.EstadoFinal)">@e.EstadoFinal</span>
                                     </td>
@@ -466,7 +525,7 @@
                                 @if (expanded)
                                 {
                                     <tr class="table-active">
-                                        <td colspan="9" class="p-3">
+                                        <td colspan="10" class="p-3">
                                             @if (_loadingDetails.Contains(e.Id))
                                             {
                                                 <div class="d-flex align-items-center gap-2 py-2 text-muted small">
@@ -525,6 +584,7 @@
                                                             @if (det.Resultado != null)
                                                             {
                                                                 <div class="mb-2 d-flex flex-wrap gap-1">
+                                                                    <span class="badge @(det.ClassificationOnly ? "bg-primary" : "bg-secondary")">@(det.ClassificationOnly ? "Solo clasificación" : "Completo")</span>
                                                                     <span class="badge @EstadoBadgeClass(det.Resultado.Estado)">@det.Resultado.Estado</span>
                                                                     @if (!string.IsNullOrEmpty(det.Resultado.EstadoCalidad))
                                                                     {
@@ -641,7 +701,7 @@
                                                             }
                                                             else
                                                             {
-                                                                <span class="text-muted small">Sin campos extraídos</span>
+                                                                <span class="text-muted small">@(det.ClassificationOnly ? "Sin extracción por flujo de solo clasificación" : "Sin campos extraídos")</span>
                                                             }
                                                         </div>
 
@@ -787,11 +847,35 @@
     private bool _dashboardVisible = true;
     private bool _loadingDashboard = false;
     private int _dashboardDias = 30;
+    private string _flowFilter = "all";
+    private string _activityFilter = string.Empty;
+    private string _activityStateFilter = string.Empty;
 
-    private int _errores => _ejecuciones.Count(e => e.EstadoFinal is "Error" or "Fallido");
-    private int _mediaDuracion => _ejecuciones.Count > 0 ? (int)_ejecuciones.Average(e => e.DuracionTotalMs) : 0;
-    private int _pctFallback => _ejecuciones.Count > 0
-        ? (int)Math.Round(100.0 * _ejecuciones.Count(e => e.UseFallbackLLM) / _ejecuciones.Count)
+    private List<EjecucionResumenDto> _filteredEjecuciones => _ejecuciones
+        .Where(MatchesFlowFilter)
+        .Where(MatchesActivityFilter)
+        .ToList();
+
+    private List<string> _activityOptions => _ejecuciones
+        .SelectMany(e => e.Actividades)
+        .Select(a => a.Nombre)
+        .Where(a => !string.IsNullOrWhiteSpace(a))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(a => a)
+        .ToList();
+
+    private List<string> _activityStateOptions => _ejecuciones
+        .SelectMany(e => e.Actividades)
+        .Select(a => a.Estado)
+        .Where(a => !string.IsNullOrWhiteSpace(a))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .OrderBy(a => a)
+        .ToList();
+
+    private int _errores => _filteredEjecuciones.Count(e => e.EstadoFinal is "Error" or "Fallido");
+    private int _mediaDuracion => _filteredEjecuciones.Count > 0 ? (int)_filteredEjecuciones.Average(e => e.DuracionTotalMs) : 0;
+    private int _pctFallback => _filteredEjecuciones.Count > 0
+        ? (int)Math.Round(100.0 * _filteredEjecuciones.Count(e => e.UseFallbackLLM) / _filteredEjecuciones.Count)
         : 0;
 
     private static readonly TimeZoneInfo _spainTz =
@@ -916,6 +1000,32 @@
     }
 
     public void Dispose() => StopTimer();
+
+    private void ClearFilters()
+    {
+        _flowFilter = "all";
+        _activityFilter = string.Empty;
+        _activityStateFilter = string.Empty;
+    }
+
+    private bool MatchesFlowFilter(EjecucionResumenDto ejecucion) => _flowFilter switch
+    {
+        "classification-only" => ejecucion.ClassificationOnly,
+        "full" => !ejecucion.ClassificationOnly,
+        _ => true
+    };
+
+    private bool MatchesActivityFilter(EjecucionResumenDto ejecucion)
+    {
+        if (string.IsNullOrWhiteSpace(_activityFilter) && string.IsNullOrWhiteSpace(_activityStateFilter))
+        {
+            return true;
+        }
+
+        return ejecucion.Actividades.Any(activity =>
+            (string.IsNullOrWhiteSpace(_activityFilter) || string.Equals(activity.Nombre, _activityFilter, StringComparison.OrdinalIgnoreCase)) &&
+            (string.IsNullOrWhiteSpace(_activityStateFilter) || string.Equals(activity.Estado, _activityStateFilter, StringComparison.OrdinalIgnoreCase)));
+    }
 
     private static DateTime ToSpainTime(DateTime utc) =>
         TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), _spainTz);

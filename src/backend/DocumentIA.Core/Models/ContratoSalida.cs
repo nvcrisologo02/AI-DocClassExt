@@ -25,13 +25,8 @@ public class Identificacion
     public string TipologiaVersion { get; set; } = string.Empty;
     public DateTime FechaProceso { get; set; } = DateTime.UtcNow;
     public int Paginas { get; set; }
-    
-    // === Clasificación jerárquica TDN ===
-    /// <summary>Primer nivel de tipología (familia).</summary>
     public string? Tdn1 { get; set; }
-    /// <summary>Segundo nivel de tipología (subtipo).</summary>
     public string? Tdn2 { get; set; }
-    /// <summary>Matrícula de la propiedad si aplica.</summary>
     public string? Matricula { get; set; }
 }
 
@@ -54,7 +49,6 @@ public class DetalleEjecucion
     public string? InstanceId { get; set; }
     /// <summary>operation_Id de Application Insights (W3C TraceId). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
     public string? OperationId { get; set; }
-    /// <summary>Indica si la ejecución se procesó en modo solo clasificación.</summary>
     public bool ClassificationOnly { get; set; }
     public string RunTipologia { get; set; } = string.Empty;
     public ResultadoClasificacion Clasificacion { get; set; } = new();
@@ -70,6 +64,20 @@ public class DetalleEjecucion
     public SeguimientoOrquestacion Seguimiento { get; set; } = new();
     /// <summary>Información de ejecución del prompt libre (cuando la tipología lo tiene habilitado).</summary>
     public ResultadoPromptEjecucion? Prompt { get; set; }
+
+    // NUEVO: Trazabilidad de recorte, markdown y modelo LLM
+    /// <summary>Indica si se aplicó recorte de páginas para clasificación.</summary>
+    public bool RecorteAplicado { get; set; }
+    /// <summary>Número de páginas incluidas tras recorte (si aplica).</summary>
+    public int PaginasIncluidas { get; set; }
+    /// <summary>Indica si se generó markdown en algún paso del flujo.</summary>
+    public bool MarkdownGenerado { get; set; }
+    /// <summary>Origen del markdown generado ("Clasificacion", "Extraccion", "Fallback", etc.).</summary>
+    public string? OrigenMarkdown { get; set; }
+    /// <summary>Modelo LLM usado en clasificación o prompt (si aplica).</summary>
+    public string? ModeloLLMUsado { get; set; }
+    /// <summary>Motivo de error en la resolución de tipología (si aplica).</summary>
+    public string? MotivoErrorTipologia { get; set; }
 }
 
 public class ResultadoPromptEjecucion
@@ -112,7 +120,7 @@ public class ResultadoClasificacion
     public double ConfianzaDI { get; set; }
     /// <summary>Confianza reportada por GPT fallback (0 si no se activó).</summary>
     public double ConfianzaGPT { get; set; }
-    /// <summary>Proveedor que produjo la clasificación final: "DocumentIntelligence" | "GPT4oMini" | "HybridTDN" | "RuleBasedTDN" | "FoundryRescue".</summary>
+    /// <summary>Proveedor que produjo la clasificación final: "DocumentIntelligence" | "GPT4oMini".</summary>
     public string ProveedorClasif { get; set; } = string.Empty;
     public bool FallbackLLM { get; set; }
     public string? FallbackRazon { get; set; }
@@ -121,23 +129,9 @@ public class ResultadoClasificacion
 
     /// <summary>Texto extraído por DI durante la clasificación. El orquestador lo usa para propagar a DatosNormalizados["Markdown"] y luego lo limpia antes de incluirlo en la respuesta.</summary>
     public string? ContentExtraido { get; set; }
-
-    // === Campos jerárquicos TDN ===
-    /// <summary>Primer nivel de la clasificación jerárquica (familia: DOCN, ESCR, SERE, etc.).</summary>
-    public string? Tdn1 { get; set; }
-    /// <summary>Segundo nivel de la clasificación jerárquica (subtipo dentro de la familia).</summary>
-    public string? Tdn2 { get; set; }
-    /// <summary>Matrícula de la propiedad asociada, si aplica.</summary>
-    public string? Matricula { get; set; }
-
-    // === Trazabilidad y auditoría ===
-    /// <summary>URI o referencia a la evidencia almacenada (ej: blob path en Asset Resolver).</summary>
     public string? EvidenceUri { get; set; }
-    /// <summary>Versión del clasificador usado en HybridTDN (para rastreabilidad de cambios en reglas).</summary>
     public string? ClassifierVersion { get; set; }
-    /// <summary>Número de páginas procesadas en la clasificación (para auditoría y optimización de costos).</summary>
-    public int PagesProcessed { get; set; } = 0;
-    /// <summary>Clasificador específico usado en esta ejecución (RuleBasedTDN, DocumentIntelligence, FoundryRescue, etc.).</summary>
+    public int PagesProcessed { get; set; }
     public string? Clasificador { get; set; }
 }
 

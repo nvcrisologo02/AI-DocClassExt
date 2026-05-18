@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Threading.Tasks;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Services;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.Extensions.Logging;
@@ -20,6 +22,7 @@ namespace DocumentIA.Functions.Services.Classification
     {
         private readonly ILogger<HybridTdnClasificarProvider> _logger;
         private readonly IClasificarDataProvider _diProvider;
+        private readonly ILayoutMarkdownProvider _layoutMarkdownProvider;
         private readonly DocumentWindowExtractor _windowExtractor;
         private readonly RuleBasedTdnClassifier _ruleClassifier;
         private readonly FoundryTdnRescueClassifier _rescueClassifier;
@@ -29,6 +32,7 @@ namespace DocumentIA.Functions.Services.Classification
         public HybridTdnClasificarProvider(
             ILogger<HybridTdnClasificarProvider> logger,
             IClasificarDataProvider diProvider,
+            ILayoutMarkdownProvider layoutMarkdownProvider,
             DocumentWindowExtractor windowExtractor,
             RuleBasedTdnClassifier ruleClassifier,
             FoundryTdnRescueClassifier rescueClassifier,
@@ -37,6 +41,7 @@ namespace DocumentIA.Functions.Services.Classification
         {
             _logger = logger;
             _diProvider = diProvider;
+            _layoutMarkdownProvider = layoutMarkdownProvider;
             _windowExtractor = windowExtractor;
             _ruleClassifier = ruleClassifier;
             _rescueClassifier = rescueClassifier;
@@ -60,6 +65,8 @@ namespace DocumentIA.Functions.Services.Classification
             {
                 _logger.LogInformation("Iniciando clasificación HybridTDN para {Documento}", 
                     input.Entrada.Documento.Name);
+
+                await EnsureMarkdownContextAsync(input, cancellationToken);
 
                 // Paso 1: Extraer ventana de contexto
                 var window = _windowExtractor.ExtractWindow(
@@ -191,6 +198,98 @@ namespace DocumentIA.Functions.Services.Classification
                 }
             }
         }
+
+        private async Task EnsureMarkdownContextAsync(ClasificacionInput input, CancellationToken cancellationToken)
+        {
+            if (HasUsefulTextContext(input.DatosNormalizados))
+            {
+                return;
+            }
+
+            var documentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
+                ? input.DocumentoBase64Override
+                : input.Entrada.Documento.Content.Base64;
+
+            if (string.IsNullOrWhiteSpace(documentoBase64))
+            {
+                _logger.LogWarning(
+                    "HybridTDN sin contexto textual y sin documento base64 disponible para extraer markdown previo en {Documento}",
+                    input.Entrada.Documento.Name);
+                return;
+            }
+
+            _logger.LogInformation(
+                "HybridTDN sin contexto textual útil. Extrayendo markdown DI Layout previo para {Documento}",
+                input.Entrada.Documento.Name);
+
+            try
+            {
+                var markdownResult = await _layoutMarkdownProvider.ExtraerMarkdownAsync(
+                    new ExtraerMarkdownLayoutInput
+                    {
+                        Tipologia = input.Entrada.Instrucciones.ExpectedType ?? string.Empty,
+                        DocumentoBase64 = documentoBase64,
+                        NombreDocumento = input.Entrada.Documento.Name
+                    },
+                    cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(markdownResult.Markdown))
+                {
+                    input.DatosNormalizados["Markdown"] = markdownResult.Markdown;
+                    _logger.LogInformation(
+                        "Markdown DI Layout inyectado para HybridTDN ({Length} chars) en {Documento}",
+                        markdownResult.Markdown.Length,
+                        input.Entrada.Documento.Name);
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "DI Layout no devolvió markdown útil para HybridTDN en {Documento}",
+                        input.Entrada.Documento.Name);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "No se pudo extraer markdown DI Layout previo para HybridTDN en {Documento}. Se continúa con el contexto disponible.",
+                    input.Entrada.Documento.Name);
+            }
+        }
+
+        private static bool HasUsefulTextContext(IDictionary<string, object> datosNormalizados)
+        {
+            if (datosNormalizados is null || datosNormalizados.Count == 0)
+            {
+                return false;
+            }
+
+            var keys = new[] { "Markdown", "markdown", "Texto", "texto", "ContentText", "contentText" };
+
+            foreach (var key in keys)
+            {
+                if (!datosNormalizados.TryGetValue(key, out var raw) || raw is null)
+                {
+                    continue;
+                }
+
+                if (raw is string text && !string.IsNullOrWhiteSpace(text))
+                {
+                    return true;
+                }
+
+                if (raw is JsonElement json && json.ValueKind == JsonValueKind.String)
+                {
+                    var value = json.GetString();
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
     }
 
     /// <summary>
@@ -204,5 +303,6 @@ namespace DocumentIA.Functions.Services.Classification
         public int PagesToInspect { get; set; } = 3;
         public int RescueTimeoutMs { get; set; } = 8000;
         public int MaxRetries { get; set; } = 1;
+        public int RulesCacheSeconds { get; set; } = 300;
     }
 }

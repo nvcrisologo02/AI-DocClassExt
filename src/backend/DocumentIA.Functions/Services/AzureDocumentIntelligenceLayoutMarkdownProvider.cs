@@ -3,11 +3,12 @@ using System.Text;
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace DocumentIA.Functions.Services;
 
-public class AzureDocumentIntelligenceLayoutMarkdownProvider
+public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownProvider
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly LayoutModelRegistryLoader _modelRegistryLoader;

@@ -32,10 +32,13 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
 
         var baseEndpoint = model.Endpoint.TrimEnd('/');
         var analyzeUrl = $"{baseEndpoint}/documentintelligence/documentClassifiers/{Uri.EscapeDataString(model.ClassifierId)}:analyze?_overload=classifyDocument&api-version={Uri.EscapeDataString(apiVersion)}";
+        var documentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
+            ? input.DocumentoBase64Override
+            : input.Entrada.Documento.Content.Base64;
 
         var requestBody = JsonSerializer.Serialize(new
         {
-            base64Source = input.Entrada.Documento.Content.Base64
+            base64Source = documentoBase64
         });
 
         using var client = _httpClientFactory.CreateClient();

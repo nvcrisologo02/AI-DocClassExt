@@ -18,14 +18,14 @@ namespace DocumentIA.Functions.Orchestrators;
 public class DocumentProcessOrchestrator
 {
     private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
-    private readonly ExtractionRoutingSettings _extractionRoutingSettings;
+    private readonly ClassificationPreparationSettings _classificationPreparationSettings;
 
     public DocumentProcessOrchestrator(
         ExtractionModelRegistryLoader extractionModelRegistryLoader,
-        IOptions<ExtractionRoutingSettings> extractionRoutingSettings)
+        IOptions<ClassificationPreparationSettings> classificationPreparationSettings)
     {
         _extractionModelRegistryLoader = extractionModelRegistryLoader;
-        _extractionRoutingSettings = extractionRoutingSettings.Value;
+        _classificationPreparationSettings = classificationPreparationSettings.Value;
     }
 
     internal static ObtenerActivoInput BuildObtenerActivoInput(
@@ -104,7 +104,6 @@ public class DocumentProcessOrchestrator
             },
             Integridad = new Integridad()
         };
-        salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
 
         var inicioOrquestacion = context.CurrentUtcDateTime;
         // Poblar identificadores de correlación (instanceId es determinista y replay-safe)
@@ -210,10 +209,34 @@ public class DocumentProcessOrchestrator
             PublicarEstado("Running", string.Empty, mensaje);
         }
 
-        void MarcarActividadSkipped(string nombre, string mensaje)
+        void MarcarActividadOmitida(string nombre, string mensaje)
         {
+            if (!seguimiento.Actividades.Any(a => string.Equals(a.Nombre, nombre, StringComparison.Ordinal)))
+            {
+                return;
+            }
+
             MarcarInicioActividad(nombre);
             MarcarFinActividad(nombre, "Skipped", mensaje);
+        }
+
+        void RegistrarMarkdown(string? markdown, string origen)
+        {
+            if (string.IsNullOrWhiteSpace(markdown))
+            {
+                return;
+            }
+
+            salida.DetalleEjecucion.MarkdownGenerado = true;
+            salida.DetalleEjecucion.OrigenMarkdown = origen;
+        }
+
+        void RegistrarModeloLlm(string? modelo)
+        {
+            if (!string.IsNullOrWhiteSpace(modelo))
+            {
+                salida.DetalleEjecucion.ModeloLLMUsado = modelo;
+            }
         }
 
         async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
@@ -254,10 +277,85 @@ public class DocumentProcessOrchestrator
             PublicarEstado(estado, string.Empty, mensaje);
         }
 
+        async Task EjecutarSubidaGdcAsync(string? idActivo, bool skipGdc)
+        {
+            if (!skipGdc)
+            {
+                if (!string.IsNullOrWhiteSpace(idActivo))
+                {
+                    MarcarInicioActividad("SubirGDC");
+                    logger.LogInformation("Paso 7: Intentando subir a GDC IdActivo={IdActivo}", idActivo);
+
+                    var subirInput = new SubirGDCActivity.SubirGDCActivityInput
+                    {
+                        Tipologia = salida.Identificacion.Tipologia,
+                        Input = new SubirGDCInput
+                        {
+                            IdActivo = idActivo,
+                            ContenidoBase64 = entrada.Documento.Content.Base64,
+                            NombreArchivo = entrada.Documento.Name,
+                            SHA256 = salida.Integridad.SHA256,
+                            MD5 = salida.Integridad.MD5,
+                            CorrelationId = entrada.Trazabilidad.CorrelationId ?? string.Empty
+                        }
+                    };
+
+                    const int GdcActivityTimeoutSeconds = 120;
+                    using var cts = new System.Threading.CancellationTokenSource();
+                    var activityTask = context.CallActivityAsync<ResultadoGDC>(
+                        "SubirGDCActivity",
+                        subirInput);
+                    var timeoutTask = context.CreateTimer(
+                        context.CurrentUtcDateTime.AddSeconds(GdcActivityTimeoutSeconds),
+                        cts.Token);
+
+                    var winner = await Task.WhenAny(activityTask, timeoutTask);
+                    ResultadoGDC? resultadoGdc;
+                    if (winner == timeoutTask)
+                    {
+                        logger.LogWarning(
+                            "SubirGDCActivity timeout after {TimeoutSeconds}s for IdActivo={IdActivo}",
+                            GdcActivityTimeoutSeconds,
+                            idActivo);
+                        resultadoGdc = new ResultadoGDC { Exitoso = false, Mensaje = "Timeout" };
+                        MarcarFinActividad("SubirGDC", "Timeout", "Timeout en SubirGDCActivity");
+                    }
+                    else
+                    {
+                        cts.Cancel();
+                        resultadoGdc = await activityTask;
+                        MarcarFinActividad("SubirGDC", "Completed", resultadoGdc?.Mensaje);
+                    }
+
+                    salida.DetalleEjecucion.GDC = resultadoGdc ?? new ResultadoGDC();
+
+                    if (resultadoGdc != null && resultadoGdc.Exitoso && !string.IsNullOrWhiteSpace(resultadoGdc.ObjectId))
+                    {
+                        salida.Integridad.GestorDocumental = resultadoGdc.ObjectId;
+                    }
+                }
+                else
+                {
+                    logger.LogInformation("Omitiendo subida a GDC: IdActivo no disponible");
+                    MarcarActividadOmitida("SubirGDC", "IdActivo no disponible");
+                }
+            }
+            else
+            {
+                logger.LogInformation(
+                    "SkipGDCUpload activo (fuente={Fuente}); se omite subida a GDC",
+                    entrada.Instrucciones.SkipGDCUpload.HasValue ? "instrucciones" : "config-tipologia");
+                MarcarActividadOmitida("SubirGDC", "SkipGDCUpload activo");
+                salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = true, Mensaje = "Skipped" };
+            }
+        }
+
         PublicarEstado("Running", string.Empty);
 
         try
         {
+            salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
+
             if (entradaPorObjectIdGdc)
             {
                 entrada.Instrucciones.SkipGDCUpload = true;
@@ -337,8 +435,10 @@ public class DocumentProcessOrchestrator
                         : metadatosGdc?.NombreArchivo ?? string.Empty;
                 }
 
-                // Sincronizar el nombre resuelto desde GDC en la salida persistible.
-                salida.Identificacion.Documento = entrada.Documento.Name;
+                if (!string.IsNullOrWhiteSpace(entrada.Documento.Name))
+                {
+                    salida.Identificacion.Documento = entrada.Documento.Name;
+                }
             }
 
             // 1. Normalizacion y calculo de hashes
@@ -352,15 +452,6 @@ public class DocumentProcessOrchestrator
             salida.Integridad.CRC32 = datosNormalizados["CRC32"].ToString() ?? "";
             salida.Integridad.RutaBlobStorage = null;
             salida.Identificacion.Paginas = ObtenerEntero(datosNormalizados, "Paginas");
-
-            var markdownEntrada = entrada.Documento.Content.Markdown?.Trim();
-            if (!string.IsNullOrWhiteSpace(markdownEntrada))
-            {
-                datosNormalizados["Markdown"] = markdownEntrada;
-                logger.LogInformation(
-                    "Markdown recibido en la entrada ({Len} chars). Se omite extracción inicial de markdown.",
-                    markdownEntrada.Length);
-            }
 
             // 2. Verificar duplicados (si esta habilitado)
             if (!entrada.Instrucciones.SkipDuplicateCheck)
@@ -392,9 +483,12 @@ public class DocumentProcessOrchestrator
                         return salidaDuplicado;
                     }
 
-                    logger.LogInformation(
-                        "Documento duplicado detectado sin ejecución histórica reutilizable para ClassificationOnly={ClassificationOnly}. Se continuará con el procesamiento.",
-                        entrada.Instrucciones.ClassificationOnly);
+                    salida.Resultado.Estado = "DUPLICADO";
+                    salida.Resultado.ReutilizadaPorDuplicado = true;
+                    salida.Resultado.MensajeReutilizacion = "Documento duplicado detectado sin ejecución histórica reutilizable.";
+
+                    FinalizarSeguimiento("Completed", "Documento detectado como duplicado");
+                    return salida;
                 }
             }
 
@@ -413,54 +507,63 @@ public class DocumentProcessOrchestrator
                 salida.Integridad.RutaBlobStorage = blobPath;
             }
 
-            if (_extractionRoutingSettings.InitialMarkdown.Enabled && !datosNormalizados.ContainsKey("Markdown"))
+            var docClasif = new PrepararDocumentoClasificacionResultado
             {
-                var providerInicial = (_extractionRoutingSettings.InitialMarkdown.Provider ?? "none").Trim().ToLowerInvariant();
+                DocumentoBase64Clasif = entrada.Documento.Content.Base64,
+                TotalPaginas = salida.Identificacion.Paginas,
+                CharsTextoNativo = 0,
+                PaginasIncluidas = salida.Identificacion.Paginas,
+                RecorteAplicado = false
+            };
 
-                if (providerInicial == "di-layout")
+            salida.DetalleEjecucion.RecorteAplicado = docClasif.RecorteAplicado;
+            salida.DetalleEjecucion.PaginasIncluidas = docClasif.PaginasIncluidas;
+
+            if (_classificationPreparationSettings.Enabled)
+            {
+                try
                 {
-                    try
-                    {
-                        logger.LogInformation(
-                            "Paso 2.6: Extracción inicial de markdown habilitada. Provider={Provider}",
-                            providerInicial);
+                    var maxPaginasClasificacion = entrada.Instrucciones.ClassificationOnly &&
+                        entrada.Instrucciones.MaxPagesForClassificationOnly > 0
+                        ? entrada.Instrucciones.MaxPagesForClassificationOnly
+                        : ResolveMaxPaginasClasificacion(entrada.Instrucciones.ExpectedType);
+                    logger.LogInformation(
+                        "Paso 2.7: Preparando documento para clasificación. MaxPaginas={MaxPaginas}",
+                        maxPaginasClasificacion);
 
-                        var markdownInicial = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                            "ExtraerMarkdownLayoutActivity",
-                            new ExtraerMarkdownLayoutInput
-                            {
-                                Tipologia = "preclassify",
-                                DocumentoBase64 = entrada.Documento.Content.Base64,
-                                NombreDocumento = entrada.Documento.Name
-                            });
-
-                        if (!string.IsNullOrWhiteSpace(markdownInicial.Markdown))
+                    var docClasifResult = await context.CallActivityAsync<PrepararDocumentoClasificacionResultado>(
+                        "PrepararDocumentoClasificacionActivity",
+                        new PrepararDocumentoClasificacionInput
                         {
-                            datosNormalizados["Markdown"] = markdownInicial.Markdown;
-                            logger.LogInformation(
-                                "Markdown inicial listo para clasificación ({Len} chars). Modelo={Modelo}",
-                                markdownInicial.Markdown.Length,
-                                markdownInicial.Modelo);
-                        }
+                            DocumentoBase64 = entrada.Documento.Content.Base64,
+                            NombreDocumento = entrada.Documento.Name,
+                            MaxPaginasClasificacion = maxPaginasClasificacion
+                        });
 
-                        if (salida.Identificacion.Paginas <= 0 && markdownInicial.Paginas > 0)
-                        {
-                            salida.Identificacion.Paginas = markdownInicial.Paginas;
-                        }
-                    }
-                    catch (Exception ex)
+                    docClasif = docClasifResult ?? docClasif;
+
+                    if (salida.Identificacion.Paginas <= 0 && docClasif.TotalPaginas > 0)
                     {
-                        logger.LogWarning(
-                            ex,
-                            "Extracción inicial de markdown falló con provider {Provider}. Se continúa con flujo normal.",
-                            providerInicial);
+                        salida.Identificacion.Paginas = docClasif.TotalPaginas;
                     }
+
+                    logger.LogInformation(
+                        "Documento preparado para clasificación: totalPaginas={TotalPaginas}, paginasIncluidas={PaginasIncluidas}, charsTextoNativo={CharsTextoNativo}, recorteAplicado={RecorteAplicado}",
+                        docClasif.TotalPaginas,
+                        docClasif.PaginasIncluidas,
+                        docClasif.CharsTextoNativo,
+                        docClasif.RecorteAplicado);
+
+                    salida.DetalleEjecucion.RecorteAplicado = docClasif.RecorteAplicado;
+                    salida.DetalleEjecucion.PaginasIncluidas = docClasif.PaginasIncluidas > 0
+                        ? docClasif.PaginasIncluidas
+                        : (docClasif.TotalPaginas > 0 ? docClasif.TotalPaginas : salida.Identificacion.Paginas);
                 }
-                else if (providerInicial != "none")
+                catch (Exception exPrep)
                 {
                     logger.LogWarning(
-                        "Provider inicial de markdown no soportado: {Provider}. Valores permitidos: none, di-layout.",
-                        providerInicial);
+                        exPrep,
+                        "PrepararDocumentoClasificacionActivity falló. Se usará documento completo para clasificación.");
                 }
             }
 
@@ -496,7 +599,10 @@ public class DocumentProcessOrchestrator
                         {
                             Entrada = entrada,
                             DatosNormalizados = datosNormalizados,
-                            UmbralFallbackEfectivo = umbralClasifFallback
+                            UmbralFallbackEfectivo = umbralClasifFallback,
+                            DocumentoBase64Override = docClasif.DocumentoBase64Clasif,
+                            CharsTextoNativo = docClasif.CharsTextoNativo,
+                            TotalPaginas = docClasif.TotalPaginas
                         });
 
                         var mensajeClasificacion = resultadoClasificacion.FallbackLLM
@@ -537,6 +643,8 @@ public class DocumentProcessOrchestrator
                             FallbackRazon = "fallback_unclassified",
                             TipologiaDetectada = "Desconocido"
                         };
+                        salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
+                        RegistrarModeloLlm(salida.DetalleEjecucion.Clasificacion.Modelo);
                         
                         salida.Resultado.Estado = "ERROR";
                         salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
@@ -561,9 +669,14 @@ public class DocumentProcessOrchestrator
                 && !datosNormalizados.ContainsKey("Markdown"))
             {
                 datosNormalizados["Markdown"] = resultadoClasificacion.ContentExtraido;
+                RegistrarMarkdown(resultadoClasificacion.ContentExtraido, "Clasificacion");
                 logger.LogInformation(
                     "Markdown de clasificación DI propagado a datosNormalizados ({Len} chars)",
                     resultadoClasificacion.ContentExtraido.Length);
+            }
+            if (resultadoClasificacion.FallbackLLM)
+            {
+                RegistrarModeloLlm(resultadoClasificacion.Modelo);
             }
             resultadoClasificacion.ContentExtraido = null; // limpiar: no exponer en respuesta
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
@@ -589,6 +702,7 @@ public class DocumentProcessOrchestrator
                     tipologiaEntrada);
 
                 salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
+                salida.DetalleEjecucion.MotivoErrorTipologia = ex.Message;
                 salida.Resultado.Estado = "ERROR";
                 salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
                 salida.Resultado.ConfianzaGlobal = 0;
@@ -624,209 +738,149 @@ public class DocumentProcessOrchestrator
             if (resultadoClasificacion.Confianza < umbralBajaConfianza)
             {
                 salida.Resultado.Estado = "BAJA_CONFIANZA_CLASIFICACION";
-                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
-                salida.Resultado.ConfianzaExtraccion = 0;
-                salida.Resultado.ConfianzaValidacion = 0;
-                salida.Resultado.ConfianzaGlobal = salida.Resultado.ConfianzaClasificacion;
-                salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
-                    salida.Resultado.ConfianzaGlobal,
-                    tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig());
-
-                foreach (var actividadPendiente in seguimiento.Actividades
-                    .Where(a => string.Equals(a.Estado, "Pending", StringComparison.Ordinal))
-                    .Select(a => a.Nombre)
-                    .ToList())
-                {
-                    MarcarActividadSkipped(actividadPendiente, "Clasificación por debajo de umbral");
-                }
-
                 logger.LogWarning($"Confianza de clasificacion baja: {resultadoClasificacion.Confianza} (umbral: {umbralBajaConfianza})");
 
                 FinalizarSeguimiento("Completed", "Clasificación por debajo de umbral");
                 return salida;
             }
 
-            resultadoClasificacion.Confianza = RedondearSalida(resultadoClasificacion.Confianza);
-            resultadoClasificacion.ConfianzaDI = RedondearSalida(resultadoClasificacion.ConfianzaDI);
-            resultadoClasificacion.ConfianzaGPT = RedondearSalida(resultadoClasificacion.ConfianzaGPT);
-
             if (entrada.Instrucciones.ClassificationOnly)
             {
-                MarcarActividadSkipped("Extraer", "ClassificationOnly activo");
+                logger.LogInformation("ClassificationOnly activo. Se omiten extracción, prompt, validación y asset resolver.");
 
-                if (promptActivoEnPeticion)
+                salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
                 {
-                    MarcarActividadSkipped("Prompt", "ClassificationOnly activo");
-                }
+                    Modelo = "skipped",
+                    LayoutEnabled = false,
+                    FallbackUsado = false,
+                    FallbackRazon = null,
+                    ConfianzaExtraccion = 0,
+                    ProveedorExtrac = "none",
+                    ConfianzaPorCampo = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
+                    CamposConDuda = new List<string>(),
+                    TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                };
 
-                MarcarActividadSkipped("Validar", "ClassificationOnly activo");
-                MarcarActividadSkipped("ObtenerActivo", "ClassificationOnly activo");
+                var markdownClasificacion = datosNormalizados.TryGetValue("Markdown", out var markdownObj) &&
+                    markdownObj is string markdownTexto &&
+                    !string.IsNullOrWhiteSpace(markdownTexto)
+                    ? markdownTexto
+                    : null;
 
+                salida.DatosExtraidos = new Dictionary<string, object>();
                 salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                 {
                     Normalizaciones = new List<string>
                     {
-                        "ClassificationOnly activo: extracción y validación omitidas"
+                        "ClassificationOnly activo: extracción, prompt, validación y asset resolver omitidos"
                     },
+                    Markdown = markdownClasificacion,
                     Validaciones = new List<string>(),
                     Inconsistencias = new List<string>(),
-                    ConfianzaValidacion = 0
+                    ConfianzaValidacion = 1.0
                 };
 
-                salida.Resultado.ConfianzaClasificacion = resultadoClasificacion.Confianza;
-                salida.Resultado.ConfianzaExtraccion = 0;
-                salida.Resultado.ConfianzaValidacion = 0;
-                salida.Resultado.ConfianzaGlobal = resultadoClasificacion.Confianza;
-
-                var confidenceCfgClassificationOnly = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
-                salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
-                    salida.Resultado.ConfianzaGlobal,
-                    confidenceCfgClassificationOnly);
-
-                var tieneIdActivoEntrada = !string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo);
-                var ejecutarIntegrar = entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly ?? false;
-
-                if (tieneIdActivoEntrada && ejecutarIntegrar)
+                if (!string.IsNullOrWhiteSpace(markdownClasificacion))
                 {
-                    logger.LogInformation("Paso 6: Integrando con sistemas externos (ClassificationOnly con override Integrar)");
-                    var integrarInputClassificationOnly = new IntegrarInput
-                    {
-                        Tipologia = salida.Identificacion.Tipologia,
-                        DocumentoId = salida.Identificacion.Guid,
-                        DatosExtraidos = salida.DatosExtraidos,
-                        IdActivo = entrada.Trazabilidad.IdActivo,
-                        Metadata = new Dictionary<string, object>
-                        {
-                            ["correlationId"] = entrada.Trazabilidad.CorrelationId,
-                            ["submittedBy"] = entrada.Trazabilidad.SubmittedBy
-                        }
-                    };
+                    salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+                    RegistrarMarkdown(markdownClasificacion, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
+                }
 
-                    var resultadoIntegracionClassificationOnly = await EjecutarPasoNegocio(
+                MarcarActividadOmitida("Extraer", "ClassificationOnly activo");
+                if (promptActivoEnPeticion)
+                {
+                    MarcarActividadOmitida("Prompt", "ClassificationOnly activo");
+                }
+                MarcarActividadOmitida("Validar", "ClassificationOnly activo");
+                MarcarActividadOmitida("ObtenerActivo", "ClassificationOnly activo");
+
+                var ejecutarIntegracionClasificacion =
+                    entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true &&
+                    !string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo);
+
+                if (ejecutarIntegracionClasificacion)
+                {
+                    logger.LogInformation("ClassificationOnly activo con integración habilitada. Ejecutando Integrar.");
+
+                    var resultadoIntegracionClasificacion = await EjecutarPasoNegocio(
                         "Integrar",
-                        () => context.CallActivityAsync<ResultadoIntegracion>(
+                        () => context.CallActivityAsync<DocumentIA.Core.Models.ResultadoIntegracion>(
                             "IntegrarActivity",
-                            integrarInputClassificationOnly));
+                            new DocumentIA.Core.Models.IntegrarInput
+                            {
+                                Tipologia = salida.Identificacion.Tipologia,
+                                DocumentoId = salida.Identificacion.Guid,
+                                DatosExtraidos = new Dictionary<string, object>(),
+                                IdActivo = entrada.Trazabilidad.IdActivo,
+                                Metadata = new Dictionary<string, object>
+                                {
+                                    ["correlationId"] = entrada.Trazabilidad.CorrelationId,
+                                    ["submittedBy"] = entrada.Trazabilidad.SubmittedBy
+                                }
+                            }));
 
-                    salida.DetalleEjecucion.Integracion = resultadoIntegracionClassificationOnly;
-
-                    if (resultadoIntegracionClassificationOnly.Estado == "OK" && resultadoIntegracionClassificationOnly.DatosFinales.Count > 0)
-                    {
-                        salida.DatosExtraidos = resultadoIntegracionClassificationOnly.DatosFinales;
-                    }
-
-                    salida.Integridad.IdActivoEntrada = resultadoIntegracionClassificationOnly.IdActivoEntrada;
-                    salida.Integridad.IdActivo = resultadoIntegracionClassificationOnly.IdActivoResuelto ?? entrada.Trazabilidad.IdActivo;
-                    salida.Integridad.IdActivoCambiado = resultadoIntegracionClassificationOnly.IdActivoCambiado;
+                    salida.DetalleEjecucion.Integracion = resultadoIntegracionClasificacion;
+                    salida.Integridad.IdActivoEntrada = resultadoIntegracionClasificacion.IdActivoEntrada;
+                    salida.Integridad.IdActivo = resultadoIntegracionClasificacion.IdActivoResuelto ?? entrada.Trazabilidad.IdActivo;
+                    salida.Integridad.IdActivoCambiado = resultadoIntegracionClasificacion.IdActivoCambiado;
                 }
                 else
                 {
-                    var motivoIntegrar = !tieneIdActivoEntrada
+                    var mensajeIntegracion = entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true
                         ? "ClassificationOnly sin IdActivo"
-                        : "ClassificationOnly: Integrar deshabilitado por instrucciones";
-                    MarcarActividadSkipped("Integrar", motivoIntegrar);
+                        : "ClassificationOnly activo";
 
+                    MarcarActividadOmitida("Integrar", mensajeIntegracion);
                     salida.DetalleEjecucion.Integracion = new ResultadoIntegracion
                     {
                         Tipologia = salida.Identificacion.Tipologia,
                         Estado = "OK",
-                        Mensaje = motivoIntegrar,
+                        Mensaje = mensajeIntegracion,
                         Timestamp = context.CurrentUtcDateTime,
-                        IdActivoEntrada = entrada.Trazabilidad.IdActivo,
-                        IdActivoResuelto = entrada.Trazabilidad.IdActivo,
+                        DatosOriginales = new Dictionary<string, object>(),
+                        DatosFinales = new Dictionary<string, object>(),
+                        IdActivoEntrada = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
+                            ? null
+                            : entrada.Trazabilidad.IdActivo.Trim(),
+                        IdActivoResuelto = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
+                            ? null
+                            : entrada.Trazabilidad.IdActivo.Trim(),
                         IdActivoCambiado = false
                     };
-
-                    salida.Integridad.IdActivoEntrada = entrada.Trazabilidad.IdActivo;
-                    salida.Integridad.IdActivo = entrada.Trazabilidad.IdActivo;
+                    salida.Integridad.IdActivoEntrada = salida.DetalleEjecucion.Integracion.IdActivoEntrada;
+                    salida.Integridad.IdActivo = salida.DetalleEjecucion.Integracion.IdActivoResuelto;
                     salida.Integridad.IdActivoCambiado = false;
                 }
 
-                var skipGDCClassificationOnly = entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload;
+                await EjecutarSubidaGdcAsync(
+                    salida.Integridad.IdActivo,
+                    entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
 
-                if (skipGDCClassificationOnly)
-                {
-                    MarcarActividadSkipped("SubirGDC", "SkipGDCUpload activo");
-                    salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = true, Mensaje = "Skipped" };
-                }
-                else if (string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
-                {
-                    MarcarActividadSkipped("SubirGDC", "IdActivo no disponible");
-                    salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = false, Mensaje = "IdActivo no disponible" };
-                }
-                else
-                {
-                    MarcarInicioActividad("SubirGDC");
-                    logger.LogInformation(
-                        "Paso 7: Intentando subir a GDC (ClassificationOnly) IdActivo={IdActivo}",
-                        salida.Integridad.IdActivo);
-
-                    var subirInput = new SubirGDCActivity.SubirGDCActivityInput
-                    {
-                        Tipologia = salida.Identificacion.Tipologia,
-                        Input = new SubirGDCInput
-                        {
-                            IdActivo = salida.Integridad.IdActivo ?? string.Empty,
-                            ContenidoBase64 = entrada.Documento.Content.Base64,
-                            NombreArchivo = entrada.Documento.Name,
-                            SHA256 = salida.Integridad.SHA256,
-                            MD5 = salida.Integridad.MD5,
-                            CorrelationId = entrada.Trazabilidad.CorrelationId ?? string.Empty
-                        }
-                    };
-
-                    const int GdcActivityTimeoutSeconds = 120;
-                    using var cts = new System.Threading.CancellationTokenSource();
-                    var activityTask = context.CallActivityAsync<ResultadoGDC>(
-                        "SubirGDCActivity",
-                        subirInput);
-                    var timeoutTask = context.CreateTimer(
-                        context.CurrentUtcDateTime.AddSeconds(GdcActivityTimeoutSeconds),
-                        cts.Token);
-
-                    var winner = await Task.WhenAny(activityTask, timeoutTask);
-                    ResultadoGDC? resultadoGdc;
-                    if (winner == timeoutTask)
-                    {
-                        logger.LogWarning(
-                            "SubirGDCActivity timeout after {TimeoutSeconds}s for IdActivo={IdActivo}",
-                            GdcActivityTimeoutSeconds,
-                            salida.Integridad.IdActivo);
-                        resultadoGdc = new ResultadoGDC { Exitoso = false, Mensaje = "Timeout" };
-                        MarcarFinActividad("SubirGDC", "Timeout", "Timeout en SubirGDCActivity");
-                    }
-                    else
-                    {
-                        cts.Cancel();
-                        resultadoGdc = await activityTask;
-                        MarcarFinActividad("SubirGDC", "Completed", resultadoGdc?.Mensaje);
-                    }
-
-                    salida.DetalleEjecucion.GDC = resultadoGdc ?? new ResultadoGDC();
-                    if (resultadoGdc != null && resultadoGdc.Exitoso && !string.IsNullOrWhiteSpace(resultadoGdc.ObjectId))
-                    {
-                        salida.Integridad.GestorDocumental = resultadoGdc.ObjectId;
-                    }
-                }
-
+                var confidenceCfgClassificationOnly = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
                 salida.Resultado.Estado = "OK";
+                salida.Resultado.ConfianzaGlobal = RedondearSalida(
+                    ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
+                salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
+                    salida.Resultado.ConfianzaGlobal,
+                    confidenceCfgClassificationOnly);
+                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                salida.Resultado.ConfianzaExtraccion = 0;
+                salida.Resultado.ConfianzaValidacion = 1.0;
 
-                logger.LogInformation("Paso 8: Persistiendo resultados");
-                if (string.IsNullOrWhiteSpace(salida.Identificacion.Documento) &&
-                    !string.IsNullOrWhiteSpace(entrada.Documento.Name))
-                {
-                    salida.Identificacion.Documento = entrada.Documento.Name;
-                }
-
+                logger.LogInformation("Paso 8: Persistiendo resultados (classificationOnly)");
                 await EjecutarPasoNegocioSinResultado(
                     "Persistir",
                     () => context.CallActivityAsync(
                         "PersistirActivity",
                         salida));
 
-                FinalizarSeguimiento("Completed", "ClassificationOnly activo");
+                FinalizarSeguimiento("Completed", "ClassificationOnly completado");
                 return salida;
             }
+
+            resultadoClasificacion.Confianza = RedondearSalida(resultadoClasificacion.Confianza);
+            resultadoClasificacion.ConfianzaDI = RedondearSalida(resultadoClasificacion.ConfianzaDI);
+            resultadoClasificacion.ConfianzaGPT = RedondearSalida(resultadoClasificacion.ConfianzaGPT);
 
             ExtraccionResultado resultadoExtraccion;
             if (tipologiaResuelta.ExtractionEnabled)
@@ -873,13 +927,14 @@ public class DocumentProcessOrchestrator
                             new ExtraerMarkdownLayoutInput
                             {
                                 Tipologia = salida.Identificacion.Tipologia,
-                                DocumentoBase64 = entrada.Documento.Content.Base64,
+                                DocumentoBase64 = docClasif.DocumentoBase64Clasif,
                                 NombreDocumento = entrada.Documento.Name
                             });
 
                         if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
                         {
                             datosNormalizados["Markdown"] = markdownLayout.Markdown;
+                            RegistrarMarkdown(markdownLayout.Markdown, "LayoutPrevioExtraccion");
                             logger.LogInformation(
                                 "Markdown DI Layout listo para extraccion GPT-directo ({Len} chars)",
                                 markdownLayout.Markdown.Length);
@@ -946,17 +1001,10 @@ public class DocumentProcessOrchestrator
                 markdownNormalizacion = markdownDetectado;
             }
 
-            if (string.IsNullOrWhiteSpace(markdownNormalizacion)
-                && datosNormalizados.TryGetValue("Markdown", out var markdownPrevio)
-                && markdownPrevio is string markdownPrevioTexto
-                && !string.IsNullOrWhiteSpace(markdownPrevioTexto))
-            {
-                markdownNormalizacion = markdownPrevioTexto;
-            }
-
             if (!string.IsNullOrWhiteSpace(markdownNormalizacion))
             {
                 datosNormalizados["Markdown"] = markdownNormalizacion;
+                RegistrarMarkdown(markdownNormalizacion, "Extraccion");
                 logger.LogInformation(
                     "Markdown de extracción preparado para normalización y fallbacks ({Length} caracteres)",
                     markdownNormalizacion.Length);
@@ -983,6 +1031,7 @@ public class DocumentProcessOrchestrator
                         markdownNormalizacion = markdownLayout.Markdown;
                         resultadoExtraccion.MarkdownExtraido = markdownLayout.Markdown;
                         datosNormalizados["Markdown"] = markdownLayout.Markdown;
+                        RegistrarMarkdown(markdownLayout.Markdown, "FallbackLayout");
 
                         logger.LogInformation(
                             "Markdown obtenido vía fallback DI layout ({Length} caracteres)",
@@ -1095,6 +1144,7 @@ public class DocumentProcessOrchestrator
                     CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
                     Error = resultadoPrompt.Error
                 };
+                RegistrarModeloLlm(resultadoPrompt.Modelo);
 
                 if (resultadoPrompt.CombinedWithFallback)
                 {
@@ -1257,77 +1307,9 @@ public class DocumentProcessOrchestrator
 
             // 7. Subida a GDC (opcional)
             // Prioridad: Instrucciones.SkipGDCUpload (si viene informado) > tipologiaResuelta.SkipGDCUpload (config de tipología)
-            var skipGDC = entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload;
-            if (!skipGDC)
-            {
-                if (!string.IsNullOrWhiteSpace(salida.Integridad.IdActivo))
-                {
-                    MarcarInicioActividad("SubirGDC");
-                    logger.LogInformation("Paso 7: Intentando subir a GDC IdActivo={IdActivo}", salida.Integridad.IdActivo);
-
-                    var subirInput = new SubirGDCActivity.SubirGDCActivityInput
-                    {
-                        Tipologia = salida.Identificacion.Tipologia,
-                        Input = new SubirGDCInput
-                        {
-                            IdActivo = salida.Integridad.IdActivo ?? string.Empty,
-                            ContenidoBase64 = entrada.Documento.Content.Base64,
-                            NombreArchivo = entrada.Documento.Name,
-                            SHA256 = salida.Integridad.SHA256,
-                            MD5 = salida.Integridad.MD5,
-                            CorrelationId = entrada.Trazabilidad.CorrelationId ?? string.Empty
-                        }
-                    };
-
-                    const int GdcActivityTimeoutSeconds = 120;
-                    using var cts = new System.Threading.CancellationTokenSource();
-                    var activityTask = context.CallActivityAsync<ResultadoGDC>(
-                        "SubirGDCActivity",
-                        subirInput);
-                    var timeoutTask = context.CreateTimer(
-                        context.CurrentUtcDateTime.AddSeconds(GdcActivityTimeoutSeconds),
-                        cts.Token);
-
-                    var winner = await Task.WhenAny(activityTask, timeoutTask);
-                    ResultadoGDC? resultadoGdc;
-                    if (winner == timeoutTask)
-                    {
-                        logger.LogWarning(
-                            "SubirGDCActivity timeout after {TimeoutSeconds}s for IdActivo={IdActivo}",
-                            GdcActivityTimeoutSeconds, salida.Integridad.IdActivo);
-                        resultadoGdc = new ResultadoGDC { Exitoso = false, Mensaje = "Timeout" };
-                        MarcarFinActividad("SubirGDC", "Timeout", "Timeout en SubirGDCActivity");
-                    }
-                    else
-                    {
-                        cts.Cancel();
-                        resultadoGdc = await activityTask;
-                        MarcarFinActividad("SubirGDC", "Completed", resultadoGdc?.Mensaje);
-                    }
-
-                    salida.DetalleEjecucion.GDC = resultadoGdc ?? new ResultadoGDC();
-
-                    if (resultadoGdc != null && resultadoGdc.Exitoso && !string.IsNullOrWhiteSpace(resultadoGdc.ObjectId))
-                    {
-                        salida.Integridad.GestorDocumental = resultadoGdc.ObjectId;
-                    }
-                }
-                else
-                {
-                    logger.LogInformation("Omitiendo subida a GDC: IdActivo no disponible");
-                    MarcarInicioActividad("SubirGDC");
-                    MarcarFinActividad("SubirGDC", "Skipped", "IdActivo no disponible");
-                }
-            }
-            else
-            {
-                logger.LogInformation(
-                    "SkipGDCUpload activo (fuente={Fuente}); se omite subida a GDC",
-                    entrada.Instrucciones.SkipGDCUpload.HasValue ? "instrucciones" : "config-tipologia");
-                MarcarInicioActividad("SubirGDC");
-                MarcarFinActividad("SubirGDC", "Skipped", "SkipGDCUpload activo");
-                salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = true, Mensaje = "Skipped" };
-            }
+            await EjecutarSubidaGdcAsync(
+                salida.Integridad.IdActivo,
+                entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
 
             // Resultado final
             if (conErroresValidacion)
@@ -1366,12 +1348,6 @@ public class DocumentProcessOrchestrator
 
             // 8. Persistencia
             logger.LogInformation("Paso 8: Persistiendo resultados");
-            if (string.IsNullOrWhiteSpace(salida.Identificacion.Documento) &&
-                !string.IsNullOrWhiteSpace(entrada.Documento.Name))
-            {
-                salida.Identificacion.Documento = entrada.Documento.Name;
-            }
-
             await EjecutarPasoNegocioSinResultado(
                 "Persistir",
                 () => context.CallActivityAsync(
@@ -1429,6 +1405,31 @@ public class DocumentProcessOrchestrator
         {
             return 0.5;
         }
+    }
+
+    private int ResolveMaxPaginasClasificacion(string? tipologia)
+    {
+        var defaultPages = Math.Max(1, _classificationPreparationSettings.MaxPaginasClasificacionDefault);
+
+        if (!string.IsNullOrWhiteSpace(tipologia) &&
+            _classificationPreparationSettings.OverridesPorTipologia.TryGetValue(tipologia, out var perTipologia) &&
+            perTipologia > 0)
+        {
+            return perTipologia;
+        }
+
+        var familia = !string.IsNullOrWhiteSpace(tipologia)
+            ? tipologia.Split('.', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()
+            : null;
+
+        if (!string.IsNullOrWhiteSpace(familia) &&
+            _classificationPreparationSettings.OverridesPorFamilia.TryGetValue(familia, out var perFamilia) &&
+            perFamilia > 0)
+        {
+            return perFamilia;
+        }
+
+        return defaultPages;
     }
 
     private static bool IsGptDirectProvider(string? provider) =>
