@@ -73,6 +73,7 @@ gantt
 | C-4 | Degradacion segura fallback GPT | **DONE** | Si GPT fallback falla, orquestacion devuelve resultado parcial sin tumbar el flujo. | estado-fallback-preproceso |
 | C-5 | Propagacion idActivo en IntegrarActivity | **DONE** | Payload plugins usa `DatosFinales.idActivo`; valor enriquecido ya no es pisado. | estado-fallback-preproceso (2026-03-27) |
 | C-6 | Fix `NombreArchivo` null en flujo `objectIdGDC` | **DONE** | Sincronizacion `entrada.Documento.Name -> salida.Identificacion.Documento` en orquestador + fallback defensivo en `PersistirActivity` para no persistir null. Incluye regresion unitaria en orquestador y persistencia. Work items `99297`, `99298`, `99299`, `99300` en `Done`. | AB#99297 AB#99298 AB#99299 AB#99300 |
+| C-7 | Fix prompt GPT fallback: tipologías incompletas | **DONE** | Dos bugs corregidos (2026-05-20): (1) `ClassificationTipologiaPromptBuilder` filtraba con `!isDefault`, excluyendo todas las tipologías TDN (ESCR/DOCN/SERE) que no tienen `isDefault=true`. Filtro eliminado — ahora se incluyen todas las Published+Activa con `tipologiaId` válido. (2) `GptClasificarDataProvider` tenía `_tipologiasPromptSection` como `Lazy<string>`, que congelaba el prompt al primer uso (indefinidamente). Eliminado el `Lazy`; ahora se llama `_tipologiaPromptBuilder.Build()` por petición, respetando el TTL de 5 min del `IMemoryCache`. Resultado: de 2–5 tipologías visibles para el LLM, pasan a ser 14 (todas las Published con `gptDescripcion`). | — |
 
 ---
 
@@ -233,6 +234,7 @@ Impacto en tests: añadir ~15-20 tests nuevos en `ValidationEngineTests` cubrien
 | ~~Azure SQL no disponible~~ | ~~Media~~ | ~~Alto~~ | **RESUELTO.** `srbsqlprodocai` operativo en produccion. |
 | ~~Self-hosted agent inestable~~ | ~~Media~~ | ~~Alto~~ | **N/A.** Agente no requerido en arquitectura actual. |
 | ~~Fallback GPT HTTP 400~~ | ~~Media~~ | ~~Alto~~ | **RESUELTO.** GPT opera sobre markdown extraido (C-1/C-2 completados). |
+| ~~Prompt GPT solo incluía 2–5 tipologías~~ | ~~Alta~~ | ~~Alto~~ | **RESUELTO (C-7).** Eliminado filtro `isDefault` en `ClassificationTipologiaPromptBuilder` y `Lazy<string>` en `GptClasificarDataProvider`. Las 14 tipologías con `gptDescripcion` están disponibles para el LLM. |
 | CU (preview) cambia API | Baja | Alto | Abstraccion via `IExtraerDataProvider`. Adapter pattern permite cambiar implementacion sin afectar pipeline. |
 | GDC sin disponibilidad | Baja | Medio | `skipGDCUpload` permite continuar sin GDC. Documento se persiste en BD igualmente. Mitigacion adicional: G-3 (reconciliacion async). |
 | GDC `DOC_OBJECT_EXISTS` sin resolver | Media | Medio | Exige implementar G-2 (idempotencia). Mientras tanto, la ejecucion termina en error de GDC pero el documento se persiste en BD. |
