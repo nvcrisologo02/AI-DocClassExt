@@ -24,7 +24,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
     private readonly Lazy<ChatClient> _chatClient;
-    private readonly Lazy<string> _tipologiasPromptSection;
 
     public GptClasificarDataProvider(
         ClassificationModelRegistryLoader modelRegistryLoader,
@@ -36,7 +35,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
         _chatClient = new Lazy<ChatClient>(CreateChatClient);
-        _tipologiasPromptSection = new Lazy<string>(() => _tipologiaPromptBuilder.Build());
+        // _tipologiasPromptSection se elimina: el IMemoryCache de ClassificationTipologiaPromptBuilder
+        // ya cachea el prompt 5 min. Un Lazy<string> lo fijaría para siempre en el singleton.
     }
 
     public async Task<ResultadoClasificacion> ClasificarAsync(
@@ -50,7 +50,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             input.Entrada.Documento.Name,
             model.DeploymentName);
 
-        var tipologias = _tipologiasPromptSection.Value;
+        // Cada invocación respeta el TTL de 5 min del IMemoryCache (no Lazy fijo).
+        var tipologias = _tipologiaPromptBuilder.Build();
         var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
 
         var systemMessage = new SystemChatMessage(
