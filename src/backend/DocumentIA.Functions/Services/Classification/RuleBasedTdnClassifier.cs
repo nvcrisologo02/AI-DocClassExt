@@ -14,7 +14,7 @@ namespace DocumentIA.Functions.Services.Classification
     {
         private readonly ILogger<RuleBasedTdnClassifier> _logger;
         private readonly IReadOnlyList<TipologiaClassificationProfile> _profiles;
-        private const int ImmediateClassificationMaxCharsDefault = 600;
+        private const int ImmediateClassificationMaxCharsDefault = 1000;
 
         public RuleBasedTdnClassifier(
             ILogger<RuleBasedTdnClassifier> logger,

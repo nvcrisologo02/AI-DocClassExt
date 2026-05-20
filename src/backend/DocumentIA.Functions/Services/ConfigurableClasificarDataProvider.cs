@@ -136,36 +136,48 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             if (!string.IsNullOrWhiteSpace(resultadoDI?.ContentExtraido))
                 resultadoGpt.ContentExtraido = resultadoDI.ContentExtraido;
 
+            // Propagar detalle de providers: añadir propuesta DI antes de la GPT
+            if (resultadoDI is not null)
+                resultadoGpt.DetalleProveedores.Insert(0, new()
+                {
+                    Proveedor = "DI",
+                    Tipologia = resultadoDI.TipologiaDetectada,
+                    Confianza = resultadoDI.Confianza,
+                    MotivoDescarte = fallbackRazon
+                });
+            resultadoGpt.DetalleProveedores.Add(new()
+            {
+                Proveedor = "GPT",
+                Tipologia = resultadoGpt.TipologiaDetectada,
+                Confianza = resultadoGpt.Confianza
+            });
+
             _logger.LogInformation(
                 "Fallback GPT completado para {Documento}. TipologÃ­a: {Tipologia}, Confianza: {Confianza:F3}",
                 input.Entrada.Documento.Name,
                 resultadoGpt.TipologiaDetectada,
                 resultadoGpt.Confianza);
 
-            // ValidaciÃ³n: Si el fallback GPT no logrÃ³ clasificar (devuelve Desconocido o muy baja confianza),
-            // lanzar excepciÃ³n para terminar la clasificaciÃ³n sin intentar resolver la tipologÃ­a
+            // ValidaciÃ³n: si fallback GPT no clasifica de forma utilizable, degradamos a resultado de negocio
+            // para que el orquestador termine en NO_CLASIFICADO sin fallo tÃ©cnico.
             if (string.Equals(resultadoGpt.TipologiaDetectada, "Desconocido", StringComparison.OrdinalIgnoreCase)
                 || resultadoGpt.Confianza < 0.3)
             {
                 _logger.LogWarning(
                     "Fallback GPT no logrÃ³ clasificar el documento {Documento}. " +
-                    "TipologÃ­a: {Tipologia}, Confianza: {Confianza:F3}. Abortando procesamiento.",
+                    "TipologÃ­a: {Tipologia}, Confianza: {Confianza:F3}. Se devolverÃ¡ Desconocido para cierre de negocio.",
                     input.Entrada.Documento.Name,
                     resultadoGpt.TipologiaDetectada,
                     resultadoGpt.Confianza);
 
-                throw new InvalidOperationException(
-                    $"No se ha podido identificar la tipologia del documento. " +
-                    $"Fallback GPT devolviÃ³: {resultadoGpt.TipologiaDetectada} (confianza: {resultadoGpt.Confianza:F3})");
+                resultadoGpt.TipologiaDetectada = "Desconocido";
+                resultadoGpt.FallbackLLM = true;
+                resultadoGpt.FallbackRazon = string.IsNullOrWhiteSpace(resultadoGpt.FallbackRazon)
+                    ? "fallback_gpt_sin_clasificacion"
+                    : $"{resultadoGpt.FallbackRazon}|fallback_gpt_sin_clasificacion";
             }
 
             return resultadoGpt;
-        }
-        catch (InvalidOperationException)
-        {
-            // Si fallback GPT no logrÃ³ clasificar documentos Desconocido, propagar la excepciÃ³n
-            // para que el orquestador termine con ERROR sin retroceder a DI
-            throw;
         }
         catch (Exception ex) when (resultadoDI is not null)
         {

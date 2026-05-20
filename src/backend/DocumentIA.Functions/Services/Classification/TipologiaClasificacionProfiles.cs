@@ -207,7 +207,7 @@ public sealed class ImmediateClassificationTriggersDefinition
     public string Scope { get; set; } = "firstPage";
 
     [JsonPropertyName("maxCharsToScan")]
-    public int MaxCharsToScan { get; set; } = 600;
+    public int MaxCharsToScan { get; set; } = 1000;
 
     [JsonPropertyName("triggers")]
     public List<string> Triggers { get; set; } = new();
@@ -267,7 +267,7 @@ public sealed class ImmediateClassificationTriggersProfile
 {
     public bool Enabled { get; init; }
     public string Scope { get; init; } = "firstPage";
-    public int MaxCharsToScan { get; init; } = 600;
+    public int MaxCharsToScan { get; init; } = 1000;
     public IReadOnlyList<string> Triggers { get; init; } = Array.Empty<string>();
     public double ResultScore { get; init; } = 1.0;
     public bool VetoedByOutOfScope { get; init; } = true;

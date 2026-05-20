@@ -30,4 +30,13 @@ public sealed record ResolvedTipologia(
     List<string>? AssetResolverMapeoDireccionNumero = null,
     List<string>? AssetResolverMapeoDireccionMunicipio = null,
     List<string>? AssetResolverMapeoDireccionCodigoPostal = null,
-    double AssetResolverUmbralScoreDireccion = 0.75);
+    double AssetResolverUmbralScoreDireccion = 0.75,
+    // Tipology metadata for output contract enrichment
+    string TipologiaNombre = "",
+    string TipologiaMGDCMatricula = "",
+    string GdcTipoDocumento = "",
+    string GdcSubtipoDocumento = "",
+    string GdcSerie = "",
+    string Tdn1 = "",
+    string Tdn2 = "",
+    string GptDescripcion = "");

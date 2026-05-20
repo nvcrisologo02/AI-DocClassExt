@@ -28,7 +28,7 @@ public class PdfRecorteService
 
             for (var pageNumber = 1; pageNumber <= paginasInspeccionar; pageNumber++)
             {
-                charsTextoNativo += document.GetPage(pageNumber).Text?.Length ?? 0;
+                charsTextoNativo += document.GetPage(pageNumber).GetWords().Sum(w => w.Text.Length);
             }
         }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using DocumentIA.Core.Models;
@@ -66,6 +67,14 @@ namespace DocumentIA.Functions.Services.Classification
                 _logger.LogInformation("Iniciando clasificación HybridTDN para {Documento}", 
                     input.Entrada.Documento.Name);
 
+                _logger.LogInformation(
+                    "HybridTDN contexto: expectedType={ExpectedType}, ruleThreshold={RuleThreshold}, diThreshold={DiThreshold}, pagesToInspect={PagesToInspect}, maxWindowChars={MaxWindowChars}",
+                    input.Entrada.Instrucciones.ExpectedType,
+                    _options.RuleConfidenceThreshold,
+                    _options.DiConfidenceThreshold,
+                    _options.PagesToInspect,
+                    _options.MaxCharactersPerWindow);
+
                 await EnsureMarkdownContextAsync(input, cancellationToken);
 
                 // Paso 1: Extraer ventana de contexto
@@ -79,6 +88,16 @@ namespace DocumentIA.Functions.Services.Classification
                 _logger.LogInformation(
                     "Clasificación por reglas: tipologia={Tipologia}, confianza={Confianza}",
                     ruleResult.TipologiaDetectada, ruleResult.Confianza);
+                _logger.LogInformation(
+                    "Detalle reglas: metodo={Metodo}, razon={Razon}, trigger={Trigger}, routeToReview={RouteToReview}, margin={Margin}, señales={Signals}",
+                    ruleResult.ClasificacionMetodo,
+                    ruleResult.Razon,
+                    ruleResult.TriggerActivado,
+                    ruleResult.RouteToReview,
+                    ruleResult.Margin,
+                    ruleResult.SeñalesEncontradas is { Count: > 0 }
+                        ? string.Join(", ", ruleResult.SeñalesEncontradas.Select(kv => $"{kv.Key}:{kv.Value}").Take(20))
+                        : "none");
 
                 // Si reglas dan alta confianza, retornar con eso
                 if (ruleResult.Confianza >= _options.RuleConfidenceThreshold)
@@ -88,6 +107,7 @@ namespace DocumentIA.Functions.Services.Classification
                     result.ContentExtraido = window.ExtractedText;
                     result.Confianza = ruleResult.Confianza;
                     result.Clasificador = "RuleBasedTDN";
+                    result.DetalleProveedores.Add(new() { Proveedor = "Reglas", Tipologia = ruleResult.TipologiaDetectada, Confianza = ruleResult.Confianza });
 
                     _logger.LogInformation(
                         "Clasificación aceptada por reglas (confianza={Confianza})",
@@ -95,6 +115,8 @@ namespace DocumentIA.Functions.Services.Classification
 
                     return result;
                 }
+
+                result.DetalleProveedores.Add(new() { Proveedor = "Reglas", Tipologia = ruleResult.TipologiaDetectada, Confianza = ruleResult.Confianza, MotivoDescarte = $"confianza_baja:{ruleResult.Confianza:F3}<{_options.RuleConfidenceThreshold}" });
 
                 _logger.LogInformation(
                     "Confianza de reglas ({Confianza}) menor a umbral ({Umbral}), escalando a DI",
@@ -106,15 +128,21 @@ namespace DocumentIA.Functions.Services.Classification
                     "Resultado DI: tipologia={Tipologia}, confianza={Confianza}",
                     diResult.TipologiaDetectada, diResult.Confianza);
 
+                var isDiResto = string.Equals(
+                    diResult.TipologiaDetectada?.Trim(),
+                    "resto",
+                    StringComparison.OrdinalIgnoreCase);
+
                 // Revisar si DI superó umbral y no es RESTO
                 if (diResult.Confianza >= _options.DiConfidenceThreshold && 
-                    diResult.TipologiaDetectada?.ToLowerInvariant() != "resto")
+                    !isDiResto)
                 {
                     result.TipologiaDetectada = diResult.TipologiaDetectada;
                     result.ConfianzaDI = diResult.Confianza;
                     result.ContentExtraido = diResult.ContentExtraido;
                     result.Confianza = diResult.Confianza;
                     result.Clasificador = "DocumentIntelligence";
+                    result.DetalleProveedores.Add(new() { Proveedor = "DI", Tipologia = diResult.TipologiaDetectada, Confianza = diResult.Confianza });
 
                     _logger.LogInformation(
                         "Clasificación aceptada por DI (confianza={Confianza})",
@@ -123,16 +151,20 @@ namespace DocumentIA.Functions.Services.Classification
                     return result;
                 }
 
-                if (diResult.TipologiaDetectada?.ToLowerInvariant() == "resto")
+                string diDescarte;
+                if (isDiResto)
                 {
+                    diDescarte = "clasificacion_resto";
                     _logger.LogWarning("DI retornó clasificación RESTO, escalando a rescate LLM");
                 }
                 else
                 {
+                    diDescarte = $"confianza_baja:{diResult.Confianza:F3}<{_options.DiConfidenceThreshold}";
                     _logger.LogInformation(
                         "DI confianza ({Confianza}) menor a umbral ({Umbral}), escalando a rescate LLM",
                         diResult.Confianza, _options.DiConfidenceThreshold);
                 }
+                result.DetalleProveedores.Add(new() { Proveedor = "DI", Tipologia = diResult.TipologiaDetectada, Confianza = diResult.Confianza, MotivoDescarte = diDescarte });
 
                 // Paso 4: Rescate con Foundry LLM
                 var rescueResult = await _rescueClassifier.ClassifyAsync(
@@ -144,7 +176,9 @@ namespace DocumentIA.Functions.Services.Classification
                 result.Confianza = rescueResult.Confianza;
                 result.ContentExtraido = window.ExtractedText;
                 result.Clasificador = "FoundryRescue";
-                result.ConfianzaDI = rescueResult.Confianza; // Rescate confidence
+                result.FallbackLLM = true;
+                result.FallbackRazon = rescueResult.Razon;
+                result.ConfianzaDI = diResult.Confianza;
 
                 if (rescueResult.Razon == "timeout_exceeded")
                 {
@@ -152,6 +186,7 @@ namespace DocumentIA.Functions.Services.Classification
                     result.TipologiaDetectada = "Desconocido";
                     result.Confianza = 0.0;
                 }
+                result.DetalleProveedores.Add(new() { Proveedor = "FoundryRescue", Tipologia = result.TipologiaDetectada, Confianza = result.Confianza, MotivoDescarte = rescueResult.Razon == "timeout_exceeded" ? "timeout" : null });
 
                 _logger.LogInformation(
                     "Clasificación finalizada por rescate LLM: tipologia={Tipologia}, confianza={Confianza}",
@@ -298,7 +333,7 @@ namespace DocumentIA.Functions.Services.Classification
     public class HybridTdnOptions
     {
         public double RuleConfidenceThreshold { get; set; } = 0.75;
-        public double DiConfidenceThreshold { get; set; } = 0.85;
+        public double DiConfidenceThreshold { get; set; } = 0.75;
         public int MaxCharactersPerWindow { get; set; } = 8000;
         public int PagesToInspect { get; set; } = 3;
         public int RescueTimeoutMs { get; set; } = 8000;

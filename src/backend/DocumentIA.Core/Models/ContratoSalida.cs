@@ -28,6 +28,12 @@ public class Identificacion
     public string? Tdn1 { get; set; }
     public string? Tdn2 { get; set; }
     public string? Matricula { get; set; }
+    // Tipology metadata enrichment (v1.5+)
+    public string TipologiaNombre { get; set; } = string.Empty;
+    public string TipologiaMGDCMatricula { get; set; } = string.Empty;
+    public string GdcTipoDocumento { get; set; } = string.Empty;
+    public string GdcSubtipoDocumento { get; set; } = string.Empty;
+    public string GdcSerie { get; set; } = string.Empty;
 }
 
 public class Integridad
@@ -111,6 +117,17 @@ public class TrazaActividad
     public string? FallbackRazon { get; set; }
 }
 
+/// <summary>Propuesta individual de un proveedor de clasificación.</summary>
+public class PropuestaProveedor
+{
+    /// <summary>Nombre del proveedor: "Reglas", "DI", "GPT", "FoundryRescue", etc.</summary>
+    public string Proveedor { get; set; } = string.Empty;
+    public string? Tipologia { get; set; }
+    public double Confianza { get; set; }
+    /// <summary>Motivo por el que este proveedor no fue el resultado final (si aplica).</summary>
+    public string? MotivoDescarte { get; set; }
+}
+
 public class ResultadoClasificacion
 {
     public string Modelo { get; set; } = string.Empty;
@@ -133,6 +150,8 @@ public class ResultadoClasificacion
     public string? ClassifierVersion { get; set; }
     public int PagesProcessed { get; set; }
     public string? Clasificador { get; set; }
+    /// <summary>Propuestas individuales de cada proveedor ejecutado. Permite auditar por qué se eligió el resultado final.</summary>
+    public List<PropuestaProveedor> DetalleProveedores { get; set; } = new();
 }
 
 public class ResultadoExtraccion

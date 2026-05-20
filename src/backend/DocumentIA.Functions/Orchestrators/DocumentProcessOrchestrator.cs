@@ -627,7 +627,7 @@ public class DocumentProcessOrchestrator
                     // terminar el proceso ahí sin intentar extraer ni validar
                     if (ex.Message.Contains("No se ha podido identificar la tipologia"))
                     {
-                        const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
+                        const string mensajeTipologiaNoIdentificada = "Documento no clasificable con confianza suficiente";
 
                         logger.LogWarning(
                             "Clasificación falló: no se pudo identificar la tipología. Terminando procesamiento.");
@@ -646,17 +646,17 @@ public class DocumentProcessOrchestrator
                         salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
                         RegistrarModeloLlm(salida.DetalleEjecucion.Clasificacion.Modelo);
                         
-                        salida.Resultado.Estado = "ERROR";
+                        salida.Resultado.Estado = "NO_CLASIFICADO";
                         salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
                         salida.Resultado.ConfianzaGlobal = 0;
-                        salida.Resultado.EstadoCalidad = "ERROR";
+                        salida.Resultado.EstadoCalidad = "WARNING";
                         salida.Resultado.ConfianzaClasificacion = 0;
                         salida.Resultado.ConfianzaExtraccion = 0;
                         salida.Resultado.ConfianzaValidacion = 0;
                         salida.DetalleEjecucion.Postproceso.Inconsistencias.Add(
-                            $"Error: {mensajeTipologiaNoIdentificada}");
+                            $"Aviso: {mensajeTipologiaNoIdentificada}");
                         
-                        FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
+                        FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
                         return salida;
                     }
                     
@@ -665,8 +665,12 @@ public class DocumentProcessOrchestrator
             }
 
             // Propagar markdown extraído por DI clasificador a DatosNormalizados
+            // cuando no exista todavía contexto útil en markdown.
+            var hasMarkdownUtil = TryGetTextoNoVacio(datosNormalizados, "Markdown", out _)
+                || TryGetTextoNoVacio(datosNormalizados, "markdown", out _);
+
             if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ContentExtraido)
-                && !datosNormalizados.ContainsKey("Markdown"))
+                && !hasMarkdownUtil)
             {
                 datosNormalizados["Markdown"] = resultadoClasificacion.ContentExtraido;
                 RegistrarMarkdown(resultadoClasificacion.ContentExtraido, "Clasificacion");
@@ -674,6 +678,13 @@ public class DocumentProcessOrchestrator
                     "Markdown de clasificación DI propagado a datosNormalizados ({Len} chars)",
                     resultadoClasificacion.ContentExtraido.Length);
             }
+
+            var markdownClasificacionDisponible = TryGetTextoNoVacio(datosNormalizados, "Markdown", out var markdownPrincipalClasif)
+                ? markdownPrincipalClasif
+                : (TryGetTextoNoVacio(datosNormalizados, "markdown", out var markdownSecundarioClasif)
+                    ? markdownSecundarioClasif
+                    : null);
+
             if (resultadoClasificacion.FallbackLLM)
             {
                 RegistrarModeloLlm(resultadoClasificacion.Modelo);
@@ -694,7 +705,7 @@ public class DocumentProcessOrchestrator
                 ex.InnerException is KeyNotFoundException ||
                 ex is TaskFailedException && ex.Message.Contains("No existe la tipologia"))
             {
-                const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
+                const string mensajeTipologiaNoIdentificada = "Documento no clasificable con confianza suficiente";
 
                 logger.LogWarning(
                     ex,
@@ -703,23 +714,79 @@ public class DocumentProcessOrchestrator
 
                 salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
                 salida.DetalleEjecucion.MotivoErrorTipologia = ex.Message;
-                salida.Resultado.Estado = "ERROR";
+                salida.Resultado.Estado = "NO_CLASIFICADO";
                 salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
                 salida.Resultado.ConfianzaGlobal = 0;
-                salida.Resultado.EstadoCalidad = "ERROR";
+                salida.Resultado.EstadoCalidad = "WARNING";
                 salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
                 salida.Resultado.ConfianzaExtraccion = 0;
                 salida.Resultado.ConfianzaValidacion = 0;
-                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
+                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Aviso: {mensajeTipologiaNoIdentificada}");
 
-                FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
+                if (!string.IsNullOrWhiteSpace(markdownClasificacionDisponible))
+                {
+                    salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacionDisponible;
+                    if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown", StringComparer.OrdinalIgnoreCase))
+                    {
+                        salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+                    }
+                    RegistrarMarkdown(markdownClasificacionDisponible, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
+                }
+
+                FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
                 return salida;
             }
 
             salida.Identificacion.Tipologia = tipologiaResuelta.TechnicalKey;
             salida.Identificacion.TipologiaFamilia = tipologiaResuelta.TipologiaId;
             salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
+            // Tipology metadata enrichment (v1.5+)
+            salida.Identificacion.TipologiaNombre = tipologiaResuelta.TipologiaNombre;
+            salida.Identificacion.TipologiaMGDCMatricula = tipologiaResuelta.TipologiaMGDCMatricula;
+            salida.Identificacion.GdcTipoDocumento = tipologiaResuelta.GdcTipoDocumento;
+            salida.Identificacion.GdcSubtipoDocumento = tipologiaResuelta.GdcSubtipoDocumento;
+            salida.Identificacion.GdcSerie = tipologiaResuelta.GdcSerie;
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1))
+            {
+                salida.Identificacion.Tdn1 = tipologiaResuelta.Tdn1;
+            }
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn2))
+            {
+                salida.Identificacion.Tdn2 = tipologiaResuelta.Tdn2;
+            }
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
+
+            if (string.Equals(tipologiaResuelta.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tipologiaResuelta.TipologiaId, "Desconocido", StringComparison.OrdinalIgnoreCase))
+            {
+                const string mensajeTipologiaNoIdentificada = "Documento no clasificable con confianza suficiente";
+
+                logger.LogWarning(
+                    "La clasificación devolvió tipología Desconocido. Terminando procesamiento sin error técnico.");
+
+                salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
+                salida.Resultado.Estado = "NO_CLASIFICADO";
+                salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
+                salida.Resultado.ConfianzaGlobal = 0;
+                salida.Resultado.EstadoCalidad = "WARNING";
+                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                salida.Resultado.ConfianzaExtraccion = 0;
+                salida.Resultado.ConfianzaValidacion = 0;
+                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Aviso: {mensajeTipologiaNoIdentificada}");
+
+                if (!string.IsNullOrWhiteSpace(markdownClasificacionDisponible))
+                {
+                    salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacionDisponible;
+                    if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown", StringComparer.OrdinalIgnoreCase))
+                    {
+                        salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+                    }
+                    RegistrarMarkdown(markdownClasificacionDisponible, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
+                }
+
+                FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
+                return salida;
+            }
 
             // Añadir actividad Prompt al seguimiento si la tipología la tiene habilitada o si hay override en la petición
             var promptActivoEnPeticion = tipologiaResuelta.PromptEnabled || entrada.Instrucciones.Prompt != null;
@@ -761,11 +828,11 @@ public class DocumentProcessOrchestrator
                     TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
                 };
 
-                var markdownClasificacion = datosNormalizados.TryGetValue("Markdown", out var markdownObj) &&
-                    markdownObj is string markdownTexto &&
-                    !string.IsNullOrWhiteSpace(markdownTexto)
-                    ? markdownTexto
-                    : null;
+                var markdownClasificacion = TryGetTextoNoVacio(datosNormalizados, "Markdown", out var markdownPrincipal)
+                    ? markdownPrincipal
+                    : (TryGetTextoNoVacio(datosNormalizados, "markdown", out var markdownSecundario)
+                        ? markdownSecundario
+                        : null);
 
                 salida.DatosExtraidos = new Dictionary<string, object>();
                 salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
@@ -1388,6 +1455,36 @@ public class DocumentProcessOrchestrator
             JsonElement json when json.ValueKind == JsonValueKind.String && int.TryParse(json.GetString(), out var parsedString) => parsedString,
             _ => 0
         };
+    }
+
+    private static bool TryGetTextoNoVacio(IDictionary<string, object> values, string key, out string value)
+    {
+        value = string.Empty;
+
+        if (!values.TryGetValue(key, out var raw) || raw is null)
+        {
+            return false;
+        }
+
+        switch (raw)
+        {
+            case string s when !string.IsNullOrWhiteSpace(s):
+                value = s;
+                return true;
+            case JsonElement json when json.ValueKind == JsonValueKind.String:
+            {
+                var parsed = json.GetString();
+                if (!string.IsNullOrWhiteSpace(parsed))
+                {
+                    value = parsed;
+                    return true;
+                }
+
+                break;
+            }
+        }
+
+        return false;
     }
 
     private static double RedondearSalida(double value)
