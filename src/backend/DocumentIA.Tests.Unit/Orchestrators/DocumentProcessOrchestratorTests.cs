@@ -340,7 +340,7 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
-    public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoError()
+    public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoNoClasificado()
     {
         var orchestrator = CreateOrchestrator();
         // Sin ExpectedType → el orquestador llama a ClasificarActivity
@@ -354,8 +354,8 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("ERROR");
-        salida.Resultado.MensajeError.Should().Contain("tipologia");
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        salida.Resultado.MensajeError.Should().Contain("no clasificable");
     }
 
     [Fact]
@@ -429,7 +429,7 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
 
         var prepInput = context.GetLastActivityInput<PrepararDocumentoClasificacionInput>("PrepararDocumentoClasificacionActivity");
         prepInput.Should().NotBeNull();
@@ -437,7 +437,7 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
-    public async Task RunOrchestrator_TipologiaNoResuelta_RetornaEstadoError()
+    public async Task RunOrchestrator_TipologiaNoResuelta_RetornaEstadoNoClasificado()
     {
         var orchestrator = CreateOrchestrator();
         // Con ExpectedType → el orquestador salta ClasificarActivity y llama ResolverTipologiaActivity
@@ -451,8 +451,34 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("ERROR");
-        salida.Resultado.MensajeError.Should().Contain("tipologia");
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        salida.Resultado.MensajeError.Should().Contain("no clasificable");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocido_TerminaSinErrorTecnico()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "Desconocido"));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("Completed");
+        salida.Identificacion.Tipologia.Should().Be("Desconocido");
     }
 
     [Fact]

@@ -59,14 +59,16 @@ public class ResolverTipologiaActivityTests
     }
 
     [Fact]
-    public void Run_WhenResolverThrows_PropagatesException()
+    public void Run_WhenResolverThrows_ReturnsDesconocidoFallback()
     {
         _resolver.Setup(r => r.Resolve("familia-desconocida"))
             .Throws(new KeyNotFoundException("familia-desconocida no registrada"));
 
-        var action = () => _sut.Run("familia-desconocida");
+        var result = _sut.Run("familia-desconocida");
 
-        action.Should().Throw<KeyNotFoundException>()
-            .WithMessage("*familia-desconocida*");
+        result.TipologiaId.Should().Be("Desconocido");
+        result.TechnicalKey.Should().Be("Desconocido");
+        result.ExtractionEnabled.Should().BeFalse();
+        result.SkipGDCUpload.Should().BeTrue();
     }
 }
