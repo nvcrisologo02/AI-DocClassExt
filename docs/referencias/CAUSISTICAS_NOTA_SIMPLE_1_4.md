@@ -105,9 +105,10 @@ graph TD
 ## **Resumen de Resultados**
 
 - **OK:** 16 causísticas (#1, #2, #3, #5, #6, #7, #9, #10, #11, #13, #14, #15, #16, #17, #19, #21)
-- **ERROR:** 6 causísticas (#4, #8, #12, #18, #20, #22)
+- **NO_CLASIFICADO:** 1 causística (#22)
+- **ERROR:** 5 causísticas (#4, #8, #12, #18, #20)
 
-> **Nota comportamiento RESTO (causísticas #21 y #22):** Cuando Azure DI clasifica como `RESTO`, el fallback a GPT es **obligatorio** independientemente de la confianza DI. A diferencia del caso "DI <0.85" (causísticas #13-#15), si GPT falla semánticamente (devuelve Desconocido o confianza < 0.3), el proceso termina en ERROR sin continuar a extracción. Si GPT falla técnicamente (excepción de API), el proceso cae al resultado DI (RESTO) y falla en la resolución de tipología por ser `RESTO` un valor no registrado en el resolver.
+> **Nota comportamiento RESTO (causísticas #21 y #22):** Cuando Azure DI clasifica como `RESTO`, el fallback a GPT es **obligatorio** independientemente de la confianza DI. A diferencia del caso "DI <0.85" (causísticas #13-#15), si GPT falla semánticamente (devuelve Desconocido o confianza < 0.3), el proceso termina en `NO_CLASIFICADO` sin continuar a extracción y sin error técnico de ejecución. Si GPT falla técnicamente (excepción de API), el proceso cae al resultado DI (RESTO) y puede terminar en `NO_CLASIFICADO` durante la resolución de tipología por ser `RESTO` un valor no registrado en el resolver.
 
 ---
 
@@ -242,5 +243,5 @@ graph TD
 ### Causística #22
 - **Clasificación:** DI = RESTO → Fallback GPT ✗ (Desconocido)
 - **Extracción:** —
-- **Descripción:** DI no reconoce el documento (devuelve `RESTO`), fallback GPT obligatorio, GPT devuelve `Desconocido` o confianza < 0.3. El orquestador termina el proceso con `Estado=ERROR` y `Resultado.MensajeError` poblado. No se ejecutan Extraer, Validar ni Integrar.
-- **Resultado:** ERROR
+- **Descripción:** DI no reconoce el documento (devuelve `RESTO`), fallback GPT obligatorio, GPT devuelve `Desconocido` o confianza < 0.3. El orquestador termina el proceso con `Estado=NO_CLASIFICADO` y `Resultado.MensajeError` funcional poblado. No se ejecutan Extraer, Validar ni Integrar.
+- **Resultado:** NO_CLASIFICADO

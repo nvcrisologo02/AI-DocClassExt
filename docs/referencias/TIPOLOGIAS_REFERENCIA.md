@@ -63,7 +63,7 @@ ContratoEntrada.Instrucciones.ExpectedType
 | Confianza DI < `clasifUmbralFallback` | `low_confidence:{confianza}` | Confianza insuficiente para aceptar el resultado DI. |
 | Error en proveedor DI | _(varía)_ | Excepción en llamada a DI; si hay resultado DI parcial, se intenta GPT. |
 
-### 3.3 Resultado GPT no clasificable → ERROR
+### 3.3 Resultado GPT no clasificable → NO_CLASIFICADO
 
 Si GPT devuelve `"Desconocido"` o confianza < 0.3, `GptClasificarDataProvider` lanza:
 
@@ -71,16 +71,16 @@ Si GPT devuelve `"Desconocido"` o confianza < 0.3, `GptClasificarDataProvider` l
 InvalidOperationException: "No se ha podido identificar la tipologia del documento..."
 ```
 
-El orquestador captura esta excepción y **termina el proceso en estado `ERROR`**:
+El orquestador captura esta excepción y **termina el proceso en estado `NO_CLASIFICADO`** (cierre controlado):
 
 - No se ejecutan `ExtraerActivity`, `ValidarActivity`, `IntegrarActivity` ni `PersistirActivity`.
 - La salida incluye en `Resultado`:
-  - `Estado = "ERROR"`
-  - `MensajeError = "No se ha podido identificar la tipologia del documento"`
-  - `ConfianzaGlobal = 0`, `EstadoCalidad = "ERROR"`, `ConfianzaClasificacion = 0`
+  - `Estado = "NO_CLASIFICADO"`
+  - `MensajeError = "Documento no clasificable con confianza suficiente"`
+  - `ConfianzaGlobal = 0`, `EstadoCalidad = "WARNING"`, `ConfianzaClasificacion = 0`
 - La salida incluye en `DetalleEjecucion.Clasificacion`:
   - `TipologiaDetectada = "Desconocido"`, `FallbackLLM = true`, `FallbackRazon = "fallback_unclassified"`, `Confianza = 0`
-- `DetalleEjecucion.Postproceso.Inconsistencias` recoge el mensaje de error.
+- `DetalleEjecucion.Postproceso.Inconsistencias` recoge un aviso funcional (no error técnico).
 
 ### 3.4 Diagrama clasificación
 
@@ -97,9 +97,9 @@ flowchart TD
     GPT["Fallback GPT\n(GptClasificarDataProvider)"]
     GPT --> GR{Resultado GPT}
     GR -- "Tipología válida\nconfianza ≥ 0.3" --> OK3["✓ OK\n(FallbackLLM=true)"]
-    GR -- "Desconocido\no confianza < 0.3" --> ERR["❌ ERROR\nMensajeError poblado\nFin proceso"]
+    GR -- "Desconocido\no confianza < 0.3" --> NC["⚠ NO_CLASIFICADO\nMensajeError funcional\nFin proceso controlado"]
 
-    style ERR fill:#F44336,stroke:#C62828,color:#fff
+    style NC fill:#FFB74D,stroke:#EF6C00,color:#fff
     style OK1 fill:#81C784,stroke:#2E7D32,color:#fff
     style OK2 fill:#81C784,stroke:#2E7D32,color:#fff
     style OK3 fill:#81C784,stroke:#2E7D32,color:#fff
@@ -260,11 +260,11 @@ La etiqueta `RESTO` es el valor que Azure DI asigna cuando no puede clasificar e
 
 | Situación | Excepción | Resultado final |
 |---|---|---|
-| GPT devuelve Desconocido o confianza < 0.3 | `InvalidOperationException` | `Estado=ERROR`, `MensajeError` con descripción |
-| Familia o versión no registrada en resolver | `KeyNotFoundException` (envuelta en `TaskFailedException`) | `Estado=ERROR`, `MensajeError` con nombre de tipología |
+| GPT devuelve Desconocido o confianza < 0.3 | `InvalidOperationException` | `Estado=NO_CLASIFICADO`, `MensajeError` funcional |
+| Familia o versión no registrada en resolver | `KeyNotFoundException` (envuelta en `TaskFailedException`) | `Estado=NO_CLASIFICADO`, `MensajeError` funcional |
 | Excepción genérica en cualquier activity | `Exception` | `Estado=ERROR`, `MensajeError = ex.Message` |
 
-El campo `Resultado.MensajeError` está definido en `ContratoSalida.ResultadoFinal` y se popula únicamente cuando `Estado = "ERROR"`.
+El campo `Resultado.MensajeError` está definido en `ContratoSalida.ResultadoFinal` y puede poblarse tanto en `ERROR` como en `NO_CLASIFICADO`.
 
 ---
 
