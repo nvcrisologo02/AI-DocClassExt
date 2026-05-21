@@ -77,7 +77,7 @@ public class CamposBusquedaActivo
 
 public class ConfiguracionIA
 {
-    public string Provider { get; set; } = "auto"; // auto | azure-document-intelligence | mock
+    public string Provider { get; set; } = "auto"; // auto | provider legacy | flow key configurado
     public string Model { get; set; } = "auto"; // DI | GPT | auto
     /// <summary>
     /// Umbral de confianza para esta etapa (legado, aplica a completitud y confianza si no se informan los específicos).

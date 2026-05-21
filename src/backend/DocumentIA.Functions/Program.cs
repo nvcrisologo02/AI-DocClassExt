@@ -19,6 +19,7 @@ using System.IO;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Microsoft.ApplicationInsights;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -135,6 +136,12 @@ var host = new HostBuilder()
                 sp.GetRequiredService<TelemetryClient>()));
 
         services.AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>();
+
+        // Configure Kestrel request body size limit for local Function host
+        services.Configure<KestrelServerOptions>(options =>
+        {
+            options.Limits.MaxRequestBodySize = 200 * 1024 * 1024; // 200 MB
+        });
 
         // Logging
         services.AddLogging(builder =>

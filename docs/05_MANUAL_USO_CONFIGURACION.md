@@ -170,7 +170,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.forceReprocess` | bool | No | `true` = reprocesar aunque sea duplicado. Default: `false`. |
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
-| `instrucciones.classification.provider` | string | No | `"auto"` / `"hybrid-tdn"` / `"hybrid"` / `"azure-document-intelligence"` / `"mock"`. `"hybrid-tdn"` aplica cadena Reglas -> DI -> Rescue. Default: `"auto"`. |
+| `instrucciones.classification.provider` | string | No | `"auto"` o clave de flujo/provider. Ejemplos: `"hybrid-rules-gpt-di"`, `"hybrid-tdn"`, `"di"`, `"gpt"`, `"rules"`, `"mock"`. Con `"auto"` se usa `Classification.DefaultFlow`. |
 | `instrucciones.classification.model` | string | No | Reservado. Usar `"auto"`. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
 | `instrucciones.extraction` | object | No | Config extraccion para esta peticion. |
@@ -562,6 +562,47 @@ Invoke-RestMethod \
 | `timeoutSeconds` | int | No | Timeout total. Default: `120` |
 | `isDefault` | bool | No | Marca como modelo de clasificacion por defecto |
 | `fallbackThreshold` | double | No | Confianza mínima DI para no activar fallback GPT |
+
+#### Configuracion de pipeline de clasificacion (appsettings / local.settings)
+
+`appsettings.json`:
+
+```json
+{
+  "Classification": {
+    "DefaultProvider": "hybrid-tdn",
+    "DefaultFlow": "hybrid-rules-gpt-di",
+    "UseGlobalFallback": true,
+    "GlobalFallbackProvider": "gpt",
+    "Flows": {
+      "hybrid-rules-gpt-di": { "Providers": [ "rules", "gpt", "di" ] },
+      "hybrid-rules-di-gpt": { "Providers": [ "rules", "di", "gpt" ] },
+      "hybrid-tdn": { "Providers": [ "hybrid-tdn" ] },
+      "di": { "Providers": [ "di" ] },
+      "gpt": { "Providers": [ "gpt" ] }
+    }
+  }
+}
+```
+
+Reglas operativas:
+
+- El flujo se ejecuta en orden y se corta en el primer resultado satisfactorio.
+- Si no hay resultado satisfactorio y `UseGlobalFallback=true`, se ejecuta `GlobalFallbackProvider` al final.
+- `DefaultProvider` se mantiene por compatibilidad legacy cuando no hay `Flows` definidos.
+
+`local.settings.json` (seccion `Values`, formato `:`):
+
+```json
+{
+  "Classification:DefaultFlow": "hybrid-rules-gpt-di",
+  "Classification:UseGlobalFallback": "true",
+  "Classification:GlobalFallbackProvider": "gpt",
+  "Classification:Flows:hybrid-rules-gpt-di:Providers:0": "rules",
+  "Classification:Flows:hybrid-rules-gpt-di:Providers:1": "gpt",
+  "Classification:Flows:hybrid-rules-gpt-di:Providers:2": "di"
+}
+```
 
 #### Configuracion `HybridTdn` (appsettings / local.settings)
 
