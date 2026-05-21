@@ -1,0 +1,73 @@
+{
+  "Models": [
+    {
+      "Key": "nota.simple.1_4.azure-cu",
+      "Provider": "azure-content-understanding",
+      "AnalyzerId": "CU_NS_1.4_2",
+      "ContentType": "application/pdf",
+      "ProcessingLocation": "geography",
+      "InputRange": "",
+      "IsDefault": true,
+      "UseAsFallback": false,
+      "Endpoint": "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/",
+      "ApiKey": "",
+      "AuthMode": "ApiKey",
+      "DeploymentName": "",
+      "TimeoutSeconds": 60,
+      "MinFieldsRatio": 0.5,
+      "Temperature": 0,
+      "MaxTokens": 2000,
+      "ApiVersion": "2024-11-30",
+      "PollIntervalMs": 1000
+    },
+    {
+      "Key": "nota.simple.1_4.azure-di",
+      "Provider": "azure-document-intelligence",
+      "AnalyzerId": "DI_NS_1.4_v1",
+      "ContentType": "application/pdf",
+      "ProcessingLocation": "",
+      "InputRange": "",
+      "IsDefault": false,
+      "UseAsFallback": false,
+      "Endpoint": "https://srbdiprodocai.cognitiveservices.azure.com/",
+      "ApiKey": "",
+      "AuthMode": "ApiKey",
+      "DeploymentName": "",
+      "TimeoutSeconds": 60,
+      "MinFieldsRatio": 0.5,
+      "Temperature": 0,
+      "MaxTokens": 2000,
+      "ApiVersion": "2024-11-30",
+      "PollIntervalMs": 1000
+    },
+    {
+      "Key": "default.gpt4o-mini_ex",
+      "Provider": "azure-openai",
+      "Endpoint": "https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+      "ApiKey": "",
+      "AuthMode": "ApiKey",
+      "DeploymentName": "gpt-4o-mini",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Key": "extraction.gpt4o-mini-fallback",
+      "Provider": "azure-openai",
+      "IsDefault": false,
+      "UseAsFallback": true,
+      "Endpoint": "https://upe48-mm2avmdm-swedencentral.openai.azure.com",
+      "ApiKey": "",
+      "AuthMode": "ApiKey",
+      "AnalyzerId": "",
+      "DeploymentName": "gpt-4o-mini",
+      "ContentType": "",
+      "ProcessingLocation": "",
+      "InputRange": "",
+      "TimeoutSeconds": 60,
+      "MinFieldsRatio": 0.5,
+      "Temperature": 0,
+      "MaxTokens": 2000,
+      "ApiVersion": "2024-11-30",
+      "PollIntervalMs": 1000
+    }
+  ]
+}

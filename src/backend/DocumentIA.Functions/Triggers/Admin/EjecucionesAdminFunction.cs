@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.Extensions.Logging;
@@ -46,6 +47,8 @@ public class EjecucionesAdminFunction
             e.EjecucionGuid,
             FechaEjecucion = e.FechaEjecucion,
             e.Tipologia,
+            e.ClassificationOnly,
+            TipoFlujo = e.ClassificationOnly ? "Clasificacion" : "Completo",
             e.EstadoFinal,
             e.ConfianzaGlobal,
             e.ConfianzaClasificacion,
@@ -57,7 +60,8 @@ public class EjecucionesAdminFunction
             e.DuracionValidacionMs,
             e.DuracionIntegracionMs,
             e.DuracionPersistenciaMs,
-            NombreDocumento = e.Documento?.NombreArchivo
+            NombreDocumento = e.Documento?.NombreArchivo,
+            Actividades = ParseActivitySummaries(e.ActivityTimelineJson)
         }).ToList();
 
         var response = req.CreateResponse(HttpStatusCode.OK);
@@ -215,6 +219,7 @@ public class EjecucionesAdminFunction
             ejecucion.Id,
             ejecucion.EjecucionGuid,
             ejecucion.ModeloClasificacion,
+            ejecucion.ClassificationOnly,
             Identificacion = identificacion,
             Integridad = integridad,
             Resultado = resultado,
@@ -257,4 +262,33 @@ public class EjecucionesAdminFunction
         JsonElement je => je.ToString(),
         _ => value.ToString() ?? ""
     };
+
+    private static List<ActivitySummaryDto> ParseActivitySummaries(string? activityTimelineJson)
+    {
+        if (string.IsNullOrWhiteSpace(activityTimelineJson))
+        {
+            return [];
+        }
+
+        try
+        {
+            var activities = JsonSerializer.Deserialize<List<ActivitySummaryDto>>(activityTimelineJson, _jsonOpts);
+            return activities?
+                .Where(a => !string.IsNullOrWhiteSpace(a.Nombre))
+                .ToList() ?? [];
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
+    private sealed class ActivitySummaryDto
+    {
+        [JsonPropertyName("Nombre")]
+        public string Nombre { get; set; } = string.Empty;
+
+        [JsonPropertyName("Estado")]
+        public string Estado { get; set; } = string.Empty;
+    }
 }

@@ -8,9 +8,9 @@ services:
     restart: unless-stopped
     command: "azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0 --skipApiVersionCheck"
     ports:
-      - "10000:10000"  # Blob
-      - "10001:10001"  # Queue
-      - "10002:10002"  # Table
+      - "20000:10000"  # Blob (remapped from 10000)
+      - "20001:10001"  # Queue (remapped from 10001)
+      - "20002:10002"  # Table (remapped from 10002)
     volumes:
       - azurite_data:/data
 
@@ -28,6 +28,7 @@ services:
 
 volumes:
   azurite_data:
-    driver: local
+    external: true
+    name: documento-ia-clasificacion-mvp_azurite-data
   sql_data:
     driver: local

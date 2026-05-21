@@ -40,7 +40,7 @@ gantt
 | **EP2** | Clasificacion y extraccion AI | DONE | 100% | DI clasificacion + CU extraccion + fallback GPT. Fix preproceso markdown aplicado. Degradacion segura activa. |
 | **EP3** | Validacion y motor de reglas | IN PROGRESS | 88% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field (V-1), reglas condicionales (V-2). |
 | **EP4** | Persistencia y auditoria | DONE | 100% | 9 entidades EF Core, migraciones auto, auditoria por ejecucion, validaciones por campo. |
-| **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
+| **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. En ejecución: pipeline de clasificación configurable por flujo + fallback global final. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
 | **EP6** | Observabilidad y pruebas | IN PROGRESS | 85% | 536 tests C# en verde (verificado 2026-05-04 en `DocumentIA.Tests.Unit`), customStatus y seguimiento de orquestacion activos. Completados T-1/T-2/T-3/T-4/T-5/T-6. Pendiente: extender pipeline a Admin/E2E/AssetResolver, dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
 | **EP7** | Proteccion datos / GDPR (ADO Epic 98519) | NEW | 0% | Cifrado en reposo (AES-256-GCM), masking PII en logs, retencion configurable, KV para secrets. Features ADO: 98520 F7.1, 98524 F7.2, 98529 F7.3, 98534 F7.4. |
 | **EP8** | Sistema de Plugins de Integracion (ADO Epic 98628) | DONE | 100% | Arquitectura plugins + plugin REST generico + plugins Atlas/Catastro/GDC + resiliencia y observabilidad. Features 98634-98637 todas Done. |
@@ -73,6 +73,7 @@ gantt
 | C-4 | Degradacion segura fallback GPT | **DONE** | Si GPT fallback falla, orquestacion devuelve resultado parcial sin tumbar el flujo. | estado-fallback-preproceso |
 | C-5 | Propagacion idActivo en IntegrarActivity | **DONE** | Payload plugins usa `DatosFinales.idActivo`; valor enriquecido ya no es pisado. | estado-fallback-preproceso (2026-03-27) |
 | C-6 | Fix `NombreArchivo` null en flujo `objectIdGDC` | **DONE** | Sincronizacion `entrada.Documento.Name -> salida.Identificacion.Documento` en orquestador + fallback defensivo en `PersistirActivity` para no persistir null. Incluye regresion unitaria en orquestador y persistencia. Work items `99297`, `99298`, `99299`, `99300` en `Done`. | AB#99297 AB#99298 AB#99299 AB#99300 |
+| C-7 | Fix prompt GPT fallback: tipologías incompletas | **DONE** | Dos bugs corregidos (2026-05-20): (1) `ClassificationTipologiaPromptBuilder` filtraba con `!isDefault`, excluyendo todas las tipologías TDN (ESCR/DOCN/SERE) que no tienen `isDefault=true`. Filtro eliminado — ahora se incluyen todas las Published+Activa con `tipologiaId` válido. (2) `GptClasificarDataProvider` tenía `_tipologiasPromptSection` como `Lazy<string>`, que congelaba el prompt al primer uso (indefinidamente). Eliminado el `Lazy`; ahora se llama `_tipologiaPromptBuilder.Build()` por petición, respetando el TTL de 5 min del `IMemoryCache`. Resultado: de 2–5 tipologías visibles para el LLM, pasan a ser 14 (todas las Published con `gptDescripcion`). | — |
 
 ---
 
@@ -233,6 +234,7 @@ Impacto en tests: añadir ~15-20 tests nuevos en `ValidationEngineTests` cubrien
 | ~~Azure SQL no disponible~~ | ~~Media~~ | ~~Alto~~ | **RESUELTO.** `srbsqlprodocai` operativo en produccion. |
 | ~~Self-hosted agent inestable~~ | ~~Media~~ | ~~Alto~~ | **N/A.** Agente no requerido en arquitectura actual. |
 | ~~Fallback GPT HTTP 400~~ | ~~Media~~ | ~~Alto~~ | **RESUELTO.** GPT opera sobre markdown extraido (C-1/C-2 completados). |
+| ~~Prompt GPT solo incluía 2–5 tipologías~~ | ~~Alta~~ | ~~Alto~~ | **RESUELTO (C-7).** Eliminado filtro `isDefault` en `ClassificationTipologiaPromptBuilder` y `Lazy<string>` en `GptClasificarDataProvider`. Las 14 tipologías con `gptDescripcion` están disponibles para el LLM. |
 | CU (preview) cambia API | Baja | Alto | Abstraccion via `IExtraerDataProvider`. Adapter pattern permite cambiar implementacion sin afectar pipeline. |
 | GDC sin disponibilidad | Baja | Medio | `skipGDCUpload` permite continuar sin GDC. Documento se persiste en BD igualmente. Mitigacion adicional: G-3 (reconciliacion async). |
 | GDC `DOC_OBJECT_EXISTS` sin resolver | Media | Medio | Exige implementar G-2 (idempotencia). Mientras tanto, la ejecucion termina en error de GDC pero el documento se persiste en BD. |

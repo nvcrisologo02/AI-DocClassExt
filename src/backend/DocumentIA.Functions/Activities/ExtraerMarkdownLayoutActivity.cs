@@ -1,4 +1,5 @@
 using DocumentIA.Core.Models;
+using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
@@ -8,11 +9,11 @@ namespace DocumentIA.Functions.Activities;
 public class ExtraerMarkdownLayoutActivity
 {
     private readonly ILogger<ExtraerMarkdownLayoutActivity> _logger;
-    private readonly AzureDocumentIntelligenceLayoutMarkdownProvider _provider;
+    private readonly ILayoutMarkdownProvider _provider;
 
     public ExtraerMarkdownLayoutActivity(
         ILogger<ExtraerMarkdownLayoutActivity> logger,
-        AzureDocumentIntelligenceLayoutMarkdownProvider provider)
+        ILayoutMarkdownProvider provider)
     {
         _logger = logger;
         _provider = provider;

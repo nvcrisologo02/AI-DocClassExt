@@ -17,6 +17,9 @@ __blobstorage__/
 __queuestorage__/
 __azurite_db*__.json
 
+# Azurite local emulator
+.azurite/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -45,6 +48,9 @@ Thumbs.db
 appsettings.Development.json
 last-instance-id.txt
 commit-motor-validacion.ps1
+
+# Test scripts (temporary)
+test-classification-only-hybrid-trace-folder.ps1
 tests/api-tests/last-instance-id.txt
 tests/api-tests/last-instance-id-notasimple13.txt
 tests/api-tests/last-instance-id-notasimple.txt
@@ -73,6 +79,7 @@ docs/manuales/salidas-demo/salida_nota_simple_1_4.json
 docs/manuales/salidas-demo/salida_test_ingest_tasacion.json
 tests/api-tests/last-instance-id.txt
 docs/auxiliares/
+docs/presentaciones/
 tests/api-tests/last-instance-id-notasimple14-classify.txt
 tests/api-tests/last-instance-id-*.txt
 tmp_func_host_prompt_*.log
@@ -111,3 +118,4 @@ scripts/report-coste-real-desde-csv.sql
 cost-analysis.csv
 cost-analysis-full.csv
 docs/riesgos-ia/build_word_pdf.py
+scripts/generate-guia-clasificacion-word.py

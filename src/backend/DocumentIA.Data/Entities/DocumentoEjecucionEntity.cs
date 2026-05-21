@@ -43,10 +43,6 @@ namespace DocumentIA.Data.Entities
         public double ConfianzaClasificacion { get; set; }
         
         public bool UseFallbackLLM { get; set; }
-
-        /// <summary>
-        /// Indica si esta ejecución se realizó en modo solo clasificación.
-        /// </summary>
         public bool ClassificationOnly { get; set; }
         
         [Column(TypeName = "nvarchar(max)")]

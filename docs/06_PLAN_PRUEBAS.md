@@ -128,6 +128,28 @@ Componente mas critico: garantiza la calidad de los datos extraidos.
 |-------|-------|---------------------|-------------|
 | **GdcIntegrationTests** | 2 | `GdcService` (E2E con FakeHttpHandler) | Subida documento: retorna ObjectId. Consulta: retorna exists. |
 
+### 6.2.8 Cobertura PRD v2.1 — Linea A (recorte 2.7)
+
+Nuevas piezas a cubrir en unit/integración:
+
+- `PdfRecorteService`
+- `PrepararDocumentoClasificacionActivity`
+- Propagación de `DocumentoBase64Override` en clasificación DI
+- Inserción del paso 2.7 en orquestador
+
+Casos mínimos:
+
+1. PDF 10 páginas, max=3 -> recorte aplicado, `PaginasIncluidas=3`.
+2. PDF 2 páginas, max=3 -> sin recorte (`RecorteAplicado=false`).
+3. Error de lectura PDF -> fallback a documento completo en orquestador.
+4. `ClasificarActivity`/provider DI usa `DocumentoBase64Override` cuando existe.
+5. `ExtraerActivity` y `SubirGDCActivity` siguen usando documento completo.
+
+Smokes recomendados:
+
+- Documento largo (>=100 páginas): clasificación sobre recorte y extracción/GDC sobre completo.
+- Muestra SERE: validar impacto con override de familia (`sere=5`) y medir tasa de `BAJA_CONFIANZA_CLASIFICACION`.
+
 ---
 
 ## 6.3 Tests Python (Enrichments)

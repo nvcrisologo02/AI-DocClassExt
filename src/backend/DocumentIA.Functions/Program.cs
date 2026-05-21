@@ -13,15 +13,23 @@ using DocumentIA.Functions.Mocks;
 using DocumentIA.Plugins.Integration;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Functions.Services;
+using DocumentIA.Functions.Services.Classification;
 using Microsoft.Extensions.Options;
 using System.IO;
 using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
+using Microsoft.ApplicationInsights;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
     .ConfigureAppConfiguration((context, config) =>
     {
+        if (context.HostingEnvironment.IsDevelopment())
+        {
+            config.AddJsonFile("local.settings.json", optional: true, reloadOnChange: true);
+        }
+
         var built = config.Build();
         var secretsSource = built["SecretsSource"] ?? "Config";
         var useAzureVault = string.Equals(secretsSource, "AzureVault", StringComparison.OrdinalIgnoreCase);
@@ -89,6 +97,7 @@ var host = new HostBuilder()
 
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
+        services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
@@ -101,11 +110,39 @@ var host = new HostBuilder()
 
         services.AddSingleton<MockClasificarDataProvider>();
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
-        services.AddSingleton<AzureDocumentIntelligenceLayoutMarkdownProvider>();
+        services.AddSingleton<ILayoutMarkdownProvider, AzureDocumentIntelligenceLayoutMarkdownProvider>();
+        services.AddSingleton<PdfRecorteService>();
         services.AddSingleton<ClassificationTipologiaPromptBuilder>();
         services.AddSingleton<GptClasificarDataProvider>();
         services.AddSingleton<PdfPageLimiterService>();
+
+        // === HybridTdn Classification Provider ===
+        services.Configure<HybridTdnOptions>(context.Configuration.GetSection("HybridTdn"));
+        services.AddSingleton<ITipologiaClassificationProfileProvider, DbTipologiaClassificationProfileProvider>();
+        services.AddSingleton<DocumentWindowExtractor>();
+        services.AddSingleton<RuleBasedTdnClassifier>();
+        services.AddSingleton<FoundryTdnRescueClassifier>(sp =>
+            new FoundryTdnRescueClassifier(
+                sp.GetRequiredService<ILogger<FoundryTdnRescueClassifier>>(),
+                sp.GetRequiredService<GptClasificarDataProvider>()));
+        services.AddSingleton<HybridTdnClasificarProvider>(sp =>
+            new HybridTdnClasificarProvider(
+                sp.GetRequiredService<ILogger<HybridTdnClasificarProvider>>(),
+                sp.GetRequiredService<AzureDocumentIntelligenceClasificarProvider>(),
+                sp.GetRequiredService<ILayoutMarkdownProvider>(),
+                sp.GetRequiredService<DocumentWindowExtractor>(),
+                sp.GetRequiredService<RuleBasedTdnClassifier>(),
+                sp.GetRequiredService<FoundryTdnRescueClassifier>(),
+                sp.GetRequiredService<IOptions<HybridTdnOptions>>(),
+                sp.GetRequiredService<TelemetryClient>()));
+
         services.AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>();
+
+        // Configure Kestrel request body size limit for local Function host
+        services.Configure<KestrelServerOptions>(options =>
+        {
+            options.Limits.MaxRequestBodySize = 200 * 1024 * 1024; // 200 MB
+        });
 
         // Logging
         services.AddLogging(builder =>

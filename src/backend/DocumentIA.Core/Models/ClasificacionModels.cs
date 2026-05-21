@@ -10,4 +10,7 @@ public class ClasificacionInput
     /// null = usar config.FallbackThreshold directamente en el proveedor.
     /// </summary>
     public double? UmbralFallbackEfectivo { get; set; }
+    public string? DocumentoBase64Override { get; set; }
+    public int CharsTextoNativo { get; set; }
+    public int TotalPaginas { get; set; }
 }

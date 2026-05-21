@@ -50,24 +50,33 @@ public class ClassificationTipologiaPromptBuilder
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (config is null || !config.IsDefault || string.IsNullOrWhiteSpace(config.TipologiaId))
+                if (config is null 
+                // || !config.IsDefault Comento el isdefault para que gestione en gpt todas las tipologias publicadas.
+                || string.IsNullOrWhiteSpace(config.TipologiaId))
                 {
                     continue;
                 }
 
-                if (!seen.Add(config.TipologiaId))
+                // Usar Codigo (columna DB) como identificador canónico del prompt.
+                // Es el mismo valor que devuelven DI y las reglas (ej: SERE-25, ESCR-01, nota-simple).
+                // Fallback a tipologiaId del JSON si el Codigo está vacío.
+                var codigoCanónico = !string.IsNullOrWhiteSpace(tipologia.Codigo)
+                    ? tipologia.Codigo
+                    : config.TipologiaId;
+
+                if (!seen.Add(codigoCanónico))
                 {
                     continue;
                 }
 
                 var nombre = string.IsNullOrWhiteSpace(config.TipologiaNombre)
-                    ? config.TipologiaId
+                    ? codigoCanónico
                     : config.TipologiaNombre;
                 var descripcion = string.IsNullOrWhiteSpace(config.GptDescripcion)
                     ? nombre
                     : config.GptDescripcion;
 
-                lines.Add($"- {config.TipologiaId}: {descripcion}");
+                lines.Add($"- {codigoCanónico}: {descripcion}");
             }
             catch
             {

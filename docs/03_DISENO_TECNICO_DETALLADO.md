@@ -25,7 +25,7 @@ flowchart TD
     BLOB["SubirBlobActivity<br/>Azure Blob Storage"] --> CLASIF{"expectedType<br/>informado?"}
 
     CLASIF -->|"Si"| SKIP_CLASIF["Confianza = 1.0<br/>TipologiaDetectada = expectedType"]
-    CLASIF -->|"No"| CLASIF_ACT["ClasificarActivity<br/>DI + fallback GPT"]
+    CLASIF -->|"No"| CLASIF_ACT["ClasificarActivity<br/>Pipeline por flujo + fallback global final"]
 
     SKIP_CLASIF --> RESOL
     CLASIF_ACT --> CHK_CONF{"Confianza <br/>< umbral?"}
@@ -80,7 +80,7 @@ flowchart TD
 | 2 | VerificarDuplicado | `VerificarDuplicadoActivity` | SHA256 | Resultado previo o null | Busca en BD por SHA256 (indice unico) |
 | 3 | ObtenerUltimaEjecucion | `ObtenerUltimaEjecucionActivity` | SHA256 | Ultima ejecucion o null | Solo si no es duplicado y no skipDuplicateCheck |
 | 4 | SubirBlob | `SubirBlobActivity` | byte[] + nombre | URL blob | Container `documents/` |
-| 5 | Clasificar | `ClasificarActivity` | byte[] PDF | TipologiaDetectada, Confianza | DI primario + GPT fallback |
+| 5 | Clasificar | `ClasificarActivity` | byte[] PDF | TipologiaDetectada, Confianza | Pipeline configurable por flujo, secuencial hasta satisfactorio y fallback global final |
 | 6 | ResolverTipologia | `ResolverTipologiaActivity` | codigo tipologia | TipologiaConfig completa | Resuelve familia@version → config |
 | 7 | Extraer | `ExtraerActivity` | byte[] + tipologia config | DatosExtraidos (Dictionary) | CU/DI/GPT segun config |
 | 8 | ExtraerMarkdownLayout | `ExtraerMarkdownLayoutActivity` | byte[] PDF | Markdown texto | Layout extraction con DI (opcional) |
@@ -101,6 +101,31 @@ Cuando la entrada viene por referencia GDC (`objectIdGDC`), antes del pipeline e
 
 En este modo se fuerza `SkipGDCUpload=true` para evitar re-subida del mismo documento origen.
 
+### Actualizacion PRD v2.1: Paso 2.7 (Preparacion para clasificacion)
+
+Se incorpora una preparacion explicita del PDF para clasificacion entre `SubirBlobActivity` y `ClasificarActivity`.
+
+Implementacion:
+
+- Activity: `PrepararDocumentoClasificacionActivity`
+- Servicio: `PdfRecorteService`
+- Contrato: `PrepararDocumentoClasificacionInput` / `PrepararDocumentoClasificacionResultado`
+
+Comportamiento:
+
+1. Si `ClassificationPreparation.Enabled=true`, se calcula `MaxPaginas` efectivo con precedencia `tipologia > familia > default`.
+2. Se recorta el PDF para clasificacion cuando el total de paginas excede `MaxPaginas`.
+3. Se propagan metadatos a clasificacion mediante `ClasificacionInput`:
+  - `DocumentoBase64Override`
+  - `CharsTextoNativo`
+  - `TotalPaginas`
+4. Si la preparacion falla, el orquestador continua con documento completo (fallback seguro).
+
+Alcance:
+
+- Impacta solo la etapa de clasificacion.
+- `ExtraerActivity` y `SubirGDCActivity` siguen usando el documento completo.
+
 ### Rama ClassificationOnly (nuevo)
 
 Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTipologia` se aplica una rama reducida:
@@ -109,6 +134,14 @@ Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTip
 - `Integrar` solo se ejecuta si `instrucciones.executeIntegrarWhenClassificationOnly=true` y existe `trazabilidad.idActivo`.
 - `SubirGDC` mantiene la prioridad de `SkipGDCUpload` y requiere `idActivo` resuelto/disponible.
 - `Persistir` siempre se ejecuta.
+
+Trazas operativas expuestas en salida:
+
+- `detalleEjecucion.classificationOnly`: confirma si la ejecución quedó en rama reducida.
+- `detalleEjecucion.recorteAplicado` y `detalleEjecucion.paginasIncluidas`: auditan el recorte real usado para clasificación.
+- `detalleEjecucion.markdownGenerado` y `detalleEjecucion.origenMarkdown`: indican si se generó markdown y en qué etapa quedó fijado.
+- `detalleEjecucion.modeloLLMUsado`: refleja el modelo LLM efectivo cuando hubo fallback/prompt.
+- `detalleEjecucion.motivoErrorTipologia`: registra el motivo cuando la tipología no pudo resolverse.
 
 Restricción de entrada:
 
@@ -135,7 +168,7 @@ Resumen de comportamiento por activity:
 - `NormalizarActivity`: hidrata/decodifica documento y calcula integridad (`SHA256`, `MD5`, `CRC32`) y metadatos de páginas.
 - `VerificarDuplicadoActivity`: consulta duplicidad por `SHA256`; con `forceReprocess=false` permite retorno temprano de ejecución previa.
 - `SubirBlobActivity`: persiste binario en blob (`documents/`) para trazabilidad operativa.
-- `ClasificarActivity`: usa DI primario y fallback GPT según umbral/resultado; puede terminar anticipadamente en baja confianza o error de clasificación.
+- `ClasificarActivity`: resuelve un flujo configurable de providers y los ejecuta en orden hasta resultado satisfactorio; si no hay resultado, aplica fallback global final si está activo.
 - `ResolverTipologiaActivity`: resuelve configuración efectiva por familia/version.
 - `ExtraerActivity`: ejecuta extracción principal y fallback cuando aplica.
 - `ValidarActivity`: ejecuta motor de reglas y produce reporte de validación.

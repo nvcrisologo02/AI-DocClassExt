@@ -1,0 +1,128 @@
+{
+  "tipologiaId": "tdn.clasificacion",
+  "tipologiaNombre": "Clasificacion Documental TDN",
+  "tipologiaMGDCMatricula": "AI-01-TDN-00",
+  "gdcTipoDocumento": "TDN",
+  "gdcSubtipoDocumento": "TDN00",
+  "gdcSerie": "AI01",
+  "skipGDCUpload": true,
+  "gptDescripcion": "Clasificacion documental jerarquica TDN1 -> TDN2 -> Matricula para documentos juridicos e inmobiliarios.",
+  "version": "1.0",
+  "isDefault": true,
+  "extraction": {
+    "enabled": false,
+    "provider": "mock",
+    "modelKey": "unused",
+    "autoMapUnmappedFields": true,
+    "fieldMappings": []
+  },
+  "promptConfig": {
+    "enabled": false,
+    "modelKey": "default.gpt4o-mini",
+    "systemPrompt": "",
+    "userPromptTemplate": "",
+    "maxTokens": 600,
+    "temperature": 0.0,
+    "contentMode": "vision"
+  },
+  "confidenceConfig": {
+    "clasifUmbralFallback": 0.85,
+    "umbralOK": 0.85,
+    "umbralRevision": 0.7
+  },
+  "classificationPolicy": {
+    "acceptWithoutFallbackThreshold": 0.85,
+    "top1Top2AmbiguityDelta": 0.15,
+    "defaultPagesToClassify": 3,
+    "escalatedPagesToClassify": 5,
+    "enforceBackendPageLimit": true,
+    "fallbackTimeoutSeconds": 8,
+    "fallbackMaxRetries": 1,
+    "fallbackBackoffMs": 500,
+    "fallbackRateTarget": 0.25,
+    "fallbackRateAlertThreshold": 0.2,
+    "costTargetEuroPerDocument": 0.1,
+    "latencyP95TargetSeconds": 90,
+    "validBusinessStates": [
+      "UNKNOWN",
+      "OUT_OF_SCOPE",
+      "NEEDS_REVIEW"
+    ],
+    "technicalErrorOnly": true,
+    "skipReprocessWhenShaMatches": true
+  },
+  "classificationCatalog": {
+    "catalogVersion": "1.0",
+    "families": [
+      {
+        "tdn1Code": "DOCN",
+        "tdn1Name": "Documentos notariales",
+        "subtypes": [
+          {
+            "tdn2Code": "cambio-titularidad-sareb",
+            "tdn2Name": "Traspaso Sareb: acta complementaria cambio titularidad",
+            "matricula": "AI-01-DOCN-06"
+          }
+        ]
+      },
+      {
+        "tdn1Code": "ESCR",
+        "tdn1Name": "Escrituras",
+        "subtypes": [
+          {
+            "tdn2Code": "compraventa",
+            "tdn2Name": "Escritura compraventa",
+            "matricula": "AI-01-ESCR-10"
+          },
+          {
+            "tdn2Code": "titularidad-otro",
+            "tdn2Name": "Titularidad del activo: otra escritura",
+            "matricula": "AI-01-ESCR-26"
+          },
+          {
+            "tdn2Code": "titularidad-anterior-sareb",
+            "tdn2Name": "Documento contractual de titularidad anterior a Sareb",
+            "matricula": "AI-01-ESCR-29"
+          },
+          {
+            "tdn2Code": "dacion",
+            "tdn2Name": "Dacion: escritura",
+            "matricula": "AI-01-ESCR-06"
+          },
+          {
+            "tdn2Code": "cancelacion-hipotecaria",
+            "tdn2Name": "Cancelacion carga hipotecaria: escritura",
+            "matricula": "AI-01-ESCR-01"
+          },
+          {
+            "tdn2Code": "prestamo-originario",
+            "tdn2Name": "Prestamo originario: escritura",
+            "matricula": "AI-01-ESCR-24"
+          }
+        ]
+      },
+      {
+        "tdn1Code": "SERE",
+        "tdn1Name": "Sentencias y resoluciones judiciales",
+        "subtypes": [
+          {
+            "tdn2Code": "subasta-adjudicacion-auto",
+            "tdn2Name": "Subasta: auto/decreto adjudicacion",
+            "matricula": "AI-01-SERE-24"
+          },
+          {
+            "tdn2Code": "subasta-testimonio-adjudicacion",
+            "tdn2Name": "Subasta: testimonio decreto adjudicacion",
+            "matricula": "AI-01-SERE-26"
+          },
+          {
+            "tdn2Code": "subasta-cancelacion-cargas",
+            "tdn2Name": "Subasta: mandamiento cancelacion cargas",
+            "matricula": "AI-01-SERE-25"
+          }
+        ]
+      }
+    ]
+  },
+  "fields": []
+}

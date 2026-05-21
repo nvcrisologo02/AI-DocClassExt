@@ -40,10 +40,10 @@
       ]
     },
     {
-      "id": "COMPLETAR_GDC_HTTP_BASIC_USERNAME",
+      "id": "admin",
       "displayName": "DocumentIA Admin",
       "kind": "webapp",
-      "defaultName": "srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai",
+      "defaultName": "srbwebadminprodocai",
       "requiredSettings": [
         { "name": "FunctionsAdminApi__BaseUrl", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
         { "name": "FunctionsAdminApi__FunctionKey", "kind": "KeyVaultRef", "owner": "pipeline", "secretName": "FunctionsAdminApiFunctionKey" }

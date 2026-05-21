@@ -1,10 +1,12 @@
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Orchestrators;
 using FluentAssertions;
 using Microsoft.DurableTask;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 
 namespace DocumentIA.Tests.Unit.Orchestrators;
 
@@ -113,19 +115,23 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
 public class DocumentProcessOrchestratorTests
 {
     // ── Helpers ──────────────────────────────────────────────────────────────
-    private static DocumentProcessOrchestrator CreateOrchestrator()
+    private static DocumentProcessOrchestrator CreateOrchestrator(ClassificationPreparationSettings? settings = null)
     {
         // El constructor string solo carga el fichero cuando se llama Load().
         // Para los escenarios que no llegan a la extracción, nunca se invoca.
         var loader = new ExtractionModelRegistryLoader("dummy.json");
-        return new DocumentProcessOrchestrator(loader);
+        var configuredSettings = settings ?? new ClassificationPreparationSettings();
+        return new DocumentProcessOrchestrator(loader, Options.Create(configuredSettings));
     }
 
     private static ContratoEntrada BuildEntrada(
         string nombre = "test.pdf",
         string? objectIdGdc = null,
         string? expectedType = null,
-        bool skipDuplicateCheck = false)
+        bool skipDuplicateCheck = false,
+        bool classificationOnly = false,
+        bool? executeIntegrarWhenClassificationOnly = null,
+        int maxPagesForClassificationOnly = 0)
         => new()
         {
             Documento = new Documento
@@ -137,6 +143,9 @@ public class DocumentProcessOrchestratorTests
             Instrucciones = new Instrucciones
             {
                 ExpectedType = expectedType ?? string.Empty,
+                ClassificationOnly = classificationOnly,
+                ExecuteIntegrarWhenClassificationOnly = executeIntegrarWhenClassificationOnly,
+                MaxPagesForClassificationOnly = maxPagesForClassificationOnly,
                 SkipDuplicateCheck = skipDuplicateCheck,
                 SkipGDCUpload = true
             },
@@ -292,7 +301,7 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_DuplicadoDetectado_RetornaSalidaReutilizada()
     {
         var orchestrator = CreateOrchestrator();
-        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
 
         var salidaPrevia = new ContratoSalida
         {
@@ -306,32 +315,32 @@ public class DocumentProcessOrchestratorTests
 
         salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
         salida.Resultado.MensajeReutilizacion.Should().NotBeNullOrWhiteSpace();
+
+        var duplicadoInput = context.GetLastActivityInput<ObtenerUltimaEjecucionDuplicadoInput>("ObtenerUltimaEjecucionDuplicadoActivity");
+        duplicadoInput.Should().NotBeNull();
+        duplicadoInput!.ClassificationOnly.Should().BeTrue();
     }
 
     [Fact]
-    public async Task RunOrchestrator_DuplicadoSinHistorialReutilizable_ContinuaProcesamiento()
+    public async Task RunOrchestrator_DuplicadoSinHistorialReutilizable_RetornaEstadoDuplicado()
     {
         var orchestrator = CreateOrchestrator();
         var entrada = BuildEntrada(expectedType: "nota.simple");
-        entrada.Instrucciones.ClassificationOnly = true;
         var context = new FakeTaskOrchestrationContext(entrada);
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", true);
         context.SetupActivity<ContratoSalida?>("ObtenerUltimaEjecucionDuplicadoActivity", null);
-        context.SetupActivity("SubirBlobActivity", "documents/test.pdf");
-        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: false, skipGdc: true));
-
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("OK");
-        salida.Resultado.ReutilizadaPorDuplicado.Should().BeFalse();
-        context.GetLastActivityInput<object>("SubirBlobActivity").Should().NotBeNull();
-        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().NotBeNull();
+        salida.Resultado.Estado.Should().Be("DUPLICADO");
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        context.GetLastActivityInput<object>("SubirBlobActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
     }
 
     [Fact]
-    public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoError()
+    public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoNoClasificado()
     {
         var orchestrator = CreateOrchestrator();
         // Sin ExpectedType → el orquestador llama a ClasificarActivity
@@ -345,12 +354,90 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("ERROR");
-        salida.Resultado.MensajeError.Should().Contain("tipologia");
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        salida.Resultado.MensajeError.Should().Contain("no clasificable");
     }
 
     [Fact]
-    public async Task RunOrchestrator_TipologiaNoResuelta_RetornaEstadoError()
+    public async Task RunOrchestrator_ClasificacionUsaDocumentoPreparado_PropagaOverrideYMetadata()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 8,
+            CharsTextoNativo = 1234,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.1,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("BAJA_CONFIANZA_CLASIFICACION");
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.DocumentoBase64Override.Should().Be("cmVjb3J0YWRv");
+        clasifInput.CharsTextoNativo.Should().Be(1234);
+        clasifInput.TotalPaginas.Should().Be(8);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ResolveMaxPaginas_PriorizaOverrideTipologia()
+    {
+        var settings = new ClassificationPreparationSettings
+        {
+            Enabled = true,
+            MaxPaginasClasificacionDefault = 3,
+            OverridesPorFamilia = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["sere"] = 5
+            },
+            OverridesPorTipologia = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["sere.nota.simple"] = 7
+            }
+        };
+
+        var orchestrator = CreateOrchestrator(settings);
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "sere.nota.simple"));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "dGVzdA==",
+            TotalPaginas = 2,
+            CharsTextoNativo = 10,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivityThrow("ResolverTipologiaActivity", new KeyNotFoundException("No existe la tipologia"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+
+        var prepInput = context.GetLastActivityInput<PrepararDocumentoClasificacionInput>("PrepararDocumentoClasificacionActivity");
+        prepInput.Should().NotBeNull();
+        prepInput!.MaxPaginasClasificacion.Should().Be(7);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaNoResuelta_RetornaEstadoNoClasificado()
     {
         var orchestrator = CreateOrchestrator();
         // Con ExpectedType → el orquestador salta ClasificarActivity y llama ResolverTipologiaActivity
@@ -364,8 +451,34 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("ERROR");
-        salida.Resultado.MensajeError.Should().Contain("tipologia");
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        salida.Resultado.MensajeError.Should().Contain("no clasificable");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocido_TerminaSinErrorTecnico()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "Desconocido"));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("Completed");
+        salida.Identificacion.Tipologia.Should().Be("Desconocido");
     }
 
     [Fact]
@@ -381,6 +494,7 @@ public class DocumentProcessOrchestratorTests
         {
             Modelo = "di-test",
             Confianza = 0.1,          // por debajo del umbral 0.6
+            ConfianzaDI = 0.1,
             TipologiaDetectada = "nota.simple"
         });
         context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
@@ -388,12 +502,12 @@ public class DocumentProcessOrchestratorTests
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.Resultado.Estado.Should().Be("BAJA_CONFIANZA_CLASIFICACION");
-        salida.Resultado.ConfianzaClasificacion.Should().Be(0.1);
-        salida.Resultado.ConfianzaGlobal.Should().Be(0.1);
+        salida.Resultado.ConfianzaClasificacion.Should().Be(0);
+        salida.Resultado.ConfianzaGlobal.Should().Be(0);
         salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("Completed");
         salida.DetalleEjecucion.Seguimiento.Actividades
             .Where(a => a.Nombre is "Extraer" or "Validar" or "ObtenerActivo" or "Integrar" or "SubirGDC" or "Persistir")
-            .All(a => a.Estado == "Skipped")
+            .All(a => a.Estado is "Pending" or "Skipped")
             .Should().BeTrue();
     }
 
@@ -413,5 +527,57 @@ public class DocumentProcessOrchestratorTests
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.Identificacion.Documento.Should().Be("nota_simple_gdc.pdf");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnly_OmitePipelinePosteriorYCompletaTrazas()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(
+            classificationOnly: true,
+            maxPagesForClassificationOnly: 3));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 8,
+            CharsTextoNativo = 1234,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.91,
+            ConfianzaDI = 0.55,
+            ConfianzaGPT = 0.91,
+            FallbackLLM = true,
+            TipologiaDetectada = "nota.simple",
+            ContentExtraido = "# markdown"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.DetalleEjecucion.ClassificationOnly.Should().BeTrue();
+        salida.DetalleEjecucion.RecorteAplicado.Should().BeTrue();
+        salida.DetalleEjecucion.PaginasIncluidas.Should().Be(3);
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("Clasificacion");
+        salida.DetalleEjecucion.ModeloLLMUsado.Should().Be("gpt-4o-mini");
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# markdown");
+
+        context.GetLastActivityInput<object>("ExtraerActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ValidarActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ObtenerActivoActivity").Should().BeNull();
+
+        salida.DetalleEjecucion.Seguimiento.Actividades
+            .Where(a => a.Nombre is "Extraer" or "Validar" or "ObtenerActivo" or "Integrar" or "SubirGDC")
+            .Select(a => a.Estado)
+            .Should().OnlyContain(estado => estado == "Skipped" || estado == "Completed");
     }
 }

@@ -15,17 +15,20 @@ namespace DocumentIA.Functions.Activities
         private readonly IGdcService gdcService;
         private readonly TipologiaConfigLoader tipologiaLoader;
         private readonly GdcSettings gdcSettings;
+        private readonly IBlobStorageService blobStorageService;
 
         public SubirGDCActivity(
             ILogger<SubirGDCActivity> logger,
             IGdcService gdcService,
             TipologiaConfigLoader tipologiaLoader,
-            IOptions<GdcSettings> gdcOptions)
+            IOptions<GdcSettings> gdcOptions,
+            IBlobStorageService blobStorageService)
         {
             this.logger = logger;
             this.gdcService = gdcService;
             this.tipologiaLoader = tipologiaLoader;
             this.gdcSettings = gdcOptions.Value;
+            this.blobStorageService = blobStorageService;
         }
 
         public class SubirGDCActivityInput
@@ -81,6 +84,14 @@ namespace DocumentIA.Functions.Activities
                 if (string.IsNullOrWhiteSpace(matricula))
                 {
                     matricula = gdcSettings.DefaultMatricula;
+                }
+
+                // Blob-first: si hay BlobPath y no hay base64 → descargar del blob
+                if (!string.IsNullOrWhiteSpace(input.BlobPath) && string.IsNullOrWhiteSpace(input.ContenidoBase64))
+                {
+                    logger.LogInformation("Descargando documento desde blob para subida a GDC. BlobPath={BlobPath}", input.BlobPath);
+                    var bytes = await blobStorageService.DownloadDocumentAsync(input.BlobPath);
+                    input.ContenidoBase64 = Convert.ToBase64String(bytes);
                 }
 
                 // Validate IdActivo

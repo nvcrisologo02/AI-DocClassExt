@@ -25,6 +25,15 @@ public class Identificacion
     public string TipologiaVersion { get; set; } = string.Empty;
     public DateTime FechaProceso { get; set; } = DateTime.UtcNow;
     public int Paginas { get; set; }
+    public string? Tdn1 { get; set; }
+    public string? Tdn2 { get; set; }
+    public string? Matricula { get; set; }
+    // Tipology metadata enrichment (v1.5+)
+    public string TipologiaNombre { get; set; } = string.Empty;
+    public string TipologiaMGDCMatricula { get; set; } = string.Empty;
+    public string GdcTipoDocumento { get; set; } = string.Empty;
+    public string GdcSubtipoDocumento { get; set; } = string.Empty;
+    public string GdcSerie { get; set; } = string.Empty;
 }
 
 public class Integridad
@@ -46,7 +55,6 @@ public class DetalleEjecucion
     public string? InstanceId { get; set; }
     /// <summary>operation_Id de Application Insights (W3C TraceId). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
     public string? OperationId { get; set; }
-    /// <summary>Indica si la ejecución se procesó en modo solo clasificación.</summary>
     public bool ClassificationOnly { get; set; }
     public string RunTipologia { get; set; } = string.Empty;
     public ResultadoClasificacion Clasificacion { get; set; } = new();
@@ -62,6 +70,20 @@ public class DetalleEjecucion
     public SeguimientoOrquestacion Seguimiento { get; set; } = new();
     /// <summary>Información de ejecución del prompt libre (cuando la tipología lo tiene habilitado).</summary>
     public ResultadoPromptEjecucion? Prompt { get; set; }
+
+    // NUEVO: Trazabilidad de recorte, markdown y modelo LLM
+    /// <summary>Indica si se aplicó recorte de páginas para clasificación.</summary>
+    public bool RecorteAplicado { get; set; }
+    /// <summary>Número de páginas incluidas tras recorte (si aplica).</summary>
+    public int PaginasIncluidas { get; set; }
+    /// <summary>Indica si se generó markdown en algún paso del flujo.</summary>
+    public bool MarkdownGenerado { get; set; }
+    /// <summary>Origen del markdown generado ("Clasificacion", "Extraccion", "Fallback", etc.).</summary>
+    public string? OrigenMarkdown { get; set; }
+    /// <summary>Modelo LLM usado en clasificación o prompt (si aplica).</summary>
+    public string? ModeloLLMUsado { get; set; }
+    /// <summary>Motivo de error en la resolución de tipología (si aplica).</summary>
+    public string? MotivoErrorTipologia { get; set; }
 }
 
 public class ResultadoPromptEjecucion
@@ -95,6 +117,17 @@ public class TrazaActividad
     public string? FallbackRazon { get; set; }
 }
 
+/// <summary>Propuesta individual de un proveedor de clasificación.</summary>
+public class PropuestaProveedor
+{
+    /// <summary>Nombre del proveedor: "Reglas", "DI", "GPT", "FoundryRescue", etc.</summary>
+    public string Proveedor { get; set; } = string.Empty;
+    public string? Tipologia { get; set; }
+    public double Confianza { get; set; }
+    /// <summary>Motivo por el que este proveedor no fue el resultado final (si aplica).</summary>
+    public string? MotivoDescarte { get; set; }
+}
+
 public class ResultadoClasificacion
 {
     public string Modelo { get; set; } = string.Empty;
@@ -113,6 +146,12 @@ public class ResultadoClasificacion
 
     /// <summary>Texto extraído por DI durante la clasificación. El orquestador lo usa para propagar a DatosNormalizados["Markdown"] y luego lo limpia antes de incluirlo en la respuesta.</summary>
     public string? ContentExtraido { get; set; }
+    public string? EvidenceUri { get; set; }
+    public string? ClassifierVersion { get; set; }
+    public int PagesProcessed { get; set; }
+    public string? Clasificador { get; set; }
+    /// <summary>Propuestas individuales de cada proveedor ejecutado. Permite auditar por qué se eligió el resultado final.</summary>
+    public List<PropuestaProveedor> DetalleProveedores { get; set; } = new();
 }
 
 public class ResultadoExtraccion
@@ -227,6 +266,11 @@ public class SubirGDCInput
     public string Serie { get; set; } = string.Empty;
     // NombreDocumento: nombre lógico del documento (display name). When empty, NombreArchivo is used.
     public string NombreDocumento { get; set; } = string.Empty;
+    /// <summary>
+    /// Ruta en blob storage del documento. Si está informado, SubirGDCActivity descarga
+    /// los bytes desde blob en lugar de usar ContenidoBase64.
+    /// </summary>
+    public string? BlobPath { get; set; }
 }
 
 public class ResultadoGDC
@@ -266,6 +310,15 @@ public class ObtenerDocumentoGDCResult
     public string Base64 { get; set; } = string.Empty;
     public string NombreArchivo { get; set; } = string.Empty;
     public string MD5 { get; set; } = string.Empty;
+    /// <summary>
+    /// Ruta en blob storage tras subir el documento descargado de GDC.
+    /// Cuando está informado, Base64 estará vacío (se sube al blob para evitar payloads grandes en la pipeline).
+    /// </summary>
+    public string? BlobPath { get; set; }
+    public string? PreComputedSHA256 { get; set; }
+    public string? PreComputedMD5 { get; set; }
+    public string? PreComputedCRC32 { get; set; }
+    public long PreComputedTamañoBytes { get; set; }
 }
 
 public class VerificarDuplicadoMd5Result

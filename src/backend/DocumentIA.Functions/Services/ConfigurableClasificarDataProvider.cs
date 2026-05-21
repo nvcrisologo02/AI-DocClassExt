@@ -1,8 +1,10 @@
 ﻿using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Services.Classification;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using DocumentIA.Core.Configuration;
+using System.Globalization;
 
 namespace DocumentIA.Functions.Services;
 
@@ -11,6 +13,10 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
     private readonly MockClasificarDataProvider _mockProvider;
     private readonly AzureDocumentIntelligenceClasificarProvider _azureProvider;
     private readonly GptClasificarDataProvider _gptProvider;
+    private readonly HybridTdnClasificarProvider _hybridTdnProvider;
+    private readonly RuleBasedTdnClassifier _ruleClassifier;
+    private readonly DocumentWindowExtractor _windowExtractor;
+    private readonly HybridTdnOptions _hybridOptions;
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
     private readonly ClassificationRoutingSettings _routingSettings;
     private readonly ILogger<ConfigurableClasificarDataProvider> _logger;
@@ -19,6 +25,10 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         MockClasificarDataProvider mockProvider,
         AzureDocumentIntelligenceClasificarProvider azureProvider,
         GptClasificarDataProvider gptProvider,
+        HybridTdnClasificarProvider hybridTdnProvider,
+        RuleBasedTdnClassifier ruleClassifier,
+        DocumentWindowExtractor windowExtractor,
+        IOptions<HybridTdnOptions> hybridOptions,
         ClassificationModelRegistryLoader modelRegistryLoader,
         IOptions<ClassificationRoutingSettings> routingSettings,
         ILogger<ConfigurableClasificarDataProvider> logger)
@@ -26,6 +36,10 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         _mockProvider = mockProvider;
         _azureProvider = azureProvider;
         _gptProvider = gptProvider;
+        _hybridTdnProvider = hybridTdnProvider;
+        _ruleClassifier = ruleClassifier;
+        _windowExtractor = windowExtractor;
+        _hybridOptions = hybridOptions.Value;
         _modelRegistryLoader = modelRegistryLoader;
         _routingSettings = routingSettings.Value;
         _logger = logger;
@@ -36,147 +50,220 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         CancellationToken cancellationToken = default)
     {
         var requestedProvider = input.Entrada.Instrucciones.Classification.Provider;
-        var provider = string.IsNullOrWhiteSpace(requestedProvider)
-            || string.Equals(requestedProvider, "auto", StringComparison.OrdinalIgnoreCase)
-            ? _routingSettings.DefaultProvider
-            : requestedProvider;
+        var resolvedFlow = ResolveFlowName(requestedProvider);
+        var flowProviders = ResolveFlowProviders(resolvedFlow);
 
         _logger.LogInformation(
-            "Proveedor de clasificaciÃ³n resuelto: {Provider}. Model solicitado: {ModelInstruction}",
-            provider,
+            "Flujo de clasificación resuelto: {Flow}. Providers: {Providers}. Model solicitado: {ModelInstruction}",
+            resolvedFlow,
+            string.Join(" -> ", flowProviders),
             input.Entrada.Instrucciones.Classification.Model);
 
-        // Proveedores no-DI: ruta directa sin fallback
-        if (!IsAzureDiProvider(provider))
+        var evaluated = new List<ResultadoClasificacion>();
+
+        foreach (var provider in flowProviders)
         {
-            return provider.ToLowerInvariant() switch
+            var providerResult = await ExecuteProviderAsync(provider, input, cancellationToken);
+            evaluated.Add(providerResult);
+
+            if (IsSatisfactory(providerResult, input))
             {
-                "mock" => await _mockProvider.ClasificarAsync(input, cancellationToken),
-                "azure-openai" or "gpt" => await _gptProvider.ClasificarAsync(input, cancellationToken),
-                _ => throw new NotSupportedException($"Proveedor de clasificaciÃ³n '{provider}' no soportado")
-            };
+                providerResult.UmbralFallbackAplicado = ResolveFallbackThreshold(input);
+                providerResult.FallbackLLM = false;
+                providerResult.FallbackRazon = null;
+                providerResult.DetalleProveedores = BuildDetalle(evaluated, null);
+                return providerResult;
+            }
+
+            _logger.LogInformation(
+                "Provider {Provider} no satisfactorio. Tipologia={Tipologia}, Confianza={Confianza:F3}. Continuando flujo.",
+                provider,
+                providerResult.TipologiaDetectada,
+                providerResult.Confianza);
         }
 
-        var fallbackEnabled = TryResolveFallbackModel(out var fallbackModel);
+        ClassificationModelConfig? fallbackModel = null;
+        var globalFallbackEnabled = _routingSettings.UseGlobalFallback && TryResolveFallbackModel(out fallbackModel);
         var umbralFallback = input.UmbralFallbackEfectivo ?? fallbackModel?.FallbackThreshold ?? 0.6;
 
-        // Ruta Azure DI â€” sin fallback si estÃ¡ desactivado
-        if (!fallbackEnabled)
+        if (!globalFallbackEnabled)
         {
-            var resultadoDirecto = await _azureProvider.ClasificarAsync(input, cancellationToken);
-            resultadoDirecto.UmbralFallbackAplicado = umbralFallback;
-            return resultadoDirecto;
+            var best = evaluated.LastOrDefault() ?? BuildUnknownResult("no_provider_executed");
+            best.UmbralFallbackAplicado = umbralFallback;
+            best.FallbackLLM = false;
+            best.FallbackRazon = "fallback_global_disabled";
+            best.DetalleProveedores = BuildDetalle(evaluated, "sin_resultado_satisfactorio");
+            return best;
         }
 
-        // Ruta Azure DI con fallback GPT activo
-        ResultadoClasificacion? resultadoDI = null;
-        string? fallbackRazon = null;
+        var fallbackProvider = ResolveGlobalFallbackProvider();
+        _logger.LogWarning(
+            "Ningún provider del flujo {Flow} fue satisfactorio. Ejecutando fallback global: {FallbackProvider}",
+            resolvedFlow,
+            fallbackProvider);
 
         try
         {
-            resultadoDI = await _azureProvider.ClasificarAsync(input, cancellationToken);
+            var fallbackResult = await ExecuteProviderAsync(fallbackProvider, input, cancellationToken);
+            fallbackResult.FallbackLLM = true;
+            fallbackResult.FallbackRazon = "global_fallback_final";
+            fallbackResult.UmbralFallbackAplicado = umbralFallback;
 
-            // Si DI devuelve RESTO (tipologÃ­a genÃ©rica/desconocida), activar fallback GPT sin importar confianza
-            if (string.Equals(resultadoDI.TipologiaDetectada, "RESTO", StringComparison.OrdinalIgnoreCase))
+            evaluated.Add(fallbackResult);
+            fallbackResult.DetalleProveedores = BuildDetalle(evaluated, "sin_resultado_satisfactorio");
+
+            if (!IsSatisfactory(fallbackResult, input))
             {
-                fallbackRazon = $"resto_classification:{resultadoDI.Confianza:F3}";
-                _logger.LogWarning(
-                    "Azure DI clasificÃ³ como RESTO para {Documento}. Activando fallback GPT obligatorio.",
-                    input.Entrada.Documento.Name);
+                fallbackResult.TipologiaDetectada = "Desconocido";
+                fallbackResult.FallbackRazon = "global_fallback_sin_clasificacion";
             }
-            else if (resultadoDI.Confianza >= umbralFallback)
-            {
-                resultadoDI.UmbralFallbackAplicado = umbralFallback;
-                return resultadoDI;
-            }
-            else
-            {
-                fallbackRazon = $"low_confidence:{resultadoDI.Confianza:F3}";
-                _logger.LogWarning(
-                    "Confianza DI ({Confianza:F3}) inferior al umbral de fallback ({Umbral:F3}) para {Documento}. Activando fallback GPT.",
-                    resultadoDI.Confianza,
-                    umbralFallback,
-                    input.Entrada.Documento.Name);
-            }
+
+            return fallbackResult;
         }
         catch (Exception ex)
         {
-            fallbackRazon = $"exception:{ex.GetType().Name}";
-            _logger.LogWarning(
-                ex,
-                "Azure DI fallÃ³ para {Documento}. Activando fallback GPT. RazÃ³n: {Razon}",
-                input.Entrada.Documento.Name,
-                fallbackRazon);
+            _logger.LogWarning(ex, "Fallback global {FallbackProvider} falló.", fallbackProvider);
+            var best = evaluated.LastOrDefault() ?? BuildUnknownResult("no_provider_executed");
+            best.UmbralFallbackAplicado = umbralFallback;
+            best.FallbackLLM = false;
+            best.FallbackRazon = $"global_fallback_failed:{ex.GetType().Name}";
+            best.DetalleProveedores = BuildDetalle(evaluated, "sin_resultado_satisfactorio");
+            return best;
+        }
+    }
+
+    private string ResolveFlowName(string? requestedProvider)
+    {
+        if (string.IsNullOrWhiteSpace(requestedProvider)
+            || string.Equals(requestedProvider, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            return !string.IsNullOrWhiteSpace(_routingSettings.DefaultFlow)
+                ? _routingSettings.DefaultFlow
+                : _routingSettings.DefaultProvider;
         }
 
-        // Si DI extrajo contenido textual, inyectarlo en DatosNormalizados para que el fallback GPT lo use
-        if (!string.IsNullOrWhiteSpace(resultadoDI?.ContentExtraido)
-            && !input.DatosNormalizados.ContainsKey("Markdown"))
+        return requestedProvider;
+    }
+
+    private List<string> ResolveFlowProviders(string flowName)
+    {
+        if (_routingSettings.Flows.TryGetValue(flowName, out var flow)
+            && flow.Providers.Count > 0)
         {
-            input.DatosNormalizados["Markdown"] = resultadoDI.ContentExtraido;
-            _logger.LogInformation(
-                "Contenido DI ({Length} chars) inyectado en DatosNormalizados para fallback GPT de clasificaciÃ³n.",
-                resultadoDI.ContentExtraido.Length);
+            return flow.Providers;
         }
 
-        try
+        return [flowName];
+    }
+
+    private string ResolveGlobalFallbackProvider()
+    {
+        if (!string.IsNullOrWhiteSpace(_routingSettings.GlobalFallbackProvider))
         {
-            var resultadoGpt = await _gptProvider.ClasificarAsync(input, cancellationToken);
-            resultadoGpt.FallbackLLM = true;
-            resultadoGpt.FallbackRazon = fallbackRazon;
-            resultadoGpt.UmbralFallbackAplicado = umbralFallback;
-            // Propagar la confianza DI original para observabilidad
-            if (resultadoDI is not null)
-                resultadoGpt.ConfianzaDI = resultadoDI.ConfianzaDI;
+            return _routingSettings.GlobalFallbackProvider;
+        }
 
-            // Propagar contenido DI para que el orquestador lo inyecte en DatosNormalizados
-            if (!string.IsNullOrWhiteSpace(resultadoDI?.ContentExtraido))
-                resultadoGpt.ContentExtraido = resultadoDI.ContentExtraido;
+        return "gpt";
+    }
 
-            _logger.LogInformation(
-                "Fallback GPT completado para {Documento}. TipologÃ­a: {Tipologia}, Confianza: {Confianza:F3}",
-                input.Entrada.Documento.Name,
-                resultadoGpt.TipologiaDetectada,
-                resultadoGpt.Confianza);
+    private double ResolveFallbackThreshold(ClasificacionInput input)
+    {
+        return input.UmbralFallbackEfectivo
+            ?? (TryResolveFallbackModel(out var fallbackModel) ? fallbackModel?.FallbackThreshold : null)
+            ?? 0.6;
+    }
 
-            // ValidaciÃ³n: Si el fallback GPT no logrÃ³ clasificar (devuelve Desconocido o muy baja confianza),
-            // lanzar excepciÃ³n para terminar la clasificaciÃ³n sin intentar resolver la tipologÃ­a
-            if (string.Equals(resultadoGpt.TipologiaDetectada, "Desconocido", StringComparison.OrdinalIgnoreCase)
-                || resultadoGpt.Confianza < 0.3)
+    private async Task<ResultadoClasificacion> ExecuteProviderAsync(
+        string provider,
+        ClasificacionInput input,
+        CancellationToken cancellationToken)
+    {
+        return provider.ToLowerInvariant() switch
+        {
+            "mock" => await _mockProvider.ClasificarAsync(input, cancellationToken),
+            "azure-openai" or "gpt" => await _gptProvider.ClasificarAsync(input, cancellationToken),
+            "hybrid-tdn" or "hybrid" => await _hybridTdnProvider.ClasificarAsync(input, cancellationToken),
+            "azure-document-intelligence" or "azure-di" or "di" => await _azureProvider.ClasificarAsync(input, cancellationToken),
+            "rules" or "reglas" => ExecuteRulesProvider(input),
+            _ => throw new NotSupportedException($"Proveedor de clasificación '{provider}' no soportado")
+        };
+    }
+
+    private ResultadoClasificacion ExecuteRulesProvider(ClasificacionInput input)
+    {
+        var window = _windowExtractor.ExtractWindow(
+            input,
+            _hybridOptions.MaxCharactersPerWindow,
+            _hybridOptions.PagesToInspect);
+
+        var ruleResult = _ruleClassifier.Classify(window);
+
+        var resultado = new ResultadoClasificacion
+        {
+            Modelo = "rules-v1",
+            ProveedorClasif = "Reglas",
+            TipologiaDetectada = ruleResult.TipologiaDetectada,
+            Confianza = ruleResult.Confianza,
+            ConfianzaDI = ruleResult.Confianza,
+            ContentExtraido = window.ExtractedText,
+            Clasificador = "RuleBasedTDN"
+        };
+
+        return resultado;
+    }
+
+    private bool IsSatisfactory(ResultadoClasificacion resultado, ClasificacionInput input)
+    {
+        var threshold = input.UmbralFallbackEfectivo ?? 0.6;
+
+        if (string.IsNullOrWhiteSpace(resultado.TipologiaDetectada))
+        {
+            return false;
+        }
+
+        if (string.Equals(resultado.TipologiaDetectada, "Desconocido", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(resultado.TipologiaDetectada, "RESTO", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        return resultado.Confianza >= threshold;
+    }
+
+    private List<PropuestaProveedor> BuildDetalle(List<ResultadoClasificacion> evaluated, string? baseDiscardReason)
+    {
+        var result = new List<PropuestaProveedor>();
+
+        for (var i = 0; i < evaluated.Count; i++)
+        {
+            var item = evaluated[i];
+            var providerName = string.IsNullOrWhiteSpace(item.ProveedorClasif) ? "desconocido" : item.ProveedorClasif;
+            var isLast = i == evaluated.Count - 1;
+
+            result.Add(new PropuestaProveedor
             {
-                _logger.LogWarning(
-                    "Fallback GPT no logrÃ³ clasificar el documento {Documento}. " +
-                    "TipologÃ­a: {Tipologia}, Confianza: {Confianza:F3}. Abortando procesamiento.",
-                    input.Entrada.Documento.Name,
-                    resultadoGpt.TipologiaDetectada,
-                    resultadoGpt.Confianza);
-
-                throw new InvalidOperationException(
-                    $"No se ha podido identificar la tipologia del documento. " +
-                    $"Fallback GPT devolviÃ³: {resultadoGpt.TipologiaDetectada} (confianza: {resultadoGpt.Confianza:F3})");
-            }
-
-            return resultadoGpt;
+                Proveedor = providerName,
+                Tipologia = item.TipologiaDetectada,
+                Confianza = item.Confianza,
+                MotivoDescarte = isLast && string.IsNullOrWhiteSpace(baseDiscardReason)
+                    ? null
+                    : $"{baseDiscardReason ?? "no_satisfactorio"}:{item.Confianza.ToString("F3", CultureInfo.InvariantCulture)}"
+            });
         }
-        catch (InvalidOperationException)
+
+        return result;
+    }
+
+    private static ResultadoClasificacion BuildUnknownResult(string reason)
+    {
+        return new ResultadoClasificacion
         {
-            // Si fallback GPT no logrÃ³ clasificar documentos Desconocido, propagar la excepciÃ³n
-            // para que el orquestador termine con ERROR sin retroceder a DI
-            throw;
-        }
-        catch (Exception ex) when (resultadoDI is not null)
-        {
-            resultadoDI.FallbackLLM = false;
-            resultadoDI.FallbackRazon = $"fallback_attempt_failed:{ex.GetType().Name}";
-            resultadoDI.UmbralFallbackAplicado = umbralFallback;
-
-            _logger.LogWarning(
-                ex,
-                "Fallback GPT fallÃ³ para {Documento}. Se mantiene el resultado de Azure DI.",
-                input.Entrada.Documento.Name);
-
-            return resultadoDI;
-        }
+            Modelo = "n/a",
+            ProveedorClasif = "None",
+            TipologiaDetectada = "Desconocido",
+            Confianza = 0.0,
+            FallbackRazon = reason
+        };
     }
 
     private bool TryResolveFallbackModel(out ClassificationModelConfig? model)
@@ -193,7 +280,5 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         }
     }
 
-    private static bool IsAzureDiProvider(string provider) =>
-        provider.ToLowerInvariant() is "azure-document-intelligence" or "azure-di" or "di";
 }
 

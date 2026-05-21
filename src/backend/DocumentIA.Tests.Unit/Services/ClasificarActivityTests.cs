@@ -70,4 +70,49 @@ public class ClasificarActivityTests
         result.Should().BeSameAs(providerResult);
         provider.Verify(p => p.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()), Times.Once);
     }
+
+    [Fact]
+    public async Task Run_WithoutExpectedType_PropagatesOverrideFieldsToProvider()
+    {
+        ClasificacionInput? captured = null;
+        var provider = new Mock<IClasificarDataProvider>();
+        provider
+            .Setup(p => p.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()))
+            .Callback<ClasificacionInput, CancellationToken>((input, _) => captured = input)
+            .ReturnsAsync(new ResultadoClasificacion
+            {
+                Modelo = "di-model-1",
+                Confianza = 0.91,
+                TipologiaDetectada = "tasacion"
+            });
+
+        var logger = new Mock<ILogger<ClasificarActivity>>();
+        var sut = new ClasificarActivity(logger.Object, provider.Object);
+
+        var input = new ClasificacionInput
+        {
+            DocumentoBase64Override = "cmVjb3J0YWRv",
+            CharsTextoNativo = 987,
+            TotalPaginas = 12,
+            Entrada = new ContratoEntrada
+            {
+                Documento = new Documento
+                {
+                    Name = "test.pdf",
+                    Content = new ContenidoDocumento { Base64 = "b3JpZ2luYWw=" }
+                },
+                Instrucciones = new Instrucciones
+                {
+                    ExpectedType = string.Empty
+                }
+            }
+        };
+
+        await sut.Run(input);
+
+        captured.Should().NotBeNull();
+        captured!.DocumentoBase64Override.Should().Be("cmVjb3J0YWRv");
+        captured.CharsTextoNativo.Should().Be(987);
+        captured.TotalPaginas.Should().Be(12);
+    }
 }

@@ -12,6 +12,8 @@ public class EjecucionResumenDto
     public string EjecucionGuid { get; set; } = string.Empty;
     public DateTime FechaEjecucion { get; set; }
     public string? Tipologia { get; set; }
+    public bool ClassificationOnly { get; set; }
+    public string TipoFlujo { get; set; } = string.Empty;
     public string EstadoFinal { get; set; } = string.Empty;
     public double ConfianzaGlobal { get; set; }
     public double ConfianzaClasificacion { get; set; }
@@ -24,6 +26,13 @@ public class EjecucionResumenDto
     public int? DuracionIntegracionMs { get; set; }
     public int? DuracionPersistenciaMs { get; set; }
     public string? NombreDocumento { get; set; }
+    public List<ActividadResumenDto> Actividades { get; set; } = [];
+}
+
+public class ActividadResumenDto
+{
+    public string Nombre { get; set; } = string.Empty;
+    public string Estado { get; set; } = string.Empty;
 }
 
 // ─── DTOs de detalle (expansión) ─────────────────────────────────────────────
@@ -142,6 +151,7 @@ public class EjecucionDetalleDto
     public int Id { get; set; }
     public string EjecucionGuid { get; set; } = string.Empty;
     public string? ModeloClasificacion { get; set; }
+    public bool ClassificationOnly { get; set; }
     public IdentificacionDetalleDto? Identificacion { get; set; }
     public IntegridadDetalleDto? Integridad { get; set; }
     public ResultadoDetalleDto? Resultado { get; set; }

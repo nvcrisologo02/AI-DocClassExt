@@ -3,23 +3,28 @@ using System.Text;
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
+using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
 
 namespace DocumentIA.Functions.Services;
 
-public class AzureDocumentIntelligenceLayoutMarkdownProvider
+public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownProvider
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly LayoutModelRegistryLoader _modelRegistryLoader;
+    private readonly IBlobStorageService _blobStorageService;
     private readonly ILogger<AzureDocumentIntelligenceLayoutMarkdownProvider> _logger;
 
     public AzureDocumentIntelligenceLayoutMarkdownProvider(
         IHttpClientFactory httpClientFactory,
         LayoutModelRegistryLoader modelRegistryLoader,
+        IBlobStorageService blobStorageService,
         ILogger<AzureDocumentIntelligenceLayoutMarkdownProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
         _modelRegistryLoader = modelRegistryLoader;
+        _blobStorageService = blobStorageService;
         _logger = logger;
     }
 
@@ -45,10 +50,21 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider
         var analyzeUrl =
             $"{baseEndpoint}/documentintelligence/documentModels/prebuilt-layout:analyze?outputContentFormat=markdown&api-version={Uri.EscapeDataString(apiVersion)}";
 
-        var requestBody = JsonSerializer.Serialize(new
+        // Blob-first: si hay BlobPath → usar urlSource; si no, usar base64Source
+        string requestBody;
+        if (!string.IsNullOrWhiteSpace(input.BlobPath))
         {
-            base64Source = input.DocumentoBase64
-        });
+            var sasUrl = await _blobStorageService.GenerateSasUrlAsync(input.BlobPath, TimeSpan.FromMinutes(30));
+            requestBody = JsonSerializer.Serialize(new { urlSource = sasUrl });
+            _logger.LogInformation("LayoutMarkdownProvider usando urlSource (SAS) para BlobPath={BlobPath}", input.BlobPath);
+        }
+        else
+        {
+            requestBody = JsonSerializer.Serialize(new
+            {
+                base64Source = input.DocumentoBase64
+            });
+        }
 
         using var client = _httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, analyzeUrl)
