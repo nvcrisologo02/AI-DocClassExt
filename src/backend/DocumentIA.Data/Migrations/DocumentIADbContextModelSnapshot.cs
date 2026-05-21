@@ -179,6 +179,10 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(8)
                         .HasColumnType("nvarchar(8)");
 
+                    b.Property<string>("ClassifierVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<double?>("ConfianzaGlobal")
                         .HasColumnType("float");
 
@@ -187,10 +191,18 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("DedupSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
                     b.Property<string>("Estado")
                         .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("EvidenceUri")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<DateTime?>("FechaActualizacion")
                         .HasColumnType("datetime2");
@@ -219,6 +231,10 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<string>("Matricula")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
                     b.Property<string>("NombreArchivo")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -226,6 +242,9 @@ namespace DocumentIA.Data.Migrations
 
                     b.Property<string>("NormalizacionMarkdownCompressed")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<int>("PagesProcessed")
+                        .HasColumnType("int");
 
                     b.Property<int>("Paginas")
                         .HasColumnType("int");
@@ -245,6 +264,14 @@ namespace DocumentIA.Data.Migrations
 
                     b.Property<long>("TamanoBytes")
                         .HasColumnType("bigint");
+
+                    b.Property<string>("Tdn1")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
+
+                    b.Property<string>("Tdn2")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<string>("Tipologia")
                         .HasMaxLength(100)
@@ -573,8 +600,7 @@ namespace DocumentIA.Data.Migrations
                         .HasColumnType("nvarchar(200)");
 
                     b.Property<string>("PromptGPT")
-                        .HasMaxLength(200)
-                        .HasColumnType("nvarchar(200)");
+                        .HasColumnType("nvarchar(max)");
 
                     b.Property<DateTime?>("PublicadaEn")
                         .HasColumnType("datetime2");
@@ -612,9 +638,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 5, 11, 7, 14, 23, 356, DateTimeKind.Utc).AddTicks(3459),
+                            FechaCreacion = new DateTime(2026, 5, 14, 15, 37, 22, 431, DateTimeKind.Utc).AddTicks(4530),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 5, 11, 7, 14, 23, 356, DateTimeKind.Utc).AddTicks(3454),
+                            PublicadaEn = new DateTime(2026, 5, 14, 15, 37, 22, 431, DateTimeKind.Utc).AddTicks(4526),
                             PublicadaPor = "seed",
                             UmbralClasificacion = 0.84999999999999998,
                             UmbralExtraccion = 0.80000000000000004,

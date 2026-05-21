@@ -17,6 +17,9 @@ namespace DocumentIA.Core.Configuration
         public string GdcSubtipoDocumento { get; set; } = string.Empty;
         // GdcSerie: serie documental GDC (ej. "AI09", "AI05"). Confirmar con Sistemas el valor exacto.
         public string GdcSerie { get; set; } = string.Empty;
+        // TDN jerárquico opcional asociado a la tipología.
+        public string Tdn1 { get; set; } = string.Empty;
+        public string Tdn2 { get; set; } = string.Empty;
         // SkipGDCUpload: si true, la subida a GDC se omite por defecto para esta tipología.
         // Puede sobreescribirse explícitamente en cada petición vía Instrucciones.SkipGDCUpload.
         public bool SkipGDCUpload { get; set; } = false;
@@ -42,12 +45,78 @@ namespace DocumentIA.Core.Configuration
         /// Si es null o Enabled=false, la actividad de obtención de activo no se ejecuta (salvo override por instrucciones).
         /// </summary>
         public TipologiaAssetResolverConfig? AssetResolver { get; set; }
+        /// <summary>
+        /// Política específica para clasificación documental jerárquica (TDN1 -> TDN2 -> Matrícula).
+        /// Se usa como contrato de configuración y no altera el flujo si no se consume explícitamente.
+        /// </summary>
+        public ClassificationPolicyConfig? ClassificationPolicy { get; set; }
+        /// <summary>
+        /// Catálogo jerárquico de clases para clasificación documental.
+        /// Permite definir familias y subtipos versionados en configuración.
+        /// </summary>
+        public TdnClassificationCatalogConfig? ClassificationCatalog { get; set; }
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
         public TipologiaValidationConfig()
         {
             Fields = new List<FieldValidationConfig>();
         }
+    }
+
+    public class ClassificationPolicyConfig
+    {
+        /// <summary>Umbral para aceptar sin fallback.</summary>
+        public double AcceptWithoutFallbackThreshold { get; set; } = 0.85;
+        /// <summary>Delta mínimo entre top1 y top2 para evitar ambigüedad.</summary>
+        public double Top1Top2AmbiguityDelta { get; set; } = 0.15;
+        /// <summary>Número de páginas por defecto a clasificar.</summary>
+        public int DefaultPagesToClassify { get; set; } = 3;
+        /// <summary>Número máximo de páginas cuando se escala por ambigüedad.</summary>
+        public int EscalatedPagesToClassify { get; set; } = 5;
+        /// <summary>Si true, el backend aplica límite de páginas aunque el cliente no recorte.</summary>
+        public bool EnforceBackendPageLimit { get; set; } = true;
+        /// <summary>Timeout del fallback GPT en segundos.</summary>
+        public int FallbackTimeoutSeconds { get; set; } = 8;
+        /// <summary>Número máximo de reintentos del fallback GPT.</summary>
+        public int FallbackMaxRetries { get; set; } = 1;
+        /// <summary>Backoff entre reintentos de fallback GPT en milisegundos.</summary>
+        public int FallbackBackoffMs { get; set; } = 500;
+        /// <summary>Objetivo máximo de fallback rate.</summary>
+        public double FallbackRateTarget { get; set; } = 0.25;
+        /// <summary>Umbral de alerta de fallback rate.</summary>
+        public double FallbackRateAlertThreshold { get; set; } = 0.20;
+        /// <summary>Objetivo de coste por documento en EUR.</summary>
+        public double CostTargetEuroPerDocument { get; set; } = 0.10;
+        /// <summary>Objetivo de latencia p95 en segundos.</summary>
+        public int LatencyP95TargetSeconds { get; set; } = 90;
+        /// <summary>Estados de negocio válidos para clasificación documental.</summary>
+        public List<string> ValidBusinessStates { get; set; } = new() { "UNKNOWN", "OUT_OF_SCOPE", "NEEDS_REVIEW" };
+        /// <summary>Si true, ERROR se reserva para fallos técnicos.</summary>
+        public bool TechnicalErrorOnly { get; set; } = true;
+        /// <summary>Si true, evita reproceso por cambio de versión de clasificador cuando el SHA coincide.</summary>
+        public bool SkipReprocessWhenShaMatches { get; set; } = true;
+    }
+
+    public class TdnClassificationCatalogConfig
+    {
+        /// <summary>Versión semántica del catálogo de clasificación documental.</summary>
+        public string CatalogVersion { get; set; } = "1.0";
+        /// <summary>Familias TDN1 con sus subtipos TDN2 y matrícula asociada.</summary>
+        public List<TdnFamilyConfig> Families { get; set; } = new();
+    }
+
+    public class TdnFamilyConfig
+    {
+        public string Tdn1Code { get; set; } = string.Empty;
+        public string Tdn1Name { get; set; } = string.Empty;
+        public List<TdnSubtypeConfig> Subtypes { get; set; } = new();
+    }
+
+    public class TdnSubtypeConfig
+    {
+        public string Tdn2Code { get; set; } = string.Empty;
+        public string Tdn2Name { get; set; } = string.Empty;
+        public string Matricula { get; set; } = string.Empty;
     }
 
     public class FieldValidationConfig

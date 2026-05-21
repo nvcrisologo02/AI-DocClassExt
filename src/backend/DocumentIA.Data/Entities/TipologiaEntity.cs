@@ -38,7 +38,7 @@ public class TipologiaEntity
     public string? ModeloExtraccionDI { get; set; }
     public double UmbralExtraccion { get; set; } = 0.80;
 
-    [MaxLength(200)]
+    [Column(TypeName = "nvarchar(max)")]
     public string? PromptGPT { get; set; }
 
     // Configuración JSON (campos esperados, reglas de validación, etc.)

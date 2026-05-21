@@ -74,7 +74,7 @@ Sección: `Classification:GptFallback`
 | `TimeoutSeconds` | int | Timeout de la llamada GPT. | `30` |
 
 > **Comportamiento especial:** Si DI clasifica como `RESTO` (tipología genérica), el fallback GPT se activa **de forma obligatoria**, independientemente del umbral y de si `Enabled = false`.  
-> Si GPT devuelve `Desconocido` o confianza < 0.3, el orquestador termina con `Estado = ERROR`.
+> Si GPT devuelve `Desconocido` o confianza < 0.3, el orquestador termina de forma controlada con `Estado = NO_CLASIFICADO` (sin error técnico de ejecución).
 
 ---
 

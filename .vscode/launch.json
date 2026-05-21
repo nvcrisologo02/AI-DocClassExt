@@ -6,39 +6,14 @@
     "configurations": [
         {
             "name": "Azure Functions: Launch (.NET)",
-            "type": "dotnet",
-            "request": "launch",
-            "projectPath": "${workspaceFolder}/src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj",
-            "preLaunchTask": "build (functions)",
-            "cwd": "${workspaceFolder}/src/backend/DocumentIA.Functions"
-        },
-        {
-            "name": "Azure Functions: Attaching to Host Process",
             "type": "coreclr",
             "request": "attach",
             "preLaunchTask": "func: host start",
             "processId": "${command:azureFunctions.pickProcess}",
             "console": "integratedTerminal",
             "justMyCode": false,
-            "symbolSearchPath": "${workspaceFolder}/src/backend/DocumentIA.Functions/bin/Debug/net8.0"
-        },
-        {
-            "name": "Azure Functions: Direct Launch (Alternative)",
-            "type": "coreclr",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/backend/DocumentIA.Functions/bin/Debug/net8.0/DocumentIA.Functions.dll",
-            "args": [
-                "host",
-                "start"
-            ],
-            "cwd": "${workspaceFolder}/src/backend/DocumentIA.Functions",
-            "stopAtEntry": false,
-            "serverReadyAction": {
-                "pattern": "Host started.*",
-                "uriFormat": "http://localhost:7071/api",
-                "action": "openExternally"
-            },
-            "console": "integratedTerminal"
+            "cwd": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/backend/DocumentIA.Functions",
+            "symbolSearchPath": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/backend/DocumentIA.Functions/bin/Debug/net8.0"
         },
         {
             "name": "PowerShell: Launch Current File",
@@ -46,12 +21,6 @@
             "request": "launch",
             "script": "${file}",
             "args": []
-        },
-        {
-            "name": "Attach to .NET Functions",
-            "type": "coreclr",
-            "request": "attach",
-            "processId": "${command:azureFunctions.pickProcess}"
         },
         {
             "name": "DocumentIA.Batch: Launch (startup break)",

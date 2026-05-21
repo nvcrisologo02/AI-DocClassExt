@@ -34,7 +34,17 @@ public class DocumentoEntity
     [MaxLength(100)]
     public string? Tipologia { get; set; }
 
+    // === Clasificación jerárquica TDN ===
+    [MaxLength(50)]
+    public string? Tdn1 { get; set; }
+
     [MaxLength(100)]
+    public string? Tdn2 { get; set; }
+
+    [MaxLength(50)]
+    public string? Matricula { get; set; }
+
+    [MaxLength(500)]
     public string Estado { get; set; } = "Pendiente"; // Pendiente, Procesando, OK, Error, BajaConfianza
 
     public double? ConfianzaGlobal { get; set; }
@@ -46,6 +56,18 @@ public class DocumentoEntity
 
     [Column(TypeName = "nvarchar(max)")]
     public string? NormalizacionMarkdownCompressed { get; set; }
+
+    // === Auditoría y trazabilidad de clasificación ===
+    [MaxLength(500)]
+    public string? EvidenceUri { get; set; }
+
+    [MaxLength(50)]
+    public string? ClassifierVersion { get; set; }
+
+    public int PagesProcessed { get; set; }
+
+    [MaxLength(64)]
+    public string? DedupSha256 { get; set; }
 
     // Trazabilidad
     [Required]

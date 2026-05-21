@@ -35,7 +35,7 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 | 3.7 | Application Insights | `srbappiprodocai` | West Europe | Existente | ☐ |
 | 3.8 | Key Vault | `srbkvprodocai` | West Europe | Existente | ☐ |
 | 3.9 | **Azure SQL Server + Database** | `srbsqlprodocai` / `DocumentIA` | West Europe | Existente (Operativo) — verificado 2026-04-30 (ver `docs/09_AUDITORIA_CONFIGURACION_2026-04-30.md`) | ☑ |
-| 3.10 | Web App Admin | `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
+| 3.10 | Web App Admin | `srbwebadminprodocai` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
 | 3.11 | App Service AssetResolver | `srbwebpluginassetresolver` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
 
 ---
@@ -177,7 +177,7 @@ Usar para cualquier actualización sobre un entorno ya operativo con foco en con
 | B2.3 | Verificar Stage **Build** completo | restore/build/test/publish sin errores | ☐ |
 | B2.4 | Verificar Stage **DeployFunctions** completo | zipDeploy + AzureCLI settings + smoke test | ☐ |
 | B2.5 | Revisar evidencias del run | logs, artifacts, duracion, warnings | ☐ |
-| B2.6 | Si aplica Admin, habilitar y revisar Stage **DeployAdmin** | `condition: succeeded()` cuando exista `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | ☐ |
+| B2.6 | Si aplica Admin, habilitar y revisar Stage **DeployAdmin** | `condition: succeeded()` cuando exista `srbwebadminprodocai` | ☐ |
 
 ---
 
@@ -252,7 +252,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | Item | Estado |
 |------|--------|
 | Azure SQL `srbsqlprodocai` | Existente y operativo en produccion |
-| Web App Admin `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | Existente y desplegado via pipeline |
+| Web App Admin `srbwebadminprodocai` | Existente y desplegado via pipeline |
 | Web App AssetResolver `srbwebpluginassetresolver` | Existente y desplegado via pipeline |
 | Stage Deploy Admin en pipeline | Activo |
 | Stage Deploy AssetResolver en pipeline | Activo |

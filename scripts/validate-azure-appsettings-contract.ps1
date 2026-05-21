@@ -26,7 +26,7 @@ param(
     [string]$FunctionsAppName = "srbappprodocai",
 
     [Parameter(Mandatory = $false)]
-    [string]$AdminWebAppName = "srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai",
+    [string]$AdminWebAppName = "srbwebadminprodocai",
 
     [Parameter(Mandatory = $false)]
     [string]$AssetResolverWebAppName = "srbwebpluginassetresolver",
@@ -134,7 +134,7 @@ function Get-AppName {
 
     switch ($AppId) {
         "functions"     { return $FunctionsAppName }
-        "COMPLETAR_GDC_HTTP_BASIC_USERNAME"         { return $AdminWebAppName }
+        "admin"         { return $AdminWebAppName }
         "assetresolver" { return $AssetResolverWebAppName }
         default          { return $DefaultName }
     }

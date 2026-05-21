@@ -180,6 +180,20 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 throw new InvalidDataException($"La configuracion '{technicalKey}' no define version.");
             }
 
+            var resolvedTdn1 = !string.IsNullOrWhiteSpace(config.Tdn1)
+                ? config.Tdn1
+                : TryReadJsonString(jsonContent, "tdn1")
+                    ?? TryReadJsonString(jsonContent, "Tdn1")
+                    ?? TryReadJsonString(jsonContent, "TDN1")
+                    ?? string.Empty;
+
+            var resolvedTdn2 = !string.IsNullOrWhiteSpace(config.Tdn2)
+                ? config.Tdn2
+                : TryReadJsonString(jsonContent, "tdn2")
+                    ?? TryReadJsonString(jsonContent, "Tdn2")
+                    ?? TryReadJsonString(jsonContent, "TDN2")
+                    ?? string.Empty;
+
             var resolved = new ResolvedTipologia(
                 RequestedValue: technicalKey,
                 TipologiaId: config.TipologiaId.Trim(),
@@ -204,7 +218,15 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 AssetResolverMapeoDireccionNumero: config.AssetResolver?.MapeoDireccionNumero,
                 AssetResolverMapeoDireccionMunicipio: config.AssetResolver?.MapeoDireccionMunicipio,
                 AssetResolverMapeoDireccionCodigoPostal: config.AssetResolver?.MapeoDireccionCodigoPostal,
-                AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75);
+                AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75,
+                TipologiaNombre: config.TipologiaNombre ?? string.Empty,
+                TipologiaMGDCMatricula: config.TipologiaMGDCMatricula ?? string.Empty,
+                GdcTipoDocumento: config.GdcTipoDocumento ?? string.Empty,
+                GdcSubtipoDocumento: config.GdcSubtipoDocumento ?? string.Empty,
+                GdcSerie: config.GdcSerie ?? string.Empty,
+                Tdn1: resolvedTdn1,
+                Tdn2: resolvedTdn2,
+                GptDescripcion: config.GptDescripcion ?? string.Empty);
 
             byTechnicalKey[technicalKey] = resolved;
 
@@ -254,6 +276,20 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 continue;
             }
 
+            var resolvedTdn1 = !string.IsNullOrWhiteSpace(config.Tdn1)
+                ? config.Tdn1
+                : TryReadJsonString(tipologia.ConfiguracionJson, "tdn1")
+                    ?? TryReadJsonString(tipologia.ConfiguracionJson, "Tdn1")
+                    ?? TryReadJsonString(tipologia.ConfiguracionJson, "TDN1")
+                    ?? string.Empty;
+
+            var resolvedTdn2 = !string.IsNullOrWhiteSpace(config.Tdn2)
+                ? config.Tdn2
+                : TryReadJsonString(tipologia.ConfiguracionJson, "tdn2")
+                    ?? TryReadJsonString(tipologia.ConfiguracionJson, "Tdn2")
+                    ?? TryReadJsonString(tipologia.ConfiguracionJson, "TDN2")
+                    ?? string.Empty;
+
             var technicalKey = tipologia.Codigo;
             var resolved = new ResolvedTipologia(
                 RequestedValue: technicalKey,
@@ -279,7 +315,15 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 AssetResolverMapeoDireccionNumero: config.AssetResolver?.MapeoDireccionNumero,
                 AssetResolverMapeoDireccionMunicipio: config.AssetResolver?.MapeoDireccionMunicipio,
                 AssetResolverMapeoDireccionCodigoPostal: config.AssetResolver?.MapeoDireccionCodigoPostal,
-                AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75);
+                AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75,
+                TipologiaNombre: config.TipologiaNombre ?? string.Empty,
+                TipologiaMGDCMatricula: config.TipologiaMGDCMatricula ?? string.Empty,
+                GdcTipoDocumento: config.GdcTipoDocumento ?? string.Empty,
+                GdcSubtipoDocumento: config.GdcSubtipoDocumento ?? string.Empty,
+                GdcSerie: config.GdcSerie ?? string.Empty,
+                Tdn1: resolvedTdn1,
+                Tdn2: resolvedTdn2,
+                GptDescripcion: config.GptDescripcion ?? string.Empty);
 
             byTechnicalKey[technicalKey] = resolved;
 
@@ -298,4 +342,34 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
     private sealed record ResolverIndex(
         Dictionary<string, ResolvedTipologia> ByTechnicalKey,
         Dictionary<string, List<ResolvedTipologia>> ByFamily);
+
+    private static string? TryReadJsonString(string json, string propertyName)
+    {
+        if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(propertyName))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            if (!doc.RootElement.TryGetProperty(propertyName, out var value))
+            {
+                return null;
+            }
+
+            return value.ValueKind == JsonValueKind.String
+                ? value.GetString()
+                : value.ToString();
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
 }

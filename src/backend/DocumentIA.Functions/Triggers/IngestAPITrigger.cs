@@ -55,11 +55,11 @@ public class IngestAPITrigger
                 return badResponse;
             }
 
-            if (contratoEntrada.Instrucciones.ClassificationOnly
-                && !string.IsNullOrWhiteSpace(contratoEntrada.Instrucciones.ExpectedType))
+            if (contratoEntrada.Instrucciones.ClassificationOnly &&
+                !string.IsNullOrWhiteSpace(contratoEntrada.Instrucciones.ExpectedType))
             {
                 var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
-                await badResponse.WriteStringAsync("instrucciones.classificationOnly es incompatible con instrucciones.expectedType.");
+                await badResponse.WriteStringAsync("classificationOnly=true es incompatible con expectedType informado.");
                 return badResponse;
             }
 
