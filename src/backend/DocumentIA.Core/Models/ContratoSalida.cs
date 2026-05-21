@@ -266,6 +266,11 @@ public class SubirGDCInput
     public string Serie { get; set; } = string.Empty;
     // NombreDocumento: nombre lógico del documento (display name). When empty, NombreArchivo is used.
     public string NombreDocumento { get; set; } = string.Empty;
+    /// <summary>
+    /// Ruta en blob storage del documento. Si está informado, SubirGDCActivity descarga
+    /// los bytes desde blob en lugar de usar ContenidoBase64.
+    /// </summary>
+    public string? BlobPath { get; set; }
 }
 
 public class ResultadoGDC
@@ -305,6 +310,15 @@ public class ObtenerDocumentoGDCResult
     public string Base64 { get; set; } = string.Empty;
     public string NombreArchivo { get; set; } = string.Empty;
     public string MD5 { get; set; } = string.Empty;
+    /// <summary>
+    /// Ruta en blob storage tras subir el documento descargado de GDC.
+    /// Cuando está informado, Base64 estará vacío (se sube al blob para evitar payloads grandes en la pipeline).
+    /// </summary>
+    public string? BlobPath { get; set; }
+    public string? PreComputedSHA256 { get; set; }
+    public string? PreComputedMD5 { get; set; }
+    public string? PreComputedCRC32 { get; set; }
+    public long PreComputedTamañoBytes { get; set; }
 }
 
 public class VerificarDuplicadoMd5Result

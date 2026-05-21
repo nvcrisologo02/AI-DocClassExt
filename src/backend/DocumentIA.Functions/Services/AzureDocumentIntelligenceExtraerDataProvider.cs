@@ -22,6 +22,7 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
     private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly ContentUnderstandingResultMapper _resultMapper;
+    private readonly IBlobStorageService _blobStorageService;
     private readonly ILogger<AzureDocumentIntelligenceExtraerDataProvider> _logger;
 
     public AzureDocumentIntelligenceExtraerDataProvider(
@@ -29,12 +30,14 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
         TipologiaConfigLoader tipologiaConfigLoader,
         ExtractionModelRegistryLoader modelRegistryLoader,
         ContentUnderstandingResultMapper resultMapper,
+        IBlobStorageService blobStorageService,
         ILogger<AzureDocumentIntelligenceExtraerDataProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _modelRegistryLoader = modelRegistryLoader;
         _resultMapper = resultMapper;
+        _blobStorageService = blobStorageService;
         _logger = logger;
     }
 
@@ -56,7 +59,19 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
             $"{baseEndpoint}/documentintelligence/documentModels/{Uri.EscapeDataString(model.AnalyzerId)}:analyze" +
             $"?api-version={Uri.EscapeDataString(model.ApiVersion)}";
 
-        var requestBody = JsonSerializer.Serialize(new { base64Source = input.Entrada.Documento.Content.Base64 });
+        // Blob-first: si hay BlobPath → usar urlSource (Azure DI descarga directo del blob vía SAS URL)
+        string requestBody;
+        var blobPath = input.Entrada.Documento.BlobPath;
+        if (!string.IsNullOrWhiteSpace(blobPath))
+        {
+            var sasUrl = await _blobStorageService.GenerateSasUrlAsync(blobPath, TimeSpan.FromMinutes(30));
+            requestBody = JsonSerializer.Serialize(new { urlSource = sasUrl });
+            _logger.LogInformation("ExtraerDataProvider usando urlSource (SAS) para BlobPath={BlobPath}", blobPath);
+        }
+        else
+        {
+            requestBody = JsonSerializer.Serialize(new { base64Source = input.Entrada.Documento.Content.Base64 });
+        }
 
         using var client = _httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, analyzeUrl)

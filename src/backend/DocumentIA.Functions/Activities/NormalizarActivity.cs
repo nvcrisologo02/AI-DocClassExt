@@ -1,6 +1,7 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using System.Security.Cryptography;
 
 namespace DocumentIA.Functions.Activities;
@@ -8,30 +9,63 @@ namespace DocumentIA.Functions.Activities;
 public class NormalizarActivity
 {
     private readonly ILogger<NormalizarActivity> _logger;
+    private readonly IBlobStorageService _blobStorageService;
 
-    public NormalizarActivity(ILogger<NormalizarActivity> logger)
+    public NormalizarActivity(
+        ILogger<NormalizarActivity> logger,
+        IBlobStorageService blobStorageService)
     {
         _logger = logger;
+        _blobStorageService = blobStorageService;
     }
 
     [Function("NormalizarActivity")]
-    public Dictionary<string, object> Run([ActivityTrigger] ContratoEntrada entrada)
+    public async Task<Dictionary<string, object>> Run([ActivityTrigger] ContratoEntrada entrada)
     {
-        _logger.LogInformation($"Normalizando documento: {entrada.Documento.Name}");
+        _logger.LogInformation("Normalizando documento: {Nombre}", entrada.Documento.Name);
 
-        // Decodificar Base64
-        var documentBytes = Convert.FromBase64String(entrada.Documento.Content.Base64);
+        // Blob-first: si los hashes ya están pre-computados en el trigger, usarlos directamente
+        // sin descargar el blob (ahorra un round-trip para ficheros grandes)
+        if (!string.IsNullOrEmpty(entrada.Documento.PreComputedSHA256))
+        {
+            _logger.LogInformation(
+                "Usando hashes pre-computados en trigger. SHA256={SHA256}, Bytes={Bytes}",
+                entrada.Documento.PreComputedSHA256, entrada.Documento.PreComputedTamañoBytes);
 
-        // Calcular SHA256
+            return new Dictionary<string, object>
+            {
+                ["SHA256"] = entrada.Documento.PreComputedSHA256,
+                ["MD5"] = entrada.Documento.PreComputedMD5 ?? string.Empty,
+                ["CRC32"] = entrada.Documento.PreComputedCRC32 ?? string.Empty,
+                ["TamañoBytes"] = entrada.Documento.PreComputedTamañoBytes,
+                ["NombreNormalizado"] = entrada.Documento.Name.Trim().ToLowerInvariant(),
+                ["FechaNormalizacion"] = DateTime.UtcNow
+            };
+        }
+
+        byte[] documentBytes;
+
+        if (!string.IsNullOrEmpty(entrada.Documento.BlobPath))
+        {
+            // BlobPath set pero sin pre-computed (ej. flujo GDC tras ObtenerDocumentoGDCActivity)
+            _logger.LogInformation("Descargando documento desde blob para normalización. BlobPath={BlobPath}",
+                entrada.Documento.BlobPath);
+            documentBytes = await _blobStorageService.DownloadDocumentAsync(entrada.Documento.BlobPath);
+        }
+        else
+        {
+            // Fallback: flujo legado con base64 (compatibilidad hacia atrás)
+            documentBytes = Convert.FromBase64String(entrada.Documento.Content.Base64);
+        }
+
         var sha256 = CalcularSHA256(documentBytes);
-
-        // Calcular MD5
         var md5 = CalcularMD5(documentBytes);
-
-        // Calcular CRC32
         var crc32 = CalcularCRC32(documentBytes);
 
-        var resultado = new Dictionary<string, object>
+        _logger.LogInformation("Normalización completada. SHA256={SHA256}, MD5={MD5}, Bytes={Bytes}",
+            sha256, md5, documentBytes.Length);
+
+        return new Dictionary<string, object>
         {
             ["SHA256"] = sha256,
             ["MD5"] = md5,
@@ -40,9 +74,6 @@ public class NormalizarActivity
             ["NombreNormalizado"] = entrada.Documento.Name.Trim().ToLowerInvariant(),
             ["FechaNormalizacion"] = DateTime.UtcNow
         };
-
-        _logger.LogInformation($"Normalización completada. SHA256: {sha256}, MD5: {md5}");
-        return resultado;
     }
 
     private static string CalcularSHA256(byte[] data)
@@ -73,3 +104,4 @@ public class NormalizarActivity
         return (~crc).ToString("X8");
     }
 }
+

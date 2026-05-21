@@ -292,6 +292,7 @@ public class DocumentProcessOrchestrator
                         Input = new SubirGDCInput
                         {
                             IdActivo = idActivo,
+                            BlobPath = entrada.Documento.BlobPath,    // si está en blob, SubirGDCActivity descarga
                             ContenidoBase64 = entrada.Documento.Content.Base64,
                             NombreArchivo = entrada.Documento.Name,
                             SHA256 = salida.Integridad.SHA256,
@@ -426,7 +427,21 @@ public class DocumentProcessOrchestrator
                         "ObtenerDocumentoGDCActivity",
                         entrada.Documento.ObjectIdGDC));
 
-                entrada.Documento.Content.Base64 = documentoGdc.Base64;
+                // Blob-first: si ObtenerDocumentoGDCActivity subió al blob, usar BlobPath
+                if (!string.IsNullOrEmpty(documentoGdc.BlobPath))
+                {
+                    entrada.Documento.BlobPath = documentoGdc.BlobPath;
+                    entrada.Documento.PreComputedSHA256 = documentoGdc.PreComputedSHA256;
+                    entrada.Documento.PreComputedMD5 = documentoGdc.PreComputedMD5;
+                    entrada.Documento.PreComputedCRC32 = documentoGdc.PreComputedCRC32;
+                    entrada.Documento.PreComputedTamañoBytes = documentoGdc.PreComputedTamañoBytes;
+                    // Base64 ya es null: la pipeline usará BlobPath
+                }
+                else
+                {
+                    // Fallback: subida a blob falló, usar base64 (ficheros pequeños de GDC)
+                    entrada.Documento.Content.Base64 = documentoGdc.Base64;
+                }
 
                 if (string.IsNullOrWhiteSpace(entrada.Documento.Name))
                 {
@@ -531,10 +546,17 @@ public class DocumentProcessOrchestrator
                 "SubirBlobActivity",
                 new SubirBlobInput
                 {
+                    BlobPath = entrada.Documento.BlobPath,         // no-op si ya está en blob
                     ContenidoBase64 = entrada.Documento.Content.Base64,
                     NombreArchivo = entrada.Documento.Name,
                     Contenedor = "documents"
                 });
+
+            // Actualizar BlobPath en entrada para que las activities posteriores lo usen
+            if (!string.IsNullOrWhiteSpace(blobPath) && string.IsNullOrEmpty(entrada.Documento.BlobPath))
+            {
+                entrada.Documento.BlobPath = blobPath;
+            }
 
             if (!string.IsNullOrWhiteSpace(blobPath))
             {
@@ -569,6 +591,7 @@ public class DocumentProcessOrchestrator
                         "PrepararDocumentoClasificacionActivity",
                         new PrepararDocumentoClasificacionInput
                         {
+                            BlobPath = entrada.Documento.BlobPath,
                             DocumentoBase64 = entrada.Documento.Content.Base64,
                             NombreDocumento = entrada.Documento.Name,
                             MaxPaginasClasificacion = maxPaginasClasificacion
@@ -1124,7 +1147,8 @@ public class DocumentProcessOrchestrator
                         {
                             Tipologia = salida.Identificacion.Tipologia,
                             DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name
+                            NombreDocumento = entrada.Documento.Name,
+                            BlobPath = entrada.Documento.BlobPath
                         });
 
                     if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))

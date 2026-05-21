@@ -107,6 +107,7 @@ public class ExtraerMarkdownLayoutInput
     public string Tipologia { get; set; } = string.Empty;
     public string DocumentoBase64 { get; set; } = string.Empty;
     public string NombreDocumento { get; set; } = string.Empty;
+    public string? BlobPath { get; set; }
 }
 
 public class ExtraerMarkdownLayoutResultado

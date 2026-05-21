@@ -23,6 +23,13 @@ public class SubirBlobActivity
     {
         try
         {
+            // Blob-first: si ya tenemos un BlobPath pre-existente, es un no-op
+            if (!string.IsNullOrWhiteSpace(input.BlobPath))
+            {
+                _logger.LogInformation("Documento ya está en blob, omitiendo subida. BlobPath={BlobPath}", input.BlobPath);
+                return input.BlobPath;
+            }
+
             if (string.IsNullOrWhiteSpace(input.ContenidoBase64))
             {
                 _logger.LogWarning("No hay contenido para subir a blob. NombreArchivo: {NombreArchivo}", input.NombreArchivo);

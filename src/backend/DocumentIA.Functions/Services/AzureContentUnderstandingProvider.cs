@@ -18,17 +18,20 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
     private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly ContentUnderstandingResultMapper _resultMapper;
+    private readonly IBlobStorageService _blobStorageService;
 
     public AzureContentUnderstandingProvider(
         ILogger<AzureContentUnderstandingProvider> logger,
         TipologiaConfigLoader tipologiaConfigLoader,
         ExtractionModelRegistryLoader modelRegistryLoader,
-        ContentUnderstandingResultMapper resultMapper)
+        ContentUnderstandingResultMapper resultMapper,
+        IBlobStorageService blobStorageService)
     {
         _logger = logger;
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _modelRegistryLoader = modelRegistryLoader;
         _resultMapper = resultMapper;
+        _blobStorageService = blobStorageService;
     }
 
     public virtual async Task<ExtraccionResultado> ObtenerDatosAsync(ExtraccionInput input, CancellationToken cancellationToken = default)
@@ -48,7 +51,19 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         ValidateAzureCuModel(model);
         var client = CreateClient(model);
         var fileName = input.Entrada.Documento.Name;
-        var binaryData = BinaryData.FromBytes(Convert.FromBase64String(input.Entrada.Documento.Content.Base64));
+        // Blob-first: si hay BlobPath → descargar del blob; si no, usar base64
+        byte[] documentBytes;
+        var blobPath = input.Entrada.Documento.BlobPath;
+        if (!string.IsNullOrWhiteSpace(blobPath))
+        {
+            _logger.LogInformation("ContentUnderstandingProvider descargando desde blob. BlobPath={BlobPath}", blobPath);
+            documentBytes = await _blobStorageService.DownloadDocumentAsync(blobPath);
+        }
+        else
+        {
+            documentBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64);
+        }
+        var binaryData = BinaryData.FromBytes(documentBytes);
         var contentType = ResolveContentType(model, fileName, binaryData);
         var processingLocation = ResolveProcessingLocation(model);
         var contentRange = string.IsNullOrWhiteSpace(model.InputRange) ? null : model.InputRange;

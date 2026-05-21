@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -12,15 +13,18 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
+    private readonly IBlobStorageService _blobStorageService;
     private readonly ILogger<AzureDocumentIntelligenceClasificarProvider> _logger;
 
     public AzureDocumentIntelligenceClasificarProvider(
         IHttpClientFactory httpClientFactory,
         ClassificationModelRegistryLoader modelRegistryLoader,
+        IBlobStorageService blobStorageService,
         ILogger<AzureDocumentIntelligenceClasificarProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
         _modelRegistryLoader = modelRegistryLoader;
+        _blobStorageService = blobStorageService;
         _logger = logger;
     }
 
@@ -32,14 +36,24 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
 
         var baseEndpoint = model.Endpoint.TrimEnd('/');
         var analyzeUrl = $"{baseEndpoint}/documentintelligence/documentClassifiers/{Uri.EscapeDataString(model.ClassifierId)}:analyze?_overload=classifyDocument&api-version={Uri.EscapeDataString(apiVersion)}";
-        var documentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
-            ? input.DocumentoBase64Override
-            : input.Entrada.Documento.Content.Base64;
-
-        var requestBody = JsonSerializer.Serialize(new
+        // Blob-first: si no hay override y hay BlobPath → usar urlSource (Azure DI descarga directo del blob)
+        object requestBodyObj;
+        var blobPath = input.Entrada.Documento.BlobPath;
+        if (string.IsNullOrWhiteSpace(input.DocumentoBase64Override) && !string.IsNullOrWhiteSpace(blobPath))
         {
-            base64Source = documentoBase64
-        });
+            var sasUrl = await _blobStorageService.GenerateSasUrlAsync(blobPath, TimeSpan.FromMinutes(30));
+            requestBodyObj = new { urlSource = sasUrl };
+            _logger.LogInformation("ClasificarProvider usando urlSource (SAS) para BlobPath={BlobPath}", blobPath);
+        }
+        else
+        {
+            var documentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
+                ? input.DocumentoBase64Override
+                : input.Entrada.Documento.Content.Base64;
+            requestBodyObj = new { base64Source = documentoBase64 };
+        }
+
+        var requestBody = JsonSerializer.Serialize(requestBodyObj);
 
         using var client = _httpClientFactory.CreateClient();
         using var request = new HttpRequestMessage(HttpMethod.Post, analyzeUrl)

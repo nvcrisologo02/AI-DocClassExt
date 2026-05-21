@@ -115,6 +115,20 @@ public class Documento
     public string Name { get; set; } = string.Empty;
     public string? ObjectIdGDC { get; set; }
     public ContenidoDocumento Content { get; set; } = new();
+    /// <summary>
+    /// Ruta en blob storage (container/path) cuando el fichero ya fue subido antes de la orquestación.
+    /// Formato: "documents/2026/05/{sha256}.pdf"
+    /// Cuando está informado, la pipeline usa blob-first y no necesita base64 en el payload.
+    /// </summary>
+    public string? BlobPath { get; set; }
+    /// <summary>SHA256 pre-calculado en el trigger antes de iniciar la orquestación. Evita re-descarga en NormalizarActivity.</summary>
+    public string? PreComputedSHA256 { get; set; }
+    /// <summary>MD5 pre-calculado en el trigger.</summary>
+    public string? PreComputedMD5 { get; set; }
+    /// <summary>CRC32 pre-calculado en el trigger.</summary>
+    public string? PreComputedCRC32 { get; set; }
+    /// <summary>Tamaño en bytes del fichero original, pre-calculado en el trigger.</summary>
+    public long PreComputedTamañoBytes { get; set; }
 }
 
 public class ContenidoDocumento
@@ -131,8 +145,3 @@ public class Trazabilidad
     public string? OperationId { get; set; }
 }
 
-public class ObtenerUltimaEjecucionDuplicadoInput
-{
-    public string SHA256 { get; set; } = string.Empty;
-    public bool ClassificationOnly { get; set; }
-}
