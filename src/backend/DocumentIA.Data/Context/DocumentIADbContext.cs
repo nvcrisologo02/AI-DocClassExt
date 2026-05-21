@@ -20,6 +20,8 @@ public class DocumentIADbContext : DbContext
     public DbSet<ModeloConfigEntity> ModeloConfigs { get; set; } = null!;
     public DbSet<PluginTipologiaConfigEntity> PluginTipologiaConfigs { get; set; } = null!;
     public DbSet<TipologiaConfigAuditEntity> TipologiaConfigAudit { get; set; } = null!;
+    public DbSet<CatalogoTdn1Entity> CatalogoTdn1 { get; set; } = null!;
+    public DbSet<CatalogoTdn2Entity> CatalogoTdn2 { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -119,5 +121,23 @@ public class DocumentIADbContext : DbContext
 
         modelBuilder.Entity<ValidacionResultadoEntity>()
             .HasIndex(v => new { v.EjecucionId, v.Campo });
+
+        // CatalogoTdn1 / CatalogoTdn2
+        modelBuilder.Entity<CatalogoTdn1Entity>()
+            .HasIndex(t => t.Codigo)
+            .IsUnique();
+
+        modelBuilder.Entity<CatalogoTdn2Entity>()
+            .HasIndex(t => t.Codigo)
+            .IsUnique();
+
+        modelBuilder.Entity<CatalogoTdn2Entity>()
+            .HasOne(t => t.Tdn1)
+            .WithMany(p => p.SubTipos)
+            .HasForeignKey(t => t.Tdn1Id)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<CatalogoTdn1Entity>().HasData(CatalogoTdn1Seed.GetData());
+        modelBuilder.Entity<CatalogoTdn2Entity>().HasData(CatalogoTdn2Seed.GetData());
     }
 }
