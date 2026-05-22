@@ -7,14 +7,14 @@ variables:
   - name: AZURE_RESOURCE_GROUP
     value: SRBRGDOCSAIPROD
   - name: AZURE_ADMIN_WEB_APP_NAME
-    value: srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai
+    value: srbwebadminprodocai
   - name: AZURE_FUNCTIONS_APP_NAME
     value: srbappprodocai
   - name: KEY_VAULT_NAME
     value: srbkvprodocai
   - name: buildConfiguration
     value: Release
-  - name: COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject
+  - name: adminProject
     value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
 
 pool:
@@ -39,23 +39,23 @@ stages:
             displayName: Restore Admin
             inputs:
               command: restore
-              projects: $(COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject)
+              projects: $(adminProject)
 
           - task: DotNetCoreCLI@2
             displayName: Publish Admin
             inputs:
               command: publish
               publishWebProjects: false
-              projects: $(COMPLETAR_GDC_HTTP_BASIC_USERNAMEProject)
-              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
+              projects: $(adminProject)
+              arguments: --configuration $(buildConfiguration) --output $(Build.ArtifactStagingDirectory)/admin
               zipAfterPublish: false
               modifyOutputPath: false
 
           - task: PublishBuildArtifacts@1
-            displayName: Upload artifact - COMPLETAR_GDC_HTTP_BASIC_USERNAME
+            displayName: Upload artifact - admin
             inputs:
-              PathtoPublish: $(Build.ArtifactStagingDirectory)/COMPLETAR_GDC_HTTP_BASIC_USERNAME
-              ArtifactName: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+              PathtoPublish: $(Build.ArtifactStagingDirectory)/admin
+              ArtifactName: drop-admin
 
   - stage: DeployAdmin
     displayName: Deploy Admin Blazor
@@ -72,7 +72,7 @@ stages:
                 - checkout: self
 
                 - download: current
-                  artifact: drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+                  artifact: drop-admin
 
                 - task: AzureWebApp@1
                   displayName: Deploy Admin Web App
@@ -80,7 +80,7 @@ stages:
                     azureSubscription: $(AZURE_SERVICE_CONNECTION)
                     appType: webApp
                     appName: $(AZURE_ADMIN_WEB_APP_NAME)
-                    package: $(Pipeline.Workspace)/drop-COMPLETAR_GDC_HTTP_BASIC_USERNAME
+                    package: $(Pipeline.Workspace)/drop-admin
                     deploymentMethod: zipDeploy
 
                 - task: AzureCLI@2
@@ -149,13 +149,13 @@ stages:
                         throw "Azure CLI python executable not found at '$azPython'"
                       }
 
-                      $COMPLETAR_GDC_HTTP_BASIC_USERNAMEBaseUrlSetting = "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/"
-                      $COMPLETAR_GDC_HTTP_BASIC_USERNAMEFunctionKeySetting = "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
+                      $adminBaseUrlSetting = "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/"
+                      $adminFunctionKeySetting = "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
 
                       & $azPython -IBm azure.cli webapp config appsettings set `
                         --resource-group "$(AZURE_RESOURCE_GROUP)" `
                         --name "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                        --settings $COMPLETAR_GDC_HTTP_BASIC_USERNAMEBaseUrlSetting $COMPLETAR_GDC_HTTP_BASIC_USERNAMEFunctionKeySetting `
+                        --settings $adminBaseUrlSetting $adminFunctionKeySetting `
                         --only-show-errors `
                         --output none
 
@@ -171,3 +171,4 @@ stages:
                         -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
                         -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
                         -AssetResolverWebAppName "srbwebpluginassetresolver"
+
