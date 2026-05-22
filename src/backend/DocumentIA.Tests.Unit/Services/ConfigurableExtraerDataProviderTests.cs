@@ -4,6 +4,7 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Mocks;
 using DocumentIA.Functions.Services;
 using FluentAssertions;
@@ -486,7 +487,8 @@ public class ConfigurableExtraerDataProviderTests
                 new Mock<ILogger<AzureContentUnderstandingProvider>>().Object,
                 _tipologiaConfigLoader,
                 _extractionModelRegistryLoader,
-                mapper);
+                mapper,
+                new Mock<IBlobStorageService>().Object);
 
             GptProvider = new Mock<GptFallbackExtraerDataProvider>(
                 MockBehavior.Strict,

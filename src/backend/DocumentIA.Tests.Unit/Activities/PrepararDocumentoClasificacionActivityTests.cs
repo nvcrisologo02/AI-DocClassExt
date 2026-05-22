@@ -1,8 +1,10 @@
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Activities;
 using DocumentIA.Functions.Services;
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Moq;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.Standard14Fonts;
 using UglyToad.PdfPig.Writer;
@@ -12,10 +14,11 @@ namespace DocumentIA.Tests.Unit.Activities;
 public class PrepararDocumentoClasificacionActivityTests
 {
     [Fact]
-    public void Run_CuandoMaxPaginasEsNull_UsaDefaultTresPaginas()
+    public async Task Run_CuandoMaxPaginasEsNull_UsaDefaultTresPaginas()
     {
         var recorteService = new PdfRecorteService(NullLogger<PdfRecorteService>.Instance);
-        var sut = new PrepararDocumentoClasificacionActivity(recorteService, NullLogger<PrepararDocumentoClasificacionActivity>.Instance);
+        var blobStorageService = new Mock<IBlobStorageService>().Object;
+        var sut = new PrepararDocumentoClasificacionActivity(recorteService, blobStorageService, NullLogger<PrepararDocumentoClasificacionActivity>.Instance);
         var input = new PrepararDocumentoClasificacionInput
         {
             DocumentoBase64 = BuildPdfBase64WithPages(4),
@@ -23,7 +26,7 @@ public class PrepararDocumentoClasificacionActivityTests
             MaxPaginasClasificacion = null
         };
 
-        var result = sut.Run(input);
+        var result = await sut.Run(input);
 
         result.RecorteAplicado.Should().BeTrue();
         result.TotalPaginas.Should().Be(4);
@@ -32,10 +35,11 @@ public class PrepararDocumentoClasificacionActivityTests
     }
 
     [Fact]
-    public void Run_MapeaResultadoDelServicio()
+    public async Task Run_MapeaResultadoDelServicio()
     {
         var recorteService = new PdfRecorteService(NullLogger<PdfRecorteService>.Instance);
-        var sut = new PrepararDocumentoClasificacionActivity(recorteService, NullLogger<PrepararDocumentoClasificacionActivity>.Instance);
+        var blobStorageService = new Mock<IBlobStorageService>().Object;
+        var sut = new PrepararDocumentoClasificacionActivity(recorteService, blobStorageService, NullLogger<PrepararDocumentoClasificacionActivity>.Instance);
         var input = new PrepararDocumentoClasificacionInput
         {
             DocumentoBase64 = BuildPdfBase64WithPages(2),
@@ -43,7 +47,7 @@ public class PrepararDocumentoClasificacionActivityTests
             MaxPaginasClasificacion = 5
         };
 
-        var result = sut.Run(input);
+        var result = await sut.Run(input);
 
         result.RecorteAplicado.Should().BeFalse();
         result.TotalPaginas.Should().Be(2);

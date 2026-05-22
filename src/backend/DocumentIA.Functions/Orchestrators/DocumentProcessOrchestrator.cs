@@ -637,7 +637,7 @@ public class DocumentProcessOrchestrator
                     // terminar el proceso ahí sin intentar extraer ni validar
                     if (ex.Message.Contains("No se ha podido identificar la tipologia"))
                     {
-                        const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
+                        const string mensajeTipologiaNoIdentificada = "no clasificable: no se ha podido identificar la tipologia del documento";
 
                         logger.LogWarning(
                             "Clasificación falló: no se pudo identificar la tipología. Terminando procesamiento.");
@@ -656,7 +656,7 @@ public class DocumentProcessOrchestrator
                         salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
                         RegistrarModeloLlm(salida.DetalleEjecucion.Clasificacion.Modelo);
                         
-                        salida.Resultado.Estado = "ERROR";
+                        salida.Resultado.Estado = "NO_CLASIFICADO";
                         salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
                         salida.Resultado.ConfianzaGlobal = 0;
                         salida.Resultado.EstadoCalidad = "ERROR";
@@ -704,7 +704,7 @@ public class DocumentProcessOrchestrator
                 ex.InnerException is KeyNotFoundException ||
                 ex is TaskFailedException && ex.Message.Contains("No existe la tipologia"))
             {
-                const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
+                const string mensajeTipologiaNoIdentificada = "no clasificable: no se ha podido identificar la tipologia del documento";
 
                 logger.LogWarning(
                     ex,
@@ -713,7 +713,7 @@ public class DocumentProcessOrchestrator
 
                 salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
                 salida.DetalleEjecucion.MotivoErrorTipologia = ex.Message;
-                salida.Resultado.Estado = "ERROR";
+                salida.Resultado.Estado = "NO_CLASIFICADO";
                 salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
                 salida.Resultado.ConfianzaGlobal = 0;
                 salida.Resultado.EstadoCalidad = "ERROR";
@@ -723,6 +723,39 @@ public class DocumentProcessOrchestrator
                 salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
 
                 FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
+                return salida;
+            }
+
+            var esTipologiaNoClasificable = string.Equals(tipologiaResuelta.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tipologiaResuelta.TipologiaId, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(tipologiaResuelta.RequestedValue, "Desconocido", StringComparison.OrdinalIgnoreCase);
+
+            if (esTipologiaNoClasificable)
+            {
+                const string mensajeTipologiaNoIdentificada = "no clasificable: tipologia desconocida";
+
+                salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
+                salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
+                salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
+                {
+                    Normalizaciones = new List<string>(),
+                    Markdown = null,
+                    Validaciones = new List<string>(),
+                    Inconsistencias = new List<string> { $"Error: {mensajeTipologiaNoIdentificada}" }
+                };
+
+                salida.Identificacion.Tipologia = tipologiaResuelta.TechnicalKey;
+                salida.Identificacion.TipologiaFamilia = tipologiaResuelta.TipologiaId;
+                salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
+                salida.Resultado.Estado = "NO_CLASIFICADO";
+                salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
+                salida.Resultado.ConfianzaGlobal = 0;
+                salida.Resultado.EstadoCalidad = "ERROR";
+                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                salida.Resultado.ConfianzaExtraccion = 0;
+                salida.Resultado.ConfianzaValidacion = 0;
+
+                FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
                 return salida;
             }
 
@@ -865,6 +898,28 @@ public class DocumentProcessOrchestrator
                 await EjecutarSubidaGdcAsync(
                     salida.Integridad.IdActivo,
                     entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
+
+                var tipologiaNoClasificable = string.Equals(entrada.Instrucciones.ExpectedType, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tipologiaResuelta.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tipologiaResuelta.TipologiaId, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(tipologiaResuelta.RequestedValue, "Desconocido", StringComparison.OrdinalIgnoreCase);
+
+                if (tipologiaNoClasificable)
+                {
+                    const string mensajeTipologiaNoIdentificada = "no clasificable: tipologia desconocida";
+
+                    salida.Resultado.Estado = "NO_CLASIFICADO";
+                    salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
+                    salida.Resultado.ConfianzaGlobal = 0;
+                    salida.Resultado.EstadoCalidad = "ERROR";
+                    salida.Resultado.ConfianzaClasificacion = 0;
+                    salida.Resultado.ConfianzaExtraccion = 0;
+                    salida.Resultado.ConfianzaValidacion = 0;
+                    salida.DetalleEjecucion.Postproceso.Inconsistencias.Add(mensajeTipologiaNoIdentificada);
+                    
+                    FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
+                    return salida;
+                }
 
                 var confidenceCfgClassificationOnly = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
                 salida.Resultado.Estado = "OK";
