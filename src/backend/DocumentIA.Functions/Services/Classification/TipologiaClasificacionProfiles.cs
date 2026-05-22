@@ -132,6 +132,11 @@ public sealed class DbTipologiaClassificationProfileProvider : ITipologiaClassif
                 definition.Codigo = tipologia.Codigo;
             }
 
+            if (!(definition.Classification?.EnableRules ?? true))
+            {
+                return null;
+            }
+
             return TipologiaClassificationProfile.FromDefinition(definition);
         }
         catch
@@ -151,6 +156,15 @@ public sealed class TipologiaClassificationDefinition
 
     [JsonPropertyName("classificationConfig")]
     public TipologiaClassificationConfig? ClassificationConfig { get; set; }
+
+    [JsonPropertyName("classification")]
+    public ClassificationTdnDefinition? Classification { get; set; }
+}
+
+public sealed class ClassificationTdnDefinition
+{
+    [JsonPropertyName("enableRules")]
+    public bool EnableRules { get; set; } = true;
 }
 
 public sealed class TipologiaClassificationConfig
@@ -187,6 +201,12 @@ public sealed class TipologiaClassificationConfig
 
     [JsonPropertyName("immediateClassificationTriggers")]
     public ImmediateClassificationTriggersDefinition? ImmediateClassificationTriggers { get; set; }
+
+    [JsonPropertyName("examplePhrases")]
+    public List<string> ExamplePhrases { get; set; } = new();
+
+    [JsonPropertyName("disambiguationHints")]
+    public List<string> DisambiguationHints { get; set; } = new();
 }
 
 public sealed class MetadataBonusDefinition

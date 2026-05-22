@@ -122,6 +122,39 @@
                 <InputNumber class="form-control" @bind-Value="WizardState.Draft.UmbralClasificacion" @bind-Value:after="MarkDirtyAsync" />
             </div>
 
+            <hr />
+            <h5>Classification (TDN)</h5>
+
+            <div class="mb-3">
+                <label class="form-label">TDN1</label>
+                <InputText class="form-control" @bind-Value="WizardState.Draft.Tdn1" @bind-Value:after="MarkDirtyAsync" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">TDN2</label>
+                <InputText class="form-control" @bind-Value="WizardState.Draft.Tdn2" @bind-Value:after="MarkDirtyAsync" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Descripción GPT de tipología</label>
+                <InputTextArea class="form-control" @bind-Value="WizardState.Draft.GptDescripcion" @bind-Value:after="MarkDirtyAsync" />
+            </div>
+
+            <div class="mb-3 form-check">
+                <InputCheckbox class="form-check-input" @bind-Value="WizardState.Draft.EnableRules" @bind-Value:after="MarkDirtyAsync" />
+                <label class="form-check-label">Habilitar reglas de clasificación para esta tipología</label>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Example phrases (una por línea)</label>
+                <InputTextArea class="form-control" Value="@string.Join("\n", WizardState.Draft.ExamplePhrases)" ValueChanged="UpdateExamplePhrasesAsync" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Disambiguation hints (una por línea)</label>
+                <InputTextArea class="form-control" Value="@string.Join("\n", WizardState.Draft.DisambiguationHints)" ValueChanged="UpdateDisambiguationHintsAsync" />
+            </div>
+
             <div class="mb-3 form-check">
                 <InputCheckbox class="form-check-input" @bind-Value="WizardState.Draft.EnableExtraction" @bind-Value:after="MarkDirtyAsync" />
                 <label class="form-check-label">Habilitar extraction</label>
@@ -381,6 +414,8 @@
             <div class="mb-2"><strong>Versión:</strong> @WizardState.Draft.Version</div>
             <div class="mb-2"><strong>Modo:</strong> @WizardState.Draft.StartMode</div>
             <div class="mb-2"><strong>Modelo clasificación:</strong> @WizardState.Draft.ModeloClasificacionDI</div>
+            <div class="mb-2"><strong>TDN:</strong> @WizardState.Draft.Tdn1 / @WizardState.Draft.Tdn2</div>
+            <div class="mb-2"><strong>EnableRules:</strong> @(WizardState.Draft.EnableRules ? "Sí" : "No")</div>
             <div class="mb-2"><strong>Extraction:</strong> @(WizardState.Draft.EnableExtraction ? "Sí" : "No")</div>
             @if (WizardState.Draft.EnableExtraction)
             {
@@ -491,11 +526,38 @@
     private static string GetStepTitle(int step) => step switch
     {
         1 => "Básicos y modo de inicio",
-        2 => "Versionado y modelos",
+        2 => "Versionado, clasificación y modelos",
         3 => "Campos y opciones",
         4 => "Configuración GDC",
         _ => "Resumen y confirmación"
     };
+
+    private async Task UpdateExamplePhrasesAsync(string? raw)
+    {
+        WizardState.Draft.ExamplePhrases = ParseMultiline(raw);
+        await MarkDirtyAsync();
+    }
+
+    private async Task UpdateDisambiguationHintsAsync(string? raw)
+    {
+        WizardState.Draft.DisambiguationHints = ParseMultiline(raw);
+        await MarkDirtyAsync();
+    }
+
+    private static List<string> ParseMultiline(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return new List<string>();
+        }
+
+        return raw
+            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
 
     private async Task GoToStepAsync(int step)
     {
@@ -855,6 +917,21 @@
         if (d.UmbralClasificacion is < 0 or > 1)
         {
             errors.Add("El umbral de clasificación debe estar entre 0 y 1.");
+        }
+
+        if (string.IsNullOrWhiteSpace(d.Tdn1))
+        {
+            errors.Add("TDN1 es obligatorio.");
+        }
+
+        if (string.IsNullOrWhiteSpace(d.Tdn2))
+        {
+            errors.Add("TDN2 es obligatorio.");
+        }
+
+        if (string.IsNullOrWhiteSpace(d.GptDescripcion))
+        {
+            errors.Add("La descripción GPT de tipología es obligatoria.");
         }
 
         if (d.EnableExtraction)

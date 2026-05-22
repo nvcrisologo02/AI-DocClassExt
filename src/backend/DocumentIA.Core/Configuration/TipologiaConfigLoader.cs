@@ -14,14 +14,8 @@ namespace DocumentIA.Core.Configuration
     /// </summary>
     public class TipologiaConfigLoader
     {
-        private readonly string? _configBasePath;
         private readonly IMemoryCache? _cache;
         private readonly IServiceScopeFactory? _scopeFactory;
-
-        public TipologiaConfigLoader(string configBasePath = "config/tipologias")
-        {
-            _configBasePath = configBasePath;
-        }
 
         public TipologiaConfigLoader(IMemoryCache cache, IServiceScopeFactory scopeFactory)
         {
@@ -34,34 +28,16 @@ namespace DocumentIA.Core.Configuration
         /// </summary>
         public TipologiaValidationConfig LoadConfig(string tipologiaId)
         {
-            if (_cache is not null && _scopeFactory is not null)
-            {
-                return _cache.GetOrCreate($"tipologia:config:{tipologiaId}", entry =>
-                {
-                    entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-                    return LoadConfigFromDatabase(tipologiaId);
-                })!;
-            }
-
-            if (_configBasePath is null)
+            if (_cache is null || _scopeFactory is null)
             {
                 throw new InvalidOperationException("TipologiaConfigLoader no esta correctamente configurado.");
             }
 
-            string configPath = Path.Combine(_configBasePath, $"{tipologiaId}.validation.json");
-
-            if (!File.Exists(configPath))
+            return _cache.GetOrCreate($"tipologia:config:{tipologiaId}", entry =>
             {
-                throw new FileNotFoundException($"No se encontro configuracion para tipologia '{tipologiaId}' en {configPath}");
-            }
-
-            string jsonContent = File.ReadAllText(configPath);
-            var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(jsonContent, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            }) ?? throw new InvalidDataException($"Configuracion invalida para tipologia '{tipologiaId}' en {configPath}");
-
-            return config;
+                entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+                return LoadConfigFromDatabase(tipologiaId);
+            })!;
         }
 
         private TipologiaValidationConfig LoadConfigFromDatabase(string tipologiaId)

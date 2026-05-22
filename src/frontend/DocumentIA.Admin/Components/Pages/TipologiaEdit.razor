@@ -1,5 +1,7 @@
 @page "/tipologias/edit"
 @page "/tipologias/edit/{Id:int}"
+@using System.Text.Json
+@using DocumentIA.Core.Configuration
 @inject TipologiaAdminService AdminService
 @inject NavigationManager Navigation
 
@@ -111,7 +113,7 @@
             var jsonFromEditor = await _jsonEditor.GetJsonAsync();
             if (!string.IsNullOrWhiteSpace(jsonFromEditor))
             {
-                _model.ConfiguracionJson = jsonFromEditor;
+                _model.ConfiguracionJson = NormalizeTipologiaConfigJsonForCompatibility(jsonFromEditor);
             }
         }
 
@@ -133,5 +135,50 @@
             _error = true;
             _message = ex.Message;
         }
+    }
+
+    private static string NormalizeTipologiaConfigJsonForCompatibility(string json)
+    {
+        var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(json, new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true,
+            WriteIndented = true
+        });
+
+        if (config is null)
+        {
+            return json;
+        }
+
+        config.Gdc = new GdcConfig
+        {
+            SkipUpload = config.ResolvedSkipGDCUpload,
+            Matricula = config.ResolvedMatricula,
+            TipoDocumento = config.ResolvedGdcTipo,
+            SubtipoDocumento = config.ResolvedGdcSubtipo,
+            Serie = config.ResolvedGdcSerie
+        };
+
+        config.Classification = new ClassificationTdnConfig
+        {
+            Tdn1 = config.ResolvedTdn1,
+            Tdn2 = config.ResolvedTdn2,
+            GptDescripcion = config.ResolvedGptDescripcion,
+            EnableRules = config.ResolvedEnableRules
+        };
+
+        config.SkipGDCUpload = config.ResolvedSkipGDCUpload;
+        config.TipologiaMGDCMatricula = config.ResolvedMatricula;
+        config.GdcTipoDocumento = config.ResolvedGdcTipo;
+        config.GdcSubtipoDocumento = config.ResolvedGdcSubtipo;
+        config.GdcSerie = config.ResolvedGdcSerie;
+        config.Tdn1 = config.ResolvedTdn1;
+        config.Tdn2 = config.ResolvedTdn2;
+        config.GptDescripcion = config.ResolvedGptDescripcion;
+
+        return JsonSerializer.Serialize(config, new JsonSerializerOptions
+        {
+            WriteIndented = true
+        });
     }
 }

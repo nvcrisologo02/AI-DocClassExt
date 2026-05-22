@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,9 +30,20 @@ public class ClassificationTipologiaPromptBuilder
     {
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
+        var db = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
         var tipologias = repository.GetAllPublishedAsync()
             .GetAwaiter()
             .GetResult();
+
+        var catalogoTdn1 = db.CatalogoTdn1
+            .ToList()
+            .GroupBy(x => x.Codigo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Nombre, StringComparer.OrdinalIgnoreCase);
+
+        var catalogoTdn2 = db.CatalogoTdn2
+            .ToList()
+            .GroupBy(x => x.Codigo, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First().Nombre, StringComparer.OrdinalIgnoreCase);
 
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var lines = new List<string>();
@@ -72,11 +84,22 @@ public class ClassificationTipologiaPromptBuilder
                 var nombre = string.IsNullOrWhiteSpace(config.TipologiaNombre)
                     ? codigoCanónico
                     : config.TipologiaNombre;
-                var descripcion = string.IsNullOrWhiteSpace(config.GptDescripcion)
-                    ? nombre
-                    : config.GptDescripcion;
 
-                lines.Add($"- {codigoCanónico}: {descripcion}");
+                var descripcion = string.IsNullOrWhiteSpace(config.ResolvedGptDescripcion)
+                    ? nombre
+                    : config.ResolvedGptDescripcion;
+
+                var tdn1Codigo = config.ResolvedTdn1?.Trim() ?? string.Empty;
+                var tdn2Codigo = config.ResolvedTdn2?.Trim() ?? string.Empty;
+
+                var tdn1Nombre = string.IsNullOrWhiteSpace(tdn1Codigo)
+                    ? "N/A"
+                    : (catalogoTdn1.TryGetValue(tdn1Codigo, out var n1) ? n1 : tdn1Codigo);
+                var tdn2Nombre = string.IsNullOrWhiteSpace(tdn2Codigo)
+                    ? "N/A"
+                    : (catalogoTdn2.TryGetValue(tdn2Codigo, out var n2) ? n2 : tdn2Codigo);
+
+                lines.Add($"- {codigoCanónico}: [{tdn1Nombre} / {tdn2Nombre}] {descripcion}");
             }
             catch
             {

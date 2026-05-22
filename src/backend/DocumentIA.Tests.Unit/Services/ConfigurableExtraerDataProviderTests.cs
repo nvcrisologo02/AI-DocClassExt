@@ -1,10 +1,14 @@
 #nullable enable
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
+using DocumentIA.Data.Entities;
+using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Mocks;
 using DocumentIA.Functions.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
@@ -388,7 +392,7 @@ public class ConfigurableExtraerDataProviderTests
             _tempDir = tempDir;
             _tipologiaId = tipologiaId;
 
-            _tipologiaConfigLoader = new TipologiaConfigLoader(_tempDir);
+            _tipologiaConfigLoader = CreateLoaderFromTempDirectory(_tempDir);
             var extractionRegistryPath = Path.Combine(_tempDir, "extraction.models.json");
             var extractionRegistry = fallbackEnabled
                 ? new
@@ -497,6 +501,43 @@ public class ConfigurableExtraerDataProviderTests
 
             _routingSettings = new ExtractionRoutingSettings { DefaultProvider = "azure-content-understanding" };
             Logger = new Mock<ILogger<ConfigurableExtraerDataProvider>>();
+        }
+
+        private static TipologiaConfigLoader CreateLoaderFromTempDirectory(string tempDir)
+        {
+            var repository = new Mock<ITipologiaRepository>();
+            repository
+                .Setup(x => x.GetByCodigoAsync(It.IsAny<string>()))
+                .ReturnsAsync((string codigo) =>
+                {
+                    var configPath = Path.Combine(tempDir, $"{codigo}.validation.json");
+                    if (!File.Exists(configPath))
+                    {
+                        return null;
+                    }
+
+                    return new TipologiaEntity
+                    {
+                        Codigo = codigo,
+                        Activa = true,
+                        Estado = EstadoTipologia.Published,
+                        ConfiguracionJson = File.ReadAllText(configPath)
+                    };
+                });
+
+            var provider = new Mock<IServiceProvider>();
+            provider
+                .Setup(x => x.GetService(typeof(ITipologiaRepository)))
+                .Returns(repository.Object);
+
+            var scope = new Mock<IServiceScope>();
+            scope.SetupGet(x => x.ServiceProvider).Returns(provider.Object);
+
+            var scopeFactory = new Mock<IServiceScopeFactory>();
+            scopeFactory.Setup(x => x.CreateScope()).Returns(scope.Object);
+
+            var cache = new MemoryCache(new MemoryCacheOptions());
+            return new TipologiaConfigLoader(cache, scopeFactory.Object);
         }
 
         public static TestFixture Create(

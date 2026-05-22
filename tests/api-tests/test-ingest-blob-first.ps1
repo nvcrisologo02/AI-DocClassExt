@@ -41,6 +41,7 @@ param(
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
+Add-Type -AssemblyName System.Net.Http
 
 # --- Validar fichero ---
 if (-not [System.IO.Path]::IsPathRooted($DocumentPath)) {
@@ -168,27 +169,27 @@ do {
         $retryCount++
 
         $icon = switch ($status.runtimeStatus) {
-            "Running"   { "[>]" }
-            "Pending"   { "[~]" }
+            "Running" { "[>]" }
+            "Pending" { "[~]" }
             "Completed" { "[OK]" }
-            "Failed"    { "[X]" }
-            default     { "[*]" }
+            "Failed" { "[X]" }
+            default { "[*]" }
         }
 
         Write-Host "[$retryCount/$MaxRetries] $icon $($status.runtimeStatus)" -NoNewline
 
-        # Mostrar customStatus si está disponible
         if ($status.customStatus -and $status.customStatus.Actividad) {
             Write-Host " | $($status.customStatus.Actividad)" -NoNewline
         }
 
         if ($status.runtimeStatus -eq "Running" -or $status.runtimeStatus -eq "Pending") {
-            Write-Host " — esperando $DelaySeconds s..."
-        } else {
+            Write-Host " - esperando $DelaySeconds s..."
+        }
+        else {
             Write-Host ""
         }
-
-    } catch {
+    }
+    catch {
         Write-Host "[$retryCount/$MaxRetries] Error consultando estado: $($_.Exception.Message)"
     }
 
@@ -217,9 +218,16 @@ if ($status.runtimeStatus -eq "Completed") {
         Write-Host "Confianza   : $($out.Resultado.ConfianzaGlobal)"
         Write-Host ""
         Write-Host "--- Integridad ---"
-        Write-Host "SHA256        : $($out.Integridad.SHA256)"
-        Write-Host "MD5           : $($out.Integridad.MD5)"
-        Write-Host "Tamaño bytes  : $($out.Integridad.TamañoBytes)"
+        Write-Host "SHA256         : $($out.Integridad.SHA256)"
+        Write-Host "MD5            : $($out.Integridad.MD5)"
+        $tamanoBytes = $null
+        if ($out.Integridad.PSObject.Properties.Name -contains 'TamanoBytes') {
+            $tamanoBytes = $out.Integridad.TamanoBytes
+        }
+        elseif ($out.Integridad.PSObject.Properties.Name -contains 'TamañoBytes') {
+            $tamanoBytes = $out.Integridad.'TamañoBytes'
+        }
+        Write-Host "Tamano bytes   : $tamanoBytes"
         Write-Host "RutaBlobStorage: $($out.Integridad.RutaBlobStorage)"
         Write-Host ""
 
@@ -231,17 +239,17 @@ if ($status.runtimeStatus -eq "Completed") {
 
     Write-Host ""
     Write-Host "[OK] Test blob-first completado correctamente."
-
-} elseif ($status.runtimeStatus -eq "Failed") {
+}
+elseif ($status.runtimeStatus -eq "Failed") {
     Write-Host "  [X] PROCESAMIENTO FALLIDO"
     Write-Host "========================================"
     Write-Host ""
     Write-Host "Output:"
     $status.output | ConvertTo-Json -Depth 10
     exit 1
-
-} else {
-    Write-Host "  [?] TIMEOUT — estado final: $($status.runtimeStatus)"
+}
+else {
+    Write-Host "  [?] TIMEOUT - estado final: $($status.runtimeStatus)"
     Write-Host "========================================"
     Write-Host "Status URI para consulta manual: $statusUri"
     exit 2

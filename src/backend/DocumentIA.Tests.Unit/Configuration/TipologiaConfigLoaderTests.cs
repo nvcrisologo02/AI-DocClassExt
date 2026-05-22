@@ -3,7 +3,12 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Validation;
 using DocumentIA.Core.Validation.Models;
 using DocumentIA.Core.Validation.Rules;
+using DocumentIA.Data.Entities;
+using DocumentIA.Data.Repositories;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
 using Xunit;
 
 namespace DocumentIA.Tests.Unit.Configuration
@@ -43,7 +48,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var config = loader.LoadConfig("notasimple");
@@ -82,7 +87,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             var config = loader.LoadConfig("extract");
 
@@ -119,7 +124,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             var config = loader.LoadConfig("prompt");
 
@@ -136,11 +141,11 @@ namespace DocumentIA.Tests.Unit.Configuration
         public void LoadConfig_NonExistentFile_ThrowsFileNotFoundException()
         {
             // Arrange
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act & Assert
             var exception = Assert.Throws<FileNotFoundException>(() => loader.LoadConfig("nonexistent"));
-            exception.Message.Should().Contain("No se encontro configuracion para tipologia 'nonexistent'");
+            exception.Message.Should().Contain("No se encontro configuracion publicada para tipologia 'nonexistent'");
         }
 
         [Fact]
@@ -151,7 +156,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             var invalidJson = "{ invalid json }";
             File.WriteAllText(configPath, invalidJson);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act & Assert
             Assert.Throws<System.Text.Json.JsonException>(() => loader.LoadConfig("invalid"));
@@ -164,7 +169,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             var configPath = Path.Combine(_tempDirectory, "null.validation.json");
             File.WriteAllText(configPath, "null");
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act & Assert
             Assert.Throws<InvalidDataException>(() => loader.LoadConfig("null"));
@@ -183,7 +188,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var config = loader.LoadConfig("casetest");
@@ -206,7 +211,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var config = loader.LoadConfig("empty");
@@ -239,7 +244,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("simple");
@@ -272,7 +277,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("bool");
@@ -303,7 +308,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("norules");
@@ -349,7 +354,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("length");
@@ -389,7 +394,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("enum");
@@ -431,7 +436,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("regex");
@@ -472,7 +477,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("range");
@@ -517,7 +522,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("date");
@@ -562,7 +567,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("severity_error");
@@ -600,7 +605,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("severity_warning");
@@ -650,7 +655,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("multi_severity");
@@ -697,7 +702,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("array");
@@ -736,7 +741,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("address");
@@ -777,7 +782,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("address_custom");
@@ -816,7 +821,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act & Assert
             var exception = Assert.Throws<NotSupportedException>(() => loader.BuildValidationEngine("unsupported"));
@@ -850,7 +855,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             }";
             File.WriteAllText(configPath, jsonContent);
 
-            var loader = new TipologiaConfigLoader(_tempDirectory);
+            var loader = CreateLoader();
 
             // Act
             var engine = loader.BuildValidationEngine("invalid_severity");
@@ -860,6 +865,43 @@ namespace DocumentIA.Tests.Unit.Configuration
         }
 
         #endregion
+
+        private TipologiaConfigLoader CreateLoader()
+        {
+            var repository = new Mock<ITipologiaRepository>();
+            repository
+                .Setup(x => x.GetByCodigoAsync(It.IsAny<string>()))
+                .ReturnsAsync((string codigo) =>
+                {
+                    var configPath = Path.Combine(_tempDirectory, $"{codigo}.validation.json");
+                    if (!File.Exists(configPath))
+                    {
+                        return null;
+                    }
+
+                    return new TipologiaEntity
+                    {
+                        Codigo = codigo,
+                        Activa = true,
+                        Estado = EstadoTipologia.Published,
+                        ConfiguracionJson = File.ReadAllText(configPath)
+                    };
+                });
+
+            var provider = new Mock<IServiceProvider>();
+            provider
+                .Setup(x => x.GetService(typeof(ITipologiaRepository)))
+                .Returns(repository.Object);
+
+            var scope = new Mock<IServiceScope>();
+            scope.SetupGet(x => x.ServiceProvider).Returns(provider.Object);
+
+            var scopeFactory = new Mock<IServiceScopeFactory>();
+            scopeFactory.Setup(x => x.CreateScope()).Returns(scope.Object);
+
+            var cache = new MemoryCache(new MemoryCacheOptions());
+            return new TipologiaConfigLoader(cache, scopeFactory.Object);
+        }
 
         #region Cleanup
 
@@ -874,3 +916,4 @@ namespace DocumentIA.Tests.Unit.Configuration
         #endregion
     }
 }
+

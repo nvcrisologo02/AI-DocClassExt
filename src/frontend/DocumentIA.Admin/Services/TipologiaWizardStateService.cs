@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Globalization;
+using System.Text.Json.Nodes;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Data.Entities;
 using Microsoft.JSInterop;
@@ -9,7 +10,7 @@ namespace DocumentIA.Admin.Services;
 public sealed class TipologiaWizardStateService
 {
     private const string DraftStorageKey = "tipologia-wizard-draft";
-    private const int DraftSchemaVersion = 3;
+    private const int DraftSchemaVersion = 4;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -247,11 +248,15 @@ public sealed class TipologiaWizardStateService
                 var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(source.ConfiguracionJson, JsonOptions);
                 if (config is not null)
                 {
-                    Draft.GdcTipoDocumento = config.GdcTipoDocumento;
-                    Draft.GdcSubtipoDocumento = config.GdcSubtipoDocumento;
-                    Draft.GdcSerie = config.GdcSerie;
-                    Draft.TipologiaMGDCMatricula = config.TipologiaMGDCMatricula;
-                    Draft.SkipGdcUpload = config.SkipGDCUpload;
+                    Draft.GdcTipoDocumento = config.ResolvedGdcTipo;
+                    Draft.GdcSubtipoDocumento = config.ResolvedGdcSubtipo;
+                    Draft.GdcSerie = config.ResolvedGdcSerie;
+                    Draft.TipologiaMGDCMatricula = config.ResolvedMatricula;
+                    Draft.SkipGdcUpload = config.ResolvedSkipGDCUpload;
+                    Draft.Tdn1 = config.ResolvedTdn1;
+                    Draft.Tdn2 = config.ResolvedTdn2;
+                    Draft.GptDescripcion = config.ResolvedGptDescripcion;
+                    Draft.EnableRules = config.ResolvedEnableRules;
                 }
             }
             catch
@@ -306,11 +311,29 @@ public sealed class TipologiaWizardStateService
             TipologiaId = Draft.Codigo,
             TipologiaNombre = Draft.Nombre,
             Version = Draft.Version,
+            Gdc = new GdcConfig
+            {
+                SkipUpload = Draft.SkipGdcUpload,
+                Matricula = Draft.TipologiaMGDCMatricula,
+                TipoDocumento = Draft.GdcTipoDocumento,
+                SubtipoDocumento = Draft.GdcSubtipoDocumento,
+                Serie = Draft.GdcSerie
+            },
+            Classification = new ClassificationTdnConfig
+            {
+                Tdn1 = Draft.Tdn1,
+                Tdn2 = Draft.Tdn2,
+                GptDescripcion = Draft.GptDescripcion,
+                EnableRules = Draft.EnableRules
+            },
             TipologiaMGDCMatricula = Draft.TipologiaMGDCMatricula,
             GdcTipoDocumento = Draft.GdcTipoDocumento,
             GdcSubtipoDocumento = Draft.GdcSubtipoDocumento,
             GdcSerie = Draft.GdcSerie,
             SkipGDCUpload = Draft.SkipGdcUpload,
+            Tdn1 = Draft.Tdn1,
+            Tdn2 = Draft.Tdn2,
+            GptDescripcion = Draft.GptDescripcion,
             Extraction = new TipologiaExtractionConfig
             {
                 Enabled = Draft.EnableExtraction,
@@ -340,7 +363,13 @@ public sealed class TipologiaWizardStateService
             Fields = fieldConfigs
         };
 
-        return JsonSerializer.Serialize(config, JsonOptions);
+        var rootNode = JsonNode.Parse(JsonSerializer.Serialize(config, JsonOptions)) as JsonObject ?? new JsonObject();
+        var classificationConfigNode = rootNode["classificationConfig"] as JsonObject ?? new JsonObject();
+        classificationConfigNode["examplePhrases"] = new JsonArray(Draft.ExamplePhrases.Select(x => (JsonNode?)x).ToArray());
+        classificationConfigNode["disambiguationHints"] = new JsonArray(Draft.DisambiguationHints.Select(x => (JsonNode?)x).ToArray());
+        rootNode["classificationConfig"] = classificationConfigNode;
+
+        return rootNode.ToJsonString(JsonOptions);
     }
 
     public void AddField()
@@ -522,6 +551,21 @@ public sealed class TipologiaWizardStateService
         Draft.GdcSubtipoDocumento ??= string.Empty;
         Draft.GdcSerie ??= string.Empty;
         Draft.TipologiaMGDCMatricula ??= string.Empty;
+        Draft.Tdn1 ??= string.Empty;
+        Draft.Tdn2 ??= string.Empty;
+        Draft.GptDescripcion ??= string.Empty;
+        Draft.ExamplePhrases ??= new List<string>();
+        Draft.DisambiguationHints ??= new List<string>();
+        Draft.ExamplePhrases = Draft.ExamplePhrases
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        Draft.DisambiguationHints = Draft.DisambiguationHints
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Select(x => x.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static int? TryExtractVersionedSuffix(string baseCodigo, string currentCode)
@@ -630,6 +674,12 @@ public sealed class TipologiaWizardDraft
     public string GdcSubtipoDocumento { get; set; } = string.Empty;
     public string GdcSerie { get; set; } = string.Empty;
     public bool SkipGdcUpload { get; set; }
+    public string Tdn1 { get; set; } = string.Empty;
+    public string Tdn2 { get; set; } = string.Empty;
+    public string GptDescripcion { get; set; } = string.Empty;
+    public bool EnableRules { get; set; } = true;
+    public List<string> ExamplePhrases { get; set; } = new();
+    public List<string> DisambiguationHints { get; set; } = new();
 
     public static TipologiaWizardDraft CreateDefault() => new();
 }

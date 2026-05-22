@@ -1,4 +1,6 @@
 @page "/tipologias/{Id:int}"
+@using System.Text.Json
+@using DocumentIA.Core.Configuration
 @inject TipologiaAdminService AdminService
 @inject NavigationManager Navigation
 
@@ -40,6 +42,45 @@ else
             </dl>
         </div>
     </div>
+
+    @if (_resolvedConfig is not null)
+    {
+        <div class="card mb-3">
+            <div class="card-header">
+                <h5 class="mb-0">Configuración Tipología v1.2 (resuelta)</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Classification.TDN1</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedTdn1)</dd>
+
+                    <dt class="col-sm-3">Classification.TDN2</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedTdn2)</dd>
+
+                    <dt class="col-sm-3">Classification.GptDescripcion</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedGptDescripcion)</dd>
+
+                    <dt class="col-sm-3">Classification.EnableRules</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedEnableRules ? "Sí" : "No")</dd>
+
+                    <dt class="col-sm-3">Gdc.SkipUpload</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedSkipGDCUpload ? "Sí" : "No")</dd>
+
+                    <dt class="col-sm-3">Gdc.TipoDocumento</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedGdcTipo)</dd>
+
+                    <dt class="col-sm-3">Gdc.SubtipoDocumento</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedGdcSubtipo)</dd>
+
+                    <dt class="col-sm-3">Gdc.Serie</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedGdcSerie)</dd>
+
+                    <dt class="col-sm-3">Gdc.Matricula</dt>
+                    <dd class="col-sm-9">@(_resolvedConfig.ResolvedMatricula)</dd>
+                </dl>
+            </div>
+        </div>
+    }
 
     @if (!string.IsNullOrWhiteSpace(_tipologia.ConfiguracionJson))
     {
@@ -275,6 +316,7 @@ else
     [Parameter] public int Id { get; set; }
 
     private TipologiaEntity? _tipologia;
+    private TipologiaValidationConfig? _resolvedConfig;
     private bool _error;
     private string? _message;
     private bool _auditLoading;
@@ -295,8 +337,29 @@ else
     protected override async Task OnParametersSetAsync()
     {
         _tipologia = await AdminService.GetTipologiaAsync(Id);
+        _resolvedConfig = ParseResolvedConfig(_tipologia?.ConfiguracionJson);
         await LoadAuditAsync();
         await LoadVersionsAsync();
+    }
+
+    private static TipologiaValidationConfig? ParseResolvedConfig(string? configuracionJson)
+    {
+        if (string.IsNullOrWhiteSpace(configuracionJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<TipologiaValidationConfig>(configuracionJson, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task LoadVersionsAsync()

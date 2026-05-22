@@ -28,12 +28,6 @@ public class Identificacion
     public string? Tdn1 { get; set; }
     public string? Tdn2 { get; set; }
     public string? Matricula { get; set; }
-    // Tipology metadata enrichment (v1.5+)
-    public string TipologiaNombre { get; set; } = string.Empty;
-    public string TipologiaMGDCMatricula { get; set; } = string.Empty;
-    public string GdcTipoDocumento { get; set; } = string.Empty;
-    public string GdcSubtipoDocumento { get; set; } = string.Empty;
-    public string GdcSerie { get; set; } = string.Empty;
 }
 
 public class Integridad
@@ -41,6 +35,7 @@ public class Integridad
     public string CRC32 { get; set; } = string.Empty;
     public string SHA256 { get; set; } = string.Empty;
     public string MD5 { get; set; } = string.Empty;
+    public long TamanoBytes { get; set; }
     // Ruta completa en blob (container/path) para relacionar documento logico con almacenamiento fisico
     public string? RutaBlobStorage { get; set; }
     public string? GestorDocumental { get; set; }
@@ -117,17 +112,6 @@ public class TrazaActividad
     public string? FallbackRazon { get; set; }
 }
 
-/// <summary>Propuesta individual de un proveedor de clasificación.</summary>
-public class PropuestaProveedor
-{
-    /// <summary>Nombre del proveedor: "Reglas", "DI", "GPT", "FoundryRescue", etc.</summary>
-    public string Proveedor { get; set; } = string.Empty;
-    public string? Tipologia { get; set; }
-    public double Confianza { get; set; }
-    /// <summary>Motivo por el que este proveedor no fue el resultado final (si aplica).</summary>
-    public string? MotivoDescarte { get; set; }
-}
-
 public class ResultadoClasificacion
 {
     public string Modelo { get; set; } = string.Empty;
@@ -150,8 +134,15 @@ public class ResultadoClasificacion
     public string? ClassifierVersion { get; set; }
     public int PagesProcessed { get; set; }
     public string? Clasificador { get; set; }
-    /// <summary>Propuestas individuales de cada proveedor ejecutado. Permite auditar por qué se eligió el resultado final.</summary>
     public List<PropuestaProveedor> DetalleProveedores { get; set; } = new();
+}
+
+public class PropuestaProveedor
+{
+    public string Proveedor { get; set; } = string.Empty;
+    public string? Tipologia { get; set; }
+    public double Confianza { get; set; }
+    public string? MotivoDescarte { get; set; }
 }
 
 public class ResultadoExtraccion
@@ -253,6 +244,8 @@ public class SubirGDCInput
     public string IdActivo { get; set; } = string.Empty;
     public string Matricula { get; set; } = string.Empty;
     public string ContenidoBase64 { get; set; } = string.Empty;
+    // Ruta container/path en blob para escenarios blob-first (alternativa a ContenidoBase64).
+    public string? BlobPath { get; set; }
     public string NombreArchivo { get; set; } = string.Empty;
     public string SHA256 { get; set; } = string.Empty;
     public string MD5 { get; set; } = string.Empty;
@@ -266,11 +259,6 @@ public class SubirGDCInput
     public string Serie { get; set; } = string.Empty;
     // NombreDocumento: nombre lógico del documento (display name). When empty, NombreArchivo is used.
     public string NombreDocumento { get; set; } = string.Empty;
-    /// <summary>
-    /// Ruta en blob storage del documento. Si está informado, SubirGDCActivity descarga
-    /// los bytes desde blob en lugar de usar ContenidoBase64.
-    /// </summary>
-    public string? BlobPath { get; set; }
 }
 
 public class ResultadoGDC
@@ -310,15 +298,12 @@ public class ObtenerDocumentoGDCResult
     public string Base64 { get; set; } = string.Empty;
     public string NombreArchivo { get; set; } = string.Empty;
     public string MD5 { get; set; } = string.Empty;
-    /// <summary>
-    /// Ruta en blob storage tras subir el documento descargado de GDC.
-    /// Cuando está informado, Base64 estará vacío (se sube al blob para evitar payloads grandes en la pipeline).
-    /// </summary>
+    // Ruta container/path en blob cuando se persiste el documento descargado de GDC.
     public string? BlobPath { get; set; }
+    // Hashes/tamaño precalculados para que NormalizarActivity evite re-descargar el contenido.
     public string? PreComputedSHA256 { get; set; }
     public string? PreComputedMD5 { get; set; }
-    public string? PreComputedCRC32 { get; set; }
-    public long PreComputedTamañoBytes { get; set; }
+    public int PreComputedTamañoBytes { get; set; }
 }
 
 public class VerificarDuplicadoMd5Result

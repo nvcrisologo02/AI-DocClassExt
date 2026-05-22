@@ -1,26 +1,21 @@
 #nullable enable
 using DocumentIA.Core.Configuration;
+using DocumentIA.Data.Entities;
 using FluentAssertions;
 
 namespace DocumentIA.Tests.Unit.Configuration;
 
-public class TipologiaVersionResolverTests : IDisposable
+public class TipologiaVersionResolverTests
 {
-    private readonly string _tempDirectory;
-
-    public TipologiaVersionResolverTests()
-    {
-        _tempDirectory = Path.Combine(Path.GetTempPath(), $"tipologia-version-resolver-{Guid.NewGuid():N}");
-        Directory.CreateDirectory(_tempDirectory);
-    }
+    private readonly List<TipologiaEntity> _entities = new();
 
     [Fact]
     public void Resolve_WithFamily_ReturnsDefaultVersion()
     {
-        WriteValidationConfig("nota.simple.1_3.validation.json", "nota-simple", "1.3", false);
-        WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", true);
+        WriteValidationConfig("nota.simple.1_3", "nota-simple", "1.3", false);
+        WriteValidationConfig("nota.simple.1_4", "nota-simple", "1.4", true);
 
-        var sut = new TipologiaVersionResolver(_tempDirectory);
+        var sut = CreateSut();
 
         var result = sut.Resolve("nota-simple");
 
@@ -33,10 +28,10 @@ public class TipologiaVersionResolverTests : IDisposable
     [Fact]
     public void Resolve_WithFamilyAndVersion_ReturnsRequestedVersion()
     {
-        WriteValidationConfig("nota.simple.1_3.validation.json", "nota-simple", "1.3", false);
-        WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", true);
+        WriteValidationConfig("nota.simple.1_3", "nota-simple", "1.3", false);
+        WriteValidationConfig("nota.simple.1_4", "nota-simple", "1.4", true);
 
-        var sut = new TipologiaVersionResolver(_tempDirectory);
+        var sut = CreateSut();
 
         var result = sut.Resolve("nota-simple@1.3");
 
@@ -48,9 +43,9 @@ public class TipologiaVersionResolverTests : IDisposable
     [Fact]
     public void Resolve_WithLegacyTechnicalKey_ReturnsSameTechnicalKey()
     {
-        WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", true);
+        WriteValidationConfig("nota.simple.1_4", "nota-simple", "1.4", true);
 
-        var sut = new TipologiaVersionResolver(_tempDirectory);
+        var sut = CreateSut();
 
         var result = sut.Resolve("nota.simple.1_4");
 
@@ -62,9 +57,9 @@ public class TipologiaVersionResolverTests : IDisposable
     [Fact]
     public void Resolve_WithTechnicalKeyAndVersionSuffix_ReturnsTechnicalKeyMatch()
     {
-        WriteValidationConfig("IBI_1.1.validation.json", "IBI", "1.1", true);
+        WriteValidationConfig("IBI_1.1", "IBI", "1.1", true);
 
-        var sut = new TipologiaVersionResolver(_tempDirectory);
+        var sut = CreateSut();
 
         var result = sut.Resolve("IBI_1.1@1.1");
 
@@ -76,10 +71,10 @@ public class TipologiaVersionResolverTests : IDisposable
     [Fact]
     public void Resolve_WithoutDefaultAndMultipleVersions_Throws()
     {
-        WriteValidationConfig("nota.simple.1_3.validation.json", "nota-simple", "1.3", false);
-        WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", false);
+        WriteValidationConfig("nota.simple.1_3", "nota-simple", "1.3", false);
+        WriteValidationConfig("nota.simple.1_4", "nota-simple", "1.4", false);
 
-        var sut = new TipologiaVersionResolver(_tempDirectory);
+        var sut = CreateSut();
 
         var action = () => sut.Resolve("nota-simple");
 
@@ -90,10 +85,10 @@ public class TipologiaVersionResolverTests : IDisposable
     [Fact]
     public void Resolve_WithMultipleDefaultVersions_Throws()
     {
-        WriteValidationConfig("nota.simple.1_3.validation.json", "nota-simple", "1.3", true);
-        WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", true);
+        WriteValidationConfig("nota.simple.1_3", "nota-simple", "1.3", true);
+        WriteValidationConfig("nota.simple.1_4", "nota-simple", "1.4", true);
 
-        var sut = new TipologiaVersionResolver(_tempDirectory);
+        var sut = CreateSut();
 
         var action = () => sut.Resolve("nota-simple");
 
@@ -104,9 +99,9 @@ public class TipologiaVersionResolverTests : IDisposable
     [Fact]
     public void Resolve_WithUnknownVersion_Throws()
     {
-        WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", true);
+        WriteValidationConfig("nota.simple.1_4", "nota-simple", "1.4", true);
 
-        var sut = new TipologiaVersionResolver(_tempDirectory);
+        var sut = CreateSut();
 
         var action = () => sut.Resolve("nota-simple@1.2");
 
@@ -117,11 +112,11 @@ public class TipologiaVersionResolverTests : IDisposable
     [Fact]
     public void GetVersions_ReturnsOrderedVersionsForFamily()
     {
-        WriteValidationConfig("nota.simple.1_4.validation.json", "nota-simple", "1.4", true);
-        WriteValidationConfig("nota.simple.1_0.validation.json", "nota-simple", "1.0", false);
-        WriteValidationConfig("tasacion.validation.json", "tasacion", "1.0", true);
+        WriteValidationConfig("nota.simple.1_4", "nota-simple", "1.4", true);
+        WriteValidationConfig("nota.simple.1_0", "nota-simple", "1.0", false);
+        WriteValidationConfig("tasacion", "tasacion", "1.0", true);
 
-        var sut = new TipologiaVersionResolver(_tempDirectory);
+        var sut = CreateSut();
 
         var result = sut.GetVersions("nota-simple");
 
@@ -155,9 +150,9 @@ public class TipologiaVersionResolverTests : IDisposable
                 }
                 """;
 
-                File.WriteAllText(Path.Combine(_tempDirectory, "resumen.documental.validation.json"), content);
+                AddEntity("resumen.documental", content);
 
-                var sut = new TipologiaVersionResolver(_tempDirectory);
+                var sut = CreateSut();
 
                 var result = sut.Resolve("resumen-documental");
 
@@ -165,15 +160,23 @@ public class TipologiaVersionResolverTests : IDisposable
                 result.ExtractionEnabled.Should().BeFalse();
         }
 
-    public void Dispose()
+    private TipologiaVersionResolver CreateSut()
     {
-        if (Directory.Exists(_tempDirectory))
-        {
-            Directory.Delete(_tempDirectory, true);
-        }
+        return new TipologiaVersionResolver(() => _entities);
     }
 
-    private void WriteValidationConfig(string fileName, string tipologiaId, string version, bool isDefault)
+    private void AddEntity(string codigo, string configuracionJson)
+    {
+        _entities.Add(new TipologiaEntity
+        {
+            Codigo = codigo,
+            Activa = true,
+            Estado = EstadoTipologia.Published,
+            ConfiguracionJson = configuracionJson
+        });
+    }
+
+    private void WriteValidationConfig(string technicalKey, string tipologiaId, string version, bool isDefault)
     {
         var content = $$"""
         {
@@ -185,6 +188,6 @@ public class TipologiaVersionResolverTests : IDisposable
         }
         """;
 
-        File.WriteAllText(Path.Combine(_tempDirectory, fileName), content);
+        AddEntity(technicalKey, content);
     }
 }

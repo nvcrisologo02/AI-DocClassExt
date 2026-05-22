@@ -292,7 +292,6 @@ public class DocumentProcessOrchestrator
                         Input = new SubirGDCInput
                         {
                             IdActivo = idActivo,
-                            BlobPath = entrada.Documento.BlobPath,    // si está en blob, SubirGDCActivity descarga
                             ContenidoBase64 = entrada.Documento.Content.Base64,
                             NombreArchivo = entrada.Documento.Name,
                             SHA256 = salida.Integridad.SHA256,
@@ -427,21 +426,7 @@ public class DocumentProcessOrchestrator
                         "ObtenerDocumentoGDCActivity",
                         entrada.Documento.ObjectIdGDC));
 
-                // Blob-first: si ObtenerDocumentoGDCActivity subió al blob, usar BlobPath
-                if (!string.IsNullOrEmpty(documentoGdc.BlobPath))
-                {
-                    entrada.Documento.BlobPath = documentoGdc.BlobPath;
-                    entrada.Documento.PreComputedSHA256 = documentoGdc.PreComputedSHA256;
-                    entrada.Documento.PreComputedMD5 = documentoGdc.PreComputedMD5;
-                    entrada.Documento.PreComputedCRC32 = documentoGdc.PreComputedCRC32;
-                    entrada.Documento.PreComputedTamañoBytes = documentoGdc.PreComputedTamañoBytes;
-                    // Base64 ya es null: la pipeline usará BlobPath
-                }
-                else
-                {
-                    // Fallback: subida a blob falló, usar base64 (ficheros pequeños de GDC)
-                    entrada.Documento.Content.Base64 = documentoGdc.Base64;
-                }
+                entrada.Documento.Content.Base64 = documentoGdc.Base64;
 
                 if (string.IsNullOrWhiteSpace(entrada.Documento.Name))
                 {
@@ -465,42 +450,13 @@ public class DocumentProcessOrchestrator
             salida.Integridad.SHA256 = datosNormalizados["SHA256"].ToString() ?? "";
             salida.Integridad.MD5 = datosNormalizados["MD5"].ToString() ?? "";
             salida.Integridad.CRC32 = datosNormalizados["CRC32"].ToString() ?? "";
+            salida.Integridad.TamanoBytes = ObtenerEntero(datosNormalizados, "TamañoBytes");
+            if (salida.Integridad.TamanoBytes == 0)
+            {
+                salida.Integridad.TamanoBytes = ObtenerEntero(datosNormalizados, "TamanoBytes");
+            }
             salida.Integridad.RutaBlobStorage = null;
             salida.Identificacion.Paginas = ObtenerEntero(datosNormalizados, "Paginas");
-
-            if (entrada.Instrucciones.ClassificationOnly
-                && entrada.Instrucciones.MaxPagesForClassificationOnly > 0
-                && !string.IsNullOrWhiteSpace(entrada.Documento.Content.Base64))
-            {
-                try
-                {
-                    var pageLimit = entrada.Instrucciones.MaxPagesForClassificationOnly;
-                    var pageLimitResult = await context.CallActivityAsync<PdfPageLimitResult>(
-                        "ApplyPdfPageLimitActivity",
-                        new ApplyPdfPageLimitInput
-                        {
-                            DocumentoBase64 = entrada.Documento.Content.Base64,
-                            MaxPages = pageLimit
-                        });
-
-                    entrada.Documento.Content.Base64 = pageLimitResult.Base64;
-                    datosNormalizados["PaginasClasificacionOriginales"] = pageLimitResult.OriginalPages;
-                    datosNormalizados["PaginasClasificacionUsadas"] = pageLimitResult.UsedPages;
-                    datosNormalizados["PaginasClasificacionLimite"] = pageLimit;
-                    datosNormalizados["PaginasClasificacionRecorteAplicado"] = pageLimitResult.Applied;
-
-                    logger.LogInformation(
-                        "ClassificationOnly page limit applied. OriginalPages={OriginalPages}, UsedPages={UsedPages}, Limit={Limit}, Applied={Applied}",
-                        pageLimitResult.OriginalPages,
-                        pageLimitResult.UsedPages,
-                        pageLimit,
-                        pageLimitResult.Applied);
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(ex, "No se pudo aplicar limit pages para clasificación. Se continúa con el documento completo.");
-                }
-            }
 
             // 2. Verificar duplicados (si esta habilitado)
             if (!entrada.Instrucciones.SkipDuplicateCheck)
@@ -524,6 +480,11 @@ public class DocumentProcessOrchestrator
 
                     if (salidaDuplicado is not null)
                     {
+                        if (salidaDuplicado.Integridad.TamanoBytes <= 0 && salida.Integridad.TamanoBytes > 0)
+                        {
+                            salidaDuplicado.Integridad.TamanoBytes = salida.Integridad.TamanoBytes;
+                        }
+
                         salidaDuplicado.Resultado.ReutilizadaPorDuplicado = true;
                         salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
 
@@ -546,17 +507,10 @@ public class DocumentProcessOrchestrator
                 "SubirBlobActivity",
                 new SubirBlobInput
                 {
-                    BlobPath = entrada.Documento.BlobPath,         // no-op si ya está en blob
                     ContenidoBase64 = entrada.Documento.Content.Base64,
                     NombreArchivo = entrada.Documento.Name,
                     Contenedor = "documents"
                 });
-
-            // Actualizar BlobPath en entrada para que las activities posteriores lo usen
-            if (!string.IsNullOrWhiteSpace(blobPath) && string.IsNullOrEmpty(entrada.Documento.BlobPath))
-            {
-                entrada.Documento.BlobPath = blobPath;
-            }
 
             if (!string.IsNullOrWhiteSpace(blobPath))
             {
@@ -591,7 +545,6 @@ public class DocumentProcessOrchestrator
                         "PrepararDocumentoClasificacionActivity",
                         new PrepararDocumentoClasificacionInput
                         {
-                            BlobPath = entrada.Documento.BlobPath,
                             DocumentoBase64 = entrada.Documento.Content.Base64,
                             NombreDocumento = entrada.Documento.Name,
                             MaxPaginasClasificacion = maxPaginasClasificacion
@@ -684,7 +637,7 @@ public class DocumentProcessOrchestrator
                     // terminar el proceso ahí sin intentar extraer ni validar
                     if (ex.Message.Contains("No se ha podido identificar la tipologia"))
                     {
-                        const string mensajeTipologiaNoIdentificada = "Documento no clasificable con confianza suficiente";
+                        const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
 
                         logger.LogWarning(
                             "Clasificación falló: no se pudo identificar la tipología. Terminando procesamiento.");
@@ -703,17 +656,17 @@ public class DocumentProcessOrchestrator
                         salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
                         RegistrarModeloLlm(salida.DetalleEjecucion.Clasificacion.Modelo);
                         
-                        salida.Resultado.Estado = "NO_CLASIFICADO";
+                        salida.Resultado.Estado = "ERROR";
                         salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
                         salida.Resultado.ConfianzaGlobal = 0;
-                        salida.Resultado.EstadoCalidad = "WARNING";
+                        salida.Resultado.EstadoCalidad = "ERROR";
                         salida.Resultado.ConfianzaClasificacion = 0;
                         salida.Resultado.ConfianzaExtraccion = 0;
                         salida.Resultado.ConfianzaValidacion = 0;
                         salida.DetalleEjecucion.Postproceso.Inconsistencias.Add(
-                            $"Aviso: {mensajeTipologiaNoIdentificada}");
+                            $"Error: {mensajeTipologiaNoIdentificada}");
                         
-                        FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
+                        FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
                         return salida;
                     }
                     
@@ -722,12 +675,8 @@ public class DocumentProcessOrchestrator
             }
 
             // Propagar markdown extraído por DI clasificador a DatosNormalizados
-            // cuando no exista todavía contexto útil en markdown.
-            var hasMarkdownUtil = TryGetTextoNoVacio(datosNormalizados, "Markdown", out _)
-                || TryGetTextoNoVacio(datosNormalizados, "markdown", out _);
-
             if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ContentExtraido)
-                && !hasMarkdownUtil)
+                && !datosNormalizados.ContainsKey("Markdown"))
             {
                 datosNormalizados["Markdown"] = resultadoClasificacion.ContentExtraido;
                 RegistrarMarkdown(resultadoClasificacion.ContentExtraido, "Clasificacion");
@@ -735,13 +684,6 @@ public class DocumentProcessOrchestrator
                     "Markdown de clasificación DI propagado a datosNormalizados ({Len} chars)",
                     resultadoClasificacion.ContentExtraido.Length);
             }
-
-            var markdownClasificacionDisponible = TryGetTextoNoVacio(datosNormalizados, "Markdown", out var markdownPrincipalClasif)
-                ? markdownPrincipalClasif
-                : (TryGetTextoNoVacio(datosNormalizados, "markdown", out var markdownSecundarioClasif)
-                    ? markdownSecundarioClasif
-                    : null);
-
             if (resultadoClasificacion.FallbackLLM)
             {
                 RegistrarModeloLlm(resultadoClasificacion.Modelo);
@@ -762,7 +704,7 @@ public class DocumentProcessOrchestrator
                 ex.InnerException is KeyNotFoundException ||
                 ex is TaskFailedException && ex.Message.Contains("No existe la tipologia"))
             {
-                const string mensajeTipologiaNoIdentificada = "Documento no clasificable con confianza suficiente";
+                const string mensajeTipologiaNoIdentificada = "No se ha podido identificar la tipologia del documento";
 
                 logger.LogWarning(
                     ex,
@@ -771,79 +713,23 @@ public class DocumentProcessOrchestrator
 
                 salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
                 salida.DetalleEjecucion.MotivoErrorTipologia = ex.Message;
-                salida.Resultado.Estado = "NO_CLASIFICADO";
+                salida.Resultado.Estado = "ERROR";
                 salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
                 salida.Resultado.ConfianzaGlobal = 0;
-                salida.Resultado.EstadoCalidad = "WARNING";
+                salida.Resultado.EstadoCalidad = "ERROR";
                 salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
                 salida.Resultado.ConfianzaExtraccion = 0;
                 salida.Resultado.ConfianzaValidacion = 0;
-                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Aviso: {mensajeTipologiaNoIdentificada}");
+                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
 
-                if (!string.IsNullOrWhiteSpace(markdownClasificacionDisponible))
-                {
-                    salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacionDisponible;
-                    if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown", StringComparer.OrdinalIgnoreCase))
-                    {
-                        salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
-                    }
-                    RegistrarMarkdown(markdownClasificacionDisponible, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
-                }
-
-                FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
+                FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
                 return salida;
             }
 
             salida.Identificacion.Tipologia = tipologiaResuelta.TechnicalKey;
             salida.Identificacion.TipologiaFamilia = tipologiaResuelta.TipologiaId;
             salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
-            // Tipology metadata enrichment (v1.5+)
-            salida.Identificacion.TipologiaNombre = tipologiaResuelta.TipologiaNombre;
-            salida.Identificacion.TipologiaMGDCMatricula = tipologiaResuelta.TipologiaMGDCMatricula;
-            salida.Identificacion.GdcTipoDocumento = tipologiaResuelta.GdcTipoDocumento;
-            salida.Identificacion.GdcSubtipoDocumento = tipologiaResuelta.GdcSubtipoDocumento;
-            salida.Identificacion.GdcSerie = tipologiaResuelta.GdcSerie;
-            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1))
-            {
-                salida.Identificacion.Tdn1 = tipologiaResuelta.Tdn1;
-            }
-            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn2))
-            {
-                salida.Identificacion.Tdn2 = tipologiaResuelta.Tdn2;
-            }
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
-
-            if (string.Equals(tipologiaResuelta.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(tipologiaResuelta.TipologiaId, "Desconocido", StringComparison.OrdinalIgnoreCase))
-            {
-                const string mensajeTipologiaNoIdentificada = "Documento no clasificable con confianza suficiente";
-
-                logger.LogWarning(
-                    "La clasificación devolvió tipología Desconocido. Terminando procesamiento sin error técnico.");
-
-                salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
-                salida.Resultado.Estado = "NO_CLASIFICADO";
-                salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
-                salida.Resultado.ConfianzaGlobal = 0;
-                salida.Resultado.EstadoCalidad = "WARNING";
-                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
-                salida.Resultado.ConfianzaExtraccion = 0;
-                salida.Resultado.ConfianzaValidacion = 0;
-                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Aviso: {mensajeTipologiaNoIdentificada}");
-
-                if (!string.IsNullOrWhiteSpace(markdownClasificacionDisponible))
-                {
-                    salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacionDisponible;
-                    if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown", StringComparer.OrdinalIgnoreCase))
-                    {
-                        salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
-                    }
-                    RegistrarMarkdown(markdownClasificacionDisponible, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
-                }
-
-                FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
-                return salida;
-            }
 
             // Añadir actividad Prompt al seguimiento si la tipología la tiene habilitada o si hay override en la petición
             var promptActivoEnPeticion = tipologiaResuelta.PromptEnabled || entrada.Instrucciones.Prompt != null;
@@ -885,11 +771,11 @@ public class DocumentProcessOrchestrator
                     TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
                 };
 
-                var markdownClasificacion = TryGetTextoNoVacio(datosNormalizados, "Markdown", out var markdownPrincipal)
-                    ? markdownPrincipal
-                    : (TryGetTextoNoVacio(datosNormalizados, "markdown", out var markdownSecundario)
-                        ? markdownSecundario
-                        : null);
+                var markdownClasificacion = datosNormalizados.TryGetValue("Markdown", out var markdownObj) &&
+                    markdownObj is string markdownTexto &&
+                    !string.IsNullOrWhiteSpace(markdownTexto)
+                    ? markdownTexto
+                    : null;
 
                 salida.DatosExtraidos = new Dictionary<string, object>();
                 salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
@@ -1147,8 +1033,7 @@ public class DocumentProcessOrchestrator
                         {
                             Tipologia = salida.Identificacion.Tipologia,
                             DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name,
-                            BlobPath = entrada.Documento.BlobPath
+                            NombreDocumento = entrada.Documento.Name
                         });
 
                     if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
@@ -1513,36 +1398,6 @@ public class DocumentProcessOrchestrator
             JsonElement json when json.ValueKind == JsonValueKind.String && int.TryParse(json.GetString(), out var parsedString) => parsedString,
             _ => 0
         };
-    }
-
-    private static bool TryGetTextoNoVacio(IDictionary<string, object> values, string key, out string value)
-    {
-        value = string.Empty;
-
-        if (!values.TryGetValue(key, out var raw) || raw is null)
-        {
-            return false;
-        }
-
-        switch (raw)
-        {
-            case string s when !string.IsNullOrWhiteSpace(s):
-                value = s;
-                return true;
-            case JsonElement json when json.ValueKind == JsonValueKind.String:
-            {
-                var parsed = json.GetString();
-                if (!string.IsNullOrWhiteSpace(parsed))
-                {
-                    value = parsed;
-                    return true;
-                }
-
-                break;
-            }
-        }
-
-        return false;
     }
 
     private static double RedondearSalida(double value)
