@@ -49,20 +49,20 @@ public class ConfidenceCalculatorTests
             camposPresentes: 3, camposTotales: 3,
             camposRequeridos: 3, camposRequeridosPresentes: 3,
             warnings: 0);
-        conf.Should().BeApproximately(1.0, 0.0001);
+        conf.Should().BeApproximately(0.9, 0.0001);
     }
 
     [Fact]
     public void ExtracCU_NoFieldConfs_UsesCamposRatio()
     {
         // Sin confs de campo: avg = 2/4 = 0.5; ratioReq = 2/2 = 1.0; penalWarn = 1.0
-        // 0.5*0.5 + 0.3*1.0 + 0.2*1.0 = 0.25 + 0.30 + 0.20 = 0.75
+        // 0.5*0.5 + 0.25*1.0 + 0.15*1.0 = 0.25 + 0.25 + 0.15 = 0.65
         var (conf, metricas) = ConfidenceCalculator.ExtracCU(
             fieldConfs: null,
             camposPresentes: 2, camposTotales: 4,
             camposRequeridos: 2, camposRequeridosPresentes: 2,
             warnings: 0);
-        conf.Should().BeApproximately(0.75, 0.0001);
+        conf.Should().BeApproximately(0.65, 0.0001);
         metricas.RatioRequeridos.Should().BeApproximately(1.0, 0.0001);
     }
 
@@ -70,28 +70,28 @@ public class ConfidenceCalculatorTests
     public void ExtracCU_MissingRequiredFields_LowersConf()
     {
         // avg=1.0, ratioReq=0/3=0.0, penalWarn=1.0
-        // 0.5*1.0 + 0.3*0.0 + 0.2*1.0 = 0.70
+        // 0.5*1.0 + 0.25*0.0 + 0.15*1.0 = 0.65
         var confs = new List<double?> { 1.0, 1.0, 1.0 };
         var (conf, _) = ConfidenceCalculator.ExtracCU(
             fieldConfs: confs,
             camposPresentes: 3, camposTotales: 3,
             camposRequeridos: 3, camposRequeridosPresentes: 0,
             warnings: 0);
-        conf.Should().BeApproximately(0.70, 0.0001);
+        conf.Should().BeApproximately(0.65, 0.0001);
     }
 
     [Fact]
     public void ExtracCU_HighWarnings_LowersConf()
     {
         // avg=1.0, ratioReq=1.0; warnings=3/3 → penalWarn=0
-        // 0.5*1.0 + 0.3*1.0 + 0.2*0.0 = 0.80
+        // 0.5*1.0 + 0.25*1.0 + 0.15*0.0 = 0.75
         var confs = new List<double?> { 1.0, 1.0, 1.0 };
         var (conf, _) = ConfidenceCalculator.ExtracCU(
             fieldConfs: confs,
             camposPresentes: 3, camposTotales: 3,
             camposRequeridos: 3, camposRequeridosPresentes: 3,
             warnings: 3);
-        conf.Should().BeApproximately(0.80, 0.0001);
+        conf.Should().BeApproximately(0.75, 0.0001);
     }
 
     [Fact]
