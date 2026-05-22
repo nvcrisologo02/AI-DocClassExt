@@ -8,22 +8,19 @@ namespace DocumentIA.Core.Configuration;
 
 public class TipologiaVersionResolver : ITipologiaVersionResolver
 {
-    private const string ValidationSuffix = ".validation.json";
-    private readonly string? _configBasePath;
     private readonly IMemoryCache? _cache;
     private readonly IServiceScopeFactory? _scopeFactory;
-    private readonly Lazy<ResolverIndex>? _index;
-
-    public TipologiaVersionResolver(string configBasePath)
-    {
-        _configBasePath = configBasePath;
-        _index = new Lazy<ResolverIndex>(BuildIndex);
-    }
+    private readonly Func<IEnumerable<TipologiaEntity>>? _entityFactory;
 
     public TipologiaVersionResolver(IMemoryCache cache, IServiceScopeFactory scopeFactory)
     {
         _cache = cache;
         _scopeFactory = scopeFactory;
+    }
+
+    internal TipologiaVersionResolver(Func<IEnumerable<TipologiaEntity>> entityFactory)
+    {
+        _entityFactory = entityFactory;
     }
 
     public ResolvedTipologia Resolve(string input)
@@ -134,127 +131,34 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
             return _cache.GetOrCreate("tipologias:snapshot", entry =>
             {
                 entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-                return BuildIndexFromDatabase();
+                return BuildIndexFromEntities(GetPublishedTipologiasFromDatabase());
             })!;
         }
 
-        if (_index is null)
+        if (_entityFactory is null)
         {
             throw new InvalidOperationException("TipologiaVersionResolver no esta correctamente configurado.");
         }
 
-        return _index.Value;
+        return BuildIndexFromEntities(_entityFactory());
     }
 
-    private ResolverIndex BuildIndex()
-    {
-        if (_configBasePath is null)
-        {
-            throw new InvalidOperationException("No se ha configurado ruta base de tipologias.");
-        }
-
-        if (!Directory.Exists(_configBasePath))
-        {
-            throw new DirectoryNotFoundException($"No existe el directorio de tipologias: {_configBasePath}");
-        }
-
-        var byTechnicalKey = new Dictionary<string, ResolvedTipologia>(StringComparer.OrdinalIgnoreCase);
-        var byFamily = new Dictionary<string, List<ResolvedTipologia>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var filePath in Directory.EnumerateFiles(_configBasePath, $"*{ValidationSuffix}"))
-        {
-            var technicalKey = Path.GetFileName(filePath)[..^ValidationSuffix.Length];
-            var jsonContent = File.ReadAllText(filePath);
-            var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(jsonContent, new JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            }) ?? throw new InvalidDataException($"Configuracion invalida en {filePath}");
-
-            if (string.IsNullOrWhiteSpace(config.TipologiaId))
-            {
-                throw new InvalidDataException($"La configuracion '{technicalKey}' no define tipologiaId.");
-            }
-
-            if (string.IsNullOrWhiteSpace(config.Version))
-            {
-                throw new InvalidDataException($"La configuracion '{technicalKey}' no define version.");
-            }
-
-            var resolvedTdn1 = !string.IsNullOrWhiteSpace(config.Tdn1)
-                ? config.Tdn1
-                : TryReadJsonString(jsonContent, "tdn1")
-                    ?? TryReadJsonString(jsonContent, "Tdn1")
-                    ?? TryReadJsonString(jsonContent, "TDN1")
-                    ?? string.Empty;
-
-            var resolvedTdn2 = !string.IsNullOrWhiteSpace(config.Tdn2)
-                ? config.Tdn2
-                : TryReadJsonString(jsonContent, "tdn2")
-                    ?? TryReadJsonString(jsonContent, "Tdn2")
-                    ?? TryReadJsonString(jsonContent, "TDN2")
-                    ?? string.Empty;
-
-            var resolved = new ResolvedTipologia(
-                RequestedValue: technicalKey,
-                TipologiaId: config.TipologiaId.Trim(),
-                Version: config.Version.Trim(),
-                TechnicalKey: technicalKey,
-                IsDefault: config.IsDefault,
-                SkipGDCUpload: config.SkipGDCUpload,
-                PromptEnabled: config.PromptConfig?.Enabled == true,
-                ExtractionEnabled: config.Extraction.Enabled,
-                ConfidenceConfig: config.ConfidenceConfig,
-                ExtractionProvider: config.Extraction.Provider ?? string.Empty,
-                AssetResolverEnabled: config.AssetResolver?.Enabled == true,
-                AssetResolverCamposSolicitados: config.AssetResolver?.CamposSolicitados,
-                AssetResolverModoCombinacionCriterios: config.AssetResolver?.ModoCombinacionCriterios ?? "OR",
-                AssetResolverMapeoIdufir: config.AssetResolver?.MapeoIdufir,
-                AssetResolverMapeoReferenciaCatastral: config.AssetResolver?.MapeoReferenciaCatastral,
-                AssetResolverBusquedaIdufirHabilitada: config.AssetResolver?.BusquedaIdufirHabilitada ?? true,
-                AssetResolverBusquedaReferenciaCatastralHabilitada: config.AssetResolver?.BusquedaReferenciaCatastralHabilitada ?? true,
-                AssetResolverBusquedaDireccionHabilitada: config.AssetResolver?.BusquedaDireccionHabilitada == true,
-                AssetResolverMapeoDireccionCompleta: config.AssetResolver?.MapeoDireccionCompleta,
-                AssetResolverMapeoDireccionNombreVia: config.AssetResolver?.MapeoDireccionNombreVia,
-                AssetResolverMapeoDireccionNumero: config.AssetResolver?.MapeoDireccionNumero,
-                AssetResolverMapeoDireccionMunicipio: config.AssetResolver?.MapeoDireccionMunicipio,
-                AssetResolverMapeoDireccionCodigoPostal: config.AssetResolver?.MapeoDireccionCodigoPostal,
-                AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75,
-                TipologiaNombre: config.TipologiaNombre ?? string.Empty,
-                TipologiaMGDCMatricula: config.TipologiaMGDCMatricula ?? string.Empty,
-                GdcTipoDocumento: config.GdcTipoDocumento ?? string.Empty,
-                GdcSubtipoDocumento: config.GdcSubtipoDocumento ?? string.Empty,
-                GdcSerie: config.GdcSerie ?? string.Empty,
-                Tdn1: resolvedTdn1,
-                Tdn2: resolvedTdn2,
-                GptDescripcion: config.GptDescripcion ?? string.Empty);
-
-            byTechnicalKey[technicalKey] = resolved;
-
-            if (!byFamily.TryGetValue(resolved.TipologiaId, out var familyEntries))
-            {
-                familyEntries = new List<ResolvedTipologia>();
-                byFamily[resolved.TipologiaId] = familyEntries;
-            }
-
-            familyEntries.Add(resolved);
-        }
-
-        return new ResolverIndex(byTechnicalKey, byFamily);
-    }
-
-    private ResolverIndex BuildIndexFromDatabase()
+    private IEnumerable<TipologiaEntity> GetPublishedTipologiasFromDatabase()
     {
         using var scope = _scopeFactory!.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
 
-        var publishedTipologias = repository.GetAllPublishedAsync()
+        return repository.GetAllPublishedAsync()
             .GetAwaiter()
             .GetResult();
+    }
 
+    private ResolverIndex BuildIndexFromEntities(IEnumerable<TipologiaEntity> sourceEntities)
+    {
         var byTechnicalKey = new Dictionary<string, ResolvedTipologia>(StringComparer.OrdinalIgnoreCase);
         var byFamily = new Dictionary<string, List<ResolvedTipologia>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var tipologia in publishedTipologias)
+        foreach (var tipologia in sourceEntities)
         {
             if (!tipologia.Activa || tipologia.Estado != EstadoTipologia.Published)
             {
@@ -262,6 +166,12 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
             }
 
             if (string.IsNullOrWhiteSpace(tipologia.ConfiguracionJson))
+            {
+                continue;
+            }
+
+            var technicalKey = tipologia.Codigo;
+            if (string.IsNullOrWhiteSpace(technicalKey))
             {
                 continue;
             }
@@ -275,29 +185,13 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
             {
                 continue;
             }
-
-            var resolvedTdn1 = !string.IsNullOrWhiteSpace(config.Tdn1)
-                ? config.Tdn1
-                : TryReadJsonString(tipologia.ConfiguracionJson, "tdn1")
-                    ?? TryReadJsonString(tipologia.ConfiguracionJson, "Tdn1")
-                    ?? TryReadJsonString(tipologia.ConfiguracionJson, "TDN1")
-                    ?? string.Empty;
-
-            var resolvedTdn2 = !string.IsNullOrWhiteSpace(config.Tdn2)
-                ? config.Tdn2
-                : TryReadJsonString(tipologia.ConfiguracionJson, "tdn2")
-                    ?? TryReadJsonString(tipologia.ConfiguracionJson, "Tdn2")
-                    ?? TryReadJsonString(tipologia.ConfiguracionJson, "TDN2")
-                    ?? string.Empty;
-
-            var technicalKey = tipologia.Codigo;
             var resolved = new ResolvedTipologia(
                 RequestedValue: technicalKey,
                 TipologiaId: config.TipologiaId.Trim(),
                 Version: config.Version.Trim(),
                 TechnicalKey: technicalKey,
                 IsDefault: config.IsDefault,
-                SkipGDCUpload: config.SkipGDCUpload,
+                SkipGDCUpload: config.ResolvedSkipGDCUpload,
                 PromptEnabled: config.PromptConfig?.Enabled == true,
                 ExtractionEnabled: config.Extraction.Enabled,
                 ConfidenceConfig: config.ConfidenceConfig,
@@ -317,13 +211,13 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 AssetResolverMapeoDireccionCodigoPostal: config.AssetResolver?.MapeoDireccionCodigoPostal,
                 AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75,
                 TipologiaNombre: config.TipologiaNombre ?? string.Empty,
-                TipologiaMGDCMatricula: config.TipologiaMGDCMatricula ?? string.Empty,
-                GdcTipoDocumento: config.GdcTipoDocumento ?? string.Empty,
-                GdcSubtipoDocumento: config.GdcSubtipoDocumento ?? string.Empty,
-                GdcSerie: config.GdcSerie ?? string.Empty,
-                Tdn1: resolvedTdn1,
-                Tdn2: resolvedTdn2,
-                GptDescripcion: config.GptDescripcion ?? string.Empty);
+                TipologiaMGDCMatricula: config.ResolvedMatricula ?? string.Empty,
+                GdcTipoDocumento: config.ResolvedGdcTipo ?? string.Empty,
+                GdcSubtipoDocumento: config.ResolvedGdcSubtipo ?? string.Empty,
+                GdcSerie: config.ResolvedGdcSerie ?? string.Empty,
+                Tdn1: config.ResolvedTdn1 ?? string.Empty,
+                Tdn2: config.ResolvedTdn2 ?? string.Empty,
+                GptDescripcion: config.ResolvedGptDescripcion ?? string.Empty);
 
             byTechnicalKey[technicalKey] = resolved;
 
@@ -342,34 +236,4 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
     private sealed record ResolverIndex(
         Dictionary<string, ResolvedTipologia> ByTechnicalKey,
         Dictionary<string, List<ResolvedTipologia>> ByFamily);
-
-    private static string? TryReadJsonString(string json, string propertyName)
-    {
-        if (string.IsNullOrWhiteSpace(json) || string.IsNullOrWhiteSpace(propertyName))
-        {
-            return null;
-        }
-
-        try
-        {
-            using var doc = JsonDocument.Parse(json);
-            if (doc.RootElement.ValueKind != JsonValueKind.Object)
-            {
-                return null;
-            }
-
-            if (!doc.RootElement.TryGetProperty(propertyName, out var value))
-            {
-                return null;
-            }
-
-            return value.ValueKind == JsonValueKind.String
-                ? value.GetString()
-                : value.ToString();
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
 }

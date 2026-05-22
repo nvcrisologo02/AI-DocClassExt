@@ -3,6 +3,10 @@
 > Ultima actualizacion: 2026-05-05
 > Proyecto: AI DocClassExt — SAREB
 
+> Actualización 2026-05-21 (Tipologías v1.2):
+> - M1 completado: script SQL idempotente `scripts/migrations/migrate-tipologias-v1_2-json-structure.sql` para poblar bloques `gdc` y `classification` en `Tipologias.ConfiguracionJson`.
+> - Pendiente funcional asociado: ejecutar el script en entorno tras despliegue completo de backend/frontend v1.2.
+
 ---
 
 ## 7.1 Estado de Epics

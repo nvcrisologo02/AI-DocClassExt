@@ -294,6 +294,47 @@ sequenceDiagram
     DC-->>C: { runtimeStatus: "Completed", output: ContratoSalida }
 ```
 
+## 3.3 Estructura de tipología v1.2 (gdc/classification)
+
+Desde mayo 2026, la configuración JSON de tipologías adopta bloques jerárquicos para metadatos de clasificación y GDC.
+
+Estructura canónica:
+
+```json
+{
+  "tipologiaId": "nota-simple",
+  "tipologiaNombre": "Nota simple",
+  "version": "1.4",
+  "gdc": {
+    "skipUpload": false,
+    "matricula": "AI-01-NOTS-01",
+    "tipoDocumento": "NOTS",
+    "subtipoDocumento": "NOTS01",
+    "serie": "AI09"
+  },
+  "classification": {
+    "tdn1": "...",
+    "tdn2": "...",
+    "gptDescripcion": "...",
+    "enableRules": true
+  },
+  "classificationConfig": {
+    "examplePhrases": [],
+    "disambiguationHints": []
+  }
+}
+```
+
+Compatibilidad backward:
+
+- El backend mantiene fallback por propiedades resueltas (`Resolved*`) para leer tanto el formato v1.2 como el legacy de raíz (`gdcTipoDocumento`, `tdn1`, `gptDescripcion`, etc.).
+- En edición/creación se persiste formato v1.2 y, temporalmente, también campos legacy redundantes para no romper consumidores previos.
+
+Fuente de configuración:
+
+- Producción opera exclusivamente contra BBDD (`Tipologias.ConfiguracionJson`).
+- Se elimina la ruta legacy de lectura por ficheros para resolver/cargar tipologías en runtime.
+
 ---
 
 ## 3.3 Diagrama de Secuencia — Motor de Validacion

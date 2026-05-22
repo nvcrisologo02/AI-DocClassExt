@@ -744,14 +744,14 @@ public class TipologiasAdminFunction
             }
         }
 
-        if (!config.SkipGDCUpload)
+        if (!config.ResolvedSkipGDCUpload)
         {
-            if (string.IsNullOrWhiteSpace(config.GdcTipoDocumento))
+            if (string.IsNullOrWhiteSpace(config.ResolvedGdcTipo))
             {
                 return "gdcTipoDocumento es obligatorio cuando skipGDCUpload=false.";
             }
 
-            if (string.IsNullOrWhiteSpace(config.GdcSerie))
+            if (string.IsNullOrWhiteSpace(config.ResolvedGdcSerie))
             {
                 return "gdcSerie es obligatorio cuando skipGDCUpload=false.";
             }

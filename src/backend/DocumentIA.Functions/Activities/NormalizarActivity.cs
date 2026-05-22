@@ -38,6 +38,7 @@ public class NormalizarActivity
                 ["MD5"] = entrada.Documento.PreComputedMD5 ?? string.Empty,
                 ["CRC32"] = entrada.Documento.PreComputedCRC32 ?? string.Empty,
                 ["TamañoBytes"] = entrada.Documento.PreComputedTamañoBytes,
+                ["TamanoBytes"] = entrada.Documento.PreComputedTamañoBytes,
                 ["NombreNormalizado"] = entrada.Documento.Name.Trim().ToLowerInvariant(),
                 ["FechaNormalizacion"] = DateTime.UtcNow
             };
@@ -71,6 +72,7 @@ public class NormalizarActivity
             ["MD5"] = md5,
             ["CRC32"] = crc32,
             ["TamañoBytes"] = documentBytes.Length,
+            ["TamanoBytes"] = documentBytes.Length,
             ["NombreNormalizado"] = entrada.Documento.Name.Trim().ToLowerInvariant(),
             ["FechaNormalizacion"] = DateTime.UtcNow
         };

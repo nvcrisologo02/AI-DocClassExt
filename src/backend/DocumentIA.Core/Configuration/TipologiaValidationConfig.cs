@@ -7,26 +7,38 @@ namespace DocumentIA.Core.Configuration
         public string TipologiaNombre { get; set; } = string.Empty;
         public string Version { get; set; } = string.Empty;
         public bool IsDefault { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("gdc")]
+        public GdcConfig? Gdc { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("classification")]
+        public ClassificationTdnConfig? Classification { get; set; }
         // Matricula utilizada para GDC upload checks for this tipologia.
         // If empty, the global default from configuration will be used.
+        [Obsolete("Use Gdc.Matricula")]
         public string TipologiaMGDCMatricula { get; set; } = string.Empty;
         // GDC taxonomy fields — mandatory for document create in SINTWS.
         // GdcTipoDocumento: código del tipo de documento en catálogo GDC (ej. "NOTS", "CERT", "ESIN").
+        [Obsolete("Use Gdc.TipoDocumento")]
         public string GdcTipoDocumento { get; set; } = string.Empty;
         // GdcSubtipoDocumento: código del subtipo de documento en catálogo GDC (opcional, ej. "NOTS01").
+        [Obsolete("Use Gdc.SubtipoDocumento")]
         public string GdcSubtipoDocumento { get; set; } = string.Empty;
         // GdcSerie: serie documental GDC (ej. "AI09", "AI05"). Confirmar con Sistemas el valor exacto.
+        [Obsolete("Use Gdc.Serie")]
         public string GdcSerie { get; set; } = string.Empty;
         // TDN jerárquico opcional asociado a la tipología.
+        [Obsolete("Use Classification.Tdn1")]
         public string Tdn1 { get; set; } = string.Empty;
+        [Obsolete("Use Classification.Tdn2")]
         public string Tdn2 { get; set; } = string.Empty;
         // SkipGDCUpload: si true, la subida a GDC se omite por defecto para esta tipología.
         // Puede sobreescribirse explícitamente en cada petición vía Instrucciones.SkipGDCUpload.
+        [Obsolete("Use Gdc.SkipUpload")]
         public bool SkipGDCUpload { get; set; } = false;
         /// <summary>
         /// Descripción optimizada para el prompt de clasificación GPT.
         /// Si está vacía, se usa TipologiaNombre como fallback en el prompt.
         /// </summary>
+        [Obsolete("Use Classification.GptDescripcion")]
         public string GptDescripcion { get; set; } = string.Empty;
         public TipologiaExtractionConfig Extraction { get; set; } = new();
         /// <summary>
@@ -57,10 +69,55 @@ namespace DocumentIA.Core.Configuration
         public TdnClassificationCatalogConfig? ClassificationCatalog { get; set; }
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool ResolvedSkipGDCUpload => Gdc?.SkipUpload ?? SkipGDCUpload;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ResolvedMatricula => Gdc?.Matricula ?? TipologiaMGDCMatricula;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ResolvedGdcTipo => Gdc?.TipoDocumento ?? GdcTipoDocumento;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ResolvedGdcSubtipo => Gdc?.SubtipoDocumento ?? GdcSubtipoDocumento;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ResolvedGdcSerie => Gdc?.Serie ?? GdcSerie;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ResolvedTdn1 => Classification?.Tdn1 ?? Tdn1;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ResolvedTdn2 => Classification?.Tdn2 ?? Tdn2;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string ResolvedGptDescripcion => Classification?.GptDescripcion ?? GptDescripcion;
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool ResolvedEnableRules => Classification?.EnableRules ?? true;
+
         public TipologiaValidationConfig()
         {
             Fields = new List<FieldValidationConfig>();
         }
+    }
+
+    public class GdcConfig
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("skipUpload")]
+        public bool SkipUpload { get; set; } = false;
+        [System.Text.Json.Serialization.JsonPropertyName("matricula")]
+        public string Matricula { get; set; } = string.Empty;
+        [System.Text.Json.Serialization.JsonPropertyName("tipoDocumento")]
+        public string TipoDocumento { get; set; } = string.Empty;
+        [System.Text.Json.Serialization.JsonPropertyName("subtipoDocumento")]
+        public string SubtipoDocumento { get; set; } = string.Empty;
+        [System.Text.Json.Serialization.JsonPropertyName("serie")]
+        public string Serie { get; set; } = string.Empty;
+    }
+
+    public class ClassificationTdnConfig
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("tdn1")]
+        public string Tdn1 { get; set; } = string.Empty;
+        [System.Text.Json.Serialization.JsonPropertyName("tdn2")]
+        public string Tdn2 { get; set; } = string.Empty;
+        [System.Text.Json.Serialization.JsonPropertyName("gptDescripcion")]
+        public string GptDescripcion { get; set; } = string.Empty;
+        [System.Text.Json.Serialization.JsonPropertyName("enableRules")]
+        public bool EnableRules { get; set; } = true;
     }
 
     public class ClassificationPolicyConfig
@@ -185,26 +242,35 @@ namespace DocumentIA.Core.Configuration
     {
         /// <summary>Umbral de confianza de clasificación DI por debajo del cual se activa fallback GPT.
         /// También se usa como umbral BAJA_CONFIANZA_CLASIFICACION cuando no hay umbral en la petición.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("clasifUmbralFallback")]
         public double ClasifUmbralFallback { get; set; } = 0.85;
         /// <summary>Ratio mínimo de campos obtenidos/esperados para considerar la extracción CU suficiente.
         /// Si CU no supera este ratio, se activa el fallback GPT de extracción.
         /// null = usar config.MinFieldsRatio (GptFallbackExtraerSettings) como último recurso.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("extracUmbralFallback")]
         public double? ExtracUmbralFallback { get; set; } = null;
         /// <summary>Umbral mínimo de completitud (ratio de campos esperados presentes) para considerar CU suficiente.
         /// Si no se informa, usa ExtracUmbralFallback y, en último término, config.MinFieldsRatio.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("extracUmbralFallbackCompletitud")]
         public double? ExtracUmbralFallbackCompletitud { get; set; } = null;
         /// <summary>Umbral mínimo de confianza global de extracción CU para considerar CU suficiente.
         /// Si no se informa, usa ExtracUmbralFallback y, en último término, config.MinFieldsRatio.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("extracUmbralFallbackConfianza")]
         public double? ExtracUmbralFallbackConfianza { get; set; } = null;
         /// <summary>Peso del promedio de confianza de campos en el cálculo CU.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("extracWeightCampos")]
         public double ExtracWeightCampos { get; set; } = 0.5;
         /// <summary>Peso del ratio de campos requeridos presentes en el cálculo CU.</summary>
-        public double ExtracWeightRequeridos { get; set; } = 0.3;
+        [System.Text.Json.Serialization.JsonPropertyName("extracWeightRequeridos")]
+        public double ExtracWeightRequeridos { get; set; } = 0.25;
         /// <summary>Peso de la penalización por warnings en el cálculo CU.</summary>
-        public double ExtracWeightWarnings { get; set; } = 0.2;
+        [System.Text.Json.Serialization.JsonPropertyName("extracWeightWarnings")]
+        public double ExtracWeightWarnings { get; set; } = 0.15;
         /// <summary>Confianza global mínima para estado OK.</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("umbralOK")]
         public double UmbralOK { get; set; } = 0.85;
         /// <summary>Confianza global mínima para estado REVISION (por debajo es ERROR).</summary>
+        [System.Text.Json.Serialization.JsonPropertyName("umbralRevision")]
         public double UmbralRevision { get; set; } = 0.70;
     }
 
