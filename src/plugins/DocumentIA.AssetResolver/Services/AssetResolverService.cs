@@ -464,7 +464,7 @@ public class AssetResolverService
         else if (!string.IsNullOrEmpty(query.Municipio))
         {
             var municipioPrefix = query.Municipio[..Math.Min(query.Municipio.Length, 6)];
-            var municipioLikePattern = $"%{municipioPrefix}%";
+            var municipioLikePattern = $"{municipioPrefix}%";
             baseQuery = baseQuery.Where(x => x.DesMunicp != null &&
                 EF.Functions.Like(x.DesMunicp, municipioLikePattern));
         }
@@ -522,7 +522,7 @@ public class AssetResolverService
         else if (!string.IsNullOrEmpty(query.Municipio))
         {
             var municipioPrefix = query.Municipio[..Math.Min(query.Municipio.Length, 6)];
-            var municipioLikePattern = $"%{municipioPrefix}%";
+            var municipioLikePattern = $"{municipioPrefix}%";
             baseQuery = baseQuery.Where(x => x.DesMunicp != null &&
                 EF.Functions.Like(x.DesMunicp, municipioLikePattern));
         }
@@ -899,20 +899,20 @@ public class AssetResolverService
     {
         IQueryable<DmPosicionAAII> query = _db.DmPosicionAAII.AsNoTracking();
 
-        // Los campos de texto usan LIKE con wildcards (%valor%) para búsqueda por subcadena,
-        // lo que permite insensibilidad a mayúsculas/tildes y variaciones de formato en la BD.
+        // Campos de vocabulario cerrado usan prefix% para favorecer uso de índices;
+        // los campos de texto libre mantienen %valor% para tolerar coincidencia por subcadena.
         if (!string.IsNullOrEmpty(direccion.Pais))
-        { var p = $"%{direccion.Pais}%"; query = query.Where(x => x.DesPais != null && EF.Functions.Like(x.DesPais, p)); }
+        { var p = $"{direccion.Pais}%"; query = query.Where(x => x.DesPais != null && EF.Functions.Like(x.DesPais, p)); }
         if (!string.IsNullOrEmpty(direccion.Provincia))
-        { var p = $"%{direccion.Provincia}%"; query = query.Where(x => x.DesProvnc != null && EF.Functions.Like(x.DesProvnc, p)); }
+        { var p = $"{direccion.Provincia}%"; query = query.Where(x => x.DesProvnc != null && EF.Functions.Like(x.DesProvnc, p)); }
         if (!string.IsNullOrEmpty(direccion.ComunidadAutonoma))
-        { var p = $"%{direccion.ComunidadAutonoma}%"; query = query.Where(x => x.DesComuniAuto != null && EF.Functions.Like(x.DesComuniAuto, p)); }
+        { var p = $"{direccion.ComunidadAutonoma}%"; query = query.Where(x => x.DesComuniAuto != null && EF.Functions.Like(x.DesComuniAuto, p)); }
         if (!string.IsNullOrEmpty(direccion.Municipio))
-        { var p = $"%{direccion.Municipio}%"; query = query.Where(x => x.DesMunicp != null && EF.Functions.Like(x.DesMunicp, p)); }
+        { var p = $"{direccion.Municipio}%"; query = query.Where(x => x.DesMunicp != null && EF.Functions.Like(x.DesMunicp, p)); }
         if (!string.IsNullOrEmpty(direccion.Poblacion))
         { var p = $"%{direccion.Poblacion}%"; query = query.Where(x => x.DesPoblcn != null && EF.Functions.Like(x.DesPoblcn, p)); }
         if (!string.IsNullOrEmpty(direccion.TipoVia))
-        { var p = $"%{direccion.TipoVia}%"; query = query.Where(x => x.DesTipoVia != null && EF.Functions.Like(x.DesTipoVia, p)); }
+        { var p = $"{direccion.TipoVia}%"; query = query.Where(x => x.DesTipoVia != null && EF.Functions.Like(x.DesTipoVia, p)); }
         if (!string.IsNullOrEmpty(direccion.Calle))
         { var p = $"%{direccion.Calle}%"; query = query.Where(x => x.DesNombreVia != null && EF.Functions.Like(x.DesNombreVia, p)); }
         if (!string.IsNullOrEmpty(direccion.Numero))
@@ -942,17 +942,17 @@ public class AssetResolverService
         IQueryable<DmPosicionAACC> query = _db.DmPosicionAACC.AsNoTracking();
 
         if (!string.IsNullOrEmpty(direccion.Pais))
-        { var p = $"%{direccion.Pais}%"; query = query.Where(x => x.DesPais != null && EF.Functions.Like(x.DesPais, p)); }
+        { var p = $"{direccion.Pais}%"; query = query.Where(x => x.DesPais != null && EF.Functions.Like(x.DesPais, p)); }
         if (!string.IsNullOrEmpty(direccion.Provincia))
-        { var p = $"%{direccion.Provincia}%"; query = query.Where(x => x.DesProvnc != null && EF.Functions.Like(x.DesProvnc, p)); }
+        { var p = $"{direccion.Provincia}%"; query = query.Where(x => x.DesProvnc != null && EF.Functions.Like(x.DesProvnc, p)); }
         if (!string.IsNullOrEmpty(direccion.ComunidadAutonoma))
-        { var p = $"%{direccion.ComunidadAutonoma}%"; query = query.Where(x => x.DesComuniAuto != null && EF.Functions.Like(x.DesComuniAuto, p)); }
+        { var p = $"{direccion.ComunidadAutonoma}%"; query = query.Where(x => x.DesComuniAuto != null && EF.Functions.Like(x.DesComuniAuto, p)); }
         if (!string.IsNullOrEmpty(direccion.Municipio))
-        { var p = $"%{direccion.Municipio}%"; query = query.Where(x => x.DesMunicp != null && EF.Functions.Like(x.DesMunicp, p)); }
+        { var p = $"{direccion.Municipio}%"; query = query.Where(x => x.DesMunicp != null && EF.Functions.Like(x.DesMunicp, p)); }
         if (!string.IsNullOrEmpty(direccion.Poblacion))
         { var p = $"%{direccion.Poblacion}%"; query = query.Where(x => x.DesPoblcn != null && EF.Functions.Like(x.DesPoblcn, p)); }
         if (!string.IsNullOrEmpty(direccion.TipoVia))
-        { var p = $"%{direccion.TipoVia}%"; query = query.Where(x => x.DesTipoVia != null && EF.Functions.Like(x.DesTipoVia, p)); }
+        { var p = $"{direccion.TipoVia}%"; query = query.Where(x => x.DesTipoVia != null && EF.Functions.Like(x.DesTipoVia, p)); }
         if (!string.IsNullOrEmpty(direccion.Calle))
         { var p = $"%{direccion.Calle}%"; query = query.Where(x => x.DesNombreVia != null && EF.Functions.Like(x.DesNombreVia, p)); }
         if (!string.IsNullOrEmpty(direccion.Numero))
