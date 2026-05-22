@@ -20,9 +20,11 @@
 
 ## 2. Resolución de tipología (`TipologiaVersionResolver`)
 
-El resolver carga tipologías desde dos fuentes (con prioridad DB sobre fichero):
-1. **Base de datos** — tabla `TipologiasConfig` vía `TipologiaVersionResolver` (tipologías DB-backed como `ibi`).
-2. **Ficheros JSON** — archivos `*.validation.json` del directorio `config/tipologias/` (tipologías legacy como `nota-simple`, `tasacion`, `resumen-documental`).
+El resolver carga tipologías exclusivamente desde base de datos:
+
+1. **Base de datos** — tabla `Tipologias` (`ConfiguracionJson`) vía `TipologiaVersionResolver`.
+
+Nota: la ruta legacy por ficheros `*.validation.json` no se usa en runtime de producción.
 
 Admite tres formas de referencia:
 
@@ -270,12 +272,14 @@ El campo `Resultado.MensajeError` está definido en `ContratoSalida.ResultadoFin
 
 ## 9. Añadir una nueva tipología
 
-1. Crear `config/tipologias/<familia>.<version>.validation.json` con los campos:
-   - `tipologiaId`, `tipologiaNombre`, `version`, `isDefault`, `skipGDCUpload`
-   - `confidenceConfig` (umbrales de confianza)
-   - `fields[]` con reglas de validación
-   - Opcionalmente: `extraction`, `promptConfig`
-2. (Opcional) Crear `config/tipologias/<familia>.<version>.plugins.json` para plugins de integración.
-3. Verificar con `TipologiaVersionResolver.Resolve("<familia>")` que el resolver la carga correctamente.
-4. Si `isDefault: true`, asegurarse de que no haya otra versión de la misma familia marcada como default.
-5. Entrenar o actualizar el clasificador Azure DI (`DocumentAICC_v0`) con muestras del nuevo tipo de documento, o configurar `ExpectedType` en las instrucciones de entrada para forzar la tipología sin clasificación automática.
+1. Crear/editar registro en `Tipologias` con `ConfiguracionJson` válido.
+2. Usar estructura v1.2 recomendada:
+  - `gdc.*` para metadatos de subida GDC.
+  - `classification.*` para TDN y prompt descriptivo.
+  - `classificationConfig.examplePhrases` / `classificationConfig.disambiguationHints` para pistas del clasificador por señales.
+3. Mantener compatibilidad durante transición (campos legacy redundantes en raíz) si hay consumidores antiguos.
+4. Validar resolución con `TipologiaVersionResolver.Resolve("<familia>")` y, si aplica, `Resolve("<familia>@<version>")`.
+5. Si `isDefault: true`, asegurar unicidad de versión default por familia.
+6. Si la tipología preexistía en formato legacy, ejecutar script de migración:
+  - `scripts/migrations/migrate-tipologias-v1_2-json-structure.sql`
+7. Entrenar/ajustar clasificador DI o forzar `expectedType` en peticiones según estrategia operativa.

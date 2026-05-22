@@ -31,7 +31,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 
 | Header | Requerido | Valor |
 |---|---|---|
-| `Content-Type` | Sí | `application/json` |
+| `Content-Type` | Sí | `application/json` o `multipart/form-data` |
 | `x-functions-key` | Sí (producción) | Function Key |
 
 #### Body — `ContratoEntrada`
@@ -66,6 +66,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
   "documento": {
     "name": "nota_simple_finca_123.pdf",
     "objectIdGDC": null,
+    "blobPath": null,
     "content": {
       "base64": "<contenido-en-base64>"
     }
@@ -130,8 +131,9 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `name` | string | Nombre del fichero (con extensión). Recomendado; si llega vacío con `objectIdGDC`, se intenta completar desde metadatos de GDC. |
-| `objectIdGDC` | string? | ObjectId del documento ya archivado en GDC. Si se informa, no debe enviarse `content.base64`. |
-| `content.base64` | string | Contenido del documento codificado en Base64. Requerido cuando no se informa `objectIdGDC`. |
+| `objectIdGDC` | string? | ObjectId del documento ya archivado en GDC. Si se informa, no debe enviarse `content.base64` ni `blobPath`. |
+| `blobPath` | string? | Ruta `container/path` del documento ya subido a Blob Storage (modo blob-first). Si se informa, no debe enviarse `objectIdGDC`. |
+| `content.base64` | string? | Contenido del documento codificado en Base64. Opcional cuando se informa `blobPath` u `objectIdGDC`. |
 
 **`trazabilidad`**
 
@@ -143,10 +145,15 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 
 Reglas de validación de entrada:
 
-- `documento.objectIdGDC` y `documento.content.base64` son mutuamente excluyentes.
-- Debe enviarse exactamente una fuente de documento.
+- `documento.objectIdGDC` es excluyente con `documento.content.base64` y `documento.blobPath`.
+- Debe enviarse al menos una fuente de documento: `objectIdGDC`, `blobPath` o `content.base64`.
 - Si se usa `documento.objectIdGDC`, el backend fuerza `instrucciones.skipGDCUpload = true`.
 - `classificationOnly=true` es incompatible con `expectedType` informado. El trigger HTTP devuelve `400`.
+
+Modo multipart/blob-first:
+
+- En `multipart/form-data` se esperan dos partes: `file` (binario) y `metadata` (JSON `ContratoEntrada`).
+- El trigger sube el binario a Blob Storage antes de iniciar la orquestación y rellena hashes/tamaño precomputados.
 
 ---
 
@@ -221,6 +228,7 @@ La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Fun
       "crc32": "a1b2c3d4",
       "sha256": "abcdef...",
       "md5": "fedcba...",
+      "tamanoBytes": 933347,
       "rutaBlobStorage": "documents/nota_simple_finca_123.pdf",
       "gestorDocumental": "GDC",
       "idActivo": "ACTIVO-001",

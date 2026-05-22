@@ -297,6 +297,62 @@ En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el 
 
 ---
 
+## 5.10 Configuración de tipologías v1.2
+
+La configuración JSON de tipologías pasa a estructura jerárquica para clasificación y metadatos GDC.
+
+Campos nuevos recomendados:
+
+- `gdc.skipUpload`
+- `gdc.matricula`
+- `gdc.tipoDocumento`
+- `gdc.subtipoDocumento`
+- `gdc.serie`
+- `classification.tdn1`
+- `classification.tdn2`
+- `classification.gptDescripcion`
+- `classification.enableRules`
+- `classificationConfig.examplePhrases`
+- `classificationConfig.disambiguationHints`
+
+Ejemplo mínimo:
+
+```json
+{
+  "tipologiaId": "nota-simple",
+  "version": "1.4",
+  "gdc": {
+    "skipUpload": false,
+    "tipoDocumento": "NOTS",
+    "serie": "AI09"
+  },
+  "classification": {
+    "tdn1": "ACTE",
+    "tdn2": "ACTE01",
+    "gptDescripcion": "Nota simple registral",
+    "enableRules": true
+  },
+  "classificationConfig": {
+    "examplePhrases": ["nota simple registral"],
+    "disambiguationHints": ["no confundir con tasación"]
+  }
+}
+```
+
+### Migración de datos legacy en SQL Server
+
+Se incluye script idempotente para poblar bloques `gdc` y `classification` cuando no existen:
+
+- `scripts/migrations/migrate-tipologias-v1_2-json-structure.sql`
+
+Uso recomendado:
+
+1. Desplegar backend/frontend que ya consumen formato v1.2 (con fallback).
+2. Ejecutar script sobre `dbo.Tipologias` en entorno objetivo.
+3. Verificar salida final del script (`HasGdc`, `HasClassification` en todas las filas JSON válidas).
+
+---
+
 ## 5.4 Interpretacion del Resultado
 
 ### Estados Finales

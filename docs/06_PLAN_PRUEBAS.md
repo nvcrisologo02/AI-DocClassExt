@@ -173,6 +173,7 @@ Scripts ubicados en `tests/api-tests/` y `scripts/`. Requieren Functions App o p
 | `test-ingest-notasimple1-4-classify.ps1` | nota-simple 1.4 | Clasificacion real | Sin expectedType — usa Document Intelligence para clasificar |
 | `test-ingest-notasimple1-4-extract-fallback.ps1` | nota-simple 1.4 | Fallback GPT | Umbral alto para forzar fallback GPT en extraccion |
 | `test-ingest-notasimple1-4-from-path.ps1` | nota-simple 1.4 | Desde disco | Para `DocumentPath` — envia fichero local |
+| `test-ingest-blob-first.ps1` | nota-simple 1.4 | Multipart/blob-first | Envia `multipart/form-data`, valida subida previa a blob y comprueba `integridad.tamanoBytes` en output |
 | `test-ingest-resumen-documental-from-path.ps1` | resumen-documental | Desde disco | Tipologia resumen-documental desde fichero local |
 | `test-gdc-consultar-aislado.ps1` | — | Aislado | Test SOAP puro contra GDC: searchEntities + create. Diagnostica DOC_OBJECT_EXISTS. |
 | `test-azure-openai-clasificacion-fallback.ps1` | — | Aislado | Test conectividad Azure OpenAI para clasificacion fallback |
