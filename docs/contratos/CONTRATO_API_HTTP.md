@@ -48,7 +48,9 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "skipGDCUpload": null,
     "classification": {
       "provider": "auto",
-      "model": "auto"
+      "model": "auto",
+      "nivelClasificacion": null,
+      "markdown": null
     },
     "extraction": {
       "provider": "auto",
@@ -92,9 +94,11 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `executeIntegrarWhenClassificationOnly` | bool? | Solo aplica cuando `classificationOnly=true`. `null/false` = no ejecutar `Integrar`. `true` = ejecutar `Integrar` si hay `trazabilidad.idActivo`. |
 | `maxPagesForClassificationOnly` | int | Solo aplica cuando `classificationOnly=true`. `0` = sin límite. `N > 0` = usa solo las primeras N páginas para clasificación. |
 | `skipGDCUpload` | bool? | `null` = respetar la configuración de la tipología. `true` = no subir al GDC. `false` = forzar subida. |
-| `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `mock` |
+| `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `gpt` \| `mock`. Si se informa `nivelClasificacion`, el sistema **fuerza automáticamente** `provider="gpt"` (D2). |
 | `classification.model` | string | Reservado. Usar `"auto"`. El model key se resuelve desde la configuración de la tipología. |
 | `classification.umbral` | double? | _(Opcional)_ Umbral de confianza para activar fallback GPT y para el check `BAJA_CONFIANZA_CLASIFICACION`. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor. |
+| `classification.nivelClasificacion` | string? | _(Opcional)_ Nivel jerárquico de clasificación deseado. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases, nivel completo). `null` / vacío = clasificación completa por defecto. Si se informa, el proveedor se fuerza a `"gpt"` automáticamente y el campo forma parte de la clave de deduplicación (`SHA256 + classificationOnly + nivelClasificacion`). |
+| `classification.markdown` | string? | _(Opcional)_ Markdown pre-procesado del documento aportado por el caller. Si se informa, el paso `ExtraerMarkdownLayoutActivity` (paso 2.8) se omite y se usa este texto directamente como contexto para la clasificación. Útil para reutilizar texto ya extraído en integraciones batch. |
 | `extraction.provider` | string | `auto` \| `azure-content-understanding` \| `azure-cu` \| `azure-document-intelligence` \| `azure-di` \| `azure-openai` \| `gpt` \| `mock`. Si se especifica un valor distinto de `"auto"`, sobreescribe el proveedor configurado en la tipología para esta petición. Con `azure-openai` se activa extracción GPT directa (sin CU). |
 | `extraction.model` | string | Model key del registro de modelos de extracción. Si se especifica un valor distinto de `"auto"`, sobreescribe el `modelKey` configurado en la tipología para esta petición. Debe coincidir con una clave del registro de modelos (`extraction-models.json`). |
 | `extraction.umbral` | double? | _(Opcional)_ Ratio mínimo de campos para considerar la extracción CU suficiente. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor (`MinFieldsRatio`). |
@@ -222,7 +226,8 @@ La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Fun
       "tipologiaFamilia": "nota-simple",
       "tipologiaVersion": "1.4",
       "fechaProceso": "2026-03-27T10:00:10Z",
-      "paginas": 5
+      "paginas": 5,
+      "propuestaTipologia": null
     },
     "integridad": {
       "crc32": "a1b2c3d4",
@@ -323,9 +328,11 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | Estado | Descripción |
 |---|---|
 | `OK` | Procesamiento completado correctamente. |
+| `OK` _(clasificación parcial — tipología virtual)_ | Solo cuando `nivelClasificacion` activa clasificación GPT y el modelo no puede mapear a ningún código de catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` contiene la propuesta libre del modelo. El pipeline se detiene: extracción y validación se omiten. |
+| `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. El pipeline continúa (extracción, validación) con la tipología parcial. |
 | `VALIDACION_CON_ERRORES` | Extracción completada pero alguna regla de validación no se cumplió. Los datos se devuelven. |
 | `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. Se devuelven datos con advertencia. |
-| `DUPLICADO` | El documento ya existe en la base de datos (mismo SHA256). Se devuelve la ejecución anterior reutilizada. Ver `reutilizadaPorDuplicado = true`. |
+| `DUPLICADO` | El documento ya existe en la base de datos (mismo SHA256 + `classificationOnly` + `nivelClasificacion`). Se devuelve la ejecución anterior reutilizada. Ver `reutilizadaPorDuplicado = true`. |
 | `ERROR` | Error irrecuperable durante el procesamiento (clasificación fallida, excepción no controlada). Consultar `mensajeError`. |
 
 ---
@@ -336,6 +343,8 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 |---|---|
 | `detalleEjecucion.instanceId` | ID de la instancia de orquestación Durable Functions. Permite hacer polling de estado y localizar la ejecución en Azure Portal. |
 | `detalleEjecucion.operationId` | `operation_Id` de Application Insights (W3C TraceId). Usar en KQL: `union traces,requests,exceptions \| where operation_Id == "<operationId>"` para obtener la traza completa. |
+| `detalleEjecucion.classificationOnly` | Refleja el valor de `instrucciones.classificationOnly` de la petición original. |
+| `detalleEjecucion.nivelClasificacion` | Nivel de clasificación usado en la petición (`"TDN1"`, `"TDN1/TDN2"` o `null`). Forma parte de la clave de deduplicación cuando se informa. |
 | `detalleEjecucion.runTipologia` | Clave de tipología usada en la ejecución. |
 | `detalleEjecucion.clasificacion.modelo` | Modelo de clasificación usado. |
 | `detalleEjecucion.clasificacion.confianza` | Confianza final (DI o GPT si hubo fallback). |

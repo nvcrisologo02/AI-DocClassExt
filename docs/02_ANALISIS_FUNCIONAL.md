@@ -178,6 +178,8 @@ flowchart TB
 - Si existe y `forceReprocess=false`, se retorna el resultado anterior.
 - Si existe y `forceReprocess=true`, se reprocesa completamente.
 - `SkipDuplicateCheck=true` omite la verificacion (procesamiento incondicional).
+- La **clave de deduplicacion** es `SHA256 + classificationOnly + nivelClasificacion`. Dos peticiones con el mismo
+  SHA256 pero distinto `nivelClasificacion` se tratan como ejecuciones independientes y no se reutilizan entre si.
 
 ### RN2: Umbrales de Confianza Configurables
 
@@ -236,6 +238,24 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 - Los plugins se ejecutan en orden ascendente de prioridad (`Priority=1` primero).
 - Si un plugin con `Priority=1` (critico) falla, se detiene la cadena completa.
 - Plugins no criticos: error se loguea como warning, se continua con el siguiente.
+
+### RN7: Clasificacion Jerarquica GPT (nivelClasificacion)
+
+Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o `"TDN1/TDN2"`):
+
+1. **D2 — Force provider GPT**: el sistema fuerza `classification.provider = "gpt"` automaticamente, independientemente
+   de lo que se haya indicado en la peticion o configuracion de tipologia.
+2. **D1 — Clasificacion parcial (`clasificacionParcial = true`)**:
+   - Si la clasificacion GPT retorna un **codigo TDN1 conocido** del catalogo: se asigna `identificacion.tdn1` y el
+     **pipeline continua normalmente** (extraccion, validacion, plugins). Solo se establece el nivel TDN1 detectado.
+   - Si la clasificacion GPT retorna una **tipologia no mapeada al catalogo** (`tipologia = "Desconocido"`):
+     el pipeline **se detiene**, extraccion y validacion se omiten, `resultado.estado = "OK"`, y
+     `identificacion.propuestaTipologia` contiene la propuesta libre del modelo.
+3. **D4 — Markdown pre-procesado**: si se informa `instrucciones.classification.markdown`, el paso
+   `ExtraerMarkdownLayoutActivity` se omite y se usa ese texto directamente. Util en integraciones batch que
+   ya tienen el markdown extraido.
+4. **D7 — Clave de deduplicacion extendida**: el campo `nivelClasificacion` forma parte de la clave de deduplicacion
+   junto con `SHA256` y `classificationOnly`. Ver RN1.
 - Cada plugin puede devolver `DatosEnriquecidos` que se mergean acumulativamente en `DatosFinales`.
 - Un plugin con `returnsIdActivo=true` puede resolver/sobreescribir el `IdActivo` del documento.
 

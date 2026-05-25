@@ -101,6 +101,12 @@ public class ConfiguracionIA
     /// Rango [0.0–1.0].
     /// </summary>
     public double? UmbralConfianza { get; set; } = null;
+    /// <summary>
+    /// Markdown del documento pre-procesado por el caller.
+    /// Si se informa, el paso 2.8 (ExtraerMarkdownLayout) se omite y se usa este valor directamente.
+    /// null/vacío = el sistema extrae el markdown mediante DI Layout.
+    /// </summary>
+    public string? Markdown { get; set; }
 }
 
 public class Documento

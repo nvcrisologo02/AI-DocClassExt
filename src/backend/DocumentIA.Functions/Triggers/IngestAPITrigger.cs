@@ -112,9 +112,19 @@ public class IngestAPITrigger
                 return badResponse;
             }
 
+            // Capturar si el caller informó nivelClasificacion explícitamente (antes de normalizar con default)
+            var nivelClasificacionExplicito = !string.IsNullOrWhiteSpace(
+                contratoEntrada.Instrucciones.Classification.NivelClasificacion);
+
             ClassificationLevelResolver.ApplyTo(
                 contratoEntrada.Instrucciones.Classification,
                 _classificationRoutingSettings.NivelClasificacionDefault);
+
+            // D2: si el caller especifica nivelClasificacion, forzar provider=gpt (único que lo interpreta)
+            if (nivelClasificacionExplicito)
+            {
+                contratoEntrada.Instrucciones.Classification.Provider = "gpt";
+            }
 
             if (!_promptInstruccionesValidator.TryValidate(contratoEntrada.Instrucciones.Prompt, out var promptValidationError))
             {

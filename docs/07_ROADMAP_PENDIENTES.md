@@ -44,7 +44,7 @@ gantt
 | **EP2** | Clasificacion y extraccion AI | DONE | 100% | DI clasificacion + CU extraccion + fallback GPT. Fix preproceso markdown aplicado. Degradacion segura activa. |
 | **EP3** | Validacion y motor de reglas | IN PROGRESS | 88% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field (V-1), reglas condicionales (V-2). |
 | **EP4** | Persistencia y auditoria | DONE | 100% | 9 entidades EF Core, migraciones auto, auditoria por ejecucion, validaciones por campo. |
-| **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. En ejecución: pipeline de clasificación configurable por flujo + fallback global final. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
+| **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. En ejecución: pipeline de clasificación configurable por flujo + fallback global final. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3), campo `classification.providers` inline en peticion (D3 — ver nota). |
 | **EP6** | Observabilidad y pruebas | IN PROGRESS | 85% | 536 tests C# en verde (verificado 2026-05-04 en `DocumentIA.Tests.Unit`), customStatus y seguimiento de orquestacion activos. Completados T-1/T-2/T-3/T-4/T-5/T-6. Pendiente: extender pipeline a Admin/E2E/AssetResolver, dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
 | **EP7** | Proteccion datos / GDPR (ADO Epic 98519) | NEW | 0% | Cifrado en reposo (AES-256-GCM), masking PII en logs, retencion configurable, KV para secrets. Features ADO: 98520 F7.1, 98524 F7.2, 98529 F7.3, 98534 F7.4. |
 | **EP8** | Sistema de Plugins de Integracion (ADO Epic 98628) | DONE | 100% | Arquitectura plugins + plugin REST generico + plugins Atlas/Catastro/GDC + resiliencia y observabilidad. Features 98634-98637 todas Done. |
@@ -109,7 +109,7 @@ Normalizar_PDFValido_RetornaHashesYPaginas()
 
 ### 7.3.2 Integracion CI/CD — `dotnet test` en pipeline
 
-**Estado 2026-05-04:** parcialmente cubierto. `azure-pipelines.yml` (lineas 31-32 / 63-68) define `testsProject = src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj` y ejecuta tarea `Test` con `command: test` tras el `Build`. Los tests del proyecto Unit (536) corren en cada build.
+**Estado 2026-05-04:** parcialmente cubierto. `azure-pipelines.yml` (lineas 31-32 / 63-68) define `testsProject = src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj` y ejecuta tarea `Test` con `command: test` tras el `Build`. Los tests del proyecto Unit (611 en 2026-05-25) corren en cada build.
 
 **Pendiente:**
 
@@ -207,6 +207,7 @@ Impacto en tests: añadir ~15-20 tests nuevos en `ValidationEngineTests` cubrien
 | A-1 | Import/Export config tipologia | Medio | Endpoint `GET /api/tipologias/{id}/export` devuelve JSON completo (campos, reglas, plugins, prompt). Endpoint `POST /api/tipologias/import` acepta ese JSON y crea nueva tipologia en estado Borrador. Util para clonar entre entornos y compartir plantillas. |
 | A-2 | Diff de versiones en Admin | Medio | Pagina en Blazor Admin que muestra lado a lado dos versiones de la misma tipologia (familia). Resaltar campos añadidos/eliminados/modificados. Usar comparacion JSON estructural. |
 | A-3 | Auditoria de cambios de config | Bajo | Tabla `TipologiaConfigAudit` (usuario, timestamp, tipo cambio, diff JSON). Registrar cada publicacion y archivado. Mostrar historial en Admin. |
+| D3 _(pendiente — clasificacion inline)_ | Campo `classification.providers` inline en peticion | Medio | Campo `instrucciones.classification.providers: string[]` para especificar la lista ordenada de providers directamente en la peticion, sin necesidad de configurar un flow de nombre en servidor. Replicaria el comportamiento de `HybridTdnClasificarProvider` de forma dinamica. Complementario a `nivelClasificacion`. Ver `/memories/repo/d3-providers-dinamicos-pendiente.md` para contexto tecnico completo. |
 
 ### 7.4.4 Rendimiento y eficiencia
 

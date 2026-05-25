@@ -355,6 +355,7 @@ public class DocumentProcessOrchestrator
         try
         {
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
+            salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
             if (entradaPorObjectIdGdc)
             {
@@ -400,7 +401,8 @@ public class DocumentProcessOrchestrator
                             new ObtenerUltimaEjecucionDuplicadoInput
                             {
                                 SHA256 = duplicadoPorMd5.SHA256,
-                                ClassificationOnly = entrada.Instrucciones.ClassificationOnly
+                                ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
+                                NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion
                             });
 
                         if (salidaDuplicado is not null)
@@ -475,7 +477,8 @@ public class DocumentProcessOrchestrator
                         new ObtenerUltimaEjecucionDuplicadoInput
                         {
                             SHA256 = salida.Integridad.SHA256,
-                            ClassificationOnly = entrada.Instrucciones.ClassificationOnly
+                            ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
+                            NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion
                         });
 
                     if (salidaDuplicado is not null)
@@ -579,6 +582,18 @@ public class DocumentProcessOrchestrator
                         exPrep,
                         "PrepararDocumentoClasificacionActivity falló. Se usará documento completo para clasificación.");
                 }
+            }
+
+            // D4: si el caller aporta markdown pre-procesado en las instrucciones, inyectarlo directamente.
+            // La condición del paso 2.8 comprueba !datosNormalizados.ContainsKey("Markdown"),
+            // por lo que la inyección aquí evita la llamada innecesaria a ExtraerMarkdownLayoutActivity.
+            if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.Classification.Markdown))
+            {
+                datosNormalizados["Markdown"] = entrada.Instrucciones.Classification.Markdown;
+                RegistrarMarkdown(entrada.Instrucciones.Classification.Markdown, "InstruccionesCallerPreClasificacion");
+                logger.LogInformation(
+                    "Paso 2.8 omitido: markdown inyectado desde instrucciones del caller ({Len} chars)",
+                    entrada.Instrucciones.Classification.Markdown.Length);
             }
 
             // 2.8: Asegurar contexto textual para clasificación.
@@ -747,73 +762,77 @@ public class DocumentProcessOrchestrator
             if (resultadoClasificacion.ClasificacionParcial)
             {
                 var tipologiaParcial = resultadoClasificacion.TipologiaDetectada ?? string.Empty;
+                var esVirtual = string.IsNullOrWhiteSpace(tipologiaParcial)
+                    || string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase);
 
-                salida.Identificacion.Tipologia = tipologiaParcial;
-                salida.Identificacion.TipologiaFamilia = tipologiaParcial;
-                salida.Identificacion.TipologiaVersion = string.Empty;
-                salida.DetalleEjecucion.RunTipologia = tipologiaParcial;
-
-                // En clasificación parcial TDN1, tipologiaParcial ES el código TDN1.
-                // Solo se asigna si no es "Desconocido" (caso tipología virtual sin código de catálogo).
-                if (!string.IsNullOrWhiteSpace(tipologiaParcial)
-                    && !string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase))
+                if (esVirtual)
                 {
-                    salida.Identificacion.Tdn1 = tipologiaParcial;
+                    // Tipología virtual: GPT identificó familia TDN1 pero no puede mapearla al catálogo.
+                    // El pipeline se detiene aquí con Estado=OK y PropuestaTipologia accesible en la salida.
+                    salida.Identificacion.Tipologia = tipologiaParcial;
+                    salida.Identificacion.TipologiaFamilia = tipologiaParcial;
+                    salida.Identificacion.TipologiaVersion = string.Empty;
+                    salida.Identificacion.PropuestaTipologia = resultadoClasificacion.PropuestaTipologia;
+                    salida.DetalleEjecucion.RunTipologia = tipologiaParcial;
+
+                    salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
+                    {
+                        Modelo = "skipped",
+                        LayoutEnabled = false,
+                        FallbackUsado = false,
+                        FallbackRazon = null,
+                        ConfianzaExtraccion = 0,
+                        ProveedorExtrac = "none",
+                        ConfianzaPorCampo = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
+                        CamposConDuda = new List<string>(),
+                        TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                    };
+
+                    salida.DatosExtraidos = new Dictionary<string, object>();
+                    salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
+                    {
+                        Normalizaciones = new List<string>
+                        {
+                            "Tipología virtual TDN1: GPT no resolvió código de catálogo. Pipeline detenido con PropuestaTipologia."
+                        },
+                        Markdown = null,
+                        Validaciones = new List<string>(),
+                        Inconsistencias = new List<string>(),
+                        ConfianzaValidacion = 1.0
+                    };
+
+                    MarcarActividadOmitida("ResolverTipologia", "Tipología virtual: sin código de catálogo");
+                    MarcarActividadOmitida("Extraer", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("Prompt", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("Validar", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("ObtenerActivo", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("Integrar", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("SubirGDC", "Tipología virtual TDN1");
+
+                    var confidenceCfgVirtual = new ConfidenceConfig();
+                    salida.Resultado.Estado = "OK";
+                    salida.Resultado.ConfianzaGlobal = RedondearSalida(
+                        ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
+                    salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
+                        salida.Resultado.ConfianzaGlobal,
+                        confidenceCfgVirtual);
+                    salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                    salida.Resultado.ConfianzaExtraccion = 0;
+                    salida.Resultado.ConfianzaValidacion = 1.0;
+
+                    await EjecutarPasoNegocioSinResultado(
+                        "Persistir",
+                        () => context.CallActivityAsync(
+                            "PersistirActivity",
+                            salida));
+
+                    FinalizarSeguimiento("Completed", "Tipología virtual TDN1: propuesta sin código de catálogo");
+                    return salida;
                 }
 
-                salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
-                {
-                    Modelo = "skipped",
-                    LayoutEnabled = false,
-                    FallbackUsado = false,
-                    FallbackRazon = null,
-                    ConfianzaExtraccion = 0,
-                    ProveedorExtrac = "none",
-                    ConfianzaPorCampo = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
-                    CamposConDuda = new List<string>(),
-                    TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
-                };
-
-                salida.DatosExtraidos = new Dictionary<string, object>();
-                salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
-                {
-                    Normalizaciones = new List<string>
-                    {
-                        "Clasificación parcial TDN1 activa: extracción, validación, GDC y asset resolver omitidos"
-                    },
-                    Markdown = null,
-                    Validaciones = new List<string>(),
-                    Inconsistencias = new List<string>(),
-                    ConfianzaValidacion = 1.0
-                };
-
-                MarcarActividadOmitida("ResolverTipologia", "Clasificación parcial TDN1");
-                MarcarActividadOmitida("Extraer", "Clasificación parcial TDN1");
-                MarcarActividadOmitida("Prompt", "Clasificación parcial TDN1");
-                MarcarActividadOmitida("Validar", "Clasificación parcial TDN1");
-                MarcarActividadOmitida("ObtenerActivo", "Clasificación parcial TDN1");
-                MarcarActividadOmitida("Integrar", "Clasificación parcial TDN1");
-                MarcarActividadOmitida("SubirGDC", "Clasificación parcial TDN1");
-
-                var confidenceCfgParcial = new ConfidenceConfig();
-                salida.Resultado.Estado = "OK";
-                salida.Resultado.ConfianzaGlobal = RedondearSalida(
-                    ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
-                salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
-                    salida.Resultado.ConfianzaGlobal,
-                    confidenceCfgParcial);
-                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
-                salida.Resultado.ConfianzaExtraccion = 0;
-                salida.Resultado.ConfianzaValidacion = 1.0;
-
-                await EjecutarPasoNegocioSinResultado(
-                    "Persistir",
-                    () => context.CallActivityAsync(
-                        "PersistirActivity",
-                        salida));
-
-                FinalizarSeguimiento("Completed", "Clasificación parcial TDN1 completada");
-                return salida;
+                // Clasificación parcial con código TDN1 conocido: asignar Tdn1 y continuar pipeline.
+                // nivelClasificacion=TDN1 no implica ClassificationOnly; el pipeline sigue normalmente.
+                salida.Identificacion.Tdn1 = tipologiaParcial;
             }
 
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";

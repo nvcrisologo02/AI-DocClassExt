@@ -83,7 +83,7 @@ flowchart TD
 | 5 | Clasificar | `ClasificarActivity` | byte[] PDF | TipologiaDetectada, Confianza | Pipeline configurable por flujo, secuencial hasta satisfactorio y fallback global final |
 | 6 | ResolverTipologia | `ResolverTipologiaActivity` | codigo tipologia | TipologiaConfig completa | Resuelve familia@version → config |
 | 7 | Extraer | `ExtraerActivity` | byte[] + tipologia config | DatosExtraidos (Dictionary) | CU/DI/GPT segun config |
-| 8 | ExtraerMarkdownLayout | `ExtraerMarkdownLayoutActivity` | byte[] PDF | Markdown texto | Layout extraction con DI (opcional) |
+| 8 | ExtraerMarkdownLayout | `ExtraerMarkdownLayoutActivity` | byte[] PDF | Markdown texto | Layout extraction con DI. **Se omite** si `instrucciones.classification.markdown` viene informado (D4): en ese caso el markdown aportado se inyecta directamente en `datosNormalizados["Markdown"]`. |
 | 9 | Prompt | `PromptActivity` | datos + markdown + prompt config | Datos prompt enriquecidos | GPT-4o-mini con prompt libre (opcional) |
 | 10 | Validar | `ValidarActivity` | DatosExtraidos + reglas JSON | ValidationReport | 11 tipos de validador |
 | 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
@@ -147,9 +147,37 @@ Restricción de entrada:
 
 - `classificationOnly=true` es incompatible con `expectedType` informado (validación en trigger HTTP, respuesta `400`).
 
+### Clasificación Jerárquica GPT (nivelClasificacion) — D1, D2, D4, D6, D7
+
+Cuando se informa `instrucciones.classification.nivelClasificacion`:
+
+**D2 — Force provider GPT** (`IngestAPITrigger.cs`):
+- Si `nivelClasificacion` no está vacío, se aplica `ClassificationLevelResolver.ApplyTo()` para resolver el nivel.
+- Tras el resolver, si el nivel fue explícito, se fuerza `classification.Provider = "gpt"` independientemente de lo indicado en la petición.
+
+**D4 — Markdown pre-procesado** (`DocumentProcessOrchestrator.cs`, antes del paso 2.8):
+- Si `entrada.Instrucciones.Classification.Markdown` no es null ni vacío, se inyecta en `datosNormalizados["Markdown"]`
+  y se omite la llamada a `ExtraerMarkdownLayoutActivity`.
+
+**D1 — Clasificación parcial reestructurada** (`DocumentProcessOrchestrator.cs`, bloque `ClasificacionParcial`):
+- Si `clasificacion.ClasificacionParcial = true`:
+  - Si `tipologiaParcial == null || "Desconocido"` → **tipología virtual**: `salida.Identificacion.PropuestaTipologia = propuestaLibre`,
+    `salida.Identificacion.Tipologia = "Desconocido"`, pipeline detenido, estado `OK`.
+  - Si `tipologiaParcial` es un código TDN1 conocido → **código conocido**: `salida.Identificacion.Tdn1 = tipologiaParcial`,
+    el pipeline continúa normalmente (extracción, validación, plugins). Estado final determinado por el resto del pipeline.
+
+**D6 — PropuestaTipologia en salida** (`ContratoSalida.cs`):
+- Nueva propiedad `Identificacion.PropuestaTipologia` (string, inicializada a `string.Empty`). Solo se informa cuando hay tipología virtual.
+
+**D7 — NivelClasificacion en clave de deduplicación**:
+- `ContratoSalida.DetalleEjecucion.NivelClasificacion` (string?) — refleja el valor de la petición.
+- `DocumentoEjecucionEntity.NivelClasificacion` (nvarchar(20) NULL) — migración `20260525151946_AddNivelClasificacionToEjecuciones`.
+- `ObtenerUltimaEjecucionDuplicadoActivity` incluye `NivelClasificacion` en el filtro LINQ in-memory.
+- `PersistirActivity` persiste el valor en la entidad BD.
+
 Deduplicación:
 
-- La reutilización de ejecuciones previas se confronta por `SHA256 + ClassificationOnly` para evitar mezclar procesos completos con procesos de solo clasificación.
+- La reutilización de ejecuciones previas se confronta por `SHA256 + ClassificationOnly + NivelClasificacion` para evitar mezclar procesos completos con procesos de solo clasificación, y para distinguir ejecuciones con distinto nivel jerárquico GPT.
 
 Limit pages en ClassificationOnly:
 
@@ -180,6 +208,8 @@ Resumen de comportamiento por activity:
 Estados funcionales de cierre del pipeline:
 
 - `OK`
+- `OK` _(clasificación parcial — tipología virtual)_: cuando `nivelClasificacion` activo y tipología no mapeada al catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` informado. Pipeline detenido antes de extracción.
+- `NO_CLASIFICADO`: clasificación parcial con código TDN1 conocido pero tipología TDN1/TDN2 no resuelta. Pipeline continúa con tipología parcial.
 - `VALIDACION_CON_ERRORES`
 - `DUPLICADO`
 - `BAJA_CONFIANZA_CLASIFICACION`

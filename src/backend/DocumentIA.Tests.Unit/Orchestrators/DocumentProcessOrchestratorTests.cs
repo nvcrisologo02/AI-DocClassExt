@@ -526,7 +526,7 @@ public class DocumentProcessOrchestratorTests
             Confianza = 0.92,
             ConfianzaGPT = 0.92,
             ProveedorClasif = "GPT4oMini",
-            TipologiaDetectada = "NOTS",
+            TipologiaDetectada = "Desconocido",  // Tipología virtual → pipeline se detiene
             ClasificacionParcial = true,
             PropuestaTipologia = "Nota simple registral"
         });
@@ -534,9 +534,10 @@ public class DocumentProcessOrchestratorTests
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.Resultado.Estado.Should().Be("OK");
-        salida.Identificacion.Tipologia.Should().Be("NOTS");
-        salida.Identificacion.TipologiaFamilia.Should().Be("NOTS");
+        salida.Identificacion.Tipologia.Should().Be("Desconocido");
+        salida.Identificacion.TipologiaFamilia.Should().Be("Desconocido");
         salida.Identificacion.TipologiaVersion.Should().BeEmpty();
+        salida.Identificacion.PropuestaTipologia.Should().Be("Nota simple registral");
         salida.DetalleEjecucion.Clasificacion.ClasificacionParcial.Should().BeTrue();
         salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Nota simple registral");
         salida.DetalleEjecucion.Extraccion.Modelo.Should().Be("skipped");
@@ -701,7 +702,8 @@ public class DocumentProcessOrchestratorTests
 
     /// <summary>
     /// Cuando ClasificacionParcial=true con TipologiaDetectada diferente de "Desconocido",
-    /// el orquestador debe asignar Identificacion.Tdn1 con el código TDN1.
+    /// el orquestador debe asignar Identificacion.Tdn1 con el código TDN1 y continuar el pipeline.
+    /// (D1: clasificacionParcial con código TDN1 conocido ya no detiene el pipeline)
     /// </summary>
     [Fact]
     public async Task RunOrchestrator_ClasificacionParcial_AsignaTdn1EnIdentificacion()
@@ -722,13 +724,17 @@ public class DocumentProcessOrchestratorTests
             ClasificacionParcial = true,
             PropuestaTipologia = "Nota simple registral"
         });
+        // D1: pipeline continúa tras asignar Tdn1; ResolverTipologia es llamado y puede fallar
+        context.SetupActivityThrow("ResolverTipologiaActivity", new KeyNotFoundException("No existe la tipologia: NOTS"));
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("OK");
-        salida.Identificacion.Tipologia.Should().Be("NOTS");
+        // Tdn1 asignado antes de continuar el pipeline
         salida.Identificacion.Tdn1.Should().Be("NOTS");
-        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+        // ResolverTipologia fue invocado (pipeline no se detuvo en ClasificacionParcial)
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().NotBeNull();
+        // KeyNotFoundException → NO_CLASIFICADO (comportamiento del orquestador)
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
     }
 
     /// <summary>
