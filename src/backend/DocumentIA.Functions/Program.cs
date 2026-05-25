@@ -85,6 +85,7 @@ var host = new HostBuilder()
         // Repositories
         services.AddScoped<IDocumentoRepository, DocumentoRepository>();
         services.AddScoped<ITipologiaRepository, TipologiaRepository>();
+        services.AddScoped<ICatalogoTdnRepository, CatalogoTdnRepository>();
         services.AddScoped<IModeloConfigRepository, ModeloConfigRepository>();
         services.AddScoped<IPluginTipologiaConfigRepository, PluginTipologiaConfigRepository>();
         services.AddScoped<IAuditoriaRepository, AuditoriaRepository>();
