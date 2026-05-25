@@ -127,6 +127,8 @@ public class ResultadoClasificacion
     public string? FallbackRazon { get; set; }
     public double? UmbralFallbackAplicado { get; set; }
     public string? TipologiaDetectada { get; set; }
+    public bool ClasificacionParcial { get; set; }
+    public string PropuestaTipologia { get; set; } = string.Empty;
 
     /// <summary>Texto extraído por DI durante la clasificación. El orquestador lo usa para propagar a DatosNormalizados["Markdown"] y luego lo limpia antes de incluirlo en la respuesta.</summary>
     public string? ContentExtraido { get; set; }

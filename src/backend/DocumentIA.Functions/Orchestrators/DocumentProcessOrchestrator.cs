@@ -690,6 +690,71 @@ public class DocumentProcessOrchestrator
             }
             resultadoClasificacion.ContentExtraido = null; // limpiar: no exponer en respuesta
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
+
+            if (resultadoClasificacion.ClasificacionParcial)
+            {
+                var tipologiaParcial = resultadoClasificacion.TipologiaDetectada ?? string.Empty;
+
+                salida.Identificacion.Tipologia = tipologiaParcial;
+                salida.Identificacion.TipologiaFamilia = tipologiaParcial;
+                salida.Identificacion.TipologiaVersion = string.Empty;
+                salida.DetalleEjecucion.RunTipologia = tipologiaParcial;
+
+                salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
+                {
+                    Modelo = "skipped",
+                    LayoutEnabled = false,
+                    FallbackUsado = false,
+                    FallbackRazon = null,
+                    ConfianzaExtraccion = 0,
+                    ProveedorExtrac = "none",
+                    ConfianzaPorCampo = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
+                    CamposConDuda = new List<string>(),
+                    TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                };
+
+                salida.DatosExtraidos = new Dictionary<string, object>();
+                salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
+                {
+                    Normalizaciones = new List<string>
+                    {
+                        "Clasificación parcial TDN1 activa: extracción, validación, GDC y asset resolver omitidos"
+                    },
+                    Markdown = null,
+                    Validaciones = new List<string>(),
+                    Inconsistencias = new List<string>(),
+                    ConfianzaValidacion = 1.0
+                };
+
+                MarcarActividadOmitida("ResolverTipologia", "Clasificación parcial TDN1");
+                MarcarActividadOmitida("Extraer", "Clasificación parcial TDN1");
+                MarcarActividadOmitida("Prompt", "Clasificación parcial TDN1");
+                MarcarActividadOmitida("Validar", "Clasificación parcial TDN1");
+                MarcarActividadOmitida("ObtenerActivo", "Clasificación parcial TDN1");
+                MarcarActividadOmitida("Integrar", "Clasificación parcial TDN1");
+                MarcarActividadOmitida("SubirGDC", "Clasificación parcial TDN1");
+
+                var confidenceCfgParcial = new ConfidenceConfig();
+                salida.Resultado.Estado = "OK";
+                salida.Resultado.ConfianzaGlobal = RedondearSalida(
+                    ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
+                salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
+                    salida.Resultado.ConfianzaGlobal,
+                    confidenceCfgParcial);
+                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                salida.Resultado.ConfianzaExtraccion = 0;
+                salida.Resultado.ConfianzaValidacion = 1.0;
+
+                await EjecutarPasoNegocioSinResultado(
+                    "Persistir",
+                    () => context.CallActivityAsync(
+                        "PersistirActivity",
+                        salida));
+
+                FinalizarSeguimiento("Completed", "Clasificación parcial TDN1 completada");
+                return salida;
+            }
+
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
             ResolvedTipologia tipologiaResuelta;
 

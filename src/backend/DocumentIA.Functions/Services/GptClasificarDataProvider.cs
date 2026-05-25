@@ -1,14 +1,16 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Azure;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
+using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Abstractions;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
@@ -21,6 +23,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 {
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
     private readonly ClassificationTipologiaPromptBuilder _tipologiaPromptBuilder;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ClassificationRoutingSettings _routingSettings;
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
     private readonly Lazy<ChatClient> _chatClient;
@@ -28,10 +32,14 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     public GptClasificarDataProvider(
         ClassificationModelRegistryLoader modelRegistryLoader,
         ClassificationTipologiaPromptBuilder tipologiaPromptBuilder,
+        IServiceScopeFactory scopeFactory,
+        IOptions<ClassificationRoutingSettings> routingSettings,
         ILogger<GptClasificarDataProvider> logger)
     {
         _modelRegistryLoader = modelRegistryLoader;
         _tipologiaPromptBuilder = tipologiaPromptBuilder;
+        _scopeFactory = scopeFactory;
+        _routingSettings = routingSettings.Value;
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
         _chatClient = new Lazy<ChatClient>(CreateChatClient);
@@ -50,26 +58,28 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             input.Entrada.Documento.Name,
             model.DeploymentName);
 
-        // Cada invocación respeta el TTL de 5 min del IMemoryCache (no Lazy fijo).
-        var tipologias = _tipologiaPromptBuilder.Build();
-        var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
+        var nivelClasificacion = ClassificationLevelResolver.Resolve(
+            input.Entrada.Instrucciones.Classification.NivelClasificacion,
+            _routingSettings.NivelClasificacionDefault);
 
-        var systemMessage = new SystemChatMessage(
+        var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
+        var contextoPrompt = BuildInstructionPromptContext(input.Entrada.Instrucciones.Prompt);
+
+        var phase1SystemMessage = new SystemChatMessage(
             "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
             "especialmente documentos de SAREB (Sociedad de Gestión de Activos procedentes de la Reestructuración Bancaria). " +
-            "Analiza el documento adjunto y clasifícalo en una de las tipologías indicadas. " +
-            "Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, " +
-            "usando exactamente este formato: " +
-            "{\"tipologia\": \"<tipologiaId>\", \"confianza\": <número entre 0.0 y 1.0>, \"razon\": \"<explicación breve en español>\"}");
+            "Analiza el documento adjunto y clasifícalo en una familia TDN1. " +
+            ClassificationTipologiaPromptBuilder.Phase1ResponseFormatInstruction);
 
-        var textoUsuario =
-            $"Clasifica este documento entre las siguientes tipologías conocidas:\n\n{tipologias}\n\n" +
-            "Si el documento no corresponde a ninguna tipología conocida, " +
-            "responde con tipologiaId=\"Desconocido\" y confianza inferior a 0.3.";
+        var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
+        var phase1UserText =
+            $"Prompt adicional de instrucciones (si aplica):\n{contextoPrompt}\n\n" +
+            $"Familias TDN1 disponibles:\n{phase1Catalog}\n\n" +
+            "Si no puedes resolver una familia, devuelve tdn1=null y completa propuesta con una sugerencia no vinculante.";
 
         if (!string.IsNullOrWhiteSpace(contextoTexto))
         {
-            textoUsuario += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}";
+            phase1UserText += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}";
         }
         else
         {
@@ -77,12 +87,99 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 "No hay contexto textual preprocesado para el fallback de clasificación en {Documento}. Se continuará con contexto mínimo.",
                 input.Entrada.Documento.Name);
 
-            textoUsuario +=
+            phase1UserText +=
                 $"\n\nNo hay contenido textual disponible para este fallback. " +
                 $"Nombre de archivo: {input.Entrada.Documento.Name}.";
         }
 
-        var userMessage = new UserChatMessage(ChatMessageContentPart.CreateTextPart(textoUsuario));
+        var phase1ResponseText = await CompleteChatAsync(model, phase1SystemMessage, phase1UserText, cancellationToken);
+
+        var phase1Parsed = GptHierarchicalClassificationParser.ParsePhase1(phase1ResponseText);
+        if (!phase1Parsed.Success || phase1Parsed.Value is null)
+        {
+            stopwatch.Stop();
+            return BuildUnclassifiedResult(model, phase1Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase1ParsingErrorReason, string.Empty);
+        }
+
+        var propuesta = phase1Parsed.Value.Propuesta;
+        if (string.IsNullOrWhiteSpace(phase1Parsed.Value.Tdn1))
+        {
+            stopwatch.Stop();
+            return BuildUnclassifiedResult(model, "tdn1_no_resuelto", propuesta);
+        }
+
+        var tdn1Code = phase1Parsed.Value.Tdn1!;
+        if (string.Equals(nivelClasificacion, ClassificationLevelResolver.LevelTdn1, StringComparison.OrdinalIgnoreCase))
+        {
+            stopwatch.Stop();
+            return new ResultadoClasificacion
+            {
+                Modelo = model.DeploymentName,
+                ProveedorClasif = "GPT4oMini",
+                TipologiaDetectada = tdn1Code,
+                Confianza = 0.9,
+                ConfianzaGPT = 0.9,
+                ClasificacionParcial = true,
+                PropuestaTipologia = propuesta
+            };
+        }
+
+        var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code);
+        if (string.IsNullOrWhiteSpace(phase2Catalog))
+        {
+            throw new InvalidOperationException($"No se encontraron subtipos TDN2 para la familia {tdn1Code}.");
+        }
+
+        var phase2SystemMessage = new SystemChatMessage(
+            "Eres un sistema experto en clasificación documental. " +
+            "Debes seleccionar exclusivamente un subtipo TDN2 de la familia ya resuelta. " +
+            ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction);
+
+        var phase2UserText =
+            $"Familia TDN1 resuelta: {tdn1Code}\n\n" +
+            $"Subtipos TDN2 disponibles:\n{phase2Catalog}";
+
+        if (!string.IsNullOrWhiteSpace(contextoTexto))
+        {
+            phase2UserText += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}";
+        }
+
+        var phase2ResponseText = await CompleteChatAsync(model, phase2SystemMessage, phase2UserText, cancellationToken);
+        var phase2Parsed = GptHierarchicalClassificationParser.ParsePhase2(phase2ResponseText);
+
+        if (!phase2Parsed.Success || phase2Parsed.Value is null)
+        {
+            stopwatch.Stop();
+            return BuildUnclassifiedResult(model, phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason, propuesta);
+        }
+
+        var tipologiaCode = ResolveTipologiaByTdn2(phase2Parsed.Value.Tdn2);
+        if (string.IsNullOrWhiteSpace(tipologiaCode))
+        {
+            stopwatch.Stop();
+            return BuildUnclassifiedResult(model, "tdn2_sin_tipologia_asociada", propuesta);
+        }
+
+        stopwatch.Stop();
+
+        return new ResultadoClasificacion
+        {
+            Modelo = model.DeploymentName,
+            TipologiaDetectada = tipologiaCode,
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            PropuestaTipologia = propuesta
+        };
+    }
+
+    private async Task<string> CompleteChatAsync(
+        ClassificationModelConfig model,
+        SystemChatMessage systemMessage,
+        string userText,
+        CancellationToken cancellationToken)
+    {
+        var userMessage = new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText));
 
         var options = new ChatCompletionOptions
         {
@@ -99,70 +196,88 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             options,
             cts.Token);
 
-        stopwatch.Stop();
-        var responseText = response.Value.Content[0].Text;
-
-        _logger.LogDebug(
-            "Respuesta GPT clasificación ({Ms}ms): {Response}",
-            stopwatch.ElapsedMilliseconds,
-            responseText);
-
-        return ParseGptResponse(responseText, model);
+        return response.Value.Content[0].Text;
     }
 
-    private ResultadoClasificacion ParseGptResponse(string responseText, ClassificationModelConfig model)
+    private string? ResolveTipologiaByTdn2(string tdn2Code)
     {
-        try
+        if (string.IsNullOrWhiteSpace(tdn2Code))
         {
-            using var doc = JsonDocument.Parse(responseText);
-            var root = doc.RootElement;
+            return null;
+        }
 
-            var tipologia = root.TryGetProperty("tipologia", out var tp) ? tp.GetString() : null;
-            var confianza = root.TryGetProperty("confianza", out var conf)
-                && conf.TryGetDouble(out var c) ? c : 0.0;
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
+        var tipologias = repository.GetAllPublishedAsync().GetAwaiter().GetResult();
 
-            if (!string.IsNullOrWhiteSpace(tipologia))
+        foreach (var tipologia in tipologias)
+        {
+            if (string.IsNullOrWhiteSpace(tipologia.ConfiguracionJson))
             {
-                return new ResultadoClasificacion
+                continue;
+            }
+
+            try
+            {
+                var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(tipologia.ConfiguracionJson, new JsonSerializerOptions
                 {
-                    Modelo = model.DeploymentName,
-                    TipologiaDetectada = tipologia,
-                    Confianza = Math.Clamp(confianza, 0.0, 1.0),
-                    ConfianzaGPT = Math.Clamp(confianza, 0.0, 1.0),
-                    ProveedorClasif = "GPT4oMini"
-                };
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (config is null)
+                {
+                    continue;
+                }
+
+                if (string.Equals(config.ResolvedTdn2, tdn2Code, StringComparison.OrdinalIgnoreCase))
+                {
+                    return string.IsNullOrWhiteSpace(tipologia.Codigo) ? config.TipologiaId : tipologia.Codigo;
+                }
+            }
+            catch
+            {
+                // Ignorar tipologías malformadas y continuar la búsqueda.
             }
         }
-        catch (JsonException)
+
+        return null;
+    }
+
+    private static string BuildInstructionPromptContext(PromptInstrucciones? prompt)
+    {
+        if (prompt is null)
         {
-            _logger.LogWarning(
-                "Respuesta GPT no es JSON válido. Intentando extracción regex. Respuesta: {Response}",
-                responseText);
+            return "(sin prompt adicional)";
         }
 
-        // Fallback regex si el JSON está malformado
-        var tipologiaMatch = Regex.Match(responseText, @"""tipologia""\s*:\s*""([^""]+)""");
-        var confianzaMatch = Regex.Match(responseText, @"""confianza""\s*:\s*([0-9]*\.?[0-9]+)");
+        var fragments = new List<string>();
 
-        var tipologiaFallback = tipologiaMatch.Success
-            ? tipologiaMatch.Groups[1].Value
-            : "Desconocido";
-        var confianzaFallback = confianzaMatch.Success
-            && double.TryParse(confianzaMatch.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var cf)
-            ? cf : 0.1;
+        if (!string.IsNullOrWhiteSpace(prompt.SystemPrompt))
+        {
+            fragments.Add($"SystemPrompt: {prompt.SystemPrompt.Trim()}");
+        }
 
-        _logger.LogWarning(
-            "Tipología extraída via regex: {Tipologia} (confianza: {Confianza:F3})",
-            tipologiaFallback,
-            confianzaFallback);
+        if (!string.IsNullOrWhiteSpace(prompt.UserPromptTemplate))
+        {
+            fragments.Add($"UserPromptTemplate: {prompt.UserPromptTemplate.Trim()}");
+        }
 
+        return fragments.Count == 0
+            ? "(sin prompt adicional)"
+            : string.Join("\n", fragments);
+    }
+
+    private static ResultadoClasificacion BuildUnclassifiedResult(ClassificationModelConfig model, string reason, string propuesta)
+    {
         return new ResultadoClasificacion
         {
             Modelo = model.DeploymentName,
-            TipologiaDetectada = tipologiaFallback,
-            Confianza = Math.Clamp(confianzaFallback, 0.0, 1.0),
-            ConfianzaGPT = Math.Clamp(confianzaFallback, 0.0, 1.0),
-            ProveedorClasif = "GPT4oMini"
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            Confianza = 0.0,
+            ConfianzaGPT = 0.0,
+            FallbackRazon = reason,
+            PropuestaTipologia = propuesta
         };
     }
 
