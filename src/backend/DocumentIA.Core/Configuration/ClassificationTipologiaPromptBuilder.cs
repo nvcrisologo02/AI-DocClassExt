@@ -8,6 +8,12 @@ namespace DocumentIA.Core.Configuration;
 
 public class ClassificationTipologiaPromptBuilder
 {
+    public const string Phase1ResponseFormatInstruction =
+        "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\"}. No incluyas texto fuera del JSON.";
+
+    public const string Phase2ResponseFormatInstruction =
+        "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\"}. No incluyas texto fuera del JSON.";
+
     private readonly IMemoryCache _cache;
     private readonly IServiceScopeFactory _scopeFactory;
 
@@ -23,6 +29,48 @@ public class ClassificationTipologiaPromptBuilder
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
             return BuildFromDatabase();
+        }) ?? string.Empty;
+    }
+
+    public string BuildTdn1Catalog()
+    {
+        return _cache.GetOrCreate("clasificacion:catalogo:tdn1", entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+
+            using var scope = _scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<ICatalogoTdnRepository>();
+            var familias = repository
+                .GetFamiliasTdnActivasAsync()
+                .GetAwaiter()
+                .GetResult();
+
+            return string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Descripcion}"));
+        }) ?? string.Empty;
+    }
+
+    public string BuildTdn2CatalogByFamilia(string tdn1Codigo)
+    {
+        if (string.IsNullOrWhiteSpace(tdn1Codigo))
+        {
+            throw new ArgumentException("El código de familia TDN1 es obligatorio.", nameof(tdn1Codigo));
+        }
+
+        var normalizedFamily = tdn1Codigo.Trim().ToUpperInvariant();
+        var cacheKey = $"clasificacion:catalogo:tdn2:{normalizedFamily}";
+
+        return _cache.GetOrCreate(cacheKey, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+
+            using var scope = _scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<ICatalogoTdnRepository>();
+            var subtipos = repository
+                .GetSubtiposByFamiliaAsync(normalizedFamily)
+                .GetAwaiter()
+                .GetResult();
+
+            return string.Join("\n", subtipos.Select(s => $"- {s.Codigo}: {s.Descripcion}"));
         }) ?? string.Empty;
     }
 
