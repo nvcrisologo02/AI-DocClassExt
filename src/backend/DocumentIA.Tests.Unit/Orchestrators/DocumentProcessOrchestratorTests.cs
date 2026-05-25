@@ -651,4 +651,120 @@ public class DocumentProcessOrchestratorTests
             .Select(a => a.Estado)
             .Should().OnlyContain(estado => estado == "Skipped" || estado == "Completed");
     }
+
+    // ── Tests de regresión sesión 2026-05-25 ────────────────────────────────
+
+    /// <summary>
+    /// Paso 2.8: cuando no hay Markdown en datosNormalizados y el provider no es DI/CU,
+    /// el orquestador debe llamar ExtraerMarkdownLayoutActivity y propagar el resultado
+    /// a DatosNormalizados antes de ClasificarActivity.
+    /// </summary>
+    [Fact]
+    public async Task RunOrchestrator_Paso28_SinMarkdown_LlamaExtraerMarkdownLayoutYPropagaAlClasificar()
+    {
+        // Preparation disabled (default) → docClasif.DocumentoBase64Clasif = entrada.Documento.Content.Base64
+        // Provider null/empty → ClasificacionProviderGeneraMarkdownPropio returns false → paso 2.8 activo
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada()); // no ExpectedType, no provider
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult()); // sin clave "Markdown"
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Markdown = "# Documento de prueba generado por Layout",
+            Paginas = 2
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "NOTS",
+            ClasificacionParcial = true
+        });
+
+        await orchestrator.RunOrchestrator(context);
+
+        // Verificar que ExtraerMarkdownLayoutActivity fue invocada
+        var markdownInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
+        markdownInput.Should().NotBeNull();
+        markdownInput!.DocumentoBase64.Should().NotBeNullOrWhiteSpace();
+
+        // Verificar que el markdown fue propagado a ClasificarActivity
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.DatosNormalizados.Should().ContainKey("Markdown");
+        clasifInput.DatosNormalizados["Markdown"].Should().Be("# Documento de prueba generado por Layout");
+    }
+
+    /// <summary>
+    /// Cuando ClasificacionParcial=true con TipologiaDetectada diferente de "Desconocido",
+    /// el orquestador debe asignar Identificacion.Tdn1 con el código TDN1.
+    /// </summary>
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionParcial_AsignaTdn1EnIdentificacion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "NOTS",
+            ClasificacionParcial = true,
+            PropuestaTipologia = "Nota simple registral"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("NOTS");
+        salida.Identificacion.Tdn1.Should().Be("NOTS");
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    /// <summary>
+    /// Tipología virtual (tdn1=null, propuesta≠null → FallbackRazon="tdn1_virtual_propuesta"):
+    /// el orquestador devuelve Estado=OK con Tipologia="Desconocido" y Tdn1 vacío/nulo
+    /// (guard impide asignar "Desconocido" a Tdn1), pero PropuestaTipologia queda accesible
+    /// en DetalleEjecucion.Clasificacion.
+    /// </summary>
+    [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualParcial_EstadoOkConDesconocidoYTdn1Nulo()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.1,
+            ConfianzaGPT = 0.1,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            ClasificacionParcial = true,
+            FallbackRazon = "tdn1_virtual_propuesta",
+            PropuestaTipologia = "Solicitud de cambio de titularidad"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("Desconocido");
+        salida.Identificacion.Tdn1.Should().BeNullOrWhiteSpace(); // Guard: "Desconocido" no se asigna a Tdn1
+        salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be("tdn1_virtual_propuesta");
+        salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Solicitud de cambio de titularidad");
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
 }
