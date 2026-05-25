@@ -105,6 +105,23 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (string.IsNullOrWhiteSpace(phase1Parsed.Value.Tdn1))
         {
             stopwatch.Stop();
+            // GPT no pudo mapear a ningún código del catálogo.
+            // Si aportó una propuesta libre (tipología virtual), devolver ClasificacionParcial=true
+            // para que el orquestador exponga la sugerencia en lugar de fallar con "Desconocido".
+            if (!string.IsNullOrWhiteSpace(propuesta))
+            {
+                return new ResultadoClasificacion
+                {
+                    Modelo = model.DeploymentName,
+                    ProveedorClasif = "GPT4oMini",
+                    TipologiaDetectada = "Desconocido",
+                    Confianza = 0.1,
+                    ConfianzaGPT = 0.1,
+                    ClasificacionParcial = true,
+                    FallbackRazon = "tdn1_virtual_propuesta",
+                    PropuestaTipologia = propuesta
+                };
+            }
             return BuildUnclassifiedResult(model, "tdn1_no_resuelto", propuesta);
         }
 

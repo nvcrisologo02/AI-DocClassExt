@@ -509,7 +509,8 @@ public class DocumentProcessOrchestrator
                 {
                     ContenidoBase64 = entrada.Documento.Content.Base64,
                     NombreArchivo = entrada.Documento.Name,
-                    Contenedor = "documents"
+                    Contenedor = "documents",
+                    BlobPath = entrada.Documento.BlobPath
                 });
 
             if (!string.IsNullOrWhiteSpace(blobPath))
@@ -547,7 +548,10 @@ public class DocumentProcessOrchestrator
                         {
                             DocumentoBase64 = entrada.Documento.Content.Base64,
                             NombreDocumento = entrada.Documento.Name,
-                            MaxPaginasClasificacion = maxPaginasClasificacion
+                            MaxPaginasClasificacion = maxPaginasClasificacion,
+                            BlobPath = !string.IsNullOrWhiteSpace(blobPath)
+                                ? blobPath
+                                : entrada.Documento.BlobPath
                         });
 
                     docClasif = docClasifResult ?? docClasif;
@@ -574,6 +578,55 @@ public class DocumentProcessOrchestrator
                     logger.LogWarning(
                         exPrep,
                         "PrepararDocumentoClasificacionActivity falló. Se usará documento completo para clasificación.");
+                }
+            }
+
+            // 2.8: Asegurar contexto textual para clasificación.
+            // DI y CU generan su propio markdown durante la ejecución de clasificación y lo propagan
+            // a datosNormalizados en el paso post-clasificación.
+            // Todos los demás providers (gpt, hybrid, rules, auto) necesitan markdown previo;
+            // si no está disponible, lo extraemos aquí vía DI Layout con el documento recortado.
+            if (!datosNormalizados.ContainsKey("Markdown")
+                && string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
+                && !ClasificacionProviderGeneraMarkdownPropio(entrada.Instrucciones.Classification.Provider))
+            {
+                logger.LogInformation(
+                    "Paso 2.8: Extrayendo markdown DI Layout previo a clasificación (provider={Provider}, doc={Doc})",
+                    entrada.Instrucciones.Classification.Provider ?? "auto",
+                    entrada.Documento.Name);
+                try
+                {
+                    var markdownPreClasif = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                        "ExtraerMarkdownLayoutActivity",
+                        new ExtraerMarkdownLayoutInput
+                        {
+                            Tipologia = string.Empty,
+                            DocumentoBase64 = docClasif.DocumentoBase64Clasif,
+                            NombreDocumento = entrada.Documento.Name
+                        });
+
+                    if (!string.IsNullOrWhiteSpace(markdownPreClasif.Markdown))
+                    {
+                        datosNormalizados["Markdown"] = markdownPreClasif.Markdown;
+                        RegistrarMarkdown(markdownPreClasif.Markdown, "LayoutPreClasificacion");
+                        logger.LogInformation(
+                            "Paso 2.8: Markdown DI Layout listo para clasificación ({Len} chars)",
+                            markdownPreClasif.Markdown.Length);
+                        if (salida.Identificacion.Paginas <= 0 && markdownPreClasif.Paginas > 0)
+                            salida.Identificacion.Paginas = markdownPreClasif.Paginas;
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "Paso 2.8: DI Layout no devolvió markdown útil para {Doc}. Se continúa sin markdown.",
+                            entrada.Documento.Name);
+                    }
+                }
+                catch (Exception exMd)
+                {
+                    logger.LogWarning(
+                        exMd,
+                        "Paso 2.8: No se pudo extraer markdown DI Layout previo. Se continúa sin markdown.");
                 }
             }
 
@@ -699,6 +752,14 @@ public class DocumentProcessOrchestrator
                 salida.Identificacion.TipologiaFamilia = tipologiaParcial;
                 salida.Identificacion.TipologiaVersion = string.Empty;
                 salida.DetalleEjecucion.RunTipologia = tipologiaParcial;
+
+                // En clasificación parcial TDN1, tipologiaParcial ES el código TDN1.
+                // Solo se asigna si no es "Desconocido" (caso tipología virtual sin código de catálogo).
+                if (!string.IsNullOrWhiteSpace(tipologiaParcial)
+                    && !string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase))
+                {
+                    salida.Identificacion.Tdn1 = tipologiaParcial;
+                }
 
                 salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
                 {
@@ -1567,4 +1628,20 @@ public class DocumentProcessOrchestrator
         (provider.Equals("azure-openai", StringComparison.OrdinalIgnoreCase) ||
          provider.Equals("openai", StringComparison.OrdinalIgnoreCase) ||
          provider.Equals("gpt", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Devuelve true para los providers de clasificación que generan su propio markdown
+    /// durante la ejecución (DI y CU). Estos no necesitan que el orquestador pre-extraiga
+    /// markdown vía DI Layout antes del paso de clasificación.
+    /// </summary>
+    private static bool ClasificacionProviderGeneraMarkdownPropio(string? provider)
+    {
+        if (string.IsNullOrWhiteSpace(provider)) return false;
+        return provider.ToLowerInvariant() switch
+        {
+            "di" or "azure-di" or "azure-document-intelligence" => true,
+            "cu" or "azure-content-understanding" or "content-understanding" => true,
+            _ => false
+        };
+    }
 }

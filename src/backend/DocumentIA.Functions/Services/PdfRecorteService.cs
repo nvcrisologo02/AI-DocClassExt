@@ -16,6 +16,23 @@ public class PdfRecorteService
     public PdfRecorteResultado RecortarParaClasificacion(string documentoBase64, int maxPaginas)
     {
         var normalizedMaxPaginas = Math.Max(1, maxPaginas);
+
+        if (string.IsNullOrWhiteSpace(documentoBase64))
+        {
+            _logger.LogWarning(
+                "PDF recorte omitido para clasificación: documentoBase64 vacío o nulo. MaxPaginas={MaxPaginas}",
+                normalizedMaxPaginas);
+
+            return new PdfRecorteResultado
+            {
+                DocumentoBase64Recortado = string.Empty,
+                TotalPaginas = 0,
+                CharsTextoNativo = 0,
+                PaginasIncluidas = 0,
+                RecorteAplicado = false
+            };
+        }
+
         var pdfBytes = Convert.FromBase64String(documentoBase64);
 
         int totalPaginas;

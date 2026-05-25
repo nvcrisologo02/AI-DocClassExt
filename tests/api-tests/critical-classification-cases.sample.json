@@ -1,0 +1,23 @@
+[
+  {
+    "id": "NOTS-01",
+    "name": "Nota simple RP",
+    "documentPath": "C:\\temp\\Para_IA\\test\\nota_simple_01.pdf",
+    "expectedTdn1": "NOTS",
+    "expectedTdn2": "NOTS-01"
+  },
+  {
+    "id": "ESCR-10",
+    "name": "Escritura compraventa",
+    "documentPath": "C:\\temp\\Para_IA\\test\\escritura_compraventa.pdf",
+    "expectedTdn1": "ESCR",
+    "expectedTdn2": "ESCR-10"
+  },
+  {
+    "id": "DOCN-01",
+    "name": "Acta notarial final de obra",
+    "documentPath": "C:\\temp\\Para_IA\\test\\acta_notarial_final_obra.pdf",
+    "expectedTdn1": "DOCN",
+    "expectedTdn2": "DOCN-01"
+  }
+]

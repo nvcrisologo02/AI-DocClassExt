@@ -512,6 +512,77 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ClasificacionParcial_OmitePipelinePosteriorYPersiste()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.92,
+            ConfianzaGPT = 0.92,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "NOTS",
+            ClasificacionParcial = true,
+            PropuestaTipologia = "Nota simple registral"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("NOTS");
+        salida.Identificacion.TipologiaFamilia.Should().Be("NOTS");
+        salida.Identificacion.TipologiaVersion.Should().BeEmpty();
+        salida.DetalleEjecucion.Clasificacion.ClasificacionParcial.Should().BeTrue();
+        salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Nota simple registral");
+        salida.DetalleEjecucion.Extraccion.Modelo.Should().Be("skipped");
+
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ExtraerActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ValidarActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ObtenerActivoActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("IntegrarActivity").Should().BeNull();
+        context.GetLastActivityInput<ContratoSalida>("PersistirActivity").Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("tdn1_no_resuelto")]
+    [InlineData("fase1_parsing_error")]
+    [InlineData("tdn2_sin_tipologia_asociada")]
+    public async Task RunOrchestrator_NoClasificadoConRazonControlada_PreservaPropuestaTipologia(string fallbackRazon)
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ConfianzaGPT = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            FallbackLLM = true,
+            FallbackRazon = fallbackRazon,
+            PropuestaTipologia = "Sugerencia libre de tipologia"
+        });
+        context.SetupActivityThrow("ResolverTipologiaActivity", new KeyNotFoundException("No existe la tipologia: Desconocido"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be(fallbackRazon);
+        salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Sugerencia libre de tipologia");
+        salida.Resultado.MensajeError.Should().Contain("no clasificable");
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ObjectIdGdc_SincronizaNombreEnSalidaParaPersistencia()
     {
         var orchestrator = CreateOrchestrator();
