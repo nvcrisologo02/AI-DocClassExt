@@ -144,6 +144,8 @@ public class ResultadoClasificacion
     public int PagesProcessed { get; set; }
     public string? Clasificador { get; set; }
     public List<PropuestaProveedor> DetalleProveedores { get; set; } = new();
+    public string? ResultadoPromptCombinado { get; set; }
+    public string? ResumenCombinado { get; set; }
 }
 
 public class PropuestaProveedor

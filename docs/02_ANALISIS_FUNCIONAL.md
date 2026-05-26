@@ -318,7 +318,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RF09 | El sistema debe exponer progreso de procesamiento en tiempo real | customStatus con timeline de actividades consultable via statusQueryUri. | DONE |
 | RF10 | El sistema debe soportar gestion CRUD de tipologias via API | Endpoints `/management/tipologias` con ciclo Draft→Published→Retired. | DONE |
 | RF11 | El sistema debe soportar gestion de modelos AI (clasificacion, extraccion, prompt, layout) | Endpoints `/management/modelos` con CRUD y activacion. | DONE |
-| RF12 | El sistema debe ejecutar prompts libres configurables por tipologia | PromptActivity con OpenAI, configurable via `promptConfig` en tipologia JSON. | DONE |
+| RF12 | El sistema debe ejecutar prompts libres configurables por tipologia y resumen por defecto controlado | PromptActivity con OpenAI, configurable via `promptConfig` en tipologia JSON. El resumen ejecutivo por defecto se devuelve en `Resumen`; el prompt propio/ad-hoc se mantiene en `ResultadoPrompt`. | DONE |
 | RF13 | El sistema debe soportar versionado de tipologias | Resolucion `nota-simple` → default version, `nota-simple@1.4` → version especifica. | DONE |
 | RF14 | El sistema debe calcular hashes SHA256, MD5 y CRC32 para integridad | NormalizarActivity calcula los tres hashes. SHA256 usado para deduplicacion, MD5 para GDC. | DONE |
 | RF15 | El sistema debe proteger datos personales segun GDPR/LOPD | Masking de datos sensibles, cifrado en reposo, retencion configurable. | DESCARTADO MVP (EP7 Removed) |

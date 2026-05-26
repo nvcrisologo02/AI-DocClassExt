@@ -39,4 +39,5 @@ public sealed record ResolvedTipologia(
     string GdcSerie = "",
     string Tdn1 = "",
     string Tdn2 = "",
-    string GptDescripcion = "");
+    string GptDescripcion = "",
+    bool PromptHasDefinition = false);

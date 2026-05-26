@@ -130,7 +130,8 @@ Alcance:
 
 Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTipologia` se aplica una rama reducida:
 
-- `Extraer`, `Prompt`, `Validar` y `ObtenerActivo` no se ejecutan y quedan como `Skipped` en `detalleEjecucion.seguimiento`.
+- `Extraer`, `Validar` y `ObtenerActivo` no se ejecutan y quedan como `Skipped` en `detalleEjecucion.seguimiento`.
+- `Prompt` se ejecuta solo si hay prompt propio/ad-hoc aplicable o si `instrucciones.forzarResumenPorDefecto=true` y no hubo una llamada GPT previa que produjera `Resumen`.
 - `Integrar` solo se ejecuta si `instrucciones.executeIntegrarWhenClassificationOnly=true` y existe `trazabilidad.idActivo`.
 - `SubirGDC` mantiene la prioridad de `SkipGDCUpload` y requiere `idActivo` resuelto/disponible.
 - `Persistir` siempre se ejecuta.
@@ -146,6 +147,21 @@ Trazas operativas expuestas en salida:
 Restricción de entrada:
 
 - `classificationOnly=true` es incompatible con `expectedType` informado (validación en trigger HTTP, respuesta `400`).
+
+### Prompt por defecto y prompt de tipologia
+
+El sistema separa dos salidas de prompting para mantener compatibilidad y controlar coste de llamadas LLM:
+
+- `DatosExtraidos["Resumen"]`: resumen ejecutivo generado con la configuracion global `PromptDefaults`.
+- `DatosExtraidos["ResultadoPrompt"]`: salida del prompt propio de tipologia o del prompt ad-hoc de la peticion.
+
+Reglas de ejecucion:
+
+- Si la clasificacion o extraccion ya usa GPT, el orquestador solicita `Resumen` en esa misma llamada cuando es posible.
+- Si la ruta DI/CU es satisfactoria y no llega a GPT, no se hace llamada adicional solo para resumen salvo que `instrucciones.forzarResumenPorDefecto=true`.
+- Si `forzarResumenPorDefecto=true` y no existe `Resumen`, `PromptActivity` ejecuta una llamada dedicada.
+- Si esa llamada dedicada coincide con un prompt propio/ad-hoc pendiente, ambos objetivos se combinan en una unica llamada y se devuelven `Resumen` y `ResultadoPrompt` por separado.
+- Una tipologia con `promptConfig.enabled=true` pero `systemPrompt` y `userPromptTemplate` vacios no activa `ResultadoPrompt`; requiere definicion real o prompt ad-hoc.
 
 ### Clasificación Jerárquica GPT (nivelClasificacion) — D1, D2, D4, D6, D7
 

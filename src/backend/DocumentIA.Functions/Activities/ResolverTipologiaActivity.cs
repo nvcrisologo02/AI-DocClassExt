@@ -42,7 +42,8 @@ public class ResolverTipologiaActivity
                 ExtractionEnabled: false,
                 ConfidenceConfig: null,
                 ExtractionProvider: string.Empty,
-                AssetResolverEnabled: false);
+                AssetResolverEnabled: false,
+                PromptHasDefinition: false);
 
             _logger.LogWarning(
                 "Tipología no resoluble ({TipologiaEntrada}). Se usa fallback a Desconocido.",

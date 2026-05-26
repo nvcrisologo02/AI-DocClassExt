@@ -20,9 +20,9 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 | Bootstrapping | 1 |
 | Frontend Admin | 2 |
 | GDC (SOAP) | 5 |
-| Otros | 7 |
+| Otros | 8 |
 | Runtime ASP.NET | 1 |
-| **TOTAL** | **22** |
+| **TOTAL** | **23** |
 
 ## AssetResolver Plugin
 
@@ -79,6 +79,7 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 | `Extraction` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
 | `FieldAliases` | [src/plugins/DocumentIA.AssetResolver/Program.cs](src/plugins/DocumentIA.AssetResolver/Program.cs) |
 | `GDC` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `PromptDefaults` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
 
 ## Runtime ASP.NET
 

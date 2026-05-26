@@ -8,6 +8,7 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
@@ -15,15 +16,18 @@ namespace DocumentIA.Functions.Services;
 public class GptFallbackExtraerDataProvider
 {
     private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
+    private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<GptFallbackExtraerDataProvider> _logger;
     private readonly Lazy<ExtractionModelConfig> _fallbackModel;
     private readonly Lazy<ChatClient> _chatClient;
 
     public GptFallbackExtraerDataProvider(
         ExtractionModelRegistryLoader modelRegistryLoader,
+        IOptions<PromptDefaultsSettings> promptDefaults,
         ILogger<GptFallbackExtraerDataProvider> logger)
     {
         _modelRegistryLoader = modelRegistryLoader;
+        _promptDefaults = promptDefaults.Value;
         _logger = logger;
         _fallbackModel = new Lazy<ExtractionModelConfig>(ResolveFallbackModel);
         _chatClient = new Lazy<ChatClient>(CreateChatClient);
@@ -43,7 +47,8 @@ public class GptFallbackExtraerDataProvider
             input.Tipologia,
             model.DeploymentName);
 
-        var systemMessage = new SystemChatMessage(
+        var resumenPrompt = ResolveResumenPrompt(input, markdownContexto);
+        var systemText =
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
             "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
             "'campos_extraidos' (objeto con los campos extraídos, null para no encontrados), " +
@@ -52,7 +57,14 @@ public class GptFallbackExtraerDataProvider
             "Para cada campo se indican el tipo esperado, si es obligatorio y las reglas de validación " +
             "(formatos permitidos, patrones, valores de enumeración, rangos numéricos). " +
             "Respeta estrictamente esas reglas al extraer el valor de cada campo. " +
-            "Usa null para campos no encontrados.");
+            "Usa null para campos no encontrados.";
+
+        if (resumenPrompt is not null)
+        {
+            systemText += " Incluye además la clave 'resumen' como string.";
+        }
+
+        var systemMessage = new SystemChatMessage(systemText);
 
         var fieldList = BuildFieldList(tipologiaConfig);
         var userPrompt =
@@ -60,6 +72,11 @@ public class GptFallbackExtraerDataProvider
             "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
             "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
             fieldList;
+
+        if (resumenPrompt is not null)
+        {
+            userPrompt += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
 
         var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
             ? ObtenerContextoTexto(input.DatosNormalizados)
@@ -139,7 +156,8 @@ public class GptFallbackExtraerDataProvider
                 ["gpt-fallback"] = (int)stopwatch.ElapsedMilliseconds
             },
             MetricasDebug = metricasDebug,
-            DatosExtraidos = datos
+            DatosExtraidos = datos,
+            ResumenCombinado = ExtractString(root, "resumen")
         };
     }
 
@@ -154,7 +172,8 @@ public class GptFallbackExtraerDataProvider
         var model = ResolveModel(modelKey);
         var chatClient = CreateChatClient(model);
 
-        var systemMessage = new SystemChatMessage(
+        var resumenPrompt = ResolveResumenPrompt(input, markdownContexto);
+        var systemText =
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
             "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
             "'campos_extraidos' (objeto con los campos extraídos, null para no encontrados), " +
@@ -163,7 +182,14 @@ public class GptFallbackExtraerDataProvider
             "Para cada campo se indican el tipo esperado, si es obligatorio y las reglas de validación " +
             "(formatos permitidos, patrones, valores de enumeración, rangos numéricos). " +
             "Respeta estrictamente esas reglas al extraer el valor de cada campo. " +
-            "Usa null para campos no encontrados.");
+            "Usa null para campos no encontrados.";
+
+        if (resumenPrompt is not null)
+        {
+            systemText += " Incluye además la clave 'resumen' como string.";
+        }
+
+        var systemMessage = new SystemChatMessage(systemText);
 
         var fieldList = BuildFieldList(tipologiaConfig);
         var userPrompt =
@@ -171,6 +197,11 @@ public class GptFallbackExtraerDataProvider
             "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
             "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
             fieldList;
+
+        if (resumenPrompt is not null)
+        {
+            userPrompt += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
 
         var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
             ? ObtenerContextoTexto(input.DatosNormalizados)
@@ -244,7 +275,8 @@ public class GptFallbackExtraerDataProvider
                 ["gpt-direct"] = (int)stopwatch.ElapsedMilliseconds
             },
             MetricasDebug = metricasDebug,
-            DatosExtraidos = datos
+            DatosExtraidos = datos,
+            ResumenCombinado = ExtractString(root, "resumen")
         };
     }
 
@@ -272,12 +304,19 @@ public class GptFallbackExtraerDataProvider
             "Eres un extractor de datos de documentos inmobiliarios y registrales españoles. " +
             "Devuelve EXCLUSIVAMENTE un objeto JSON válido, sin texto adicional, con las siguientes claves: " +
             "'campos_extraidos' (objeto JSON con los campos del documento, usa null para no encontrados), " +
-            "'resultado_prompt' (string con la respuesta a la instrucción adicional a continuación), " +
             "'confianza_extraccion' (número entre 0.0 y 1.0 que refleja tu confianza global en la extracción) y " +
             "'confianza_por_campo' (objeto con confianza 0..1 por campo extraído). " +
             "Para cada campo en 'campos_extraidos' se indican el tipo esperado, si es obligatorio y las reglas " +
             "de validación (formatos, patrones, enumeraciones, rangos). " +
             "Respeta estrictamente esas reglas al extraer el valor de cada campo.";
+
+        var resumenPromptCombinado = ResolveResumenPrompt(input, markdownContexto);
+        if (resumenPromptCombinado is not null)
+        {
+            combinedSystemPrompt += " Incluye además la clave 'resumen' como string.";
+        }
+
+        combinedSystemPrompt += " Incluye además la clave 'resultado_prompt' como string con la respuesta a la instrucción adicional.";
 
         if (!string.IsNullOrWhiteSpace(promptConfig.SystemPrompt))
         {
@@ -302,7 +341,10 @@ public class GptFallbackExtraerDataProvider
             "Extrae los siguientes campos. Para cada uno se indica tipo, obligatoriedad y las reglas de validación " +
             "que debe cumplir el valor extraído (respétalas en el formato del dato devuelto):\n" +
             fieldList + "\n\n" +
-            "**Parte 2 — Instrucción adicional** ('resultado_prompt'):\n" +
+            (resumenPromptCombinado is null
+                ? string.Empty
+                : "**Parte 2 — Resumen por defecto** ('resumen'):\n" + resumenPromptCombinado.UserPromptTemplate + "\n\n") +
+            "**Parte 3 — Instrucción adicional** ('resultado_prompt'):\n" +
             promptInstruction;
 
         var contextoTexto = string.IsNullOrWhiteSpace(markdownContexto)
@@ -398,8 +440,53 @@ public class GptFallbackExtraerDataProvider
             },
             MetricasDebug = metricasDebug,
             DatosExtraidos = campos,
-            ResultadoPromptCombinado = resultadoPrompt
+            ResultadoPromptCombinado = resultadoPrompt,
+            ResumenCombinado = ExtractString(root, "resumen")
         };
+    }
+
+    private PromptConfig? ResolveResumenPrompt(ExtraccionInput input, string? markdownContexto)
+    {
+        if (!input.GenerarResumenPorDefecto)
+        {
+            return null;
+        }
+
+        var defaults = _promptDefaults.ToPromptConfig();
+        if (string.IsNullOrWhiteSpace(defaults.UserPromptTemplate))
+        {
+            return null;
+        }
+
+        var contenido = string.IsNullOrWhiteSpace(markdownContexto)
+            ? ObtenerContextoTexto(input.DatosNormalizados)
+            : markdownContexto;
+
+        return new PromptConfig
+        {
+            Enabled = true,
+            ModelKey = defaults.ModelKey,
+            SystemPrompt = defaults.SystemPrompt,
+            UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
+                defaults.UserPromptTemplate,
+                contenido ?? string.Empty,
+                input.DatosNormalizados),
+            MaxTokens = defaults.MaxTokens,
+            Temperature = defaults.Temperature,
+            ContentMode = defaults.ContentMode
+        };
+    }
+
+    private static string? ExtractString(JsonElement root, string propertyName)
+    {
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(propertyName, out var element))
+        {
+            return element.ValueKind == JsonValueKind.String
+                ? element.GetString()
+                : element.GetRawText();
+        }
+
+        return null;
     }
 
     private (double Confianza, ConfidenceMetricasExtraccion Metricas) BuildFallbackMetricas(

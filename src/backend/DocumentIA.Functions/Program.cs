@@ -99,6 +99,7 @@ var host = new HostBuilder()
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
         services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
+        services.Configure<PromptDefaultsSettings>(context.Configuration.GetSection("PromptDefaults"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();

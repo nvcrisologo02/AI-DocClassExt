@@ -272,6 +272,64 @@ public class DocumentProcessOrchestrator
             }
         }
 
+        async Task EjecutarPromptLibreAsync(
+            string? markdownParaPrompt,
+            Dictionary<string, object> datosExtraidos,
+            string? resultadoPromptCombinado = null,
+            string? resumenCombinado = null,
+            bool forzarResumenPorDefecto = false)
+        {
+            var promptInput = new PromptActivityInput
+            {
+                Tipologia = salida.Identificacion.Tipologia,
+                MarkdownExtraido = markdownParaPrompt,
+                DocumentoBase64 = entrada.Documento.Content.Base64,
+                DatosExtraidos = datosExtraidos,
+                ResultadoPromptCombinado = resultadoPromptCombinado,
+                ResumenCombinado = resumenCombinado,
+                ForzarResumenPorDefecto = forzarResumenPorDefecto,
+                Prompt = entrada.Instrucciones.Prompt
+            };
+
+            var resultadoPrompt = await EjecutarPasoNegocio(
+                "Prompt",
+                () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
+
+            if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
+            {
+                salida.DatosExtraidos["ResultadoPrompt"] = resultadoPrompt.Resultado;
+            }
+
+            if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resumen))
+            {
+                salida.DatosExtraidos["Resumen"] = resultadoPrompt.Resumen;
+            }
+
+            salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+            {
+                Modelo = resultadoPrompt.Modelo,
+                TiempoMs = resultadoPrompt.TiempoMs,
+                CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
+                Error = resultadoPrompt.Error
+            };
+            RegistrarModeloLlm(resultadoPrompt.Modelo);
+
+            if (resultadoPrompt.CombinedWithFallback)
+            {
+                var trazaPrompt = ObtenerTraza("Prompt");
+                trazaPrompt.Mensaje = "Resultado reutilizado de llamada combinada con un paso GPT previo";
+                PublicarEstado("Running", string.Empty, trazaPrompt.Mensaje);
+            }
+        }
+
+        void AplicarResumenCombinado(string? resumen)
+        {
+            if (!string.IsNullOrWhiteSpace(resumen))
+            {
+                salida.DatosExtraidos["Resumen"] = resumen;
+            }
+        }
+
         void FinalizarSeguimiento(string estado, string? mensaje = null)
         {
             PublicarEstado(estado, string.Empty, mensaje);
@@ -680,7 +738,8 @@ public class DocumentProcessOrchestrator
                             UmbralFallbackEfectivo = umbralClasifFallback,
                             DocumentoBase64Override = docClasif.DocumentoBase64Clasif,
                             CharsTextoNativo = docClasif.CharsTextoNativo,
-                            TotalPaginas = docClasif.TotalPaginas
+                            TotalPaginas = docClasif.TotalPaginas,
+                            GenerarResumenPorDefecto = true
                         });
 
                         var mensajeClasificacion = resultadoClasificacion.FallbackLLM
@@ -910,12 +969,26 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
 
             // Añadir actividad Prompt al seguimiento si la tipología la tiene habilitada o si hay override en la petición
-            var promptActivoEnPeticion = tipologiaResuelta.PromptEnabled || entrada.Instrucciones.Prompt != null;
-            if (promptActivoEnPeticion)
+            var promptActivoEnPeticion = (tipologiaResuelta.PromptEnabled && tipologiaResuelta.PromptHasDefinition)
+                || entrada.Instrucciones.Prompt != null;
+            var resumenCombinadoClasificacion = resultadoClasificacion.ResumenCombinado;
+            if (!string.IsNullOrWhiteSpace(resumenCombinadoClasificacion))
+            {
+                AplicarResumenCombinado(resumenCombinadoClasificacion);
+            }
+
+            var forzarResumenDedicado = entrada.Instrucciones.ForzarResumenPorDefecto &&
+                !salida.DatosExtraidos.ContainsKey("Resumen");
+
+            if (promptActivoEnPeticion || forzarResumenDedicado)
             {
                 seguimiento.ActividadesTotales++;
                 seguimiento.Actividades.Add(new TrazaActividad { Nombre = "Prompt", Estado = "Pending" });
             }
+
+            var resultadoPromptCombinadoClasificacion = entrada.Instrucciones.Prompt != null
+                ? resultadoClasificacion.ResultadoPromptCombinado
+                : null;
 
             // Verificar umbral de confianza: instrucciones ?? tipología ?? config servidor
             var umbralBajaConfianza = entrada.Instrucciones.Classification.Umbral
@@ -956,6 +1029,7 @@ public class DocumentProcessOrchestrator
                     : null;
 
                 salida.DatosExtraidos = new Dictionary<string, object>();
+                AplicarResumenCombinado(resumenCombinadoClasificacion);
                 salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                 {
                     Normalizaciones = new List<string>
@@ -974,11 +1048,21 @@ public class DocumentProcessOrchestrator
                     RegistrarMarkdown(markdownClasificacion, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
                 }
 
-                MarcarActividadOmitida("Extraer", "ClassificationOnly activo");
-                if (promptActivoEnPeticion)
+                var forzarResumenDedicadoClassificationOnly = entrada.Instrucciones.ForzarResumenPorDefecto &&
+                    !salida.DatosExtraidos.ContainsKey("Resumen");
+
+                if (promptActivoEnPeticion || forzarResumenDedicadoClassificationOnly)
                 {
-                    MarcarActividadOmitida("Prompt", "ClassificationOnly activo");
+                    logger.LogInformation("ClassificationOnly activo con prompt habilitado. Ejecutando PromptActivity.");
+                    await EjecutarPromptLibreAsync(
+                        markdownClasificacion,
+                        salida.DatosExtraidos,
+                        resultadoPromptCombinadoClasificacion,
+                        resumenCombinadoClasificacion,
+                        forzarResumenDedicadoClassificationOnly);
                 }
+
+                MarcarActividadOmitida("Extraer", "ClassificationOnly activo");
                 MarcarActividadOmitida("Validar", "ClassificationOnly activo");
                 MarcarActividadOmitida("ObtenerActivo", "ClassificationOnly activo");
 
@@ -1175,7 +1259,8 @@ public class DocumentProcessOrchestrator
                             UmbralFallbackEfectivoCompletitud = umbralExtracCompletitudRequest,
                             UmbralFallbackEfectivoConfianza = umbralExtracConfianzaRequest,
                             ProviderEfectivo = providerEfectivo,
-                            ModelKeyEfectivo = modelKeyEfectivo
+                            ModelKeyEfectivo = modelKeyEfectivo,
+                            GenerarResumenPorDefecto = !salida.DatosExtraidos.ContainsKey("Resumen")
                         }));
 
                 if (resultadoExtraccion.FallbackUsado)
@@ -1276,6 +1361,7 @@ public class DocumentProcessOrchestrator
             // El markdown no debe formar parte de DatosExtraidos de salida.
             resultadoExtraccion.DatosExtraidos.Remove("Markdown");
             salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
+            AplicarResumenCombinado(resultadoExtraccion.ResumenCombinado ?? resumenCombinadoClasificacion);
 
             // Prioridad para páginas:
             // 1) valor explícito devuelto por el proveedor de extracción
@@ -1328,7 +1414,10 @@ public class DocumentProcessOrchestrator
             };
 
             // 4.5 Prompt libre (si la tipología lo tiene habilitado, o si la petición trae instrucciones de prompt ad-hoc)
-            if (tipologiaResuelta.PromptEnabled || entrada.Instrucciones.Prompt != null)
+            forzarResumenDedicado = entrada.Instrucciones.ForzarResumenPorDefecto &&
+                !salida.DatosExtraidos.ContainsKey("Resumen");
+
+            if (promptActivoEnPeticion || forzarResumenDedicado)
             {
                 var markdownParaPrompt = resultadoExtraccion.MarkdownExtraido;
                 if (string.IsNullOrWhiteSpace(markdownParaPrompt) && !string.IsNullOrWhiteSpace(markdownNormalizacion))
@@ -1337,42 +1426,12 @@ public class DocumentProcessOrchestrator
                 }
 
                 logger.LogInformation("Paso 4.5: Ejecutando prompt libre de tipología");
-                var promptInput = new PromptActivityInput
-                {
-                    Tipologia = salida.Identificacion.Tipologia,
-                    MarkdownExtraido = markdownParaPrompt,
-                    DocumentoBase64 = entrada.Documento.Content.Base64,
-                    DatosExtraidos = resultadoExtraccion.DatosExtraidos,
-                    // Optimización: si el fallback ya ejecutó el prompt en modo combinado, no hacer otra llamada
-                    ResultadoPromptCombinado = resultadoExtraccion.ResultadoPromptCombinado,
-                    Prompt = entrada.Instrucciones.Prompt
-                };
-
-                var resultadoPrompt = await EjecutarPasoNegocio(
-                    "Prompt",
-                    () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
-
-                if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
-                {
-                    // Exponer resultado de prompt en DatosExtraidos para validación/integración/persistencia
-                    salida.DatosExtraidos["ResultadoPrompt"] = resultadoPrompt.Resultado;
-                }
-
-                salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
-                {
-                    Modelo = resultadoPrompt.Modelo,
-                    TiempoMs = resultadoPrompt.TiempoMs,
-                    CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
-                    Error = resultadoPrompt.Error
-                };
-                RegistrarModeloLlm(resultadoPrompt.Modelo);
-
-                if (resultadoPrompt.CombinedWithFallback)
-                {
-                    var trazaPrompt = ObtenerTraza("Prompt");
-                    trazaPrompt.Mensaje = "Resultado reutilizado de llamada combinada con fallback de extracción";
-                    PublicarEstado("Running", string.Empty, trazaPrompt.Mensaje);
-                }
+                await EjecutarPromptLibreAsync(
+                    markdownParaPrompt,
+                    resultadoExtraccion.DatosExtraidos,
+                    resultadoExtraccion.ResultadoPromptCombinado ?? resultadoPromptCombinadoClasificacion,
+                    resultadoExtraccion.ResumenCombinado ?? resumenCombinadoClasificacion,
+                    forzarResumenDedicado);
             }
 
             // 5. Validacion - ACTUALIZADO PARA USAR MOTOR DE VALIDACION

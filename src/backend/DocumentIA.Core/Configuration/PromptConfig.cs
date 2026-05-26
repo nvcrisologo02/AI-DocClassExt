@@ -42,3 +42,24 @@ public class PromptConfig
     /// </summary>
     public string ContentMode { get; set; } = "markdown";
 }
+
+public class PromptDefaultsSettings
+{
+    public string ModelKey { get; set; } = string.Empty;
+    public string SystemPrompt { get; set; } = string.Empty;
+    public string UserPromptTemplate { get; set; } = string.Empty;
+    public int MaxTokens { get; set; } = 2000;
+    public double Temperature { get; set; } = 0.0;
+    public string ContentMode { get; set; } = "markdown";
+
+    public PromptConfig ToPromptConfig() => new()
+    {
+        Enabled = true,
+        ModelKey = ModelKey,
+        SystemPrompt = SystemPrompt,
+        UserPromptTemplate = UserPromptTemplate,
+        MaxTokens = MaxTokens,
+        Temperature = Temperature,
+        ContentMode = ContentMode
+    };
+}

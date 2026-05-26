@@ -11,6 +11,8 @@ public class PromptResultado
     /// <summary>Respuesta en texto libre devuelta por el LLM.</summary>
     public string Resultado { get; set; } = string.Empty;
 
+    public string Resumen { get; set; } = string.Empty;
+
     /// <summary>Duración de la llamada al LLM en milisegundos.</summary>
     public int TiempoMs { get; set; }
 

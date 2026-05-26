@@ -94,6 +94,41 @@ public class OpenAIPromptDataProviderConfigResolutionTests
     }
 
     [Fact]
+    public void ResolvePromptConfig_EnabledTipologiaWithEmptyPrompt_UsesDefaultPromptDefinition()
+    {
+        var tipologia = new PromptConfig
+        {
+            Enabled = true,
+            ModelKey = "default.gpt4o-mini",
+            SystemPrompt = string.Empty,
+            UserPromptTemplate = string.Empty,
+            MaxTokens = 0,
+            Temperature = 0.0,
+            ContentMode = string.Empty
+        };
+
+        var defaults = new PromptConfig
+        {
+            Enabled = true,
+            ModelKey = "default.gpt4o-mini",
+            SystemPrompt = "default.sys",
+            UserPromptTemplate = "default.template {contenido}",
+            MaxTokens = 1600,
+            Temperature = 0.0,
+            ContentMode = "markdown"
+        };
+
+        var result = OpenAIPromptDataProvider.ResolvePromptConfig(tipologia, null, defaults);
+
+        result.Should().NotBeNull();
+        result!.Enabled.Should().BeTrue();
+        result.SystemPrompt.Should().Be("default.sys");
+        result.UserPromptTemplate.Should().Be("default.template {contenido}");
+        result.MaxTokens.Should().Be(1600);
+        result.ContentMode.Should().Be("markdown");
+    }
+
+    [Fact]
     public void ResolvePromptConfig_NullTipologiaConfig_NullRequest_ReturnsNull()
     {
         var result = OpenAIPromptDataProvider.ResolvePromptConfig(null, null);

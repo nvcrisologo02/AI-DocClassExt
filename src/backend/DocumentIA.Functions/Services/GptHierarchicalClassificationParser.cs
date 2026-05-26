@@ -94,7 +94,21 @@ public static class GptHierarchicalClassificationParser
                     "La respuesta de fase 2 contiene un 'tdn2' vacío.");
             }
 
-            return GptHierarchicalParsingResult<GptPhase2Classification>.Ok(new GptPhase2Classification(tdn2));
+            string? resultadoPrompt = null;
+            if (root.TryGetProperty("resultado_prompt", out var promptElement) &&
+                promptElement.ValueKind == JsonValueKind.String)
+            {
+                resultadoPrompt = promptElement.GetString();
+            }
+
+            string? resumen = null;
+            if (root.TryGetProperty("resumen", out var resumenElement) &&
+                resumenElement.ValueKind == JsonValueKind.String)
+            {
+                resumen = resumenElement.GetString();
+            }
+
+            return GptHierarchicalParsingResult<GptPhase2Classification>.Ok(new GptPhase2Classification(tdn2, resultadoPrompt, resumen));
         }
         catch (JsonException ex)
         {
@@ -117,7 +131,7 @@ public static class GptHierarchicalClassificationParser
 
 public sealed record GptPhase1Classification(string? Tdn1, string Propuesta);
 
-public sealed record GptPhase2Classification(string Tdn2);
+public sealed record GptPhase2Classification(string Tdn2, string? ResultadoPrompt = null, string? Resumen = null);
 
 public sealed record GptHierarchicalParsingResult<T>(bool Success, T? Value, string? ErrorReason, string? ErrorMessage)
 {

@@ -15,6 +15,7 @@ public class Instrucciones
     public int MaxPagesForClassificationOnly { get; set; }
     public bool SkipDuplicateCheck { get; set; }
     public bool ForceReprocess { get; set; }
+    public bool ForzarResumenPorDefecto { get; set; }
     // Controla si se sube el documento al GDC. Si no se especifica (null), se usa el valor por defecto
     // configurado en la tipología detectada (tipologiaConfig.SkipGDCUpload).
     // true = omitir subida; false = forzar subida; null = respetar config de tipología.

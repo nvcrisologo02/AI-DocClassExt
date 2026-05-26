@@ -140,11 +140,13 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         }
 
         ExtraccionResultado resultadoGpt;
-        var promptConfig = config.PromptConfig;
+        var promptConfig = HasPromptDefinition(config.PromptConfig)
+            ? OpenAIPromptDataProvider.ResolvePromptConfig(config.PromptConfig, null)
+            : null;
 
         // Optimización: si prompt está habilitado y usa el mismo modelo/deployment que el fallback,
         // se ejecuta extracción + prompt en una única llamada LLM.
-        if (promptConfig is not null && DebeUsarModoCombinado(config))
+        if (promptConfig is not null && DebeUsarModoCombinado(promptConfig))
         {
             _logger.LogInformation(
                 "Activando modo combinado fallback+prompt para tipología {Tipologia}.",
@@ -249,15 +251,14 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private static bool IsAzureContentUnderstandingProvider(string provider) =>
         provider.ToLowerInvariant() is "azure-content-understanding" or "azure-cu" or "cu";
 
-    private bool DebeUsarModoCombinado(TipologiaValidationConfig config)
+    private bool DebeUsarModoCombinado(PromptConfig prompt)
     {
         if (!TryResolveFallbackModel(out var fallbackModel) || string.IsNullOrWhiteSpace(fallbackModel?.DeploymentName))
         {
             return false;
         }
 
-        var prompt = config.PromptConfig;
-        if (prompt == null || !prompt.Enabled)
+        if (!prompt.Enabled)
         {
             return false;
         }
@@ -284,6 +285,13 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             promptModel.DeploymentName,
             fallbackModel!.DeploymentName,
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasPromptDefinition(PromptConfig? promptConfig)
+    {
+        return promptConfig is not null && promptConfig.Enabled &&
+            (!string.IsNullOrWhiteSpace(promptConfig.SystemPrompt) ||
+             !string.IsNullOrWhiteSpace(promptConfig.UserPromptTemplate));
     }
 
     private bool TryResolveFallbackModel(out ExtractionModelConfig? model)

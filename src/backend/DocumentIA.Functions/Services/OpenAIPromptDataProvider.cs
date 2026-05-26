@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Azure;
 using Azure.AI.OpenAI;
@@ -7,6 +8,7 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
@@ -15,6 +17,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 {
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
+    private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<OpenAIPromptDataProvider> _logger;
 
     // Cache de clientes por endpoint/auth/deployment para evitar recrearlos en cada llamada
@@ -24,10 +27,12 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
     public OpenAIPromptDataProvider(
         TipologiaConfigLoader tipologiaConfigLoader,
         PromptModelRegistryLoader promptModelRegistryLoader,
+        IOptions<PromptDefaultsSettings> promptDefaults,
         ILogger<OpenAIPromptDataProvider> logger)
     {
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _promptModelRegistryLoader = promptModelRegistryLoader;
+        _promptDefaults = promptDefaults.Value;
         _logger = logger;
     }
 
@@ -37,31 +42,34 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
     {
         var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
         var effectivePromptConfig = ResolvePromptConfig(tipologiaConfig.PromptConfig, input.Prompt);
+        var promptActivo = effectivePromptConfig is not null && effectivePromptConfig.Enabled && HasPromptDefinition(effectivePromptConfig);
+        var necesitaPrompt = promptActivo && string.IsNullOrWhiteSpace(input.ResultadoPromptCombinado);
+        var necesitaResumen = input.ForzarResumenPorDefecto && string.IsNullOrWhiteSpace(input.ResumenCombinado);
 
-        // Modo optimizado: resultado ya calculado en la llamada combinada con el fallback
-        if (!string.IsNullOrWhiteSpace(input.ResultadoPromptCombinado))
+        if (!necesitaPrompt && !necesitaResumen)
         {
             _logger.LogInformation(
-                "Prompt para tipología {Tipologia}: reutilizando resultado combinado del fallback de extracción.",
+                "Prompt para tipología {Tipologia}: reutilizando resultados combinados previos.",
                 input.Tipologia);
 
             return new PromptResultado
             {
-                Modelo = effectivePromptConfig?.ModelKey ?? string.Empty,
-                Resultado = input.ResultadoPromptCombinado,
+                Modelo = FirstNonEmpty(effectivePromptConfig?.ModelKey, _promptDefaults.ModelKey),
+                Resultado = input.ResultadoPromptCombinado ?? string.Empty,
+                Resumen = input.ResumenCombinado ?? string.Empty,
                 TiempoMs = 0,
                 CombinedWithFallback = true
             };
         }
 
-        var promptConfig = effectivePromptConfig;
-
-        if (promptConfig == null || !promptConfig.Enabled)
+        var promptConfig = necesitaPrompt ? effectivePromptConfig : null;
+        if (!necesitaPrompt && !necesitaResumen)
         {
             return new PromptResultado { Error = "Prompt no habilitado para esta tipología." };
         }
 
-        if (string.IsNullOrWhiteSpace(promptConfig.ModelKey))
+        var modelKey = FirstNonEmpty(promptConfig?.ModelKey, _promptDefaults.ModelKey);
+        if (string.IsNullOrWhiteSpace(modelKey))
         {
             var mensaje = "PromptConfig requiere ModelKey para ejecutar el prompt.";
             _logger.LogError(mensaje);
@@ -71,24 +79,45 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         PromptModelConfig modelConfig;
         try
         {
-            modelConfig = _promptModelRegistryLoader.GetModel(promptConfig.ModelKey);
+            modelConfig = _promptModelRegistryLoader.GetModel(modelKey);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "No se pudo resolver el modelo de prompt para key={ModelKey}", promptConfig.ModelKey);
-            return new PromptResultado { Modelo = promptConfig.ModelKey, Error = ex.Message };
+            _logger.LogError(ex, "No se pudo resolver el modelo de prompt para key={ModelKey}", modelKey);
+            return new PromptResultado { Modelo = modelKey, Error = ex.Message };
         }
 
         _logger.LogInformation(
             "Ejecutando prompt para tipología {Tipologia} con modelKey={ModelKey} deployment={DeploymentName}.",
-            input.Tipologia, promptConfig.ModelKey, modelConfig.DeploymentName);
+            input.Tipologia, modelKey, modelConfig.DeploymentName);
 
         var stopwatch = Stopwatch.StartNew();
         try
         {
             var chatClient = GetOrCreateClient(modelConfig);
 
-            var systemPrompt = string.IsNullOrWhiteSpace(promptConfig.SystemPrompt)
+            if (necesitaResumen)
+            {
+                var resultado = await EjecutarPromptJsonAsync(
+                    chatClient,
+                    modelConfig,
+                    promptConfig,
+                    input,
+                    tipologiaConfig,
+                    necesitaPrompt,
+                    ctsToken: cancellationToken);
+
+                stopwatch.Stop();
+                resultado.Modelo = modelConfig.DeploymentName;
+                resultado.TiempoMs = (int)stopwatch.ElapsedMilliseconds;
+                if (!string.IsNullOrWhiteSpace(input.ResultadoPromptCombinado) && string.IsNullOrWhiteSpace(resultado.Resultado))
+                {
+                    resultado.Resultado = input.ResultadoPromptCombinado;
+                }
+                return resultado;
+            }
+
+            var systemPrompt = string.IsNullOrWhiteSpace(promptConfig!.SystemPrompt)
                 ? "Eres un asistente experto en análisis de documentos inmobiliarios y registrales españoles."
                 : promptConfig.SystemPrompt;
 
@@ -131,6 +160,83 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 Error = ex.Message
             };
         }
+    }
+
+    private async Task<PromptResultado> EjecutarPromptJsonAsync(
+        ChatClient chatClient,
+        PromptModelConfig modelConfig,
+        PromptConfig? promptConfig,
+        PromptActivityInput input,
+        TipologiaValidationConfig tipologiaConfig,
+        bool incluirPromptPropio,
+        CancellationToken ctsToken)
+    {
+        var resumenConfig = _promptDefaults.ToPromptConfig();
+        var contenido = !string.IsNullOrWhiteSpace(input.MarkdownExtraido)
+            ? input.MarkdownExtraido!
+            : string.Empty;
+
+        var resumenInstruction = InterpolateTemplate(
+            resumenConfig.UserPromptTemplate,
+            contenido,
+            input.DatosExtraidos);
+
+        var systemPrompt = "Eres un analista documental experto. Devuelve exclusivamente JSON válido.";
+        if (!string.IsNullOrWhiteSpace(resumenConfig.SystemPrompt))
+        {
+            systemPrompt += $"\n\nInstrucciones para resumen:\n{resumenConfig.SystemPrompt}";
+        }
+        if (incluirPromptPropio && promptConfig is not null && !string.IsNullOrWhiteSpace(promptConfig.SystemPrompt))
+        {
+            systemPrompt += $"\n\nInstrucciones para resultado_prompt:\n{promptConfig.SystemPrompt}";
+        }
+
+        var userText = "Devuelve un objeto JSON con la clave 'resumen' como string." +
+            $"\n\nInstrucción para resumen:\n{resumenInstruction}";
+
+        if (incluirPromptPropio && promptConfig is not null)
+        {
+            var promptInstruction = InterpolateTemplate(
+                promptConfig.UserPromptTemplate,
+                contenido,
+                input.DatosExtraidos);
+
+            userText += $"\n\nIncluye también la clave 'resultado_prompt' como string. Instrucción para resultado_prompt:\n{promptInstruction}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(contenido))
+        {
+            userText += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contenido}";
+        }
+
+        var options = new ChatCompletionOptions
+        {
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
+            Temperature = (float)resumenConfig.Temperature,
+            MaxOutputTokenCount = Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0)
+        };
+
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctsToken);
+        cts.CancelAfter(TimeSpan.FromSeconds(modelConfig.TimeoutSeconds));
+
+        var response = await chatClient.CompleteChatAsync(
+            new List<ChatMessage>
+            {
+                new SystemChatMessage(systemPrompt),
+                new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText))
+            },
+            options,
+            cts.Token);
+
+        var text = response.Value.Content[0].Text;
+        using var json = JsonDocument.Parse(text);
+        var root = json.RootElement;
+
+        return new PromptResultado
+        {
+            Resumen = ExtractString(root, "resumen") ?? string.Empty,
+            Resultado = ExtractString(root, "resultado_prompt") ?? string.Empty
+        };
     }
 
     private UserChatMessage BuildUserMessage(
@@ -185,7 +291,10 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
     private static readonly Regex CampoPlaceholderRegex =
         new(@"\{campo:([^}]+)\}", RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    public static PromptConfig? ResolvePromptConfig(PromptConfig? tipologiaPromptConfig, PromptInstrucciones? requestPrompt)
+    public static PromptConfig? ResolvePromptConfig(
+        PromptConfig? tipologiaPromptConfig,
+        PromptInstrucciones? requestPrompt,
+        PromptConfig? defaultPromptConfig = null)
     {
         // Si no hay ningún prompt configurado, no hay nada que hacer
         if (tipologiaPromptConfig is null && requestPrompt is null)
@@ -196,7 +305,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         // Prompt ad-hoc: la tipología no tiene PromptConfig pero la petición trae instrucciones completas
         if (tipologiaPromptConfig is null)
         {
-            return new PromptConfig
+            return ApplyDefaults(new PromptConfig
             {
                 Enabled = true,
                 ModelKey = requestPrompt!.ModelKey ?? string.Empty,
@@ -205,16 +314,16 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 MaxTokens = requestPrompt.MaxTokens ?? 2000,
                 Temperature = requestPrompt.Temperature ?? 0.0,
                 ContentMode = requestPrompt.ContentMode ?? "markdown"
-            };
+            }, defaultPromptConfig);
         }
 
         if (requestPrompt is null)
         {
-            return tipologiaPromptConfig;
+            return ApplyDefaults(tipologiaPromptConfig, defaultPromptConfig);
         }
 
         // Override campo a campo: request tiene precedencia sobre tipología
-        return new PromptConfig
+        return ApplyDefaults(new PromptConfig
         {
             Enabled = tipologiaPromptConfig.Enabled,
             ModelKey = FirstNonEmpty(requestPrompt.ModelKey, tipologiaPromptConfig.ModelKey),
@@ -223,6 +332,25 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             MaxTokens = requestPrompt.MaxTokens ?? tipologiaPromptConfig.MaxTokens,
             Temperature = requestPrompt.Temperature ?? tipologiaPromptConfig.Temperature,
             ContentMode = FirstNonEmpty(requestPrompt.ContentMode, tipologiaPromptConfig.ContentMode)
+        }, defaultPromptConfig);
+    }
+
+    public static PromptConfig ApplyDefaults(PromptConfig promptConfig, PromptConfig? defaultPromptConfig)
+    {
+        if (defaultPromptConfig is null)
+        {
+            return promptConfig;
+        }
+
+        return new PromptConfig
+        {
+            Enabled = promptConfig.Enabled,
+            ModelKey = FirstNonEmpty(promptConfig.ModelKey, defaultPromptConfig.ModelKey),
+            SystemPrompt = FirstNonEmpty(promptConfig.SystemPrompt, defaultPromptConfig.SystemPrompt),
+            UserPromptTemplate = FirstNonEmpty(promptConfig.UserPromptTemplate, defaultPromptConfig.UserPromptTemplate),
+            MaxTokens = promptConfig.MaxTokens > 0 ? promptConfig.MaxTokens : defaultPromptConfig.MaxTokens,
+            Temperature = promptConfig.Temperature,
+            ContentMode = FirstNonEmpty(promptConfig.ContentMode, defaultPromptConfig.ContentMode)
         };
     }
 
@@ -234,6 +362,24 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         }
 
         return fallback;
+    }
+
+    private static bool HasPromptDefinition(PromptConfig promptConfig)
+    {
+        return !string.IsNullOrWhiteSpace(promptConfig.SystemPrompt) ||
+            !string.IsNullOrWhiteSpace(promptConfig.UserPromptTemplate);
+    }
+
+    private static string? ExtractString(JsonElement root, string propertyName)
+    {
+        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(propertyName, out var element))
+        {
+            return element.ValueKind == JsonValueKind.String
+                ? element.GetString()
+                : element.GetRawText();
+        }
+
+        return null;
     }
 
     internal static string InterpolateTemplate(

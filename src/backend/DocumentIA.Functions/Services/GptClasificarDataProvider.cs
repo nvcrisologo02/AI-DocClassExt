@@ -25,6 +25,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly ClassificationTipologiaPromptBuilder _tipologiaPromptBuilder;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ClassificationRoutingSettings _routingSettings;
+    private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
     private readonly Lazy<ChatClient> _chatClient;
@@ -34,12 +35,14 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         ClassificationTipologiaPromptBuilder tipologiaPromptBuilder,
         IServiceScopeFactory scopeFactory,
         IOptions<ClassificationRoutingSettings> routingSettings,
+        IOptions<PromptDefaultsSettings> promptDefaults,
         ILogger<GptClasificarDataProvider> logger)
     {
         _modelRegistryLoader = modelRegistryLoader;
         _tipologiaPromptBuilder = tipologiaPromptBuilder;
         _scopeFactory = scopeFactory;
         _routingSettings = routingSettings.Value;
+        _promptDefaults = promptDefaults.Value;
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
         _chatClient = new Lazy<ChatClient>(CreateChatClient);
@@ -147,21 +150,43 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             throw new InvalidOperationException($"No se encontraron subtipos TDN2 para la familia {tdn1Code}.");
         }
 
-        var phase2SystemMessage = new SystemChatMessage(
+        var resumenPrompt = ResolveResumenPrompt(input, contextoTexto);
+        var phase2ResponseInstruction = resumenPrompt is null
+            ? ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction
+            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"resumen\": \"resumen ejecutivo\"}. No incluyas texto fuera del JSON.";
+
+        var phase2SystemText =
             "Eres un sistema experto en clasificación documental. " +
             "Debes seleccionar exclusivamente un subtipo TDN2 de la familia ya resuelta. " +
-            ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction);
+            phase2ResponseInstruction;
+
+        if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
+        {
+            phase2SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
+        }
+
+        var phase2SystemMessage = new SystemChatMessage(phase2SystemText);
 
         var phase2UserText =
             $"Familia TDN1 resuelta: {tdn1Code}\n\n" +
             $"Subtipos TDN2 disponibles:\n{phase2Catalog}";
+
+        if (resumenPrompt is not null)
+        {
+            phase2UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
 
         if (!string.IsNullOrWhiteSpace(contextoTexto))
         {
             phase2UserText += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}";
         }
 
-        var phase2ResponseText = await CompleteChatAsync(model, phase2SystemMessage, phase2UserText, cancellationToken);
+        var phase2ResponseText = await CompleteChatAsync(
+            model,
+            phase2SystemMessage,
+            phase2UserText,
+            cancellationToken,
+            resumenPrompt?.MaxTokens);
         var phase2Parsed = GptHierarchicalClassificationParser.ParsePhase2(phase2ResponseText);
 
         if (!phase2Parsed.Success || phase2Parsed.Value is null)
@@ -186,7 +211,37 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             Confianza = 0.9,
             ConfianzaGPT = 0.9,
             ProveedorClasif = "GPT4oMini",
-            PropuestaTipologia = propuesta
+            PropuestaTipologia = propuesta,
+            ResultadoPromptCombinado = phase2Parsed.Value.ResultadoPrompt,
+            ResumenCombinado = phase2Parsed.Value.Resumen
+        };
+    }
+
+    private PromptConfig? ResolveResumenPrompt(ClasificacionInput input, string? contextoTexto)
+    {
+        if (!input.GenerarResumenPorDefecto)
+        {
+            return null;
+        }
+
+        var defaults = _promptDefaults.ToPromptConfig();
+        if (string.IsNullOrWhiteSpace(defaults.UserPromptTemplate))
+        {
+            return null;
+        }
+
+        return new PromptConfig
+        {
+            Enabled = true,
+            ModelKey = defaults.ModelKey,
+            SystemPrompt = defaults.SystemPrompt,
+            UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
+                defaults.UserPromptTemplate,
+                contextoTexto ?? string.Empty,
+                input.DatosNormalizados),
+            MaxTokens = defaults.MaxTokens,
+            Temperature = defaults.Temperature,
+            ContentMode = defaults.ContentMode
         };
     }
 
@@ -194,7 +249,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         ClassificationModelConfig model,
         SystemChatMessage systemMessage,
         string userText,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? maxOutputTokens = null)
     {
         var userMessage = new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText));
 
@@ -202,7 +258,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
             Temperature = (float)model.Temperature,
-            MaxOutputTokenCount = model.MaxTokens
+            MaxOutputTokenCount = Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens)
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
