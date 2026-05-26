@@ -51,6 +51,12 @@ public class DocumentIADbContext : DbContext
         modelBuilder.Entity<DocumentoEntity>()
             .HasIndex(d => d.Estado);
 
+        modelBuilder.Entity<DocumentoEntity>()
+            .HasIndex(d => d.FechaExpiracionBlob);
+
+        modelBuilder.Entity<DocumentoEntity>()
+            .HasIndex(d => new { d.FechaExpiracionBlob, d.RutaBlobStorage });
+
         modelBuilder.Entity<TipologiaEntity>()
             .HasIndex(t => t.Codigo)
             .IsUnique();

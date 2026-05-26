@@ -68,6 +68,19 @@ public class DocumentoRepository : IDocumentoRepository
             .ToListAsync();
     }
 
+    public async Task<IEnumerable<DocumentoEntity>> GetDocumentosConBlobExpiradosAsync(int top)
+    {
+        var batchSize = top <= 0 ? 200 : top;
+        var nowUtc = DateTime.UtcNow;
+
+        return await _context.Documentos
+            .Where(d => d.RutaBlobStorage != null && d.RutaBlobStorage != string.Empty)
+            .Where(d => d.FechaExpiracionBlob.HasValue && d.FechaExpiracionBlob.Value <= nowUtc)
+            .OrderBy(d => d.FechaExpiracionBlob)
+            .Take(batchSize)
+            .ToListAsync();
+    }
+
     public async Task<DocumentoEntity> AddAsync(DocumentoEntity documento)
     {
         _context.Documentos.Add(documento);

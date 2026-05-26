@@ -85,6 +85,7 @@ public class DocumentoEntity
 
     public DateTime FechaCreacion { get; set; } = DateTime.UtcNow;
     public DateTime? FechaProceso { get; set; }
+    public DateTime? FechaExpiracionBlob { get; set; }
     public DateTime? FechaActualizacion { get; set; }
     public virtual ICollection<DocumentoEjecucionEntity> Ejecuciones { get; set; }
         = new List<DocumentoEjecucionEntity>();

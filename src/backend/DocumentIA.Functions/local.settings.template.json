@@ -5,6 +5,7 @@
     "AzureWebJobsStorage": "UseDevelopmentStorage=true",
     "SecretsSource": "Local",
     "RunDatabaseMigrationsOnStartup": "false",
+    "BlobRetentionCleanupCron": "0 0 3 * * *",
     "SqlConnectionString": "Server=localhost,1433;Database=DocumentIA;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;",
     "AzureStorageConnectionString": "UseDevelopmentStorage=true",
     "AssetResolver__BaseUrl": "http://localhost:5006/",

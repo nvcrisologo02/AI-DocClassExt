@@ -518,6 +518,45 @@ Ejemplo mínimo:
 }
 ```
 
+### 5.10.1 Politica de retencion de blobs (EP9 simplificada)
+
+La retencion del blob se usa como almacenamiento temporal. La fuente de verdad de negocio sigue siendo la BBDD.
+
+Reglas de resolucion:
+
+1. Si la tipologia define `retentionPolicy.blobRetentionDays`, ese valor tiene prioridad.
+2. Si no lo define, se usa `BlobRetention:DefaultDays` de `appsettings.json`.
+3. Si el valor final es `-1` (o no hay valor), no se programa expiracion (`FechaExpiracionBlob = null`).
+
+Configuracion por tipologia (en `ConfiguracionJson`):
+
+```json
+{
+  "tipologiaId": "nota-simple",
+  "version": "1.4",
+  "retentionPolicy": {
+    "blobRetentionDays": 90
+  }
+}
+```
+
+Configuracion global en Functions (`appsettings.json`):
+
+```json
+"BlobRetention": {
+  "DefaultDays": 90,
+  "CleanupCron": "0 0 3 * * *",
+  "BatchSize": 200
+}
+```
+
+Comportamiento de limpieza:
+
+- La function `BlobCleanupTimerTrigger` elimina en lotes los documentos con `RutaBlobStorage` informada y `FechaExpiracionBlob <= UTC now`.
+- En borrado correcto: auditoria `BlobEliminado`.
+- Si no existe el blob: auditoria `BlobNoEncontrado` y se limpia `RutaBlobStorage` en BBDD.
+- En error: auditoria `BlobEliminadoError` y el lote continua con el resto de documentos.
+
 ### Migración de datos legacy en SQL Server
 
 Se incluye script idempotente para poblar bloques `gdc` y `classification` cuando no existen:

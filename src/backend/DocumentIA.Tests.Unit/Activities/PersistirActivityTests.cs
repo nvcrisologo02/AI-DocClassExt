@@ -8,6 +8,7 @@ using FluentAssertions;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -19,6 +20,7 @@ public class PersistirActivityTests : IDisposable
     private readonly Mock<IDocumentoEjecucionRepository> _ejecucionRepoMock;
     private readonly Mock<IAuditoriaRepository> _auditoriaRepoMock;
     private readonly DocumentIADbContext _context;
+    private readonly IConfiguration _configuration;
     private readonly PersistirActivity _sut;
 
     public PersistirActivityTests()
@@ -33,6 +35,12 @@ public class PersistirActivityTests : IDisposable
         _context = new DocumentIADbContext(options);
 
         var telemetryClient = new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true });
+        _configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["BlobRetention:DefaultDays"] = "90"
+            })
+            .Build();
 
         _sut = new PersistirActivity(
             new Mock<ILogger<PersistirActivity>>().Object,
@@ -40,7 +48,8 @@ public class PersistirActivityTests : IDisposable
             _ejecucionRepoMock.Object,
             _auditoriaRepoMock.Object,
             _context,
-            telemetryClient);
+            telemetryClient,
+            _configuration);
     }
 
     private static ContratoSalida BuildSalidaMinima(string sha256 = "abc123sha256")
@@ -225,6 +234,80 @@ public class PersistirActivityTests : IDisposable
 
         _context.ResultadosProcesamiento.Should().HaveCount(1);
         _context.ResultadosProcesamiento.First().DocumentoId.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task Run_DocumentoNuevo_AplicaDefaultDaysEnFechaExpiracionBlob()
+    {
+        const string sha256 = "sha256_expiracion_default";
+        var salida = BuildSalidaMinima(sha256);
+        salida.Identificacion.FechaProceso = new DateTime(2026, 5, 1, 12, 0, 0, DateTimeKind.Utc);
+
+        DocumentoEntity? documentoCapturado = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) =>
+            {
+                documentoCapturado = d;
+                d.Id = 100;
+                return d;
+            });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(salida);
+
+        documentoCapturado.Should().NotBeNull();
+        documentoCapturado!.FechaExpiracionBlob.Should().Be(new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public async Task Run_TipologiaConRetentionMenosUno_DejaFechaExpiracionBlobNull()
+    {
+        const string sha256 = "sha256_expiracion_indefinida";
+        var salida = BuildSalidaMinima(sha256);
+        salida.Identificacion.Tipologia = "NDS";
+
+        _context.Tipologias.Add(new TipologiaEntity
+        {
+            Codigo = "NDS",
+            Nombre = "Nota Simple",
+            ConfiguracionJson = "{\"retentionPolicy\":{\"blobRetentionDays\":-1}}"
+        });
+        await _context.SaveChangesAsync();
+
+        DocumentoEntity? documentoCapturado = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) =>
+            {
+                documentoCapturado = d;
+                d.Id = 101;
+                return d;
+            });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(salida);
+
+        documentoCapturado.Should().NotBeNull();
+        documentoCapturado!.FechaExpiracionBlob.Should().BeNull();
     }
 
     public void Dispose()

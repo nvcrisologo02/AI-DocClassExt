@@ -72,6 +72,29 @@ namespace DocumentIA.Tests.Unit.Configuration
         }
 
         [Fact]
+        public void TipologiaValidationConfig_RetentionPolicy_StoresValuesCorrectly()
+        {
+            var config = new TipologiaValidationConfig
+            {
+                RetentionPolicy = new RetentionPolicyConfig
+                {
+                    BlobRetentionDays = 45
+                }
+            };
+
+            config.RetentionPolicy.Should().NotBeNull();
+            config.RetentionPolicy!.BlobRetentionDays.Should().Be(45);
+        }
+
+        [Fact]
+        public void RetentionPolicyConfig_DefaultValues_AreExpected()
+        {
+            var retention = new RetentionPolicyConfig();
+
+            retention.BlobRetentionDays.Should().Be(-1);
+        }
+
+        [Fact]
         public void TipologiaValidationConfig_AddFields_ListGrows()
         {
             // Arrange

@@ -14,6 +14,9 @@ using System.IO.Compression;
 using System.Text;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.DataContracts;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using DocumentIA.Core.Configuration;
 
 namespace DocumentIA.Functions.Activities
 {
@@ -25,6 +28,7 @@ namespace DocumentIA.Functions.Activities
         private readonly IAuditoriaRepository _auditoriaRepo;
         private readonly DocumentIADbContext _context;
         private readonly TelemetryClient _telemetryClient;
+        private readonly IConfiguration _configuration;
 
         public PersistirActivity(
             ILogger<PersistirActivity> logger,
@@ -32,7 +36,8 @@ namespace DocumentIA.Functions.Activities
             IDocumentoEjecucionRepository ejecucionRepo,
             IAuditoriaRepository auditoriaRepo,
             DocumentIADbContext context,
-            TelemetryClient telemetryClient)
+            TelemetryClient telemetryClient,
+            IConfiguration configuration)
         {
             _logger = logger;
             _documentoRepo = documentoRepo;
@@ -40,6 +45,7 @@ namespace DocumentIA.Functions.Activities
             _auditoriaRepo = auditoriaRepo;
             _context = context;
             _telemetryClient = telemetryClient;
+            _configuration = configuration;
         }
 
         [Function(nameof(PersistirActivity))]
@@ -52,6 +58,8 @@ namespace DocumentIA.Functions.Activities
 
             try
             {
+                var fechaExpiracionBlob = await ResolveFechaExpiracionBlobAsync(salida);
+
                 // 1. Obtener o crear documento base
                 var documento = await _documentoRepo.GetBySHA256Async(salida.Integridad.SHA256);
                 
@@ -84,7 +92,8 @@ namespace DocumentIA.Functions.Activities
                         ClassifierVersion = salida.DetalleEjecucion.Clasificacion.ClassifierVersion,
                         PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed,
                         FechaCreacion = DateTime.UtcNow,
-                        FechaProceso = salida.Identificacion.FechaProceso
+                        FechaProceso = salida.Identificacion.FechaProceso,
+                        FechaExpiracionBlob = fechaExpiracionBlob
                     };
                     
                     documento = await _documentoRepo.AddAsync(documento);
@@ -132,6 +141,7 @@ namespace DocumentIA.Functions.Activities
                         documento.PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed;
                     
                     documento.NormalizacionMarkdownCompressed = CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown);
+                    documento.FechaExpiracionBlob = fechaExpiracionBlob;
                     documento.FechaActualizacion = DateTime.UtcNow;
                     await _documentoRepo.UpdateAsync(documento);
                     _logger.LogInformation("Documento actualizado ID={Id}", documento.Id);
@@ -417,6 +427,76 @@ namespace DocumentIA.Functions.Activities
 
             output.Position = 0;
             return Convert.ToBase64String(output.ToArray());
+        }
+
+        private async Task<DateTime?> ResolveFechaExpiracionBlobAsync(ContratoSalida salida)
+        {
+            var retentionDays = await ResolveBlobRetentionDaysAsync(salida.Identificacion.Tipologia);
+
+            if (!retentionDays.HasValue || retentionDays.Value == -1)
+            {
+                return null;
+            }
+
+            if (retentionDays.Value <= 0)
+            {
+                _logger.LogWarning(
+                    "Valor de retención no válido ({RetentionDays}) para tipología {Tipologia}. Se conserva sin expiración.",
+                    retentionDays.Value,
+                    salida.Identificacion.Tipologia);
+                return null;
+            }
+
+            var fechaBase = salida.Identificacion.FechaProceso;
+            if (fechaBase == default)
+            {
+                fechaBase = DateTime.UtcNow;
+            }
+
+            if (fechaBase.Kind == DateTimeKind.Unspecified)
+            {
+                fechaBase = DateTime.SpecifyKind(fechaBase, DateTimeKind.Utc);
+            }
+            else
+            {
+                fechaBase = fechaBase.ToUniversalTime();
+            }
+
+            return fechaBase.AddDays(retentionDays.Value);
+        }
+
+        private async Task<int?> ResolveBlobRetentionDaysAsync(string? tipologia)
+        {
+            if (!string.IsNullOrWhiteSpace(tipologia))
+            {
+                var tipologiaEntity = await _context.Tipologias
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(t => t.Codigo == tipologia || t.Nombre == tipologia);
+
+                if (!string.IsNullOrWhiteSpace(tipologiaEntity?.ConfiguracionJson))
+                {
+                    try
+                    {
+                        var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(
+                            tipologiaEntity.ConfiguracionJson,
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                        if (config?.RetentionPolicy != null)
+                        {
+                            return config.RetentionPolicy.BlobRetentionDays;
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "No se pudo parsear ConfiguracionJson de tipología {Tipologia}. Se usará fallback global.",
+                            tipologia);
+                    }
+                }
+            }
+
+            return _configuration.GetValue<int?>("BlobRetention:DefaultDays");
         }
     }
 }

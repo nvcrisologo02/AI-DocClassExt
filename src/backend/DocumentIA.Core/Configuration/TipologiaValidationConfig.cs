@@ -67,6 +67,8 @@ namespace DocumentIA.Core.Configuration
         /// Permite definir familias y subtipos versionados en configuración.
         /// </summary>
         public TdnClassificationCatalogConfig? ClassificationCatalog { get; set; }
+        [System.Text.Json.Serialization.JsonPropertyName("retentionPolicy")]
+        public RetentionPolicyConfig? RetentionPolicy { get; set; }
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
         [System.Text.Json.Serialization.JsonIgnore]
@@ -152,6 +154,12 @@ namespace DocumentIA.Core.Configuration
         public bool TechnicalErrorOnly { get; set; } = true;
         /// <summary>Si true, evita reproceso por cambio de versión de clasificador cuando el SHA coincide.</summary>
         public bool SkipReprocessWhenShaMatches { get; set; } = true;
+    }
+
+    public class RetentionPolicyConfig
+    {
+        [System.Text.Json.Serialization.JsonPropertyName("blobRetentionDays")]
+        public int BlobRetentionDays { get; set; } = -1;
     }
 
     public class TdnClassificationCatalogConfig

@@ -11,6 +11,7 @@ public interface IDocumentoRepository
     Task<DocumentoEntity?> GetByCorrelationIdAsync(string correlationId);
     Task<IEnumerable<DocumentoEntity>> GetAllAsync();
     Task<IEnumerable<DocumentoEntity>> GetByEstadoAsync(string estado);
+    Task<IEnumerable<DocumentoEntity>> GetDocumentosConBlobExpiradosAsync(int top);
     Task<DocumentoEntity> AddAsync(DocumentoEntity documento);
     Task UpdateAsync(DocumentoEntity documento);
     Task DeleteAsync(int id);
