@@ -1,0 +1,94 @@
+[
+  {
+    "domain": "orchestration-state",
+    "group": "B",
+    "id": "B1",
+    "caseKey": "B-B1",
+    "suiteId": 99641,
+    "testCaseId": 99648,
+    "name": "Secuencia completa de actividades",
+    "description": "Ejecuta camino funcional completo y valida que la orquestacion finaliza con trazabilidad util.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": false,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["Resultado.Estado", "DetalleEjecucion"],
+      "expectOutputJsonContains": ["Seguimiento"]
+    }
+  },
+  {
+    "domain": "orchestration-state",
+    "group": "B",
+    "id": "B2",
+    "caseKey": "B-B2",
+    "suiteId": 99642,
+    "testCaseId": 99646,
+    "name": "Estado y customStatus durante ejecucion",
+    "description": "Valida transicion de orquestacion y captura historico de polling/customStatus como evidencia.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectObservedRuntimeStatuses": ["Running", "Completed"]
+    }
+  },
+  {
+    "domain": "orchestration-state",
+    "group": "B",
+    "id": "B3",
+    "caseKey": "B-B3",
+    "suiteId": 99643,
+    "testCaseId": 99647,
+    "name": "Timeline y duraciones por actividad",
+    "description": "Comprueba que la salida final contiene seguimiento/timeline o duraciones de actividades.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": false,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputJsonContains": ["duracionTotalMs", "actividadesTotales"]
+    }
+  },
+  {
+    "domain": "orchestration-state",
+    "group": "B",
+    "id": "B4",
+    "caseKey": "B-B4",
+    "suiteId": 99644,
+    "testCaseId": 99649,
+    "name": "Reintentos y errores parciales",
+    "description": "Ejecuta una ruta controlada donde no debe producirse error tecnico aunque el resultado funcional sea parcial.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "umbral": 0.95,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["Resultado.Estado"]
+    }
+  }
+]

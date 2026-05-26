@@ -67,7 +67,17 @@ public class IngestAPITrigger
             else
             {
                 var requestBody = await req.ReadAsStringAsync();
-                contratoEntrada = JsonSerializer.Deserialize<ContratoEntrada>(requestBody!, JsonOptions);
+                try
+                {
+                    contratoEntrada = JsonSerializer.Deserialize<ContratoEntrada>(requestBody!, JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    _logger.LogWarning(ex, "JSON de entrada mal formado.");
+                    var badJsonResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                    await badJsonResponse.WriteStringAsync("JSON mal formado.");
+                    return badJsonResponse;
+                }
 
                 if (contratoEntrada is not null)
                 {
@@ -138,6 +148,13 @@ public class IngestAPITrigger
             {
                 var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badResponse.WriteStringAsync("classificationOnly=true es incompatible con expectedType informado.");
+                return badResponse;
+            }
+
+            if (contratoEntrada.Instrucciones.ClassificationOnly && contratoEntrada.Instrucciones.MaxPagesForClassificationOnly < 0)
+            {
+                var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badResponse.WriteStringAsync("instrucciones.maxPagesForClassificationOnly debe ser 0 o mayor.");
                 return badResponse;
             }
 

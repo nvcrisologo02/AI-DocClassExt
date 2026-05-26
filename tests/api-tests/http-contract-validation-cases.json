@@ -1,0 +1,77 @@
+[
+  {
+    "domain": "http-contract-validation",
+    "group": "C",
+    "id": "C1",
+    "caseKey": "C-C1",
+    "suiteId": 99659,
+    "testCaseId": 99636,
+    "name": "Payload invalido sin documento",
+    "description": "Verifica que el endpoint rechaza payload sin documento con error HTTP controlado.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "payloadMode": "missingDocumento",
+    "classificationProvider": "auto",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectHttpStatus": 400
+    }
+  },
+  {
+    "domain": "http-contract-validation",
+    "group": "C",
+    "id": "C2",
+    "caseKey": "C-C2",
+    "suiteId": 99660,
+    "testCaseId": 99638,
+    "name": "Regla de negocio invalida por maxPages",
+    "description": "Verifica respuesta controlada para combinacion de parametros no permitida o degradada.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": -1,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectHttpStatus": 400
+    }
+  },
+  {
+    "domain": "http-contract-validation",
+    "group": "C",
+    "id": "C3",
+    "caseKey": "C-C3",
+    "suiteId": 99661,
+    "testCaseId": 99630,
+    "name": "Error semantico esperado por expectedType invalido",
+    "description": "Valida que expectedType invalido no expone error tecnico interno.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "expectedType": "TIPO_INEXISTENTE",
+    "assertions": {
+      "expectHttpStatus": 400
+    }
+  },
+  {
+    "domain": "http-contract-validation",
+    "group": "C",
+    "id": "C4",
+    "caseKey": "C-C4",
+    "suiteId": 99662,
+    "testCaseId": 99635,
+    "name": "Formato de respuesta de error para JSON mal formado",
+    "description": "Verifica que un JSON mal formado produce respuesta 4xx controlada.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "payloadMode": "malformedJson",
+    "assertions": {
+      "expectHttpStatus": 400
+    }
+  }
+]

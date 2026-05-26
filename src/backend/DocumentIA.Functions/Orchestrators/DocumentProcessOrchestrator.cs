@@ -1203,18 +1203,29 @@ public class DocumentProcessOrchestrator
             }
 
             var markdownNormalizacion = resultadoExtraccion.MarkdownExtraido;
+            var origenMarkdownNormalizacion = "Extraccion";
+            if (string.IsNullOrWhiteSpace(markdownNormalizacion)
+                && datosNormalizados.TryGetValue("Markdown", out var markdownPreexistente)
+                && markdownPreexistente is string markdownExistente
+                && !string.IsNullOrWhiteSpace(markdownExistente))
+            {
+                markdownNormalizacion = markdownExistente;
+                origenMarkdownNormalizacion = "MarkdownPrevio";
+            }
+
             if (string.IsNullOrWhiteSpace(markdownNormalizacion)
                 && resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownExtraido)
                 && markdownExtraido is string markdownDetectado
                 && !string.IsNullOrWhiteSpace(markdownDetectado))
             {
                 markdownNormalizacion = markdownDetectado;
+                origenMarkdownNormalizacion = "Extraccion";
             }
 
             if (!string.IsNullOrWhiteSpace(markdownNormalizacion))
             {
                 datosNormalizados["Markdown"] = markdownNormalizacion;
-                RegistrarMarkdown(markdownNormalizacion, "Extraccion");
+                RegistrarMarkdown(markdownNormalizacion, origenMarkdownNormalizacion);
                 logger.LogInformation(
                     "Markdown de extracción preparado para normalización y fallbacks ({Length} caracteres)",
                     markdownNormalizacion.Length);

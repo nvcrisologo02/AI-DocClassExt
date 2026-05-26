@@ -1,0 +1,115 @@
+[
+  {
+    "domain": "extraction-normalization",
+    "group": "A",
+    "id": "A1",
+    "caseKey": "A-A1",
+    "suiteId": 99654,
+    "testCaseId": 99663,
+    "name": "Proveedor principal y fallback",
+    "description": "Valida que provider=auto completa el flujo sin error tecnico y deja salida consumible para extraccion/normalizacion.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": false,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["Resultado.Estado", "Identificacion"]
+    }
+  },
+  {
+    "domain": "extraction-normalization",
+    "group": "A",
+    "id": "A2",
+    "caseKey": "A-A2",
+    "suiteId": 99655,
+    "testCaseId": 99634,
+    "name": "Markdown inyectado y preprocesado",
+    "description": "Valida que el markdown informado en la peticion se usa como entrada controlada y queda trazado.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": false,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "markdown": "## Documento de prueba\n\nEscritura con finca registral, fecha 01/02/2026 e importe 12345,67 EUR.",
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["Resultado.Estado"],
+      "expectOutputJsonContains": ["OrigenMarkdown"]
+    }
+  },
+  {
+    "domain": "extraction-normalization",
+    "group": "A",
+    "id": "A3",
+    "caseKey": "A-A3",
+    "suiteId": 99656,
+    "testCaseId": 99629,
+    "name": "Campos minimos y normalizacion",
+    "description": "Comprueba presencia de estructura de identificacion y resultado final normalizado a estado funcional.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": false,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["Resultado.Estado", "Identificacion.Tipologia"]
+    }
+  },
+  {
+    "domain": "extraction-normalization",
+    "group": "A",
+    "id": "A4",
+    "caseKey": "A-A4",
+    "suiteId": 99657,
+    "testCaseId": 99637,
+    "name": "Paginas y metadatos extraidos",
+    "description": "Verifica que la salida contiene informacion de paginas o detalle de ejecucion suficiente para auditoria.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputJsonContains": ["Paginas"]
+    }
+  },
+  {
+    "domain": "extraction-normalization",
+    "group": "A",
+    "id": "A5",
+    "caseKey": "A-A5",
+    "suiteId": 99658,
+    "testCaseId": 99627,
+    "name": "Calidad del resultado de extraccion",
+    "description": "Valida que el resultado sea completo o parcial controlado, nunca error tecnico expuesto.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": false,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["Resultado.Estado", "DetalleEjecucion"]
+    }
+  }
+]
