@@ -355,6 +355,7 @@ public class DocumentProcessOrchestrator
         try
         {
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
+            salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
             if (entradaPorObjectIdGdc)
             {
@@ -400,7 +401,8 @@ public class DocumentProcessOrchestrator
                             new ObtenerUltimaEjecucionDuplicadoInput
                             {
                                 SHA256 = duplicadoPorMd5.SHA256,
-                                ClassificationOnly = entrada.Instrucciones.ClassificationOnly
+                                ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
+                                NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion
                             });
 
                         if (salidaDuplicado is not null)
@@ -475,7 +477,8 @@ public class DocumentProcessOrchestrator
                         new ObtenerUltimaEjecucionDuplicadoInput
                         {
                             SHA256 = salida.Integridad.SHA256,
-                            ClassificationOnly = entrada.Instrucciones.ClassificationOnly
+                            ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
+                            NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion
                         });
 
                     if (salidaDuplicado is not null)
@@ -509,7 +512,8 @@ public class DocumentProcessOrchestrator
                 {
                     ContenidoBase64 = entrada.Documento.Content.Base64,
                     NombreArchivo = entrada.Documento.Name,
-                    Contenedor = "documents"
+                    Contenedor = "documents",
+                    BlobPath = entrada.Documento.BlobPath
                 });
 
             if (!string.IsNullOrWhiteSpace(blobPath))
@@ -547,7 +551,10 @@ public class DocumentProcessOrchestrator
                         {
                             DocumentoBase64 = entrada.Documento.Content.Base64,
                             NombreDocumento = entrada.Documento.Name,
-                            MaxPaginasClasificacion = maxPaginasClasificacion
+                            MaxPaginasClasificacion = maxPaginasClasificacion,
+                            BlobPath = !string.IsNullOrWhiteSpace(blobPath)
+                                ? blobPath
+                                : entrada.Documento.BlobPath
                         });
 
                     docClasif = docClasifResult ?? docClasif;
@@ -574,6 +581,67 @@ public class DocumentProcessOrchestrator
                     logger.LogWarning(
                         exPrep,
                         "PrepararDocumentoClasificacionActivity falló. Se usará documento completo para clasificación.");
+                }
+            }
+
+            // D4: si el caller aporta markdown pre-procesado en las instrucciones, inyectarlo directamente.
+            // La condición del paso 2.8 comprueba !datosNormalizados.ContainsKey("Markdown"),
+            // por lo que la inyección aquí evita la llamada innecesaria a ExtraerMarkdownLayoutActivity.
+            if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.Classification.Markdown))
+            {
+                datosNormalizados["Markdown"] = entrada.Instrucciones.Classification.Markdown;
+                RegistrarMarkdown(entrada.Instrucciones.Classification.Markdown, "InstruccionesCallerPreClasificacion");
+                logger.LogInformation(
+                    "Paso 2.8 omitido: markdown inyectado desde instrucciones del caller ({Len} chars)",
+                    entrada.Instrucciones.Classification.Markdown.Length);
+            }
+
+            // 2.8: Asegurar contexto textual para clasificación.
+            // DI y CU generan su propio markdown durante la ejecución de clasificación y lo propagan
+            // a datosNormalizados en el paso post-clasificación.
+            // Todos los demás providers (gpt, hybrid, rules, auto) necesitan markdown previo;
+            // si no está disponible, lo extraemos aquí vía DI Layout con el documento recortado.
+            if (!datosNormalizados.ContainsKey("Markdown")
+                && string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
+                && !ClasificacionProviderGeneraMarkdownPropio(entrada.Instrucciones.Classification.Provider))
+            {
+                logger.LogInformation(
+                    "Paso 2.8: Extrayendo markdown DI Layout previo a clasificación (provider={Provider}, doc={Doc})",
+                    entrada.Instrucciones.Classification.Provider ?? "auto",
+                    entrada.Documento.Name);
+                try
+                {
+                    var markdownPreClasif = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                        "ExtraerMarkdownLayoutActivity",
+                        new ExtraerMarkdownLayoutInput
+                        {
+                            Tipologia = string.Empty,
+                            DocumentoBase64 = docClasif.DocumentoBase64Clasif,
+                            NombreDocumento = entrada.Documento.Name
+                        });
+
+                    if (!string.IsNullOrWhiteSpace(markdownPreClasif.Markdown))
+                    {
+                        datosNormalizados["Markdown"] = markdownPreClasif.Markdown;
+                        RegistrarMarkdown(markdownPreClasif.Markdown, "LayoutPreClasificacion");
+                        logger.LogInformation(
+                            "Paso 2.8: Markdown DI Layout listo para clasificación ({Len} chars)",
+                            markdownPreClasif.Markdown.Length);
+                        if (salida.Identificacion.Paginas <= 0 && markdownPreClasif.Paginas > 0)
+                            salida.Identificacion.Paginas = markdownPreClasif.Paginas;
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "Paso 2.8: DI Layout no devolvió markdown útil para {Doc}. Se continúa sin markdown.",
+                            entrada.Documento.Name);
+                    }
+                }
+                catch (Exception exMd)
+                {
+                    logger.LogWarning(
+                        exMd,
+                        "Paso 2.8: No se pudo extraer markdown DI Layout previo. Se continúa sin markdown.");
                 }
             }
 
@@ -690,6 +758,83 @@ public class DocumentProcessOrchestrator
             }
             resultadoClasificacion.ContentExtraido = null; // limpiar: no exponer en respuesta
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
+
+            if (resultadoClasificacion.ClasificacionParcial)
+            {
+                var tipologiaParcial = resultadoClasificacion.TipologiaDetectada ?? string.Empty;
+                var esVirtual = string.IsNullOrWhiteSpace(tipologiaParcial)
+                    || string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase);
+
+                if (esVirtual)
+                {
+                    // Tipología virtual: GPT identificó familia TDN1 pero no puede mapearla al catálogo.
+                    // El pipeline se detiene aquí con Estado=OK y PropuestaTipologia accesible en la salida.
+                    salida.Identificacion.Tipologia = tipologiaParcial;
+                    salida.Identificacion.TipologiaFamilia = tipologiaParcial;
+                    salida.Identificacion.TipologiaVersion = string.Empty;
+                    salida.Identificacion.PropuestaTipologia = resultadoClasificacion.PropuestaTipologia;
+                    salida.DetalleEjecucion.RunTipologia = tipologiaParcial;
+
+                    salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
+                    {
+                        Modelo = "skipped",
+                        LayoutEnabled = false,
+                        FallbackUsado = false,
+                        FallbackRazon = null,
+                        ConfianzaExtraccion = 0,
+                        ProveedorExtrac = "none",
+                        ConfianzaPorCampo = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
+                        CamposConDuda = new List<string>(),
+                        TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                    };
+
+                    salida.DatosExtraidos = new Dictionary<string, object>();
+                    salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
+                    {
+                        Normalizaciones = new List<string>
+                        {
+                            "Tipología virtual TDN1: GPT no resolvió código de catálogo. Pipeline detenido con PropuestaTipologia."
+                        },
+                        Markdown = null,
+                        Validaciones = new List<string>(),
+                        Inconsistencias = new List<string>(),
+                        ConfianzaValidacion = 1.0
+                    };
+
+                    MarcarActividadOmitida("ResolverTipologia", "Tipología virtual: sin código de catálogo");
+                    MarcarActividadOmitida("Extraer", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("Prompt", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("Validar", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("ObtenerActivo", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("Integrar", "Tipología virtual TDN1");
+                    MarcarActividadOmitida("SubirGDC", "Tipología virtual TDN1");
+
+                    var confidenceCfgVirtual = new ConfidenceConfig();
+                    salida.Resultado.Estado = "OK";
+                    salida.Resultado.ConfianzaGlobal = RedondearSalida(
+                        ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
+                    salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
+                        salida.Resultado.ConfianzaGlobal,
+                        confidenceCfgVirtual);
+                    salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                    salida.Resultado.ConfianzaExtraccion = 0;
+                    salida.Resultado.ConfianzaValidacion = 1.0;
+
+                    await EjecutarPasoNegocioSinResultado(
+                        "Persistir",
+                        () => context.CallActivityAsync(
+                            "PersistirActivity",
+                            salida));
+
+                    FinalizarSeguimiento("Completed", "Tipología virtual TDN1: propuesta sin código de catálogo");
+                    return salida;
+                }
+
+                // Clasificación parcial con código TDN1 conocido: asignar Tdn1 y continuar pipeline.
+                // nivelClasificacion=TDN1 no implica ClassificationOnly; el pipeline sigue normalmente.
+                salida.Identificacion.Tdn1 = tipologiaParcial;
+            }
+
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
             ResolvedTipologia tipologiaResuelta;
 
@@ -1502,4 +1647,20 @@ public class DocumentProcessOrchestrator
         (provider.Equals("azure-openai", StringComparison.OrdinalIgnoreCase) ||
          provider.Equals("openai", StringComparison.OrdinalIgnoreCase) ||
          provider.Equals("gpt", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Devuelve true para los providers de clasificación que generan su propio markdown
+    /// durante la ejecución (DI y CU). Estos no necesitan que el orquestador pre-extraiga
+    /// markdown vía DI Layout antes del paso de clasificación.
+    /// </summary>
+    private static bool ClasificacionProviderGeneraMarkdownPropio(string? provider)
+    {
+        if (string.IsNullOrWhiteSpace(provider)) return false;
+        return provider.ToLowerInvariant() switch
+        {
+            "di" or "azure-di" or "azure-document-intelligence" => true,
+            "cu" or "azure-content-understanding" or "content-understanding" => true,
+            _ => false
+        };
+    }
 }

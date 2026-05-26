@@ -1,5 +1,7 @@
 namespace DocumentIA.Functions.Services;
 
+using DocumentIA.Core.Services;
+
 public class ClassificationRoutingSettings
 {
     /// <summary>
@@ -23,6 +25,11 @@ public class ClassificationRoutingSettings
     /// </summary>
     public string GlobalFallbackProvider { get; set; } = "gpt";
     public string DefaultModelKey { get; set; } = string.Empty;
+    /// <summary>
+    /// Nivel jerárquico de clasificación usado cuando la petición no informa NivelClasificacion.
+    /// Valores permitidos: TDN1, TDN1_TDN2.
+    /// </summary>
+    public string NivelClasificacionDefault { get; set; } = ClassificationLevelResolver.DefaultLevel;
 }
 
 public class ClassificationFlowSettings

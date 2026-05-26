@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.DurableTask.Client;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Services;
@@ -19,6 +20,7 @@ public class IngestAPITrigger
     private readonly ILogger<IngestAPITrigger> _logger;
     private readonly PromptInstruccionesValidator _promptInstruccionesValidator;
     private readonly IBlobStorageService _blobStorageService;
+    private readonly ClassificationRoutingSettings _classificationRoutingSettings;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -28,11 +30,13 @@ public class IngestAPITrigger
     public IngestAPITrigger(
         ILogger<IngestAPITrigger> logger,
         PromptInstruccionesValidator promptInstruccionesValidator,
-        IBlobStorageService blobStorageService)
+        IBlobStorageService blobStorageService,
+        IOptions<ClassificationRoutingSettings> classificationRoutingOptions)
     {
         _logger = logger;
         _promptInstruccionesValidator = promptInstruccionesValidator;
         _blobStorageService = blobStorageService;
+        _classificationRoutingSettings = classificationRoutingOptions.Value;
     }
 
     [Function("IngestDocument")]
@@ -81,6 +85,45 @@ public class IngestAPITrigger
                 var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badResponse.WriteStringAsync("Contrato de entrada inválido");
                 return badResponse;
+            }
+
+            contratoEntrada.Instrucciones ??= new Instrucciones();
+            contratoEntrada.Instrucciones.Classification ??= new ConfiguracionIA();
+
+            if (!ClassificationLevelResolver.TryResolve(
+                null,
+                _classificationRoutingSettings.NivelClasificacionDefault,
+                out _,
+                out var defaultLevelError))
+            {
+                var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
+                await errorResponse.WriteStringAsync($"Configuración de clasificación inválida: {defaultLevelError}");
+                return errorResponse;
+            }
+
+            if (!ClassificationLevelResolver.TryResolve(
+                contratoEntrada.Instrucciones.Classification.NivelClasificacion,
+                _classificationRoutingSettings.NivelClasificacionDefault,
+                out _,
+                out var levelValidationError))
+            {
+                var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await badResponse.WriteStringAsync(levelValidationError ?? "instrucciones.classification.nivelClasificacion inválido.");
+                return badResponse;
+            }
+
+            // Capturar si el caller informó nivelClasificacion explícitamente (antes de normalizar con default)
+            var nivelClasificacionExplicito = !string.IsNullOrWhiteSpace(
+                contratoEntrada.Instrucciones.Classification.NivelClasificacion);
+
+            ClassificationLevelResolver.ApplyTo(
+                contratoEntrada.Instrucciones.Classification,
+                _classificationRoutingSettings.NivelClasificacionDefault);
+
+            // D2: si el caller especifica nivelClasificacion, forzar provider=gpt (único que lo interpreta)
+            if (nivelClasificacionExplicito)
+            {
+                contratoEntrada.Instrucciones.Classification.Provider = "gpt";
             }
 
             if (!_promptInstruccionesValidator.TryValidate(contratoEntrada.Instrucciones.Prompt, out var promptValidationError))

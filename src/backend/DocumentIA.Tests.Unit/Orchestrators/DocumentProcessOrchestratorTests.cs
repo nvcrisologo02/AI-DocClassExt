@@ -512,6 +512,78 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ClasificacionParcial_OmitePipelinePosteriorYPersiste()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.92,
+            ConfianzaGPT = 0.92,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",  // Tipología virtual → pipeline se detiene
+            ClasificacionParcial = true,
+            PropuestaTipologia = "Nota simple registral"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("Desconocido");
+        salida.Identificacion.TipologiaFamilia.Should().Be("Desconocido");
+        salida.Identificacion.TipologiaVersion.Should().BeEmpty();
+        salida.Identificacion.PropuestaTipologia.Should().Be("Nota simple registral");
+        salida.DetalleEjecucion.Clasificacion.ClasificacionParcial.Should().BeTrue();
+        salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Nota simple registral");
+        salida.DetalleEjecucion.Extraccion.Modelo.Should().Be("skipped");
+
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ExtraerActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ValidarActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ObtenerActivoActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("IntegrarActivity").Should().BeNull();
+        context.GetLastActivityInput<ContratoSalida>("PersistirActivity").Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData("tdn1_no_resuelto")]
+    [InlineData("fase1_parsing_error")]
+    [InlineData("tdn2_sin_tipologia_asociada")]
+    public async Task RunOrchestrator_NoClasificadoConRazonControlada_PreservaPropuestaTipologia(string fallbackRazon)
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ConfianzaGPT = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            FallbackLLM = true,
+            FallbackRazon = fallbackRazon,
+            PropuestaTipologia = "Sugerencia libre de tipologia"
+        });
+        context.SetupActivityThrow("ResolverTipologiaActivity", new KeyNotFoundException("No existe la tipologia: Desconocido"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be(fallbackRazon);
+        salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Sugerencia libre de tipologia");
+        salida.Resultado.MensajeError.Should().Contain("no clasificable");
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ObjectIdGdc_SincronizaNombreEnSalidaParaPersistencia()
     {
         var orchestrator = CreateOrchestrator();
@@ -579,5 +651,126 @@ public class DocumentProcessOrchestratorTests
             .Where(a => a.Nombre is "Extraer" or "Validar" or "ObtenerActivo" or "Integrar" or "SubirGDC")
             .Select(a => a.Estado)
             .Should().OnlyContain(estado => estado == "Skipped" || estado == "Completed");
+    }
+
+    // ── Tests de regresión sesión 2026-05-25 ────────────────────────────────
+
+    /// <summary>
+    /// Paso 2.8: cuando no hay Markdown en datosNormalizados y el provider no es DI/CU,
+    /// el orquestador debe llamar ExtraerMarkdownLayoutActivity y propagar el resultado
+    /// a DatosNormalizados antes de ClasificarActivity.
+    /// </summary>
+    [Fact]
+    public async Task RunOrchestrator_Paso28_SinMarkdown_LlamaExtraerMarkdownLayoutYPropagaAlClasificar()
+    {
+        // Preparation disabled (default) → docClasif.DocumentoBase64Clasif = entrada.Documento.Content.Base64
+        // Provider null/empty → ClasificacionProviderGeneraMarkdownPropio returns false → paso 2.8 activo
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada()); // no ExpectedType, no provider
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult()); // sin clave "Markdown"
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Markdown = "# Documento de prueba generado por Layout",
+            Paginas = 2
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "NOTS",
+            ClasificacionParcial = true
+        });
+
+        await orchestrator.RunOrchestrator(context);
+
+        // Verificar que ExtraerMarkdownLayoutActivity fue invocada
+        var markdownInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
+        markdownInput.Should().NotBeNull();
+        markdownInput!.DocumentoBase64.Should().NotBeNullOrWhiteSpace();
+
+        // Verificar que el markdown fue propagado a ClasificarActivity
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.DatosNormalizados.Should().ContainKey("Markdown");
+        clasifInput.DatosNormalizados["Markdown"].Should().Be("# Documento de prueba generado por Layout");
+    }
+
+    /// <summary>
+    /// Cuando ClasificacionParcial=true con TipologiaDetectada diferente de "Desconocido",
+    /// el orquestador debe asignar Identificacion.Tdn1 con el código TDN1 y continuar el pipeline.
+    /// (D1: clasificacionParcial con código TDN1 conocido ya no detiene el pipeline)
+    /// </summary>
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionParcial_AsignaTdn1EnIdentificacion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "NOTS",
+            ClasificacionParcial = true,
+            PropuestaTipologia = "Nota simple registral"
+        });
+        // D1: pipeline continúa tras asignar Tdn1; ResolverTipologia es llamado y puede fallar
+        context.SetupActivityThrow("ResolverTipologiaActivity", new KeyNotFoundException("No existe la tipologia: NOTS"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // Tdn1 asignado antes de continuar el pipeline
+        salida.Identificacion.Tdn1.Should().Be("NOTS");
+        // ResolverTipologia fue invocado (pipeline no se detuvo en ClasificacionParcial)
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().NotBeNull();
+        // KeyNotFoundException → NO_CLASIFICADO (comportamiento del orquestador)
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+    }
+
+    /// <summary>
+    /// Tipología virtual (tdn1=null, propuesta≠null → FallbackRazon="tdn1_virtual_propuesta"):
+    /// el orquestador devuelve Estado=OK con Tipologia="Desconocido" y Tdn1 vacío/nulo
+    /// (guard impide asignar "Desconocido" a Tdn1), pero PropuestaTipologia queda accesible
+    /// en DetalleEjecucion.Clasificacion.
+    /// </summary>
+    [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualParcial_EstadoOkConDesconocidoYTdn1Nulo()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.1,
+            ConfianzaGPT = 0.1,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            ClasificacionParcial = true,
+            FallbackRazon = "tdn1_virtual_propuesta",
+            PropuestaTipologia = "Solicitud de cambio de titularidad"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("Desconocido");
+        salida.Identificacion.Tdn1.Should().BeNullOrWhiteSpace(); // Guard: "Desconocido" no se asigna a Tdn1
+        salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be("tdn1_virtual_propuesta");
+        salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Solicitud de cambio de titularidad");
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
     }
 }

@@ -3,6 +3,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using System.Net;
 using System.Security.Claims;
+using System.Text;
 
 namespace DocumentIA.Tests.Unit.Helpers;
 
@@ -11,10 +12,14 @@ namespace DocumentIA.Tests.Unit.Helpers;
 /// </summary>
 public static class HttpFunctionTestFactory
 {
-    public static HttpRequestData CreateRequest(string method = "GET", string url = "http://localhost/api/test")
+    public static HttpRequestData CreateRequest(
+        string method = "GET",
+        string url = "http://localhost/api/test",
+        string? body = null,
+        IReadOnlyDictionary<string, string>? headers = null)
     {
         var context = new Mock<FunctionContext>().Object;
-        return new FakeHttpRequestData(context, method, new Uri(url));
+        return new FakeHttpRequestData(context, method, new Uri(url), body, headers);
     }
 
     public static async Task<string> ReadBodyAsync(HttpResponseData response)
@@ -28,17 +33,34 @@ public static class HttpFunctionTestFactory
     {
         private readonly string _method;
         private readonly Uri _url;
+        private readonly Stream _body;
+        private readonly HttpHeadersCollection _headers;
 
-        public FakeHttpRequestData(FunctionContext context, string method, Uri url) : base(context)
+        public FakeHttpRequestData(
+            FunctionContext context,
+            string method,
+            Uri url,
+            string? body,
+            IReadOnlyDictionary<string, string>? headers) : base(context)
         {
             _method = method;
             _url = url;
+            _body = new MemoryStream(Encoding.UTF8.GetBytes(body ?? string.Empty));
+            _headers = new HttpHeadersCollection();
+
+            if (headers is not null)
+            {
+                foreach (var header in headers)
+                {
+                    _headers.Add(header.Key, header.Value);
+                }
+            }
         }
 
         public override HttpResponseData CreateResponse() => new FakeHttpResponseData(FunctionContext);
 
-        public override Stream Body => Stream.Null;
-        public override HttpHeadersCollection Headers => new HttpHeadersCollection();
+        public override Stream Body => _body;
+        public override HttpHeadersCollection Headers => _headers;
         public override IReadOnlyCollection<IHttpCookie> Cookies => Array.Empty<IHttpCookie>();
         public override Uri Url => _url;
         public override IEnumerable<ClaimsIdentity> Identities => Array.Empty<ClaimsIdentity>();

@@ -44,6 +44,9 @@ namespace DocumentIA.Data.Entities
         
         public bool UseFallbackLLM { get; set; }
         public bool ClassificationOnly { get; set; }
+
+        [MaxLength(20)]
+        public string? NivelClasificacion { get; set; }
         
         [Column(TypeName = "nvarchar(max)")]
         public string? DatosOriginalesJson { get; set; }

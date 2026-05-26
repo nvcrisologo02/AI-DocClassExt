@@ -80,6 +80,11 @@ public class ConfiguracionIA
     public string Provider { get; set; } = "auto"; // auto | azure-document-intelligence | mock
     public string Model { get; set; } = "auto"; // DI | GPT | auto
     /// <summary>
+    /// Nivel de clasificación jerárquica solicitado para la etapa de clasificación.
+    /// Valores permitidos: TDN1, TDN1_TDN2. null = usar default global configurado.
+    /// </summary>
+    public string? NivelClasificacion { get; set; }
+    /// <summary>
     /// Umbral de confianza para esta etapa (legado, aplica a completitud y confianza si no se informan los específicos).
     /// null = usar el valor configurado en la tipología o en el servidor.
     /// </summary>
@@ -96,6 +101,12 @@ public class ConfiguracionIA
     /// Rango [0.0–1.0].
     /// </summary>
     public double? UmbralConfianza { get; set; } = null;
+    /// <summary>
+    /// Markdown del documento pre-procesado por el caller.
+    /// Si se informa, el paso 2.8 (ExtraerMarkdownLayout) se omite y se usa este valor directamente.
+    /// null/vacío = el sistema extrae el markdown mediante DI Layout.
+    /// </summary>
+    public string? Markdown { get; set; }
 }
 
 public class Documento

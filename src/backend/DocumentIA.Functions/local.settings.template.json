@@ -10,6 +10,7 @@
     "AssetResolver__BaseUrl": "http://localhost:5006/",
     "AssetResolver__ApiKey": "",
     "Classification__DefaultProvider": "hybrid-tdn",
+    "Classification__NivelClasificacionDefault": "TDN1_TDN2",
     "Classification__AzureDocumentIntelligence__Endpoint": "",
     "Classification__AzureDocumentIntelligence__ApiKey": "",
     "Classification__AzureDocumentIntelligence__AuthMode": "ApiKey",

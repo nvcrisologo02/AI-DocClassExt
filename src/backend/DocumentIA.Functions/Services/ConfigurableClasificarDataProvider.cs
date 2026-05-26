@@ -97,6 +97,22 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         }
 
         var fallbackProvider = ResolveGlobalFallbackProvider();
+
+        // No ejecutar GlobalFallback si el flujo ya incluyó ese mismo provider.
+        // Evita llamadas dobles a GPT cuando provider="gpt" y GlobalFallbackProvider="gpt".
+        if (flowProviders.Any(p => string.Equals(p, fallbackProvider, StringComparison.OrdinalIgnoreCase)))
+        {
+            _logger.LogInformation(
+                "GlobalFallback omitido: el flujo {Flow} ya ejecutó el provider de fallback '{FallbackProvider}'.",
+                resolvedFlow,
+                fallbackProvider);
+            var best = evaluated.LastOrDefault() ?? BuildUnknownResult("no_provider_executed");
+            best.UmbralFallbackAplicado = umbralFallback;
+            best.FallbackLLM = false;
+            best.DetalleProveedores = BuildDetalle(evaluated, "sin_resultado_satisfactorio");
+            return best;
+        }
+
         _logger.LogWarning(
             "Ningún provider del flujo {Flow} fue satisfactorio. Ejecutando fallback global: {FallbackProvider}",
             resolvedFlow,

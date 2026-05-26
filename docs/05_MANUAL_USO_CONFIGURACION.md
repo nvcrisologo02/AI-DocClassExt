@@ -167,6 +167,30 @@ $body = @{
     }
     trazabilidad = @{ submittedBy = "batch" }
   } | ConvertTo-Json -Depth 5
+
+# Clasificacion jerarquica GPT — solo nivel TDN1 (D2: fuerza provider="gpt" automaticamente)
+$body = @{
+  instrucciones = @{
+    classification = @{
+      nivelClasificacion = "TDN1"
+    }
+    classificationOnly = $true
+  }
+  documento = @{ name = "doc_desconocido.pdf"; content = @{ base64 = $base64 } }
+  trazabilidad = @{ submittedBy = "batch-presort" }
+} | ConvertTo-Json -Depth 5
+
+# Clasificacion con markdown pre-procesado (omite ExtraerMarkdownLayoutActivity)
+$markdownTexto = "## Nota Simple\nFinca: 12345\n..."
+$body = @{
+  instrucciones = @{
+    classification = @{
+      nivelClasificacion = "TDN1/TDN2"
+      markdown           = $markdownTexto
+    }
+  }
+  documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
+} | ConvertTo-Json -Depth 5
 ```
 
 ### 5.1.4 Consultar Tipologias Publicadas
@@ -196,6 +220,8 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |
 | `instrucciones.classification.model` | string | No | Reservado. Usar `"auto"`. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
+| `instrucciones.classification.nivelClasificacion` | string? | No | Nivel de clasificacion jerarquica. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases). Si se informa, fuerza automaticamente `provider="gpt"` (D2). Forma parte de la clave de deduplicacion. `null` = clasificacion completa por defecto. |
+| `instrucciones.classification.markdown` | string? | No | Markdown pre-procesado del documento. Si se informa, omite el paso `ExtraerMarkdownLayoutActivity` (paso 2.8) y usa este texto directamente. Util en integraciones batch que ya han extraido el markdown. |
 | `instrucciones.extraction` | object | No | Config extraccion para esta peticion. |
 | `instrucciones.extraction.provider` | string | No | `"auto"` / `"azure-content-understanding"` / `"azure-cu"` / `"azure-document-intelligence"` / `"azure-di"` / `"azure-openai"` / `"gpt"` / `"mock"`. Con `"azure-openai"` se activa el modo GPT directo (sin CU). |
 | `instrucciones.extraction.model` | string | No | Model key del registro. `"auto"` = usar config tipologia. |
@@ -223,6 +249,10 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 - Debe venir exactamente una fuente de documento: `objectIdGDC` o `content.base64`.
 - Si se usa `documento.objectIdGDC`, el sistema fuerza `instrucciones.skipGDCUpload = true`.
 - `instrucciones.classificationOnly=true` y `instrucciones.expectedType` informado son incompatibles (`400 Bad Request`).
+- La **clave de deduplicacion** es `SHA256 + classificationOnly + nivelClasificacion`. Peticiones con el mismo
+  documento pero distinto `nivelClasificacion` no reutilizan el resultado anterior.
+- Si se informa `instrucciones.classification.nivelClasificacion`, el sistema fuerza `provider="gpt"` aunque se
+  haya indicado otro proveedor en la peticion.
 
 ### Jerarquia de Umbrales
 

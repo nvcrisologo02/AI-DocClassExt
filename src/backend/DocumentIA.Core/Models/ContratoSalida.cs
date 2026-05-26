@@ -28,6 +28,11 @@ public class Identificacion
     public string? Tdn1 { get; set; }
     public string? Tdn2 { get; set; }
     public string? Matricula { get; set; }
+    /// <summary>
+    /// Propuesta de tipología libre cuando GPT no pudo mapear a un código de catálogo.
+    /// Solo se informa cuando Tipologia="Desconocido" (tipología virtual).
+    /// </summary>
+    public string? PropuestaTipologia { get; set; }
 }
 
 public class Integridad
@@ -51,6 +56,8 @@ public class DetalleEjecucion
     /// <summary>operation_Id de Application Insights (W3C TraceId). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
     public string? OperationId { get; set; }
     public bool ClassificationOnly { get; set; }
+    /// <summary>Nivel de clasificación usado en la petición (TDN1, TDN1/TDN2, etc.). Forma parte de la clave de deduplicación cuando se informa.</summary>
+    public string? NivelClasificacion { get; set; }
     public string RunTipologia { get; set; } = string.Empty;
     public ResultadoClasificacion Clasificacion { get; set; } = new();
     public ResultadoExtraccion Extraccion { get; set; } = new();
@@ -127,6 +134,8 @@ public class ResultadoClasificacion
     public string? FallbackRazon { get; set; }
     public double? UmbralFallbackAplicado { get; set; }
     public string? TipologiaDetectada { get; set; }
+    public bool ClasificacionParcial { get; set; }
+    public string PropuestaTipologia { get; set; } = string.Empty;
 
     /// <summary>Texto extraído por DI durante la clasificación. El orquestador lo usa para propagar a DatosNormalizados["Markdown"] y luego lo limpia antes de incluirlo en la respuesta.</summary>
     public string? ContentExtraido { get; set; }

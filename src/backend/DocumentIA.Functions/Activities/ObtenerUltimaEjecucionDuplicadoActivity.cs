@@ -49,6 +49,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
         var ejecuciones = await _documentoEjecucionRepository.GetByDocumentoIdAsync(documento.Id);
         var ultimaConSalida = ejecuciones.FirstOrDefault(e =>
             e.ClassificationOnly == request.ClassificationOnly &&
+            string.Equals(e.NivelClasificacion, request.NivelClasificacion, StringComparison.OrdinalIgnoreCase) &&
             !string.IsNullOrWhiteSpace(e.ContratoSalidaCompletoJson));
 
         if (ultimaConSalida is null)
@@ -98,7 +99,8 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
             return new ObtenerUltimaEjecucionDuplicadoInput
             {
                 SHA256 = sha,
-                ClassificationOnly = false
+                ClassificationOnly = false,
+                NivelClasificacion = null
             };
         }
 

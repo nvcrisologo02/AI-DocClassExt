@@ -1,0 +1,21 @@
+[
+  {
+    "id": "NOTS10-TDN1",
+    "name": "Nota simple - validacion por TDN1",
+    "documentPath": "C:\\Users\\ubf0238\\Downloads\\github-ignaciovaras-sareb-receipt-2026-02-25.pdf",
+    "classificationProvider": "gpt"
+  },
+  {
+    "id": "ESCR10-TDN1",
+    "name": "Escritura compraventa - validacion por TDN1",
+    "documentPath": "C:\\temp\\Para_IA\\AI-01-ESCR-10\\4ca08f28873db2273c6e2dfdc52478bc74b61cc0.pdf",
+    "classificationProvider": "gpt",
+    "expectedTdn1": "ESCR"
+  },
+  {
+    "id": "OTROS-EXPLORACION-01",
+    "name": "Solicitud cambio titularidad 20140918 - clasificacion libre",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\13033655 Otros documentos - 20140918 - Solicitud cambio titularidad_20140920_124512.PDF",
+    "classificationProvider": "gpt"
+  }
+]

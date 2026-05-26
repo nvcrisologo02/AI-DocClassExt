@@ -509,6 +509,8 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             return new GptClasificarDataProvider(
                 loader,
                 promptBuilder,
+                scopeFactory,
+                Options.Create(new ClassificationRoutingSettings()),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<GptClasificarDataProvider>.Instance);
         }
     }
@@ -838,6 +840,8 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             return new GptClasificarDataProvider(
                 loader,
                 promptBuilder,
+                scopeFactory,
+                Options.Create(new ClassificationRoutingSettings()),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<GptClasificarDataProvider>.Instance);
         }
 
