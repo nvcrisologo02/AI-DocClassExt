@@ -1,0 +1,416 @@
+[
+  {
+    "group": "A",
+    "id": "A1",
+    "name": "Flujo auto - hybrid-tdn por defecto",
+    "description": "Verifica que el flujo por defecto (provider=auto) completa clasificacion correctamente.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectTipologiaNotEmpty": true
+    }
+  },
+  {
+    "group": "A",
+    "id": "A2",
+    "name": "Solo Document Intelligence - provider=di",
+    "description": "Verifica que provider=di intenta DocumentIntelligence primero. Con fallback global activo, GPT puede tomar el relevo si DI tiene baja confianza.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "di",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectDiWasTried": true
+    }
+  },
+  {
+    "group": "A",
+    "id": "A3",
+    "name": "Solo GPT - provider=gpt",
+    "description": "Verifica que provider=gpt usa exclusivamente GPT4o-mini.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectProveedorContains": "GPT"
+    }
+  },
+  {
+    "group": "B",
+    "id": "B1",
+    "name": "Sin nivelClasificacion - default TDN1_TDN2",
+    "description": "Sin nivelClasificacion en la peticion, el sistema resuelve TDN1_TDN2 por defecto. En flujo TDN1_TDN2 completo, Tdn1 queda null y la tipologia va a Identificacion.Tipologia.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "nivelClasificacion": null,
+    "assertions": {
+      "expectedStatus": ["OK", "NO_CLASIFICADO"],
+      "expectNivelClasificacion": "TDN1_TDN2"
+    }
+  },
+  {
+    "group": "B",
+    "id": "B2",
+    "name": "nivelClasificacion=TDN1 - solo familia y force GPT (D2)",
+    "description": "Con nivelClasificacion=TDN1 el trigger fuerza provider=gpt y la clasificacion produce solo Tdn1 sin Tdn2.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "nivelClasificacion": "TDN1",
+    "assertions": {
+      "expectedStatus": ["OK", "NO_CLASIFICADO"],
+      "expectTdn1NotEmpty": true,
+      "expectTdn2Empty": true,
+      "expectNivelClasificacion": "TDN1",
+      "expectProveedorContains": "GPT"
+    }
+  },
+  {
+    "group": "B",
+    "id": "B3",
+    "name": "nivelClasificacion=TDN1_TDN2 - familia y subtipo (D7)",
+    "description": "Con nivelClasificacion=TDN1_TDN2 la clasificacion usa dos fases GPT. Tdn1 queda null en Identificacion (la tipologia completa va a Identificacion.Tipologia). NivelClasificacion=TDN1_TDN2 se persiste en DetalleEjecucion (D7).",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "nivelClasificacion": "TDN1_TDN2",
+    "assertions": {
+      "expectedStatus": ["OK", "NO_CLASIFICADO"],
+      "expectNivelClasificacion": "TDN1_TDN2"
+    }
+  },
+  {
+    "group": "C",
+    "id": "C1",
+    "name": "Sin markdown - ExtraerMarkdownLayoutActivity se ejecuta",
+    "description": "Sin classification.markdown el orquestador llama ExtraerMarkdownLayoutActivity para obtener texto.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "markdown": null,
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectOrigenMarkdownNot": "Instrucciones"
+    }
+  },
+  {
+    "group": "C",
+    "id": "C2",
+    "name": "Con markdown inyectado - skip ExtraerMarkdownLayout (D4)",
+    "description": "Con classification.markdown informado el orquestador omite ExtraerMarkdownLayoutActivity.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "markdown": "## Escritura de Compraventa\n\nEn la ciudad de Madrid, ante el Notario...\nFinca registral numero 12345.\nTitulares: Banco XYZ S.A.\nTransmision por compraventa.",
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectOrigenMarkdown": "InstruccionesCallerPreClasificacion"
+    }
+  },
+  {
+    "group": "D",
+    "id": "D1",
+    "name": "classificationOnly=true sin limite de paginas",
+    "description": "Pipeline reducido: omite Extraer, Validar, ObtenerActivo, Integrar. Solo clasifica y persiste. Con maxPages=0 el sistema aplica el limite configurado por defecto.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 0,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "executeIntegrarWhenClassificationOnly": false,
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectClassificationOnly": true
+    }
+  },
+  {
+    "group": "D",
+    "id": "D2",
+    "name": "classificationOnly=true con maxPages=3",
+    "description": "Con maxPagesForClassificationOnly=3 el PDF se recorta antes de clasificar. recorteAplicado auditable.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "executeIntegrarWhenClassificationOnly": false,
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectClassificationOnly": true,
+      "expectPaginasIncluidasMax": 3
+    }
+  },
+  {
+    "group": "D",
+    "id": "D3",
+    "name": "classificationOnly con executeIntegrarWhenClassificationOnly=true",
+    "description": "Con executeIntegrarWhenClassificationOnly=true la actividad Integrar se ejecuta incluso en modo solo clasificacion.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "executeIntegrarWhenClassificationOnly": true,
+    "idActivo": "354937",
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectClassificationOnly": true
+    }
+  },
+  {
+    "group": "E",
+    "id": "E1",
+    "name": "Primera ingestion - documento nuevo",
+    "description": "Primera vez que se procesa este documento. En primera ejecucion de la bateria no hay reutilizacion; en ejecuciones posteriores el documento ya esta en BD y devuelve DUPLICADO. Ambos son comportamientos correctos.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\13033655 Otros documentos - 20140918 - Solicitud cambio titularidad_20140920_124512.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": false,
+    "forceReprocess": false,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO", "DUPLICADO"]
+    }
+  },
+  {
+    "group": "E",
+    "id": "E2",
+    "name": "Segunda ingestion mismo doc - reutilizacion",
+    "description": "Segundo envio del mismo PDF sin forceReprocess. Debe reutilizar la ejecucion anterior (DUPLICADO con historial).",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\13033655 Otros documentos - 20140918 - Solicitud cambio titularidad_20140920_124512.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": false,
+    "forceReprocess": false,
+    "skipGDCUpload": true,
+    "dependsOn": "E1",
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO", "DUPLICADO"],
+      "expectReutilizadaPorDuplicado": true
+    }
+  },
+  {
+    "group": "E",
+    "id": "E3",
+    "name": "forceReprocess=true en documento duplicado",
+    "description": "Con forceReprocess=true el sistema reprocesa aunque el SHA256 exista en BD.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\13033655 Otros documentos - 20140918 - Solicitud cambio titularidad_20140920_124512.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": false,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "dependsOn": "E1",
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectReutilizadaPorDuplicado": false
+    }
+  },
+  {
+    "group": "E",
+    "id": "E4",
+    "name": "skipDuplicateCheck=true - sin verificacion de duplicados",
+    "description": "Con skipDuplicateCheck=true nunca se verifica duplicado; siempre procesa como nuevo.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\13033655 Otros documentos - 20140918 - Solicitud cambio titularidad_20140920_124512.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true,
+    "forceReprocess": false,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectStatusNot": "DUPLICADO"
+    }
+  },
+  {
+    "group": "E",
+    "id": "E5a",
+    "name": "Dedup TDN1 - primera llamada con nivelClasificacion=TDN1",
+    "description": "Primera llamada con nivelClasificacion=TDN1. Crea registro con esa clave de dedup (D7).",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\12078959_TITULO_1.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": false,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "nivelClasificacion": "TDN1",
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectReutilizadaPorDuplicado": false,
+      "expectNivelClasificacion": "TDN1"
+    }
+  },
+  {
+    "group": "E",
+    "id": "E5b",
+    "name": "Dedup TDN1_TDN2 - segunda llamada mismo doc distinto nivel (D7)",
+    "description": "Mismo doc que E5a pero con nivelClasificacion=TDN1_TDN2. Solo verifica no reutilizacion en primera ejecucion de la bateria (D7: clave dedup incluye nivel). En re-ejecuciones el documento TDN1_TDN2 ya existe en BD -> DUPLICADO es tambien correcto.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\12078959_TITULO_1.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": false,
+    "forceReprocess": false,
+    "skipGDCUpload": true,
+    "nivelClasificacion": "TDN1_TDN2",
+    "dependsOn": "E5a",
+    "assertions": {
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO", "DUPLICADO"],
+      "expectNivelClasificacion": "TDN1_TDN2"
+    }
+  },
+  {
+    "group": "F",
+    "id": "F1",
+    "name": "Umbral permisivo 0.30 - facilita OK",
+    "description": "Con umbral 0.30 documentos clasificables con confianza media deben alcanzar estado OK. Tipologia va a Identificacion.Tipologia (no a Tdn1).",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "umbral": 0.30,
+    "assertions": {
+      "expectedStatus": ["OK"],
+      "expectTipologiaNotEmpty": true
+    }
+  },
+  {
+    "group": "F",
+    "id": "F2",
+    "name": "Umbral estricto 0.95 - puede producir BAJA_CONFIANZA o NO_CLASIFICADO",
+    "description": "Con umbral 0.95 un documento ambiguo produce BAJA_CONFIANZA_CLASIFICACION o NO_CLASIFICADO si la confianza no llega al 95%.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\000042 13 ACTIVOS_TITULO2_RATIFICACIÓN_20130612_133336.PDF",
+    "classificationProvider": "di",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "umbral": 0.95,
+    "assertions": {
+      "expectedStatus": ["BAJA_CONFIANZA_CLASIFICACION", "OK", "NO_CLASIFICADO"]
+    }
+  },
+  {
+    "group": "G",
+    "id": "G1",
+    "name": "classificationOnly=true + expectedType - combinacion invalida HTTP 400",
+    "description": "classificationOnly=true con expectedType es combinacion invalida segun el trigger. Debe rechazarse con HTTP 400.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": true,
+    "expectedType": "nota.simple",
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectHttpStatus": 400,
+      "expectNoOrchestration": true
+    }
+  },
+  {
+    "group": "G",
+    "id": "G2",
+    "name": "nivelClasificacion con valor no permitido TDN3 - HTTP 400",
+    "description": "nivelClasificacion=TDN3 no es un valor valido. El trigger debe responder HTTP 400.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "auto",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "nivelClasificacion": "TDN3",
+    "assertions": {
+      "expectHttpStatus": 400,
+      "expectNoOrchestration": true
+    }
+  },
+  {
+    "group": "H",
+    "id": "H1",
+    "name": "Documento clasificable - OK con tipologia conocida",
+    "description": "Documento de escritura transmision claramente clasificable. Debe producir estado OK con tipologia del catalogo en Identificacion.Tipologia.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "nivelClasificacion": "TDN1_TDN2",
+    "assertions": {
+      "expectedStatus": ["OK"],
+      "expectTipologiaNotEmpty": true,
+      "expectTipologiaNotDesconocido": true
+    }
+  },
+  {
+    "group": "H",
+    "id": "H2",
+    "name": "Documento ambiguo - tipologia virtual o NO_CLASIFICADO",
+    "description": "Documento de contenido incierto. Debe producir OK con propuestaTipologia (D6) o NO_CLASIFICADO. Nunca error tecnico.",
+    "documentPath": "C:\\temp\\Para_IA\\Otros\\000042 13 ACTIVOS_TITULO2_RATIFICACIÓN_20130612_133336.PDF",
+    "classificationProvider": "gpt",
+    "classificationOnly": true,
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "maxPagesForClassificationOnly": 3,
+    "nivelClasificacion": "TDN1_TDN2",
+    "assertions": {
+      "expectedStatus": ["OK", "NO_CLASIFICADO"],
+      "ifDesconocidoExpectPropuestaTipologia": true,
+      "expectNoTechnicalError": true
+    }
+  }
+]
