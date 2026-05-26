@@ -535,7 +535,7 @@ Configuracion por tipologia (en `ConfiguracionJson`):
   "tipologiaId": "nota-simple",
   "version": "1.4",
   "retentionPolicy": {
-    "blobRetentionDays": 90
+    "blobRetentionDays": 2
   }
 }
 ```
@@ -544,7 +544,7 @@ Configuracion global en Functions (`appsettings.json`):
 
 ```json
 "BlobRetention": {
-  "DefaultDays": 90,
+  "DefaultDays": 2,
   "CleanupCron": "0 0 3 * * *",
   "BatchSize": 200
 }
@@ -559,15 +559,21 @@ Comportamiento de limpieza:
 
 ### Migración de datos legacy en SQL Server
 
-Se incluye script idempotente para poblar bloques `gdc` y `classification` cuando no existen:
+Para incluir histórico en la limpieza automática de blobs se incluye script idempotente:
 
-- `scripts/migrations/migrate-tipologias-v1_2-json-structure.sql`
+- `scripts/migrations/backfill-documentos-fecha-expiracion-blob-2-dias.sql`
 
 Uso recomendado:
 
-1. Desplegar backend/frontend que ya consumen formato v1.2 (con fallback).
-2. Ejecutar script sobre `dbo.Tipologias` en entorno objetivo.
-3. Verificar salida final del script (`HasGdc`, `HasClassification` en todas las filas JSON válidas).
+1. Desplegar backend con `BlobRetention:DefaultDays = 2`.
+2. Ejecutar script sobre la base objetivo.
+3. Verificar la salida del script (`RowsUpdated`, `RetentionDaysApplied`, `ExecutedAtUtc`).
+
+Detalles del backfill:
+
+- Aplica a todas las tipologías.
+- Solo afecta documentos con `RutaBlobStorage` informada y `FechaExpiracionBlob IS NULL`.
+- Calcula `FechaExpiracionBlob = COALESCE(FechaProceso, FechaCreacion, SYSUTCDATETIME()) + 2 dias`.
 
 ---
 

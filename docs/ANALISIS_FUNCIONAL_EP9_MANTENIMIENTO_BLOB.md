@@ -46,7 +46,7 @@ La ocupación del Blob Storage crece de forma ilimitada, lo que supone:
 | Impacto | Descripción |
 |---------|-------------|
 | **Coste** | Facturación creciente por GB almacenado en Azure Blob Storage |
-| **Compliance** | Documentos con datos personales retenidos más tiempo del legalmente necesario (GDPR/LOPD) |
+| **Compliance** | Documentos con datos personales retenidos más tiempo del legalmente necesario (requisito regulatorio de retención) |
 | **Operativo** | Sin visibilidad sobre qué está almacenado, cuánto ocupa ni cuándo expira |
 | **Técnico** | Sin mecanismo para limpiar datos de prueba ni entornos non-prod |
 
@@ -76,7 +76,7 @@ Implementar un sistema de mantenimiento que:
 ### Fuera de alcance
 
 - Migración retroactiva de blobs ya existentes (se contempla como tarea de backfill opcional).
-- Cifrado adicional de blobs antes del borrado (cubierto por EP 7).
+- Cifrado adicional de blobs antes del borrado (fuera de alcance de EP 9 y del MVP actual).
 - Archivado a Azure Blob Storage tier *Cool/Archive* (puede ser una evolución posterior).
 - Interfaz de usuario (sólo API y métricas).
 
@@ -277,7 +277,7 @@ La política de retención se define dentro del fichero JSON de configuración d
 | Campo | Tipo | Obligatorio | Descripción |
 |-------|------|-------------|-------------|
 | `maxRetentionDays` | `int` | Sí | Días que se retiene el blob desde `FechaProceso`. `-1` = indefinido (no crea trigger). `0` = expira inmediatamente. |
-| `actionOnExpiry` | `string` | Sí | Acción al expirar: `delete` (borrado físico) o `anonymize` (en combinación con EP 7). En EP 9 sólo se implementa `delete`. |
+| `actionOnExpiry` | `string` | Sí | Acción al expirar: `delete` (borrado físico). El valor `anonymize` queda fuera de alcance en el MVP actual. |
 | `batchSize` | `int` | No (default: 50) | Máximo de blobs procesados por lote en cada ciclo de limpieza. Evita timeouts en Durable Functions. |
 
 ### 6.3 Comportamiento por valores de maxRetentionDays
@@ -499,7 +499,7 @@ Cada ciclo de limpieza emite un log estructurado con los siguientes campos:
 | `TipologiaConfigLoader` | Interna | Debe extenderse para leer `retentionPolicy` |
 | `DocumentIADbContext` / EF Core | Interna | Requiere nueva migración para `BlobRetentionTrigger` y `HoldActivo` |
 | Azure Durable Functions (Timer) | Azure Platform | Disponible en el runtime actual |
-| EP 7 – Protección de datos y GDPR | Interna | La acción `anonymize` de `actionOnExpiry` queda pendiente hasta completarse EP 7 |
+| Protección de datos avanzada (cifrado/anonimización) | Interna | Fuera de alcance del MVP actual; EP9 mantiene únicamente `actionOnExpiry=delete` |
 
 ### 13.2 Riesgos
 
@@ -523,4 +523,4 @@ Cada ciclo de limpieza emite un log estructurado con los siguientes campos:
 | **Expiración** | Momento a partir del cual un blob es candidato a ser eliminado (`FechaExpiracionBlob <= NOW`) |
 | **Retención indefinida** | Política con `maxRetentionDays = -1`; el blob no tiene fecha de expiración |
 | **Lote (batch)** | Subconjunto de triggers expirados procesados en una invocación de `DeleteExpiredBlobsActivity` |
-| **actionOnExpiry** | Acción a ejecutar cuando el blob expira: `delete` (borrado físico) o `anonymize` (EP 7) |
+| **actionOnExpiry** | Acción a ejecutar cuando el blob expira: `delete` (borrado físico) |

@@ -55,6 +55,8 @@ az functionapp config appsettings set `
         "AssetResolver__BaseUrl=$assetResolverBaseUrl" `
         "AssetResolver__ApiKey=@Microsoft.KeyVault(VaultName=$keyVaultName;SecretName=AssetResolverApiKey)" `
         "RunDatabaseMigrationsOnStartup=false" `
+        "BlobRetention__DefaultDays=2" `
+        "BlobRetentionCleanupCron=0 0 3 * * *" `
     --output none
 
 if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Fallo en settings de infraestructura" -ForegroundColor Red; exit 1 }
