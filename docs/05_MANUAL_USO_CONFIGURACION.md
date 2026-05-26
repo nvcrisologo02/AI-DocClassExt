@@ -1,13 +1,162 @@
 # 5. Manual de Uso y Configuracion — DocumentIA MVP
 
-> Ultima actualizacion: 2026-03-31  
+> Ultima actualizacion: 2026-05-26  
 > Proyecto: AI DocClassExt — SAREB
 
-> Alcance de este manual: uso funcional de APIs, ejemplos de invocacion y configuracion de consumo.
+> Alcance de este manual:
+> - Parte A (usuario final): guia practica de uso, no tecnica.
+> - Parte B (equipo tecnico): APIs, contratos y configuracion.
+> 
+> Si solo necesitas usar DocumentIA en tu operativa diaria, lee la Parte A.
 > Para instalacion, infraestructura y despliegue, ver `docs/04_MANUAL_EXPLOTACION.md`.
-> Para especificación contractual de request/response y semántica de campos, ver `docs/contratos/CONTRATO_API_HTTP.md`.
+> Para contrato HTTP detallado, ver `docs/contratos/CONTRATO_API_HTTP.md`.
 
 ---
+
+## Parte A — Guia de uso para usuario final (no tecnico)
+
+### A.1 Que es DocumentIA
+
+DocumentIA es una herramienta que analiza documentos (normalmente PDF), identifica su tipologia y devuelve los datos clave de forma estructurada.
+
+En terminos sencillos:
+- Tu subes un documento.
+- El sistema lo procesa automaticamente.
+- Recibes un resultado con estado, nivel de confianza y campos extraidos.
+
+### A.2 Para que te sirve en el dia a dia
+
+- Reducir tareas manuales de lectura y copia de datos.
+- Estandarizar como se registran documentos.
+- Detectar rapidamente casos que necesitan revision humana.
+
+### A.3 Antes de empezar
+
+Confirma con tu responsable funcional:
+- Que tipo de documentos puedes cargar.
+- Desde que canal debes operar (aplicacion web, escritorio o integracion interna habilitada para tu area).
+- Quien revisa incidencias cuando un documento queda en estado de error o revision.
+
+### A.4 Flujo de uso recomendado
+
+1. Preparar el documento
+2. Cargar el documento
+3. Esperar resultado
+4. Revisar estado y confianza
+5. Confirmar o escalar segun el caso
+
+### A.5 Paso a paso
+
+#### Paso 1: Preparar el archivo
+
+Recomendaciones:
+- Usa PDF legibles y completos.
+- Evita escaneos borrosos, girados o cortados.
+- Si el documento tiene muchas paginas, comprueba que todas pertenecen al mismo expediente.
+
+#### Paso 2: Cargar el documento
+
+Accion esperada:
+- Selecciona el archivo en el canal habilitado.
+- Inicia el procesamiento.
+
+Buenas practicas:
+- Carga un documento por operacion (salvo que tu procedimiento interno indique lo contrario).
+- Usa nombres de archivo claros para facilitar trazabilidad.
+
+#### Paso 3: Seguir el procesamiento
+
+El procesamiento es asincrono. Eso significa que no termina al instante.
+
+Durante este paso puedes ver estados intermedios como:
+- Pendiente
+- En proceso
+
+Al finalizar, veras un estado final.
+
+#### Paso 4: Interpretar el estado final
+
+Estados habituales y accion recomendada:
+
+| Estado | Que significa | Que hacer |
+|---|---|---|
+| `OK` | Documento procesado correctamente | Continuar flujo normal |
+| `VALIDACION_CON_ERRORES` | Se extrajeron datos pero hay inconsistencias | Revisar campos marcados y corregir/confirmar |
+| `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
+| `DUPLICADO` | El documento ya habia sido procesado | Usar resultado existente o seguir criterio de negocio |
+| `ERROR` | El procesamiento no pudo completarse | Reintentar y, si persiste, escalar a soporte |
+
+#### Paso 5: Revisar confianza del resultado
+
+DocumentIA informa un nivel de calidad global:
+
+| EstadoCalidad | Significado operativo |
+|---|---|
+| `OK` | Resultado fiable para operativa normal |
+| `REVISION` | Requiere validacion humana antes de cerrar |
+| `ERROR` | No usar sin revision completa |
+
+Regla simple para usuario:
+- Si ves `OK`, continua.
+- Si ves `REVISION`, valida campos criticos.
+- Si ves `ERROR`, no cierres el caso sin soporte/revision.
+
+### A.6 Casos frecuentes
+
+#### Caso 1: Documento correcto y completo
+- Resultado esperado: `OK`.
+- Accion: continuar el expediente.
+
+#### Caso 2: Documento con mala calidad
+- Posible resultado: `VALIDACION_CON_ERRORES` o `BAJA_CONFIANZA_CLASIFICACION`.
+- Accion: solicitar documento mas legible o revisar manualmente.
+
+#### Caso 3: Documento repetido
+- Resultado: `DUPLICADO`.
+- Accion: usar resultado previo segun norma interna.
+
+#### Caso 4: Falla de proceso
+- Resultado: `ERROR`.
+- Accion: reintentar una vez y escalar si se repite.
+
+### A.7 Checklist rapido para usuario
+
+Antes de enviar:
+- [ ] El PDF se ve bien y no esta incompleto.
+- [ ] Corresponde al expediente correcto.
+- [ ] El nombre del archivo es identificable.
+
+Despues de procesar:
+- [ ] Revisado el estado final.
+- [ ] Revisado el estado de calidad.
+- [ ] Si aplica, validados campos clave de negocio.
+- [ ] Si hubo error, registrado/escalado segun procedimiento interno.
+
+### A.8 Buenas practicas operativas
+
+- Prioriza calidad de origen: mejor escaneo, mejor resultado.
+- Evita cargar varias veces el mismo documento sin necesidad.
+- Usa siempre el canal oficial definido para tu area.
+- Ante duda funcional, valida con el responsable de proceso.
+
+### A.9 Cuando escalar a soporte
+
+Escala incidencia cuando:
+- Hay errores repetidos con documentos correctos.
+- Aparecen clasificaciones claramente incorrectas de forma recurrente.
+- No se obtiene resultado tras un tiempo razonable de espera.
+
+Incluye en la incidencia:
+- Fecha y hora aproximada.
+- Nombre del archivo (sin datos sensibles adicionales).
+- Estado recibido.
+- Breve descripcion del problema.
+
+---
+
+## Parte B — Referencia tecnica (API y configuracion)
+
+> Esta parte esta orientada a perfiles tecnicos (integracion, soporte, operaciones).
 
 ## 5.1 Guia de la API REST
 
@@ -168,7 +317,7 @@ $body = @{
     trazabilidad = @{ submittedBy = "batch" }
   } | ConvertTo-Json -Depth 5
 
-# Clasificacion jerarquica GPT — solo nivel TDN1 (D2: fuerza provider="gpt" automaticamente)
+# Clasificacion jerarquica GPT - solo nivel TDN1 (D2: fuerza provider="gpt" automaticamente)
 $body = @{
   instrucciones = @{
     classification = @{
