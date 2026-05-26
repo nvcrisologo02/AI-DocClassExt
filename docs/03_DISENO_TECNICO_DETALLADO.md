@@ -1127,17 +1127,15 @@ if (winner == timeoutTask)
 | Datos en transito | HTTPS (Functions + AI Services + Blob) |
 | Datos en reposo BD | TDE (Azure SQL) / sin cifrado (Docker local) |
 | Datos en reposo Blob | SSE con Microsoft-managed keys |
-| Logs | Structured logging sin PII (planned: masking EP7) |
+| Logs | Structured logging (sin implementación específica de masking PII en MVP) |
 
-### 3.10.2 Roadmap GDPR (EP7 — Planned)
+### 3.10.2 Estado EP7 (actualizado)
 
-| Funcionalidad | Descripcion |
-|--------------|------------|
-| Cifrado campo-nivel | AES-256-GCM para campos PII (NIF, nombres, direcciones) |
-| Masking en logs | Enmascarar automaticamente datos sensibles en telemetria |
-| Politica retencion | TTL configurable por tipologia para documentos y blobs |
-| Derecho al olvido | API para purge de datos por CorrelationId / SHA256 |
-| Key management | Claves de cifrado en Key Vault con rotacion automatica |
+| Item | Estado |
+|------|--------|
+| EP7 — Protección de datos y GDPR (WI 98519) | `Removed` en ADO (2026-05-26) por decisión de producto |
+| Implicación documental | No se considera funcionalidad pendiente del MVP |
+| Evolución futura | Si se retoma, deberá abrirse como nueva iniciativa y redefinir alcance técnico |
 
 ---
 

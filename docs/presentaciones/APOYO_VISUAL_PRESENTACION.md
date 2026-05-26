@@ -284,7 +284,7 @@ flowchart LR
 
     subgraph FUTURO["Planificado"]
         T8["📋 Nuevas tipologías\n(escrituras, contratos…)"]
-        T9["📋 Protección GDPR\n(cifrado, enmascaramiento)"]
+        T9["⛔ Protección GDPR\n(fuera de alcance MVP)"]
         T10["📋 Ciclo de vida\nde documentos en Storage"]
     end
 
@@ -529,7 +529,7 @@ pie title Estado de implementación (abril 2026)
 | Configuración tipologías (versionado avanzado) | 🔧 80% — import/export pendiente |
 | Observabilidad (dashboards App Insights) | 🔧 65% — alertas productivas pendientes |
 | GDC retry avanzado + idempotencia | 🔧 80% — Polly pendiente |
-| Protección GDPR (cifrado, masking PII) | 📋 Planificado |
+| Protección GDPR (cifrado, masking PII) | ⛔ Fuera de alcance MVP (EP7 Removed) |
 | Ciclo de vida Blob (limpieza automática) | 📋 Planificado |
 
 ---

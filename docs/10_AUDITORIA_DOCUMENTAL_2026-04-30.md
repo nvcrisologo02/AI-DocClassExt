@@ -4,6 +4,8 @@
 > Modo: solo lectura. Este documento NO aplica cambios sobre repo, pipelines, configuracion, recursos ni work items.
 > Complementa a `docs/09_AUDITORIA_CONFIGURACION_2026-04-30.md` (foco configuracion runtime/Azure).
 
+> **Addendum 2026-05-26 (fuera de alcance MVP):** EP7 Protección de Datos/GDPR (WI 98519) y su árbol se marcaron como `Removed` en ADO por decisión de producto. Las menciones a EP7 como pendiente en este documento deben interpretarse como contexto histórico de fecha 2026-04-30.
+
 ---
 
 ## Nota sobre evidencias usadas
@@ -77,7 +79,7 @@
 | AB#99122-99129 | Prompt ad-hoc + AssetResolver dual | Implementado, 443 tests | Roadmap EP5/EP10 | Implementado | EP10 marcado DONE 100% - coherente |
 | AB#99101, 99103 | Tanda C (evidencia) | Solo paquete docs+scripts | - | Documental | Sin evidencia de delivery de codigo |
 | AB#99071-99080 | EP6 Fase A/B/C: Monitor + telemetria | Implementado (`MonitorService`, `EjecucionesAdminFunction`, telemetria) | EP6 65% en roadmap | **Roadmap subestima %** | Recalcular |
-| Items planificados sin trazo (EP7 GDPR, EP8 Blob lifecycle, V-1/V-2 cross-field, G-1/G-2/G-3 GDC) | Features/Stories | Sin commits | Documentados como pending | No iniciados | Coherente |
+| Items planificados sin trazo (EP7 GDPR, EP8 Blob lifecycle, V-1/V-2 cross-field, G-1/G-2/G-3 GDC) | Features/Stories | Sin commits | Documentados como pending | EP7 descartado en 2026-05-26; resto no iniciados | Coherente (con addendum) |
 | Tests T-1..T-6 | Tasks calidad | Estado real desconocido (~231 tests reportados; un commit dice 443 tests pass) | Roadmap dice pending | **Inconsistente** | Recontar y actualizar |
 
 **Hallazgo critico**: roadmap reporta `~231 tests` (seccion 7.3) y un commit dice `443 tests pass`. Esta divergencia debe verificarse antes de cualquier afirmacion de "DONE".

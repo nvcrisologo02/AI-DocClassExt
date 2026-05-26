@@ -212,7 +212,7 @@ Los modelos de IA utilizados para clasificar y extraer datos se pueden reentrena
 |-----------|--------|
 | Soporte a nuevas tipologías documentales | Disponible (configuración) |
 | Reglas de validación cruzadas entre campos | En desarrollo |
-| Protección de datos personales / GDPR (cifrado, enmascaramiento en logs) | StandBy |
+| Protección de datos personales / GDPR (cifrado, enmascaramiento en logs) | Fuera de alcance MVP (EP7 Removed) |
 | Gestión automática del ciclo de vida de documentos en Storage | Planificado |
 | Dashboards operativos en tiempo real (Application Insights) | En desarrollo |
 

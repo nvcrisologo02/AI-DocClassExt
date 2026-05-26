@@ -6,6 +6,10 @@
 > **Proyecto:** AI DocClassExt
 > **Fuentes:** Azure DevOps REST API vía MCP (`list_work_items` + WIQL, `get_work_item`), `git log --all --since="90 days ago"`, `docs/07_ROADMAP_PENDIENTES.md`.
 
+> **Addendum 2026-05-26 (limpieza backlog EP7):**
+> - El Epic `98519` (EP7) y su árbol completo (`98520`, `98524`, `98529`, `98534` + tasks hijas) se han transicionado a `Removed` en ADO por decisión de producto.
+> - Desde esta fecha, EP7 deja de computar como abierto, bloqueante o pendiente del MVP.
+
 > ⚠️ **Limitación documentada de la API utilizada.** Las consultas WIQL ejecutadas con `mcp_azuredevops_list_work_items` solo devuelven los campos `System.Id`, `System.State`, `System.Title` aunque la cláusula `SELECT` incluya otros (AreaPath, IterationPath, AssignedTo, Tags, ChangedDate, Priority, Severity). Para los work items abiertos críticos se ha completado la información con `mcp_azuredevops_get_work_item` (8 fetches detallados). Donde un campo no aparece para un work item, se indica `n/d` (no disponible en la respuesta API). La herramienta `search_work_items` no se ha podido usar en esta ejecución (fallo de certificado `unable to verify the first certificate`).
 
 > 🔎 **Hallazgos relevantes constatados durante la recolección:**
@@ -42,11 +46,11 @@
 
 ### 1.3 Recuento por estado y tipo (cabeceras)
 
-- **Epics abiertos (no Done/Removed):** 3 → `98519 EP7`, `98692 EP9`, `99089 EP10`.
-- **Features abiertos:** 13 → bloque EP7 (4 en `New`), bloque EP9 (4 en `New`), bloque EP6 (`98379`, `98408`, `99065`, `99078` en `In Progress`), `98359 F5.2` (In Progress), `99091 AR-F1` (In Progress).
+- **Epics abiertos (no Done/Removed):** 2 → `98692 EP9`, `99089 EP10`.
+- **Features abiertas:** 10 → bloque EP9 (4 en `New`), bloque EP6 (`98379`, `98408`, `99065`, `99078` en `In Progress`), `98359 F5.2` (In Progress), `99091 AR-F1` (In Progress).
 - **PBI/HU abiertos (Committed/New/To Validate):** 31 → la mayoría son HU del MVP base (98382-98454) que el roadmap declara funcionalmente cumplidas pero permanecen en `Committed` en ADO; 5 HU EP9 (`98697-98701`) en `New`; 1 HU `98871` en `To Validate`.
 - **Bugs abiertos:** **0**. Los 3 bugs históricos del proyecto están `Done` (`98918`, `98947`, `98948`).
-- **Tasks abiertas:** 54 (`To Do` + `In Progress`), concentradas en EP7 GDPR, EP9 Blob, EP6 Observabilidad fase final.
+- **Tasks abiertas:** 33 (`To Do` + `In Progress`), concentradas en EP9 Blob y EP6 Observabilidad fase final (EP7 retirado).
 
 ---
 
@@ -62,7 +66,7 @@
 |  98392  | EP 2 – Clasificación y extracción de contenido    | Done         | n/d                               |                                        |
 |  98399  | EP 4 – Persistencia y auditoría                   | Done         | n/d                               |                                        |
 |  98406  | EP 6 – Observabilidad y pruebas                   | Done         | n/d                               | Sub-features 99065/99078 aún In Progress |
-|  98519  | EP 7 - Proteccion de Datos y GDPR                 | **New**      | DocumentIA; EP7; GDPR; Security   | Effort: 21. Priority: 2                |
+|  98519  | EP 7 - Proteccion de Datos y GDPR                 | **Removed**  | DocumentIA; EP7; GDPR; Security   | Descartado por decisión de producto (2026-05-26) |
 |  98628  | EP 8 - Sistema de Plugins de Integracion          | Done         | n/d                               |                                        |
 |  98692  | EP 9 – Mantenimiento y limpieza de Blob Storage   | **New**      | Blob; DocumentIA; EP9; Mantenimiento; Retencion | Effort: 21. Priority: 2 |
 |  99063  | Obtener Activo desde documento (AssetResolver)    | Done         | n/d                               | Epic "técnico" (precursor de EP10)     |
@@ -126,13 +130,13 @@
 | 99073 | F6.2 – Monitor Dashboard Blazor | Done |
 | 99078 | F6.3 – TelemetryClient custom events + Workbook + Alertas | **In Progress** |
 
-#### EP 7 — Protección de datos y GDPR (New)
+#### EP 7 — Protección de datos y GDPR (Removed)
 | Feature ID | Título | State |
 |---:|---|---|
-| 98520 | F 7.1 - Sistema de clasificacion de sensibilidad de datos | **New** |
-| 98524 | F 7.2 - Encriptacion de campos sensibles en BD | **New** |
-| 98529 | F 7.3 - Sistema de triggers de retencion de datos | **New** |
-| 98534 | F 7.4 - Anonimizacion y masking de datos | **New** |
+| 98520 | F 7.1 - Sistema de clasificacion de sensibilidad de datos | **Removed** |
+| 98524 | F 7.2 - Encriptacion de campos sensibles en BD | **Removed** |
+| 98529 | F 7.3 - Sistema de triggers de retencion de datos | **Removed** |
+| 98534 | F 7.4 - Anonimizacion y masking de datos | **Removed** |
 
 #### EP 8 — Sistema de plugins de integración (Done)
 | Feature ID | Título | State |
@@ -171,17 +175,13 @@
 
 ## 3. Features abiertas (estado ≠ Done / Removed)
 
-> Total: **13** Features abiertas. AreaPath/IterationPath = `AI DocClassExt`. AssignedTo = null. ChangedDate y Tags no devueltos por la WIQL; consultar `get_work_item` para detalle (ejemplo en 99251 ya validado).
+> Total: **10** Features abiertas. AreaPath/IterationPath = `AI DocClassExt`. AssignedTo = null. ChangedDate y Tags no devueltos por la WIQL; consultar `get_work_item` para detalle (ejemplo en 99251 ya validado).
 
 | ID    | Título                                                                       | State        | Epic ascendente (heurístico) |
 |------:|------------------------------------------------------------------------------|--------------|------------------------------|
 | 98359 | F 5.2 – Soporte multi-tipología basado en configuración                      | In Progress  | EP 5                         |
 | 98379 | F 6.1 – Logging y telemetría                                                  | In Progress  | EP 6                         |
 | 98408 | F 6.2 – Pruebas end-to-end                                                    | In Progress  | EP 6                         |
-| 98520 | F 7.1 - Sistema de clasificacion de sensibilidad de datos                     | New          | EP 7                         |
-| 98524 | F 7.2 - Encriptacion de campos sensibles en BD                                | New          | EP 7                         |
-| 98529 | F 7.3 - Sistema de triggers de retencion de datos                             | New          | EP 7                         |
-| 98534 | F 7.4 - Anonimizacion y masking de datos                                      | New          | EP 7                         |
 | 98693 | F 9.1 – Política de retención configurable por tipología                      | New          | EP 9                         |
 | 98694 | F 9.2 – Motor de limpieza automática de blobs expirados                       | New          | EP 9                         |
 | 98695 | F 9.3 – Inventario y reporting de ocupación                                   | New          | EP 9                         |
@@ -374,9 +374,7 @@ Cobertura del cruce solicitado: **30/32** con commit AB# directo (93,75 %). Los 
 | 99103 | Task    | AR-12 - Hardening operativo y telemetria                                     | In Progress   | **Tanda C abierta**: pendiente telemetría matching + alertas.             |
 | 99089 | Epic    | EP10 - Resolucion de Activo por Direccion en AssetResolver                   | In Progress   | Bloqueado parcialmente por 99101/99103 (cierre Tanda C).                  |
 | 99091 | Feature | AR-F1 - Busqueda avanzada por direccion y normalizacion                      | In Progress   | Bloqueado parcialmente por 99101/99103.                                   |
-| 98519 | Epic    | EP 7 - Proteccion de Datos y GDPR                                            | New           | Sin tareas iniciadas. Bloquea cumplimiento normativo en producción.       |
 | 98692 | Epic    | EP 9 – Mantenimiento y limpieza de Blob Storage                              | New           | 80 % de avance reportado en roadmap, pero work items en `New` en ADO.     |
-| 98520-98534 | Feature | F 7.1 / F 7.2 / F 7.3 / F 7.4 (EP7)                                       | New           | Sin tasks abiertas progresando. Riesgo de regulación GDPR/LOPD.           |
 | 98693-98696 | Feature | F 9.1 / F 9.2 / F 9.3 / F 9.4 (EP9)                                       | New           | Backlog completo (98697-98716) en `To Do`. Necesario antes de prod.       |
 | 98379 | Feature | F 6.1 – Logging y telemetría                                                  | In Progress   | Coexiste con 99065/99078 (mismo dominio); riesgo de duplicidad.           |
 | 98408 | Feature | F 6.2 – Pruebas end-to-end (scripts y REST Client)                            | In Progress   | Coexiste con 99073 (Monitor Dashboard); revisar solapamiento.             |
@@ -421,7 +419,7 @@ Tras inspeccionar todas las menciones `AB#\d+` en commits 90 días, **no se han 
 | EP 6              | "65 % en progreso"                                      | Epic 98406 = Done; pero F6.1 (99065), F6.3 (99078), F 6.1 (98379), F 6.2 (98408) **siguen In Progress**, y 99082/99083 en `To Do`. | Epic cerrado prematuramente; sub-features abiertas. |
 | EP 9              | "80 % en progreso"                                      | Epic 98692 = `New` (sin transición a In Progress). 5 HU + 14 tasks en `To Do`. | Roadmap reporta avance que no se refleja en ADO. |
 | EP 10             | "Done"                                                  | Epic 99089 = `In Progress`; 99101/99103 abiertos (Tanda C). | Roadmap optimista; ADO indica trabajo Tanda C pendiente. |
-| EP 7 (GDPR)       | "Planned 0 %"                                           | Epic 98519 = `New`; 4 features, 22 tasks en `To Do`.       | Coherente. |
+| EP 7 (GDPR)       | "Planned 0 %"                                           | Epic 98519 y árbol EP7 en `Removed` (actualización 2026-05-26). | Ya no aplica al backlog activo del MVP. |
 | EP 8 (Plugins)    | "Done"                                                  | Epic 98628 = Done; todas las features Done.                 | Coherente. |
 | HU MVP base (HU 1-11) | "Funcionalmente cumplidas y desplegadas en MVP"     | PBIs `Committed` no transicionados a `Done` en ADO.        | Limpieza pendiente: transicionar HU 1-11 a `Done` o `Pdte. Despliegue`. |
 | HU TV1-TV6        | "Tipología versioning Done"                             | PBIs `Committed`.                                           | Idem: faltan transiciones de cierre. |
@@ -433,7 +431,7 @@ Tras inspeccionar todas las menciones `AB#\d+` en commits 90 días, **no se han 
 
 - **Duplicado de Epic** `99090` (Removed) frente a `99089` (In Progress): mismo título "EP10 - Resolucion de Activo por Direccion en AssetResolver". Limpieza correcta vía Removed.
 - **Test Cases removidos masivamente** (`99105`-`99115`): 11 escenarios de prueba `[RUN:20260420-inicial]` archivados. Sin impacto operativo.
-- **Cobertura de tags** muy baja: solo Epics EP1, EP7, EP9 tienen tags poblados (`DocumentIA;EPx;…`). Los demás work items leídos en detalle muestran `System.Tags = null` o vacío.
+- **Cobertura de tags** muy baja: los tags están poblados de forma no homogénea (`DocumentIA;EPx;…`) y muchos work items leídos en detalle muestran `System.Tags = null` o vacío.
 - **AssignedTo nunca poblado** en la muestra leída (8 work items en detalle). Para una auditoría de responsabilidades reales, recomendable consultar `System.History` de cada item, no devuelto en este informe.
 
 ---

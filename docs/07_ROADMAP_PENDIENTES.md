@@ -1,7 +1,11 @@
 # 7. Roadmap y Pendientes — DocumentIA MVP
 
-> Ultima actualizacion: 2026-05-05
+> Ultima actualizacion: 2026-05-26
 > Proyecto: AI DocClassExt — SAREB
+
+> Actualización 2026-05-26 (Backlog):
+> - EP7 Protección de datos / GDPR (ADO Epic 98519) y su árbol de trabajo (features/tasks) se han retirado del backlog activo con estado `Removed` por decisión de producto.
+> - EP7 deja de considerarse pendiente del MVP y pasa a fuera de alcance para este release.
 
 > Actualización 2026-05-21 (Tipologías v1.2):
 > - M1 completado: script SQL idempotente `scripts/migrations/migrate-tipologias-v1_2-json-structure.sql` para poblar bloques `gdc` y `classification` en `Tipologias.ConfiguracionJson`.
@@ -31,8 +35,10 @@ gantt
     EP10 AssetResolver                  :active, ep10, 2026-04-01, 2026-05-15
     EP-GDC Integracion GDC (transversal) :active, epgdc, 2026-03-01, 2026-04-30
 
+    section Fuera de alcance MVP
+    EP7 Proteccion datos GDPR (Removed) :done, ep7, 2026-05-01, 2026-06-15
+
     section Planificado
-    EP7 Proteccion datos GDPR           :ep7, 2026-05-01, 2026-06-15
     EP9 Mantenimiento Blob              :ep9, 2026-05-15, 2026-06-30
 ```
 
@@ -46,7 +52,7 @@ gantt
 | **EP4** | Persistencia y auditoria | DONE | 100% | 9 entidades EF Core, migraciones auto, auditoria por ejecucion, validaciones por campo. |
 | **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. En ejecución: pipeline de clasificación configurable por flujo + fallback global final. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
 | **EP6** | Observabilidad y pruebas | IN PROGRESS | 85% | 536 tests C# en verde (verificado 2026-05-04 en `DocumentIA.Tests.Unit`), customStatus y seguimiento de orquestacion activos. Completados T-1/T-2/T-3/T-4/T-5/T-6. Pendiente: extender pipeline a Admin/E2E/AssetResolver, dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
-| **EP7** | Proteccion datos / GDPR (ADO Epic 98519) | NEW | 0% | Cifrado en reposo (AES-256-GCM), masking PII en logs, retencion configurable, KV para secrets. Features ADO: 98520 F7.1, 98524 F7.2, 98529 F7.3, 98534 F7.4. |
+| **EP7** | Proteccion datos / GDPR (ADO Epic 98519) | REMOVED | 0% | Descartado por decisión de producto (2026-05-26). Fuera de alcance del MVP. Features 98520/98524/98529/98534 en `Removed`. |
 | **EP8** | Sistema de Plugins de Integracion (ADO Epic 98628) | DONE | 100% | Arquitectura plugins + plugin REST generico + plugins Atlas/Catastro/GDC + resiliencia y observabilidad. Features 98634-98637 todas Done. |
 | **EP9** | Mantenimiento y limpieza de Blob Storage (ADO Epic 98692) | NEW | 0% | Politica de retencion por tipologia (F9.1), motor de limpieza automatica (F9.2), inventario y reporting (F9.3), observabilidad/auditoria (F9.4). Features 98693-98696 todas New. |
 | **EP10** | Resolucion de Activo por Direccion en AssetResolver (ADO Epic 99089) | IN PROGRESS | 90% | Core operativo: 3 criterios (IDUFIR, RefCat, Direccion) + doble origen AAII/AACC + flags por criterio. Pendiente Tanda C: AR-10 evaluacion rendimiento/calidad matching (Task 99101), AR-12 hardening operativo + telemetria (Task 99103). Feature AR-F1 (99091) In Progress. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
@@ -255,7 +261,7 @@ Impacto en tests: añadir ~15-20 tests nuevos en `ValidationEngineTests` cubrien
 | Azure SQL tier | Basic/S0/S1 | **RESUELTO** | `srbsqlprodocai` creado. Tier a confirmar segun volumen real en produccion. |
 | Admin Blazor: auth | Anonymous vs Azure AD | **PENDIENTE** | Desplegada sin auth (MVP). Produccion deberia requerir Azure AD — definir antes de dar acceso externo. |
 | Plugins SarebEnrichments en v1 | Incluir vs posponer | POSPUESTO | Funcionalidad implementada, DLL compilable. No critico para MVP sin activos reales. |
-| Retencion documentos Blob | 30d / 90d / indefinida | **PENDIENTE** | GDPR/EP8 requiere politica de retencion. Definir con Legal/Compliance SAREB. |
+| Retencion documentos Blob | 30d / 90d / indefinida | **PENDIENTE** | Requiere política de retención operativa para EP9 y validación con Legal/Compliance SAREB. EP7 está descartado del MVP. |
 | Retry GDC: Polly vs codigo manual | Polly vs IAsyncRetryPolicy custom | **PENDIENTE** | Polly recomendado (ya en dependencias transitivas de Functions). Ver G-1. |
 | Cache extraccion: Redis vs SQL | Redis Cache vs tabla `ExtraccionCache` en SQL | **PENDIENTE** | SQL suficiente para MVP (volumen bajo). Redis si latencia es problema. Ver R-1. |
 | Admin Blazor: auth cuándo | Antes o despues de GA | **PENDIENTE** | Bloquear sin auth si el Admin es accesible desde red corporativa sin restriccion de IP. |

@@ -321,7 +321,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RF12 | El sistema debe ejecutar prompts libres configurables por tipologia | PromptActivity con OpenAI, configurable via `promptConfig` en tipologia JSON. | DONE |
 | RF13 | El sistema debe soportar versionado de tipologias | Resolucion `nota-simple` → default version, `nota-simple@1.4` → version especifica. | DONE |
 | RF14 | El sistema debe calcular hashes SHA256, MD5 y CRC32 para integridad | NormalizarActivity calcula los tres hashes. SHA256 usado para deduplicacion, MD5 para GDC. | DONE |
-| RF15 | El sistema debe proteger datos personales segun GDPR/LOPD | Masking de datos sensibles, cifrado en reposo, retencion configurable. | PLANNED |
+| RF15 | El sistema debe proteger datos personales segun GDPR/LOPD | Masking de datos sensibles, cifrado en reposo, retencion configurable. | DESCARTADO MVP (EP7 Removed) |
 | RF16 | El sistema debe resolver el activo inmobiliario desde datos extraidos | `ObtenerActivoActivity` consulta `DM_POSICION_AAII_TB` via AssetResolver. Devuelve `IdActivo` si match unico. Habilitacion configurable por tipologia/instrucciones. | DONE |
 
 ---
@@ -355,7 +355,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | **EP4** | Persistencia y auditoria | DONE | HU7 |
 | **EP5** | Configuracion y tipologias | IN PROGRESS | HU8, HU9, HU10 |
 | **EP6** | Observabilidad y pruebas | IN PROGRESS | HU11 |
-| **EP7** | Proteccion de datos / GDPR | PLANNED | HU12 |
+| **EP7** | Proteccion de datos / GDPR | REMOVED (fuera de alcance MVP) | HU12 |
 | **EP8** | Mantenimiento Blob | PLANNED | HU13 |
 | **EP9** | GDC integracion completa | IN PROGRESS | — |
 | **EP10** | Resolucion de Activo | DONE | HU14 |
@@ -375,7 +375,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | HU9 | Versionado de tipologias | Como COMPLETAR_GDC_HTTP_BASIC_USERNAME, quiero manejar multiples versiones de una tipologia simultanamente. | Resolucion `familia@version`. Default version configurable. | DONE |
 | HU10 | Configuracion de plugins | Como COMPLETAR_GDC_HTTP_BASIC_USERNAME, quiero asignar y configurar plugins de integracion por tipologia. | Endpoints `/management/plugins-tipologias`. JSON con priority, retry, enabled. | DONE |
 | HU11 | Observabilidad | Como operador, quiero metricas y logs en Application Insights para diagnosticar problemas. | Structured logging, telemetria AI SDK, metricas por actividad en seguimiento. | IN PROGRESS |
-| HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | PLANNED |
+| HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | REMOVED (fuera de alcance MVP) |
 | HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Lifecycle rules en Storage + soft delete + archivado por antigüedad. | PLANNED |
 | HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR, Referencia Catastral y/o Direccion. | `ObtenerActivoActivity` busca en AssetResolver con tres criterios configurables (habilitar/deshabilitar cada uno). Soporta AND/OR. Si match unico, `IdActivo` se propaga. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). | DONE |
 
@@ -385,7 +385,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 
 | Restriccion | Detalle |
 |------------|---------|
-| **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Se requiere cifrado en reposo (AES-256-GCM), masking en logs, y retencion configurable. EP7 PLANNED. |
+| **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional (EP7) queda fuera del alcance del MVP actual (`Removed` en ADO el 2026-05-26). |
 | **Formatos aceptados** | Solo PDF. Puede recibirse como Base64 sin saltos de línea (RFC 4648) o recuperarse desde GDC vía `documento.objectIdGDC`. |
 | **Tamaño maximo** | Limitado por el tamaño maximo de input de Durable Functions (~60 KB entity size en Storage). Documentos grandes pueden requerir blob-reference pattern (no implementado). |
 | **Timeouts** | GDC: 120s (hardcoded en orchestrator). Servicios AI: configurable por proveedor (DI: 120s, GPT: 30-60s, CU: configurable). |
