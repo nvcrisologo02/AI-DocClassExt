@@ -42,6 +42,26 @@ public class GptHierarchicalClassificationParserTests
     }
 
     [Fact]
+    public void ParsePhase1_WhenResumenIsProvided_ReturnsResumen()
+    {
+        const string response = """
+            {
+              "tdn1": "escr",
+              "propuesta": "Parece una escritura",
+              "resumen": "Resumen ejecutivo"
+            }
+            """;
+
+        var result = GptHierarchicalClassificationParser.ParsePhase1(response);
+
+        result.Success.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.Tdn1.Should().Be("ESCR");
+        result.Value.Propuesta.Should().Be("Parece una escritura");
+        result.Value.Resumen.Should().Be("Resumen ejecutivo");
+    }
+
+    [Fact]
     public void ParsePhase1_WhenJsonIsInvalid_ReturnsControlledError()
     {
         const string response = "no es json";

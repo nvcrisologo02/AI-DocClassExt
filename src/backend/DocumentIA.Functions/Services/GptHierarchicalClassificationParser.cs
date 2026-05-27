@@ -48,7 +48,14 @@ public static class GptHierarchicalClassificationParser
                 ? NormalizeCodeOrNull(tdn1Element.GetString())
                 : null;
 
-            return GptHierarchicalParsingResult<GptPhase1Classification>.Ok(new GptPhase1Classification(tdn1, propuesta));
+            string? resumen = null;
+            if (root.TryGetProperty("resumen", out var resumenElement) &&
+                resumenElement.ValueKind == JsonValueKind.String)
+            {
+                resumen = resumenElement.GetString();
+            }
+
+            return GptHierarchicalParsingResult<GptPhase1Classification>.Ok(new GptPhase1Classification(tdn1, propuesta, resumen));
         }
         catch (JsonException ex)
         {
@@ -129,7 +136,7 @@ public static class GptHierarchicalClassificationParser
     }
 }
 
-public sealed record GptPhase1Classification(string? Tdn1, string Propuesta);
+public sealed record GptPhase1Classification(string? Tdn1, string Propuesta, string? Resumen = null);
 
 public sealed record GptPhase2Classification(string Tdn2, string? ResultadoPrompt = null, string? Resumen = null);
 

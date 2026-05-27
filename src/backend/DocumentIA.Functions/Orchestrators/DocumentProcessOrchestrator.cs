@@ -322,12 +322,33 @@ public class DocumentProcessOrchestrator
             }
         }
 
-        void AplicarResumenCombinado(string? resumen)
+        void AplicarResumenCombinado(string? resumen, bool marcarResumenParcialClasificacion = false)
         {
-            if (!string.IsNullOrWhiteSpace(resumen))
+            if (string.IsNullOrWhiteSpace(resumen))
             {
-                salida.DatosExtraidos["Resumen"] = resumen;
+                return;
             }
+
+            var resumenAjustado = resumen;
+            if (marcarResumenParcialClasificacion)
+            {
+                var paginasIncluidas = salida.DetalleEjecucion.PaginasIncluidas;
+                var paginasDocumento = salida.Identificacion.Paginas;
+
+                if (salida.DetalleEjecucion.RecorteAplicado &&
+                    paginasIncluidas > 0 &&
+                    paginasDocumento > 0 &&
+                    paginasIncluidas < paginasDocumento)
+                {
+                    var sufijoResumenParcial = $"* Resumen basado en las primeras {paginasIncluidas} paginas del documento";
+                    if (!resumenAjustado.Contains(sufijoResumenParcial, StringComparison.OrdinalIgnoreCase))
+                    {
+                        resumenAjustado = resumenAjustado.TrimEnd() + Environment.NewLine + sufijoResumenParcial;
+                    }
+                }
+            }
+
+            salida.DatosExtraidos["Resumen"] = resumenAjustado;
         }
 
         void FinalizarSeguimiento(string estado, string? mensaje = null)
@@ -974,7 +995,7 @@ public class DocumentProcessOrchestrator
             var resumenCombinadoClasificacion = resultadoClasificacion.ResumenCombinado;
             if (!string.IsNullOrWhiteSpace(resumenCombinadoClasificacion))
             {
-                AplicarResumenCombinado(resumenCombinadoClasificacion);
+                AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcialClasificacion: true);
             }
 
             var forzarResumenDedicado = entrada.Instrucciones.ForzarResumenPorDefecto &&
@@ -1029,7 +1050,7 @@ public class DocumentProcessOrchestrator
                     : null;
 
                 salida.DatosExtraidos = new Dictionary<string, object>();
-                AplicarResumenCombinado(resumenCombinadoClasificacion);
+                AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcialClasificacion: true);
                 salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                 {
                     Normalizaciones = new List<string>
@@ -1170,6 +1191,49 @@ public class DocumentProcessOrchestrator
 
                 FinalizarSeguimiento("Completed", "ClassificationOnly completado");
                 return salida;
+            }
+
+            var markdownPreclasificacionRecortado = salida.DetalleEjecucion.RecorteAplicado &&
+                salida.DetalleEjecucion.PaginasIncluidas > 0 &&
+                salida.Identificacion.Paginas > 0 &&
+                salida.DetalleEjecucion.PaginasIncluidas < salida.Identificacion.Paginas &&
+                datosNormalizados.TryGetValue("Markdown", out var markdownPreClasifObj) &&
+                markdownPreClasifObj is string markdownPreClasifTexto &&
+                !string.IsNullOrWhiteSpace(markdownPreClasifTexto);
+
+            if (markdownPreclasificacionRecortado)
+            {
+                try
+                {
+                    logger.LogInformation(
+                        "Markdown actual proviene de recorte de clasificación ({PaginasIncluidas}/{PaginasDocumento}). Regenerando markdown de documento completo para extracción/prompt.",
+                        salida.DetalleEjecucion.PaginasIncluidas,
+                        salida.Identificacion.Paginas);
+
+                    var markdownCompleto = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                        "ExtraerMarkdownLayoutActivity",
+                        new ExtraerMarkdownLayoutInput
+                        {
+                            Tipologia = salida.Identificacion.Tipologia,
+                            DocumentoBase64 = entrada.Documento.Content.Base64,
+                            NombreDocumento = entrada.Documento.Name
+                        });
+
+                    if (!string.IsNullOrWhiteSpace(markdownCompleto.Markdown))
+                    {
+                        datosNormalizados["Markdown"] = markdownCompleto.Markdown;
+                        RegistrarMarkdown(markdownCompleto.Markdown, "LayoutDocumentoCompletoPostClasificacion");
+                        logger.LogInformation(
+                            "Markdown de documento completo preparado para extracción/prompt ({Len} chars).",
+                            markdownCompleto.Markdown.Length);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "No se pudo regenerar markdown de documento completo. Se mantiene markdown de preclasificación recortado para pasos posteriores.");
+                }
             }
 
             resultadoClasificacion.Confianza = RedondearSalida(resultadoClasificacion.Confianza);

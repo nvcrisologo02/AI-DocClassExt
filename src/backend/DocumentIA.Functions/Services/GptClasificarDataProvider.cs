@@ -66,19 +66,36 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             _routingSettings.NivelClasificacionDefault);
 
         var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
+        var resumenPrompt = ResolveResumenPrompt(input, contextoTexto);
         var contextoPrompt = BuildInstructionPromptContext(input.Entrada.Instrucciones.Prompt);
 
-        var phase1SystemMessage = new SystemChatMessage(
+        var phase1ResponseInstruction = resumenPrompt is null
+            ? ClassificationTipologiaPromptBuilder.Phase1ResponseFormatInstruction
+            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\"}. No incluyas texto fuera del JSON.";
+
+        var phase1SystemText =
             "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
             "especialmente documentos de SAREB (Sociedad de Gestión de Activos procedentes de la Reestructuración Bancaria). " +
             "Analiza el documento adjunto y clasifícalo en una familia TDN1. " +
-            ClassificationTipologiaPromptBuilder.Phase1ResponseFormatInstruction);
+            phase1ResponseInstruction;
+
+        if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
+        {
+            phase1SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
+        }
+
+        var phase1SystemMessage = new SystemChatMessage(phase1SystemText);
 
         var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
         var phase1UserText =
             $"Prompt adicional de instrucciones (si aplica):\n{contextoPrompt}\n\n" +
             $"Familias TDN1 disponibles:\n{phase1Catalog}\n\n" +
             "Si no puedes resolver una familia, devuelve tdn1=null y completa propuesta con una sugerencia no vinculante.";
+
+        if (resumenPrompt is not null)
+        {
+            phase1UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
 
         if (!string.IsNullOrWhiteSpace(contextoTexto))
         {
@@ -95,7 +112,12 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 $"Nombre de archivo: {input.Entrada.Documento.Name}.";
         }
 
-        var phase1ResponseText = await CompleteChatAsync(model, phase1SystemMessage, phase1UserText, cancellationToken);
+        var phase1ResponseText = await CompleteChatAsync(
+            model,
+            phase1SystemMessage,
+            phase1UserText,
+            cancellationToken,
+            resumenPrompt?.MaxTokens);
 
         var phase1Parsed = GptHierarchicalClassificationParser.ParsePhase1(phase1ResponseText);
         if (!phase1Parsed.Success || phase1Parsed.Value is null)
@@ -140,7 +162,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 Confianza = 0.9,
                 ConfianzaGPT = 0.9,
                 ClasificacionParcial = true,
-                PropuestaTipologia = propuesta
+                PropuestaTipologia = propuesta,
+                ResumenCombinado = phase1Parsed.Value.Resumen
             };
         }
 
@@ -150,7 +173,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             throw new InvalidOperationException($"No se encontraron subtipos TDN2 para la familia {tdn1Code}.");
         }
 
-        var resumenPrompt = ResolveResumenPrompt(input, contextoTexto);
         var phase2ResponseInstruction = resumenPrompt is null
             ? ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction
             : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"resumen\": \"resumen ejecutivo\"}. No incluyas texto fuera del JSON.";
