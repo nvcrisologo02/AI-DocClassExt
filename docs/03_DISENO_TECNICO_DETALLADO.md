@@ -123,7 +123,8 @@ Comportamiento:
 
 Alcance:
 
-- Impacta solo la etapa de clasificacion.
+- Impacta la etapa de clasificacion y el resumen inicial cuando ese resumen se obtiene en clasificacion.
+- En flujo completo (`classificationOnly=false`), antes de `Extraer`/`Prompt` se recompone `datosNormalizados["Markdown"]` con el documento completo cuando la clasificacion trabajo con recorte.
 - `ExtraerActivity` y `SubirGDCActivity` siguen usando el documento completo.
 
 ### Rama ClassificationOnly (nuevo)
@@ -158,10 +159,12 @@ El sistema separa dos salidas de prompting para mantener compatibilidad y contro
 Reglas de ejecucion:
 
 - Si la clasificacion o extraccion ya usa GPT, el orquestador solicita `Resumen` en esa misma llamada cuando es posible.
+- En clasificacion jerarquica GPT con `nivelClasificacion="TDN1"`, la fase 1 puede devolver `resumen` y se propaga a `DatosExtraidos["Resumen"]` sin esperar a fase 2.
 - Si la ruta DI/CU es satisfactoria y no llega a GPT, no se hace llamada adicional solo para resumen salvo que `instrucciones.forzarResumenPorDefecto=true`.
 - Si `forzarResumenPorDefecto=true` y no existe `Resumen`, `PromptActivity` ejecuta una llamada dedicada.
 - Si esa llamada dedicada coincide con un prompt propio/ad-hoc pendiente, ambos objetivos se combinan en una unica llamada y se devuelven `Resumen` y `ResultadoPrompt` por separado.
 - Una tipologia con `promptConfig.enabled=true` pero `systemPrompt` y `userPromptTemplate` vacios no activa `ResultadoPrompt`; requiere definicion real o prompt ad-hoc.
+- Si el resumen procede de una clasificacion con recorte real (`paginasIncluidas < paginasDocumento`), se anade sufijo de transparencia: `* Resumen basado en las primeras {N} paginas del documento`.
 
 ### Clasificación Jerárquica GPT (nivelClasificacion) — D1, D2, D4, D6, D7
 
@@ -199,6 +202,8 @@ Limit pages en ClassificationOnly:
 
 - Si `instrucciones.maxPagesForClassificationOnly > 0`, la orquestación aplica recorte defensivo del PDF a las primeras N páginas justo antes de `Clasificar`.
 - El documento original completo se mantiene para integridad, blob y trazabilidad; el recorte afecta solo al payload utilizado en clasificación.
+- En flujo no `classificationOnly`, tras clasificar con recorte se regenera markdown del documento completo antes de extraccion/prompt para evitar contaminar pasos posteriores con contexto parcial.
+- Si el resumen se genera durante la clasificacion recortada, se marca explicitamente como parcial con el sufijo de transparencia indicado arriba.
 - Se registran métricas operativas: páginas originales, páginas usadas, límite configurado y si el recorte fue aplicado.
 
 Adicionalmente, cuando `documento.name` llega vacio y se resuelve desde GDC durante este preflujo, el nombre se sincroniza en `salida.Identificacion.Documento` antes de persistir. Como defensa final, `PersistirActivity` aplica fallback determinista si el nombre siguiera vacio para cumplir la restriccion `NOT NULL` de `Documentos.NombreArchivo`.

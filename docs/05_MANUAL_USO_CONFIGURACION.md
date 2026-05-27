@@ -417,10 +417,13 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 
 - El resumen ejecutivo global se configura en `PromptDefaults` y se expone como `DatosExtraidos.Resumen`.
 - El prompt propio de tipologia o prompt ad-hoc se expone como `DatosExtraidos.ResultadoPrompt`.
+- En jerarquia GPT con `instrucciones.classification.nivelClasificacion = "TDN1"`, el resumen puede generarse ya en fase 1 y se devuelve igualmente en `DatosExtraidos.Resumen`.
 - `forzarResumenPorDefecto=false` evita llamadas LLM extra cuando DI/CU ya han resuelto el documento sin GPT.
 - `forzarResumenPorDefecto=true` fuerza una llamada dedicada si todavia no existe `Resumen`.
 - Si esa llamada dedicada tambien debe ejecutar un prompt propio/ad-hoc, ambos prompts se combinan y se devuelven en campos separados.
 - `promptConfig.enabled=true` con `systemPrompt` y `userPromptTemplate` vacios no dispara `ResultadoPrompt` por si solo.
+- Si la clasificacion se hizo con recorte real de paginas y el resumen sale de ese contexto, se anade la nota: `* Resumen basado en las primeras N paginas del documento`.
+- En ejecucion completa (`classificationOnly=false`), extraccion y prompt libre se ejecutan con markdown del documento completo aunque la clasificacion haya usado recorte.
 
 ### Jerarquia de Umbrales
 
