@@ -91,6 +91,78 @@ flowchart TD
 | 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP (`searchEntities` + `create`) con timeout 120s |
 | 14 | Persistir | `PersistirActivity` | ContratoSalida completo | void | BD + auditoria |
 
+### 3.1.1 Comportamiento del orquestador segun entrada y configuracion
+
+El flujo del orquestador no depende solo del tipo de documento, sino tambien de la combinacion de entrada y configuracion activa. Este diagrama resume las ramas que cambian el comportamiento real.
+
+```mermaid
+flowchart TD
+    INICIO([Entrada HTTP / Durable Input]) --> SRC{"Fuente de documento"}
+
+    SRC -->|content.base64| DOC["Documento Base64"]
+    SRC -->|objectIdGDC| GDCIN["Documento desde GDC"]
+
+    GDCIN --> PREGDC["Preflujo GDC:<br/>Metadatos + duplicado MD5 + descarga"]
+    PREGDC --> NORM["NormalizarActivity<br/>SHA256 + MD5 + CRC32 + paginas"]
+    DOC --> NORM
+
+    NORM --> DUP{"VerificarDuplicadoActivity<br/>SHA256 en BD?"}
+    DUP -->|duplicado + !forceReprocess| CACHE["Retorno cacheado<br/>ReutilizadaPorDuplicado=true"]
+    CACHE --> FIN([Completed])
+
+    DUP -->|no duplicado / forceReprocess| SKIP{"skipDuplicateCheck?"}
+    SKIP -->|si| BLOB
+    SKIP -->|no| ULT["ObtenerUltimaEjecucionActivity<br/>historico"]
+    ULT --> BLOB
+
+    BLOB["SubirBlobActivity<br/>Azure Blob Storage"] --> PREP{"ClassificationPreparation.Enabled?"}
+    PREP -->|si| RECORTE["PrepararDocumentoClasificacionActivity<br/>recorte por paginas"]
+    PREP -->|no| CLASIFCFG
+    RECORTE --> CLASIFCFG
+
+    CLASIFCFG{"expectedType informado?"} -->|si| TIPOSKIP["Clasificacion omitida<br/>confianza=1.0"]
+    CLASIFCFG -->|no| FLOW["ClasificarActivity<br/>flow: DefaultFlow + UseGlobalFallback"]
+
+    FLOW --> CONF{"Confianza < umbral?"}
+    CONF -->|si| BAJA["BAJA_CONFIANZA_CLASIFICACION"]
+    BAJA --> PERSISTERR["PersistirActivity<br/>estado parcial/error"]
+    CONF -->|no| RESOL
+    TIPOSKIP --> RESOL
+
+    RESOL["ResolverTipologiaActivity<br/>config tipologia"] --> TIPO{"Tipologia resuelta?"}
+    TIPO -->|no| ERR["ERROR<br/>No se identifico tipologia"]
+    ERR --> PERSISTERR
+    TIPO -->|si| CLY{"classificationOnly?"}
+
+    CLY -->|si| RED["Rama reducida:<br/>Extraer/Validar/ObtenerActivo pueden omitir"]
+    CLY -->|no| EXTRACT
+
+    RED --> PROMPTCHK
+    EXTRACT["ExtraerActivity<br/>CU / DI / GPT fallback"] --> PROMPTCHK{"Prompt habilitado<br/>o forzarResumenPorDefecto?"}
+    PROMPTCHK -->|si| PROMPT["PromptActivity<br/>PromptDefaults / prompt tipologia"]
+    PROMPTCHK -->|no| VALID
+    PROMPT --> VALID["ValidarActivity<br/>reglas JSON"]
+
+    VALID --> ASSETCHK{"AssetResolver habilitado?"}
+    ASSETCHK -->|si| ASSET["ObtenerActivoActivity"]
+    ASSETCHK -->|no| INTEG
+    ASSET --> INTEG
+
+    INTEG["IntegrarActivity<br/>plugins por prioridad"] --> GDCCHK{"SkipGDCUpload?"}
+    GDCCHK -->|si| PERSIST
+    GDCCHK -->|no| GDCUP["SubirGDCActivity<br/>SOAP + timeout"]
+    GDCUP --> PERSIST
+
+    PERSIST["PersistirActivity<br/>SQL + auditoria"] --> FIN
+
+    style CACHE fill:#f9f,stroke:#333
+    style BAJA fill:#ff9,stroke:#333
+    style ERR fill:#f99,stroke:#333
+    style FIN fill:#9f9,stroke:#333
+```
+
+La configuracion que mas impacta este flujo es `Classification.DefaultFlow`, `Classification.UseGlobalFallback`, `ClassificationPreparation.Enabled`, `PromptDefaults` y `SkipGDCUpload` resuelto desde la tipologia o la peticion. En la entrada, los disparadores mas decisivos son `objectIdGDC`, `expectedType`, `classificationOnly`, `skipDuplicateCheck` y `forzarResumenPorDefecto`.
+
 ### Preflujo adicional cuando se usa `documento.objectIdGDC`
 
 Cuando la entrada viene por referencia GDC (`objectIdGDC`), antes del pipeline estándar se ejecuta un preflujo con operaciones SOAP `get`:
@@ -123,14 +195,16 @@ Comportamiento:
 
 Alcance:
 
-- Impacta solo la etapa de clasificacion.
+- Impacta la etapa de clasificacion y el resumen inicial cuando ese resumen se obtiene en clasificacion.
+- En flujo completo (`classificationOnly=false`), antes de `Extraer`/`Prompt` se recompone `datosNormalizados["Markdown"]` con el documento completo cuando la clasificacion trabajo con recorte.
 - `ExtraerActivity` y `SubirGDCActivity` siguen usando el documento completo.
 
 ### Rama ClassificationOnly (nuevo)
 
 Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTipologia` se aplica una rama reducida:
 
-- `Extraer`, `Prompt`, `Validar` y `ObtenerActivo` no se ejecutan y quedan como `Skipped` en `detalleEjecucion.seguimiento`.
+- `Extraer`, `Validar` y `ObtenerActivo` no se ejecutan y quedan como `Skipped` en `detalleEjecucion.seguimiento`.
+- `Prompt` se ejecuta solo si hay prompt propio/ad-hoc aplicable o si `instrucciones.forzarResumenPorDefecto=true` y no hubo una llamada GPT previa que produjera `Resumen`.
 - `Integrar` solo se ejecuta si `instrucciones.executeIntegrarWhenClassificationOnly=true` y existe `trazabilidad.idActivo`.
 - `SubirGDC` mantiene la prioridad de `SkipGDCUpload` y requiere `idActivo` resuelto/disponible.
 - `Persistir` siempre se ejecuta.
@@ -146,6 +220,23 @@ Trazas operativas expuestas en salida:
 Restricción de entrada:
 
 - `classificationOnly=true` es incompatible con `expectedType` informado (validación en trigger HTTP, respuesta `400`).
+
+### Prompt por defecto y prompt de tipologia
+
+El sistema separa dos salidas de prompting para mantener compatibilidad y controlar coste de llamadas LLM:
+
+- `DatosExtraidos["Resumen"]`: resumen ejecutivo generado con la configuracion global `PromptDefaults`.
+- `DatosExtraidos["ResultadoPrompt"]`: salida del prompt propio de tipologia o del prompt ad-hoc de la peticion.
+
+Reglas de ejecucion:
+
+- Si la clasificacion o extraccion ya usa GPT, el orquestador solicita `Resumen` en esa misma llamada cuando es posible.
+- En clasificacion jerarquica GPT con `nivelClasificacion="TDN1"`, la fase 1 puede devolver `resumen` y se propaga a `DatosExtraidos["Resumen"]` sin esperar a fase 2.
+- Si la ruta DI/CU es satisfactoria y no llega a GPT, no se hace llamada adicional solo para resumen salvo que `instrucciones.forzarResumenPorDefecto=true`.
+- Si `forzarResumenPorDefecto=true` y no existe `Resumen`, `PromptActivity` ejecuta una llamada dedicada.
+- Si esa llamada dedicada coincide con un prompt propio/ad-hoc pendiente, ambos objetivos se combinan en una unica llamada y se devuelven `Resumen` y `ResultadoPrompt` por separado.
+- Una tipologia con `promptConfig.enabled=true` pero `systemPrompt` y `userPromptTemplate` vacios no activa `ResultadoPrompt`; requiere definicion real o prompt ad-hoc.
+- Si el resumen procede de una clasificacion con recorte real (`paginasIncluidas < paginasDocumento`), se anade sufijo de transparencia: `* Resumen basado en las primeras {N} paginas del documento`.
 
 ### Clasificación Jerárquica GPT (nivelClasificacion) — D1, D2, D4, D6, D7
 
@@ -183,6 +274,8 @@ Limit pages en ClassificationOnly:
 
 - Si `instrucciones.maxPagesForClassificationOnly > 0`, la orquestación aplica recorte defensivo del PDF a las primeras N páginas justo antes de `Clasificar`.
 - El documento original completo se mantiene para integridad, blob y trazabilidad; el recorte afecta solo al payload utilizado en clasificación.
+- En flujo no `classificationOnly`, tras clasificar con recorte se regenera markdown del documento completo antes de extraccion/prompt para evitar contaminar pasos posteriores con contexto parcial.
+- Si el resumen se genera durante la clasificacion recortada, se marca explicitamente como parcial con el sufijo de transparencia indicado arriba.
 - Se registran métricas operativas: páginas originales, páginas usadas, límite configurado y si el recorte fue aplicado.
 
 Adicionalmente, cuando `documento.name` llega vacio y se resuelve desde GDC durante este preflujo, el nombre se sincroniza en `salida.Identificacion.Documento` antes de persistir. Como defensa final, `PersistirActivity` aplica fallback determinista si el nombre siguiera vacio para cumplir la restriccion `NOT NULL` de `Documentos.NombreArchivo`.
@@ -197,6 +290,8 @@ Resumen de comportamiento por activity:
 - `VerificarDuplicadoActivity`: consulta duplicidad por `SHA256`; con `forceReprocess=false` permite retorno temprano de ejecución previa.
 - `SubirBlobActivity`: persiste binario en blob (`documents/`) para trazabilidad operativa.
 - `ClasificarActivity`: resuelve un flujo configurable de providers y los ejecuta en orden hasta resultado satisfactorio; si no hay resultado, aplica fallback global final si está activo.
+- `GptClasificarDataProvider`: cuando el flujo ejecuta GPT, el modelo se resuelve por petición desde `instrucciones.classification.model` (si viene valor explícito y válido). `auto`/vacío usa el fallback del registro (`useAsFallback=true`).
+- `GptClasificarDataProvider`: el cliente de chat ya no queda fijado al modelo fallback del singleton; se crea con el modelo efectivo resuelto en cada petición para evitar lock-in de deployment.
 - `ResolverTipologiaActivity`: resuelve configuración efectiva por familia/version.
 - `ExtraerActivity`: ejecuta extracción principal y fallback cuando aplica.
 - `ValidarActivity`: ejecuta motor de reglas y produce reporte de validación.

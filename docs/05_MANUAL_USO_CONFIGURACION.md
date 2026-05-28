@@ -273,6 +273,15 @@ $body = @{
   trazabilidad = @{ submittedBy = "batch"; idActivo = "ACTIVO-001" }
 } | ConvertTo-Json -Depth 5
 
+# Forzar resumen por defecto aunque el flujo DI/CU no necesite GPT
+$body = @{
+  instrucciones = @{
+    forzarResumenPorDefecto = $true
+  }
+  documento = @{ name = "nota.pdf"; content = @{ base64 = $base64 } }
+  trazabilidad = @{ submittedBy = "batch" }
+} | ConvertTo-Json -Depth 5
+
 # ClassificationOnly forzando Integrar (requiere idActivo)
 $body = @{
   instrucciones = @{
@@ -364,10 +373,11 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.classificationOnly` | bool | No | `true` = ejecutar solo clasificación + resolución de tipología. Omite extracción/validación/asset resolver. |
 | `instrucciones.executeIntegrarWhenClassificationOnly` | bool? | No | Solo aplica con `classificationOnly=true`. `null/false` = no integrar (default). `true` = ejecutar Integrar si hay `trazabilidad.idActivo`. |
 | `instrucciones.maxPagesForClassificationOnly` | int | No | Solo aplica con `classificationOnly=true`. `0` = sin límite; `N > 0` = clasificar con las primeras N páginas. |
+| `instrucciones.forzarResumenPorDefecto` | bool | No | Default `false`. Si no hubo llamada GPT previa que produzca `Resumen`, `true` fuerza una llamada dedicada de `PromptActivity` para generar el resumen por defecto. |
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
 | `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |
-| `instrucciones.classification.model` | string | No | Reservado. Usar `"auto"`. |
+| `instrucciones.classification.model` | string | No | Model key del registro de clasificación para la ruta GPT. `"auto"` = usar modelo fallback marcado con `useAsFallback=true`. Si se informa un model key válido de provider GPT/Azure OpenAI, se utiliza en esa petición. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
 | `instrucciones.classification.nivelClasificacion` | string? | No | Nivel de clasificacion jerarquica. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases). Si se informa, fuerza automaticamente `provider="gpt"` (D2). Forma parte de la clave de deduplicacion. `null` = clasificacion completa por defecto. |
 | `instrucciones.classification.markdown` | string? | No | Markdown pre-procesado del documento. Si se informa, omite el paso `ExtraerMarkdownLayoutActivity` (paso 2.8) y usa este texto directamente. Util en integraciones batch que ya han extraido el markdown. |
@@ -402,6 +412,20 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
   documento pero distinto `nivelClasificacion` no reutilizan el resultado anterior.
 - Si se informa `instrucciones.classification.nivelClasificacion`, el sistema fuerza `provider="gpt"` aunque se
   haya indicado otro proveedor en la peticion.
+- En ruta `provider="gpt"` (directa o forzada por `nivelClasificacion`), `instrucciones.classification.model`
+  se resuelve por petición. Solo se usa fallback cuando el valor viene vacío o `"auto"`.
+
+### Resumen por defecto y ResultadoPrompt
+
+- El resumen ejecutivo global se configura en `PromptDefaults` y se expone como `DatosExtraidos.Resumen`.
+- El prompt propio de tipologia o prompt ad-hoc se expone como `DatosExtraidos.ResultadoPrompt`.
+- En jerarquia GPT con `instrucciones.classification.nivelClasificacion = "TDN1"`, el resumen puede generarse ya en fase 1 y se devuelve igualmente en `DatosExtraidos.Resumen`.
+- `forzarResumenPorDefecto=false` evita llamadas LLM extra cuando DI/CU ya han resuelto el documento sin GPT.
+- `forzarResumenPorDefecto=true` fuerza una llamada dedicada si todavia no existe `Resumen`.
+- Si esa llamada dedicada tambien debe ejecutar un prompt propio/ad-hoc, ambos prompts se combinan y se devuelven en campos separados.
+- `promptConfig.enabled=true` con `systemPrompt` y `userPromptTemplate` vacios no dispara `ResultadoPrompt` por si solo.
+- Si la clasificacion se hizo con recorte real de paginas y el resumen sale de ese contexto, se anade la nota: `* Resumen basado en las primeras N paginas del documento`.
+- En ejecucion completa (`classificationOnly=false`), extraccion y prompt libre se ejecutan con markdown del documento completo aunque la clasificacion haya usado recorte.
 
 ### Jerarquia de Umbrales
 

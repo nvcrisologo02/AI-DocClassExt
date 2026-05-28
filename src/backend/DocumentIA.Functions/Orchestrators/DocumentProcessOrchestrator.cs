@@ -272,6 +272,85 @@ public class DocumentProcessOrchestrator
             }
         }
 
+        async Task EjecutarPromptLibreAsync(
+            string? markdownParaPrompt,
+            Dictionary<string, object> datosExtraidos,
+            string? resultadoPromptCombinado = null,
+            string? resumenCombinado = null,
+            bool forzarResumenPorDefecto = false)
+        {
+            var promptInput = new PromptActivityInput
+            {
+                Tipologia = salida.Identificacion.Tipologia,
+                MarkdownExtraido = markdownParaPrompt,
+                DocumentoBase64 = entrada.Documento.Content.Base64,
+                DatosExtraidos = datosExtraidos,
+                ResultadoPromptCombinado = resultadoPromptCombinado,
+                ResumenCombinado = resumenCombinado,
+                ForzarResumenPorDefecto = forzarResumenPorDefecto,
+                Prompt = entrada.Instrucciones.Prompt
+            };
+
+            var resultadoPrompt = await EjecutarPasoNegocio(
+                "Prompt",
+                () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
+
+            if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
+            {
+                salida.DatosExtraidos["ResultadoPrompt"] = resultadoPrompt.Resultado;
+            }
+
+            if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resumen))
+            {
+                salida.DatosExtraidos["Resumen"] = resultadoPrompt.Resumen;
+            }
+
+            salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+            {
+                Modelo = resultadoPrompt.Modelo,
+                TiempoMs = resultadoPrompt.TiempoMs,
+                CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
+                Error = resultadoPrompt.Error
+            };
+            RegistrarModeloLlm(resultadoPrompt.Modelo);
+
+            if (resultadoPrompt.CombinedWithFallback)
+            {
+                var trazaPrompt = ObtenerTraza("Prompt");
+                trazaPrompt.Mensaje = "Resultado reutilizado de llamada combinada con un paso GPT previo";
+                PublicarEstado("Running", string.Empty, trazaPrompt.Mensaje);
+            }
+        }
+
+        void AplicarResumenCombinado(string? resumen, bool marcarResumenParcialClasificacion = false)
+        {
+            if (string.IsNullOrWhiteSpace(resumen))
+            {
+                return;
+            }
+
+            var resumenAjustado = resumen;
+            if (marcarResumenParcialClasificacion)
+            {
+                var paginasIncluidas = salida.DetalleEjecucion.PaginasIncluidas;
+                var paginasDocumento = salida.Identificacion.Paginas;
+
+                if (salida.DetalleEjecucion.RecorteAplicado &&
+                    paginasIncluidas > 0 &&
+                    paginasDocumento > 0 &&
+                    paginasIncluidas < paginasDocumento)
+                {
+                    var sufijoResumenParcial = $"* Resumen basado en las primeras {paginasIncluidas} paginas del documento";
+                    if (!resumenAjustado.Contains(sufijoResumenParcial, StringComparison.OrdinalIgnoreCase))
+                    {
+                        resumenAjustado = resumenAjustado.TrimEnd() + Environment.NewLine + sufijoResumenParcial;
+                    }
+                }
+            }
+
+            salida.DatosExtraidos["Resumen"] = resumenAjustado;
+        }
+
         void FinalizarSeguimiento(string estado, string? mensaje = null)
         {
             PublicarEstado(estado, string.Empty, mensaje);
@@ -680,7 +759,8 @@ public class DocumentProcessOrchestrator
                             UmbralFallbackEfectivo = umbralClasifFallback,
                             DocumentoBase64Override = docClasif.DocumentoBase64Clasif,
                             CharsTextoNativo = docClasif.CharsTextoNativo,
-                            TotalPaginas = docClasif.TotalPaginas
+                            TotalPaginas = docClasif.TotalPaginas,
+                            GenerarResumenPorDefecto = true
                         });
 
                         var mensajeClasificacion = resultadoClasificacion.FallbackLLM
@@ -837,38 +917,80 @@ public class DocumentProcessOrchestrator
 
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
             ResolvedTipologia tipologiaResuelta;
+            var esNivelTdn1 =
+                string.Equals(
+                    entrada.Instrucciones.Classification.NivelClasificacion,
+                    ClassificationLevelResolver.LevelTdn1,
+                    StringComparison.OrdinalIgnoreCase);
+            var omitirResolucionTipologiaPorTdn1ClasificacionOnly =
+                esNivelTdn1 &&
+                (!string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1)
+                    || !string.IsNullOrWhiteSpace(resultadoClasificacion.TipologiaDetectada));
 
-            try
+            if (omitirResolucionTipologiaPorTdn1ClasificacionOnly)
             {
-                tipologiaResuelta = await context.CallActivityAsync<ResolvedTipologia>(
-                    "ResolverTipologiaActivity",
-                    tipologiaEntrada);
+                if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1))
+                {
+                    salida.Identificacion.Tdn1 = resultadoClasificacion.TipologiaDetectada;
+                }
+
+                var tdn1Value = string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1)
+                    ? "Desconocido"
+                    : salida.Identificacion.Tdn1;
+
+                tipologiaResuelta = new ResolvedTipologia(
+                    RequestedValue: tdn1Value,
+                    TipologiaId: tdn1Value,
+                    Version: "N/A",
+                    TechnicalKey: tdn1Value,
+                    IsDefault: true,
+                    SkipGDCUpload: true,
+                    PromptEnabled: false,
+                    ExtractionEnabled: false,
+                    ConfidenceConfig: new ConfidenceConfig(),
+                    ExtractionProvider: string.Empty,
+                    AssetResolverEnabled: false,
+                    PromptHasDefinition: false);
+
+                logger.LogInformation(
+                    "Nivel TDN1: se usa familia TDN1 '{Tdn1}' como tipología virtual sin resolver tipología técnica.",
+                    tdn1Value);
             }
-            catch (Exception ex) when (
-                ex is KeyNotFoundException ||
-                ex.InnerException is KeyNotFoundException ||
-                ex is TaskFailedException && ex.Message.Contains("No existe la tipologia"))
+            else
             {
-                const string mensajeTipologiaNoIdentificada = "no clasificable: no se ha podido identificar la tipologia del documento";
 
-                logger.LogWarning(
-                    ex,
-                    "La clasificación devolvió una tipología no resoluble: {TipologiaDetectada}",
-                    tipologiaEntrada);
+                try
+                {
+                    tipologiaResuelta = await context.CallActivityAsync<ResolvedTipologia>(
+                        "ResolverTipologiaActivity",
+                        tipologiaEntrada);
+                }
+                catch (Exception ex) when (
+                    ex is KeyNotFoundException ||
+                    ex.InnerException is KeyNotFoundException ||
+                    ex is TaskFailedException && ex.Message.Contains("No existe la tipologia"))
+                {
+                    const string mensajeTipologiaNoIdentificada = "no clasificable: no se ha podido identificar la tipologia del documento";
 
-                salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
-                salida.DetalleEjecucion.MotivoErrorTipologia = ex.Message;
-                salida.Resultado.Estado = "NO_CLASIFICADO";
-                salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
-                salida.Resultado.ConfianzaGlobal = 0;
-                salida.Resultado.EstadoCalidad = "ERROR";
-                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
-                salida.Resultado.ConfianzaExtraccion = 0;
-                salida.Resultado.ConfianzaValidacion = 0;
-                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
+                    logger.LogWarning(
+                        ex,
+                        "La clasificación devolvió una tipología no resoluble: {TipologiaDetectada}",
+                        tipologiaEntrada);
 
-                FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
-                return salida;
+                    salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
+                    salida.DetalleEjecucion.MotivoErrorTipologia = ex.Message;
+                    salida.Resultado.Estado = "NO_CLASIFICADO";
+                    salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
+                    salida.Resultado.ConfianzaGlobal = 0;
+                    salida.Resultado.EstadoCalidad = "ERROR";
+                    salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                    salida.Resultado.ConfianzaExtraccion = 0;
+                    salida.Resultado.ConfianzaValidacion = 0;
+                    salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
+
+                    FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
+                    return salida;
+                }
             }
 
             var esTipologiaNoClasificable = string.Equals(tipologiaResuelta.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
@@ -910,12 +1032,26 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
 
             // Añadir actividad Prompt al seguimiento si la tipología la tiene habilitada o si hay override en la petición
-            var promptActivoEnPeticion = tipologiaResuelta.PromptEnabled || entrada.Instrucciones.Prompt != null;
-            if (promptActivoEnPeticion)
+            var promptActivoEnPeticion = (tipologiaResuelta.PromptEnabled && tipologiaResuelta.PromptHasDefinition)
+                || entrada.Instrucciones.Prompt != null;
+            var resumenCombinadoClasificacion = resultadoClasificacion.ResumenCombinado;
+            if (!string.IsNullOrWhiteSpace(resumenCombinadoClasificacion))
+            {
+                AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcialClasificacion: true);
+            }
+
+            var forzarResumenDedicado = (entrada.Instrucciones.ForzarResumenPorDefecto || esNivelTdn1) &&
+                !salida.DatosExtraidos.ContainsKey("Resumen");
+
+            if (promptActivoEnPeticion || forzarResumenDedicado)
             {
                 seguimiento.ActividadesTotales++;
                 seguimiento.Actividades.Add(new TrazaActividad { Nombre = "Prompt", Estado = "Pending" });
             }
+
+            var resultadoPromptCombinadoClasificacion = entrada.Instrucciones.Prompt != null
+                ? resultadoClasificacion.ResultadoPromptCombinado
+                : null;
 
             // Verificar umbral de confianza: instrucciones ?? tipología ?? config servidor
             var umbralBajaConfianza = entrada.Instrucciones.Classification.Umbral
@@ -935,6 +1071,7 @@ public class DocumentProcessOrchestrator
             if (entrada.Instrucciones.ClassificationOnly)
             {
                 logger.LogInformation("ClassificationOnly activo. Se omiten extracción, prompt, validación y asset resolver.");
+                var classificationOnlyTdn1SoloFamilia = esNivelTdn1;
 
                 salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
                 {
@@ -956,6 +1093,7 @@ public class DocumentProcessOrchestrator
                     : null;
 
                 salida.DatosExtraidos = new Dictionary<string, object>();
+                AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcialClasificacion: true);
                 salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                 {
                     Normalizaciones = new List<string>
@@ -974,75 +1112,149 @@ public class DocumentProcessOrchestrator
                     RegistrarMarkdown(markdownClasificacion, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
                 }
 
-                MarcarActividadOmitida("Extraer", "ClassificationOnly activo");
-                if (promptActivoEnPeticion)
+                var forzarResumenDedicadoClassificationOnly =
+                    (entrada.Instrucciones.ForzarResumenPorDefecto || classificationOnlyTdn1SoloFamilia) &&
+                    !salida.DatosExtraidos.ContainsKey("Resumen");
+
+                if (forzarResumenDedicadoClassificationOnly && string.IsNullOrWhiteSpace(markdownClasificacion))
                 {
-                    MarcarActividadOmitida("Prompt", "ClassificationOnly activo");
+                    try
+                    {
+                        logger.LogInformation(
+                            "ClassificationOnly con resumen forzado y sin markdown. Ejecutando DI Layout para contexto de resumen.");
+
+                        var markdownParaResumen = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                            "ExtraerMarkdownLayoutActivity",
+                            new ExtraerMarkdownLayoutInput
+                            {
+                                Tipologia = salida.Identificacion.Tipologia,
+                                DocumentoBase64 = docClasif.DocumentoBase64Clasif,
+                                NombreDocumento = entrada.Documento.Name
+                            });
+
+                        if (!string.IsNullOrWhiteSpace(markdownParaResumen.Markdown))
+                        {
+                            markdownClasificacion = markdownParaResumen.Markdown;
+                            salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacion;
+                            if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown"))
+                            {
+                                salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+                            }
+                            RegistrarMarkdown(markdownClasificacion, "LayoutResumenClassificationOnly");
+                        }
+                    }
+                    catch (Exception exResumenLayout)
+                    {
+                        logger.LogWarning(
+                            exResumenLayout,
+                            "No se pudo extraer markdown DI Layout para resumen en classificationOnly. Se continuará con fallback de prompt.");
+                    }
                 }
+
+                if (promptActivoEnPeticion || forzarResumenDedicadoClassificationOnly)
+                {
+                    logger.LogInformation("ClassificationOnly activo con prompt habilitado. Ejecutando PromptActivity.");
+                    await EjecutarPromptLibreAsync(
+                        markdownClasificacion,
+                        salida.DatosExtraidos,
+                        resultadoPromptCombinadoClasificacion,
+                        resumenCombinadoClasificacion,
+                        forzarResumenDedicadoClassificationOnly);
+                }
+
+                MarcarActividadOmitida("Extraer", "ClassificationOnly activo");
                 MarcarActividadOmitida("Validar", "ClassificationOnly activo");
                 MarcarActividadOmitida("ObtenerActivo", "ClassificationOnly activo");
 
-                var ejecutarIntegracionClasificacion =
-                    entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true &&
-                    !string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo);
-
-                if (ejecutarIntegracionClasificacion)
+                if (classificationOnlyTdn1SoloFamilia)
                 {
-                    logger.LogInformation("ClassificationOnly activo con integración habilitada. Ejecutando Integrar.");
-
-                    var resultadoIntegracionClasificacion = await EjecutarPasoNegocio(
-                        "Integrar",
-                        () => context.CallActivityAsync<DocumentIA.Core.Models.ResultadoIntegracion>(
-                            "IntegrarActivity",
-                            new DocumentIA.Core.Models.IntegrarInput
-                            {
-                                Tipologia = salida.Identificacion.Tipologia,
-                                DocumentoId = salida.Identificacion.Guid,
-                                DatosExtraidos = new Dictionary<string, object>(),
-                                IdActivo = entrada.Trazabilidad.IdActivo,
-                                Metadata = new Dictionary<string, object>
-                                {
-                                    ["correlationId"] = entrada.Trazabilidad.CorrelationId,
-                                    ["submittedBy"] = entrada.Trazabilidad.SubmittedBy
-                                }
-                            }));
-
-                    salida.DetalleEjecucion.Integracion = resultadoIntegracionClasificacion;
-                    salida.Integridad.IdActivoEntrada = resultadoIntegracionClasificacion.IdActivoEntrada;
-                    salida.Integridad.IdActivo = resultadoIntegracionClasificacion.IdActivoResuelto ?? entrada.Trazabilidad.IdActivo;
-                    salida.Integridad.IdActivoCambiado = resultadoIntegracionClasificacion.IdActivoCambiado;
-                }
-                else
-                {
-                    var mensajeIntegracion = entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true
-                        ? "ClassificationOnly sin IdActivo"
-                        : "ClassificationOnly activo";
-
-                    MarcarActividadOmitida("Integrar", mensajeIntegracion);
+                    // En clasificación TDN1 solo-familia no existe tipología técnica completa para integraciones/GDC.
+                    // Se limita el flujo a clasificación + resumen + persistencia.
+                    MarcarActividadOmitida("Integrar", "ClassificationOnly TDN1: solo familia");
+                    MarcarActividadOmitida("SubirGDC", "ClassificationOnly TDN1: solo familia");
                     salida.DetalleEjecucion.Integracion = new ResultadoIntegracion
                     {
                         Tipologia = salida.Identificacion.Tipologia,
                         Estado = "OK",
-                        Mensaje = mensajeIntegracion,
+                        Mensaje = "ClassificationOnly TDN1: integración omitida",
                         Timestamp = context.CurrentUtcDateTime,
                         DatosOriginales = new Dictionary<string, object>(),
                         DatosFinales = new Dictionary<string, object>(),
-                        IdActivoEntrada = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
-                            ? null
-                            : entrada.Trazabilidad.IdActivo.Trim(),
-                        IdActivoResuelto = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
-                            ? null
-                            : entrada.Trazabilidad.IdActivo.Trim(),
+                        IdActivoEntrada = null,
+                        IdActivoResuelto = null,
                         IdActivoCambiado = false
                     };
-                    salida.Integridad.IdActivoEntrada = salida.DetalleEjecucion.Integracion.IdActivoEntrada;
-                    salida.Integridad.IdActivo = salida.DetalleEjecucion.Integracion.IdActivoResuelto;
-                    salida.Integridad.IdActivoCambiado = false;
+                    salida.DetalleEjecucion.GDC = new ResultadoGDC
+                    {
+                        Exitoso = true,
+                        Mensaje = "Skipped"
+                    };
                 }
+                else
+                {
 
-                await EjecutarSubidaGdcAsync(
-                    salida.Integridad.IdActivo,
-                    entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
+                    var ejecutarIntegracionClasificacion =
+                        entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true &&
+                        !string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo);
+
+                    if (ejecutarIntegracionClasificacion)
+                    {
+                        logger.LogInformation("ClassificationOnly activo con integración habilitada. Ejecutando Integrar.");
+
+                        var resultadoIntegracionClasificacion = await EjecutarPasoNegocio(
+                            "Integrar",
+                            () => context.CallActivityAsync<DocumentIA.Core.Models.ResultadoIntegracion>(
+                                "IntegrarActivity",
+                                new DocumentIA.Core.Models.IntegrarInput
+                                {
+                                    Tipologia = salida.Identificacion.Tipologia,
+                                    DocumentoId = salida.Identificacion.Guid,
+                                    DatosExtraidos = new Dictionary<string, object>(),
+                                    IdActivo = entrada.Trazabilidad.IdActivo,
+                                    Metadata = new Dictionary<string, object>
+                                    {
+                                        ["correlationId"] = entrada.Trazabilidad.CorrelationId,
+                                        ["submittedBy"] = entrada.Trazabilidad.SubmittedBy
+                                    }
+                                }));
+
+                        salida.DetalleEjecucion.Integracion = resultadoIntegracionClasificacion;
+                        salida.Integridad.IdActivoEntrada = resultadoIntegracionClasificacion.IdActivoEntrada;
+                        salida.Integridad.IdActivo = resultadoIntegracionClasificacion.IdActivoResuelto ?? entrada.Trazabilidad.IdActivo;
+                        salida.Integridad.IdActivoCambiado = resultadoIntegracionClasificacion.IdActivoCambiado;
+                    }
+                    else
+                    {
+                        var mensajeIntegracion = entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true
+                            ? "ClassificationOnly sin IdActivo"
+                            : "ClassificationOnly activo";
+
+                        MarcarActividadOmitida("Integrar", mensajeIntegracion);
+                        salida.DetalleEjecucion.Integracion = new ResultadoIntegracion
+                        {
+                            Tipologia = salida.Identificacion.Tipologia,
+                            Estado = "OK",
+                            Mensaje = mensajeIntegracion,
+                            Timestamp = context.CurrentUtcDateTime,
+                            DatosOriginales = new Dictionary<string, object>(),
+                            DatosFinales = new Dictionary<string, object>(),
+                            IdActivoEntrada = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
+                                ? null
+                                : entrada.Trazabilidad.IdActivo.Trim(),
+                            IdActivoResuelto = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
+                                ? null
+                                : entrada.Trazabilidad.IdActivo.Trim(),
+                            IdActivoCambiado = false
+                        };
+                        salida.Integridad.IdActivoEntrada = salida.DetalleEjecucion.Integracion.IdActivoEntrada;
+                        salida.Integridad.IdActivo = salida.DetalleEjecucion.Integracion.IdActivoResuelto;
+                        salida.Integridad.IdActivoCambiado = false;
+                    }
+
+                    await EjecutarSubidaGdcAsync(
+                        salida.Integridad.IdActivo,
+                        entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
+                }
 
                 var tipologiaNoClasificable = string.Equals(entrada.Instrucciones.ExpectedType, "Desconocido", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tipologiaResuelta.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
@@ -1086,6 +1298,49 @@ public class DocumentProcessOrchestrator
 
                 FinalizarSeguimiento("Completed", "ClassificationOnly completado");
                 return salida;
+            }
+
+            var markdownPreclasificacionRecortado = salida.DetalleEjecucion.RecorteAplicado &&
+                salida.DetalleEjecucion.PaginasIncluidas > 0 &&
+                salida.Identificacion.Paginas > 0 &&
+                salida.DetalleEjecucion.PaginasIncluidas < salida.Identificacion.Paginas &&
+                datosNormalizados.TryGetValue("Markdown", out var markdownPreClasifObj) &&
+                markdownPreClasifObj is string markdownPreClasifTexto &&
+                !string.IsNullOrWhiteSpace(markdownPreClasifTexto);
+
+            if (markdownPreclasificacionRecortado)
+            {
+                try
+                {
+                    logger.LogInformation(
+                        "Markdown actual proviene de recorte de clasificación ({PaginasIncluidas}/{PaginasDocumento}). Regenerando markdown de documento completo para extracción/prompt.",
+                        salida.DetalleEjecucion.PaginasIncluidas,
+                        salida.Identificacion.Paginas);
+
+                    var markdownCompleto = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                        "ExtraerMarkdownLayoutActivity",
+                        new ExtraerMarkdownLayoutInput
+                        {
+                            Tipologia = salida.Identificacion.Tipologia,
+                            DocumentoBase64 = entrada.Documento.Content.Base64,
+                            NombreDocumento = entrada.Documento.Name
+                        });
+
+                    if (!string.IsNullOrWhiteSpace(markdownCompleto.Markdown))
+                    {
+                        datosNormalizados["Markdown"] = markdownCompleto.Markdown;
+                        RegistrarMarkdown(markdownCompleto.Markdown, "LayoutDocumentoCompletoPostClasificacion");
+                        logger.LogInformation(
+                            "Markdown de documento completo preparado para extracción/prompt ({Len} chars).",
+                            markdownCompleto.Markdown.Length);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(
+                        ex,
+                        "No se pudo regenerar markdown de documento completo. Se mantiene markdown de preclasificación recortado para pasos posteriores.");
+                }
             }
 
             resultadoClasificacion.Confianza = RedondearSalida(resultadoClasificacion.Confianza);
@@ -1175,7 +1430,8 @@ public class DocumentProcessOrchestrator
                             UmbralFallbackEfectivoCompletitud = umbralExtracCompletitudRequest,
                             UmbralFallbackEfectivoConfianza = umbralExtracConfianzaRequest,
                             ProviderEfectivo = providerEfectivo,
-                            ModelKeyEfectivo = modelKeyEfectivo
+                            ModelKeyEfectivo = modelKeyEfectivo,
+                            GenerarResumenPorDefecto = !salida.DatosExtraidos.ContainsKey("Resumen")
                         }));
 
                 if (resultadoExtraccion.FallbackUsado)
@@ -1276,6 +1532,7 @@ public class DocumentProcessOrchestrator
             // El markdown no debe formar parte de DatosExtraidos de salida.
             resultadoExtraccion.DatosExtraidos.Remove("Markdown");
             salida.DatosExtraidos = resultadoExtraccion.DatosExtraidos;
+            AplicarResumenCombinado(resultadoExtraccion.ResumenCombinado ?? resumenCombinadoClasificacion);
 
             // Prioridad para páginas:
             // 1) valor explícito devuelto por el proveedor de extracción
@@ -1328,7 +1585,10 @@ public class DocumentProcessOrchestrator
             };
 
             // 4.5 Prompt libre (si la tipología lo tiene habilitado, o si la petición trae instrucciones de prompt ad-hoc)
-            if (tipologiaResuelta.PromptEnabled || entrada.Instrucciones.Prompt != null)
+            forzarResumenDedicado = entrada.Instrucciones.ForzarResumenPorDefecto &&
+                !salida.DatosExtraidos.ContainsKey("Resumen");
+
+            if (promptActivoEnPeticion || forzarResumenDedicado)
             {
                 var markdownParaPrompt = resultadoExtraccion.MarkdownExtraido;
                 if (string.IsNullOrWhiteSpace(markdownParaPrompt) && !string.IsNullOrWhiteSpace(markdownNormalizacion))
@@ -1337,42 +1597,12 @@ public class DocumentProcessOrchestrator
                 }
 
                 logger.LogInformation("Paso 4.5: Ejecutando prompt libre de tipología");
-                var promptInput = new PromptActivityInput
-                {
-                    Tipologia = salida.Identificacion.Tipologia,
-                    MarkdownExtraido = markdownParaPrompt,
-                    DocumentoBase64 = entrada.Documento.Content.Base64,
-                    DatosExtraidos = resultadoExtraccion.DatosExtraidos,
-                    // Optimización: si el fallback ya ejecutó el prompt en modo combinado, no hacer otra llamada
-                    ResultadoPromptCombinado = resultadoExtraccion.ResultadoPromptCombinado,
-                    Prompt = entrada.Instrucciones.Prompt
-                };
-
-                var resultadoPrompt = await EjecutarPasoNegocio(
-                    "Prompt",
-                    () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
-
-                if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
-                {
-                    // Exponer resultado de prompt en DatosExtraidos para validación/integración/persistencia
-                    salida.DatosExtraidos["ResultadoPrompt"] = resultadoPrompt.Resultado;
-                }
-
-                salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
-                {
-                    Modelo = resultadoPrompt.Modelo,
-                    TiempoMs = resultadoPrompt.TiempoMs,
-                    CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
-                    Error = resultadoPrompt.Error
-                };
-                RegistrarModeloLlm(resultadoPrompt.Modelo);
-
-                if (resultadoPrompt.CombinedWithFallback)
-                {
-                    var trazaPrompt = ObtenerTraza("Prompt");
-                    trazaPrompt.Mensaje = "Resultado reutilizado de llamada combinada con fallback de extracción";
-                    PublicarEstado("Running", string.Empty, trazaPrompt.Mensaje);
-                }
+                await EjecutarPromptLibreAsync(
+                    markdownParaPrompt,
+                    resultadoExtraccion.DatosExtraidos,
+                    resultadoExtraccion.ResultadoPromptCombinado ?? resultadoPromptCombinadoClasificacion,
+                    resultadoExtraccion.ResumenCombinado ?? resumenCombinadoClasificacion,
+                    forzarResumenDedicado);
             }
 
             // 5. Validacion - ACTUALIZADO PARA USAR MOTOR DE VALIDACION

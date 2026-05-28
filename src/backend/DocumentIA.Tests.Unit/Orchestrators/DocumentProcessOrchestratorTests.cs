@@ -131,7 +131,8 @@ public class DocumentProcessOrchestratorTests
         bool skipDuplicateCheck = false,
         bool classificationOnly = false,
         bool? executeIntegrarWhenClassificationOnly = null,
-        int maxPagesForClassificationOnly = 0)
+        int maxPagesForClassificationOnly = 0,
+        bool forzarResumenPorDefecto = false)
         => new()
         {
             Documento = new Documento
@@ -146,6 +147,7 @@ public class DocumentProcessOrchestratorTests
                 ClassificationOnly = classificationOnly,
                 ExecuteIntegrarWhenClassificationOnly = executeIntegrarWhenClassificationOnly,
                 MaxPagesForClassificationOnly = maxPagesForClassificationOnly,
+                ForzarResumenPorDefecto = forzarResumenPorDefecto,
                 SkipDuplicateCheck = skipDuplicateCheck,
                 SkipGDCUpload = true
             },
@@ -167,7 +169,9 @@ public class DocumentProcessOrchestratorTests
     private static ResolvedTipologia BuildTipologia(
         bool extractionEnabled = false,
         bool skipGdc = true,
-        bool assetResolverEnabled = false)
+        bool assetResolverEnabled = false,
+        bool promptEnabled = false,
+        bool promptHasDefinition = false)
         => new(
             RequestedValue: "nota.simple",
             TipologiaId: "nota.simple",
@@ -176,7 +180,9 @@ public class DocumentProcessOrchestratorTests
             IsDefault: true,
             ExtractionEnabled: extractionEnabled,
             SkipGDCUpload: skipGdc,
-            AssetResolverEnabled: assetResolverEnabled);
+            PromptEnabled: promptEnabled,
+            AssetResolverEnabled: assetResolverEnabled,
+            PromptHasDefinition: promptHasDefinition);
 
     // ── Static helper tests (pre-existing) ──────────────────────────────────
     [Fact]
@@ -533,6 +539,7 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
+        salida.Resultado.MensajeError.Should().BeNull();
         salida.Resultado.Estado.Should().Be("OK");
         salida.Identificacion.Tipologia.Should().Be("Desconocido");
         salida.Identificacion.TipologiaFamilia.Should().Be("Desconocido");
@@ -651,6 +658,209 @@ public class DocumentProcessOrchestratorTests
             .Where(a => a.Nombre is "Extraer" or "Validar" or "ObtenerActivo" or "Integrar" or "SubirGDC")
             .Select(a => a.Estado)
             .Should().OnlyContain(estado => estado == "Skipped" || estado == "Completed");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnlyConPromptActivo_EjecutaPromptYExponeResultado()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.91,
+            ConfianzaGPT = 0.91,
+            FallbackLLM = true,
+            TipologiaDetectada = "nota.simple",
+            ContentExtraido = "# markdown classificationOnly"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(promptEnabled: true, promptHasDefinition: true));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-4o-mini",
+            Resultado = "Resumen ejecutivo"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.DatosExtraidos.Should().ContainKey("ResultadoPrompt");
+        salida.DatosExtraidos["ResultadoPrompt"].Should().Be("Resumen ejecutivo");
+        salida.DetalleEjecucion.Prompt.Should().NotBeNull();
+        salida.DetalleEjecucion.Prompt.Modelo.Should().Be("gpt-4o-mini");
+
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.MarkdownExtraido.Should().Be("# markdown classificationOnly");
+
+        salida.DetalleEjecucion.Seguimiento.Actividades
+            .Single(a => a.Nombre == "Prompt")
+            .Estado.Should().Be("Completed");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ForzarResumenPorDefectoSinGptPrevio_EjecutaPromptActivitySoloResumen()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(
+            classificationOnly: true,
+            forzarResumenPorDefecto: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.91,
+            ConfianzaDI = 0.91,
+            ProveedorClasif = "DocumentIntelligence",
+            TipologiaDetectada = "nota.simple",
+            ContentExtraido = "# markdown DI"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-4o-mini",
+            Resumen = "Resumen ejecutivo"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.DatosExtraidos.Should().ContainKey("Resumen");
+        salida.DatosExtraidos["Resumen"].Should().Be("Resumen ejecutivo");
+        salida.DatosExtraidos.Should().NotContainKey("ResultadoPrompt");
+
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.ForzarResumenPorDefecto.Should().BeTrue();
+        promptInput.ResultadoPromptCombinado.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnly_ResumenForzadoSinMarkdown_EjecutaLayoutAntesDePrompt()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(
+            classificationOnly: true,
+            forzarResumenPorDefecto: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.91,
+            ConfianzaDI = 0.91,
+            ProveedorClasif = "DocumentIntelligence",
+            TipologiaDetectada = "nota.simple",
+            ContentExtraido = null
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Markdown = "# markdown layout resumen",
+            Paginas = 2
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-4o-mini",
+            Resumen = "Resumen ejecutivo"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.DatosExtraidos.Should().ContainKey("Resumen");
+        salida.DatosExtraidos["Resumen"].Should().Be("Resumen ejecutivo");
+
+        var layoutInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
+        layoutInput.Should().NotBeNull();
+
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.MarkdownExtraido.Should().Be("# markdown layout resumen");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnlyNivelTdn1_NoDegradaANoClasificadoCuandoTdn1EsValido()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: true);
+        entrada.Instrucciones.Classification.NivelClasificacion = "TDN1";
+
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "CEDU",
+            ClasificacionParcial = true
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-4o-mini",
+            Resumen = "Resumen TDN1"
+        });
+
+        // Si se intenta resolver tipología técnica en este escenario, es un bug.
+        context.SetupActivityThrow("ResolverTipologiaActivity", new InvalidOperationException("No debería llamarse ResolverTipologiaActivity para TDN1 classificationOnly"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Identificacion.Tdn1.Should().Be("CEDU");
+        salida.Identificacion.Tipologia.Should().Be("CEDU");
+        salida.Identificacion.TipologiaFamilia.Should().Be("CEDU");
+        salida.DetalleEjecucion.MotivoErrorTipologia.Should().BeNull();
+
+        var resolverInput = context.GetLastActivityInput<string>("ResolverTipologiaActivity");
+        resolverInput.Should().BeNull();
+
+        var integrarInput = context.GetLastActivityInput<DocumentIA.Core.Models.IntegrarInput>("IntegrarActivity");
+        integrarInput.Should().BeNull();
+
+        var subirGdcInput = context.GetLastActivityInput<object>("SubirGDCActivity");
+        subirGdcInput.Should().BeNull();
     }
 
     // ── Tests de regresión sesión 2026-05-25 ────────────────────────────────

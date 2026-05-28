@@ -31,6 +31,7 @@ public class ExtraccionInput
     /// Viene de instrucciones.Extraction.Model si no es "auto" ni vacío; de lo contrario null (usa config de tipología).
     /// </summary>
     public string? ModelKeyEfectivo { get; set; }
+    public bool GenerarResumenPorDefecto { get; set; }
 }
 
 public class ExtraccionResultado
@@ -56,6 +57,7 @@ public class ExtraccionResultado
     /// (una única llamada LLM que realizó extracción + prompt a la vez). Null en caso contrario.
     /// </summary>
     public string? ResultadoPromptCombinado { get; set; }
+    public string? ResumenCombinado { get; set; }
 }
 
 public class ConfidenceMetricasExtraccion
@@ -91,6 +93,8 @@ public class PromptActivityInput
     /// directamente sin realizar ninguna llamada adicional al LLM.
     /// </summary>
     public string? ResultadoPromptCombinado { get; set; }
+    public string? ResumenCombinado { get; set; }
+    public bool ForzarResumenPorDefecto { get; set; }
     /// <summary>
     /// Override opcional de prompt para esta petición.
     /// Si no se informa, se usa PromptConfig de la tipología.

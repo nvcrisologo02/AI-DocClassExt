@@ -144,10 +144,14 @@ Casos mínimos:
 3. Error de lectura PDF -> fallback a documento completo en orquestador.
 4. `ClasificarActivity`/provider DI usa `DocumentoBase64Override` cuando existe.
 5. `ExtraerActivity` y `SubirGDCActivity` siguen usando documento completo.
+6. Si se genera `Resumen` durante clasificacion recortada, incluye sufijo `* Resumen basado en las primeras N paginas del documento`.
+7. En flujo no `classificationOnly`, tras recorte para clasificar, `PromptActivity` y extraccion operan con markdown reconstruido del documento completo.
+8. Con `nivelClasificacion=TDN1`, validar que se devuelve `Resumen` cuando lo aporta fase 1 GPT.
 
 Smokes recomendados:
 
 - Documento largo (>=100 páginas): clasificación sobre recorte y extracción/GDC sobre completo.
+- Documento largo con `forzarResumenPorDefecto=true`: confirmar `Resumen` siempre presente y nota de parcialidad solo cuando aplique recorte real.
 - Muestra SERE: validar impacto con override de familia (`sere=5`) y medir tasa de `BAJA_CONFIANZA_CLASIFICACION`.
 
 ---

@@ -217,7 +217,8 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 GdcSerie: config.ResolvedGdcSerie ?? string.Empty,
                 Tdn1: config.ResolvedTdn1 ?? string.Empty,
                 Tdn2: config.ResolvedTdn2 ?? string.Empty,
-                GptDescripcion: config.ResolvedGptDescripcion ?? string.Empty);
+                GptDescripcion: config.ResolvedGptDescripcion ?? string.Empty,
+                PromptHasDefinition: HasPromptDefinition(config.PromptConfig));
 
             byTechnicalKey[technicalKey] = resolved;
 
@@ -236,4 +237,11 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
     private sealed record ResolverIndex(
         Dictionary<string, ResolvedTipologia> ByTechnicalKey,
         Dictionary<string, List<ResolvedTipologia>> ByFamily);
+
+    private static bool HasPromptDefinition(PromptConfig? promptConfig)
+    {
+        return promptConfig is not null &&
+            (!string.IsNullOrWhiteSpace(promptConfig.SystemPrompt) ||
+             !string.IsNullOrWhiteSpace(promptConfig.UserPromptTemplate));
+    }
 }

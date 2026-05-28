@@ -3,6 +3,7 @@ param(
     [string]$Endpoint = "http://localhost:7071/api/IngestDocument",
     [int]$MaxRetries = 45,
     [int]$DelaySeconds = 2,
+    [int]$MaxHttpRetries = 6,
     [switch]$Strict
 )
 
@@ -38,6 +39,83 @@ function Resolve-StatusUri {
     }
 
     return $StatusUri
+}
+
+function Test-IsTransientConnectionError {
+    param([Parameter(Mandatory = $true)][Exception]$Exception)
+
+    $message = $Exception.Message
+    return
+        $message -match "deneg[oó] expresamente dicha conexi[oó]n" -or
+        $message -match "No connection could be made" -or
+        $message -match "actively refused" -or
+        $message -match "Connection refused" -or
+        $message -match "No se puede establecer una conexión"
+}
+
+function Invoke-RestMethodWithRetry {
+    param(
+        [Parameter(Mandatory = $true)][string]$Uri,
+        [Parameter(Mandatory = $true)][string]$Method,
+        [Parameter(Mandatory = $false)][string]$Body,
+        [Parameter(Mandatory = $false)][string]$ContentType = "application/json",
+        [Parameter(Mandatory = $true)][int]$MaxHttpRetries,
+        [Parameter(Mandatory = $true)][int]$DelaySeconds
+    )
+
+    $attempt = 0
+    while ($true) {
+        try {
+            if ($null -ne $Body) {
+                return Invoke-RestMethod -Uri $Uri -Method $Method -Body $Body -ContentType $ContentType
+            }
+
+            return Invoke-RestMethod -Uri $Uri -Method $Method
+        }
+        catch {
+            $attempt++
+            if ($attempt -ge $MaxHttpRetries -or -not (Test-IsTransientConnectionError -Exception $_.Exception)) {
+                throw
+            }
+
+            Write-Host "[WARN] HTTP $Method transitorio (intento $attempt/$MaxHttpRetries): $($_.Exception.Message)"
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
+}
+
+function Wait-EndpointAvailable {
+    param(
+        [Parameter(Mandatory = $true)][string]$Endpoint,
+        [Parameter(Mandatory = $true)][int]$MaxHttpRetries,
+        [Parameter(Mandatory = $true)][int]$DelaySeconds
+    )
+
+    $uri = [System.Uri]$Endpoint
+    $healthUri = "$($uri.Scheme)://$($uri.Host):$($uri.Port)/"
+
+    $attempt = 0
+    while ($attempt -lt $MaxHttpRetries) {
+        try {
+            # Cualquier respuesta HTTP indica que el host está vivo (aunque sea 404).
+            Invoke-WebRequest -Uri $healthUri -Method Get -TimeoutSec 5 | Out-Null
+            return
+        }
+        catch {
+            $attempt++
+
+            if ($attempt -ge $MaxHttpRetries -and -not (Test-IsTransientConnectionError -Exception $_.Exception)) {
+                return
+            }
+
+            if ($attempt -ge $MaxHttpRetries) {
+                throw
+            }
+
+            Write-Host "[WARN] Host Functions no disponible (intento $attempt/$MaxHttpRetries). Esperando..."
+            Start-Sleep -Seconds $DelaySeconds
+        }
+    }
 }
 
 function Resolve-TdnFromTipologia {
@@ -91,12 +169,33 @@ function Resolve-TdnFromTipologia {
     }
 }
 
+function Get-PreviewText {
+    param(
+        [Parameter(Mandatory = $false)]
+        [string]$Text,
+        [Parameter(Mandatory = $false)]
+        [int]$MaxLength = 140
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Text)) {
+        return $null
+    }
+
+    $normalized = ($Text -replace "\s+", " ").Trim()
+    if ($normalized.Length -le $MaxLength) {
+        return $normalized
+    }
+
+    return ($normalized.Substring(0, $MaxLength) + "...")
+}
+
 function Invoke-IngestCase {
     param(
         [Parameter(Mandatory = $true)][pscustomobject]$Case,
         [Parameter(Mandatory = $true)][string]$Endpoint,
         [Parameter(Mandatory = $true)][int]$MaxRetries,
-        [Parameter(Mandatory = $true)][int]$DelaySeconds
+        [Parameter(Mandatory = $true)][int]$DelaySeconds,
+        [Parameter(Mandatory = $true)][int]$MaxHttpRetries
     )
 
     $documentPath = $Case.documentPath
@@ -133,6 +232,23 @@ function Invoke-IngestCase {
     $documentName = [System.IO.Path]::GetFileName($resolvedPath)
     $classificationProvider = if ([string]::IsNullOrWhiteSpace($Case.classificationProvider)) { "auto" } else { "$($Case.classificationProvider)" }
 
+    $promptModelKey = "default.gpt4o-mini"
+    $promptModelKeyProp = $Case.PSObject.Properties["promptModelKey"]
+    if ($null -ne $promptModelKeyProp -and -not [string]::IsNullOrWhiteSpace("$($promptModelKeyProp.Value)")) {
+        $promptModelKey = "$($promptModelKeyProp.Value)"
+    }
+
+    $forzarResumenPorDefecto = $true
+    $forzarResumenProp = $Case.PSObject.Properties["forzarResumenPorDefecto"]
+    if ($null -ne $forzarResumenProp -and $null -ne $forzarResumenProp.Value) {
+        try {
+            $forzarResumenPorDefecto = [System.Convert]::ToBoolean($forzarResumenProp.Value)
+        }
+        catch {
+            $forzarResumenPorDefecto = $true
+        }
+    }
+
     # nivelClasificacion: usar el del caso si existe; si solo hay expectedTdn1 sin expectedTdn2, inferir TDN1.
     $nivelClasificacion = if (-not [string]::IsNullOrWhiteSpace($Case.nivelClasificacion)) {
         $Case.nivelClasificacion
@@ -148,8 +264,9 @@ function Invoke-IngestCase {
             forceReprocess = $true
             skipGDCUpload = $true
             classificationOnly = $true
-            maxPagesForClassificationOnly = 3
+            maxPagesForClassificationOnly = 10
             executeIntegrarWhenClassificationOnly = $false
+            forzarResumenPorDefecto = $forzarResumenPorDefecto
             classification = @{
                 provider = $classificationProvider
                 model = "auto"
@@ -159,6 +276,9 @@ function Invoke-IngestCase {
             extraction = @{
                 model = "auto"
                 umbral = 0.80
+            }
+            prompt = @{
+                modelKey = $promptModelKey
             }
         }
         documento = @{
@@ -176,14 +296,17 @@ function Invoke-IngestCase {
     } | ConvertTo-Json -Depth 12
 
     try {
-        $response = Invoke-RestMethod -Uri $Endpoint -Method Post -Body $body -ContentType "application/json"
+        Wait-EndpointAvailable -Endpoint $Endpoint -MaxHttpRetries $MaxHttpRetries -DelaySeconds $DelaySeconds
+
+        $response = Invoke-RestMethodWithRetry -Uri $Endpoint -Method "Post" -Body $body -MaxHttpRetries $MaxHttpRetries -DelaySeconds $DelaySeconds
+
         $statusUri = Resolve-StatusUri -StatusUri $response.statusQueryUri
 
         $status = $null
         $retryCount = 0
         do {
             Start-Sleep -Seconds $DelaySeconds
-            $status = Invoke-RestMethod -Uri $statusUri -Method Get
+            $status = Invoke-RestMethodWithRetry -Uri $statusUri -Method "Get" -MaxHttpRetries $MaxHttpRetries -DelaySeconds $DelaySeconds
             $retryCount++
         } while (($status.runtimeStatus -eq "Running" -or $status.runtimeStatus -eq "Pending") -and $retryCount -lt $MaxRetries)
 
@@ -199,8 +322,12 @@ function Invoke-IngestCase {
 
         $output = $status.output
         $identificacion = Get-FieldValue -Object $output -Names @("Identificacion", "identificacion")
+        $resultadoFinal = Get-FieldValue -Object $output -Names @("Resultado", "resultado")
         $detalleEjecucion = Get-FieldValue -Object $output -Names @("DetalleEjecucion", "detalleEjecucion")
         $clasificacion = Get-FieldValue -Object $detalleEjecucion -Names @("Clasificacion", "clasificacion")
+        $promptDetalle = Get-FieldValue -Object $detalleEjecucion -Names @("Prompt", "prompt")
+        $promptError = Get-FieldValue -Object $promptDetalle -Names @("Error", "error")
+        $datosExtraidos = Get-FieldValue -Object $output -Names @("DatosExtraidos", "datosExtraidos")
 
         $tipologia = Get-FieldValue -Object $identificacion -Names @("Tipologia", "tipologia")
         if ([string]::IsNullOrWhiteSpace($tipologia)) {
@@ -225,10 +352,33 @@ function Invoke-IngestCase {
             $tdn2 = $inferred.Tdn2
         }
 
+        $resumen = Get-FieldValue -Object $datosExtraidos -Names @("Resumen", "resumen")
+        if ([string]::IsNullOrWhiteSpace($resumen)) {
+            $resumen = Get-FieldValue -Object $clasificacion -Names @("ResumenCombinado", "resumenCombinado", "Resumen", "resumen")
+        }
+
+        $requireResumen = $true
+        $requireResumenProp = $Case.PSObject.Properties["requireResumen"]
+        if ($null -ne $requireResumenProp -and $null -ne $requireResumenProp.Value) {
+            try {
+                $requireResumen = [System.Convert]::ToBoolean($requireResumenProp.Value)
+            }
+            catch {
+                $requireResumen = $true
+            }
+        }
+
         $expectedTdn1 = $Case.expectedTdn1
         $expectedTdn2 = $Case.expectedTdn2
 
         $errors = @()
+
+        # Defensa adicional: la batería exige siempre reproceso, nunca reutilización por duplicado.
+        $reutilizadaPorDuplicado = Get-FieldValue -Object $resultadoFinal -Names @("ReutilizadaPorDuplicado", "reutilizadaPorDuplicado")
+        if ($reutilizadaPorDuplicado -eq $true) {
+            $errors += "Resultado reutilizado por duplicado (se esperaba reproceso forzado)"
+        }
+
         if ([string]::IsNullOrWhiteSpace($tipologia)) { $errors += "Tipologia vacia" }
         if ([string]::IsNullOrWhiteSpace($tdn1)) { $errors += "Tdn1 vacio" }
         if ($nivelClasificacion -ne "TDN1" -and [string]::IsNullOrWhiteSpace($tdn2)) { $errors += "Tdn2 vacio" }
@@ -241,6 +391,14 @@ function Invoke-IngestCase {
             $errors += "Tdn2 esperado='$expectedTdn2' real='$tdn2'"
         }
 
+        if ($requireResumen -and [string]::IsNullOrWhiteSpace($resumen)) {
+            $errors += "Resumen vacio/no informado"
+        }
+
+        if (-not [string]::IsNullOrWhiteSpace("$promptError")) {
+            $errors += "PromptError='$promptError'"
+        }
+
         if ($errors.Count -gt 0) {
             return [pscustomobject]@{
                 Id = $Case.id
@@ -251,6 +409,9 @@ function Invoke-IngestCase {
                 Tipologia = $tipologia
                 Tdn1 = $tdn1
                 Tdn2 = $tdn2
+                Resumen = $resumen
+                ResumenLength = if ([string]::IsNullOrWhiteSpace($resumen)) { 0 } else { $resumen.Length }
+                ResumenPreview = Get-PreviewText -Text $resumen
             }
         }
 
@@ -264,6 +425,9 @@ function Invoke-IngestCase {
             Tipologia = $tipologia
             Tdn1 = $tdn1
             Tdn2 = $tdn2
+            Resumen = $resumen
+            ResumenLength = if ([string]::IsNullOrWhiteSpace($resumen)) { 0 } else { $resumen.Length }
+            ResumenPreview = Get-PreviewText -Text $resumen
         }
     }
     catch {
@@ -308,7 +472,7 @@ if ($caseList.Count -eq 0) {
 $results = @()
 foreach ($case in $caseList) {
     Write-Host "Ejecutando caso $($case.id): $($case.name)"
-    $result = Invoke-IngestCase -Case $case -Endpoint $Endpoint -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds
+    $result = Invoke-IngestCase -Case $case -Endpoint $Endpoint -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds -MaxHttpRetries $MaxHttpRetries
     $results += $result
 
     $line = "[$($result.Status)] $($result.Id) - $($result.Name)"
@@ -317,6 +481,9 @@ foreach ($case in $caseList) {
     }
     if (-not [string]::IsNullOrWhiteSpace($result.Reason)) {
         $line += " | $($result.Reason)"
+    }
+    if ($null -ne $result.ResumenLength) {
+        $line += " | resumenLen=$($result.ResumenLength)"
     }
     Write-Host $line
 }
@@ -328,7 +495,7 @@ $total = $results.Count
 
 Write-Host ""
 Write-Host "Resumen: Total=$total PASS=$pass FAIL=$fail SKIP=$skip"
-$results | Format-Table -AutoSize Id, Name, Status, Provider, InstanceId, Tdn1, Tdn2, Tipologia, Reason
+$results | Format-Table -AutoSize Id, Name, Status, Provider, InstanceId, Tdn1, Tdn2, Tipologia, ResumenLength, ResumenPreview, Reason
 
 if ($Strict.IsPresent -and ($fail -gt 0 -or $skip -gt 0)) {
     exit 2

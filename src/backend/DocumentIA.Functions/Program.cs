@@ -20,6 +20,17 @@ using Azure.Identity;
 using Azure.Security.KeyVault.Secrets;
 using Microsoft.ApplicationInsights;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Unicode;
+
+var jsonOpts = new JsonSerializerOptions
+{
+    Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    WriteIndented = false
+};
 
 var host = new HostBuilder()
     .ConfigureFunctionsWebApplication()
@@ -56,6 +67,18 @@ var host = new HostBuilder()
     })
     .ConfigureServices((context, services) =>
     {
+        // Capa 1: respuesta HTTP al cliente
+        services.Configure<JsonSerializerOptions>(opts =>
+        {
+            opts.Encoder = JavaScriptEncoder.Create(UnicodeRanges.All);
+            opts.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+            opts.WriteIndented = false;
+        });
+
+
+         // Capa 2: serializacion interna entre actividades Durable
+        services.AddSingleton(jsonOpts);
+        
         // Application Insights
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
@@ -99,6 +122,7 @@ var host = new HostBuilder()
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
         services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
+        services.Configure<PromptDefaultsSettings>(context.Configuration.GetSection("PromptDefaults"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();

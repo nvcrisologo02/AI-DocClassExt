@@ -130,6 +130,15 @@ public class IngestAPITrigger
                 contratoEntrada.Instrucciones.Classification,
                 _classificationRoutingSettings.NivelClasificacionDefault);
 
+            // Regla de control backend: en nivel TDN1, el flujo siempre es de solo clasificación.
+            if (string.Equals(
+                contratoEntrada.Instrucciones.Classification.NivelClasificacion,
+                ClassificationLevelResolver.LevelTdn1,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                contratoEntrada.Instrucciones.ClassificationOnly = true;
+            }
+
             // D2: si el caller especifica nivelClasificacion, forzar provider=gpt (único que lo interpreta)
             if (nivelClasificacionExplicito)
             {

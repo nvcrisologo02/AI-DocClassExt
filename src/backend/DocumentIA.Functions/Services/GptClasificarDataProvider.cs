@@ -25,24 +25,25 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly ClassificationTipologiaPromptBuilder _tipologiaPromptBuilder;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ClassificationRoutingSettings _routingSettings;
+    private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
-    private readonly Lazy<ChatClient> _chatClient;
 
     public GptClasificarDataProvider(
         ClassificationModelRegistryLoader modelRegistryLoader,
         ClassificationTipologiaPromptBuilder tipologiaPromptBuilder,
         IServiceScopeFactory scopeFactory,
         IOptions<ClassificationRoutingSettings> routingSettings,
+        IOptions<PromptDefaultsSettings> promptDefaults,
         ILogger<GptClasificarDataProvider> logger)
     {
         _modelRegistryLoader = modelRegistryLoader;
         _tipologiaPromptBuilder = tipologiaPromptBuilder;
         _scopeFactory = scopeFactory;
         _routingSettings = routingSettings.Value;
+        _promptDefaults = promptDefaults.Value;
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
-        _chatClient = new Lazy<ChatClient>(CreateChatClient);
         // _tipologiasPromptSection se elimina: el IMemoryCache de ClassificationTipologiaPromptBuilder
         // ya cachea el prompt 5 min. Un Lazy<string> lo fijaría para siempre en el singleton.
     }
@@ -52,10 +53,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        var model = _fallbackModel.Value;
+        var requestedModel = input.Entrada.Instrucciones.Classification.Model;
+        var model = ResolveModel(requestedModel);
         _logger.LogInformation(
-            "Iniciando clasificación Azure OpenAI fallback para documento {Documento} con deployment {DeploymentName}",
+            "Iniciando clasificación Azure OpenAI para documento {Documento}. RequestedModel={RequestedModel}, ResolvedModelKey={ResolvedModelKey}, Deployment={DeploymentName}",
             input.Entrada.Documento.Name,
+            string.IsNullOrWhiteSpace(requestedModel) ? "<empty>" : requestedModel,
+            model.Key,
             model.DeploymentName);
 
         var nivelClasificacion = ClassificationLevelResolver.Resolve(
@@ -63,19 +67,36 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             _routingSettings.NivelClasificacionDefault);
 
         var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
+        var resumenPrompt = ResolveResumenPrompt(input, contextoTexto);
         var contextoPrompt = BuildInstructionPromptContext(input.Entrada.Instrucciones.Prompt);
 
-        var phase1SystemMessage = new SystemChatMessage(
+        var phase1ResponseInstruction = resumenPrompt is null
+            ? ClassificationTipologiaPromptBuilder.Phase1ResponseFormatInstruction
+            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\"}. No incluyas texto fuera del JSON.";
+
+        var phase1SystemText =
             "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
             "especialmente documentos de SAREB (Sociedad de Gestión de Activos procedentes de la Reestructuración Bancaria). " +
             "Analiza el documento adjunto y clasifícalo en una familia TDN1. " +
-            ClassificationTipologiaPromptBuilder.Phase1ResponseFormatInstruction);
+            phase1ResponseInstruction;
+
+        if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
+        {
+            phase1SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
+        }
+
+        var phase1SystemMessage = new SystemChatMessage(phase1SystemText);
 
         var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
         var phase1UserText =
             $"Prompt adicional de instrucciones (si aplica):\n{contextoPrompt}\n\n" +
             $"Familias TDN1 disponibles:\n{phase1Catalog}\n\n" +
             "Si no puedes resolver una familia, devuelve tdn1=null y completa propuesta con una sugerencia no vinculante.";
+
+        if (resumenPrompt is not null)
+        {
+            phase1UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
 
         if (!string.IsNullOrWhiteSpace(contextoTexto))
         {
@@ -92,7 +113,12 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 $"Nombre de archivo: {input.Entrada.Documento.Name}.";
         }
 
-        var phase1ResponseText = await CompleteChatAsync(model, phase1SystemMessage, phase1UserText, cancellationToken);
+        var phase1ResponseText = await CompleteChatAsync(
+            model,
+            phase1SystemMessage,
+            phase1UserText,
+            cancellationToken,
+            resumenPrompt?.MaxTokens);
 
         var phase1Parsed = GptHierarchicalClassificationParser.ParsePhase1(phase1ResponseText);
         if (!phase1Parsed.Success || phase1Parsed.Value is null)
@@ -137,7 +163,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 Confianza = 0.9,
                 ConfianzaGPT = 0.9,
                 ClasificacionParcial = true,
-                PropuestaTipologia = propuesta
+                PropuestaTipologia = propuesta,
+                ResumenCombinado = phase1Parsed.Value.Resumen
             };
         }
 
@@ -147,21 +174,42 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             throw new InvalidOperationException($"No se encontraron subtipos TDN2 para la familia {tdn1Code}.");
         }
 
-        var phase2SystemMessage = new SystemChatMessage(
+        var phase2ResponseInstruction = resumenPrompt is null
+            ? ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction
+            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"resumen\": \"resumen ejecutivo\"}. No incluyas texto fuera del JSON.";
+
+        var phase2SystemText =
             "Eres un sistema experto en clasificación documental. " +
             "Debes seleccionar exclusivamente un subtipo TDN2 de la familia ya resuelta. " +
-            ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction);
+            phase2ResponseInstruction;
+
+        if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
+        {
+            phase2SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
+        }
+
+        var phase2SystemMessage = new SystemChatMessage(phase2SystemText);
 
         var phase2UserText =
             $"Familia TDN1 resuelta: {tdn1Code}\n\n" +
             $"Subtipos TDN2 disponibles:\n{phase2Catalog}";
+
+        if (resumenPrompt is not null)
+        {
+            phase2UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
 
         if (!string.IsNullOrWhiteSpace(contextoTexto))
         {
             phase2UserText += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}";
         }
 
-        var phase2ResponseText = await CompleteChatAsync(model, phase2SystemMessage, phase2UserText, cancellationToken);
+        var phase2ResponseText = await CompleteChatAsync(
+            model,
+            phase2SystemMessage,
+            phase2UserText,
+            cancellationToken,
+            resumenPrompt?.MaxTokens);
         var phase2Parsed = GptHierarchicalClassificationParser.ParsePhase2(phase2ResponseText);
 
         if (!phase2Parsed.Success || phase2Parsed.Value is null)
@@ -186,7 +234,37 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             Confianza = 0.9,
             ConfianzaGPT = 0.9,
             ProveedorClasif = "GPT4oMini",
-            PropuestaTipologia = propuesta
+            PropuestaTipologia = propuesta,
+            ResultadoPromptCombinado = phase2Parsed.Value.ResultadoPrompt,
+            ResumenCombinado = phase2Parsed.Value.Resumen
+        };
+    }
+
+    private PromptConfig? ResolveResumenPrompt(ClasificacionInput input, string? contextoTexto)
+    {
+        if (!input.GenerarResumenPorDefecto)
+        {
+            return null;
+        }
+
+        var defaults = _promptDefaults.ToPromptConfig();
+        if (string.IsNullOrWhiteSpace(defaults.UserPromptTemplate))
+        {
+            return null;
+        }
+
+        return new PromptConfig
+        {
+            Enabled = true,
+            ModelKey = defaults.ModelKey,
+            SystemPrompt = defaults.SystemPrompt,
+            UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
+                defaults.UserPromptTemplate,
+                contextoTexto ?? string.Empty,
+                input.DatosNormalizados),
+            MaxTokens = defaults.MaxTokens,
+            Temperature = defaults.Temperature,
+            ContentMode = defaults.ContentMode
         };
     }
 
@@ -194,7 +272,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         ClassificationModelConfig model,
         SystemChatMessage systemMessage,
         string userText,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        int? maxOutputTokens = null)
     {
         var userMessage = new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText));
 
@@ -202,13 +281,14 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
             Temperature = (float)model.Temperature,
-            MaxOutputTokenCount = model.MaxTokens
+            MaxOutputTokenCount = Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens)
         };
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
 
-        var response = await _chatClient.Value.CompleteChatAsync(
+        var chatClient = CreateChatClient(model);
+        var response = await chatClient.CompleteChatAsync(
             new List<ChatMessage> { systemMessage, userMessage },
             options,
             cts.Token);
@@ -258,6 +338,36 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         }
 
         return null;
+    }
+
+    private static ClassificationModelConfig ValidateGptModel(ClassificationModelConfig model)
+    {
+        if (!IsAzureOpenAiProvider(model.Provider))
+        {
+            throw new InvalidOperationException(
+                $"El modelo de clasificación '{model.Key}' no es compatible con GPT/Azure OpenAI. Provider actual: '{model.Provider}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.Endpoint es obligatorio para el modelo '{model.Key}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.DeploymentName))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.DeploymentName es obligatorio para el modelo '{model.Key}'.");
+        }
+
+        if (!string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(model.ApiKey))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.ApiKey es obligatorio para el modelo '{model.Key}' cuando AuthMode=ApiKey.");
+        }
+
+        return model;
     }
 
     private static string BuildInstructionPromptContext(PromptInstrucciones? prompt)
@@ -340,22 +450,18 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return null;
     }
 
-    private ChatClient CreateChatClient()
+    private ClassificationModelConfig ResolveModel(string? requestedModel)
     {
-        var model = _fallbackModel.Value;
-
-        if (string.IsNullOrWhiteSpace(model.Endpoint))
+        if (string.IsNullOrWhiteSpace(requestedModel) || string.Equals(requestedModel, "auto", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(
-                $"ClassificationModelConfig.Endpoint es obligatorio para el modelo de fallback '{model.Key}'.");
+            return _fallbackModel.Value;
         }
 
-        if (string.IsNullOrWhiteSpace(model.DeploymentName))
-        {
-            throw new InvalidOperationException(
-                $"ClassificationModelConfig.DeploymentName es obligatorio para el modelo de fallback '{model.Key}'.");
-        }
+        return ValidateGptModel(_modelRegistryLoader.GetModel(requestedModel));
+    }
 
+    private ChatClient CreateChatClient(ClassificationModelConfig model)
+    {
         AzureOpenAIClient azureClient;
 
         if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
@@ -364,11 +470,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(model.ApiKey))
-            {
-                throw new InvalidOperationException(
-                    $"ClassificationModelConfig.ApiKey es obligatorio para el modelo de fallback '{model.Key}' cuando AuthMode=ApiKey.");
-            }
             azureClient = new AzureOpenAIClient(
                 new Uri(model.Endpoint),
                 new AzureKeyCredential(model.ApiKey));
@@ -380,13 +481,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private ClassificationModelConfig ResolveFallbackModel()
     {
         var model = _modelRegistryLoader.GetFallbackModel();
-        if (!IsAzureOpenAiProvider(model.Provider))
-        {
-            throw new InvalidOperationException(
-                $"El modelo de fallback '{model.Key}' debe ser de provider Azure OpenAI. Provider actual: '{model.Provider}'.");
-        }
-
-        return model;
+        return ValidateGptModel(model);
     }
 
     private static bool IsAzureOpenAiProvider(string provider) =>

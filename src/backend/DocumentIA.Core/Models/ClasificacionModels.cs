@@ -13,4 +13,5 @@ public class ClasificacionInput
     public string? DocumentoBase64Override { get; set; }
     public int CharsTextoNativo { get; set; }
     public int TotalPaginas { get; set; }
+    public bool GenerarResumenPorDefecto { get; set; }
 }
