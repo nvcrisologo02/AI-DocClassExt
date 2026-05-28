@@ -184,6 +184,9 @@ dotnet run --launch-profile http
 | `Classification:DefaultModelKey` | string | Clave del modelo en la tabla `ModeloConfigs` (`default.azure-di`) | Si |
 | **Extraccion** | | | |
 | `Extraction:DefaultProvider` | string | Proveedor por defecto: `azure-content-understanding` / `azure-openai` / `azure-document-intelligence` / `mock` | Si |
+| `Extraction:AzureContentUnderstanding:MaxConcurrentCalls` | int | Maximo de llamadas simultaneas a CU (SemaphoreSlim). Default: `3`. Subir con precaucion; mas de 5 aumenta la latencia CU por degradacion del servicio. | No |
+| `Extraction:AzureContentUnderstanding:MaxRetries` | int | Intentos maximos con backoff exponencial ante errores transitorios CU. Default: `3`. Delay = `InitialRetryDelayMs × 2^(intento-1)`. | No |
+| `Extraction:AzureContentUnderstanding:InitialRetryDelayMs` | int | Delay base en ms para el backoff exponencial. Default: `500`. | No |
 | **GDC** | | | |
 | `GDC:Endpoint` | string | URL del servicio SOAP GDC SINTWS | Si |
 | `GDC:TimeoutSeconds` | int | Timeout GDC en segundos | Si |
