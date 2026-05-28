@@ -3,6 +3,7 @@ using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
 namespace DocumentIA.Core.Services;
@@ -11,6 +12,7 @@ public class BlobStorageService : IBlobStorageService
 {
     private readonly BlobServiceClient _blobServiceClient;
     private readonly ILogger<BlobStorageService> _logger;
+    private readonly ConcurrentDictionary<string, bool> _initializedContainers = new(StringComparer.OrdinalIgnoreCase);
 
     public BlobStorageService(IConfiguration configuration, ILogger<BlobStorageService> logger)
     {
@@ -24,7 +26,7 @@ public class BlobStorageService : IBlobStorageService
         try
         {
             var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
-            await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
+            await EnsureContainerExistsAsync(containerClient, containerName);
 
             var blobPath = GenerateBlobPath(ComputeSHA256(content), fileName);
             var blobClient = containerClient.GetBlobClient(blobPath);
@@ -54,7 +56,7 @@ public class BlobStorageService : IBlobStorageService
             var bytes = buffer.ToArray();
 
             var containerClient = _blobServiceClient.GetBlobContainerClient(containerName);
-            await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
+            await EnsureContainerExistsAsync(containerClient, containerName);
 
             var sha256 = ComputeSHA256(bytes);
             var blobPath = GenerateBlobPath(sha256, fileName);
@@ -135,6 +137,20 @@ public class BlobStorageService : IBlobStorageService
         {
             return false;
         }
+    }
+
+    private Task EnsureContainerExistsAsync(BlobContainerClient containerClient, string containerName)
+    {
+        if (_initializedContainers.ContainsKey(containerName))
+            return Task.CompletedTask;
+
+        return InitializeContainerAsync(containerClient, containerName);
+    }
+
+    private async Task InitializeContainerAsync(BlobContainerClient containerClient, string containerName)
+    {
+        await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
+        _initializedContainers.TryAdd(containerName, true);
     }
 
     public string GenerateBlobPath(string sha256, string fileName)
