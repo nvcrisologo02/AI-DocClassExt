@@ -216,111 +216,109 @@ stages:
                         "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=2",
                         "Extraction__AzureContentUnderstanding__MaxRetries=3",
                         "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=500",
-                        "Extraction__GptFallback__Enabled=true",
-                        "Extraction__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com",
-                        "Extraction__GptFallback__AuthMode=ApiKey",
-                        "Extraction__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--GptFallback--ApiKey)",
-                        "Extraction__GptFallback__DeploymentName=gpt-4o-mini",
-                        "Extraction__GptFallback__MinFieldsRatio=0.9",
-                        "Extraction__GptFallback__Temperature=0.0",
-                        "Extraction__GptFallback__MaxTokens=2000",
-                        "Extraction__GptFallback__TimeoutSeconds=60",
-                        "Classification__DefaultProvider=azure-document-intelligence",
-                        "Classification__DefaultModelKey=default.azure-di",
-                        "Classification__AzureDocumentIntelligence__Endpoint=https://srbdiprodocai.cognitiveservices.azure.com/",
-                        "Classification__AzureDocumentIntelligence__AuthMode=ApiKey",
-                        "Classification__AzureDocumentIntelligence__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--AzureDocumentIntelligence--ApiKey)",
-                        "Classification__AzureDocumentIntelligence__ApiVersion=2024-11-30",
-                        "Classification__GptFallback__Enabled=true",
-                        "Classification__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com",
-                        "Classification__GptFallback__AuthMode=ApiKey",
-                        "Classification__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--GptFallback--ApiKey)",
-                        "Classification__GptFallback__DeploymentName=gpt-4o-mini",
-                        "Classification__GptFallback__FallbackThreshold=0.5",
-                        "Classification__GptFallback__Temperature=0.0",
-                        "Classification__GptFallback__MaxTokens=150",
-                        "Classification__GptFallback__TimeoutSeconds=30",
-                        "GDC__Endpoint=https://srbwidd03.sareb.srb:8090/sintws/IDocService",
-                        "GDC__TimeoutSeconds=60",
-                        "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicUsername)",
-                        "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicPassword)",
-                        "GDC__ApplicationId=CKP1",
-                        "GDC__NominalUser=",
-                        "GDC__DocumentTypeId=document",
-                        "GDC__ContentFieldName=Content",
-                        "GDC__OrigenDocumento=8878",
-                        "GDC__RepositoryId=",
-                        "GDC__RepositoryName=",
-                        "GDC__ClaseExpediente=AI04",
-                        "GDC__DefaultMatricula=AI-99-SCXX-00",
-                        "GDC__Servicer=9999",
-                        "GDC__EntidadOrigen=9999",
-                        "GDC__ProcesoCarga=PC01",
-                        "GDC__TipoExpediente=AI",
-                        "GDC__Publico=verdadero",
-                        "GDC__BypassSslValidation=true"
-                      )
+                        - task: AzurePowerShell@5
+                          displayName: Set Function App settings (Key Vault mode)
+                          inputs:
+                            azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                            ScriptType: InlineScript
+                            Inline: |
+                              # Uses Az PowerShell cmdlets (no az.cmd/cmd.exe) so parentheses in
+                              # Key Vault references are passed safely via hashtable without shell escaping.
+                              $settings = @{
+                                "FUNCTIONS_WORKER_RUNTIME" = "dotnet-isolated"
+                                "SecretsSource" = "AzureVault"
+                                "KeyVaultName" = "$(KEY_VAULT_NAME)"
+                                "RunDatabaseMigrationsOnStartup" = "false"
+                                "AzureWebJobsStorage" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureWebJobsStorage)"
+                                "AzureStorageConnectionString" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AzureStorageConnectionString)"
+                                "SqlConnectionString" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=SqlConnectionString)"
+                                "AssetResolver__BaseUrl" = "$(AZURE_ASSET_RESOLVER_BASE_URL)"
+                                "AssetResolver__ApiKey" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
+                                "Extraction__DefaultProvider" = "azure-content-understanding"
+                                "Extraction__AzureContentUnderstanding__Endpoint" = "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/"
+                                "Extraction__AzureContentUnderstanding__AuthMode" = "ApiKey"
+                                "Extraction__AzureContentUnderstanding__ApiKey" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--AzureContentUnderstanding--ApiKey)"
+                                "Extraction__AzureContentUnderstanding__DefaultProcessingLocation" = "geography"
+                                "Extraction__AzureContentUnderstanding__MaxConcurrentCalls" = "2"
+                                "Extraction__AzureContentUnderstanding__MaxRetries" = "3"
+                                "Extraction__AzureContentUnderstanding__InitialRetryDelayMs" = "500"
+                                "Extraction__GptFallback__Enabled" = "true"
+                                "Extraction__GptFallback__Endpoint" = "https://upe48-mm2avmdm-swedencentral.openai.azure.com"
+                                "Extraction__GptFallback__AuthMode" = "ApiKey"
+                                "Extraction__GptFallback__ApiKey" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--GptFallback--ApiKey)"
+                                "Extraction__GptFallback__DeploymentName" = "gpt-4o-mini"
+                                "Extraction__GptFallback__MinFieldsRatio" = "0.9"
+                                "Extraction__GptFallback__Temperature" = "0.0"
+                                "Extraction__GptFallback__MaxTokens" = "2000"
+                                "Extraction__GptFallback__TimeoutSeconds" = "60"
+                                "Classification__DefaultProvider" = "azure-document-intelligence"
+                                "Classification__DefaultModelKey" = "default.azure-di"
+                                "Classification__AzureDocumentIntelligence__Endpoint" = "https://srbdiprodocai.cognitiveservices.azure.com/"
+                                "Classification__AzureDocumentIntelligence__AuthMode" = "ApiKey"
+                                "Classification__AzureDocumentIntelligence__ApiKey" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--AzureDocumentIntelligence--ApiKey)"
+                                "Classification__AzureDocumentIntelligence__ApiVersion" = "2024-11-30"
+                                "Classification__GptFallback__Enabled" = "true"
+                                "Classification__GptFallback__Endpoint" = "https://upe48-mm2avmdm-swedencentral.openai.azure.com"
+                                "Classification__GptFallback__AuthMode" = "ApiKey"
+                                "Classification__GptFallback__ApiKey" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--GptFallback--ApiKey)"
+                                "Classification__GptFallback__DeploymentName" = "gpt-4o-mini"
+                                "Classification__GptFallback__FallbackThreshold" = "0.5"
+                                "Classification__GptFallback__Temperature" = "0.0"
+                                "Classification__GptFallback__MaxTokens" = "150"
+                                "Classification__GptFallback__TimeoutSeconds" = "30"
+                                "GDC__Endpoint" = "https://srbwidd03.sareb.srb:8090/sintws/IDocService"
+                                "GDC__TimeoutSeconds" = "60"
+                                "GDC__HttpBasicUsername" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicUsername)"
+                                "GDC__HttpBasicPassword" = "@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicPassword)"
+                                "GDC__ApplicationId" = "CKP1"
+                                "GDC__NominalUser" = ""
+                                "GDC__DocumentTypeId" = "document"
+                                "GDC__ContentFieldName" = "Content"
+                                "GDC__OrigenDocumento" = "8878"
+                                "GDC__RepositoryId" = ""
+                                "GDC__RepositoryName" = ""
+                                "GDC__ClaseExpediente" = "AI04"
+                                "GDC__DefaultMatricula" = "AI-99-SCXX-00"
+                                "GDC__Servicer" = "9999"
+                                "GDC__EntidadOrigen" = "9999"
+                                "GDC__ProcesoCarga" = "PC01"
+                                "GDC__TipoExpediente" = "AI"
+                                "GDC__Publico" = "verdadero"
+                                "GDC__BypassSslValidation" = "true"
+                              }
 
-                      az functionapp config appsettings set `
-                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
-                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                        --settings $settings `
-                        --only-show-errors `
-                        --output none
+                              Update-AzFunctionAppSetting `
+                                -ResourceGroupName "$(AZURE_RESOURCE_GROUP)" `
+                                -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                                -AppSetting $settings
 
-                      az functionapp config appsettings delete `
-                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
-                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                        --setting-names AzureWebJobsStorage__accountName AzureWebJobsStorage__credential `
-                        --only-show-errors `
-                        --output none
+                              Remove-AzFunctionAppSetting `
+                                -ResourceGroupName "$(AZURE_RESOURCE_GROUP)" `
+                                -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                                -AppSettingName @("AzureWebJobsStorage__accountName", "AzureWebJobsStorage__credential") `
+                                -Force
 
-                      $appliedSettings = az functionapp config appsettings list `
-                        --resource-group "$(AZURE_RESOURCE_GROUP)" `
-                        --name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                        --query "[].name" `
-                        -o tsv
+                              $appliedSettings = (Get-AzWebApp `
+                                -ResourceGroupName "$(AZURE_RESOURCE_GROUP)" `
+                                -Name "$(AZURE_FUNCTIONS_APP_NAME)").SiteConfig.AppSettings |
+                                Select-Object -ExpandProperty Name
 
-                      $requiredSettings = @(
-                        "AssetResolver__BaseUrl",
-                        "AssetResolver__ApiKey",
-                        "Extraction__AzureContentUnderstanding__MaxConcurrentCalls",
-                        "Extraction__AzureContentUnderstanding__MaxRetries",
-                        "Extraction__AzureContentUnderstanding__InitialRetryDelayMs"
-                      )
+                              $requiredSettings = @(
+                                "AssetResolver__BaseUrl",
+                                "AssetResolver__ApiKey",
+                                "Extraction__AzureContentUnderstanding__MaxConcurrentCalls",
+                                "Extraction__AzureContentUnderstanding__MaxRetries",
+                                "Extraction__AzureContentUnderstanding__InitialRetryDelayMs"
+                              )
 
-                      foreach ($requiredSetting in $requiredSettings) {
-                        if ($appliedSettings -notcontains $requiredSetting) {
-                          throw "Required Function App setting '$requiredSetting' was not found after deployment."
-                        }
-                      }
+                              foreach ($requiredSetting in $requiredSettings) {
+                                if ($appliedSettings -notcontains $requiredSetting) {
+                                  throw "Required Function App setting '$requiredSetting' was not found after deployment."
+                                }
+                              }
 
-                      Write-Host "[OK] Required Function App settings are present on $(AZURE_FUNCTIONS_APP_NAME)."
-
-                - task: AzureCLI@2
-                  displayName: Resolve Function App host name
-                  inputs:
-                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
-                    scriptType: pscore
-                    scriptLocation: inlineScript
-                    inlineScript: |
-                      $hostName = az functionapp show --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_FUNCTIONS_APP_NAME)" --query defaultHostName -o tsv
-                      if (-not $hostName) { throw "No se pudo resolver defaultHostName de $(AZURE_FUNCTIONS_APP_NAME)" }
-                      Write-Host "##vso[task.setvariable variable=FUNCTIONS_HOST_NAME]$hostName"
-
-                - task: PowerShell@2
-                  displayName: Smoke test Functions endpoint
-                  inputs:
-                    targetType: filePath
-                    filePath: scripts/smoke-test-functions.ps1
-                    arguments: -HostName $(FUNCTIONS_HOST_NAME)
-                    pwsh: true
-
-  - stage: DeployAdmin
-    displayName: Deploy Admin Blazor
-    dependsOn: DeployFunctions
-    condition: succeeded()
-    jobs:
+                              Write-Host "[OK] Required Function App settings are present on $(AZURE_FUNCTIONS_APP_NAME)."
+                            azurePowerShellVersion: LatestVersion
       - deployment: DeployAdminJob
         displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
         environment: prod
