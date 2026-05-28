@@ -68,6 +68,7 @@ public class ConfidenceMetricasExtraccion
     public int CamposTotales { get; set; }
     public Dictionary<string, double> ConfianzaPorCampo { get; set; } = new();
     public List<string> CamposBajaConfianza { get; set; } = new();
+    public List<string>? CamposExcluidosConfianza { get; set; }
 }
 
 /// <summary>

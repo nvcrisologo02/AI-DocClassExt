@@ -198,6 +198,11 @@ Instrucciones de la peticion (request)
 | `umbralOK` | Confianza global minima para estado calidad "OK" | 0.85 |
 | `umbralRevision` | Confianza global minima para estado calidad "REVISION" (entre revision y error) | 0.70 |
 
+Los campos de una tipologia pueden declarar `avoidConfidence: true`. Estos campos quedan fuera del calculo
+del score de confianza de extraccion y de `CamposBajaConfianza`, pero siguen contando para completitud,
+campos requeridos y `DatosExtraidos`. `MetricasDebug.ConfianzaPorCampo` mantiene la confianza original de
+todos los campos, y `CamposExcluidosConfianza` lista los campos excluidos del score.
+
 ### RN3: Confianza Global
 
 ```
@@ -323,6 +328,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RF14 | El sistema debe calcular hashes SHA256, MD5 y CRC32 para integridad | NormalizarActivity calcula los tres hashes. SHA256 usado para deduplicacion, MD5 para GDC. | DONE |
 | RF15 | El sistema debe proteger datos personales segun GDPR/LOPD | Masking de datos sensibles, cifrado en reposo, retencion configurable. | DESCARTADO MVP (EP7 Removed) |
 | RF16 | El sistema debe resolver el activo inmobiliario desde datos extraidos | `ObtenerActivoActivity` consulta `DM_POSICION_AAII_TB` via AssetResolver. Devuelve `IdActivo` si match unico. Habilitacion configurable por tipologia/instrucciones. | DONE |
+| RF17 | El sistema debe permitir excluir campos del score de confianza de extraccion por tipologia | `avoidConfidence: true` en un campo lo excluye del score y de `CamposBajaConfianza`, manteniendo completitud y trazabilidad en `ConfianzaPorCampo`. | DONE |
 
 ---
 

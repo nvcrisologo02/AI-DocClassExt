@@ -152,8 +152,9 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
             var camposRequeridosPresentes = tipologiaConfig.Fields
                 .Where(f => f.Required)
                 .Count(f => datosExtraidos.ContainsKey(f.Name));
+            var avoidConfidenceFields = ConfidenceFieldFilter.GetAvoidConfidenceFields(tipologiaConfig);
             var fieldConfs = fieldsElement.HasValue
-                ? TryExtractFieldConfidences(fieldsElement.Value)
+                ? TryExtractFieldConfidences(fieldsElement.Value, avoidConfidenceFields)
                 : null;
 
             var (confianzaExtraccion, metricasDebug) = ConfidenceCalculator.ExtracCU(
@@ -164,6 +165,8 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
                 camposRequeridosPresentes: camposRequeridosPresentes,
                 warnings: 0,
                 cfg: tipologiaConfig.ConfidenceConfig);
+
+            metricasDebug.CamposExcluidosConfianza = ConfidenceFieldFilter.ToSortedList(avoidConfidenceFields);
 
             _logger.LogInformation(
                 "Extraccion DI custom completada. Tipologia={Tipologia}, ModelId={ModelId}, Campos={Campos}, Confianza={Confianza:F3}",
@@ -213,11 +216,16 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
     /// Extrae la confianza por campo desde el elemento fields de DI:
     /// fields[fieldName].confidence
     /// </summary>
-    private static IReadOnlyList<double?>? TryExtractFieldConfidences(JsonElement fieldsElement)
+    private static IReadOnlyList<double?>? TryExtractFieldConfidences(JsonElement fieldsElement, ISet<string> avoidConfidenceFields)
     {
         var confs = new List<double?>();
         foreach (var field in fieldsElement.EnumerateObject())
         {
+            if (avoidConfidenceFields.Contains(field.Name))
+            {
+                continue;
+            }
+
             if (field.Value.ValueKind == JsonValueKind.Object
                 && field.Value.TryGetProperty("confidence", out var confEl)
                 && confEl.TryGetDouble(out var conf))

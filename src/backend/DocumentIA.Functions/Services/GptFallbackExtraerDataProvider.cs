@@ -504,9 +504,10 @@ public class GptFallbackExtraerDataProvider
         var camposRequeridosPresentes = tipologiaConfig.Fields
             .Where(f => f.Required)
             .Count(f => campos.ContainsKey(f.Name));
+        var avoidConfidenceFields = ConfidenceFieldFilter.GetAvoidConfidenceFields(tipologiaConfig);
 
         var (confianzaCalculada, metricas) = ConfidenceCalculator.ExtracCU(
-            fieldConfs: confianzaPorCampo?.Values.Select(v => (double?)v).ToList(),
+            fieldConfs: ConfidenceFieldFilter.FilterFieldConfidences(confianzaPorCampo, avoidConfidenceFields),
             camposPresentes: camposPresentes,
             camposTotales: camposTotales,
             camposRequeridos: camposRequeridos,
@@ -520,11 +521,11 @@ public class GptFallbackExtraerDataProvider
             ?? tipologiaConfig.ConfidenceConfig?.ExtracUmbralFallback
             ?? _fallbackModel.Value.MinFieldsRatio;
 
-        metricas.CamposBajaConfianza = metricas.ConfianzaPorCampo
-            .Where(kvp => kvp.Value < umbralDuda)
-            .Select(kvp => kvp.Key)
-            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        metricas.CamposBajaConfianza = ConfidenceFieldFilter.GetLowConfidenceFields(
+            metricas.ConfianzaPorCampo,
+            umbralDuda,
+            avoidConfidenceFields);
+        metricas.CamposExcluidosConfianza = ConfidenceFieldFilter.ToSortedList(avoidConfidenceFields);
 
         return (confianzaCalculada, metricas);
     }

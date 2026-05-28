@@ -168,7 +168,8 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             .Where(f => f.Required)
             .Count(f => datosExtraidos.ContainsKey(f.Name));
         var confidenceMap = TryExtractFieldConfidenceMap(analysisDocument);
-        var fieldConfs = confidenceMap?.Values.Select(v => (double?)v).ToList();
+        var avoidConfidenceFields = ConfidenceFieldFilter.GetAvoidConfidenceFields(tipologiaConfig);
+        var fieldConfs = ConfidenceFieldFilter.FilterFieldConfidences(confidenceMap, avoidConfidenceFields);
         var confidenceConfig = tipologiaConfig.ConfidenceConfig;
 
         var (confianzaExtraccion, metricasDebug) = ConfidenceCalculator.ExtracCU(
@@ -185,11 +186,11 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             ?? 0.6;
 
         metricasDebug.ConfianzaPorCampo = confidenceMap ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-        metricasDebug.CamposBajaConfianza = metricasDebug.ConfianzaPorCampo
-            .Where(kvp => kvp.Value < umbralDuda)
-            .Select(kvp => kvp.Key)
-            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        metricasDebug.CamposBajaConfianza = ConfidenceFieldFilter.GetLowConfidenceFields(
+            metricasDebug.ConfianzaPorCampo,
+            umbralDuda,
+            avoidConfidenceFields);
+        metricasDebug.CamposExcluidosConfianza = ConfidenceFieldFilter.ToSortedList(avoidConfidenceFields);
 
         _logger.LogInformation(
             "Azure Content Understanding completado para tipología {Tipologia} con analyzer {AnalyzerId}. Campos: {Count}. Paginas: {Paginas}",

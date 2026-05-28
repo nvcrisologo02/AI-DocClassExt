@@ -189,6 +189,7 @@ namespace DocumentIA.Core.Configuration
         public string Name { get; set; } = string.Empty;
         public string Type { get; set; } = string.Empty; // decimal, string, date, array, object, etc
         public bool Required { get; set; }
+        public bool AvoidConfidence { get; set; } = false;
         public string Description { get; set; } = string.Empty;
         public List<ValidationRuleConfig> Rules { get; set; } = new List<ValidationRuleConfig>();
         
