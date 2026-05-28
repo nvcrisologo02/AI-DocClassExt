@@ -120,6 +120,7 @@ var host = new HostBuilder()
         services.AddSingleton<IBlobStorageService, BlobStorageService>();
 
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
+        services.Configure<AzureContentUnderstandingOptions>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
         services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
         services.Configure<PromptDefaultsSettings>(context.Configuration.GetSection("PromptDefaults"));

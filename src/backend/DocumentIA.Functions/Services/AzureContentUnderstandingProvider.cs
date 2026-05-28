@@ -6,7 +6,9 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
+using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -19,23 +21,33 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
     private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly ContentUnderstandingResultMapper _resultMapper;
     private readonly IBlobStorageService _blobStorageService;
+    private readonly AzureContentUnderstandingOptions _options;
+    private readonly SemaphoreSlim _cuLimiter;
+    private readonly TelemetryClient _telemetryClient;
 
     public AzureContentUnderstandingProvider(
         ILogger<AzureContentUnderstandingProvider> logger,
         TipologiaConfigLoader tipologiaConfigLoader,
         ExtractionModelRegistryLoader modelRegistryLoader,
         ContentUnderstandingResultMapper resultMapper,
-        IBlobStorageService blobStorageService)
+        IBlobStorageService blobStorageService,
+        IOptions<AzureContentUnderstandingOptions> options,
+        TelemetryClient telemetryClient)
     {
         _logger = logger;
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _modelRegistryLoader = modelRegistryLoader;
         _resultMapper = resultMapper;
         _blobStorageService = blobStorageService;
+        _options = options.Value;
+        var maxConcurrentCalls = Math.Max(1, _options.MaxConcurrentCalls);
+        _cuLimiter = new SemaphoreSlim(maxConcurrentCalls, maxConcurrentCalls);
+        _telemetryClient = telemetryClient;
     }
 
     public virtual async Task<ExtraccionResultado> ObtenerDatosAsync(ExtraccionInput input, CancellationToken cancellationToken = default)
     {
+        var prepareStopwatch = Stopwatch.StartNew();
         var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
         var extractionConfig = tipologiaConfig.Extraction;
 
@@ -67,29 +79,77 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         var contentType = ResolveContentType(model, fileName, binaryData);
         var processingLocation = ResolveProcessingLocation(model);
         var contentRange = string.IsNullOrWhiteSpace(model.InputRange) ? null : model.InputRange;
-        var requestContent = RequestContent.Create(binaryData.ToArray());
+        prepareStopwatch.Stop();
 
-        var stopwatch = Stopwatch.StartNew();
-        var operation = contentRange is { } range
-            ? await client.AnalyzeBinaryAsync(
-                WaitUntil.Completed,
-                model.AnalyzerId,
-                contentType,
-                requestContent,
-                processingLocation: processingLocation,
-                contentRange: range)
-            : await client.AnalyzeBinaryAsync(
-                WaitUntil.Completed,
-                model.AnalyzerId,
-                contentType,
-                requestContent,
-                processingLocation: processingLocation);
-        stopwatch.Stop();
+        Operation<BinaryData>? operation = null;
+        var attempts = 0;
+        var analysisElapsedMs = 0L;
+        var limiterWaitStopwatch = Stopwatch.StartNew();
+        await _cuLimiter.WaitAsync(cancellationToken);
+        limiterWaitStopwatch.Stop();
 
+        try
+        {
+            var maxAttempts = Math.Max(1, _options.MaxRetries);
+            for (var attempt = 1; attempt <= maxAttempts; attempt++)
+            {
+                attempts = attempt;
+                var analysisStopwatch = Stopwatch.StartNew();
+                try
+                {
+                    var requestContent = RequestContent.Create(binaryData.ToArray());
+                    operation = contentRange is { } range
+                        ? await client.AnalyzeBinaryAsync(
+                            WaitUntil.Completed,
+                            model.AnalyzerId,
+                            contentType,
+                            requestContent,
+                            processingLocation: processingLocation,
+                            contentRange: range)
+                        : await client.AnalyzeBinaryAsync(
+                            WaitUntil.Completed,
+                            model.AnalyzerId,
+                            contentType,
+                            requestContent,
+                            processingLocation: processingLocation);
+                    analysisStopwatch.Stop();
+                    analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
+                    break;
+                }
+                catch (Exception ex) when (IsTransientCuError(ex) && attempt < maxAttempts)
+                {
+                    analysisStopwatch.Stop();
+                    analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
+                    TrackTransientError(input.Tipologia, attempt, ex);
+
+                    var retryDelay = ComputeRetryDelay(ex, attempt);
+                    _logger.LogWarning(
+                        ex,
+                        "Error transitorio en Azure Content Understanding para tipología {Tipologia}. Intento {Attempt}/{MaxAttempts}. Reintento en {DelayMs} ms",
+                        input.Tipologia,
+                        attempt,
+                        maxAttempts,
+                        retryDelay.TotalMilliseconds);
+                    await Task.Delay(retryDelay, cancellationToken);
+                }
+            }
+        }
+        finally
+        {
+            _cuLimiter.Release();
+        }
+
+        if (operation is null)
+        {
+            throw new InvalidOperationException("Azure Content Understanding no devolvió una operación de análisis.");
+        }
+
+        var parseStopwatch = Stopwatch.StartNew();
         using var analysisDocument = JsonDocument.Parse(operation.Value.ToString());
         var datosExtraidos = _resultMapper.Map(analysisDocument, tipologiaConfig);
         var paginas = ResolvePageCount(analysisDocument);
         var markdownExtraido = TryExtractMarkdown(analysisDocument);
+        parseStopwatch.Stop();
 
         if (paginas > 0)
         {
@@ -138,6 +198,14 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             datosExtraidos.Count,
             paginas);
 
+        TrackCuMetrics(
+            input.Tipologia,
+            prepareStopwatch.ElapsedMilliseconds,
+            limiterWaitStopwatch.ElapsedMilliseconds,
+            analysisElapsedMs,
+            parseStopwatch.ElapsedMilliseconds,
+            attempts);
+
         return new ExtraccionResultado
         {
             Proveedor = model.Provider,
@@ -151,20 +219,85 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             MetricasDebug = metricasDebug,
             TiemposMs = new Dictionary<string, int>
             {
-                ["analysis"] = (int)stopwatch.ElapsedMilliseconds
+                ["prepare"] = (int)prepareStopwatch.ElapsedMilliseconds,
+                ["limiterWaitMs"] = (int)limiterWaitStopwatch.ElapsedMilliseconds,
+                ["analysis"] = (int)analysisElapsedMs,
+                ["parse"] = (int)parseStopwatch.ElapsedMilliseconds,
+                ["attempts"] = attempts
             },
             DatosExtraidos = datosExtraidos
         };
     }
 
-    private static ContentUnderstandingClient CreateClient(ExtractionModelConfig model)
+    private ContentUnderstandingClient CreateClient(ExtractionModelConfig model)
     {
+        var clientOptions = new ContentUnderstandingClientOptions();
+        clientOptions.Retry.MaxRetries = 0;
+
         if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
         {
-            return new ContentUnderstandingClient(new Uri(model.Endpoint), new DefaultAzureCredential());
+            return new ContentUnderstandingClient(new Uri(model.Endpoint), new DefaultAzureCredential(), clientOptions);
         }
 
-        return new ContentUnderstandingClient(new Uri(model.Endpoint), new AzureKeyCredential(model.ApiKey));
+        return new ContentUnderstandingClient(new Uri(model.Endpoint), new AzureKeyCredential(model.ApiKey), clientOptions);
+    }
+
+    private static bool IsTransientCuError(Exception ex)
+    {
+        if (ex is not RequestFailedException requestFailedException)
+        {
+            return false;
+        }
+
+        return requestFailedException.Status is 429 or 500 or 502 or 503 or 504
+            || requestFailedException.Message.Contains("InternalServerError", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private TimeSpan ComputeRetryDelay(Exception ex, int attempt)
+    {
+        if (ex is RequestFailedException requestFailedException
+            && requestFailedException.GetRawResponse()?.Headers.TryGetValue("Retry-After", out var retryAfter) == true
+            && int.TryParse(retryAfter, out var retryAfterSeconds)
+            && retryAfterSeconds > 0)
+        {
+            return TimeSpan.FromSeconds(retryAfterSeconds);
+        }
+
+        var baseDelayMs = Math.Max(1, _options.InitialRetryDelayMs) * Math.Pow(2, Math.Max(0, attempt - 1));
+        var jitterFactor = 0.8 + Random.Shared.NextDouble() * 0.4;
+        return TimeSpan.FromMilliseconds(baseDelayMs * jitterFactor);
+    }
+
+    private void TrackTransientError(string tipologia, int attempt, Exception ex)
+    {
+        _telemetryClient.TrackEvent("CU.TransientError", new Dictionary<string, string>
+        {
+            ["attempt"] = attempt.ToString(),
+            ["statusCode"] = ex is RequestFailedException requestFailedException
+                ? requestFailedException.Status.ToString()
+                : "unknown",
+            ["tipologia"] = tipologia
+        });
+    }
+
+    private void TrackCuMetrics(
+        string tipologia,
+        long prepareMs,
+        long limiterWaitMs,
+        long analysisMs,
+        long parseMs,
+        int attempts)
+    {
+        var properties = new Dictionary<string, string>
+        {
+            ["Tipologia"] = tipologia
+        };
+
+        _telemetryClient.TrackMetric("CU.PrepareMs", prepareMs, properties);
+        _telemetryClient.TrackMetric("CU.LimiterWaitMs", limiterWaitMs, properties);
+        _telemetryClient.TrackMetric("CU.AnalysisMs", analysisMs, properties);
+        _telemetryClient.TrackMetric("CU.ParseMs", parseMs, properties);
+        _telemetryClient.TrackMetric("CU.Attempts", attempts, properties);
     }
 
     private static string ResolveProcessingLocation(ExtractionModelConfig model)
