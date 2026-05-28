@@ -102,6 +102,9 @@ Settings clave a confirmar (ver detalle completo en `docs/04_MANUAL_EXPLOTACION.
 | `Extraction__DefaultProvider` | `azure-content-understanding` |
 | `Classification__DefaultProvider` | `azure-document-intelligence` |
 | `Extraction__AzureContentUnderstanding__Endpoint` | `https://upe48-mm2avmdm.cognitiveservices.azure.com/` |
+| `Extraction__AzureContentUnderstanding__MaxConcurrentCalls` | `3` (llamadas CU simultáneas; ajustar según carga) |
+| `Extraction__AzureContentUnderstanding__MaxRetries` | `3` (reintentos con backoff exponencial) |
+| `Extraction__AzureContentUnderstanding__InitialRetryDelayMs` | `500` (ms base para backoff; delay real = base × 2^(intento-1)) |
 | `Classification__AzureDocumentIntelligence__Endpoint` | `https://srbdiprodocai.cognitiveservices.azure.com/` |
 | `Extraction__GptFallback__DeploymentName` | `gpt-4o-mini` |
 | `Classification__GptFallback__DeploymentName` | `gpt-4o-mini` |
