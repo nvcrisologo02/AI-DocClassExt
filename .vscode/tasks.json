@@ -5,13 +5,47 @@
     {
       "label": "func: host start",
       "type": "func",
-      "dependsOn": "build (functions)",
+      "dependsOn": [
+        "start (azurite)",
+        "build (functions)"
+      ],
+      "dependsOrder": "sequence",
       "options": {
         "cwd": "${workspaceFolder}/src/backend/DocumentIA.Functions"
       },
       "command": "host start",
       "isBackground": true,
       "problemMatcher": "$func-dotnet-watch"
+    },
+    {
+      "label": "start (azurite)",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\start-azurite.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "stop (azurite)",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}\\scripts\\stop-azurite.ps1"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
     },
     {
       "label": "clean (functions)",
