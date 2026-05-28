@@ -1,7 +1,8 @@
 # Plan de implementacion - avoidConfidence en campos de tipologia
 
 Fecha: 2026-05-28
-Estado: Aprobado, pendiente de implementacion
+Estado: Implementado y verificado en rama `feature/99676-avoid-confidence`
+Work Items: Feature 99675, User Story 99676, Tasks 99677-99682
 
 ## 1. Objetivo
 
@@ -39,6 +40,9 @@ La ausencia de la propiedad equivale a false. Retrocompatibilidad total sin migr
 `ConfidenceCalculator.ExtracCU` NO cambia su firma. El filtrado de campos ocurre en los callers
 (proveedores de extraccion) antes de pasar `fieldConfs`, manteniendo el calculador puro y sin
 dependencias de configuracion de campo.
+
+Implementacion: el filtrado se centraliza en `ConfidenceFieldFilter` para evitar duplicar la logica
+en cada proveedor. Los callers siguen siendo responsables de decidir que campos entran en el calculo.
 
 ## 4. Fases de implementacion
 
@@ -129,11 +133,13 @@ pero NO construye `CamposBajaConfianza` explicitamente. Solo requiere:
 | Archivo | Cambio |
 |---------|--------|
 | `src/backend/DocumentIA.Core/Configuration/TipologiaValidationConfig.cs` | Añadir `AvoidConfidence` a `FieldValidationConfig` |
+| `src/backend/DocumentIA.Core/Services/ConfidenceFieldFilter.cs` | Helper puro para resolver campos excluidos, filtrar confianzas y filtrar campos de baja confianza |
 | `src/backend/DocumentIA.Functions/Services/AzureContentUnderstandingProvider.cs` | Filtrar `fieldConfs` y `CamposBajaConfianza` (lineas 108-131) |
 | `src/backend/DocumentIA.Functions/Services/GptFallbackExtraerDataProvider.cs` | Mismo patron (lineas 505-530) |
 | `src/backend/DocumentIA.Functions/Services/AzureDocumentIntelligenceExtraerDataProvider.cs` | Filtrar `fieldConfs` (linea 159) |
 | `src/backend/DocumentIA.Core/Models/ExtraccionModels.cs` | `CamposExcluidosConfianza` en `ConfidenceMetricasExtraccion` (opcional) |
-| `src/backend/DocumentIA.Tests.Unit/Services/ConfidenceCalculatorTests.cs` | Nuevos tests de aceptacion |
+| `src/backend/DocumentIA.Tests.Unit/Services/ConfidenceFieldFilterTests.cs` | Tests unitarios de filtrado, baja confianza y required/completitud |
+| `src/backend/DocumentIA.Tests.Unit/Configuration/TipologiaValidationConfigTests.cs` | Tests de default y deserializacion de `AvoidConfidence` |
 | `src/backend/DocumentIA.Functions/config/tipologias/*.validation.json` | Campos especificos a determinar |
 | `scripts/seeds/20260410-080308/config/tipologias/*.validation.json` | Mismos cambios en seeds (a determinar) |
 
@@ -151,3 +157,13 @@ pero NO construye `CamposBajaConfianza` explicitamente. Solo requiere:
 - La ausencia de `avoidConfidence` equivale a `false` (default value en C#).
 - `CamposExcluidosConfianza` es opcional segun spec ("Se recomienda") — incluido en el plan.
 - Los JSON de tipologias se actualizaran cuando se identifiquen los campos concretos.
+
+## 8. Estado de implementacion
+
+- Rama creada: `feature/99676-avoid-confidence`.
+- User Story 99676 cerrada en estado `Done`.
+- Feature 99675 cerrada en estado `Done`.
+- Tasks 99677-99682 cerradas en estado `Done`.
+- Verificacion ejecutada: build de Functions correcto, tests focalizados 36/36, suite unitaria completa 633/633.
+- No se han marcado campos concretos en los JSON de tipologias; la funcionalidad queda disponible para configuracion futura.
+- `ConfianzaPorCampo` se conserva completo y `CamposExcluidosConfianza` expone los campos excluidos para auditoria.

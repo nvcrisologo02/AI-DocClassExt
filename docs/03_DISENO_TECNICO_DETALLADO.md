@@ -1458,7 +1458,13 @@ Reglas de validación del trigger:
           "FechaDocumento": 0.93
         },
         "camposConDuda": [],
-        "tiemposMs": { "cu": 3200 }
+        "tiemposMs": {
+          "prepare": 45,
+          "limiterWaitMs": 120,
+          "analysis": 3200,
+          "parse": 18,
+          "attempts": 1
+        }
       },
       "postproceso": {
         "normalizaciones": ["FechaDocumento normalizada a dd/MM/yyyy"],

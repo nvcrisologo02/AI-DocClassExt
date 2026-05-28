@@ -1,6 +1,7 @@
 #nullable enable
 using DocumentIA.Core.Configuration;
 using FluentAssertions;
+using System.Text.Json;
 using Xunit;
 
 namespace DocumentIA.Tests.Unit.Configuration
@@ -142,6 +143,7 @@ namespace DocumentIA.Tests.Unit.Configuration
             field.Rules.Should().NotBeNull();
             field.Rules.Should().BeEmpty();
             field.Items.Should().BeNull();
+            field.AvoidConfidence.Should().BeFalse();
         }
 
         [Fact]
@@ -241,6 +243,27 @@ namespace DocumentIA.Tests.Unit.Configuration
 
             // Assert
             field.Required.Should().BeFalse();
+        }
+
+        [Fact]
+        public void FieldValidationConfig_AvoidConfidence_DeserializesFromJson()
+        {
+            var json = """
+            {
+              "name": "ReferenciaRegistral",
+              "type": "string",
+              "avoidConfidence": true
+            }
+            """;
+
+            var field = JsonSerializer.Deserialize<FieldValidationConfig>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            field.Should().NotBeNull();
+            field!.Name.Should().Be("ReferenciaRegistral");
+            field.AvoidConfidence.Should().BeTrue();
         }
 
         #endregion
