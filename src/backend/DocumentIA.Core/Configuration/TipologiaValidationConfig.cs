@@ -69,6 +69,12 @@ namespace DocumentIA.Core.Configuration
         public TdnClassificationCatalogConfig? ClassificationCatalog { get; set; }
         [System.Text.Json.Serialization.JsonPropertyName("retentionPolicy")]
         public RetentionPolicyConfig? RetentionPolicy { get; set; }
+        /// <summary>
+        /// Máximo de páginas del documento para permitir extracción completa.
+        /// Si el documento supera este valor, el pipeline se detiene con PAGINAS_EXCEDIDAS.
+        /// 0 o ausente = sin límite para esta tipología.
+        /// </summary>
+        public int MaxPaginasDocumento { get; set; } = 0;
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
         [System.Text.Json.Serialization.JsonIgnore]

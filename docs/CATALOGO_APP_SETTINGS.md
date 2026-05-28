@@ -80,6 +80,8 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 | `FieldAliases` | [src/plugins/DocumentIA.AssetResolver/Program.cs](src/plugins/DocumentIA.AssetResolver/Program.cs) |
 | `GDC` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
 | `PromptDefaults` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `Pipeline` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `Pipeline:MaxPaginasDocumento` | Límite global de páginas por documento. 0 = sin límite. Puede sobreescribirse por tipología con `maxPaginasDocumento` en `ConfiguracionJson`. |
 
 ## Runtime ASP.NET
 

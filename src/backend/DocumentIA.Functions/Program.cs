@@ -124,6 +124,7 @@ var host = new HostBuilder()
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
         services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
         services.Configure<PromptDefaultsSettings>(context.Configuration.GetSection("PromptDefaults"));
+        services.Configure<PipelineSettings>(context.Configuration.GetSection("Pipeline"));
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();

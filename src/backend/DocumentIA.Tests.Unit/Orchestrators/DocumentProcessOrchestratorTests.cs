@@ -121,7 +121,7 @@ public class DocumentProcessOrchestratorTests
         // Para los escenarios que no llegan a la extracción, nunca se invoca.
         var loader = new ExtractionModelRegistryLoader("dummy.json");
         var configuredSettings = settings ?? new ClassificationPreparationSettings();
-        return new DocumentProcessOrchestrator(loader, Options.Create(configuredSettings));
+        return new DocumentProcessOrchestrator(loader, Options.Create(configuredSettings), Options.Create(new PipelineSettings()));
     }
 
     private static ContratoEntrada BuildEntrada(

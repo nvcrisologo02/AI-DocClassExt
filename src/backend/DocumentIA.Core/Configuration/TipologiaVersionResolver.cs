@@ -218,7 +218,8 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 Tdn1: config.ResolvedTdn1 ?? string.Empty,
                 Tdn2: config.ResolvedTdn2 ?? string.Empty,
                 GptDescripcion: config.ResolvedGptDescripcion ?? string.Empty,
-                PromptHasDefinition: HasPromptDefinition(config.PromptConfig));
+                PromptHasDefinition: HasPromptDefinition(config.PromptConfig),
+                MaxPaginasDocumento: config.MaxPaginasDocumento);
 
             byTechnicalKey[technicalKey] = resolved;
 
