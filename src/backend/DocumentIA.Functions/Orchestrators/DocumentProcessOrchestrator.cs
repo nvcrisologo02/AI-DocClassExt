@@ -917,38 +917,80 @@ public class DocumentProcessOrchestrator
 
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
             ResolvedTipologia tipologiaResuelta;
+            var esNivelTdn1 =
+                string.Equals(
+                    entrada.Instrucciones.Classification.NivelClasificacion,
+                    ClassificationLevelResolver.LevelTdn1,
+                    StringComparison.OrdinalIgnoreCase);
+            var omitirResolucionTipologiaPorTdn1ClasificacionOnly =
+                esNivelTdn1 &&
+                (!string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1)
+                    || !string.IsNullOrWhiteSpace(resultadoClasificacion.TipologiaDetectada));
 
-            try
+            if (omitirResolucionTipologiaPorTdn1ClasificacionOnly)
             {
-                tipologiaResuelta = await context.CallActivityAsync<ResolvedTipologia>(
-                    "ResolverTipologiaActivity",
-                    tipologiaEntrada);
+                if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1))
+                {
+                    salida.Identificacion.Tdn1 = resultadoClasificacion.TipologiaDetectada;
+                }
+
+                var tdn1Value = string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1)
+                    ? "Desconocido"
+                    : salida.Identificacion.Tdn1;
+
+                tipologiaResuelta = new ResolvedTipologia(
+                    RequestedValue: tdn1Value,
+                    TipologiaId: tdn1Value,
+                    Version: "N/A",
+                    TechnicalKey: tdn1Value,
+                    IsDefault: true,
+                    SkipGDCUpload: true,
+                    PromptEnabled: false,
+                    ExtractionEnabled: false,
+                    ConfidenceConfig: new ConfidenceConfig(),
+                    ExtractionProvider: string.Empty,
+                    AssetResolverEnabled: false,
+                    PromptHasDefinition: false);
+
+                logger.LogInformation(
+                    "Nivel TDN1: se usa familia TDN1 '{Tdn1}' como tipología virtual sin resolver tipología técnica.",
+                    tdn1Value);
             }
-            catch (Exception ex) when (
-                ex is KeyNotFoundException ||
-                ex.InnerException is KeyNotFoundException ||
-                ex is TaskFailedException && ex.Message.Contains("No existe la tipologia"))
+            else
             {
-                const string mensajeTipologiaNoIdentificada = "no clasificable: no se ha podido identificar la tipologia del documento";
 
-                logger.LogWarning(
-                    ex,
-                    "La clasificación devolvió una tipología no resoluble: {TipologiaDetectada}",
-                    tipologiaEntrada);
+                try
+                {
+                    tipologiaResuelta = await context.CallActivityAsync<ResolvedTipologia>(
+                        "ResolverTipologiaActivity",
+                        tipologiaEntrada);
+                }
+                catch (Exception ex) when (
+                    ex is KeyNotFoundException ||
+                    ex.InnerException is KeyNotFoundException ||
+                    ex is TaskFailedException && ex.Message.Contains("No existe la tipologia"))
+                {
+                    const string mensajeTipologiaNoIdentificada = "no clasificable: no se ha podido identificar la tipologia del documento";
 
-                salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
-                salida.DetalleEjecucion.MotivoErrorTipologia = ex.Message;
-                salida.Resultado.Estado = "NO_CLASIFICADO";
-                salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
-                salida.Resultado.ConfianzaGlobal = 0;
-                salida.Resultado.EstadoCalidad = "ERROR";
-                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
-                salida.Resultado.ConfianzaExtraccion = 0;
-                salida.Resultado.ConfianzaValidacion = 0;
-                salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
+                    logger.LogWarning(
+                        ex,
+                        "La clasificación devolvió una tipología no resoluble: {TipologiaDetectada}",
+                        tipologiaEntrada);
 
-                FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
-                return salida;
+                    salida.DetalleEjecucion.RunTipologia = tipologiaEntrada;
+                    salida.DetalleEjecucion.MotivoErrorTipologia = ex.Message;
+                    salida.Resultado.Estado = "NO_CLASIFICADO";
+                    salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
+                    salida.Resultado.ConfianzaGlobal = 0;
+                    salida.Resultado.EstadoCalidad = "ERROR";
+                    salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                    salida.Resultado.ConfianzaExtraccion = 0;
+                    salida.Resultado.ConfianzaValidacion = 0;
+                    salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
+
+                    FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
+                    return salida;
+                }
             }
 
             var esTipologiaNoClasificable = string.Equals(tipologiaResuelta.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
@@ -998,7 +1040,7 @@ public class DocumentProcessOrchestrator
                 AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcialClasificacion: true);
             }
 
-            var forzarResumenDedicado = entrada.Instrucciones.ForzarResumenPorDefecto &&
+            var forzarResumenDedicado = (entrada.Instrucciones.ForzarResumenPorDefecto || esNivelTdn1) &&
                 !salida.DatosExtraidos.ContainsKey("Resumen");
 
             if (promptActivoEnPeticion || forzarResumenDedicado)
@@ -1029,6 +1071,7 @@ public class DocumentProcessOrchestrator
             if (entrada.Instrucciones.ClassificationOnly)
             {
                 logger.LogInformation("ClassificationOnly activo. Se omiten extracción, prompt, validación y asset resolver.");
+                var classificationOnlyTdn1SoloFamilia = esNivelTdn1;
 
                 salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
                 {
@@ -1069,8 +1112,44 @@ public class DocumentProcessOrchestrator
                     RegistrarMarkdown(markdownClasificacion, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
                 }
 
-                var forzarResumenDedicadoClassificationOnly = entrada.Instrucciones.ForzarResumenPorDefecto &&
+                var forzarResumenDedicadoClassificationOnly =
+                    (entrada.Instrucciones.ForzarResumenPorDefecto || classificationOnlyTdn1SoloFamilia) &&
                     !salida.DatosExtraidos.ContainsKey("Resumen");
+
+                if (forzarResumenDedicadoClassificationOnly && string.IsNullOrWhiteSpace(markdownClasificacion))
+                {
+                    try
+                    {
+                        logger.LogInformation(
+                            "ClassificationOnly con resumen forzado y sin markdown. Ejecutando DI Layout para contexto de resumen.");
+
+                        var markdownParaResumen = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                            "ExtraerMarkdownLayoutActivity",
+                            new ExtraerMarkdownLayoutInput
+                            {
+                                Tipologia = salida.Identificacion.Tipologia,
+                                DocumentoBase64 = docClasif.DocumentoBase64Clasif,
+                                NombreDocumento = entrada.Documento.Name
+                            });
+
+                        if (!string.IsNullOrWhiteSpace(markdownParaResumen.Markdown))
+                        {
+                            markdownClasificacion = markdownParaResumen.Markdown;
+                            salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacion;
+                            if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown"))
+                            {
+                                salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+                            }
+                            RegistrarMarkdown(markdownClasificacion, "LayoutResumenClassificationOnly");
+                        }
+                    }
+                    catch (Exception exResumenLayout)
+                    {
+                        logger.LogWarning(
+                            exResumenLayout,
+                            "No se pudo extraer markdown DI Layout para resumen en classificationOnly. Se continuará con fallback de prompt.");
+                    }
+                }
 
                 if (promptActivoEnPeticion || forzarResumenDedicadoClassificationOnly)
                 {
@@ -1087,67 +1166,95 @@ public class DocumentProcessOrchestrator
                 MarcarActividadOmitida("Validar", "ClassificationOnly activo");
                 MarcarActividadOmitida("ObtenerActivo", "ClassificationOnly activo");
 
-                var ejecutarIntegracionClasificacion =
-                    entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true &&
-                    !string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo);
-
-                if (ejecutarIntegracionClasificacion)
+                if (classificationOnlyTdn1SoloFamilia)
                 {
-                    logger.LogInformation("ClassificationOnly activo con integración habilitada. Ejecutando Integrar.");
-
-                    var resultadoIntegracionClasificacion = await EjecutarPasoNegocio(
-                        "Integrar",
-                        () => context.CallActivityAsync<DocumentIA.Core.Models.ResultadoIntegracion>(
-                            "IntegrarActivity",
-                            new DocumentIA.Core.Models.IntegrarInput
-                            {
-                                Tipologia = salida.Identificacion.Tipologia,
-                                DocumentoId = salida.Identificacion.Guid,
-                                DatosExtraidos = new Dictionary<string, object>(),
-                                IdActivo = entrada.Trazabilidad.IdActivo,
-                                Metadata = new Dictionary<string, object>
-                                {
-                                    ["correlationId"] = entrada.Trazabilidad.CorrelationId,
-                                    ["submittedBy"] = entrada.Trazabilidad.SubmittedBy
-                                }
-                            }));
-
-                    salida.DetalleEjecucion.Integracion = resultadoIntegracionClasificacion;
-                    salida.Integridad.IdActivoEntrada = resultadoIntegracionClasificacion.IdActivoEntrada;
-                    salida.Integridad.IdActivo = resultadoIntegracionClasificacion.IdActivoResuelto ?? entrada.Trazabilidad.IdActivo;
-                    salida.Integridad.IdActivoCambiado = resultadoIntegracionClasificacion.IdActivoCambiado;
-                }
-                else
-                {
-                    var mensajeIntegracion = entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true
-                        ? "ClassificationOnly sin IdActivo"
-                        : "ClassificationOnly activo";
-
-                    MarcarActividadOmitida("Integrar", mensajeIntegracion);
+                    // En clasificación TDN1 solo-familia no existe tipología técnica completa para integraciones/GDC.
+                    // Se limita el flujo a clasificación + resumen + persistencia.
+                    MarcarActividadOmitida("Integrar", "ClassificationOnly TDN1: solo familia");
+                    MarcarActividadOmitida("SubirGDC", "ClassificationOnly TDN1: solo familia");
                     salida.DetalleEjecucion.Integracion = new ResultadoIntegracion
                     {
                         Tipologia = salida.Identificacion.Tipologia,
                         Estado = "OK",
-                        Mensaje = mensajeIntegracion,
+                        Mensaje = "ClassificationOnly TDN1: integración omitida",
                         Timestamp = context.CurrentUtcDateTime,
                         DatosOriginales = new Dictionary<string, object>(),
                         DatosFinales = new Dictionary<string, object>(),
-                        IdActivoEntrada = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
-                            ? null
-                            : entrada.Trazabilidad.IdActivo.Trim(),
-                        IdActivoResuelto = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
-                            ? null
-                            : entrada.Trazabilidad.IdActivo.Trim(),
+                        IdActivoEntrada = null,
+                        IdActivoResuelto = null,
                         IdActivoCambiado = false
                     };
-                    salida.Integridad.IdActivoEntrada = salida.DetalleEjecucion.Integracion.IdActivoEntrada;
-                    salida.Integridad.IdActivo = salida.DetalleEjecucion.Integracion.IdActivoResuelto;
-                    salida.Integridad.IdActivoCambiado = false;
+                    salida.DetalleEjecucion.GDC = new ResultadoGDC
+                    {
+                        Exitoso = true,
+                        Mensaje = "Skipped"
+                    };
                 }
+                else
+                {
 
-                await EjecutarSubidaGdcAsync(
-                    salida.Integridad.IdActivo,
-                    entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
+                    var ejecutarIntegracionClasificacion =
+                        entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true &&
+                        !string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo);
+
+                    if (ejecutarIntegracionClasificacion)
+                    {
+                        logger.LogInformation("ClassificationOnly activo con integración habilitada. Ejecutando Integrar.");
+
+                        var resultadoIntegracionClasificacion = await EjecutarPasoNegocio(
+                            "Integrar",
+                            () => context.CallActivityAsync<DocumentIA.Core.Models.ResultadoIntegracion>(
+                                "IntegrarActivity",
+                                new DocumentIA.Core.Models.IntegrarInput
+                                {
+                                    Tipologia = salida.Identificacion.Tipologia,
+                                    DocumentoId = salida.Identificacion.Guid,
+                                    DatosExtraidos = new Dictionary<string, object>(),
+                                    IdActivo = entrada.Trazabilidad.IdActivo,
+                                    Metadata = new Dictionary<string, object>
+                                    {
+                                        ["correlationId"] = entrada.Trazabilidad.CorrelationId,
+                                        ["submittedBy"] = entrada.Trazabilidad.SubmittedBy
+                                    }
+                                }));
+
+                        salida.DetalleEjecucion.Integracion = resultadoIntegracionClasificacion;
+                        salida.Integridad.IdActivoEntrada = resultadoIntegracionClasificacion.IdActivoEntrada;
+                        salida.Integridad.IdActivo = resultadoIntegracionClasificacion.IdActivoResuelto ?? entrada.Trazabilidad.IdActivo;
+                        salida.Integridad.IdActivoCambiado = resultadoIntegracionClasificacion.IdActivoCambiado;
+                    }
+                    else
+                    {
+                        var mensajeIntegracion = entrada.Instrucciones.ExecuteIntegrarWhenClassificationOnly == true
+                            ? "ClassificationOnly sin IdActivo"
+                            : "ClassificationOnly activo";
+
+                        MarcarActividadOmitida("Integrar", mensajeIntegracion);
+                        salida.DetalleEjecucion.Integracion = new ResultadoIntegracion
+                        {
+                            Tipologia = salida.Identificacion.Tipologia,
+                            Estado = "OK",
+                            Mensaje = mensajeIntegracion,
+                            Timestamp = context.CurrentUtcDateTime,
+                            DatosOriginales = new Dictionary<string, object>(),
+                            DatosFinales = new Dictionary<string, object>(),
+                            IdActivoEntrada = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
+                                ? null
+                                : entrada.Trazabilidad.IdActivo.Trim(),
+                            IdActivoResuelto = string.IsNullOrWhiteSpace(entrada.Trazabilidad.IdActivo)
+                                ? null
+                                : entrada.Trazabilidad.IdActivo.Trim(),
+                            IdActivoCambiado = false
+                        };
+                        salida.Integridad.IdActivoEntrada = salida.DetalleEjecucion.Integracion.IdActivoEntrada;
+                        salida.Integridad.IdActivo = salida.DetalleEjecucion.Integracion.IdActivoResuelto;
+                        salida.Integridad.IdActivoCambiado = false;
+                    }
+
+                    await EjecutarSubidaGdcAsync(
+                        salida.Integridad.IdActivo,
+                        entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
+                }
 
                 var tipologiaNoClasificable = string.Equals(entrada.Instrucciones.ExpectedType, "Desconocido", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(tipologiaResuelta.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)

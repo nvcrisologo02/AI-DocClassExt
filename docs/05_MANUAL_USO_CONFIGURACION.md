@@ -377,7 +377,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
 | `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |
-| `instrucciones.classification.model` | string | No | Reservado. Usar `"auto"`. |
+| `instrucciones.classification.model` | string | No | Model key del registro de clasificación para la ruta GPT. `"auto"` = usar modelo fallback marcado con `useAsFallback=true`. Si se informa un model key válido de provider GPT/Azure OpenAI, se utiliza en esa petición. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
 | `instrucciones.classification.nivelClasificacion` | string? | No | Nivel de clasificacion jerarquica. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases). Si se informa, fuerza automaticamente `provider="gpt"` (D2). Forma parte de la clave de deduplicacion. `null` = clasificacion completa por defecto. |
 | `instrucciones.classification.markdown` | string? | No | Markdown pre-procesado del documento. Si se informa, omite el paso `ExtraerMarkdownLayoutActivity` (paso 2.8) y usa este texto directamente. Util en integraciones batch que ya han extraido el markdown. |
@@ -412,6 +412,8 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
   documento pero distinto `nivelClasificacion` no reutilizan el resultado anterior.
 - Si se informa `instrucciones.classification.nivelClasificacion`, el sistema fuerza `provider="gpt"` aunque se
   haya indicado otro proveedor en la peticion.
+- En ruta `provider="gpt"` (directa o forzada por `nivelClasificacion`), `instrucciones.classification.model`
+  se resuelve por petición. Solo se usa fallback cuando el valor viene vacío o `"auto"`.
 
 ### Resumen por defecto y ResultadoPrompt
 

@@ -45,7 +45,7 @@ public class PromptConfig
 
 public class PromptDefaultsSettings
 {
-    public string ModelKey { get; set; } = string.Empty;
+    public string ModelKey { get; set; } = "default.gpt4o-mini";
     public string SystemPrompt { get; set; } = string.Empty;
     public string UserPromptTemplate { get; set; } = string.Empty;
     public int MaxTokens { get; set; } = 2000;

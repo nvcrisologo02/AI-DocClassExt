@@ -28,7 +28,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
-    private readonly Lazy<ChatClient> _chatClient;
 
     public GptClasificarDataProvider(
         ClassificationModelRegistryLoader modelRegistryLoader,
@@ -45,7 +44,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         _promptDefaults = promptDefaults.Value;
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
-        _chatClient = new Lazy<ChatClient>(CreateChatClient);
         // _tipologiasPromptSection se elimina: el IMemoryCache de ClassificationTipologiaPromptBuilder
         // ya cachea el prompt 5 min. Un Lazy<string> lo fijaría para siempre en el singleton.
     }
@@ -55,10 +53,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
-        var model = _fallbackModel.Value;
+        var requestedModel = input.Entrada.Instrucciones.Classification.Model;
+        var model = ResolveModel(requestedModel);
         _logger.LogInformation(
-            "Iniciando clasificación Azure OpenAI fallback para documento {Documento} con deployment {DeploymentName}",
+            "Iniciando clasificación Azure OpenAI para documento {Documento}. RequestedModel={RequestedModel}, ResolvedModelKey={ResolvedModelKey}, Deployment={DeploymentName}",
             input.Entrada.Documento.Name,
+            string.IsNullOrWhiteSpace(requestedModel) ? "<empty>" : requestedModel,
+            model.Key,
             model.DeploymentName);
 
         var nivelClasificacion = ClassificationLevelResolver.Resolve(
@@ -286,7 +287,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
 
-        var response = await _chatClient.Value.CompleteChatAsync(
+        var chatClient = CreateChatClient(model);
+        var response = await chatClient.CompleteChatAsync(
             new List<ChatMessage> { systemMessage, userMessage },
             options,
             cts.Token);
@@ -336,6 +338,36 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         }
 
         return null;
+    }
+
+    private static ClassificationModelConfig ValidateGptModel(ClassificationModelConfig model)
+    {
+        if (!IsAzureOpenAiProvider(model.Provider))
+        {
+            throw new InvalidOperationException(
+                $"El modelo de clasificación '{model.Key}' no es compatible con GPT/Azure OpenAI. Provider actual: '{model.Provider}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.Endpoint))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.Endpoint es obligatorio para el modelo '{model.Key}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(model.DeploymentName))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.DeploymentName es obligatorio para el modelo '{model.Key}'.");
+        }
+
+        if (!string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(model.ApiKey))
+        {
+            throw new InvalidOperationException(
+                $"ClassificationModelConfig.ApiKey es obligatorio para el modelo '{model.Key}' cuando AuthMode=ApiKey.");
+        }
+
+        return model;
     }
 
     private static string BuildInstructionPromptContext(PromptInstrucciones? prompt)
@@ -418,22 +450,18 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return null;
     }
 
-    private ChatClient CreateChatClient()
+    private ClassificationModelConfig ResolveModel(string? requestedModel)
     {
-        var model = _fallbackModel.Value;
-
-        if (string.IsNullOrWhiteSpace(model.Endpoint))
+        if (string.IsNullOrWhiteSpace(requestedModel) || string.Equals(requestedModel, "auto", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException(
-                $"ClassificationModelConfig.Endpoint es obligatorio para el modelo de fallback '{model.Key}'.");
+            return _fallbackModel.Value;
         }
 
-        if (string.IsNullOrWhiteSpace(model.DeploymentName))
-        {
-            throw new InvalidOperationException(
-                $"ClassificationModelConfig.DeploymentName es obligatorio para el modelo de fallback '{model.Key}'.");
-        }
+        return ValidateGptModel(_modelRegistryLoader.GetModel(requestedModel));
+    }
 
+    private ChatClient CreateChatClient(ClassificationModelConfig model)
+    {
         AzureOpenAIClient azureClient;
 
         if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
@@ -442,11 +470,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(model.ApiKey))
-            {
-                throw new InvalidOperationException(
-                    $"ClassificationModelConfig.ApiKey es obligatorio para el modelo de fallback '{model.Key}' cuando AuthMode=ApiKey.");
-            }
             azureClient = new AzureOpenAIClient(
                 new Uri(model.Endpoint),
                 new AzureKeyCredential(model.ApiKey));
@@ -458,13 +481,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private ClassificationModelConfig ResolveFallbackModel()
     {
         var model = _modelRegistryLoader.GetFallbackModel();
-        if (!IsAzureOpenAiProvider(model.Provider))
-        {
-            throw new InvalidOperationException(
-                $"El modelo de fallback '{model.Key}' debe ser de provider Azure OpenAI. Provider actual: '{model.Provider}'.");
-        }
-
-        return model;
+        return ValidateGptModel(model);
     }
 
     private static bool IsAzureOpenAiProvider(string provider) =>

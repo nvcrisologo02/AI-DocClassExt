@@ -40,8 +40,25 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         PromptActivityInput input,
         CancellationToken cancellationToken = default)
     {
-        var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
-        var effectivePromptConfig = ResolvePromptConfig(tipologiaConfig.PromptConfig, input.Prompt);
+        TipologiaValidationConfig? tipologiaConfig = null;
+        PromptConfig? tipologiaPromptConfig = null;
+
+        try
+        {
+            tipologiaConfig = _tipologiaConfigLoader.LoadConfig(input.Tipologia);
+            tipologiaPromptConfig = tipologiaConfig.PromptConfig;
+        }
+        catch (FileNotFoundException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "No se encontró configuración publicada para tipología {Tipologia}. Se aplicará fallback de prompt con defaults/request.",
+                input.Tipologia);
+        }
+
+        var tipologiaConfigEfectiva = tipologiaConfig ?? BuildFallbackTipologiaConfig(input.Tipologia);
+        var defaultPromptConfig = _promptDefaults.ToPromptConfig();
+        var effectivePromptConfig = ResolvePromptConfig(tipologiaPromptConfig, input.Prompt, defaultPromptConfig);
         var promptActivo = effectivePromptConfig is not null && effectivePromptConfig.Enabled && HasPromptDefinition(effectivePromptConfig);
         var necesitaPrompt = promptActivo && string.IsNullOrWhiteSpace(input.ResultadoPromptCombinado);
         var necesitaResumen = input.ForzarResumenPorDefecto && string.IsNullOrWhiteSpace(input.ResumenCombinado);
@@ -54,7 +71,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
             return new PromptResultado
             {
-                Modelo = FirstNonEmpty(effectivePromptConfig?.ModelKey, _promptDefaults.ModelKey),
+                Modelo = FirstNonEmpty(effectivePromptConfig?.ModelKey, ResolveDefaultPromptModelKey()),
                 Resultado = input.ResultadoPromptCombinado ?? string.Empty,
                 Resumen = input.ResumenCombinado ?? string.Empty,
                 TiempoMs = 0,
@@ -68,7 +85,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             return new PromptResultado { Error = "Prompt no habilitado para esta tipología." };
         }
 
-        var modelKey = FirstNonEmpty(promptConfig?.ModelKey, _promptDefaults.ModelKey);
+        var modelKey = FirstNonEmpty(promptConfig?.ModelKey, ResolveDefaultPromptModelKey());
         if (string.IsNullOrWhiteSpace(modelKey))
         {
             var mensaje = "PromptConfig requiere ModelKey para ejecutar el prompt.";
@@ -103,9 +120,17 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                     modelConfig,
                     promptConfig,
                     input,
-                    tipologiaConfig,
+                    tipologiaConfigEfectiva,
                     necesitaPrompt,
                     ctsToken: cancellationToken);
+
+                if (input.ForzarResumenPorDefecto && string.IsNullOrWhiteSpace(resultado.Resumen))
+                {
+                    resultado.Resumen = BuildFallbackSummary(input);
+                    _logger.LogWarning(
+                        "Prompt para tipología {Tipologia} devolvió resumen vacío. Se aplica resumen fallback por política ForzarResumenPorDefecto.",
+                        input.Tipologia);
+                }
 
                 stopwatch.Stop();
                 resultado.Modelo = modelConfig.DeploymentName;
@@ -121,7 +146,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 ? "Eres un asistente experto en análisis de documentos inmobiliarios y registrales españoles."
                 : promptConfig.SystemPrompt;
 
-            var userMessage = BuildUserMessage(promptConfig, input, tipologiaConfig);
+            var userMessage = BuildUserMessage(promptConfig, input, tipologiaConfigEfectiva);
 
             var messages = new List<ChatMessage>
             {
@@ -160,6 +185,18 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 Error = ex.Message
             };
         }
+    }
+
+    private static TipologiaValidationConfig BuildFallbackTipologiaConfig(string? tipologia)
+    {
+        var tipologiaValue = string.IsNullOrWhiteSpace(tipologia) ? "Desconocido" : tipologia.Trim();
+
+        return new TipologiaValidationConfig
+        {
+            TipologiaId = tipologiaValue,
+            TipologiaNombre = tipologiaValue,
+            Version = "N/A"
+        };
     }
 
     private async Task<PromptResultado> EjecutarPromptJsonAsync(
@@ -234,9 +271,17 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
         return new PromptResultado
         {
-            Resumen = ExtractString(root, "resumen") ?? string.Empty,
+            Resumen = FirstNonEmpty(
+                ExtractString(root, "resumen"),
+                ExtractString(root, "summary")) ?? string.Empty,
             Resultado = ExtractString(root, "resultado_prompt") ?? string.Empty
         };
+    }
+
+    private static string BuildFallbackSummary(PromptActivityInput input)
+    {
+        var tipologia = string.IsNullOrWhiteSpace(input.Tipologia) ? "desconocida" : input.Tipologia;
+        return $"Documento clasificado como {tipologia}.";
     }
 
     private UserChatMessage BuildUserMessage(
@@ -364,6 +409,13 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         return fallback;
     }
 
+    private string ResolveDefaultPromptModelKey()
+    {
+        return !string.IsNullOrWhiteSpace(_promptDefaults.ModelKey)
+            ? _promptDefaults.ModelKey
+            : "default.gpt4o-mini";
+    }
+
     private static bool HasPromptDefinition(PromptConfig promptConfig)
     {
         return !string.IsNullOrWhiteSpace(promptConfig.SystemPrompt) ||
@@ -372,7 +424,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
     private static string? ExtractString(JsonElement root, string propertyName)
     {
-        if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty(propertyName, out var element))
+        if (root.ValueKind == JsonValueKind.Object && TryGetPropertyIgnoreCase(root, propertyName, out var element))
         {
             return element.ValueKind == JsonValueKind.String
                 ? element.GetString()
@@ -380,6 +432,21 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         }
 
         return null;
+    }
+
+    private static bool TryGetPropertyIgnoreCase(JsonElement root, string propertyName, out JsonElement element)
+    {
+        foreach (var property in root.EnumerateObject())
+        {
+            if (string.Equals(property.Name, propertyName, StringComparison.OrdinalIgnoreCase))
+            {
+                element = property.Value;
+                return true;
+            }
+        }
+
+        element = default;
+        return false;
     }
 
     internal static string InterpolateTemplate(

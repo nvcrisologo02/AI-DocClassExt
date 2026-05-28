@@ -180,4 +180,75 @@ public class IngestAPITriggerTests
         durableClient.VerifyNoOtherCalls();
         blobStorage.VerifyNoOtherCalls();
     }
+
+    [Fact]
+    public async Task Run_WhenNivelClasificacionIsTdn1_EnforcesClassificationOnlyInBackend()
+    {
+        var logger = new Mock<ILogger<IngestAPITrigger>>();
+        var blobStorage = new Mock<IBlobStorageService>(MockBehavior.Strict);
+        var promptValidator = new PromptInstruccionesValidator(new PromptModelRegistryLoader("dummy.json"));
+        var settings = Options.Create(new ClassificationRoutingSettings
+        {
+            NivelClasificacionDefault = ClassificationLevelResolver.LevelTdn1Tdn2
+        });
+
+        ContratoEntrada? scheduledInput = null;
+        var durableClient = new Mock<DurableTaskClient>(MockBehavior.Strict, "test");
+        durableClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<TaskName, object?, StartOrchestrationOptions?, CancellationToken>((_, input, _, _) =>
+            {
+                scheduledInput = input as ContratoEntrada;
+            })
+            .ReturnsAsync("instance-tdn1");
+
+        var function = new IngestAPITrigger(logger.Object, promptValidator, blobStorage.Object, settings);
+
+        var body = JsonSerializer.Serialize(new
+        {
+            documento = new
+            {
+                name = "test.pdf",
+                blobPath = "documents/test.pdf"
+            },
+            instrucciones = new
+            {
+                classificationOnly = false,
+                classification = new
+                {
+                    nivelClasificacion = "TDN1",
+                    provider = "auto"
+                }
+            },
+            trazabilidad = new
+            {
+                correlationId = "corr-tdn1",
+                submittedBy = "tester"
+            }
+        });
+
+        var request = HttpFunctionTestFactory.CreateRequest(
+            method: "POST",
+            url: "http://localhost/api/ingest",
+            body: body,
+            headers: new Dictionary<string, string> { ["Content-Type"] = "application/json" });
+
+        var response = await function.Run(request, durableClient.Object);
+        var responseBody = await HttpFunctionTestFactory.ReadBodyAsync(response);
+
+        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        responseBody.Should().Contain("provider");
+
+        scheduledInput.Should().NotBeNull();
+        scheduledInput!.Instrucciones.Classification.NivelClasificacion.Should().Be(ClassificationLevelResolver.LevelTdn1);
+        scheduledInput.Instrucciones.Classification.Provider.Should().Be("gpt");
+        scheduledInput.Instrucciones.ClassificationOnly.Should().BeTrue();
+
+        durableClient.VerifyAll();
+        blobStorage.VerifyNoOtherCalls();
+    }
 }
