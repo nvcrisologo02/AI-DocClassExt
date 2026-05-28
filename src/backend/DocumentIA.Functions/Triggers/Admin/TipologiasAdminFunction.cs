@@ -11,6 +11,7 @@ using DocumentIA.Data.Repositories;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
 namespace DocumentIA.Functions.Triggers.Admin;
@@ -43,17 +44,20 @@ public class TipologiasAdminFunction
     private readonly ITipologiaRepository _tipologiaRepository;
     private readonly ITipologiaConfigAuditRepository _tipologiaAuditRepository;
     private readonly ILogger<TipologiasAdminFunction> _logger;
+    private readonly IMemoryCache _cache;
 
     public TipologiasAdminFunction(
         DocumentIADbContext dbContext,
         ITipologiaRepository tipologiaRepository,
         ITipologiaConfigAuditRepository tipologiaAuditRepository,
-        ILogger<TipologiasAdminFunction> logger)
+        ILogger<TipologiasAdminFunction> logger,
+        IMemoryCache cache)
     {
         _dbContext = dbContext;
         _tipologiaRepository = tipologiaRepository;
         _tipologiaAuditRepository = tipologiaAuditRepository;
         _logger = logger;
+        _cache = cache;
     }
 
     [Function("Admin_GetTipologias")]
@@ -225,6 +229,9 @@ public class TipologiasAdminFunction
 
         var payload = await ReadBody<PublicarTipologiaRequest>(req);
         await _tipologiaRepository.PublicarAsync(id, payload?.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+
+        // Invalidar caché del resolver para que la nueva tipología publicada esté disponible de inmediato
+        _cache.Remove("tipologias:snapshot");
 
         var updated = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
         var response = req.CreateResponse(HttpStatusCode.OK);
