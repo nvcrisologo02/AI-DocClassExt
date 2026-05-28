@@ -213,6 +213,9 @@ stages:
                         "Extraction__AzureContentUnderstanding__AuthMode=ApiKey",
                         "Extraction__AzureContentUnderstanding__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--AzureContentUnderstanding--ApiKey)",
                         "Extraction__AzureContentUnderstanding__DefaultProcessingLocation=geography",
+                        "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=2",
+                        "Extraction__AzureContentUnderstanding__MaxRetries=3",
+                        "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=500",
                         "Extraction__GptFallback__Enabled=true",
                         "Extraction__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com",
                         "Extraction__GptFallback__AuthMode=ApiKey",
@@ -280,7 +283,10 @@ stages:
 
                       $requiredSettings = @(
                         "AssetResolver__BaseUrl",
-                        "AssetResolver__ApiKey"
+                        "AssetResolver__ApiKey",
+                        "Extraction__AzureContentUnderstanding__MaxConcurrentCalls",
+                        "Extraction__AzureContentUnderstanding__MaxRetries",
+                        "Extraction__AzureContentUnderstanding__InitialRetryDelayMs"
                       )
 
                       foreach ($requiredSetting in $requiredSettings) {
@@ -289,7 +295,7 @@ stages:
                         }
                       }
 
-                      Write-Host "[OK] AssetResolver settings are present on $(AZURE_FUNCTIONS_APP_NAME)."
+                      Write-Host "[OK] Required Function App settings are present on $(AZURE_FUNCTIONS_APP_NAME)."
 
                 - task: AzureCLI@2
                   displayName: Resolve Function App host name

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace DocumentIA.Core.Models;
 
 public class ContratoEntrada
@@ -59,6 +61,7 @@ public class Instrucciones
     /// <summary>
     /// Fuerza la generación del resumen por defecto cuando aplique lógica de resumen.
     /// </summary>
+    [JsonConverter(typeof(NullToFalseBooleanConverter))]
     public bool ForzarResumenPorDefecto { get; set; }
 
     /// <summary>

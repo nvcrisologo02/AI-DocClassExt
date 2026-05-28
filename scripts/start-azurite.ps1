@@ -2,7 +2,8 @@ param(
     [int]$BlobPort = 20000,
     [int]$QueuePort = 20001,
     [int]$TablePort = 20002,
-    [string]$DataPath = ".azurite"
+    [string]$DataPath = ".azurite",
+    [bool]$SkipApiVersionCheck = $true
 )
 
 function Test-PortListening {
@@ -73,6 +74,10 @@ $args = @(
     "--queuePort", $QueuePort,
     "--tablePort", $TablePort
 )
+
+if ($SkipApiVersionCheck) {
+    $args += "--skipApiVersionCheck"
+}
 
 Write-Host "Iniciando Azurite en puertos $BlobPort/$QueuePort/$TablePort..." -ForegroundColor Cyan
 Start-Process -FilePath $resolved.FilePath -ArgumentList $args -WindowStyle Hidden | Out-Null

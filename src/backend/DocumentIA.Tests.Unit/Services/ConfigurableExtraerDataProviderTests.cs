@@ -8,6 +8,8 @@ using DocumentIA.Core.Services;
 using DocumentIA.Functions.Mocks;
 using DocumentIA.Functions.Services;
 using FluentAssertions;
+using Microsoft.ApplicationInsights;
+using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -488,7 +490,9 @@ public class ConfigurableExtraerDataProviderTests
                 _tipologiaConfigLoader,
                 _extractionModelRegistryLoader,
                 mapper,
-                new Mock<IBlobStorageService>().Object);
+                new Mock<IBlobStorageService>().Object,
+                Options.Create(new AzureContentUnderstandingOptions()),
+                new TelemetryClient(TelemetryConfiguration.CreateDefault()));
 
             GptProvider = new Mock<GptFallbackExtraerDataProvider>(
                 MockBehavior.Strict,

@@ -11,6 +11,9 @@ variables:
   azureSubscription: 'AI DocClassExt'
   functionAppName: 'srbappprodocai'
   azureResourceGroup: 'SRBRGDOCSAIPROD'
+  cuMaxConcurrentCalls: '2'
+  cuMaxRetries: '3'
+  cuInitialRetryDelayMs: '500'
 
 stages:
 - stage: Build
@@ -58,3 +61,22 @@ stages:
               appType: 'functionApp'
               appName: '$(functionAppName)'
               package: '$(Pipeline.Workspace)/FunctionsPublish'
+          - task: AzureCLI@2
+            displayName: 'Set CU limiter settings'
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'pscore'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                $settings = @(
+                  "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=$(cuMaxConcurrentCalls)",
+                  "Extraction__AzureContentUnderstanding__MaxRetries=$(cuMaxRetries)",
+                  "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=$(cuInitialRetryDelayMs)"
+                )
+
+                az functionapp config appsettings set `
+                  --resource-group "$(azureResourceGroup)" `
+                  --name "$(functionAppName)" `
+                  --settings $settings `
+                  --only-show-errors `
+                  --output none
