@@ -90,7 +90,7 @@ El archivo `local.settings.json` ya viene configurado para desarrollo local con 
 | `Classification:DefaultProvider` | `azure-document-intelligence` |
 | `Extraction:DefaultProvider` | `azure-content-understanding` |
 
-**Parámetros de los proveedores AI** (endpoints, API keys, versiones API): se cargan automáticamente desde la base de datos en la primera ejecución. La semilla inicial se encuentra en los ficheros `config/classification/models.json`, `config/extraction/models.json`, `config/prompt/models.json` y `config/layout/models.json`. Para entornos de producción, modificar los valores en esos ficheros antes del primer arranque, o editarlos desde la interfaz web de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración (`/modelos`) una vez que la app esté corriendo.
+**Parámetros de los proveedores AI** (endpoints, API keys, versiones API): se cargan automáticamente desde la base de datos en la primera ejecución. La semilla inicial se encuentra en los ficheros `config/classification/models.json`, `config/extraction/models.json`, `config/prompt/models.json` y `config/layout/models.json`. Para entornos de producción, modificar los valores en esos ficheros antes del primer arranque, o editarlos desde la interfaz web de administración (`/modelos`) una vez que la app esté corriendo.
 
 ### Paso 5: Compilar plugins de enriquecimiento
 
@@ -184,7 +184,11 @@ dotnet run --launch-profile http
 | `Classification:DefaultModelKey` | string | Clave del modelo en la tabla `ModeloConfigs` (`default.azure-di`) | Si |
 | **Extraccion** | | | |
 | `Extraction:DefaultProvider` | string | Proveedor por defecto: `azure-content-understanding` / `azure-openai` / `azure-document-intelligence` / `mock` | Si |
-| `Extraction:AzureContentUnderstanding:MaxConcurrentCalls` | int | Maximo de llamadas simultaneas a CU (SemaphoreSlim). Default: `3`. Subir con precaucion; mas de 5 aumenta la latencia CU por degradacion del servicio. | No |
+| `Extraction:AzureContentUnderstanding:MaxConcurrentCalls` | int | Maximo de llamadas simultaneas a CU (SemaphoreSlim). Default operativo recomendado: `4`. Ajustar con métricas `CU.LimiterWaitMs` y `CU.AnalysisMs`. | No |
+| `Extraction:AzureContentUnderstanding:HardTimeoutSeconds` | int | Timeout duro por intento CU. Default: `90` segundos. Superado el umbral, se emite `CU.HardTimeout`. | No |
+| `Extraction:AzureContentUnderstanding:EnableCircuitBreaker` | bool | Activa/desactiva circuit breaker por `ModelKey`. Default: `true`. | No |
+| `Extraction:AzureContentUnderstanding:CircuitBreakerFailureThreshold` | int | Fallos consecutivos para abrir circuito de un `ModelKey`. Default: `5`. | No |
+| `Extraction:AzureContentUnderstanding:CircuitBreakerOpenSeconds` | int | Tiempo en segundos de circuito abierto antes de reintento. Default: `45`. | No |
 | `Extraction:AzureContentUnderstanding:MaxRetries` | int | Intentos maximos con backoff exponencial ante errores transitorios CU. Default: `3`. Delay = `InitialRetryDelayMs × 2^(intento-1)`. | No |
 | `Extraction:AzureContentUnderstanding:InitialRetryDelayMs` | int | Delay base en ms para el backoff exponencial. Default: `500`. | No |
 | **GDC** | | | |
@@ -205,15 +209,15 @@ dotnet run --launch-profile http
 | `GDC:ProcesoCarga` | string | Codigo proceso de carga | Si |
 | `GDC:Publico` | string | Visibilidad documento (`verdadero`/`falso`) | Si |
 
-> **Nota**: Endpoint, ApiKey, AuthMode, ApiVersion y demás parámetros de cada proveedor AI (Document Intelligence clasificador/extractor, Azure Content Understanding, Azure OpenAI GPT) se almacenan **exclusivamente en la base de datos**, en la tabla `ModeloConfigs`. Se gestionan desde la interfaz web de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración en `/modelos` o mediante los ficheros seed en `config/classification/models.json`, `config/extraction/models.json`, `config/prompt/models.json` y `config/layout/models.json`. No requieren variables de entorno adicionales.
+> **Nota**: Endpoint, ApiKey, AuthMode, ApiVersion y demás parámetros de cada proveedor AI (Document Intelligence clasificador/extractor, Azure Content Understanding, Azure OpenAI GPT) se almacenan **exclusivamente en la base de datos**, en la tabla `ModeloConfigs`. Se gestionan desde la interfaz web de administración en `/modelos` o mediante los ficheros seed en `config/classification/models.json`, `config/extraction/models.json`, `config/prompt/models.json` y `config/layout/models.json`. No requieren variables de entorno adicionales.
 
 ### 4.4.2 host.json (Configuracion del Runtime)
 
 | Seccion | Parametro | Valor | Descripcion |
 |---------|-----------|-------|------------|
 | `extensions.durableTask` | `hubName` | `DocumentIAHub` | Nombre del hub de Durable Functions |
-| | `maxConcurrentActivityFunctions` | `10` | Actividades simultaneas maximas |
-| | `maxConcurrentOrchestratorFunctions` | `10` | Orquestadores simultaneos maximos |
+| | `maxConcurrentActivityFunctions` | `4` | Actividades simultaneas maximas (alineado con resiliencia CU) |
+| | `maxConcurrentOrchestratorFunctions` | `4` | Orquestadores simultaneos maximos |
 | | `extendedSessionsEnabled` | `false` | Sesiones extendidas |
 | | `tracing.traceInputsAndOutputs` | `false` | No trazar inputs/outputs (contienen PDF base64) |
 | `logging.applicationInsights` | `samplingSettings.isEnabled` | `true` | Muestreo de telemetria |
@@ -298,7 +302,7 @@ El script aplica en 3 bloques:
 > - `GDC__Password`, `GDC__HttpBasicPassword`
 > - `user-ods-dwh` para la connection string `ConnectionStrings__AssetResolverDb` del AssetResolver
 >
-> Las API Keys de servicios AI (Document Intelligence, Content Understanding, Azure OpenAI) se gestionan en la base de datos dentro de `ModeloConfigs.ConfiguracionJson`. Si se desea centralizarlas en Key Vault, usar referencias KV (`@Microsoft.KeyVault(...)`) en los campos `apiKey` de cada modelo via la interfaz de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración.
+> Las API Keys de servicios AI (Document Intelligence, Content Understanding, Azure OpenAI) se gestionan en la base de datos dentro de `ModeloConfigs.ConfiguracionJson`. Si se desea centralizarlas en Key Vault, usar referencias KV (`@Microsoft.KeyVault(...)`) en los campos `apiKey` de cada modelo via la interfaz de administración.
 
 ### 4.5.4 Revision obligatoria de Azure y Azure DevOps
 

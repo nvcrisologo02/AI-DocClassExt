@@ -77,18 +77,19 @@ Componente mas critico: garantiza la calidad de los datos extraidos.
 | **RequiredFieldValidatorTests** | 6 | `RequiredFieldValidator` | Con valor, null, vacio, whitespace, numerico, booleano |
 | **ValidationEngineTests** | 18 | `ValidationEngine` | Sin reglas, required faltante, campo valido, multiples validadores (pass/fail), campos mixtos, fallo parcial, documento complejo, contexto, campos opcionales, enum/regex/boolean/length, arrays, conteo error/warning, caso completo |
 
-### 6.2.2 Configuracion (6 clases, ~54 tests)
+### 6.2.2 Configuracion (7 clases, ~68 tests)
 
 | Clase | Tests | Componente bajo test | Casos clave |
 |-------|-------|---------------------|-------------|
 | **TipologiaVersionResolverTests** | 9 | `TipologiaVersionResolver` | Familia→version default, familia@version especifica, clave tecnica legacy, multiples defaults, default faltante, tipologia solo prompt |
 | **TipologiaValidationConfigTests** | 26 | `TipologiaValidationConfig` (modelo) | Serializacion/deserializacion JSON, valores default, campos, extraccion, reglas (range, enum, date, regex), items, arrays anidados, estructuras reales nota-simple y tasacion |
 | **TipologiaConfigLoaderTests** | 22 | `TipologiaConfigLoader` | Carga JSON desde disco, secciones extraccion/prompt, errores (fichero faltante, JSON invalido, null), construccion motor validacion (cada tipo regla), severidades, reglas no soportadas |
+| **AzureContentUnderstandingOptionsTests** | 2 | `AzureContentUnderstandingOptions` | Defaults y límites mínimos válidos para concurrencia/reintentos/timeout/circuit breaker |
 | **PromptModelRegistryLoaderTests** | 3 | `PromptModelRegistryLoader` | Cargar registry, obtener modelo por key, excepcion key desconocida |
 | **ClassificationModelRegistryLoaderTests** | 3 | `ClassificationModelRegistryLoader` | Cargar registry, obtener modelo por key, excepcion key desconocida |
 | **ExtractionModelRegistryLoaderTests** | 3 | `ExtractionModelRegistryLoader` | Cargar registry, obtener modelo por key, excepcion key desconocida |
 
-### 6.2.3 Servicios (5 clases, ~33 tests)
+### 6.2.3 Servicios (6 clases, ~36 tests)
 
 | Clase | Tests | Componente bajo test | Casos clave |
 |-------|-------|---------------------|-------------|
@@ -96,6 +97,7 @@ Componente mas critico: garantiza la calidad de los datos extraidos.
 | **ClasificarActivityTests** | 2 | `ClasificarActivity` | ExpectedType bypass, delegacion a provider |
 | **ConfigurableExtraerDataProviderTests** | 4 | `ConfigurableExtraerDataProvider` | Extraccion deshabilitada, CU excepcion→fallback GPT, CU insuficiente→fallback, CU suficiente→sin fallback |
 | **ContentUnderstandingResultMapperTests** | 3 | `ContentUnderstandingResultMapper` | Auto-mapping campos, mapping explicito, campo faltante |
+| **AzureContentUnderstandingProviderCircuitBreakerTests** | 3 | `AzureContentUnderstandingProvider` | Failover cuando circuito primario está abierto, comportamiento con breaker desactivado, error cuando no hay fallback |
 | **GdcServiceTests** | 10 | `GdcService` | ConsultarDocumento (existe/no), SubirDocumento (exito/DOC_OBJECT_EXISTS), SOAP 1.2 envelope/content-type, expresion IN, campo MD5 EQUALS, parsing SOAP fault, campos obligatorios GDC |
 
 ### 6.2.4 Plugins (5 clases, 14 tests)

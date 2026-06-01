@@ -3,7 +3,8 @@ using System;
 using DocumentIA.Core.Validation.Rules;
 using FluentAssertions;
 using Xunit;
-
+
+
 #nullable disable
 
 namespace DocumentIA.Tests.Unit.Validation
@@ -14,6 +15,8 @@ namespace DocumentIA.Tests.Unit.Validation
         [InlineData("31/12/2025")]
         [InlineData("2025-12-31")]
         [InlineData("31-12-2025")]
+        [InlineData("15/11/24")]
+        [InlineData("04 de abril de 2016")]
         public void Validate_ValidDateFormats_ReturnsValid(string dateString)
         {
             var validator = new DateFormatValidator();
@@ -73,6 +76,16 @@ namespace DocumentIA.Tests.Unit.Validation
 
             resultValid.IsValid.Should().BeTrue();
             resultInvalid.IsValid.Should().BeFalse();
+        }
+
+        [Fact]
+        public void Validate_SpanishTextualDate_WithUppercase_ReturnsValid()
+        {
+            var validator = new DateFormatValidator();
+
+            var result = validator.Validate("Fecha", "04 DE ABRIL DE 2016");
+
+            result.IsValid.Should().BeTrue();
         }
 
         [Fact]

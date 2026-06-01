@@ -208,6 +208,13 @@ ILayoutMarkdownDataProvider (interfaz)
 > El proveedor se resuelve por prioridad: instrucciones de la petición → campo `extraction.provider` de la tipología → `Extraction.DefaultProvider` de configuración global.
 > `GptDirectExtraerDataProvider` extrae directamente con OpenAI (sin CU previo), validando upfront que el modelo tiene endpoint, deployment y API key configurados.
 
+Para `AzureContentUnderstandingProvider` está activo un patrón de resiliencia específico:
+
+- Selección de modelo por tipología con `modelKey` + `secondaryModelKey` (round-robin cuando existe réplica).
+- Timeout duro por intento (`HardTimeoutSeconds`) con evento de telemetría `CU.HardTimeout`.
+- Circuit breaker por `ModelKey` con failover al modelo alternativo (`CU.CircuitOpen`, `CU.CircuitFailover`, `CU.CircuitClosed`, `CU.CircuitRejected`).
+- Retorno de metadatos efectivos de ejecución (`ModelKeyEfectivo`, `EndpointEfectivo`, `ProcessingLocationEfectiva`) para trazabilidad.
+
 ### 1.4.2a Patrón RegistryLoader — Configuración de Proveedores IA desde BD
 
 Todos los parámetros de conexión de los proveedores IA (**endpoint, apiKey, authMode, apiVersion**, etc.) se almacenan **exclusivamente en la tabla `ModeloConfigs` de BD**. No hay ninguna clave de configuración en `appsettings` ni en `local.settings.json` para estos parámetros.

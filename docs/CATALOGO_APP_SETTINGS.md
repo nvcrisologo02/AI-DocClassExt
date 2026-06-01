@@ -97,4 +97,13 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 - Para ver el valor concreto en cada entorno consultar Azure Portal -> Function App srbappprodocai -> Configuration, o el local.settings.json local.
 - Los secretos referenciados via @Microsoft.KeyVault(...) se documentan en docs/INFRAESTRUCTURA_AZURE.md.
 - Ver tambien .env.example (raiz del repo) y MANUAL_HEALTHCHECK.md para settings con probe especifico.
+- Este catálogo se genera por escaneo estático de acceso a configuración y puede no listar todas las claves de opciones enlazadas por sección.
+- Claves CU de resiliencia actualmente requeridas en operación:
+	- `Extraction:AzureContentUnderstanding:MaxConcurrentCalls`
+	- `Extraction:AzureContentUnderstanding:HardTimeoutSeconds`
+	- `Extraction:AzureContentUnderstanding:EnableCircuitBreaker`
+	- `Extraction:AzureContentUnderstanding:CircuitBreakerFailureThreshold`
+	- `Extraction:AzureContentUnderstanding:CircuitBreakerOpenSeconds`
+	- `Extraction:AzureContentUnderstanding:MaxRetries`
+	- `Extraction:AzureContentUnderstanding:InitialRetryDelayMs`
 

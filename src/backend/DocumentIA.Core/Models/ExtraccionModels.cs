@@ -38,6 +38,9 @@ public class ExtraccionResultado
 {
     public string Proveedor { get; set; } = string.Empty;
     public string Modelo { get; set; } = string.Empty;
+    public string? ModelKeyEfectivo { get; set; }
+    public string? EndpointEfectivo { get; set; }
+    public string? ProcessingLocationEfectiva { get; set; }
     public bool LayoutEnabled { get; set; }
     public string? OperationId { get; set; }
     public int Paginas { get; set; }

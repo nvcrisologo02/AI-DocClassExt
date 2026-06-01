@@ -1,5 +1,6 @@
 // DocumentIA.Core/Validation/Rules/DateFormatValidator.cs
 using System.Globalization;
+using System.Text;
 using DocumentIA.Core.Validation.Models;
 
 namespace DocumentIA.Core.Validation.Rules
@@ -10,6 +11,23 @@ namespace DocumentIA.Core.Validation.Rules
     public class DateFormatValidator : ValidationRuleBase
     {
         private readonly string[] _acceptedFormats;
+        private static readonly string[] SupplementalFormats =
+        {
+            "dd/MM/yy",
+            "d/M/yy",
+            "d/M/yyyy",
+            "dd-MM-yy",
+            "d-M-yy",
+            "d-M-yyyy",
+            "d 'de' MMMM 'de' yyyy",
+            "dd 'de' MMMM 'de' yyyy"
+        };
+
+        private static readonly CultureInfo[] ParseCultures =
+        {
+            CultureInfo.InvariantCulture,
+            new("es-ES")
+        };
         private readonly bool _allowFutureDates;
         private readonly bool _allowPastDates;
 
@@ -20,13 +38,19 @@ namespace DocumentIA.Core.Validation.Rules
             bool allowFutureDates = true, 
             bool allowPastDates = true)
         {
-            _acceptedFormats = acceptedFormats ?? new[] 
+            var baseFormats = acceptedFormats ?? new[] 
             { 
                 "dd/MM/yyyy", 
                 "yyyy-MM-dd", 
                 "dd-MM-yyyy",
                 "yyyy/MM/dd"
             };
+
+            _acceptedFormats = (acceptedFormats is null
+                    ? baseFormats.Concat(SupplementalFormats)
+                    : baseFormats)
+                .Distinct(StringComparer.Ordinal)
+                .ToArray();
             _allowFutureDates = allowFutureDates;
             _allowPastDates = allowPastDates;
         }
@@ -46,8 +70,7 @@ namespace DocumentIA.Core.Validation.Rules
 
             dateString = dateString.Trim();
 
-            if (!DateTime.TryParseExact(dateString, _acceptedFormats, 
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsedDate))
+            if (!TryParseDate(dateString, out DateTime parsedDate))
             {
                 return CreateFailureResult(fieldName,
                     $"Formato de fecha '{dateString}' no valido",
@@ -69,6 +92,54 @@ namespace DocumentIA.Core.Validation.Rules
             }
 
             return CreateSuccessResult(fieldName);
+        }
+
+        private bool TryParseDate(string dateString, out DateTime parsedDate)
+        {
+            var candidates = new[]
+            {
+                dateString,
+                dateString.ToLowerInvariant(),
+                RemoveDiacritics(dateString),
+                RemoveDiacritics(dateString).ToLowerInvariant()
+            }
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+            foreach (var candidate in candidates)
+            {
+                foreach (var culture in ParseCultures)
+                {
+                    if (DateTime.TryParseExact(
+                        candidate,
+                        _acceptedFormats,
+                        culture,
+                        DateTimeStyles.AllowWhiteSpaces,
+                        out parsedDate))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            parsedDate = default;
+            return false;
+        }
+
+        private static string RemoveDiacritics(string input)
+        {
+            var normalized = input.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder(normalized.Length);
+            foreach (var c in normalized)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString().Normalize(NormalizationForm.FormC);
         }
     }
 }

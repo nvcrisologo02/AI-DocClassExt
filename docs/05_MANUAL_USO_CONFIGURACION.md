@@ -656,6 +656,10 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
   "tipologiaId": "nota.simple.1_4",
   "version": "1.4",
   "extractionConfig": {
+    "enabled": true,
+    "provider": "azure-content-understanding",
+    "modelKey": "nota.simple.1_4.azure-cu.sweden",
+    "secondaryModelKey": "nota.simple.1_4.azure-cu.westeurope",
     "expectedFields": [
       "FincaRegistral",
       "IDUFIR_CRU",
@@ -722,6 +726,18 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
   }
 }
 ```
+
+Campos relevantes de `extractionConfig` (tipología):
+
+| Campo | Tipo | Obligatorio | Notas |
+|-------|------|-------------|-------|
+| `enabled` | bool | No | Activa/desactiva extracción para la tipología. |
+| `provider` | string | No | Proveedor de extracción. Recomendado: `azure-content-understanding`. |
+| `modelKey` | string | Sí (si `enabled=true`) | Modelo principal de extracción (clave existente en `ModeloConfigs`). |
+| `secondaryModelKey` | string | No | Modelo secundario para reparto round-robin y failover por circuit breaker. |
+| `expectedFields` | array string | No | Lista de campos esperados para mapeo/validación. |
+
+> `modelKey` y `secondaryModelKey` deben apuntar a modelos de tipo extracción en BD (`ModeloConfigs`). Si no se define `secondaryModelKey`, no hay reparto round-robin ni failover entre réplicas.
 
 ### 5.5.2 Tipos de Regla Disponibles
 

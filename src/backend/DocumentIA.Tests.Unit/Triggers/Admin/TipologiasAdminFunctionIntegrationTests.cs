@@ -5,6 +5,7 @@ using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Triggers.Admin;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -310,7 +311,8 @@ public class TipologiasAdminFunctionIntegrationTests
             dbContext,
             Mock.Of<ITipologiaRepository>(),
             Mock.Of<ITipologiaConfigAuditRepository>(),
-            Mock.Of<ILogger<TipologiasAdminFunction>>());
+            Mock.Of<ILogger<TipologiasAdminFunction>>(),
+            new MemoryCache(new MemoryCacheOptions()));
     }
 
     private static DocumentIADbContext CreateDbContext()

@@ -9,6 +9,7 @@ using DocumentIA.Functions.Abstractions;
 using Microsoft.ApplicationInsights;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Threading;
@@ -25,6 +26,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
     private readonly AzureContentUnderstandingOptions _options;
     private readonly SemaphoreSlim _cuLimiter;
     private readonly TelemetryClient _telemetryClient;
+    private readonly ConcurrentDictionary<string, CircuitState> _circuits = new(StringComparer.OrdinalIgnoreCase);
     private int _roundRobinCounter = -1;
 
     public AzureContentUnderstandingProvider(
@@ -61,6 +63,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         var modelKey = !string.IsNullOrWhiteSpace(input.ModelKeyEfectivo)
             ? input.ModelKeyEfectivo
             : ResolveModelKeyRoundRobin(extractionConfig);
+        modelKey = ResolveModelKeyWithCircuit(modelKey, extractionConfig, input.Tipologia);
         var model = _modelRegistryLoader.GetModel(modelKey);
         ValidateAzureCuModel(model);
         var client = CreateClient(model);
@@ -81,6 +84,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         var contentType = ResolveContentType(model, fileName, binaryData);
         var processingLocation = ResolveProcessingLocation(model);
         var contentRange = string.IsNullOrWhiteSpace(model.InputRange) ? null : model.InputRange;
+        var hardTimeoutSeconds = Math.Max(1, _options.HardTimeoutSeconds);
         prepareStopwatch.Stop();
 
         Operation<BinaryData>? operation = null;
@@ -97,31 +101,75 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             {
                 attempts = attempt;
                 var analysisStopwatch = Stopwatch.StartNew();
+                using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(hardTimeoutSeconds));
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
                 try
                 {
                     var requestContent = RequestContent.Create(binaryData.ToArray());
+                    var requestContext = new RequestContext
+                    {
+                        CancellationToken = linkedCts.Token
+                    };
                     operation = contentRange is { } range
                         ? await client.AnalyzeBinaryAsync(
                             WaitUntil.Completed,
                             model.AnalyzerId,
                             contentType,
                             requestContent,
+                            stringEncoding: null,
                             processingLocation: processingLocation,
-                            contentRange: range)
+                            contentRange: range,
+                            clientRequestId: null,
+                            context: requestContext)
                         : await client.AnalyzeBinaryAsync(
                             WaitUntil.Completed,
                             model.AnalyzerId,
                             contentType,
                             requestContent,
-                            processingLocation: processingLocation);
+                            stringEncoding: null,
+                            processingLocation: processingLocation,
+                            contentRange: null,
+                            clientRequestId: null,
+                            context: requestContext);
                     analysisStopwatch.Stop();
                     analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
                     break;
+                }
+                catch (OperationCanceledException ex)
+                    when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested && attempt < maxAttempts)
+                {
+                    analysisStopwatch.Stop();
+                    analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
+                    RegisterCircuitFailure(modelKey, input.Tipologia, "hard-timeout");
+                    TrackHardTimeout(input.Tipologia, modelKey, attempt, hardTimeoutSeconds);
+
+                    var retryDelay = ComputeRetryDelay(ex, attempt);
+                    _logger.LogWarning(
+                        ex,
+                        "Hard timeout en Azure Content Understanding para tipología {Tipologia}. ModelKey={ModelKey}. Intento {Attempt}/{MaxAttempts}. Reintento en {DelayMs} ms",
+                        input.Tipologia,
+                        modelKey,
+                        attempt,
+                        maxAttempts,
+                        retryDelay.TotalMilliseconds);
+                    await Task.Delay(retryDelay, cancellationToken);
+                }
+                catch (OperationCanceledException ex)
+                    when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
+                {
+                    analysisStopwatch.Stop();
+                    analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
+                    RegisterCircuitFailure(modelKey, input.Tipologia, "hard-timeout");
+                    TrackHardTimeout(input.Tipologia, modelKey, attempt, hardTimeoutSeconds);
+                    throw new TimeoutException(
+                        $"Azure Content Understanding superó el hard timeout de {hardTimeoutSeconds}s para la tipología '{input.Tipologia}' y modelKey '{modelKey}'.",
+                        ex);
                 }
                 catch (Exception ex) when (IsTransientCuError(ex) && attempt < maxAttempts)
                 {
                     analysisStopwatch.Stop();
                     analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
+                    RegisterCircuitFailure(modelKey, input.Tipologia, "transient-error");
                     TrackTransientError(input.Tipologia, attempt, ex);
 
                     var retryDelay = ComputeRetryDelay(ex, attempt);
@@ -135,6 +183,8 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                     await Task.Delay(retryDelay, cancellationToken);
                 }
             }
+
+            RegisterCircuitSuccess(modelKey, input.Tipologia);
         }
         finally
         {
@@ -187,7 +237,9 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             ?? confidenceConfig?.ExtracUmbralFallback
             ?? 0.6;
 
-        metricasDebug.ConfianzaPorCampo = confidenceMap ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        metricasDebug.ConfianzaPorCampo = ConfidenceFieldFilter.FilterConfidenceMap(
+            confidenceMap,
+            avoidConfidenceFields);
         metricasDebug.CamposBajaConfianza = ConfidenceFieldFilter.GetLowConfidenceFields(
             metricasDebug.ConfianzaPorCampo,
             umbralDuda,
@@ -214,6 +266,9 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         {
             Proveedor = model.Provider,
             Modelo = model.AnalyzerId,
+            ModelKeyEfectivo = modelKey,
+            EndpointEfectivo = model.Endpoint,
+            ProcessingLocationEfectiva = processingLocation,
             LayoutEnabled = true,
             OperationId = operation.Id,
             Paginas = paginas,
@@ -242,6 +297,122 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
 
         var slot = Interlocked.Increment(ref _roundRobinCounter) % 2;
         return slot == 0 ? extractionConfig.ModelKey : extractionConfig.SecondaryModelKey;
+    }
+
+    private string ResolveModelKeyWithCircuit(
+        string preferredModelKey,
+        TipologiaExtractionConfig extractionConfig,
+        string tipologia)
+    {
+        if (!IsCircuitOpen(preferredModelKey, tipologia))
+        {
+            return preferredModelKey;
+        }
+
+        var fallbackModelKey = GetAlternativeModelKey(extractionConfig, preferredModelKey);
+        if (!string.IsNullOrWhiteSpace(fallbackModelKey) && !IsCircuitOpen(fallbackModelKey, tipologia))
+        {
+            TrackCircuitFailover(tipologia, preferredModelKey, fallbackModelKey);
+            _logger.LogWarning(
+                "Circuit breaker activo para modelKey={PrimaryModelKey}. Se aplica failover a modelKey={FallbackModelKey} para tipología {Tipologia}.",
+                preferredModelKey,
+                fallbackModelKey,
+                tipologia);
+            return fallbackModelKey;
+        }
+
+        TrackCircuitRejected(tipologia, preferredModelKey);
+        throw new InvalidOperationException(
+            $"Circuit breaker abierto para modelKey '{preferredModelKey}' y no hay fallback disponible para tipología '{tipologia}'.");
+    }
+
+    private string? GetAlternativeModelKey(TipologiaExtractionConfig extractionConfig, string currentModelKey)
+    {
+        if (string.IsNullOrWhiteSpace(extractionConfig.SecondaryModelKey))
+        {
+            return null;
+        }
+
+        return string.Equals(currentModelKey, extractionConfig.ModelKey, StringComparison.OrdinalIgnoreCase)
+            ? extractionConfig.SecondaryModelKey
+            : extractionConfig.ModelKey;
+    }
+
+    private bool IsCircuitOpen(string modelKey, string tipologia)
+    {
+        if (!_options.EnableCircuitBreaker)
+        {
+            return false;
+        }
+
+        var circuit = _circuits.GetOrAdd(modelKey, _ => new CircuitState());
+        lock (circuit.SyncRoot)
+        {
+            if (!circuit.OpenUntilUtc.HasValue)
+            {
+                return false;
+            }
+
+            if (DateTimeOffset.UtcNow >= circuit.OpenUntilUtc.Value)
+            {
+                circuit.OpenUntilUtc = null;
+                circuit.ConsecutiveFailures = 0;
+                TrackCircuitClosed(tipologia, modelKey, "cooldown-elapsed");
+                return false;
+            }
+
+            return true;
+        }
+    }
+
+    private void RegisterCircuitFailure(string modelKey, string tipologia, string reason)
+    {
+        if (!_options.EnableCircuitBreaker)
+        {
+            return;
+        }
+
+        var threshold = Math.Max(1, _options.CircuitBreakerFailureThreshold);
+        var openSeconds = Math.Max(1, _options.CircuitBreakerOpenSeconds);
+        var circuit = _circuits.GetOrAdd(modelKey, _ => new CircuitState());
+        lock (circuit.SyncRoot)
+        {
+            circuit.ConsecutiveFailures++;
+
+            if (circuit.ConsecutiveFailures < threshold)
+            {
+                return;
+            }
+
+            var openUntil = DateTimeOffset.UtcNow.AddSeconds(openSeconds);
+            circuit.OpenUntilUtc = openUntil;
+            circuit.ConsecutiveFailures = 0;
+            TrackCircuitOpen(tipologia, modelKey, reason, openUntil, threshold);
+        }
+    }
+
+    private void RegisterCircuitSuccess(string modelKey, string tipologia)
+    {
+        if (!_options.EnableCircuitBreaker)
+        {
+            return;
+        }
+
+        var circuit = _circuits.GetOrAdd(modelKey, _ => new CircuitState());
+        lock (circuit.SyncRoot)
+        {
+            if (circuit.ConsecutiveFailures == 0 && !circuit.OpenUntilUtc.HasValue)
+            {
+                return;
+            }
+
+            circuit.ConsecutiveFailures = 0;
+            if (circuit.OpenUntilUtc.HasValue)
+            {
+                circuit.OpenUntilUtc = null;
+                TrackCircuitClosed(tipologia, modelKey, "success");
+            }
+        }
     }
 
     private ContentUnderstandingClient CreateClient(ExtractionModelConfig model)
@@ -292,6 +463,58 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                 ? requestFailedException.Status.ToString()
                 : "unknown",
             ["tipologia"] = tipologia
+        });
+    }
+
+    private void TrackHardTimeout(string tipologia, string modelKey, int attempt, int hardTimeoutSeconds)
+    {
+        _telemetryClient.TrackEvent("CU.HardTimeout", new Dictionary<string, string>
+        {
+            ["tipologia"] = tipologia,
+            ["modelKey"] = modelKey,
+            ["attempt"] = attempt.ToString(),
+            ["hardTimeoutSeconds"] = hardTimeoutSeconds.ToString()
+        });
+    }
+
+    private void TrackCircuitOpen(string tipologia, string modelKey, string reason, DateTimeOffset openUntilUtc, int threshold)
+    {
+        _telemetryClient.TrackEvent("CU.CircuitOpen", new Dictionary<string, string>
+        {
+            ["tipologia"] = tipologia,
+            ["modelKey"] = modelKey,
+            ["reason"] = reason,
+            ["openUntilUtc"] = openUntilUtc.UtcDateTime.ToString("O"),
+            ["failureThreshold"] = threshold.ToString()
+        });
+    }
+
+    private void TrackCircuitClosed(string tipologia, string modelKey, string reason)
+    {
+        _telemetryClient.TrackEvent("CU.CircuitClosed", new Dictionary<string, string>
+        {
+            ["tipologia"] = tipologia,
+            ["modelKey"] = modelKey,
+            ["reason"] = reason
+        });
+    }
+
+    private void TrackCircuitFailover(string tipologia, string primaryModelKey, string fallbackModelKey)
+    {
+        _telemetryClient.TrackEvent("CU.CircuitFailover", new Dictionary<string, string>
+        {
+            ["tipologia"] = tipologia,
+            ["primaryModelKey"] = primaryModelKey,
+            ["fallbackModelKey"] = fallbackModelKey
+        });
+    }
+
+    private void TrackCircuitRejected(string tipologia, string modelKey)
+    {
+        _telemetryClient.TrackEvent("CU.CircuitRejected", new Dictionary<string, string>
+        {
+            ["tipologia"] = tipologia,
+            ["modelKey"] = modelKey
         });
     }
 
@@ -499,5 +722,12 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         }
 
         return confByField.Count > 0 ? confByField : null;
+    }
+
+    private sealed class CircuitState
+    {
+        public object SyncRoot { get; } = new();
+        public int ConsecutiveFailures { get; set; }
+        public DateTimeOffset? OpenUntilUtc { get; set; }
     }
 }

@@ -369,5 +369,62 @@ namespace DocumentIA.Tests.Unit.Validation
             validator.Validate("Dir", "Calle Test 999, 28001").IsValid.Should().BeTrue(); // 3 dígitos
             validator.Validate("Dir", "Calle Test 9999, 28001").IsValid.Should().BeTrue(); // 4 dígitos
         }
+
+        [Fact]
+        public void Validate_AddressWithQuotedOrColonContent_ReturnsValid()
+        {
+            // Arrange
+            var validator = new AddressValidator(requirePostalCode: false);
+            var address = "Parcela de la finca \"El Palomar\", Planta: -2, Puerta: 164, CÁCERES (CACERES)";
+
+            // Act
+            var result = validator.Validate("Direccion", address);
+
+            // Assert
+            result.IsValid.Should().BeTrue();
+        }
+
+        [Fact]
+        public void Validate_AddressWithStreetNumberInWords_ReturnsValid()
+        {
+            // Arrange
+            var validator = new AddressValidator(requirePostalCode: false);
+            var address = "calle de las Margaritas número uno, Arenys de Mar, Barcelona";
+
+            // Act
+            var result = validator.Validate("Direccion", address);
+
+            // Assert
+            result.IsValid.Should().BeTrue();
+        }
+
+        [Fact]
+        public void Validate_AddressWithoutPostalCode_WhenOptional_ReturnsValid()
+        {
+            // Arrange
+            var validator = new AddressValidator(requirePostalCode: false);
+            var address = "Avenida del Mar, número 6, Benicarló";
+
+            // Act
+            var result = validator.Validate("Direccion", address);
+
+            // Assert
+            result.IsValid.Should().BeTrue();
+        }
+
+        [Fact]
+        public void Validate_AddressWithoutPostalCode_WhenRequired_ReturnsInvalid()
+        {
+            // Arrange
+            var validator = new AddressValidator(requirePostalCode: true);
+            var address = "Avenida del Mar, número 6, Benicarló";
+
+            // Act
+            var result = validator.Validate("Direccion", address);
+
+            // Assert
+            result.IsValid.Should().BeFalse();
+            result.Message.Should().Contain("código postal");
+        }
     }
 }

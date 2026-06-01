@@ -407,6 +407,35 @@ namespace DocumentIA.Tests.Unit.Validation
             validator.Validate("UsoPropiedad", "AGRARIO").IsValid.Should().BeFalse();
         }
 
+        [Fact]
+        public void Validate_AcentosYMayusculas_CaseInsensitive_ReturnsValid()
+        {
+            // Arrange
+            var validator = new EnumValidator(
+                new List<string> { "Adjudicacion", "Cesion", "Division Horizontal" },
+                caseSensitive: false);
+
+            // Act & Assert
+            validator.Validate("TituloAdquisicion", "Adjudicación").IsValid.Should().BeTrue();
+            validator.Validate("TituloAdquisicion", "CESIÓN").IsValid.Should().BeTrue();
+            validator.Validate("TituloAdquisicion", "división horizontal").IsValid.Should().BeTrue();
+        }
+
+        [Fact]
+        public void Validate_AcentosYMayusculas_CaseSensitive_ReturnsInvalid()
+        {
+            // Arrange
+            var validator = new EnumValidator(
+                new List<string> { "Adjudicacion" },
+                caseSensitive: true);
+
+            // Act
+            var result = validator.Validate("TituloAdquisicion", "Adjudicación");
+
+            // Assert
+            result.IsValid.Should().BeFalse();
+        }
+
         #endregion
 
         #region Listas Numéricas como Strings

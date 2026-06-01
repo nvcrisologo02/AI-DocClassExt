@@ -8,6 +8,12 @@ Recurso AI Services: `upe48-mm2avmdm-swedencentral` (swedencentral, SKU S0)
 Modelo de despliegue OpenAI: **GlobalStandard en TPM** (pago por token, sin PTUs)  
 Cuotas observadas (captura 2026-06-01): `gpt-4.1` 150K TPM · `gpt-4.1-mini` 250K TPM · `gpt-4o` 250K TPM · `gpt-4o-mini` 150K Standard · `text-embedding-3-large` 150K TPM
 
+Estado operativo vigente (post-implementación):
+
+- `host.json`: `maxConcurrentActivityFunctions=4`, `maxConcurrentOrchestratorFunctions=4`.
+- `Extraction:AzureContentUnderstanding`: `MaxConcurrentCalls=4`, `HardTimeoutSeconds=90`, `EnableCircuitBreaker=true`, `CircuitBreakerFailureThreshold=5`, `CircuitBreakerOpenSeconds=45`, `MaxRetries=3`, `InitialRetryDelayMs=500`.
+- Selección de modelo CU con `modelKey` y `secondaryModelKey` (round-robin + failover por circuit breaker).
+
 ---
 
 ## 1. Resumen ejecutivo
@@ -857,34 +863,25 @@ Configuración:
 
 | Fase | Cambios | Efecto sobre el incidente del 29/05 |
 |---|---|---|
-| **Fase 0** | `maxConcurrentActivityFunctions=4`, `MaxConcurrentCalls=3`, alertas | p95 estimado: 129s → ~60s |
+| **Fase 0** | `maxConcurrentActivityFunctions=4`, `MaxConcurrentCalls=4`, alertas | p95 estimado: 129s → ~60s |
 | **+ Fase 1** | Timeout 90s, queue limit, jitter, Premium Plan | p99: 478s → 90s. Max: 1.521s → 90s. Thundering herd eliminado |
 | **+ Fase 2** | Circuit breaker, adaptive rate, endpoint secundario, priorización batch | Saturación de CU → failover automático. Ciclo vicioso interrumpido en origen |
 | **+ Fase 3** | Back-pressure batch, scheduling, APIM | Prevención estructural para escenario de carga masiva |
 
 ---
 
-## 7. Configuración objetivo post-implementación
+## 7. Configuración efectiva post-implementación
 
 ```json
 // appsettings.json — AzureContentUnderstanding section
 {
   "MaxConcurrentCalls": 4,
-  "MaxBatchConcurrentCalls": 1,
-  "MaxQueueDepth": 8,
   "HardTimeoutSeconds": 90,
+  "EnableCircuitBreaker": true,
+  "CircuitBreakerFailureThreshold": 5,
+  "CircuitBreakerOpenSeconds": 45,
   "MaxRetries": 3,
-  "InitialRetryDelayMs": 500,
-  "SlowThresholdMs": 45000,
-  "RecoveryThresholdMs": 28000,
-  "MaxStartupJitterMs": 15000,
-  "CircuitBreaker": {
-    "FailureRatioThreshold": 0.5,
-    "MinimumThroughput": 5,
-    "SamplingDurationSeconds": 30,
-    "BreakDurationSeconds": 45,
-    "HalfOpenAttempts": 2
-  }
+  "InitialRetryDelayMs": 500
 }
 
 // host.json — durableTask section
@@ -911,3 +908,217 @@ artifacts/reports/cu-performance-live-20260529-12h/
 ```
 
 Script utilizado para la extracción: `scripts/reports/export-cu-performance-insights.ps1` (modificado el 01/06/2026 para soportar `-StartTime`/`-EndTime` en formato ISO 8601).
+
+---
+
+## 21. Actualizacion 2026-06-01: replica multi-region y balanceo CU
+
+### 21.1 Cambios ejecutados
+
+Durante la sesion del 01/06/2026 se completo la estrategia de resiliencia basada en **replica de analyzer en segunda region** y **balanceo de carga por model key**:
+
+1. Se replico el analyzer `CU_NS_1.5_0` desde `swedencentral` a `westeurope`.
+2. Se dio de alta en BD el modelo secundario `nota.simple.1_5.azure-cu-we` (activo) apuntando al endpoint de West Europe.
+3. Se amplio la config de tipologia con `extraction.secondaryModelKey`.
+4. Se implemento round-robin en `AzureContentUnderstandingProvider`:
+   - slot 0: `extraction.modelKey` (principal)
+   - slot 1: `extraction.secondaryModelKey` (secundario)
+5. Se anadio trazabilidad en telemetria App Insights con dimension `ModelKey` en `CU.AnalysisMs`.
+6. Se creo tipologia de prueba `nota.simple_bal` para validar reparto sin tocar `nota.simple` productiva.
+
+### 21.2 Verificacion de resultado
+
+En la ejecucion de validacion finalizada el 01/06/2026:
+
+- Total llamadas `CU.AnalysisMs` para `nota.simple_bal`: **50**
+- Reparto por `ModelKey`:
+  - `nota.simple.1_5.azure-cu` (Sweden): **25**
+  - `nota.simple.1_5.azure-cu-we` (West Europe): **25**
+- Resultado: **50/50 exacto**
+- Estado de ejecuciones persistidas en `DocumentoEjecuciones`: **50 OK / 0 NoOK**
+
+Nota importante: la secuencia temporal no siempre alterna visualmente 1-1 porque las llamadas finalizan en paralelo y con latencias distintas. El criterio canonico de validacion es el conteo por `ModelKey` en App Insights.
+
+### 21.3 Decision tecnica
+
+Queda **adoptada** la estrategia multi-region por model key para CU en tipologias criticas, al ser la unica que separa pools de capacidad entre regiones Azure.
+
+Queda **descartada** como estrategia principal la multiplicacion de analyzers en el mismo recurso para resiliencia, ya que no separa cuota/capacidad del recurso.
+
+---
+
+## 22. Manual operativo: replicar analyzers CU entre recursos/regiones
+
+Este procedimiento crea una copia funcional del analyzer en otro recurso AI Services sin reentrenamiento.
+
+### 22.1 Prerrequisitos
+
+- `az login` con permisos sobre ambos recursos.
+- API version CU valida (ejemplo: `2025-11-01`).
+- Endpoint origen y destino accesibles.
+- Mismo `AnalyzerId` permitido en destino (o uno alternativo si ya existe).
+
+### 22.2 Paso 1 - Exportar analyzer del recurso origen
+
+```powershell
+$token = (az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv)
+$sourceEndpoint = "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com"
+$analyzerId = "CU_NS_1.5_0"
+$apiVersion = "2025-11-01"
+
+$source = Invoke-RestMethod \
+  -Uri "$sourceEndpoint/contentunderstanding/analyzers/${analyzerId}?api-version=$apiVersion" \
+  -Headers @{ Authorization = "Bearer $token" } \
+  -Method GET
+
+$source | ConvertTo-Json -Depth 30 | Set-Content ".\\analyzer-export.json"
+```
+
+### 22.3 Paso 2 - Limpiar campos read-only del export
+
+```powershell
+$schema = Get-Content ".\\analyzer-export.json" -Raw | ConvertFrom-Json
+$null = $schema.PSObject.Properties.Remove("analyzerId")
+$null = $schema.PSObject.Properties.Remove("createdAt")
+$null = $schema.PSObject.Properties.Remove("lastModifiedAt")
+$null = $schema.PSObject.Properties.Remove("status")
+
+$body = $schema | ConvertTo-Json -Depth 30
+```
+
+### 22.4 Paso 3 - Crear analyzer en recurso destino
+
+```powershell
+$token2 = (az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv)
+$targetEndpoint = "https://srbaisrv-westeurope.services.ai.azure.com"
+$targetAnalyzerId = "CU_NS_1.5_0"
+
+Invoke-RestMethod \
+  -Uri "$targetEndpoint/contentunderstanding/analyzers/${targetAnalyzerId}?api-version=$apiVersion" \
+  -Headers @{ Authorization = "Bearer $token2"; "Content-Type" = "application/json" } \
+  -Method PUT \
+  -Body $body
+```
+
+### 22.5 Paso 4 - Validar estado `ready`
+
+```powershell
+do {
+  Start-Sleep -Seconds 2
+  $st = Invoke-RestMethod \
+    -Uri "$targetEndpoint/contentunderstanding/analyzers/${targetAnalyzerId}?api-version=$apiVersion" \
+    -Headers @{ Authorization = "Bearer $token2" } \
+    -Method GET
+  Write-Host "Estado: $($st.status)"
+} while ($st.status -eq "creating")
+
+if ($st.status -ne "ready") {
+  throw "Analyzer no quedo ready. Estado final: $($st.status)"
+}
+```
+
+### 22.6 Paso 5 - Registrar modelo en BD para el nuevo endpoint
+
+Registrar una nueva fila activa en `ModeloConfigs` (tipo extraccion) con:
+
+- `Key` nuevo (ejemplo `nota.simple.1_5.azure-cu-we`)
+- `Endpoint` del recurso destino
+- `AnalyzerId` replicado
+- mismo `Provider`
+- `Activo = 1`
+
+### 22.7 Paso 6 - Activar balanceo en tipologia
+
+Actualizar configuracion de tipologia:
+
+- `extraction.modelKey = <modelo principal>`
+- `extraction.secondaryModelKey = <modelo secundario>`
+
+Con esto, el provider aplica round-robin automatico 50/50 (si ambos modelos estan activos y resolubles).
+
+### 22.8 Checklist de validacion post-cambio
+
+1. `GET analyzer` en destino devuelve `status=ready`.
+2. `ModeloConfigs` contiene ambas keys activas (principal y secundaria).
+3. Tipologia objetivo publica incluye `secondaryModelKey`.
+4. App Insights (`CU.AnalysisMs`) muestra llamadas en ambos `ModelKey`.
+5. Reparto esperado en prueba controlada: cada model key entre 40%-60%.
+6. Ejecuciones en `DocumentoEjecuciones` finalizan sin aumento anomalo de errores.
+
+---
+
+## 23. Trazabilidad ADO (creado 2026-06-01)
+
+Se crea un paquete de trabajo en Azure DevOps para ejecutar la fase de resiliencia post-validacion multi-region:
+
+- Feature (padre): **99702** - `[CU-RESILIENCIA] Fase 2 post-validación de balanceo multi-región`
+- PBI hijo: **99704** - Persistir trazabilidad de extraccion (`ModelKey` + `Endpoint/Region` efectiva)
+- PBI hijo: **99706** - Hard timeout de CU + telemetria `CU.HardTimeout`
+- PBI hijo: **99703** - Ajuste de concurrencia durable + CU y calibracion operativa
+- PBI hijo: **99705** - Circuit breaker por `ModelKey`/region con failover
+
+Estado ADO actualizado (2026-06-01, tras validacion tecnica):
+
+- **99702**: `In Progress`
+- **99704**: `Committed`
+- **99706**: `Committed`
+- **99703**: `Committed`
+- **99705**: `Committed`
+
+Evidencia registrada en los WI:
+
+- Build `DocumentIA.Functions`: OK
+- `dotnet test` (`DocumentIA.Tests.Unit`): 652 tests, 0 fallos
+
+Actualizacion adicional de calidad (2026-06-01):
+
+- Corregidos tests de `TipologiasAdminFunction` para nueva firma con `IMemoryCache`.
+- Añadidos tests `AzureContentUnderstandingOptionsTests` para defaults y overrides de resiliencia CU.
+- Añadidos tests `AzureContentUnderstandingProviderCircuitBreakerTests`:
+  - failover a secondary con circuito primary abierto
+  - circuito deshabilitado mantiene model key preferido
+  - cierre de circuito tras cooldown
+
+Validacion funcional en entorno (App Insights, ultimas 24h):
+
+- Eventos `CU.CircuitOpen`, `CU.CircuitClosed`, `CU.CircuitFailover`, `CU.CircuitRejected`, `CU.HardTimeout`: **0**
+- `CU.AnalysisMs` para `nota.simple_bal` mantiene reparto por `ModelKey`:
+  - `nota.simple.1_5.azure-cu`: 25 llamadas
+  - `nota.simple.1_5.azure-cu-we`: 25 llamadas
+
+Interpretacion: el circuit breaker esta desplegado y cubierto por tests, pero no se ha activado en produccion en la ventana analizada (comportamiento esperado en ausencia de degradacion).
+
+### 23.1 Estado de implementacion en esta sesion
+
+Implementado:
+
+1. **Trazabilidad funcional de extraccion (99704)**
+  - Se anaden en salida de extraccion los campos efectivos:
+    - `ModelKeyEfectivo`
+    - `EndpointEfectivo`
+    - `ProcessingLocationEfectiva`
+  - Se propagan a `DetalleEjecucion.Extraccion`.
+
+2. **Hard timeout CU (99706)**
+  - Nuevo setting: `HardTimeoutSeconds` en `AzureContentUnderstandingOptions`.
+  - Timeout duro por intento en llamada `AnalyzeBinaryAsync` usando `RequestContext.CancellationToken`.
+  - Evento de telemetria: `CU.HardTimeout` con tipologia, modelKey, intento y timeout.
+
+3. **Ajuste base de concurrencia (99703)**
+  - `host.json`: `maxConcurrentActivityFunctions=4`, `maxConcurrentOrchestratorFunctions=4`.
+  - `appsettings.json`: `Extraction:AzureContentUnderstanding:MaxConcurrentCalls=4`.
+  - `appsettings.json` y `local.settings.json`: `HardTimeoutSeconds=90`.
+
+4. **Circuit breaker por model key/region (99705)**
+  - Implementado en `AzureContentUnderstandingProvider` con estado por `ModelKey`.
+  - Telemetria de ciclo de vida:
+    - `CU.CircuitOpen`
+    - `CU.CircuitClosed`
+    - `CU.CircuitFailover`
+    - `CU.CircuitRejected`
+  - Failover automatico entre `modelKey` principal/secundario cuando el circuito del seleccionado esta abierto.
+
+Pendiente en siguiente iteracion:
+
+- Validacion funcional en entorno y ajuste fino de umbrales de circuit breaker.
+

@@ -356,6 +356,9 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | `detalleEjecucion.extraccion.proveedorExtrac` | `"AzureContentUnderstanding"` \| `"DICustom"` \| `"GPT4oMini"` |
 | `detalleEjecucion.extraccion.confianzaExtraccion` | Confianza de extracción. |
 | `detalleEjecucion.extraccion.fallbackUsado` | `true` si se usó GPT fallback en extracción. |
+| `detalleEjecucion.extraccion.modelKeyEfectivo` | Model key realmente utilizado en ejecución (incluye selección round-robin/failover si aplica). |
+| `detalleEjecucion.extraccion.endpointEfectivo` | Endpoint efectivo del modelo usado en extracción. |
+| `detalleEjecucion.extraccion.processingLocationEfectiva` | Processing location efectiva del modelo de extracción. |
 | `detalleEjecucion.postproceso.normalizaciones` | Lista de transformaciones aplicadas. |
 | `detalleEjecucion.postproceso.validaciones` | Lista de reglas de validación ejecutadas. |
 | `detalleEjecucion.postproceso.inconsistencias` | Lista de inconsistencias detectadas. |

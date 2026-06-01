@@ -1448,6 +1448,9 @@ Reglas de validación del trigger:
         "modelo": "nota-simple-cu-v1",
         "confianzaExtraccion": 0.91,
         "proveedorExtrac": "AzureContentUnderstanding",
+        "modelKeyEfectivo": "nota.simple.1_4.azure-cu.sweden",
+        "endpointEfectivo": "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/",
+        "processingLocationEfectiva": "swedencentral",
         "layoutEnabled": false,
         "fallbackUsado": false,
         "confianzaPorCampo": {

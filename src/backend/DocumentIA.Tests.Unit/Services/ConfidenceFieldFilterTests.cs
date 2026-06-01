@@ -26,7 +26,7 @@ public class ConfidenceFieldFilterTests
     }
 
     [Fact]
-    public void FilterFieldConfidences_ExcludesAvoidConfidenceFields_AndKeepsOriginalMapComplete()
+    public void FilterFieldConfidences_ExcludesAvoidConfidenceFields_FromAggregateList()
     {
         var confidenceMap = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
         {
@@ -39,8 +39,25 @@ public class ConfidenceFieldFilterTests
         var result = ConfidenceFieldFilter.FilterFieldConfidences(confidenceMap, excluded);
 
         result.Should().Equal(0.95, 0.85);
+    }
+
+    [Fact]
+    public void FilterConfidenceMap_ExcludesAvoidConfidenceFields_FromPersistedMap()
+    {
+        var confidenceMap = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Titular"] = 0.95,
+            ["Motivacion"] = 0.10,
+            ["Importe"] = 0.85
+        };
+        var excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "motivacion" };
+
+        var result = ConfidenceFieldFilter.FilterConfidenceMap(confidenceMap, excluded);
+
+        result.Should().ContainKey("Titular");
+        result.Should().ContainKey("Importe");
+        result.Should().NotContainKey("Motivacion");
         confidenceMap.Should().ContainKey("Motivacion");
-        confidenceMap["Motivacion"].Should().Be(0.10);
     }
 
     [Fact]

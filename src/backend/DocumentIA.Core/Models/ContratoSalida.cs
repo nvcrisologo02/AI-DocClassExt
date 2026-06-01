@@ -412,6 +412,18 @@ public class ResultadoExtraccion
     /// Modelo usado en extracción.
     /// </summary>
     public string Modelo { get; set; } = string.Empty;
+    /// <summary>
+    /// Model key efectivo resuelto para la llamada de extracción.
+    /// </summary>
+    public string? ModelKeyEfectivo { get; set; }
+    /// <summary>
+    /// Endpoint efectivo usado por el proveedor de extracción.
+    /// </summary>
+    public string? EndpointEfectivo { get; set; }
+    /// <summary>
+    /// Processing location efectiva de la llamada de extracción.
+    /// </summary>
+    public string? ProcessingLocationEfectiva { get; set; }
     /// <summary>Confianza calculada para la extracción (0-1). 0 cuando la extracción está deshabilitada.</summary>
     public double ConfianzaExtraccion { get; set; }
     /// <summary>Proveedor que realizó la extracción: "AzureContentUnderstanding" | "DICustom" | "GPT4oMini".</summary>

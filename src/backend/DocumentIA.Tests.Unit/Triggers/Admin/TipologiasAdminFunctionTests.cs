@@ -10,6 +10,7 @@ using DocumentIA.Functions.Triggers.Admin;
 using FluentAssertions;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -84,7 +85,8 @@ public class TipologiasAdminFunctionTests : IDisposable
             _dbContext,
             _repoMock.Object,
             _auditRepoMock.Object,
-            new Mock<ILogger<TipologiasAdminFunction>>().Object);
+            new Mock<ILogger<TipologiasAdminFunction>>().Object,
+            new MemoryCache(new MemoryCacheOptions()));
 
         var mockCtx = new Mock<FunctionContext>();
         var services = new ServiceCollection();

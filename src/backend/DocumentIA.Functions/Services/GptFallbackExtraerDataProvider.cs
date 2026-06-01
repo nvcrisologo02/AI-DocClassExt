@@ -515,7 +515,9 @@ public class GptFallbackExtraerDataProvider
             warnings: 0,
             cfg: tipologiaConfig.ConfidenceConfig);
 
-        metricas.ConfianzaPorCampo = confianzaPorCampo ?? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        metricas.ConfianzaPorCampo = ConfidenceFieldFilter.FilterConfidenceMap(
+            confianzaPorCampo,
+            avoidConfidenceFields);
 
         var umbralDuda = input.UmbralFallbackEfectivo
             ?? tipologiaConfig.ConfidenceConfig?.ExtracUmbralFallback

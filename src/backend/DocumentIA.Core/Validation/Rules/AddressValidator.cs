@@ -34,29 +34,38 @@ namespace DocumentIA.Core.Validation.Rules
         private readonly int _minLength;
         private readonly int _maxLength;
         private readonly bool _requireStreetNumber;
+        private readonly bool _requirePostalCode;
         private readonly bool _requireMunicipality;
         private readonly bool _requireProvince;
 
         private static readonly Regex StreetNumberPattern =
             new(@"\b\d{1,4}([A-Z]|-[A-Z])?\b", RegexOptions.Compiled);
 
+        private static readonly Regex StreetNumberByWordPattern =
+            new(@"\b(N[ÚU]MERO|N[º°O]\.?|NUM\.)\s+[A-Z0-9ÁÉÍÓÚÜÑ]+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+        private static readonly Regex StreetNumberSnPattern =
+            new(@"\bS\/?N\b", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
         private static readonly Regex PostalCodePattern =
             new(@"\b\d{5}\b", RegexOptions.Compiled);
 
         // Letras con tildes/ñ, números y separadores comunes
         private static readonly string ADDRESS_CHAR_PATTERN =
-            @"^[A-Z0-9ÁÉÍÓÚÜÑàáéíóúüñºª\-/.,() ]+$";
+            @"^[A-Z0-9ÁÉÍÓÚÜÑàáéíóúüñºª°\-/.,():;\""'# ]+$";
 
         public AddressValidator(
             int minLength = 5,
             int maxLength = 160,
             bool requireStreetNumber = true,
+            bool requirePostalCode = true,
             bool requireMunicipality = false,
             bool requireProvince = false)
         {
             _minLength = minLength;
             _maxLength = maxLength;
             _requireStreetNumber = requireStreetNumber;
+            _requirePostalCode = requirePostalCode;
             _requireMunicipality = requireMunicipality;
             _requireProvince = requireProvince;
         }
@@ -91,13 +100,17 @@ namespace DocumentIA.Core.Validation.Rules
                     $"Usar solo letras, números, espacios, puntos, comas y guiones.");
 
             // Número de portal
-            if (_requireStreetNumber && !StreetNumberPattern.IsMatch(address))
+            var hasStreetNumber = StreetNumberPattern.IsMatch(address)
+                || StreetNumberByWordPattern.IsMatch(address)
+                || StreetNumberSnPattern.IsMatch(address);
+
+            if (_requireStreetNumber && !hasStreetNumber)
                 return Fail(fieldName, address,
                     $"La dirección no contiene número de portal.",
-                    $"Ejemplo: 'Calle Mayor 15' o 'Paseo del Prado 32-B'.");
+                    $"Ejemplo: 'Calle Mayor 15', 'número 15' o 'S/N'.");
 
             // Código postal (5 dígitos)
-            if (!PostalCodePattern.IsMatch(address))
+            if (_requirePostalCode && !PostalCodePattern.IsMatch(address))
                 return Fail(fieldName, address,
                     $"No se ha encontrado un código postal válido.",
                     $"El código postal debe tener 5 dígitos (ej.: 28013).");

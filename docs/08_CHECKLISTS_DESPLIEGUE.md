@@ -92,7 +92,7 @@ Secretos requeridos en KV:
 | 6.1 | Aplicar todos los App Settings (infraestructura + AI + GDC) | `.\scripts\set-app-settings.ps1` | ☐ |
 | 6.2 | Aplicar referencias Key Vault en settings de secretos | `.\scripts\set-functionapp-keyvault-references.ps1 -SubscriptionId <ID>` | ☐ |
 | 6.3 | Verificar que la Function App tiene `RunDatabaseMigrationsOnStartup=true` (primer arranque) | `az functionapp config appsettings list --name srbappprodocai --resource-group SRBRGDOCSAIPROD` | ☐ |
-| 6.4 | Verificar `host.json`: `hubName=DocumentIAHub`, storage provider correcto | `src/backend/DocumentIA.Functions/host.json` | ☐ |
+| 6.4 | Verificar `host.json`: `hubName=DocumentIAHub`, `maxConcurrentActivityFunctions=4`, `maxConcurrentOrchestratorFunctions=4` | `src/backend/DocumentIA.Functions/host.json` | ☐ |
 
 Settings clave a confirmar (ver detalle completo en `docs/04_MANUAL_EXPLOTACION.md` § 4.4):
 
@@ -102,7 +102,11 @@ Settings clave a confirmar (ver detalle completo en `docs/04_MANUAL_EXPLOTACION.
 | `Extraction__DefaultProvider` | `azure-content-understanding` |
 | `Classification__DefaultProvider` | `azure-document-intelligence` |
 | `Extraction__AzureContentUnderstanding__Endpoint` | `https://upe48-mm2avmdm.cognitiveservices.azure.com/` |
-| `Extraction__AzureContentUnderstanding__MaxConcurrentCalls` | `3` (llamadas CU simultáneas; ajustar según carga) |
+| `Extraction__AzureContentUnderstanding__MaxConcurrentCalls` | `4` (baseline operativo actual; ajustar según carga) |
+| `Extraction__AzureContentUnderstanding__HardTimeoutSeconds` | `90` (timeout duro por intento CU) |
+| `Extraction__AzureContentUnderstanding__EnableCircuitBreaker` | `true` |
+| `Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold` | `5` |
+| `Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds` | `45` |
 | `Extraction__AzureContentUnderstanding__MaxRetries` | `3` (reintentos con backoff exponencial) |
 | `Extraction__AzureContentUnderstanding__InitialRetryDelayMs` | `500` (ms base para backoff; delay real = base × 2^(intento-1)) |
 | `Classification__AzureDocumentIntelligence__Endpoint` | `https://srbdiprodocai.cognitiveservices.azure.com/` |

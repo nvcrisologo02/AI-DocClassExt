@@ -133,6 +133,7 @@ namespace DocumentIA.Core.Configuration
                     minLength: GetParameter<int>(ruleConfig.Parameters, "minLength", 5),
                     maxLength: GetParameter<int>(ruleConfig.Parameters, "maxLength", 260),
                     requireStreetNumber: GetParameter<bool>(ruleConfig.Parameters, "requireStreetNumber", true),
+                    requirePostalCode: GetParameter<bool>(ruleConfig.Parameters, "requirePostalCode", true),
                     requireMunicipality: GetParameter<bool>(ruleConfig.Parameters, "requireMunicipality", false),
                     requireProvince: GetParameter<bool>(ruleConfig.Parameters, "requireProvince", false)
                 ),

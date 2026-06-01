@@ -1659,6 +1659,9 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
             {
                 Modelo = resultadoExtraccion.Modelo,
+                ModelKeyEfectivo = resultadoExtraccion.ModelKeyEfectivo,
+                EndpointEfectivo = resultadoExtraccion.EndpointEfectivo,
+                ProcessingLocationEfectiva = resultadoExtraccion.ProcessingLocationEfectiva,
                 LayoutEnabled = resultadoExtraccion.LayoutEnabled,
                 FallbackUsado = resultadoExtraccion.FallbackUsado,
                 FallbackRazon = resultadoExtraccion.FallbackRazon,

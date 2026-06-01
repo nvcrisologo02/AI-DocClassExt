@@ -6,6 +6,10 @@
 **ADO Work Items:** Feature [#99671](https://sareb.visualstudio.com/baf56a97-5b96-43d7-952c-86d74d2a4af1/_workitems/edit/99671) → PBI [#99672](https://sareb.visualstudio.com/baf56a97-5b96-43d7-952c-86d74d2a4af1/_workitems/edit/99672), [#99673](https://sareb.visualstudio.com/baf56a97-5b96-43d7-952c-86d74d2a4af1/_workitems/edit/99673), [#99674](https://sareb.visualstudio.com/baf56a97-5b96-43d7-952c-86d74d2a4af1/_workitems/edit/99674)  
 **Análisis base:** [18_ANALISIS_RENDIMIENTO_CONTENT_UNDERSTANDING_2026-05-28.md](./18_ANALISIS_RENDIMIENTO_CONTENT_UNDERSTANDING_2026-05-28.md)
 
+> Estado documental: este documento describe el plan original y se conserva como histórico. La referencia operativa vigente está en `docs/20_ANALISIS_CRISIS_CU_20260529_Y_PLAN_RESILIENCIA.md` y en manuales de operación/despliegue.
+
+> Valores vigentes tras implementación y endurecimiento posterior: `maxConcurrentActivityFunctions=4`, `maxConcurrentOrchestratorFunctions=4`, `Extraction:AzureContentUnderstanding:MaxConcurrentCalls=4`, `HardTimeoutSeconds=90`, `EnableCircuitBreaker=true`, `CircuitBreakerFailureThreshold=5`, `CircuitBreakerOpenSeconds=45`.
+
 ---
 
 ## 1. Problema raíz
@@ -52,7 +56,7 @@ La compilación de `DocumentIA.Functions` finalizó correctamente. La suite back
 
 Validación adicional de configuración:
 
-- `local.settings.json` contiene las claves locales `Extraction:AzureContentUnderstanding:MaxConcurrentCalls=2`, `Extraction:AzureContentUnderstanding:MaxRetries=3` y `Extraction:AzureContentUnderstanding:InitialRetryDelayMs=500`.
+- `local.settings.json` vigente contiene `Extraction:AzureContentUnderstanding:MaxConcurrentCalls=4`, `Extraction:AzureContentUnderstanding:HardTimeoutSeconds=90`, `Extraction:AzureContentUnderstanding:EnableCircuitBreaker=true`, `Extraction:AzureContentUnderstanding:CircuitBreakerFailureThreshold=5`, `Extraction:AzureContentUnderstanding:CircuitBreakerOpenSeconds=45`, `Extraction:AzureContentUnderstanding:MaxRetries=3` y `Extraction:AzureContentUnderstanding:InitialRetryDelayMs=500`.
 - `local.settings.template.json` contiene las claves equivalentes con doble guion bajo para entornos basados en variables.
 - `azure-pipelines.yml` aplica las tres App Settings en producción y las incluye en la lista de settings obligatorias tras el despliegue.
 - `azure-pipelines-functions.yml` incluye un paso `AzureCLI@2` posterior al ZIP deploy para aplicar las mismas tres App Settings si se usa ese pipeline alternativo.
@@ -60,6 +64,8 @@ Validación adicional de configuración:
 ---
 
 ## 4. Fases de implementación
+
+> Importante: las subsecciones y snippets de esta sección describen la propuesta original de 2026-05-28. Pueden contener valores de partida (`2`, `3` o `10`) que ya no representan la configuración vigente.
 
 ### Fase 1 — Limiter (SemaphoreSlim) · PBI #99672
 

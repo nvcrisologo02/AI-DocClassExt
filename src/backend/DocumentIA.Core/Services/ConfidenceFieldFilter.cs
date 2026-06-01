@@ -29,6 +29,20 @@ public static class ConfidenceFieldFilter
         return filtered.Count > 0 ? filtered : null;
     }
 
+    public static Dictionary<string, double> FilterConfidenceMap(
+        IReadOnlyDictionary<string, double>? confidenceMap,
+        ISet<string> avoidConfidenceFields)
+    {
+        if (confidenceMap is null)
+        {
+            return new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        }
+
+        return confidenceMap
+            .Where(kvp => !avoidConfidenceFields.Contains(kvp.Key))
+            .ToDictionary(kvp => kvp.Key, kvp => kvp.Value, StringComparer.OrdinalIgnoreCase);
+    }
+
     public static List<string> GetLowConfidenceFields(
         IReadOnlyDictionary<string, double> confidenceMap,
         double threshold,

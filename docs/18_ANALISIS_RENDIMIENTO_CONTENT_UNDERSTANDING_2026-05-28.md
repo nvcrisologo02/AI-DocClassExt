@@ -4,6 +4,8 @@ Fecha: 2026-05-28
 Ambito: extracciones de notas simples ejecutadas desde el frontend batch  
 Ventana principal analizada: desde 2026-05-27 14:45 UTC
 
+> Documento histórico de línea base (pre-endurecimiento). Para operación actual y medidas implementadas consultar también `docs/20_ANALISIS_CRISIS_CU_20260529_Y_PLAN_RESILIENCIA.md`.
+
 ## 1. Resumen ejecutivo
 
 Durante la prueba de extraccion de notas simples se lanzaron aproximadamente 150 ejecuciones desde el frontend batch, usando colas de 10 documentos. Conforme avanzaba el lote, los tiempos de ejecucion aumentaban de forma progresiva.
@@ -219,3 +221,15 @@ La evidencia disponible indica que el principal cuello de botella esta en Azure 
 No hay indicios de que SQL, AssetResolver o el frontend sean la causa principal de la degradacion. Tampoco se observa agotamiento de cuotas visibles de Azure AI Services. El limite relevante parece estar en capacidad interna, cola, throughput o concurrencia de Content Understanding, que no se expone en las consultas de cuotas disponibles.
 
 La accion mas practica desde el lado de la aplicacion es implementar control explicito de concurrencia y backoff adaptativo para Content Understanding, acompanado de pruebas controladas para encontrar el punto de equilibrio entre throughput y estabilidad. En paralelo, conviene abrir ticket a Microsoft con las evidencias anteriores para confirmar limites reales y opciones de capacidad del servicio.
+
+## 10. Estado actual implementado (actualización)
+
+Tras este análisis base, el sistema se endureció con cambios ya aplicados en backend y configuración:
+
+- Durable Functions: `maxConcurrentActivityFunctions = 4` y `maxConcurrentOrchestratorFunctions = 4`.
+- CU limiter: `Extraction:AzureContentUnderstanding:MaxConcurrentCalls = 4`.
+- Timeout duro por intento CU: `Extraction:AzureContentUnderstanding:HardTimeoutSeconds = 90`.
+- Circuit breaker por `ModelKey` habilitado: `EnableCircuitBreaker = true`, `CircuitBreakerFailureThreshold = 5`, `CircuitBreakerOpenSeconds = 45`.
+- Telemetría ampliada para resiliencia: `CU.HardTimeout`, `CU.CircuitOpen`, `CU.CircuitClosed`, `CU.CircuitFailover`, `CU.CircuitRejected`.
+
+Estos valores sustituyen las recomendaciones iniciales de este documento cuando se use como referencia operativa.
