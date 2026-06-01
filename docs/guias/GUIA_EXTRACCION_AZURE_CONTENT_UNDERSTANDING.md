@@ -5,7 +5,7 @@
 1. [Descripción general](#1-descripción-general)
 2. [Arquitectura del flujo](#2-arquitectura-del-flujo)
 3. [Componentes principales](#3-componentes-principales)
-4. [Archivos de configuración](#4-archivos-de-configuración)
+4. [Configuración y seed](#4-configuración-y-seed)
 5. [Añadir soporte para una nueva tipología](#5-añadir-soporte-para-una-nueva-tipología)
 6. [Configuración en local (desarrollo)](#6-configuración-en-local-desarrollo)
 7. [Configuración en Azure (producción)](#7-configuración-en-azure-producción)
@@ -22,8 +22,10 @@ El pipeline de procesamiento de documentos incluye un paso de **extracción de d
 La integración es **totalmente guiada por configuración**: no hay código específico por tipología. Añadir una nueva tipología con extracción Azure solo requiere:
 
 - Definir un analizador en Azure AI Foundry.
-- Registrar ese analizador en `models.json`.
-- Habilitar la extracción en el fichero de validación de la tipología.
+- Registrar ese analizador en la tabla `ModeloConfigs` mediante Admin API/DocumentIA.Admin.
+- Habilitar la extracción en `Tipologias.ConfiguracionJson` para la tipología publicada.
+
+Los ficheros `models.json` y `*.validation.json` del repositorio son seed o referencia historica; pueden estar desactualizados y no son la fuente de verdad operativa.
 
 ---
 
@@ -42,7 +44,7 @@ ConfigurableExtraerDataProvider   ◄── Lee la tipología de TipologiaValida
         │
         └── "azure-content-understanding" ──► AzureContentUnderstandingProvider
                                                     │
-                                                    ├─ ExtractionModelRegistryLoader  ◄── models.json
+                                                    ├─ ExtractionModelRegistryLoader  ◄── ModeloConfigs (BD)
                                                     │     (resuelve AnalyzerId, ContentType, etc.)
                                                     │
                                                     ├─ ContentUnderstandingClient     ◄── Azure AI Foundry
@@ -69,7 +71,7 @@ ConfigurableExtraerDataProvider   ◄── Lee la tipología de TipologiaValida
 ### `ConfigurableExtraerDataProvider`
 **Fichero:** `DocumentIA.Functions/Services/ConfigurableExtraerDataProvider.cs`
 
-Actúa como router. Lee el campo `Extraction.Provider` del fichero de validación de la tipología y delega en el proveedor correspondiente. Si el campo está vacío, usa el valor de `Extraction:DefaultProvider` de la configuración de la Function App.
+Actúa como router. Lee el campo `Extraction.Provider` de la configuración publicada de la tipología en BD y delega en el proveedor correspondiente. Si el campo está vacío, usa el valor de `Extraction:DefaultProvider` de la configuración de la Function App.
 
 Proveedores soportados:
 
@@ -106,16 +108,19 @@ Transforma la respuesta de Azure en el diccionario `DatosExtraidos`. Para cada c
 ### `ExtractionModelRegistryLoader`
 **Fichero:** `DocumentIA.Core/Configuration/ExtractionModelRegistryLoader.cs`
 
-Carga y cachea en memoria el fichero `config/extraction/models.json`. Proporciona el método `GetModel(string key)` que lanza `KeyNotFoundException` si la clave no existe.
+Carga y cachea en memoria los modelos publicados en la tabla `ModeloConfigs` (tipo `Extraccion`). Proporciona el método `GetModel(string key)` que lanza `KeyNotFoundException` si la clave no existe. El fichero `config/extraction/models.json` queda como seed/bootstrap o referencia historica.
 
 ---
 
-## 4. Archivos de configuración
+## 4. Configuración y seed
 
-### 4.1 `config/extraction/models.json`
-**Ruta:** `DocumentIA.Functions/config/extraction/models.json`
+### 4.1 Registro de modelos de extraccion
 
-Registro global de modelos de extracción. Cada entrada describe un analizador de Azure AI Content Understanding.
+Fuente de verdad runtime: tabla `ModeloConfigs` (`TipoModelo.Extraccion`), gestionada por DocumentIA.Admin o Admin API.
+
+Seed/referencia historica: `DocumentIA.Functions/config/extraction/models.json`.
+
+Cada entrada describe un analizador de Azure AI Content Understanding.
 
 ```json
 {
@@ -217,9 +222,9 @@ Supongamos que queremos añadir extracción Azure para una tipología `tasacion.
 
 En el portal de Azure AI Foundry, crear un analizador con el ID que quieras usar (p. ej. `tasacion-1-0`) y entrenarlo con los documentos representativos. Anotar el `analyzerId` resultante.
 
-### Paso 2: Registrar el modelo en `models.json`
+### Paso 2: Registrar el modelo en BD
 
-Añadir una entrada en `DocumentIA.Functions/config/extraction/models.json`:
+Crear o actualizar una entrada en `ModeloConfigs` mediante DocumentIA.Admin o Admin API. Puede usarse este JSON como plantilla o seed de un entorno nuevo:
 
 ```json
 {
@@ -232,9 +237,9 @@ Añadir una entrada en `DocumentIA.Functions/config/extraction/models.json`:
 }
 ```
 
-### Paso 3: Habilitar la extracción en el fichero de validación de la tipología
+### Paso 3: Habilitar la extracción en la configuración de la tipología
 
-En `config/tipologias/tasacion.1_0.validation.json`, añadir el bloque `extraction`:
+En `Tipologias.ConfiguracionJson`, añadir el bloque `extraction`. El fichero `config/tipologias/tasacion.1_0.validation.json` solo sirve como plantilla/seed:
 
 ```json
 {
@@ -400,8 +405,8 @@ Para forzar el mock en una tipología específica aunque el default sea Azure:
 **¿Qué pasa si el analizador de Azure no devuelve un campo que está declarado en la tipología?**
 El campo simplemente no aparece en `DatosExtraidos`. No se produce ningún error. La validación posterior puede marcar ese campo como faltante si tiene `required: true`.
 
-**¿Qué pasa si `models.json` no contiene la clave referenciada en la tipología?**
-`ExtractionModelRegistryLoader.GetModel()` lanza `KeyNotFoundException` y la activity falla con un error descriptivo.
+**¿Qué pasa si `ModeloConfigs` no contiene la clave referenciada en la tipología?**
+`ExtractionModelRegistryLoader.GetModel()` lanza `KeyNotFoundException` y la activity falla con un error descriptivo. El `models.json` físico solo serviría como seed de un entorno nuevo.
 
 ---
 
@@ -417,8 +422,8 @@ El campo simplemente no aparece en `DatosExtraidos`. No se produce ningún error
 
 Implicaciones:
 
-- Actualiza `DocumentIA.Functions/config/extraction/models.json` con el `analyzerId` y `processingLocation` correctos antes de ejecutar en entorno apuntando al recurso Azure.
-- Si se despliega en un entorno distinto (staging/prod), valida que `models.json` es el apropiado para ese entorno o parametriza los `analyzerId` según la estrategia de despliegue.
+- Actualiza `ModeloConfigs` con el `analyzerId` y `processingLocation` correctos antes de ejecutar en entorno apuntando al recurso Azure.
+- Si se despliega en un entorno distinto (staging/prod), valida que el registro de BD de ese entorno contiene el modelo apropiado. Mantén `models.json` solo como seed o referencia.
 
 Si quieres, puedo aplicar un script que compare automáticamente el `fieldSchema` exportado desde Azure con `fields[]` de la tipología y generar un informe de discrepancias más detallado.
 
@@ -426,7 +431,7 @@ Si quieres, puedo aplicar un script que compare automáticamente el `fieldSchema
 `AzureContentUnderstandingProvider` lanza `InvalidOperationException` con el mensaje `"Extraction:AzureContentUnderstanding:Endpoint es obligatorio"` en el arranque de la Function App.
 
 **¿Se puede usar un analizador diferente para distintos entornos (dev/staging/prod)?**
-Sí. El `analyzerId` está en `models.json`, que se despliega con la Function App. Se puede tener un `models.json` diferente por entorno, o parametrizar el `analyzerId` a través de variables de entorno si se prefiere externalizar completamente esa decisión.
+Sí. El `analyzerId` está en `ModeloConfigs` para cada entorno. Se puede mantener un `models.json` diferente como seed inicial, pero la decisión operativa debe quedar publicada en BD.
 
 **¿La llamada a Azure es síncrona o asíncrona?**
 La llamada usa `WaitUntil.Completed`, que hace que el SDK espere a que Azure finalice el análisis antes de devolver. Es una operación de larga duración (puede tardar segundos o minutos según el documento). Al estar dentro de una Durable Activity, el orquestador no se bloquea: la Activity se ejecuta en su propio worker y el orquestador continúa cuando recibe el resultado.

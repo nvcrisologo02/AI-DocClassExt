@@ -7,7 +7,7 @@ El motor de validaciones de `DocumentIA.Core` aplica reglas de negocio sobre los
 ### Qué aporta
 
 - **Calidad de datos**: detecta campos ausentes, mal formados o fuera de rango antes de que lleguen a sistemas externos.
-- **Configuración sin código**: las reglas se definen en JSON por tipología, no en código.
+- **Configuración sin código**: las reglas se definen en `Tipologias.ConfiguracionJson` por tipología, no en código. Los `.validation.json` físicos son seed o referencia.
 - **Severidades granulares**: distingue `Error` (bloquea confianza), `Warning` e `Info` sin detener el pipeline.
 - **Reglas especializadas para España**: NIF/NIE/CIF, referencia catastral y dirección postal.
 - **Extensible**: añadir una nueva regla supone implementar `IValidationRule` y registrar el `ruleType` en `TipologiaConfigLoader`.
@@ -18,7 +18,7 @@ El motor de validaciones de `DocumentIA.Core` aplica reglas de negocio sobre los
 
 ```
 TipologiaConfigLoader
-   └── Lee <tipologia>.validation.json
+  └── Lee la tipologia publicada en BD (modo fichero solo compatibilidad/seed)
    └── Construye ValidationEngine (AddRule por campo)
 
 ValidationEngine
@@ -35,10 +35,10 @@ ValidationReport
 
 ```mermaid
 flowchart TD
-    A[ValidarActivity\nrecibe tipología + datos] --> B[TipologiaConfigLoader\nlee .validation.json]
-    B --> C{¿Existe archivo?}
-    C -- No --> D[Devuelve WARNING funcional\nConfianza = 0.5]
-    C -- Sí --> E[Construye ValidationEngine\ncon reglas por campo]
+  A[ValidarActivity\nrecibe tipología + datos] --> B[TipologiaConfigLoader\nlee Tipologias.ConfiguracionJson]
+  B --> C{¿Existe configuracion publicada?}
+  C -- No --> D[Devuelve WARNING funcional\nConfianza = 0.5]
+  C -- Sí --> E[Construye ValidationEngine\ncon reglas por campo]
     E --> F[ValidationEngine.ValidateDocument]
     F --> G[Por cada campo\n ejecuta sus reglas en orden]
     G --> H{¿Resultado inválido?}
@@ -204,7 +204,9 @@ Valida arrays y sus items anidados.
 
 ## 5) Configuración por tipología
 
-Ubicación: `src/backend/DocumentIA.Functions/config/tipologias/<tipologia>.validation.json`
+Fuente de verdad runtime: tabla `Tipologias`, campo `ConfiguracionJson`, gestionada por DocumentIA.Admin o Admin API.
+
+Referencia/seed historico: `src/backend/DocumentIA.Functions/config/tipologias/<tipologia>.validation.json`. Este fichero puede estar desactualizado respecto a BD y no debe editarse para cambiar produccion ni borrarse sin confirmacion explicita.
 
 ### Esquema completo
 
@@ -304,7 +306,8 @@ public class MiReglaValidator : ValidationRuleBase
 
 ## 8) Checklist para nueva tipología
 
-- Crear `<tipologia>.validation.json` en `config/tipologias`.
+- Crear o editar la tipologia en BD (`Tipologias.ConfiguracionJson`) mediante DocumentIA.Admin o Admin API.
+- Usar `<tipologia>.validation.json` en `config/tipologias` solo como plantilla o seed de un entorno nuevo.
 - Definir campos requeridos con `"required": true`.
 - Asignar `severity` correcta por impacto en negocio.
 - Para campos NIF/catastral, usar `Warning` sin bloquear flujo.
@@ -321,6 +324,7 @@ public class MiReglaValidator : ValidationRuleBase
 - Reglas: `src/backend/DocumentIA.Core/Validation/Rules/`
 - Config de tipología: `src/backend/DocumentIA.Core/Configuration/TipologiaValidationConfig.cs`
 - Cargador de config: `src/backend/DocumentIA.Core/Configuration/TipologiaConfigLoader.cs`
-- Archivos JSON: `src/backend/DocumentIA.Functions/config/tipologias/*.validation.json`
+- Fuente runtime: tabla `Tipologias`, campo `ConfiguracionJson`
+- Seed/referencia: `src/backend/DocumentIA.Functions/config/tipologias/*.validation.json`
 - Activity de validación: `src/backend/DocumentIA.Functions/Activities/ValidarActivity.cs`
 - Manual de activities relacionado: `docs/03_DISENO_TECNICO_DETALLADO.md` (anexo integrado)

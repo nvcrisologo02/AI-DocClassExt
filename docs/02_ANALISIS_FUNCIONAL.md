@@ -128,7 +128,7 @@ flowchart TB
 | **Actor principal** | Administrador |
 | **Endpoints** | `GET/POST/PUT /management/tipologias`, `POST .../publicar`, `POST .../retirar`, `POST .../draft` |
 | **Ciclo de vida** | Draft → Published → Retired. Solo tipologias Published estan activas para clasificacion. |
-| **Datos gestionados** | Codigo, nombre, version, umbrales, modelo DI, prompt GPT, configuracion JSON. |
+| **Datos gestionados** | Codigo, nombre, version, umbrales, modelos asociados, prompt GPT y `ConfiguracionJson` persistido en BD. Los JSON fisicos son seed/referencia, no fuente operativa. |
 
 ### CU4: Gestionar Modelos AI
 
@@ -137,7 +137,7 @@ flowchart TB
 | **Actor principal** | Administrador |
 | **Endpoints** | `GET /management/modelos/{tipo}`, `POST /management/modelos`, `PUT .../modelos/{id}`, `DELETE .../modelos/{id}` |
 | **Tipos** | Clasificacion, Extraccion, Prompt, Layout |
-| **Datos** | Key unica, provider, modelo, configuracion JSON, activo/inactivo. |
+| **Datos** | Key unica, provider, modelo, `ConfiguracionJson` en la tabla `ModeloConfigs`, activo/inactivo. |
 
 ### CU5: Configurar Plugins por Tipologia
 
@@ -145,7 +145,7 @@ flowchart TB
 |-------|---------|
 | **Actor principal** | Administrador |
 | **Endpoints** | `GET/PUT /management/plugins-tipologias/{codigo}`, `POST .../publicar`, `POST .../retirar` |
-| **Datos** | JSON con array de plugins: pluginKey, pluginType (REST/SOAP/Custom), enabled, priority, configuration, retryPolicy. |
+| **Datos** | `ConfiguracionJson` en BD con array de plugins: pluginKey, pluginType (REST/SOAP/Custom), enabled, priority, configuration, retryPolicy. |
 
 ### CU6: Consultar Tipologias Publicadas
 
@@ -187,7 +187,7 @@ La confianza se evalua en cascada con prioridad:
 
 ```
 Instrucciones de la peticion (request)
-  → Configuracion de la tipologia (BD/JSON)
+  → Configuracion de la tipologia publicada en BD
     → Configuracion global del servidor (appsettings)
 ```
 
@@ -342,7 +342,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RNF04 | Seguridad | Autenticacion en todos los endpoints de gestion | `AuthorizationLevel.Function` (x-functions-key). Managed Identity preparada. | CUMPLIDO |
 | RNF05 | Seguridad | Credenciales nunca en codigo fuente | API Keys en configuration/Key Vault. SSL bypass solo configurable explicitamente. | CUMPLIDO |
 | RNF06 | Auditabilidad | Cada operacion registrada en tabla Auditoria | PersistirActivity escribe AuditoriaEntity con accion, nivel, mensaje, timestamp. | CUMPLIDO |
-| RNF07 | Extensibilidad | Anadir nueva tipologia sin cambiar codigo | Configuracion JSON + registro en BD via Admin portal. Sin recompilacion. | CUMPLIDO |
+| RNF07 | Extensibilidad | Anadir nueva tipologia sin cambiar codigo | Registro/configuracion en BD via Admin portal o Admin API. JSON fisico solo como seed/plantilla. Sin recompilacion. | CUMPLIDO |
 | RNF08 | Observabilidad | Telemetria en Application Insights | Structured logging + Application Insights SDK. Metricas custom por actividad. | CUMPLIDO |
 | RNF09 | Resiliencia | Tolerancia a fallos en servicios externos | Circuit breaker + retry exponencial en plugins y GDC. Fallback IA automatico. | CUMPLIDO |
 | RNF10 | Mantenibilidad | Cobertura de tests unitarios >= 70% en modulos criticos | 33 clases de test. Validacion, plugins, configuracion bien cubiertos. | EN PROGRESO |

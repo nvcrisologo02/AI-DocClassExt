@@ -71,12 +71,12 @@ Esta seccion responde especificamente a que ficheros de configuracion existen, c
 | `src/backend/DocumentIA.Functions/host.json` | Dev/prod | Runtime Durable Functions, hub, concurrencia, logging | Activo y debe tratarse como canonico |
 | `src/backend/DocumentIA.Functions/appsettings.json` | Dev/prod fallback | Defaults de Functions; superado por App Settings Azure en prod | Activo como fallback, no fuente unica de verdad |
 | `src/backend/DocumentIA.Functions/local.settings.json` | Dev local | Configuracion local real, ignorada por Git | Activo local; contiene valores sensibles/literales y claves `_dev` auxiliares |
-| `src/backend/DocumentIA.Functions/config/classification/models.json` | Seed / runtime inicial | Seed de `ModeloConfigs` para clasificacion | Activo si BD no tiene datos; contiene API keys literales y debe sanearse |
-| `src/backend/DocumentIA.Functions/config/extraction/models.json` | Seed / runtime inicial | Seed de `ModeloConfigs` para extraccion | Activo si BD no tiene datos; contiene API keys literales y debe sanearse |
-| `src/backend/DocumentIA.Functions/config/prompt/models.json` | Seed / runtime inicial | Seed de `ModeloConfigs` para prompts | Activo si BD no tiene datos; contiene API key literal y debe sanearse |
-| `src/backend/DocumentIA.Functions/config/layout/models.json` | Seed / runtime inicial | Seed de modelos layout | Activo si BD no tiene datos |
-| `src/backend/DocumentIA.Functions/config/tipologias/*.validation.json` | Seed / runtime inicial | Configuracion de tipologias/versiones | Activo si BD no tiene datos; pendiente contrastar con SQL real |
-| `src/backend/DocumentIA.Functions/config/tipologias/*.plugins.json` | Seed / runtime inicial | Configuracion de plugins por tipologia | Activo si BD no tiene datos; pendiente contrastar con SQL real |
+| `src/backend/DocumentIA.Functions/config/classification/models.json` | Seed / referencia historica | Seed de `ModeloConfigs` para clasificacion | No es fuente de verdad si BD ya tiene datos; puede estar desactualizado y contener valores a sanear |
+| `src/backend/DocumentIA.Functions/config/extraction/models.json` | Seed / referencia historica | Seed de `ModeloConfigs` para extraccion | No es fuente de verdad si BD ya tiene datos; puede estar desactualizado y contener valores a sanear |
+| `src/backend/DocumentIA.Functions/config/prompt/models.json` | Seed / referencia historica | Seed de `ModeloConfigs` para prompts | No es fuente de verdad si BD ya tiene datos; puede estar desactualizado y contener valores a sanear |
+| `src/backend/DocumentIA.Functions/config/layout/models.json` | Seed / referencia historica | Seed de modelos layout | No es fuente de verdad si BD ya tiene datos |
+| `src/backend/DocumentIA.Functions/config/tipologias/*.validation.json` | Seed / referencia historica | Seed de tipologias/versiones | No es fuente de verdad si BD ya tiene datos; contrastar siempre con `Tipologias` |
+| `src/backend/DocumentIA.Functions/config/tipologias/*.plugins.json` | Seed / referencia historica | Seed de plugins por tipologia | No es fuente de verdad si BD ya tiene datos; contrastar siempre con `PluginTipologiaConfigs` |
 | `src/frontend/DocumentIA.Admin/appsettings.json` | Dev/prod publish | URL y Function Key para llamar Functions | Activo, pero contiene secreto literal |
 | `src/frontend/DocumentIA.Admin/appsettings.Development.json` | Dev local | Overrides locales Admin | Activo local; FunctionKey vacia |
 | `src/plugins/DocumentIA.AssetResolver/appsettings.json` | Dev/prod publish | Defaults del plugin, KV refs, aliases globales | Activo; falta revisar divergencia de aliases documentados |

@@ -28,7 +28,8 @@ El proyecto `DocumentIA.Plugins` implementa una capa de integración extensible 
 ### Gestión y creación
 
 - `PluginConfigLoader`
-  - Carga JSON por tipología desde `config/tipologias/{tipologiaId}.plugins.json`.
+  - En runtime carga la configuración publicada desde `PluginTipologiaConfigs` en BD.
+  - Mantiene modo fichero (`config/tipologias/{tipologiaId}.plugins.json`) solo para pruebas, compatibilidad local o seed historico.
   - Cachea configuración en memoria y permite invalidar/recargar.
 
 - `PluginFactory`
@@ -102,9 +103,15 @@ Registro DI en `src/backend/DocumentIA.Functions/Program.cs`:
 
 ## 4) Configuración de plugins por tipología
 
-Ubicación actual:
+Fuente de verdad runtime:
+
+- Tabla `PluginTipologiaConfigs`, gestionada por DocumentIA.Admin o Admin API `/management/plugins-tipologias/{codigo}`.
+
+Ficheros físicos:
 
 - `src/backend/DocumentIA.Functions/config/tipologias/*.plugins.json`
+
+Estos ficheros son seed inicial, plantilla o referencia historica. Pueden estar desactualizados respecto a BBDD y no deben editarse para cambiar produccion ni borrarse sin confirmacion explicita.
 
 ### Esquema esperado
 
@@ -159,11 +166,9 @@ Ubicación actual:
 
 ## 5) Cómo usarlo (operativa)
 
-### Paso 1: registrar la tipología
+### Paso 1: registrar/publicar la configuración en BD
 
-Crear/editar `*.plugins.json` en:
-
-- `src/backend/DocumentIA.Functions/config/tipologias`
+Crear o editar la configuracion de plugins desde DocumentIA.Admin o Admin API. Usar `*.plugins.json` solo como plantilla o seed de un entorno nuevo.
 
 ### Paso 2: si usas plugin custom, compilar y publicar DLL
 
@@ -204,7 +209,7 @@ Así, el pipeline conserva un único `IdActivo` resuelto para pasos posteriores 
 
 1. Implementar `IIntegrationPlugin`.
 2. Añadir caso en `PluginFactory.CreatePluginAsync`.
-3. Definir configuración necesaria en `*.plugins.json`.
+3. Definir configuración necesaria en `PluginTipologiaConfigs.ConfiguracionJson` mediante Admin API/DocumentIA.Admin.
 4. Probar con tests unitarios.
 
 ### Opción B: plugin custom externo (DLL)
@@ -227,7 +232,7 @@ Ejemplo real de implementación:
 - Definir `retryPolicy` para dependencias externas inestables.
 - Evitar lógica de negocio pesada en `IntegrarActivity`; ubicarla en plugins.
 - En plugins custom, controlar excepciones y devolver datos trazables.
-- Versionar cambios de `*.plugins.json` por tipología.
+- Versionar cambios de plantillas/seed `*.plugins.json` solo cuando se decida mantener una referencia documental; la configuración viva se versiona en BBDD mediante estados y auditoría.
 
 ---
 
@@ -236,7 +241,8 @@ Ejemplo real de implementación:
 - Core plugins: `src/backend/DocumentIA.Plugins/Integration`
 - Registro DI: `src/backend/DocumentIA.Functions/Program.cs`
 - Ejecución en pipeline: `src/backend/DocumentIA.Functions/Activities/IntegrarActivity.cs`
-- Configuración tipologías: `src/backend/DocumentIA.Functions/config/tipologias`
+- Configuración runtime de plugins: tabla `PluginTipologiaConfigs` en BD
+- Plantillas/seed historico: `src/backend/DocumentIA.Functions/config/tipologias`
 - Ejemplo custom enricher: `src/enrichments/SarebEnrichments/NotaSimpleEnricher.cs`
 - Tests unitarios: `src/backend/DocumentIA.Tests.Unit/Plugins`
 - Plantillas JSON (incluye local/qa/prod): `docs/contratos/PLANTILLA_PLUGINS_JSON.md`

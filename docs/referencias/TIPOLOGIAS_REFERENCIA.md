@@ -1,5 +1,7 @@
 # Referencia de Tipologías
 
+> Esta referencia debe contrastarse con BBDD antes de tomar decisiones operativas. La fuente de verdad runtime es `Tipologias`, `ModeloConfigs` y `PluginTipologiaConfigs`; los JSON fisicos del repositorio son seed o referencia historica y pueden estar desactualizados.
+
 ## 1. Resumen de tipologías activas
 
 | Familia (`tipologiaId`) | Versión | Clave técnica | Default | GDC Tipo | GDC Subtipo | Skip GDC | Extracción (proveedor) | Prompt |
@@ -12,9 +14,9 @@
 | `resumen-documental` | 1.0 | `resumen.documental` | Sí | — | — | **Sí** | Disabled (mock) | Sí (vision, gpt4o-mini) |
 | `ibi` ★ | 1.0 | DB-backed | No | — | — | No | GPT directo (`azure-openai`) | — |
 
-> **Cédula:** el archivo `cedula.plugins.json` ha sido eliminado. La tipología `cedula` no está operativa.
+> **Cédula:** la operatividad no se determina por la existencia de un fichero `.plugins.json`, sino por el estado publicado en BD. Validar `Tipologias` y `PluginTipologiaConfigs` antes de concluir si esta disponible.
 >
-> ★ **`ibi`** es una tipología almacenada exclusivamente en base de datos (sin fichero `.validation.json` en disco). Usa `extraction.provider = "azure-openai"` → `GptDirectExtraerDataProvider`. El modelo de extracción se define en la tabla `ModelosConfig` (key `default.gpt4o-mini_ex`).
+> ★ **`ibi`** es una tipología almacenada exclusivamente en base de datos (sin fichero `.validation.json` en disco). Usa `extraction.provider = "azure-openai"` → `GptDirectExtraerDataProvider`. El modelo de extracción se define en la tabla `ModeloConfigs` (key `default.gpt4o-mini_ex`).
 
 ---
 

@@ -1,8 +1,16 @@
 # Plantillas de configuración de plugins por tipología
 
-Este documento ofrece plantillas listas para copiar y adaptar en archivos:
+Este documento ofrece plantillas listas para copiar y adaptar como configuracion de plugins por tipologia.
+
+Fuente de verdad runtime:
+
+- Tabla `PluginTipologiaConfigs`, gestionada por DocumentIA.Admin o Admin API.
+
+Uso como seed/referencia historica:
 
 - `src/backend/DocumentIA.Functions/config/tipologias/<tipologia>.plugins.json`
+
+Los ficheros fisicos pueden estar desactualizados respecto a BD. No deben editarse para cambiar produccion ni borrarse sin confirmacion explicita.
 
 ## Reglas generales
 
@@ -209,7 +217,7 @@ Para compatibilidad con el flujo de persistencia/GDC:
 
 ## 6) Checklist rápida antes de arrancar
 
-- Archivo guardado en `config/tipologias` con nombre correcto: `<tipologia>.plugins.json`.
+- Configuracion guardada/publicada en `PluginTipologiaConfigs`. Si se mantiene seed, archivo guardado en `config/tipologias` con nombre correcto: `<tipologia>.plugins.json`.
 - Campo `tipologiaId` alineado con la tipología que llega a `IntegrarActivity`.
 - Endpoints accesibles desde el entorno de ejecución.
 - Si es `custom`, DLL existente y `className` implementa `ICustomEnricher`.

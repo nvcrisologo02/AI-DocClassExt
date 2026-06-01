@@ -103,7 +103,7 @@ Sección: `Extraction:AzureContentUnderstanding`
 
 Sección: `Extraction:GptFallback`
 
-> Esta sección configura **tanto el fallback GPT** (CU→GPT cuando la completitud/confianza no supera el umbral) **como el proveedor GPT directo** (`azure-openai`). Ambos modos comparten el registro de modelos (`ModelosConfig` en BD / `extraction-models.json`) y los mismos parámetros de conexión.
+> Esta sección configura **tanto el fallback GPT** (CU→GPT cuando la completitud/confianza no supera el umbral) **como el proveedor GPT directo** (`azure-openai`). Ambos modos comparten el registro de modelos en BD (`ModeloConfigs`) y los mismos parámetros de conexión. Los JSON de modelos son solo seed o referencia.
 
 | Clave | Tipo | Descripción | Default |
 |---|---|---|---|
@@ -227,10 +227,10 @@ La configuración operativa de tipologías, modelos y plugins se carga desde bas
 | Dominio | Tabla | Estados |
 |---|---|---|
 | Tipologías/versiones | `Tipologias` | `Draft` \| `Published` \| `Retired` |
-| Modelos (clasificación/extracción/prompt) | `ModelosConfig` | `Draft` \| `Published` \| `Retired` |
+| Modelos (clasificación/extracción/prompt/layout) | `ModeloConfigs` | Activo/Inactivo |
 | Plugins por tipología | `PluginTipologiaConfigs` | `Draft` \| `Published` \| `Retired` |
 
-Solo la configuración en estado `Published` se utiliza en ejecución.
+Solo la configuración publicada/activa en BD se utiliza en ejecución. Los ficheros JSON del repositorio no son fuente de verdad operativa.
 
 ### 7.2 Cache en runtime
 
@@ -245,10 +245,13 @@ En arranque, el servicio `ConfigurationSeedService` puede sembrar datos desde JS
 | Origen | Destino |
 |---|---|
 | `config/tipologias/*.validation.json` | `Tipologias` |
-| `config/models/*.models.json` | `ModelosConfig` |
+| `config/classification/models.json` | `ModeloConfigs` (`TipoModelo.Clasificacion`) |
+| `config/extraction/models.json` | `ModeloConfigs` (`TipoModelo.Extraccion`) |
+| `config/prompt/models.json` | `ModeloConfigs` (`TipoModelo.Prompt`) |
+| `config/layout/models.json` | `ModeloConfigs` (`TipoModelo.Layout`) |
 | `config/tipologias/*.plugins.json` | `PluginTipologiaConfigs` |
 
-Esto permite mantener compatibilidad con artefactos históricos y acelerar provisión en nuevos entornos.
+Esto permite mantener compatibilidad con artefactos históricos y acelerar provisión en nuevos entornos. En entornos con BBDD ya inicializada, estos ficheros pueden estar desactualizados respecto a la configuracion publicada; no deben usarse para validar el comportamiento real ni borrarse sin confirmacion explicita.
 
 ### 7.4 Modo fichero (compatibilidad)
 

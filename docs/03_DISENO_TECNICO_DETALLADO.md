@@ -474,7 +474,7 @@ sequenceDiagram
 
     O->>+VA: CallActivityAsync("Validar", input)
     VA->>+TCL: LoadValidationConfig(tipologia)
-    TCL->>TCL: Lee ConfiguracionJson de BD (tabla TipologiasConfig)
+    TCL->>TCL: Lee ConfiguracionJson de BD (tabla Tipologias)
     TCL-->>-VA: ValidationConfig { campos, reglas }
 
     VA->>+VE: Validate(datosExtraidos, validationConfig)
@@ -1127,14 +1127,14 @@ Los archivos JSON en `config/tipologias/` son únicamente **fuente de seed**: al
 
 | Archivo (solo seed) | Propósito | Tabla BD en runtime |
 |---------------------|-----------|---------------------|
-| `{codigo}.validation.json` | Reglas de validación por campo | `TipologiasConfig.ConfiguracionJson` |
+| `{codigo}.validation.json` | Reglas de validación por campo | `Tipologias.ConfiguracionJson` |
 | `{codigo}.plugins.json` | Plugins de integración | `PluginTipologiaConfigs.ConfiguracionJson` |
-| `config/extraction/models.json` | Modelos de extracción | `ModelosConfig` (tipo = Extraccion) |
-| `config/classification/models.json` | Modelos de clasificación | `ModelosConfig` (tipo = Clasificacion) |
-| `config/prompt/models.json` | Modelos de prompt | `ModelosConfig` (tipo = Prompt) |
-| `config/layout/models.json` | Modelos de layout markdown | `ModelosConfig` (tipo = Layout) |
+| `config/extraction/models.json` | Modelos de extracción | `ModeloConfigs` (tipo = Extraccion) |
+| `config/classification/models.json` | Modelos de clasificación | `ModeloConfigs` (tipo = Clasificacion) |
+| `config/prompt/models.json` | Modelos de prompt | `ModeloConfigs` (tipo = Prompt) |
+| `config/layout/models.json` | Modelos de layout markdown | `ModeloConfigs` (tipo = Layout) |
 
-> **Nunca editar los JSON de `config/tipologias/` para cambiar el comportamiento en producción.** Para modificar una tipología existente, usar los endpoints de la Admin API (`PUT /management/tipologias/{id}` + `POST /management/tipologias/{id}/publicar`). Los archivos JSON siguen siendo útiles como respaldo o para crear nuevas versiones de tipologías via re-seed en un entorno nuevo.
+> **Nunca editar los JSON de `config/` para cambiar el comportamiento en producción.** Para modificar tipologías, modelos o plugins existentes, usar DocumentIA.Admin o los endpoints de la Admin API y publicar el cambio en BD. Los archivos JSON siguen siendo útiles como respaldo, plantilla o re-seed en un entorno nuevo, pero pueden estar desactualizados y no deben borrarse sin confirmacion explicita.
 
 ### 3.8.3 Ciclo de Vida Draft → Published → Retired
 

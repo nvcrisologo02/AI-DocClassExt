@@ -540,20 +540,20 @@ Key Vault `srbkvprodocai` esta activo y operativo. Los secretos criticos (`SqlCo
 3. Verificar que la Function App o el Web App del AssetResolver funcionan correctamente tras la rotacion.
 4. Deshabilitar la version anterior del secreto en Key Vault.
 
-**Para secretos en App Settings directos** (API Keys de servicios AI):
+**Para claves de servicios AI en `ModeloConfigs`**:
 
 1. Generar nueva clave en el servicio correspondiente (Azure Portal).
-2. Actualizar el App Setting en la Function App (`srbappprodocai` → Configuration) o via `set-app-settings.ps1`.
-3. Verificar que la Function App funciona correctamente.
+2. Actualizar el registro del modelo en BD mediante DocumentIA.Admin o Admin API (`/management/modelos`).
+3. Verificar que la Function App funciona correctamente y que el modelo publicado se resuelve desde `ModeloConfigs`.
 4. Revocar la clave antigua.
 
 ---
 
 ## 4.10 Gestion de Tipologias sin Cambiar Codigo
 
-> **Importante:** Los archivos JSON en `config/tipologias/` son solo fuente de **seed inicial**. En tiempo de ejecucion, la Function App lee toda la configuracion desde base de datos. Para gestionar tipologias en produccion, usar siempre la Admin API.
+> **Importante:** Los archivos JSON en `config/tipologias/` son solo fuente de **seed inicial**, plantilla o referencia historica. En tiempo de ejecucion, la Function App lee toda la configuracion desde base de datos. Para gestionar tipologias en produccion, usar siempre DocumentIA.Admin o la Admin API. No borrar JSON historicos sin confirmacion explicita.
 
-### Paso 1: Crear la configuracion JSON (seed o como referencia)
+### Paso 1 opcional: Preparar JSON como seed o referencia
 
 ```
 config/tipologias/
@@ -561,7 +561,7 @@ config/tipologias/
   mi-nueva-tipologia.plugins.json       # Plugins de integracion (opcional)
 ```
 
-> Si la Function App arranca con estos archivos presentes y sin registro previo en BD, `ConfigurationSeedService` los insertar automaticamente. Para entornos donde ya existe la BD, usar directamente el Paso 2.
+> Si la Function App arranca con estos archivos presentes y sin registro previo en BD, `ConfigurationSeedService` los inserta automaticamente. Para entornos donde ya existe la BD, usar directamente el Paso 2; editar el JSON no cambia una tipologia ya publicada.
 
 ### Paso 2: Registrar tipologia via API Admin
 

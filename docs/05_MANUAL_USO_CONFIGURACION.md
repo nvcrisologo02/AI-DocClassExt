@@ -645,7 +645,7 @@ Detalles del backfill:
 
 ## 5.5 Configuracion de Validacion
 
-> Los archivos `.validation.json` descritos aquí son la **estructura de referencia y de seed**. En runtime, la configuración se lee desde la columna `ConfiguracionJson` de la tabla `TipologiasConfig` en BD.
+> Los archivos `.validation.json` descritos aquí son la **estructura de referencia y de seed**. En runtime, la configuración se lee desde la columna `ConfiguracionJson` de la tabla `Tipologias` en BD.
 
 ### 5.5.1 Estructura del Archivo de Validacion (referencia / seed)
 
@@ -755,8 +755,8 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
 
 | # | Paso | Detalle | Verificacion |
 |---|------|---------|-------------|
-| 1 | Preparar JSON de validacion | Crear `config/tipologias/{codigo}.validation.json` con campos y reglas (usado como seed o referencia) | JSON valido, campos coinciden con modelo CU |
-| 2 | Preparar JSON de plugins (si aplica) | Crear `config/tipologias/{codigo}.plugins.json` (seed) | JSON valido, pluginKeys correctos |
+| 1 | Preparar configuracion de validacion | Definir campos y reglas para `Tipologias.ConfiguracionJson` en BD. Opcionalmente mantener `config/tipologias/{codigo}.validation.json` como seed/referencia | Configuracion valida, campos coinciden con modelo CU |
+| 2 | Preparar configuracion de plugins (si aplica) | Definir `PluginTipologiaConfigs.ConfiguracionJson` en BD. Opcionalmente mantener `config/tipologias/{codigo}.plugins.json` como seed/referencia | Configuracion valida, pluginKeys correctos |
 | 3 | Entrenar modelo CU (si extraccion custom) | Azure Content Understanding → crear analyzer con campos custom | Modelo publicado y accesible |
 | 4 | Registrar modelo en BD | `POST /management/modelos` con `Key`, `Tipo` y `ConfiguracionJson` (ver §5.6.1 para el schema por tipo de proveedor) | 200 OK |
 | 5 | Entrenar clasificador DI (si clasificacion custom) | Azure Document Intelligence → entrenar modelo custom | Modelo publicado |

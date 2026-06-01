@@ -74,6 +74,9 @@ Ver carpeta docs/ para:
 - Manual de plugins: [docs/manuales/MANUAL_PLUGINS.md](docs/manuales/MANUAL_PLUGINS.md)
 - Manual del motor de validaciones: [docs/manuales/MANUAL_VALIDACIONES.md](docs/manuales/MANUAL_VALIDACIONES.md)
 - Plantillas de plugins: [docs/contratos/PLANTILLA_PLUGINS_JSON.md](docs/contratos/PLANTILLA_PLUGINS_JSON.md)
+- Fuente de verdad de configuracion: [docs/referencias/FUENTE_VERDAD_CONFIGURACION.md](docs/referencias/FUENTE_VERDAD_CONFIGURACION.md)
+
+> Tipologias, modelos IA y plugins por tipologia se gestionan en BBDD mediante Admin API/DocumentIA.Admin. Los JSON fisicos del repositorio son seed inicial, plantillas o referencia historica; pueden estar desactualizados y no deben borrarse sin confirmacion explicita.
 
 ## Licencia
 

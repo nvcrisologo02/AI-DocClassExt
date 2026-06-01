@@ -221,7 +221,7 @@ Cada tipo de modelo tiene su propio loader que hereda de `ModelRegistryLoader<TC
 | `PromptModelRegistryLoader` | `TipoModelo.Prompt` | `PromptModelConfig` |
 | `LayoutModelRegistryLoader` | `TipoModelo.Layout` | `LayoutModelConfig` |
 
-Los proveedores reciben el loader por inyección de dependencias y obtienen el modelo con `GetModel(key)` o `GetDefaultModel()`. El seed inicial se carga desde los archivos `config/{tipo}/models.json` al arrancar la Function App (solo si no existen ya en BD).
+Los proveedores reciben el loader por inyección de dependencias y obtienen el modelo con `GetModel(key)` o `GetDefaultModel()`. Los archivos `config/{tipo}/models.json` solo actuan como seed/bootstrap de un entorno sin datos o como referencia historica; la configuracion valida en runtime es la publicada en BD y puede diferir de esos JSON.
 
 ### 1.4.3 Repository Pattern
 
@@ -235,7 +235,9 @@ Los plugins de integracion siguen una arquitectura extensible:
 - **PluginFactory**: crea instancias segun configuracion (`REST` → `RestPlugin`, `SOAP` → `SoapPlugin`, `Custom` → `CustomPlugin`).
 - **PluginManager**: registro y lookup de plugins por clave.
 - **CustomPlugin**: carga DLLs externas desde `AppContext.BaseDirectory/plugins/` usando reflection.
-- **Configuracion JSON**: `config/tipologias/{codigo}.plugins.json` define que plugins se ejecutan por tipologia, su prioridad y retry policy.
+- **Configuracion de plugins por tipologia**: se lee desde la tabla `PluginTipologiaConfigs` en BD. El fichero `config/tipologias/{codigo}.plugins.json` queda limitado a seed inicial, plantilla o referencia historica.
+
+> Regla general: tipologias, modelos IA y plugins por tipologia tienen como fuente de verdad la BBDD gestionada por Admin API/DocumentIA.Admin. Los JSON fisicos no deben editarse como mecanismo de cambio productivo ni borrarse sin confirmacion explicita.
 
 ### 1.4.5 Circuit Breaker + Retry (Decorator Pattern)
 

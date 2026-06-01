@@ -662,7 +662,7 @@ Valores por defecto del sistema
     },
     "extraction": {
       "provider": "auto",                    // auto|azure-content-understanding|azure-openai|mock
-      "model": "auto",                       // Clave del modelo en extraction-models.json
+      "model": "auto",                       // Clave del modelo en ModeloConfigs
       "umbral": 0.80                         // Umbral mínimo de campos para aceptar extracción
     },
     "prompt": {
