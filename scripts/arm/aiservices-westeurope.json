@@ -1,0 +1,71 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "accounts_name": {
+            "defaultValue": "upe48-mm2avmdm-westeurope",
+            "type": "String"
+        },
+        "virtualNetworks_RedServiciosProduccion_externalid": {
+            "defaultValue": "/subscriptions/647c7246-54bc-4d31-b909-431cacf03272/resourceGroups/RecursoComunicaciones/providers/Microsoft.Network/virtualNetworks/RedServiciosProduccion",
+            "type": "String"
+        }
+    },
+    "variables": {},
+    "resources": [
+        {
+            "type": "Microsoft.CognitiveServices/accounts",
+            "apiVersion": "2024-10-01",
+            "name": "[parameters('accounts_name')]",
+            "location": "westeurope",
+            "tags": {
+                "Project": "Document AI",
+                "Purpose": "CU-secondary-endpoint"
+            },
+            "sku": { "name": "S0" },
+            "kind": "AIServices",
+            "identity": { "type": "SystemAssigned" },
+            "properties": {
+                "customSubDomainName": "[parameters('accounts_name')]",
+                "networkAcls": {
+                    "bypass": "AzureServices",
+                    "defaultAction": "Allow",
+                    "virtualNetworkRules": [
+                        {
+                            "id": "[concat(parameters('virtualNetworks_RedServiciosProduccion_externalid'), '/subnets/ServiciosProduccionDocumentAI')]",
+                            "ignoreMissingVnetServiceEndpoint": false
+                        },
+                        {
+                            "id": "[concat(parameters('virtualNetworks_RedServiciosProduccion_externalid'), '/subnets/ServiciosProduccionFrontend')]",
+                            "ignoreMissingVnetServiceEndpoint": false
+                        }
+                    ],
+                    "ipRules": []
+                },
+                "publicNetworkAccess": "Enabled",
+                "disableLocalAuth": false
+            }
+        },
+        {
+            "type": "Microsoft.CognitiveServices/accounts/defenderForAISettings",
+            "apiVersion": "2024-10-01",
+            "name": "[concat(parameters('accounts_name'), '/Default')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accounts_name'))]"
+            ],
+            "properties": {
+                "state": "Disabled"
+            }
+        }
+    ],
+    "outputs": {
+        "resourceId": {
+            "type": "string",
+            "value": "[resourceId('Microsoft.CognitiveServices/accounts', parameters('accounts_name'))]"
+        },
+        "endpoint": {
+            "type": "string",
+            "value": "[concat('https://', parameters('accounts_name'), '.cognitiveservices.azure.com/')]"
+        }
+    }
+}

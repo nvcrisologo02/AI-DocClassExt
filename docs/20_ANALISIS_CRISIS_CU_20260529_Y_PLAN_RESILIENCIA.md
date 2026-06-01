@@ -4,7 +4,9 @@ Fecha análisis: 2026-06-01
 Ventana analizada: 2026-05-29 08:10 – 20:10 UTC (12 horas)  
 Operaciones registradas: 1.055  
 Tipología predominante: nota.simple  
-Recurso AI Services: `upe48-mm2avmdm-swedencentral` (swedencentral, SKU S0)
+Recurso AI Services: `upe48-mm2avmdm-swedencentral` (swedencentral, SKU S0)  
+Modelo de despliegue OpenAI: **GlobalStandard en TPM** (pago por token, sin PTUs)  
+Cuotas observadas (captura 2026-06-01): `gpt-4.1` 150K TPM · `gpt-4.1-mini` 250K TPM · `gpt-4o` 250K TPM · `gpt-4o-mini` 150K Standard · `text-embedding-3-large` 150K TPM
 
 ---
 
@@ -450,6 +452,308 @@ Function App
 ---
 
 ##### Impacto en el código existente
+
+Ver sección 9 — implementación realizada el 2026-06-01.
+
+---
+
+## 9. Estrategia multi-analyzer: pool de analyzers mismo recurso
+
+> **Decisión de diseño (2026-06-01):** Como paso previo a añadir un segundo recurso Azure AI Services,
+> se implementa primero un pool de analyzers dentro del mismo recurso.
+> Si no hay mejora, se escala al multi-recurso (sección 5.2.3).
+
+### 9.1 Enfoque adoptado
+
+El campo `AnalyzerId` de `ExtractionModelConfig` pasa a soportar **múltiples IDs separados por `;`**:
+
+```json
+{
+  "Key": "nota.simple.1_5.azure-cu",
+  "Provider": "azure-content-understanding",
+  "AnalyzerId": "CU_NS_1.5_0;CU_NS_1.5_0_b",
+  "Endpoint": "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/",
+  ...
+}
+```
+
+El sistema selecciona el analyzer mediante **round-robin atómico** (`Interlocked.Increment`) en cada
+llamada a `ObtenerDatosAsync`. Con N analyzers, la carga se distribuye 1/N por analyzer.
+
+**Hipótesis de mejora:** Azure CU puede manejar múltiples analyzers con colas de procesamiento
+independientes internamente. Si hay saturación por analyzer, distribuir entre 2-3 reducirá la
+latencia efectiva aunque compartan el mismo recurso/cuota.
+
+**Limitación conocida:** Si la degradación es por límite de capacidad del recurso completo (como
+el 29/05), este enfoque no ayudará y habrá que pasar al multi-recurso.
+
+---
+
+### 9.2 Cambios implementados
+
+| Archivo | Cambio |
+|---|---|
+| `DocumentIA.Core/Configuration/TipologiaValidationConfig.cs` | Propiedad `AnalyzerIds` en `ExtractionModelConfig` — parsea `;` |
+| `DocumentIA.Functions/Services/AzureContentUnderstandingProvider.cs` | Campo `_analyzerRoundRobinCounter` + selección en `ObtenerDatosAsync` |
+| `DocumentIA.Functions/Services/AzureContentUnderstandingProvider.cs` | Parámetro `analyzerId` en `TrackCuMetrics` → nuevo atributo `AnalyzerId` en métricas App Insights |
+| `DocumentIA.Tests.Unit/Configuration/ExtractionModelConfigTests.cs` | 9 tests: parsing de IDs, distribución round-robin con 2 y 3 analyzers |
+
+**Retrocompatibilidad total:** si `AnalyzerId` contiene un solo ID (configuración actual), el
+comportamiento es idéntico al anterior — el path rápido usa `model.AnalyzerId` directamente.
+
+---
+
+### 9.3 Plan de aprovisionamiento en Azure
+
+#### Paso 1 — Crear el segundo analyzer en el mismo recurso
+
+```powershell
+# Exportar el analyzer actual
+$endpoint  = "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com"
+$apiKey    = "<ApiKey del recurso>"
+$srcId     = "CU_NS_1.5_0"
+$dstId     = "CU_NS_1.5_0_b"
+$apiVer    = "2025-11-01"
+
+$headers = @{
+    "Ocp-Apim-Subscription-Key" = $apiKey
+    "Content-Type"              = "application/json"
+}
+
+# Exportar esquema del analyzer original
+$schema = Invoke-RestMethod `
+    -Uri "$endpoint/contentunderstanding/analyzers/${srcId}?api-version=$apiVer" `
+    -Headers $headers `
+    -Method GET
+
+# Eliminar campos de solo-lectura antes de recrear
+$body = $schema | Select-Object -ExcludeProperty analyzerId, createdAt, lastModifiedAt, status `
+    | ConvertTo-Json -Depth 20
+
+# Crear el analyzer duplicado con el nuevo ID (mismo esquema, mismo recurso)
+Invoke-RestMethod `
+    -Uri "$endpoint/contentunderstanding/analyzers/${dstId}?api-version=$apiVer" `
+    -Headers $headers `
+    -Method PUT `
+    -Body $body
+
+Write-Host "Analyzer '$dstId' creado. Verificando..."
+
+# Verificar estado (esperar a que quede en estado 'ready')
+do {
+    Start-Sleep -Seconds 2
+    $status = Invoke-RestMethod `
+        -Uri "$endpoint/contentunderstanding/analyzers/${dstId}?api-version=$apiVer" `
+        -Headers $headers -Method GET
+    Write-Host "  Estado: $($status.status)"
+} while ($status.status -eq "creating")
+
+Write-Host "Listo: $($status.status)"
+```
+
+#### Paso 2 — Actualizar la configuración en BD
+
+```sql
+-- Verificar la fila actual
+SELECT Id, [Key], AnalyzerId = JSON_VALUE(ConfiguracionJson, '$.AnalyzerId'), ConfiguracionJson
+FROM TipologiaModelEntity
+WHERE [Key] = 'nota.simple.1_5.azure-cu' AND Tipo = 'Extraccion' AND Activo = 1;
+
+-- Actualizar el campo AnalyzerId dentro del JSON (SQL Server JSON_MODIFY)
+UPDATE TipologiaModelEntity
+SET ConfiguracionJson = JSON_MODIFY(ConfiguracionJson, '$.AnalyzerId', 'CU_NS_1.5_0;CU_NS_1.5_0_b')
+WHERE [Key] = 'nota.simple.1_5.azure-cu' AND Tipo = 'Extraccion' AND Activo = 1;
+
+-- Confirmar cambio
+SELECT JSON_VALUE(ConfiguracionJson, '$.AnalyzerId') AS AnalyzerId
+FROM TipologiaModelEntity
+WHERE [Key] = 'nota.simple.1_5.azure-cu' AND Tipo = 'Extraccion' AND Activo = 1;
+```
+
+#### Paso 3 — Invalidar caché (opcional)
+
+La caché de modelos expira cada 5 minutos. Para efecto inmediato sin reiniciar la Function App,
+se puede reiniciar la instancia activa desde Azure Portal → Function App → Restart.
+
+---
+
+### 9.4 Configuración de número de analyzers
+
+El número de analyzers a usar se controla **exclusivamente desde BD** — no requiere cambio de código:
+
+| Caso | Valor de `AnalyzerId` en BD |
+|---|---|
+| 1 analyzer (actual, sin cambio) | `CU_NS_1.5_0` |
+| 2 analyzers | `CU_NS_1.5_0;CU_NS_1.5_0_b` |
+| 3 analyzers | `CU_NS_1.5_0;CU_NS_1.5_0_b;CU_NS_1.5_0_c` |
+| Rollback a 1 | Eliminar todo después del primer `;` |
+
+**Para añadir un analyzer adicional:** repetir el Paso 1 con un nuevo `$dstId` y añadir el ID
+al campo en BD separado por `;`.
+
+---
+
+### 9.5 Plan de pruebas y criterios de eficacia
+
+#### 9.5.1 Prueba de distribución (pre-producción)
+
+Verificar que el round-robin funciona antes de activar en producción:
+
+```powershell
+# Consulta App Insights tras 30-50 clasificaciones:
+# Verificar que AnalyzerId aparece como dimensión y ambos IDs tienen ~50% de llamadas
+# KQL en Application Insights:
+# customMetrics
+# | where name == "CU.AnalysisMs"
+# | extend analyzerId = tostring(customDimensions.AnalyzerId)
+# | summarize count(), avg(value), percentile(value, 50), percentile(value, 95)
+#     by analyzerId
+# | order by count_ desc
+```
+
+Criterio de éxito: cada analyzer recibe entre 40%-60% de las llamadas.
+
+#### 9.5.2 Métricas de referencia (baseline)
+
+Extraer p50/p95 de `CU.AnalysisMs` en una ventana sin carga extrema (estado normal):
+
+```powershell
+# KQL baseline (últimas 2 horas en estado normal):
+# customMetrics
+# | where name == "CU.AnalysisMs" and timestamp > ago(2h)
+# | summarize p50=percentile(value, 50), p95=percentile(value, 95), n=count()
+```
+
+Registrar los valores aquí como baseline:
+
+| Métrica | Baseline (sin pool) | Objetivo con pool |
+|---|---|---|
+| `CU.AnalysisMs` p50 | _medir_ | ≤ baseline |
+| `CU.AnalysisMs` p95 | _medir_ | ≤ baseline × 0.8 |
+| `CU.LimiterWaitMs` p95 | _medir_ | ≤ baseline |
+| Throughput (docs/hora) | _medir_ | ≥ baseline × 1.2 |
+
+#### 9.5.3 Prueba de carga controlada
+
+Ejecutar un lote de ≥ 50 documentos y comparar:
+
+```powershell
+# Lanzar lote de prueba (usar el smoke test existente o API directamente)
+# Luego consultar en App Insights:
+
+# customMetrics
+# | where name in ("CU.AnalysisMs", "CU.LimiterWaitMs") and timestamp > ago(1h)
+# | extend analyzerId = tostring(customDimensions.AnalyzerId)
+# | summarize p50=percentile(value, 50), p95=percentile(value, 95), n=count()
+#     by name, analyzerId
+# | order by name, analyzerId
+```
+
+#### 9.5.4 Criterio de decisión Go/No-Go
+
+| Resultado | Decisión |
+|---|---|
+| p95 `CU.AnalysisMs` baja ≥ 20% respecto al baseline | ✅ Estrategia válida — mantener y escalar a 3 analyzers |
+| Sin mejora apreciable (< 5%) bajo carga normal | ⚠️ Neutral — mantener por si acaso, preparar multi-recurso |
+| Sin mejora durante un episodio de degradación | ❌ Confirma que el problema es a nivel de recurso — activar Plan B: multi-recurso (sección 5.2.3) |
+
+---
+
+### 9.7 Resultados del experimento multi-analyzer (2026-06-01) — CONCLUIDO
+
+> **Veredicto: hipótesis refutada. Experimento revertido.**
+
+#### 9.7.1 Configuración del experimento
+
+| Parámetro | Valor |
+|---|---|
+| Analyzers | `CU_NS_1.5_0` + `CU_NS_1.5_0b` (mismo recurso, misma región) |
+| Documentos | 40 |
+| Concurrencia | `MaxConcurrentCalls=4`, 4 colas Service Bus |
+| Ventana | 08:50:10 – 08:56:14 UTC |
+| Duración total | **6 min 4 seg** |
+
+#### 9.7.2 Distribución del round-robin
+
+| Analyzer | Llamadas | % |
+|---|---|---|
+| `CU_NS_1.5_0` | 20 | 50% |
+| `CU_NS_1.5_0b` | 20 | 50% |
+
+Reparto perfectamente equilibrado. El mecanismo `Interlocked.Increment` funciona correctamente.
+
+#### 9.7.3 Latencias por analyzer
+
+| Métrica | `CU_NS_1.5_0` | `CU_NS_1.5_0b` | Diferencia |
+|---|---|---|---|
+| `CU.AnalysisMs` p50 | 26.2s | 28.5s | +9% |
+| `CU.AnalysisMs` p95 | 63.2s | 69.1s | +9% |
+| `CU.AnalysisMs` avg | 34.5s | 34.7s | < 1% |
+| `CU.LimiterWaitMs` p95 | **0ms** | **0ms** | — |
+| `CU.Attempts` | 1 (todos) | 1 (todos) | — |
+
+Las latencias de ambos analyzers son **estadísticamente idénticas** (diferencia < 10%, dentro del ruido del servicio). Ninguno tiene ventaja sobre el otro porque comparten el mismo pool de inferencia del recurso.
+
+#### 9.7.4 Throughput
+
+| Métrica | Valor |
+|---|---|
+| Docs/min | **~6.6** |
+| p50 E2E (DocumentIA.Duracion.Total) | 29.2s |
+| p95 E2E | 69.9s |
+
+#### 9.7.5 Implicaciones del modelo de despliegue TPM (GlobalStandard)
+
+La captura del portal Azure (2026-06-01) confirma que los despliegues OpenAI del recurso son **GlobalStandard en TPM**, no PTU. Esto tiene implicaciones directas para entender la saturación del 29/05 y las opciones de mejora:
+
+**GlobalStandard + TPM**:
+- El límite no es de PTUs reservados sino de **tokens por minuto (TPM)**. El recurso comparte la capacidad regional de Azure con otros tenants.
+- El throttling se produce cuando el pool global de la región (`swedencentral`) está bajo presión — independiente de la carga propia.
+- No se puede "comprar más capacidad" aumentando PTUs porque no hay PTUs en este modelo. Para más throughput garantizado habría que migrar a **Provisioned Throughput (PTU)**.
+- Los episodios de saturación como el del 29/05 son consecuencia directa de compartir capacidad regional con otros clientes de Azure — es inherente al modelo GlobalStandard.
+
+**¿Ayudan múltiples analyzers en el mismo recurso?**
+No. Confirmado experimentalmente: mismas latencias en ambos analyzers bajo carga normal. El cuello de botella es el pool de capacidad regional compartido del recurso AI Services, no el analyzer concreto.
+
+**¿Ayuda un segundo recurso en la misma región?**
+Potencialmente, pero no garantizado: dos recursos en `swedencentral` siguen compartiendo el mismo pool de capacidad regional de Azure. En un episodio de saturación regional (como el 29/05), ambos recursos se degradarían igual.
+
+**¿Qué sí ayuda?**
+
+| Opción | Efectividad | Coste/Complejidad |
+|---|---|---|
+| Segundo recurso en **región diferente** (westeurope, francecentral) | ✅ Alta — pools independientes | Media |
+| Migrar a **PTU (Provisioned Throughput)** | ✅ Alta — capacidad reservada, sin compartir | Alta (coste fijo) |
+| Circuit breaker + hard timeout (Fase 1) | ✅ Media — no evita degradación, sí limita el daño | Baja |
+| Múltiples analyzers mismo recurso | ❌ Ninguna — comparten pool | N/A |
+
+**Nota sobre PTU**: con PTU no se paga por token sino por PTU/hora (coste fijo reservado). La capacidad está garantizada — no hay throttling por saturación regional. Para el volumen actual (~40 docs en 6 min = ~400 docs/hora en punta) habría que dimensionar los PTUs necesarios con la herramienta de sizing de Azure Foundry.
+
+#### 9.7.6 Estado del experimento
+
+- **Código revertido** (2026-06-01): `TipologiaValidationConfig.cs`, `AzureContentUnderstandingProvider.cs`, `ExtractionModelConfigTests.cs` eliminados.
+- **BD restaurada**: `AnalyzerId` vuelto a valor único `CU_NS_1.5_0`.
+- **Analyzer `CU_NS_1.5_0b`**: puede eliminarse del recurso o mantenerse para pruebas futuras.
+- **Próximo paso recomendado**: implementar Fase 1 (hard timeout + queue depth limit) como protección inmediata ante la próxima degradación regional.
+
+---
+
+### 9.6 Plan B: multi-recurso (activación condicional)
+
+Si el pool de analyzers no muestra mejora durante un episodio real:
+
+1. Crear nuevo recurso Azure AI Services en diferente región (westeurope recomendado por latencia).
+2. Exportar y recrear los analyzers en el nuevo recurso (scripts de sección 5.2.3).
+3. Añadir segunda fila en `TipologiaModelEntity` con el nuevo `Endpoint` + `ApiKey`.
+4. Implementar `GetModelsForProvider()` en `ExtractionModelRegistryLoader` + selección por key
+   en el provider (ya documentado en sección 5.2.3, Opción A).
+
+El cambio de enfoque (mismo recurso → multi-recurso) requiere ~3h de trabajo incluyendo
+el aprovisionamiento Azure.
+
+---
+
+_Sección añadida: 2026-06-01 — Implementación activa en rama de trabajo._
 
 La arquitectura actual ya está muy cerca de soportar esto. `ExtractionModelConfig` tiene `Endpoint`, `ApiKey` y `AnalyzerId` como campos independientes — está pensada para un endpoint por config. `CreateClient(model)` ya crea el `ContentUnderstandingClient` usando `model.Endpoint`.
 

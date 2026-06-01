@@ -213,6 +213,7 @@ namespace DocumentIA.Core.Configuration
         public bool Enabled { get; set; } = true;
         public string Provider { get; set; } = string.Empty;
         public string ModelKey { get; set; } = string.Empty;
+        public string? SecondaryModelKey { get; set; }
         public bool AutoMapUnmappedFields { get; set; } = true;
         public List<ExtractionFieldMappingConfig> FieldMappings { get; set; } = new List<ExtractionFieldMappingConfig>();
     }

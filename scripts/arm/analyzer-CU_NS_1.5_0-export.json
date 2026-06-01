@@ -1,0 +1,272 @@
+{
+  "analyzerId": "CU_NS_1.5_0",
+  "description": "Nota Simple 1.5.0",
+  "tags": {
+    "projectId": "01ecc742-3215-4bf8-bdc2-ea7a7ef00fd1",
+    "templateId": "prebuilt-documentAnalyzer"
+  },
+  "createdAt": "2026-05-05T05:22:45Z",
+  "lastModifiedAt": "2026-05-05T05:23:02Z",
+  "baseAnalyzerId": "prebuilt-document",
+  "config": {
+    "returnDetails": false,
+    "enableOcr": true,
+    "enableLayout": true,
+    "enableFormula": true,
+    "enableFigureDescription": false,
+    "enableFigureAnalysis": false,
+    "chartFormat": "chartjs",
+    "tableFormat": "html",
+    "enableSegment": false,
+    "omitContent": false,
+    "segmentPerPage": false,
+    "annotationFormat": "markdown"
+  },
+  "fieldSchema": {
+    "fields": {
+      "FincaRegistral": {
+        "type": "string",
+        "method": "extract",
+        "description": "Número de finca registral. Extraer únicamente el número (o código alfanumérico) que aparece tras 'FINCA DE <municipio> Nº' o en el encabezado 'DATOS DE LA FINCA'. No incluir el literal 'FINCA', el municipio ni 'Nº'. Longitud esperada: 1-30 caracteres."
+      },
+      "RegistroPropiedad": {
+        "type": "string",
+        "method": "extract",
+        "description": "Nombre completo del Registro de la Propiedad emisor tal como aparece en el encabezado del documento (p.ej. 'REGISTRO DE LA PROPIEDAD DE CHIVA 1'). Incluir número de registro si consta. Longitud esperada: 3-120 caracteres."
+      },
+      "MunicipioRegistro": {
+        "type": "string",
+        "method": "extract",
+        "description": "Municipio donde está ubicado el Registro de la Propiedad emisor, extraído del encabezado (p.ej. 'CHIVA' de 'REGISTRO DE LA PROPIEDAD DE CHIVA 1'). No confundir con el municipio de la finca. Máximo 80 caracteres."
+      },
+      "IDUFIR_CRU": {
+        "type": "string",
+        "method": "extract",
+        "description": "Identificador Único de Finca Registral (IDUFIR) o Código Registral Único (CRU). Buscar junto a las etiquetas 'IDUFIR', 'CRU' o 'Código Registral'. Extraer exclusivamente los 14 dígitos numéricos; omitir guiones, espacios o texto adicional."
+      },
+      "Registrador": {
+        "type": "string",
+        "method": "extract",
+        "description": "Nombre completo del Registrador que firma o certifica la nota simple. Aparece habitualmente al final del documento, precedido de 'El/La Registrador/a', 'Firmado:' o similar. Extraer nombre y apellidos, sin cargo ni fórmula legal. Longitud esperada: 3-120 caracteres."
+      },
+      "FechaDocumento": {
+        "type": "string",
+        "method": "generate",
+        "description": "Fecha de emisión de la nota simple. Priorizar la fecha que acompaña al lugar de firma al final del documento (p.ej. 'Chiva, 10 de octubre de 2025' → '2025-10-10'), tambien es muy usual el encontrarla después del texto \"FECHA DE EMISION:\". No usar fechas de inscripción, escrituras ni cargas. Convertir siempre al formato ISO 8601: yyyy-MM-dd. Formatos de entrada posibles: 'dd/MM/yyyy', 'd de MMMM de yyyy' (en español), 'yyyy-MM-dd'."
+      },
+      "NumeroAsientoPresentacion": {
+        "type": "string",
+        "method": "extract",
+        "description": "Número de asiento de presentación del documento en el Registro. Buscar junto a 'asiento', 'presentación', 'Asiento de presentación'. Extraer el código completo tal como aparece. Máximo 40 caracteres."
+      },
+      "Direccion": {
+        "type": "string",
+        "method": "extract",
+        "description": "Dirección postal completa del inmueble según la descripción registral (sección 'DATOS DE LA FINCA' o similar): tipo de vía, nombre de vía, número, piso/puerta, municipio y provincia. La dirección debe incluir, al menos, vía con número, municipio y provincia. Longitud esperada: 6-160 caracteres."
+      },
+      "ReferenciaCatastral": {
+        "type": "string",
+        "method": "extract",
+        "description": "Referencia catastral del inmueble. Buscar junto a las etiquetas 'Referencia catastral', 'Ref. catastral' o 'RC'. El formato estándar es: 7 dígitos + 2 letras + 4 dígitos + 1 letra + 2 dígitos + 3 letras (p.ej. '1234567AB1234A01XYZ'). Extraer exactamente el código, sin espacios adicionales."
+      },
+      "CodigoPostal": {
+        "type": "string",
+        "method": "extract",
+        "description": "Extrae el código postal del inmueble (5 dígitos) de la sección \"DESCRIPCIÓN/DATOS DE LA FINCA\". Reglas: Ignora el CP del encabezado o del Registro (datos de oficina). Identifica el número asociado a la dirección física del inmueble. Si no figura en la descripción, devuelve \"No encontrado\". Formato: Solo los 5 dígitos numéricos."
+      },
+      "Provincia": {
+        "type": "string",
+        "method": "generate",
+        "description": "Provincia donde se ubica el inmueble según la descripción registral. Si no consta expresamente, derivarla del municipio, del Registro de la Propiedad o del código postal. Devolver solo el nombre de la provincia (sin 'provincia de'). Máximo 50 caracteres."
+      },
+      "Municipio": {
+        "type": "string",
+        "method": "extract",
+        "description": "Municipio donde se ubica el inmueble según la descripción registral (sección 'DATOS DE LA FINCA'). No confundir con el municipio del Registro. Máximo 80 caracteres."
+      },
+      "TipologiaInmueble": {
+        "type": "string",
+        "method": "generate",
+        "description": "Tipo del inmueble según la descripción registral que aparece en el apartado “DATOS DE LA FINCA”. Normalizar al valor más próximo de la lista: 'Vivienda', 'Local', 'Trastero', 'Garaje', 'Edificio', 'Suelo', 'Oficina', 'Nave', 'Finca rústica', 'Otro'. Reglas de normalización: 'PLAZA DE APARCAMIENTO', 'PLAZA DE GARAJE' → 'Garaje'; 'PISO', 'APARTAMENTO', 'DÚPLEX' → 'Vivienda'; 'NAVE INDUSTRIAL' → 'Nave'; 'SOLAR', 'PARCELA',  → 'Suelo'; 'FINCA RUSTICA' → 'Finca rústica'. Si no encaja en ninguna categoría, devolver 'Otro'."
+      },
+      "superficies": {
+        "type": "array",
+        "method": "extract",
+        "description": "Analiza la descripción registral y extrae un array de objetos con todas las superficies (construida, útil, terreno, etc.). Reglas de conversión a m²: Sistema Agrario: 1 Hectárea (Ha) = 10.000 | 1 Área (a) = 100 (multiplica por 100 el numero de areas) | 1 Centiárea (ca) = 1. Cálculo: Suma las unidades mixtas (ej: \"1 área y 5 centiareas\" = 105.0). Formato: Valores numéricos con punto decimal, sin símbolos de unidad. Estructura del Array: tipo: (ej: \"Terreno\", \"Útil\"). valor_m2: (Número convertido). original: (Texto exacto del documento). Requisito: Extrae tantas entradas como medidas distintas aparezcan. Obligatorio al menos una. No te inventes nada y excluye superficies de anejos y lindes",
+        "items": {
+          "type": "object",
+          "properties": {
+            "valor": {
+              "type": "number",
+              "description": "Valor de la superficie como número decimal con punto como separador (p.ej. 85.34). Sin unidad textual. Rango válido: 0-200000000."
+            },
+            "UnidadSuperficie": {
+              "type": "string",
+              "description": "Semántica de la medida. Devolver uno de los valores del enum: 'm2_construidos' si la superficie es construida (vivienda, local, oficina, nave, edificio); 'm2_utiles' si la superficie es útil (garaje, trastero, o cuando el documento la etiqueta explícitamente como útil); 'm2_suelo' si la superficie corresponde a terreno, solar o finca rústica; 'otro' en cualquier otro caso."
+            }
+          }
+        }
+      },
+      "Anejos": {
+        "type": "array",
+        "method": "extract",
+        "description": "Lista de elementos anejos al inmueble principal (garaje, trastero, jardín, terraza, etc.) que consten en la descripción registral como anejos o vinculados ob rem. Para cada anejo extraer: tipo (nombre del anejo, máx 40 caracteres), descripcion (texto literal tal como aparece, máx 200 caracteres) y superficie (como número decimal con punto, rango 0-200000000). Si no hay anejos, devolver array vacío [].",
+        "items": {
+          "type": "object",
+          "properties": {
+            "tipo": {
+              "type": "string",
+              "description": "Tipo de anejo: 'Garaje', 'Trastero', 'Jardín', 'Terraza', 'Plaza de aparcamiento', etc. Normalizar en minúsculas con primera letra en mayúscula."
+            },
+            "descripcion": {
+              "type": "string",
+              "description": "Descripción literal del anejo tal como aparece en el documento registral. Máximo 200 caracteres."
+            },
+            "superficie": {
+              "type": "number",
+              "description": "Superficie del anejo como número decimal con punto como separador (p.ej. 12.5). Sin unidad. Rango 0-200000000."
+            }
+          }
+        }
+      },
+      "CalificacionUrbanistica": {
+        "type": "string",
+        "method": "extract",
+        "description": "Extrae la naturaleza y clasificación urbanística del inmueble de las secciones \"DESCRIPCIÓN\" o \"DATOS DE LA FINCA\". Instrucciones de normalización: Identifica la clasificación del suelo y normaliza el resultado estrictamente a uno de estos valores: 'Suelo urbano' 'Suelo urbanizable' 'Suelo rústico' 'Suelo no urbanizable' 'Urbana' 'Otros' Reglas de extracción: Si el documento indica \"Naturaleza: Urbana\" o \"DESCRIPCION DE LA FINCA URBANA\"  devuelve 'Urbana'. Si el documento indica \"Campo\" o \"Huerta\"  devuelve 'Rustico'. Si no consta ninguna mención explícita a la clasificación o naturaleza del suelo, devuelve 'No consta'."
+      },
+      "Titular": {
+        "type": "string",
+        "method": "extract",
+        "description": "Nombre completo del titular registral con derecho de PLENO DOMINIO (o la cuota indicada). Buscar en la sección 'TITULARIDAD', 'TITULAR', 'DOMINIO' o similar. Extraer nombre completo tal como aparece (nombre y apellidos, o razón social si es persona jurídica). Si hay copropiedad, extraer el primer titular o todos separados por ' / '. Máximo 160 caracteres."
+      },
+      "NIF": {
+        "type": "string",
+        "method": "extract",
+        "description": "NIF, DNI o CIF del titular registral si consta en el documento. Buscar junto a etiquetas 'NIF', 'DNI', 'CIF', 'N.I.F.', 'C.I.F.'. Devolver únicamente el identificador sin puntos ni espacios (p.ej. '12345678A' o 'B12345678')."
+      },
+      "PorTitularidadSareb": {
+        "type": "string",
+        "method": "extract",
+        "description": "Porcentaje de titularidad del inmueble si consta en la nota simple. Expresar siempre como porcentaje, Buscar expresiones como 'una mitad indivisa', 'dos terceras partes' y convertirlas a porcentaje. Si la titularidad es \"total\" o indica \"pleno dominio\" devolver 100%. Solamente tener en cuanta el valor asociado al titular \"Sareb, Sociedad de Gestion de Activos Procedentes de la Reestructuracion Bancaria\" con CIF  A86602158"
+      },
+      "FechaAdquisicion": {
+        "type": "string",
+        "method": "extract",
+        "description": "Fecha en que el titular actual adquirió el inmueble según el título que consta inscrito. Buscar en la sección de titularidad o inscripción. Convertir siempre a formato ISO 8601: yyyy-MM-dd. Formatos de entrada posibles: 'dd/MM/yyyy', 'd de MMMM de yyyy' (en español)."
+      },
+      "TituloAdquisicion": {
+        "type": "string",
+        "method": "extract",
+        "description": "título o causa jurídica de adquisición del inmueble de una nota simple española. La información suele encontrarse en el bloque de TITULARIDAD, INSCRIPCIÓN o HISTORIA REGISTRAL. Identificar el acto jurídico principal por el cual el titular actual adquiere el dominio, interpretando el texto de forma semántica y contextual, no solo por coincidencia literal de palabras. Normalizar el resultado a: -Compraventa -Herencia -Adjudicacion -Dacion -Donacion -Cesion -Otros Criterios ejemplo: -Compraventa: transmisiones onerosas entre vivos (compraventa, permuta, liquidaciones onerosas, transmisiones por precio) -Herencia: adquisiciones mortis causa (herencia, legado, sucesión, testamento). -Adjudicacion: adquisiciones por resolución judicial o administrativa (subasta, ejecución, remate) -Dacion: transmisión en pago de deuda -Donacion: transmisión gratuita entre vivos Si existen varios actos, seleccionar el que origine la adquisición del dominio actual. Si no puede determinarse, 'Otros' ",
+        "estimateSourceAndConfidence": true
+      },
+      "FechaInscripcion": {
+        "type": "string",
+        "method": "extract",
+        "description": "Fecha de inscripción del título de adquisición en el Registro de la Propiedad. Buscar en la sección 'INSCRIPCIÓN', 'TÍTULO', el apartado de titularidad o al pie del documento. Convertir siempre a formato ISO 8601: yyyy-MM-dd. Formatos de entrada posibles: 'dd/MM/yyyy', 'd de MMMM de yyyy' (en español)."
+      },
+      "TomoLibroFolio": {
+        "type": "string",
+        "method": "extract",
+        "description": "Referencia registral de la inscripción: tomo, libro y folio donde consta inscrito el inmueble. Buscar expresiones como 'Tomo X, Libro Y, Folio Z' o 'T. X, L. Y, F. Z'. Extraer la cadena completa tal como aparece. Máximo 60 caracteres."
+      },
+      "Cargas": {
+        "type": "array",
+        "method": "extract",
+        "description": "Lista de cargas, gravámenes y derechos reales que afectan al inmueble según la sección 'CARGAS', 'GRAVÁMENES' o 'DERECHOS'. Incluir únicamente cargas con efecto real vigente: hipotecas, embargos, afecciones fiscales, servidumbres, condiciones resolutorias. No incluir notas marginales ni advertencias. Si el documento indica 'SIN CARGAS', 'LIBRE DE CARGAS' o equivalente, devolver array vacío [].",
+        "items": {
+          "type": "object",
+          "properties": {
+            "tipo": {
+              "type": "string",
+              "description": "Clasificar la carga en uno de los valores: 'Hipoteca' (hipoteca, préstamo hipotecario); 'Embargo' (anotación preventiva de embargo); 'Servidumbre' (servidumbre de paso, luces, etc.); 'Condicion resolutoria' (condición resolutoria explícita); 'Afeccion fiscal' (afección fiscal por impuestos); 'Otra' (cualquier otro gravamen)."
+            },
+            "descripcion": {
+              "type": "string",
+              "description": "Texto literal completo de la carga tal como aparece en el documento, incluyendo inscripción, anotación y cualquier dato identificativo. Máximo 300 caracteres."
+            },
+            "importeMaxResponsabilidad": {
+              "type": "number",
+              "description": "Importe máximo de responsabilidad si consta (capital + intereses + costas). Convertir a número decimal con punto (p.ej. '123.456,78 €' → 123456.78). Si no consta importe, omitir este campo. Rango: 0-999999999999."
+            },
+            "fechaInscripcion": {
+              "type": "string",
+              "description": "Fecha de inscripción o anotación de la carga en el Registro. Convertir a formato ISO 8601: yyyy-MM-dd. Formatos de entrada: 'dd/MM/yyyy', 'd de MMMM de yyyy'."
+            },
+            "acreedor": {
+              "type": "string",
+              "description": "Nombre o razón social del acreedor, entidad financiera o beneficiario de la carga si consta expresamente en la descripción (p.ej. 'BANCO SANTANDER, S.A.'). Máximo 160 caracteres."
+            }
+          }
+        }
+      },
+      "VPO": {
+        "type": "boolean",
+        "method": "generate",
+        "description": "Indica si el inmueble tiene régimen de Vivienda de Protección Oficial (VPO) o protección pública equivalente. Devolver true si el documento menciona explícitamente 'VPO', 'Vivienda de Protección Oficial', 'VPT', 'VPPA', 'protección pública' o similar. Devolver false en cualquier otro caso."
+      },
+      "LimitacionesAdministrativas": {
+        "type": "string",
+        "method": "extract",
+        "description": "Texto que recoge limitaciones o restricciones impuestas por administraciones públicas sobre el inmueble, distintas de las cargas registrales (p.ej. limitaciones urbanísticas, declaraciones de bien de interés cultural, afecciones de dominio público, limitaciones de uso). Extraer el texto literal. Máximo 300 caracteres. Si no constan, omitir el campo."
+      },
+      "Ocupacion": {
+        "type": "string",
+        "method": "generate",
+        "description": "Situación posesoria u ocupacional del inmueble según conste en el documento. Normalizar al valor más próximo: 'Libre' (libre de ocupantes); 'Arrendado inscrito' (arrendamiento inscrito en el Registro); 'Ocupado' (ocupado por terceros sin título inscrito); 'Otro' (cualquier otra situación indicada). Si el documento no menciona nada sobre la situación posesoria, devolver 'No consta'."
+      },
+      "ArrendamientosInscritos": {
+        "type": "array",
+        "method": "extract",
+        "description": "Lista de arrendamientos inscritos en el Registro que consten en la nota simple. Para cada arrendamiento extraer: arrendatario (nombre del inquilino), fechaInicio (inicio del contrato en formato yyyy-MM-dd) y fechaFin (fin del contrato en formato yyyy-MM-dd si consta). Si no hay arrendamientos inscritos, devolver array vacío [].",
+        "items": {
+          "type": "object",
+          "properties": {
+            "arrendatario": {
+              "type": "string",
+              "description": "Nombre completo del arrendatario (inquilino) tal como consta en la inscripción."
+            },
+            "fechaInicio": {
+              "type": "string",
+              "description": "Fecha de inicio del arrendamiento en formato ISO 8601: yyyy-MM-dd."
+            },
+            "fechaFin": {
+              "type": "string",
+              "description": "Fecha de fin o vencimiento del arrendamiento en formato ISO 8601: yyyy-MM-dd. Omitir si no consta."
+            }
+          }
+        }
+      }
+    }
+  },
+  "warnings": [],
+  "status": "ready",
+  "processingLocation": "geography",
+  "knowledgeSources": [
+    {
+      "kind": "labeledData",
+      "containerUrl": "https://srbstgproapppdocai.blob.core.windows.net/documentai",
+      "prefix": "labelingProjects/01ecc742-3215-4bf8-bdc2-ea7a7ef00fd1/train",
+      "fileListPath": ""
+    }
+  ],
+  "supportedModels": {
+    "completion": [
+      "gpt-4o",
+      "gpt-4o-mini",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "gpt-4.1-nano",
+      "gpt-5.2"
+    ],
+    "embedding": [
+      "text-embedding-3-small",
+      "text-embedding-3-large",
+      "text-embedding-ada-002"
+    ]
+  },
+  "models": {
+    "completion": "gpt-4.1",
+    "embedding": "text-embedding-3-large"
+  }
+}

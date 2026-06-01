@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Threading;
 
 namespace DocumentIA.Functions.Services;
 
@@ -24,6 +25,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
     private readonly AzureContentUnderstandingOptions _options;
     private readonly SemaphoreSlim _cuLimiter;
     private readonly TelemetryClient _telemetryClient;
+    private int _roundRobinCounter = -1;
 
     public AzureContentUnderstandingProvider(
         ILogger<AzureContentUnderstandingProvider> logger,
@@ -58,7 +60,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
 
         var modelKey = !string.IsNullOrWhiteSpace(input.ModelKeyEfectivo)
             ? input.ModelKeyEfectivo
-            : extractionConfig.ModelKey;
+            : ResolveModelKeyRoundRobin(extractionConfig);
         var model = _modelRegistryLoader.GetModel(modelKey);
         ValidateAzureCuModel(model);
         var client = CreateClient(model);
@@ -201,6 +203,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
 
         TrackCuMetrics(
             input.Tipologia,
+            modelKey,
             prepareStopwatch.ElapsedMilliseconds,
             limiterWaitStopwatch.ElapsedMilliseconds,
             analysisElapsedMs,
@@ -228,6 +231,17 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             },
             DatosExtraidos = datosExtraidos
         };
+    }
+
+    private string ResolveModelKeyRoundRobin(TipologiaExtractionConfig extractionConfig)
+    {
+        if (string.IsNullOrWhiteSpace(extractionConfig.SecondaryModelKey))
+        {
+            return extractionConfig.ModelKey;
+        }
+
+        var slot = Interlocked.Increment(ref _roundRobinCounter) % 2;
+        return slot == 0 ? extractionConfig.ModelKey : extractionConfig.SecondaryModelKey;
     }
 
     private ContentUnderstandingClient CreateClient(ExtractionModelConfig model)
@@ -283,6 +297,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
 
     private void TrackCuMetrics(
         string tipologia,
+        string modelKey,
         long prepareMs,
         long limiterWaitMs,
         long analysisMs,
@@ -291,7 +306,8 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
     {
         var properties = new Dictionary<string, string>
         {
-            ["Tipologia"] = tipologia
+            ["Tipologia"] = tipologia,
+            ["ModelKey"] = modelKey
         };
 
         _telemetryClient.TrackMetric("CU.PrepareMs", prepareMs, properties);
