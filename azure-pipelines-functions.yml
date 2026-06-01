@@ -11,9 +11,17 @@ variables:
   azureSubscription: 'AI DocClassExt'
   functionAppName: 'srbappprodocai'
   azureResourceGroup: 'SRBRGDOCSAIPROD'
-  cuMaxConcurrentCalls: '2'
+  # CU Resiliencia baseline (post-2026-06-01)
+  cuMaxConcurrentCalls: '4'
+  cuHardTimeoutSeconds: '90'
+  cuEnableCircuitBreaker: 'true'
+  cuCircuitBreakerFailureThreshold: '5'
+  cuCircuitBreakerOpenSeconds: '45'
   cuMaxRetries: '3'
   cuInitialRetryDelayMs: '500'
+  # Durable Functions concurrency (alineado con CU limiter)
+  maxConcurrentActivityFunctions: '4'
+  maxConcurrentOrchestratorFunctions: '4'
 
 stages:
 - stage: Build
@@ -62,14 +70,20 @@ stages:
               appName: '$(functionAppName)'
               package: '$(Pipeline.Workspace)/FunctionsPublish'
           - task: AzureCLI@2
-            displayName: 'Set CU limiter settings'
+            displayName: 'Set CU Resiliencia App Settings (post-deploy validation)'
             inputs:
               azureSubscription: '$(azureSubscription)'
               scriptType: 'pscore'
               scriptLocation: 'inlineScript'
               inlineScript: |
+                Write-Host "Aplicando App Settings de resiliencia CU..."
+                
                 $settings = @(
                   "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=$(cuMaxConcurrentCalls)",
+                  "Extraction__AzureContentUnderstanding__HardTimeoutSeconds=$(cuHardTimeoutSeconds)",
+                  "Extraction__AzureContentUnderstanding__EnableCircuitBreaker=$(cuEnableCircuitBreaker)",
+                  "Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold=$(cuCircuitBreakerFailureThreshold)",
+                  "Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds=$(cuCircuitBreakerOpenSeconds)",
                   "Extraction__AzureContentUnderstanding__MaxRetries=$(cuMaxRetries)",
                   "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=$(cuInitialRetryDelayMs)"
                 )
@@ -80,3 +94,38 @@ stages:
                   --settings $settings `
                   --only-show-errors `
                   --output none
+
+                Write-Host "Validando que todas las variables se han aplicado..."
+                
+                $requiredKeys = @(
+                  "Extraction__AzureContentUnderstanding__MaxConcurrentCalls",
+                  "Extraction__AzureContentUnderstanding__HardTimeoutSeconds",
+                  "Extraction__AzureContentUnderstanding__EnableCircuitBreaker",
+                  "Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold",
+                  "Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds",
+                  "Extraction__AzureContentUnderstanding__MaxRetries",
+                  "Extraction__AzureContentUnderstanding__InitialRetryDelayMs"
+                )
+                
+                $appliedSettings = az functionapp config appsettings list `
+                  --resource-group "$(azureResourceGroup)" `
+                  --name "$(functionAppName)" `
+                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding')].{name: name, value: value}" `
+                  -o json | ConvertFrom-Json
+                
+                $appliedNames = $appliedSettings | Select-Object -ExpandProperty name
+                $missingKeys = @()
+                
+                foreach ($key in $requiredKeys) {
+                  if ($key -notin $appliedNames) {
+                    $missingKeys += $key
+                  }
+                }
+                
+                if ($missingKeys.Count -gt 0) {
+                  Write-Host "##vso[task.logissue type=error]Faltan variables requeridas: $($missingKeys -join ', ')"
+                  exit 1
+                } else {
+                  Write-Host "✓ Todas las variables de resiliencia CU están aplicadas correctamente"
+                  $appliedSettings | ForEach-Object { Write-Host "  ✓ $($_.name) = $($_.value)" }
+                }
