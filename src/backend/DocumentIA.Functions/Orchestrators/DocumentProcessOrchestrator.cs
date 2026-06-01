@@ -19,13 +19,16 @@ public class DocumentProcessOrchestrator
 {
     private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
     private readonly ClassificationPreparationSettings _classificationPreparationSettings;
+    private readonly PipelineSettings _pipelineSettings;
 
     public DocumentProcessOrchestrator(
         ExtractionModelRegistryLoader extractionModelRegistryLoader,
-        IOptions<ClassificationPreparationSettings> classificationPreparationSettings)
+        IOptions<ClassificationPreparationSettings> classificationPreparationSettings,
+        IOptions<PipelineSettings> pipelineSettings)
     {
         _extractionModelRegistryLoader = extractionModelRegistryLoader;
         _classificationPreparationSettings = classificationPreparationSettings.Value;
+        _pipelineSettings = pipelineSettings.Value;
     }
 
     internal static ObtenerActivoInput BuildObtenerActivoInput(
@@ -1298,6 +1301,94 @@ public class DocumentProcessOrchestrator
 
                 FinalizarSeguimiento("Completed", "ClassificationOnly completado");
                 return salida;
+            }
+
+            // ─────────────────────────────────────────────────────────────────────────
+            // Paso 3.9 — Validación del límite de páginas (tras clasificación, antes de extracción)
+            // ─────────────────────────────────────────────────────────────────────────
+            var maxPaginasEfectivo = tipologiaResuelta.MaxPaginasDocumento > 0
+                ? tipologiaResuelta.MaxPaginasDocumento
+                : _pipelineSettings.MaxPaginasDocumento;
+
+            var paginasDocumento = salida.Identificacion.Paginas;
+            var limitePaginasActivo = maxPaginasEfectivo > 0;
+            var documentoSuperaLimite = limitePaginasActivo && paginasDocumento > maxPaginasEfectivo;
+            var forzarSinLimite = entrada.Instrucciones.ForzarProcesadoSinLimitePaginas;
+
+            if (documentoSuperaLimite && !forzarSinLimite)
+            {
+                var origenLimite = tipologiaResuelta.MaxPaginasDocumento > 0 ? "tipología" : "global";
+                logger.LogWarning(
+                    "Paso 3.9: Documento bloqueado por límite de páginas. Páginas={Paginas}, Límite={Limite} (origen={OrigenLimite}), Documento={Documento}",
+                    paginasDocumento, maxPaginasEfectivo, origenLimite, entrada.Documento.Name);
+
+                var mensajePaginasExcedidas =
+                    $"El documento no ha sido procesado porque supera el límite de páginas configurado. " +
+                    $"Páginas del documento: {paginasDocumento}. Límite configurado: {maxPaginasEfectivo}. " +
+                    $"Para forzar el procesado use ForzarProcesadoSinLimitePaginas = true en la solicitud.";
+
+                MarcarActividadOmitida("Extraer", $"Límite de páginas excedido ({paginasDocumento}/{maxPaginasEfectivo})");
+                MarcarActividadOmitida("Validar", "Límite de páginas excedido");
+                MarcarActividadOmitida("ObtenerActivo", "Límite de páginas excedido");
+                MarcarActividadOmitida("Integrar", "Límite de páginas excedido");
+                MarcarActividadOmitida("SubirGDC", "Límite de páginas excedido");
+
+                salida.DetalleEjecucion.Extraccion = new ResultadoExtraccion
+                {
+                    Modelo = "skipped",
+                    LayoutEnabled = false,
+                    FallbackUsado = false,
+                    FallbackRazon = null,
+                    ConfianzaExtraccion = 0,
+                    ProveedorExtrac = "none",
+                    ConfianzaPorCampo = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase),
+                    CamposConDuda = new List<string>(),
+                    TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+                };
+                salida.DatosExtraidos = new Dictionary<string, object>();
+                salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
+                {
+                    Normalizaciones = new List<string>(),
+                    Markdown = null,
+                    Validaciones = new List<string>(),
+                    Inconsistencias = new List<string> { mensajePaginasExcedidas },
+                    ConfianzaValidacion = 1.0
+                };
+                salida.DetalleEjecucion.Integracion = new ResultadoIntegracion
+                {
+                    Tipologia = salida.Identificacion.Tipologia,
+                    Estado = "OK",
+                    Mensaje = "Omitido: límite de páginas excedido",
+                    Timestamp = context.CurrentUtcDateTime,
+                    DatosOriginales = new Dictionary<string, object>(),
+                    DatosFinales = new Dictionary<string, object>()
+                };
+                salida.DetalleEjecucion.GDC = new ResultadoGDC { Exitoso = true, Mensaje = "Skipped" };
+
+                salida.Resultado.Estado = "PAGINAS_EXCEDIDAS";
+                salida.Resultado.MensajeError = mensajePaginasExcedidas;
+                salida.Resultado.ConfianzaGlobal = RedondearSalida(resultadoClasificacion.Confianza);
+                salida.Resultado.EstadoCalidad = "REVISION";
+                salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
+                salida.Resultado.ConfianzaExtraccion = 0;
+                salida.Resultado.ConfianzaValidacion = 1.0;
+
+                await EjecutarPasoNegocioSinResultado(
+                    "Persistir",
+                    () => context.CallActivityAsync(
+                        "PersistirActivity",
+                        salida));
+
+                FinalizarSeguimiento("Completed", mensajePaginasExcedidas);
+                return salida;
+            }
+
+            if (forzarSinLimite && limitePaginasActivo)
+            {
+                logger.LogWarning(
+                    "[AVISO] Límite de páginas omitido por ForzarProcesadoSinLimitePaginas=true. " +
+                    "Documento: {Documento}. Páginas: {Paginas}. Límite configurado: {Limite}.",
+                    entrada.Documento.Name, paginasDocumento, maxPaginasEfectivo);
             }
 
             var markdownPreclasificacionRecortado = salida.DetalleEjecucion.RecorteAplicado &&

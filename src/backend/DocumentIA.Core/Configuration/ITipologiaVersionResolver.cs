@@ -40,4 +40,5 @@ public sealed record ResolvedTipologia(
     string Tdn1 = "",
     string Tdn2 = "",
     string GptDescripcion = "",
-    bool PromptHasDefinition = false);
+    bool PromptHasDefinition = false,
+    int MaxPaginasDocumento = 0);

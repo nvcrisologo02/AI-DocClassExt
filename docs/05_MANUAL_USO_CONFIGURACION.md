@@ -273,6 +273,16 @@ $body = @{
   trazabilidad = @{ submittedBy = "batch"; idActivo = "ACTIVO-001" }
 } | ConvertTo-Json -Depth 5
 
+# Forzar procesado aunque el documento supere el límite de páginas configurado
+# ⚠️  El llamador es responsable del coste adicional. Se registra traza de auditoría.
+$body = @{
+  instrucciones = @{
+    forzarProcesadoSinLimitePaginas = $true
+  }
+  documento = @{ name = "contrato-largo.pdf"; content = @{ base64 = $base64 } }
+  trazabilidad = @{ submittedBy = "admin"; motivo = "excepcion-aprobada" }
+} | ConvertTo-Json -Depth 5
+
 # Forzar resumen por defecto aunque el flujo DI/CU no necesite GPT
 $body = @{
   instrucciones = @{

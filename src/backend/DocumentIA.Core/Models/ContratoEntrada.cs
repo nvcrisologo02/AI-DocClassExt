@@ -93,6 +93,12 @@ public class Instrucciones
     /// Si no se informa, se mantiene la configuración de prompt de la tipología.
     /// </summary>
     public PromptInstrucciones? Prompt { get; set; }
+
+    /// <summary>
+    /// Cuando es true, omite la validación de límite de páginas y procesa el documento completo.
+    /// El llamador es responsable del coste adicional. Se registra traza de auditoría obligatoria.
+    /// </summary>
+    public bool ForzarProcesadoSinLimitePaginas { get; set; }
 }
 
 /// <summary>
