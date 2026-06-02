@@ -60,6 +60,67 @@ public class CatalogoTdnRepositoryTests
         await act.Should().ThrowAsync<ArgumentException>();
     }
 
+    [Fact]
+    public async Task GetTdn2PromptByFamiliaAsync_WhenPromptIsNull_Should_ReturnNull()
+    {
+        await using var context = CreateContext();
+        SeedCatalogo(context);
+        var repository = new CatalogoTdnRepository(context);
+
+        var result = await repository.GetTdn2PromptByFamiliaAsync("NOTS");
+
+        result.Should().BeNull("porque NOTS no tiene TDN2_Prompt configurado");
+    }
+
+    [Fact]
+    public async Task GetTdn2PromptByFamiliaAsync_WhenPromptIsPopulated_Should_ReturnPrompt()
+    {
+        await using var context = CreateContext();
+        SeedCatalogoWithCustomPrompt(context);
+        var repository = new CatalogoTdnRepository(context);
+
+        var result = await repository.GetTdn2PromptByFamiliaAsync("ESCR");
+
+        result.Should().NotBeNull();
+        result.Should().Contain("custom prompt for ESCR family");
+    }
+
+    [Fact]
+    public async Task GetTdn2PromptByFamiliaAsync_WhenFamilyNotFound_Should_ReturnNull()
+    {
+        await using var context = CreateContext();
+        SeedCatalogo(context);
+        var repository = new CatalogoTdnRepository(context);
+
+        var result = await repository.GetTdn2PromptByFamiliaAsync("MISSING");
+
+        result.Should().BeNull("porque la familia MISSING no existe");
+    }
+
+    [Fact]
+    public async Task GetTdn2PromptByFamiliaAsync_WhenCodigoIsEmpty_Should_Throw()
+    {
+        await using var context = CreateContext();
+        var repository = new CatalogoTdnRepository(context);
+
+        var act = () => repository.GetTdn2PromptByFamiliaAsync(" ");
+
+        await act.Should().ThrowAsync<ArgumentException>();
+    }
+
+    [Fact]
+    public async Task GetTdn2PromptByFamiliaAsync_Should_NormalizeCodigoToUppercase()
+    {
+        await using var context = CreateContext();
+        SeedCatalogoWithCustomPrompt(context);
+        var repository = new CatalogoTdnRepository(context);
+
+        var result = await repository.GetTdn2PromptByFamiliaAsync("escr");
+
+        result.Should().NotBeNull("porque el código se normaliza a ESCR");
+        result.Should().Contain("custom prompt for ESCR family");
+    }
+
     private static DocumentIADbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<DocumentIADbContext>()
@@ -123,6 +184,21 @@ public class CatalogoTdnRepositoryTests
                 Tdn1Id = 1002
             });
 
+        context.SaveChanges();
+    }
+
+    private static void SeedCatalogoWithCustomPrompt(DocumentIADbContext context)
+    {
+        var tdn1Escr = new CatalogoTdn1Entity
+        {
+            Id = 1002,
+            Codigo = "ESCR",
+            Nombre = "Escrituras",
+            Descripcion = "Documentos notariales",
+            TDN2_Prompt = "This is a custom prompt for ESCR family that should be used instead of dynamic generation."
+        };
+
+        context.CatalogoTdn1.Add(tdn1Escr);
         context.SaveChanges();
     }
 }
