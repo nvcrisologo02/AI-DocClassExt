@@ -4,6 +4,7 @@ using DocumentIA.Data.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DocumentIA.Data.Migrations
 {
     [DbContext(typeof(DocumentIADbContext))]
-    partial class DocumentIADbContextModelSnapshot : ModelSnapshot
+    [Migration("20260602183150_AddTdn2PromptToCatalogoTdn1")]
+    partial class AddTdn2PromptToCatalogoTdn1
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
