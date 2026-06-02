@@ -19,6 +19,9 @@ variables:
   cuCircuitBreakerOpenSeconds: '45'
   cuMaxRetries: '3'
   cuInitialRetryDelayMs: '500'
+  promptTracingEnabled: 'true'
+  promptTracingIncludePromptText: 'true'
+  promptTracingMaxPromptTextChars: '20000'
   # Durable Functions concurrency (alineado con CU limiter)
   maxConcurrentActivityFunctions: '4'
   maxConcurrentOrchestratorFunctions: '4'
@@ -60,6 +63,8 @@ stages:
       runOnce:
         deploy:
           steps:
+          - checkout: self
+
           - download: current
             artifact: FunctionsPublish
           - task: AzureFunctionApp@1
@@ -85,15 +90,17 @@ stages:
                   "Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold=$(cuCircuitBreakerFailureThreshold)",
                   "Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds=$(cuCircuitBreakerOpenSeconds)",
                   "Extraction__AzureContentUnderstanding__MaxRetries=$(cuMaxRetries)",
-                  "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=$(cuInitialRetryDelayMs)"
+                  "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=$(cuInitialRetryDelayMs)",
+                  "PromptTracing__Enabled=$(promptTracingEnabled)",
+                  "PromptTracing__IncludePromptText=$(promptTracingIncludePromptText)",
+                  "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)"
                 )
 
-                az functionapp config appsettings set `
-                  --resource-group "$(azureResourceGroup)" `
-                  --name "$(functionAppName)" `
-                  --settings $settings `
-                  --only-show-errors `
-                  --output none
+                & .\scripts\ensure-app-settings.ps1 `
+                  -AppKind functionapp `
+                  -ResourceGroup "$(azureResourceGroup)" `
+                  -Name "$(functionAppName)" `
+                  -Settings $settings
 
                 Write-Host "Validando que todas las variables se han aplicado..."
                 
@@ -104,13 +111,16 @@ stages:
                   "Extraction__AzureContentUnderstanding__CircuitBreakerFailureThreshold",
                   "Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds",
                   "Extraction__AzureContentUnderstanding__MaxRetries",
-                  "Extraction__AzureContentUnderstanding__InitialRetryDelayMs"
+                  "Extraction__AzureContentUnderstanding__InitialRetryDelayMs",
+                  "PromptTracing__Enabled",
+                  "PromptTracing__IncludePromptText",
+                  "PromptTracing__MaxPromptTextChars"
                 )
                 
                 $appliedSettings = az functionapp config appsettings list `
                   --resource-group "$(azureResourceGroup)" `
                   --name "$(functionAppName)" `
-                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding')].{name: name, value: value}" `
+                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__')].{name: name, value: value}" `
                   -o json | ConvertFrom-Json
                 
                 $appliedNames = $appliedSettings | Select-Object -ExpandProperty name
