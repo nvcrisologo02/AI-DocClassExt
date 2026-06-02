@@ -91,7 +91,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         var phase1UserText =
             $"Prompt adicional de instrucciones (si aplica):\n{contextoPrompt}\n\n" +
             $"Familias TDN1 disponibles:\n{phase1Catalog}\n\n" +
-            "Si no puedes resolver una familia, devuelve tdn1=null y completa propuesta con una sugerencia no vinculante.";
+            "Si no puedes resolver una familia, devuelve tdn1=null y completa propuesta con una sugerencia no vinculante. Comenzando siempre por el codigo de la tipologia propuesta, seguido de la justificacion en no mas de 200 caracteres   (ejemplo: 'ESCR-06: Se trata de una escritura de dación en pago en la que los deudores transmiten un bien al acreedor para cancelar la deuda hipotecaria existente y extinguir las obligaciones derivadas.'). - No inventes códigos ni nombres fuera del catálogo.";
 
         if (resumenPrompt is not null)
         {
@@ -179,8 +179,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"resumen\": \"resumen ejecutivo\"}. No incluyas texto fuera del JSON.";
 
         var phase2SystemText =
-            "Eres un sistema experto en clasificación documental. " +
-            "Debes seleccionar exclusivamente un subtipo TDN2 de la familia ya resuelta. " +
+            "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
+            "especialmente documentos de SAREB (Sociedad de Gestión de Activos procedentes de la Reestructuración Bancaria). " +
+            "Debes seleccionar exclusivamente una tipología de la familia TDN1 ya resuelta basándote en el contenido del documento. " +
             phase2ResponseInstruction;
 
         if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
@@ -192,7 +193,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         var phase2UserText =
             $"Familia TDN1 resuelta: {tdn1Code}\n\n" +
-            $"Subtipos TDN2 disponibles:\n{phase2Catalog}";
+            $"Tipologías disponibles en esta familia:\n{phase2Catalog}\n\n" +
+            "Si no puedes resolver la tipología exacta, devuelve una propuesta no vinculante comenzando siempre por el código de la tipología propuesta, " +
+            "seguido de la justificación en no más de 200 caracteres (ejemplo: 'ESCR-06: Se trata de una escritura de dación en pago en la que los deudores transmiten un bien al acreedor para cancelar la deuda hipotecaria existente y extinguir las obligaciones derivadas.').";
 
         if (resumenPrompt is not null)
         {

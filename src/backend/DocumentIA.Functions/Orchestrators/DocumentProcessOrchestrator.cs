@@ -855,6 +855,7 @@ public class DocumentProcessOrchestrator
                     salida.Identificacion.Tipologia = tipologiaParcial;
                     salida.Identificacion.TipologiaFamilia = tipologiaParcial;
                     salida.Identificacion.TipologiaVersion = string.Empty;
+                    salida.Identificacion.TipologiaNombre = resultadoClasificacion.PropuestaTipologia ?? string.Empty;
                     salida.Identificacion.PropuestaTipologia = resultadoClasificacion.PropuestaTipologia;
                     salida.DetalleEjecucion.RunTipologia = tipologiaParcial;
 
@@ -1032,9 +1033,8 @@ public class DocumentProcessOrchestrator
             salida.Identificacion.Tipologia = tipologiaResuelta.TechnicalKey;
             salida.Identificacion.TipologiaFamilia = tipologiaResuelta.TipologiaId;
             salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
+            salida.Identificacion.TipologiaNombre = tipologiaResuelta.TipologiaNombre;
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
-
-            // Añadir actividad Prompt al seguimiento si la tipología la tiene habilitada o si hay override en la petición
             var promptActivoEnPeticion = (tipologiaResuelta.PromptEnabled && tipologiaResuelta.PromptHasDefinition)
                 || entrada.Instrucciones.Prompt != null;
             var resumenCombinadoClasificacion = resultadoClasificacion.ResumenCombinado;

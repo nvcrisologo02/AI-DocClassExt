@@ -1,4 +1,5 @@
-﻿using Azure.Storage.Blobs;
+﻿using Azure;
+using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
 using Microsoft.Extensions.Configuration;
@@ -149,8 +150,18 @@ public class BlobStorageService : IBlobStorageService
 
     private async Task InitializeContainerAsync(BlobContainerClient containerClient, string containerName)
     {
-        await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
-        _initializedContainers.TryAdd(containerName, true);
+        try
+        {
+            await containerClient.CreateIfNotExistsAsync(PublicAccessType.None);
+            _initializedContainers.TryAdd(containerName, true);
+        }
+        catch (RequestFailedException ex) when (ex.Status == 409)
+        {
+            // Container already exists — normal race condition during parallel initialization.
+            // Silently mark as initialized; no need to log as error.
+            _initializedContainers.TryAdd(containerName, true);
+            _logger.LogDebug("Container '{ContainerName}' already exists (409). Race condition during init.", containerName);
+        }
     }
 
     public string GenerateBlobPath(string sha256, string fileName)

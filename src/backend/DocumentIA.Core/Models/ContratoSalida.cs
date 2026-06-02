@@ -63,6 +63,11 @@ public class Identificacion
     public string TipologiaVersion { get; set; } = string.Empty;
 
     /// <summary>
+    /// Nombre legible/descriptivo de la tipología detectada.
+    /// </summary>
+    public string TipologiaNombre { get; set; } = string.Empty;
+
+    /// <summary>
     /// Marca temporal UTC del procesamiento.
     /// </summary>
     public DateTime FechaProceso { get; set; } = DateTime.UtcNow;

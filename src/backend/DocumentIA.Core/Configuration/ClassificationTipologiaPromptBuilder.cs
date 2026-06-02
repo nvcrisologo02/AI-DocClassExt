@@ -64,13 +64,77 @@ public class ClassificationTipologiaPromptBuilder
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
 
             using var scope = _scopeFactory.CreateScope();
-            var repository = scope.ServiceProvider.GetRequiredService<ICatalogoTdnRepository>();
-            var subtipos = repository
-                .GetSubtiposByFamiliaAsync(normalizedFamily)
+            var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
+            var db = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
+            var tipologias = repository.GetAllPublishedAsync()
                 .GetAwaiter()
                 .GetResult();
 
-            return string.Join("\n", subtipos.Select(s => $"- {s.Codigo}: {s.Descripcion}"));
+            var catalogoTdn2 = db.CatalogoTdn2
+                .ToList()
+                .GroupBy(x => x.Codigo, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.First().Nombre, StringComparer.OrdinalIgnoreCase);
+
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var lines = new List<string>();
+
+            // Filtrar tipologías que pertenezcan a la familia TDN1 especificada
+            var tipologiasEnFamilia = tipologias
+                .Where(t => !string.IsNullOrWhiteSpace(t.ConfiguracionJson))
+                .Select(t =>
+                {
+                    try
+                    {
+                        var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(t.ConfiguracionJson!, 
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                        return new { Tipologia = t, Config = config };
+                    }
+                    catch
+                    {
+                        return new { Tipologia = t, Config = (TipologiaValidationConfig?)null };
+                    }
+                })
+                .Where(x => x.Config != null && string.Equals(x.Config.ResolvedTdn1?.Trim(), normalizedFamily, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            // Construir catálogo enriquecido con tipologiacodigo, tipologiaNombre, gptdescription, tdn2
+            foreach (var item in tipologiasEnFamilia)
+            {
+                var tipologia = item.Tipologia;
+                var config = item.Config!;
+
+                if (string.IsNullOrWhiteSpace(config.TipologiaId))
+                {
+                    continue;
+                }
+
+                var codigoCanónico = !string.IsNullOrWhiteSpace(tipologia.Codigo)
+                    ? tipologia.Codigo
+                    : config.TipologiaId;
+
+                if (!seen.Add(codigoCanónico))
+                {
+                    continue;
+                }
+
+                var nombre = string.IsNullOrWhiteSpace(config.TipologiaNombre)
+                    ? codigoCanónico
+                    : config.TipologiaNombre;
+
+                var descripcion = string.IsNullOrWhiteSpace(config.ResolvedGptDescripcion)
+                    ? nombre
+                    : config.ResolvedGptDescripcion;
+
+                var tdn2Codigo = config.ResolvedTdn2?.Trim() ?? "N/A";
+                var tdn2Nombre = string.IsNullOrWhiteSpace(tdn2Codigo) || tdn2Codigo == "N/A"
+                    ? "N/A"
+                    : (catalogoTdn2.TryGetValue(tdn2Codigo, out var n2) ? n2 : tdn2Codigo);
+
+                // Formato: - tipologiacodigo [tdn2: tdn2nombre] descripcion
+                lines.Add($"- {codigoCanónico} [{tdn2Codigo}: {tdn2Nombre}] {descripcion}");
+            }
+
+            return string.Join("\n", lines);
         }) ?? string.Empty;
     }
 
