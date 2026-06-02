@@ -183,6 +183,6 @@ Antes de retomar en otra sesion:
 
 ## 12. Referencias
 
-- Plan maestro de expansion: `docs/16_PLAN_EXPANSION_BATERIAS_E2E_ADO_2026-05-26.md`
+- Plan maestro de expansion: `docs/plans/16_PLAN_EXPANSION_BATERIAS_E2E_ADO_2026-05-26.md`
 - Script de bateria: `tests/api-tests/test-classification-process.ps1`
 - Casos de bateria: `tests/api-tests/classification-process-cases.json`

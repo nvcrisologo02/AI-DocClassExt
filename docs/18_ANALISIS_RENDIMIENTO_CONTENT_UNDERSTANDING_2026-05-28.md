@@ -4,7 +4,7 @@ Fecha: 2026-05-28
 Ambito: extracciones de notas simples ejecutadas desde el frontend batch  
 Ventana principal analizada: desde 2026-05-27 14:45 UTC
 
-> Documento histórico de línea base (pre-endurecimiento). Para operación actual y medidas implementadas consultar también `docs/20_ANALISIS_CRISIS_CU_20260529_Y_PLAN_RESILIENCIA.md`.
+> Documento histórico de línea base (pre-endurecimiento). Para operación actual y medidas implementadas consultar también `docs/plans/20_ANALISIS_CRISIS_CU_20260529_Y_PLAN_RESILIENCIA.md`.
 
 ## 1. Resumen ejecutivo
 

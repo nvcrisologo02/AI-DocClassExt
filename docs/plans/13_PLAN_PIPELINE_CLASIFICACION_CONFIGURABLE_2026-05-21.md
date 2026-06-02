@@ -218,7 +218,7 @@ Iniciativa completada y cerrada (2026-05-21):
 - Features 99464, 99462, 99463, 99465: Done
 - Tasks 99473-99477, 99466-99475, 99471-99474: Done
 - Documentacion operativa:
-  - Plan: docs/13_PLAN_PIPELINE_CLASIFICACION_CONFIGURABLE_2026-05-21.md
+  - Plan: docs/plans/13_PLAN_PIPELINE_CLASIFICACION_CONFIGURABLE_2026-05-21.md
   - Backlog: docs/14_ADO_BACKLOG_PIPELINE_CLASIFICACION_2026-05-21.md
 - Evidencias:
   - Build backend Functions: OK (10,1s).

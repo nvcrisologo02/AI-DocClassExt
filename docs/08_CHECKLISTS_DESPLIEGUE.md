@@ -295,6 +295,6 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Arquitectura completa y diagrama de despliegue |
 | [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Procedimientos paso a paso, variables de entorno, scripts |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Configuracion tecnica detallada |
-| [11_PLAN_CONFIGURACION_LIMPIA.md](11_PLAN_CONFIGURACION_LIMPIA.md) | Plan de remediacion y gobierno de configuracion |
+| [11_PLAN_CONFIGURACION_LIMPIA.md](plans/11_PLAN_CONFIGURACION_LIMPIA.md) | Plan de remediacion y gobierno de configuracion |
 | [../scripts/README-activate-pim.md](../scripts/README-activate-pim.md) | Guia de activacion PIM |
 | [../azure-pipelines.yml](../azure-pipelines.yml) | Pipeline CI/CD: Build + DeployFunctions + DeployAdmin + DeployAssetResolver + ValidateConfiguration |

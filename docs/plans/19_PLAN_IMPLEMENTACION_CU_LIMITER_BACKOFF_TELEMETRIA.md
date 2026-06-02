@@ -4,9 +4,9 @@
 **Rama de implementación:** `feature/99671-cu-limiter-backoff-telemetry`  
 **Estado:** Implementado localmente y verificado  
 **ADO Work Items:** Feature [#99671](https://sareb.visualstudio.com/baf56a97-5b96-43d7-952c-86d74d2a4af1/_workitems/edit/99671) → PBI [#99672](https://sareb.visualstudio.com/baf56a97-5b96-43d7-952c-86d74d2a4af1/_workitems/edit/99672), [#99673](https://sareb.visualstudio.com/baf56a97-5b96-43d7-952c-86d74d2a4af1/_workitems/edit/99673), [#99674](https://sareb.visualstudio.com/baf56a97-5b96-43d7-952c-86d74d2a4af1/_workitems/edit/99674)  
-**Análisis base:** [18_ANALISIS_RENDIMIENTO_CONTENT_UNDERSTANDING_2026-05-28.md](./18_ANALISIS_RENDIMIENTO_CONTENT_UNDERSTANDING_2026-05-28.md)
+**Análisis base:** [18_ANALISIS_RENDIMIENTO_CONTENT_UNDERSTANDING_2026-05-28.md](../18_ANALISIS_RENDIMIENTO_CONTENT_UNDERSTANDING_2026-05-28.md)
 
-> Estado documental: este documento describe el plan original y se conserva como histórico. La referencia operativa vigente está en `docs/20_ANALISIS_CRISIS_CU_20260529_Y_PLAN_RESILIENCIA.md` y en manuales de operación/despliegue.
+> Estado documental: este documento describe el plan original y se conserva como histórico. La referencia operativa vigente está en `docs/plans/20_ANALISIS_CRISIS_CU_20260529_Y_PLAN_RESILIENCIA.md` y en manuales de operación/despliegue.
 
 > Valores vigentes tras implementación y endurecimiento posterior: `maxConcurrentActivityFunctions=4`, `maxConcurrentOrchestratorFunctions=4`, `Extraction:AzureContentUnderstanding:MaxConcurrentCalls=4`, `HardTimeoutSeconds=90`, `EnableCircuitBreaker=true`, `CircuitBreakerFailureThreshold=5`, `CircuitBreakerOpenSeconds=45`.
 

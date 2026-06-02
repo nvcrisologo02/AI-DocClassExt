@@ -48,7 +48,7 @@
 | `docs/03_DISENO_TECNICO_DETALLADO.md` | A verificar | Diseno tecnico (48 KB) | Riesgo de quedar atras sobre healthcheck por componentes y prompt ad-hoc. | Alta | Diff tecnico contra activities y triggers reales. |
 | `docs/04_MANUAL_EXPLOTACION.md` | Parcial | Operacion | Declara Azure SQL "(pendiente)" - ya existe `srbsqlprodocai`. Migraciones: dice arranque, pipeline tiene stage off. | **Critica** | Eliminar "pendiente" en SQL, documentar estrategia real de migraciones. |
 | `docs/05_MANUAL_USO_CONFIGURACION.md` | Mayoritariamente alineado | Uso, config, contratos | Riesgo de no reflejar contrato `objectIdGDC` y `PromptInstrucciones`. | Media | Verificar secciones de contrato vs CONTRATO_API_HTTP. |
-| `docs/06_PLAN_PRUEBAS.md` | A revisar | Plan de pruebas | El roadmap (7.3.2) afirma que el pipeline no ejecuta tests; el YAML actual incluye task `Test`. Contradiccion interna. | Alta | Reconciliar 06 + 07.3.2 + YAML. |
+| `docs/plans/06_PLAN_PRUEBAS.md` | A revisar | Plan de pruebas | El roadmap (7.3.2) afirma que el pipeline no ejecuta tests; el YAML actual incluye task `Test`. Contradiccion interna. | Alta | Reconciliar 06 + 07.3.2 + YAML. |
 | `docs/07_ROADMAP_PENDIENTES.md` | Inconsistencias internas | Roadmap | Filas duplicadas para EP3 (85% y 88%) y EP9 (75% y 80%). Estado dice "EP10 DONE 100%" - coherente con ramas, pero EP6 % desactualizado. | Alta | Deduplicar filas, recalcular % con evidencia de WI. |
 | `docs/08_CHECKLISTS_DESPLIEGUE.md` | Parcial | Checklists | Fila 3.9 SQL "PENDIENTE DE CREAR" y 3.10 Web App "PENDIENTE" estan desfasadas (ambos creados). | Alta | Marcar DONE y datar. |
 | `docs/09_AUDITORIA_CONFIGURACION_2026-04-30.md` | **No commiteado** (untracked) | Auditoria config | Vigente y bien estructurada. Riesgo: no versionada -> puede perderse. | **Critica** | Decidir versionado (commit a develop o branch dedicada) via Git Governance Agent. |
@@ -121,7 +121,7 @@
 
 ### 5.2 Mid-term (1-2 sprints)
 
-1. Reconciliar Plan de Pruebas: alinear `docs/06_PLAN_PRUEBAS.md`, seccion 7.3.2 de `07_ROADMAP_PENDIENTES.md`, conteo real de tests y task `Test` del pipeline. _(DONE 2026-05-01: conteo verificado vía `dotnet test --list-tests` (554 C# + 2 Python = 556); doc 06 y EP6/7.3.2 actualizados; pipeline ya ejecuta `Test` solo sobre `DocumentIA.Tests.Unit`, queda pendiente extender a Admin/AssetResolver)_
+1. Reconciliar Plan de Pruebas: alinear `docs/plans/06_PLAN_PRUEBAS.md`, seccion 7.3.2 de `07_ROADMAP_PENDIENTES.md`, conteo real de tests y task `Test` del pipeline. _(DONE 2026-05-01: conteo verificado vía `dotnet test --list-tests` (554 C# + 2 Python = 556); doc 06 y EP6/7.3.2 actualizados; pipeline ya ejecuta `Test` solo sobre `DocumentIA.Tests.Unit`, queda pendiente extender a Admin/AssetResolver)_
 2. Diff `CONTRATO_API_HTTP.md` vs DTOs: confirmar `PromptInstrucciones`, `objectIdGDC`, healthcheck, AAII/AACC dual. _(DONE 2026-05-01: añadida sección healthcheck; resto ya documentado)_
 3. Redisenar diagrama orquestador con las 17 activities reales. _(DONE 2026-05-01: actualizado `01_ARQUITECTURA_SISTEMA.md`)_
 4. Crear manual de healthcheck por componentes (probes, payload, contrato, consumo Admin/Desktop). _(DONE 2026-05-01: nuevo `docs/manuales/MANUAL_HEALTHCHECK.md`; ademas se ajusto §4.bis de `CONTRATO_API_HTTP.md` para alinear con el codigo real \u2014 status en minusculas, `message` en lugar de `details`, sub-componentes de `modelProviders` como objetos unicos en lugar de arrays)_
