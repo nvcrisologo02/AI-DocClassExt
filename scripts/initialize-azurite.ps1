@@ -4,14 +4,23 @@ $connectionString = "DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;
 
 Write-Host "Inicializando Azurite con contenedores necesarios..." -ForegroundColor Cyan
 
-# Esperar a que Azurite esté listo
-Write-Host "Esperando a que Azurite responda..." -ForegroundColor Yellow
+# Esperar a que Azurite esté listo (Blob + Queue + Table)
+Write-Host "Esperando a que Azurite responda (todos los servicios)..." -ForegroundColor Yellow
 $maxRetries = 30
 $retries = 0
+$context = $null
+
 while ($retries -lt $maxRetries) {
     try {
         $context = New-AzStorageContext -ConnectionString $connectionString -ErrorAction Stop
-        Write-Host "[OK] Azurite esta listo" -ForegroundColor Green
+        
+        # Verify Blob service is ready
+        $containers = Get-AzStorageContainer -Context $context -MaxCount 1 -ErrorAction Stop | Select-Object -First 1
+        
+        # Verify Table service is ready
+        $tables = Get-AzStorageTable -Context $context -ErrorAction Stop | Select-Object -First 1
+        
+        Write-Host "[OK] Azurite esta listo (Blob + Queue + Table)" -ForegroundColor Green
         break
     }
     catch {
@@ -24,9 +33,6 @@ while ($retries -lt $maxRetries) {
         Start-Sleep -Seconds 1
     }
 }
-
-# Crear contexto
-$context = New-AzStorageContext -ConnectionString $connectionString
 
 # Crear contenedores de Blob Storage
 Write-Host "`nCreando contenedores de Blob Storage..." -ForegroundColor Cyan
@@ -67,7 +73,7 @@ foreach ($queue in $queues) {
     }
 }
 
-# Crear tablas (Tables)
+# Crear tablas (Tables) con reintentos
 Write-Host "`nCreando tablas para Durable Functions..." -ForegroundColor Cyan
 $tables = @(
     "DocumentIAHub",
@@ -76,13 +82,38 @@ $tables = @(
 )
 
 foreach ($table in $tables) {
-    try {
-        New-AzStorageTable -Name $table -Context $context -ErrorAction SilentlyContinue
-        Write-Host "  [OK] Tabla '$table' creada/verificada"
-    }
-    catch {
-        Write-Host "  [WARN] Tabla '$table' ya existe o error: $_" -ForegroundColor Yellow
+    $tableRetries = 0
+    $maxTableRetries = 3
+    $created = $false
+    
+    while ($tableRetries -lt $maxTableRetries -and -not $created) {
+        try {
+            $existingTable = Get-AzStorageTable -Name $table -Context $context -ErrorAction SilentlyContinue
+            if ($existingTable) {
+                Write-Host "  [OK] Tabla '$table' ya existe (verificada)"
+                $created = $true
+            }
+            else {
+                New-AzStorageTable -Name $table -Context $context -ErrorAction Stop
+                Write-Host "  [OK] Tabla '$table' creada"
+                $created = $true
+            }
+        }
+        catch {
+            $tableRetries++
+            if ($tableRetries -lt $maxTableRetries) {
+                Write-Host "  [RETRY] Tabla '$table' - intento $tableRetries/$maxTableRetries"
+                Start-Sleep -Milliseconds 500
+            }
+            else {
+                Write-Host "  [WARN] Tabla '$table' no se pudo crear/verificar: $_" -ForegroundColor Yellow
+            }
+        }
     }
 }
+
+# Esperar a que Azurite sincronice cambios antes de retornar
+Write-Host "`nEsperando a que Azurite sincronice..." -ForegroundColor Cyan
+Start-Sleep -Seconds 2
 
 Write-Host "`n[SUCCESS] Azurite inicializado correctamente" -ForegroundColor Green

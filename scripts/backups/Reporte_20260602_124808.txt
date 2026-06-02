@@ -1,0 +1,7 @@
+﻿REPORTE DE ACTUALIZACION
+Fecha: 2026-06-02 12:48:08
+Modo: DRY RUN
+Archivo: .\docs\auxiliares\tiposgpt.csv
+
+CAMBIOS REALIZADOS
+==================

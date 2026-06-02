@@ -1,0 +1,1231 @@
+﻿REPORTE DE ACTUALIZACION
+Fecha: 2026-06-02 12:51:12
+Modo: DRY RUN
+Archivo: .\docs\auxiliares\tiposgpt.csv
+
+CAMBIOS REALIZADOS
+==================
+ID=2019 [actr.01]
+  Nombre: Asamblea y/o consejo: acta
+  tipologiaNombre anterior: Asamblea y/o consejo: acta
+  gptdescripcion anterior: Documento formal que deja constancia de lo tratado, asistentes y acuerdos adoptados en el acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Asamblea y/o consejo: acta. Descripci�n principal: Documento formal que deja constancia de lo tratado, asistentes y acuerdos adoptados en el acto indicado. Contexto descriptivo: Testimonios, asientos o constancia oficial de lo tratado o acordado en una junta, consejo, asamblea, comite, equipo de trabajo, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2020 [acue.01]
+  Nombre: Aprobación / denegación operación financiera por órgano externo
+  tipologiaNombre anterior: Aprobación / denegación operación financiera por órgano externo
+  gptdescripcion anterior: Documento correspondiente a la tipología “Aprobación / denegación operación financiera por órgano externo”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Aprobaci�n / denegaci�n operaci�n financiera por �rgano externo. Descripci�n principal: Resoluci�n de aprobaci�n o denegaci�n de una operaci�n concreta por parte de una cedente o un servicer. Contexto descriptivo: Escritos y acuerdos de un �gano distinto a Sareb (y nunca Adm. P�blica) por el que se consiente o no alg�n acto normamente solicitado. Se caracteriza por su unilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2021 [acui.02]
+  Nombre: Aprobación / denegación operación por Sareb
+  tipologiaNombre anterior: Aprobación / denegación operación por Sareb
+  gptdescripcion anterior: Documento correspondiente a la tipología “Aprobación / denegación operación por Sareb”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Aprobaci�n / denegaci�n operaci�n por Sareb. Descripci�n principal: Resoluci�n de aprobaci�n o denegaci�n de una operaci�n concreta por parte de Sareb. Contexto descriptivo: Escritos y acuerdos de los �rganos de decisi�n de Sareb por los que se consiente o no alg�n acto solicitado. Se caracteriza por la unilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2022 [anex.04]
+  Nombre: Contrato: anexo contrato
+  tipologiaNombre anterior: Contrato: anexo contrato
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Contrato: anexo contrato. Descripci�n principal: Relaci�n de documentaci�n anexa al contrato. Contexto descriptivo: Informaci�n que acompa�a a cualquier tipo documental y que por sus caracter�sticas e importancia debe ser considerado como un tipo documental independiente. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2023 [cedu.01]
+  Nombre: Cédula urbanística
+  tipologiaNombre anterior: Cédula urbanística
+  gptdescripcion anterior: Documento administrativo de solicitud, autorización o acreditación emitido o presentado ante la administración.
+  gptdescripcion nuevo: Tipo de documento: C�dula urban�stica. Descripci�n principal: Documentos o certificados administrativos municipales acreditativos de las circunstancias urban�sticas que concurran en las fincas, solares o parcelas. Pueden encontrarse embebidos: solicitudes, denegaciones, escritos observaciones, etc"...). Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2024 [cera.02]
+  Nombre: Arras: justificante abono
+  tipologiaNombre anterior: Arras: justificante abono
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Arras: justificante abono. Descripci�n principal: Documento de Justificaci�n de pago de las arras penitenciales o confirmatorias (este tipo documental incorpora tambi�n la devoluci�n total o parcial de las cantidades abonadas con anterioridad). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2025 [cera.08]
+  Nombre: Derramas y cuotas: justificante de abono
+  tipologiaNombre anterior: Derramas y cuotas: justificante de abono
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Derramas y cuotas: justificante de abono. Descripci�n principal: Justificante de abono emitido por la entidad al part�cipe como consecuencia del reparto de los costes asumidos por la entidad y girados al participe en el porcentaje que le corresponde. (este tipo documental incorpora tambi�n la devoluci�n total o parcial de las cantidades abonadas con anterioridad). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2026 [cera.12]
+  Nombre: Impuesto sobre bienes inmuebles (IBI): justificante abono
+  tipologiaNombre anterior: Impuesto sobre bienes inmuebles (IBI): justificante abono
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Impuesto sobre bienes inmuebles (IBI): justificante abono. Descripci�n principal: Carta de Pago del Impuesto Municipal sobre Bienes Inmuebles (IBI) (este tipo documental incorpora tambi�n la devoluci�n total o parcial de las cantidades abonadas con anterioridad)..). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2027 [cera.14]
+  Nombre: Impuesto de transmisiones patrimoniales (ITP) y Actos Jurídicos Documentados (AJD)
+  tipologiaNombre anterior: Impuesto de transmisiones patrimoniales (ITP) y Actos Jurídicos Documentados (AJD)
+  gptdescripcion anterior: Documento correspondiente a la tipología “Impuesto de transmisiones patrimoniales (ITP) y Actos Jurídicos Documentados (AJD)”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Impuesto de transmisiones patrimoniales (ITP) y Actos Jur�dicos Documentados (AJD). Descripci�n principal: Conjunto de documentaci�n relativa al Impuesto de Trasmisiones Patrimoniales y/o Actos Jur�dicos Documentados. Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2028 [cera.15]
+  Nombre: Impuesto Incremento Valor Terrenos Naturaleza Urbana (plusvalía)
+  tipologiaNombre anterior: Impuesto Incremento Valor Terrenos Naturaleza Urbana (plusvalía)
+  gptdescripcion anterior: Documento correspondiente a la tipología “Impuesto Incremento Valor Terrenos Naturaleza Urbana (plusvalía)”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Impuesto Incremento Valor Terrenos Naturaleza Urbana (plusval�a). Descripci�n principal: Conjunto de documentaci�n relativa al Impuesto del Valor Terrenos de Naturaleza Urbana (Plusval�a). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2029 [cera.16]
+  Nombre: Impuesto sobre bienes inmuebles (IBI): recibo
+  tipologiaNombre anterior: Impuesto sobre bienes inmuebles (IBI): recibo
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Impuesto sobre bienes inmuebles (IBI): recibo. Descripci�n principal: Documento justificativo del pago del impuesto de bienes inmuebles emitido por la administraci�n compentente. Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2030 [cera.19]
+  Nombre: Justificante abono
+  tipologiaNombre anterior: Justificante abono
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Justificante abono. Descripci�n principal: Documento Justificativo de habar realizado el abono de un concepto no contemplado en otros apartados de la clasificaci�n (este tipo documental incorpora tambi�n la devoluci�n total o parcial de las cantidades abonadas con anterioridad). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2031 [cera.22]
+  Nombre: Otro impuesto / tasa / contribución
+  tipologiaNombre anterior: Otro impuesto / tasa / contribución
+  gptdescripcion anterior: Documento correspondiente a la tipología “Otro impuesto / tasa / contribución”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Otro impuesto / tasa / contribuci�n. Descripci�n principal: Carta de Pago de un Impuesto, tasa o contribuci�n no incluidos en otros apartados de la clasificaci�n. Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2032 [cera.27]
+  Nombre: Proyecto ejecución: justificación abono tasa tramitación
+  tipologiaNombre anterior: Proyecto ejecución: justificación abono tasa tramitación
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Proyecto ejecuci�n: justificaci�n abono tasa tramitaci�n. Descripci�n principal: Carta pago de la Tasa de Tramitaci�n del proyecto de ejecuci�n (este tipo documental incorpora tambi�n la devoluci�n total o parcial de las cantidades abonadas con anterioridad). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2033 [cera.32]
+  Nombre: Reserva: justificante abono
+  tipologiaNombre anterior: Reserva: justificante abono
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Reserva: justificante abono. Descripci�n principal: Documento Justificativo de haber abonado la reserva (este tipo documental incorpora tambi�n la devoluci�n total o parcial de las cantidades abonadas con anterioridad). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2034 [cera.44]
+  Nombre: Tasa municipal basura, vado, etc
+  tipologiaNombre anterior: Tasa municipal basura, vado, etc
+  gptdescripcion anterior: Documento correspondiente a la tipología “Tasa municipal basura, vado, etc”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Tasa municipal basura, vado, etc. Descripci�n principal: Conjunto de documentaci�n relativa a la tasa municipal de recogida de basura, Vado, o cualquier otra no contemplada en la presente clasificaci�n. Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2035 [cera.45]
+  Nombre: Transacción: justificante abono
+  tipologiaNombre anterior: Transacción: justificante abono
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Transacci�n: justificante abono. Descripci�n principal: Documento Justificativo de haber abonado el importe de la transacci�n pactada (este tipo documental incorpora tambi�n la devoluci�n total o parcial de las cantidades abonadas con anterioridad). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2036 [cera.52]
+  Nombre: Depósito justificante abono
+  tipologiaNombre anterior: Depósito justificante abono
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Dep�sito justificante abono. Descripci�n principal: Justificante del ingreso del importe del dep�sito marcado por contrato (este tipo documental incorpora tambi�n la devoluci�n total o parcial de las cantidades abonadas con anterioridad). Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2037 [cera.55]
+  Nombre: Justificante
+  tipologiaNombre anterior: Justificante
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Justificante. Descripci�n principal: Documento acreditativo de la realizaci�n de alg�n acto. Contexto descriptivo: Documentos en los que se justifica y acredita cualquier actividad de pago y/o cobro ya sea por impuestos, tasas, contribuciones, abonos por contratos, ventas, alquileres, etc.Los medios de pago/cobro tales como transferencia bancaria, cheque, efectivo se engloban en el t�rmino "justificante abono". Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2038 [cerj.03]
+  Nombre: Carta no vinculación
+  tipologiaNombre anterior: Carta no vinculación
+  gptdescripcion anterior: Documento correspondiente a la tipología “Carta no vinculación”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Carta no vinculaci�n. Descripci�n principal: Certificado que acredita la inexistencia de una relaci�n entre una entidad y activo. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2039 [cerj.04]
+  Nombre: Catastro: certificación
+  tipologiaNombre anterior: Catastro: certificación
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Catastro: certificaci�n. Descripci�n principal: Documento que acredita los datos f�sicos, jur�dicos de los inmuebles obrantes en el registro administrativo dependiente del Ministerio de Hacienda y Administraciones P�blicas. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2040 [cerj.11]
+  Nombre: Certificado deuda
+  tipologiaNombre anterior: Certificado deuda
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Certificado deuda. Descripci�n principal: Certificado emitido con indicaci�n de que no existe deuda. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2041 [cerj.20]
+  Nombre: Derramas y cuotas: certificación deuda
+  tipologiaNombre anterior: Derramas y cuotas: certificación deuda
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Derramas y cuotas: certificaci�n deuda. Descripci�n principal: Certificado emitido por la una entidad que acredita que un propietario, que forma parte de la entidad, est� al corriente de pago de las derramas y cuotas giradas. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2042 [cerj.23]
+  Nombre: Extracto bancario
+  tipologiaNombre anterior: Extracto bancario
+  gptdescripcion anterior: Evidencia documental de un pago/cobro, cargo o movimiento económico asociado al concepto indicado.
+  gptdescripcion nuevo: Tipo de documento: Extracto bancario. Descripci�n principal: Documento bancario a trav�s del cual se permite valorar la liquidez y disponibilidad econ�mica de una persona f�sica o jur�dica. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2043 [cerj.25]
+  Nombre: Impuesto sobre bienes inmuebles (IBI): certificado
+  tipologiaNombre anterior: Impuesto sobre bienes inmuebles (IBI): certificado
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Impuesto sobre bienes inmuebles (IBI): certificado. Descripci�n principal: Certificado, girado por el ayuntamiento donde se ubica el inmueble, en el que se detalla la cuant�a del impuesto a satisfacer por el propietario del mismo. La cuant�a girada est� en relaci�n a los datos f�sicos, jur�dicos y econ�micos que constan en el Padr�n Municipal de Bienes Inmuebles. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2044 [cerj.43]
+  Nombre: Recibí entrega llaves y documentación
+  tipologiaNombre anterior: Recibí entrega llaves y documentación
+  gptdescripcion anterior: Documento correspondiente a la tipología “Recibí entrega llaves y documentación”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Recib� entrega llaves y documentaci�n. Descripci�n principal: Documento que acredita la recepci�n de las llaves de un activo propiedad de Sareb as� como la documentaci�n asociada a la entrega de las mismas. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2045 [cerj.47]
+  Nombre: Registro Propiedad: certificación dominio y cargas
+  tipologiaNombre anterior: Registro Propiedad: certificación dominio y cargas
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Registro Propiedad: certificaci�n dominio y cargas. Descripci�n principal: Documento oficial emitido por el Registro de la Propiedad oportuno, en el cual se certifica en una determinada fecha el estado de Dominio y Cargas de la finca a consultar. Este documento va firmado y cotejado por el Registrador y tiene una validez mucho mayor que la nota simple informativa, sirviendo como prueba frente a terceros en caso de disputas judiciales...). Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2046 [cerj.49]
+  Nombre: Tasación: certificado
+  tipologiaNombre anterior: Tasación: certificado
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Tasaci�n: certificado. Descripci�n principal: Documento en el que se asegura la veracidad de una valoraci�n y/o las circunstancias relacionadas con la misma, en el que se contiene entre otros el tipo del inmueble tasado, el estado de ocupaci�n, localizaci�n, finca registral, valor de tasaci�n, cautelas al valor de tasaci�n, m�todos de valoraci�n utilizados,. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2047 [cerj.57]
+  Nombre: Certificado deuda saldo pendiente
+  tipologiaNombre anterior: Certificado deuda saldo pendiente
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Certificado deuda saldo pendiente. Descripci�n principal: Certificado que detalla, para un determinado momento, los importes adeudados por concepto. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2048 [cerj.63]
+  Nombre: Certificado titularidad cuenta bancaria
+  tipologiaNombre anterior: Certificado titularidad cuenta bancaria
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Certificado titularidad cuenta bancaria. Descripci�n principal: Documento que certifica la titularidad y vigencia de una cuenta bancaria. Contexto descriptivo: Documentos que acreditan, justifican o aseguran la veracidad de un hecho cuando no sean ni de car�cter t�cnico ni manifiesten la realizaci�n de un cobro y/o pago. Incluye cualquier tipo de materia incluyendo la econ�mica, siempre que esta no tenga relaci�n con la justificaci�n de un pago/cobro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2049 [cert.05]
+  Nombre: Eficiencia energética: certificado
+  tipologiaNombre anterior: Eficiencia energética: certificado
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Eficiencia energ�tica: certificado. Descripci�n principal: Documento acreditativo de la clasificaci�n energ�tica alcanzada por el inmueble. Es un documento oficial redactado por un t�cnico competente que incluye informaci�n objetiva sobre las caracter�sticas energ�ticas de un inmueble, calculando el consumo anual de energ�a necesario para satisfacer la demanda energ�tica de �ste en condiciones normales de ocupaci�n y funcionamiento. Contexto descriptivo: Documentos que acreditan y aseguran la veracidad de un hecho relacionado con calquier aspecto t�cnico de un activo inmobiliario o de la fase en la que se encuentre. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2050 [cert.07]
+  Nombre: Instalación agua: boletín suministro
+  tipologiaNombre anterior: Instalación agua: boletín suministro
+  gptdescripcion anterior: Documento correspondiente a la tipología “Instalación agua: boletín suministro”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Instalaci�n agua: bolet�n suministro. Descripci�n principal: Documento acreditativo oficial, emitido por instalador autorizado, que certifica que la instalaci�n de agua cumple con todos los requisitos para el suministro. Este certificado es necesario para contratar el suministro de agua. Contexto descriptivo: Documentos que acreditan y aseguran la veracidad de un hecho relacionado con calquier aspecto t�cnico de un activo inmobiliario o de la fase en la que se encuentre. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2051 [cert.10]
+  Nombre: Instalación eléctrica: boletín suministro
+  tipologiaNombre anterior: Instalación eléctrica: boletín suministro
+  gptdescripcion anterior: Documento correspondiente a la tipología “Instalación eléctrica: boletín suministro”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Instalaci�n el�ctrica: bolet�n suministro. Descripci�n principal: Documento acreditativo oficial emitido por un instalador electricista autorizado que certifica que una instalaci�n cumple todos los requisitos para el suministro. Recoge la caracter�sticas de la instalaci�n, la potencia instalada y la m�xima admisible y garantiza la calidad de la misma. Incluye un esquema y un plano de ubicaci�n de los elementos instalados. Este certificado es necesario para contratar el suministro el�ctrico. Contexto descriptivo: Documentos que acreditan y aseguran la veracidad de un hecho relacionado con calquier aspecto t�cnico de un activo inmobiliario o de la fase en la que se encuentre. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2052 [cert.11]
+  Nombre: Instalación gas: boletín suministro
+  tipologiaNombre anterior: Instalación gas: boletín suministro
+  gptdescripcion anterior: Documento correspondiente a la tipología “Instalación gas: boletín suministro”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Instalaci�n gas: bolet�n suministro. Descripci�n principal: Documento acreditativo oficial, emitido por instalador autorizado, que certifica que la instalaci�n de gas cumple con todos los requisitos para el suministro. Este certificado es necesario para contratar el suministro del gas. Contexto descriptivo: Documentos que acreditan y aseguran la veracidad de un hecho relacionado con calquier aspecto t�cnico de un activo inmobiliario o de la fase en la que se encuentre. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2053 [cert.17]
+  Nombre: Obra: certificado final
+  tipologiaNombre anterior: Obra: certificado final
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Obra: certificado final. Descripci�n principal: Documento acreditativo, visado en el colegio profesional, correspondiente de la finalizaci�n de la obra. El director de la obra certificar� que la misma ha sido realizada bajo su direcci�n, de conformidad con el proyecto objeto de licencia y la documentaci�n t�cnica que lo complementa, hall�ndose dispuesta para su adecuada utilizaci�n con arreglo a las instrucciones de uso y mantenimiento. Contexto descriptivo: Documentos que acreditan y aseguran la veracidad de un hecho relacionado con calquier aspecto t�cnico de un activo inmobiliario o de la fase en la que se encuentre. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2054 [cert.22]
+  Nombre: Proyecto ejecución: certificado de eficiencia energética
+  tipologiaNombre anterior: Proyecto ejecución: certificado de eficiencia energética
+  gptdescripcion anterior: Documento emitido por una entidad competente que acredita un hecho, condición, deuda o situación concreta.
+  gptdescripcion nuevo: Tipo de documento: Proyecto ejecuci�n: certificado de eficiencia energ�tica. Descripci�n principal: Documento a trav�s del cual el redactor del proyecto de ejecuci�n certifica que, de acuerdo a la normativa aplicable y a las caracter�sticas f�sicas, instalaciones y dem�s determinaciones del proyecto, al inmueble de nueva planta le corresponde una calificaci�n de eficiencia energ�tica concreta. Contexto descriptivo: Documentos que acreditan y aseguran la veracidad de un hecho relacionado con calquier aspecto t�cnico de un activo inmobiliario o de la fase en la que se encuentre. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2055 [cncv.04]
+  Nombre: Alquiler: contrato
+  tipologiaNombre anterior: Alquiler: contrato
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Alquiler: contrato. Descripci�n principal: Documento contractual a trav�s del cual el propietario (arrendador) se compromete a ceder durante un tiempo determinado el derecho a usar y disfrutar un bien a favor de un tercero (arrendatario) el cual se compromete a realizar los pagos acordados como contraprestaci�n de este derecho de uso. Dentro de este tipo documental se incluir�n las distintas modificaciones o novaciones del contrato, la resoluci�n,. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2056 [cncv.06]
+  Nombre: Alquiler: modelo libertad de arrendamiento
+  tipologiaNombre anterior: Alquiler: modelo libertad de arrendamiento
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Alquiler: modelo libertad de arrendamiento. Descripci�n principal: Documento acreditativo de la situaci�n ocupacional de un inmueble adjudicado por sentencia judicial. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2057 [cncv.07]
+  Nombre: Arras: contrato
+  tipologiaNombre anterior: Arras: contrato
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Arras: contrato. Descripci�n principal: Documento, firmado por el propietario del bien y el potencial comprador, en el que se detallan los datos que aparecer�n en el futuro contrato de compravena y en el que se refleja el acuerdo jur�dico por el que el potencial comprador se reserva el derecho sobre la compra del bien mediante la entrega de una cantidad. Las arras pueden ser penienciales o confirmatorias, siendo las m�s habituales las penitenciales, celebrados al amparo del art. 1454 del C�digo Civil. Dentro de este tipo documental se incluir�n las distintas modificaciones o novaciones del contrato, la resoluci�n,. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2058 [cncv.22]
+  Nombre: Contrato marco PDV
+  tipologiaNombre anterior: Contrato marco PDV
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Contrato marco PDV. Descripci�n principal: Contrato sobre Paquete SAREB 1-5 Bienes. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2059 [cncv.23]
+  Nombre: Contrato operación financiera
+  tipologiaNombre anterior: Contrato operación financiera
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Contrato operaci�n financiera. Descripci�n principal: Contrato Privado de operaci�n financiera, no contemplado en otras clasificaci�n. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2060 [cncv.35]
+  Nombre: Dación: contrato
+  tipologiaNombre anterior: Dación: contrato
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Daci�n: contrato. Descripci�n principal: Contrato de Compra venta que recoge la daci�n de un bien para la satisfacci�n de una deuda. Dentro de este tipo documental se incluir�n las distintas modificaciones o novaciones del contrato, la resoluci�n,. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2061 [cncv.40]
+  Nombre: Posesión activo: documento privado de entrega
+  tipologiaNombre anterior: Posesión activo: documento privado de entrega
+  gptdescripcion anterior: Documento correspondiente a la tipología “Posesión activo: documento privado de entrega”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Posesi�n activo: documento privado de entrega. Descripci�n principal: Documento privado en el que pone de manifiesto la entrega de la posesi�n sobre un activo concreto. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2062 [cncv.50]
+  Nombre: Reserva: contrato
+  tipologiaNombre anterior: Reserva: contrato
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Reserva: contrato. Descripci�n principal: Documento a trav�s del cual las partes interesadas en la transmisi�n de un bien (propietario del activo y futuro comprador) acuerdan la reserva de un bien para su posteior compraventa. Dentro de este tipo documental se incluir�n las distintas modificaciones o novaciones del contrato, la resoluci�n,. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2063 [cncv.61]
+  Nombre: Contrato de comercialización
+  tipologiaNombre anterior: Contrato de comercialización
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Contrato de comercializaci�n. Descripci�n principal: Documento a trav�s del cual la propiedad de un inmueble autoriza la comercializaci�n por un tercero del inmueble de su propiedad. Contexto descriptivo: Pactos escritos entre partes que se obligan de manera onerosa o gratuita sobre materia o cosa determinada, y a cuyo cumplimiento pueden ser compelidas. Se caraceriza por su bilateralidad. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2064 [comu.04]
+  Nombre: Administraciones publicas: comunicación
+  tipologiaNombre anterior: Administraciones publicas: comunicación
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Administraciones publicas: comunicaci�n. Descripci�n principal: Comunicaci�n formal de una Administraci�n Publica. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2065 [comu.07]
+  Nombre: Notificación deudor
+  tipologiaNombre anterior: Notificación deudor
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Notificaci�n deudor. Descripci�n principal: Comunicaci�n fehaciente y prejudicial realizada al deudor en la que se le emplaza para la satisfacci�n de la deuda concreta. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2066 [comu.11]
+  Nombre: Comunicación incidencia
+  tipologiaNombre anterior: Comunicación incidencia
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Comunicaci�n incidencia. Descripci�n principal: Documento en el que se pone en conocimiento de Sareb la existencia incidencia sobre un activo o en el desarrollo de una operaci�n concreta. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2067 [comu.17]
+  Nombre: Declaración concurso: notificación administrador
+  tipologiaNombre anterior: Declaración concurso: notificación administrador
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Declaraci�n concurso: notificaci�n administrador. Descripci�n principal: Comunicaci�n del Administrador Concursal en la que se indica la apertura del concurso con la copia del Auto. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2068 [comu.43]
+  Nombre: Traspaso Sareb: notificación cambio titularidad
+  tipologiaNombre anterior: Traspaso Sareb: notificación cambio titularidad
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Traspaso Sareb: notificaci�n cambio titularidad. Descripci�n principal: Escrito formal en el que se notifica a tercero interesado el cambio de titularidad del bien. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2069 [comu.45]
+  Nombre: Impuesto sobre bienes inmuebles (IBI): comunicaciones
+  tipologiaNombre anterior: Impuesto sobre bienes inmuebles (IBI): comunicaciones
+  gptdescripcion anterior: Documento correspondiente a la tipología “Impuesto sobre bienes inmuebles (IBI): comunicaciones”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Impuesto sobre bienes inmuebles (IBI): comunicaciones. Descripci�n principal: Conjunto de comunicaciones, tanto emitidas como recibidas, relatival al impuesto de bienes inmuebles. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2070 [comu.48]
+  Nombre: Otra comunicación
+  tipologiaNombre anterior: Otra comunicación
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Otra comunicaci�n. Descripci�n principal: Relaci�n de comunicaciones emitidas o recibidas por las diversas entidades no definidas de forma mas detallada en la presente clasificaci�n. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2071 [comu.62]
+  Nombre: Alquiler: comunicación / declaración
+  tipologiaNombre anterior: Alquiler: comunicación / declaración
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Alquiler: comunicaci�n / declaraci�n. Descripci�n principal: Relaci�n de comunicaciones giradas entre las partes o entre estas y terceros relacionadas con el contrato de arrendamiento. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2072 [comu.67]
+  Nombre: Registro Propiedad: Instancia
+  tipologiaNombre anterior: Registro Propiedad: Instancia
+  gptdescripcion anterior: Documento administrativo de solicitud, autorización o acreditación emitido o presentado ante la administración.
+  gptdescripcion nuevo: Tipo de documento: Registro Propiedad: Instancia. Descripci�n principal: Escrito remitido al Registrador de la Propiedad para que inicie el procedimiento de calificaci�n y, llegado el caso, inscripci�n de un derecho real concreto sobre una finca incluida dentro de su circunscripci�n (p.e. inscripci�n de un cambio de titularidad o de una carga, incorporaci�n o modificaci�n de aspectos referentes a la descripci�n de la finca, de un levantamiento de cargas,...). Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2073 [comu.68]
+  Nombre: Evidencia de comprobación en FACTIVA
+  tipologiaNombre anterior: Evidencia de comprobación en FACTIVA
+  gptdescripcion anterior: Documento correspondiente a la tipología “Evidencia de comprobación en FACTIVA”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Evidencia de comprobaci�n en FACTIVA. Descripci�n principal: Documento que muestra el resultado obtenido de la comprobaci�n del interviniente en la operaci�n en las listas de Factiva. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2074 [comu.69]
+  Nombre: Proteccion de datos: Consentimiento
+  tipologiaNombre anterior: Proteccion de datos: Consentimiento
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Proteccion de datos: Consentimiento. Descripci�n principal: Documento a trav�s del cual el interesado o cliente autoriza el tratamiento de los datos personales aportados por �ste o generados como consecuencia del desarrollo de una operaci�n y se pone de manifiesto, entre otros, el responsable del tratamiento de dichos datos, los derechos del interesado,. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2075 [comu.82]
+  Nombre: Licencia primera ocupación: Solicitud/instancia
+  tipologiaNombre anterior: Licencia primera ocupación: Solicitud/instancia
+  gptdescripcion anterior: Documento administrativo de solicitud, autorización o acreditación emitido o presentado ante la administración.
+  gptdescripcion nuevo: Tipo de documento: Licencia primera ocupaci�n: Solicitud/instancia. Descripci�n principal: Documentaci�n relativa a la solicitud realizada ante la administraci�n para la obtenci�n de una licencia de primera ocupaci�n. Contexto descriptivo: Documentos en los que se recogen las transmisiones e intercambio de informaci�n entre distintos intervinientes.Los medios de comunicaci�n como emal, burofax, etc..cuando tengan un espec�fico en raz�n de la materia, se engloban en el t�rmino ""comunicaci�n"". En este se incluyen los requerimientos, solicitudes, notificaciones, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2076 [conv.01]
+  Nombre: Asamblea y/o consejo: convocatoria asistencia
+  tipologiaNombre anterior: Asamblea y/o consejo: convocatoria asistencia
+  gptdescripcion anterior: Documento que cita oficialmente a los asistentes e informa de fecha, lugar y objeto de la reunión.
+  gptdescripcion nuevo: Tipo de documento: Asamblea y/o consejo: convocatoria asistencia. Descripci�n principal: Escrito de llamamiento o citaci�n a se�alando el d�a, hora y lugar para que concurran a un acto o encuentro de la Asamblea de la Entidad correspondiente. Contexto descriptivo: Anuncio o escrito con el cual se convoca a un determinado evento o acontecimiento que se producir�. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2077 [corr.02]
+  Nombre: Correo electrónico
+  tipologiaNombre anterior: Correo electrónico
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Correo electr�nico. Descripci�n principal: Comunicaci�n a trav�s de medios telem�ticos. Contexto descriptivo: Medio de comunicaci�n que un emisor (remitente) env�a a su receptor por medio de correo ordinario o electr�nico. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2078 [cuad.02]
+  Nombre: Cuadro amortización
+  tipologiaNombre anterior: Cuadro amortización
+  gptdescripcion anterior: Documento correspondiente a la tipología “Cuadro amortización”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Cuadro amortizaci�n. Descripci�n principal: Documento que expresa la evoluci�n en el tiempo de un pr�stamo, con indicaci�n de Cuota de pago, Cuota de Amortizaci�n, Cuota de intereses, Capital Amortizado y Capital Pendiente. Contexto descriptivo: Conjuntos de nombres, cifras u otros datos presentados gr�ficamente, de manera que se advierta la relaci�n existente entre ellos. En este se incluyen los plannigs. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2079 [cuad.04]
+  Nombre: Cuadro distribución responsabilidad hipotecaria
+  tipologiaNombre anterior: Cuadro distribución responsabilidad hipotecaria
+  gptdescripcion anterior: Documento correspondiente a la tipología “Cuadro distribución responsabilidad hipotecaria”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Cuadro distribuci�n responsabilidad hipotecaria. Descripci�n principal: Documento que expresa el reparto de una carga hipotecaria y su asignaci�n individual a cada bien dividido del principal...). Contexto descriptivo: Conjuntos de nombres, cifras u otros datos presentados gr�ficamente, de manera que se advierta la relaci�n existente entre ellos. En este se incluyen los plannigs. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2080 [culc.03]
+  Nombre: Estados financieros
+  tipologiaNombre anterior: Estados financieros
+  gptdescripcion anterior: Documento correspondiente a la tipología “Estados financieros”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Estados financieros. Descripci�n principal: Informes que se preparan a partir de los saldos de los registros contables, y presentan diversos aspectos de la situaci�n financiera, resultados y flujos de efectivo de una empresa, de conformidad con principios de contabilidad generalmente aceptados. Contexto descriptivo: Pliegos compuestos de varias partidas econ�micas, que tras operaciones de sumas y/o restas ofrecen un resultado. En este se incluyen los estados financieros y los balances de situaci�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2081 [deac.01]
+  Nombre: Catastro: acuerdo alteración
+  tipologiaNombre anterior: Catastro: acuerdo alteración
+  gptdescripcion anterior: Documento correspondiente a la tipología “Catastro: acuerdo alteración”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Catastro: acuerdo alteraci�n. Descripci�n principal: Documento en el que se especifica el acuerdo sobre alteraci�n de los datos catastrales. Contexto descriptivo: Decisiones o resoluciones de una autoridad p�blica de car�cter reglamentario o administrativo, que influye de manera directa o indirecta en el estado o gesti�n de un activo. (se caracteriza por la unilateralidad). Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2082 [deac.07]
+  Nombre: Orden reparación
+  tipologiaNombre anterior: Orden reparación
+  gptdescripcion anterior: Documento correspondiente a la tipología “Orden reparación”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Orden reparaci�n. Descripci�n principal: Comunicaci�n por la que se pone de manifiesto el mal estado de una instalaci�n y se ordena de su reparaci�n. Contexto descriptivo: Decisiones o resoluciones de una autoridad p�blica de car�cter reglamentario o administrativo, que influye de manera directa o indirecta en el estado o gesti�n de un activo. (se caracteriza por la unilateralidad). Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2083 [decl.01]
+  Nombre: Catastro: declaración alteración (MOD 901, 902, 903, 904,900D)
+  tipologiaNombre anterior: Catastro: declaración alteración (MOD 901, 902, 903, 904,900D)
+  gptdescripcion anterior: Documento correspondiente a la tipología “Catastro: declaración alteración (MOD 901, 902, 903, 904,900D)”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Catastro: declaraci�n alteraci�n (MOD 901, 902, 903, 904,900D). Descripci�n principal: Documentaci�n y formularios presentados al catastro a trav�s de los cuales se solicita la alteraci�n del inmueble, m�s concretamente: 900D.- Modelo que desde el 06/12/2018 se utilizar� para declarar cualquier alteraci�n catastral que hasta dicha fecha se declaraban en los modelos que siguen: 901.-Formulario para realizar la alteraci�n catastral o la cuota de participaci�n en un inmueble 902.- Formulario para realizar la alteraci�n catastral en el Ayuntamiento, asigna referencia catastral a cada uno de los inmuebles edificados una vez realizada la divisi�n horizontal 903.-Agregaci�n, agrupaci�n, segregaci�n o divisi�n de bienes inmuebles 904.-Cambio de cultivo o aprovechamiento, cambio de uso o demolici�n o derribo de bienes inmuebles. Contexto descriptivo: Se incluyen en este las declaraciones de aquellos impuestos y tasas cuyo pago es peri�dico. (Los impuestos y tasas cuyo pago se realice una �nica vez, se incluir�n en el Certificados, autoliquidaciones, justificantes y recibos de pago / cobro, ya que lo relenvante en estos casos es la justificaci�n del pago en s�.). Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2084 [decl.06]
+  Nombre: Impuesto renta personas físicas (IRPF): declaración
+  tipologiaNombre anterior: Impuesto renta personas físicas (IRPF): declaración
+  gptdescripcion anterior: Documento correspondiente a la tipología “Impuesto renta personas físicas (IRPF): declaración”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Impuesto renta personas f�sicas (IRPF): declaraci�n. Descripci�n principal: Documento modelo que acredita la presentaci�n ante la Agencia Tributaria del IRPF del ejercicio correspondiente. Contexto descriptivo: Se incluyen en este las declaraciones de aquellos impuestos y tasas cuyo pago es peri�dico. (Los impuestos y tasas cuyo pago se realice una �nica vez, se incluir�n en el Certificados, autoliquidaciones, justificantes y recibos de pago / cobro, ya que lo relenvante en estos casos es la justificaci�n del pago en s�.). Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2085 [decl.08]
+  Nombre: Impuesto sociedades: declaración
+  tipologiaNombre anterior: Impuesto sociedades: declaración
+  gptdescripcion anterior: Documento correspondiente a la tipología “Impuesto sociedades: declaración”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Impuesto sociedades: declaraci�n. Descripci�n principal: Documento modelo que acredita la presentaci�n ante la Agencia Tributaria del impuesto que grava la renta obtenida en un a�o natural por las personas jur�dicas residentes en Espa�a o contribuyentes. Contexto descriptivo: Se incluyen en este las declaraciones de aquellos impuestos y tasas cuyo pago es peri�dico. (Los impuestos y tasas cuyo pago se realice una �nica vez, se incluir�n en el Certificados, autoliquidaciones, justificantes y recibos de pago / cobro, ya que lo relenvante en estos casos es la justificaci�n del pago en s�.). Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2086 [decl.09]
+  Nombre: Impuesto valor añadido (IVA): declaración
+  tipologiaNombre anterior: Impuesto valor añadido (IVA): declaración
+  gptdescripcion anterior: Documento correspondiente a la tipología “Impuesto valor añadido (IVA): declaración”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Impuesto valor a�adido (IVA): declaraci�n. Descripci�n principal: Documento modelo que acredita la presentaci�n ante la Agencia Tributaria del impuesto que impuesto que grava el valor a�adido o agregado de un producto en las distintas fases de su producci�n. Contexto descriptivo: Se incluyen en este las declaraciones de aquellos impuestos y tasas cuyo pago es peri�dico. (Los impuestos y tasas cuyo pago se realice una �nica vez, se incluir�n en el Certificados, autoliquidaciones, justificantes y recibos de pago / cobro, ya que lo relenvante en estos casos es la justificaci�n del pago en s�.). Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2087 [doca.33]
+  Nombre: Proyecto urbanización: otro documento administrativo
+  tipologiaNombre anterior: Proyecto urbanización: otro documento administrativo
+  gptdescripcion anterior: Documento correspondiente a la tipología “Proyecto urbanización: otro documento administrativo”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Proyecto urbanizaci�n: otro documento administrativo. Descripci�n principal: Documento administrativo relacionado con el proyecto de urbanizaci�n que no se encuentra especificado en otro apartado de la clasificaci�n definida. Contexto descriptivo: Documentos que dan soporte a los actos de decisi�n (resoluciones y acuerdos) de la Administraci�n p�blica En este se incluyen, oficios, notas interiores, cartas, actas, certificados, diligencias etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2088 [doca.45]
+  Nombre: Expediente Administrativo: Restauración Legalidad
+  tipologiaNombre anterior: Expediente Administrativo: Restauración Legalidad
+  gptdescripcion anterior: Documento correspondiente a la tipología “Expediente Administrativo: Restauración Legalidad”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Expediente Administrativo: Restauraci�n Legalidad. Descripci�n principal: Notificacines de actos administrativos, como consecuencia de procedimientos para la restauraci�n de la legalidad. Incluye alegaciones Sareb. Contexto descriptivo: Documentos que dan soporte a los actos de decisi�n (resoluciones y acuerdos) de la Administraci�n p�blica En este se incluyen, oficios, notas interiores, cartas, actas, certificados, diligencias etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2089 [doca.47]
+  Nombre: Expediente Administrativo: Otro
+  tipologiaNombre anterior: Expediente Administrativo: Otro
+  gptdescripcion anterior: Documento correspondiente a la tipología “Expediente Administrativo: Otro”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Expediente Administrativo: Otro. Descripci�n principal: Notificaciones de actos administrativos o alegaciones en otros procedimientos adminitrativos. Contexto descriptivo: Documentos que dan soporte a los actos de decisi�n (resoluciones y acuerdos) de la Administraci�n p�blica En este se incluyen, oficios, notas interiores, cartas, actas, certificados, diligencias etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2090 [doca.54]
+  Nombre: Documentación de juntas de compensación
+  tipologiaNombre anterior: Documentación de juntas de compensación
+  gptdescripcion anterior: Documento correspondiente a la tipología “Documentación de juntas de compensación”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Documentaci�n de juntas de compensaci�n. Descripci�n principal: Documentaci�n varia de juntas de compensaci�n. Contexto descriptivo: Documentos que dan soporte a los actos de decisi�n (resoluciones y acuerdos) de la Administraci�n p�blica En este se incluyen, oficios, notas interiores, cartas, actas, certificados, diligencias etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2091 [doci.01]
+  Nombre: Documento identidad persona física (DNI / NIE)
+  tipologiaNombre anterior: Documento identidad persona física (DNI / NIE)
+  gptdescripcion anterior: Documento correspondiente a la tipología “Documento identidad persona física (DNI / NIE)”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Documento identidad persona f�sica (DNI / NIE). Descripci�n principal: Documento nacional de identidad expedido en Espa�a. Contexto descriptivo: Documento legales y oficiales de identificaci�n de cada persona (f�sica o jur�dica) para todos los actos civiles, administrativos, legales y en general, para todos los actos en que, por ley, la persona deba identificarse. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2092 [doci.07]
+  Nombre: Tarjeta identificación fiscal (NIF /CIF)
+  tipologiaNombre anterior: Tarjeta identificación fiscal (NIF /CIF)
+  gptdescripcion anterior: Documento correspondiente a la tipología “Tarjeta identificación fiscal (NIF /CIF)”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Tarjeta identificaci�n fiscal (NIF /CIF). Descripci�n principal: Documento de naturaleza fiscal en el que se especif�ca el c�digo asignado por la Agencia Tributaria a una persona f�sica o jur�dica. Contexto descriptivo: Documento legales y oficiales de identificaci�n de cada persona (f�sica o jur�dica) para todos los actos civiles, administrativos, legales y en general, para todos los actos en que, por ley, la persona deba identificarse. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2093 [docj.04]
+  Nombre: Convenio acreedores: acción judicial por incumplimiento
+  tipologiaNombre anterior: Convenio acreedores: acción judicial por incumplimiento
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Convenio acreedores: acci�n judicial por incumplimiento. Descripci�n principal: Escrito de los acreedores denunciando el incumplimiento del Convenio. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2094 [docj.06]
+  Nombre: Desahucio: demanda
+  tipologiaNombre anterior: Desahucio: demanda
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Desahucio: demanda. Descripci�n principal: Escrito presentado por abogado y procurador ante la Jurisdicci�n de lo Civil instando el desalojo de un inmueble. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2095 [docj.08]
+  Nombre: Ejecución: demanda
+  tipologiaNombre anterior: Ejecución: demanda
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Ejecuci�n: demanda. Descripci�n principal: Escrito de Demanda, petici�n, solicitud, ampliaci�n en cualquier procedimiento jur�dico para ejercitar una reclamaci�n civil o solicitar al tribunal que se despache ejecuci�n. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2096 [docj.09]
+  Nombre: Ejecución: escrito oposición
+  tipologiaNombre anterior: Ejecución: escrito oposición
+  gptdescripcion anterior: Documento correspondiente a la tipología “Ejecución: escrito oposición”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Ejecuci�n: escrito oposici�n. Descripci�n principal: Escrito de oposici�n, contestaci�n a la demanda, contrademanda introduciendo nuevas peticiones frente al demandante o a cualquier documento presentado por las partes en un procedimiento jur�dico. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2097 [docj.14]
+  Nombre: Posesión activo: acta
+  tipologiaNombre anterior: Posesión activo: acta
+  gptdescripcion anterior: Documento formal que deja constancia de lo tratado, asistentes y acuerdos adoptados en el acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Posesi�n activo: acta. Descripci�n principal: Acta por la que se decreta la posesi�n del bien. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2098 [docj.15]
+  Nombre: Posesión activo: acta lanzamiento
+  tipologiaNombre anterior: Posesión activo: acta lanzamiento
+  gptdescripcion anterior: Documento formal que deja constancia de lo tratado, asistentes y acuerdos adoptados en el acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Posesi�n activo: acta lanzamiento. Descripci�n principal: Acta a trav�s de la cual el juzgado acuerda el desalojo del inmueble y se ordena a las fuerzas del orden la realizaci�n del mismo con presencia de una comitiva judicial y del procurador de la propiedad. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2099 [docj.19]
+  Nombre: Requerimiento al deudor
+  tipologiaNombre anterior: Requerimiento al deudor
+  gptdescripcion anterior: Documento correspondiente a la tipología “Requerimiento al deudor”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Requerimiento al deudor. Descripci�n principal: Notificaci�n al deudor y, en su caso, fiador del resultado de la liquidaci�n con requerimiento de pago (BUROFAX). Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2100 [docj.21]
+  Nombre: Subasta: solicitud
+  tipologiaNombre anterior: Subasta: solicitud
+  gptdescripcion anterior: Documento administrativo de solicitud, autorización o acreditación emitido o presentado ante la administración.
+  gptdescripcion nuevo: Tipo de documento: Subasta: solicitud. Descripci�n principal: Escrito presentado ante el Juzgado en el que se solicita el inicio del procedimiento de Subasta. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2101 [docj.23]
+  Nombre: Usurpación: denuncia
+  tipologiaNombre anterior: Usurpación: denuncia
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Usurpaci�n: denuncia. Descripci�n principal: Documento a trav�s del cual la propiedad del activo da noticia a la autoridad competente de la comisi�n de un delito de usurpaci�n, entendiendo como tal, el acto a trav�s del cual el denunciado ocupa un inmueble o derecho real inmobiliario, propiedad del denunciante, con violencia o intimidaci�n o tambi�n aquel que sin autorizaci�n de la propiedad ocupare un inmueble o se mantuviera en �ste contra la voluntad de su titular. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2102 [docj.24]
+  Nombre: Usurpación: instrucción del procedimiento
+  tipologiaNombre anterior: Usurpación: instrucción del procedimiento
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Usurpaci�n: instrucci�n del procedimiento. Descripci�n principal: Documentaci�n asociada al conjunto de actos por medio de los cuales se aportan al �rgano decisorio los elementos de juicio necesarios para que dicte resoluci�n sobre el asunto en cuesti�n. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2103 [docj.28]
+  Nombre: Otra documentación del procedimiento
+  tipologiaNombre anterior: Otra documentación del procedimiento
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Otra documentaci�n del procedimiento. Descripci�n principal: Documentaci�n de un procedimiento judicial cuya tipolog�a documental no se encuentra contemplada en la presenta clasificaci�n. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2104 [docj.32]
+  Nombre: Posesión activo: escrito solicitud
+  tipologiaNombre anterior: Posesión activo: escrito solicitud
+  gptdescripcion anterior: Documento administrativo de solicitud, autorización o acreditación emitido o presentado ante la administración.
+  gptdescripcion nuevo: Tipo de documento: Posesi�n activo: escrito solicitud. Descripci�n principal: Escrito de solicitud al juzgado solicitando el se�alamiento para la toma de posesi�n/lanzamiento. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2105 [docj.42]
+  Nombre: Escrito solicitando Impulso procesal
+  tipologiaNombre anterior: Escrito solicitando Impulso procesal
+  gptdescripcion anterior: Documento correspondiente a la tipología “Escrito solicitando Impulso procesal”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Escrito solicitando Impulso procesal. Descripci�n principal: Escrito de parte solicitando que el proceso se desarrolle y avances en sus distintas fases. Contexto descriptivo: Diferentes tipos de escritos emitidos por los intervenientes en alg�n proceso que se atienden en los tribunales. Se excluyen: Los emitidos o promulgados por los juzgados y tribunales. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2106 [docn.01]
+  Nombre: Acta notarial final de obra
+  tipologiaNombre anterior: Acta notarial final de obra
+  gptdescripcion anterior: Acta autorizada por notaría que deja constancia fehaciente del hecho o situación indicada.
+  gptdescripcion nuevo: Tipo de documento: Acta notarial final de obra. Descripci�n principal: Documento notarial a trav�s del cual el promotor deja constancia de la concusi�n de los trabajos de edificaci�n y aporta la documentaci�n legalmente preceptiva. Contexto descriptivo: Documentos que tienen como contenido la constataci�n de hechos o la percepci�n que de los mismos tenga el notario,as� como sus juicios y calificaciones. En este se incluyen, entre otros, las actas de presencia, de manifestaciones, de remisi�n de documentos por correo, de notificaci�n y requerimiento, de exhibici�n de cosas o documentos, de notoriedad, de protocolizaci�n, de dep�sito ante notario, de subasta (como va a ser la subasta) y de sorteo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2107 [docn.06]
+  Nombre: Traspaso Sareb: acta complementaria cambio titularidad
+  tipologiaNombre anterior: Traspaso Sareb: acta complementaria cambio titularidad
+  gptdescripcion anterior: Documento formal que deja constancia de lo tratado, asistentes y acuerdos adoptados en el acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Traspaso Sareb: acta complementaria cambio titularidad. Descripci�n principal: Elevaci�n a publico, documento notarial que describe el cambio de titularidad que se efect�a en el activo. Contexto descriptivo: Documentos que tienen como contenido la constataci�n de hechos o la percepci�n que de los mismos tenga el notario,as� como sus juicios y calificaciones. En este se incluyen, entre otros, las actas de presencia, de manifestaciones, de remisi�n de documentos por correo, de notificaci�n y requerimiento, de exhibici�n de cosas o documentos, de notoriedad, de protocolizaci�n, de dep�sito ante notario, de subasta (como va a ser la subasta) y de sorteo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2108 [docn.07]
+  Nombre: Fijación saldo: acta
+  tipologiaNombre anterior: Fijación saldo: acta
+  gptdescripcion anterior: Documento formal que deja constancia de lo tratado, asistentes y acuerdos adoptados en el acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Fijaci�n saldo: acta. Descripci�n principal: Documento fehaciente a trav�s del cual y de acuerdo a las condiciones marcadas por contrato se liquida el importe del saldo resultante de las operaciones derivadas de contratos formalizados en escritura p�blica o en p�liza intervenida. Dicho documento, de acuerdo a la legislaci�n espa�ola, es preceptivo que acompa�e a la demanda ejecutiva. Contexto descriptivo: Documentos que tienen como contenido la constataci�n de hechos o la percepci�n que de los mismos tenga el notario,as� como sus juicios y calificaciones. En este se incluyen, entre otros, las actas de presencia, de manifestaciones, de remisi�n de documentos por correo, de notificaci�n y requerimiento, de exhibici�n de cosas o documentos, de notoriedad, de protocolizaci�n, de dep�sito ante notario, de subasta (como va a ser la subasta) y de sorteo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2016 [DOCN-06]
+  Nombre: Traspaso Sareb: acta complementaria cambio titularidad
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Acta, escritura complementaria o escritura de subsanación/complemento de una escritura de transmisión de activos a favor de SAREB, emitida por notario, que identifica activos transmitidos, partes transmitente/adquirente, datos registrales/catastrales, cargas y remisión electrónica para inscripción registral. No documenta por sí misma un negocio principal de compraventa, dación, préstamo, cancelación hipotecaria o resolución judicial.
+  gptdescripcion nuevo: Tipo de documento: Traspaso Sareb: acta complementaria cambio titularidad. Descripci�n principal: Acta, escritura complementaria o escritura de subsanaci�n/complemento de una escritura de transmisi�n de activos a favor de SAREB, emitida por notario, que identifica activos transmitidos, partes transmitente/adquirente, datos registrales/catastrales, cargas y remisi�n electr�nica para inscripci�n registral. No documenta por s� misma un negocio principal de compraventa, daci�n, pr�stamo, cancelaci�n hipotecaria o resoluci�n judicial. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2109 [doss.02]
+  Nombre: Dossier Fotográfico
+  tipologiaNombre anterior: Dossier Fotográfico
+  gptdescripcion anterior: Evidencia visual (foto o conjunto de fotos) que documenta el estado, incidencia o características del activo.
+  gptdescripcion nuevo: Tipo de documento: Dossier Fotogr�fico. Descripci�n principal: Conjunto de fotograf�as referentes a un activo. Contexto descriptivo: Conjunto de documentos o informes acerca de un determinado asunto. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2110 [escr.01]
+  Nombre: Cancelación carga hipotecaria: escritura
+  tipologiaNombre anterior: Cancelación carga hipotecaria: escritura
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Cancelaci�n carga hipotecaria: escritura. Descripci�n principal: Escritura que recoge el levantamiento del derecho real de garant�a, que se constituy�, sobre un inmueble, para asegurar el cumplimiento de una obligaci�n. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2111 [escr.02]
+  Nombre: Cancelación: escritura
+  tipologiaNombre anterior: Cancelación: escritura
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Cancelaci�n: escritura. Descripci�n principal: Documento publico por el cual se acredita la cancelaci�n de la deuda contra�da. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2112 [escr.03]
+  Nombre: Cesión préstamo: escritura
+  tipologiaNombre anterior: Cesión préstamo: escritura
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Cesi�n pr�stamo: escritura. Descripci�n principal: Escritura de Cesi�n de pr�stamo a trav�s del cual una persona llamada cedente, transmite a otra, llamad cesionaria, la titularidad de un derecho de cr�dito frente a un tercero. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2113 [escr.04]
+  Nombre: Constitución: escritura
+  tipologiaNombre anterior: Constitución: escritura
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Constituci�n: escritura. Descripci�n principal: Documento formalizado ante notario donde se describen y detallan los aspectos relacionados con la constituci�n legal de una entidad, donde entre otros se describen los datos generales de las personas que participan, el volumen del capital y los estatutos. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2114 [escr.06]
+  Nombre: Dación: escritura
+  tipologiaNombre anterior: Dación: escritura
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Daci�n: escritura. Descripci�n principal: Documento publico por el que se acredita el traspaso de la titularidad sobre un bien entregado a cambio de la cancelaci�n de la deuda pendiente. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2115 [escr.10]
+  Nombre: Escritura compraventa
+  tipologiaNombre anterior: Escritura compraventa
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Escritura compraventa. Descripci�n principal: Documento legal realizado ante notario de elevaci�n a p�blico de los acuerdos y condiciones existentes entre comprador y vendedor para transmitir inmuebles, suelo. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2116 [escr.13]
+  Nombre: Escritura obra nueva y división horizontal
+  tipologiaNombre anterior: Escritura obra nueva y división horizontal
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Escritura obra nueva y divisi�n horizontal. Descripci�n principal: Obra Nueva.- Elevaci�n a publico, documento notarial que describe la edificaci�n a construir, elementos comunes a los inmuebles como son zonas de ocio, deportivas, local de uso com�n vecinal.... Divisi�n Horizontal.- Elevaci�n a p�blico, documento notarial que describe de forma individualizada todos y cada uno de los inmuebles que forman parte de la construcci�n ( linderos, metros, ubicaci�n, departamentos que lo integran....)...). Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2117 [escr.16]
+  Nombre: Escritura préstamo
+  tipologiaNombre anterior: Escritura préstamo
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Escritura pr�stamo. Descripci�n principal: Documento notarial por el que el cual la entidad financiera (prestamista) entrega al cliente (prestatario) una determinada cantidad de dinero estableci�ndose contractualmente la forma en que habr� de restituirse el capital, y abonar los intereses remuneratorios generalmente en unos vencimientos prefijados en el cuadro de amortizaci�n que acompa�a al contrato. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2118 [escr.18]
+  Nombre: Escritura subrogación
+  tipologiaNombre anterior: Escritura subrogación
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Escritura subrogaci�n. Descripci�n principal: Documento p�blico por el cual un tercero sustituye (total o parcialmente) a una de las partes del contrato de la operaci�n. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2119 [escr.26]
+  Nombre: Titularidad del activo: otra escritura
+  tipologiaNombre anterior: Titularidad del activo: otra escritura
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Titularidad del activo: otra escritura. Descripci�n principal: Documento notarial que acredita el titulo de propiedad del activo y no ha sido contemplado en otra tipolog�a de la presente clasificaci�n. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2120 [escr.29]
+  Nombre: Documento contractual de titularidad anterior a Sareb
+  tipologiaNombre anterior: Documento contractual de titularidad anterior a Sareb
+  gptdescripcion anterior: Documento correspondiente a la tipología “Documento contractual de titularidad anterior a Sareb”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Documento contractual de titularidad anterior a Sareb. Descripci�n principal: Documento que acredita la titularidad del activo a favor de un tercero anterior a Sareb (p.e. la entidad cedente). Se ha de tener en cuenta que en este tipo documental se englobar�n tanto las escrituras como cualesquiera otros documentos de naturaleza distinta (DOCA, CNCV...) a excepci�n de aquella de naturaleza judicial (que cuenta con tipo propio) que acrediten la titularidad previa del activo a favor de un tercero. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2121 [escr.33]
+  Nombre: Escritura ratificación de venta
+  tipologiaNombre anterior: Escritura ratificación de venta
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Escritura ratificaci�n de venta. Descripci�n principal: Formalizaci�n en documentos p�blico de la escritura de ratificacion de venta. Contexto descriptivo: Documentos en los que se hace constar un determinado acontecimiento (declaraciones de voluntad, los actos jur�dicos que impliquen prestaci�n de consentimiento, los contratos y negocios jur�dicos de todas clases) ante la presencia de un notario p�blico, quien da fe de la capacidad jur�dica del contenido y de la fecha en la que se llev� acabo y que firma junto con el otorgante u los otorgantes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2011 [ESCR-01]
+  Nombre: Cancelacion carga hipotecaria: escritura
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Escritura pública notarial de cancelación de hipoteca, carta de pago, levantamiento o extinción registral de carga hipotecaria, diferenciada del mandamiento judicial de cancelación y de la dación en pago cuando no existe transmisión en pago como acto principal.
+  gptdescripcion nuevo: Tipo de documento: Cancelacion carga hipotecaria: escritura. Descripci�n principal: Escritura p�blica notarial de cancelaci�n de hipoteca, carta de pago, levantamiento o extinci�n registral de carga hipotecaria, diferenciada del mandamiento judicial de cancelaci�n y de la daci�n en pago cuando no existe transmisi�n en pago como acto principal. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2010 [ESCR-06]
+  Nombre: Dacion: escritura
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Escritura pública de dación en pago, adjudicación en pago, condonación o transmisión de inmueble en pago/cancelación de deuda, a menudo en contexto concursal o de liquidación, con posible intervención de administrador concursal, SAREB u otra entidad acreedora.
+  gptdescripcion nuevo: Tipo de documento: Dacion: escritura. Descripci�n principal: Escritura p�blica de daci�n en pago, adjudicaci�n en pago, condonaci�n o transmisi�n de inmueble en pago/cancelaci�n de deuda, a menudo en contexto concursal o de liquidaci�n, con posible intervenci�n de administrador concursal, SAREB u otra entidad acreedora. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2008 [ESCR-10]
+  Nombre: Escritura compraventa
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Escritura pública notarial de compraventa inmobiliaria, frecuentemente con SAREB como vendedora, partes denominadas vendedora/compradora, descripción registral del inmueble, precio, forma de pago, representación —incluido mandatario verbal y ratificación—, declaraciones de titular real y activo esencial cuando proceda.
+  gptdescripcion nuevo: Tipo de documento: Escritura compraventa. Descripci�n principal: Escritura p�blica notarial de compraventa inmobiliaria, frecuentemente con SAREB como vendedora, partes denominadas vendedora/compradora, descripci�n registral del inmueble, precio, forma de pago, representaci�n �incluido mandatario verbal y ratificaci�n�, declaraciones de titular real y activo esencial cuando proceda. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2012 [ESCR-24]
+  Nombre: Prestamo originario: escritura
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Escritura pública de préstamo con garantía hipotecaria, préstamo hipotecario originario, novación modificativa, subrogación, modificación o refinanciación de préstamo hipotecario, con entidad acreedora/prestamista, prestatario/deudor y responsabilidad hipotecaria.
+  gptdescripcion nuevo: Tipo de documento: Prestamo originario: escritura. Descripci�n principal: Escritura p�blica de pr�stamo con garant�a hipotecaria, pr�stamo hipotecario originario, novaci�n modificativa, subrogaci�n, modificaci�n o refinanciaci�n de pr�stamo hipotecario, con entidad acreedora/prestamista, prestatario/deudor y responsabilidad hipotecaria. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2007 [ESCR-26]
+  Nombre: Titularidad del activo: otra escritura
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Escritura pública residual acreditativa de titularidad, dominio, propiedad, adquisición o transmisión de activo cuando no hay señales suficientes de compraventa, dación, préstamo, cancelación hipotecaria, titularidad anterior Sareb, acta complementaria Sareb o documento judicial.
+  gptdescripcion nuevo: Tipo de documento: Titularidad del activo: otra escritura. Descripci�n principal: Escritura p�blica residual acreditativa de titularidad, dominio, propiedad, adquisici�n o transmisi�n de activo cuando no hay se�ales suficientes de compraventa, daci�n, pr�stamo, cancelaci�n hipotecaria, titularidad anterior Sareb, acta complementaria Sareb o documento judicial. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2009 [ESCR-29]
+  Nombre: Documento contractual de titularidad anterior a Sareb
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Escritura o documento contractual/notarial que acredita titularidad previa, transmisión previa, tracto sucesivo, subrogación, segregación, fusión o antecedentes de dominio vinculados a activos posteriormente relacionados con SAREB, sin que el acto principal sea el acta complementaria Sareb ni una compraventa/dación/préstamo/cancelación específica.
+  gptdescripcion nuevo: Tipo de documento: Documento contractual de titularidad anterior a Sareb. Descripci�n principal: Escritura o documento contractual/notarial que acredita titularidad previa, transmisi�n previa, tracto sucesivo, subrogaci�n, segregaci�n, fusi�n o antecedentes de dominio vinculados a activos posteriormente relacionados con SAREB, sin que el acto principal sea el acta complementaria Sareb ni una compraventa/daci�n/pr�stamo/cancelaci�n espec�fica. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2122 [esin.16]
+  Nombre: Due diligence (legal, fiscal, técnica, urbanística…)
+  tipologiaNombre anterior: Due diligence (legal, fiscal, técnica, urbanística…)
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Due diligence (legal, fiscal, t�cnica, urban�stica...). Descripci�n principal: Estudio profundo realizado en virtud del cual el adquirente de un activo, con explicito consentimiento y asistencia del vendedor, realiza una detallada investigaci�n de los diferentes aspectos (legal, fiscal, t�cnica, urban�stica,...) del activo o entidad que se pretende adquirir al objeto de conocer con mayor profundidad el activo. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2123 [esin.18]
+  Nombre: Estudio mercado
+  tipologiaNombre anterior: Estudio mercado
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Estudio mercado. Descripci�n principal: An�lisis sobre la situaci�n de la oferta y la demanda de similares bienes inmuebles ubicados dentro de una zona determinada. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2124 [esin.19]
+  Nombre: Estudio y/o informe situación inmobiliaria
+  tipologiaNombre anterior: Estudio y/o informe situación inmobiliaria
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Estudio y/o informe situaci�n inmobiliaria. Descripci�n principal: Documento de investigaci�n a trav�s del cual se realiza un an�lisis de la situaci�n, en t�rminos generales, en que se encuentra el mercado inmobiliario y de la posible evoluci�n del mismo. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2125 [esin.27]
+  Nombre: Informe conflicto intereses (RyC)
+  tipologiaNombre anterior: Informe conflicto intereses (RyC)
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe conflicto intereses (RyC). Descripci�n principal: Informe de conflicto de intereses en relaci�n emitido por el departamento de regulaci�n y cumplimiento. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2126 [esin.32]
+  Nombre: Informe detalle
+  tipologiaNombre anterior: Informe detalle
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe detalle. Descripci�n principal: Documento informativo emitido por un experto a trav�s del cual se documentan con detalle determinados aspectos concretos relativos a un activo. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2127 [esin.34]
+  Nombre: Informe estado
+  tipologiaNombre anterior: Informe estado
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe estado. Descripci�n principal: Documento informativo emitido por un experto a trav�s del cual se documentan con detalle el estado en el que se encuentra un activo concreto. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2128 [esin.36]
+  Nombre: Informe legal
+  tipologiaNombre anterior: Informe legal
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe legal. Descripci�n principal: Documento informativo emitido por un departamento, persona o ente, relativos a la ley o al derecho. Incluir en este tipo documental las valoraciones de letrados o asesor�a jur�dica. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2129 [esin.41]
+  Nombre: Informe técnico
+  tipologiaNombre anterior: Informe técnico
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe t�cnico. Descripci�n principal: Documento informativo emitido por un experto a trav�s del cual se documentan con detalle determinados aspectos t�cnicos referentes a un activo concreto. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2130 [esin.42]
+  Nombre: Justificación precio propuesto
+  tipologiaNombre anterior: Justificación precio propuesto
+  gptdescripcion anterior: Documento correspondiente a la tipología “Justificación precio propuesto”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Justificaci�n precio propuesto. Descripci�n principal: Documento justificativo a trav�s del cual se pretende valorar la conveniencia respecto al precio propuesto en una oferta realizada para la compra de un activo. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2131 [esin.43]
+  Nombre: Liquidación concurso: informe trimestral administración concursal
+  tipologiaNombre anterior: Liquidación concurso: informe trimestral administración concursal
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Liquidaci�n concurso: informe trimestral administraci�n concursal. Descripci�n principal: Informe trimestral obligatorio sobre la aplicaci�n del Plan de Liquidaci�n. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2132 [esin.54]
+  Nombre: Precio transferencia
+  tipologiaNombre anterior: Precio transferencia
+  gptdescripcion anterior: Documento correspondiente a la tipología “Precio transferencia”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Precio transferencia. Descripci�n principal: Documento que justifica el precio a aplicar a una transacci�n. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2133 [esin.59]
+  Nombre: Subasta: informe
+  tipologiaNombre anterior: Subasta: informe
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Subasta: informe. Descripci�n principal: Conjunto de documentos en el que se incluye la documentaci�n necesaria para la realizaci�n subasta de un activo. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2134 [esin.80]
+  Nombre: Informe valorativo
+  tipologiaNombre anterior: Informe valorativo
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe valorativo. Descripci�n principal: Documento que incluye la descripci�n escrita de la opini�n departamental o personal sobre una acci�n espec�fica u operaci�n. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2135 [esin.86]
+  Nombre: Informe fiscal
+  tipologiaNombre anterior: Informe fiscal
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe fiscal. Descripci�n principal: Documento que describe o explica aspectos fiscales o tributarios de un hecho, negocio o acto. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2136 [esin.87]
+  Nombre: Informe valoración y precio
+  tipologiaNombre anterior: Informe valoración y precio
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe valoraci�n y precio. Descripci�n principal: Documento que describe o explica en base a unos determinados criterios la valoraci�n o precio asignado. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2137 [esin.90]
+  Nombre: Informe legal activo
+  tipologiaNombre anterior: Informe legal activo
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe legal activo. Descripci�n principal: Documento informativo emitido por un experto legal a trav�s del cual se documenta con detalle la situaci�n legal de un activo concreto. Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2138 [esin.92]
+  Nombre: Informe cierre
+  tipologiaNombre anterior: Informe cierre
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Informe cierre. Descripci�n principal: Informe emitido a trav�s del cual se hace un resumen de las actividades realizadas en una operaci�n en concreto y del resultado obtenido, como consecuencia de los trabajos realizados (p.e. Informe de cierre de los trabajos de mantenimiento realizados sobre un activo inmobiliario propiedad de SAREB). Contexto descriptivo: Descripciones escritas, de las caracter�sticas y circunstancias de un suceso o asunto relacionado con la situaci�n o gesti�n de un activo o una persona. Incluye preliminares y definitivos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2139 [fact.03]
+  Nombre: Contrato: factura comercial
+  tipologiaNombre anterior: Contrato: factura comercial
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Contrato: factura comercial. Descripci�n principal: Factura emitida/recibida como consecuencia de una relaci�n contractual preexistente. Contexto descriptivo: Cuentas econ�micas detalladas de una operaci�n de venta, por servicios prestados u obras. Se incluyen tanto las facturas comerciales como aquellas derivadas de los pagos a profesionales y organismos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2140 [fact.04]
+  Nombre: Derramas y cuotas: factura
+  tipologiaNombre anterior: Derramas y cuotas: factura
+  gptdescripcion anterior: Documento de facturación que detalla un servicio/bien, su importe, impuestos y datos de emisor y receptor.
+  gptdescripcion nuevo: Tipo de documento: Derramas y cuotas: factura. Descripci�n principal: Factura emitida por la entidad al part�cipe/socio como consecuencia del reparto de los costes asumidos por la entidad y girados al socio/participe en el porcentaje que le corresponde. Contexto descriptivo: Cuentas econ�micas detalladas de una operaci�n de venta, por servicios prestados u obras. Se incluyen tanto las facturas comerciales como aquellas derivadas de los pagos a profesionales y organismos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2141 [fact.10]
+  Nombre: Otro gasto
+  tipologiaNombre anterior: Otro gasto
+  gptdescripcion anterior: Documento correspondiente a la tipología “Otro gasto”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Otro gasto. Descripci�n principal: Factura recibida cuya tipolog�a no est� contemplada en la presente clasificaci�n. Contexto descriptivo: Cuentas econ�micas detalladas de una operaci�n de venta, por servicios prestados u obras. Se incluyen tanto las facturas comerciales como aquellas derivadas de los pagos a profesionales y organismos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2142 [fact.11]
+  Nombre: Préstamo originario: provisión fondos
+  tipologiaNombre anterior: Préstamo originario: provisión fondos
+  gptdescripcion anterior: Documento correspondiente a la tipología “Préstamo originario: provisión fondos”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Pr�stamo originario: provisi�n fondos. Descripci�n principal: Justificante de Provisi�n de Fondos. Contexto descriptivo: Cuentas econ�micas detalladas de una operaci�n de venta, por servicios prestados u obras. Se incluyen tanto las facturas comerciales como aquellas derivadas de los pagos a profesionales y organismos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2143 [fact.15]
+  Nombre: Tasación: factura
+  tipologiaNombre anterior: Tasación: factura
+  gptdescripcion anterior: Documento de facturación que detalla un servicio/bien, su importe, impuestos y datos de emisor y receptor.
+  gptdescripcion nuevo: Tipo de documento: Tasaci�n: factura. Descripci�n principal: Factura recibida por la Tasaci�n contratada. Contexto descriptivo: Cuentas econ�micas detalladas de una operaci�n de venta, por servicios prestados u obras. Se incluyen tanto las facturas comerciales como aquellas derivadas de los pagos a profesionales y organismos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2144 [fact.16]
+  Nombre: Transacción: factura
+  tipologiaNombre anterior: Transacción: factura
+  gptdescripcion anterior: Documento de facturación que detalla un servicio/bien, su importe, impuestos y datos de emisor y receptor.
+  gptdescripcion nuevo: Tipo de documento: Transacci�n: factura. Descripci�n principal: Factura correspondiente a una transacci�n econ�mica. Contexto descriptivo: Cuentas econ�micas detalladas de una operaci�n de venta, por servicios prestados u obras. Se incluyen tanto las facturas comerciales como aquellas derivadas de los pagos a profesionales y organismos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2145 [fact.17]
+  Nombre: Alquiler: factura
+  tipologiaNombre anterior: Alquiler: factura
+  gptdescripcion anterior: Documento de facturación que detalla un servicio/bien, su importe, impuestos y datos de emisor y receptor.
+  gptdescripcion nuevo: Tipo de documento: Alquiler: factura. Descripci�n principal: Factura emitida por Sareb como consecuencia del importe girado al arrendatario de acuerdo a lo estipulado en el contrato de arrendamiento firmado entre las partes. Contexto descriptivo: Cuentas econ�micas detalladas de una operaci�n de venta, por servicios prestados u obras. Se incluyen tanto las facturas comerciales como aquellas derivadas de los pagos a profesionales y organismos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2146 [fich.02]
+  Nombre: Catastro: ficha
+  tipologiaNombre anterior: Catastro: ficha
+  gptdescripcion anterior: Documento estructurado que registra datos clave y características del activo, cliente o elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Catastro: ficha. Descripci�n principal: Documentos provenientes del Catastro que acreditan los datos f�sicos, jur�dicos del inmueble. Contexto descriptivo: Folios en el que se anotan de manera esquem�tica datos generales, sobre un activo, operaci�n, persona, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2147 [fich.04]
+  Nombre: Ficha conocimiento cliente (KYC)
+  tipologiaNombre anterior: Ficha conocimiento cliente (KYC)
+  gptdescripcion anterior: Documento estructurado que registra datos clave y características del activo, cliente o elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Ficha conocimiento cliente (KYC). Descripci�n principal: Documento en el que se recogen los datos del solicitante de una operaci�n (datos identificativos, de actividad, as� como el detalle del origen de los fondos destinados a la operaci�n y medios de pago que se van a utilizar). Contexto descriptivo: Folios en el que se anotan de manera esquem�tica datos generales, sobre un activo, operaci�n, persona, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2148 [fich.05]
+  Nombre: Ficha datos básicos
+  tipologiaNombre anterior: Ficha datos básicos
+  gptdescripcion anterior: Documento estructurado que registra datos clave y características del activo, cliente o elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Ficha datos b�sicos. Descripci�n principal: Ficha resumen que recoge los datos b�sicos referentes a la situaci�n y estado de un activo. Contexto descriptivo: Folios en el que se anotan de manera esquem�tica datos generales, sobre un activo, operaci�n, persona, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2149 [fich.08]
+  Nombre: Ficha gasto
+  tipologiaNombre anterior: Ficha gasto
+  gptdescripcion anterior: Documento estructurado que registra datos clave y características del activo, cliente o elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Ficha gasto. Descripci�n principal: Documento resumen de la relaci�n de gastos incurridos por el activo. Contexto descriptivo: Folios en el que se anotan de manera esquem�tica datos generales, sobre un activo, operaci�n, persona, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2150 [fich.10]
+  Nombre: Ficha resumen
+  tipologiaNombre anterior: Ficha resumen
+  gptdescripcion anterior: Documento estructurado que registra datos clave y características del activo, cliente o elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Ficha resumen. Descripci�n principal: Documento resumen sobre las caracter�sticas concretas de un activo. Contexto descriptivo: Folios en el que se anotan de manera esquem�tica datos generales, sobre un activo, operaci�n, persona, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2151 [fich.11]
+  Nombre: Ficha técnica / urbanística
+  tipologiaNombre anterior: Ficha técnica / urbanística
+  gptdescripcion anterior: Documento estructurado que registra datos clave y características del activo, cliente o elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Ficha t�cnica / urban�stica. Descripci�n principal: Ficha resumen que recoge los datos t�cnicos e informaci�n urban�stica referente a la situaci�n y estado de un activo. Contexto descriptivo: Folios en el que se anotan de manera esquem�tica datos generales, sobre un activo, operaci�n, persona, etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2152 [foto.01]
+  Nombre: Fotografía estado / avería
+  tipologiaNombre anterior: Fotografía estado / avería
+  gptdescripcion anterior: Evidencia visual (foto o conjunto de fotos) que documenta el estado, incidencia o características del activo.
+  gptdescripcion nuevo: Tipo de documento: Fotograf�a estado / aver�a. Descripci�n principal: Documentaci�n gr�fica que muestra el estado de una aver�a. Contexto descriptivo: Im�genes capturadas del estado del activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2153 [foto.04]
+  Nombre: Otra fotografía
+  tipologiaNombre anterior: Otra fotografía
+  gptdescripcion anterior: Evidencia visual (foto o conjunto de fotos) que documenta el estado, incidencia o características del activo.
+  gptdescripcion nuevo: Tipo de documento: Otra fotograf�a. Descripci�n principal: Documentaci�n gr�fica no incluida en el resto de apartados definidos en la clasificaci�n. Contexto descriptivo: Im�genes capturadas del estado del activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2154 [foto.05]
+  Nombre: Postventa: fotografía
+  tipologiaNombre anterior: Postventa: fotografía
+  gptdescripcion anterior: Evidencia visual (foto o conjunto de fotos) que documenta el estado, incidencia o características del activo.
+  gptdescripcion nuevo: Tipo de documento: Postventa: fotograf�a. Descripci�n principal: Documentaci�n gr�fica que muestra el estado en el que se entrega la vivienda. Contexto descriptivo: Im�genes capturadas del estado del activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2005 [general-prompting]
+  Nombre: Documento generico _test
+  tipologiaNombre anterior: Documento generico _test
+  gptdescripcion anterior: 
+  gptdescripcion nuevo: Tipo de documento: Documento generico _test. Criterio para clasificaci�n autom�tica: descripci�n insuficiente; requiere revisi�n manual antes de usar esta clase en un modelo de clasificaci�n.
+
+ID=1006 [IBI]
+  Nombre: IBI
+  tipologiaNombre anterior: IBI
+  gptdescripcion anterior: Documento correspondiente al recibo del Impuesto sobre Bienes Inmuebles (IBI) en España, emitido por el ayuntamiento competente, relativo al inmueble identificado y al ejercicio fiscal indicado.
+  gptdescripcion nuevo: Tipo de documento: IBI. Descripci�n principal: Documento correspondiente al recibo del Impuesto sobre Bienes Inmuebles (IBI) en Espa�a, emitido por el ayuntamiento competente, relativo al inmueble identificado y al ejercicio fiscal indicado. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2001 [IBI_1.1]
+  Nombre: IBI
+  tipologiaNombre anterior: IBI
+  gptdescripcion anterior: Recibo del Impuesto sobre Bienes Inmuebles (IBI) emitido por ayuntamiento español. Incluye referencia catastral, valor catastral, base imponible, cuota tributaria, periodo impositivo y datos del titular.
+  gptdescripcion nuevo: Tipo de documento: IBI. Descripci�n principal: Recibo del Impuesto sobre Bienes Inmuebles (IBI) emitido por ayuntamiento espa�ol. Incluye referencia catastral, valor catastral, base imponible, cuota tributaria, periodo impositivo y datos del titular. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2155 [inli.03]
+  Nombre: Listado con problemáticas
+  tipologiaNombre anterior: Listado con problemáticas
+  gptdescripcion anterior: Documento estructurado que registra datos clave y características del activo, cliente o elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Listado con problem�ticas. Descripci�n principal: Documento que recoge la relaci�n de incidencias detectadas sobre el inmueble. Contexto descriptivo: Conjunto de datos ordenados siguiendo alg�n tipo de caracter�sticas particulares a fin de enumerarlos y organizarlos. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2156 [inrg.08]
+  Nombre: Registro Propiedad: calificación y/o inscripción
+  tipologiaNombre anterior: Registro Propiedad: calificación y/o inscripción
+  gptdescripcion anterior: Documento correspondiente a la tipología “Registro Propiedad: calificación y/o inscripción”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Registro Propiedad: calificaci�n y/o inscripci�n. Descripci�n principal: Documento Registral que refleja la calificaci�n realizada por el Registrador del documento presentado y, llegado el caso, la inscripci�n del cambio de titularidad a favor del nuevo propietario...). Contexto descriptivo: Extensi�n, suspensi�n o denegaci�n por parte del registrador de una inscripci�n, anotaci�n, nota marginal o cancelaci�n solicitada. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2157 [licm.15]
+  Nombre: Manual prevención riesgos laborales
+  tipologiaNombre anterior: Manual prevención riesgos laborales
+  gptdescripcion anterior: Documento correspondiente a la tipología “Manual prevención riesgos laborales”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Manual prevenci�n riesgos laborales. Descripci�n principal: Documento redactado por el t�cnico competente, en el que se especif�ca, de forma gen�rica, la relaci�n de protocolos aplicables respecto a las disposiciones m�nimas marcadas por la legislaci�n, y referentes a la seguridad y salud de las obras de construcci�n, las cuales ser�n de aplicaci�n siempre que lo exijan las caracter�sticas de la obra o de la actividad, las circunstancias o cualquier otro riesgo. Contexto descriptivo: Documentos que, entendidos como compendio o colecci�n de textos seleccionados y f�cilmente localizables, contienen informaci�n v�lida y clasificada sobre una determinada materia, trat�ndose como una gu�a. Se incluye en este los documentos que reunen el historial de un conjunto de hechos o acciones tomadas durante la realizaci�n de las obras, complementando en su caso las determinaciones de los instrumentos de planeamiento relativas a la conservaci�n, protecci�n o mejora del patrimonio urban�stico, arquitect�nico, hist�rico, cultural, natural o paisaj�stico. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2158 [lipr.03]
+  Nombre: Obra: cédula de habitabilidad
+  tipologiaNombre anterior: Obra: cédula de habitabilidad
+  gptdescripcion anterior: Documento administrativo de solicitud, autorización o acreditación emitido o presentado ante la administración.
+  gptdescripcion nuevo: Tipo de documento: Obra: c�dula de habitabilidad. Descripci�n principal: Documento administrativo de nivel municipal, solicitado por la propiedad, que garantiza que el inmueble re�ne las condiciones necesarias para vivir en �ste. Dicho documento es imprescindible para contratar los servicios de electricidad, agua, gas y telecomunicaciones, concesiones de pr�stamos, as� como para vender o alquilar una casa. Contexto descriptivo: Resoluciones de la Administraci�n por la que se autoriza una determinada actividad relacionada con el desarrollo inmobiliario y gesti�n de un activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2159 [lipr.05]
+  Nombre: Obra: licencia obras
+  tipologiaNombre anterior: Obra: licencia obras
+  gptdescripcion anterior: Documento administrativo de solicitud, autorización o acreditación emitido o presentado ante la administración.
+  gptdescripcion nuevo: Tipo de documento: Obra: licencia obras. Descripci�n principal: Documento necesario para el inicio de las obras. Es un permiso requerido, normalmente por la administraci�n local, para la realizaci�n de cualquier tipo de construcci�n, supone la autorizaci�n municipal para realizar las obras. Su fin es comprobar la adecuaci�n de la solicitud de licencia a lo establecido en la normativa urban�stica...). Contexto descriptivo: Resoluciones de la Administraci�n por la que se autoriza una determinada actividad relacionada con el desarrollo inmobiliario y gesti�n de un activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2160 [lipr.06]
+  Nombre: Obra: licencia primera ocupación
+  tipologiaNombre anterior: Obra: licencia primera ocupación
+  gptdescripcion anterior: Documento administrativo de solicitud, autorización o acreditación emitido o presentado ante la administración.
+  gptdescripcion nuevo: Tipo de documento: Obra: licencia primera ocupaci�n. Descripci�n principal: Documento administrativo de car�cter municipal que tiene por objeto acreditar que las actividades y las obras que se precisan para su implantaci�n, modificaci�n o cambio, han sido ejecutadas de conformidad con el proyecto y condiciones en que la licencia fue concedida, o con las variaciones que no suponen modificaci�n de la licencia, y que se encuentran debidamente terminadas y aptas seg�n las determinaciones urban�sticas, ambientales y de seguridad de su destino espec�fico. Contexto descriptivo: Resoluciones de la Administraci�n por la que se autoriza una determinada actividad relacionada con el desarrollo inmobiliario y gesti�n de un activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2161 [memo.16]
+  Nombre: Proyecto básico: memoria
+  tipologiaNombre anterior: Proyecto básico: memoria
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Proyecto b�sico: memoria. Descripci�n principal: Documentaci�n t�cnica que comprende los datos generales, la informaci�n descriptiva y constructiva necesarios para definir adecuadamente el proyecto b�sico. Contexto descriptivo: Documentos en que se rinden cuentas de una actividad realizada durante cierto tiempo, casi siempre para justificar su aprovechamiento. Por lo general consta de tres partes: resumen de lo que se ha venido haciendo, cr�tica de lo que se ha hecho y propuesta de mejora para el futuro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2162 [memo.19]
+  Nombre: Proyecto urbanización: memoria
+  tipologiaNombre anterior: Proyecto urbanización: memoria
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Proyecto urbanizaci�n: memoria. Descripci�n principal: Documentaci�n t�cnica que comprende los datos generales, la informaci�n descriptiva y constructiva necesarios para definir adecuadamente el proyecto de urbanizaci�n. Contexto descriptivo: Documentos en que se rinden cuentas de una actividad realizada durante cierto tiempo, casi siempre para justificar su aprovechamiento. Por lo general consta de tres partes: resumen de lo que se ha venido haciendo, cr�tica de lo que se ha hecho y propuesta de mejora para el futuro. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2006 [nota.simple]
+  Nombre: Nota Simple
+  tipologiaNombre anterior: Nota Simple
+  gptdescripcion anterior: Nota simple registral española. Documento oficial del Registro de la Propiedad que certifica la situación jurídica de una finca: titular dominical, cargas, hipotecas, servidumbres y graváménes.
+  gptdescripcion nuevo: Tipo de documento: Nota Simple. Descripci�n principal: Nota simple registral espa�ola. Documento oficial del Registro de la Propiedad que certifica la situaci�n jur�dica de una finca: titular dominical, cargas, hipotecas, servidumbres y grav�m�nes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=1001 [nota.simple.1_0]
+  Nombre: Nota Simple
+  tipologiaNombre anterior: Nota Simple
+  gptdescripcion anterior: 
+  gptdescripcion nuevo: Tipo de documento: Nota Simple. Criterio para clasificaci�n autom�tica: descripci�n insuficiente; requiere revisi�n manual antes de usar esta clase en un modelo de clasificaci�n.
+
+ID=1002 [nota.simple.1_2]
+  Nombre: Nota Simple
+  tipologiaNombre anterior: Nota Simple
+  gptdescripcion anterior: 
+  gptdescripcion nuevo: Tipo de documento: Nota Simple. Criterio para clasificaci�n autom�tica: descripci�n insuficiente; requiere revisi�n manual antes de usar esta clase en un modelo de clasificaci�n. Diferenciador t�cnico del registro: nota.simple.1_2 / 1002.
+
+ID=1003 [nota.simple.1_3]
+  Nombre: Nota Simple
+  tipologiaNombre anterior: Nota Simple
+  gptdescripcion anterior: 
+  gptdescripcion nuevo: Tipo de documento: Nota Simple. Criterio para clasificaci�n autom�tica: descripci�n insuficiente; requiere revisi�n manual antes de usar esta clase en un modelo de clasificaci�n. Diferenciador t�cnico del registro: nota.simple.1_3 / 1003.
+
+ID=1004 [nota.simple.1_4]
+  Nombre: Nota Simple
+  tipologiaNombre anterior: Nota Simple
+  gptdescripcion anterior: Nota simple registral española. Documento oficial del Registro de la Propiedad que certifica la situación jurídica de una finca: titular dominical, cargas, hipotecas, servidumbres y graváménes.
+  gptdescripcion nuevo: Tipo de documento: Nota Simple. Descripci�n principal: Nota simple registral espa�ola. Documento oficial del Registro de la Propiedad que certifica la situaci�n jur�dica de una finca: titular dominical, cargas, hipotecas, servidumbres y grav�m�nes. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades. Diferenciador t�cnico del registro: nota.simple.1_4 / 1004.
+
+ID=2221 [nota.simple_bal]
+  Nombre: Nota Simple (Balanceada)
+  tipologiaNombre anterior: Nota Simple (Balanceada)
+  gptdescripcion anterior: Nota simple registral española. Documento oficial del Registro de la Propiedad que certifica la situación jurídica de una finca: titular dominical, cargas, hipotecas, servidumbres y graváménes.
+  gptdescripcion nuevo: Tipo de documento: Nota Simple (Balanceada). Criterio para clasificaci�n autom�tica: descripci�n insuficiente; requiere revisi�n manual antes de usar esta clase en un modelo de clasificaci�n.
+
+ID=2163 [nots.01]
+  Nombre: Registro Propiedad: nota simple / literal
+  tipologiaNombre anterior: Registro Propiedad: nota simple / literal
+  gptdescripcion anterior: Documento correspondiente a la tipología “Registro Propiedad: nota simple / literal”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Registro Propiedad: nota simple / literal. Descripci�n principal: Documento emitido por le Registro de la Propiedad a trav�s de la cual se informa de los asientos de inscripci�n en vigor de una finca concreta y que proporciona informaci�n breve y concisa sobre la situaci�n jur�dica de una finca.: descripci�n, propietarios, derechos y cargas si existen y servidumbres. Contexto descriptivo: Extractos sucintos del contenido de los asientos registrales relativos a la finca, donde conste la identificaci�n de la misma, la identidad del titular o titulares de los derechos inscritos sobre la misma, y la extensi�n, naturaleza y limitaciones de �stos. Su valor es puramente informativo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2164 [nots.02]
+  Nombre: Registro de la propiedad: informacion de indices
+  tipologiaNombre anterior: Registro de la propiedad: informacion de indices
+  gptdescripcion anterior: Documento correspondiente a la tipología “Registro de la propiedad: informacion de indices”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Registro de la propiedad: informacion de indices. Descripci�n principal: Documento emitido por le Registro Central de Indices de la Propiedad a trav�s de la cual se informa de derechos (propiedad y otros derechos sobre inmuebles) inscritos en los distintos Registos de la Propiedad a favor de una persona concreta. Contexto descriptivo: Extractos sucintos del contenido de los asientos registrales relativos a la finca, donde conste la identificaci�n de la misma, la identidad del titular o titulares de los derechos inscritos sobre la misma, y la extensi�n, naturaleza y limitaciones de �stos. Su valor es puramente informativo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2165 [nova.04]
+  Nombre: Novación: escritura/contrato
+  tipologiaNombre anterior: Novación: escritura/contrato
+  gptdescripcion anterior: Documento público notarial que formaliza y da validez jurídica al negocio o acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Novaci�n: escritura/contrato. Descripci�n principal: Documento p�blico/privado que recoge los acuerdos adoptados entre las partes. Contexto descriptivo: Documentos p�blicos o privados, en los que se hace constar un determinado acontecimientopor la que se modifica alguna de las condiciones u obligaciones de un contrato de financiaci�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2166 [ofer.01]
+  Nombre: Oferta transacción
+  tipologiaNombre anterior: Oferta transacción
+  gptdescripcion anterior: Documento correspondiente a la tipología “Oferta transacción”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Oferta transacci�n. Descripci�n principal: Documento emitido por el interesado en la adquisici�n o arrendamiento de un bien en el que se especifican, entre otros, el precio y forma de pago y otras las condiciones vinculadas a la oferta. Contexto descriptivo: Propuestas econ�micas presentadas para alcanzar un acuerdo mercantil. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2167 [pblo.27]
+  Nombre: Subasta: publicación convocatoria
+  tipologiaNombre anterior: Subasta: publicación convocatoria
+  gptdescripcion anterior: Documento que cita oficialmente a los asistentes e informa de fecha, lugar y objeto de la reunión.
+  gptdescripcion nuevo: Tipo de documento: Subasta: publicaci�n convocatoria. Descripci�n principal: Documento emitido por el juzgado en el que se anuncia la celebraci�n de la subasta del activo. Contexto descriptivo: Medios de comunicaci�n escritos (boletines, diarios oficiales y/o tabl�n de anuncios) que una Administraci�n o Entidad P�blica utiliza para publicar sus normas jur�dicas y otros actos de naturaleza p�blica. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2168 [pblo.28]
+  Nombre: Subasta: edicto
+  tipologiaNombre anterior: Subasta: edicto
+  gptdescripcion anterior: Anuncio oficial publicado para dar publicidad y validez a un trámite, convocatoria o actuación.
+  gptdescripcion nuevo: Tipo de documento: Subasta: edicto. Descripci�n principal: Mandamiento o decreto publicado por el organo judicial a trav�s del cual se publica la providencia acordada por el organo judicial competente respecto a la futura subasta de bienes del ejecutado, en el que se especifican los detalles de la subasta y del bien subastado. Contexto descriptivo: Medios de comunicaci�n escritos (boletines, diarios oficiales y/o tabl�n de anuncios) que una Administraci�n o Entidad P�blica utiliza para publicar sus normas jur�dicas y otros actos de naturaleza p�blica. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2169 [plao.26]
+  Nombre: Plano distribución
+  tipologiaNombre anterior: Plano distribución
+  gptdescripcion anterior: Representación gráfica a escala que describe ubicación, distribución o definición técnica del elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Plano distribuci�n. Descripci�n principal: Documentaci�n gr�fica del inmueble en el que se detalla la distribuci�n del mismo. Contexto descriptivo: Representaciones gr�ficas esquem�ticas, en dos dimensiones y a determinada escala, de un terreno, �mbito, poblaci�n,etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2170 [plao.27]
+  Nombre: Plano situación
+  tipologiaNombre anterior: Plano situación
+  gptdescripcion anterior: Representación gráfica a escala que describe ubicación, distribución o definición técnica del elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Plano situaci�n. Descripci�n principal: Documentaci�n gr�fica en el que se especifica la ubicaci�n concreta del inmueble...). Contexto descriptivo: Representaciones gr�ficas esquem�ticas, en dos dimensiones y a determinada escala, de un terreno, �mbito, poblaci�n,etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2171 [plao.36]
+  Nombre: Proyecto urbanización: plano
+  tipologiaNombre anterior: Proyecto urbanización: plano
+  gptdescripcion anterior: Representación gráfica a escala que describe ubicación, distribución o definición técnica del elemento indicado.
+  gptdescripcion nuevo: Tipo de documento: Proyecto urbanizaci�n: plano. Descripci�n principal: Documentaci�n gr�fica que se acompa�a al proyecto de urbanizaci�n. Contexto descriptivo: Representaciones gr�ficas esquem�ticas, en dos dimensiones y a determinada escala, de un terreno, �mbito, poblaci�n,etc. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2172 [plap.02]
+  Nombre: Liquidación concurso: plan liquidación
+  tipologiaNombre anterior: Liquidación concurso: plan liquidación
+  gptdescripcion anterior: Documento correspondiente a la tipología “Liquidación concurso: plan liquidación”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Liquidaci�n concurso: plan liquidaci�n. Descripci�n principal: Plan de liquidaci�n presentado por la administraci�n concursal iniciada la fase de liquidaci�n de la concursada. Contexto descriptivo: Documentos en los que se detalla el modo y conjunto de medios necesarios para llevar a cabo un negocio, proyecto, acci�n o planificaci�n econ�mica y de gesti�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2173 [plap.03]
+  Nombre: Plan de mantenimiento
+  tipologiaNombre anterior: Plan de mantenimiento
+  gptdescripcion anterior: Documento correspondiente a la tipología “Plan de mantenimiento”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Plan de mantenimiento. Descripci�n principal: Documento a trav�s del cual se detalla la planificaci�n, en actividades y tiempos, definida para la ejecuci�n de una o varias actividades contenidas en un contrato de mantenimiento. Contexto descriptivo: Documentos en los que se detalla el modo y conjunto de medios necesarios para llevar a cabo un negocio, proyecto, acci�n o planificaci�n econ�mica y de gesti�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2174 [plap.08]
+  Nombre: Plan de Mantenimiento Individualizado
+  tipologiaNombre anterior: Plan de Mantenimiento Individualizado
+  gptdescripcion anterior: Documento correspondiente a la tipología “Plan de Mantenimiento Individualizado”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Plan de Mantenimiento Individualizado. Descripci�n principal: Documento en el que se detalla las acciones y medios para el mantenimiento de un activo. Contexto descriptivo: Documentos en los que se detalla el modo y conjunto de medios necesarios para llevar a cabo un negocio, proyecto, acci�n o planificaci�n econ�mica y de gesti�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2175 [pres.01]
+  Nombre: Contrato: presupuesto
+  tipologiaNombre anterior: Contrato: presupuesto
+  gptdescripcion anterior: Documento contractual que regula obligaciones, condiciones y derechos de las partes para el supuesto indicado.
+  gptdescripcion nuevo: Tipo de documento: Contrato: presupuesto. Descripci�n principal: Estimaci�n econ�mica detalla emitida por la empresa constructora, de servicios o suministradora que recoge los costes asociados al contrato. Contexto descriptivo: C�mputo anticipado del coste de una obra o de los gastos y rentas de una corporaci�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2176 [pres.02]
+  Nombre: Derramas y cuotas: presupuesto
+  tipologiaNombre anterior: Derramas y cuotas: presupuesto
+  gptdescripcion anterior: Estimación económica desglosada de costes para una actuación, obra o servicio.
+  gptdescripcion nuevo: Tipo de documento: Derramas y cuotas: presupuesto. Descripci�n principal: Estimaci�n econ�mica detalla emitida por la el gestor en el que recoge la previsi�n de costes asociados a la actividad de la entidad. Contexto descriptivo: C�mputo anticipado del coste de una obra o de los gastos y rentas de una corporaci�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2177 [pres.07]
+  Nombre: Presupuesto inversión
+  tipologiaNombre anterior: Presupuesto inversión
+  gptdescripcion anterior: Estimación económica desglosada de costes para una actuación, obra o servicio.
+  gptdescripcion nuevo: Tipo de documento: Presupuesto inversi�n. Descripci�n principal: Estimaci�n econ�mica detalla emitida por la empresa constructora, de servicios o suministradora que recoge los costes asociados a la inversi�n planificada. Contexto descriptivo: C�mputo anticipado del coste de una obra o de los gastos y rentas de una corporaci�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2178 [pres.10]
+  Nombre: Proyecto urbanización: presupuesto
+  tipologiaNombre anterior: Proyecto urbanización: presupuesto
+  gptdescripcion anterior: Estimación económica desglosada de costes para una actuación, obra o servicio.
+  gptdescripcion nuevo: Tipo de documento: Proyecto urbanizaci�n: presupuesto. Descripci�n principal: Valoraci�n aproximada de la ejecuci�n material de la obra proyectada por cap�tulos en el proyecto de urbanizaci�n. Contexto descriptivo: C�mputo anticipado del coste de una obra o de los gastos y rentas de una corporaci�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2179 [pres.11]
+  Nombre: Presupuesto Correctivo/ Preventivo
+  tipologiaNombre anterior: Presupuesto Correctivo/ Preventivo
+  gptdescripcion anterior: Estimación económica desglosada de costes para una actuación, obra o servicio.
+  gptdescripcion nuevo: Tipo de documento: Presupuesto Correctivo/ Preventivo. Descripci�n principal: Estimaci�n econ�mica detallada de los costes asociados a una acci�n de mantenimiento correctivo o preventivo concreta, a realizar sobre un activo. Contexto descriptivo: C�mputo anticipado del coste de una obra o de los gastos y rentas de una corporaci�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2180 [prpe.07]
+  Nombre: Préstamo financiación operación: comunicación concesión financiación bancaria
+  tipologiaNombre anterior: Préstamo financiación operación: comunicación concesión financiación bancaria
+  gptdescripcion anterior: Documento de comunicación formal (o consentimiento) intercambiado entre partes sobre el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Pr�stamo financiaci�n operaci�n: comunicaci�n concesi�n financiaci�n bancaria. Descripci�n principal: Documento bancario que informa de la concesi�n, por parte de la entidad bancaria correspondiente, de la financiaci�n necesaria para llevar a cabo una operaci�n determinada. Contexto descriptivo: Idea, manifestaci�n o pregunta realizada por persona/ �rgano distinto a Sareb por la que se pide al interesado que exprese y declare su actitud o su respuesta.En caso de que se adjunte documentaci�n para su an�lisis por el receptor, �sta se clasificar� en el tipo documental y unidad documental que proceda. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2181 [prpe.09]
+  Nombre: Propuesta operación /actuación
+  tipologiaNombre anterior: Propuesta operación /actuación
+  gptdescripcion anterior: Documento correspondiente a la tipología “Propuesta operación /actuación”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Propuesta operaci�n /actuaci�n. Descripci�n principal: Documento de propuesta de una determinada operaci�n financiera o propuesta de actuaci�n. Contexto descriptivo: Idea, manifestaci�n o pregunta realizada por persona/ �rgano distinto a Sareb por la que se pide al interesado que exprese y declare su actitud o su respuesta.En caso de que se adjunte documentaci�n para su an�lisis por el receptor, �sta se clasificar� en el tipo documental y unidad documental que proceda. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2182 [prpe.10]
+  Nombre: Propuesta PDV
+  tipologiaNombre anterior: Propuesta PDV
+  gptdescripcion anterior: Documento correspondiente a la tipología “Propuesta PDV”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Propuesta PDV. Descripci�n principal: Presupuesto sobre propuesta de Venta Paquete de 1-5 Activos. Contexto descriptivo: Idea, manifestaci�n o pregunta realizada por persona/ �rgano distinto a Sareb por la que se pide al interesado que exprese y declare su actitud o su respuesta.En caso de que se adjunte documentaci�n para su an�lisis por el receptor, �sta se clasificar� en el tipo documental y unidad documental que proceda. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2183 [prpi.07]
+  Nombre: Relación Peticiones de Precios y Ofertas
+  tipologiaNombre anterior: Relación Peticiones de Precios y Ofertas
+  gptdescripcion anterior: Documento correspondiente a la tipología “Relación Peticiones de Precios y Ofertas”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Relaci�n Peticiones de Precios y Ofertas. Descripci�n principal: Listado de solicitudes de informaci�n sobre el valor del activo y las ofertas recibidas por el mismo. Contexto descriptivo: Idea, manifestaci�n o pregunta realizada por persona/ �rgano de Sareb por la que se pide al interesado que exprese y declare su actitud o su respuesta.En caso de que se adjunte documentaci�n para su an�lisis por el receptor, �sta se clasificar� en el tipo documental y unidad documental que proceda. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2184 [pryt.11]
+  Nombre: Proyecto ejecución: anexos memoria
+  tipologiaNombre anterior: Proyecto ejecución: anexos memoria
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Proyecto ejecuci�n: anexos memoria. Descripci�n principal: Documentaci�n t�cnica adicional a la memoria que contiene el conjunto de planos, dibujos, esquemas y textos explicativos asociadas a diversos aspectos del proyecto de ejecuci�n. Contexto descriptivo: Conjunto de escritos, c�lculos y dibujos que se hacen para dar idea de c�mo ha de ser y lo que ha de costar una obra de arquitectura o de ingenier�a. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=1005 [resumen.documental]
+  Nombre: Resumen Documental Estandar
+  tipologiaNombre anterior: Resumen Documental Estandar
+  gptdescripcion anterior: Tipología orientada a generar un resumen estandarizado del documento de entrada.
+  gptdescripcion nuevo: Tipo de documento: Resumen Documental Estandar. Criterio para clasificaci�n autom�tica: descripci�n insuficiente; requiere revisi�n manual antes de usar esta clase en un modelo de clasificaci�n.
+
+ID=2185 [retr.02]
+  Nombre: Nómina
+  tipologiaNombre anterior: Nómina
+  gptdescripcion anterior: Documento que refleja el detalle de retribuciones, deducciones y neto a percibir en un periodo.
+  gptdescripcion nuevo: Tipo de documento: N�mina. Descripci�n principal: Salarios o sueldos que se pagan al trabajador en dinero o en especie por el empresario privado o p�blico, dependiendo de lo establecido contractualmente y dentro de las exigencias legales que el derecho laboral del pa�s marque. Contexto descriptivo: Salarios o sueldos que se pagan al trabajador en dinero o en especie por el empresario privado o p�blico, dependiendo de lo establecido contractualmente y dentro de las exigencias legales que el derecho laboral del pa�s marque. Tambi�n se entienden como retribuciones, las cantidades recibidas con concepto de prestaciones por despempleo o jubilaci�n. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2186 [scxx.00]
+  Nombre: Sin Clasificar
+  tipologiaNombre anterior: Sin Clasificar
+  gptdescripcion anterior: Documento pendiente de tipificar dentro del catálogo documental; requiere clasificación posterior.
+  gptdescripcion nuevo: Tipo de documento: Sin Clasificar. Descripci�n principal: Documento pendiente de tipificar dentro del cat�logo documental; requiere clasificaci�n posterior. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2187 [segu.11]
+  Nombre: Seguro responsabilidad decenal: póliza
+  tipologiaNombre anterior: Seguro responsabilidad decenal: póliza
+  gptdescripcion anterior: Documento que acredita la cobertura aseguradora contratada, sus condiciones y vigencia.
+  gptdescripcion nuevo: Tipo de documento: Seguro responsabilidad decenal: p�liza. Descripci�n principal: Documento que recoge el contrato y clausulado aplicable a la p�liza de seguro de responsabilidad decenal...). Contexto descriptivo: Acuerdos por los cuales una de las partes (el asegurador), se obliga a resarcir de un da�o o a pagar una suma de dinero a la otra parte (tomador), al verificarse la eventualidad prevista en el contrato, a cambio del pago de un precio, denominado prima. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2188 [sere.12]
+  Nombre: Ejecución: auto admisión a tramite demanda
+  tipologiaNombre anterior: Ejecución: auto admisión a tramite demanda
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Ejecuci�n: auto admisi�n a tramite demanda. Descripci�n principal: Documento por el que el juez o letrado de la administraci�n de justicia admite o inadmite a tr�mite la demanda o el escrito de solicitud presentada por las partes, o bien declara la falta de jurisdicci�n y/o competencia. Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2189 [sere.15]
+  Nombre: Ejecución: orden general
+  tipologiaNombre anterior: Ejecución: orden general
+  gptdescripcion anterior: Documento correspondiente a la tipología “Ejecución: orden general”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Ejecuci�n: orden general. Descripci�n principal: Documento que contiene el auto con el que el juez o tribunal acuerdan la orden general de ejecuci�n y despacho de la misma (incluyendo la ejecuci�n provisional). Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2190 [sere.23]
+  Nombre: Subasta: acta
+  tipologiaNombre anterior: Subasta: acta
+  gptdescripcion anterior: Documento formal que deja constancia de lo tratado, asistentes y acuerdos adoptados en el acto indicado.
+  gptdescripcion nuevo: Tipo de documento: Subasta: acta. Descripci�n principal: Documento de naturaleza judicial redactado por el Secretario Judicial a trav�s del cual se deja constancia de la celebraci�n del remate con su desarrollo e incidentes, especificando, entre otros, los participantes en la subasta, las posturas formuladas y se concreta la mejor oferta recibida. Dentro de este tipo documental se incorpora tanto el acta como la certificaci�n de cierre de la subasta. Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2191 [sere.24]
+  Nombre: Subasta: auto / decreto adjudicación
+  tipologiaNombre anterior: Subasta: auto / decreto adjudicación
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Subasta: auto / decreto adjudicaci�n. Descripci�n principal: Auto/Decreto de adjudicaci�n emitido por el juzgado en el procedimiento de ejecuci�n. Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2192 [sere.25]
+  Nombre: Subasta: mandamiento cancelación cargas
+  tipologiaNombre anterior: Subasta: mandamiento cancelación cargas
+  gptdescripcion anterior: Documento correspondiente a la tipología “Subasta: mandamiento cancelación cargas”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Subasta: mandamiento cancelaci�n cargas. Descripci�n principal: Mandamiento remitido a los registros p�blicos por los que se dictamina el levantamiento de las cargas que figuraban inscritas. Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2193 [sere.26]
+  Nombre: Subasta: testimonio decreto adjudicación
+  tipologiaNombre anterior: Subasta: testimonio decreto adjudicación
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Subasta: testimonio decreto adjudicaci�n. Descripci�n principal: Testimonio del decreto de adjudicaci�n emitido por el juzgado en un procedimiento de ejecuci�n. Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2194 [sere.29]
+  Nombre: Recurso apelación: resolución.
+  tipologiaNombre anterior: Recurso apelación: resolución.
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Recurso apelaci�n: resoluci�n.. Descripci�n principal: Acto procesal proveniente de un tribunal por el que se resuelve un recurso. Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2195 [sere.90]
+  Nombre: Diligencia de ordenación
+  tipologiaNombre anterior: Diligencia de ordenación
+  gptdescripcion anterior: Documento judicial del expediente procesal que inicia, impulsa o resuelve actuaciones en el procedimiento indicado.
+  gptdescripcion nuevo: Tipo de documento: Diligencia de ordenaci�n. Descripci�n principal: Resoluciones judiciales emitidas por el letrado de la administraci�n de justicia que dan a los autos el curso que corresponda, seg�n lo ordenado por la ley, e impulsar formalmente el procedimiento. Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2196 [sere.91]
+  Nombre: Resoluciones judiciales
+  tipologiaNombre anterior: Resoluciones judiciales
+  gptdescripcion anterior: Documento correspondiente a la tipología “Resoluciones judiciales”, usado para evidenciar y respaldar el trámite indicado.
+  gptdescripcion nuevo: Tipo de documento: Resoluciones judiciales. Descripci�n principal: Providencias, autos dictadas por los jueces y tribunales as� como las diligencias y decretos del letrado de la administraci�n de justicia, dictadas durante el procedimiento judicial que no est�n incluidos en el el resto de definidos en la clasificaci�n documental. Contexto descriptivo: Actos procesales provenientes de un tribunal o juzgado, mediante el cual resuelve las peticiones de las partes, o autoriza u ordena el cumplimiento de determinadas medidas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2013 [SERE-24]
+  Nombre: Subasta: auto / decreto adjudicacion
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Resolución judicial —auto, decreto o resolución— de ejecución hipotecaria que acuerda adjudicación de bienes inmuebles tras subasta judicial, con estructura de antecedentes, fundamentos y parte dispositiva, identificación de partes, fincas, valor de tasación/subasta, adjudicación y posible cancelación de cargas.
+  gptdescripcion nuevo: Tipo de documento: Subasta: auto / decreto adjudicacion. Descripci�n principal: Resoluci�n judicial �auto, decreto o resoluci�n� de ejecuci�n hipotecaria que acuerda adjudicaci�n de bienes inmuebles tras subasta judicial, con estructura de antecedentes, fundamentos y parte dispositiva, identificaci�n de partes, fincas, valor de tasaci�n/subasta, adjudicaci�n y posible cancelaci�n de cargas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2015 [SERE-25]
+  Nombre: Subasta: mandamiento cancelacion cargas
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Mandamiento, decreto, diligencia o resolución judicial dirigida al Registro de la Propiedad para cancelar hipoteca, cargas, anotaciones, inscripciones o notas marginales tras ejecución hipotecaria, adjudicación, subasta, dación en pago o liquidación concursal.
+  gptdescripcion nuevo: Tipo de documento: Subasta: mandamiento cancelacion cargas. Descripci�n principal: Mandamiento, decreto, diligencia o resoluci�n judicial dirigida al Registro de la Propiedad para cancelar hipoteca, cargas, anotaciones, inscripciones o notas marginales tras ejecuci�n hipotecaria, adjudicaci�n, subasta, daci�n en pago o liquidaci�n concursal. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2014 [SERE-26]
+  Nombre: Subasta: testimonio decreto adjudicacion
+  tipologiaNombre anterior: 
+  gptdescripcion anterior: Testimonio judicial o documento expedido por el Letrado de la Administración de Justicia que incorpora o testimonia un decreto/auto firme de adjudicación en ejecución hipotecaria, con datos de procedimiento, finca, subasta, adjudicación, recursos, firma electrónica/CSV y eventual cancelación de cargas.
+  gptdescripcion nuevo: Tipo de documento: Subasta: testimonio decreto adjudicacion. Descripci�n principal: Testimonio judicial o documento expedido por el Letrado de la Administraci�n de Justicia que incorpora o testimonia un decreto/auto firme de adjudicaci�n en ejecuci�n hipotecaria, con datos de procedimiento, finca, subasta, adjudicaci�n, recursos, firma electr�nica/CSV y eventual cancelaci�n de cargas. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2197 [tasa.09]
+  Nombre: Tasación: Informe activo
+  tipologiaNombre anterior: Tasación: Informe activo
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Tasaci�n: Informe activo. Descripci�n principal: Documento emitido por un perito que viene a demostrar frente a terceros y argumentar el porqu� de un valor concreto, especificando en que elementos o bases se apoyan para poder dar un valor frente a otros. Tomando como referente siempre un bien concreto individualizado y poni�ndolo en relaci�n con el conjunto, atendiendo de forma inequ�voca a las cualidades espec�ficas de ese bien. Contexto descriptivo: Documentos de estimaci�n del valor de un activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2198 [tasa.11]
+  Nombre: Tasación: informe activo
+  tipologiaNombre anterior: Tasación: informe activo
+  gptdescripcion anterior: Documento de análisis técnico/financiero/jurídico que describe, valora o justifica el asunto indicado.
+  gptdescripcion nuevo: Tipo de documento: Tasaci�n: informe activo. Descripci�n principal: Documento emitido por un perito que viene a demostrar frente a terceros y argumentar el porqu� de un valor concreto, especificando en que elementos o bases se apoyan para poder dar un valor frente a otros. Tomando como referente siempre un bien concreto individualizado y poni�ndolo en relaci�n con el conjunto, atendiendo de forma inequ�voca a las cualidades espec�ficas de ese bien. Contexto descriptivo: Documentos de estimaci�n del valor de un activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2199 [tasa.12]
+  Nombre: Valoración colateral UVA
+  tipologiaNombre anterior: Valoración colateral UVA
+  gptdescripcion anterior: Informe técnico que determina el valor del activo o garantía según criterios y metodología aplicables.
+  gptdescripcion nuevo: Tipo de documento: Valoraci�n colateral UVA. Descripci�n principal: Documento de Valoraci�n realizado por la unidad de valoraciones de SAREB sobre una garant�a. Contexto descriptivo: Documentos de estimaci�n del valor de un activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2200 [tasa.13]
+  Nombre: Valoración Préstamos
+  tipologiaNombre anterior: Valoración Préstamos
+  gptdescripcion anterior: Informe técnico que determina el valor del activo o garantía según criterios y metodología aplicables.
+  gptdescripcion nuevo: Tipo de documento: Valoraci�n Pr�stamos. Descripci�n principal: Documento interno que determina la valoraci�n de un pr�stamo en un momento determinado. Contexto descriptivo: Documentos de estimaci�n del valor de un activo. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=1 [tasacion]
+  Nombre: Tasacion
+  tipologiaNombre anterior: Tasacion
+  gptdescripcion anterior: Informe de tasación inmobiliaria. Documento técnico que certifica el valor de mercado de un inmueble. Incluye valor tasado, metodología de valoración, descripción del inmueble, superficies y datos del tasador.
+  gptdescripcion nuevo: Tipo de documento: Tasacion. Descripci�n principal: Informe de tasaci�n inmobiliaria. Documento t�cnico que certifica el valor de mercado de un inmueble. Incluye valor tasado, metodolog�a de valoraci�n, descripci�n del inmueble, superficies y datos del tasador. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+
+ID=2017 [tdn.clasificacion.1_0]
+  Nombre: Clasificacion Documental TDN
+  tipologiaNombre anterior: Clasificacion Documental TDN
+  gptdescripcion anterior: Clasificacion documental jerarquica TDN1 -> TDN2 -> Matricula para documentos juridicos e inmobiliarios.
+  gptdescripcion nuevo: Tipo de documento: Clasificacion Documental TDN. Descripci�n principal: Clasificacion documental jerarquica ? ? Matricula para documentos juridicos e inmobiliarios. Criterio para clasificaci�n autom�tica: asignar esta clase cuando el contenido principal del documento coincida con la descripci�n principal; usar el contexto descriptivo solo para resolver ambig�edades.
+

@@ -97,6 +97,9 @@ scripts/validate-superpowers-copilot.ps1
 docs/superpowers/plans/2026-04-29-healthcheck-endpoint.md
 docs/superpowers/plans/
 artifacts/
+
+# Temporary agent-generated files (analysis, scripts, reports)
+docs/auxiliares/temps/
 # Generated PDFs from Markdown (do not commit)
 docs/**/pdf/
 ado-add-branch-link.json
