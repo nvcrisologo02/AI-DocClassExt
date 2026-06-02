@@ -289,9 +289,14 @@ Resumen de comportamiento por activity:
 - `NormalizarActivity`: hidrata/decodifica documento y calcula integridad (`SHA256`, `MD5`, `CRC32`) y metadatos de páginas.
 - `VerificarDuplicadoActivity`: consulta duplicidad por `SHA256`; con `forceReprocess=false` permite retorno temprano de ejecución previa.
 - `SubirBlobActivity`: persiste binario en blob (`documents/`) para trazabilidad operativa.
-- `ClasificarActivity`: resuelve un flujo configurable de providers y los ejecuta en orden hasta resultado satisfactorio; si no hay resultado, aplica fallback global final si está activo.
-- `GptClasificarDataProvider`: cuando el flujo ejecuta GPT, el modelo se resuelve por petición desde `instrucciones.classification.model` (si viene valor explícito y válido). `auto`/vacío usa el fallback del registro (`useAsFallback=true`).
-- `GptClasificarDataProvider`: el cliente de chat ya no queda fijado al modelo fallback del singleton; se crea con el modelo efectivo resuelto en cada petición para evitar lock-in de deployment.
+- `ClasificarActivity`: resuelve un flujo configurable de providers y los ejecuta en orden hasta resultado satisfactorio; si no hay resultado, aplica fallback global final si está activo. Fallback chain: RuleBasedTdnClassifier → DocumentIntelligenceProvider → FoundryTdnRescueClassifier → GptClasificarDataProvider (two-phase).
+- `GptClasificarDataProvider`: implementa clasificación jerárquica de dos fases:
+  - **Phase 1 (TDN1 Family Selection)**: Consulta prompts enriquecidos con todas las familias TDN1 disponibles. Envía al LLM: catálogo TDN1 con formato "- CODIGO_TDN1: Descripcion". Espera respuesta JSON: `{"tdn1": "CODIGO" | null, "propuesta": "..."}`. Cache por petición, 5 min TTL vía IMemoryCache.
+  - **Phase 2 (TDN2 Specific Typology)**: Una vez resuelta familia TDN1, consulta catálogo enriquecido de tipologías para esa familia. Catálogo contiene: `- TIPOLOGIA_CODIGO [TDN2_CODE: TDN2_NAME] gptdescription` donde TipologiaNombre y gptdescripcion provienen de ConfiguracionJson (poblados desde BD). Envía al LLM: instrucciones mejoradas con contexto SAREB sector, ejemplos de formato fallback, límite 200 caracteres. Espera: `{"tdn2": "CODIGO_TDN2"}`. 
+  - **Catalog Enrichment**: Cada tipología publicada en la familia aporta: tipologiacodigo (ESCR-06), tipologiaNombre (Escritura: venta), tdn2 (ESCR-06), gptdescripcion (texto enriquecido con descripción principal, contexto descriptivo, criterio de clasificación automática).
+  - **Model Resolution**: Modelo LLM resuelto por petición desde `instrucciones.classification.model` (si viene explícito y válido). `auto`/vacío usa fallback del registro (`useAsFallback=true`). Cliente de chat creado dinámicamente por petición para evitar lock-in de deployment.
+  - **Fallback Mapping**: ResolveTipologiaByTdn2() mapea TDN2 code a tipología final (ej., ESCR-06 → tipología con ResolvedTdn2='ESCR-06').
+- `ClassificationTipologiaPromptBuilder`: construye catálogos dinámicos. BuildTdn1Catalog() devuelve todas las familias TDN1 publicadas. BuildTdn2CatalogByFamilia(tdn1Code) consulta ITipologiaRepository directamente, filtra por ResolvedTdn1 = familia, retorna todas las tipologías published+activas con ConfiguracionJson poblado (incluyendo new tipologiaNombre + gptdescripcion campos). Respeta cache 5-min TTL.
 - `ResolverTipologiaActivity`: resuelve configuración efectiva por familia/version.
 - `ExtraerActivity`: ejecuta extracción principal y fallback cuando aplica.
 - `ValidarActivity`: ejecuta motor de reglas y produce reporte de validación.

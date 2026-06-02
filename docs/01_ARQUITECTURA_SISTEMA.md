@@ -10,7 +10,7 @@
 
 DocumentIA es un sistema de clasificacion y extraccion automatizada de documentos para SAREB. Procesa documentos inmobiliarios (notas simples registrales, tasaciones, resumenes documentales) empleando servicios de IA de Azure para:
 
-1. **Clasificar** el tipo documental mediante Azure AI Document Intelligence (modelos custom entrenados) con fallback a Azure OpenAI GPT-4o-mini.
+1. **Clasificar** el tipo documental mediante Azure AI Document Intelligence (modelos custom entrenados) con fallback a Azure OpenAI GPT-4o-mini (two-phase hierarchical: TDN1 family → TDN2 enriquecido con metadatos de BD).
 2. **Extraer** campos estructurados mediante Azure Content Understanding o Document Intelligence, con fallback GPT.
 3. **Validar** los datos extraidos contra un motor de reglas configurable por tipologia (NIF, fechas, rangos, referencias catastrales, campos obligatorios).
 4. **Enriquecer** los datos mediante un sistema de plugins de integracion (REST, SOAP, DLL custom).
@@ -187,10 +187,20 @@ Tanto clasificacion como extraccion usan el patron Strategy con un **router conf
 ```
 IClasificarDataProvider (interfaz)
   ├─ ConfigurableClasificarDataProvider (router)
+  │   ├─ RuleBasedTdnClassifier                                          ← reglas deterministas
   │   ├─ AzureDocumentIntelligenceClasificarProvider
-  │   ├─ GptClasificarDataProvider
+  │   ├─ FoundryTdnRescueClassifier                                      ← Foundry LLM fallback
+  │   ├─ GptClasificarDataProvider (two-phase hierarchy)                 ← Phase 1: TDN1 family, Phase 2: TDN2 enriquecido
   │   └─ MockClasificarDataProvider
 ```
+
+**GptClasificarDataProvider** (NEW):
+- **Phase 1**: Resuelve familia TDN1 (ej., ESCR) desde catálogo dinámico
+- **Phase 2**: Resuelve tipología TDN2 enriquecida (ej., ESCR-06) desde catálogo filtrado + metadatos (tipologiaNombre, gptdescripcion) de BD
+- **Caching**: 5 min TTL per-family via IMemoryCache
+- **Enriquecimiento**: ConfiguracionJson ahora contiene tipologiaNombre + gptdescripcion (pobladas 2026-06-02, 204 tipologías)
+- **Fallback**: Integrado en fallback chain tras DI y Foundry LLM
+- **Documentación**: Ver [ANEXO_PROVIDER_GPT_CLASIFICACION_DOS_FASES.md](ANEXO_PROVIDER_GPT_CLASIFICACION_DOS_FASES.md)
 
 ```
 IExtraerDataProvider (interfaz)
