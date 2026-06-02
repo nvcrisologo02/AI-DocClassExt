@@ -505,6 +505,10 @@ namespace DocumentIA.Tests.Unit.Services.Classification
 
             var loader = new ClassificationModelRegistryLoader(memoryCache, scopeFactory);
             var promptBuilder = new ClassificationTipologiaPromptBuilder(memoryCache, scopeFactory);
+            var promptTraceTelemetry = new PromptTraceTelemetryService(
+                new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }),
+                Options.Create(new PromptTracingSettings { Enabled = false }),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<PromptTraceTelemetryService>.Instance);
 
             return new GptClasificarDataProvider(
                 loader,
@@ -512,6 +516,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 scopeFactory,
                 Options.Create(new ClassificationRoutingSettings()),
                 Options.Create(new PromptDefaultsSettings()),
+                promptTraceTelemetry,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<GptClasificarDataProvider>.Instance);
         }
     }
@@ -837,6 +842,10 @@ namespace DocumentIA.Tests.Unit.Services.Classification
 
             var loader = new ClassificationModelRegistryLoader(memoryCache, scopeFactory);
             var promptBuilder = new ClassificationTipologiaPromptBuilder(memoryCache, scopeFactory);
+            var promptTraceTelemetry = new PromptTraceTelemetryService(
+                new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }),
+                Options.Create(new PromptTracingSettings { Enabled = false }),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<PromptTraceTelemetryService>.Instance);
 
             return new GptClasificarDataProvider(
                 loader,
@@ -844,6 +853,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 scopeFactory,
                 Options.Create(new ClassificationRoutingSettings()),
                 Options.Create(new PromptDefaultsSettings()),
+                promptTraceTelemetry,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<GptClasificarDataProvider>.Instance);
         }
 

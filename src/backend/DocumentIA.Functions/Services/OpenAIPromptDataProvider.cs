@@ -19,6 +19,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
     private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<OpenAIPromptDataProvider> _logger;
+    private readonly PromptTraceTelemetryService _promptTraceTelemetry;
 
     // Cache de clientes por endpoint/auth/deployment para evitar recrearlos en cada llamada
     private readonly Dictionary<string, ChatClient> _clientCache = new(StringComparer.OrdinalIgnoreCase);
@@ -28,11 +29,13 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         TipologiaConfigLoader tipologiaConfigLoader,
         PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<PromptDefaultsSettings> promptDefaults,
+        PromptTraceTelemetryService promptTraceTelemetry,
         ILogger<OpenAIPromptDataProvider> logger)
     {
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _promptModelRegistryLoader = promptModelRegistryLoader;
         _promptDefaults = promptDefaults.Value;
+        _promptTraceTelemetry = promptTraceTelemetry;
         _logger = logger;
     }
 
@@ -160,6 +163,23 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 MaxOutputTokenCount = promptConfig.MaxTokens
             };
 
+            var traceContenido = !string.IsNullOrWhiteSpace(input.MarkdownExtraido)
+                ? input.MarkdownExtraido!
+                : string.Empty;
+            var userText = InterpolateTemplate(
+                promptConfig.UserPromptTemplate,
+                traceContenido,
+                input.DatosExtraidos);
+
+            _promptTraceTelemetry.TrackPrompt(
+                provider: "gpt-prompt",
+                operation: "prompt.resultado",
+                tipologia: input.Tipologia,
+                modelKey: modelConfig.Key,
+                deployment: modelConfig.DeploymentName,
+                systemPrompt: systemPrompt,
+                userPrompt: userText);
+
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(modelConfig.TimeoutSeconds));
 
@@ -255,6 +275,15 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctsToken);
         cts.CancelAfter(TimeSpan.FromSeconds(modelConfig.TimeoutSeconds));
+
+        _promptTraceTelemetry.TrackPrompt(
+            provider: "gpt-prompt",
+            operation: "prompt.json",
+            tipologia: input.Tipologia,
+            modelKey: modelConfig.Key,
+            deployment: modelConfig.DeploymentName,
+            systemPrompt: systemPrompt,
+            userPrompt: userText);
 
         var response = await chatClient.CompleteChatAsync(
             new List<ChatMessage>

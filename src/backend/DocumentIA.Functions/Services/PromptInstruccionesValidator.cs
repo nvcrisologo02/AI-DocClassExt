@@ -5,11 +5,11 @@ namespace DocumentIA.Functions.Services;
 
 public sealed class PromptInstruccionesValidator
 {
-    private const int MaxPromptLength = 5000;
+    private const int MaxPromptLength = 50000;
     private const double MinTemperature = 0.0;
     private const double MaxTemperature = 2.0;
     private const int MinMaxTokens = 100;
-    private const int MaxMaxTokens = 4000;
+    private const int MaxMaxTokens = 16384;
 
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
 

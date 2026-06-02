@@ -334,7 +334,7 @@ namespace DocumentIA.Functions.Services.Classification
     {
         public double RuleConfidenceThreshold { get; set; } = 0.75;
         public double DiConfidenceThreshold { get; set; } = 0.75;
-        public int MaxCharactersPerWindow { get; set; } = 8000;
+        public int MaxCharactersPerWindow { get; set; } = 32000;
         public int PagesToInspect { get; set; } = 3;
         public int RescueTimeoutMs { get; set; } = 8000;
         public int MaxRetries { get; set; } = 1;

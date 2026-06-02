@@ -26,7 +26,7 @@ namespace DocumentIA.Functions.Services.Classification
         /// </summary>
         public DocumentClassificationWindow ExtractWindow(
             ClasificacionInput input,
-            int maxCharacters = 8000,
+            int maxCharacters = 32000,
             int pagesToInspect = 3)
         {
             var window = new DocumentClassificationWindow

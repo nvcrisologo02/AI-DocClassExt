@@ -27,6 +27,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly ClassificationRoutingSettings _routingSettings;
     private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<GptClasificarDataProvider> _logger;
+    private readonly PromptTraceTelemetryService _promptTraceTelemetry;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
 
     public GptClasificarDataProvider(
@@ -35,6 +36,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         IServiceScopeFactory scopeFactory,
         IOptions<ClassificationRoutingSettings> routingSettings,
         IOptions<PromptDefaultsSettings> promptDefaults,
+        PromptTraceTelemetryService promptTraceTelemetry,
         ILogger<GptClasificarDataProvider> logger)
     {
         _modelRegistryLoader = modelRegistryLoader;
@@ -42,6 +44,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         _scopeFactory = scopeFactory;
         _routingSettings = routingSettings.Value;
         _promptDefaults = promptDefaults.Value;
+        _promptTraceTelemetry = promptTraceTelemetry;
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
         // _tipologiasPromptSection se elimina: el IMemoryCache de ClassificationTipologiaPromptBuilder
@@ -78,14 +81,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
             "especialmente documentos de SAREB (Sociedad de Gestión de Activos procedentes de la Reestructuración Bancaria). " +
             "Analiza el documento adjunto y clasifícalo en una familia TDN1. " +
+            "Clasifica por el acto jurídico principal del documento, ignorando el medio de remisión (correo, notificación, traslado, etc.). "+ 
             phase1ResponseInstruction;
 
         if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
         {
             phase1SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
         }
-
-        var phase1SystemMessage = new SystemChatMessage(phase1SystemText);
 
         var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
         var phase1UserText =
@@ -115,7 +117,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         var phase1ResponseText = await CompleteChatAsync(
             model,
-            phase1SystemMessage,
+            "classification.phase1",
+            input.Entrada.Instrucciones.ExpectedType,
+            phase1SystemText,
             phase1UserText,
             cancellationToken,
             resumenPrompt?.MaxTokens);
@@ -189,8 +193,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             phase2SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
         }
 
-        var phase2SystemMessage = new SystemChatMessage(phase2SystemText);
-
         var phase2UserText =
             $"Familia TDN1 resuelta: {tdn1Code}\n\n" +
             $"Tipologías disponibles en esta familia:\n{phase2Catalog}\n\n" +
@@ -209,7 +211,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         var phase2ResponseText = await CompleteChatAsync(
             model,
-            phase2SystemMessage,
+            "classification.phase2",
+            input.Entrada.Instrucciones.ExpectedType,
+            phase2SystemText,
             phase2UserText,
             cancellationToken,
             resumenPrompt?.MaxTokens);
@@ -273,11 +277,23 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
     private async Task<string> CompleteChatAsync(
         ClassificationModelConfig model,
-        SystemChatMessage systemMessage,
+        string operation,
+        string? tipologia,
+        string systemText,
         string userText,
         CancellationToken cancellationToken,
         int? maxOutputTokens = null)
     {
+        _promptTraceTelemetry.TrackPrompt(
+            provider: "gpt-classification",
+            operation: operation,
+            tipologia: tipologia ?? string.Empty,
+            modelKey: model.Key,
+            deployment: model.DeploymentName,
+            systemPrompt: systemText,
+            userPrompt: userText);
+
+        var systemMessage = new SystemChatMessage(systemText);
         var userMessage = new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText));
 
         var options = new ChatCompletionOptions
