@@ -845,8 +845,13 @@ public class DocumentProcessOrchestrator
             if (resultadoClasificacion.ClasificacionParcial)
             {
                 var tipologiaParcial = resultadoClasificacion.TipologiaDetectada ?? string.Empty;
+                var esTipologiaVirtual = string.Equals(
+                    resultadoClasificacion.FallbackRazon,
+                    "Tipologia Virtual",
+                    StringComparison.OrdinalIgnoreCase);
                 var esVirtual = string.IsNullOrWhiteSpace(tipologiaParcial)
-                    || string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase);
+                    || string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                    || esTipologiaVirtual;
 
                 if (esVirtual)
                 {

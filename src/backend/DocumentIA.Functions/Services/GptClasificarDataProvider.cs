@@ -175,7 +175,11 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code);
         if (string.IsNullOrWhiteSpace(phase2Catalog))
         {
-            throw new InvalidOperationException($"No se encontraron subtipos TDN2 para la familia {tdn1Code}.");
+            stopwatch.Stop();
+            return BuildVirtualResult(
+                model,
+                tipologiaDetectada: tdn1Code,
+                propuesta: tdn1Code);
         }
 
         var phase2ResponseInstruction = resumenPrompt is null
@@ -229,7 +233,12 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (string.IsNullOrWhiteSpace(tipologiaCode))
         {
             stopwatch.Stop();
-            return BuildUnclassifiedResult(model, "tdn2_sin_tipologia_asociada", propuesta);
+            var tipologiaVirtual = BuildVirtualTipologiaDetectada(propuesta, tdn1Code, phase2Parsed.Value.Tdn2);
+            var justificacionVirtual = BuildVirtualJustificacion(propuesta, tipologiaVirtual, phase2Parsed.Value.Tdn2, tdn1Code);
+            return BuildVirtualResult(
+                model,
+                tipologiaDetectada: tipologiaVirtual,
+                propuesta: justificacionVirtual);
         }
 
         stopwatch.Stop();
@@ -425,6 +434,65 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             FallbackRazon = reason,
             PropuestaTipologia = propuesta
         };
+    }
+
+    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta)
+    {
+        return new ResultadoClasificacion
+        {
+            Modelo = model.DeploymentName,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = tipologiaDetectada,
+            Confianza = 0.1,
+            ConfianzaGPT = 0.1,
+            ClasificacionParcial = true,
+            FallbackRazon = "Tipologia Virtual",
+            PropuestaTipologia = propuesta
+        };
+    }
+
+    private static string BuildVirtualTipologiaDetectada(string? propuesta, string tdn1Code, string tdn2Code)
+    {
+        if (!string.IsNullOrWhiteSpace(propuesta))
+        {
+            var propuestaNormalizada = propuesta.Trim();
+            var separador = propuestaNormalizada.IndexOf(':');
+            if (separador > 0)
+            {
+                var codigo = propuestaNormalizada[..separador].Trim();
+                if (!string.IsNullOrWhiteSpace(codigo))
+                {
+                    return codigo;
+                }
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(tdn2Code))
+        {
+            return tdn2Code.Trim().ToUpperInvariant();
+        }
+
+        return tdn1Code.Trim().ToUpperInvariant();
+    }
+
+    private static string BuildVirtualJustificacion(string? propuesta, string tipologiaVirtual, string tdn2Code, string tdn1Code)
+    {
+        if (!string.IsNullOrWhiteSpace(propuesta))
+        {
+            var propuestaNormalizada = propuesta.Trim();
+            var separador = propuestaNormalizada.IndexOf(':');
+            if (separador >= 0 && separador < propuestaNormalizada.Length - 1)
+            {
+                var justificacion = propuestaNormalizada[(separador + 1)..].Trim();
+                if (!string.IsNullOrWhiteSpace(justificacion))
+                {
+                    return justificacion;
+                }
+            }
+            return propuestaNormalizada;
+        }
+
+        return $"GPT propone {tipologiaVirtual} porque el TDN2 '{tdn2Code}' de la familia '{tdn1Code}' no tiene mapeo a tipologia publicada en BBDD.";
     }
 
     private static string? ObtenerContextoTexto(IDictionary<string, object> datosNormalizados)
