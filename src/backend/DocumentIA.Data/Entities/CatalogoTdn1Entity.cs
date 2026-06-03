@@ -20,5 +20,12 @@ public class CatalogoTdn1Entity
     [MaxLength(2000)]
     public string? Descripcion { get; set; }
 
+    /// <summary>
+    /// Prompt personalizado para clasificación Phase 2 (TDN2) de esta familia.
+    /// Si tiene valor, se usa este prompt en lugar de generar uno dinámicamente desde las tipologías.
+    /// El sistema inyecta automáticamente: tdn1Code, contextoTexto del documento, y phase2ResponseInstruction.
+    /// </summary>
+    public string? TDN2_Prompt { get; set; }
+
     public ICollection<CatalogoTdn2Entity> SubTipos { get; set; } = new List<CatalogoTdn2Entity>();
 }

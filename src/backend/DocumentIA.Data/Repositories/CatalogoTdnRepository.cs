@@ -22,6 +22,7 @@ public class CatalogoTdnRepository : ICatalogoTdnRepository
             .OrderBy(t => t.Codigo)
             .Select(t => new TdnCatalogItem(
                 t.Codigo,
+                t.Nombre ?? string.Empty,
                 string.IsNullOrWhiteSpace(t.Descripcion) ? t.Nombre : t.Descripcion!))
             .ToListAsync(cancellationToken);
     }
@@ -42,7 +43,26 @@ public class CatalogoTdnRepository : ICatalogoTdnRepository
             .OrderBy(t => t.Codigo)
             .Select(t => new TdnCatalogItem(
                 t.Codigo,
+                t.Nombre ?? string.Empty,
                 string.IsNullOrWhiteSpace(t.Descripcion) ? t.Nombre : t.Descripcion!))
             .ToListAsync(cancellationToken);
+    }
+
+    public async Task<string?> GetTdn2PromptByFamiliaAsync(string tdn1Codigo, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(tdn1Codigo))
+        {
+            throw new ArgumentException("El código de familia TDN1 es obligatorio.", nameof(tdn1Codigo));
+        }
+
+        var normalizedCodigo = tdn1Codigo.Trim().ToUpperInvariant();
+
+        var familia = await _context.CatalogoTdn1
+            .AsNoTracking()
+            .Where(t => t.Codigo.ToUpper() == normalizedCodigo)
+            .Select(t => t.TDN2_Prompt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return familia;
     }
 }

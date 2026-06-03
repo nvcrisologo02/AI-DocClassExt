@@ -3,6 +3,7 @@ using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DocumentIA.Core.Configuration;
 
@@ -16,11 +17,16 @@ public class ClassificationTipologiaPromptBuilder
 
     private readonly IMemoryCache _cache;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ClassificationTipologiaPromptBuilder> _logger;
 
-    public ClassificationTipologiaPromptBuilder(IMemoryCache cache, IServiceScopeFactory scopeFactory)
+    public ClassificationTipologiaPromptBuilder(
+        IMemoryCache cache, 
+        IServiceScopeFactory scopeFactory,
+        ILogger<ClassificationTipologiaPromptBuilder> logger)
     {
         _cache = cache;
         _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
     public string Build()
@@ -45,7 +51,7 @@ public class ClassificationTipologiaPromptBuilder
                 .GetAwaiter()
                 .GetResult();
 
-            return string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Descripcion}"));
+            return string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Nombre}, {f.Descripcion}"));
         }) ?? string.Empty;
     }
 
@@ -64,6 +70,23 @@ public class ClassificationTipologiaPromptBuilder
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
 
             using var scope = _scopeFactory.CreateScope();
+            var catalogoRepository = scope.ServiceProvider.GetRequiredService<ICatalogoTdnRepository>();
+            
+            // FALLBACK LOGIC: Primero intentar obtener prompt personalizado
+            var customPrompt = catalogoRepository
+                .GetTdn2PromptByFamiliaAsync(normalizedFamily)
+                .GetAwaiter()
+                .GetResult();
+
+            if (!string.IsNullOrWhiteSpace(customPrompt))
+            {
+                _logger.LogDebug("Using custom TDN2 prompt for family {Family}: {Prompt}", normalizedFamily, customPrompt);
+                return customPrompt;
+            }
+
+            // FALLBACK: Si no hay prompt personalizado, generar dinámicamente
+            _logger.LogDebug("falling back to dynamic catalog generation for family {Family}", normalizedFamily);
+
             var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
             var db = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
             var tipologias = repository.GetAllPublishedAsync()
