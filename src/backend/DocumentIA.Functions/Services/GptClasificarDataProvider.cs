@@ -75,7 +75,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         var phase1ResponseInstruction = resumenPrompt is null
             ? ClassificationTipologiaPromptBuilder.Phase1ResponseFormatInstruction
-            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\"}. No incluyas texto fuera del JSON.";
+            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
 
         var phase1SystemText =
             "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
@@ -159,13 +159,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (string.Equals(nivelClasificacion, ClassificationLevelResolver.LevelTdn1, StringComparison.OrdinalIgnoreCase))
         {
             stopwatch.Stop();
+            var confianzaPhase1 = phase1Parsed.Value.Confianza ?? 0.9;
+            _logger.LogInformation(
+                "Clasificación GPT Fase 1 completada. TDN1={Tdn1}, ConfianzaSelfReported={ConfianzaSelfReported}, ConfianzaFinal={ConfianzaFinal}",
+                tdn1Code,
+                phase1Parsed.Value.Confianza.HasValue ? phase1Parsed.Value.Confianza.Value.ToString("F3") : "<no reportada>",
+                confianzaPhase1.ToString("F3"));
             return new ResultadoClasificacion
             {
                 Modelo = model.DeploymentName,
                 ProveedorClasif = "GPT4oMini",
                 TipologiaDetectada = tdn1Code,
-                Confianza = 0.9,
-                ConfianzaGPT = 0.9,
+                Confianza = confianzaPhase1,
+                ConfianzaGPT = confianzaPhase1,
                 ClasificacionParcial = true,
                 PropuestaTipologia = propuesta,
                 ResumenCombinado = phase1Parsed.Value.Resumen
@@ -184,7 +190,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         var phase2ResponseInstruction = resumenPrompt is null
             ? ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction
-            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"resumen\": \"resumen ejecutivo\"}. No incluyas texto fuera del JSON.";
+            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
 
         var phase2SystemText =
             "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
@@ -243,12 +249,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         stopwatch.Stop();
 
+        var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
+        _logger.LogInformation(
+            "Clasificación GPT Fase 2 completada. Tipologia={Tipologia}, ConfianzaSelfReported={ConfianzaSelfReported}, ConfianzaFinal={ConfianzaFinal}",
+            tipologiaCode,
+            phase2Parsed.Value.Confianza.HasValue ? phase2Parsed.Value.Confianza.Value.ToString("F3") : "<no reportada>",
+            confianzaPhase2.ToString("F3"));
+
         return new ResultadoClasificacion
         {
             Modelo = model.DeploymentName,
             TipologiaDetectada = tipologiaCode,
-            Confianza = 0.9,
-            ConfianzaGPT = 0.9,
+            Confianza = confianzaPhase2,
+            ConfianzaGPT = confianzaPhase2,
             ProveedorClasif = "GPT4oMini",
             PropuestaTipologia = propuesta,
             ResultadoPromptCombinado = phase2Parsed.Value.ResultadoPrompt,

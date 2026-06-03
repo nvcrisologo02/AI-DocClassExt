@@ -113,4 +113,106 @@ public class GptHierarchicalClassificationParserTests
         result.Success.Should().BeFalse();
         result.ErrorReason.Should().Be(GptHierarchicalClassificationParser.Phase2ParsingErrorReason);
     }
+
+    [Fact]
+    public void ParsePhase1_WhenConfianzaIsProvided_ReturnsConfianza()
+    {
+        const string response = """
+            {
+              "tdn1": "escr",
+              "propuesta": "Parece una escritura",
+              "confianza": 0.85
+            }
+            """;
+
+        var result = GptHierarchicalClassificationParser.ParsePhase1(response);
+
+        result.Success.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.Tdn1.Should().Be("ESCR");
+        result.Value.Propuesta.Should().Be("Parece una escritura");
+        result.Value.Confianza.Should().Be(0.85);
+    }
+
+    [Fact]
+    public void ParsePhase1_WhenConfianzaIsOutOfRange_ClampsToValidRange()
+    {
+        const string response = """
+            {
+              "tdn1": "nots",
+              "propuesta": "Test",
+              "confianza": 1.5
+            }
+            """;
+
+        var result = GptHierarchicalClassificationParser.ParsePhase1(response);
+
+        result.Success.Should().BeTrue();
+        result.Value!.Confianza.Should().Be(1.0);
+    }
+
+    [Fact]
+    public void ParsePhase1_WhenConfianzaIsMissing_ReturnsNull()
+    {
+        const string response = """
+            {
+              "tdn1": "nots",
+              "propuesta": "Test"
+            }
+            """;
+
+        var result = GptHierarchicalClassificationParser.ParsePhase1(response);
+
+        result.Success.Should().BeTrue();
+        result.Value!.Confianza.Should().BeNull();
+    }
+
+    [Fact]
+    public void ParsePhase2_WhenConfianzaIsProvided_ReturnsConfianza()
+    {
+        const string response = """
+            {
+              "tdn2": "nots-01",
+              "confianza": 0.92
+            }
+            """;
+
+        var result = GptHierarchicalClassificationParser.ParsePhase2(response);
+
+        result.Success.Should().BeTrue();
+        result.Value.Should().NotBeNull();
+        result.Value!.Tdn2.Should().Be("NOTS-01");
+        result.Value.Confianza.Should().Be(0.92);
+    }
+
+    [Fact]
+    public void ParsePhase2_WhenConfianzaIsOutOfRange_ClampsToValidRange()
+    {
+        const string response = """
+            {
+              "tdn2": "nots-01",
+              "confianza": -0.1
+            }
+            """;
+
+        var result = GptHierarchicalClassificationParser.ParsePhase2(response);
+
+        result.Success.Should().BeTrue();
+        result.Value!.Confianza.Should().Be(0.0);
+    }
+
+    [Fact]
+    public void ParsePhase2_WhenConfianzaIsMissing_ReturnsNull()
+    {
+        const string response = """
+            {
+              "tdn2": "nots-01"
+            }
+            """;
+
+        var result = GptHierarchicalClassificationParser.ParsePhase2(response);
+
+        result.Success.Should().BeTrue();
+        result.Value!.Confianza.Should().BeNull();
+    }
 }

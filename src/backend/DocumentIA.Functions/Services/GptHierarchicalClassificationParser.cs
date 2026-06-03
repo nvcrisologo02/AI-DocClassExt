@@ -55,7 +55,15 @@ public static class GptHierarchicalClassificationParser
                 resumen = resumenElement.GetString();
             }
 
-            return GptHierarchicalParsingResult<GptPhase1Classification>.Ok(new GptPhase1Classification(tdn1, propuesta, resumen));
+            double? confianza = null;
+            if (root.TryGetProperty("confianza", out var confianzaElement) &&
+                confianzaElement.ValueKind == JsonValueKind.Number)
+            {
+                var rawValue = confianzaElement.GetDouble();
+                confianza = Math.Clamp(rawValue, 0.0, 1.0);
+            }
+
+            return GptHierarchicalParsingResult<GptPhase1Classification>.Ok(new GptPhase1Classification(tdn1, propuesta, resumen, confianza));
         }
         catch (JsonException ex)
         {
@@ -115,7 +123,15 @@ public static class GptHierarchicalClassificationParser
                 resumen = resumenElement.GetString();
             }
 
-            return GptHierarchicalParsingResult<GptPhase2Classification>.Ok(new GptPhase2Classification(tdn2, resultadoPrompt, resumen));
+            double? confianza = null;
+            if (root.TryGetProperty("confianza", out var confianzaElement) &&
+                confianzaElement.ValueKind == JsonValueKind.Number)
+            {
+                var rawValue = confianzaElement.GetDouble();
+                confianza = Math.Clamp(rawValue, 0.0, 1.0);
+            }
+
+            return GptHierarchicalParsingResult<GptPhase2Classification>.Ok(new GptPhase2Classification(tdn2, resultadoPrompt, resumen, confianza));
         }
         catch (JsonException ex)
         {
@@ -136,9 +152,9 @@ public static class GptHierarchicalClassificationParser
     }
 }
 
-public sealed record GptPhase1Classification(string? Tdn1, string Propuesta, string? Resumen = null);
+public sealed record GptPhase1Classification(string? Tdn1, string Propuesta, string? Resumen = null, double? Confianza = null);
 
-public sealed record GptPhase2Classification(string Tdn2, string? ResultadoPrompt = null, string? Resumen = null);
+public sealed record GptPhase2Classification(string Tdn2, string? ResultadoPrompt = null, string? Resumen = null, double? Confianza = null);
 
 public sealed record GptHierarchicalParsingResult<T>(bool Success, T? Value, string? ErrorReason, string? ErrorMessage)
 {

@@ -10,10 +10,10 @@ namespace DocumentIA.Core.Configuration;
 public class ClassificationTipologiaPromptBuilder
 {
     public const string Phase1ResponseFormatInstruction =
-        "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\"}. No incluyas texto fuera del JSON.";
+        "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
 
     public const string Phase2ResponseFormatInstruction =
-        "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\"}. No incluyas texto fuera del JSON.";
+        "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
 
     private readonly IMemoryCache _cache;
     private readonly IServiceScopeFactory _scopeFactory;
