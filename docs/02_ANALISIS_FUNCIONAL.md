@@ -261,6 +261,13 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
    ya tienen el markdown extraido.
 4. **D7 — Clave de deduplicacion extendida**: el campo `nivelClasificacion` forma parte de la clave de deduplicacion
    junto con `SHA256` y `classificationOnly`. Ver RN1.
+5. **Confianza dinamica self-reported**: GPT reporta su propia certeza sobre cada clasificacion mediante un campo
+   `confianza` (0.0-1.0) en el JSON de respuesta. El sistema extrae este valor y lo usa como `ConfianzaClasificacion`
+   final. Si GPT no reporta confianza, se aplica fallback a 0.9 para mantener compatibilidad con versiones anteriores.
+   Esta confianza se refleja en:
+   - `output.DetalleEjecucion.Clasificacion.Confianza`
+   - Logs: `ConfianzaSelfReported` vs `ConfianzaFinal`
+   - Calculo de `ConfianzaGlobal` (ver RN3)
 - Cada plugin puede devolver `DatosEnriquecidos` que se mergean acumulativamente en `DatosFinales`.
 - Un plugin con `returnsIdActivo=true` puede resolver/sobreescribir el `IdActivo` del documento.
 
