@@ -1,7 +1,7 @@
 # Catalogo de App Settings (vivo)
 
 > Generado automaticamente por `scripts/generate-config/generate-appsettings-catalog.ps1`  
-> Fecha: 2026-05-01 01:52:08  
+> Fecha: 2026-06-03 16:33:12  
 > Fuente: escaneo regex sobre `src/**/*.cs` (patrones `IConfiguration["..."]`, `GetSection`, `GetValue<T>`, `Environment.GetEnvironmentVariable`)
 
 ## Como regenerar
@@ -16,13 +16,13 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 |---|---:|
 | AssetResolver Plugin | 3 |
 | Azure Storage | 1 |
-| Base de datos | 2 |
+| Base de datos | 3 |
 | Bootstrapping | 1 |
-| Frontend Admin | 2 |
+| Frontend Admin | 1 |
 | GDC (SOAP) | 5 |
-| Otros | 8 |
+| Otros | 18 |
 | Runtime ASP.NET | 1 |
-| **TOTAL** | **23** |
+| **TOTAL** | **33** |
 
 ## AssetResolver Plugin
 
@@ -42,8 +42,9 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 
 | Clave | Usada en |
 |---|---|
+| `ConnectionStrings__DocumentIA` | [src/backend/DocumentIA.Data/Context/DocumentIADbContextFactory.cs](src/backend/DocumentIA.Data/Context/DocumentIADbContextFactory.cs) |
 | `ConnectionStrings:DocumentIA` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs)<br>[src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs](src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs) |
-| `SqlConnectionString` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs)<br>[src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs](src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs) |
+| `SqlConnectionString` | [src/backend/DocumentIA.Data/Context/DocumentIADbContextFactory.cs](src/backend/DocumentIA.Data/Context/DocumentIADbContextFactory.cs)<br>[src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs)<br>[src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs](src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs) |
 
 ## Bootstrapping
 
@@ -55,8 +56,7 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 
 | Clave | Usada en |
 |---|---|
-| `FunctionsAdminApi:BaseUrl` | [src/frontend/DocumentIA.Admin/Program.cs](src/frontend/DocumentIA.Admin/Program.cs)<br>[src/frontend/DocumentIA.Admin/Services/SystemConfigService.cs](src/frontend/DocumentIA.Admin/Services/SystemConfigService.cs) |
-| `FunctionsAdminApi:FunctionKey` | [src/frontend/DocumentIA.Admin/Program.cs](src/frontend/DocumentIA.Admin/Program.cs) |
+| `FunctionsAdminApi:BaseUrl` | [src/frontend/DocumentIA.Admin/Services/SystemConfigService.cs](src/frontend/DocumentIA.Admin/Services/SystemConfigService.cs) |
 
 ## GDC (SOAP)
 
@@ -73,15 +73,23 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 | Clave | Usada en |
 |---|---|
 | `AZURE_FUNCTIONS_ENVIRONMENT` | [src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs](src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs) |
+| `BlobRetention:BatchSize` | [src/backend/DocumentIA.Functions/Triggers/BlobCleanupTimerTrigger.cs](src/backend/DocumentIA.Functions/Triggers/BlobCleanupTimerTrigger.cs) |
+| `BlobRetention:DefaultDays` | [src/backend/DocumentIA.Functions/Activities/PersistirActivity.cs](src/backend/DocumentIA.Functions/Activities/PersistirActivity.cs) |
 | `Classification` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `Classification:Flows` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `ClassificationPreparation` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
 | `DOCUMENTIA_ADMIN_URL` | [src/backend/DocumentIA.Tests.E2E/WizardE2ETestBase.cs](src/backend/DocumentIA.Tests.E2E/WizardE2ETestBase.cs) |
 | `DOTNET_ENVIRONMENT` | [src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs](src/backend/DocumentIA.Functions/Triggers/Admin/ConfigurationAdminFunction.cs) |
 | `Extraction` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `Extraction:AzureContentUnderstanding` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
 | `FieldAliases` | [src/plugins/DocumentIA.AssetResolver/Program.cs](src/plugins/DocumentIA.AssetResolver/Program.cs) |
 | `GDC` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
-| `PromptDefaults` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `HybridTdn` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `Performance` | [src/plugins/DocumentIA.AssetResolver/Program.cs](src/plugins/DocumentIA.AssetResolver/Program.cs) |
+| `Performance:SqlCommandTimeoutSeconds` | [src/plugins/DocumentIA.AssetResolver/Program.cs](src/plugins/DocumentIA.AssetResolver/Program.cs) |
 | `Pipeline` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
-| `Pipeline:MaxPaginasDocumento` | Límite global de páginas por documento. 0 = sin límite. Puede sobreescribirse por tipología con `maxPaginasDocumento` en `ConfiguracionJson`. |
+| `PromptDefaults` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
+| `PromptTracing` | [src/backend/DocumentIA.Functions/Program.cs](src/backend/DocumentIA.Functions/Program.cs) |
 
 ## Runtime ASP.NET
 
@@ -97,13 +105,4 @@ pwsh ./scripts/generate-config/generate-appsettings-catalog.ps1
 - Para ver el valor concreto en cada entorno consultar Azure Portal -> Function App srbappprodocai -> Configuration, o el local.settings.json local.
 - Los secretos referenciados via @Microsoft.KeyVault(...) se documentan en docs/INFRAESTRUCTURA_AZURE.md.
 - Ver tambien .env.example (raiz del repo) y MANUAL_HEALTHCHECK.md para settings con probe especifico.
-- Este catálogo se genera por escaneo estático de acceso a configuración y puede no listar todas las claves de opciones enlazadas por sección.
-- Claves CU de resiliencia actualmente requeridas en operación:
-	- `Extraction:AzureContentUnderstanding:MaxConcurrentCalls`
-	- `Extraction:AzureContentUnderstanding:HardTimeoutSeconds`
-	- `Extraction:AzureContentUnderstanding:EnableCircuitBreaker`
-	- `Extraction:AzureContentUnderstanding:CircuitBreakerFailureThreshold`
-	- `Extraction:AzureContentUnderstanding:CircuitBreakerOpenSeconds`
-	- `Extraction:AzureContentUnderstanding:MaxRetries`
-	- `Extraction:AzureContentUnderstanding:InitialRetryDelayMs`
 

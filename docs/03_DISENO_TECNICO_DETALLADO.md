@@ -1,6 +1,6 @@
 # 3. Diseno Tecnico Detallado — DocumentIA MVP
 
-> Ultima actualizacion: 2026-04-24  
+> Ultima actualizacion: 2026-06-03  
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -80,7 +80,7 @@ flowchart TD
 | 2 | VerificarDuplicado | `VerificarDuplicadoActivity` | SHA256 | Resultado previo o null | Busca en BD por SHA256 (indice unico) |
 | 3 | ObtenerUltimaEjecucion | `ObtenerUltimaEjecucionActivity` | SHA256 | Ultima ejecucion o null | Solo si no es duplicado y no skipDuplicateCheck |
 | 4 | SubirBlob | `SubirBlobActivity` | byte[] + nombre | URL blob | Container `documents/` |
-| 5 | Clasificar | `ClasificarActivity` | byte[] PDF | TipologiaDetectada, Confianza | Pipeline configurable por flujo, secuencial hasta satisfactorio y fallback global final |
+| 5 | Clasificar | `ClasificarActivity` | byte[] PDF | TipologiaDetectada, Confianza | Pipeline configurable por flujo (resuelto desde `Classification.Flows` + `Classification.DefaultFlow`), secuencial hasta satisfactorio y fallback global final. PostConfigure en Program.cs carga diccionario Flows desde configuracion. |
 | 6 | ResolverTipologia | `ResolverTipologiaActivity` | codigo tipologia | TipologiaConfig completa | Resuelve familia@version → config |
 | 7 | Extraer | `ExtraerActivity` | byte[] + tipologia config | DatosExtraidos (Dictionary) | CU/DI/GPT segun config |
 | 8 | ExtraerMarkdownLayout | `ExtraerMarkdownLayoutActivity` | byte[] PDF | Markdown texto | Layout extraction con DI. **Se omite** si `instrucciones.classification.markdown` viene informado (D4): en ese caso el markdown aportado se inyecta directamente en `datosNormalizados["Markdown"]`. |
@@ -296,7 +296,7 @@ Resumen de comportamiento por activity:
   - **Catalog Enrichment**: Cada tipología publicada en la familia aporta: tipologiacodigo (ESCR-06), tipologiaNombre (Escritura: venta), tdn2 (ESCR-06), gptdescripcion (texto enriquecido con descripción principal, contexto descriptivo, criterio de clasificación automática).
   - **Model Resolution**: Modelo LLM resuelto por petición desde `instrucciones.classification.model` (si viene explícito y válido). `auto`/vacío usa fallback del registro (`useAsFallback=true`). Cliente de chat creado dinámicamente por petición para evitar lock-in de deployment.
   - **Fallback Mapping**: ResolveTipologiaByTdn2() mapea TDN2 code a tipología final (ej., ESCR-06 → tipología con ResolvedTdn2='ESCR-06').
-- `ClassificationTipologiaPromptBuilder`: construye catálogos dinámicos. BuildTdn1Catalog() devuelve todas las familias TDN1 publicadas. BuildTdn2CatalogByFamilia(tdn1Code) consulta ITipologiaRepository directamente, filtra por ResolvedTdn1 = familia, retorna todas las tipologías published+activas con ConfiguracionJson poblado (incluyendo new tipologiaNombre + gptdescripcion campos). Respeta cache 5-min TTL.
+- `ClassificationTipologiaPromptBuilder`: construye catálogos dinámicos. BuildTdn1Catalog() devuelve todas las familias TDN1 publicadas. BuildTdn2CatalogByFamilia(tdn1Code) consulta ITipologiaRepository directamente, filtra por ResolvedTdn1 = familia, retorna todas las tipologías published+activas con ConfiguracionJson poblado (incluyendo tipologiaNombre [nuevo campo] + gptdescripcion campos). El campo `Nombre` en TdnCatalogItem se resuelve desde TipologiaConfig.TipologiaNombre en tiempo de consulta, enriqueciendo los catálogos con nombre legible de tipología para GPT. Respeta cache 5-min TTL.
 - `ResolverTipologiaActivity`: resuelve configuración efectiva por familia/version.
 - `ExtraerActivity`: ejecuta extracción principal y fallback cuando aplica.
 - `ValidarActivity`: ejecuta motor de reglas y produce reporte de validación.
@@ -314,6 +314,72 @@ Estados funcionales de cierre del pipeline:
 - `DUPLICADO`
 - `BAJA_CONFIANZA_CLASIFICACION`
 - `ERROR`
+
+---
+
+## 3.1.2 Vinculación de flujos de clasificación — Estructura de configuración
+
+### Binding de Configuration en Program.cs
+
+La configuración de flujos se define en `appsettings.json` como una estructura anidada compleja:
+
+```json
+"Classification": {
+  "DefaultFlow": "hybrid-rules-gpt-di",
+  "UseGlobalFallback": true,
+  "GlobalFallbackProvider": "gpt",
+  "Flows": {
+    "hybrid-rules-gpt-di": { "Providers": ["rules", "gpt", "di"] },
+    "hybrid-rules-di-gpt": { "Providers": ["rules", "di", "gpt"] },
+    "hybrid-tdn": { "Providers": ["hybrid-tdn"] },
+    "di": { "Providers": ["di"] },
+    "gpt": { "Providers": ["gpt"] }
+  }
+}
+```
+
+**Problema conocido:** .NET ConfigurationBuilder no deserializa automáticamente estructuras anidadas complejas como `Dictionary<string, ClassificationFlowSettings>` desde JSON. Por ello, en `Program.cs` se implementa un patrón `PostConfigure` explícito:
+
+```csharp
+services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
+
+// Manual binding para diccionario Flows (limitación de .NET config binding con estructuras JSON complejas)
+services.PostConfigure<ClassificationRoutingSettings>(settings =>
+{
+    var flowsSection = context.Configuration.GetSection("Classification:Flows");
+    if (flowsSection.Exists())
+    {
+        foreach (var flowSection in flowsSection.GetChildren())
+        {
+            var flowName = flowSection.Key;
+            var flowSettings = new ClassificationFlowSettings();
+            flowSection.Bind(flowSettings);
+            settings.Flows[flowName] = flowSettings;
+        }
+    }
+});
+```
+
+**Impacto:** Sin este PostConfigure, el diccionario `Flows` quedaria vacio en runtime, causando que `ConfigurableClasificarDataProvider` no encontrara flujos nombrados y fallara con `NotSupportedException`.
+
+**Sincronización local.settings.json:** Para desarrollo local, asegurar que `local.settings.json` incluya la misma estructura de `Classification:Flows` que `appsettings.json` (Variables de entorno en formato plano). Ejemplo:
+
+```json
+"Classification:Flows:hybrid-rules-di-gpt:Providers:0": "rules",
+"Classification:Flows:hybrid-rules-di-gpt:Providers:1": "di",
+"Classification:Flows:hybrid-rules-di-gpt:Providers:2": "gpt"
+```
+
+### Resolución de flujo en tiempo de ejecución
+
+En `ConfigurableClasificarDataProvider.ResolveFlowProviders()` (línea 164):
+
+1. Si `instrucciones.classification.flujo` viene informado explícitamente, se busca en `_routingSettings.Flows`.
+2. Si la clave existe, se devuelve la secuencia configurada de providers.
+3. Si no existe, se devuelve `[flowName]` directamente (fallback: intenta ese nombre como single provider).
+4. Si en `ExecuteProviderAsync` no hay case para ese nombre, falla con `NotSupportedException`.
+
+Esta estructura garantiza backward-compatibility: configuraciones legacy con un único provider siguen funcionando.
 
 ---
 
