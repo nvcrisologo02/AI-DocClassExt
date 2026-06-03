@@ -122,6 +122,23 @@ var host = new HostBuilder()
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<AzureContentUnderstandingOptions>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
+        
+        // Manual binding for Flows dictionary (complex type not supported by default configuration binding)
+        services.PostConfigure<ClassificationRoutingSettings>(settings =>
+        {
+            var flowsSection = context.Configuration.GetSection("Classification:Flows");
+            if (flowsSection.Exists())
+            {
+                foreach (var flowSection in flowsSection.GetChildren())
+                {
+                    var flowName = flowSection.Key;
+                    var flowSettings = new ClassificationFlowSettings();
+                    flowSection.Bind(flowSettings);
+                    settings.Flows[flowName] = flowSettings;
+                }
+            }
+        });
+        
         services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
         services.Configure<PromptDefaultsSettings>(context.Configuration.GetSection("PromptDefaults"));
         services.Configure<PromptTracingSettings>(context.Configuration.GetSection("PromptTracing"));
