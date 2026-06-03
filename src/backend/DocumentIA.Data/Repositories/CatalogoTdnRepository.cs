@@ -22,6 +22,7 @@ public class CatalogoTdnRepository : ICatalogoTdnRepository
             .OrderBy(t => t.Codigo)
             .Select(t => new TdnCatalogItem(
                 t.Codigo,
+                t.Nombre ?? string.Empty,
                 string.IsNullOrWhiteSpace(t.Descripcion) ? t.Nombre : t.Descripcion!))
             .ToListAsync(cancellationToken);
     }
@@ -42,6 +43,7 @@ public class CatalogoTdnRepository : ICatalogoTdnRepository
             .OrderBy(t => t.Codigo)
             .Select(t => new TdnCatalogItem(
                 t.Codigo,
+                t.Nombre ?? string.Empty,
                 string.IsNullOrWhiteSpace(t.Descripcion) ? t.Nombre : t.Descripcion!))
             .ToListAsync(cancellationToken);
     }

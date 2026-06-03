@@ -51,7 +51,7 @@ public class ClassificationTipologiaPromptBuilder
                 .GetAwaiter()
                 .GetResult();
 
-            return string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Descripcion}"));
+            return string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Nombre}, {f.Descripcion}"));
         }) ?? string.Empty;
     }
 

@@ -14,4 +14,4 @@ public interface ICatalogoTdnRepository
     Task<string?> GetTdn2PromptByFamiliaAsync(string tdn1Codigo, CancellationToken cancellationToken = default);
 }
 
-public sealed record TdnCatalogItem(string Codigo, string Descripcion);
+public sealed record TdnCatalogItem(string Codigo, string Nombre, string Descripcion);
