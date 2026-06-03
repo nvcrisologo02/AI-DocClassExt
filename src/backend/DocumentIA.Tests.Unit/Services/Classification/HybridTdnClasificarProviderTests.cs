@@ -504,7 +504,10 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
 
             var loader = new ClassificationModelRegistryLoader(memoryCache, scopeFactory);
-            var promptBuilder = new ClassificationTipologiaPromptBuilder(memoryCache, scopeFactory);
+            var promptBuilder = new ClassificationTipologiaPromptBuilder(
+                memoryCache, 
+                scopeFactory,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ClassificationTipologiaPromptBuilder>.Instance);
             var promptTraceTelemetry = new PromptTraceTelemetryService(
                 new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }),
                 Options.Create(new PromptTracingSettings { Enabled = false }),
@@ -841,7 +844,10 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             var scopeFactory = serviceProvider.GetRequiredService<IServiceScopeFactory>();
 
             var loader = new ClassificationModelRegistryLoader(memoryCache, scopeFactory);
-            var promptBuilder = new ClassificationTipologiaPromptBuilder(memoryCache, scopeFactory);
+            var promptBuilder = new ClassificationTipologiaPromptBuilder(
+                memoryCache, 
+                scopeFactory,
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<ClassificationTipologiaPromptBuilder>.Instance);
             var promptTraceTelemetry = new PromptTraceTelemetryService(
                 new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }),
                 Options.Create(new PromptTracingSettings { Enabled = false }),

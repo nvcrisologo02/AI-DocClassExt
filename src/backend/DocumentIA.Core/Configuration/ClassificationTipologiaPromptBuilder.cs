@@ -3,6 +3,7 @@ using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace DocumentIA.Core.Configuration;
 
@@ -16,11 +17,16 @@ public class ClassificationTipologiaPromptBuilder
 
     private readonly IMemoryCache _cache;
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<ClassificationTipologiaPromptBuilder> _logger;
 
-    public ClassificationTipologiaPromptBuilder(IMemoryCache cache, IServiceScopeFactory scopeFactory)
+    public ClassificationTipologiaPromptBuilder(
+        IMemoryCache cache, 
+        IServiceScopeFactory scopeFactory,
+        ILogger<ClassificationTipologiaPromptBuilder> logger)
     {
         _cache = cache;
         _scopeFactory = scopeFactory;
+        _logger = logger;
     }
 
     public string Build()
