@@ -70,6 +70,23 @@ public class ClassificationTipologiaPromptBuilder
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
 
             using var scope = _scopeFactory.CreateScope();
+            var catalogoRepository = scope.ServiceProvider.GetRequiredService<ICatalogoTdnRepository>();
+            
+            // FALLBACK LOGIC: Primero intentar obtener prompt personalizado
+            var customPrompt = catalogoRepository
+                .GetTdn2PromptByFamiliaAsync(normalizedFamily)
+                .GetAwaiter()
+                .GetResult();
+
+            if (!string.IsNullOrWhiteSpace(customPrompt))
+            {
+                _logger.LogDebug("Using custom TDN2 prompt for family {Family}: {Prompt}", normalizedFamily, customPrompt);
+                return customPrompt;
+            }
+
+            // FALLBACK: Si no hay prompt personalizado, generar dinámicamente
+            _logger.LogDebug("falling back to dynamic catalog generation for family {Family}", normalizedFamily);
+
             var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
             var db = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
             var tipologias = repository.GetAllPublishedAsync()
