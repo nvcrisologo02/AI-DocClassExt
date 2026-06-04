@@ -25,6 +25,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
+using DocumentIA.Functions.Services.Abstractions;
 
 var jsonOpts = new JsonSerializerOptions
 {
@@ -150,6 +151,12 @@ var host = new HostBuilder()
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
         services.AddSingleton<AzureDocumentIntelligenceExtraerDataProvider>();
+        
+        // Extracción GPT services
+        services.AddScoped<IGptPromptBuilder, GptPromptBuilder>();
+        services.AddScoped<IGptJsonResponseParser, GptJsonResponseParser>();
+        services.AddScoped<IOpenAiClientFactory, OpenAiClientFactory>();
+        
         services.AddSingleton<GptFallbackExtraerDataProvider>();
         services.AddSingleton<GptDirectExtraerDataProvider>();
         services.AddSingleton<IPromptDataProvider, OpenAIPromptDataProvider>();
