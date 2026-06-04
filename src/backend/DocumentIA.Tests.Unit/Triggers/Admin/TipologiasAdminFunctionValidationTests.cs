@@ -190,7 +190,7 @@ public class TipologiasAdminFunctionValidationTests
     private static DocumentIADbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<DocumentIADbContext>()
-            .UseInMemoryDatabase($"tipologias-COMPLETAR_GDC_HTTP_BASIC_USERNAME-validation-tests-{Guid.NewGuid()}")
+            .UseInMemoryDatabase($"tipologias-validation-tests-{Guid.NewGuid()}")
             .Options;
 
         return new DocumentIADbContext(options);

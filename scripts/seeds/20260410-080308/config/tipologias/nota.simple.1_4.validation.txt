@@ -211,7 +211,7 @@ Campos:
 
   • LimitacionesAdministrativas (string)
     - Máximo: 300 caracteres
-    - Restricciones impuestas por COMPLETAR_GDC_HTTP_BASIC_USERNAMEistraciones públicas
+    - Restricciones impuestas por administraciones públicas
 
 ---
 9) SITUACIÓN POSESORIA
@@ -284,3 +284,4 @@ NOTAS IMPORTANTES
   esquema enfocado en datos registrales, titularidad, cargas y ocupación.
 
 ================================================================================
+

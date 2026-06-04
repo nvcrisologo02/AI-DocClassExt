@@ -140,12 +140,12 @@ public class TipologiasAdminFunction
             Activa = true,
             Estado = EstadoTipologia.Draft,
             ConfiguracionJson = payload.ConfiguracionJson,
-            CreadoPor = payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME",
+            CreadoPor = payload.Usuario ?? "SYSTEM",
             FechaCreacion = DateTime.UtcNow,
             FechaActualizacion = DateTime.UtcNow
         };
 
-        await _tipologiaRepository.AddAsync(entity, payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        await _tipologiaRepository.AddAsync(entity, payload.Usuario ?? "SYSTEM");
 
         // Convert to clean DTO (AB#99735: omit deprecated fields)
         var dto = _mapper.ToResponseDto(entity);
@@ -198,7 +198,7 @@ public class TipologiasAdminFunction
         entity.ConfiguracionJson = payload.ConfiguracionJson;
         entity.FechaActualizacion = DateTime.UtcNow;
 
-        await _tipologiaRepository.UpdateAsync(entity, payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME", "Updated");
+        await _tipologiaRepository.UpdateAsync(entity, payload.Usuario ?? "SYSTEM", "Updated");
 
         // Convert to clean DTO (AB#99735: omit deprecated fields)
         var dto = _mapper.ToResponseDto(entity);
@@ -231,7 +231,7 @@ public class TipologiasAdminFunction
         }
 
         var payload = await ReadBody<PublicarTipologiaRequest>(req);
-        await _tipologiaRepository.PublicarAsync(id, payload?.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        await _tipologiaRepository.PublicarAsync(id, payload?.Usuario ?? "SYSTEM");
 
         // Invalidar caché del resolver para que la nueva tipología publicada esté disponible de inmediato
         _cache.Remove("tipologias:snapshot");
@@ -258,7 +258,7 @@ public class TipologiasAdminFunction
         }
 
         var payload = await ReadBody<RetirarTipologiaRequest>(req);
-        await _tipologiaRepository.RetirarAsync(id, payload?.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        await _tipologiaRepository.RetirarAsync(id, payload?.Usuario ?? "SYSTEM");
         var updated = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
 
         // Convert to clean DTO (AB#99735: omit deprecated fields)
@@ -281,7 +281,7 @@ public class TipologiasAdminFunction
         }
 
         var payload = await ReadBody<PasarTipologiaADraftRequest>(req);
-        await _tipologiaRepository.PasarADraftAsync(id, payload?.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        await _tipologiaRepository.PasarADraftAsync(id, payload?.Usuario ?? "SYSTEM");
 
         entity = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
 
@@ -477,7 +477,7 @@ public class TipologiasAdminFunction
         {
             TipologiaId = tipologia.Id,
             Accion = "Exported",
-            Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME",
+            Usuario = "SYSTEM",
             FechaHora = DateTime.UtcNow,
             DetallesJson = JsonSerializer.Serialize(new
             {
@@ -594,7 +594,7 @@ public class TipologiasAdminFunction
             }
         }
 
-        var usuario = payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME";
+        var usuario = payload.Usuario ?? "SYSTEM";
         var entity = new TipologiaEntity
         {
             Codigo = codigo,

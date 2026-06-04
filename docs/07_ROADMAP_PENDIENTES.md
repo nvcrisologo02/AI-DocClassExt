@@ -70,7 +70,7 @@ gantt
 | I-2 | Registrar self-hosted agent | **DONE / N/A** | Agente no requerido. Pipeline CI/CD operativo con alternativa actual. | plan-despliegue FASE 0 |
 | I-3 | Configurar Key Vault references | **DONE** | Secretos en KV `srbkvprodocai`. Referencias `@Microsoft.KeyVault(...)` activas en App Settings. | plan-despliegue FASE 2 |
 | I-4 | RBAC Managed Identity | **DONE** | MI `srbappprodocai` con roles en Storage, KV y SQL configurados. | plan-despliegue FASE 2 |
-| I-5 | Web App Admin Blazor | **DONE** | `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` desplegada y operativa (frontend web). | plan-despliegue FASE 5 |
+| I-5 | Web App Admin Blazor | **DONE** | `srbwebadminprodocai` desplegada y operativa (frontend web). | plan-despliegue FASE 5 |
 | I-6 | Verificar deployment gpt-4o-mini | **DONE** | Deployment `gpt-4o-mini` verificado en region de produccion y funcionando OK. | plan-despliegue FASE 0 |
 
 ### 7.2.2 Codigo

@@ -52,7 +52,7 @@ public class TipologiaAdminService
                     Nombre = tipologia.Nombre,
                     Version = tipologia.Version,
                     ConfiguracionJson = tipologia.ConfiguracionJson ?? string.Empty,
-                    Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                    Usuario = "ADMIN-UI"
                 });
         }
 
@@ -65,7 +65,7 @@ public class TipologiaAdminService
                 Nombre = tipologia.Nombre,
                 Version = tipologia.Version,
                 ConfiguracionJson = tipologia.ConfiguracionJson ?? string.Empty,
-                Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                Usuario = "ADMIN-UI"
             });
     }
 
@@ -88,7 +88,7 @@ public class TipologiaAdminService
         await SendRequiredAsync<TipologiaEntity>(
             HttpMethod.Post,
             $"management/tipologias/{id}/retirar",
-            new UsuarioRequest { Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui" });
+            new UsuarioRequest { Usuario = "ADMIN-UI" });
     }
 
     public async Task PasarTipologiaADraftAsync(int id)
@@ -96,7 +96,7 @@ public class TipologiaAdminService
         await SendRequiredAsync<TipologiaEntity>(
             HttpMethod.Post,
             $"management/tipologias/{id}/draft",
-            new UsuarioRequest { Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui" });
+            new UsuarioRequest { Usuario = "ADMIN-UI" });
     }
 
     public async Task<IReadOnlyCollection<TipologiaAuditEntry>> GetTipologiaAuditAsync(int id, int take = 200)
@@ -158,7 +158,7 @@ public class TipologiaAdminService
                     Provider = modelo.Provider,
                     ConfiguracionJson = modelo.ConfiguracionJson,
                     Activo = modelo.Activo,
-                    Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                    Usuario = "ADMIN-UI"
                 });
         }
 
@@ -172,7 +172,7 @@ public class TipologiaAdminService
                 Provider = modelo.Provider,
                 ConfiguracionJson = modelo.ConfiguracionJson,
                 Activo = modelo.Activo,
-                Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                Usuario = "ADMIN-UI"
             });
     }
 
@@ -199,7 +199,7 @@ public class TipologiaAdminService
             new PluginConfigUpsertRequest
             {
                 ConfiguracionJson = configuracionJson,
-                Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                Usuario = "ADMIN-UI"
             });
     }
 

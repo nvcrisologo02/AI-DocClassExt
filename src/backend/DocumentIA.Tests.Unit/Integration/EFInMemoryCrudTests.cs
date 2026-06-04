@@ -145,12 +145,12 @@ public class EFInMemoryCrudTests : IDisposable
 
         tipologia.Estado = EstadoTipologia.Published;
         tipologia.PublicadaEn = DateTime.UtcNow;
-        tipologia.PublicadaPor = "COMPLETAR_GDC_HTTP_BASIC_USERNAME";
+        tipologia.PublicadaPor = "SYSTEM";
         await _context.SaveChangesAsync();
 
         var updated = await _context.Tipologias.FindAsync(tipologia.Id);
         updated!.Estado.Should().Be(EstadoTipologia.Published);
-        updated.PublicadaPor.Should().Be("COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        updated.PublicadaPor.Should().Be("SYSTEM");
     }
 
     // ── Aislamiento de base de datos ─────────────────────────────────────────

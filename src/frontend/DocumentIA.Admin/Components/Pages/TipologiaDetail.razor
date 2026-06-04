@@ -486,7 +486,7 @@ else
     {
         try
         {
-            await AdminService.PublishTipologiaAsync(Id, "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui");
+            await AdminService.PublishTipologiaAsync(Id, "ADMIN-UI");
             _error = false;
             _message = "Tipología publicada.";
             _tipologia = await AdminService.GetTipologiaAsync(Id);

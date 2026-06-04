@@ -286,7 +286,7 @@
 2026-04-29  a4ad7f4  feat: add healthcheck endpoint AB#99228
 2026-04-29  f481714  test: add healthcheck function tests AB#99225
 2026-04-29  4ede77a  chore: define healthcheck endpoint contract AB#99226
-2026-04-28  d52e6a2  feat(COMPLETAR_GDC_HTTP_BASIC_USERNAME): wizard tipologias con validaciones reforzadas AB#99179
+2026-04-28  d52e6a2  feat(admin): wizard tipologias con validaciones reforzadas AB#99179
 2026-04-24  9315d35  EP5: cierre funcional A-1/A-2/A-3 (audit, import-export, version diff+filtro)
 2026-04-24  608d413  fix(functions): preservar seguimiento y mostrar Skipped en GDC AB#99141 99160
 2026-04-24  065c564  docs: actualiza contrato y manuales para objectIdGDC AB#99141

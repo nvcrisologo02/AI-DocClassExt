@@ -1360,10 +1360,10 @@ R: Los campos solicitados (`camposSolicitados`) no existen como columnas en `DM_
 
 ## 5.9 Aplicacion de Administracion (Admin Blazor)
 
-La aplicacion de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistracion `DocumentIA.Admin` es una web Blazor Server accesible en produccion en la URL:
+La aplicacion de Administracion `DocumentIA.Admin` es una web Blazor Server accesible en produccion en la URL:
 
 ```
-https://srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai.azurewebsites.net
+https://srbwebadminprodocai.azurewebsites.net
 ```
 
 En desarrollo local se levanta con:

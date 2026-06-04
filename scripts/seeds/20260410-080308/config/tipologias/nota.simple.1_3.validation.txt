@@ -216,7 +216,7 @@ Campos:
     
   • LimitacionesAdministrativas (string)
     - Máximo: 300 caracteres
-    - Restricciones impuestas por COMPLETAR_GDC_HTTP_BASIC_USERNAMEistraciones públicas
+    - Restricciones impuestas por administraciones públicas
     
   • AfeccionesFiscales (string)
     - Máximo: 200 caracteres
@@ -336,3 +336,4 @@ NOTAS IMPORTANTES
 • La Superficie (campo obligatorio en sección 4) debe ser mayor a 0.
 
 ================================================================================
+

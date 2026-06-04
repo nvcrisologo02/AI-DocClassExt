@@ -15,7 +15,7 @@ Este documento describe el sistema corporativo de clasificación y extracción d
 ### 1.1 Tipos de usuarios con acceso
 - Equipo de desarrollo: mantiene backend, frontend, plugins e integraciones técnicas.
 - Equipo de operaciones y DevOps: gestiona despliegues, configuración de entornos y operación técnica.
-- Administradores funcionales: gestionan tipologías, reglas y configuración de modelos desde componentes de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración.
+- Administradores funcionales: gestionan tipologías, reglas y configuración de modelos desde componentes de Administración.
 - Analistas de negocio y operación: revisan resultados, validan casos de excepción y trazabilidad funcional.
 - Seguridad, compliance y auditoría interna: supervisan cumplimiento, accesos, cambios y evidencias.
 - Sistemas corporativos integrados: gestor documental y servicios de datos de activos.
@@ -72,7 +72,7 @@ Semiautomáticas:
 Canales de uso:
 - API HTTP de ingesta y seguimiento asíncrono.
 - Frontend operativo para consumo de resultados.
-- Frontend COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrativo para configuración funcional y técnica.
+- Frontend Administrativo para configuración funcional y técnica.
 - Pipeline CI/CD para despliegues controlados.
 
 Flujo de trabajo típico (A-Z):
@@ -123,7 +123,7 @@ Beneficios medibles esperados:
 ## 4. Fuentes de información y clasificación de datos
 ### 4.1 Fuentes de información
 - Repositorios corporativos de código y configuración.
-- APIs internas (gestor documental, servicios de integración y COMPLETAR_GDC_HTTP_BASIC_USERNAMEistración).
+- APIs internas (gestor documental, servicios de integración y Administración).
 - APIs de servicios IA corporativos en Azure.
 - Base de datos de resultados, configuración, auditoría y operación.
 - Archivos de configuración de tipologías, reglas, modelos y plugins.
@@ -177,7 +177,7 @@ Beneficios medibles esperados:
 - Ejecución automatizada: sí.
 - Criticidad: alta.
 
-6. Frontend COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrativo y operativo.
+6. Frontend Administrativo y operativo.
 - Lectura/escritura: sí, según rol.
 - Ejecución automatizada: limitada.
 - Criticidad: media-alta.
@@ -209,3 +209,4 @@ Beneficios medibles esperados:
 ### 7.4 Supuestos pendientes de validación por comité
 - Confirmar si habrá terceros externos con acceso operativo o solo equipos internos Sareb.
 - Confirmar umbrales objetivos de calidad/aceptación por tipología para su formalización en políticas de IA.
+

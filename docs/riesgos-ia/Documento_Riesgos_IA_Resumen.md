@@ -72,7 +72,7 @@
 ## 6. Tools / herramientas que utiliza el sistema
 ### 6.1 Herramientas clave y criticidad
 - Alta: Azure Functions, Azure DevOps, Key Vault, Storage/SQL, servicios IA.
-- Media-alta: frontends COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrativo y operativo.
+- Media-alta: frontends Administrativo y operativo.
 - Alta: plugins e integraciones con sistemas corporativos.
 
 ### 6.2 Tipo de acciones
@@ -92,3 +92,4 @@
 
 ### 7.3 Pendiente de validación
 - Confirmar si habrá acceso operativo para terceros externos o solo equipos internos Sareb.
+

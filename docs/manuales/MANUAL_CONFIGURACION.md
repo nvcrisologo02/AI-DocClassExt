@@ -257,7 +257,7 @@ Esto permite mantener compatibilidad con artefactos históricos y acelerar provi
 
 Los loaders conservan constructor en modo fichero para pruebas unitarias y escenarios de compatibilidad local. En producción se recomienda modo BD.
 
-### 7.5 Gestión COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrativa
+### 7.5 Gestión Administrativa
 
 La gestión se realiza por API management (`/api/management/...`) y por la app `DocumentIA.Admin` para:
 
@@ -337,3 +337,4 @@ Patrón recomendado: **exportar -> importar -> ajustar -> publicar**.
 - Mantener una única modificación funcional por versión cuando sea posible.
 - Revisar `A-3` (auditoría) tras cada publicación para garantizar trazabilidad.
 - Evitar edición manual de JSON seed para cambios productivos; la fuente de verdad es BD.
+

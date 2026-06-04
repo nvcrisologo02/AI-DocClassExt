@@ -5,7 +5,7 @@ namespace DocumentIA.Tests.E2E;
 
 /// <summary>
 /// Base class for all wizard E2E tests.
-/// Requires the COMPLETAR_GDC_HTTP_BASIC_USERNAME frontend running at the URL defined in DOCUMENTIA_ADMIN_URL
+/// Requires the Admin frontend running at the URL defined in DOCUMENTIA_ADMIN_URL
 /// (defaults to http://localhost:5288).
 /// 
 /// To run:
@@ -17,7 +17,7 @@ namespace DocumentIA.Tests.E2E;
 /// </summary>
 public abstract class WizardE2ETestBase : IAsyncLifetime
 {
-    protected const string SkipReason = "E2E tests require the COMPLETAR_GDC_HTTP_BASIC_USERNAME frontend running. Set DOCUMENTIA_ADMIN_URL or start the frontend.";
+    protected const string SkipReason = "E2E tests require the Admin frontend running. Set DOCUMENTIA_ADMIN_URL or start the frontend.";
 
     protected static readonly string AdminBaseUrl =
         Environment.GetEnvironmentVariable("DOCUMENTIA_ADMIN_URL") ?? "http://localhost:5288";

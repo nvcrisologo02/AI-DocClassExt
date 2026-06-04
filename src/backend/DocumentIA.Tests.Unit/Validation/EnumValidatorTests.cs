@@ -348,7 +348,7 @@ namespace DocumentIA.Tests.Unit.Validation
 
             // Act
             var validRole = validator.Validate("Role", "Admin");
-            var invalidRole1 = validator.Validate("Role", "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+            var invalidRole1 = validator.Validate("Role", "invalid-role");
             var invalidRole2 = validator.Validate("Role", "ADMIN");
 
             // Assert

@@ -320,7 +320,7 @@ public class TipologiasAdminFunctionIntegrationTests
     private static DocumentIADbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<DocumentIADbContext>()
-            .UseInMemoryDatabase($"tipologias-COMPLETAR_GDC_HTTP_BASIC_USERNAME-integration-tests-{Guid.NewGuid()}")
+            .UseInMemoryDatabase($"tipologias-integration-tests-{Guid.NewGuid()}")
             .Options;
         return new DocumentIADbContext(options);
     }
