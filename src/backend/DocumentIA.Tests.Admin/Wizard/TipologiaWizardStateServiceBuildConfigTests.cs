@@ -1,10 +1,12 @@
 using System.Text.Json;
-using DocumentIA.Admin.Services;
 using DocumentIA.Core.Configuration;
 using FluentAssertions;
 
 namespace DocumentIA.Tests.Admin.Wizard;
 
+// NOTE: TipologiaWizardStateService has been removed in v1.4 refactoring.
+// This test class is disabled but preserved for reference.
+#if ENABLE_WIZARD_TESTS
 public class TipologiaWizardStateServiceBuildConfigTests
 {
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
@@ -223,3 +225,4 @@ public class TipologiaWizardStateServiceBuildConfigTests
         return svc;
     }
 }
+#endif
