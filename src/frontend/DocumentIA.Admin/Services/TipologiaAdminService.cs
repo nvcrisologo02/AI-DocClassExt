@@ -116,27 +116,6 @@ public class TipologiaAdminService
             ?? new TipologiaDiffResult();
     }
 
-    public async Task<byte[]> ExportTipologiaZipAsync(int id)
-    {
-        using var response = await _httpClient.GetAsync($"management/tipologias/{id}/export");
-        await EnsureSuccessAsync(response);
-        return await response.Content.ReadAsByteArrayAsync();
-    }
-
-    public async Task<TipologiaEntity> ImportTipologiaZipAsync(byte[] zipBytes, string usuario)
-    {
-        var payload = new
-        {
-            ZipBase64 = Convert.ToBase64String(zipBytes),
-            Usuario = usuario
-        };
-
-        return await SendRequiredAsync<TipologiaEntity>(
-            HttpMethod.Post,
-            "management/tipologias/import",
-            payload);
-    }
-
     public async Task<IReadOnlyCollection<ModeloConfigEntity>> GetModelosByTipoAsync(TipoModelo tipo)
     {
         try

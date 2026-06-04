@@ -19,6 +19,24 @@
     <div class="alert alert-warning">Solo se pueden editar tipologías en estado Draft. Esta tipología está en estado <strong>@_model.Estado</strong>.</div>
 }
 
+@if (!Id.HasValue)
+{
+    <div class="mb-3">
+        <strong>Plantillas predefinidas:</strong>
+        <div class="button-group gap-2">
+            <button class="btn btn-outline-secondary btn-sm" @onclick='() => ApplyTemplate("notasimple")' disabled="@(!_isEditable)">
+                Plantilla: Nota Simple
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick='() => ApplyTemplate("tasacion")' disabled="@(!_isEditable)">
+                Plantilla: Tasación
+            </button>
+            <button class="btn btn-outline-secondary btn-sm" @onclick='() => ApplyTemplate("generica")' disabled="@(!_isEditable)">
+                Plantilla: Genérica
+            </button>
+        </div>
+    </div>
+}
+
 <div class="mb-3">
     <label class="form-label">Codigo</label>
     <InputText class="form-control" @bind-Value="_model.Codigo" disabled="@(!_isEditable || Id.HasValue)" />
@@ -95,6 +113,99 @@
         {
             _error = true;
             _message = "El JSON contiene errores. Revisalo en el editor.";
+        }
+    }
+
+    private void ApplyTemplate(string templateCode)
+    {
+        switch (templateCode)
+        {
+            case "notasimple":
+                if (string.IsNullOrWhiteSpace(_model.Nombre))
+                {
+                    _model.Nombre = "Nota simple";
+                }
+                InitializeTemplateConfig("notasimple", "di-clasificacion-default", "cu-notasimple-v1", "NOTS", "AI09", false);
+                break;
+            case "tasacion":
+                if (string.IsNullOrWhiteSpace(_model.Nombre))
+                {
+                    _model.Nombre = "Tasacion";
+                }
+                InitializeTemplateConfig("tasacion", "di-clasificacion-default", "cu-tasacion-v1", "TASA", "AI05", false);
+                break;
+            case "generica":
+                if (string.IsNullOrWhiteSpace(_model.Nombre))
+                {
+                    _model.Nombre = "Documento generico";
+                }
+                InitializeTemplateConfig("generica", "di-clasificacion-default", null, null, null, true);
+                break;
+        }
+        StateHasChanged();
+    }
+
+    private void InitializeTemplateConfig(string template, string modeloClasificacion, string? modeloExtraccion, string? gdcTipo, string? gdcSerie, bool skipGdc)
+    {
+        var config = TryParseConfig(_model.ConfiguracionJson);
+        
+        if (string.IsNullOrWhiteSpace(config.ModeloClasificacionDI))
+        {
+            config.ModeloClasificacionDI = modeloClasificacion;
+        }
+        
+        if (!string.IsNullOrWhiteSpace(modeloExtraccion))
+        {
+            if (string.IsNullOrWhiteSpace(config.ModeloExtraccionDI))
+            {
+                config.ModeloExtraccionDI = modeloExtraccion;
+                config.EnableExtraction = true;
+            }
+        }
+        else
+        {
+            config.EnableExtraction = false;
+        }
+        
+        if (!string.IsNullOrWhiteSpace(gdcTipo) && string.IsNullOrWhiteSpace(config.GdcTipoDocumento))
+        {
+            config.GdcTipoDocumento = gdcTipo;
+        }
+        
+        if (!string.IsNullOrWhiteSpace(gdcSerie) && string.IsNullOrWhiteSpace(config.GdcSerie))
+        {
+            config.GdcSerie = gdcSerie;
+        }
+        
+        config.SkipGDCUpload = skipGdc;
+        
+        _model.ConfiguracionJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    private static dynamic TryParseConfig(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new { ModeloClasificacionDI = "", ModeloExtraccionDI = "", EnableExtraction = false, GdcTipoDocumento = "", GdcSerie = "", SkipGDCUpload = false };
+        }
+
+        try
+        {
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            return new 
+            { 
+                ModeloClasificacionDI = root.TryGetProperty("ModeloClasificacionDI", out var m1) ? m1.GetString() ?? "" : "",
+                ModeloExtraccionDI = root.TryGetProperty("ModeloExtraccionDI", out var m2) ? m2.GetString() ?? "" : "",
+                EnableExtraction = root.TryGetProperty("EnableExtraction", out var e) && e.GetBoolean(),
+                GdcTipoDocumento = root.TryGetProperty("GdcTipoDocumento", out var g1) ? g1.GetString() ?? "" : "",
+                GdcSerie = root.TryGetProperty("GdcSerie", out var g2) ? g2.GetString() ?? "" : "",
+                SkipGDCUpload = root.TryGetProperty("SkipGDCUpload", out var s) && s.GetBoolean()
+            };
+        }
+        catch
+        {
+            return new { ModeloClasificacionDI = "", ModeloExtraccionDI = "", EnableExtraction = false, GdcTipoDocumento = "", GdcSerie = "", SkipGDCUpload = false };
         }
     }
 
