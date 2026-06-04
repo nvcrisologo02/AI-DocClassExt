@@ -27,8 +27,7 @@ flowchart TB
 
         subgraph AI["🤖 Inteligencia Artificial"]
             DI["srbdiprodocai\nDocument Intelligence\nModelos custom SAREB"]
-            CU["Content Understanding\nAzure AI Foundry\nSweden Central"]
-            GPT["srboaiprodocai\nAzure OpenAI\ngpt-4o-mini  fallback"]
+            CU["Content Understanding\nAzure AI Foundry (upe48-mm2avmdm)\nSweden Central · Primary"]
         end
 
         subgraph SEC["🔒 Seguridad"]
