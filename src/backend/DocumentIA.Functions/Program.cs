@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Services;
+using DocumentIA.Core.Mappers;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Mocks;
 using DocumentIA.Plugins.Integration;
@@ -321,6 +322,9 @@ var host = new HostBuilder()
                 provider.GetRequiredService<IServiceScopeFactory>()));
         services.AddScoped<ISystemHealthService, SystemHealthService>();
 
+        // Tipologia caching + mapper (AB#99737, AB#99735)
+        services.AddScoped<TipologiaConfigurationCache>();
+        services.AddScoped<TipologiaMapper>();
 
     })
     .Build();

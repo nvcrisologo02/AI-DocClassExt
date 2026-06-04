@@ -2,6 +2,7 @@ using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 

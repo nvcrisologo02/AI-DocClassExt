@@ -12,7 +12,7 @@ namespace DocumentIA.Core.Mappers;
 /// Estrategia:
 /// - ToResponseDto(): Respuesta limpia (v1.4+)
 /// - ToResponseDtoLegacy(): Respuesta legacy (solo si cliente solicita)
-/// - FromRequestDto(): Parsear request, migrar legacy fields → ConfiguracionJson
+/// - FromRequestDto(): Parsear request, aceptar legacy fields pero priorizar ConfiguracionJson
 /// 
 /// Status: En producción desde v1.4
 /// </summary>
@@ -67,10 +67,9 @@ public class TipologiaMapper
     /// <summary>
     /// Convierte TipologiaRequestDto → TipologiaEntity.
     /// 
-    /// Maneja:
-    /// - Legacy fields (PromptGPT, Modelo*, Umbral*) → Migra a ConfiguracionJson
-    /// - Valida JSON de entrada
-    /// - Loguea migraciones automáticas
+    /// Prioriza ConfiguracionJson sobre legacy fields.
+    /// Si ambos están presentes, ConfiguracionJson prevalece (no migración automática compleja).
+    /// Loguea si legacy fields son detectados.
     /// </summary>
     public DocumentIA.Data.Entities.TipologiaEntity FromRequestDto(
         TipologiaRequestDto request,
@@ -83,134 +82,42 @@ public class TipologiaMapper
         entity.Version = request.Version;
         entity.Activa = request.Activa;
 
-        // Procesar ConfiguracionJson, migrando legacy fields si existen
-        entity.ConfiguracionJson = ProcessConfiguracionJson(
-            request.ConfiguracionJson,
-            request.PromptGPT,
-            request.ModeloClasificacionDI,
-            request.UmbralClasificacion,
-            request.ModeloExtraccionDI,
-            request.UmbralExtraccion
-        );
+        // Use ConfiguracionJson as primary source
+        // Legacy fields are logged but NOT merged (ConfiguracionJson takes precedence)
+        if (!string.IsNullOrWhiteSpace(request.ConfiguracionJson))
+        {
+            entity.ConfiguracionJson = request.ConfiguracionJson;
+            
+            // Log if legacy fields are also present (detect client migration status)
+            var hasLegacyFields = 
+                !string.IsNullOrWhiteSpace(request.PromptGPT) ||
+                !string.IsNullOrWhiteSpace(request.ModeloClasificacionDI) ||
+                !string.IsNullOrWhiteSpace(request.ModeloExtraccionDI) ||
+                (request.UmbralClasificacion.HasValue && request.UmbralClasificacion > 0) ||
+                (request.UmbralExtraccion.HasValue && request.UmbralExtraccion > 0);
+            
+            if (hasLegacyFields)
+            {
+                _logger.LogWarning(
+                    "Request for tipologia {Codigo} includes deprecated fields (PromptGPT, Modelo*, Umbral*). " +
+                    "These are ignored in favor of ConfiguracionJson. Client should remove legacy fields.",
+                    entity.Codigo
+                );
+            }
+        }
+        else if (!string.IsNullOrWhiteSpace(request.PromptGPT) || 
+                 !string.IsNullOrWhiteSpace(request.ModeloClasificacionDI) ||
+                 !string.IsNullOrWhiteSpace(request.ModeloExtraccionDI))
+        {
+            // If NO ConfiguracionJson provided, create minimal JSON to avoid losing data
+            _logger.LogWarning(
+                "Request for tipologia {Codigo} has NO ConfiguracionJson. " +
+                "Creating minimal config. Please provide ConfiguracionJson in future requests.",
+                entity.Codigo
+            );
+            entity.ConfiguracionJson = "{}";
+        }
 
         return entity;
-    }
-
-    /// <summary>
-    /// Parsea y normaliza ConfiguracionJson.
-    /// Si legacy fields están presentes, los migra a JSON.
-    /// </summary>
-    private string ProcessConfiguracionJson(
-        string newConfigJson,
-        string? legacyPromptGPT = null,
-        string? legacyModeloClasificacion = null,
-        double? legacyUmbralClasificacion = null,
-        string? legacyModeloExtraccion = null,
-        double? legacyUmbralExtraccion = null)
-    {
-        // Parse existing JSON
-        TipologiaValidationConfig config;
-        
-        try
-        {
-            var options = new System.Text.Json.JsonSerializerOptions
-            {
-                PropertyNameCaseInsensitive = true
-            };
-            config = System.Text.Json.JsonSerializer.Deserialize<TipologiaValidationConfig>(
-                newConfigJson,
-                options
-            ) ?? new TipologiaValidationConfig();
-        }
-        catch (System.Text.Json.JsonException ex)
-        {
-            _logger.LogWarning("Invalid JSON in ConfiguracionJson: {Error}. Using empty config.", ex.Message);
-            config = new TipologiaValidationConfig();
-        }
-
-        // Migrar legacy fields a JSON si existen y JSON no los tiene
-        bool migrationOccurred = false;
-
-        if (!string.IsNullOrWhiteSpace(legacyPromptGPT))
-        {
-            if (config.PromptConfig?.SystemPrompt == null)
-            {
-                if (config.PromptConfig == null)
-                {
-                    config.PromptConfig = new TipologiaPromptConfig();
-                }
-                config.PromptConfig.SystemPrompt = legacyPromptGPT;
-                _logger.LogInformation("Migrated legacy PromptGPT → ConfiguracionJson.PromptConfig");
-                migrationOccurred = true;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(legacyModeloClasificacion))
-        {
-            if (config.ClassificationTdn?.Modelo == null)
-            {
-                if (config.ClassificationTdn == null)
-                {
-                    config.ClassificationTdn = new ClassificationTdnConfig();
-                }
-                config.ClassificationTdn.Modelo = legacyModeloClasificacion;
-                _logger.LogInformation("Migrated legacy ModeloClasificacionDI → ConfiguracionJson.Classification.Modelo");
-                migrationOccurred = true;
-            }
-        }
-
-        if (legacyUmbralClasificacion.HasValue && legacyUmbralClasificacion > 0)
-        {
-            if (config.ClassificationPolicy?.UmbralMinimo == null)
-            {
-                if (config.ClassificationPolicy == null)
-                {
-                    config.ClassificationPolicy = new ClassificationPolicyConfig();
-                }
-                config.ClassificationPolicy.UmbralMinimo = legacyUmbralClasificacion.Value;
-                _logger.LogInformation("Migrated legacy UmbralClasificacion → ConfiguracionJson.ClassificationPolicy.UmbralMinimo");
-                migrationOccurred = true;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(legacyModeloExtraccion))
-        {
-            if (config.Extraction?.Modelo == null)
-            {
-                if (config.Extraction == null)
-                {
-                    config.Extraction = new TipologiaExtractionConfig();
-                }
-                config.Extraction.Modelo = legacyModeloExtraccion;
-                _logger.LogInformation("Migrated legacy ModeloExtraccionDI → ConfiguracionJson.Extraction.Modelo");
-                migrationOccurred = true;
-            }
-        }
-
-        if (legacyUmbralExtraccion.HasValue && legacyUmbralExtraccion > 0)
-        {
-            if (config.Extraction?.UmbralMinimo == null)
-            {
-                if (config.Extraction == null)
-                {
-                    config.Extraction = new TipologiaExtractionConfig();
-                }
-                config.Extraction.UmbralMinimo = legacyUmbralExtraccion.Value;
-                _logger.LogInformation("Migrated legacy UmbralExtraccion → ConfiguracionJson.Extraction.UmbralMinimo");
-                migrationOccurred = true;
-            }
-        }
-
-        if (migrationOccurred)
-        {
-            _logger.LogInformation("Legacy field migration completed. Serializing updated config.");
-        }
-
-        // Serializar config de vuelta a JSON
-        return System.Text.Json.JsonSerializer.Serialize(config, new System.Text.Json.JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true,
-            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
-        });
     }
 }

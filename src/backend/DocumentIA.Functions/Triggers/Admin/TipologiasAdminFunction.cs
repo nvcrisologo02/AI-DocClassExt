@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DocumentIA.Core.Configuration;
+using DocumentIA.Core.Mappers;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
@@ -45,45 +46,37 @@ public class TipologiasAdminFunction
     private readonly ITipologiaConfigAuditRepository _tipologiaAuditRepository;
     private readonly ILogger<TipologiasAdminFunction> _logger;
     private readonly IMemoryCache _cache;
+    private readonly TipologiaMapper _mapper;
 
     public TipologiasAdminFunction(
         DocumentIADbContext dbContext,
         ITipologiaRepository tipologiaRepository,
         ITipologiaConfigAuditRepository tipologiaAuditRepository,
         ILogger<TipologiasAdminFunction> logger,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        TipologiaMapper mapper)
     {
         _dbContext = dbContext;
         _tipologiaRepository = tipologiaRepository;
         _tipologiaAuditRepository = tipologiaAuditRepository;
         _logger = logger;
         _cache = cache;
+        _mapper = mapper;
     }
 
     [Function("Admin_GetTipologias")]
     public async Task<HttpResponseData> GetTipologias(
             [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/tipologias")] HttpRequestData req)
     {
-        var rows = await _dbContext.Tipologias
+        var tipologias = await _dbContext.Tipologias
             .OrderBy(t => t.Nombre)
-            .Select(t => new
-            {
-                t.Id,
-                t.Codigo,
-                t.Nombre,
-                t.Version,
-                t.Estado,
-                t.Activa,
-                t.FechaCreacion,
-                t.FechaActualizacion,
-                t.PublicadaEn,
-                t.PublicadaPor,
-                t.VersionPublicada
-            })
             .ToListAsync();
 
+        // Convert to clean DTOs (AB#99735: omit deprecated fields)
+        var dtos = _mapper.ToResponseDtos(tipologias);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(rows);
+        await response.WriteAsJsonAsync(dtos);
         return response;
     }
 
@@ -98,8 +91,11 @@ public class TipologiasAdminFunction
             return await CreateError(req, HttpStatusCode.NotFound, $"No existe tipologia con id {id}.");
         }
 
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(tipologia);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(tipologia);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -150,8 +146,11 @@ public class TipologiasAdminFunction
 
         await _tipologiaRepository.AddAsync(entity, payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
 
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(entity);
+
         var response = req.CreateResponse(HttpStatusCode.Created);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -200,8 +199,11 @@ public class TipologiasAdminFunction
 
         await _tipologiaRepository.UpdateAsync(entity, payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME", "Updated");
 
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(entity);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -234,8 +236,12 @@ public class TipologiasAdminFunction
         _cache.Remove("tipologias:snapshot");
 
         var updated = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
+        
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(updated!);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(updated);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -254,8 +260,11 @@ public class TipologiasAdminFunction
         await _tipologiaRepository.RetirarAsync(id, payload?.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
         var updated = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
 
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(updated!);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(updated);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -275,8 +284,11 @@ public class TipologiasAdminFunction
 
         entity = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
 
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(entity!);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
