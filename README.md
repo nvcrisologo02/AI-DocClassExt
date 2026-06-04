@@ -68,6 +68,7 @@ func azure functionapp publish srbappprodocai
 ## Documentacion
 
 Ver carpeta docs/ para:
+- **Cambios v1.4 (IMPORTANTE):** [docs/12_MIGRACION_PROMPTGPT_V1_4.md](docs/12_MIGRACION_PROMPTGPT_V1_4.md) — PromptGPT deprecation y ConfiguracionJson refactorizado
 - Arquitectura detallada
 - Contratos de entrada/salida
 - Manuales de operacion

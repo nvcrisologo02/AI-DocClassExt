@@ -1,7 +1,8 @@
 # 3. Diseno Tecnico Detallado — DocumentIA MVP
 
-> Ultima actualizacion: 2026-06-03  
-> Proyecto: AI DocClassExt — SAREB
+> Ultima actualizacion: 2026-06-04  
+> Proyecto: AI DocClassExt — SAREB  
+> **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. Campo `Tipologias.PromptGPT` deprecated (see [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md)).
 
 ---
 
