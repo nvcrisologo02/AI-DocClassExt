@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DocumentIA.Core.Configuration;
+using DocumentIA.Core.Extensions;
 using DocumentIA.Core.Mappers;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
@@ -422,7 +423,10 @@ public class TipologiasAdminFunction
         var changes = new List<DiffChange>();
         AddJsonSectionDiff(changes, "validation", left.ConfiguracionJson, right.ConfiguracionJson);
         AddJsonSectionDiff(changes, "plugins", leftPlugins?.ConfiguracionJson, rightPlugins?.ConfiguracionJson);
-        AddJsonSectionDiff(changes, "prompt", ToPromptJson(left.PromptGPT), ToPromptJson(right.PromptGPT));
+        
+        var leftPrompt = left.GetSystemPrompt();
+        var rightPrompt = right.GetSystemPrompt();
+        AddJsonSectionDiff(changes, "prompt", ToPromptJson(leftPrompt), ToPromptJson(rightPrompt));
 
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(new
@@ -439,10 +443,13 @@ public class TipologiasAdminFunction
     }
 
     [Function("Admin_ExportTipologia")]
+    [Obsolete("Use direct GET /management/tipologias/{id} + ConfiguracionJson instead. Deprecated 2026-06-04.", false)]
     public async Task<HttpResponseData> ExportTipologia(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/tipologias/{id:int}/export")] HttpRequestData req,
         int id)
     {
+        _logger.LogWarning("Deprecated endpoint: Admin_ExportTipologia called. Use GET /management/tipologias/{id} instead.");
+        
         var tipologia = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
         if (tipologia is null)
         {
@@ -460,7 +467,7 @@ public class TipologiasAdminFunction
             Version = tipologia.Version,
             ExportedAtUtc = DateTime.UtcNow,
             IncludesPlugins = pluginConfig is not null,
-            IncludesPrompt = !string.IsNullOrWhiteSpace(tipologia.PromptGPT),
+            IncludesPrompt = !string.IsNullOrWhiteSpace(tipologia.GetSystemPrompt()),
             Source = "DocumentIA.AdminAPI"
         };
 
@@ -491,9 +498,12 @@ public class TipologiasAdminFunction
     }
 
     [Function("Admin_ImportTipologia")]
+    [Obsolete("Import/Export deprecated. Use POST /management/tipologias with ConfiguracionJson. Deprecated 2026-06-04.", false)]
     public async Task<HttpResponseData> ImportTipologia(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/tipologias/import")] HttpRequestData req)
     {
+        _logger.LogWarning("Deprecated endpoint: Admin_ImportTipologia called. Use POST /management/tipologias instead.");
+        
         var payload = await ReadBody<TipologiaImportRequest>(req);
         if (payload is null || string.IsNullOrWhiteSpace(payload.ZipBase64))
         {
@@ -1000,11 +1010,12 @@ public class TipologiasAdminFunction
                 AddZipEntry(archive, "tipologia.plugins.json", PrettyJson(pluginConfig.ConfiguracionJson));
             }
 
-            if (!string.IsNullOrWhiteSpace(tipologia.PromptGPT))
+            var systemPrompt = tipologia.GetSystemPrompt();
+            if (!string.IsNullOrWhiteSpace(systemPrompt))
             {
                 AddZipEntry(archive, "tipologia.prompt.json", JsonSerializer.Serialize(new
                 {
-                    promptGPT = tipologia.PromptGPT
+                    promptGPT = systemPrompt
                 }, JsonIndentedOptions));
             }
         }
