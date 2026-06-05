@@ -314,7 +314,7 @@ public class TipologiasAdminFunctionIntegrationTests
             Mock.Of<ITipologiaConfigAuditRepository>(),
             Mock.Of<ILogger<TipologiasAdminFunction>>(),
             new MemoryCache(new MemoryCacheOptions()),
-            Mock.Of<TipologiaMapper>());
+            new TipologiaMapper(Mock.Of<ILogger<TipologiaMapper>>()));
     }
 
     private static DocumentIADbContext CreateDbContext()
