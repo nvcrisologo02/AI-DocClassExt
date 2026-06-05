@@ -1,6 +1,6 @@
 # 7. Roadmap y Pendientes — DocumentIA MVP
 
-> Ultima actualizacion: 2026-05-26
+> Ultima actualizacion: 2026-06-05  
 > Proyecto: AI DocClassExt — SAREB
 
 > Actualización 2026-05-26 (Backlog):
@@ -10,6 +10,15 @@
 > Actualización 2026-05-21 (Tipologías v1.2):
 > - M1 completado: script SQL idempotente `scripts/migrations/migrate-tipologias-v1_2-json-structure.sql` para poblar bloques `gdc` y `classification` en `Tipologias.ConfiguracionJson`.
 > - Pendiente funcional asociado: ejecutar el script en entorno tras despliegue completo de backend/frontend v1.2.
+
+> Actualización 2026-06-05 (Fase 3.1 - Schema Cleanup):
+> - ✅ **COMPLETADO:** Eliminación de 4 columnas redundantes (ModeloClasificacionDI, UmbralClasificacion, ModeloExtraccionDI, UmbralExtraccion)
+> - Migration 20260605113924_v31_DropLegacyModelosUmbrales aplicada a BD
+> - 12/12 deprecation tests passing, 0 build errors
+> - Todas las configuraciones consolidadas en ConfiguracionJson (única fuente de verdad)
+> - WI: AB#99744, AB#99746, AB#99747, AB#99749 → Done
+> - AB#99745 (JSON indexes) → Removed (no ROI justificado con 204 registros)
+> - Documentación: [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md)
 
 ---
 
@@ -85,6 +94,7 @@ gantt
 | C-6 | Fix `NombreArchivo` null en flujo `objectIdGDC` | **DONE** | Sincronizacion `entrada.Documento.Name -> salida.Identificacion.Documento` en orquestador + fallback defensivo en `PersistirActivity` para no persistir null. Incluye regresion unitaria en orquestador y persistencia. Work items `99297`, `99298`, `99299`, `99300` en `Done`. | AB#99297 AB#99298 AB#99299 AB#99300 |
 | C-7 | Fix prompt GPT fallback: tipologías incompletas | **DONE** | Dos bugs corregidos (2026-05-20): (1) `ClassificationTipologiaPromptBuilder` filtraba con `!isDefault`, excluyendo todas las tipologías TDN (ESCR/DOCN/SERE) que no tienen `isDefault=true`. Filtro eliminado — ahora se incluyen todas las Published+Activa con `tipologiaId` válido. (2) `GptClasificarDataProvider` tenía `_tipologiasPromptSection` como `Lazy<string>`, que congelaba el prompt al primer uso (indefinidamente). Eliminado el `Lazy`; ahora se llama `_tipologiaPromptBuilder.Build()` por petición, respetando el TTL de 5 min del `IMemoryCache`. Resultado: de 2–5 tipologías visibles para el LLM, pasan a ser 14 (todas las Published con `gptDescripcion`). | — |
 | C-8 | Arquitectura two-phase GptClasificarDataProvider | **DONE** | (2026-06-02) Implementada clasificación jerárquica de dos fases: Phase 1 resuelve familia TDN1, Phase 2 resuelve tipología TDN2 enriquecida desde DB (tipologiaNombre + gptdescripcion). `ClassificationTipologiaPromptBuilder.BuildTdn2CatalogByFamilia()` reescrita para consultar `ITipologiaRepository` directamente, filtrar por `ResolvedTdn1`, incluir metadatos de ConfiguracionJson (204 tipologías pobladas via script `Backup-Actualizar-Tipologias.ps1`). Cache 5-min TTL per-family. Prompts mejorados con contexto SAREB + fallback instruction + 200-char limit. Ver [ANEXO_PROVIDER_GPT_CLASIFICACION_DOS_FASES.md](ANEXO_PROVIDER_GPT_CLASIFICACION_DOS_FASES.md). | AB#99999 |
+| C-9 | Fase 3.1 - Schema cleanup: 4 columnas redundantes | **DONE** | (2026-06-05) Eliminadas columnas ModeloClasificacionDI, UmbralClasificacion, ModeloExtraccionDI, UmbralExtraccion de TipologiaEntity. Migration 20260605113924_v31_DropLegacyModelosUmbrales aplicada. [Obsolete] + [NotMapped] en entity. 12/12 tests passing, 0 errors. Commit 3e36c24. Todas las configuraciones consolidadas en ConfiguracionJson. Zero data loss; 204 tipologías unaffected. WI: AB#99732 (Fase 3.1 subtasks). Ver [27_FASE3_1_SCHEMA_CLEANUP_COMPLETION_2026-06-05.md](27_FASE3_1_SCHEMA_CLEANUP_COMPLETION_2026-06-05.md). | AB#99732 |
 
 ---
 

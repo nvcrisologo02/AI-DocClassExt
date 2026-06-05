@@ -1,8 +1,10 @@
 # 5. Manual de Uso y Configuracion — DocumentIA MVP
 
-> Ultima actualizacion: 2026-06-04  
+> Ultima actualizacion: 2026-06-05  
 > Proyecto: AI DocClassExt — SAREB  
-> **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. Para cambios en esta versión, ver [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md).
+> **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. 
+> - Para cambios en v1.4-v1.5, ver [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md).
+> - **Fase 3.1 (2026-06-05):** 4 columnas legacy removidas. ConfiguracionJson es única fuente de verdad. Ver [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md).
 
 > Alcance de este manual:
 > - Parte A (usuario final): guia practica de uso, no tecnica.
