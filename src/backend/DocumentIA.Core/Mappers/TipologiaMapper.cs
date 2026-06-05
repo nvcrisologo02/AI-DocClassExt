@@ -51,6 +51,7 @@ public class TipologiaMapper
     /// 
     /// Loguea advertencia si se usa (para auditoría de clientes legacy).
     /// </summary>
+    #pragma warning disable CS0618 // Type or member is obsolete
     public TipologiaResponseDtoLegacy ToResponseDtoLegacy(
         DocumentIA.Data.Entities.TipologiaEntity entity)
     {
@@ -63,6 +64,7 @@ public class TipologiaMapper
 
         return TipologiaResponseDtoLegacy.FromEntity(entity);
     }
+    #pragma warning restore CS0618 // Type or member is obsolete
 
     /// <summary>
     /// Convierte TipologiaRequestDto → TipologiaEntity.
@@ -88,6 +90,7 @@ public class TipologiaMapper
         {
             entity.ConfiguracionJson = request.ConfiguracionJson;
             
+            #pragma warning disable CS0618 // Type or member is obsolete
             // Log if legacy fields are also present (detect client migration status)
             var hasLegacyFields = 
                 !string.IsNullOrWhiteSpace(request.PromptGPT) ||
@@ -95,6 +98,7 @@ public class TipologiaMapper
                 !string.IsNullOrWhiteSpace(request.ModeloExtraccionDI) ||
                 (request.UmbralClasificacion.HasValue && request.UmbralClasificacion > 0) ||
                 (request.UmbralExtraccion.HasValue && request.UmbralExtraccion > 0);
+            #pragma warning restore CS0618 // Type or member is obsolete
             
             if (hasLegacyFields)
             {
@@ -105,9 +109,11 @@ public class TipologiaMapper
                 );
             }
         }
+        #pragma warning disable CS0618 // Type or member is obsolete
         else if (!string.IsNullOrWhiteSpace(request.PromptGPT) || 
                  !string.IsNullOrWhiteSpace(request.ModeloClasificacionDI) ||
                  !string.IsNullOrWhiteSpace(request.ModeloExtraccionDI))
+        #pragma warning restore CS0618 // Type or member is obsolete
         {
             // If NO ConfiguracionJson provided, create minimal JSON to avoid losing data
             _logger.LogWarning(

@@ -173,7 +173,7 @@ public class BlobStorageService : IBlobStorageService
         return $"{year}/{month}/{sha256}{extension}";
     }
 
-    public async Task<string> GenerateSasUrlAsync(string blobPath, TimeSpan? expiry = null)
+    public Task<string> GenerateSasUrlAsync(string blobPath, TimeSpan? expiry = null)
     {
         try
         {
@@ -193,7 +193,7 @@ public class BlobStorageService : IBlobStorageService
             {
                 var sasUri = blobClient.GenerateSasUri(BlobSasPermissions.Read, expiresOn);
                 _logger.LogDebug("SAS URL generada para {BlobPath}, expira en {ExpiresOn}", blobPath, expiresOn);
-                return sasUri.ToString();
+                return Task.FromResult(sasUri.ToString());
             }
 
             // Fallback: construir SAS manualmente si el cliente no puede generarla directamente
@@ -214,7 +214,7 @@ public class BlobStorageService : IBlobStorageService
                         _blobServiceClient.AccountName,
                         GetStorageAccountKey()))
             };
-            return uriBuilder.ToUri().ToString();
+            return Task.FromResult(uriBuilder.ToUri().ToString());
         }
         catch (Exception ex)
         {

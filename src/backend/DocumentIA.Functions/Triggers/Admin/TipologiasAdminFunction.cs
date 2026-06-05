@@ -448,7 +448,7 @@ public class TipologiasAdminFunction
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/tipologias/{id:int}/export")] HttpRequestData req,
         int id)
     {
-        _logger.LogWarning("Deprecated endpoint: Admin_ExportTipologia called. Use GET /management/tipologias/{id} instead.");
+        _logger.LogWarning("Deprecated endpoint: Admin_ExportTipologia called. Use GET /management/tipologias/<id> instead.");
         
         var tipologia = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
         if (tipologia is null)

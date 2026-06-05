@@ -149,7 +149,7 @@ public class TipologiaConfigurationCache
         cacheEntry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
         cacheEntry.Dispose();
 
-        return result;
+        return result!;
     }
 
     /// <summary>

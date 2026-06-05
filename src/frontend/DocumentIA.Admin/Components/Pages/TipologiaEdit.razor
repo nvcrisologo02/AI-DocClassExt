@@ -288,6 +288,8 @@
             EnableRules = config.ResolvedEnableRules
         };
 
+        #pragma warning disable CS0618 // Type or member is obsolete
+        // Mantener campos legacy para compatibilidad con versiones anteriores
         config.SkipGDCUpload = config.ResolvedSkipGDCUpload;
         config.TipologiaMGDCMatricula = config.ResolvedMatricula;
         config.GdcTipoDocumento = config.ResolvedGdcTipo;
@@ -296,6 +298,7 @@
         config.Tdn1 = config.ResolvedTdn1;
         config.Tdn2 = config.ResolvedTdn2;
         config.GptDescripcion = config.ResolvedGptDescripcion;
+        #pragma warning restore CS0618 // Type or member is obsolete
 
         return JsonSerializer.Serialize(config, new JsonSerializerOptions
         {

@@ -14,6 +14,7 @@ public class CatalogoTdnRepository : ICatalogoTdnRepository
 
     public async Task<IReadOnlyCollection<TdnCatalogItem>> GetFamiliasTdnActivasAsync(CancellationToken cancellationToken = default)
     {
+#nullable disable warnings
         // El catálogo actual no tiene flag Activo; para esta fase se consideran activas
         // todas las familias disponibles en tabla con código informado.
         return await _context.CatalogoTdn1
@@ -23,12 +24,14 @@ public class CatalogoTdnRepository : ICatalogoTdnRepository
             .Select(t => new TdnCatalogItem(
                 t.Codigo,
                 t.Nombre ?? string.Empty,
-                string.IsNullOrWhiteSpace(t.Descripcion) ? t.Nombre : t.Descripcion!))
+                (t.Descripcion ?? t.Nombre ?? string.Empty)!))
             .ToListAsync(cancellationToken);
+#nullable restore warnings
     }
 
     public async Task<IReadOnlyCollection<TdnCatalogItem>> GetSubtiposByFamiliaAsync(string tdn1Codigo, CancellationToken cancellationToken = default)
     {
+#nullable disable warnings
         if (string.IsNullOrWhiteSpace(tdn1Codigo))
         {
             throw new ArgumentException("El código de familia TDN1 es obligatorio.", nameof(tdn1Codigo));
@@ -44,8 +47,9 @@ public class CatalogoTdnRepository : ICatalogoTdnRepository
             .Select(t => new TdnCatalogItem(
                 t.Codigo,
                 t.Nombre ?? string.Empty,
-                string.IsNullOrWhiteSpace(t.Descripcion) ? t.Nombre : t.Descripcion!))
+                (t.Descripcion ?? t.Nombre ?? string.Empty)!))
             .ToListAsync(cancellationToken);
+#nullable restore warnings
     }
 
     public async Task<string?> GetTdn2PromptByFamiliaAsync(string tdn1Codigo, CancellationToken cancellationToken = default)
