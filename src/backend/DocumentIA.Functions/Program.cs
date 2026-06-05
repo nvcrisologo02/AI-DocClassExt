@@ -157,11 +157,11 @@ var host = new HostBuilder()
         services.AddScoped<IGptJsonResponseParser, GptJsonResponseParser>();
         services.AddScoped<IOpenAiClientFactory, OpenAiClientFactory>();
         
-        services.AddSingleton<GptFallbackExtraerDataProvider>();
-        services.AddSingleton<GptDirectExtraerDataProvider>();
+        services.AddScoped<GptFallbackExtraerDataProvider>();
+        services.AddScoped<GptDirectExtraerDataProvider>();
         services.AddSingleton<IPromptDataProvider, OpenAIPromptDataProvider>();
         services.AddSingleton<ContentUnderstandingResultMapper>();
-        services.AddSingleton<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
+        services.AddScoped<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
 
         services.AddSingleton<MockClasificarDataProvider>();
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();

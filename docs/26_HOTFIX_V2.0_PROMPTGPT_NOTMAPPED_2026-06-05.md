@@ -46,6 +46,43 @@ Correctas! - Con error: 0, Superado: 12, Omitido: 0, Total: 12, Duración: 2 s
 
 ---
 
+## Additional Fix: DI Scope for Extraction Providers
+
+**Also changed in this hotfix:** [Program.cs](src/backend/DocumentIA.Functions/Program.cs)
+
+**Why:** Extraction providers handle per-request state. Singleton lifecycle causes cross-request contamination in concurrent Azure Functions.
+
+**Changes:**
+```csharp
+// BEFORE (incorrect):
+services.AddSingleton<GptFallbackExtraerDataProvider>();
+services.AddSingleton<GptDirectExtraerDataProvider>();
+services.AddSingleton<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
+
+// AFTER (fixed - Scoped lifecycle):
+services.AddScoped<GptFallbackExtraerDataProvider>();
+services.AddScoped<GptDirectExtraerDataProvider>();
+services.AddScoped<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
+```
+
+**Impact:**
+- ✅ Each request gets isolated provider state
+- ✅ Prevents state leakage across concurrent operations
+- ✅ No breaking changes to code
+
+---
+
+## Validation Summary
+
+| Component | Status |
+|-----------|--------|
+| v2.0 Migration | ✅ Applied (32/32 tests passing) |
+| [NotMapped] Fix | ✅ Applied (12/12 deprecation tests passing) |
+| DI Scope Fix | ✅ Applied (0 build errors) |
+| Documentation | ✅ Complete |
+
+---
+
 ## Next Steps
 
 1. **Restart Azure Functions host** - Should now start without "Invalid column name 'PromptGPT'" error
