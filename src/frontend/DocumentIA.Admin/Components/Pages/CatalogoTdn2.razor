@@ -1,0 +1,125 @@
+@page "/catalogotdn2"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Catálogo TDN2</PageTitle>
+
+<h1>Catálogo TDN2</h1>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <label class="form-label">Filtro TDN1</label>
+        <InputText class="form-control" @bind-Value="_filtroTdn1" placeholder="Ej: ESCR" />
+    </div>
+    <div class="col-md-3 align-self-end">
+        <button class="btn btn-outline-primary" @onclick="ApplyFilterAsync">Aplicar</button>
+        <button class="btn btn-outline-secondary ms-2" @onclick="ClearFilterAsync">Limpiar</button>
+    </div>
+</div>
+
+<p>
+    <button class="btn btn-primary" @onclick="CreateItem">Nuevo TDN2</button>
+</p>
+
+@if (_loading)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+    }
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>TDN1</th>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _rows)
+            {
+                <tr>
+                    <td>@row.CodigoTdn1</td>
+                    <td>@row.Codigo</td>
+                    <td>@row.Nombre</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => EditItem(row.Id)">Editar</button>
+                        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="() => DeleteAsync(row.Id)">Borrar</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _error;
+    private string? _message;
+    private string _filtroTdn1 = string.Empty;
+    private IReadOnlyCollection<CatalogoTdn2Item> _rows = Array.Empty<CatalogoTdn2Item>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _rows = await AdminService.GetCatalogoTdn2Async();
+        _loading = false;
+        _error = false;
+        _message = null;
+    }
+
+    private async Task ApplyFilterAsync()
+    {
+        try
+        {
+            _rows = string.IsNullOrWhiteSpace(_filtroTdn1)
+                ? await AdminService.GetCatalogoTdn2Async()
+                : await AdminService.GetCatalogoTdn2ByTdn1Async(_filtroTdn1.Trim());
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+
+    private async Task ClearFilterAsync()
+    {
+        _filtroTdn1 = string.Empty;
+        await ReloadAsync();
+    }
+
+    private void CreateItem()
+    {
+        Navigation.NavigateTo("/catalogotdn2/edit");
+    }
+
+    private void EditItem(int id)
+    {
+        Navigation.NavigateTo($"/catalogotdn2/edit/{id}");
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        try
+        {
+            await AdminService.DeleteCatalogoTdn2Async(id);
+            await ApplyFilterAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

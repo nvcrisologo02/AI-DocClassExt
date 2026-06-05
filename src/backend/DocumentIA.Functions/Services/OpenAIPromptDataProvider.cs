@@ -428,14 +428,14 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         };
     }
 
-    private static string FirstNonEmpty(string? preferred, string fallback)
+    private static string FirstNonEmpty(string? preferred, string? fallback)
     {
         if (!string.IsNullOrWhiteSpace(preferred))
         {
             return preferred;
         }
 
-        return fallback;
+        return fallback ?? string.Empty;
     }
 
     private string ResolveDefaultPromptModelKey()

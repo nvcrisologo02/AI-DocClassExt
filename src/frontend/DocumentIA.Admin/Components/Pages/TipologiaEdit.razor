@@ -182,19 +182,19 @@
         _model.ConfiguracionJson = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
     }
 
-    private static dynamic TryParseConfig(string? json)
+    private static TemplateConfig TryParseConfig(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))
         {
-            return new { ModeloClasificacionDI = "", ModeloExtraccionDI = "", EnableExtraction = false, GdcTipoDocumento = "", GdcSerie = "", SkipGDCUpload = false };
+            return new TemplateConfig();
         }
 
         try
         {
             var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
-            return new 
-            { 
+            return new TemplateConfig
+            {
                 ModeloClasificacionDI = root.TryGetProperty("ModeloClasificacionDI", out var m1) ? m1.GetString() ?? "" : "",
                 ModeloExtraccionDI = root.TryGetProperty("ModeloExtraccionDI", out var m2) ? m2.GetString() ?? "" : "",
                 EnableExtraction = root.TryGetProperty("EnableExtraction", out var e) && e.GetBoolean(),
@@ -205,8 +205,18 @@
         }
         catch
         {
-            return new { ModeloClasificacionDI = "", ModeloExtraccionDI = "", EnableExtraction = false, GdcTipoDocumento = "", GdcSerie = "", SkipGDCUpload = false };
+            return new TemplateConfig();
         }
+    }
+
+    private sealed class TemplateConfig
+    {
+        public string ModeloClasificacionDI { get; set; } = string.Empty;
+        public string ModeloExtraccionDI { get; set; } = string.Empty;
+        public bool EnableExtraction { get; set; }
+        public string GdcTipoDocumento { get; set; } = string.Empty;
+        public string GdcSerie { get; set; } = string.Empty;
+        public bool SkipGDCUpload { get; set; }
     }
 
     private async Task SaveAsync()

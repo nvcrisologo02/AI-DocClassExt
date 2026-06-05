@@ -621,7 +621,7 @@
       "name": "LimitacionesAdministrativas",
       "type": "string",
       "required": false,
-      "description": "Texto que recoge limitaciones o restricciones impuestas por administraciones p\u00FAblicas sobre el inmueble, distintas de las cargas registrales (p.ej. limitaciones urban\u00EDsticas, declaraciones de bien de inter\u00E9s cultural, afecciones de dominio p\u00FAblico, limitaciones de uso). Extraer el texto literal. M\u00E1ximo 300 caracteres. Si no constan, omitir el campo.",
+      \"description\": \"Texto que recoge limitaciones o restricciones impuestas por administraciones p\u00FAblicas sobre el inmueble, distintas de las cargas registrales (p.ej. limitaciones urban\u00EDsticas, declaraciones de bien de inter\u00E9s cultural, afecciones de dominio p\u00FAblico, limitaciones de uso). Extraer el texto literal. M\u00E1ximo 300 caracteres. Si no constan, omitir el campo.\",
       "rules": [
         {
           "ruleType": "maxLength",

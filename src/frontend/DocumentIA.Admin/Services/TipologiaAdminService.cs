@@ -6,6 +6,7 @@ using DocumentIA.Plugins.Integration;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.RegularExpressions;
+using System.Text.Json.Serialization;
 
 namespace DocumentIA.Admin.Services;
 
@@ -20,7 +21,8 @@ public class TipologiaAdminService
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        PropertyNameCaseInsensitive = true
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() }
     };
     private readonly HttpClient _httpClient;
 
@@ -217,6 +219,81 @@ public class TipologiaAdminService
             HttpMethod.Post,
             $"management/plugins-tipologias/{Uri.EscapeDataString(tipologiaCodigo)}/retirar",
             new { });
+    }
+
+    public async Task<IReadOnlyCollection<CatalogoTdn1Item>> GetCatalogoTdn1Async()
+    {
+        return await GetRequiredAsync<List<CatalogoTdn1Item>>("management/catalogotdn1") ?? [];
+    }
+
+    public async Task<CatalogoTdn1Item?> GetCatalogoTdn1ByIdAsync(int id)
+    {
+        return await GetOptionalAsync<CatalogoTdn1Item>($"management/catalogotdn1/{id}");
+    }
+
+    public async Task<CatalogoTdn1Item> SaveCatalogoTdn1Async(CatalogoTdn1Item item)
+    {
+        var payload = new CatalogoTdn1UpsertRequest
+        {
+            Codigo = item.Codigo,
+            Nombre = item.Nombre,
+            Descripcion = item.Descripcion,
+            Tdn2Prompt = item.Tdn2Prompt
+        };
+
+        if (item.Id == 0)
+        {
+            return await SendRequiredAsync<CatalogoTdn1Item>(HttpMethod.Post, "management/catalogotdn1", payload);
+        }
+
+        return await SendRequiredAsync<CatalogoTdn1Item>(HttpMethod.Put, $"management/catalogotdn1/{item.Id}", payload);
+    }
+
+    public async Task DeleteCatalogoTdn1Async(int id)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"management/catalogotdn1/{id}");
+        using var response = await _httpClient.SendAsync(request);
+        await EnsureSuccessAsync(response);
+    }
+
+    public async Task<IReadOnlyCollection<CatalogoTdn2Item>> GetCatalogoTdn2Async()
+    {
+        return await GetRequiredAsync<List<CatalogoTdn2Item>>("management/catalogotdn2") ?? [];
+    }
+
+    public async Task<IReadOnlyCollection<CatalogoTdn2Item>> GetCatalogoTdn2ByTdn1Async(string codigoTdn1)
+    {
+        return await GetRequiredAsync<List<CatalogoTdn2Item>>($"management/catalogotdn2/by-tdn1/{Uri.EscapeDataString(codigoTdn1)}") ?? [];
+    }
+
+    public async Task<CatalogoTdn2Item?> GetCatalogoTdn2ByIdAsync(int id)
+    {
+        return await GetOptionalAsync<CatalogoTdn2Item>($"management/catalogotdn2/{id}");
+    }
+
+    public async Task<CatalogoTdn2Item> SaveCatalogoTdn2Async(CatalogoTdn2Item item)
+    {
+        var payload = new CatalogoTdn2UpsertRequest
+        {
+            Codigo = item.Codigo,
+            Nombre = item.Nombre,
+            CodigoTdn1 = item.CodigoTdn1,
+            Descripcion = item.Descripcion
+        };
+
+        if (item.Id == 0)
+        {
+            return await SendRequiredAsync<CatalogoTdn2Item>(HttpMethod.Post, "management/catalogotdn2", payload);
+        }
+
+        return await SendRequiredAsync<CatalogoTdn2Item>(HttpMethod.Put, $"management/catalogotdn2/{item.Id}", payload);
+    }
+
+    public async Task DeleteCatalogoTdn2Async(int id)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"management/catalogotdn2/{id}");
+        using var response = await _httpClient.SendAsync(request);
+        await EnsureSuccessAsync(response);
     }
 
     private async Task<T?> GetOptionalAsync<T>(string relativeUrl)
@@ -627,6 +704,22 @@ public class TipologiaAdminService
         public string? Usuario { get; set; }
     }
 
+    private sealed class CatalogoTdn1UpsertRequest
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string? Descripcion { get; set; }
+        public string? Tdn2Prompt { get; set; }
+    }
+
+    private sealed class CatalogoTdn2UpsertRequest
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string CodigoTdn1 { get; set; } = string.Empty;
+        public string? Descripcion { get; set; }
+    }
+
     public sealed class TipologiaAuditEntry
     {
         public int Id { get; set; }
@@ -676,4 +769,24 @@ public class TipologiaAdminService
         public string? LeftValue { get; set; }
         public string? RightValue { get; set; }
     }
+}
+
+public sealed class CatalogoTdn1Item
+{
+    public int Id { get; set; }
+    public string Codigo { get; set; } = string.Empty;
+    public string Nombre { get; set; } = string.Empty;
+    public string? Descripcion { get; set; }
+    public string? Tdn2Prompt { get; set; }
+    public int Subtipos { get; set; }
+}
+
+public sealed class CatalogoTdn2Item
+{
+    public int Id { get; set; }
+    public string Codigo { get; set; } = string.Empty;
+    public string Nombre { get; set; } = string.Empty;
+    public string? Descripcion { get; set; }
+    public string CodigoTdn1 { get; set; } = string.Empty;
+    public int Tdn1Id { get; set; }
 }

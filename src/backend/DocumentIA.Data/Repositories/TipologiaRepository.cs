@@ -144,6 +144,7 @@ public class TipologiaRepository : ITipologiaRepository
 
     private static TipologiaEntity CloneForAudit(TipologiaEntity source)
     {
+        #pragma warning disable CS0618
         return new TipologiaEntity
         {
             Id = source.Id,
@@ -165,6 +166,7 @@ public class TipologiaRepository : ITipologiaRepository
             PublicadaPor = source.PublicadaPor,
             VersionPublicada = source.VersionPublicada
         };
+        #pragma warning restore CS0618
     }
 
     private async Task AddAuditAsync(int tipologiaId, string accion, string? usuario, TipologiaEntity? before, TipologiaEntity? after)

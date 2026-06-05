@@ -67,7 +67,7 @@ public class PromptInstruccionesValidatorTests : IDisposable
     [Fact]
     public void TryValidate_SystemPromptTooLong_ReturnsFalse()
     {
-        var tooLong = new string('a', 5001);
+        var tooLong = new string('a', 200001);
 
         var ok = _validator.TryValidate(new PromptInstrucciones
         {
@@ -81,7 +81,7 @@ public class PromptInstruccionesValidatorTests : IDisposable
     [Fact]
     public void TryValidate_UserPromptTemplateTooLong_ReturnsFalse()
     {
-        var tooLong = new string('b', 5001);
+        var tooLong = new string('b', 200001);
 
         var ok = _validator.TryValidate(new PromptInstrucciones
         {

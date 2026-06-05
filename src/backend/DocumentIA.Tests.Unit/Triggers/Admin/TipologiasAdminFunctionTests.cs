@@ -89,7 +89,7 @@ public class TipologiasAdminFunctionTests : IDisposable
             _auditRepoMock.Object,
             new Mock<ILogger<TipologiasAdminFunction>>().Object,
             new MemoryCache(new MemoryCacheOptions()),
-            Mock.Of<TipologiaMapper>());
+            new TipologiaMapper(Mock.Of<ILogger<TipologiaMapper>>()));
 
         var mockCtx = new Mock<FunctionContext>();
         var services = new ServiceCollection();

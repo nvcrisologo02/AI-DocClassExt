@@ -1,0 +1,78 @@
+@page "/catalogotdn1/edit"
+@page "/catalogotdn1/edit/{Id:int}"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Editar TDN1</PageTitle>
+
+<h1>@(Id.HasValue ? "Editar TDN1" : "Nuevo TDN1")</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+}
+
+<div class="mb-3">
+    <label class="form-label">Código</label>
+    <InputText class="form-control" @bind-Value="_model.Codigo" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Nombre</label>
+    <InputText class="form-control" @bind-Value="_model.Nombre" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Descripción</label>
+    <InputTextArea class="form-control" @bind-Value="_model.Descripcion" rows="4" />
+</div>
+
+<div class="mb-3">
+    <label class="form-label">Prompt personalizado TDN2 (opcional)</label>
+    <InputTextArea class="form-control" @bind-Value="_model.Tdn2Prompt" rows="6" />
+</div>
+
+<div class="mb-3">
+    <button class="btn btn-primary" type="button" @onclick="SaveAsync">Guardar</button>
+    <a class="btn btn-secondary ms-2" href="/catalogotdn1">Volver</a>
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private CatalogoTdn1Item _model = new();
+    private bool _error;
+    private string? _message;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _error = false;
+        _message = null;
+
+        if (!Id.HasValue)
+        {
+            _model = new CatalogoTdn1Item();
+            return;
+        }
+
+        var existing = await AdminService.GetCatalogoTdn1ByIdAsync(Id.Value);
+        if (existing is not null)
+        {
+            _model = existing;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            await AdminService.SaveCatalogoTdn1Async(_model);
+            Navigation.NavigateTo("/catalogotdn1");
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

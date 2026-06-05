@@ -1,0 +1,92 @@
+@page "/catalogotdn1"
+@inject TipologiaAdminService AdminService
+@inject NavigationManager Navigation
+
+<PageTitle>Catálogo TDN1</PageTitle>
+
+<h1>Catálogo TDN1</h1>
+
+<p>
+    <button class="btn btn-primary" @onclick="CreateItem">Nuevo TDN1</button>
+</p>
+
+@if (_loading)
+{
+    <p>Cargando...</p>
+}
+else
+{
+    @if (!string.IsNullOrWhiteSpace(_message))
+    {
+        <div class="alert @(_error ? "alert-danger" : "alert-success")">@_message</div>
+    }
+
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Subtipos</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _rows)
+            {
+                <tr>
+                    <td>@row.Codigo</td>
+                    <td>@row.Nombre</td>
+                    <td>@row.Subtipos</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-secondary" @onclick="() => EditItem(row.Id)">Editar</button>
+                        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="() => DeleteAsync(row.Id)">Borrar</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private bool _loading = true;
+    private bool _error;
+    private string? _message;
+    private IReadOnlyCollection<CatalogoTdn1Item> _rows = Array.Empty<CatalogoTdn1Item>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ReloadAsync();
+    }
+
+    private async Task ReloadAsync()
+    {
+        _rows = await AdminService.GetCatalogoTdn1Async();
+        _loading = false;
+        _error = false;
+        _message = null;
+    }
+
+    private void CreateItem()
+    {
+        Navigation.NavigateTo("/catalogotdn1/edit");
+    }
+
+    private void EditItem(int id)
+    {
+        Navigation.NavigateTo($"/catalogotdn1/edit/{id}");
+    }
+
+    private async Task DeleteAsync(int id)
+    {
+        try
+        {
+            await AdminService.DeleteCatalogoTdn1Async(id);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = true;
+            _message = ex.Message;
+        }
+    }
+}

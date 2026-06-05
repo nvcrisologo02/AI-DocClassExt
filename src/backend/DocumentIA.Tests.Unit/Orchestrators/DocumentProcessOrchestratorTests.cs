@@ -698,7 +698,8 @@ public class DocumentProcessOrchestratorTests
         salida.DatosExtraidos.Should().ContainKey("ResultadoPrompt");
         salida.DatosExtraidos["ResultadoPrompt"].Should().Be("Resumen ejecutivo");
         salida.DetalleEjecucion.Prompt.Should().NotBeNull();
-        salida.DetalleEjecucion.Prompt.Modelo.Should().Be("gpt-4o-mini");
+        var promptDetalle = salida.DetalleEjecucion.Prompt!;
+        promptDetalle.Modelo.Should().Be("gpt-4o-mini");
 
         var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
         promptInput.Should().NotBeNull();

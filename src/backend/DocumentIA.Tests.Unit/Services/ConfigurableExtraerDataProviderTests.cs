@@ -496,9 +496,15 @@ public class ConfigurableExtraerDataProviderTests
 
             GptProvider = new Mock<GptFallbackExtraerDataProvider>(
                 MockBehavior.Strict,
-                _extractionModelRegistryLoader,
-                Options.Create(new PromptDefaultsSettings()),
-                new Mock<ILogger<GptFallbackExtraerDataProvider>>().Object);
+                new object[]
+                {
+                    _extractionModelRegistryLoader,
+                    Options.Create(new PromptDefaultsSettings()),
+                    new Mock<ILogger<GptFallbackExtraerDataProvider>>().Object,
+                    Mock.Of<DocumentIA.Functions.Services.Abstractions.IGptPromptBuilder>(),
+                    Mock.Of<DocumentIA.Functions.Services.Abstractions.IGptJsonResponseParser>(),
+                    Mock.Of<DocumentIA.Functions.Services.Abstractions.IOpenAiClientFactory>()
+                });
 
             DirectGptProvider = new Mock<GptDirectExtraerDataProvider>(
                 MockBehavior.Strict,

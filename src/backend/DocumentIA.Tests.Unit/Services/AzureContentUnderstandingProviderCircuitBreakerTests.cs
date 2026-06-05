@@ -80,10 +80,11 @@ public class AzureContentUnderstandingProviderCircuitBreakerTests
         var sut = CreateProvider(new AzureContentUnderstandingOptions
         {
             EnableCircuitBreaker = true,
-            CircuitBreakerFailureThreshold = 1,
+            CircuitBreakerFailureThreshold = 2,
             CircuitBreakerOpenSeconds = 1
         });
 
+        InvokePrivate(sut, "RegisterCircuitFailure", "primary-cu", "nota.simple_bal", "test");
         InvokePrivate(sut, "RegisterCircuitFailure", "primary-cu", "nota.simple_bal", "test");
 
         var openNow = (bool)InvokePrivate(sut, "IsCircuitOpen", "primary-cu", "nota.simple_bal")!;

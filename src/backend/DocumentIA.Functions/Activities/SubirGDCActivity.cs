@@ -54,25 +54,25 @@ namespace DocumentIA.Functions.Activities
                     try
                     {
                         var cfg = tipologiaLoader.LoadConfig(tipologia);
-                        if (!string.IsNullOrWhiteSpace(cfg.TipologiaMGDCMatricula))
+                        if (!string.IsNullOrWhiteSpace(cfg.ResolvedMatricula))
                         {
-                            matricula = cfg.TipologiaMGDCMatricula;
+                            matricula = cfg.ResolvedMatricula;
                         }
 
                         // Resolve GDC taxonomy fields from tipología config when not already set
-                        if (string.IsNullOrWhiteSpace(input.TipoDocumento) && !string.IsNullOrWhiteSpace(cfg.GdcTipoDocumento))
+                        if (string.IsNullOrWhiteSpace(input.TipoDocumento) && !string.IsNullOrWhiteSpace(cfg.ResolvedGdcTipo))
                         {
-                            input.TipoDocumento = cfg.GdcTipoDocumento;
+                            input.TipoDocumento = cfg.ResolvedGdcTipo;
                         }
 
-                        if (string.IsNullOrWhiteSpace(input.SubtipoDocumento) && !string.IsNullOrWhiteSpace(cfg.GdcSubtipoDocumento))
+                        if (string.IsNullOrWhiteSpace(input.SubtipoDocumento) && !string.IsNullOrWhiteSpace(cfg.ResolvedGdcSubtipo))
                         {
-                            input.SubtipoDocumento = cfg.GdcSubtipoDocumento;
+                            input.SubtipoDocumento = cfg.ResolvedGdcSubtipo;
                         }
 
-                        if (string.IsNullOrWhiteSpace(input.Serie) && !string.IsNullOrWhiteSpace(cfg.GdcSerie))
+                        if (string.IsNullOrWhiteSpace(input.Serie) && !string.IsNullOrWhiteSpace(cfg.ResolvedGdcSerie))
                         {
-                            input.Serie = cfg.GdcSerie;
+                            input.Serie = cfg.ResolvedGdcSerie;
                         }
                     }
                     catch (Exception ex)
