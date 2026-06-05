@@ -31,12 +31,20 @@ public class TipologiaEntity
     public bool Activa { get; set; } = true;
 
     // Configuración de modelos
-    [MaxLength(200)]
+    [Obsolete("Use ConfiguracionJson.confidenceConfig.clasifUmbralFallback instead (v1.5+). Removed in v3.0.", false)]
+    [NotMapped]
     public string? ModeloClasificacionDI { get; set; }
+    
+    [Obsolete("Use ConfiguracionJson.confidenceConfig.clasifUmbralFallback instead (v1.5+). Removed in v3.0.", false)]
+    [NotMapped]
     public double UmbralClasificacion { get; set; } = 0.85;
 
-    [MaxLength(200)]
+    [Obsolete("Use ConfiguracionJson.extraction.modelKey instead (v1.5+). Removed in v3.0.", false)]
+    [NotMapped]
     public string? ModeloExtraccionDI { get; set; }
+    
+    [Obsolete("Use ConfiguracionJson.confidenceConfig.extracUmbralFallback instead (v1.5+). Removed in v3.0.", false)]
+    [NotMapped]
     public double UmbralExtraccion { get; set; } = 0.80;
 
     [Obsolete("Use ConfiguracionJson.promptConfig instead (v1.4+). Removed in v2.0.", false)]
