@@ -4,6 +4,7 @@ using DocumentIA.Data.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DocumentIA.Data.Migrations
 {
     [DbContext(typeof(DocumentIADbContext))]
-    partial class DocumentIADbContextModelSnapshot : ModelSnapshot
+    [Migration("20260605095444_v15_MarkPromptGPTObsolete")]
+    partial class v15_MarkPromptGPTObsolete
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -11783,9 +11786,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 6, 5, 9, 54, 56, 32, DateTimeKind.Utc).AddTicks(7719),
+                            FechaCreacion = new DateTime(2026, 6, 5, 9, 54, 43, 370, DateTimeKind.Utc).AddTicks(1450),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 6, 5, 9, 54, 56, 32, DateTimeKind.Utc).AddTicks(7714),
+                            PublicadaEn = new DateTime(2026, 6, 5, 9, 54, 43, 370, DateTimeKind.Utc).AddTicks(1446),
                             PublicadaPor = "seed",
                             UmbralClasificacion = 0.84999999999999998,
                             UmbralExtraccion = 0.80000000000000004,

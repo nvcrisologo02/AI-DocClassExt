@@ -1,3 +1,4 @@
+using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -38,6 +39,7 @@ public class TipologiaEntity
     public string? ModeloExtraccionDI { get; set; }
     public double UmbralExtraccion { get; set; } = 0.80;
 
+    [Obsolete("Use ConfiguracionJson.promptConfig instead (v1.4+). Removed in v2.0.", false)]
     [Column(TypeName = "nvarchar(max)")]
     public string? PromptGPT { get; set; }
 
