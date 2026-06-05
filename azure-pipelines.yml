@@ -452,7 +452,7 @@ stages:
   - stage: ValidateConfiguration
     displayName: Validate Azure configuration contract
     dependsOn:
-      - DeployAdmin
+      - DeployFunctions
       - DeployAssetResolver
     condition: succeeded()
     jobs:
