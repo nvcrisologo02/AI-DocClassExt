@@ -32,7 +32,6 @@ builder.Services.AddHttpClient<TipologiaAdminService>(ConfigureFunctionsHttpClie
 builder.Services.AddHttpClient(nameof(SystemConfigService), ConfigureFunctionsHttpClient);
 
 builder.Services.AddScoped<SystemConfigService>();
-builder.Services.AddScoped<TipologiaWizardStateService>();
 
 builder.Services.AddHttpClient<MonitorService>(ConfigureFunctionsHttpClient);
 

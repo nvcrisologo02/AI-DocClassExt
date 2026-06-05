@@ -5,6 +5,8 @@ using System.Text;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using DocumentIA.Core.Configuration;
+using DocumentIA.Core.Extensions;
+using DocumentIA.Core.Mappers;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
@@ -45,45 +47,37 @@ public class TipologiasAdminFunction
     private readonly ITipologiaConfigAuditRepository _tipologiaAuditRepository;
     private readonly ILogger<TipologiasAdminFunction> _logger;
     private readonly IMemoryCache _cache;
+    private readonly TipologiaMapper _mapper;
 
     public TipologiasAdminFunction(
         DocumentIADbContext dbContext,
         ITipologiaRepository tipologiaRepository,
         ITipologiaConfigAuditRepository tipologiaAuditRepository,
         ILogger<TipologiasAdminFunction> logger,
-        IMemoryCache cache)
+        IMemoryCache cache,
+        TipologiaMapper mapper)
     {
         _dbContext = dbContext;
         _tipologiaRepository = tipologiaRepository;
         _tipologiaAuditRepository = tipologiaAuditRepository;
         _logger = logger;
         _cache = cache;
+        _mapper = mapper;
     }
 
     [Function("Admin_GetTipologias")]
     public async Task<HttpResponseData> GetTipologias(
             [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/tipologias")] HttpRequestData req)
     {
-        var rows = await _dbContext.Tipologias
+        var tipologias = await _dbContext.Tipologias
             .OrderBy(t => t.Nombre)
-            .Select(t => new
-            {
-                t.Id,
-                t.Codigo,
-                t.Nombre,
-                t.Version,
-                t.Estado,
-                t.Activa,
-                t.FechaCreacion,
-                t.FechaActualizacion,
-                t.PublicadaEn,
-                t.PublicadaPor,
-                t.VersionPublicada
-            })
             .ToListAsync();
 
+        // Convert to clean DTOs (AB#99735: omit deprecated fields)
+        var dtos = _mapper.ToResponseDtos(tipologias);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(rows);
+        await response.WriteAsJsonAsync(dtos);
         return response;
     }
 
@@ -98,8 +92,11 @@ public class TipologiasAdminFunction
             return await CreateError(req, HttpStatusCode.NotFound, $"No existe tipologia con id {id}.");
         }
 
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(tipologia);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(tipologia);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -143,15 +140,18 @@ public class TipologiasAdminFunction
             Activa = true,
             Estado = EstadoTipologia.Draft,
             ConfiguracionJson = payload.ConfiguracionJson,
-            CreadoPor = payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME",
+            CreadoPor = payload.Usuario ?? "SYSTEM",
             FechaCreacion = DateTime.UtcNow,
             FechaActualizacion = DateTime.UtcNow
         };
 
-        await _tipologiaRepository.AddAsync(entity, payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        await _tipologiaRepository.AddAsync(entity, payload.Usuario ?? "SYSTEM");
+
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(entity);
 
         var response = req.CreateResponse(HttpStatusCode.Created);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -198,10 +198,13 @@ public class TipologiasAdminFunction
         entity.ConfiguracionJson = payload.ConfiguracionJson;
         entity.FechaActualizacion = DateTime.UtcNow;
 
-        await _tipologiaRepository.UpdateAsync(entity, payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME", "Updated");
+        await _tipologiaRepository.UpdateAsync(entity, payload.Usuario ?? "SYSTEM", "Updated");
+
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(entity);
 
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -228,14 +231,18 @@ public class TipologiasAdminFunction
         }
 
         var payload = await ReadBody<PublicarTipologiaRequest>(req);
-        await _tipologiaRepository.PublicarAsync(id, payload?.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        await _tipologiaRepository.PublicarAsync(id, payload?.Usuario ?? "SYSTEM");
 
         // Invalidar caché del resolver para que la nueva tipología publicada esté disponible de inmediato
         _cache.Remove("tipologias:snapshot");
 
         var updated = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
+        
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(updated!);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(updated);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -251,11 +258,14 @@ public class TipologiasAdminFunction
         }
 
         var payload = await ReadBody<RetirarTipologiaRequest>(req);
-        await _tipologiaRepository.RetirarAsync(id, payload?.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        await _tipologiaRepository.RetirarAsync(id, payload?.Usuario ?? "SYSTEM");
         var updated = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
 
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(updated!);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(updated);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -271,12 +281,15 @@ public class TipologiasAdminFunction
         }
 
         var payload = await ReadBody<PasarTipologiaADraftRequest>(req);
-        await _tipologiaRepository.PasarADraftAsync(id, payload?.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME");
+        await _tipologiaRepository.PasarADraftAsync(id, payload?.Usuario ?? "SYSTEM");
 
         entity = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
 
+        // Convert to clean DTO (AB#99735: omit deprecated fields)
+        var dto = _mapper.ToResponseDto(entity!);
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(dto);
         return response;
     }
 
@@ -410,7 +423,10 @@ public class TipologiasAdminFunction
         var changes = new List<DiffChange>();
         AddJsonSectionDiff(changes, "validation", left.ConfiguracionJson, right.ConfiguracionJson);
         AddJsonSectionDiff(changes, "plugins", leftPlugins?.ConfiguracionJson, rightPlugins?.ConfiguracionJson);
-        AddJsonSectionDiff(changes, "prompt", ToPromptJson(left.PromptGPT), ToPromptJson(right.PromptGPT));
+        
+        var leftPrompt = left.GetSystemPrompt();
+        var rightPrompt = right.GetSystemPrompt();
+        AddJsonSectionDiff(changes, "prompt", ToPromptJson(leftPrompt), ToPromptJson(rightPrompt));
 
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(new
@@ -427,10 +443,13 @@ public class TipologiasAdminFunction
     }
 
     [Function("Admin_ExportTipologia")]
+    [Obsolete("Use direct GET /management/tipologias/{id} + ConfiguracionJson instead. Deprecated 2026-06-04.", false)]
     public async Task<HttpResponseData> ExportTipologia(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/tipologias/{id:int}/export")] HttpRequestData req,
         int id)
     {
+        _logger.LogWarning("Deprecated endpoint: Admin_ExportTipologia called. Use GET /management/tipologias/{id} instead.");
+        
         var tipologia = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
         if (tipologia is null)
         {
@@ -448,7 +467,7 @@ public class TipologiasAdminFunction
             Version = tipologia.Version,
             ExportedAtUtc = DateTime.UtcNow,
             IncludesPlugins = pluginConfig is not null,
-            IncludesPrompt = !string.IsNullOrWhiteSpace(tipologia.PromptGPT),
+            IncludesPrompt = !string.IsNullOrWhiteSpace(tipologia.GetSystemPrompt()),
             Source = "DocumentIA.AdminAPI"
         };
 
@@ -458,7 +477,7 @@ public class TipologiasAdminFunction
         {
             TipologiaId = tipologia.Id,
             Accion = "Exported",
-            Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME",
+            Usuario = "SYSTEM",
             FechaHora = DateTime.UtcNow,
             DetallesJson = JsonSerializer.Serialize(new
             {
@@ -479,9 +498,12 @@ public class TipologiasAdminFunction
     }
 
     [Function("Admin_ImportTipologia")]
+    [Obsolete("Import/Export deprecated. Use POST /management/tipologias with ConfiguracionJson. Deprecated 2026-06-04.", false)]
     public async Task<HttpResponseData> ImportTipologia(
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/tipologias/import")] HttpRequestData req)
     {
+        _logger.LogWarning("Deprecated endpoint: Admin_ImportTipologia called. Use POST /management/tipologias instead.");
+        
         var payload = await ReadBody<TipologiaImportRequest>(req);
         if (payload is null || string.IsNullOrWhiteSpace(payload.ZipBase64))
         {
@@ -572,7 +594,7 @@ public class TipologiasAdminFunction
             }
         }
 
-        var usuario = payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME";
+        var usuario = payload.Usuario ?? "SYSTEM";
         var entity = new TipologiaEntity
         {
             Codigo = codigo,
@@ -988,11 +1010,12 @@ public class TipologiasAdminFunction
                 AddZipEntry(archive, "tipologia.plugins.json", PrettyJson(pluginConfig.ConfiguracionJson));
             }
 
-            if (!string.IsNullOrWhiteSpace(tipologia.PromptGPT))
+            var systemPrompt = tipologia.GetSystemPrompt();
+            if (!string.IsNullOrWhiteSpace(systemPrompt))
             {
                 AddZipEntry(archive, "tipologia.prompt.json", JsonSerializer.Serialize(new
                 {
-                    promptGPT = tipologia.PromptGPT
+                    promptGPT = systemPrompt
                 }, JsonIndentedOptions));
             }
         }

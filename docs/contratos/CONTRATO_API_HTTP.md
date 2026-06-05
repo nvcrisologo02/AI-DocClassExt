@@ -445,7 +445,7 @@ El backend consume un único endpoint configurable `GDC:Endpoint` de SINTWS `IDo
 
 ---
 
-## 9. Endpoints COMPLETAR_GDC_HTTP_BASIC_USERNAME de configuración dinámica
+## 9. Endpoints Admin de configuración dinámica
 
 Estos endpoints gestionan configuración de tipologías, modelos y plugins en base de datos. Todos son `AuthorizationLevel.Function`.
 
@@ -485,3 +485,4 @@ Estos endpoints gestionan configuración de tipologías, modelos y plugins en ba
 - `POST publicar` vuelve a validar antes de promover a `Published`.
 - Si un recurso no existe, la API devuelve `404 Not Found`.
 - Si el JSON es inválido, la API devuelve `400 Bad Request` con detalle en `error`.
+

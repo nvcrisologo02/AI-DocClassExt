@@ -15,7 +15,7 @@ flowchart TB
 
         subgraph COMPUTE["⚙️ Cómputo  ·  App Service Plan: srbspprodocai"]
             FUNC["srbappprodocai\nFunction App · .NET 8\nDurable Functions v4"]
-            ADMIN["srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai\nApp Service\nBlazor Server .NET 8"]
+            ADMIN["srbwebAdminprodocai\nApp Service\nBlazor Server .NET 8"]
             ASSET["AssetResolver\nApp Service · .NET 8\nASP.NET Core API"]
         end
 
@@ -27,8 +27,7 @@ flowchart TB
 
         subgraph AI["🤖 Inteligencia Artificial"]
             DI["srbdiprodocai\nDocument Intelligence\nModelos custom SAREB"]
-            CU["Content Understanding\nAzure AI Foundry\nSweden Central"]
-            GPT["srboaiprodocai\nAzure OpenAI\ngpt-4o-mini  fallback"]
+            CU["Content Understanding\nAzure AI Foundry (upe48-mm2avmdm)\nSweden Central · Primary"]
         end
 
         subgraph SEC["🔒 Seguridad"]
@@ -113,7 +112,7 @@ flowchart TB
 | `srbappprodocai` | AssetResolver | HTTPS | X-Api-Key (KV) |
 | `srbappprodocai` | GDC SINTWS | SOAP/HTTP | Usuario/pwd SAREB |
 | AssetResolver | BD SAREB | SQL Server | Connection string |
-| `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | `srbappprodocai` | HTTPS | Function Key |
+| `srbwebAdminprodocai` | `srbappprodocai` | HTTPS | Function Key |
 
 ---
 
@@ -122,7 +121,7 @@ flowchart TB
 | Recurso | Tipo | Región |
 |---|---|---|
 | `srbappprodocai` | Function App (.NET 8 Isolated) | West Europe |
-| `srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai` | App Service — Blazor Server | West Europe |
+| `srbwebAdminprodocai` | App Service — Blazor Server | West Europe |
 | AssetResolver Web App | App Service — ASP.NET Core API | West Europe |
 | `srbspprodocai` | App Service Plan | West Europe |
 | `srbstgprodocai` | Storage Account (PDFs + sidecars) | West Europe |
@@ -136,3 +135,4 @@ flowchart TB
 | `srblawprodocai` | Log Analytics Workspace | West Europe |
 | GDC SINTWS | SOAP Service (on-premise) | Red interna SAREB |
 | BD `DM_POSICION_AAII_TB` | SQL Server (on-premise) | Red interna SAREB |
+

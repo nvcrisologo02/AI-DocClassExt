@@ -21,26 +21,6 @@
       "PollIntervalMs": 1000
     },
     {
-      "Key": "nota.simple.1_4.azure-di",
-      "Provider": "azure-document-intelligence",
-      "AnalyzerId": "DI_NS_1.4_v1",
-      "ContentType": "application/pdf",
-      "ProcessingLocation": "",
-      "InputRange": "",
-      "IsDefault": false,
-      "UseAsFallback": false,
-      "Endpoint": "https://srbdiprodocai.cognitiveservices.azure.com/",
-      "ApiKey": "",
-      "AuthMode": "ApiKey",
-      "DeploymentName": "",
-      "TimeoutSeconds": 60,
-      "MinFieldsRatio": 0.5,
-      "Temperature": 0,
-      "MaxTokens": 2000,
-      "ApiVersion": "2024-11-30",
-      "PollIntervalMs": 1000
-    },
-    {
       "Key": "default.gpt4o-mini_ex",
       "Provider": "azure-openai",
       "Endpoint": "https://upe48-mm2avmdm-swedencentral.openai.azure.com",

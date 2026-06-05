@@ -52,7 +52,7 @@ public class TipologiaAdminService
                     Nombre = tipologia.Nombre,
                     Version = tipologia.Version,
                     ConfiguracionJson = tipologia.ConfiguracionJson ?? string.Empty,
-                    Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                    Usuario = "ADMIN-UI"
                 });
         }
 
@@ -65,7 +65,7 @@ public class TipologiaAdminService
                 Nombre = tipologia.Nombre,
                 Version = tipologia.Version,
                 ConfiguracionJson = tipologia.ConfiguracionJson ?? string.Empty,
-                Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                Usuario = "ADMIN-UI"
             });
     }
 
@@ -88,7 +88,7 @@ public class TipologiaAdminService
         await SendRequiredAsync<TipologiaEntity>(
             HttpMethod.Post,
             $"management/tipologias/{id}/retirar",
-            new UsuarioRequest { Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui" });
+            new UsuarioRequest { Usuario = "ADMIN-UI" });
     }
 
     public async Task PasarTipologiaADraftAsync(int id)
@@ -96,7 +96,7 @@ public class TipologiaAdminService
         await SendRequiredAsync<TipologiaEntity>(
             HttpMethod.Post,
             $"management/tipologias/{id}/draft",
-            new UsuarioRequest { Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui" });
+            new UsuarioRequest { Usuario = "ADMIN-UI" });
     }
 
     public async Task<IReadOnlyCollection<TipologiaAuditEntry>> GetTipologiaAuditAsync(int id, int take = 200)
@@ -114,27 +114,6 @@ public class TipologiaAdminService
     {
         return await GetRequiredAsync<TipologiaDiffResult>($"management/tipologias/{leftId}/diff/{rightId}")
             ?? new TipologiaDiffResult();
-    }
-
-    public async Task<byte[]> ExportTipologiaZipAsync(int id)
-    {
-        using var response = await _httpClient.GetAsync($"management/tipologias/{id}/export");
-        await EnsureSuccessAsync(response);
-        return await response.Content.ReadAsByteArrayAsync();
-    }
-
-    public async Task<TipologiaEntity> ImportTipologiaZipAsync(byte[] zipBytes, string usuario)
-    {
-        var payload = new
-        {
-            ZipBase64 = Convert.ToBase64String(zipBytes),
-            Usuario = usuario
-        };
-
-        return await SendRequiredAsync<TipologiaEntity>(
-            HttpMethod.Post,
-            "management/tipologias/import",
-            payload);
     }
 
     public async Task<IReadOnlyCollection<ModeloConfigEntity>> GetModelosByTipoAsync(TipoModelo tipo)
@@ -179,7 +158,7 @@ public class TipologiaAdminService
                     Provider = modelo.Provider,
                     ConfiguracionJson = modelo.ConfiguracionJson,
                     Activo = modelo.Activo,
-                    Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                    Usuario = "ADMIN-UI"
                 });
         }
 
@@ -193,7 +172,7 @@ public class TipologiaAdminService
                 Provider = modelo.Provider,
                 ConfiguracionJson = modelo.ConfiguracionJson,
                 Activo = modelo.Activo,
-                Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                Usuario = "ADMIN-UI"
             });
     }
 
@@ -220,7 +199,7 @@ public class TipologiaAdminService
             new PluginConfigUpsertRequest
             {
                 ConfiguracionJson = configuracionJson,
-                Usuario = "COMPLETAR_GDC_HTTP_BASIC_USERNAME-ui"
+                Usuario = "ADMIN-UI"
             });
     }
 

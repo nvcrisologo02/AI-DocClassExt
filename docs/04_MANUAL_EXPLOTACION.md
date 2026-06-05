@@ -1,7 +1,8 @@
 # 4. Manual de Explotacion — DocumentIA MVP
 
-> Ultima actualizacion: 2026-04-16  
-> Proyecto: AI DocClassExt — SAREB
+> Ultima actualizacion: 2026-06-05  
+> Proyecto: AI DocClassExt — SAREB  
+> **Nota:** Migración 20260605113924_v31_DropLegacyModelosUmbrales aplicada a schema. Ver [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md) para rollback.
 
 > Alcance de este manual: instalacion, despliegue, infraestructura y operacion tecnica del entorno.
 > Para uso funcional de APIs y configuracion de consumo, ver `docs/05_MANUAL_USO_CONFIGURACION.md`.

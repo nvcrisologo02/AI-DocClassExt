@@ -327,17 +327,17 @@ if ($sqlServer) {
     }
 
     $adAdmin = Try-AzJson -AzArgs @(
-        "sql", "server", "ad-COMPLETAR_GDC_HTTP_BASIC_USERNAME", "show",
+        "sql", "server", "ad-admin", "show",
         "--server", $SqlServerName,
         "--resource-group", $ResourceGroup,
         "-o", "json"
     )
 
     if ($adAdmin) {
-        Write-Host "Entra COMPLETAR_GDC_HTTP_BASIC_USERNAME SQL: $($adAdmin.login)"
+        Write-Host "Entra ID SQL Admin: $($adAdmin.login)"
     }
     else {
-        Write-Host "No se pudo leer Entra COMPLETAR_GDC_HTTP_BASIC_USERNAME SQL o no esta configurado."
+        Write-Host "No se pudo leer Entra ID SQL Admin o no esta configurado."
     }
 }
 else {

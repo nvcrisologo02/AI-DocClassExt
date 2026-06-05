@@ -3,6 +3,8 @@ using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Text.Json;
+using DocumentIA.Core.Configuration;
+using DocumentIA.Core.Mappers;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
@@ -86,7 +88,8 @@ public class TipologiasAdminFunctionTests : IDisposable
             _repoMock.Object,
             _auditRepoMock.Object,
             new Mock<ILogger<TipologiasAdminFunction>>().Object,
-            new MemoryCache(new MemoryCacheOptions()));
+            new MemoryCache(new MemoryCacheOptions()),
+            Mock.Of<TipologiaMapper>());
 
         var mockCtx = new Mock<FunctionContext>();
         var services = new ServiceCollection();

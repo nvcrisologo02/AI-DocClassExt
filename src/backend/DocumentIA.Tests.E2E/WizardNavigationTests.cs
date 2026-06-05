@@ -5,7 +5,7 @@ namespace DocumentIA.Tests.E2E;
 
 /// <summary>
 /// E2E tests for wizard step navigation, validation blocking, and draft persistence.
-/// Requires the COMPLETAR_GDC_HTTP_BASIC_USERNAME frontend running (see WizardE2ETestBase).
+/// Requires the Admin frontend running (see WizardE2ETestBase).
 /// </summary>
 public class WizardNavigationTests : WizardE2ETestBase
 {

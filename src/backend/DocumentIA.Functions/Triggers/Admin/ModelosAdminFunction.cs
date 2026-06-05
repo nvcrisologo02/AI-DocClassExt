@@ -80,7 +80,7 @@ public class ModelosAdminFunction
             Provider = payload.Provider.Trim(),
             Activo = payload.Activo,
             ConfiguracionJson = payload.ConfiguracionJson,
-            CreadoPor = payload.Usuario ?? "COMPLETAR_GDC_HTTP_BASIC_USERNAME",
+            CreadoPor = payload.Usuario ?? "SYSTEM",
             FechaCreacion = DateTime.UtcNow,
             FechaActualizacion = DateTime.UtcNow
         };

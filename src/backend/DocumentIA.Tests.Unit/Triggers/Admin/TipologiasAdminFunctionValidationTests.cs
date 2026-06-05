@@ -1,5 +1,6 @@
 using System.Reflection;
 using DocumentIA.Core.Configuration;
+using DocumentIA.Core.Mappers;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
@@ -182,13 +183,14 @@ public class TipologiasAdminFunctionValidationTests
             Mock.Of<ITipologiaRepository>(),
             Mock.Of<ITipologiaConfigAuditRepository>(),
             Mock.Of<ILogger<TipologiasAdminFunction>>(),
-            new MemoryCache(new MemoryCacheOptions()));
+            new MemoryCache(new MemoryCacheOptions()),
+            Mock.Of<TipologiaMapper>());
     }
 
     private static DocumentIADbContext CreateDbContext()
     {
         var options = new DbContextOptionsBuilder<DocumentIADbContext>()
-            .UseInMemoryDatabase($"tipologias-COMPLETAR_GDC_HTTP_BASIC_USERNAME-validation-tests-{Guid.NewGuid()}")
+            .UseInMemoryDatabase($"tipologias-validation-tests-{Guid.NewGuid()}")
             .Options;
 
         return new DocumentIADbContext(options);

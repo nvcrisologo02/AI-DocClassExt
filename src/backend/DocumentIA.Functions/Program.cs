@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Services;
+using DocumentIA.Core.Mappers;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Mocks;
 using DocumentIA.Plugins.Integration;
@@ -24,6 +25,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
+using DocumentIA.Functions.Services.Abstractions;
 
 var jsonOpts = new JsonSerializerOptions
 {
@@ -149,11 +151,17 @@ var host = new HostBuilder()
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
         services.AddSingleton<AzureDocumentIntelligenceExtraerDataProvider>();
-        services.AddSingleton<GptFallbackExtraerDataProvider>();
-        services.AddSingleton<GptDirectExtraerDataProvider>();
+        
+        // Extracción GPT services
+        services.AddScoped<IGptPromptBuilder, GptPromptBuilder>();
+        services.AddScoped<IGptJsonResponseParser, GptJsonResponseParser>();
+        services.AddScoped<IOpenAiClientFactory, OpenAiClientFactory>();
+        
+        services.AddScoped<GptFallbackExtraerDataProvider>();
+        services.AddScoped<GptDirectExtraerDataProvider>();
         services.AddSingleton<IPromptDataProvider, OpenAIPromptDataProvider>();
         services.AddSingleton<ContentUnderstandingResultMapper>();
-        services.AddSingleton<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
+        services.AddScoped<IExtraerDataProvider, ConfigurableExtraerDataProvider>();
 
         services.AddSingleton<MockClasificarDataProvider>();
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
@@ -321,6 +329,9 @@ var host = new HostBuilder()
                 provider.GetRequiredService<IServiceScopeFactory>()));
         services.AddScoped<ISystemHealthService, SystemHealthService>();
 
+        // Tipologia caching + mapper (AB#99737, AB#99735)
+        services.AddScoped<TipologiaConfigurationCache>();
+        services.AddScoped<TipologiaMapper>();
 
     })
     .Build();

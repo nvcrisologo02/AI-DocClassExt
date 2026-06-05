@@ -1,7 +1,10 @@
 # 5. Manual de Uso y Configuracion — DocumentIA MVP
 
-> Ultima actualizacion: 2026-05-26  
-> Proyecto: AI DocClassExt — SAREB
+> Ultima actualizacion: 2026-06-05  
+> Proyecto: AI DocClassExt — SAREB  
+> **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. 
+> - Para cambios en v1.4-v1.5, ver [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md).
+> - **Fase 3.1 (2026-06-05):** 4 columnas legacy removidas. ConfiguracionJson es única fuente de verdad. Ver [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md).
 
 > Alcance de este manual:
 > - Parte A (usuario final): guia practica de uso, no tecnica.
@@ -1359,10 +1362,10 @@ R: Los campos solicitados (`camposSolicitados`) no existen como columnas en `DM_
 
 ## 5.9 Aplicacion de Administracion (Admin Blazor)
 
-La aplicacion de COMPLETAR_GDC_HTTP_BASIC_USERNAMEistracion `DocumentIA.Admin` es una web Blazor Server accesible en produccion en la URL:
+La aplicacion de Administracion `DocumentIA.Admin` es una web Blazor Server accesible en produccion en la URL:
 
 ```
-https://srbwebCOMPLETAR_GDC_HTTP_BASIC_USERNAMEprodocai.azurewebsites.net
+https://srbwebadminprodocai.azurewebsites.net
 ```
 
 En desarrollo local se levanta con:

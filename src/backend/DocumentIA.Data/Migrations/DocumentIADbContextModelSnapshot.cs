@@ -11744,9 +11744,6 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
-                    b.Property<string>("PromptGPT")
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<DateTime?>("PublicadaEn")
                         .HasColumnType("datetime2");
 
@@ -11783,9 +11780,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 6, 2, 18, 31, 49, 961, DateTimeKind.Utc).AddTicks(360),
+                            FechaCreacion = new DateTime(2026, 6, 5, 11, 39, 19, 802, DateTimeKind.Utc).AddTicks(2796),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 6, 2, 18, 31, 49, 961, DateTimeKind.Utc).AddTicks(356),
+                            PublicadaEn = new DateTime(2026, 6, 5, 11, 39, 19, 802, DateTimeKind.Utc).AddTicks(2646),
                             PublicadaPor = "seed",
                             UmbralClasificacion = 0.84999999999999998,
                             UmbralExtraccion = 0.80000000000000004,

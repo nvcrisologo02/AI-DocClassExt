@@ -30,7 +30,7 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 | Almacenamiento blob | Azure Blob Storage (Azurite en local) |
 | Gestor documental | GDC SINTWS (SOAP, srbwidd03.sareb.srb:8090) |
 | Frontend operativo | WPF .NET 8 (MVVM, RestSharp) |
-| Frontend COMPLETAR_GDC_HTTP_BASIC_USERNAME | Blazor Server .NET 8 |
+| Frontend Admin | Blazor Server .NET 8 |
 | CI/CD | Azure DevOps Pipelines (self-hosted agent) |
 | Observabilidad | Application Insights + Log Analytics |
 
@@ -379,11 +379,11 @@ flowchart TB
         APPINS["srbappiprodocai<br/>Application Insights"]
         LAW["srblawprodocai<br/>Log Analytics Workspace"]
         DI_PROD["srbdiprodocai<br/>Document Intelligence"]
-        OAI["srboaiprodocai<br/>Azure OpenAI<br/>gpt-4o-mini"]
     end
 
-    subgraph SwedenCentral["Sweden Central"]
-        CU_PROD["Azure AI Foundry<br/>Content Understanding<br/>upe48-mm2avmdm"]
+    subgraph SwedenCentral["Sweden Central — PRIMARY AI"]
+        CU_PROD["Azure AI Foundry<br/>Content Understanding<br/>upe48-mm2avmdm<br/>(Extraction + Prompt)"]
+        OAI["Azure OpenAI<br/>gpt-4o-mini<br/>(Fallback)"]
     end
 
     subgraph OnPrem["Infraestructura SAREB"]

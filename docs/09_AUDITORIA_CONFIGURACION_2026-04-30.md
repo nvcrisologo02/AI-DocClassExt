@@ -46,7 +46,7 @@ La auditoria original se ejecuto en modo lectura. Este documento no aplica cambi
 | Storage Functions | `srbstgproapppdocai` | Public network enabled, default action allow |
 | Application Insights | `srbappiprodocai` | Existente |
 | Document Intelligence | `srbdiprodocai` | S0, public access enabled |
-| OpenAI / AI Services | `srboaiprodocai`, `upe48-mm2avmdm-swedencentral` | S0, public access enabled |
+| OpenAI / AI Services | `upe48-mm2avmdm-swedencentral` (PRIMARY) | S0, public access enabled |
 
 ### CI/CD
 

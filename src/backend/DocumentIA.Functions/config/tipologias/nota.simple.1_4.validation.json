@@ -462,7 +462,7 @@
       "name": "TituloAdquisicion",
       "type": "string",
       "required": false,
-      "description": "T\u00EDtulo o causa jur\u00EDdica de adquisici\u00F3n del inmueble de una nota simple espa\u00F1ola. La informaci\u00F3n suele encontrarse en el bloque de TITULARIDAD, INSCRIPCI\u00D3N o HISTORIA REGISTRAL. Identificar el acto jur\u00EDdico principal por el cual el titular actual adquiere el dominio, interpretando el texto de forma sem\u00E1ntica y contextual, no solo por coincidencia literal de palabras. Normalizar el resultado a: Compraventa, Herencia, Adjudicacion, Dacion, Donacion, Otros. Criterios de ejemplo: Compraventa \u2192 transmisiones onerosas entre vivos (compraventa, permuta, liquidaciones onerosas, transmisiones por precio); Herencia \u2192 adquisiciones mortis causa (herencia, legado, sucesi\u00F3n, testamento); Adjudicacion \u2192 adquisiciones por resoluci\u00F3n judicial o COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrativa (subasta, ejecuci\u00F3n, remate); Dacion \u2192 transmisi\u00F3n en pago de deuda; Donacion \u2192 transmisi\u00F3n gratuita entre vivos. Si existen varios actos, seleccionar el que origine la adquisici\u00F3n del dominio actual. Si no puede determinarse o no encaja, devolver \u0027Otros\u0027.",
+      "description": "T\u00EDtulo o causa jur\u00EDdica de adquisici\u00F3n del inmueble de una nota simple espa\u00F1ola. La informaci\u00F3n suele encontrarse en el bloque de TITULARIDAD, INSCRIPCI\u00D3N o HISTORIA REGISTRAL. Identificar el acto jur\u00EDdico principal por el cual el titular actual adquiere el dominio, interpretando el texto de forma sem\u00E1ntica y contextual, no solo por coincidencia literal de palabras. Normalizar el resultado a: Compraventa, Herencia, Adjudicacion, Dacion, Donacion, Otros. Criterios de ejemplo: Compraventa \u2192 transmisiones onerosas entre vivos (compraventa, permuta, liquidaciones onerosas, transmisiones por precio); Herencia \u2192 adquisiciones mortis causa (herencia, legado, sucesi\u00F3n, testamento); Adjudicacion \u2192 adquisiciones por resoluci\u00F3n judicial o administrativa (subasta, ejecuci\u00F3n, remate); Dacion \u2192 transmisi\u00F3n en pago de deuda; Donacion \u2192 transmisi\u00F3n gratuita entre vivos. Si existen varios actos, seleccionar el que origine la adquisici\u00F3n del dominio actual. Si no puede determinarse o no encaja, devolver \u0027Otros\u0027.",
       "rules": [
         {
           "ruleType": "enum",
@@ -621,7 +621,7 @@
       "name": "LimitacionesAdministrativas",
       "type": "string",
       "required": false,
-      "description": "Texto que recoge limitaciones o restricciones impuestas por COMPLETAR_GDC_HTTP_BASIC_USERNAMEistraciones p\u00FAblicas sobre el inmueble, distintas de las cargas registrales (p.ej. limitaciones urban\u00EDsticas, declaraciones de bien de inter\u00E9s cultural, afecciones de dominio p\u00FAblico, limitaciones de uso). Extraer el texto literal. M\u00E1ximo 300 caracteres. Si no constan, omitir el campo.",
+      \"description\": \"Texto que recoge limitaciones o restricciones impuestas por administraciones p\u00FAblicas sobre el inmueble, distintas de las cargas registrales (p.ej. limitaciones urban\u00EDsticas, declaraciones de bien de inter\u00E9s cultural, afecciones de dominio p\u00FAblico, limitaciones de uso). Extraer el texto literal. M\u00E1ximo 300 caracteres. Si no constan, omitir el campo.\",
       "rules": [
         {
           "ruleType": "maxLength",

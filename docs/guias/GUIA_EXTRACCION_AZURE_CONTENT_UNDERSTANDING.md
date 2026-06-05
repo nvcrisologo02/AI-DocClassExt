@@ -326,7 +326,7 @@ Añadir en **Configuración > Variables de entorno** (o mediante Bicep/Terraform
 
 Usar **Managed Identity** para evitar gestionar API keys:
 
-1. Activar la **identidad COMPLETAR_GDC_HTTP_BASIC_USERNAMEistrada asignada por el sistema** en la Function App.
+1. Activar la **identidad administrada asignada por el sistema** en la Function App.
 2. Asignar el rol **Cognitive Services User** a esa identidad en el recurso de Azure AI Services.
 3. Configurar `AuthMode=DefaultAzureCredential`.
 
