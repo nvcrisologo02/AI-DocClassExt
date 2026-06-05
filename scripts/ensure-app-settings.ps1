@@ -16,8 +16,37 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-if (-not (Get-Command az -ErrorActionSilentlyContinue)) {
-    throw 'Azure CLI (az) no esta instalado o no esta en PATH.'
+# Comprobar disponibilidad de Azure CLI de forma robusta
+try {
+    $azCmds = Get-Command -Name az -ErrorAction SilentlyContinue
+}
+catch {
+    # En algunos entornos Get-Command puede fallar; dejamos que la comprobación por invocación actúe como fallback
+    $azCmds = $null
+}
+
+if (-not $azCmds) {
+    try {
+        & az --version > $null 2>&1
+        if ($LASTEXITCODE -ne 0) { throw }
+    }
+    catch {
+        throw 'Azure CLI (az) no esta instalado o no esta en PATH.'
+    }
+}
+
+# Validar parámetros obligatorios con mensajes claros para fallos en CI
+if ([string]::IsNullOrWhiteSpace($ResourceGroup)) {
+    throw 'Parametro obligatorio "-ResourceGroup" vacio o no establecido. Revisa la variable de pipeline $(AZURE_RESOURCE_GROUP).'
+}
+
+if ([string]::IsNullOrWhiteSpace($Name)) {
+    throw 'Parametro obligatorio "-Name" vacio o no establecido. Revisa la variable de pipeline correspondiente (p.ej. $(AZURE_FUNCTIONS_APP_NAME)).'
+}
+
+if (-not $Settings -or $Settings.Count -eq 0) {
+    Write-Host "[INFO] No se han pasado settings a aplicar para $Name; nada que hacer." -ForegroundColor Yellow
+    exit 0
 }
 
 function Invoke-AzJson {
