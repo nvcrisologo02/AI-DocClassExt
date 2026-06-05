@@ -40,7 +40,7 @@ public class TipologiaEntity
     public double UmbralExtraccion { get; set; } = 0.80;
 
     [Obsolete("Use ConfiguracionJson.promptConfig instead (v1.4+). Removed in v2.0.", false)]
-    [Column(TypeName = "nvarchar(max)")]
+    [NotMapped]
     public string? PromptGPT { get; set; }
 
     // Configuración JSON (campos esperados, reglas de validación, etc.)
