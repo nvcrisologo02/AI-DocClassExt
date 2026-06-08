@@ -23,6 +23,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 {
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
     private readonly ClassificationTipologiaPromptBuilder _tipologiaPromptBuilder;
+    private readonly TipologiaConfigLoader _tipologiaConfigLoader;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ClassificationRoutingSettings _routingSettings;
     private readonly PromptDefaultsSettings _promptDefaults;
@@ -33,6 +34,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     public GptClasificarDataProvider(
         ClassificationModelRegistryLoader modelRegistryLoader,
         ClassificationTipologiaPromptBuilder tipologiaPromptBuilder,
+        TipologiaConfigLoader tipologiaConfigLoader,
         IServiceScopeFactory scopeFactory,
         IOptions<ClassificationRoutingSettings> routingSettings,
         IOptions<PromptDefaultsSettings> promptDefaults,
@@ -41,6 +43,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     {
         _modelRegistryLoader = modelRegistryLoader;
         _tipologiaPromptBuilder = tipologiaPromptBuilder;
+        _tipologiaConfigLoader = tipologiaConfigLoader;
         _scopeFactory = scopeFactory;
         _routingSettings = routingSettings.Value;
         _promptDefaults = promptDefaults.Value;
@@ -277,7 +280,15 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         }
 
         var defaults = _promptDefaults.ToPromptConfig();
-        if (string.IsNullOrWhiteSpace(defaults.UserPromptTemplate))
+        var tipologiaPrompt = TryLoadTipologiaPromptConfig(input);
+        var effectivePrompt = tipologiaPrompt is null
+            ? defaults
+            : OpenAIPromptDataProvider.ResolvePromptConfig(
+                tipologiaPrompt,
+                requestPrompt: null,
+                defaultPromptConfig: defaults);
+
+        if (effectivePrompt is null || string.IsNullOrWhiteSpace(effectivePrompt.UserPromptTemplate))
         {
             return null;
         }
@@ -285,16 +296,47 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return new PromptConfig
         {
             Enabled = true,
-            ModelKey = defaults.ModelKey,
-            SystemPrompt = defaults.SystemPrompt,
+            ModelKey = effectivePrompt.ModelKey,
+            SystemPrompt = effectivePrompt.SystemPrompt,
             UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
-                defaults.UserPromptTemplate,
+                effectivePrompt.UserPromptTemplate,
                 contextoTexto ?? string.Empty,
                 input.DatosNormalizados),
-            MaxTokens = defaults.MaxTokens,
-            Temperature = defaults.Temperature,
-            ContentMode = defaults.ContentMode
+            MaxTokens = effectivePrompt.MaxTokens,
+            Temperature = effectivePrompt.Temperature,
+            ContentMode = effectivePrompt.ContentMode
         };
+    }
+
+    private PromptConfig? TryLoadTipologiaPromptConfig(ClasificacionInput input)
+    {
+        var tipologiaHint = input.Entrada.Instrucciones.ExpectedType;
+        if (string.IsNullOrWhiteSpace(tipologiaHint))
+        {
+            return null;
+        }
+
+        try
+        {
+            var tipologiaConfig = _tipologiaConfigLoader.LoadConfig(tipologiaHint.Trim());
+            return tipologiaConfig.PromptConfig;
+        }
+        catch (FileNotFoundException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "No se encontró configuración publicada para tipología {Tipologia}. Se usarán PromptDefaults para resumen.",
+                tipologiaHint);
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Error cargando PromptConfig de tipología {Tipologia}. Se usarán PromptDefaults para resumen.",
+                tipologiaHint);
+            return null;
+        }
     }
 
     private async Task<string> CompleteChatAsync(

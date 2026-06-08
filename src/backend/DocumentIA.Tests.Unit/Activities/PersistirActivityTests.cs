@@ -4,9 +4,8 @@ using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Activities;
+using DocumentIA.Functions.Services.Abstractions;
 using FluentAssertions;
-using Microsoft.ApplicationInsights;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -19,6 +18,7 @@ public class PersistirActivityTests : IDisposable
     private readonly Mock<IDocumentoRepository> _documentoRepoMock;
     private readonly Mock<IDocumentoEjecucionRepository> _ejecucionRepoMock;
     private readonly Mock<IAuditoriaRepository> _auditoriaRepoMock;
+    private readonly Mock<ITelemetryService> _telemetryServiceMock;
     private readonly DocumentIADbContext _context;
     private readonly IConfiguration _configuration;
     private readonly PersistirActivity _sut;
@@ -28,13 +28,13 @@ public class PersistirActivityTests : IDisposable
         _documentoRepoMock = new Mock<IDocumentoRepository>();
         _ejecucionRepoMock = new Mock<IDocumentoEjecucionRepository>();
         _auditoriaRepoMock = new Mock<IAuditoriaRepository>();
+        _telemetryServiceMock = new Mock<ITelemetryService>();
 
         var options = new DbContextOptionsBuilder<DocumentIADbContext>()
             .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
             .Options;
         _context = new DocumentIADbContext(options);
 
-        var telemetryClient = new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true });
         _configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
@@ -48,7 +48,7 @@ public class PersistirActivityTests : IDisposable
             _ejecucionRepoMock.Object,
             _auditoriaRepoMock.Object,
             _context,
-            telemetryClient,
+            _telemetryServiceMock.Object,
             _configuration);
     }
 
@@ -308,6 +308,110 @@ public class PersistirActivityTests : IDisposable
 
         documentoCapturado.Should().NotBeNull();
         documentoCapturado!.FechaExpiracionBlob.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Run_EmiteTelemetria_TrackEventDocumentProcessed()
+    {
+        const string sha256 = "sha256_telemetry_event";
+        var salida = BuildSalidaMinima(sha256);
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) =>
+            {
+                d.Id = 500;
+                return d;
+            });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(salida);
+
+        _telemetryServiceMock.Verify(t => t.TrackEvent(
+            "DocumentProcessed",
+            It.Is<IDictionary<string, string>>(d =>
+                d.ContainsKey("Tipologia") &&
+                d.ContainsKey("EstadoFinal") &&
+                d.ContainsKey("UseFallbackLLM") &&
+                d.ContainsKey("NombreDocumento") &&
+                d.ContainsKey("EjecucionGuid"))), Times.Once);
+    }
+
+    [Fact]
+    public async Task Run_EmiteTelemetria_TrackMetricPorActividad()
+    {
+        const string sha256 = "sha256_telemetry_metric";
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Seguimiento = new SeguimientoOrquestacion
+        {
+            DuracionTotalMs = 1200
+        };
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) =>
+            {
+                d.Id = 501;
+                return d;
+            });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(salida);
+
+        _telemetryServiceMock.Verify(t => t.TrackMetric(
+            "DocumentIA.Duracion.Total",
+            It.IsAny<double>(),
+            It.Is<IDictionary<string, string>>(d => d.ContainsKey("Tipologia"))), Times.Once);
+    }
+
+    [Fact]
+    public async Task Run_TelemetriaFalla_NoBloqueaFlujo()
+    {
+        const string sha256 = "sha256_telemetry_fails";
+        var salida = BuildSalidaMinima(sha256);
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) =>
+            {
+                d.Id = 502;
+                return d;
+            });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        _telemetryServiceMock
+            .Setup(t => t.TrackEvent(It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
+            .Throws(new InvalidOperationException("telemetry down"));
+
+        var act = async () => await _sut.Run(salida);
+
+        await act.Should().NotThrowAsync();
+        _ejecucionRepoMock.Verify(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()), Times.Once);
+        _auditoriaRepoMock.Verify(r => r.AddAsync(It.IsAny<AuditoriaEntity>()), Times.Once);
     }
 
     public void Dispose()

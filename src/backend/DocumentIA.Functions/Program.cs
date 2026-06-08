@@ -84,6 +84,7 @@ var host = new HostBuilder()
         // Application Insights
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
+        services.AddSingleton<ITelemetryService, ApplicationInsightsTelemetryService>();
 
         // Database Context
         services.AddDbContext<DocumentIADbContext>(options =>

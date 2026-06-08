@@ -18,11 +18,18 @@ namespace DocumentIA.Core.Mappers;
 /// </summary>
 public class TipologiaMapper
 {
-    private readonly ILogger<TipologiaMapper> _logger;
+    private readonly ILogger<TipologiaMapper>? _logger;
 
+    /// <summary>Constructor para inyección de dependencias (producción).</summary>
     public TipologiaMapper(ILogger<TipologiaMapper> logger)
     {
         _logger = logger;
+    }
+
+    /// <summary>Constructor por defecto (usado por Moq/Castle en tests).</summary>
+    public TipologiaMapper()
+    {
+        _logger = null;
     }
 
     /// <summary>
@@ -55,7 +62,7 @@ public class TipologiaMapper
     public TipologiaResponseDtoLegacy ToResponseDtoLegacy(
         DocumentIA.Data.Entities.TipologiaEntity entity)
     {
-        _logger.LogWarning(
+        _logger?.LogWarning(
             "Legacy response format requested for tipologia {Codigo}. " +
             "Deprecated fields: PromptGPT, ModeloClasificacionDI, etc. " +
             "Client should migrate to v1.4+ format.",
@@ -102,7 +109,7 @@ public class TipologiaMapper
             
             if (hasLegacyFields)
             {
-                _logger.LogWarning(
+                _logger?.LogWarning(
                     "Request for tipologia {Codigo} includes deprecated fields (PromptGPT, Modelo*, Umbral*). " +
                     "These are ignored in favor of ConfiguracionJson. Client should remove legacy fields.",
                     entity.Codigo
@@ -116,7 +123,7 @@ public class TipologiaMapper
         #pragma warning restore CS0618 // Type or member is obsolete
         {
             // If NO ConfiguracionJson provided, create minimal JSON to avoid losing data
-            _logger.LogWarning(
+            _logger?.LogWarning(
                 "Request for tipologia {Codigo} has NO ConfiguracionJson. " +
                 "Creating minimal config. Please provide ConfiguracionJson in future requests.",
                 entity.Codigo

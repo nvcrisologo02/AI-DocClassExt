@@ -508,6 +508,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 memoryCache, 
                 scopeFactory,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<ClassificationTipologiaPromptBuilder>.Instance);
+            var tipologiaConfigLoader = new TipologiaConfigLoader(memoryCache, scopeFactory);
             var promptTraceTelemetry = new PromptTraceTelemetryService(
                 new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }),
                 Options.Create(new PromptTracingSettings { Enabled = false }),
@@ -516,6 +517,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             return new GptClasificarDataProvider(
                 loader,
                 promptBuilder,
+                tipologiaConfigLoader,
                 scopeFactory,
                 Options.Create(new ClassificationRoutingSettings()),
                 Options.Create(new PromptDefaultsSettings()),
@@ -848,6 +850,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 memoryCache, 
                 scopeFactory,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<ClassificationTipologiaPromptBuilder>.Instance);
+            var tipologiaConfigLoader = new TipologiaConfigLoader(memoryCache, scopeFactory);
             var promptTraceTelemetry = new PromptTraceTelemetryService(
                 new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }),
                 Options.Create(new PromptTracingSettings { Enabled = false }),
@@ -856,6 +859,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             return new GptClasificarDataProvider(
                 loader,
                 promptBuilder,
+                tipologiaConfigLoader,
                 scopeFactory,
                 Options.Create(new ClassificationRoutingSettings()),
                 Options.Create(new PromptDefaultsSettings()),
