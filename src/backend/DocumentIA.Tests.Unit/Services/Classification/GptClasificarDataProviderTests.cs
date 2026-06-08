@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Data.Entities;
+using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Services.Classification;
@@ -31,6 +32,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
     {
         private readonly IMemoryCache _memoryCache;
         private readonly Mock<IServiceScopeFactory> _scopeFactoryMock;
+        private readonly TipologiaConfigLoader _tipologiaConfigLoader;
         private readonly Mock<ILogger<GptClasificarDataProvider>> _loggerMock;
         private readonly PromptTraceTelemetryService _promptTraceTelemetryMock;
         private readonly IOptions<ClassificationRoutingSettings> _routingSettings;
@@ -54,6 +56,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 promptTraceTelemetryLogger.Object);
 
             _routingSettings = Options.Create(new ClassificationRoutingSettings());
+            _tipologiaConfigLoader = new TipologiaConfigLoader(_memoryCache, _scopeFactoryMock.Object);
             
             _promptDefaults = Options.Create(new PromptDefaultsSettings
             {
@@ -104,6 +107,7 @@ Contenido del documento:
             _provider = new GptClasificarDataProvider(
                 modelRegistryLoader,
                 tipologiaPromptBuilder,
+                _tipologiaConfigLoader,
                 _scopeFactoryMock.Object,
                 _routingSettings,
                 _promptDefaults,
@@ -146,6 +150,7 @@ Contenido del documento:
                     _memoryCache,
                     _scopeFactoryMock.Object,
                     new Mock<ILogger<ClassificationTipologiaPromptBuilder>>().Object),
+                _tipologiaConfigLoader,
                 _scopeFactoryMock.Object,
                 _routingSettings,
                 promptDefaultsEmpty,
@@ -227,6 +232,7 @@ Contenido del documento:
                     _memoryCache,
                     _scopeFactoryMock.Object,
                     new Mock<ILogger<ClassificationTipologiaPromptBuilder>>().Object),
+                _tipologiaConfigLoader,
                 _scopeFactoryMock.Object,
                 _routingSettings,
                 customDefaults,
@@ -246,6 +252,68 @@ Contenido del documento:
             result.MaxTokens.Should().Be(2000);
             result.Temperature.Should().Be(0.5);
             result.ContentMode.Should().Be("vision");
+        }
+
+        [Fact]
+        public void ResolveResumenPrompt_WhenTipologiaPromptExists_UsesTipologiaOverrideOverDefaults()
+        {
+            var tipologiaCodigo = "ESCR-06";
+            var tipologiaJson = """
+{
+  "tipologiaId": "ESCR-06",
+  "tipologiaNombre": "Escritura",
+  "version": "1.0",
+  "promptConfig": {
+    "enabled": true,
+    "modelKey": "tipologia.gpt4o-mini",
+    "systemPrompt": "System tipologia",
+    "userPromptTemplate": "Plantilla tipologia:\n{contenido}",
+    "maxTokens": 999,
+    "temperature": 0.25,
+    "contentMode": "markdown"
+  },
+  "fields": []
+}
+""";
+
+            var repoMock = new Mock<ITipologiaRepository>();
+            repoMock
+                .Setup(r => r.GetByCodigoAsync(tipologiaCodigo))
+                .ReturnsAsync(new TipologiaEntity
+                {
+                    Codigo = tipologiaCodigo,
+                    Nombre = "Escritura",
+                    Activa = true,
+                    Estado = EstadoTipologia.Published,
+                    ConfiguracionJson = tipologiaJson
+                });
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            serviceProviderMock
+                .Setup(sp => sp.GetService(typeof(ITipologiaRepository)))
+                .Returns(repoMock.Object);
+
+            var scopeMock = new Mock<IServiceScope>();
+            scopeMock
+                .SetupGet(s => s.ServiceProvider)
+                .Returns(serviceProviderMock.Object);
+
+            _scopeFactoryMock
+                .Setup(sf => sf.CreateScope())
+                .Returns(scopeMock.Object);
+
+            var input = CreateClasificacionInput(generarResumenPorDefecto: true);
+            input.Entrada.Instrucciones.ExpectedType = tipologiaCodigo;
+
+            var result = InvokeResolveResumenPrompt(input, "CONTENIDO_DOC");
+
+            result.Should().NotBeNull();
+            result!.ModelKey.Should().Be("tipologia.gpt4o-mini");
+            result.SystemPrompt.Should().Be("System tipologia");
+            result.MaxTokens.Should().Be(999);
+            result.Temperature.Should().Be(0.25);
+            result.UserPromptTemplate.Should().Contain("Plantilla tipologia");
+            result.UserPromptTemplate.Should().Contain("CONTENIDO_DOC");
         }
 
         // ========== Helper Methods ==========
