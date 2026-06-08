@@ -1,6 +1,6 @@
 # 1. Arquitectura del Sistema — DocumentIA MVP
 
-> Ultima actualizacion: 2026-06-08 (Upgrade .NET 8→9 Isolated)  
+> Ultima actualizacion: 2026-06-08 (Upgrade .NET 9→10 Isolated - Extended Support)  
 > Proyecto: AI DocClassExt — SAREB  
 > Repositorio: Azure DevOps `sareb.visualstudio.com/AI%20DocClassExt`
 
@@ -21,8 +21,8 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 
 | Capa | Tecnologia |
 |------|-----------|
-| Runtime | .NET 9 Isolated Worker |
-| Orquestacion | Azure Durable Functions v4 (soportado hasta 2028) |
+| Runtime | .NET 10 Isolated Worker |
+| Orquestacion | Azure Durable Functions v4 (soportado hasta 2027) |
 | Clasificacion IA | Azure AI Document Intelligence (custom classifier) |
 | Extraccion IA | Azure Content Understanding + Azure DI (custom models) |
 | LLM (fallback + prompt) | Azure OpenAI GPT-4o-mini |
@@ -31,7 +31,7 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 | Gestor documental | GDC SINTWS (SOAP, srbwidd03.sareb.srb:8090) |
 | Frontend operativo | WPF .NET 8 (MVVM, RestSharp) |
 | Frontend Admin | Blazor Server .NET 8 | 
-| **Backend Status** | ✅ Upgraded to .NET 9 (Jun 2026) |
+| **Backend Status** | ✅ Upgraded to .NET 10 Isolated (Jun 2026) |
 | CI/CD | Azure DevOps Pipelines (self-hosted agent) |
 | Observabilidad | Application Insights + Log Analytics |
 
@@ -123,7 +123,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph Backend
-        FUNC["DocumentIA.Functions<br/>.NET 9 Isolated<br/>Azure Functions v4"]
+        FUNC["DocumentIA.Functions<br/>.NET 10 Isolated<br/>Azure Functions v4"]
         CORE["DocumentIA.Core<br/>.NET 8 Library"]
         DATA["DocumentIA.Data<br/>.NET 8 Library<br/>EF Core 8"]
         PLUGINS["DocumentIA.Plugins<br/>.NET 8 Library"]
@@ -441,7 +441,7 @@ flowchart TB
     ADMIN_USER["fa:fa-user-cog Administrador"]
 
     subgraph DocumentIA["DocumentIA MVP"]
-        FUNCAPP["Azure Functions<br/>.NET 9 Isolated<br/>Durable Orchestrator<br/>+ 17 Activities<br/>+ HTTP Triggers (Ingest + Healthcheck)"]
+        FUNCAPP["Azure Functions<br/>.NET 10 Isolated<br/>Durable Orchestrator<br/>+ 17 Activities<br/>+ HTTP Triggers (Ingest + Healthcheck)"]
         SQLDB["SQL Server 2022<br/>DocumentIA DB<br/>9 tablas EF Core"]
         BLOBST["Azure Blob Storage<br/>Contenedor: documents<br/>PDFs originales"]
         DESKTOP_APP["DocumentIA Desktop<br/>WPF .NET 8<br/>MVVM + RestSharp"]
