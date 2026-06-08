@@ -1,6 +1,6 @@
 # 1. Arquitectura del Sistema — DocumentIA MVP
 
-> Ultima actualizacion: 2026-03-31  
+> Ultima actualizacion: 2026-06-08 (Upgrade .NET 8→9 Isolated)  
 > Proyecto: AI DocClassExt — SAREB  
 > Repositorio: Azure DevOps `sareb.visualstudio.com/AI%20DocClassExt`
 
@@ -21,8 +21,8 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 
 | Capa | Tecnologia |
 |------|-----------|
-| Runtime | .NET 8 Isolated Worker |
-| Orquestacion | Azure Durable Functions v4 |
+| Runtime | .NET 9 Isolated Worker |
+| Orquestacion | Azure Durable Functions v4 (soportado hasta 2028) |
 | Clasificacion IA | Azure AI Document Intelligence (custom classifier) |
 | Extraccion IA | Azure Content Understanding + Azure DI (custom models) |
 | LLM (fallback + prompt) | Azure OpenAI GPT-4o-mini |
@@ -30,7 +30,8 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 | Almacenamiento blob | Azure Blob Storage (Azurite en local) |
 | Gestor documental | GDC SINTWS (SOAP, srbwidd03.sareb.srb:8090) |
 | Frontend operativo | WPF .NET 8 (MVVM, RestSharp) |
-| Frontend Admin | Blazor Server .NET 8 |
+| Frontend Admin | Blazor Server .NET 8 | 
+| **Backend Status** | ✅ Upgraded to .NET 9 (Jun 2026) |
 | CI/CD | Azure DevOps Pipelines (self-hosted agent) |
 | Observabilidad | Application Insights + Log Analytics |
 
@@ -42,7 +43,7 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 flowchart TB
     subgraph Clientes
         DESKTOP["DocumentIA Desktop<br/>(WPF .NET 8)"]
-        ADMIN["DocumentIA Admin<br/>(Blazor Server)"]
+        ADMIN["DocumentIA Admin<br/>(Blazor Server .NET 8)"]
         API_EXT["Sistema Cliente API<br/>(externo)"]
     end
 
@@ -122,7 +123,7 @@ flowchart TB
 ```mermaid
 flowchart LR
     subgraph Backend
-        FUNC["DocumentIA.Functions<br/>.NET 8 Isolated<br/>Azure Functions v4"]
+        FUNC["DocumentIA.Functions<br/>.NET 9 Isolated<br/>Azure Functions v4"]
         CORE["DocumentIA.Core<br/>.NET 8 Library"]
         DATA["DocumentIA.Data<br/>.NET 8 Library<br/>EF Core 8"]
         PLUGINS["DocumentIA.Plugins<br/>.NET 8 Library"]
@@ -131,11 +132,11 @@ flowchart LR
 
     subgraph Frontend
         DESKTOP["DocumentIA.Desktop<br/>WPF .NET 8"]
-        ADMIN_FE["DocumentIA.Admin<br/>Blazor Server .NET 8"]
+        ADMIN_FE["DocumentIA.Admin<br/>Blazor Server .NET 8 | (✅ EF Core 8)"]
     end
 
     subgraph Enrichments
-        SAREB_ENR["SarebEnrichments<br/>.NET 8 DLL<br/>(CustomPlugin)"]
+        SAREB_ENR["SarebEnrichments<br/>.NET 8 DLL<br/>(CustomPlugin | compat .NET 9)"]
         ACTIVO_ENR["ActivoEnrichment<br/>(Python REST)"]
     end
 
@@ -440,7 +441,7 @@ flowchart TB
     ADMIN_USER["fa:fa-user-cog Administrador"]
 
     subgraph DocumentIA["DocumentIA MVP"]
-        FUNCAPP["Azure Functions<br/>.NET 8 Isolated<br/>Durable Orchestrator<br/>+ 17 Activities<br/>+ HTTP Triggers (Ingest + Healthcheck)"]
+        FUNCAPP["Azure Functions<br/>.NET 9 Isolated<br/>Durable Orchestrator<br/>+ 17 Activities<br/>+ HTTP Triggers (Ingest + Healthcheck)"]
         SQLDB["SQL Server 2022<br/>DocumentIA DB<br/>9 tablas EF Core"]
         BLOBST["Azure Blob Storage<br/>Contenedor: documents<br/>PDFs originales"]
         DESKTOP_APP["DocumentIA Desktop<br/>WPF .NET 8<br/>MVVM + RestSharp"]
