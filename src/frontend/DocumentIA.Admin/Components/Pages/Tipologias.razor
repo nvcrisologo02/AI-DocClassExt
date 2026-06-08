@@ -7,6 +7,13 @@
 
 <h1>Tipologías</h1>
 
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <label class="form-label">Buscar</label>
+        <InputText class="form-control" @bind-Value="_searchTerm" placeholder="Código, Nombre..." />
+    </div>
+</div>
+
 <p>
     <button class="btn btn-primary" @onclick="CreateTipologia">Nueva tipología</button>
 </p>
@@ -20,16 +27,16 @@ else
     <table class="table table-striped">
         <thead>
             <tr>
-                <th>Codigo</th>
-                <th>Nombre</th>
-                <th>Version</th>
-                <th>Estado</th>
-                <th>Actualizado</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Codigo"))">Codigo @SortIndicator("Codigo")</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Nombre"))">Nombre @SortIndicator("Nombre")</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Version"))">Version @SortIndicator("Version")</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Estado"))">Estado @SortIndicator("Estado")</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("FechaActualizacion"))">Actualizado @SortIndicator("FechaActualizacion")</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var tipologia in _tipologias)
+            @foreach (var tipologia in GetFilteredAndSortedTipologias())
             {
                 <tr>
                     <td>@tipologia.Codigo</td>
@@ -56,6 +63,9 @@ else
 
 @code {
     private bool _loading = true;
+    private string _searchTerm = string.Empty;
+    private string _sortColumn = "Codigo";
+    private bool _sortAscending = true;
     private IReadOnlyCollection<TipologiaEntity> _tipologias = Array.Empty<TipologiaEntity>();
 
     protected override async Task OnInitializedAsync()
@@ -67,5 +77,51 @@ else
     private void CreateTipologia()
     {
         Navigation.NavigateTo("/tipologias/edit");
+    }
+
+    private void SortBy(string column)
+    {
+        if (_sortColumn == column)
+        {
+            _sortAscending = !_sortAscending;
+        }
+        else
+        {
+            _sortColumn = column;
+            _sortAscending = true;
+        }
+    }
+
+    private string SortIndicator(string column)
+    {
+        if (_sortColumn != column) return "";
+        return _sortAscending ? "▲" : "▼";
+    }
+
+    private IEnumerable<TipologiaEntity> GetFilteredAndSortedTipologias()
+    {
+        var query = _tipologias.AsEnumerable();
+
+        // Filtro de búsqueda
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            var searchLower = _searchTerm.ToLower();
+            query = query.Where(t =>
+                (t.Codigo?.ToLower().Contains(searchLower) ?? false) ||
+                (t.Nombre?.ToLower().Contains(searchLower) ?? false)
+            );
+        }
+
+        // Ordenamiento
+        query = _sortColumn switch
+        {
+            "Nombre" => _sortAscending ? query.OrderBy(t => t.Nombre) : query.OrderByDescending(t => t.Nombre),
+            "Version" => _sortAscending ? query.OrderBy(t => t.Version) : query.OrderByDescending(t => t.Version),
+            "Estado" => _sortAscending ? query.OrderBy(t => t.Estado) : query.OrderByDescending(t => t.Estado),
+            "FechaActualizacion" => _sortAscending ? query.OrderBy(t => t.FechaActualizacion) : query.OrderByDescending(t => t.FechaActualizacion),
+            _ => _sortAscending ? query.OrderBy(t => t.Codigo) : query.OrderByDescending(t => t.Codigo)
+        };
+
+        return query;
     }
 }

@@ -6,6 +6,13 @@
 
 <h1>Catálogo TDN1</h1>
 
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <label class="form-label">Buscar</label>
+        <InputText class="form-control" @bind-Value="_searchTerm" placeholder="Código, Nombre..." />
+    </div>
+</div>
+
 <p>
     <button class="btn btn-primary" @onclick="CreateItem">Nuevo TDN1</button>
 </p>
@@ -24,14 +31,14 @@ else
     <table class="table table-striped">
         <thead>
             <tr>
-                <th>Código</th>
-                <th>Nombre</th>
-                <th>Subtipos</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Codigo"))">Código @SortIndicator("Codigo")</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Nombre"))">Nombre @SortIndicator("Nombre")</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Subtipos"))">Subtipos @SortIndicator("Subtipos")</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var row in _rows)
+            @foreach (var row in GetFilteredAndSortedRows())
             {
                 <tr>
                     <td>@row.Codigo</td>
@@ -51,6 +58,9 @@ else
     private bool _loading = true;
     private bool _error;
     private string? _message;
+    private string _searchTerm = string.Empty;
+    private string _sortColumn = "Codigo";
+    private bool _sortAscending = true;
     private IReadOnlyCollection<CatalogoTdn1Item> _rows = Array.Empty<CatalogoTdn1Item>();
 
     protected override async Task OnInitializedAsync()
@@ -88,5 +98,49 @@ else
             _error = true;
             _message = ex.Message;
         }
+    }
+
+    private void SortBy(string column)
+    {
+        if (_sortColumn == column)
+        {
+            _sortAscending = !_sortAscending;
+        }
+        else
+        {
+            _sortColumn = column;
+            _sortAscending = true;
+        }
+    }
+
+    private string SortIndicator(string column)
+    {
+        if (_sortColumn != column) return "";
+        return _sortAscending ? "▲" : "▼";
+    }
+
+    private IEnumerable<CatalogoTdn1Item> GetFilteredAndSortedRows()
+    {
+        var query = _rows.AsEnumerable();
+
+        // Filtro de búsqueda
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            var searchLower = _searchTerm.ToLower();
+            query = query.Where(r =>
+                (r.Codigo?.ToLower().Contains(searchLower) ?? false) ||
+                (r.Nombre?.ToLower().Contains(searchLower) ?? false)
+            );
+        }
+
+        // Ordenamiento
+        query = _sortColumn switch
+        {
+            "Nombre" => _sortAscending ? query.OrderBy(r => r.Nombre) : query.OrderByDescending(r => r.Nombre),
+            "Subtipos" => _sortAscending ? query.OrderBy(r => r.Subtipos) : query.OrderByDescending(r => r.Subtipos),
+            _ => _sortAscending ? query.OrderBy(r => r.Codigo) : query.OrderByDescending(r => r.Codigo)
+        };
+
+        return query;
     }
 }

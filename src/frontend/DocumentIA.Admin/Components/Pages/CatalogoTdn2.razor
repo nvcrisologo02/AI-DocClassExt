@@ -11,6 +11,10 @@
         <label class="form-label">Filtro TDN1</label>
         <InputText class="form-control" @bind-Value="_filtroTdn1" placeholder="Ej: ESCR" />
     </div>
+    <div class="col-md-3">
+        <label class="form-label">Buscar</label>
+        <InputText class="form-control" @bind-Value="_searchTerm" placeholder="Código, Nombre..." />
+    </div>
     <div class="col-md-3 align-self-end">
         <button class="btn btn-outline-primary" @onclick="ApplyFilterAsync">Aplicar</button>
         <button class="btn btn-outline-secondary ms-2" @onclick="ClearFilterAsync">Limpiar</button>
@@ -35,14 +39,14 @@ else
     <table class="table table-striped">
         <thead>
             <tr>
-                <th>TDN1</th>
-                <th>Código</th>
-                <th>Nombre</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("CodigoTdn1"))">TDN1 @SortIndicator("CodigoTdn1")</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Codigo"))">Código @SortIndicator("Codigo")</th>
+                <th style="cursor: pointer;" @onclick="@(() => SortBy("Nombre"))">Nombre @SortIndicator("Nombre")</th>
                 <th></th>
             </tr>
         </thead>
         <tbody>
-            @foreach (var row in _rows)
+            @foreach (var row in GetFilteredAndSortedRows())
             {
                 <tr>
                     <td>@row.CodigoTdn1</td>
@@ -63,6 +67,9 @@ else
     private bool _error;
     private string? _message;
     private string _filtroTdn1 = string.Empty;
+    private string _searchTerm = string.Empty;
+    private string _sortColumn = "Codigo";
+    private bool _sortAscending = true;
     private IReadOnlyCollection<CatalogoTdn2Item> _rows = Array.Empty<CatalogoTdn2Item>();
 
     protected override async Task OnInitializedAsync()
@@ -96,6 +103,7 @@ else
     private async Task ClearFilterAsync()
     {
         _filtroTdn1 = string.Empty;
+        _searchTerm = string.Empty;
         await ReloadAsync();
     }
 
@@ -114,12 +122,56 @@ else
         try
         {
             await AdminService.DeleteCatalogoTdn2Async(id);
-            await ApplyFilterAsync();
+            await ReloadAsync();
         }
         catch (Exception ex)
         {
             _error = true;
             _message = ex.Message;
         }
+    }
+
+    private void SortBy(string column)
+    {
+        if (_sortColumn == column)
+        {
+            _sortAscending = !_sortAscending;
+        }
+        else
+        {
+            _sortColumn = column;
+            _sortAscending = true;
+        }
+    }
+
+    private string SortIndicator(string column)
+    {
+        if (_sortColumn != column) return "";
+        return _sortAscending ? "▲" : "▼";
+    }
+
+    private IEnumerable<CatalogoTdn2Item> GetFilteredAndSortedRows()
+    {
+        var query = _rows.AsEnumerable();
+
+        // Filtro de búsqueda
+        if (!string.IsNullOrWhiteSpace(_searchTerm))
+        {
+            var searchLower = _searchTerm.ToLower();
+            query = query.Where(r =>
+                (r.Codigo?.ToLower().Contains(searchLower) ?? false) ||
+                (r.Nombre?.ToLower().Contains(searchLower) ?? false)
+            );
+        }
+
+        // Ordenamiento
+        query = _sortColumn switch
+        {
+            "CodigoTdn1" => _sortAscending ? query.OrderBy(r => r.CodigoTdn1) : query.OrderByDescending(r => r.CodigoTdn1),
+            "Nombre" => _sortAscending ? query.OrderBy(r => r.Nombre) : query.OrderByDescending(r => r.Nombre),
+            _ => _sortAscending ? query.OrderBy(r => r.Codigo) : query.OrderByDescending(r => r.Codigo)
+        };
+
+        return query;
     }
 }
