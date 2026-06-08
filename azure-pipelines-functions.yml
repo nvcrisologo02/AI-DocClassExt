@@ -36,7 +36,7 @@ stages:
     - task: UseDotNet@2
       inputs:
         packageType: 'sdk'
-        version: '8.0.x'
+        version: '9.0.x'
     - script: dotnet restore src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj
       displayName: 'dotnet restore'
     - script: dotnet build src/backend/DocumentIA.Functions/DocumentIA.Functions.csproj --configuration $(buildConfiguration) --no-restore
