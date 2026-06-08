@@ -1,8 +1,9 @@
 # 4. Manual de Explotacion — DocumentIA MVP
 
-> Ultima actualizacion: 2026-06-05  
+> Ultima actualizacion: 2026-06-08  
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Migración 20260605113924_v31_DropLegacyModelosUmbrales aplicada a schema. Ver [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md) para rollback.
+> **Nota (2026-06-08):** ITelemetryService wrapper implementado para testabilidad de telemetría. Ver sección 4.9 nueva.
 
 > Alcance de este manual: instalacion, despliegue, infraestructura y operacion tecnica del entorno.
 > Para uso funcional de APIs y configuracion de consumo, ver `docs/05_MANUAL_USO_CONFIGURACION.md`.
@@ -517,7 +518,148 @@ Acceder desde Azure Portal → Application Insights → Live Metrics para monito
 
 ---
 
-## 4.9 Rotacion de Claves
+## 4.9 Arquitectura de Servicios de Telemetría (v2026-06-08)
+
+> **Nueva en v2026-06-08:** Implementación de ITelemetryService abstracción para desacoplamiento de Microsoft.ApplicationInsights.TelemetryClient (sealed class).
+
+### 4.9.1 Capas de Telemetría
+
+DocumentIA implementa dos capas de telemetría:
+
+1. **Capa de Abstracción** (`ITelemetryService`)
+   - Interfaz limpia con 2 métodos: `TrackEvent()` y `TrackMetric()`
+   - Ubicación: `src/backend/DocumentIA.Functions/Services/Abstractions/ITelemetryService.cs`
+   - Propósito: Permitir mocking en unit tests (sealed TelemetryClient no se puede mockarear)
+
+2. **Capa de Implementación** (`ApplicationInsightsTelemetryService`)
+   - Wrapper concreto que encapsula `TelemetryClient`
+   - Ubicación: `src/backend/DocumentIA.Functions/Services/ApplicationInsightsTelemetryService.cs`
+   - Propósito: Delegación directa a TelemetryClient (thin wrapper pattern)
+
+### 4.9.2 Inyección de Dependencias
+
+La registración DI está centralizada en `Program.cs` (línea 87):
+
+```csharp
+services.AddSingleton<ITelemetryService, ApplicationInsightsTelemetryService>();
+```
+
+**Patrón de consumo en Activities:**
+
+```csharp
+public class PersistirActivity
+{
+    private readonly ITelemetryService _telemetryService;  // Inyección de interfaz
+    
+    public PersistirActivity(ITelemetryService telemetryService) 
+        => _telemetryService = telemetryService;
+    
+    public async Task Execute()
+    {
+        // TrackEvent
+        _telemetryService.TrackEvent(
+            "DocumentProcessed", 
+            new Dictionary<string, string> 
+            { 
+                { "tipologia", "ACTE" },
+                { "paginas", "5" }
+            }
+        );
+        
+        // TrackMetric
+        _telemetryService.TrackMetric(
+            "DuracionPersistirMs", 
+            stopwatch.ElapsedMilliseconds,
+            new Dictionary<string, string> { { "activo_id", doc.IdActivo } }
+        );
+    }
+}
+```
+
+### 4.9.3 Testing — Mockeo de Telemetría
+
+Con ITelemetryService, el mockeo es trivial en xUnit + Moq:
+
+```csharp
+[Fact]
+public async Task Run_EmiteTelemetria_TrackEventDocumentProcessed()
+{
+    // Arrange
+    var telemetryMock = new Mock<ITelemetryService>();
+    var activity = new PersistirActivity(telemetryMock.Object, ...);
+    
+    // Act
+    await activity.Run(...)
+    
+    // Assert
+    telemetryMock.Verify(x => x.TrackEvent(
+        It.Is<string>(s => s == "DocumentProcessed"),
+        It.Is<Dictionary<string, string>>(d => d.ContainsKey("tipologia"))
+    ), Times.Once);
+}
+```
+
+**Test Suite:** `PersistirActivityTests` (11/11 PASS)
+- ✅ Verificación de TrackEvent llamadas
+- ✅ Verificación de TrackMetric con dimensions
+- ✅ Comportamiento ante errores de telemetría (no bloquean flujo principal)
+
+### 4.9.4 Métricas Clave Emitidas
+
+| Métrica | Activity | Unidad | Dimensiones | Frecuencia |
+|---------|----------|--------|------------|-----------|
+| `DocumentIA.Duracion.Total` | PersistirActivity | ms | doc_id, tipologia, actividad | Por documento |
+| `DocumentIA.Duracion.{ActivityName}` | Todas | ms | orchestration_id | Por actividad |
+| `DocumentProcessed` | PersistirActivity | evento | tipologia, paginas, origen | Por documento |
+| `ClassificationConfidence` | ClasificarActivity | % (0-100) | tipologia_tdn1, tipologia_tdn2 | Por documento |
+| `ExtractionCompleteness` | ExtraerActivity | ratio (0-1) | campo_count, campo_extraido_count | Por documento |
+| `GdcUploadDuration` | IntegrarActivity | ms | matriz, estado | Si GDC habilitado |
+| `UseFallbackLLM` | Activities | bool | proveedor_fallback, actividad | Si fallback activado |
+
+### 4.9.5 Consultas KQL para Telemetría Centralizada
+
+**Tasa de fallback en últimas 24h:**
+
+```kusto
+customEvents
+| where timestamp > ago(24h)
+| where name == "DocumentProcessed"
+| extend UseFallback = tostring(customDimensions.UseFallbackLLM)
+| summarize 
+    TotalDocs = count(),
+    FallbackDocs = sumif(1, UseFallback == "true"),
+    FallbackRate = (sumif(1, UseFallback == "true") * 100.0 / count())
+```
+
+**P95 latencia por Activity:**
+
+```kusto
+customMetrics
+| where timestamp > ago(7d)
+| where name contains "DocumentIA.Duracion"
+| summarize 
+    P50Ms = percentile(value, 50),
+    P95Ms = percentile(value, 95),
+    P99Ms = percentile(value, 99)
+| by tostring(customDimensions.activity)
+```
+
+**Distribución de confianza de clasificación:**
+
+```kusto
+customMetrics
+| where timestamp > ago(7d)
+| where name == "ClassificationConfidence"
+| summarize 
+    AvgConfidence = avg(value),
+    MinConfidence = min(value),
+    MaxConfidence = max(value)
+| by tostring(customDimensions.tipologia_tdn1)
+```
+
+---
+
+## 4.10 Rotacion de Claves
 
 ### 4.9.1 Estado Actual
 

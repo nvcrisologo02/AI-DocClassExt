@@ -17,6 +17,7 @@ using Microsoft.ApplicationInsights.DataContracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using DocumentIA.Core.Configuration;
+using DocumentIA.Functions.Services.Abstractions;
 
 namespace DocumentIA.Functions.Activities
 {
@@ -27,7 +28,7 @@ namespace DocumentIA.Functions.Activities
         private readonly IDocumentoEjecucionRepository _ejecucionRepo;
         private readonly IAuditoriaRepository _auditoriaRepo;
         private readonly DocumentIADbContext _context;
-        private readonly TelemetryClient _telemetryClient;
+        private readonly ITelemetryService _telemetryService;
         private readonly IConfiguration _configuration;
 
         public PersistirActivity(
@@ -36,7 +37,7 @@ namespace DocumentIA.Functions.Activities
             IDocumentoEjecucionRepository ejecucionRepo,
             IAuditoriaRepository auditoriaRepo,
             DocumentIADbContext context,
-            TelemetryClient telemetryClient,
+            ITelemetryService telemetryService,
             IConfiguration configuration)
         {
             _logger = logger;
@@ -44,7 +45,7 @@ namespace DocumentIA.Functions.Activities
             _ejecucionRepo = ejecucionRepo;
             _auditoriaRepo = auditoriaRepo;
             _context = context;
-            _telemetryClient = telemetryClient;
+            _telemetryService = telemetryService;
             _configuration = configuration;
         }
 
@@ -385,7 +386,7 @@ namespace DocumentIA.Functions.Activities
                     ["NombreDocumento"] = salida.Identificacion.Documento ?? string.Empty,
                     ["EjecucionGuid"]  = ejecucion.EjecucionGuid
                 };
-                _telemetryClient.TrackEvent("DocumentProcessed", properties);
+                _telemetryService.TrackEvent("DocumentProcessed", properties);
 
                 // T2 – TrackMetric duraciones por actividad
                 TrackDuracion("Total",        ejecucion.DuracionTotalMs,        ejecucion.Tipologia);
@@ -406,9 +407,13 @@ namespace DocumentIA.Functions.Activities
         private void TrackDuracion(string actividad, int? duracionMs, string? tipologia)
         {
             if (!duracionMs.HasValue) return;
-            var metric = new MetricTelemetry($"DocumentIA.Duracion.{actividad}", duracionMs.Value);
-            metric.Properties["Tipologia"] = tipologia ?? string.Empty;
-            _telemetryClient.TrackMetric(metric);
+            _telemetryService.TrackMetric(
+                $"DocumentIA.Duracion.{actividad}",
+                duracionMs.Value,
+                new Dictionary<string, string>
+                {
+                    ["Tipologia"] = tipologia ?? string.Empty
+                });
         }
 
         private static string? CompressToBase64(string? value)

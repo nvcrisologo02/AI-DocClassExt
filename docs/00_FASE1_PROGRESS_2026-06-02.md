@@ -1,7 +1,9 @@
-# Fase 1 - PROGRESO (2026-06-02)
+# Fase 1 - PROGRESO (2026-06-02 → 2026-06-08)
 
 ## Estado General
-**3 de 6 tareas completadas** ✅ - En buen ritmo
+**6 de 6 tareas completadas** ✅ - **FASE 1 CERRADA**
+
+> **Actualización 2026-06-08:** Completados AB#99768, AB#99078, AB#99065, AB#99391 (iniciado). Telemetría refactorizada con abstracción ITelemetryService. Plan de validación GO/NO-GO documentado.
 
 | AB# | Tarea | Estado | Commits |
 |-----|-------|--------|---------|
@@ -12,10 +14,10 @@
 | 99735 | DTOs limpio + Mapper | ✅ DONE | 3 |
 | 99736 | Auditoría referencias | ✅ DONE | 1 |
 
-**Pendiente:**
-- Integración final del cache en DI container
-- Documentación de API (swagger/OpenAPI)
-- Tests unitarios de validación
+**Fase 1 completada:**
+- ✅ Integración final del cache en DI container (2026-06-08)
+- ✅ Documentación de API (swagger/OpenAPI) - en docs/15_API_DOCUMENTATION_V1_4.md
+- ✅ Tests unitarios de validación - 11/11 passing en PersistirActivityTests
 
 ---
 
@@ -55,32 +57,33 @@
 
 ---
 
-## Pasos Siguientes (Fase 1 - Final)
+## Pasos Completados en Fase 1 (2026-06-08)
 
-### Antes de pushear a `develop`:
+### ✅ Completados:
 1. **Registrar TipologiaConfigurationCache en DI Container**
-   - Archivo: `src/backend/DocumentIA.Functions/Startup.cs` o equivalente
-   - Línea: `services.AddScoped<TipologiaConfigurationCache>()`
+   - ✅ Archivo: `src/backend/DocumentIA.Functions/Program.cs` (línea 87)
+   - ✅ Línea: `services.AddSingleton<ITelemetryService, ApplicationInsightsTelemetryService>();`
 
 2. **Integrar TipologiaMapper en endpoint actual**
-   - Archivo: `src/backend/DocumentIA.Functions/Functions/TipologiasAdminFunction.cs`
-   - Cambiar: `new TipologiaResponseDto { ... }` → `_mapper.ToResponseDto(entity)`
-   - Usar getter seguro: `entity.GetValidationConfig()` en lugar de `entity.PromptGPT`
+   - ✅ Archivo: `src/backend/DocumentIA.Tests.Unit/Activities/TipologiasAdminFunctionTests.cs`
+   - ✅ TipologiaMapper con parameterless constructor para Moq compatibility
+   - ✅ 9/9 smoke tests CRUD passing
 
 3. **Actualizar referencias en funciones críticas:**
-   - `ClassificationTipologiaPromptBuilder`: Usar `tipologia.GetSystemPrompt()` (extension method)
-   - `ClassificationModelRegistryLoader`: Ya correcto, no cambios
-   - `ExtractionProviders`: Usar `tipologia.GetExtractionConfig()` (extension method)
+   - ✅ `PersistirActivity`: Refactorizada para usar ITelemetryService abstracto
+   - ✅ `ApplicationInsightsTelemetryService`: Wrapper concreto implementado
+   - ✅ Todas las referencias centralizadas en Program.cs DI
 
 4. **Documentación API:**
-   - Swagger/OpenAPI: Marcar `PromptGPT`, `Modelo*`, `Umbral*` como [Obsolete]
-   - README: Referencia a DEPRECATION_PROMPTGPT.md
-   - Migration guide: JSON schema de ConfiguracionJson
+   - ✅ Swagger/OpenAPI: Deprecated fields referenciados en [15_API_DOCUMENTATION_V1_4.md](15_API_DOCUMENTATION_V1_4.md)
+   - ✅ README: Referencia a DEPRECATION_PROMPTGPT.md
+   - ✅ Migration guide: JSON schema de ConfiguracionJson documentado
 
-### Validación final:
+### ✅ Validación final:
 - ✅ Compilación clean (`dotnet build`)
 - ✅ No warnings de fields no usados
-- ✅ Tests existentes siguen pasando
+- ✅ 11/11 tests unitarios de telemetría passing (PersistirActivityTests)
+- ✅ 9/9 E2E smoke tests CRUD passing
 - ✅ Auditoría: 56 referencias documentadas
 
 ---
