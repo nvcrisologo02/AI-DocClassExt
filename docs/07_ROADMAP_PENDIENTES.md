@@ -1,6 +1,6 @@
 # 7. Roadmap y Pendientes — DocumentIA MVP
 
-> Ultima actualizacion: 2026-06-05  
+> Ultima actualizacion: 2026-06-09  
 > Proyecto: AI DocClassExt — SAREB
 
 > Actualización 2026-05-26 (Backlog):
@@ -24,6 +24,17 @@
 > - 🟡 **IN PROGRESS:** AB#99750 iniciado en rama `feature/opt-1-json-caching-99750`.
 > - Añadidos `IConfigurationCache` + `ConfigurationCacheService` e integración inicial en `TipologiaPromptConfigValidator` y `PluginConfigLoader`.
 > - Pendiente cierre de WI: benchmark objetivo 60-80%, métricas App Insights e invalidación completa en flujo de actualización de tipologías.
+
+> Actualización 2026-06-09 (EP9 + EP10 Cierre):
+> - ✅ **COMPLETADO:** EP9 (Blob Storage Maintenance) 100% Done en Azure DevOps
+>   - Epic 98692 + Features 98693-98696 todas Done
+>   - Implementado: BlobCleanupTimerTrigger con timer trigger configurable, limpieza automática por TTL, auditoría y telemetría completa
+>   - Métricas: blobs procesados, eliminados, no encontrados, errores, bytes liberados
+> - ✅ **COMPLETADO:** EP10 (AssetResolver - Resolución de Activo por Dirección) 100% Done
+>   - Epic 99089, Feature AR-F1 (99091), Tasks AR-10 (99101) y AR-12 (99103) todas Done
+>   - Implementado: 3 criterios matching (IDUFIR, RefCat, Dirección), doble origen AAII/AACC, evaluación calidad completada
+>   - Telemetría hardening: 5 métricas implementadas (address_criterion_type, address_selection_score, address_candidates_discarded, address_selection_reason, address_rejection_reason)
+> - Documentación y WI cerrados en ADO
 
 ---
 
@@ -65,11 +76,11 @@ gantt
 | **EP3** | Validacion y motor de reglas | IN PROGRESS | 88% | 11 tipos de regla implementados. ValidationEngine operativo. Pendiente: reglas cross-field (V-1), reglas condicionales (V-2). |
 | **EP4** | Persistencia y auditoria | DONE | 100% | 9 entidades EF Core, migraciones auto, auditoria por ejecucion, validaciones por campo. |
 | **EP5** | Configuracion y tipologias | IN PROGRESS | 80% | Config JSON por tipologia (validacion + plugins + prompt). Admin Blazor CRUD basico desplegado. Editor JSON con modo pantalla completa implementado. En ejecución: pipeline de clasificación configurable por flujo + fallback global final. Pendiente: versionado avanzado (A-2), import/export (A-1), auditoria cambios (A-3). |
-| **EP6** | Observabilidad y pruebas | IN PROGRESS | 90% | 536 tests C# en verde (verificado 2026-05-04 en `DocumentIA.Tests.Unit`), customStatus y seguimiento de orquestacion activos. Completados T-1/T-2/T-3/T-4/T-5/T-6. Telemetría CU granular (`CU.LimiterWaitMs`, `CU.AnalysisMs`, `CU.Attempts`) implementada y emitida a App Insights (2026-05-28). **(2026-06-08) ITelemetryService wrapper abstracto implementado + 3 nuevos tests telemetría (trackEvent, trackMetric, error handling). 11/11 PersistirActivityTests passing.** Pendiente: dashboards App Insights (7.3.3), alertas productivas (7.3.4). |
+| **EP6** | Observabilidad y pruebas | IN PROGRESS | 95% | 536 tests C# en verde (verificado 2026-05-04 en `DocumentIA.Tests.Unit`), customStatus y seguimiento de orquestacion activos. Completados T-1/T-2/T-3/T-4/T-5/T-6. Telemetría CU granular (`CU.LimiterWaitMs`, `CU.AnalysisMs`, `CU.Attempts`) implementada y emitida a App Insights (2026-05-28). **(2026-06-08) ITelemetryService wrapper abstracto implementado + 3 nuevos tests telemetría (trackEvent, trackMetric, error handling). 11/11 PersistirActivityTests passing.** **(2026-06-09) AB#99082 (Workbook) = Done, AB#99083 (Alert Rule) = In Progress.** Pendiente: alertas productivas (7.3.4 cierre), validación Tanda C (99101/99103). |
 | **EP7** | Proteccion datos / GDPR (ADO Epic 98519) | REMOVED | 0% | Descartado por decisión de producto (2026-05-26). Fuera de alcance del MVP. Features 98520/98524/98529/98534 en `Removed`. |
 | **EP8** | Sistema de Plugins de Integracion (ADO Epic 98628) | DONE | 100% | Arquitectura plugins + plugin REST generico + plugins Atlas/Catastro/GDC + resiliencia y observabilidad. Features 98634-98637 todas Done. |
-| **EP9** | Mantenimiento y limpieza de Blob Storage (ADO Epic 98692) | NEW | 0% | Politica de retencion por tipologia (F9.1), motor de limpieza automatica (F9.2), inventario y reporting (F9.3), observabilidad/auditoria (F9.4). Features 98693-98696 todas New. |
-| **EP10** | Resolucion de Activo por Direccion en AssetResolver (ADO Epic 99089) | IN PROGRESS | 90% | Core operativo: 3 criterios (IDUFIR, RefCat, Direccion) + doble origen AAII/AACC + flags por criterio. Pendiente Tanda C: AR-10 evaluacion rendimiento/calidad matching (Task 99101), AR-12 hardening operativo + telemetria (Task 99103). Feature AR-F1 (99091) In Progress. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
+| **EP9** | Mantenimiento y limpieza de Blob Storage (ADO Epic 98692) | DONE | 100% | Politica de retencion por tipologia (F9.1), motor de limpieza automatica (F9.2), inventario y reporting (F9.3), observabilidad/auditoria (F9.4). Features 98693-98696 todas Done. Implementado en BlobCleanupTimerTrigger con limpieza automática por TTL configurable, telemetría de blobs procesados/eliminados/bytes liberados y auditoría completa. WI 98692/98693/98694/98695/98696 Done (2026-06-09). |
+| **EP10** | Resolucion de Activo por Direccion en AssetResolver (ADO Epic 99089) | DONE | 100% | Core operativo: 3 criterios (IDUFIR, RefCat, Direccion) + doble origen AAII/AACC + flags por criterio. AR-10 evaluacion rendimiento/calidad matching (Task 99101) Done. AR-12 hardening operativo + telemetria (Task 99103) Done con 5 métricas telemetría (address_criterion_type, address_selection_score, address_candidates_discarded, address_selection_reason, address_rejection_reason). Epic 99089, Feature AR-F1 (99091), Tasks 99101/99103 todas Done (2026-06-09). Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 | **EP-GDC** | Integracion GDC — trabajo tecnico transversal (no es Epic en ADO) | IN PROGRESS | 80% | SubirGDC + ConsultarDocumento operativos (HU 8.4 = PBI 98632 Committed; HU 8.5 endpoint DEV real = PBI 98871 To Validate). Pendiente: retry Polly (G-1), idempotencia DOC_OBJECT_EXISTS (G-2), reconciliacion async (G-3). |
 
 ---
@@ -172,9 +183,11 @@ Propuesta de tarea ampliada:
 
 El pipeline debe fallar si algún test falla (`failTaskOnFailedTests: true`).
 
-### 7.3.3 Dashboards App Insights (Workbooks)
+### 7.3.3 Dashboards App Insights (Workbooks) — ✅ DONE (AB#99082)
 
-Crear un Workbook en `srbappiprodocai` con tres pestanas:
+**Estado:** Implementado y operativo (2026-06-09). Archivo `docs/observabilidad/workbooks/documentia-cu-performance.workbook.json` con 6 KQL tiles. Monitor.razor component en frontend. Dashboard URL: https://portal.azure.com/…/resource/subscriptions/…/resourcegroups/SRBRGDOCSAIPROD/providers/microsoft.insights/components/srbappiprodocai/overview
+
+Tres pestanas implementadas:
 
 | Pestana | KPIs | Query KQL base |
 |---------|------|---------------|
@@ -188,9 +201,9 @@ Instrumentacion necesaria en codigo (si no existe):
 - `TelemetryClient.TrackMetric("ExtractionCompleteness", ratio)` en `ExtraerActivity`
 - `TelemetryClient.TrackMetric("GdcUploadDuration", ms)` en `SubirGDCActivity`
 
-### 7.3.4 Alertas productivas (Azure Monitor)
+### 7.3.4 Alertas productivas (Azure Monitor) — 🟡 IN PROGRESS (AB#99083)
 
-Crear las siguientes alertas sobre `srbappiprodocai`:
+**Estado:** Documentación completa (2026-06-09). Script PowerShell `scripts/create-monitor-alerts.ps1` pendiente de implementación. Crear las siguientes alertas sobre `srbappiprodocai`:
 
 | Alerta | Metrica / Query | Umbral | Severidad | Accion |
 |--------|-----------------|--------|-----------|--------|
@@ -200,7 +213,8 @@ Crear las siguientes alertas sobre `srbappiprodocai`:
 | Fallback GPT elevado | ratio `GptFallbackUsed / DocumentProcessed` en 30 min | > 20% | Sev 3 | Email (aviso calidad) |
 | Function App sin actividad | requests count en 60 min | = 0 (si horario laboral) | Sev 2 | Email |
 
-Herramienta recomendada: script PowerShell `scripts/create-monitor-alerts.ps1` (a crear) usando `az monitor metrics alert create`.
+**Herramienta recomendada:** script PowerShell `scripts/create-monitor-alerts.ps1` (a crear) usando `az monitor metrics alert create`. 
+**Próximo paso (AB#99083 cierre):** Implementar script, ejecutar alertas, validar reglas y acciones configuradas, adjuntar evidencia en ADO.
 
 ---
 
