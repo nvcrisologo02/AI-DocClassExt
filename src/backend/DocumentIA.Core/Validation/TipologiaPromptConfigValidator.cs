@@ -1,4 +1,5 @@
 using System.Text.Json;
+using DocumentIA.Core.Caching;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Data.Entities;
 using Microsoft.Extensions.Logging;
@@ -18,10 +19,14 @@ namespace DocumentIA.Core.Validation;
 public class TipologiaPromptConfigValidator
 {
     private readonly ILogger<TipologiaPromptConfigValidator> _logger;
+    private readonly IConfigurationCache? _configCache;
 
-    public TipologiaPromptConfigValidator(ILogger<TipologiaPromptConfigValidator> logger)
+    public TipologiaPromptConfigValidator(
+        ILogger<TipologiaPromptConfigValidator> logger,
+        IConfigurationCache? configCache = null)
     {
         _logger = logger;
+        _configCache = configCache;
     }
 
     /// <summary>
@@ -51,12 +56,26 @@ public class TipologiaPromptConfigValidator
         TipologiaValidationConfig? config = null;
         if (!string.IsNullOrWhiteSpace(tipologia.ConfiguracionJson))
         {
+            var cacheKey = $"tipologia-validation-config:{tipologia.Id}:{tipologia.Version}:{tipologia.FechaActualizacion?.Ticks ?? 0}";
             try
             {
-                config = JsonSerializer.Deserialize<TipologiaValidationConfig>(
-                    tipologia.ConfiguracionJson,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                );
+                config = _configCache is not null
+                    ? _configCache.GetAsync<TipologiaValidationConfig>(cacheKey).GetAwaiter().GetResult()
+                    : null;
+
+                if (config is null)
+                {
+                    config = JsonSerializer.Deserialize<TipologiaValidationConfig>(
+                        tipologia.ConfiguracionJson,
+                        new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                    );
+
+                    if (config is not null && _configCache is not null)
+                    {
+                        _ = _configCache.SetAsync(cacheKey, config);
+                    }
+                }
+
                 result.HasConfigPrompt = config?.PromptConfig != null &&
                     (!string.IsNullOrWhiteSpace(config.PromptConfig.SystemPrompt) ||
                      !string.IsNullOrWhiteSpace(config.PromptConfig.UserPromptTemplate));

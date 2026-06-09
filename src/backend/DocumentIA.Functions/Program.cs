@@ -26,6 +26,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using DocumentIA.Functions.Services.Abstractions;
+using DocumentIA.Core.Caching;
 
 var jsonOpts = new JsonSerializerOptions
 {
@@ -118,6 +119,8 @@ var host = new HostBuilder()
         services.AddScoped<ITipologiaConfigAuditRepository, TipologiaConfigAuditRepository>();
         services.AddScoped<IDocumentoEjecucionRepository, DocumentoEjecucionRepository>();
         services.AddMemoryCache();
+        services.AddSingleton<IConfigurationCache, ConfigurationCacheService>();
+        services.AddSingleton<ICacheInvalidationService, CacheInvalidationService>();
 
         // Services
         services.AddSingleton<IBlobStorageService, BlobStorageService>();
@@ -293,7 +296,8 @@ var host = new HostBuilder()
             return new PluginConfigLoader(
                 provider.GetRequiredService<IMemoryCache>(),
                 provider.GetRequiredService<IServiceScopeFactory>(),
-                logger);
+                logger,
+                provider.GetService<IConfigurationCache>());
         });
 
         // Registrar TipologiaConfigLoader (usado por SubirGDCActivity)

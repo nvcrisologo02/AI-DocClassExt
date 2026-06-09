@@ -271,7 +271,8 @@
 | 99101 | Task    | AR-10 - Evaluacion de rendimiento y calidad de matching                                      | In Progress  |
 | 99103 | Task    | AR-12 - Hardening operativo y telemetria                                                     | In Progress  |
 | 99066-99070 | Task | Sub-tareas EP6 F6.1 (App Insights, KQL, Live Metrics, Durable Monitor)                       | In Progress  |
-| 99082-99083 | Task | Workbook + Alert Rule de errores (EP6 F6.3)                                                  | To Do        |
+| 99082 | Task | Workbook Azure Monitor 6 KQL tiles (EP6 F6.3)                                            | Done         |
+| 99083 | Task | Alert Rule: tasa errores >10% en 5 min (EP6 F6.3)                                        | In Progress  |
 
 ### 5.2 Commits últimos 30 días (resumen — ver 6.2 para mapeo AB#)
 
@@ -380,7 +381,8 @@ Cobertura del cruce solicitado: **30/32** con commit AB# directo (93,75 %). Los 
 | 98408 | Feature | F 6.2 – Pruebas end-to-end (scripts y REST Client)                            | In Progress   | Coexiste con 99073 (Monitor Dashboard); revisar solapamiento.             |
 | 98871 | PBI     | HU 8.5 - Integracion endpoint GDC DEV real                                   | To Validate   | Pendiente verificación funcional contra entorno DEV real.                 |
 | 99066-99070 | Task | Sub-tareas EP6 F6.1 (App Insights/KQL/Durable Monitor)                       | In Progress   | Bloquean cierre formal de F6.1 (99065) y por tanto EP6 al 100 %.          |
-| 99082, 99083 | Task | Workbook 4 tiles + Alert Rule errores >10 %                                | To Do         | Bloquean cierre F6.3 (99078) y entrega EP6 fase C.                        |
+| 99082 | Task | Workbook 6 KQL tiles App Insights (E2E, latencias, IA/GDC)                 | Done          | Desbloqueado: JSON + Monitor.razor + 3 KQL queries implementados.        |
+| 99083 | Task | Alert Rule: tasa errores >10%, latencia E2E >120s, GDC fails >3             | In Progress   | Desbloqueado: documentación lista, script PS falta, próximo: create-monitor-alerts.ps1. |
 
 ---
 
@@ -416,7 +418,7 @@ Tras inspeccionar todas las menciones `AB#\d+` en commits 90 días, **no se han 
 | Área              | Roadmap (07_ROADMAP_PENDIENTES.md)                      | ADO (estado real)                                          | Gap |
 |-------------------|---------------------------------------------------------|-------------------------------------------------------------|-----|
 | EP 5              | Marcado como "In Progress 80 %" en sección global, "Done" en bloque Tanda C | Epic 98375 = Done; cierre formalizado por 99162 = Done.    | Roadmap inconsistente consigo mismo; ADO indica Done definitivo. |
-| EP 6              | "65 % en progreso"                                      | Epic 98406 = Done; pero F6.1 (99065), F6.3 (99078), F 6.1 (98379), F 6.2 (98408) **siguen In Progress**, y 99082/99083 en `To Do`. | Epic cerrado prematuramente; sub-features abiertas. |
+| EP 6              | "90 % completado (cierre C)"                            | Epic 98406 = Done. F6.1 (99065), F6.3 (99078), F 6.1 (98379), F 6.2 (98408) = In Progress. **99082 = Done (Workbook)**, **99083 = In Progress (Alert Rule)**. Telemetría CU + Monitor dashboard operativos. | Fase final: alertas productivas + cierre validación Tanda C (99101/99103). |
 | EP 9              | "80 % en progreso"                                      | Epic 98692 = `New` (sin transición a In Progress). 5 HU + 14 tasks en `To Do`. | Roadmap reporta avance que no se refleja en ADO. |
 | EP 10             | "Done"                                                  | Epic 99089 = `In Progress`; 99101/99103 abiertos (Tanda C). | Roadmap optimista; ADO indica trabajo Tanda C pendiente. |
 | EP 7 (GDPR)       | "Planned 0 %"                                           | Epic 98519 y árbol EP7 en `Removed` (actualización 2026-05-26). | Ya no aplica al backlog activo del MVP. |
