@@ -20,6 +20,11 @@
 > - AB#99745 (JSON indexes) → Removed (no ROI justificado con 204 registros)
 > - Documentación: [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md)
 
+> Actualización 2026-06-09 (OPT-1 Caching JSON parseado):
+> - 🟡 **IN PROGRESS:** AB#99750 iniciado en rama `feature/opt-1-json-caching-99750`.
+> - Añadidos `IConfigurationCache` + `ConfigurationCacheService` e integración inicial en `TipologiaPromptConfigValidator` y `PluginConfigLoader`.
+> - Pendiente cierre de WI: benchmark objetivo 60-80%, métricas App Insights e invalidación completa en flujo de actualización de tipologías.
+
 ---
 
 ## 7.1 Estado de Epics

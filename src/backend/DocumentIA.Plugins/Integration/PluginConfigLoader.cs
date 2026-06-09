@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using DocumentIA.Core.Caching;
 using System.Threading.Tasks;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
@@ -19,6 +20,7 @@ namespace DocumentIA.Plugins.Integration
         private readonly string? configBasePath;
         private readonly IMemoryCache? cache;
         private readonly IServiceScopeFactory? scopeFactory;
+        private readonly IConfigurationCache? configurationCache;
         private readonly ILogger<PluginConfigLoader> logger;
         private readonly Dictionary<string, PluginConfiguration> cachedConfigs = new();
 
@@ -28,11 +30,16 @@ namespace DocumentIA.Plugins.Integration
             this.logger = logger;
         }
 
-        public PluginConfigLoader(IMemoryCache cache, IServiceScopeFactory scopeFactory, ILogger<PluginConfigLoader> logger)
+        public PluginConfigLoader(
+            IMemoryCache cache,
+            IServiceScopeFactory scopeFactory,
+            ILogger<PluginConfigLoader> logger,
+            IConfigurationCache? configurationCache = null)
         {
             this.cache = cache;
             this.scopeFactory = scopeFactory;
             this.logger = logger;
+            this.configurationCache = configurationCache;
         }
 
         /// <summary>
@@ -79,10 +86,25 @@ namespace DocumentIA.Plugins.Integration
             try
             {
                 string jsonContent = await File.ReadAllTextAsync(configPath);
-                var config = JsonSerializer.Deserialize<PluginConfiguration>(jsonContent, new JsonSerializerOptions
+                var fileVersion = File.GetLastWriteTimeUtc(configPath).Ticks;
+                var parseCacheKey = $"plugins-file-config:{tipologiaId}:{fileVersion}";
+
+                var config = configurationCache is not null
+                    ? await configurationCache.GetAsync<PluginConfiguration>(parseCacheKey)
+                    : null;
+
+                if (config is null)
                 {
-                    PropertyNameCaseInsensitive = true
-                });
+                    config = JsonSerializer.Deserialize<PluginConfiguration>(jsonContent, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+                    if (config is not null && configurationCache is not null)
+                    {
+                        await configurationCache.SetAsync(parseCacheKey, config);
+                    }
+                }
 
                 if (config == null)
                 {
@@ -149,10 +171,25 @@ namespace DocumentIA.Plugins.Integration
 
             try
             {
-                var config = JsonSerializer.Deserialize<PluginConfiguration>(dbConfig.ConfiguracionJson, new JsonSerializerOptions
+                var configVersion = dbConfig.FechaActualizacion?.Ticks ?? dbConfig.FechaCreacion.Ticks;
+                var parseCacheKey = $"plugins-db-config:{tipologiaId}:{dbConfig.Id}:{configVersion}";
+
+                var config = configurationCache is not null
+                    ? await configurationCache.GetAsync<PluginConfiguration>(parseCacheKey)
+                    : null;
+
+                if (config is null)
                 {
-                    PropertyNameCaseInsensitive = true
-                });
+                    config = JsonSerializer.Deserialize<PluginConfiguration>(dbConfig.ConfiguracionJson, new JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true
+                    });
+
+                    if (config is not null && configurationCache is not null)
+                    {
+                        await configurationCache.SetAsync(parseCacheKey, config);
+                    }
+                }
 
                 if (config is null)
                 {
