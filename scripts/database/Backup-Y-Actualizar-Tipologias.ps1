@@ -1,8 +1,14 @@
 <#
 .SYNOPSIS
-    Hace backup de tabla Tipologias y actualiza TipologiaNombre + gptdescripcion desde Excel
+    ⚠️ DEPRECATED - Hace backup de tabla Tipologias y actualiza TipologiaNombre + gptdescripcion desde Excel
 
 .DESCRIPTION
+    ⚠️ ESTADO DEPRECATED (2026-06-10): Este script depende de scripts\config\db-connection.json que no existe en el repositorio.
+    Si necesitas usar este script:
+    1. Crea scripts\config\db-connection.json con estructura: { "ConnectionString": "<value>", ... }
+    2. O modifica el script para usar variables de entorno en lugar de JSON
+    3. O contacta al equipo de plataforma para aclarar si esta herramienta sigue en uso
+
     1. Crea backup BCP de tabla Tipologias
     2. Lee Excel con tipologías y gptdescripciones
     3. Actualiza ConfiguracionJson con TipologiaNombre y gptdescripcion
@@ -19,8 +25,8 @@
     Si es $true, mantiene el archivo de backup. Default: $true
 
 .EXAMPLE
+    # ⚠️ DEPRECATED - Ver DESCRIPTION para reactivar
     .\Backup-Y-Actualizar-Tipologias.ps1 -ExcelPath ".\tiposgpt.xlsx" -DryRun $true
-    .\Backup-Y-Actualizar-Tipologias.ps1 -ExcelPath ".\tiposgpt.xlsx" -DryRun $false
 #>
 
 param(

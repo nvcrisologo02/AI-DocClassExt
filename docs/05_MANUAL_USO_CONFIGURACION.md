@@ -11,7 +11,7 @@
 > - Parte B (equipo tecnico): APIs, contratos y configuracion.
 > 
 > Si solo necesitas usar DocumentIA en tu operativa diaria, lee la Parte A.
-> Para instalacion, infraestructura y despliegue, ver `docs/04_MANUAL_EXPLOTACION.md`.
+> Para instalacion, infraestructura y despliegue, ver `docs/auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md`.
 > Para contrato HTTP detallado, ver `docs/contratos/CONTRATO_API_HTTP.md`.
 
 ---

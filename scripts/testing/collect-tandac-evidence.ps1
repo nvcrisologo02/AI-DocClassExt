@@ -155,7 +155,7 @@ if ([string]::IsNullOrWhiteSpace($ResourceGroup) -or [string]::IsNullOrWhiteSpac
     Write-WarnMsg "Debes informar -ResourceGroup y -AppInsightsName."
     Write-Host ""
     Write-Host "Uso recomendado:" -ForegroundColor Cyan
-    Write-Host "  powershell -ExecutionPolicy Bypass -File .\\scripts\\collect-tandac-evidence.ps1 -ResourceGroup \"SRBRGDOCSAIPROD\" -AppInsightsName \"srbappiprodocai\" -Subscription \"<subscription-id-o-nombre>\" -DatasetCsv .\\artifacts\\dataset-matching.csv"
+    Write-Host "  powershell -ExecutionPolicy Bypass -File .\scripts\testing\collect-tandac-evidence.ps1 -ResourceGroup \"SRBRGDOCSAIPROD\" -AppInsightsName \"srbappiprodocai\" -Subscription \"<subscription-id-o-nombre>\" -DatasetCsv .\artifacts\dataset-matching.csv"
     Write-Host ""
     Write-Host "Columnas obligatorias en -DatasetCsv: IdActivoEsperado, IdActivoObtenido"
     return

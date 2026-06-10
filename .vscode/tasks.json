@@ -25,7 +25,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\start-azurite.ps1"
+        "${workspaceFolder}\\scripts\\legacy\\start-azurite.ps1"
       ],
       "options": {
         "cwd": "${workspaceFolder}"
@@ -40,7 +40,7 @@
         "-ExecutionPolicy",
         "Bypass",
         "-File",
-        "${workspaceFolder}\\scripts\\stop-azurite.ps1"
+        "${workspaceFolder}\\scripts\\legacy\\stop-azurite.ps1"
       ],
       "options": {
         "cwd": "${workspaceFolder}"

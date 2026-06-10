@@ -34,7 +34,7 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 | 3.6 | Azure OpenAI + Content Understanding | `upe48-mm2avmdm` | Sweden Central | Verificar deployment `gpt-4o-mini` activo | ☐ |
 | 3.7 | Application Insights | `srbappiprodocai` | West Europe | Existente | ☐ |
 | 3.8 | Key Vault | `srbkvprodocai` | West Europe | Existente | ☐ |
-| 3.9 | **Azure SQL Server + Database** | `srbsqlprodocai` / `DocumentIA` | West Europe | Existente (Operativo) — verificado 2026-04-30 (ver `docs/09_AUDITORIA_CONFIGURACION_2026-04-30.md`) | ☑ |
+| 3.9 | **Azure SQL Server + Database** | `srbsqlprodocai` / `DocumentIA` | West Europe | Existente (Operativo) — verificado 2026-04-30 (ver `docs/auxiliares/auditorias/09_AUDITORIA_CONFIGURACION_2026-04-30.md`) | ☑ |
 | 3.10 | Web App Admin | `srbwebadminprodocai` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
 | 3.11 | App Service AssetResolver | `srbwebpluginassetresolver` | West Europe | Existente — verificado 2026-04-30 (doc 09) | ☑ |
 
@@ -59,8 +59,8 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 | # | Tarea | Script | OK |
 |---|-------|--------|----|
 | 5.1 | Login Azure CLI con cuenta que tenga acceso a KV | `az login` | ☐ |
-| 5.2 | Activar rol PIM si necesario | `.\scripts\activate-pim.ps1 -UseUser` | ☐ |
-| 5.3 | Verificar elegibilidad PIM | `.\scripts\list-pim-eligible.ps1 -UseUser` | ☐ |
+| 5.2 | Activar rol PIM si necesario | Ver tareas VS Code: "Activate PIM role (user - device code)" | ☐ |
+| 5.3 | Verificar elegibilidad PIM | Ver tareas VS Code: "List PIM eligible assignments (user)" | ☐ |
 | 5.4 | Verificar permisos sobre el RG | `.\scripts\check-azure-permissions.ps1` | ☐ |
 | 5.5 | Cargar todos los secretos en Key Vault | `.\scripts\set-keyvault-secrets.ps1 -SubscriptionId <ID>` | ☐ |
 | 5.6 | Verificar que los secretos existen en KV | `.\scripts\verify-prod-prereqs.ps1` | ☐ |
@@ -90,11 +90,11 @@ Secretos requeridos en KV:
 | # | Tarea | Script | OK |
 |---|-------|--------|----|
 | 6.1 | Aplicar todos los App Settings (infraestructura + AI + GDC) | `.\scripts\set-app-settings.ps1` | ☐ |
-| 6.2 | Aplicar referencias Key Vault en settings de secretos | `.\scripts\set-functionapp-keyvault-references.ps1 -SubscriptionId <ID>` | ☐ |
+| 6.2 | Aplicar referencias Key Vault en settings de secretos | `}.\scripts\configuration\set-functionapp-keyvault-references.ps1 -SubscriptionId <ID>` | ☐ |
 | 6.3 | Verificar que la Function App tiene `RunDatabaseMigrationsOnStartup=true` (primer arranque) | `az functionapp config appsettings list --name srbappprodocai --resource-group SRBRGDOCSAIPROD` | ☐ |
 | 6.4 | Verificar `host.json`: `hubName=DocumentIAHub`, `maxConcurrentActivityFunctions=4`, `maxConcurrentOrchestratorFunctions=4` | `src/backend/DocumentIA.Functions/host.json` | ☐ |
 
-Settings clave a confirmar (ver detalle completo en `docs/04_MANUAL_EXPLOTACION.md` § 4.4):
+Settings clave a confirmar (ver detalle completo en `docs/auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md` § 4.4):
 
 | Setting | Valor esperado |
 |---------|---------------|
@@ -148,7 +148,7 @@ Settings clave a confirmar (ver detalle completo en `docs/04_MANUAL_EXPLOTACION.
 | # | Tarea | Script / Comando | OK |
 |---|-------|------------------|----|
 | 9.1 | Verificar todos los prerrequisitos de prod OK | `.\scripts\verify-prod-prereqs.ps1` | ☐ |
-| 9.2 | Smoke test del endpoint `/api/tipologias` | `.\scripts\smoke-test-functions.ps1 -HostName srbappprodocai.azurewebsites.net` | ☐ |
+| 9.2 | Smoke test del endpoint `/api/tipologias` | `}.\scripts\testing\smoke-test-functions.ps1 -HostName srbappprodocai.azurewebsites.net` | ☐ |
 | 9.3 | Verificar estado de slots/settings en Function App | Azure Portal → Configuration (sin valores vacios/errores) | ☐ |
 | 9.4 | Verificar conectividad de secretos Key Vault references | Estado `Resolved` en App Settings | ☐ |
 | 9.5 | Verificar salud en Application Insights | Exceptions/failures sin picos post-deploy | ☐ |
@@ -194,7 +194,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 | # | Tarea | Comando | OK |
 |---|-------|---------|-----|
-| B3.1 | Activar PIM si necesario | `.\scripts\activate-pim.ps1 -UseUser` | ☐ |
+| B3.1 | Activar PIM si necesario | Ver tareas VS Code: "Activate PIM role (user - device code)" | ☐ |
 | B3.2 | Obtener credenciales Kudu | `az functionapp deployment list-publishing-credentials --resource-group SRBRGDOCSAIPROD --name srbappprodocai` | ☐ |
 | B3.3 | Ejecutar deploy-manual.ps1 | `.\scripts\deploy-manual.ps1 -KuduUser '$srbappprodocai' -KuduPassword '<PASS>'`  | ☐ |
 | B3.4 | Alternativa Cloud Shell | `.\scripts\deploy-manual.ps1` → subir `publish/functions.zip` → `az functionapp deploy ...` | ☐ |
@@ -227,7 +227,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 | # | Tarea | Script / Comando | OK |
 |---|-------|------------------|----|
-| B6.1 | Humo: /api/tipologias responde HTTP 200 | `.\scripts\smoke-test-functions.ps1 -HostName srbappprodocai.azurewebsites.net` | ☐ |
+| B6.1 | Humo: /api/tipologias responde HTTP 200 | `}.\scripts\testing\smoke-test-functions.ps1 -HostName srbappprodocai.azurewebsites.net` | ☐ |
 | B6.2 | Revisar Application Insights durante 5-10 min post-deploy | Failures, exceptions, duraciones normales | ☐ |
 | B6.3 | Verificar estado de secretos y referencias KV | `verify-prod-prereqs.ps1` sin errores y settings `Resolved` | ☐ |
 | B6.4 | Verificar estado de recursos criticos Azure | Function App, Storage, SQL y DI en estado saludable | ☐ |
@@ -238,14 +238,14 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 | Script | Uso | Cuando ejecutar |
 |--------|-----|-----------------|
-| `scripts\activate-pim.ps1 -UseUser` | Activar rol PIM | Antes de cualquier operacion Azure CLI que requiera Contributor |
+| Ver tareas VS Code | Activar rol PIM | Antes de cualquier operacion Azure CLI que requiera Contributor |
 | `scripts\verify-prod-prereqs.ps1` | Verificar KV, secretos, Function App, Storage | Antes del deploy y post-deploy |
 | `scripts\set-keyvault-secrets.ps1 -SubscriptionId <ID>` | Cargar / actualizar secretos en KV | Primer deploy o rotacion de claves |
-| `scripts\set-functionapp-keyvault-references.ps1 -SubscriptionId <ID>` | Aplicar modo KV en App Settings | Primer deploy o tras reset de settings |
+| `scripts\configuration\set-functionapp-keyvault-references.ps1 -SubscriptionId <ID>` | Aplicar modo KV en App Settings | Primer deploy o tras reset de settings |
 | `scripts\set-app-settings.ps1` | Aplicar todos los App Settings no-secretos | Primer deploy o cambio de configuracion no-secreta |
 | `scripts\compile-all-plugins.ps1` | Compilar SarebEnrichments.dll | Cuando cambien los plugins de enriquecimiento |
 | `scripts\deploy-manual.ps1` | Build + zip + deploy via Kudu | Deploy manual sin pipeline |
-| `scripts\smoke-test-functions.ps1 -HostName <host>` | Verificar endpoint `/api/tipologias` | Post cada deploy |
+| `scripts\testing\smoke-test-functions.ps1 -HostName <host>` | Verificar endpoint `/api/tipologias` | Post cada deploy |
 | `scripts\check-database.ps1` | Verificar conectividad BD y estado tablas | Post migraciones |
 | `scripts\list-analyzers.ps1` | Listar modelos disponibles en Document Intelligence | Diagnostico de clasificacion |
 | `scripts\check-azure-permissions.ps1` | Verificar permisos del SP / usuario sobre el RG | Antes del primer deploy |
@@ -293,8 +293,7 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 | Documento | Contenido |
 |-----------|-----------|
 | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Arquitectura completa y diagrama de despliegue |
-| [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Procedimientos paso a paso, variables de entorno, scripts |
+| [auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md](auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md) | Procedimientos paso a paso, variables de entorno, scripts |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Configuracion tecnica detallada |
-| [11_PLAN_CONFIGURACION_LIMPIA.md](plans/11_PLAN_CONFIGURACION_LIMPIA.md) | Plan de remediacion y gobierno de configuracion |
-| [../scripts/README-activate-pim.md](../scripts/README-activate-pim.md) | Guia de activacion PIM |
+| [auxiliares/planes/11_PLAN_CONFIGURACION_LIMPIA.md](auxiliares/planes/11_PLAN_CONFIGURACION_LIMPIA.md) | Plan de remediacion y gobierno de configuracion |
 | [../azure-pipelines.yml](../azure-pipelines.yml) | Pipeline CI/CD: Build + DeployFunctions + DeployAdmin + DeployAssetResolver + ValidateConfiguration |
