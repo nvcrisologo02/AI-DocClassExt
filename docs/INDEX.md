@@ -1,8 +1,9 @@
 # 📚 Índice Maestro de Documentación — DocumentIA
 
 > **Última actualización:** 2026-06-10  
-> **Versión:** 1.5  
+> **Versión:** 1.5.1
 > **Rama:** develop
+> **Nuevos:** 6 documentos operacionales críticos agregados
 
 Bienvenido a la documentación centralizada de **DocumentIA**, un sistema de clasificación inteligente de documentos basado en Azure cloud-native. Esta página es tu punto de partida para navegar toda la documentación técnica del proyecto.
 
@@ -153,7 +154,74 @@ Guías detalladas para tareas específicas:
 
 ---
 
-## 🚀 **Procedimientos & Despliegue (docs/auxiliares/migracion-deployment/)**
+## 🚀 **Procedimientos Operacionales Críticos (docs/procedimientos/ — 2026-06-10)**
+
+⭐ **NUEVOS DOCUMENTOS** para control real del sistema en producción:
+
+### Gestión de Incidentes
+- **[RUNBOOK_INCIDENTES_PRODUCCION.md](procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md)** 
+  - 7 escenarios de incidentes (latency, errores, circuit breaker, stuck docs, memory leak, access denied)
+  - KQL queries para diagnóstico rápido
+  - Soluciones inmediatas y permanentes
+  - Escalation path y contactos
+  - *Líneas: ~337 | Tiempo: 15 min diagnosis*
+
+### Release & Versioning
+- **[RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md)**
+  - Semantic versioning strategy
+  - Pre-release timeline (1 semana)
+  - Rollback procedures
+  - Hotfix process
+  - Pre-release checklist
+  - *Líneas: ~263 | Tiempo: 30 min study*
+
+### Migraciones de Base de Datos
+- **[DATABASE_MIGRATION_STRATEGY.md](procedimientos/DATABASE_MIGRATION_STRATEGY.md)**
+  - EF Core migration workflows
+  - Testing local vs staging vs production
+  - Blue-green deployment para 0-downtime
+  - Rollback procedures
+  - Known issues & solutions
+  - *Líneas: ~332 | Tiempo: 20 min lookup*
+
+### CI/CD & Deployments
+- **[CI_CD_DEPLOYMENT_DETAILS.md](procedimientos/CI_CD_DEPLOYMENT_DETAILS.md)**
+  - Pipeline overview (3 pipelines)
+  - Build, test, deploy stages
+  - Staging vs production deployments
+  - Troubleshooting pipeline failures
+  - Secrets management
+  - *Líneas: ~325 | Tiempo: 25 min lookup*
+
+---
+
+## 🏗️ **Infraestructura & Despliegue (docs/infraestructura/ — 2026-06-10)**
+
+- **[INFRAESTRUCTURA_DESPLIEGUE.md](infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md)** ⭐ **LEER PRIMERO**
+  - Topología Azure (staging vs production)
+  - Resource groups y servicios por ambiente
+  - Capacidad & escalado (límites actuales)
+  - Cost breakdown ($926/month) + optimizaciones
+  - Networking, Disaster recovery, Backup strategy
+  - Monitoring, alertas, compliance
+  - *Líneas: ~245 | Tiempo: 30 min overview*
+
+---
+
+## 👥 **Team & Responsabilidades (docs/referencias/ — 2026-06-10)**
+
+- **[TEAM_MATRIX_RESPONSABILIDADES.md](referencias/TEAM_MATRIX_RESPONSABILIDADES.md)**
+  - RACI matrix por componente
+  - On-call rotation schedule
+  - SLA response times (P1/P2/P3)
+  - Change approval process
+  - Training & onboarding workflows
+  - Performance metrics por rol
+  - *Líneas: ~188 | Tiempo: 15 min reference*
+
+---
+
+## 🚀 **Procedimientos & Despliegue Legacy (docs/auxiliares/migracion-deployment/)**
 
 ### Manuales Operacionales
 - **[04_MANUAL_EXPLOTACION.md](auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md)**
@@ -222,16 +290,22 @@ Guías detalladas para tareas específicas:
 
 | Necesidad | Documento | Ubicación |
 |-----------|-----------|-----------|
-| Empezar desde cero | QUICKSTART | `guias/` |
-| Entender terminología | GLOSSARIO | `referencias/` |
-| Resolver error rápido | TROUBLESHOOTING | `guias/` |
-| Ver arquitectura | ARQUITECTURA_SISTEMA | `docs/` (raíz) |
-| Crear un plugin | EXTENSIBILIDAD | `guias/` |
-| Ver schema BD | DATA_MODELS | `especificaciones/` |
-| Monitorear sistema | OBSERVABILIDAD + KQL | `observabilidad/` |
-| Optimizar performance | PERFORMANCE_TUNING | `guias/` |
-| API reference | CONTRATO_API_HTTP | `contratos/` |
-| Desplegar a prod | CHECKLISTS_DESPLIEGUE | `docs/` (raíz) |
+| **Empezar desde cero** | QUICKSTART | `guias/` |
+| **Entender terminología** | GLOSSARIO | `referencias/` |
+| **Resolver error rápido** | TROUBLESHOOTING | `guias/` |
+| **Ver arquitectura** | ARQUITECTURA_SISTEMA | `docs/` (raíz) |
+| **Crear un plugin** | EXTENSIBILIDAD | `guias/` |
+| **Ver schema BD** | DATA_MODELS | `especificaciones/` |
+| **Monitorear sistema** | OBSERVABILIDAD + KQL | `observabilidad/` |
+| **Optimizar performance** | PERFORMANCE_TUNING | `guias/` |
+| **API reference** | CONTRATO_API_HTTP | `contratos/` |
+| **Desplegar a prod** | CHECKLISTS_DESPLIEGUE | `docs/` (raíz) |
+| **🆕 Incidente en producción** | RUNBOOK_INCIDENTES_PRODUCCION | `procedimientos/` |
+| **🆕 Infraestructura Azure** | INFRAESTRUCTURA_DESPLIEGUE | `infraestructura/` |
+| **🆕 Release & hotfix** | RELEASE_MANAGEMENT | `procedimientos/` |
+| **🆕 Migración BD** | DATABASE_MIGRATION_STRATEGY | `procedimientos/` |
+| **🆕 CI/CD y pipelines** | CI_CD_DEPLOYMENT_DETAILS | `procedimientos/` |
+| **🆕 Responsabilidades equipo** | TEAM_MATRIX_RESPONSABILIDADES | `referencias/` |
 
 ---
 
@@ -247,23 +321,33 @@ docs/
 ├── 08_CHECKLISTS_DESPLIEGUE.md
 ├── 15_API_DOCUMENTATION_V1_4.md
 │
-├── 📁 guias/                           ← NUEVAS (2026-06-10)
+├── 📁 guias/
 │   ├── QUICKSTART_DESARROLLADORES.md   ⭐
 │   ├── EXTENSIBILIDAD_PLUGIN_SYSTEM.md
 │   ├── TROUBLESHOOTING_DIAGNOSTICO.md
 │   └── PERFORMANCE_TUNING.md
 │
-├── 📁 especificaciones/                ← NUEVAS (2026-06-10)
+├── 📁 especificaciones/
 │   ├── DATA_MODELS_ER_DIAGRAM.md       ⭐
 │   └── ESPECIFICACION_PLUGIN_ASSETRESOLVER.md
 │
-├── 📁 referencias/                     ← NUEVAS (2026-06-10)
+├── 📁 referencias/
 │   ├── GLOSSARIO_TERMINOS.md           ⭐
-│   └── FUENTE_VERDAD_CONFIGURACION.md
+│   ├── FUENTE_VERDAD_CONFIGURACION.md
+│   └── TEAM_MATRIX_RESPONSABILIDADES.md (🆕 2026-06-10)
 │
-├── 📁 observabilidad/                  ← NUEVAS (2026-06-10)
+├── 📁 observabilidad/
 │   ├── OBSERVABILIDAD_KQL.md           ⭐
 │   └── CU_RENDIMIENTO_INSIGHTS.md
+│
+├── 📁 procedimientos/ (🆕 2026-06-10)
+│   ├── RUNBOOK_INCIDENTES_PRODUCCION.md
+│   ├── RELEASE_MANAGEMENT.md
+│   ├── DATABASE_MIGRATION_STRATEGY.md
+│   └── CI_CD_DEPLOYMENT_DETAILS.md
+│
+├── 📁 infraestructura/ (🆕 2026-06-10)
+│   └── INFRAESTRUCTURA_DESPLIEGUE.md
 │
 ├── 📁 contratos/
 │   ├── CONTRATO_API_HTTP.md
@@ -306,19 +390,34 @@ Para estar productivo rápidamente:
 
 ## 🆕 **Documentos Recientemente Agregados (v1.5 — 2026-06-10)**
 
-Estos 7 documentos fueron agregados en esta versión:
+### Operacionales Críticos (6 documentos nuevos — 2026-06-10) ⭐
 
-| # | Documento | Secciones | Líneas | Commit |
+| # | Documento | Propósito | Líneas | Commit |
 |----|-----------|-----------|--------|--------|
-| 1 | GLOSSARIO_TERMINOS.md | Términos, Acrónimos, Conceptos, Patrones | ~400 | `5faddee` |
-| 2 | DATA_MODELS_ER_DIAGRAM.md | ER, Tablas, Relaciones, Queries, Evolution | ~650 | `49f92eb` |
-| 3 | QUICKSTART_DESARROLLADORES.md | Setup, Estructura, First Run, Debugging | ~400 | `e90ec36` |
-| 4 | EXTENSIBILIDAD_PLUGIN_SYSTEM.md | Architecture, Interfaces, 6 Providers, Testing | ~1,200 | `e6ebdda` |
-| 5 | TROUBLESHOOTING_DIAGNOSTICO.md | Decision Tree, 6 Casos, KQL, Escalation | ~860 | `b9235aa` |
-| 6 | OBSERVABILIDAD_KQL.md | 20 Queries, 8 Alerts, Debugging, Casos | ~1,000 | `docs/...` |
-| 7 | PERFORMANCE_TUNING.md | Benchmarks, Config, Scaling, Tuning | ~1,210 | `docs/...` |
+| 1 | RUNBOOK_INCIDENTES_PRODUCCION.md | 7 escenarios de incidentes + diagnostic queries | 337 | `2d3543e` |
+| 2 | INFRAESTRUCTURA_DESPLIEGUE.md | Topología Azure, capacidad, DR, compliance | 245 | `6b78895` |
+| 3 | RELEASE_MANAGEMENT.md | Versioning, pre-release, rollback, hotfix | 263 | `65907d4` |
+| 4 | TEAM_MATRIX_RESPONSABILIDADES.md | RACI, on-call, SLAs, change approval, training | 188 | `058b6c8` |
+| 5 | DATABASE_MIGRATION_STRATEGY.md | EF Core, testing, blue-green, rollback | 332 | `5abdfb2` |
+| 6 | CI_CD_DEPLOYMENT_DETAILS.md | Pipelines, build, test, deploy, troubleshooting | 325 | `e49009e` |
 
-**Total:** ~5,720 líneas de documentación técnica nueva ✅
+**Subtotal Operacionales:** 1,690 líneas de documentación crítica ✅
+
+### Técnicas Previas (7 documentos)
+
+| # | Documento | Secciones | Líneas |
+|----|-----------|-----------|--------|
+| 1 | GLOSSARIO_TERMINOS.md | Términos, Acrónimos, Conceptos, Patrones | ~400 |
+| 2 | DATA_MODELS_ER_DIAGRAM.md | ER, Tablas, Relaciones, Queries | ~650 |
+| 3 | QUICKSTART_DESARROLLADORES.md | Setup, Estructura, First Run, Debugging | ~400 |
+| 4 | EXTENSIBILIDAD_PLUGIN_SYSTEM.md | Architecture, Interfaces, 6 Providers, Testing | ~1,200 |
+| 5 | TROUBLESHOOTING_DIAGNOSTICO.md | Decision Tree, 6 Casos, KQL, Escalation | ~860 |
+| 6 | OBSERVABILIDAD_KQL.md | 20 Queries, 8 Alerts, Debugging | ~1,000 |
+| 7 | PERFORMANCE_TUNING.md | Benchmarks, Config, Scaling | ~1,210 |
+
+**Subtotal Técnicas:** ~5,720 líneas
+
+**TOTAL v1.5:** ~7,410 líneas de documentación nueva ✅
 
 ---
 
