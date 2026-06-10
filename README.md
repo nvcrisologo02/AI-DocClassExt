@@ -55,7 +55,7 @@ python training/train_classifier.py
 
 ## Deploy
 
-Despliegue productivo gestionado por el pipeline `azure-pipelines.yml` (rama `main`) sobre el Resource Group **`SRBRGDOCSAIPROD`** (West Europe). Detalle completo en [docs/INFRAESTRUCTURA_AZURE.md](docs/INFRAESTRUCTURA_AZURE.md) y [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md).
+Despliegue productivo gestionado por el pipeline `azure-pipelines.yml` (rama `main`) sobre el Resource Group **`SRBRGDOCSAIPROD`** (West Europe). Detalle completo en [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md).
 
 Despliegue manual (Functions) sobre la Function App existente:
 
@@ -68,7 +68,7 @@ func azure functionapp publish srbappprodocai
 ## Documentacion
 
 Ver carpeta docs/ para:
-- **Cambios v1.4 (IMPORTANTE):** [docs/12_MIGRACION_PROMPTGPT_V1_4.md](docs/12_MIGRACION_PROMPTGPT_V1_4.md) — PromptGPT deprecation y ConfiguracionJson refactorizado
+- **Cambios v1.4 (IMPORTANTE):** [docs/auxiliares/migracion-deployment/12_MIGRACION_PROMPTGPT_V1_4.md](docs/auxiliares/migracion-deployment/12_MIGRACION_PROMPTGPT_V1_4.md) — PromptGPT deprecation y ConfiguracionJson refactorizado
 - Arquitectura detallada
 - Contratos de entrada/salida
 - Manuales de operacion
