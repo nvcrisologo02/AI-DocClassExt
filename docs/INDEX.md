@@ -103,6 +103,16 @@ Guías detalladas para tareas específicas:
 
 ## 📊 **Observabilidad & Monitoreo (docs/observabilidad/)**
 
+### ⭐ Monitoreo en Producción
+- **[MONITOREO_ALERTAS_REAL.md](observabilidad/MONITOREO_ALERTAS_REAL.md)** ✅ **VERIFICADO**
+  - Configuración REAL de Application Insights en SRBRGDOCSAIPROD
+  - Eventos telemetría registrados (DocumentProcessed, CU.*, Prompt.Trace, BlobCleanupCycle)
+  - Circuit breaker + Retry policy implementados en código
+  - Hard timeouts y métricas por subfase de CU
+  - Queries KQL validadas + script PowerShell para exportar reportes
+  - **Fuente:** Código verificado en `AzureContentUnderstandingProvider.cs`, `PromptTraceTelemetryService.cs`, `PersistirActivity.cs`
+  - *Líneas: ~450 | Verificado: 2026-06-10*
+
 ### Guía de Observabilidad
 - **[OBSERVABILIDAD_KQL.md](observabilidad/OBSERVABILIDAD_KQL.md)**
   - 20 KQL queries listas para copiar-pegar
@@ -114,6 +124,7 @@ Guías detalladas para tareas específicas:
 
 ### Workbooks & Dashboards
 - Documentos en formato `.workbook.json` para Azure Monitor
+- **Incluye:** `documentia-cu-performance.workbook.json` — Dashboard interactivo para CU performance diagnostics
 
 ---
 
@@ -197,14 +208,25 @@ Guías detalladas para tareas específicas:
 
 ## 🏗️ **Infraestructura & Despliegue (docs/infraestructura/ — 2026-06-10)**
 
-- **[INFRAESTRUCTURA_DESPLIEGUE.md](infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md)** ⭐ **LEER PRIMERO**
-  - Topología Azure (staging vs production)
-  - Resource groups y servicios por ambiente
-  - Capacidad & escalado (límites actuales)
-  - Cost breakdown ($926/month) + optimizaciones
-  - Networking, Disaster recovery, Backup strategy
-  - Monitoring, alertas, compliance
-  - *Líneas: ~245 | Tiempo: 30 min overview*
+### ✅ VERIFICADO CONTRA PIPELINES REALES
+
+- **[INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md)** ⭐ **FUENTE DE VERDAD**
+  - Topología completa: 13 recursos en SRBRGDOCSAIPROD
+  - Azure Functions (srbappprodocai) + 2 App Services
+  - Key Vault con 40+ secrets
+  - CU/DI/OpenAI endpoints reales
+  - 60+ App Settings documentadas
+  - Proceso de despliegue real (6 stages)
+  - Verificado contra: azure-pipelines*.yml
+  - *Líneas: ~500 | Tiempo: 30 min overview | Status: ✅ Verificado*
+
+### Procedimientos Relacionados
+- **[CI_CD_DEPLOYMENT_DETAILS.md](procedimientos/CI_CD_DEPLOYMENT_DETAILS.md)**
+  - Pipeline orchestration (manual trigger, no CI/CD automático)
+  - Build → Migration → Deploy Functions → Deploy Admin → Deploy AssetResolver
+  - Troubleshooting pipeline failures
+  - Secrets management en KeyVault
+  - *Líneas: ~325 | Tiempo: 25 min lookup*
 
 ---
 

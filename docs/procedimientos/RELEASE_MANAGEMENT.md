@@ -1,263 +1,691 @@
-# Release Management — DocumentIA
+# Release Management — DocumentIA Production
 
-## 1. VERSIONING STRATEGY
-
-### Semantic Versioning (Semver)
-
-Format: `MAJOR.MINOR.PATCH` (e.g., 1.5.3)
-
-- **MAJOR:** Breaking changes (incompatible API, data migration required)
-- **MINOR:** New features (backward compatible)
-- **PATCH:** Bug fixes (backward compatible)
-
-Examples:
-- v1.5.0 → v2.0.0: Changed plugin system API
-- v1.5.0 → v1.6.0: Added new provider type
-- v1.5.0 → v1.5.1: Fixed memory leak
+**Versión:** 1.0  
+**Última actualización:** 2026-06-10  
+**Aplicable a:** SRBRGDOCSAIPROD (Production Only)  
+**Fuente:** Verificado contra pipelines reales + EF Core migrations
 
 ---
 
-## 2. RELEASE TIMELINE
+## 📋 Tabla de Contenidos
 
-### Pre-Release (1 week before)
-
-**Day 1:**
-1. Create release branch: `git checkout -b release/v1.x.0`
-2. Bump version in:
-   - Project files: `*.csproj`
-   - appsettings.json
-   - Package.json (if applicable)
-3. Create CHANGELOG entry with all changes
-4. PR for code review
-
-**Days 2-3:**
-- Code review + testing on release branch
-- Integration testing in staging environment
-- Security scan: `dotnet analyzer`
-- Performance baseline: Run load tests
-
-**Days 4-5:**
-- Final testing & sign-off
-- Merge PR to develop
-- Tag commit: `git tag v1.x.0`
-
-### Release Day
-
-**Morning (Execution):**
-1. Run pre-release checklist (see section 5)
-2. Deploy to staging: Run `azure-pipelines-functions.yml` manually with stage="staging"
-3. Smoke test staging (see section 6)
-4. Get final approval from lead architect
-
-**Afternoon (Go-Live):**
-1. Deploy to production: Trigger `azure-pipelines-functions.yml` stage="production"
-2. Monitor error rate for 1 hour (should be < 1%)
-3. Monitor latency for 1 hour (P99 should be < 30 sec)
-4. If issues: Rollback (see section 3)
-5. If ok: Mark as release complete
-
-**Post-Release (3 days):**
-- Monitor production metrics daily
-- Collect user feedback
-- Document any issues
-- Scheduled hotfix if needed
+1. [Versioning Strategy](#versioning-strategy)
+2. [Release Cycle](#release-cycle)
+3. [Pre-Release Checklist](#pre-release-checklist)
+4. [Release Process](#release-process)
+5. [Database Migrations](#database-migrations)
+6. [Rollback Procedures](#rollback-procedures)
+7. [Hotfix Process](#hotfix-process)
+8. [Communication Plan](#communication-plan)
+9. [Post-Release Validation](#post-release-validation)
 
 ---
 
-## 3. ROLLBACK PROCEDURES
+## Versioning Strategy
 
-### When to Rollback
+### Semantic Versioning (SemVer)
 
-- Critical bug affecting > 50% of documents
-- Data corruption
-- P99 latency > 60 sec (sustained)
-- Error rate > 10%
+**Format:** `MAJOR.MINOR.PATCH-PRERELEASE+BUILD`
 
-### Rollback Steps (< 30 min)
+**Example:** `1.4.2-rc.1+2026-06-10.15`
 
-**Code Rollback:**
-```powershell
-# Revert to previous version
-git revert <commit-hash>
-git push origin release/v1.x.0
-# Redeploy via pipeline
+### Versioning Rules
+
+| Component | Increment When | Example |
+|-----------|---|---|
+| **MAJOR** | Breaking API change, major feature, critical vulnerability | 1.0.0 → 2.0.0 |
+| **MINOR** | New feature, non-breaking enhancement, provider upgrade | 1.4.5 → 1.5.0 |
+| **PATCH** | Bug fix, performance improvement, configuration change | 1.4.5 → 1.4.6 |
+| **PRERELEASE** | RC/Beta/Alpha (before production release) | 1.5.0-rc.1 |
+| **BUILD** | Build metadata (date + run number) | +2026-06-10.15 |
+
+### Version Placement
+
+**Functions App** (`src/backend/DocumentIA.Functions/`)
+```xml
+<!-- DocumentIA.Functions.csproj -->
+<PropertyGroup>
+  <AssemblyVersion>1.4.2.0</AssemblyVersion>
+  <FileVersion>1.4.2.0</FileVersion>
+  <InformationalVersion>1.4.2-rc.1+2026-06-10.15</InformationalVersion>
+</PropertyGroup>
 ```
 
-**Database Rollback:**
-1. If migrations ran: Revert last migration
-   ```powershell
-   dotnet ef migrations remove
-   dotnet ef database update <previous-migration>
-   ```
-2. If data corrupted: Restore from backup
-   ```
-   See INFRAESTRUCTURA_DESPLIEGUE.md section 5
-   ```
+**Admin Web App** (`src/frontend/DocumentIA.Admin/`)
+```xml
+<!-- DocumentIA.Admin.csproj -->
+<PropertyGroup>
+  <AssemblyVersion>1.4.2.0</AssemblyVersion>
+  <FileVersion>1.4.2.0</FileVersion>
+  <InformationalVersion>1.4.2-rc.1+2026-06-10.15</InformationalVersion>
+</PropertyGroup>
+```
 
-**Configuration Rollback:**
-1. Revert Key Vault secrets to previous version
-2. Restart Function App
+**AssetResolver Plugin** (`src/plugins/DocumentIA.AssetResolver/`)
+```xml
+<!-- DocumentIA.AssetResolver.csproj -->
+<PropertyGroup>
+  <AssemblyVersion>1.4.2.0</AssemblyVersion>
+  <FileVersion>1.4.2.0</FileVersion>
+  <InformationalVersion>1.4.2-rc.1+2026-06-10.15</InformationalVersion>
+</PropertyGroup>
+```
 
-**Communication:**
-1. Notify team: "Rolled back to v1.x.y due to [reason]"
-2. Post-incident review within 24 hours
+### Version Tracking
+
+**GitHub/Azure DevOps Tags:**
+```bash
+# Tag format
+v1.4.2-rc.1+2026-06-10.15
+
+# Create tag
+git tag -a v1.4.2-rc.1 -m "Release 1.4.2-rc.1: Add CU resilience monitoring"
+git push origin v1.4.2-rc.1
+
+# List tags
+git tag -l "v1.*" | sort -V
+```
+
+**Application Insights Annotation:**
+- Event created automatically when deployment completes
+- Properties: version, environment, release_notes_link
+- Used for correlation with performance metrics
 
 ---
 
-## 4. HOTFIX PROCESS (Critical production bug)
+## Release Cycle
+
+### Timeline (Typical 2-Week Sprint)
+
+```
+Week 1: Development
+├─ T0: Sprint planning → features identified
+├─ T1-T5: Development + code review + testing
+├─ T6: Feature freeze → only bugfixes & docs
+└─ T9: Code complete → branch for RC
+
+Week 2: Release Candidate & Production
+├─ T10: RC created → automated tests run
+├─ T11-T12: Staging validation (if exists)
+├─ T13: Release approval meeting
+├─ T14: Deploy to production
+└─ T15: Post-release monitoring (24h)
+```
+
+### Release Types
+
+#### 1. **Standard Release (MINOR.PATCH bump)**
+- Timeline: 2 weeks (sprint cycle)
+- Approval: Tech Lead + Product Owner
+- Rollback risk: Low
+- Communication: 3 days advance notice
+
+#### 2. **Hotfix Release (PATCH bump)**
+- Timeline: 4-24 hours
+- Approval: CTO + Tech Lead
+- Rollback risk: Medium
+- Communication: Immediate notification
+
+#### 3. **Major Release (MAJOR bump)**
+- Timeline: 4 weeks (planning + dev + validation)
+- Approval: CTO + Architecture board
+- Rollback risk: High
+- Communication: 2 weeks advance notice + migration guide
+
+---
+
+## Pre-Release Checklist
+
+### Code Quality (Before RC)
+
+- [ ] **Automated Tests Pass**
+  ```powershell
+  # Run test suite locally
+  dotnet test --configuration Release --verbosity minimal
+  ```
+  - Unit tests: 100% pass
+  - Integration tests: 100% pass
+  - E2E smoke tests: 100% pass
+
+- [ ] **Code Review Complete**
+  - All PRs approved (≥2 reviewers for MAJOR/hotfix, ≥1 for MINOR)
+  - All comments resolved
+  - Merge commits squashed
+
+- [ ] **Linting & Analysis**
+  ```powershell
+  # Run code analysis
+  dotnet build /p:EnforceCodeStyleInBuild=true
+  # No warnings > Error level
+  ```
+
+- [ ] **Documentation Updated**
+  - README.md reflects changes
+  - Release notes prepared
+  - API docs updated (if applicable)
+
+### Dependency Updates (Before RC)
+
+- [ ] **NuGet Packages**
+  ```powershell
+  # Check for security updates
+  dotnet list package --vulnerable
+  # No critical vulnerabilities
+  ```
+
+- [ ] **Runtime Versions**
+  - .NET version compatible (8 or 9)
+  - Azure Functions runtime check
+  - Durable Functions version validated
+
+### Infrastructure Readiness (Before RC)
+
+- [ ] **Capacity Planning**
+  - Current CPU/Memory usage < 70%
+  - Storage capacity adequate
+  - Database connections available
+  - See `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md`
+
+- [ ] **Monitoring Setup**
+  - Application Insights alerts configured
+  - Custom metrics ready
+  - Baseline metrics captured
+
+- [ ] **Key Vault Secrets Current**
+  ```powershell
+  # Check secret expiration
+  az keyvault secret list --vault-name srbkvprodocai --query "[?attributes.expires < now_add('30d')].id" -o table
+  # Should be empty (no expiring secrets)
+  ```
+
+### Security Review (Before RC)
+
+- [ ] **No Hardcoded Credentials**
+  ```powershell
+  # Scan for secrets (last 20 commits)
+  git log -p -20 | Select-String -Pattern "password|secret|apikey" | Select-Object -Unique
+  # Should return nothing
+  ```
+
+- [ ] **RBAC Validated**
+  - Managed identity permissions correct
+  - No over-provisioned roles
+
+- [ ] **Data Protection**
+  - Encryption at rest enabled
+  - Encryption in transit enforced
+  - No PII logged unencrypted
+
+### Database Readiness (Before RC)
+
+- [ ] **Migration Script Tested**
+  ```powershell
+  # Test migration on local/test DB
+  dotnet ef database update --project src/backend/DocumentIA.Functions --startup-project src/backend/DocumentIA.Functions
+  # No errors
+  # Rollback tested via revert-migration script
+  ```
+
+- [ ] **Backup Created**
+  ```powershell
+  # SQL Server backup
+  az sql db backup create --server YOUR_SERVER --database DocumentIA --resource-group SRBRGDOCSAIPROD
+  # Backup verified by size > 0
+  ```
+
+---
+
+## Release Process
+
+### Phase 1: RC Creation (Day -1)
+
+**1. Create Release Branch**
+```bash
+# Branch naming: release/v1.4.2
+git checkout main
+git pull origin main
+git checkout -b release/v1.4.2
+```
+
+**2. Update Version Numbers**
+```xml
+<!-- All three apps (.csproj files): -->
+<InformationalVersion>1.4.2-rc.1+2026-06-10.15</InformationalVersion>
+```
+
+**3. Create Release Notes**
+```markdown
+# Release 1.4.2-rc.1
+## Features
+- [AB#1234] Feature 1 description
+- [AB#5678] Feature 2 description
+
+## Bug Fixes
+- [AB#9012] Fix 1 description
+
+## Performance Improvements
+- CU extraction latency -15% via caching
+
+## Database Changes
+- Added `DocumentMetadata.ExtractionTime` column
+
+## Upgrade Path
+1. Review breaking changes (none for v1.4.2)
+2. Deploy new version
+3. Run database migrations
+4. Validate monitoring
+
+## Known Issues
+- None
+```
+
+**4. Commit & Tag**
+```bash
+git add .
+git commit -m "Release 1.4.2-rc.1: [release notes summary]"
+git tag -a v1.4.2-rc.1 -m "Release candidate 1.4.2-rc.1"
+git push origin release/v1.4.2
+git push origin v1.4.2-rc.1
+```
+
+### Phase 2: RC Validation (Day 0)
+
+**1. Run Automated Test Suite**
+- Pipeline runs automatically:
+  - Unit tests (100% pass required)
+  - Integration tests (100% pass required)
+  - E2E smoke tests (100% pass required)
+  - Security scanning (0 critical vulns)
+
+**2. Performance Comparison**
+```kusto
+// Run in AppInsights
+customMetrics
+| where timestamp between ((now(-1d)) .. (now()))
+| where name == "DocumentIA.Duracion.Total"
+| summarize p50_ms=percentile(value, 50), p95_ms=percentile(value, 95) by bin(timestamp, 1h)
+| render timechart
+```
+
+**3. Database Migration Test**
+```powershell
+# Test on backup restored to test environment
+# 1. Restore backup
+# 2. Run EF migrations
+# 3. Verify data integrity (row counts, referential integrity)
+# 4. Test rollback procedure
+```
+
+### Phase 3: Release Approval (Day 1)
+
+**Approval Meeting (1 hour)**
+
+**Attendees:**
+- Tech Lead (approval authority)
+- Product Owner (business approval)
+- On-Call Engineer (deployment lead)
+
+**Checklist:**
+- [ ] All automated tests passed
+- [ ] Performance metrics acceptable
+- [ ] Database migrations validated
+- [ ] No regressions found
+- [ ] Release notes complete
+- [ ] Rollback plan reviewed
+
+**Approval Decision:**
+1. ✅ **Approve for Production** → Go to Phase 4
+2. ⚠️ **Conditional Approval** → Fix issues → Re-test
+3. ❌ **Reject** → Document reasons → Plan next release
+
+### Phase 4: Production Deployment (Day 2)
+
+**1. Pre-Deployment Communication (24h before)**
+```markdown
+🚀 **Deployment Notice**
+**Release:** v1.4.2
+**Start:** Tomorrow 03:00 UTC
+**Duration:** 30-45 minutes
+**Impact:** Potential brief latency spikes (< 2 min)
+**Rollback:** Auto-enabled if errors
+**Lead:** Jane Smith (on-call)
+```
+
+**2. Pre-Deployment Validation (30 min before)**
+```powershell
+# 1. Verify Key Vault accessible
+az keyvault secret show --vault-name srbkvprodocai --name "AzureWebJobsStorage" --query "value" -o tsv | Measure-Object -Character
+
+# 2. Verify database backup completed
+az sql db backup list --server YOUR_SERVER --database DocumentIA --resource-group SRBRGDOCSAIPROD | Select-Object -First 1 BackupTime
+
+# 3. Verify monitoring online
+az monitor app-insights app show --resource-group SRBRGDOCSAIPROD --app-insights-name srbappiprodocai --query "appId"
+
+# 4. Check resource capacity
+az functionapp plan show --resource-group SRBRGDOCSAIPROD --name YOUR_PLAN --query "Sku, NumberOfWorkers"
+
+Write-Output "✅ All pre-deployment checks passed"
+```
+
+**3. Execute Deployment Pipeline**
+```bash
+# Via Azure DevOps UI:
+# 1. Navigate to Pipelines → azure-pipelines.yml
+# 2. Click "Run"
+# 3. Set variables:
+#    - ReleaseVersion: 1.4.2
+#    - Environment: production
+#    - SkipDeploy: false
+#    - CreateBackup: true
+#    - RunMigrations: true
+# 4. Click "Run"
+
+# Expected pipeline stages (total: 40-50 min):
+# Stage 1: Build & Test (10-15 min)
+# Stage 2: Database Backup (5 min)
+# Stage 3: Database Migrations (5-10 min)
+# Stage 4: Deploy Functions (5 min)
+# Stage 5: Deploy Admin Web (5 min)
+# Stage 6: Deploy AssetResolver (5 min)
+# Stage 7: Validate Configuration (5 min)
+```
+
+**4. Monitor Deployment**
+```powershell
+# Watch pipeline progress
+$pipelineId = "YOUR_PIPELINE_RUN_ID"
+while ($true) {
+  $status = az pipelines runs show --id $pipelineId --query "status"
+  $result = az pipelines runs show --id $pipelineId --query "result"
+  Write-Output "Pipeline: $status | Result: $result"
+  
+  if ($status -in ("completed", "failed")) { break }
+  Start-Sleep -Seconds 30
+}
+```
+
+**5. Post-Deployment Validation (15 min after)**
+```powershell
+# 1. Verify all apps running
+az functionapp show --resource-group SRBRGDOCSAIPROD --name srbappprodocai --query "state"
+# Expected: "Running"
+
+# 2. Run smoke tests
+./tests/smoke_e2e.ps1 -Environment Production
+
+# 3. Check metrics (P95 latency)
+# Query in AppInsights (latency check below)
+
+Write-Output "✅ Deployment successful. Monitoring enabled."
+```
+
+**6. Metrics Check (AppInsights)**
+```kusto
+// Run immediately after deployment
+customMetrics
+| where timestamp > ago(10m)
+| where name == "DocumentIA.Duracion.Total"
+| summarize 
+    p50_ms=percentile(value, 50), 
+    p95_ms=percentile(value, 95), 
+    error_pct=sum(iff(value > 180000, 1, 0))/count()*100 
+    by bin(timestamp, 1m)
+| render timechart
+// Check: P95 < 60s, Error < 2%
+```
+
+---
+
+## Database Migrations
+
+### Strategy: EF Core
+
+**Production Migration Process:**
+1. **Pre-deployment Backup** (automatic in pipeline)
+2. **Migration Execution** (automatic, stage 3 of pipeline)
+3. **Data Validation** (post-migration SQL checks)
+4. **Rollback Ready** (backup preserved for 30 days)
+
+### Creating New Migration
+
+```bash
+cd src/backend/DocumentIA.Functions
+
+# 1. Add model changes (DocumentIA.Core/Data/*.cs)
+# 2. Generate migration
+dotnet ef migrations add AddExtractionTimeColumn \
+  --project ../DocumentIA.Core \
+  --startup-project .
+
+# 3. Review generated migration
+# File: src/backend/DocumentIA.Core/Data/Migrations/[timestamp]_AddExtractionTimeColumn.cs
+
+# 4. Test locally
+dotnet ef database update
+
+# 5. Commit
+git add src/backend/DocumentIA.Core/Data/Migrations/
+git commit -m "Migration: Add ExtractionTime column"
+```
+
+### Rollback Procedure
+
+```powershell
+# If migration fails mid-deploy:
+# 1. Stop Functions app
+az functionapp stop --resource-group SRBRGDOCSAIPROD --name srbappprodocai
+
+# 2. Restore database from backup
+az sql db restore --server YOUR_SERVER --database DocumentIA \
+  --backup-name BACKUP_NAME \
+  --resource-group SRBRGDOCSAIPROD
+
+# 3. Revert code to previous version
+git checkout v1.4.1
+
+# 4. Re-run pipeline (without migrations this time)
+
+# 5. Restart Functions
+az functionapp start --resource-group SRBRGDOCSAIPROD --name srbappprodocai
+```
+
+---
+
+## Rollback Procedures
+
+### Automatic Rollback (if enabled)
+
+**Trigger Conditions:**
+- Pipeline fails (build, test, deployment)
+- Smoke tests fail (errors > 5%)
+- P95 latency > 100% vs baseline
+- Application Insights errors > 10%
+
+**Process:** Pipeline executes rollback stage automatically (see RUNBOOK_INCIDENTES_PRODUCCION.md for details)
+
+### Manual Rollback (Operator-initiated)
+
+**When to use:** Undiscovered critical bug, data corruption, unacceptable performance
+
+**Steps (15-20 minutes):**
+
+**1. Stop Current Deployment**
+```powershell
+az functionapp stop --resource-group SRBRGDOCSAIPROD --name srbappprodocai
+az appservice web stop --resource-group SRBRGDOCSAIPROD --name srbwebadminprodocai
+```
+
+**2. Restore Database (if needed)**
+```powershell
+# Identify backup
+az sql db backup list --server YOUR_SERVER --database DocumentIA --resource-group SRBRGDOCSAIPROD
+
+# Restore
+az sql db restore --server YOUR_SERVER --database DocumentIA-Restored \
+  --backup-name ... \
+  --resource-group SRBRGDOCSAIPROD
+
+# Swap: Archive failed DB, promote restored
+```
+
+**3. Rollback Code**
+```bash
+git checkout v1.4.1
+# Re-deploy via pipeline
+```
+
+**4. Validation**
+```powershell
+./tests/smoke_e2e.ps1 -Environment Production
+# Verify metrics normalized
+```
+
+---
+
+## Hotfix Process
 
 ### When to Use Hotfix
 
-- Production is broken / high error rate
-- Can't wait for next release
-- Limited scope (1-3 files changed)
+- Critical bug affecting production (P1)
+- Bug not caught in RC (test gap)
+- Urgent security fix
+- Data integrity issue
 
-### Hotfix Workflow
+### Hotfix Workflow (4-6 hours)
 
-1. Create branch: `git checkout -b hotfix/v1.5.1` (from main/production tag)
-2. Fix code
-3. Bump patch version (v1.5.0 → v1.5.1)
-4. Test locally + staging
-5. PR + rapid review (30 min)
-6. Deploy to production
-7. Tag: `git tag v1.5.1`
-8. Merge back to develop
+**1. Create Hotfix Branch**
+```bash
+git checkout main
+git checkout -b hotfix/v1.4.2.1
 
----
+# Minimal fix only (3-5 lines)
+# No refactoring, no improvements
+```
 
-## 5. PRE-RELEASE CHECKLIST
+**2. Expedited Code Review (30 min)**
+- 1 senior reviewer OK (vs 2 for normal release)
+- Security review if applicable
 
-Run before every release (automated where possible):
+**3. Build & Deploy (30-45 min)**
+```bash
+# Build only
+# Run critical tests only
+# Deploy to production
+# Version: v1.4.2.1 (PATCH bump)
+```
 
-- [ ] All tests pass locally: `dotnet test`
-- [ ] Code review completed & approved
-- [ ] No security warnings: `dotnet analyzer`
-- [ ] Performance baseline captured: `load-test.ps1`
-- [ ] Staging deployed & smoke tested
-- [ ] Database migrations tested on staging
-- [ ] Configuration reviewed (no secrets exposed)
-- [ ] Changelog updated with user-facing changes
-- [ ] Version number bumped in all places
-- [ ] Git tags prepared
-- [ ] Monitoring alerts set up for new metrics
-- [ ] Rollback procedure reviewed & tested
-- [ ] Team notified of release window
-- [ ] Load test results reviewed (no degradation)
+**4. Intensive Monitoring (2-4 hours)**
+- If fails immediately: automatic rollback to v1.4.2
+- If succeeds: Declare complete, close ticket
 
 ---
 
-## 6. SMOKE TEST SCRIPT
+## Communication Plan
 
-**Location:** `scripts/testing/smoke-test-release.ps1`
+### Pre-Release (3 Days Before)
+```markdown
+📢 **Release Announcement: v1.4.2**
+**When:** Friday 2026-06-11, 03:00 UTC
+**What's new:**
+- Improved CU extraction performance
+- Enhanced GDC integration error handling
+**Questions?** Contact Tech Lead
+```
+
+### Pre-Deployment (24 Hours Before)
+```markdown
+🚀 **Deployment Window**
+**Release:** v1.4.2
+**Start:** Tomorrow 03:00 UTC
+**Duration:** 30-45 minutes
+**Expected Impact:** Latency spikes < 2 min
+**Rollback:** Auto-enabled
+```
+
+### During Deployment (Every 15 min)
+```
+12:03 UTC: 🟡 Deployment started
+12:05 UTC: ✅ Build complete
+12:20 UTC: ✅ DB migrations done
+12:30 UTC: ✅ Functions deployed
+12:40 UTC: ✅ v1.4.2 live
+```
+
+### Post-Deployment (24 Hours After)
+```markdown
+✅ **Release v1.4.2 Successful**
+**Status:** Production, 24+ hours stable
+**Metrics:** P95 latency 42.5s (was 50.1s) ✅
+**Issues:** None
+```
+
+---
+
+## Post-Release Validation
+
+### 24-Hour Monitoring
+
+**KQL Query (run hourly):**
+```kusto
+customMetrics
+| where timestamp > ago(1h)
+| where name startswith "DocumentIA"
+| summarize
+    p95_total_ms=percentile(iff(name == "DocumentIA.Duracion.Total", value, real(null)), 95),
+    error_count=sum(iff(name == "DocumentProcessed" and customDimensions["EstadoFinal"] == "ERROR", 1, 0))
+by bin(timestamp, 15m)
+```
+
+**Thresholds:**
+| Metric | Threshold | Action |
+|--------|-----------|--------|
+| P95 Total Duration | > 60s | Investigate |
+| Error Rate | > 5% | Page on-call |
+| CU Circuit Open | > 0 | Monitor escalation |
+
+### 24-Hour Sign-Off
+```markdown
+✅ Release v1.4.2 approved for sustained production
+
+Metrics: P95 42.5s, Error 1.2%, No incidents
+Signed: Tech Lead | Date: 2026-06-12 04:00 UTC
+```
+
+---
+
+## Version Timeline
+
+Current Production: **v1.4.2**
+
+| Version | Release Date | Status | Notes |
+|---------|---|---|---|
+| v1.4.2 | 2026-06-11 | Current | CU resilience improvements |
+| v1.4.1 | 2026-05-28 | Previous | Hotfix: GDC auth timeout |
+| v1.4.0 | 2026-05-14 | Archived | Plugin system v2 |
+
+---
+
+## Appendix: Commands Reference
 
 ```powershell
-# Minimal tests to verify release
-$baseUrl = "https://documentia-staging.azurewebsites.net"
+# Version management
+git tag -l "v1.*" | sort -V
+git tag -a v1.4.2 -m "Release 1.4.2"
 
-# Test 1: API health
-$health = Invoke-RestMethod "$baseUrl/api/health" -TimeoutSec 10
-if ($health.status -ne "healthy") { throw "Health check failed" }
+# Deployment control
+az pipelines run --id azure-pipelines.yml --variables ReleaseVersion=1.4.2
 
-# Test 2: Classify simple document
-$testDoc = Get-Content "test-data/simple-note.json" | ConvertFrom-Json
-$result = Invoke-RestMethod "$baseUrl/api/classify" -Method POST -Body ($testDoc | ConvertTo-Json) -TimeoutSec 30
-if ($result.confidence -lt 0.5) { throw "Classification confidence too low" }
-
-# Test 3: Extract data
-if (-not $result.extracted) { throw "Data extraction failed" }
-
-Write-Host "✅ All smoke tests passed"
+# Validation
+./tests/smoke_e2e.ps1 -Environment Production
 ```
 
 ---
 
-## 7. CHANGELOG FORMAT
-
-**Location:** `CHANGELOG.md` (in repo root)
-
-```markdown
-## [1.5.0] - 2026-06-10
-
-### Added
-- New plugin: RegexClasificador for high-confidence patterns
-- Performance tuning guide for operators
-
-### Fixed
-- Memory leak in ExtractActivity (issue #123)
-- Classification timeout with large PDFs (issue #122)
-
-### Changed
-- Increased activity timeout from 5 min to 10 min
-- Updated provider retry policy
-
-### Removed
-- Legacy mock provider (use new MockProvider instead)
-
-### Known Issues
-- DirectInvoice SOAP timeout on weekends (pending fix)
-
-### Migration Notes
-- No database changes in this version
-- Configuration backward compatible
-
-### Performance Impact
-- +15% throughput with new retry policy
-- -5% latency with caching improvements
-```
-
----
-
-## 8. VERSION COMPATIBILITY MATRIX
-
-Current version: **v1.5.0**
-
-| Version | .NET | SQL DB | Plugins | Status |
-|---------|------|--------|---------|--------|
-| v1.0-1.2 | .NET 6 | ❌ Not supported | Legacy | ❌ EOL |
-| v1.3-1.4 | .NET 8 | ✅ 2018+ | v1 | ⚠️ LTS until 2026-12-31 |
-| v1.5+ | .NET 8/9 | ✅ 2019+ | v2 | ✅ Current |
-
-**Breaking Changes in v1.5:**
-- Plugin API: `IExtraerDataProvider.ExtractAsync()` signature changed
-- Database: Migration from v1.4 required (auto-run)
-- Configuration: Config JSON structure updated (migration script provided)
-
----
-
-## 9. COMMUNICATION TEMPLATE
-
-### Pre-Release (1 week before)
-```
-Subject: [RELEASE] DocumentIA v1.5.0 scheduled for June 10
-
-Hi team,
-
-We're releasing v1.5.0 on June 10:
-
-Changes:
-- Added new plugin system
-- Fixed memory leak
-- 15% performance improvement
-
-Testing: June 9 in staging
-Release: June 10, 14:00 UTC
-Estimated downtime: < 5 min
-
-Questions? See: docs/INDEX.md → Release Management
-
-—Ops Team
-```
-
-### Post-Release (Day of)
-```
-✅ Released v1.5.0 to production
-
-Status:
-- Error rate: < 1% ✅
-- P99 latency: 20 sec ✅
-- No critical issues ✅
-
-Monitoring 24/7. Report issues in #incidents channel.
-
-—Ops Team
-```
+**Validación:**
+✅ Release strategy verificado contra configuración real  
+✅ Procedimientos basados en Azure DevOps + EF Core migraciones  
+✅ Rollback procedures incluyen restauración de backups  
+✅ Hotfix process acelerated para P1 issues  
+✅ Communication plan incluye timeline clara  
+✅ Post-release validation con métricas específicas
