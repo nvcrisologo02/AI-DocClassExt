@@ -63,7 +63,14 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         var defaultPromptConfig = _promptDefaults.ToPromptConfig();
         var effectivePromptConfig = ResolvePromptConfig(tipologiaPromptConfig, input.Prompt, defaultPromptConfig);
         var promptActivo = effectivePromptConfig is not null && effectivePromptConfig.Enabled && HasPromptDefinition(effectivePromptConfig);
-        var necesitaPrompt = promptActivo && string.IsNullOrWhiteSpace(input.ResultadoPromptCombinado);
+        
+        // Si hay override de prompt en la petición, ignora caché y ejecuta siempre
+        var tienePromptOverride = input.Prompt != null && 
+            (!string.IsNullOrWhiteSpace(input.Prompt.SystemPrompt) || 
+             !string.IsNullOrWhiteSpace(input.Prompt.UserPromptTemplate));
+        
+        var necesitaPrompt = (promptActivo || tienePromptOverride) && 
+            (string.IsNullOrWhiteSpace(input.ResultadoPromptCombinado) || tienePromptOverride);
         var necesitaResumen = input.ForzarResumenPorDefecto && string.IsNullOrWhiteSpace(input.ResumenCombinado);
 
         if (!necesitaPrompt && !necesitaResumen)
@@ -261,8 +268,19 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             userText += $"\n\nIncluye también la clave 'resultado_prompt' como string. Instrucción para resultado_prompt:\n{promptInstruction}";
         }
 
-        if (!string.IsNullOrWhiteSpace(contenido))
+        // Agregar contenido del documento SOLO si no está en ninguno de los templates
+        bool contenidoEnResumen = !string.IsNullOrWhiteSpace(resumenConfig.UserPromptTemplate) && 
+                                  resumenConfig.UserPromptTemplate.Contains("{contenido}", StringComparison.OrdinalIgnoreCase);
+        bool contenidoEnPrompt = incluirPromptPropio && promptConfig is not null && 
+                                 !string.IsNullOrWhiteSpace(promptConfig.UserPromptTemplate) && 
+                                 promptConfig.UserPromptTemplate.Contains("{contenido}", StringComparison.OrdinalIgnoreCase);
+
+        if (!string.IsNullOrWhiteSpace(contenido) && !contenidoEnResumen && !contenidoEnPrompt)
         {
+            _logger.LogInformation(
+                "Prompt JSON para tipología {Tipologia}: Ni resumen ni prompt contienen {{contenido}}, agregando markdown automáticamente.",
+                input.Tipologia);
+
             userText += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contenido}";
         }
 
@@ -335,6 +353,18 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         }
 
         var promptText = InterpolateTemplate(promptConfig.UserPromptTemplate, contenido, input.DatosExtraidos);
+
+        // Si el template no incluye {contenido} pero hay contenido disponible, agregarlo automáticamente
+        // Esto asegura que el markdown siempre se pase, incluso si el usuario olvida el tag
+        if (!string.IsNullOrWhiteSpace(contenido) && 
+            !promptConfig.UserPromptTemplate.Contains("{contenido}", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation(
+                "Prompt para tipología {Tipologia}: Template no contiene {{contenido}}, agregando markdown automáticamente al final.",
+                input.Tipologia);
+
+            promptText = $"{promptText}\n\n---\n\n**Documento:**\n\n{contenido}";
+        }
 
         // Si hay documento en base64 y el modo es vision (o no hay markdown), adjuntar como imagen
         if (!string.IsNullOrWhiteSpace(input.DocumentoBase64) &&
