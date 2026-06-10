@@ -149,7 +149,7 @@ stages:
                           "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
                         )
 
-                        & .\scripts\ensure-app-settings.ps1 `
+                        & .\scripts\configuration\ensure-app-settings.ps1 `
                           -AppKind webapp `
                           -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                           -Name "$(AZURE_ADMIN_WEB_APP_NAME)" `
@@ -162,7 +162,7 @@ stages:
                     scriptType: pscore
                     scriptLocation: inlineScript
                     inlineScript: |
-                      ./scripts/validate-azure-appsettings-contract.ps1 `
+                      ./scripts/testing/validate-azure-appsettings-contract.ps1 `
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
                         -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `

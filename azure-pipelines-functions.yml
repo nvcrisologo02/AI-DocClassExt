@@ -96,7 +96,7 @@ stages:
                   "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)"
                 )
 
-                & .\scripts\ensure-app-settings.ps1 `
+                & .\scripts\configuration\ensure-app-settings.ps1 `
                   -AppKind functionapp `
                   -ResourceGroup "$(azureResourceGroup)" `
                   -Name "$(functionAppName)" `

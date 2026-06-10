@@ -291,7 +291,7 @@ stages:
                         "GDC__BypassSslValidation=true"
                       )
 
-                      & .\scripts\ensure-app-settings.ps1 `
+                      & .\scripts\configuration\ensure-app-settings.ps1 `
                         -AppKind functionapp `
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
@@ -399,7 +399,7 @@ stages:
                         "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
                       )
 
-                      & .\scripts\ensure-app-settings.ps1 `
+                      & .\scripts\configuration\ensure-app-settings.ps1 `
                         -AppKind webapp `
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -Name "$(AZURE_ADMIN_WEB_APP_NAME)" `
@@ -443,7 +443,7 @@ stages:
                         "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
                       )
 
-                      & .\scripts\ensure-app-settings.ps1 `
+                      & .\scripts\configuration\ensure-app-settings.ps1 `
                         -AppKind webapp `
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -Name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
@@ -470,10 +470,11 @@ stages:
               scriptType: pscore
               scriptLocation: inlineScript
               inlineScript: |
-                ./scripts/validate-azure-appsettings-contract.ps1 `
+                ./scripts/testing/validate-azure-appsettings-contract.ps1 `
                   -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                   -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
                   -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
                   -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)"
+
 
 
