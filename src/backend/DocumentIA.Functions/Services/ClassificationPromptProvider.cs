@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Data.Repositories;
@@ -44,38 +45,66 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
     public async Task<ClassificationPromptSet> GetPromptSetAsync(CancellationToken cancellationToken = default)
     {
         var cacheKey = $"{CacheKeyPrefix}all";
+        var stopwatch = Stopwatch.StartNew();
 
         // Intento 1: Buscar en caché
         if (_cache.TryGetValue<ClassificationPromptSet>(cacheKey, out var cachedSet) && cachedSet is not null)
         {
-            _logger.LogDebug("Prompts de clasificación obtenidos desde caché (TTL: {CacheTtl}s)", CacheTtl.TotalSeconds);
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "[PromptResolution] Cache HIT. Source={Source}, Version={Version}, DurationMs={DurationMs}, CacheTtl={CacheTtl}s",
+                cachedSet.Source,
+                cachedSet.Version,
+                stopwatch.ElapsedMilliseconds,
+                CacheTtl.TotalSeconds);
             return cachedSet;
         }
+
+        _logger.LogInformation("[PromptResolution] Cache MISS. Intentando resolución desde BD...");
 
         // Intento 2: Buscar en BD
         try
         {
+            var dbStopwatch = Stopwatch.StartNew();
             var promptSet = await TryLoadFromDatabaseAsync(cancellationToken);
+            dbStopwatch.Stop();
+
             if (promptSet is not null)
             {
+                stopwatch.Stop();
                 // Almacenar en caché por 120 segundos
                 _cache.Set(cacheKey, promptSet, CacheTtl);
                 _logger.LogInformation(
-                    "Prompts de clasificación cargados desde BD (versión: {Version}, origen: {Source}). Cacheados por {CacheTtl}s.",
-                    promptSet.Version,
+                    "[PromptResolution] Resolved from DATABASE. Source={Source}, Version={Version}, DbQueryMs={DbQueryMs}, TotalResolutionMs={TotalMs}, CacheTtl={CacheTtl}s",
                     promptSet.Source,
+                    promptSet.Version,
+                    dbStopwatch.ElapsedMilliseconds,
+                    stopwatch.ElapsedMilliseconds,
                     CacheTtl.TotalSeconds);
                 return promptSet;
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "[PromptResolution] Database query returned incomplete set. DbQueryMs={DbQueryMs}. Falling back to appsettings.",
+                    dbStopwatch.ElapsedMilliseconds);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Error al cargar prompts desde BD. Usando fallback de configuración.");
+            _logger.LogError(ex,
+                "[PromptResolution] Database query FAILED. Falling back to appsettings configuration.");
         }
 
         // Intento 3: Fallback a appsettings
         var fallbackSet = LoadFromFallbackConfiguration();
-        _logger.LogInformation("Prompts de clasificación cargados desde configuración fallback (appsettings).");
+        stopwatch.Stop();
+        _logger.LogWarning(
+            "[PromptResolution] Resolved from FALLBACK (appsettings). Source={Source}, Version={Version}, TotalResolutionMs={TotalMs}, CacheTtl={CacheTtl}s",
+            fallbackSet.Source,
+            fallbackSet.Version,
+            stopwatch.ElapsedMilliseconds,
+            CacheTtl.TotalSeconds);
         
         // Cachear también el fallback para evitar reconstrucción en cada llamada
         _cache.Set(cacheKey, fallbackSet, CacheTtl);
@@ -100,11 +129,11 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
             if (phase1System is not null || phase1User is not null || phase2System is not null || phase2User is not null)
             {
                 _logger.LogWarning(
-                    "Configuración incompleta en BD: Phase1System={P1S}, Phase1User={P1U}, Phase2System={P2S}, Phase2User={P2U}. Se requieren los 4 prompts activos.",
-                    phase1System?.Id,
-                    phase1User?.Id,
-                    phase2System?.Id,
-                    phase2User?.Id);
+                    "[PromptResolution] Incomplete database configuration. Phase1System={P1SExists}, Phase1User={P1UExists}, Phase2System={P2SExists}, Phase2User={P2UExists}. All 4 active prompts required.",
+                    phase1System is not null,
+                    phase1User is not null,
+                    phase2System is not null,
+                    phase2User is not null);
             }
             return null;
         }
@@ -114,11 +143,17 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
         if (versions.Distinct().Count() > 1)
         {
             _logger.LogWarning(
-                "Versiones inconsistentes en prompts de BD: Phase1System={V1S}, Phase1User={V1U}, Phase2System={V2S}, Phase2User={V2U}. Se recomienda activar prompts de la misma versión.",
+                "[PromptResolution] VERSION MISMATCH detected. Phase1SystemV={V1S}, Phase1UserV={V1U}, Phase2SystemV={V2S}, Phase2UserV={V2U}. Recommend activating prompts from same version.",
                 phase1System.Version,
                 phase1User.Version,
                 phase2System.Version,
                 phase2User.Version);
+        }
+        else
+        {
+            _logger.LogInformation(
+                "[PromptResolution] All 4 prompts loaded from database with consistent version {Version}",
+                phase1System.Version);
         }
 
         return new ClassificationPromptSet
