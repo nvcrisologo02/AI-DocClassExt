@@ -27,6 +27,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ClassificationRoutingSettings _routingSettings;
     private readonly PromptDefaultsSettings _promptDefaults;
+    private readonly IClassificationPromptProvider _promptProvider;
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly PromptTraceTelemetryService _promptTraceTelemetry;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
@@ -38,6 +39,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         IServiceScopeFactory scopeFactory,
         IOptions<ClassificationRoutingSettings> routingSettings,
         IOptions<PromptDefaultsSettings> promptDefaults,
+        IClassificationPromptProvider promptProvider,
         PromptTraceTelemetryService promptTraceTelemetry,
         ILogger<GptClasificarDataProvider> logger)
     {
@@ -47,6 +49,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         _scopeFactory = scopeFactory;
         _routingSettings = routingSettings.Value;
         _promptDefaults = promptDefaults.Value;
+        _promptProvider = promptProvider;
         _promptTraceTelemetry = promptTraceTelemetry;
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
@@ -76,38 +79,36 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         var resumenPrompt = ResolveResumenPrompt(input, contextoTexto);
         var contextoPrompt = BuildInstructionPromptContext(input.Entrada.Instrucciones.Prompt);
 
+        // Obtener prompts configurables desde BD/cache/fallback
+        var promptSet = await _promptProvider.GetPromptSetAsync(cancellationToken);
+        _logger.LogInformation(
+            "Prompts de clasificación resueltos desde {Source} (versión: {Version})",
+            promptSet.Source,
+            promptSet.Version);
+
         var phase1ResponseInstruction = resumenPrompt is null
             ? ClassificationTipologiaPromptBuilder.Phase1ResponseFormatInstruction
             : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
 
-        var phase1SystemText =
-            "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
-            "especialmente documentos de SAREB (Sociedad de Gestión de Activos procedentes de la Reestructuración Bancaria). " +
-            "Analiza el documento adjunto y clasifícalo en una familia TDN1. " +
-            "Clasifica por el acto jurídico principal del documento, ignorando el medio de remisión (correo, notificación, traslado, etc.). "+ 
-            phase1ResponseInstruction;
+        // Construir prompt Phase 1 desde configuración
+        var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
+        var phase1SystemText = promptSet.Phase1SystemPrompt;
+        var phase1UserText = promptSet.Phase1UserPrompt
+            .Replace("{CONTEXT_PROMPT}", contextoPrompt)
+            .Replace("{TDN1_CATALOG}", phase1Catalog)
+            .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
 
         if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
         {
             phase1SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
         }
 
-        var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
-        var phase1UserText =
-            $"Prompt adicional de instrucciones (si aplica):\n{contextoPrompt}\n\n" +
-            $"Familias TDN1 disponibles:\n{phase1Catalog}\n\n" +
-            "Si no puedes resolver una familia, devuelve tdn1=null y completa propuesta con una sugerencia no vinculante. Comenzando siempre por el codigo de la tipologia propuesta, seguido de la justificacion en no mas de 200 caracteres   (ejemplo: 'ESCR-06: Se trata de una escritura de dación en pago en la que los deudores transmiten un bien al acreedor para cancelar la deuda hipotecaria existente y extinguir las obligaciones derivadas.'). - No inventes códigos ni nombres fuera del catálogo.";
-
         if (resumenPrompt is not null)
         {
             phase1UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
         }
 
-        if (!string.IsNullOrWhiteSpace(contextoTexto))
-        {
-            phase1UserText += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}";
-        }
-        else
+        if (string.IsNullOrWhiteSpace(contextoTexto))
         {
             _logger.LogWarning(
                 "No hay contexto textual preprocesado para el fallback de clasificación en {Documento}. Se continuará con contexto mínimo.",
@@ -195,31 +196,21 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             ? ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction
             : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
 
-        var phase2SystemText =
-            "Eres un sistema experto en clasificación de documentos del sector inmobiliario español, " +
-            "especialmente documentos de SAREB (Sociedad de Gestión de Activos procedentes de la Reestructuración Bancaria). " +
-            "Debes seleccionar exclusivamente una tipología de la familia TDN1 ya resuelta basándote en el contenido del documento. " +
-            phase2ResponseInstruction;
+        // Construir prompt Phase 2 desde configuración
+        var phase2SystemText = promptSet.Phase2SystemPrompt;
+        var phase2UserText = promptSet.Phase2UserPrompt
+            .Replace("{TDN1_CODE}", tdn1Code)
+            .Replace("{TDN2_CATALOG}", phase2Catalog)
+            .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
 
         if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
         {
             phase2SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
         }
 
-        var phase2UserText =
-            $"Familia TDN1 resuelta: {tdn1Code}\n\n" +
-            $"Tipologías disponibles en esta familia:\n{phase2Catalog}\n\n" +
-            "Si no puedes resolver la tipología exacta, devuelve una propuesta no vinculante comenzando siempre por el código de la tipología propuesta, " +
-            "seguido de la justificación en no más de 200 caracteres (ejemplo: 'ESCR-06: Se trata de una escritura de dación en pago en la que los deudores transmiten un bien al acreedor para cancelar la deuda hipotecaria existente y extinguir las obligaciones derivadas.').";
-
         if (resumenPrompt is not null)
         {
             phase2UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
-        }
-
-        if (!string.IsNullOrWhiteSpace(contextoTexto))
-        {
-            phase2UserText += $"\n\nCONTENIDO DEL DOCUMENTO (texto/markdown):\n{contextoTexto}";
         }
 
         var phase2ResponseText = await CompleteChatAsync(
