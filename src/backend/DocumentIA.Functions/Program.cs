@@ -118,6 +118,7 @@ var host = new HostBuilder()
         services.AddScoped<IAuditoriaRepository, AuditoriaRepository>();
         services.AddScoped<ITipologiaConfigAuditRepository, TipologiaConfigAuditRepository>();
         services.AddScoped<IDocumentoEjecucionRepository, DocumentoEjecucionRepository>();
+        services.AddScoped<IPromptTemplateRepository, PromptTemplateRepository>();
         services.AddMemoryCache();
         services.AddSingleton<IConfigurationCache, ConfigurationCacheService>();
         services.AddSingleton<ICacheInvalidationService, CacheInvalidationService>();
@@ -173,6 +174,7 @@ var host = new HostBuilder()
         services.AddSingleton<ILayoutMarkdownProvider, AzureDocumentIntelligenceLayoutMarkdownProvider>();
         services.AddSingleton<PdfRecorteService>();
         services.AddSingleton<ClassificationTipologiaPromptBuilder>();
+        services.AddSingleton<IClassificationPromptProvider, ClassificationPromptProvider>();
         services.AddSingleton<GptClasificarDataProvider>();
         services.AddSingleton<PdfPageLimiterService>();
 
