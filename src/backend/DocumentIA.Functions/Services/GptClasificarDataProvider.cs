@@ -27,6 +27,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ClassificationRoutingSettings _routingSettings;
     private readonly PromptDefaultsSettings _promptDefaults;
+    private readonly ClassificationPromptsSettings _promptSettings;
     private readonly IClassificationPromptProvider _promptProvider;
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly PromptTraceTelemetryService _promptTraceTelemetry;
@@ -39,6 +40,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         IServiceScopeFactory scopeFactory,
         IOptions<ClassificationRoutingSettings> routingSettings,
         IOptions<PromptDefaultsSettings> promptDefaults,
+        IOptions<ClassificationPromptsSettings> promptSettings,
         IClassificationPromptProvider promptProvider,
         PromptTraceTelemetryService promptTraceTelemetry,
         ILogger<GptClasificarDataProvider> logger)
@@ -49,6 +51,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         _scopeFactory = scopeFactory;
         _routingSettings = routingSettings.Value;
         _promptDefaults = promptDefaults.Value;
+        _promptSettings = promptSettings.Value;
         _promptProvider = promptProvider;
         _promptTraceTelemetry = promptTraceTelemetry;
         _logger = logger;
@@ -117,6 +120,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             phase1UserText +=
                 $"\n\nNo hay contenido textual disponible para este fallback. " +
                 $"Nombre de archivo: {input.Entrada.Documento.Name}.";
+        }
+
+        // Log prompts finales si está habilitado
+        if (_promptSettings.EnableFullPromptLogging)
+        {
+            _logger.LogInformation(
+                "[Classification] FULL FINAL PROMPT (Phase1.System, {Length} chars):\n{Content}",
+                phase1SystemText.Length,
+                phase1SystemText);
+            _logger.LogInformation(
+                "[Classification] FULL FINAL PROMPT (Phase1.User, {Length} chars):\n{Content}",
+                phase1UserText.Length,
+                phase1UserText);
         }
 
         var phase1ResponseText = await CompleteChatAsync(
@@ -211,6 +227,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (resumenPrompt is not null)
         {
             phase2UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
+
+        // Log prompts finales si está habilitado
+        if (_promptSettings.EnableFullPromptLogging)
+        {
+            _logger.LogInformation(
+                "[Classification] FULL FINAL PROMPT (Phase2.System, {Length} chars):\n{Content}",
+                phase2SystemText.Length,
+                phase2SystemText);
+            _logger.LogInformation(
+                "[Classification] FULL FINAL PROMPT (Phase2.User, {Length} chars):\n{Content}",
+                phase2UserText.Length,
+                phase2UserText);
         }
 
         var phase2ResponseText = await CompleteChatAsync(

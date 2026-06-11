@@ -11,6 +11,13 @@ public class ClassificationPromptsSettings
 
     /// <summary>Configuración de prompts para la Fase 2 (clasificación TDN2 - específica).</summary>
     public required ClassificationPhasePromptSettings Phase2 { get; set; }
+
+    /// <summary>
+    /// Si true, loguea el contenido completo de los prompts resueltos y los prompts finales (con placeholders reemplazados)
+    /// antes de enviarlos a OpenAI. Útil para debugging, pero puede generar logs muy extensos.
+    /// Por defecto: false.
+    /// </summary>
+    public bool EnableFullPromptLogging { get; set; } = false;
 }
 
 /// <summary>

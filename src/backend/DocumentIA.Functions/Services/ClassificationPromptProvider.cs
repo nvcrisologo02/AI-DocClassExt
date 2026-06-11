@@ -109,6 +109,9 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
         // Cachear también el fallback para evitar reconstrucción en cada llamada
         _cache.Set(cacheKey, fallbackSet, CacheTtl);
         
+        // Log completo si está habilitado
+        LogFullPromptsIfEnabled(fallbackSet);
+        
         return fallbackSet;
     }
 
@@ -180,5 +183,35 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
             Source = "Fallback",
             ResolvedAtUtc = DateTime.UtcNow
         };
+    }
+
+    /// <summary>
+    /// Loguea el contenido completo de los 4 prompts si EnableFullPromptLogging=true.
+    /// Útil para debugging, pero puede generar logs muy extensos.
+    /// </summary>
+    private void LogFullPromptsIfEnabled(ClassificationPromptSet promptSet)
+    {
+        if (!_fallbackSettings.EnableFullPromptLogging)
+            return;
+
+        _logger.LogInformation(
+            "[PromptResolution] FULL PROMPT DUMP (Phase1.System, {Length} chars):\n{Content}",
+            promptSet.Phase1SystemPrompt.Length,
+            promptSet.Phase1SystemPrompt);
+
+        _logger.LogInformation(
+            "[PromptResolution] FULL PROMPT DUMP (Phase1.User, {Length} chars):\n{Content}",
+            promptSet.Phase1UserPrompt.Length,
+            promptSet.Phase1UserPrompt);
+
+        _logger.LogInformation(
+            "[PromptResolution] FULL PROMPT DUMP (Phase2.System, {Length} chars):\n{Content}",
+            promptSet.Phase2SystemPrompt.Length,
+            promptSet.Phase2SystemPrompt);
+
+        _logger.LogInformation(
+            "[PromptResolution] FULL PROMPT DUMP (Phase2.User, {Length} chars):\n{Content}",
+            promptSet.Phase2UserPrompt.Length,
+            promptSet.Phase2UserPrompt);
     }
 }
