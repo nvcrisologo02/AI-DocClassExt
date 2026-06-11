@@ -147,6 +147,7 @@ var host = new HostBuilder()
         
         services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
         services.Configure<PromptDefaultsSettings>(context.Configuration.GetSection("PromptDefaults"));
+        services.Configure<ClassificationPromptsSettings>(context.Configuration.GetSection("ClassificationPrompts"));
         services.Configure<PromptTracingSettings>(context.Configuration.GetSection("PromptTracing"));
         services.Configure<PipelineSettings>(context.Configuration.GetSection("Pipeline"));
 
