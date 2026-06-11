@@ -22,6 +22,7 @@ public class DocumentIADbContext : DbContext
     public DbSet<TipologiaConfigAuditEntity> TipologiaConfigAudit { get; set; } = null!;
     public DbSet<CatalogoTdn1Entity> CatalogoTdn1 { get; set; } = null!;
     public DbSet<CatalogoTdn2Entity> CatalogoTdn2 { get; set; } = null!;
+    public DbSet<PromptTemplateEntity> PromptTemplates { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -144,6 +145,18 @@ public class DocumentIADbContext : DbContext
             .WithMany(p => p.SubTipos)
             .HasForeignKey(t => t.Tdn1Id)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // PromptTemplate indices and constraints
+        modelBuilder.Entity<PromptTemplateEntity>(entity =>
+        {
+            entity.HasIndex(p => new { p.PromptKey, p.Version })
+                .IsUnique()
+                .HasDatabaseName("UQ_PromptTemplate_Key_Version");
+
+            entity.HasIndex(p => new { p.PromptKey, p.IsActive })
+                .HasFilter("[IsActive] = 1")
+                .HasDatabaseName("IX_PromptTemplate_Key_Active");
+        });
 
         modelBuilder.Entity<CatalogoTdn1Entity>().HasData(CatalogoTdn1Seed.GetData());
         modelBuilder.Entity<CatalogoTdn2Entity>().HasData(CatalogoTdn2Seed.GetData());

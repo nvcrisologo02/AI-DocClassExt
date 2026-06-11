@@ -97,25 +97,22 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 
 ### 4.2 Scopes por entorno
 
-**Decisión:** Scopes por entorno con campo `Environment` opcional
-
-**Valores permitidos:** `dev`, `pre`, `pro`, `null` (aplica a todos)
+**Decisión:** NO se utiliza campo `Environment` en la entidad
 
 **Justificación:**
-- Permite testing de prompts en `dev`/`pre` antes de `pro`
-- Simplicidad: misma tabla para todos los entornos
-- Fallback: si no existe versión activa para entorno específico, buscar versión con `Environment = null`
+- Cada entorno (dev, pre, pro) tiene su propia base de datos separada
+- No hay riesgo de cruce de datos entre entornos
+- Simplifica el diseño: menos índices, menos restricciones, menos lógica de resolución
+- Elimina la necesidad de filtrado por entorno en queries
 
-**Alternativa descartada:** Tablas separadas por entorno
-- Pros: aislamiento total
-- Contras: migración complicada, sincronización manual, pérdida de trazabilidad
+**Alternativa descartada:** Campo `Environment` con valores `dev`, `pre`, `pro`, `null`
+- Pros: todos los entornos en la misma tabla
+- Contras: innecesario cuando BBDD están separadas, complica índices únicos y lógica de resolución
 
 **Implementación:**
-- Campo `Environment` tipo `nvarchar(10)` NULL
-- Lógica de resolución:
-  1. Buscar versión activa para `(PromptKey, Environment = <actual>, IsActive = true)`
-  2. Si no existe, buscar `(PromptKey, Environment = null, IsActive = true)`
-  3. Si no existe, fallback a `appsettings.json`
+- Sin campo `Environment` en la entidad
+- Restricción única simplificada: (`PromptKey`, `Version`)
+- Lógica de resolución directa: buscar versión activa para `(PromptKey, IsActive = true)`
 
 ---
 
@@ -150,7 +147,7 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 3. **Rollback** (API POST `/admin/prompts/{id}/rollback`) → Activar versión anterior, desactivar actual
 
 **Reglas de negocio:**
-- Solo 1 versión activa por (`PromptKey`, `Environment`) en un momento dado
+- Solo 1 versión activa por `PromptKey` en un momento dado
 - No se permite edición del campo `Content` de una versión activa
 - No se permite borrado físico (solo marcar como inactiva)
 - Auditoría completa: `CreatedBy`, `UpdatedBy`, `PublishedBy`, `PublishedAtUtc`
@@ -168,7 +165,6 @@ CREATE TABLE [dbo].[PromptTemplate] (
     [Id] BIGINT IDENTITY(1,1) PRIMARY KEY,
     [PromptKey] NVARCHAR(100) NOT NULL,
     [Version] INT NOT NULL,
-    [Environment] NVARCHAR(10) NULL, -- 'dev', 'pre', 'pro', NULL (all)
     [Content] NVARCHAR(MAX) NOT NULL,
     [IsActive] BIT NOT NULL DEFAULT 0,
     [Description] NVARCHAR(500) NULL,
@@ -179,15 +175,16 @@ CREATE TABLE [dbo].[PromptTemplate] (
     [PublishedAtUtc] DATETIME2(7) NULL,
     [PublishedBy] NVARCHAR(100) NULL,
     
-    CONSTRAINT [UQ_PromptTemplate_Key_Version_Env] UNIQUE ([PromptKey], [Version], [Environment]),
-    CONSTRAINT [CK_PromptTemplate_Content_Length] CHECK (LEN([Content]) <= 16000),
-    CONSTRAINT [CK_PromptTemplate_Environment] CHECK ([Environment] IN ('dev', 'pre', 'pro') OR [Environment] IS NULL)
+    CONSTRAINT [UQ_PromptTemplate_Key_Version] UNIQUE ([PromptKey], [Version]),
+    CONSTRAINT [CK_PromptTemplate_Content_Length] CHECK (LEN([Content]) <= 16000)
 );
 
-CREATE INDEX [IX_PromptTemplate_Key_Env_Active] 
-ON [dbo].[PromptTemplate] ([PromptKey], [Environment], [IsActive])
+CREATE INDEX [IX_PromptTemplate_Key_Active] 
+ON [dbo].[PromptTemplate] ([PromptKey], [IsActive])
 WHERE [IsActive] = 1;
 ```
+
+**Nota:** No se incluye campo `Environment` porque cada entorno (dev/pre/pro) tiene su propia base de datos separada.
 
 ---
 
