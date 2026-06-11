@@ -173,6 +173,16 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
 
     private ClassificationPromptSet LoadFromFallbackConfiguration()
     {
+        // Validar que la configuración fallback está disponible y completa
+        if (_fallbackSettings?.Phase1 == null || _fallbackSettings?.Phase2 == null)
+        {
+            _logger.LogError("Fallback configuration incomplete: Phase1={Phase1}, Phase2={Phase2}",
+                _fallbackSettings?.Phase1 != null ? "OK" : "NULL",
+                _fallbackSettings?.Phase2 != null ? "OK" : "NULL");
+            throw new InvalidOperationException(
+                "Fallback configuration is incomplete. Ensure ClassificationPrompts:Phase1 and Phase2 are configured in appsettings.json");
+        }
+
         return new ClassificationPromptSet
         {
             Phase1SystemPrompt = _fallbackSettings.Phase1.SystemPrompt,

@@ -7,10 +7,10 @@ namespace DocumentIA.Core.Configuration;
 public class ClassificationPromptsSettings
 {
     /// <summary>Configuración de prompts para la Fase 1 (clasificación TDN1 - familia).</summary>
-    public required ClassificationPhasePromptSettings Phase1 { get; set; }
+    public ClassificationPhasePromptSettings? Phase1 { get; set; }
 
     /// <summary>Configuración de prompts para la Fase 2 (clasificación TDN2 - específica).</summary>
-    public required ClassificationPhasePromptSettings Phase2 { get; set; }
+    public ClassificationPhasePromptSettings? Phase2 { get; set; }
 
     /// <summary>
     /// Si true, loguea el contenido completo de los prompts resueltos y los prompts finales (con placeholders reemplazados)
