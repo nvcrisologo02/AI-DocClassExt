@@ -1,0 +1,326 @@
+@page "/admin/prompts"
+@using DocumentIA.Admin.Models
+@using DocumentIA.Admin.Services
+@using DocumentIA.Admin.Components.Prompts
+@inject PromptManagementService PromptService
+
+<div class="container-fluid mt-4 mb-4">
+    <h1 class="mb-4">
+        <i class="bi bi-file-earmark-text"></i> Gestión de Prompts de Clasificación
+    </h1>
+
+    @if (IsLoading)
+    {
+        <div class="alert alert-info" role="alert">
+            <div class="spinner-border spinner-border-sm me-2" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            Cargando prompts...
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(ErrorMessage))
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <strong>Error:</strong> @ErrorMessage
+            <button type="button" class="btn-close" @onclick="() => ErrorMessage = null" aria-label="Close"></button>
+        </div>
+    }
+
+    @if (!IsLoading && !ShowEditor && !ShowVersionHistory)
+    {
+        <!-- Vista Lista -->
+        <div class="mb-3">
+            <button class="btn btn-success" @onclick="StartCreatePrompt">
+                <i class="bi bi-plus-circle"></i> Crear Nuevo Prompt
+            </button>
+        </div>
+
+        @if (Prompts.Any())
+        {
+            <div class="table-responsive">
+                <table class="table table-hover table-striped">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Clave</th>
+                            <th class="text-center">Versión</th>
+                            <th class="text-center">Estado</th>
+                            <th>Descripción</th>
+                            <th>Publicado</th>
+                            <th class="text-center">Tamaño</th>
+                            <th class="text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var prompt in Prompts.OrderBy(p => p.PromptKey).ThenByDescending(p => p.Version))
+                        {
+                            <tr>
+                                <td><code style="background: #f0f0f0; padding: 3px 6px; border-radius: 3px;">@prompt.PromptKey</code></td>
+                                <td class="text-center">v@prompt.Version</td>
+                                <td class="text-center">
+                                    @if (prompt.IsActive)
+                                    {
+                                        <span class="badge bg-success">✓ Activo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning text-dark">📝 Draft</span>
+                                    }
+                                </td>
+                                <td>@(prompt.Description ?? "-")</td>
+                                <td>@(prompt.PublishedAtUtc?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td class="text-center text-muted">@prompt.ContentLength</td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-primary" title="Editar" @onclick="() => StartEditPrompt(prompt.PromptKey)">
+                                        ✏️
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-secondary" title="Ver Versiones" @onclick="() => ViewVersionHistory(prompt.PromptKey)">
+                                        📜
+                                    </button>
+                                    @if (!prompt.IsActive)
+                                    {
+                                        <button class="btn btn-sm btn-outline-success" title="Activar" @onclick="() => ActivatePromptItem(prompt)">
+                                            ✅
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-danger" title="Eliminar" @onclick="() => DeletePromptItem(prompt.PromptKey)">
+                                            🗑️
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-info" role="alert">
+                📭 No hay prompts. <a href="javascript:void(0)" @onclick="StartCreatePrompt" class="alert-link">Crea uno nuevo</a>
+            </div>
+        }
+    }
+
+    @if (ShowEditor)
+    {
+        <!-- Vista Edición -->
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <strong>@(EditingPrompt?.Id == 0 ? "Crear Nuevo Prompt" : $"Editar Prompt - {EditingPrompt?.PromptKey} v{EditingPrompt?.Version}")</strong>
+            </div>
+            <div class="card-body">
+                <PromptEditor 
+                    PromptKey="@(EditingPrompt?.PromptKey ?? "")" 
+                    PromptKeyChanged="EventCallback.Factory.Create<string>(this, v => { if (EditingPrompt != null) EditingPrompt = EditingPrompt with { PromptKey = v }; })"
+                    Content="@(EditingPrompt?.Content ?? "")" 
+                    ContentChanged="EventCallback.Factory.Create<string>(this, v => { if (EditingPrompt != null) EditingPrompt = EditingPrompt with { Content = v }; })"
+                    Description="@(EditingPrompt?.Description ?? "")" 
+                    DescriptionChanged="EventCallback.Factory.Create<string>(this, v => { if (EditingPrompt != null) EditingPrompt = EditingPrompt with { Description = v }; })"
+                    IsReadOnly="false"
+                    OnSave="SavePrompt"
+                    OnCancel="CancelEdit" />
+            </div>
+        </div>
+    }
+
+    @if (ShowVersionHistory && !string.IsNullOrEmpty(SelectedPromptKey))
+    {
+        <!-- Vista Historial de Versiones -->
+        <div class="card">
+            <div class="card-header bg-secondary text-white">
+                <strong>📜 Historial de Versiones - @SelectedPromptKey</strong>
+                <button class="btn btn-sm btn-light float-end" @onclick="CancelVersionHistory">Cerrar</button>
+            </div>
+            <div class="card-body">
+                @if (VersionHistory != null && VersionHistory.Any())
+                {
+                    <div class="list-group">
+                        @foreach (var version in VersionHistory.OrderByDescending(v => v.Version))
+                        {
+                            <div class="list-group-item">
+                                <div class="d-flex w-100 justify-content-between">
+                                    <h6 class="mb-1">
+                                        Versión @version.Version
+                                        @if (version.IsActive)
+                                        {
+                                            <span class="badge bg-success">Activa</span>
+                                        }
+                                    </h6>
+                                    <small>@version.PublishedAtUtc?.ToString("dd/MM/yyyy HH:mm")</small>
+                                </div>
+                                <p class="mb-1 text-muted">@(version.Description ?? "Sin descripción")</p>
+                                <small>Por: @(version.PublishedBy ?? "-")</small>
+                                @if (!version.IsActive)
+                                {
+                                    <button class="btn btn-sm btn-outline-success ms-2" @onclick="() => RestoreVersion(version)">Restaurar</button>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <p class="text-muted">Cargando versiones...</p>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private List<PromptTemplateListItemDto> Prompts = [];
+    private List<PromptTemplateDto>? VersionHistory;
+    private bool IsLoading = true;
+    private bool ShowEditor = false;
+    private bool ShowVersionHistory = false;
+    private PromptTemplateDto? EditingPrompt;
+    private string? SelectedPromptKey;
+    private string? ErrorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPrompts();
+    }
+
+    private async Task LoadPrompts()
+    {
+        try
+        {
+            IsLoading = true;
+            Prompts = await PromptService.GetPromptTemplatesAsync();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void StartCreatePrompt()
+    {
+        EditingPrompt = new(0, "", 0, "", false, null, DateTime.UtcNow, DateTime.UtcNow, null, null, null, null);
+        ShowEditor = true;
+    }
+
+    private async Task StartEditPrompt(string promptKey)
+    {
+        try
+        {
+            var versions = await PromptService.GetPromptTemplatesByKeyAsync(promptKey);
+            var latest = versions.FirstOrDefault();
+            if (latest != null)
+            {
+                EditingPrompt = latest;
+                ShowEditor = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task ViewVersionHistory(string promptKey)
+    {
+        try
+        {
+            SelectedPromptKey = promptKey;
+            VersionHistory = await PromptService.GetPromptTemplatesByKeyAsync(promptKey);
+            ShowVersionHistory = true;
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private void CancelEdit()
+    {
+        ShowEditor = false;
+        EditingPrompt = null;
+        ErrorMessage = null;
+    }
+
+    private void CancelVersionHistory()
+    {
+        ShowVersionHistory = false;
+        SelectedPromptKey = null;
+        VersionHistory = null;
+    }
+
+    private async Task SavePrompt()
+    {
+        try
+        {
+            if (EditingPrompt == null) return;
+
+            if (EditingPrompt.Id == 0)
+            {
+                var request = new CreatePromptTemplateRequest(EditingPrompt.PromptKey, EditingPrompt.Content, EditingPrompt.Description);
+                await PromptService.CreatePromptTemplateAsync(request);
+            }
+            else
+            {
+                var request = new UpdatePromptTemplateRequest(EditingPrompt.Content, EditingPrompt.Description, "admin");
+                await PromptService.UpdatePromptTemplateAsync(EditingPrompt.Id, request);
+            }
+
+            CancelEdit();
+            await LoadPrompts();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error al guardar: {ex.Message}";
+        }
+    }
+
+    private async Task ActivatePromptItem(PromptTemplateListItemDto prompt)
+    {
+        try
+        {
+            await PromptService.ActivatePromptVersionAsync(prompt.Id, "admin");
+            await LoadPrompts();
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task DeletePromptItem(string promptKey)
+    {
+        try
+        {
+            var versions = await PromptService.GetPromptTemplatesByKeyAsync(promptKey);
+            var draftVersion = versions.FirstOrDefault(v => !v.IsActive);
+            if (draftVersion != null)
+            {
+                await PromptService.DeletePromptTemplateAsync(draftVersion.Id);
+                await LoadPrompts();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+
+    private async Task RestoreVersion(PromptTemplateDto version)
+    {
+        try
+        {
+            if (!string.IsNullOrEmpty(SelectedPromptKey))
+            {
+                await PromptService.RollbackPromptVersionAsync(SelectedPromptKey, version.Version, "admin");
+                CancelVersionHistory();
+                await LoadPrompts();
+            }
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"Error: {ex.Message}";
+        }
+    }
+}

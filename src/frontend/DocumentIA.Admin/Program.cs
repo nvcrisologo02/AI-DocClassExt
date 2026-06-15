@@ -35,6 +35,8 @@ builder.Services.AddScoped<SystemConfigService>();
 
 builder.Services.AddHttpClient<MonitorService>(ConfigureFunctionsHttpClient);
 
+builder.Services.AddHttpClient<PromptManagementService>(ConfigureFunctionsHttpClient);
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

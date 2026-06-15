@@ -1,0 +1,288 @@
+@using DocumentIA.Admin.Models
+@using DocumentIA.Admin.Components.Prompts
+@implements IDisposable
+
+<div class="prompt-editor">
+    <div class="form-group mb-3">
+        <label for="promptKey" class="form-label fw-bold">Clave del Prompt</label>
+        <input type="text" 
+               class="form-control" 
+               id="promptKey" 
+               @bind="PromptKey" 
+               @bind:event="oninput"
+               placeholder="ej: classification.phase1.system"
+               readonly="@IsReadOnly"
+               disabled="@IsReadOnly" />
+        <small class="form-text text-muted d-block mt-1">
+            Formato: classification.phase{1|2}.{system|user}
+        </small>
+    </div>
+
+    <div class="form-group mb-3">
+        <label for="description" class="form-label">Descripción (opcional)</label>
+        <input type="text" 
+               class="form-control" 
+               id="description" 
+               @bind="Description" 
+               @bind:event="oninput"
+               placeholder="Descripción breve del prompt"
+               maxlength="500"
+               disabled="@IsReadOnly" />
+        <small class="form-text text-muted">@Description?.Length ?? 0 / 500</small>
+    </div>
+
+    <!-- Placeholders Reference -->
+    <div class="card mb-3 bg-light">
+        <div class="card-header bg-info text-white">
+            <strong>📌 Placeholders Disponibles</strong>
+        </div>
+        <div class="card-body" style="font-size: 0.9rem;">
+            @if (ValidationState?.RequiredPlaceholders?.Any() == true)
+            {
+                <div class="mb-2">
+                    <strong class="text-danger">Requeridos:</strong>
+                    <div>
+                        @foreach (var placeholder in ValidationState.RequiredPlaceholders)
+                        {
+                            <span class="badge bg-danger me-1 mb-1">
+                                <code>@placeholder</code>
+                            </span>
+                        }
+                    </div>
+                </div>
+            }
+
+            <strong>Todos disponibles:</strong>
+            <div class="placeholder-list">
+                @foreach (var placeholder in PromptPlaceholders.AllPlaceholders)
+                {
+                    var isRequired = ValidationState?.RequiredPlaceholders?.Contains(placeholder) ?? false;
+                    var isFound = ValidationState?.FoundPlaceholders?.Contains(placeholder) ?? false;
+                    var badgeClass = isRequired ? "bg-danger" : (isFound ? "bg-success" : "bg-secondary");
+
+                    <div class="d-inline-block me-2 mb-1">
+                        <span class="badge @badgeClass" 
+                              title="@PromptPlaceholders.PlaceholderDescriptions.GetValueOrDefault(placeholder, "")">
+                            <code>@placeholder</code>
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <!-- Editor with Validation -->
+    <div class="form-group mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <label for="content" class="form-label fw-bold">Contenido del Prompt</label>
+            <small class="form-text">
+                <span class="@(ValidationState?.IsLengthValid == true ? "text-success" : "text-danger")">
+                    @(ValidationState?.CharacterCount ?? 0) / 16000 caracteres
+                </span>
+            </small>
+        </div>
+
+        <textarea class="form-control @(ValidationState?.HasErrors == true ? "is-invalid" : (ValidationState?.IsValid == true ? "is-valid" : ""))" 
+                  id="content"
+                  rows="12"
+                  @bind="Content" 
+                  @bind:event="oninput"
+                  placeholder="Ingresa el contenido del prompt aquí..."
+                  disabled="@IsReadOnly"
+                  style="font-family: 'Monaco', 'Courier New', monospace; font-size: 0.85rem;"></textarea>
+
+        @if (ValidationState?.HasErrors == true)
+        {
+            <div class="invalid-feedback d-block">
+                <strong>Errores de validación:</strong>
+                <ul class="mb-0 mt-1">
+                    @foreach (var error in ValidationState.Errors)
+                    {
+                        <li>@error</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        @if (ValidationState?.MissingRequired?.Any() == true)
+        {
+            <div class="alert alert-info mt-2 mb-0" role="alert">
+                <strong>ℹ️ Placeholders sugeridos no encontrados:</strong>
+                @foreach (var missing in ValidationState.MissingRequired)
+                {
+                    <span class="badge bg-info text-dark me-1"><code>@missing</code></span>
+                }
+            </div>
+        }
+
+        @if (ValidationState?.IsValid == true && !IsReadOnly)
+        {
+            <div class="alert alert-success mt-2 mb-0" role="alert">
+                ✓ Validación exitosa - Prompt listo para guardar
+            </div>
+        }
+    </div>
+
+    <!-- Preview Section -->
+    @if (!string.IsNullOrWhiteSpace(Content) && ValidationState?.IsValid == true)
+    {
+        <div class="card mb-3 bg-light">
+            <div class="card-header bg-secondary text-white">
+                <strong>👁️ Vista Previa (Mock)</strong>
+            </div>
+            <div class="card-body" style="font-size: 0.85rem; white-space: pre-wrap; word-break: break-word; max-height: 300px; overflow-y: auto; font-family: monospace;">
+                @if (@Content != null)
+                {
+                    @RenderPreview()
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Action Buttons -->
+    @if (!IsReadOnly && OnSave.HasDelegate)
+    {
+        <div class="d-flex gap-2">
+            <button class="btn btn-primary" 
+                    @onclick="OnSaveClick">
+                💾 Guardar
+            </button>
+            @if (OnCancel.HasDelegate)
+            {
+                <button class="btn btn-secondary" @onclick="OnCancel">
+                    ❌ Cancelar
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? PromptKey { get; set; }
+
+    [Parameter]
+    public EventCallback<string> PromptKeyChanged { get; set; }
+
+    [Parameter]
+    public string? Content { get; set; }
+
+    [Parameter]
+    public EventCallback<string> ContentChanged { get; set; }
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter]
+    public EventCallback<string> DescriptionChanged { get; set; }
+
+    [Parameter]
+    public bool IsReadOnly { get; set; }
+
+    [Parameter]
+    public EventCallback OnSave { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    private PromptPlaceholderValidator.ValidationState? ValidationState { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        UpdateValidation();
+    }
+
+    private async Task OnPromptKeyChanged(ChangeEventArgs e)
+    {
+        PromptKey = e.Value?.ToString();
+        await PromptKeyChanged.InvokeAsync(PromptKey);
+        UpdateValidation();
+    }
+
+    private async Task OnContentChanged(ChangeEventArgs e)
+    {
+        Content = e.Value?.ToString();
+        await ContentChanged.InvokeAsync(Content);
+        UpdateValidation();
+    }
+
+    private async Task OnDescriptionChanged(ChangeEventArgs e)
+    {
+        Description = e.Value?.ToString();
+        await DescriptionChanged.InvokeAsync(Description);
+    }
+
+    private void UpdateValidation()
+    {
+        if (string.IsNullOrWhiteSpace(PromptKey) || string.IsNullOrWhiteSpace(Content))
+        {
+            ValidationState = new PromptPlaceholderValidator.ValidationState();
+            return;
+        }
+
+        ValidationState = PromptPlaceholderValidator.GetValidationState(Content, PromptKey);
+    }
+
+    private async Task OnSaveClick()
+    {
+        if (ValidationState?.IsValid == true)
+        {
+            await OnSave.InvokeAsync();
+        }
+    }
+
+    private RenderFragment RenderPreview()
+    {
+        return builder =>
+        {
+            if (Content == null) return;
+
+            var preview = Content;
+            
+            // Mock placeholders para preview
+            preview = preview.Replace("{DOCUMENT_TEXT}", "[📄 Contenido del documento]", StringComparison.Ordinal);
+            preview = preview.Replace("{CONTEXT_PROMPT}", "[💡 Instrucciones adicionales]", StringComparison.Ordinal);
+            preview = preview.Replace("{TDN1_CATALOG}", "[📋 Catálogo TDN1]", StringComparison.Ordinal);
+            preview = preview.Replace("{TDN2_CATALOG}", "[📋 Catálogo TDN2]", StringComparison.Ordinal);
+            preview = preview.Replace("{TDN1_CODE}", "[🏷️ Código TDN1 resuelto]", StringComparison.Ordinal);
+
+            builder.AddMarkupContent(0, System.Net.WebUtility.HtmlEncode(preview)
+                .Replace("\n", "<br/>").Replace(" ", "&nbsp;"));
+        };
+    }
+
+    void IDisposable.Dispose()
+    {
+        // Cleanup si es necesario
+    }
+}
+
+<style>
+.prompt-editor {
+    background-color: #f8f9fa;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.placeholder-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+code {
+    background-color: #e9ecef;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.9em;
+}
+
+.form-control.is-valid {
+    border-color: #28a745;
+}
+
+.form-control.is-invalid {
+    border-color: #dc3545;
+}
+</style>

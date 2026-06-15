@@ -151,6 +151,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return BuildUnclassifiedResult(model, phase1Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase1ParsingErrorReason, string.Empty);
         }
 
+        // Guardar resumen de Phase 1 para reutilizar (no se regenera en Phase 2)
+        var resumenPhase1 = phase1Parsed.Value.Resumen;
+        
         var propuesta = phase1Parsed.Value.Propuesta;
         if (string.IsNullOrWhiteSpace(phase1Parsed.Value.Tdn1))
         {
@@ -208,26 +211,16 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 propuesta: tdn1Code);
         }
 
-        var phase2ResponseInstruction = resumenPrompt is null
-            ? ClassificationTipologiaPromptBuilder.Phase2ResponseFormatInstruction
-            : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn2\": \"CODIGO_TDN2\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
-
+        // Phase 2: NO incluir instrucción de resumen
+        // El resumen ya fue generado en Phase 1 (phase1Parsed.Value.Resumen)
+        // Phase 2 solo debe refinar la clasificación TDN2 dentro de la familia conocida
+        
         // Construir prompt Phase 2 desde configuración
         var phase2SystemText = promptSet.Phase2SystemPrompt;
         var phase2UserText = promptSet.Phase2UserPrompt
             .Replace("{TDN1_CODE}", tdn1Code)
             .Replace("{TDN2_CATALOG}", phase2Catalog)
             .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
-
-        if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
-        {
-            phase2SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
-        }
-
-        if (resumenPrompt is not null)
-        {
-            phase2UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
-        }
 
         // Log prompts finales si está habilitado
         if (_promptSettings.EnableFullPromptLogging)
@@ -288,7 +281,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             ProveedorClasif = "GPT4oMini",
             PropuestaTipologia = propuesta,
             ResultadoPromptCombinado = phase2Parsed.Value.ResultadoPrompt,
-            ResumenCombinado = phase2Parsed.Value.Resumen
+            ResumenCombinado = resumenPhase1  // Usar resumen de Phase 1 (no se regenera en Phase 2)
         };
     }
 
@@ -299,6 +292,26 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return null;
         }
 
+        // Intentar cargar prompts de resumen desde BD primero
+        var dbResumenPrompt = TryLoadResumenPromptFromDatabase().GetAwaiter().GetResult();
+        if (dbResumenPrompt is not null)
+        {
+            return new PromptConfig
+            {
+                Enabled = true,
+                ModelKey = dbResumenPrompt.ModelKey,
+                SystemPrompt = dbResumenPrompt.SystemPrompt,
+                UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
+                    dbResumenPrompt.UserPromptTemplate,
+                    contextoTexto ?? string.Empty,
+                    input.DatosNormalizados),
+                MaxTokens = dbResumenPrompt.MaxTokens,
+                Temperature = dbResumenPrompt.Temperature,
+                ContentMode = dbResumenPrompt.ContentMode
+            };
+        }
+
+        // Fallback: Intentar cargar desde tipología o PromptDefaults
         var defaults = _promptDefaults.ToPromptConfig();
         var tipologiaPrompt = TryLoadTipologiaPromptConfig(input);
         var effectivePrompt = tipologiaPrompt is null
@@ -326,6 +339,48 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             Temperature = effectivePrompt.Temperature,
             ContentMode = effectivePrompt.ContentMode
         };
+    }
+
+    private async Task<PromptConfig?> TryLoadResumenPromptFromDatabase()
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var repository = scope.ServiceProvider.GetRequiredService<IPromptTemplateRepository>();
+
+            // Cargar prompts de resumen desde BD
+            var systemPrompt = await repository.GetActivePromptAsync("summary.system", CancellationToken.None);
+            var userPrompt = await repository.GetActivePromptAsync("summary.user", CancellationToken.None);
+
+            if (systemPrompt is null || userPrompt is null)
+            {
+                _logger.LogDebug(
+                    "[ResumenPrompt] Summary prompts not found in database. SummarySystem={SExists}, SummaryUser={UExists}.",
+                    systemPrompt is not null,
+                    userPrompt is not null);
+                return null;
+            }
+
+            _logger.LogInformation(
+                "[ResumenPrompt] Summary prompts loaded from database. Version={Version}",
+                systemPrompt.Version);
+
+            return new PromptConfig
+            {
+                Enabled = true,
+                ModelKey = _promptDefaults.ModelKey ?? "default.gpt4o-mini",
+                SystemPrompt = systemPrompt.Content,
+                UserPromptTemplate = userPrompt.Content,
+                MaxTokens = _promptDefaults.MaxTokens,
+                Temperature = _promptDefaults.Temperature,
+                ContentMode = _promptDefaults.ContentMode
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ResumenPrompt] Error loading summary prompts from database. Fallback to appsettings.");
+            return null;
+        }
     }
 
     private PromptConfig? TryLoadTipologiaPromptConfig(ClasificacionInput input)

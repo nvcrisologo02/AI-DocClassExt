@@ -87,6 +87,7 @@ $body = @{
         skipDuplicateCheck = $true
         forceReprocess = $true
         SkipGDCUpload = $false
+        forzarResumenPorDefecto = $true
         classification = @{
             provider = "auto"
             model = "auto"

@@ -215,12 +215,6 @@ public class PromptsAdminFunction
             return await CreateError(req, HttpStatusCode.NotFound, $"No existe PromptTemplate con Id {id}.");
         }
 
-        if (entity.IsActive)
-        {
-            return await CreateError(req, HttpStatusCode.Conflict,
-                "No se puede modificar un PromptTemplate activo. Desactívelo primero o cree una nueva versión.");
-        }
-
         var payload = await ReadBody<UpdatePromptTemplateRequest>(req);
         if (payload is null)
         {
@@ -239,7 +233,22 @@ public class PromptsAdminFunction
         entity.UpdatedAtUtc = DateTime.UtcNow;
         entity.UpdatedBy = string.IsNullOrWhiteSpace(payload.UpdatedBy) ? null : payload.UpdatedBy!.Trim();
 
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            // Marcar explícitamente como modificado para asegurar persistencia en EF Core
+            _dbContext.Update(entity);
+            var changeCount = await _dbContext.SaveChangesAsync();
+            _logger.LogInformation(
+                "PromptTemplate actualizado correctamente: {PromptKey} (Id: {Id}), ChangesApplied: {ChangeCount}",
+                entity.PromptKey, entity.Id, changeCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error al actualizar PromptTemplate {PromptKey} (Id: {Id}). Mensaje: {ErrorMessage}", 
+                entity.PromptKey, entity.Id, ex.InnerException?.Message ?? ex.Message);
+            return await CreateError(req, HttpStatusCode.InternalServerError, 
+                $"Error al actualizar prompt ID {id}: {ex.InnerException?.Message ?? ex.Message}");
+        }
 
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(new PromptTemplateDto
@@ -458,53 +467,8 @@ public class PromptsAdminFunction
             return "El contenido del prompt debe tener al menos 10 caracteres.";
         }
 
-        // Validar presencia de placeholders según el tipo de prompt
-        var normalizedKey = promptKey.ToLowerInvariant();
-
-        if (normalizedKey.Contains("phase1"))
-        {
-            // Phase1 debe tener {CONTEXT_PROMPT}, {TDN1_CATALOG}, {DOCUMENT_TEXT}
-            if (!content.Contains("{CONTEXT_PROMPT}"))
-            {
-                return "Phase1 prompts deben contener el placeholder {CONTEXT_PROMPT}.";
-            }
-
-            if (normalizedKey.Contains("user") && !content.Contains("{DOCUMENT_TEXT}"))
-            {
-                return "Phase1 user prompts deben contener el placeholder {DOCUMENT_TEXT}.";
-            }
-        }
-        else if (normalizedKey.Contains("phase2"))
-        {
-            // Phase2 debe tener {TDN1_CODE}, {TDN2_CATALOG}, {DOCUMENT_TEXT}
-            if (normalizedKey.Contains("user"))
-            {
-                if (!content.Contains("{TDN1_CODE}"))
-                {
-                    return "Phase2 user prompts deben contener el placeholder {TDN1_CODE}.";
-                }
-
-                if (!content.Contains("{DOCUMENT_TEXT}"))
-                {
-                    return "Phase2 user prompts deben contener el placeholder {DOCUMENT_TEXT}.";
-                }
-            }
-        }
-
-        // Validar que no haya placeholders no permitidos
-        var invalidPlaceholders = new System.Text.RegularExpressions.Regex(@"\{[A-Z_]+\}")
-            .Matches(content)
-            .Select(m => m.Value)
-            .Where(p => !AllowedPlaceholders.Contains(p))
-            .Distinct()
-            .ToList();
-
-        if (invalidPlaceholders.Any())
-        {
-            return $"Placeholders no permitidos detectados: {string.Join(", ", invalidPlaceholders)}. " +
-                   $"Placeholders válidos: {string.Join(", ", AllowedPlaceholders)}.";
-        }
-
+        // Solo validación de rango de caracteres permitida.
+        // Se permite flexibilidad en placeholders para edición iterativa de prompts.
         return null; // Validación exitosa
     }
 
