@@ -1,14 +1,11 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Azure Functions: Launch (.NET)",
+            "name": "functions",
             "type": "coreclr",
             "request": "attach",
-            "preLaunchTask": "func: host start",
+            "preLaunchTask": "Run Host Functions con todo lo que implique",
             "processId": "${command:azureFunctions.pickProcess}",
             "console": "integratedTerminal",
             "justMyCode": false,
@@ -16,29 +13,10 @@
             "symbolSearchPath": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/backend/DocumentIA.Functions/bin/Debug/net8.0"
         },
         {
-            "name": "PowerShell: Launch Current File",
-            "type": "PowerShell",
-            "request": "launch",
-            "script": "${file}",
-            "args": []
-        },
-        {
-            "name": "DocumentIA.Batch: Launch (startup break)",
+            "name": "Batch",
             "type": "coreclr",
             "request": "launch",
-            "program": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch/bin/Debug/net8.0-windows/DocumentIA.Batch.dll",
-            "cwd": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch",
-            "console": "internalConsole",
-            "stopAtEntry": false,
-            "justMyCode": true,
-            "env": {
-                "DOCIA_BATCH_DEBUG_BREAK_ON_STARTUP": "1"
-            }
-        },
-        {
-            "name": "DocumentIA.Batch: Launch (normal)",
-            "type": "coreclr",
-            "request": "launch",
+            "preLaunchTask": "build (DocumentIA.Batch)",
             "program": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch/bin/Debug/net8.0-windows/DocumentIA.Batch.dll",
             "cwd": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch",
             "console": "internalConsole",
@@ -46,10 +24,51 @@
             "justMyCode": true
         },
         {
-            "name": "DocumentIA.Batch: Attach",
+            "name": "Batch.Classification",
             "type": "coreclr",
-            "request": "attach",
-            "processId": "${command:pickProcess}"
+            "request": "launch",
+            "preLaunchTask": "build (DocumentIA.Batch.Classification)",
+            "program": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch.Classification/bin/Debug/net8.0-windows/DocumentIA.Batch.Classification.dll",
+            "cwd": "${workspaceFolder:DocumentIA.Batch}/src/DocumentIA.Batch.Classification",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "justMyCode": true
+        },
+        {
+            "name": "AssetResolver",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build (AssetResolver)",
+            "program": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/plugins/DocumentIA.AssetResolver/bin/Debug/net8.0/DocumentIA.AssetResolver.dll",
+            "cwd": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/plugins/DocumentIA.AssetResolver",
+            "console": "integratedTerminal",
+            "stopAtEntry": false,
+            "justMyCode": true
+        },
+        {
+            "name": "Frontend admin",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build (frontend admin)",
+            "program": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/frontend/DocumentIA.Admin/bin/Debug/net8.0/DocumentIA.Admin.dll",
+            "cwd": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/frontend/DocumentIA.Admin",
+            "console": "integratedTerminal",
+            "stopAtEntry": false,
+            "justMyCode": true,
+            "env": {
+                "ASPNETCORE_ENVIRONMENT": "Development"
+            },
+            "serverReadyAction": {
+                "action": "openExternally",
+                "pattern": "Now listening on:\\s+(https?://\\S+)"
+            }
+        },
+        {
+            "name": "PowerShell: Launch Current File",
+            "type": "PowerShell",
+            "request": "launch",
+            "script": "${file}",
+            "args": []
         }
     ]
 }

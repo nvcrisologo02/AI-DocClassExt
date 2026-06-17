@@ -1,4 +1,3 @@
-
 {
   "version": "2.0.0",
   "tasks": [
@@ -18,7 +17,18 @@
       "problemMatcher": "$func-dotnet-watch"
     },
     {
-      "label": "start (azurite)",
+      "label": "Run Host Functions con todo lo que implique",
+      "type": "shell",
+      "dependsOn": [
+        "start mock servers",
+        "func: host start"
+      ],
+      "dependsOrder": "sequence",
+      "command": "Write-Output 'Functions host started with dependencies'",
+      "problemMatcher": []
+    },
+    {
+      "label": "start Azurite",
       "type": "process",
       "command": "powershell",
       "args": [
@@ -30,6 +40,13 @@
       "options": {
         "cwd": "${workspaceFolder}"
       },
+      "problemMatcher": []
+    },
+    {
+      "label": "start (azurite)",
+      "type": "shell",
+      "dependsOn": "start Azurite",
+      "command": "Write-Output 'start Azurite alias'",
       "problemMatcher": []
     },
     {
@@ -49,13 +66,13 @@
     },
     {
       "label": "clean (functions)",
+      "type": "process",
       "command": "dotnet",
       "args": [
         "clean",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
-      "type": "process",
       "problemMatcher": "$msCompile",
       "options": {
         "cwd": "${workspaceFolder}/src\\backend\\DocumentIA.Functions"
@@ -63,13 +80,13 @@
     },
     {
       "label": "build (functions)",
+      "type": "process",
       "command": "dotnet",
       "args": [
         "build",
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
-      "type": "process",
       "dependsOn": "clean (functions)",
       "group": {
         "kind": "build",
@@ -82,6 +99,7 @@
     },
     {
       "label": "clean release (functions)",
+      "type": "process",
       "command": "dotnet",
       "args": [
         "clean",
@@ -90,7 +108,6 @@
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
-      "type": "process",
       "problemMatcher": "$msCompile",
       "options": {
         "cwd": "${workspaceFolder}/src\\backend\\DocumentIA.Functions"
@@ -98,6 +115,7 @@
     },
     {
       "label": "publish (functions)",
+      "type": "process",
       "command": "dotnet",
       "args": [
         "publish",
@@ -106,7 +124,6 @@
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
-      "type": "process",
       "dependsOn": "clean release (functions)",
       "problemMatcher": "$msCompile",
       "options": {
@@ -114,7 +131,7 @@
       }
     },
     {
-      "label": "start (mock servers)",
+      "label": "start mock servers",
       "type": "process",
       "command": "powershell",
       "args": [
@@ -129,7 +146,14 @@
       "problemMatcher": []
     },
     {
-      "label": "stop (mock servers)",
+      "label": "start (mock servers)",
+      "type": "shell",
+      "dependsOn": "start mock servers",
+      "command": "Write-Output 'start mock servers alias'",
+      "problemMatcher": []
+    },
+    {
+      "label": "stop mock server",
       "type": "process",
       "command": "powershell",
       "args": [
@@ -144,106 +168,101 @@
       "problemMatcher": []
     },
     {
-        "label": "build",
-        "command": "dotnet",
-        "type": "process",
-        "args": [
-            "build",
-            "/property:GenerateFullPaths=true",
-            "/consoleloggerparameters:NoSummary;ForceNoAlign"
-        ],
-        "problemMatcher": "$msCompile"
+      "label": "stop (mock servers)",
+      "type": "shell",
+      "dependsOn": "stop mock server",
+      "command": "Write-Output 'stop mock server alias'",
+      "problemMatcher": []
     },
     {
-        "label": "publish",
-        "command": "dotnet",
-        "type": "process",
-        "args": [
-            "publish",
-            "/property:GenerateFullPaths=true",
-            "/consoleloggerparameters:NoSummary;ForceNoAlign"
-        ],
-        "problemMatcher": "$msCompile"
-    },
-    {
-        "label": "watch",
-        "command": "dotnet",
-        "type": "process",
-        "args": [
-            "watch",
-            "run"
-        ],
-        "problemMatcher": "$msCompile"
-    },
-    {
-      "label": "run (frontend desktop)",
-      "command": "dotnet",
+      "label": "build",
       "type": "process",
+      "command": "dotnet",
       "args": [
-        "run"
+        "build",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
       ],
-      "options": {
-        "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Desktop"
-      },
       "problemMatcher": "$msCompile"
     },
     {
-      "label": "run (frontend web)",
-      "command": "dotnet",
+      "label": "publish",
       "type": "process",
+      "command": "dotnet",
       "args": [
-        "run",
-        "--launch-profile",
-        "http"
+        "publish",
+        "/property:GenerateFullPaths=true",
+        "/consoleloggerparameters:NoSummary;ForceNoAlign"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "watch",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "watch",
+        "run"
+      ],
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "build (frontend admin)",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build"
       ],
       "options": {
         "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Admin"
       },
       "problemMatcher": "$msCompile"
-    }, 
-
+    },
     {
-      "label": "Activate PIM role (user - device code)",
-      "type": "shell",
-      "command": "powershell",
+      "label": "Run (build + run) Frontend admin",
+      "type": "process",
+      "command": "dotnet",
       "args": [
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\activate-pim.ps1",
-        "-UseUser"
+        "run",
+        "--launch-profile",
+        "http"
       ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared"
+      "dependsOn": "build (frontend admin)",
+      "dependsOrder": "sequence",
+      "options": {
+        "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Admin"
       },
-      "problemMatcher": []
-    }
-    ,
+      "isBackground": true,
+      "problemMatcher": "$msCompile"
+    },
     {
-      "label": "List PIM eligible assignments (user)",
+      "label": "run (frontend web)",
       "type": "shell",
-      "command": "powershell",
-      "args": [
-        "-ExecutionPolicy",
-        "Bypass",
-        "-File",
-        "${workspaceFolder}\\scripts\\list-pim-eligible.ps1",
-        "-UseUser"
-      ],
-      "presentation": {
-        "reveal": "always",
-        "panel": "shared"
-      },
+      "dependsOn": "Run (build + run) Frontend admin",
+      "command": "Write-Output 'run frontend web alias'",
       "problemMatcher": []
     },
     {
-      "label": "run (AssetResolver)",
-      "command": "dotnet",
+      "label": "build (AssetResolver)",
       "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/plugins/DocumentIA.AssetResolver"
+      },
+      "problemMatcher": "$msCompile"
+    },
+    {
+      "label": "Run (build + run) AssetResolver",
+      "type": "process",
+      "command": "dotnet",
       "args": [
         "run"
       ],
+      "dependsOn": "build (AssetResolver)",
+      "dependsOrder": "sequence",
       "options": {
         "cwd": "${workspaceFolder}/src/plugins/DocumentIA.AssetResolver"
       },
@@ -254,6 +273,25 @@
         "panel": "dedicated",
         "group": "plugins"
       }
+    },
+    {
+      "label": "run (AssetResolver)",
+      "type": "shell",
+      "dependsOn": "Run (build + run) AssetResolver",
+      "command": "Write-Output 'run AssetResolver alias'",
+      "problemMatcher": []
+    },
+    {
+      "label": "run (frontend desktop)",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "run"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/src/frontend/DocumentIA.Desktop"
+      },
+      "problemMatcher": "$msCompile"
     }
   ]
 }
