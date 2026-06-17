@@ -155,14 +155,31 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         var resumenPhase1 = phase1Parsed.Value.Resumen;
         
         var propuesta = phase1Parsed.Value.Propuesta;
-        if (string.IsNullOrWhiteSpace(phase1Parsed.Value.Tdn1))
+        var tdn1Code = phase1Parsed.Value.Tdn1;
+        
+        // Intentar extraer TDN1 de la propuesta si no se obtuvo del modelo
+        if (string.IsNullOrWhiteSpace(tdn1Code))
+        {
+            tdn1Code = GptHierarchicalClassificationParser.ExtraerTdn1DePropuesta(propuesta);
+            if (!string.IsNullOrWhiteSpace(tdn1Code))
+            {
+                _logger.LogInformation(
+                    "GPT no devolvió tdn1 explícito, pero se extrajo '{Tdn1}' de la propuesta. Continuando a Phase 2.",
+                    tdn1Code);
+            }
+        }
+        
+        // Si no se resolvió TDN1 de ninguna forma, retornar sin clasificar
+        if (string.IsNullOrWhiteSpace(tdn1Code))
         {
             stopwatch.Stop();
-            // GPT no pudo mapear a ningún código del catálogo.
             // Si aportó una propuesta libre (tipología virtual), devolver ClasificacionParcial=true
-            // para que el orquestador exponga la sugerencia en lugar de fallar con "Desconocido".
             if (!string.IsNullOrWhiteSpace(propuesta))
             {
+                _logger.LogInformation(
+                    "GPT devolvió propuesta sin TDN1 extraíble: '{Propuesta}'. Marcando como tipología virtual.",
+                    propuesta);
+                
                 return new ResultadoClasificacion
                 {
                     Modelo = model.DeploymentName,
@@ -172,17 +189,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                     ConfianzaGPT = 0.1,
                     ClasificacionParcial = true,
                     FallbackRazon = "tdn1_virtual_propuesta",
-                    PropuestaTipologia = propuesta
+                    PropuestaTipologia = propuesta,
+                    ResumenCombinado = resumenPhase1
                 };
             }
             return BuildUnclassifiedResult(model, "tdn1_no_resuelto", propuesta);
         }
 
-        var tdn1Code = phase1Parsed.Value.Tdn1!;
+        tdn1Code = tdn1Code!;
+        var confianzaPhase1 = phase1Parsed.Value.Confianza ?? 0.9;
+
         if (string.Equals(nivelClasificacion, ClassificationLevelResolver.LevelTdn1, StringComparison.OrdinalIgnoreCase))
         {
             stopwatch.Stop();
-            var confianzaPhase1 = phase1Parsed.Value.Confianza ?? 0.9;
             _logger.LogInformation(
                 "Clasificación GPT Fase 1 completada. TDN1={Tdn1}, ConfianzaSelfReported={ConfianzaSelfReported}, ConfianzaFinal={ConfianzaFinal}",
                 tdn1Code,
@@ -196,9 +215,25 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 Confianza = confianzaPhase1,
                 ConfianzaGPT = confianzaPhase1,
                 ClasificacionParcial = true,
+                FallbackRazon = "tdn1_solicitado",
                 PropuestaTipologia = propuesta,
                 ResumenCombinado = phase1Parsed.Value.Resumen
             };
+        }
+
+        // Phase 2 solo se ejecuta si confianza de Phase 1 > 0.6
+        if (confianzaPhase1 <= 0.6)
+        {
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "Clasificación GPT detenida tras Phase 1. Confianza={Confianza} <= 0.6. TDN1={Tdn1}",
+                confianzaPhase1.ToString("F3"),
+                tdn1Code);
+            return BuildVirtualResult(
+                model,
+                tipologiaDetectada: tdn1Code,
+                propuesta: tdn1Code,
+                resumen: resumenPhase1);
         }
 
         var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code);
@@ -208,7 +243,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return BuildVirtualResult(
                 model,
                 tipologiaDetectada: tdn1Code,
-                propuesta: tdn1Code);
+                propuesta: tdn1Code,
+                resumen: resumenPhase1);
         }
 
         // Phase 2: NO incluir instrucción de resumen
@@ -260,7 +296,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return BuildVirtualResult(
                 model,
                 tipologiaDetectada: tipologiaVirtual,
-                propuesta: justificacionVirtual);
+                propuesta: justificacionVirtual,
+                resumen: resumenPhase1);
         }
 
         stopwatch.Stop();
@@ -566,7 +603,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta)
+    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, string? resumen = null)
     {
         return new ResultadoClasificacion
         {
@@ -577,7 +614,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             ConfianzaGPT = 0.1,
             ClasificacionParcial = true,
             FallbackRazon = "Tipologia Virtual",
-            PropuestaTipologia = propuesta
+            PropuestaTipologia = propuesta,
+            ResumenCombinado = resumen
         };
     }
 

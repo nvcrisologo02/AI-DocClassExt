@@ -8,8 +8,8 @@
         <input type="text" 
                class="form-control" 
                id="promptKey" 
-               @bind="PromptKey" 
-               @bind:event="oninput"
+               value="@PromptKey"
+               @oninput="OnPromptKeyChanged"
                placeholder="ej: classification.phase1.system"
                readonly="@IsReadOnly"
                disabled="@IsReadOnly" />
@@ -23,8 +23,8 @@
         <input type="text" 
                class="form-control" 
                id="description" 
-               @bind="Description" 
-               @bind:event="oninput"
+               value="@Description"
+               @oninput="OnDescriptionChanged"
                placeholder="Descripción breve del prompt"
                maxlength="500"
                disabled="@IsReadOnly" />
@@ -82,11 +82,11 @@
             </small>
         </div>
 
-        <textarea class="form-control @(ValidationState?.HasErrors == true ? "is-invalid" : (ValidationState?.IsValid == true ? "is-valid" : ""))" 
+        <textarea class="form-control" 
                   id="content"
                   rows="12"
-                  @bind="Content" 
-                  @bind:event="oninput"
+                  value="@Content"
+                  @oninput="OnContentChanged"
                   placeholder="Ingresa el contenido del prompt aquí..."
                   disabled="@IsReadOnly"
                   style="font-family: 'Monaco', 'Courier New', monospace; font-size: 0.85rem;"></textarea>
@@ -225,10 +225,7 @@
 
     private async Task OnSaveClick()
     {
-        if (ValidationState?.IsValid == true)
-        {
-            await OnSave.InvokeAsync();
-        }
+        await OnSave.InvokeAsync();
     }
 
     private RenderFragment RenderPreview()

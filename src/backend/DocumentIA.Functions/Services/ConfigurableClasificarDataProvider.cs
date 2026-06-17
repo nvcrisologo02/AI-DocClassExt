@@ -130,8 +130,29 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
 
             if (!IsSatisfactory(fallbackResult, input))
             {
-                fallbackResult.TipologiaDetectada = "Desconocido";
-                fallbackResult.FallbackRazon = "global_fallback_sin_clasificacion";
+                // Si tiene código TDN1 válido (4 letras mayúsculas), conservarlo aunque la confianza sea baja
+                var tdn1Match = System.Text.RegularExpressions.Regex.Match(
+                    fallbackResult.TipologiaDetectada ?? string.Empty,
+                    @"^[A-Z]{4}$",
+                    System.Text.RegularExpressions.RegexOptions.None,
+                    TimeSpan.FromMilliseconds(100));
+                
+                if (tdn1Match.Success)
+                {
+                    // TDN1 válido pero confianza baja: marcar como parcial
+                    fallbackResult.ClasificacionParcial = true;
+                    fallbackResult.FallbackRazon = "global_fallback_baja_confianza";
+                    _logger.LogInformation(
+                        "GlobalFallback identificó TDN1 '{Tdn1}' con confianza baja ({Confianza}). Marcado como clasificación parcial.",
+                        fallbackResult.TipologiaDetectada,
+                        fallbackResult.Confianza);
+                }
+                else
+                {
+                    // Sin clasificación válida
+                    fallbackResult.TipologiaDetectada = "Desconocido";
+                    fallbackResult.FallbackRazon = "global_fallback_sin_clasificacion";
+                }
             }
 
             return fallbackResult;

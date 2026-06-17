@@ -1395,7 +1395,7 @@ stateDiagram-v2
     "assetResolver": {
       "enabled": true,
       "camposBusqueda": {
-        "idufir": "28077000012345",
+        "idufir": "FiledName_NewIDUFIR",
         "referenciaCatastral": null
       },
       "camposSolicitados": ["#ALL#"]

@@ -37,8 +37,15 @@ public class DocumentProcessOrchestrator
         ResolvedTipologia tipologiaResuelta)
     {
         // Resolver campos de búsqueda: Instrucciones > auto-detección
-        var idufirOverride = entrada.Instrucciones.AssetResolver?.CamposBusqueda?.Idufir;
-        var refCatastralOverride = entrada.Instrucciones.AssetResolver?.CamposBusqueda?.ReferenciaCatastral;
+        var idufirCampo = entrada.Instrucciones.AssetResolver?.CamposBusqueda?.Idufir;
+        var idufirOverride = idufirCampo != null && salida.DatosExtraidos.TryGetValue(idufirCampo, out var idufirVal)
+            ? idufirVal?.ToString()
+            : null;
+
+        var refCatastralCampo = entrada.Instrucciones.AssetResolver?.CamposBusqueda?.ReferenciaCatastral;
+        var refCatastralOverride = refCatastralCampo != null && salida.DatosExtraidos.TryGetValue(refCatastralCampo, out var refCatVal)
+            ? refCatVal?.ToString()
+            : null;
 
         // Resolver campos solicitados: Instrucciones > Tipología > solo obligatorios
         var camposSolicitados = entrada.Instrucciones.AssetResolver?.CamposSolicitados
@@ -97,6 +104,7 @@ public class DocumentProcessOrchestrator
         }
 
         logger.LogInformation($"Iniciando procesamiento para documento: {entrada.Documento.Name}");
+        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento?.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento?.BlobPath ?? "(null)"}' | Base64Length: {entrada.Documento?.Content?.Base64?.Length ?? 0}");
 
         var salida = new ContratoSalida
         {
@@ -439,6 +447,8 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
             salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
+            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{entrada.Documento.Content?.Base64?.Substring(0, Math.Min(20, entrada.Documento.Content?.Base64?.Length ?? 0)) ?? "(null)"}'");
+
             if (entradaPorObjectIdGdc)
             {
                 entrada.Instrucciones.SkipGDCUpload = true;
@@ -510,7 +520,22 @@ public class DocumentProcessOrchestrator
                         "ObtenerDocumentoGDCActivity",
                         entrada.Documento.ObjectIdGDC));
 
-                entrada.Documento.Content.Base64 = documentoGdc.Base64;
+                // Blob-first: ObtenerDocumentoGDCActivity sube el documento al blob y devuelve BlobPath.
+                // Usar BlobPath + hashes pre-computados en lugar de Base64 (que es null para ahorrar memoria).
+                if (!string.IsNullOrWhiteSpace(documentoGdc.BlobPath))
+                {
+                    entrada.Documento.BlobPath = documentoGdc.BlobPath;
+                    entrada.Documento.PreComputedSHA256 = documentoGdc.PreComputedSHA256;
+                    entrada.Documento.PreComputedMD5 = documentoGdc.PreComputedMD5;
+                    entrada.Documento.PreComputedTamañoBytes = documentoGdc.PreComputedTamañoBytes;
+                    logger.LogInformation($"Documento GDC subido al blob: BlobPath='{documentoGdc.BlobPath}', SHA256='{documentoGdc.PreComputedSHA256}', TamañoBytes={documentoGdc.PreComputedTamañoBytes}");
+                }
+                else
+                {
+                    // Fallback: si no hay BlobPath, usar Base64 (caso legacy o error)
+                    entrada.Documento.Content.Base64 = documentoGdc.Base64;
+                    logger.LogWarning($"BlobPath no disponible, usando Base64 (legacy): Base64Length={documentoGdc.Base64?.Length ?? 0}");
+                }
 
                 if (string.IsNullOrWhiteSpace(entrada.Documento.Name))
                 {
@@ -849,16 +874,40 @@ public class DocumentProcessOrchestrator
                     resultadoClasificacion.FallbackRazon,
                     "Tipologia Virtual",
                     StringComparison.OrdinalIgnoreCase);
+                var esTdn1ExtraidoDePropuesta = string.Equals(
+                    resultadoClasificacion.FallbackRazon,
+                    "tdn1_extraido_de_propuesta",
+                    StringComparison.OrdinalIgnoreCase);
+                var esGlobalFallbackFinal = string.Equals(
+                    resultadoClasificacion.FallbackRazon,
+                    "global_fallback_final",
+                    StringComparison.OrdinalIgnoreCase);
+                var esGlobalFallbackBajaConfianza = string.Equals(
+                    resultadoClasificacion.FallbackRazon,
+                    "global_fallback_baja_confianza",
+                    StringComparison.OrdinalIgnoreCase);
                 var esVirtual = string.IsNullOrWhiteSpace(tipologiaParcial)
                     || string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase)
-                    || esTipologiaVirtual;
+                    || esTipologiaVirtual
+                    || esTdn1ExtraidoDePropuesta
+                    || esGlobalFallbackFinal
+                    || esGlobalFallbackBajaConfianza;
 
                 if (esVirtual)
                 {
-                    // Tipología virtual: GPT identificó familia TDN1 pero no puede mapearla al catálogo.
+                    // Tipología virtual: GPT identificó familia TDN1 pero no puede mapearla al catálogo,
+                    // o se extrajo TDN1 de propuesta sin código de catálogo completo.
                     // El pipeline se detiene aquí con Estado=OK y PropuestaTipologia accesible en la salida.
                     salida.Identificacion.Tipologia = tipologiaParcial;
                     salida.Identificacion.TipologiaFamilia = tipologiaParcial;
+                    
+                    // Asignar Tdn1 si hay código válido (para todos los casos virtuales)
+                    if (!string.IsNullOrWhiteSpace(tipologiaParcial) 
+                        && !string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase))
+                    {
+                        salida.Identificacion.Tdn1 = tipologiaParcial;
+                    }
+                    
                     salida.Identificacion.TipologiaVersion = string.Empty;
                     salida.Identificacion.TipologiaNombre = resultadoClasificacion.PropuestaTipologia ?? string.Empty;
                     salida.Identificacion.PropuestaTipologia = resultadoClasificacion.PropuestaTipologia;
@@ -878,11 +927,28 @@ public class DocumentProcessOrchestrator
                     };
 
                     salida.DatosExtraidos = new Dictionary<string, object>();
+                    
+                    // Propagar ResumenCombinado de clasificación a DatosExtraidos si existe
+                    if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ResumenCombinado))
+                    {
+                        salida.DatosExtraidos["Resumen"] = resultadoClasificacion.ResumenCombinado;
+                        logger.LogInformation(
+                            "ResumenCombinado de clasificación propagado a DatosExtraidos para tipología virtual");
+                    }
+                    
+                    var mensajeNormalizacion = esTdn1ExtraidoDePropuesta
+                        ? $"Tipología parcial TDN1: se extrajo código '{tipologiaParcial}' de propuesta. Pipeline detenido sin clasificación TDN2."
+                        : esGlobalFallbackFinal
+                        ? $"Tipología parcial TDN1: GlobalFallback identificó familia '{tipologiaParcial}' sin TDN2. Pipeline detenido."
+                        : esGlobalFallbackBajaConfianza
+                        ? $"Tipología parcial TDN1: GlobalFallback identificó familia '{tipologiaParcial}' con confianza baja. Pipeline detenido."
+                        : "Tipología virtual TDN1: GPT no resolvió código de catálogo. Pipeline detenido con PropuestaTipologia.";
+                    
                     salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                     {
                         Normalizaciones = new List<string>
                         {
-                            "Tipología virtual TDN1: GPT no resolvió código de catálogo. Pipeline detenido con PropuestaTipologia."
+                            mensajeNormalizacion
                         },
                         Markdown = null,
                         Validaciones = new List<string>(),
@@ -890,13 +956,21 @@ public class DocumentProcessOrchestrator
                         ConfianzaValidacion = 1.0
                     };
 
-                    MarcarActividadOmitida("ResolverTipologia", "Tipología virtual: sin código de catálogo");
-                    MarcarActividadOmitida("Extraer", "Tipología virtual TDN1");
-                    MarcarActividadOmitida("Prompt", "Tipología virtual TDN1");
-                    MarcarActividadOmitida("Validar", "Tipología virtual TDN1");
-                    MarcarActividadOmitida("ObtenerActivo", "Tipología virtual TDN1");
-                    MarcarActividadOmitida("Integrar", "Tipología virtual TDN1");
-                    MarcarActividadOmitida("SubirGDC", "Tipología virtual TDN1");
+                    var motivoOmision = esTdn1ExtraidoDePropuesta
+                        ? $"Tipología parcial TDN1: {tipologiaParcial}"
+                        : esGlobalFallbackFinal
+                        ? $"GlobalFallback TDN1: {tipologiaParcial}"
+                        : esGlobalFallbackBajaConfianza
+                        ? $"GlobalFallback TDN1 baja confianza: {tipologiaParcial}"
+                        : "Tipología virtual: sin código de catálogo";
+                    
+                    MarcarActividadOmitida("ResolverTipologia", motivoOmision);
+                    MarcarActividadOmitida("Extraer", motivoOmision);
+                    MarcarActividadOmitida("Prompt", motivoOmision);
+                    MarcarActividadOmitida("Validar", motivoOmision);
+                    MarcarActividadOmitida("ObtenerActivo", motivoOmision);
+                    MarcarActividadOmitida("Integrar", motivoOmision);
+                    MarcarActividadOmitida("SubirGDC", motivoOmision);
 
                     var confidenceCfgVirtual = new ConfidenceConfig();
                     salida.Resultado.Estado = "OK";
@@ -915,7 +989,15 @@ public class DocumentProcessOrchestrator
                             "PersistirActivity",
                             salida));
 
-                    FinalizarSeguimiento("Completed", "Tipología virtual TDN1: propuesta sin código de catálogo");
+                    var mensajeFinal = esTdn1ExtraidoDePropuesta
+                        ? $"Tipología parcial TDN1: '{tipologiaParcial}' extraído de propuesta, sin TDN2"
+                        : esGlobalFallbackFinal
+                        ? $"Tipología parcial TDN1: GlobalFallback identificó '{tipologiaParcial}' sin TDN2"
+                        : esGlobalFallbackBajaConfianza
+                        ? $"Tipología parcial TDN1: GlobalFallback identificó '{tipologiaParcial}' con confianza baja"
+                        : "Tipología virtual TDN1: propuesta sin código de catálogo";
+                    
+                    FinalizarSeguimiento("Completed", mensajeFinal);
                     return salida;
                 }
 
@@ -1333,6 +1415,7 @@ public class DocumentProcessOrchestrator
                     $"Para forzar el procesado use ForzarProcesadoSinLimitePaginas = true en la solicitud.";
 
                 MarcarActividadOmitida("Extraer", $"Límite de páginas excedido ({paginasDocumento}/{maxPaginasEfectivo})");
+                MarcarActividadOmitida("Prompt", $"Límite de páginas excedido ({paginasDocumento}/{maxPaginasEfectivo})");
                 MarcarActividadOmitida("Validar", "Límite de páginas excedido");
                 MarcarActividadOmitida("ObtenerActivo", "Límite de páginas excedido");
                 MarcarActividadOmitida("Integrar", "Límite de páginas excedido");

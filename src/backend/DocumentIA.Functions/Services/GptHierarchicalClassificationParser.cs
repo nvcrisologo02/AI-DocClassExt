@@ -150,6 +150,35 @@ public static class GptHierarchicalClassificationParser
 
         return value.Trim().ToUpperInvariant();
     }
+
+    /// <summary>
+    /// Intenta extraer un código TDN1 del inicio de una propuesta.
+    /// Busca patrones como "COMU-01: descripción" o "COMU: descripción" y extrae "COMU".
+    /// </summary>
+    /// <param name="propuesta">La propuesta de clasificación de GPT</param>
+    /// <returns>El código TDN1 si se encuentra, null en caso contrario</returns>
+    public static string? ExtraerTdn1DePropuesta(string? propuesta)
+    {
+        if (string.IsNullOrWhiteSpace(propuesta))
+        {
+            return null;
+        }
+
+        // Buscar patrón: XXXX-NN: o XXXX:
+        // Ejemplos: "COMU-01: descripción", "COMU: descripción"
+        var match = System.Text.RegularExpressions.Regex.Match(
+            propuesta.Trim(),
+            @"^([A-Z]{4})(?:-\d+)?[\s:]+",
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromMilliseconds(100));
+
+        if (match.Success && match.Groups.Count > 1)
+        {
+            return match.Groups[1].Value;
+        }
+
+        return null;
+    }
 }
 
 public sealed record GptPhase1Classification(string? Tdn1, string Propuesta, string? Resumen = null, double? Confianza = null);

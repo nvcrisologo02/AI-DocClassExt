@@ -1,15 +1,18 @@
 using DocumentIA.Data.Context;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace DocumentIA.Data.Repositories;
 
 public class CatalogoTdnRepository : ICatalogoTdnRepository
 {
     private readonly DocumentIADbContext _context;
+    private readonly ILogger<CatalogoTdnRepository> _logger;
 
-    public CatalogoTdnRepository(DocumentIADbContext context)
+    public CatalogoTdnRepository(DocumentIADbContext context, ILogger<CatalogoTdnRepository> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyCollection<TdnCatalogItem>> GetFamiliasTdnActivasAsync(CancellationToken cancellationToken = default)
@@ -60,13 +63,27 @@ public class CatalogoTdnRepository : ICatalogoTdnRepository
         }
 
         var normalizedCodigo = tdn1Codigo.Trim().ToUpperInvariant();
+        _logger.LogInformation("GetTdn2PromptByFamiliaAsync: Buscando TDN2_Prompt en CatalogoTdn1 donde Codigo.ToUpper() = '{NormalizedCodigo}'", normalizedCodigo);
 
         var familia = await _context.CatalogoTdn1
             .AsNoTracking()
             .Where(t => t.Codigo.ToUpper() == normalizedCodigo)
-            .Select(t => t.TDN2_Prompt)
+            .Select(t => new { t.Codigo, t.TDN2_Prompt })
             .FirstOrDefaultAsync(cancellationToken);
 
-        return familia;
+        if (familia == null)
+        {
+            _logger.LogWarning("GetTdn2PromptByFamiliaAsync: NO encontrado registro en CatalogoTdn1 para familia '{NormalizedCodigo}'", normalizedCodigo);
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(familia.TDN2_Prompt))
+        {
+            _logger.LogWarning("GetTdn2PromptByFamiliaAsync: Registro encontrado para '{NormalizedCodigo}' pero TDN2_Prompt está NULL o vacío", normalizedCodigo);
+            return null;
+        }
+
+        _logger.LogInformation("GetTdn2PromptByFamiliaAsync: ✓ TDN2_Prompt encontrado para '{Codigo}'. Longitud: {Length} chars", familia.Codigo, familia.TDN2_Prompt.Length);
+        return familia.TDN2_Prompt;
     }
 }

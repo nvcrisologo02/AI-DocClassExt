@@ -15,7 +15,8 @@
       "Function": "Information",
       "Host.Aggregator": "Warning",
       "Microsoft.Azure.Functions.Worker": "Warning",
-      "Microsoft.DurableTask": "Warning"
+      "Microsoft.DurableTask": "Warning",
+      "DocumentIA": "Information"
     }
   },
   "extensions": {

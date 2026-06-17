@@ -51,7 +51,15 @@ public class ClassificationTipologiaPromptBuilder
                 .GetAwaiter()
                 .GetResult();
 
-            return string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Nombre}, {f.Descripcion}"));
+            var catalog = string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Nombre}, {f.Descripcion}"));
+            
+            _logger.LogInformation(
+                "BuildTdn1Catalog: Generado catálogo con {FamilyCount} familias. Catálogo length={CatalogLength} chars. Familias: {Familias}",
+                familias.Count(),
+                catalog.Length,
+                string.Join(", ", familias.Select(f => f.Codigo)));
+
+            return catalog;
         }) ?? string.Empty;
     }
 
@@ -73,6 +81,7 @@ public class ClassificationTipologiaPromptBuilder
             var catalogoRepository = scope.ServiceProvider.GetRequiredService<ICatalogoTdnRepository>();
             
             // FALLBACK LOGIC: Primero intentar obtener prompt personalizado
+            _logger.LogInformation("BuildTdn2CatalogByFamilia: Buscando custom TDN2_Prompt para familia '{Family}' en CatalogoTdn1...", normalizedFamily);
             var customPrompt = catalogoRepository
                 .GetTdn2PromptByFamiliaAsync(normalizedFamily)
                 .GetAwaiter()
@@ -80,12 +89,12 @@ public class ClassificationTipologiaPromptBuilder
 
             if (!string.IsNullOrWhiteSpace(customPrompt))
             {
-                _logger.LogDebug("Using custom TDN2 prompt for family {Family}: {Prompt}", normalizedFamily, customPrompt);
+                _logger.LogInformation("✓ Custom TDN2_Prompt encontrado para familia '{Family}'. Longitud: {Length} chars. Usando custom prompt.", normalizedFamily, customPrompt.Length);
                 return customPrompt;
             }
 
             // FALLBACK: Si no hay prompt personalizado, generar dinámicamente
-            _logger.LogDebug("falling back to dynamic catalog generation for family {Family}", normalizedFamily);
+            _logger.LogInformation("⚠ Custom TDN2_Prompt NO encontrado o está vacío para familia '{Family}'. Cayendo a generación dinámica.", normalizedFamily);
 
             var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
             var db = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();

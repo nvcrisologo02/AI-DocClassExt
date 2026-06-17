@@ -126,8 +126,8 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 |---|---|---|
 | `assetResolver.enabled` | bool? | `true` = forzar resolucion de activo via AssetResolver. `false` = desactivar. `null` = respetar config tipologia (default: deshabilitado). |
 | `assetResolver.camposBusqueda` | object? | Override de valores de busqueda. Si se informa, sobreescribe los datos extraidos del documento. |
-| `assetResolver.camposBusqueda.idufir` | string? | IDUFIR a buscar directamente (sin extraer del documento). |
-| `assetResolver.camposBusqueda.referenciaCatastral` | string? | Referencia Catastral a buscar directamente. |
+| `assetResolver.camposBusqueda.idufir` | string? | Nombre del campo de DatosExtraidos cuyo valor se usara como IDUFIR. |
+| `assetResolver.camposBusqueda.referenciaCatastral` | string? | Nombre del campo de DatosExtraidos cuyo valor se usara como Referencia Catastral. |
 | `assetResolver.camposSolicitados` | string[]? | Columnas de `DM_POSICION_AAII_TB` a retornar. Si `null`, usa config tipologia o default (`ID_ACTIVO_SAREB`). |
 
 **`documento`**

@@ -40,7 +40,7 @@ public class ObtenerActivoActivity
                 DocumentType = input.Tipologia,
                 ExtractedData = input.DatosExtraidos?.ToDictionary(
                     kv => kv.Key,
-                    kv => kv.Value?.ToString()) ?? new Dictionary<string, string?>(),
+                    kv => FlattenToString(kv.Value)) ?? new Dictionary<string, string?>(),
                 RequestedFields = input.CamposSolicitados,
                 IdufirOverride = input.IdufirOverride,
                 ReferenciaCatastralOverride = input.ReferenciaCatastralOverride,
@@ -162,6 +162,43 @@ public class ObtenerActivoActivity
     }
 
     // ── DTOs internos para deserializar la respuesta del plugin ──
+
+    /// <summary>
+    /// Convierte un valor de DatosExtraidos a string plano para el payload del AssetResolver.
+    /// Los arrays JSON (JsonElement) se aplanan al primer elemento, evitando ruido de serialización.
+    /// </summary>
+    private static string? FlattenToString(object? value)
+    {
+        if (value is null) return null;
+
+        if (value is System.Text.Json.JsonElement je)
+        {
+            return je.ValueKind switch
+            {
+                System.Text.Json.JsonValueKind.Array =>
+                    je.GetArrayLength() > 0
+                        ? (je[0].ValueKind == System.Text.Json.JsonValueKind.String
+                            ? je[0].GetString()
+                            : je[0].ToString())
+                        : null,
+                System.Text.Json.JsonValueKind.String =>
+                    je.GetString(),
+                System.Text.Json.JsonValueKind.Null =>
+                    null,
+                _ => je.ToString()
+            };
+        }
+
+        // Si ya es lista en memoria (tras deserialización no-JsonElement)
+        if (value is System.Collections.IEnumerable enumerable and not string)
+        {
+            foreach (var item in enumerable)
+                return item?.ToString();
+            return null;
+        }
+
+        return value.ToString();
+    }
 
     private class AssetResolverPluginResponse
     {

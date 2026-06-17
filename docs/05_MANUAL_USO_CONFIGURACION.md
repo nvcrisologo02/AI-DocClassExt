@@ -403,8 +403,8 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.assetResolver` | object | No | Configuracion de resolucion de activo para esta peticion. |
 | `instrucciones.assetResolver.enabled` | bool? | No | `true` = forzar resolucion de activo. `false` = desactivar. `null` = respetar config tipologia. |
 | `instrucciones.assetResolver.camposBusqueda` | object | No | Valores override de busqueda. |
-| `instrucciones.assetResolver.camposBusqueda.idufir` | string? | No | IDUFIR a buscar (sobreescribe el extraido del documento). |
-| `instrucciones.assetResolver.camposBusqueda.referenciaCatastral` | string? | No | Referencia Catastral a buscar (sobreescribe la extraida). |
+| `instrucciones.assetResolver.camposBusqueda.idufir` | string? | No | Nombre del campo de DatosExtraidos cuyo valor se usara como IDUFIR. |
+| `instrucciones.assetResolver.camposBusqueda.referenciaCatastral` | string? | No | Nombre del campo de DatosExtraidos cuyo valor se usara como Referencia Catastral.  |
 | `instrucciones.assetResolver.camposSolicitados` | string[]? | No | Columnas de `DM_POSICION_AAII_TB` a retornar. Si `null`, usa config tipologia o default (`ID_ACTIVO_SAREB`). |
 | `documento` | object | **Si** | Documento a procesar. |
 | `documento.name` | string | No | Nombre del archivo con extension. Si viene vacio con `documento.objectIdGDC`, se intenta completar desde metadatos GDC. |

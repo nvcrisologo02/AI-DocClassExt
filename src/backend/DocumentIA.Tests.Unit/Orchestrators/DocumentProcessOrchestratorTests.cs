@@ -11,8 +11,8 @@ using Microsoft.Extensions.Options;
 namespace DocumentIA.Tests.Unit.Orchestrators;
 
 /// <summary>
-/// Implementación fake de TaskOrchestrationContext para pruebas unitarias del orquestador.
-/// Permite inyectar resultados o excepciones por nombre de actividad.
+/// Implementacion fake de TaskOrchestrationContext para pruebas unitarias del orquestador.
+/// Permite inyectar resultados o excepciones por nombre de activity.
 /// </summary>
 internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
 {
@@ -26,11 +26,9 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
         _input = input;
     }
 
-    /// <summary>Configura el resultado para una actividad por nombre.</summary>
     public void SetupActivity<T>(string activityName, T result)
         => _activityResults[activityName] = result;
 
-    /// <summary>Configura que una actividad lance una excepción.</summary>
     public void SetupActivityThrow(string activityName, Exception ex)
         => _activityThrows[activityName] = ex;
 
@@ -44,7 +42,9 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
         return (T?)inputs[^1];
     }
 
-    // ── Abstract overrides ──────────────────────────────────────────────────
+    public int GetActivityCallCount(string activityName)
+        => _activityInputs.TryGetValue(activityName, out var inputs) ? inputs.Count : 0;
+
     public override TaskName Name => new TaskName("DocumentProcessOrchestrator");
     public override string InstanceId => "fake-instance-001";
     public override DateTime CurrentUtcDateTime => new DateTime(2025, 1, 1, 12, 0, 0, DateTimeKind.Utc);
@@ -52,8 +52,7 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
 
     public override T? GetInput<T>() where T : default => (T?)(object?)_input;
 
-    public override Task<TResult> CallActivityAsync<TResult>(
-        TaskName name, object? input = null, TaskOptions? options = null)
+    public override Task<TResult> CallActivityAsync<TResult>(TaskName name, object? input = null, TaskOptions? options = null)
     {
         if (!_activityInputs.TryGetValue(name.Name, out var inputs))
         {
@@ -70,7 +69,6 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
     }
 
     public override Task CreateTimer(DateTime fireAt, CancellationToken cancellationToken)
-        // Para pruebas, el timer "nunca" completa solo para que WhenAny use la actividad real.
         => Task.Delay(Timeout.Infinite, cancellationToken);
 
     public override void SetCustomStatus(object? customStatus) { }
@@ -78,7 +76,6 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
     public override ILogger CreateReplaySafeLogger(string categoryName)
         => NullLogger.Instance;
 
-    // Void variant of CallActivityAsync
     public override Task CallActivityAsync(TaskName name, object? input = null, TaskOptions? options = null)
     {
         if (!_activityInputs.TryGetValue(name.Name, out var inputs))
@@ -93,13 +90,11 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
         return Task.CompletedTask;
     }
 
-    // ── Members not used by the orchestrator under test ──────────────────────
     protected override ILoggerFactory LoggerFactory => NullLoggerFactory.Instance;
     public override Guid NewGuid() => Guid.NewGuid();
     public override ParentOrchestrationInstance? Parent => null;
 
-    public override Task<TResult> CallSubOrchestratorAsync<TResult>(
-        TaskName orchestratorName, object? input = null, TaskOptions? options = null)
+    public override Task<TResult> CallSubOrchestratorAsync<TResult>(TaskName orchestratorName, object? input = null, TaskOptions? options = null)
         => throw new NotImplementedException();
 
     public override void SendEvent(string instanceId, string eventName, object? payload = null)
@@ -114,11 +109,8 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
 
 public class DocumentProcessOrchestratorTests
 {
-    // ── Helpers ──────────────────────────────────────────────────────────────
     private static DocumentProcessOrchestrator CreateOrchestrator(ClassificationPreparationSettings? settings = null)
     {
-        // El constructor string solo carga el fichero cuando se llama Load().
-        // Para los escenarios que no llegan a la extracción, nunca se invoca.
         var loader = new ExtractionModelRegistryLoader("dummy.json");
         var configuredSettings = settings ?? new ClassificationPreparationSettings();
         return new DocumentProcessOrchestrator(loader, Options.Create(configuredSettings), Options.Create(new PipelineSettings()));
@@ -161,9 +153,60 @@ public class DocumentProcessOrchestratorTests
     private static Dictionary<string, object> BuildNormalizarResult() => new()
     {
         ["SHA256"] = "sha256abc",
-        ["MD5"]    = "md5abc",
-        ["CRC32"]  = "crc32abc",
+        ["MD5"] = "md5abc",
+        ["CRC32"] = "crc32abc",
         ["Paginas"] = 1
+    };
+
+    private static Dictionary<string, object> BuildNormalizarResultConMarkdown() => new()
+    {
+        ["SHA256"] = "sha256abc",
+        ["MD5"] = "md5abc",
+        ["CRC32"] = "crc32abc",
+        ["Paginas"] = 1,
+        ["Markdown"] = "# markdown normalizado"
+    };
+
+    private static ResultadoClasificacion BuildClasificacionOk(string tipologia = "nota.simple") => new()
+    {
+        Modelo = "gpt-4o-mini",
+        Confianza = 0.95,
+        ConfianzaGPT = 0.95,
+        ProveedorClasif = "GPT4oMini",
+        TipologiaDetectada = tipologia,
+        ContentExtraido = "# markdown clasificacion"
+    };
+
+    private static ResultadoExtraccion BuildExtraccionOk() => new()
+    {
+        Modelo = "gpt-4o-mini",
+        Resultado = new Dictionary<string, object>
+        {
+            ["IDUFIR"] = "IDUFIR-123",
+            ["ReferenciaCatastral"] = "REFCAT-123",
+            ["Titular"] = "Titular de prueba"
+        },
+        Resumen = "Resumen de prueba"
+    };
+
+    private static ResultadoValidacion BuildValidacionOk() => new()
+    {
+        EsValido = true,
+        Score = 0.98,
+        Reglas = new List<ResultadoReglaValidacion>()
+    };
+
+    private static ObtenerActivoOutput BuildActivoOk() => new()
+    {
+        ActivoEncontrado = true,
+        Coincidencias = new List<Dictionary<string, object>>
+        {
+            new()
+            {
+                ["DES_SERVICER"] = "HipoGes",
+                ["IMP_PT"] = 125000m
+            }
+        }
     };
 
     private static ResolvedTipologia BuildTipologia(
@@ -184,7 +227,6 @@ public class DocumentProcessOrchestratorTests
             AssetResolverEnabled: assetResolverEnabled,
             PromptHasDefinition: promptHasDefinition);
 
-    // ── Static helper tests (pre-existing) ──────────────────────────────────
     [Fact]
     public void BuildObtenerActivoInput_WithInstructionOverrides_PrioritizesRequestValues()
     {
@@ -301,8 +343,6 @@ public class DocumentProcessOrchestratorTests
         input.UmbralScoreDireccion.Should().Be(0.75);
     }
 
-    // ── Full orchestrator flow tests (T-1) ───────────────────────────────────
-
     [Fact]
     public async Task RunOrchestrator_DuplicadoDetectado_RetornaSalidaReutilizada()
     {
@@ -349,14 +389,12 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoNoClasificado()
     {
         var orchestrator = CreateOrchestrator();
-        // Sin ExpectedType → el orquestador llama a ClasificarActivity
         var context = new FakeTaskOrchestrationContext(BuildEntrada());
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
-        context.SetupActivityThrow("ClasificarActivity",
-            new Exception("No se ha podido identificar la tipologia del documento"));
+        context.SetupActivityThrow("ClasificarActivity", new Exception("No se ha podido identificar la tipologia del documento"));
 
         var salida = await orchestrator.RunOrchestrator(context);
 
@@ -446,14 +484,12 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_TipologiaNoResuelta_RetornaEstadoNoClasificado()
     {
         var orchestrator = CreateOrchestrator();
-        // Con ExpectedType → el orquestador salta ClasificarActivity y llama ResolverTipologiaActivity
         var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
-        context.SetupActivityThrow("ResolverTipologiaActivity",
-            new KeyNotFoundException("No existe la tipologia: nota.simple"));
+        context.SetupActivityThrow("ResolverTipologiaActivity", new KeyNotFoundException("No existe la tipologia: nota.simple"));
 
         var salida = await orchestrator.RunOrchestrator(context);
 
@@ -499,7 +535,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
         {
             Modelo = "di-test",
-            Confianza = 0.1,          // por debajo del umbral 0.6
+            Confianza = 0.1,
             ConfianzaDI = 0.1,
             TipologiaDetectada = "nota.simple"
         });
@@ -532,7 +568,7 @@ public class DocumentProcessOrchestratorTests
             Confianza = 0.92,
             ConfianzaGPT = 0.92,
             ProveedorClasif = "GPT4oMini",
-            TipologiaDetectada = "Desconocido",  // Tipología virtual → pipeline se detiene
+            TipologiaDetectada = "Desconocido",
             ClasificacionParcial = true,
             PropuestaTipologia = "Nota simple registral"
         });
@@ -612,9 +648,7 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_ClassificationOnly_OmitePipelinePosteriorYCompletaTrazas()
     {
         var orchestrator = CreateOrchestrator();
-        var context = new FakeTaskOrchestrationContext(BuildEntrada(
-            classificationOnly: true,
-            maxPagesForClassificationOnly: 3));
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true, maxPagesForClassificationOnly: 3));
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
@@ -714,9 +748,7 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_ForzarResumenPorDefectoSinGptPrevio_EjecutaPromptActivitySoloResumen()
     {
         var orchestrator = CreateOrchestrator();
-        var context = new FakeTaskOrchestrationContext(BuildEntrada(
-            classificationOnly: true,
-            forzarResumenPorDefecto: true));
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true, forzarResumenPorDefecto: true));
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
@@ -761,9 +793,7 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_ClassificationOnly_ResumenForzadoSinMarkdown_EjecutaLayoutAntesDePrompt()
     {
         var orchestrator = CreateOrchestrator();
-        var context = new FakeTaskOrchestrationContext(BuildEntrada(
-            classificationOnly: true,
-            forzarResumenPorDefecto: true));
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true, forzarResumenPorDefecto: true));
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
@@ -843,9 +873,7 @@ public class DocumentProcessOrchestratorTests
             Modelo = "gpt-4o-mini",
             Resumen = "Resumen TDN1"
         });
-
-        // Si se intenta resolver tipología técnica en este escenario, es un bug.
-        context.SetupActivityThrow("ResolverTipologiaActivity", new InvalidOperationException("No debería llamarse ResolverTipologiaActivity para TDN1 classificationOnly"));
+        context.SetupActivityThrow("ResolverTipologiaActivity", new InvalidOperationException("No deberia llamarse ResolverTipologiaActivity para TDN1 classificationOnly"));
 
         var salida = await orchestrator.RunOrchestrator(context);
 
@@ -856,30 +884,19 @@ public class DocumentProcessOrchestratorTests
 
         var resolverInput = context.GetLastActivityInput<string>("ResolverTipologiaActivity");
         resolverInput.Should().BeNull();
-
-        var integrarInput = context.GetLastActivityInput<DocumentIA.Core.Models.IntegrarInput>("IntegrarActivity");
+        var integrarInput = context.GetLastActivityInput<IntegrarInput>("IntegrarActivity");
         integrarInput.Should().BeNull();
-
         var subirGdcInput = context.GetLastActivityInput<object>("SubirGDCActivity");
         subirGdcInput.Should().BeNull();
     }
 
-    // ── Tests de regresión sesión 2026-05-25 ────────────────────────────────
-
-    /// <summary>
-    /// Paso 2.8: cuando no hay Markdown en datosNormalizados y el provider no es DI/CU,
-    /// el orquestador debe llamar ExtraerMarkdownLayoutActivity y propagar el resultado
-    /// a DatosNormalizados antes de ClasificarActivity.
-    /// </summary>
     [Fact]
     public async Task RunOrchestrator_Paso28_SinMarkdown_LlamaExtraerMarkdownLayoutYPropagaAlClasificar()
     {
-        // Preparation disabled (default) → docClasif.DocumentoBase64Clasif = entrada.Documento.Content.Base64
-        // Provider null/empty → ClasificacionProviderGeneraMarkdownPropio returns false → paso 2.8 activo
         var orchestrator = CreateOrchestrator();
-        var context = new FakeTaskOrchestrationContext(BuildEntrada()); // no ExpectedType, no provider
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
 
-        context.SetupActivity("NormalizarActivity", BuildNormalizarResult()); // sin clave "Markdown"
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
@@ -899,23 +916,16 @@ public class DocumentProcessOrchestratorTests
 
         await orchestrator.RunOrchestrator(context);
 
-        // Verificar que ExtraerMarkdownLayoutActivity fue invocada
         var markdownInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
         markdownInput.Should().NotBeNull();
         markdownInput!.DocumentoBase64.Should().NotBeNullOrWhiteSpace();
 
-        // Verificar que el markdown fue propagado a ClasificarActivity
         var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
         clasifInput.Should().NotBeNull();
         clasifInput!.DatosNormalizados.Should().ContainKey("Markdown");
         clasifInput.DatosNormalizados["Markdown"].Should().Be("# Documento de prueba generado por Layout");
     }
 
-    /// <summary>
-    /// Cuando ClasificacionParcial=true con TipologiaDetectada diferente de "Desconocido",
-    /// el orquestador debe asignar Identificacion.Tdn1 con el código TDN1 y continuar el pipeline.
-    /// (D1: clasificacionParcial con código TDN1 conocido ya no detiene el pipeline)
-    /// </summary>
     [Fact]
     public async Task RunOrchestrator_ClasificacionParcial_AsignaTdn1EnIdentificacion()
     {
@@ -935,25 +945,15 @@ public class DocumentProcessOrchestratorTests
             ClasificacionParcial = true,
             PropuestaTipologia = "Nota simple registral"
         });
-        // D1: pipeline continúa tras asignar Tdn1; ResolverTipologia es llamado y puede fallar
         context.SetupActivityThrow("ResolverTipologiaActivity", new KeyNotFoundException("No existe la tipologia: NOTS"));
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        // Tdn1 asignado antes de continuar el pipeline
         salida.Identificacion.Tdn1.Should().Be("NOTS");
-        // ResolverTipologia fue invocado (pipeline no se detuvo en ClasificacionParcial)
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().NotBeNull();
-        // KeyNotFoundException → NO_CLASIFICADO (comportamiento del orquestador)
         salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
     }
 
-    /// <summary>
-    /// Tipología virtual (tdn1=null, propuesta≠null → FallbackRazon="tdn1_virtual_propuesta"):
-    /// el orquestador devuelve Estado=OK con Tipologia="Desconocido" y Tdn1 vacío/nulo
-    /// (guard impide asignar "Desconocido" a Tdn1), pero PropuestaTipologia queda accesible
-    /// en DetalleEjecucion.Clasificacion.
-    /// </summary>
     [Fact]
     public async Task RunOrchestrator_TipologiaVirtualParcial_EstadoOkConDesconocidoYTdn1Nulo()
     {
@@ -979,9 +979,250 @@ public class DocumentProcessOrchestratorTests
 
         salida.Resultado.Estado.Should().Be("OK");
         salida.Identificacion.Tipologia.Should().Be("Desconocido");
-        salida.Identificacion.Tdn1.Should().BeNullOrWhiteSpace(); // Guard: "Desconocido" no se asigna a Tdn1
+        salida.Identificacion.Tdn1.Should().BeNullOrWhiteSpace();
         salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be("tdn1_virtual_propuesta");
         salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Solicitud de cambio de titularidad");
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SkipDuplicateCheck_OmiteVerificarDuplicadoActivity()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple", skipDuplicateCheck: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivityThrow("VerificarDuplicadoActivity", new InvalidOperationException("No debia llamarse VerificarDuplicadoActivity"));
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ResolverTipologiaActivity", new KeyNotFoundException("No existe la tipologia: nota.simple"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        context.GetActivityCallCount("VerificarDuplicadoActivity").Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnlyConExecuteIntegrarTrue_EjecutaIntegrarActivity()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true, executeIntegrarWhenClassificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 4,
+            PaginasIncluidas = 2,
+            RecorteAplicado = true
+        });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+        context.SetupActivity("IntegrarActivity", new IntegrarOutput
+        {
+            DatosIntegrados = new Dictionary<string, object> { ["Integrado"] = true }
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        context.GetActivityCallCount("IntegrarActivity").Should().BeGreaterThan(0);
+        context.GetLastActivityInput<IntegrarInput>("IntegrarActivity").Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_FlujoCompletoConExtraccionValidacionYPersistencia_FinalizaOkYPersiste()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: true));
+        context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        context.GetActivityCallCount("ExtraerActivity").Should().Be(1);
+        context.GetActivityCallCount("ValidarActivity").Should().Be(1);
+        context.GetLastActivityInput<ContratoSalida>("PersistirActivity").Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_FlujoCompletoConAssetResolver_EjecutaObtenerActivoEIntegrar()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, assetResolverEnabled: true, skipGdc: true));
+        context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("ObtenerActivoActivity", BuildActivoOk());
+        context.SetupActivity("IntegrarActivity", new IntegrarOutput
+        {
+            DatosIntegrados = new Dictionary<string, object>
+            {
+                ["DES_SERVICER"] = "HipoGes"
+            }
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        context.GetActivityCallCount("ObtenerActivoActivity").Should().Be(1);
+        context.GetActivityCallCount("IntegrarActivity").Should().Be(1);
+        context.GetLastActivityInput<ObtenerActivoInput>("ObtenerActivoActivity").Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SkipGdcFalse_EjecutaSubirGdcActivity()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: false));
+        context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("SubirGDCActivity", "GDC-RESULT-001");
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        context.GetActivityCallCount("SubirGDCActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_InputNulo_RetornaErrorControlado()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(null);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_NormalizarActivityFalla_RetornaErrorControlado()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivityThrow("NormalizarActivity", new Exception("fallo normalizando"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SubirBlobActivityFalla_RetornaErrorControlado()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivityThrow("SubirBlobActivity", new Exception("fallo blob"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptActivityFalla_NoRompeElPipeline()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(promptEnabled: true, promptHasDefinition: true));
+        context.SetupActivityThrow("PromptActivity", new Exception("fallo prompt"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        context.GetActivityCallCount("PromptActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnlyNivelTipologia_ResuelveTipologiaTecnicaCorrectamente()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: true);
+        entrada.Instrucciones.Classification.NivelClasificacion = "TIPOLOGIA";
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk("nota.simple"));
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("nota.simple.1_0");
+        context.GetActivityCallCount("ResolverTipologiaActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnlyConMaxPagesOverride_AplicaValorDeEntrada()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true, maxPagesForClassificationOnly: 5));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 6,
+            PaginasIncluidas = 5,
+            RecorteAplicado = true
+        });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        var prepInput = context.GetLastActivityInput<PrepararDocumentoClasificacionInput>("PrepararDocumentoClasificacionActivity");
+        prepInput.Should().NotBeNull();
+        prepInput!.MaxPaginasClasificacion.Should().Be(5);
     }
 }
