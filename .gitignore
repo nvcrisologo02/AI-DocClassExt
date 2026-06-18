@@ -123,3 +123,4 @@ cost-analysis.csv
 cost-analysis-full.csv
 docs/riesgos-ia/build_word_pdf.py
 scripts/generate-guia-clasificacion-word.py
+objectids.txt

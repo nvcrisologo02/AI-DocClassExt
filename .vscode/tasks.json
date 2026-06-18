@@ -14,7 +14,38 @@
       },
       "command": "host start",
       "isBackground": true,
-      "problemMatcher": "$func-dotnet-watch"
+      "problemMatcher": {
+        "owner": "azure-functions",
+        "pattern": [],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Azure Functions Core Tools.*$",
+          "endsPattern": "^.*Host (started|lock lease acquired).*$"
+        }
+      }
+    },
+    {
+      "label": "func: host start (manual debug)",
+      "type": "shell",
+      "dependsOn": [
+        "start (azurite)",
+        "build (functions)"
+      ],
+      "dependsOrder": "sequence",
+      "command": "func host start",
+      "options": {
+        "cwd": "${workspaceFolder}/src/backend/DocumentIA.Functions"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "azure-functions",
+        "pattern": [],
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Azure Functions Core Tools.*$",
+          "endsPattern": "^.*Host (started|lock lease acquired).*$"
+        }
+      }
     },
     {
       "label": "Run Host Functions con todo lo que implique",
@@ -87,7 +118,6 @@
         "/property:GenerateFullPaths=true",
         "/consoleloggerparameters:NoSummary"
       ],
-      "dependsOn": "clean (functions)",
       "group": {
         "kind": "build",
         "isDefault": true

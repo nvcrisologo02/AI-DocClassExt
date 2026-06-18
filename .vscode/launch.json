@@ -5,7 +5,17 @@
             "name": "functions",
             "type": "coreclr",
             "request": "attach",
-            "preLaunchTask": "Run Host Functions con todo lo que implique",
+            "preLaunchTask": "func: host start",
+            "processId": "${command:azureFunctions.pickProcess}",
+            "console": "integratedTerminal",
+            "justMyCode": false,
+            "cwd": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/backend/DocumentIA.Functions",
+            "symbolSearchPath": "${workspaceFolder:documento-ia-clasificacion-mvp}/src/backend/DocumentIA.Functions/bin/Debug/net8.0"
+        },
+        {
+            "name": "functions (attach manual)",
+            "type": "coreclr",
+            "request": "attach",
             "processId": "${command:azureFunctions.pickProcess}",
             "console": "integratedTerminal",
             "justMyCode": false,
