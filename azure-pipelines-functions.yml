@@ -8,7 +8,7 @@ pool:
 
 variables:
   buildConfiguration: 'Release'
-  azureSubscription: 'AI DocClassExt'
+  azureSubscription: 'AI DocClassExt PRO'
   functionAppName: 'srbappprodocai'
   azureResourceGroup: 'SRBRGDOCSAIPROD'
   # CU Resiliencia baseline (post-2026-06-01)
