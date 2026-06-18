@@ -32,7 +32,7 @@ param(
     [string]$AssetResolverWebAppName = "srbwebpluginassetresolver",
 
     [Parameter(Mandatory = $false)]
-    [string]$ContractPath = (Join-Path $PSScriptRoot "config\azure-appsettings-contract.json"),
+    [string]$ContractPath = ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\config\azure-appsettings-contract.json"))),
 
     [Parameter(Mandatory = $false)]
     [switch]$SkipAzureLoginCheck
