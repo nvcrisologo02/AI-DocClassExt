@@ -8,7 +8,7 @@ pool:
 
 variables:
   buildConfiguration: 'Release'
-  azureSubscription: '' # set this pipeline variable to an Azure service connection
+  azureSubscription: 'AI DocClassExt PRO' # set this pipeline variable to an Azure service connection
   webAppName: 'srbwebpluginassetresolver' # override if needed
 
 stages:

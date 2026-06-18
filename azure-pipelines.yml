@@ -3,7 +3,7 @@ pr: none
 
 variables:
   - name: AZURE_SERVICE_CONNECTION
-    value: AI DocClassExt
+    value: AI DocClassExt PRO
   - name: AZURE_FUNCTIONS_APP_NAME
     value: srbappprodocai
   - name: AZURE_ADMIN_WEB_APP_NAME
