@@ -36,7 +36,7 @@ public class CatalogoTdnRepositoryIntegrationTests
         // Act
         using (var context = new DocumentIADbContext(options))
         {
-            var repository = new CatalogoTdnRepository(context);
+            var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
             
             var result = await repository.GetTdn2PromptByFamiliaAsync("SERE");
 
@@ -69,7 +69,7 @@ public class CatalogoTdnRepositoryIntegrationTests
         // Act - llamar con minúsculas
         using (var context = new DocumentIADbContext(options))
         {
-            var repository = new CatalogoTdnRepository(context);
+            var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
             
             var result = await repository.GetTdn2PromptByFamiliaAsync("sere");
 
@@ -102,7 +102,7 @@ public class CatalogoTdnRepositoryIntegrationTests
         // Act
         using (var context = new DocumentIADbContext(options))
         {
-            var repository = new CatalogoTdnRepository(context);
+            var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
             
             var result = await repository.GetTdn2PromptByFamiliaAsync("ESCR");
 

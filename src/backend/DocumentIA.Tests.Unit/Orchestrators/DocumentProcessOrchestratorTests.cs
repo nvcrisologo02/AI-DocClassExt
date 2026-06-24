@@ -177,16 +177,16 @@ public class DocumentProcessOrchestratorTests
         ContentExtraido = "# markdown clasificacion"
     };
 
-    private static ResultadoExtraccion BuildExtraccionOk() => new()
+    private static global::DocumentIA.Core.Models.ExtraccionResultado BuildExtraccionOk() => new()
     {
         Modelo = "gpt-4o-mini",
-        Resultado = new Dictionary<string, object>
+        DatosExtraidos = new Dictionary<string, object>
         {
             ["IDUFIR"] = "IDUFIR-123",
             ["ReferenciaCatastral"] = "REFCAT-123",
             ["Titular"] = "Titular de prueba"
         },
-        Resumen = "Resumen de prueba"
+        ResumenCombinado = "Resumen de prueba"
     };
 
     private static ResultadoValidacion BuildValidacionOk() => new()
@@ -1020,9 +1020,9 @@ public class DocumentProcessOrchestratorTests
         });
         context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
         context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
-        context.SetupActivity("IntegrarActivity", new IntegrarOutput
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
         {
-            DatosIntegrados = new Dictionary<string, object> { ["Integrado"] = true }
+            DatosFinales = new Dictionary<string, object> { ["Integrado"] = true }
         });
 
         var salida = await orchestrator.RunOrchestrator(context);
@@ -1068,9 +1068,9 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
         context.SetupActivity("ValidarActivity", BuildValidacionOk());
         context.SetupActivity("ObtenerActivoActivity", BuildActivoOk());
-        context.SetupActivity("IntegrarActivity", new IntegrarOutput
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
         {
-            DatosIntegrados = new Dictionary<string, object>
+            DatosFinales = new Dictionary<string, object>
             {
                 ["DES_SERVICER"] = "HipoGes"
             }
