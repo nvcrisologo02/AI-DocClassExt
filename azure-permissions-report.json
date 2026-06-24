@@ -1,0 +1,15 @@
+{
+  "SubscriptionName": "Core Desarrollo",
+  "SubscriptionId": "8764f9ff-fe37-4c03-bde9-6294622bef6d",
+  "ResourceGroup": "SRBRGDEVDOCSAI",
+  "UserUPN": "ignacio.varas@sareb.es",
+  "UserObjectId": "dd759b2b-bd5a-49a9-8bc8-753aa1139368",
+  "CanCreateResourcesInRG": true,
+  "CanAssignRbacRoles": true,
+  "KeyVaultName": "srbkvdevdocai",
+  "CanManageSecrets": true,
+  "SqlServerName": "srbsqldevdocai",
+  "CanCreateSqlDbByRbac": true,
+  "FunctionAppName": "srbappdevdocai",
+  "FunctionAppMIPrincipalId": "WARNING: Connection verification disabled by environment variable AZURE_CLI_DISABLE_CONNECTION_VERIFICATION\r\nD:\\a\\_work\\1\\s\\build_scripts\\windows\\artifacts\\cli\\Lib\\site-packages\\urllib3/connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'management.azure.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings\r\n71380c7e-fbb5-4333-8b35-0126e9e87720"
+}

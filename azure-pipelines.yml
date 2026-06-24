@@ -1,21 +1,61 @@
 trigger: none
 pr: none
 
+parameters:
+  - name: targetEnvironment
+    type: string
+    default: prod
+    values:
+      - dev
+      - pre
+      - prod
+
 variables:
-  - name: AZURE_SERVICE_CONNECTION
-    value: AI DocClassExt PRO
-  - name: AZURE_FUNCTIONS_APP_NAME
-    value: srbappprodocai
-  - name: AZURE_ADMIN_WEB_APP_NAME
-    value: srbwebadminprodocai
-  - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
-    value: srbwebpluginassetresolver
-  - name: AZURE_ASSET_RESOLVER_BASE_URL
-    value: https://srbwebpluginassetresolver.azurewebsites.net/
-  - name: AZURE_RESOURCE_GROUP
-    value: SRBRGDOCSAIPROD
-  - name: KEY_VAULT_NAME
-    value: srbkvprodocai
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt DEV
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbappdevdocai
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadmindevdocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverdev
+    - name: AZURE_ASSET_RESOLVER_BASE_URL
+      value: https://srbwebpluginassetresolverdev.azurewebsites.net/
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGDEVDOCSAI
+    - name: KEY_VAULT_NAME
+      value: srbkvdevdocai
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRE
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbapppredocai
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadminpredocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverpre
+    - name: AZURE_ASSET_RESOLVER_BASE_URL
+      value: https://srbwebpluginassetresolverpre.azurewebsites.net/
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGPREDOCSAI
+    - name: KEY_VAULT_NAME
+      value: srbkvpredocai
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRO
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbappprodocai
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadminprodocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolver
+    - name: AZURE_ASSET_RESOLVER_BASE_URL
+      value: https://srbwebpluginassetresolver.azurewebsites.net/
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGDOCSAIPROD
+    - name: KEY_VAULT_NAME
+      value: srbkvprodocai
   - name: buildConfiguration
     value: Release
   - name: solutionPath
@@ -193,7 +233,7 @@ stages:
     jobs:
       - deployment: DeployFunctionsJob
         displayName: Deploy to srbappprodocai
-        environment: prod
+        environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
             deploy:
@@ -336,7 +376,7 @@ stages:
                       }
       - deployment: DeployAdminJob
         displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
-        environment: prod
+        environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
             deploy:
@@ -412,7 +452,7 @@ stages:
     jobs:
       - deployment: DeployAssetResolverJob
         displayName: Deploy to $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
-        environment: prod
+        environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
             deploy:

@@ -1,0 +1,202 @@
+name: bootstrap-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+pr: none
+
+parameters:
+  - name: targetEnvironment
+    type: string
+    default: dev
+    values:
+      - dev
+      - pre
+      - prod
+
+variables:
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt DEV
+    - name: SUBSCRIPTION_ID
+      value: 8764f9ff-fe37-4c03-bde9-6294622bef6d
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGDEVDOCSAI
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbappdevdocai
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadmindevdocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverdev
+    - name: KEY_VAULT_NAME
+      value: srbkvdevdocai
+    - name: AZURE_SQL_SERVER_NAME
+      value: srbsqldevdocai
+    - name: AZURE_STORAGE_DOCUMENTS
+      value: srbstgdevdocai
+    - name: AZURE_STORAGE_DURABLE
+      value: srbstgdevappdocai
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRE
+    - name: SUBSCRIPTION_ID
+      value: a4f6b357-8f13-4488-9ee8-b9f635426f91
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGPREDOCSAI
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbapppredocai
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadminpredocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverpre
+    - name: KEY_VAULT_NAME
+      value: srbkvpredocai
+    - name: AZURE_SQL_SERVER_NAME
+      value: srbsqlpredocai
+    - name: AZURE_STORAGE_DOCUMENTS
+      value: srbstgpredocai
+    - name: AZURE_STORAGE_DURABLE
+      value: srbstgpreappdocai
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRO
+    - name: SUBSCRIPTION_ID
+      value: 647c7246-54bc-4d31-b909-431cacf03272
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGDOCSAIPROD
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbappprodocai
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadminprodocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolver
+    - name: KEY_VAULT_NAME
+      value: srbkvprodocai
+    - name: AZURE_SQL_SERVER_NAME
+      value: srbsqlprodocai
+    - name: AZURE_STORAGE_DOCUMENTS
+      value: srbstgproapppdocai
+    - name: AZURE_STORAGE_DURABLE
+      value: srbstgproapppdocai
+
+pool:
+  vmImage: windows-latest
+
+stages:
+  - stage: Bootstrap
+    displayName: Bootstrap environment configuration
+    jobs:
+      - job: BootstrapJob
+        displayName: Permissions, secrets, app settings and validation
+        steps:
+          - checkout: self
+
+          - task: AzureCLI@2
+            displayName: Pre-check Azure permissions
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                pwsh -File .\scripts\configuration\check-azure-permissions.ps1 `
+                  -SubscriptionId "$(SUBSCRIPTION_ID)" `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -KeyVaultName "$(KEY_VAULT_NAME)" `
+                  -SqlServerName "$(AZURE_SQL_SERVER_NAME)" `
+                  -FunctionAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
+                  -StorageDocuments "$(AZURE_STORAGE_DOCUMENTS)" `
+                  -StorageDurable "$(AZURE_STORAGE_DURABLE)"
+
+          - task: AzureCLI@2
+            displayName: Upload Key Vault secrets from secure pipeline variables
+            env:
+              DOCIA_SECRET_SQLCONNECTIONSTRING: $(DOCIA_SECRET_SQLCONNECTIONSTRING)
+              DOCIA_SECRET_AZUREWEBJOBSSTORAGE: $(DOCIA_SECRET_AZUREWEBJOBSSTORAGE)
+              DOCIA_SECRET_AZURESTORAGECONNECTIONSTRING: $(DOCIA_SECRET_AZURESTORAGECONNECTIONSTRING)
+              DOCIA_SECRET_EXTRACTION_AZURECONTENTUNDERSTANDING_APIKEY: $(DOCIA_SECRET_EXTRACTION_AZURECONTENTUNDERSTANDING_APIKEY)
+              DOCIA_SECRET_EXTRACTION_GPTFALLBACK_APIKEY: $(DOCIA_SECRET_EXTRACTION_GPTFALLBACK_APIKEY)
+              DOCIA_SECRET_CLASSIFICATION_AZUREDOCUMENTINTELLIGENCE_APIKEY: $(DOCIA_SECRET_CLASSIFICATION_AZUREDOCUMENTINTELLIGENCE_APIKEY)
+              DOCIA_SECRET_CLASSIFICATION_GPTFALLBACK_APIKEY: $(DOCIA_SECRET_CLASSIFICATION_GPTFALLBACK_APIKEY)
+              DOCIA_SECRET_ASSETRESOLVERAPIKEY: $(DOCIA_SECRET_ASSETRESOLVERAPIKEY)
+              DOCIA_SECRET_FUNCTIONSADMINAPIFUNCTIONKEY: $(DOCIA_SECRET_FUNCTIONSADMINAPIFUNCTIONKEY)
+              DOCIA_SECRET_GDC_USERNAME: $(DOCIA_SECRET_GDC_USERNAME)
+              DOCIA_SECRET_GDC_PASSWORD: $(DOCIA_SECRET_GDC_PASSWORD)
+              DOCIA_SECRET_GDC_HTTPBASICUSERNAME: $(DOCIA_SECRET_GDC_HTTPBASICUSERNAME)
+              DOCIA_SECRET_GDC_HTTPBASICPASSWORD: $(DOCIA_SECRET_GDC_HTTPBASICPASSWORD)
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                pwsh -File .\scripts\configuration\set-keyvault-secrets.ps1 `
+                  -SubscriptionId "$(SUBSCRIPTION_ID)" `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -KeyVaultName "$(KEY_VAULT_NAME)"
+
+          - task: AzureCLI@2
+            displayName: Verify deployment prerequisites
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                pwsh -File .\scripts\deployment\verify-prod-prereqs.ps1 `
+                  -SubscriptionId "$(SUBSCRIPTION_ID)" `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -FunctionAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
+                  -KeyVaultName "$(KEY_VAULT_NAME)" `
+                  -StorageAccountName "$(AZURE_STORAGE_DURABLE)"
+
+          - task: AzureCLI@2
+            displayName: Apply Function App Key Vault mode
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                pwsh -File .\scripts\configuration\set-functionapp-keyvault-references.ps1 `
+                  -SubscriptionId "$(SUBSCRIPTION_ID)" `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -FunctionAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
+                  -KeyVaultName "$(KEY_VAULT_NAME)"
+
+          - task: AzureCLI@2
+            displayName: Apply Admin and AssetResolver app settings
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                $adminSettings = @(
+                  "FunctionsAdminApi__BaseUrl=https://$(AZURE_FUNCTIONS_APP_NAME).azurewebsites.net/api/",
+                  "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
+                )
+
+                pwsh -File .\scripts\configuration\ensure-app-settings.ps1 `
+                  -AppKind webapp `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -Name "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                  -Settings $adminSettings
+
+                $assetResolverSettings = @(
+                  "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=user-ods-dwh)",
+                  "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
+                )
+
+                pwsh -File .\scripts\configuration\ensure-app-settings.ps1 `
+                  -AppKind webapp `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -Name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
+                  -Settings $assetResolverSettings
+
+          - task: AzureCLI@2
+            displayName: Validate app settings contract
+            inputs:
+              azureSubscription: $(AZURE_SERVICE_CONNECTION)
+              scriptType: pscore
+              scriptLocation: inlineScript
+              inlineScript: |
+                pwsh -File .\scripts\testing\validate-azure-appsettings-contract.ps1 `
+                  -SubscriptionId "$(SUBSCRIPTION_ID)" `
+                  -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                  -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
+                  -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
+                  -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)"
