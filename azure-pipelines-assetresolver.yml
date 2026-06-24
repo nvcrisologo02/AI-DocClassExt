@@ -3,12 +3,37 @@ name: assetresolver-$(Date:yyyyMMdd)$(Rev:.r)
 trigger: none
 pr: none
 
+parameters:
+  - name: targetEnvironment
+    type: string
+    default: dev
+    values:
+      - dev
+      - pre
+      - prod
+
 variables:
-  buildConfiguration: 'Release'
-  projectPath: 'src/plugins/DocumentIA.AssetResolver/DocumentIA.AssetResolver.csproj'
-  publishDir: '$(Build.ArtifactStagingDirectory)/assetresolver'
-  AZURE_SERVICE_CONNECTION: 'AI DocClassExt'
-  AZURE_ASSET_RESOLVER_WEB_APP_NAME: 'srbwebpluginassetresolver'
+  - name: buildConfiguration
+    value: Release
+  - name: projectPath
+    value: src/plugins/DocumentIA.AssetResolver/DocumentIA.AssetResolver.csproj
+  - name: publishDir
+    value: $(Build.ArtifactStagingDirectory)/assetresolver
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt DEV
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverdev
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRE
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverpre
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRO
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolver
 
 pool:
   vmImage: 'windows-latest'
@@ -51,7 +76,7 @@ stages:
     jobs:
       - deployment: DeployToAppService
         displayName: 'Deploy to Azure App Service (optional)'
-        environment: prod
+        environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
             deploy:

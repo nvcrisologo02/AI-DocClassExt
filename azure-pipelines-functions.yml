@@ -3,28 +3,66 @@ name: Functions-CI-CD
 trigger: none
 pr: none
 
+parameters:
+  - name: targetEnvironment
+    type: string
+    default: dev
+    values:
+      - dev
+      - pre
+      - prod
+
 pool:
   vmImage: 'windows-latest'
 
 variables:
-  buildConfiguration: 'Release'
-  azureSubscription: 'AI DocClassExt PRO'
-  functionAppName: 'srbappprodocai'
-  azureResourceGroup: 'SRBRGDOCSAIPROD'
-  # CU Resiliencia baseline (post-2026-06-01)
-  cuMaxConcurrentCalls: '4'
-  cuHardTimeoutSeconds: '90'
-  cuEnableCircuitBreaker: 'true'
-  cuCircuitBreakerFailureThreshold: '5'
-  cuCircuitBreakerOpenSeconds: '45'
-  cuMaxRetries: '3'
-  cuInitialRetryDelayMs: '500'
-  promptTracingEnabled: 'true'
-  promptTracingIncludePromptText: 'true'
-  promptTracingMaxPromptTextChars: '20000'
-  # Durable Functions concurrency (alineado con CU limiter)
-  maxConcurrentActivityFunctions: '4'
-  maxConcurrentOrchestratorFunctions: '4'
+  - name: buildConfiguration
+    value: Release
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: azureSubscription
+      value: AI DocClassExt DEV
+    - name: functionAppName
+      value: srbappdevdocai
+    - name: azureResourceGroup
+      value: SRBRGDEVDOCSAI
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: azureSubscription
+      value: AI DocClassExt PRE
+    - name: functionAppName
+      value: srbapppredocai
+    - name: azureResourceGroup
+      value: SRBRGPREDOCSAI
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: azureSubscription
+      value: AI DocClassExt PRO
+    - name: functionAppName
+      value: srbappprodocai
+    - name: azureResourceGroup
+      value: SRBRGDOCSAIPROD
+  - name: cuMaxConcurrentCalls
+    value: '4'
+  - name: cuHardTimeoutSeconds
+    value: '90'
+  - name: cuEnableCircuitBreaker
+    value: 'true'
+  - name: cuCircuitBreakerFailureThreshold
+    value: '5'
+  - name: cuCircuitBreakerOpenSeconds
+    value: '45'
+  - name: cuMaxRetries
+    value: '3'
+  - name: cuInitialRetryDelayMs
+    value: '500'
+  - name: promptTracingEnabled
+    value: 'true'
+  - name: promptTracingIncludePromptText
+    value: 'true'
+  - name: promptTracingMaxPromptTextChars
+    value: '20000'
+  - name: maxConcurrentActivityFunctions
+    value: '4'
+  - name: maxConcurrentOrchestratorFunctions
+    value: '4'
 
 stages:
 - stage: Build
@@ -56,7 +94,7 @@ stages:
   jobs:
   - deployment: Deploy
     displayName: Deploy to Azure Functions
-    environment: 'prod'
+    environment: ${{ parameters.targetEnvironment }}
     pool:
       vmImage: 'windows-latest'
     strategy:

@@ -131,6 +131,8 @@ Implicacion:
 ## 6. Comandos operativos
 
 Nota:
+- El flujo principal es por Azure DevOps Pipelines.
+- Los comandos manuales quedan como plan de respaldo para incidencias o ejecuciones puntuales.
 - Ejecutar primero todo en DEV y despues repetir en PRE cambiando variables.
 - Comandos en PowerShell.
 - En los pasos que requieren datos sensibles, usar variables DOCIA_SECRET_* o local.settings no versionado.
@@ -284,6 +286,12 @@ Pipelines:
 - Bootstrap por entorno: [azure-pipelines-bootstrap.yml](azure-pipelines-bootstrap.yml)
 - Despliegue multi-entorno: [azure-pipelines.yml](azure-pipelines.yml)
 
+Uso esperado:
+
+- Bootstrap: primera alta de entorno, remediacion de prerequisitos o reconfiguracion.
+- Pipeline principal: despliegue repetible de codigo una vez que el entorno ya esta preparado.
+- Si el entorno falla en validacion, volver al bootstrap; no saltar directamente al deploy.
+
 Parametros minimos para bootstrap:
 
 - targetEnvironment: dev | pre | prod
@@ -302,6 +310,23 @@ Comportamiento:
 - El pipeline resuelve service connection, nombres de apps/RG/KV y suscripcion segun targetEnvironment.
 - Mantiene endpoints AI compartidos y valida contrato de app settings al final.
 
+### 6.12 Que necesitas crear o revisar en Azure DevOps
+
+Ya no hace falta crear mas YAML para separar DEV/PRE/PRO si vas a usar los pipelines actuales.
+
+Lo que si debes tener creado o revisado en Azure DevOps es esto:
+
+1. Service connections existentes y autorizadas:
+  1. AI DocClassExt DEV
+  2. AI DocClassExt PRE
+  3. AI DocClassExt PRO
+2. Variables seguras o variable groups para los secretos DOCIA_SECRET_* que consume el bootstrap.
+3. Environments de Azure DevOps para `dev`, `pre` y `prod` si quieres aprobaciones, checks o trazabilidad por entorno.
+4. Permisos de pipeline sobre cada service connection y sobre cada environment, si aplicas approvals.
+5. Si quieres gobernanza adicional, reglas de branch policy y/o approvals manuales antes de desplegar a PRE y PROD.
+
+No necesitas crear pipeline nuevo adicional para cada entorno salvo que quieras una separacion organizativa distinta a la que ya deja el YAML.
+
 ## 7. Riesgos y mitigaciones
 
 1. Riesgo: scripts hardcodeados a PROD.
@@ -319,6 +344,7 @@ Comportamiento:
 ## 8. Referencias del repositorio
 
 - [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md)
+- [docs/procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md](docs/procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md)
 - [scripts/configuration/check-azure-permissions.ps1](scripts/configuration/check-azure-permissions.ps1)
 - [scripts/configuration/set-keyvault-secrets.ps1](scripts/configuration/set-keyvault-secrets.ps1)
 - [scripts/configuration/set-app-settings.ps1](scripts/configuration/set-app-settings.ps1)

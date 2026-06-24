@@ -1,21 +1,53 @@
 trigger: none
 pr: none
 
+parameters:
+  - name: targetEnvironment
+    type: string
+    default: dev
+    values:
+      - dev
+      - pre
+      - prod
+
 variables:
-  - name: AZURE_SERVICE_CONNECTION
-    value: AI DocClassExt PRO
-  - name: AZURE_RESOURCE_GROUP
-    value: SRBRGDOCSAIPROD
-  - name: AZURE_ADMIN_WEB_APP_NAME
-    value: srbwebadminprodocai
-  - name: AZURE_FUNCTIONS_APP_NAME
-    value: srbappprodocai
-  - name: KEY_VAULT_NAME
-    value: srbkvprodocai
   - name: buildConfiguration
     value: Release
   - name: adminProject
     value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt DEV
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGDEVDOCSAI
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadmindevdocai
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbappdevdocai
+    - name: KEY_VAULT_NAME
+      value: srbkvdevdocai
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRE
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGPREDOCSAI
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadminpredocai
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbapppredocai
+    - name: KEY_VAULT_NAME
+      value: srbkvpredocai
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRO
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGDOCSAIPROD
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadminprodocai
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbappprodocai
+    - name: KEY_VAULT_NAME
+      value: srbkvprodocai
 
 pool:
   vmImage: windows-latest
@@ -64,7 +96,7 @@ stages:
     jobs:
       - deployment: DeployAdminJob
         displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
-        environment: prod
+        environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
             deploy:
