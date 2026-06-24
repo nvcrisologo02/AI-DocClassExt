@@ -521,6 +521,8 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 scopeFactory,
                 Options.Create(new ClassificationRoutingSettings()),
                 Options.Create(new PromptDefaultsSettings()),
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
                 promptTraceTelemetry,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<GptClasificarDataProvider>.Instance);
         }
@@ -863,6 +865,8 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 scopeFactory,
                 Options.Create(new ClassificationRoutingSettings()),
                 Options.Create(new PromptDefaultsSettings()),
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
                 promptTraceTelemetry,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<GptClasificarDataProvider>.Instance);
         }

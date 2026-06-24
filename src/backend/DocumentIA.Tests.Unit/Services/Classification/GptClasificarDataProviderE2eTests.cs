@@ -237,6 +237,8 @@ Documento: {contenido}",
                 _scopeFactoryMock.Object,
                 _routingSettings,
                 _promptDefaults,
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
                 _promptTraceTelemetryService,
                 _loggerMock.Object);
         }

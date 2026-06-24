@@ -111,6 +111,8 @@ Contenido del documento:
                 _scopeFactoryMock.Object,
                 _routingSettings,
                 _promptDefaults,
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
                 _promptTraceTelemetryMock,
                 _loggerMock.Object);
         }
@@ -154,6 +156,8 @@ Contenido del documento:
                 _scopeFactoryMock.Object,
                 _routingSettings,
                 promptDefaultsEmpty,
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
                 _promptTraceTelemetryMock,
                 _loggerMock.Object);
 
@@ -236,6 +240,8 @@ Contenido del documento:
                 _scopeFactoryMock.Object,
                 _routingSettings,
                 customDefaults,
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
                 _promptTraceTelemetryMock,
                 _loggerMock.Object);
 
