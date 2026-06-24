@@ -189,22 +189,31 @@ public class DocumentProcessOrchestratorTests
         ResumenCombinado = "Resumen de prueba"
     };
 
-    private static ResultadoValidacion BuildValidacionOk() => new()
+    private static DetalleValidacion BuildValidacionOk() => new()
     {
-        EsValido = true,
-        Score = 0.98,
-        Reglas = new List<ResultadoReglaValidacion>()
+        TotalReglas = 0,
+        ReglasAplicadas = 0,
+        Errores = 0,
+        Warnings = 0,
+        Validaciones = new List<ItemValidacion>(),
+        ConfianzaValidacion = 0.98
     };
 
-    private static ObtenerActivoOutput BuildActivoOk() => new()
+    private static ResultadoAssetResolver BuildActivoOk() => new()
     {
-        ActivoEncontrado = true,
-        Coincidencias = new List<Dictionary<string, object>>
+        Ejecutado = true,
+        Exitoso = true,
+        Count = 1,
+        Activos = new List<ActivoEncontrado>
         {
-            new()
+            new ActivoEncontrado
             {
-                ["DES_SERVICER"] = "HipoGes",
-                ["IMP_PT"] = 125000m
+                IdActivo = "ACT-1",
+                CamposSolicitados = new Dictionary<string, object?>
+                {
+                    ["DES_SERVICER"] = "HipoGes",
+                    ["IMP_PT"] = 125000m
+                }
             }
         }
     };
