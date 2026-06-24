@@ -62,7 +62,10 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
 
         inputs.Add(input);
 
-        if (_activityThrows.TryGetValue(name.Name, out var ex)) throw ex;
+        if (_activityThrows.TryGetValue(name.Name, out var ex))
+        {
+            throw ex;
+        }
         if (_activityResults.TryGetValue(name.Name, out var result))
             return Task.FromResult((TResult)result!);
         return Task.FromResult(default(TResult)!);
@@ -86,7 +89,10 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
 
         inputs.Add(input);
 
-        if (_activityThrows.TryGetValue(name.Name, out var ex)) throw ex;
+        if (_activityThrows.TryGetValue(name.Name, out var ex))
+        {
+            throw ex;
+        }
         return Task.CompletedTask;
     }
 
@@ -109,9 +115,26 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
 
 public class DocumentProcessOrchestratorTests
 {
+    private static string? _extractionRegistryPath;
+
+    private static string EnsureExtractionRegistryPath()
+    {
+        if (!string.IsNullOrWhiteSpace(_extractionRegistryPath) && File.Exists(_extractionRegistryPath))
+        {
+            return _extractionRegistryPath;
+        }
+
+        _extractionRegistryPath = Path.Combine(Path.GetTempPath(), "documentia-tests-extraction.models.json");
+        var registryJson =
+            "{\"models\":[{\"key\":\"default.cu\",\"provider\":\"azure-content-understanding\",\"isDefault\":true,\"endpoint\":\"https://example.cu.azure.com\",\"apiKey\":\"test\",\"authMode\":\"ApiKey\",\"analyzerId\":\"analyzer-default\",\"processingLocation\":\"global\",\"minFieldsRatio\":0.5}]}";
+        File.WriteAllText(_extractionRegistryPath, registryJson);
+
+        return _extractionRegistryPath;
+    }
+
     private static DocumentProcessOrchestrator CreateOrchestrator(ClassificationPreparationSettings? settings = null)
     {
-        var loader = new ExtractionModelRegistryLoader("dummy.json");
+        var loader = new ExtractionModelRegistryLoader(EnsureExtractionRegistryPath());
         var configuredSettings = settings ?? new ClassificationPreparationSettings();
         return new DocumentProcessOrchestrator(loader, Options.Create(configuredSettings), Options.Create(new PipelineSettings()));
     }
@@ -189,22 +212,31 @@ public class DocumentProcessOrchestratorTests
         ResumenCombinado = "Resumen de prueba"
     };
 
-    private static ResultadoValidacion BuildValidacionOk() => new()
+    private static DetalleValidacion BuildValidacionOk() => new()
     {
-        EsValido = true,
-        Score = 0.98,
-        Reglas = new List<ResultadoReglaValidacion>()
+        TotalReglas = 0,
+        ReglasAplicadas = 0,
+        Errores = 0,
+        Warnings = 0,
+        Validaciones = new List<ItemValidacion>(),
+        ConfianzaValidacion = 0.98
     };
 
-    private static ObtenerActivoOutput BuildActivoOk() => new()
+    private static ResultadoAssetResolver BuildActivoOk() => new()
     {
-        ActivoEncontrado = true,
-        Coincidencias = new List<Dictionary<string, object>>
+        Ejecutado = true,
+        Exitoso = true,
+        Count = 1,
+        Activos = new List<ActivoEncontrado>
         {
-            new()
+            new ActivoEncontrado
             {
-                ["DES_SERVICER"] = "HipoGes",
-                ["IMP_PT"] = 125000m
+                IdActivo = "ACT-1",
+                CamposSolicitados = new Dictionary<string, object?>
+                {
+                    ["DES_SERVICER"] = "HipoGes",
+                    ["IMP_PT"] = 125000m
+                }
             }
         }
     };
@@ -238,8 +270,9 @@ public class DocumentProcessOrchestratorTests
                 {
                     CamposBusqueda = new CamposBusquedaActivo
                     {
-                        Idufir = "IDUFIR-OVERRIDE",
-                        ReferenciaCatastral = "REFCAT-OVERRIDE"
+                        // CamposBusqueda debe indicar el nombre del campo en DatosExtraidos
+                        Idufir = "IDUFIR",
+                        ReferenciaCatastral = "ReferenciaCatastral"
                     },
                     CamposSolicitados = new List<string> { "DES_SERVICER", "IMP_PT" }
                 }
@@ -282,8 +315,8 @@ public class DocumentProcessOrchestratorTests
 
         input.CorrelationId.Should().Be("corr-001");
         input.Tipologia.Should().Be("nota.simple.1_4");
-        input.IdufirOverride.Should().Be("IDUFIR-OVERRIDE");
-        input.ReferenciaCatastralOverride.Should().Be("REFCAT-OVERRIDE");
+        input.IdufirOverride.Should().Be("from-extract");
+        input.ReferenciaCatastralOverride.Should().Be("from-extract-ref");
         input.CamposSolicitados.Should().BeEquivalentTo(new[] { "DES_SERVICER", "IMP_PT" });
         input.ModoCombinacionCriterios.Should().Be("AND");
         input.DatosExtraidos.Should().ContainKey("IDUFIR");
@@ -675,7 +708,7 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("OK");
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
         salida.DetalleEjecucion.ClassificationOnly.Should().BeTrue();
         salida.DetalleEjecucion.RecorteAplicado.Should().BeTrue();
         salida.DetalleEjecucion.PaginasIncluidas.Should().Be(3);
@@ -728,7 +761,7 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("OK");
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
         salida.DatosExtraidos.Should().ContainKey("ResultadoPrompt");
         salida.DatosExtraidos["ResultadoPrompt"].Should().Be("Resumen ejecutivo");
         salida.DetalleEjecucion.Prompt.Should().NotBeNull();
@@ -778,7 +811,7 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("OK");
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
         salida.DatosExtraidos.Should().ContainKey("Resumen");
         salida.DatosExtraidos["Resumen"].Should().Be("Resumen ejecutivo");
         salida.DatosExtraidos.Should().NotContainKey("ResultadoPrompt");
@@ -1006,7 +1039,10 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_ClassificationOnlyConExecuteIntegrarTrue_EjecutaIntegrarActivity()
     {
         var orchestrator = CreateOrchestrator();
-        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true, executeIntegrarWhenClassificationOnly: true));
+        var entrada = BuildEntrada(classificationOnly: true, executeIntegrarWhenClassificationOnly: true);
+        // Forzar IdActivo en trazabilidad para permitir que el orquestador ejecute Integrar en classificationOnly
+        entrada.Trazabilidad.IdActivo = "ACT-TEST-001";
+        var context = new FakeTaskOrchestrationContext(entrada);
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
         context.SetupActivity("VerificarDuplicadoActivity", false);
@@ -1045,6 +1081,14 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: true));
         context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
         context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>
+            {
+                ["Titular"] = "Titular de prueba"
+            }
+        });
 
         var salida = await orchestrator.RunOrchestrator(context);
 
@@ -1070,6 +1114,8 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("ObtenerActivoActivity", BuildActivoOk());
         context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
         {
+            Estado = "OK",
+            IdActivoResuelto = "ACT-1",
             DatosFinales = new Dictionary<string, object>
             {
                 ["DES_SERVICER"] = "HipoGes"
@@ -1088,7 +1134,9 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_SkipGdcFalse_EjecutaSubirGdcActivity()
     {
         var orchestrator = CreateOrchestrator();
-        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.SkipGDCUpload = false;
+        var context = new FakeTaskOrchestrationContext(entrada);
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
         context.SetupActivity("VerificarDuplicadoActivity", false);
@@ -1097,11 +1145,22 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: false));
         context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
         context.SetupActivity("ValidarActivity", BuildValidacionOk());
-        context.SetupActivity("SubirGDCActivity", "GDC-RESULT-001");
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            IdActivoResuelto = "ACT-GDC-001",
+            DatosFinales = new Dictionary<string, object>()
+        });
+        context.SetupActivity("SubirGDCActivity", new global::DocumentIA.Core.Models.ResultadoGDC
+        {
+            Exitoso = true,
+            ObjectId = "GDC-RESULT-001",
+            Mensaje = "OK"
+        });
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("OK");
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
         context.GetActivityCallCount("SubirGDCActivity").Should().Be(1);
     }
 
@@ -1111,10 +1170,10 @@ public class DocumentProcessOrchestratorTests
         var orchestrator = CreateOrchestrator();
         var context = new FakeTaskOrchestrationContext(null);
 
-        var salida = await orchestrator.RunOrchestrator(context);
+        var act = async () => await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("ERROR");
-        salida.Resultado.MensajeError.Should().NotBeNullOrWhiteSpace();
+        await act.Should().ThrowAsync<ArgumentNullException>()
+            .WithMessage("*Contrato de entrada no puede ser nulo*");
     }
 
     [Fact]
@@ -1167,7 +1226,8 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("OK");
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Contain("fallo prompt");
         context.GetActivityCallCount("PromptActivity").Should().Be(1);
     }
 
