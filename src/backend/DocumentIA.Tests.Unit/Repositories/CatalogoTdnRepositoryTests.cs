@@ -13,7 +13,7 @@ public class CatalogoTdnRepositoryTests
     {
         await using var context = CreateContext();
         SeedCatalogo(context);
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var result = await repository.GetFamiliasTdnActivasAsync();
 
@@ -27,7 +27,7 @@ public class CatalogoTdnRepositoryTests
     {
         await using var context = CreateContext();
         SeedCatalogo(context);
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var result = await repository.GetSubtiposByFamiliaAsync("nots");
 
@@ -42,7 +42,7 @@ public class CatalogoTdnRepositoryTests
     {
         await using var context = CreateContext();
         SeedCatalogo(context);
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var result = await repository.GetSubtiposByFamiliaAsync("MISSING");
 
@@ -53,7 +53,7 @@ public class CatalogoTdnRepositoryTests
     public async Task GetSubtiposByFamiliaAsync_WhenFamilyIsEmpty_Should_Throw()
     {
         await using var context = CreateContext();
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var act = () => repository.GetSubtiposByFamiliaAsync(" ");
 
@@ -65,7 +65,7 @@ public class CatalogoTdnRepositoryTests
     {
         await using var context = CreateContext();
         SeedCatalogo(context);
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var result = await repository.GetTdn2PromptByFamiliaAsync("NOTS");
 
@@ -77,7 +77,7 @@ public class CatalogoTdnRepositoryTests
     {
         await using var context = CreateContext();
         SeedCatalogoWithCustomPrompt(context);
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var result = await repository.GetTdn2PromptByFamiliaAsync("ESCR");
 
@@ -90,7 +90,7 @@ public class CatalogoTdnRepositoryTests
     {
         await using var context = CreateContext();
         SeedCatalogo(context);
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var result = await repository.GetTdn2PromptByFamiliaAsync("MISSING");
 
@@ -101,7 +101,7 @@ public class CatalogoTdnRepositoryTests
     public async Task GetTdn2PromptByFamiliaAsync_WhenCodigoIsEmpty_Should_Throw()
     {
         await using var context = CreateContext();
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var act = () => repository.GetTdn2PromptByFamiliaAsync(" ");
 
@@ -113,7 +113,7 @@ public class CatalogoTdnRepositoryTests
     {
         await using var context = CreateContext();
         SeedCatalogoWithCustomPrompt(context);
-        var repository = new CatalogoTdnRepository(context);
+        var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
 
         var result = await repository.GetTdn2PromptByFamiliaAsync("escr");
 
