@@ -42,6 +42,7 @@ public class ConfigurationCacheBenchmarkTests
     private long BenchmarkParsing(string[] configJsons, int iterations, bool useCache)
     {
         var sw = Stopwatch.StartNew();
+        var cache = new Dictionary<string, TestConfig?>();
 
         if (useCache)
         {
@@ -49,9 +50,10 @@ public class ConfigurationCacheBenchmarkTests
             {
                 foreach (var json in configJsons)
                 {
-                    // Parse on first iteration, should be cached after
-                    var parsed = JsonSerializer.Deserialize<TestConfig>(json);
-                    // Simulating cache hits on subsequent iterations
+                    if (!cache.TryGetValue(json, out _))
+                    {
+                        cache[json] = JsonSerializer.Deserialize<TestConfig>(json);
+                    }
                 }
             }
         }
