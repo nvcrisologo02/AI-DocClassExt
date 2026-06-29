@@ -181,11 +181,13 @@ stages:
                           "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
                         )
 
+                        # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+                        $adminSettingsJson = $adminSettings | ConvertTo-Json -Compress -AsArray
                         & .\scripts\configuration\ensure-app-settings.ps1 `
                           -AppKind webapp `
                           -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                           -Name "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                          -Settings $adminSettings
+                          -SettingsJson $adminSettingsJson
 
                 - task: AzureCLI@2
                   displayName: Validate Admin App settings contract

@@ -9,12 +9,31 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Name,
 
-    [Parameter(Mandatory = $true)]
-    [string[]]$Settings
+    [Parameter(Mandatory = $false)]
+    [string[]]$Settings,
+
+    [Parameter(Mandatory = $false)]
+    [string]$SettingsJson
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Si se proporciona SettingsJson, deserializarlo a Settings
+if (-not [string]::IsNullOrWhiteSpace($SettingsJson)) {
+    try {
+        $settingsArray = $SettingsJson | ConvertFrom-Json
+        if ($settingsArray -is [array]) {
+            $Settings = @($settingsArray)
+        }
+        else {
+            $Settings = @($settingsArray)
+        }
+    }
+    catch {
+        throw "No se pudo deserializar SettingsJson: $_"
+    }
+}
 
 # Comprobar disponibilidad de Azure CLI de forma robusta
 try {
@@ -44,7 +63,7 @@ if ([string]::IsNullOrWhiteSpace($Name)) {
     throw 'Parametro obligatorio "-Name" vacio o no establecido. Revisa la variable de pipeline correspondiente (p.ej. $(AZURE_FUNCTIONS_APP_NAME)).'
 }
 
-if (-not $Settings -or $Settings.Count -eq 0) {
+if ((-not $Settings -or $Settings.Count -eq 0) -and [string]::IsNullOrWhiteSpace($SettingsJson)) {
     Write-Host "[INFO] No se han pasado settings a aplicar para $Name; nada que hacer." -ForegroundColor Yellow
     exit 0
 }

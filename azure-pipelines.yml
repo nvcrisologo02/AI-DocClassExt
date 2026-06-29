@@ -331,11 +331,13 @@ stages:
                         "GDC__BypassSslValidation=true"
                       )
 
+                      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+                      $settingsJson = $settings | ConvertTo-Json -Compress -AsArray
                       & .\scripts\configuration\ensure-app-settings.ps1 `
                         -AppKind functionapp `
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                        -Settings $settings
+                        -SettingsJson $settingsJson
 
                       Write-Host "Validando que todas las variables de resiliencia CU se han aplicado..."
                       
@@ -439,11 +441,13 @@ stages:
                         "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
                       )
 
+                      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+                      $adminSettingsJson = $adminSettings | ConvertTo-Json -Compress -AsArray
                       & .\scripts\configuration\ensure-app-settings.ps1 `
                         -AppKind webapp `
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -Name "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                        -Settings $adminSettings
+                        -SettingsJson $adminSettingsJson
 
   - stage: DeployAssetResolver
     displayName: Deploy AssetResolver Plugin
@@ -483,11 +487,13 @@ stages:
                         "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
                       )
 
+                      # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+                      $assetResolverSettingsJson = $assetResolverSettings | ConvertTo-Json -Compress -AsArray
                       & .\scripts\configuration\ensure-app-settings.ps1 `
                         -AppKind webapp `
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -Name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
-                        -Settings $assetResolverSettings
+                        -SettingsJson $assetResolverSettingsJson
 
   - stage: ValidateConfiguration
     displayName: Validate Azure configuration contract
