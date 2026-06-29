@@ -151,3 +151,40 @@ Comprobar en SQL (con usuario admin Entra) que existe el usuario y sus roles:
 		WHERE m.name = 'srbappdevdocai';
 
 Si faltan permisos: asignar al menos db_datareader y db_datawriter. Agregar db_ddladmin solo si se ejecutaran migraciones desde app/pipeline.
+
+## 9. Permisos Key Vault para Service Connection (WIF)
+
+Si el bootstrap falla en "Verify deployment prerequisites" con mensajes "[SIN PERMISO]" al leer secretos, la causa habitual es falta de RBAC del principal de la service connection sobre Key Vault.
+
+Comprobacion del modo de permisos del Key Vault (debe ser RBAC para este flujo):
+
+		az keyvault show --name srbkvdevdocai --resource-group SRBRGDEVDOCSAI --query properties.enableRbacAuthorization -o tsv
+
+Si devuelve true, asignar rol IAM al principal de la service connection.
+
+Ejemplo real DEV:
+
+- Service connection: AI DocClassExt DEV
+- AppId (cliente): efff077f-57d1-41c5-b66f-7b0d2e00fc0e
+- Key Vault scope: /subscriptions/8764f9ff-fe37-4c03-bde9-6294622bef6d/resourceGroups/SRBRGDEVDOCSAI/providers/Microsoft.KeyVault/vaults/srbkvdevdocai
+- Rol requerido para bootstrap: Key Vault Secrets Officer
+
+Asignacion por CLI:
+
+		az role assignment create `
+			--assignee efff077f-57d1-41c5-b66f-7b0d2e00fc0e `
+			--role "Key Vault Secrets Officer" `
+			--scope "/subscriptions/8764f9ff-fe37-4c03-bde9-6294622bef6d/resourceGroups/SRBRGDEVDOCSAI/providers/Microsoft.KeyVault/vaults/srbkvdevdocai"
+
+Verificacion:
+
+		az role assignment list `
+			--assignee efff077f-57d1-41c5-b66f-7b0d2e00fc0e `
+			--scope "/subscriptions/8764f9ff-fe37-4c03-bde9-6294622bef6d/resourceGroups/SRBRGDEVDOCSAI/providers/Microsoft.KeyVault/vaults/srbkvdevdocai" `
+			--query "[].roleDefinitionName" -o table
+
+Salida esperada:
+
+- Key Vault Secrets Officer
+
+Tras asignar rol, esperar 2-5 minutos por propagacion RBAC y relanzar bootstrap.

@@ -221,6 +221,33 @@ Opcion B: local.settings no versionado
       -KeyVaultName $KeyVaultName `
       -StorageAccountName $StorageDurable
 
+Si aparece "[SIN PERMISO]" en todos los secretos de Key Vault:
+
+1. Confirmar que Key Vault usa RBAC:
+
+    az keyvault show --name $KeyVaultName --resource-group $ResourceGroup --query properties.enableRbacAuthorization -o tsv
+
+2. Asignar rol al principal de la Service Connection (WIF) del entorno:
+
+    az role assignment create `
+      --assignee <APP_ID_SERVICE_CONNECTION> `
+      --role "Key Vault Secrets Officer" `
+      --scope "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.KeyVault/vaults/$KeyVaultName"
+
+3. Verificar asignacion:
+
+    az role assignment list `
+      --assignee <APP_ID_SERVICE_CONNECTION> `
+      --scope "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.KeyVault/vaults/$KeyVaultName" `
+      --query "[].roleDefinitionName" -o table
+
+4. Esperar 2-5 minutos por propagacion RBAC y relanzar bootstrap.
+
+Caso real DEV validado:
+
+- AppId service connection DEV: efff077f-57d1-41c5-b66f-7b0d2e00fc0e
+- Rol verificado: Key Vault Secrets Officer
+
 ### 6.5 Configuracion de Function App
 
 Importante:
