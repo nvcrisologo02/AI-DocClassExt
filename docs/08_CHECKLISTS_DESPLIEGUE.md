@@ -52,6 +52,14 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 > ```
 >
 > El script habilita la System-Assigned Managed Identity de las 3 apps y les asigna `Key Vault Secrets User` sobre el Key Vault (idempotente). Tras ejecutarlo, el paso *"Ensure ... Key Vault RBAC"* del pipeline **solo verifica** que el rol existe (variable `manageKeyVaultRbac=false`, por defecto). Si la variable se pone a `true`, el pipeline intentará crear la asignación (solo funciona si el SP tiene permiso RBAC).
+>
+> **Comprobar** (solo lectura, no requiere PIM): confirma el estado antes o después del pipeline.
+>
+> ```powershell
+> pwsh ./scripts/configuration/verify-keyvault-rbac.ps1 -TargetEnvironment dev   # o pre / prod
+> ```
+>
+> Devuelve `[ OK ]` por cada app (Function App, Admin, AssetResolver) y código de salida 0 si todas tienen el rol; `[MISSING]`/`[MI OFF]` y código 1 si falta en alguna.
 
 | # | Tarea | Comando / Portal | OK |
 |---|-------|------------------|----|
@@ -264,6 +272,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | `scripts\legacy\list-analyzers.ps1` | Listar modelos disponibles en Document Intelligence | Diagnostico de clasificacion |
 | `scripts\configuration\check-azure-permissions.ps1` | Verificar permisos del SP / usuario sobre el RG | Antes del primer deploy |
 | `scripts\configuration\assign-keyvault-rbac.ps1 -TargetEnvironment <env>` | **Prerrequisito RBAC**: habilita las MI de Function App/Admin/AssetResolver y les asigna `Key Vault Secrets User` (rol elevado/PIM) | Una vez por entorno, antes del pipeline |
+| `scripts\configuration\verify-keyvault-rbac.ps1 -TargetEnvironment <env>` | Comprobar (solo lectura) que las MI tienen `Key Vault Secrets User` | Antes/después del pipeline o ante fallo de RBAC |
 
 > **Nota:** `compile-all-plugins.ps1` y `check-database.ps1` referenciados en versiones anteriores **ya no existen**. Para compilar plugins de enriquecimiento ver [docs/manuales/MANUAL_PLUGINS.md](../manuales/MANUAL_PLUGINS.md); para la BD usar `scripts\database\Query-Tipologias.ps1`, `scripts\database\diagnose-assetresolver-sql.ps1` o `sqlcmd`.
 

@@ -72,6 +72,16 @@
   pwsh ./scripts/database/replicate-config-data.ps1 -Mode Copy -Mirror `
     -SourceConnectionString $env:DOCIA_SRC_CS -TargetConnectionString $env:DOCIA_DST_CS
 
+.EXAMPLE
+  # PROD -> DEV con tu usuario de Entra ID (az login previo). Las cadenas solo llevan Server/Database.
+  az login
+  pwsh ./scripts/database/replicate-config-data.ps1 -Mode Export -EntraAuth `
+    -SourceConnectionString "Server=tcp:srbsqlprodocai.database.windows.net,1433;Database=DocumentIA;Encrypt=True;" `
+    -OutputFile .\artifacts\db-config\seed-from-prod.sql
+  pwsh ./scripts/database/replicate-config-data.ps1 -Mode Apply -EntraAuth -Mirror `
+    -TargetConnectionString "Server=tcp:srbsqldevdocai.database.windows.net,1433;Database=DocumentIA;Encrypt=True;" `
+    -InputFile .\artifacts\db-config\seed-from-prod.sql
+
 .NOTES
   - Requiere el ensamblado System.Data.SqlClient (incluido en .NET Framework y en
     Windows PowerShell 5.1; en PowerShell 7 se carga via Microsoft.Data.SqlClient si
@@ -93,7 +103,14 @@ param(
     [switch]$Mirror,
     [string]$Schema = 'dbo',
     [int]$BatchSize = 250,
-    [switch]$Force
+    [switch]$Force,
+
+    # Autenticacion Entra ID (Azure AD) contra Azure SQL con tu usuario: obtiene un
+    # token via 'az account get-access-token' y lo aplica a las conexiones. En ese caso
+    # las cadenas de conexion solo necesitan Server/Database/Encrypt (sin User Id/Password).
+    [switch]$EntraAuth,
+    [string]$SourceAccessToken,
+    [string]$TargetAccessToken
 )
 
 Set-StrictMode -Version Latest
@@ -120,7 +137,10 @@ function Quote-Id {
 }
 
 function New-SqlConnection {
-    param([Parameter(Mandatory)][string]$ConnectionString)
+    param(
+        [Parameter(Mandatory)][string]$ConnectionString,
+        [string]$AccessToken
+    )
     # Preferir Microsoft.Data.SqlClient (PS7) y caer en System.Data.SqlClient
     $cn = $null
     try {
@@ -128,23 +148,38 @@ function New-SqlConnection {
     } catch {
         $cn = New-Object System.Data.SqlClient.SqlConnection $ConnectionString
     }
+    # Autenticacion por token de Entra ID (no combinar con User Id/Password en la CS)
+    if ($AccessToken) { $cn.AccessToken = $AccessToken }
     $cn.Open()
     return $cn
 }
 
-function Invoke-Reader {
+function Get-SqlAccessToken {
+    # Token de Entra ID para el recurso Azure SQL (valido para cualquier servidor del tenant)
+    $token = az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv 2>$null
+    if ([string]::IsNullOrWhiteSpace($token)) {
+        throw "No se pudo obtener el token de Azure SQL. Ejecuta 'az login' (y selecciona el tenant correcto) e intentalo de nuevo."
+    }
+    return $token
+}
+
+function New-SqlCommandObj {
+    # Devuelve un SqlCommand (NO un reader): un reader implementa IEnumerable y al
+    # retornarlo desde una funcion PowerShell lo desenrolla, rompiendo $rd. Por eso
+    # el ExecuteReader() se hace SIEMPRE en el sitio de uso, no en un helper.
     param([Parameter(Mandatory)]$Connection, [Parameter(Mandatory)][string]$Query)
     $cmd = $Connection.CreateCommand()
     $cmd.CommandTimeout = 0
     $cmd.CommandText = $Query
-    return $cmd.ExecuteReader()
+    return $cmd
 }
 
 function Get-ScalarRows {
     # Devuelve la primera columna de cada fila como array de strings.
     param($Connection, [string]$Query)
     $rows = @()
-    $rd = Invoke-Reader -Connection $Connection -Query $Query
+    $cmd = New-SqlCommandObj -Connection $Connection -Query $Query
+    $rd = $cmd.ExecuteReader()
     try { while ($rd.Read()) { $rows += [string]$rd.GetValue(0) } } finally { $rd.Close() }
     return , $rows
 }
@@ -290,7 +325,8 @@ function Read-TableRows {
     $colListQuoted = ($Meta.Columns | ForEach-Object { Quote-Id $_ }) -join ', '
     $qTable = "$(Quote-Id $Meta.Schema).$(Quote-Id $Meta.Table)"
     $rows = New-Object System.Collections.ArrayList
-    $rd = Invoke-Reader -Connection $Connection -Query "SELECT $colListQuoted FROM $qTable;"
+    $cmd = New-SqlCommandObj -Connection $Connection -Query "SELECT $colListQuoted FROM $qTable;"
+    $rd = $cmd.ExecuteReader()
     try {
         while ($rd.Read()) {
             $row = @{}
@@ -381,6 +417,18 @@ switch ($Mode) {
 Write-Step "Modo: $Mode | Tablas: $($ConfigTables -join ', ')"
 if ($Mirror) { Write-Warn2 "Mirror ACTIVADO: el destino quedara como espejo exacto del origen (se borraran filas ausentes en origen)." }
 
+# --- Resolucion de token de Entra ID (si procede) -------------------------------
+# Un mismo token de database.windows.net sirve para cualquier servidor del tenant.
+$srcToken = $SourceAccessToken
+$dstToken = $TargetAccessToken
+if ($EntraAuth) {
+    if (-not (Get-Command az -ErrorAction SilentlyContinue)) { throw "EntraAuth requiere Azure CLI (az) autenticado ('az login')." }
+    Write-Step "Obteniendo token de Entra ID para Azure SQL ..."
+    $sharedToken = Get-SqlAccessToken
+    if (-not $srcToken) { $srcToken = $sharedToken }
+    if (-not $dstToken) { $dstToken = $sharedToken }
+}
+
 # ============================ Ejecucion por modo =================================
 if ($Mode -eq 'Export') {
     if (-not $OutputFile) {
@@ -390,7 +438,7 @@ if ($Mode -eq 'Export') {
     $dir = Split-Path -Parent $OutputFile
     if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 
-    $src = New-SqlConnection -ConnectionString $SourceConnectionString
+    $src = New-SqlConnection -ConnectionString $SourceConnectionString -AccessToken $srcToken
     try {
         $label = $src.DataSource + '/' + $src.Database
         Write-Step "Generando script desde ORIGEN ($label) ..."
@@ -407,7 +455,7 @@ elseif ($Mode -eq 'Apply') {
         return
     }
     $sql = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath $InputFile))
-    $dst = New-SqlConnection -ConnectionString $TargetConnectionString
+    $dst = New-SqlConnection -ConnectionString $TargetConnectionString -AccessToken $dstToken
     try {
         Write-Step "Aplicando $InputFile contra DESTINO ($($dst.DataSource)/$($dst.Database)) ..."
         Invoke-SqlScript -Connection $dst -Sql $sql
@@ -415,7 +463,7 @@ elseif ($Mode -eq 'Apply') {
     } finally { $dst.Close() }
 }
 elseif ($Mode -eq 'Copy') {
-    $src = New-SqlConnection -ConnectionString $SourceConnectionString
+    $src = New-SqlConnection -ConnectionString $SourceConnectionString -AccessToken $srcToken
     $sql = $null
     try {
         $label = $src.DataSource + '/' + $src.Database
@@ -428,7 +476,7 @@ elseif ($Mode -eq 'Copy') {
         Write-Warn2 "Cancelado por el usuario."
         return
     }
-    $dst = New-SqlConnection -ConnectionString $TargetConnectionString
+    $dst = New-SqlConnection -ConnectionString $TargetConnectionString -AccessToken $dstToken
     try {
         Write-Step "Aplicando contra DESTINO ($($dst.DataSource)/$($dst.Database)) ..."
         Invoke-SqlScript -Connection $dst -Sql $sql
