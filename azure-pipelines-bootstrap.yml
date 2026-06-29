@@ -206,4 +206,5 @@ stages:
                   -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                   -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
                   -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                  -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)"
+                  -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
+                  -BasicValidationOnly
