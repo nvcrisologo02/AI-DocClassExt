@@ -52,6 +52,13 @@ function Get-EnvironmentSecretValue {
         return $null
     }
 
+    # Azure DevOps deja macros sin resolver como texto literal: $(VAR_NAME)
+    # Tratarlo como "sin valor" para evitar fallos de parseo en comandos nativos.
+    if ($value -match '^\$\([^)]+\)$') {
+        Write-Host "[SKIP] $envName sin resolver (valor literal '$value')." -ForegroundColor Yellow
+        return $null
+    }
+
     return $value
 }
 
@@ -105,14 +112,25 @@ function Set-SecretSafe {
         return
     }
 
-    & az keyvault secret set `
-        --vault-name $VaultName `
-        --name $SecretName `
-        --value $SecretValue `
-        --output none
+    $tempPath = Join-Path ([System.IO.Path]::GetTempPath()) ("kv-secret-" + [guid]::NewGuid().ToString("N") + ".txt")
+    try {
+        # Usar archivo temporal evita problemas con caracteres especiales en linea de comandos.
+        Set-Content -LiteralPath $tempPath -Value $SecretValue -Encoding utf8NoBOM -NoNewline
 
-    if ($LASTEXITCODE -ne 0) {
-        throw "Error creando/actualizando secreto: $SecretName"
+        & az keyvault secret set `
+            --vault-name $VaultName `
+            --name $SecretName `
+            --file $tempPath `
+            --output none
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "Error creando/actualizando secreto: $SecretName"
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $tempPath) {
+            Remove-Item -LiteralPath $tempPath -Force -ErrorAction SilentlyContinue
+        }
     }
 
     Write-Host "[OK] $SecretName"
