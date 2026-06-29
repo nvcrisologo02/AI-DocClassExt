@@ -181,12 +181,35 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
 Write-Section "Contexto Azure"
 Try-AzText -AzArgs @("account", "set", "--subscription", $SubscriptionId) | Out-Null
 $account = Invoke-AzJson -AzArgs @("account", "show", "-o", "json")
-$me = Invoke-AzJson -AzArgs @("ad", "signed-in-user", "show", "-o", "json")
+$principalType = [string]$account.user.type
+$principalName = [string]$account.user.name
+$principalObjectId = ""
+$principalDisplayName = ""
+
+if ($principalType -eq "servicePrincipal") {
+    $sp = Try-AzJson -AzArgs @("ad", "sp", "show", "--id", $principalName, "-o", "json")
+    if ($sp) {
+        $principalObjectId = [string]$sp.id
+        $principalDisplayName = if (-not [string]::IsNullOrWhiteSpace([string]$sp.displayName)) { [string]$sp.displayName } else { $principalName }
+    }
+    else {
+        # Fallback: with some tenant permissions, 'az ad sp show' may fail.
+        # Role assignment queries can still work using appId/clientId as assignee.
+        $principalObjectId = $principalName
+        $principalDisplayName = $principalName
+    }
+}
+else {
+    $me = Invoke-AzJson -AzArgs @("ad", "signed-in-user", "show", "-o", "json")
+    $principalObjectId = [string]$me.id
+    $principalDisplayName = [string]$me.userPrincipalName
+}
 
 Write-Host "Suscripcion: $($account.name) ($($account.id))"
 Write-Host "Tenant: $($account.tenantId)"
-Write-Host "Usuario: $($me.userPrincipalName)"
-Write-Host "ObjectId: $($me.id)"
+Write-Host "Principal: $principalDisplayName"
+Write-Host "PrincipalType: $principalType"
+Write-Host "PrincipalId: $principalObjectId"
 
 $scopeRg = "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup"
 $scopeKv = if ($KeyVaultName) { "$scopeRg/providers/Microsoft.KeyVault/vaults/$KeyVaultName" } else { $null }
@@ -195,7 +218,7 @@ $scopeStorageDocs = "$scopeRg/providers/Microsoft.Storage/storageAccounts/$Stora
 $scopeStorageDurable = "$scopeRg/providers/Microsoft.Storage/storageAccounts/$StorageDurable"
 
 Write-Section "RBAC del usuario en Resource Group"
-$rgAssignments = Get-RoleAssignments -Assignee $me.id -Scope $scopeRg
+$rgAssignments = Get-RoleAssignments -Assignee $principalObjectId -Scope $scopeRg
 if ($rgAssignments) {
     $rgAssignments |
         Select-Object roleDefinitionName, scope, principalName |
@@ -234,7 +257,7 @@ else {
         Write-Host "Modelo permisos: $(if ($isRbac) { 'RBAC' } else { 'Access Policies' })"
 
         if ($isRbac) {
-            $kvAssignments = Get-RoleAssignments -Assignee $me.id -Scope $scopeKv
+            $kvAssignments = Get-RoleAssignments -Assignee $principalObjectId -Scope $scopeKv
             if ($kvAssignments) {
                 $kvAssignments |
                     Select-Object roleDefinitionName, scope, principalName |
@@ -247,7 +270,7 @@ else {
         else {
             $policies = $keyVaultInfo.properties.accessPolicies
             if ($policies) {
-                $mine = $policies | Where-Object { $_.objectId -eq $me.id }
+                $mine = $policies | Where-Object { $_.objectId -eq $principalObjectId }
                 if ($mine) {
                     $secretPerms = $mine.permissions.secrets
                     Write-Host "Access policy encontrada para tu usuario. Permisos secretos: $($secretPerms -join ', ')"
@@ -301,7 +324,7 @@ $sqlServer = Try-AzJson -AzArgs @(
     "-o", "json"
 )
 
-$sqlAssignments = Get-RoleAssignments -Assignee $me.id -Scope $scopeSql
+$sqlAssignments = Get-RoleAssignments -Assignee $principalObjectId -Scope $scopeSql
 if ($sqlAssignments) {
     $sqlAssignments |
         Select-Object roleDefinitionName, scope, principalName |
@@ -442,8 +465,9 @@ $summary = [PSCustomObject]@{
     SubscriptionName = $account.name
     SubscriptionId = $account.id
     ResourceGroup = $ResourceGroup
-    UserUPN = $me.userPrincipalName
-    UserObjectId = $me.id
+    PrincipalName = $principalDisplayName
+    PrincipalType = $principalType
+    PrincipalId = $principalObjectId
     CanCreateResourcesInRG = $canContributorRg
     CanAssignRbacRoles = $canGrantRoles
     KeyVaultName = $KeyVaultName
