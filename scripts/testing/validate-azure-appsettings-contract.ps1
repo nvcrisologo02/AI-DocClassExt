@@ -54,11 +54,11 @@ function Get-EnvironmentFromResourceGroup {
 # Detectar nombres de apps si no se proporcionan
 $environment = Get-EnvironmentFromResourceGroup -ResourceGroup $ResourceGroup
 if ([string]::IsNullOrWhiteSpace($FunctionsAppName)) {
-    $FunctionsAppName = "srbappdev docai"       # pattern: srba pp [dev|pre|prod] docai
     switch ($environment) {
         "dev"  { $FunctionsAppName = "srbappdevdocai" }
         "pre"  { $FunctionsAppName = "srbapppredocai" }
         "prod" { $FunctionsAppName = "srbappprodocai" }
+        default { $FunctionsAppName = "srbappprodocai" }
     }
 }
 

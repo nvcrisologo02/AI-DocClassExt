@@ -323,7 +323,8 @@ Guías detalladas para tareas específicas:
 | **API reference** | CONTRATO_API_HTTP | `contratos/` |
 | **Desplegar a prod** | CHECKLISTS_DESPLIEGUE | `docs/` (raíz) |
 | **🆕 Incidente en producción** | RUNBOOK_INCIDENTES_PRODUCCION | `procedimientos/` |
-| **🆕 Infraestructura Azure** | INFRAESTRUCTURA_DESPLIEGUE | `infraestructura/` |
+| **🆕 Infraestructura Azure (real desplegada)** | INFRAESTRUCTURA_REAL_DESPLEGADA ⭐ | `infraestructura/` |
+| Infraestructura — plantilla genérica (NO refleja lo desplegado) | INFRAESTRUCTURA_DESPLIEGUE ⚠️ | `infraestructura/` |
 | **🆕 Release & hotfix** | RELEASE_MANAGEMENT | `procedimientos/` |
 | **🆕 Migración BD** | DATABASE_MIGRATION_STRATEGY | `procedimientos/` |
 | **🆕 CI/CD y pipelines** | CI_CD_DEPLOYMENT_DETAILS | `procedimientos/` |
@@ -417,7 +418,7 @@ Para estar productivo rápidamente:
 | # | Documento | Propósito | Líneas | Commit |
 |----|-----------|-----------|--------|--------|
 | 1 | RUNBOOK_INCIDENTES_PRODUCCION.md | 7 escenarios de incidentes + diagnostic queries | 337 | `2d3543e` |
-| 2 | INFRAESTRUCTURA_DESPLIEGUE.md | Topología Azure, capacidad, DR, compliance | 245 | `6b78895` |
+| 2 | INFRAESTRUCTURA_DESPLIEGUE.md | ⚠️ Plantilla genérica (Staging/Prod, DR, SKU) — NO refleja lo desplegado; ver INFRAESTRUCTURA_REAL_DESPLEGADA.md | 245 | `6b78895` |
 | 3 | RELEASE_MANAGEMENT.md | Versioning, pre-release, rollback, hotfix | 263 | `65907d4` |
 | 4 | TEAM_MATRIX_RESPONSABILIDADES.md | RACI, on-call, SLAs, change approval, training | 188 | `058b6c8` |
 | 5 | DATABASE_MIGRATION_STRATEGY.md | EF Core, testing, blue-green, rollback | 332 | `5abdfb2` |

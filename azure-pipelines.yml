@@ -89,6 +89,11 @@ variables:
     value: 'true'
   - name: promptTracingMaxPromptTextChars
     value: '20000'
+  # RBAC de Key Vault: 'false' = el pipeline solo VERIFICA que la MI ya tiene
+  # 'Key Vault Secrets User' (pre-asignado con scripts/configuration/assign-keyvault-rbac.ps1).
+  # 'true' = el pipeline intenta crear la asignacion (requiere que el SP tenga permiso RBAC).
+  - name: manageKeyVaultRbac
+    value: 'false'
 
 pool:
   vmImage: windows-latest
@@ -404,6 +409,8 @@ stages:
                     scriptType: pscore
                     scriptLocation: inlineScript
                     inlineScript: |
+                      $manageRbac = "$(manageKeyVaultRbac)" -eq 'true'
+
                       az webapp identity assign --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --only-show-errors --output none
 
                       $principalId = az webapp identity show --resource-group "$(AZURE_RESOURCE_GROUP)" --name "$(AZURE_ADMIN_WEB_APP_NAME)" --query principalId -o tsv
@@ -420,13 +427,22 @@ stages:
 
                       $existingRole = az role assignment list --scope $keyVaultScope --assignee $principalId --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" -o tsv
 
-                      if ($existingRole -eq "0") {
+                      if ($existingRole -ne "0") {
+                        Write-Host "[OK] $(AZURE_ADMIN_WEB_APP_NAME) ya tiene 'Key Vault Secrets User' sobre $(KEY_VAULT_NAME)."
+                      }
+                      elseif ($manageRbac) {
+                        Write-Host "[INFO] manageKeyVaultRbac=true: intentando asignar 'Key Vault Secrets User'..."
                         az role assignment create --role "Key Vault Secrets User" --assignee-object-id $principalId --assignee-principal-type ServicePrincipal --scope $keyVaultScope --only-show-errors --output none
-
-                        Write-Host "[OK] Assigned 'Key Vault Secrets User' to $(AZURE_ADMIN_WEB_APP_NAME)."
+                        if ($LASTEXITCODE -ne 0) {
+                          Write-Host "##vso[task.logissue type=error]El SP del service connection no puede crear role assignments sobre $(KEY_VAULT_NAME). Pre-asigna el rol con scripts/configuration/assign-keyvault-rbac.ps1 -TargetEnvironment ${{ parameters.targetEnvironment }} (rol elevado/PIM) y vuelve a ejecutar con manageKeyVaultRbac=false."
+                          exit 1
+                        }
+                        Write-Host "[OK] Asignado 'Key Vault Secrets User' a $(AZURE_ADMIN_WEB_APP_NAME)."
                       }
                       else {
-                        Write-Host "[OK] $(AZURE_ADMIN_WEB_APP_NAME) already has 'Key Vault Secrets User' on $(KEY_VAULT_NAME)."
+                        Write-Host "##vso[task.logissue type=error]PRERREQUISITO NO CUMPLIDO: la identidad $principalId de $(AZURE_ADMIN_WEB_APP_NAME) no tiene 'Key Vault Secrets User' sobre $(KEY_VAULT_NAME)."
+                        Write-Host "##vso[task.logissue type=error]Asignalo una vez con: pwsh ./scripts/configuration/assign-keyvault-rbac.ps1 -TargetEnvironment ${{ parameters.targetEnvironment }} (con rol elevado/PIM). Alternativa: re-ejecutar con la variable manageKeyVaultRbac=true si el SP tiene permiso de RBAC."
+                        exit 1
                       }
 
                 - task: AzureCLI@2

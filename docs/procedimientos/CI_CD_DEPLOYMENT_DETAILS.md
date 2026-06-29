@@ -8,7 +8,7 @@
 
 ## 🔄 Pipeline Overview
 
-### Pipelines Disponibles (4 total)
+### Pipelines Disponibles (5 total)
 
 ```
 Pipelines en repo root:
@@ -33,13 +33,18 @@ azure-pipelines-assetresolver.yml (Plugin-only: AssetResolver hotfix)
 ├─ Stages: Build → Deploy (optional)
 ├─ Trigger: Manual
 └─ Target: srbwebpluginassetresolver
+
+azure-pipelines-bootstrap.yml (Inicializacion de entorno: permisos, secretos KV, app settings, validacion)
+├─ Stages: Bootstrap (job unico)
+├─ Trigger: Manual
+└─ Requiere: variable group docia-bootstrap-<env>-secrets
 ```
 
 ### Current State
 - ⚠️ **NO automatic CI/CD** — All pipelines are manual trigger
 - ✅ All deployments target **SRBRGDOCSAIPROD** (single RG, production only)
 - ✅ Service Connection: "AI DocClassExt"
-- ✅ .NET 10 for Functions, .NET 9 for Admin/AssetResolver
+- ✅ .NET 10 Isolated for Functions, .NET 8 for Admin/AssetResolver (SDK 9.x usado solo como host de build/EF tools)
 
 ---
 

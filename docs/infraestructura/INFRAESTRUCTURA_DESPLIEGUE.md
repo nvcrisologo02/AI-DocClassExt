@@ -1,5 +1,13 @@
 # Infraestructura & Despliegue — DocumentIA
 
+> ⚠️ **AVISO IMPORTANTE — DOCUMENTO DE REFERENCIA GENÉRICO, NO REFLEJA EL DESPLIEGUE REAL.**
+> Este documento describe una topología de plantilla (Staging + Production separados, Function App Premium EP1/EP2 "always on", App Service B2/P1v2 con auto-scale, SQL S2/S3 por DTU, Storage GRS, multi-región/DR). **La infraestructura realmente desplegada NO es así.**
+>
+> La realidad operativa es: **un único Resource Group productivo `SRBRGDOCSAIPROD`** (West Europe), Function App en **plan Consumption**, **sin entorno de staging**, **sin DR/multi-región** ni geo-redundancia. Los SKU, costes, RTO/RPO, VNet y políticas de escalado de este documento son ilustrativos y **no deben usarse para planificación de capacidad, coste ni continuidad**.
+>
+> 👉 **Fuente de verdad de la infraestructura desplegada:** [INFRAESTRUCTURA_REAL_DESPLEGADA.md](INFRAESTRUCTURA_REAL_DESPLEGADA.md).
+> Para el detalle de pipelines/despliegue ver [../procedimientos/CI_CD_DEPLOYMENT_DETAILS.md](../procedimientos/CI_CD_DEPLOYMENT_DETAILS.md) y [../08_CHECKLISTS_DESPLIEGUE.md](../08_CHECKLISTS_DESPLIEGUE.md).
+
 ## 1. TOPOLOGÍA DE DESPLIEGUE
 
 ### Visión General (Diagrama ASCII)
