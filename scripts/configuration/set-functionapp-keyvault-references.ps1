@@ -33,7 +33,8 @@ if ($LASTEXITCODE -ne 0) {
 $settings = @(
     "SecretsSource=AzureVault",
     "KeyVaultName=$KeyVaultName",
-    "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$KeyVaultName;SecretName=AzureWebJobsStorage)"
+    "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$KeyVaultName;SecretName=AzureWebJobsStorage)",
+    "RunDatabaseMigrationsOnStartup=false"
 )
 
 $tempJsonPath = Join-Path ([System.IO.Path]::GetTempPath()) ("appsettings-" + [guid]::NewGuid().ToString("N") + ".json")
