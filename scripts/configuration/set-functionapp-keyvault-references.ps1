@@ -36,15 +36,36 @@ $settings = @(
     "AzureWebJobsStorage=@Microsoft.KeyVault(VaultName=$KeyVaultName;SecretName=AzureWebJobsStorage)"
 )
 
-az functionapp config appsettings set `
-    --resource-group $ResourceGroup `
-    --name $FunctionAppName `
-    --settings $settings `
-    --only-show-errors `
-    --output none
+$tempJsonPath = Join-Path ([System.IO.Path]::GetTempPath()) ("appsettings-" + [guid]::NewGuid().ToString("N") + ".json")
+try {
+    # Convertir array a hash y luego a JSON para evitar problemas con caracteres especiales en cmd.
+    $settingsHash = @{}
+    foreach ($setting in $settings) {
+        $parts = $setting -split "=", 2
+        $key = $parts[0]
+        $value = if ($parts.Count -gt 1) { $parts[1] } else { "" }
+        $settingsHash[$key] = $value
+    }
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Fallo al aplicar el modo Key Vault en $FunctionAppName"
+    $settingsJson = $settingsHash | ConvertTo-Json -Depth 10 -Compress
+    Set-Content -LiteralPath $tempJsonPath -Value $settingsJson -Encoding utf8NoBOM -NoNewline
+
+    # Pasar settings por JSON file evita rotura en cmd con caracteres especiales.
+    az functionapp config appsettings set `
+        --resource-group $ResourceGroup `
+        --name $FunctionAppName `
+        --settings "@$tempJsonPath" `
+        --only-show-errors `
+        --output none
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fallo al aplicar el modo Key Vault en $FunctionAppName"
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $tempJsonPath) {
+        Remove-Item -LiteralPath $tempJsonPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Host "[OK] Modo Key Vault aplicado." -ForegroundColor Green
