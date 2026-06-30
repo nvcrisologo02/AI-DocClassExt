@@ -165,6 +165,68 @@ Settings clave a confirmar (ver detalle completo en `docs/auxiliares/migracion-d
 
 ---
 
+### BLOQUE 7b — Esquema + datos de configuración en un entorno nuevo/limpio (procedimiento probado)
+
+Usar cuando la base de datos del entorno está **vacía** (sin tablas) y hay que dejarla operativa: primero el **esquema** (migraciones EF Core) y después los **datos de configuración** (modelos/providers, tipologías, catálogos TDN1/TDN2, plugins, prompts). Autenticación con tu usuario **Entra ID** (`az login`), sin contraseñas.
+
+> ⚠️ **Orden obligatorio:** las migraciones van SIEMPRE antes de la carga de datos. Si intentas cargar config sobre una BD vacía obtendrás `Cannot find the object "dbo.ModeloConfigs"`.
+
+#### Paso 1 — Crear/actualizar el esquema (migraciones EF Core)
+
+El factory de diseño (`DocumentIA.Data/Context/DocumentIADbContextFactory.cs`) resuelve la conexión desde la **variable de entorno** `SqlConnectionString` (o `ConnectionStrings__DocumentIA`) e **ignora `--connection`**. Por eso se fija la conexión por env var:
+
+```powershell
+az login   # tu usuario con permisos en el entorno destino
+
+# Apuntar al entorno destino (ejemplo DEV) con auth Entra ID
+$env:SqlConnectionString = "Server=tcp:srbsqldevdocai.database.windows.net,1433;Database=DocumentIA;Authentication=Active Directory Default;Encrypt=True;"
+
+dotnet ef database update `
+  --project src/backend/DocumentIA.Data `
+  --startup-project src/backend/DocumentIA.Functions
+```
+
+- Requiere **.NET 10 SDK** (compila el startup `DocumentIA.Functions`, net10) y `dotnet-ef` (8.x). Aplica todas las migraciones + datos seed (catálogos, prompts iniciales, tipología `tasacion`).
+- Necesitas **`db_owner`/`db_ddladmin`** en la BD destino.
+- **Alternativa** (mezcla net10/EF8, o sin SDK en la máquina de aplicación): generar script idempotente y aplicarlo con `sqlcmd`:
+  ```powershell
+  dotnet ef migrations script --idempotent `
+    --project src/backend/DocumentIA.Data --startup-project src/backend/DocumentIA.Functions `
+    -o .\artifacts\db-config\schema-migrations.sql
+  sqlcmd -S srbsqldevdocai.database.windows.net -d DocumentIA -G -C -i .\artifacts\db-config\schema-migrations.sql
+  ```
+
+#### Paso 2 — Cargar/replicar los datos de configuración entre entornos
+
+Con [scripts/database/replicate-config-data.ps1](../scripts/database/replicate-config-data.ps1). Ejemplo **PROD → DEV** (PROD es origen de solo lectura; DEV el destino):
+
+```powershell
+# 2a) Exportar desde PROD (solo lectura, genera un .sql idempotente para revisar)
+pwsh ./scripts/database/replicate-config-data.ps1 -Mode Export -EntraAuth `
+  -SourceConnectionString "Server=tcp:srbsqlprodocai.database.windows.net,1433;Database=DocumentIA;Encrypt=True;" `
+  -OutputFile .\artifacts\db-config\seed-from-prod.sql
+
+# 2b) Revisar el .sql y aplicarlo a DEV (-Mirror deja DEV como espejo de PROD)
+pwsh ./scripts/database/replicate-config-data.ps1 -Mode Apply -EntraAuth -Mirror `
+  -TargetConnectionString "Server=tcp:srbsqldevdocai.database.windows.net,1433;Database=DocumentIA;Encrypt=True;" `
+  -InputFile .\artifacts\db-config\seed-from-prod.sql
+```
+
+- Tablas replicadas: `ModeloConfigs` (modelos+providers), `PromptTemplates`, `Tipologias`, `CatalogoTdn1`, `CatalogoTdn2`, `PluginTipologiaConfigs`. **No** toca datos operativos (documentos, ejecuciones, auditoría, validaciones).
+- Con `-EntraAuth` las cadenas solo llevan `Server`/`Database`/`Encrypt` (sin credenciales); el script obtiene un token de Entra ID válido para todo el tenant.
+- Idempotente: `MERGE` por PK con `IDENTITY_INSERT` (conserva Ids → mantiene la FK `CatalogoTdn2 → CatalogoTdn1`). Reejecutable.
+- `-Mirror` borra en destino lo que no exista en origen (orden inverso de FK) y evita colisiones de clave única (`Codigo`/`Key` con distinto Id). Para destino = PROD, omitir `-Mirror` salvo intención explícita.
+- Modo directo sin fichero intermedio: `-Mode Copy` pasando ambas connection strings.
+- Para otros entornos cambiar los nombres de servidor: DEV `srbsqldevdocai` · PRE `srbsqlpredocai` · PROD `srbsqlprodocai`.
+
+#### Paso 3 — Verificar
+
+```powershell
+.\scripts\database\Query-Tipologias.ps1     # o: sqlcmd ... -Q "SELECT COUNT(*) FROM Tipologias"
+```
+
+---
+
 ### BLOQUE 8 — Verificacion post-deploy
 
 | # | Tarea | Script / Comando | OK |
@@ -242,6 +304,8 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | B5.2 | Revisar `migrations.sql` antes de aplicar | Especialmente: columnas ADD, tablas CREATE, indices | ☐ |
 | B5.3 | Aplicar en Azure SQL (o Docker si es local) | `sqlcmd -S srbsqlprodocai.database.windows.net -d DocumentIA -i migrations.sql` | ☐ |
 | B5.4 | Verificar tablas y columnas nuevas | `sqlcmd ... -Q "SELECT name FROM sys.tables"` o `.\scripts\database\Query-Tipologias.ps1` | ☐ |
+
+> Para **entorno limpio** (BD vacía) o para **promocionar datos de configuración** entre entornos (dev→pre→prod), ver el procedimiento completo paso a paso en **BLOQUE 7b** (migraciones de esquema + carga de datos con `replicate-config-data.ps1`).
 
 ---
 
