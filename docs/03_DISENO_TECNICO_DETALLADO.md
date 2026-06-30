@@ -1650,7 +1650,7 @@ Reglas de validación del trigger:
 
 | Metodo | Endpoint | Descripcion | Auth |
 |--------|----------|------------|------|
-| GET | `/api/tipologias` | Tipologias publicadas | Anonymous |
+| GET | `/api/tipologias` | Tipologias publicadas (`identificador`, `nombre`, `extraction`) | Anonymous |
 | GET | `/management/tipologias` | Todas las tipologias | Function |
 | POST | `/management/tipologias` | Crear tipologia | Function |
 | PUT | `/management/tipologias/{id}` | Actualizar tipologia | Function |

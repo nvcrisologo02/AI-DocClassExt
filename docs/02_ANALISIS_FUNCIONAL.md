@@ -151,9 +151,10 @@ flowchart TB
 
 | Campo | Detalle |
 |-------|---------|
-| **Actor principal** | Sistema Cliente / Desktop |
+| **Actor principal** | Sistema Cliente / Desktop / Batch |
 | **Endpoint** | `GET /api/tipologias` (Anonymous) |
-| **Respuesta** | Lista de tipologias publicadas con codigo, nombre, version, campos GDC. |
+| **Respuesta** | Lista de tipologias publicadas. Cada item: `identificador` (`{codigo}@{version}`), `nombre` y `extraction` (booleano = `ConfiguracionJson.Extraction.Enabled`). |
+| **Nota** | El campo `extraction` permite a los consumidores filtrar tipologias segun si tienen extraccion habilitada. El batch de extraccion (`DocumentIA.Batch`) solo muestra las que tienen `extraction: true`. Retrocompatible: clientes antiguos (Desktop) que solo leen `identificador`/`nombre` no se ven afectados. |
 
 ### CU7: Obtener Activo desde Documento
 
