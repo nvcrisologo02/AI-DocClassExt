@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text.Json;
+using DocumentIA.Core.Extensions;
 using DocumentIA.Data.Repositories;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -37,7 +38,8 @@ public class TipologiasPublicasFunction
             .Select(t => new
             {
                 identificador = $"{t.Codigo}@{t.Version}",
-                nombre = t.Nombre
+                nombre = t.Nombre,
+                extraction = t.GetExtractionConfig().Enabled
             })
             .ToList();
 
