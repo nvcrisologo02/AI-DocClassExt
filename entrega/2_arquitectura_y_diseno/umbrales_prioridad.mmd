@@ -1,0 +1,59 @@
+flowchart TD
+  %% Entrada y orquestador
+  Req[Petición HTTP<br/>(instrucciones...)] --> Orch[Orquestador<br/>(resuelve umbrales por actividad)]
+  Orch --> Clasif[ClasificarActivity]
+  Orch --> Extrac[ExtraerActivity]
+  Orch --> Valid[ValidarActivity]
+
+  %% Clasificación: resolución de umbral
+  Clasif --> Cresolve[Resolver `umbralClasifFallback`]
+  Cresolve --> C1[1) Petición: `instrucciones.classification.umbral`]
+  C1 --> C2[2) Tipología: `confidenceConfig.clasifUmbralFallback`]
+  C2 --> C3[3) Modelo/Servidor: `Classification:GptFallback:FallbackThreshold`]
+  C3 --> C4[4) Default: `_gptClasifSettings.FallbackThreshold`]
+
+  Cresolve --> Cdec{`ConfianzaDI` ≥ umbral?}
+  Cdec -->|Sí| Cpass[Usar `ConfianzaDI` → `ConfianzaClasificacion`]
+  Cdec -->|No| Cfb[Fallback a GPT → `ConfianzaGPT`]
+  Cfb --> Cprop[`ConfigurableClasificarDataProvider` propaga `ConfianzaDI` + `ConfianzaGPT`]
+
+  %% Extracción: dos criterios independientes
+  Extrac --> Eresolve[Resolver umbrales de extracción]
+
+  Eresolve --> Ecomp[Umbral completitud]
+  Eresolve --> Econf[Umbral confianza]
+
+  Ecomp --> Ecomp_chain[Petición → Tipología → Legado → Servidor<br/>(`instrucciones.extraction.umbralCompletitud` → `confidenceConfig.extracUmbralFallbackCompletitud` → `extracUmbralFallback`/`MinFieldsRatio`)]
+  Econf --> Econf_chain[Petición → Tipología → Legado → Servidor<br/>(`instrucciones.extraction.umbralConfianza` → `confidenceConfig.extracUmbralFallbackConfianza` → `extracUmbralFallback`/`MinFieldsRatio`)]
+
+  Eresolve --> Edec{ratioCompletitud ≥ umbralCompletitud<br/>AND confianzaCU ≥ umbralConfianza?}
+  Edec -->|Sí| Epass[No fallback → `ConfianzaExtraccion` = CU calculada o `confianza_extraccion` GPT]
+  Edec -->|No| Efb[Fallback a GPT → `confianza_extraccion` (self-report) o `ExtracCU` calculada]
+  Efb --> Eprop[Propagar `ConfianzaExtraccion` + `ProveedorExtrac`]
+
+  Extrac -.->|`extraction.enabled = false`| Eskip[Omitir `ConfianzaExtraccion` en cálculo global]
+
+  %% Validación
+  Valid --> Vcalc[ValidarActivity<br/>`ConfianzaValidacion = 1 - errores/TotalReglas`]
+
+  %% Agregación global y EstadoCalidad
+  Cprop --> Global[ConfidenceCalculator.Global<br/>`ConfianzaGlobal = MIN(Clasif, Extrac?, Valid)`]
+  Eprop --> Global
+  Vcalc --> Global
+
+  Global --> EstadoResolve[Resolver `umbralOK` / `umbralRevision`]
+  EstadoResolve --> Sreq[Petición (si existe)]
+  Sreq --> Stop[Tipología: `confidenceConfig.umbralOK` / `umbralRevision`]
+  Stop --> Sdef[Defaults: `confidenceConfig` global (ej. 0.85 / 0.70)]
+
+  EstadoResolve --> Estado{`ConfianzaGlobal ≥ umbralOK?`}
+  Estado -->|Sí| OK[EstadoCalidad = OK]
+  Estado -->|No| Estado2{`ConfianzaGlobal ≥ umbralRevision?`}
+  Estado2 -->|Sí| REV[EstadoCalidad = REVISION]
+  Estado2 -->|No| ERR[EstadoCalidad = ERROR]
+
+  %% Nota sobre configuración
+  note right of Stop
+    `confidenceConfig` puede definirse en:
+    `src/backend/.../config/tipologias/*.validation.json`
+  end
