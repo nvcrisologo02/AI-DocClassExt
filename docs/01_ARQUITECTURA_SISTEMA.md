@@ -373,7 +373,7 @@ flowchart TB
 ```mermaid
 flowchart TB
     subgraph RG["SRBRGDOCSAIPROD — West Europe"]
-        FUNCAPP["srbappprodocai<br/>Function App<br/>.NET 8 Isolated<br/>Consumption Plan Linux"]
+        FUNCAPP["srbappprodocai<br/>Function App<br/>.NET 10 Isolated<br/>Consumption Plan Linux"]
         STG_HUB["srbstgproapppdocai<br/>Storage (Durable hub)"]
         STG_DOCS["srbstgprodocai<br/>Storage (documentos)"]
         KV["srbkvprodocai<br/>Key Vault"]

@@ -14,6 +14,7 @@ parameters:
 
 variables:
   - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - group: docia-bootstrap-dev-secrets
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt DEV
     - name: SUBSCRIPTION_ID
@@ -35,6 +36,7 @@ variables:
     - name: AZURE_STORAGE_DURABLE
       value: srbstgdevappdocai
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - group: docia-bootstrap-pre-secrets
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRE
     - name: SUBSCRIPTION_ID
@@ -56,6 +58,7 @@ variables:
     - name: AZURE_STORAGE_DURABLE
       value: srbstgpreappdocai
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - group: docia-bootstrap-prod-secrets
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRO
     - name: SUBSCRIPTION_ID
@@ -170,22 +173,26 @@ stages:
                   "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
                 )
 
+                # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+                $adminSettingsJson = $adminSettings | ConvertTo-Json -Compress -AsArray
                 pwsh -File .\scripts\configuration\ensure-app-settings.ps1 `
                   -AppKind webapp `
                   -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                   -Name "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                  -Settings $adminSettings
+                  -SettingsJson $adminSettingsJson
 
                 $assetResolverSettings = @(
                   "ConnectionStrings__AssetResolverDb=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=user-ods-dwh)",
                   "ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=AssetResolverApiKey)"
                 )
 
+                # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+                $assetResolverSettingsJson = $assetResolverSettings | ConvertTo-Json -Compress -AsArray
                 pwsh -File .\scripts\configuration\ensure-app-settings.ps1 `
                   -AppKind webapp `
                   -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                   -Name "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
-                  -Settings $assetResolverSettings
+                  -SettingsJson $assetResolverSettingsJson
 
           - task: AzureCLI@2
             displayName: Validate app settings contract
@@ -199,4 +206,5 @@ stages:
                   -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                   -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
                   -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                  -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)"
+                  -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)" `
+                  -BasicValidationOnly

@@ -23,20 +23,60 @@ param(
     [string]$ResourceGroup = "SRBRGDOCSAIPROD",
 
     [Parameter(Mandatory = $false)]
-    [string]$FunctionsAppName = "srbappprodocai",
+    [string]$FunctionsAppName = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$AdminWebAppName = "srbwebadminprodocai",
+    [string]$AdminWebAppName = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$AssetResolverWebAppName = "srbwebpluginassetresolver",
+    [string]$AssetResolverWebAppName = "",
 
     [Parameter(Mandatory = $false)]
     [string]$ContractPath = ([System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\config\azure-appsettings-contract.json"))),
 
     [Parameter(Mandatory = $false)]
-    [switch]$SkipAzureLoginCheck
+    [switch]$SkipAzureLoginCheck,
+    
+    [Parameter(Mandatory = $false)]
+    [switch]$BasicValidationOnly
 )
+
+# Detectar environment del ResourceGroup
+function Get-EnvironmentFromResourceGroup {
+    param([string]$ResourceGroup)
+    
+    if ($ResourceGroup -like "*DEV*") { return "dev" }
+    if ($ResourceGroup -like "*PRE*") { return "pre" }
+    if ($ResourceGroup -like "*PROD*") { return "prod" }
+    return "prod"  # default
+}
+
+# Detectar nombres de apps si no se proporcionan
+$environment = Get-EnvironmentFromResourceGroup -ResourceGroup $ResourceGroup
+if ([string]::IsNullOrWhiteSpace($FunctionsAppName)) {
+    switch ($environment) {
+        "dev"  { $FunctionsAppName = "srbappdevdocai" }
+        "pre"  { $FunctionsAppName = "srbapppredocai" }
+        "prod" { $FunctionsAppName = "srbappprodocai" }
+        default { $FunctionsAppName = "srbappprodocai" }
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($AdminWebAppName)) {
+    switch ($environment) {
+        "dev"  { $AdminWebAppName = "srbwebadmindevdocai" }
+        "pre"  { $AdminWebAppName = "srbwebadminpredocai" }
+        "prod" { $AdminWebAppName = "srbwebadminprodocai" }
+    }
+}
+
+if ([string]::IsNullOrWhiteSpace($AssetResolverWebAppName)) {
+    switch ($environment) {
+        "dev"  { $AssetResolverWebAppName = "srbwebpluginassetresolverdev" }
+        "pre"  { $AssetResolverWebAppName = "srbwebpluginassetresolverpre" }
+        "prod" { $AssetResolverWebAppName = "srbwebpluginassetresolver" }
+    }
+}
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -192,7 +232,20 @@ foreach ($app in @($contract.apps)) {
         $settingsByName[[string]$setting.name] = [string]$setting.value
     }
 
-    foreach ($required in @($app.requiredSettings)) {
+    # Si es BasicValidationOnly y es Functions, solo valida settings básicos (KV references y config)
+    $requiredToValidate = @($app.requiredSettings)
+    if ($BasicValidationOnly -and $app.id -eq "functions") {
+        $basicFunctionSettings = @(
+            "SecretsSource",
+            "KeyVaultName",
+            "AzureWebJobsStorage",
+            "RunDatabaseMigrationsOnStartup"
+        )
+        $requiredToValidate = @($app.requiredSettings | Where-Object { $_.name -in $basicFunctionSettings })
+        Write-Host "  [INFO] BasicValidationOnly: validando solo $($basicFunctionSettings -join ', ')" -ForegroundColor Cyan
+    }
+
+    foreach ($required in @($requiredToValidate)) {
         $name = [string]$required.name
         if (-not $settingsByName.ContainsKey($name)) {
             $failures.Add("[$($app.id)] Falta setting obligatorio: $name")
@@ -220,6 +273,12 @@ foreach ($app in @($contract.apps)) {
         }
 
         if ($required.PSObject.Properties.Name -contains "requiredValue") {
+            # Si es BasicValidationOnly o si estamos en un environment no-prod, skip requiredValue check para valores env-específicos
+            if ($BasicValidationOnly -or ($environment -ne "prod" -and $name -eq "KeyVaultName")) {
+                Write-Host "  [OK] $name (requiredValue check skipped)" -ForegroundColor Green
+                continue
+            }
+            
             $expectedValue = [string]$required.requiredValue
             if ($value -ne $expectedValue) {
                 $failures.Add("[$($app.id)] $name no coincide con el valor canonico esperado")

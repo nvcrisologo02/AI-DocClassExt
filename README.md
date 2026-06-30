@@ -4,7 +4,7 @@ Sistema modular de procesamiento de documentos con clasificacion y extraccion au
 
 ## Arquitectura
 
-- Backend: .NET 8.0 con Azure Durable Functions
+- Backend: Azure Durable Functions en .NET 10 Isolated (librerias Core/Data/Plugins y Admin/AssetResolver en .NET 8.0)
 - IA: Azure AI Document Intelligence + Azure OpenAI
 - Entrenamiento: Python 3.10+
 - Infraestructura: Azure (Bicep)
@@ -14,7 +14,8 @@ Sistema modular de procesamiento de documentos con clasificacion y extraccion au
 ## Requisitos
 
 ### Backend (.NET)
-- .NET 8.0 SDK
+- .NET 10 SDK (requerido para compilar DocumentIA.Functions, que es .NET 10 Isolated)
+- .NET 8.0 SDK (Admin, AssetResolver y librerias)
 - Azure Functions Core Tools v4
 - Visual Studio 2022 o VS Code con C# extension
 
@@ -55,7 +56,18 @@ python training/train_classifier.py
 
 ## Deploy
 
-Despliegue productivo gestionado por el pipeline `azure-pipelines.yml` (rama `main`) sobre el Resource Group **`SRBRGDOCSAIPROD`** (West Europe). Detalle completo en [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md).
+Despliegue productivo gestionado por el pipeline `azure-pipelines.yml` sobre el Resource Group **`SRBRGDOCSAIPROD`** (West Europe). El pipeline es de **ejecución manual** (`trigger: none`, `pr: none`): se lanza desde Azure DevOps con "Run pipeline" eligiendo el parámetro `targetEnvironment` (`dev`/`pre`/`prod`). No se dispara automáticamente al hacer merge.
+
+Pipelines disponibles (todos de ejecución manual y parametrizados por `targetEnvironment`):
+- `azure-pipelines.yml` — completo: Build + DeployFunctions (+Admin) + DeployAssetResolver + ValidateConfiguration.
+- `azure-pipelines-functions.yml` — solo Functions.
+- `azure-pipelines-admin.yml` — solo Admin (Blazor).
+- `azure-pipelines-assetresolver.yml` — solo plugin AssetResolver.
+- `azure-pipelines-bootstrap.yml` — preparacion inicial de entorno (permisos, secretos KV, app settings, validacion de contrato).
+
+> Los pipelines por componente (`-functions`, `-admin`, `-assetresolver`) asumen que el entorno ya fue inicializado con `azure-pipelines-bootstrap.yml` o un run previo del pipeline completo; sirven para redespliegues incrementales de un unico componente sin tocar el resto.
+
+Detalle completo en [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md).
 
 Despliegue manual (Functions) sobre la Function App existente:
 

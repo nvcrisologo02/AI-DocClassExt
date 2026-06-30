@@ -15,12 +15,17 @@ $resourceGroup   = "SRBRGDOCSAIPROD"
 $functionAppName = "srbappprodocai"
 $keyVaultName    = "srbkvprodocai"
 $assetResolverBaseUrl = "https://srbwebpluginassetresolver.azurewebsites.net/"
-$cuMaxConcurrentCalls = 2
+$appInsightsName = "srbappiprodocai"
+$cuMaxConcurrentCalls = 4   # baseline operativo alineado con los pipelines (azure-pipelines.yml)
 $cuMaxRetries = 3
 $cuInitialRetryDelayMs = 500
 
-# Obtenido via: az monitor app-insights component show --resource-group SRBRGDOCSAIPROD --app srbappiprodocai --query connectionString -o tsv
-$appInsightsConnectionString = "InstrumentationKey=c57c6166-c5ac-4584-a4d6-13fbb37860c4;IngestionEndpoint=https://westeurope-5.in.applicationinsights.azure.com/;LiveEndpoint=https://westeurope.livediagnostics.monitor.azure.com/;ApplicationId=19eeb2fb-8544-41c5-931a-b0983a26e92e"
+# La connection string de App Insights NO se versiona: se obtiene dinamicamente de Azure.
+# Si az no esta autenticado/falla, queda en COMPLETAR y la validacion de abajo aborta el script.
+$appInsightsConnectionString = az monitor app-insights component show --resource-group $resourceGroup --app $appInsightsName --query connectionString -o tsv 2>$null
+if ([string]::IsNullOrWhiteSpace($appInsightsConnectionString)) {
+    $appInsightsConnectionString = "COMPLETAR_APPLICATIONINSIGHTS_CONNECTION_STRING"
+}
 
 # =============================================================================
 # NO modificar a partir de aqui salvo cambio de entorno

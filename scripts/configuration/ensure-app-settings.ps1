@@ -9,12 +9,31 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Name,
 
-    [Parameter(Mandatory = $true)]
-    [string[]]$Settings
+    [Parameter(Mandatory = $false)]
+    [string[]]$Settings,
+
+    [Parameter(Mandatory = $false)]
+    [string]$SettingsJson
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+# Si se proporciona SettingsJson, deserializarlo a Settings
+if (-not [string]::IsNullOrWhiteSpace($SettingsJson)) {
+    try {
+        $settingsArray = $SettingsJson | ConvertFrom-Json
+        if ($settingsArray -is [array]) {
+            $Settings = @($settingsArray)
+        }
+        else {
+            $Settings = @($settingsArray)
+        }
+    }
+    catch {
+        throw "No se pudo deserializar SettingsJson: $_"
+    }
+}
 
 # Comprobar disponibilidad de Azure CLI de forma robusta
 try {
@@ -44,7 +63,7 @@ if ([string]::IsNullOrWhiteSpace($Name)) {
     throw 'Parametro obligatorio "-Name" vacio o no establecido. Revisa la variable de pipeline correspondiente (p.ej. $(AZURE_FUNCTIONS_APP_NAME)).'
 }
 
-if (-not $Settings -or $Settings.Count -eq 0) {
+if ((-not $Settings -or $Settings.Count -eq 0) -and [string]::IsNullOrWhiteSpace($SettingsJson)) {
     Write-Host "[INFO] No se han pasado settings a aplicar para $Name; nada que hacer." -ForegroundColor Yellow
     exit 0
 }
@@ -135,17 +154,39 @@ if ($missingSettings.Count -eq 0) {
 
 Write-Host "[INFO] Aplicando $($missingSettings.Count) setting(s) nuevos en $Name..." -ForegroundColor Cyan
 
-$setArgs = @(
-    $commandPrefix[0], $commandPrefix[1], $commandPrefix[2], 'set',
-    '--resource-group', $ResourceGroup,
-    '--name', $Name,
-    '--settings'
-) + @($missingSettings.ToArray()) + @('--only-show-errors', '--output', 'none')
+# Convertir settings a JSON para evitar rotura en cmd con caracteres especiales (@, ;, parens)
+$settingsHash = @{}
+foreach ($setting in $missingSettings) {
+    $parts = $setting -split "=", 2
+    $key = $parts[0].Trim()
+    $value = if ($parts.Count -gt 1) { $parts[1] } else { "" }
+    $settingsHash[$key] = $value
+}
 
-& az @setArgs
+$tempJsonPath = Join-Path ([System.IO.Path]::GetTempPath()) ("appsettings-" + [guid]::NewGuid().ToString("N") + ".json")
+try {
+    $settingsJson = $settingsHash | ConvertTo-Json -Depth 10 -Compress
+    Set-Content -LiteralPath $tempJsonPath -Value $settingsJson -Encoding utf8NoBOM -NoNewline
 
-if ($LASTEXITCODE -ne 0) {
-    throw "Fallo al aplicar App Settings en $Name"
+    # Pasar settings por JSON file evita rotura en cmd con caracteres especiales.
+    $setArgs = @(
+        $commandPrefix[0], $commandPrefix[1], $commandPrefix[2], 'set',
+        '--resource-group', $ResourceGroup,
+        '--name', $Name,
+        '--settings', "@$tempJsonPath",
+        '--only-show-errors', '--output', 'none'
+    )
+
+    & az @setArgs
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "Fallo al aplicar App Settings en $Name"
+    }
+}
+finally {
+    if (Test-Path -LiteralPath $tempJsonPath) {
+        Remove-Item -LiteralPath $tempJsonPath -Force -ErrorAction SilentlyContinue
+    }
 }
 
 Write-Host "[OK] Settings nuevos aplicados sin sobrescribir los existentes." -ForegroundColor Green

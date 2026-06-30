@@ -176,6 +176,33 @@ Opcion A: variables de entorno DOCIA_SECRET_*
       -ResourceGroup $ResourceGroup `
       -KeyVaultName $KeyVaultName
 
+Obtencion rapida de valores en DEV para storage:
+
+    $docsConn = az storage account show-connection-string `
+      --name $StorageDocuments `
+      --resource-group $ResourceGroup `
+      --query connectionString -o tsv
+
+    $jobsConn = az storage account show-connection-string `
+      --name $StorageDurable `
+      --resource-group $ResourceGroup `
+      --query connectionString -o tsv
+
+    # Asignar a variables secretas de sesion (no imprimir en consola)
+    $env:DOCIA_SECRET_AZURESTORAGECONNECTIONSTRING = $docsConn
+    $env:DOCIA_SECRET_AZUREWEBJOBSSTORAGE = $jobsConn
+
+SqlConnectionString recomendada para DEV (alineada con PROD mediante Managed Identity):
+
+    $env:DOCIA_SECRET_SQLCONNECTIONSTRING = "Server=tcp:srbsqldevdocai.database.windows.net,1433;Database=DocumentIA;Authentication=Active Directory Managed Identity;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;"
+
+Function key para Admin API (si no existe una dedicada, usar la default):
+
+    $env:DOCIA_SECRET_FUNCTIONSADMINAPIFUNCTIONKEY = az functionapp keys list `
+      --resource-group $ResourceGroup `
+      --name $FunctionAppName `
+      --query "functionKeys.default" -o tsv
+
 Opcion B: local.settings no versionado
 
     pwsh -File .\scripts\configuration\set-keyvault-secrets.ps1 `
@@ -193,6 +220,33 @@ Opcion B: local.settings no versionado
       -FunctionAppName $FunctionAppName `
       -KeyVaultName $KeyVaultName `
       -StorageAccountName $StorageDurable
+
+Si aparece "[SIN PERMISO]" en todos los secretos de Key Vault:
+
+1. Confirmar que Key Vault usa RBAC:
+
+    az keyvault show --name $KeyVaultName --resource-group $ResourceGroup --query properties.enableRbacAuthorization -o tsv
+
+2. Asignar rol al principal de la Service Connection (WIF) del entorno:
+
+    az role assignment create `
+      --assignee <APP_ID_SERVICE_CONNECTION> `
+      --role "Key Vault Secrets Officer" `
+      --scope "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.KeyVault/vaults/$KeyVaultName"
+
+3. Verificar asignacion:
+
+    az role assignment list `
+      --assignee <APP_ID_SERVICE_CONNECTION> `
+      --scope "/subscriptions/$SubscriptionId/resourceGroups/$ResourceGroup/providers/Microsoft.KeyVault/vaults/$KeyVaultName" `
+      --query "[].roleDefinitionName" -o table
+
+4. Esperar 2-5 minutos por propagacion RBAC y relanzar bootstrap.
+
+Caso real DEV validado:
+
+- AppId service connection DEV: efff077f-57d1-41c5-b66f-7b0d2e00fc0e
+- Rol verificado: Key Vault Secrets Officer
 
 ### 6.5 Configuracion de Function App
 
@@ -240,6 +294,27 @@ AssetResolver:
       -AssetResolverWebAppName $AssetResolverWebAppName
 
 ### 6.8 BBDD (mismo patron que PROD)
+
+Comprobacion previa recomendada de identidad administrada en DEV:
+
+  az functionapp identity show `
+    --resource-group $ResourceGroup `
+    --name $FunctionAppName `
+    --query "{type:type,principalId:principalId,tenantId:tenantId}" -o json
+
+Validacion en SQL (ejecutar con usuario administrador Entra en la base DocumentIA):
+
+  SELECT name, type_desc, authentication_type_desc
+  FROM sys.database_principals
+  WHERE name = 'srbappdevdocai';
+
+  SELECT r.name AS role_name, m.name AS member_name
+  FROM sys.database_role_members drm
+  JOIN sys.database_principals r ON drm.role_principal_id = r.principal_id
+  JOIN sys.database_principals m ON drm.member_principal_id = m.principal_id
+  WHERE m.name = 'srbappdevdocai';
+
+Si falta usuario o roles: crear usuario desde EXTERNAL PROVIDER y asignar al menos db_datareader + db_datawriter. Agregar db_ddladmin solo si se ejecutaran migraciones desde app/pipeline.
 
 Generar script idempotente de migraciones:
 

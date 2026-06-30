@@ -82,3 +82,109 @@ Conceder al pipeline:
 
 El repositorio no puede crear por si mismo estos objetos de Azure DevOps sin una integracion adicional con REST API o credenciales de acceso a la organizacion.
 Este documento deja la definicion exacta para crearlos de forma manual o automatizada despues.
+
+## 8. Obtencion de valores de secretos en DEV
+
+Esta seccion resume como obtener los valores de los secretos principales para el entorno DEV antes de ejecutar el bootstrap.
+
+Datos de entorno DEV:
+
+- SubscriptionId: 8764f9ff-fe37-4c03-bde9-6294622bef6d
+- ResourceGroup: SRBRGDEVDOCSAI
+- FunctionApp: srbappdevdocai
+- Storage documents: srbstgdevdocai
+- Storage durable: srbstgdevappdocai
+- SQL server: srbsqldevdocai
+- Database: DocumentIA
+
+### 8.1 DOCIA_SECRET_AZURESTORAGECONNECTIONSTRING (documents)
+
+		az account set --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d
+		az storage account show-connection-string `
+			--name srbstgdevdocai `
+			--resource-group SRBRGDEVDOCSAI `
+			--query connectionString -o tsv
+
+### 8.2 DOCIA_SECRET_AZUREWEBJOBSSTORAGE (durable)
+
+		az account set --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d
+		az storage account show-connection-string `
+			--name srbstgdevappdocai `
+			--resource-group SRBRGDEVDOCSAI `
+			--query connectionString -o tsv
+
+### 8.3 DOCIA_SECRET_SQLCONNECTIONSTRING (patron Managed Identity)
+
+Valor esperado en DEV (alineado con PROD):
+
+		Server=tcp:srbsqldevdocai.database.windows.net,1433;Database=DocumentIA;Authentication=Active Directory Managed Identity;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;
+
+### 8.4 DOCIA_SECRET_FUNCTIONSADMINAPIFUNCTIONKEY
+
+Obtener function key de la Function App DEV:
+
+		az account set --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d
+		az functionapp keys list `
+			--resource-group SRBRGDEVDOCSAI `
+			--name srbappdevdocai `
+			--query "functionKeys.default" -o tsv
+
+### 8.5 Validacion de identidad administrada para SQL
+
+Verificar que la Function App tiene SystemAssigned identity:
+
+		az functionapp identity show `
+			--resource-group SRBRGDEVDOCSAI `
+			--name srbappdevdocai `
+			--query "{type:type,principalId:principalId,tenantId:tenantId}" -o json
+
+Comprobar en SQL (con usuario admin Entra) que existe el usuario y sus roles:
+
+		SELECT name, type_desc, authentication_type_desc
+		FROM sys.database_principals
+		WHERE name = 'srbappdevdocai';
+
+		SELECT r.name AS role_name, m.name AS member_name
+		FROM sys.database_role_members drm
+		JOIN sys.database_principals r ON drm.role_principal_id = r.principal_id
+		JOIN sys.database_principals m ON drm.member_principal_id = m.principal_id
+		WHERE m.name = 'srbappdevdocai';
+
+Si faltan permisos: asignar al menos db_datareader y db_datawriter. Agregar db_ddladmin solo si se ejecutaran migraciones desde app/pipeline.
+
+## 9. Permisos Key Vault para Service Connection (WIF)
+
+Si el bootstrap falla en "Verify deployment prerequisites" con mensajes "[SIN PERMISO]" al leer secretos, la causa habitual es falta de RBAC del principal de la service connection sobre Key Vault.
+
+Comprobacion del modo de permisos del Key Vault (debe ser RBAC para este flujo):
+
+		az keyvault show --name srbkvdevdocai --resource-group SRBRGDEVDOCSAI --query properties.enableRbacAuthorization -o tsv
+
+Si devuelve true, asignar rol IAM al principal de la service connection.
+
+Ejemplo real DEV:
+
+- Service connection: AI DocClassExt DEV
+- AppId (cliente): efff077f-57d1-41c5-b66f-7b0d2e00fc0e
+- Key Vault scope: /subscriptions/8764f9ff-fe37-4c03-bde9-6294622bef6d/resourceGroups/SRBRGDEVDOCSAI/providers/Microsoft.KeyVault/vaults/srbkvdevdocai
+- Rol requerido para bootstrap: Key Vault Secrets Officer
+
+Asignacion por CLI:
+
+		az role assignment create `
+			--assignee efff077f-57d1-41c5-b66f-7b0d2e00fc0e `
+			--role "Key Vault Secrets Officer" `
+			--scope "/subscriptions/8764f9ff-fe37-4c03-bde9-6294622bef6d/resourceGroups/SRBRGDEVDOCSAI/providers/Microsoft.KeyVault/vaults/srbkvdevdocai"
+
+Verificacion:
+
+		az role assignment list `
+			--assignee efff077f-57d1-41c5-b66f-7b0d2e00fc0e `
+			--scope "/subscriptions/8764f9ff-fe37-4c03-bde9-6294622bef6d/resourceGroups/SRBRGDEVDOCSAI/providers/Microsoft.KeyVault/vaults/srbkvdevdocai" `
+			--query "[].roleDefinitionName" -o table
+
+Salida esperada:
+
+- Key Vault Secrets Officer
+
+Tras asignar rol, esperar 2-5 minutos por propagacion RBAC y relanzar bootstrap.

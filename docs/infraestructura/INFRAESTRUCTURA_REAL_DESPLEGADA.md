@@ -19,12 +19,12 @@ SRBRGDOCSAIPROD (Resource Group)
 │   └── Storage: AzureWebJobsStorage (from KeyVault)
 ├── App Service (Admin Blazor)
 │   ├── Name: srbwebadminprodocai
-│   ├── Runtime: .NET 9
+│   ├── Runtime: .NET 8
 │   ├── Managed Identity: ✓ Enabled + RBAC to KeyVault
 │   └── Access: Key Vault via "Key Vault Secrets User" role
 ├── App Service (AssetResolver Plugin)
 │   ├── Name: srbwebpluginassetresolver
-│   ├── Runtime: .NET 9
+│   ├── Runtime: .NET 8
 │   ├── Connection: AssetResolver DB (secret: user-ods-dwh)
 │   └── Base URL: https://srbwebpluginassetresolver.azurewebsites.net/
 ├── Key Vault

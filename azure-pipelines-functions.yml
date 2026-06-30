@@ -134,11 +134,13 @@ stages:
                   "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)"
                 )
 
+                # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+                $settingsJson = $settings | ConvertTo-Json -Compress -AsArray
                 & .\scripts\configuration\ensure-app-settings.ps1 `
                   -AppKind functionapp `
                   -ResourceGroup "$(azureResourceGroup)" `
                   -Name "$(functionAppName)" `
-                  -Settings $settings
+                  -SettingsJson $settingsJson
 
                 Write-Host "Validando que todas las variables se han aplicado..."
                 

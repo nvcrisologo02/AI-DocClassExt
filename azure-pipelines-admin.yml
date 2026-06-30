@@ -15,6 +15,10 @@ variables:
     value: Release
   - name: adminProject
     value: src/frontend/DocumentIA.Admin/DocumentIA.Admin.csproj
+  # 'false' = el pipeline solo VERIFICA el rol 'Key Vault Secrets User' (pre-asignado con
+  # scripts/configuration/assign-keyvault-rbac.ps1). 'true' = intenta crearlo (requiere SP con permiso RBAC).
+  - name: manageKeyVaultRbac
+    value: 'false'
   - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt DEV
@@ -148,13 +152,19 @@ stages:
                         throw "No se pudo resolver el recurso de Key Vault $(KEY_VAULT_NAME)."
                       }
 
+                      $manageRbac = "$(manageKeyVaultRbac)" -eq 'true'
+
                       $existingRole = az role assignment list `
                         --scope $keyVaultScope `
                         --assignee $principalId `
                         --query "[?roleDefinitionName=='Key Vault Secrets User'] | length(@)" `
                         -o tsv
 
-                      if ($existingRole -eq "0") {
+                      if ($existingRole -ne "0") {
+                        Write-Host "[OK] $(AZURE_ADMIN_WEB_APP_NAME) ya tiene 'Key Vault Secrets User' sobre $(KEY_VAULT_NAME)."
+                      }
+                      elseif ($manageRbac) {
+                        Write-Host "[INFO] manageKeyVaultRbac=true: intentando asignar 'Key Vault Secrets User'..."
                         az role assignment create `
                           --role "Key Vault Secrets User" `
                           --assignee-object-id $principalId `
@@ -162,11 +172,16 @@ stages:
                           --scope $keyVaultScope `
                           --only-show-errors `
                           --output none
-
-                        Write-Host "[OK] Assigned 'Key Vault Secrets User' to $(AZURE_ADMIN_WEB_APP_NAME)."
+                        if ($LASTEXITCODE -ne 0) {
+                          Write-Host "##vso[task.logissue type=error]El SP no puede crear role assignments sobre $(KEY_VAULT_NAME). Pre-asigna con scripts/configuration/assign-keyvault-rbac.ps1 -TargetEnvironment ${{ parameters.targetEnvironment }} y re-ejecuta con manageKeyVaultRbac=false."
+                          exit 1
+                        }
+                        Write-Host "[OK] Asignado 'Key Vault Secrets User' a $(AZURE_ADMIN_WEB_APP_NAME)."
                       }
                       else {
-                        Write-Host "[OK] $(AZURE_ADMIN_WEB_APP_NAME) already has 'Key Vault Secrets User' on $(KEY_VAULT_NAME)."
+                        Write-Host "##vso[task.logissue type=error]PRERREQUISITO NO CUMPLIDO: $(AZURE_ADMIN_WEB_APP_NAME) (identidad $principalId) no tiene 'Key Vault Secrets User' sobre $(KEY_VAULT_NAME)."
+                        Write-Host "##vso[task.logissue type=error]Ejecuta una vez: pwsh ./scripts/configuration/assign-keyvault-rbac.ps1 -TargetEnvironment ${{ parameters.targetEnvironment }} (rol elevado/PIM). Alternativa: variable manageKeyVaultRbac=true si el SP tiene permiso RBAC."
+                        exit 1
                       }
 
                 - task: AzureCLI@2
@@ -181,11 +196,13 @@ stages:
                           "FunctionsAdminApi__FunctionKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=FunctionsAdminApiFunctionKey)"
                         )
 
+                        # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
+                        $adminSettingsJson = $adminSettings | ConvertTo-Json -Compress -AsArray
                         & .\scripts\configuration\ensure-app-settings.ps1 `
                           -AppKind webapp `
                           -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                           -Name "$(AZURE_ADMIN_WEB_APP_NAME)" `
-                          -Settings $adminSettings
+                          -SettingsJson $adminSettingsJson
 
                 - task: AzureCLI@2
                   displayName: Validate Admin App settings contract
