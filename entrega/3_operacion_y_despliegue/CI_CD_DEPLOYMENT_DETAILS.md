@@ -736,9 +736,12 @@ All sensitive data stored in KeyVault; referenced in App Settings as:
 ```
 Extraction--AzureContentUnderstanding--ApiKey (maps to Extraction:AzureContentUnderstanding:ApiKey)
 Classification--AzureDocumentIntelligence--ApiKey
-Database--ConnectionString
-GDC--AuthToken
+SqlConnectionString
+GDC--HttpBasicUsername
+GDC--HttpBasicPassword
 ```
+
+> **Nota — config no-secreta por entorno:** el endpoint de GDC **no** es un secreto. `GDC__Endpoint` es un App Setting que el pipeline fija por entorno con la variable `GDC_ENDPOINT` (`azure-pipelines.yml`): dev=`srbwidd03.sareb.srb:8090`, prod=`srbwidp05.sareb.srb:8090` (réplica PRD; primario `srbwidp04`), pre pendiente. ⚠️ En PROD existe un secreto huérfano `GDC--Endpoint` en el Key Vault que, por el volcado masivo de secretos en `Program.cs`, **tiene precedencia** sobre el App Setting; debe eliminarse para que el pipeline sea la única fuente de verdad del endpoint.
 
 ### How to Rotate a Secret
 

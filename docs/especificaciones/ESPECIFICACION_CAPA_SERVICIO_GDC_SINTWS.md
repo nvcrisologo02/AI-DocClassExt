@@ -173,6 +173,8 @@ El backend consume un endpoint configurable de `IDocService`:
 - PRD replica: `https://srbwidp05.sareb.srb:8090/sintws/IDocService`
 - Mock local: `http://localhost:8888/sintws/IDocService`
 
+> Nota: en PROD el Function App tiene configurada la réplica `srbwidp05` (el primario es `srbwidp04`); en DEV el host es `srbwidd03`. El valor efectivo se resuelve por `GDC:Endpoint` (app setting `GDC__Endpoint`). Aviso operativo: en PROD existe un secreto de Key Vault `GDC--Endpoint` que, por el volcado masivo de secretos, tiene **precedencia** sobre el app setting.
+
 Operaciones sobre ese endpoint:
 - `searchEntities`
 - `create`

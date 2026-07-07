@@ -206,7 +206,8 @@ traces
 **Verificación Rápida (2 min):**
 ```powershell
 # Test GDC connectivity
-$gdcEndpoint = "https://srbwidd03.sareb.srb:8090/sintws/IDocService"
+# PROD apunta a la réplica srbwidp05 (primario srbwidp04); en dev el host es srbwidd03
+$gdcEndpoint = "https://srbwidp05.sareb.srb:8090/sintws/IDocService"
 $username = (az keyvault secret show --vault-name srbkvprodocai --name "GDC--HttpBasicUsername" --query "value" -o tsv)
 $password = (az keyvault secret show --vault-name srbkvprodocai --name "GDC--HttpBasicPassword" --query "value" -o tsv)
 

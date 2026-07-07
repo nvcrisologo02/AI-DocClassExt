@@ -26,6 +26,8 @@ variables:
       value: SRBRGDEVDOCSAI
     - name: KEY_VAULT_NAME
       value: srbkvdevdocai
+    - name: GDC_ENDPOINT
+      value: https://srbwidd03.sareb.srb:8090/sintws/IDocService
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRE
@@ -41,6 +43,8 @@ variables:
       value: SRBRGPREDOCSAI
     - name: KEY_VAULT_NAME
       value: srbkvpredocai
+    - name: GDC_ENDPOINT
+      value: https://REEMPLAZAR-host-pre.sareb.srb:8090/sintws/IDocService  # TODO: confirmar host GDC de PRE
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRO
@@ -56,6 +60,8 @@ variables:
       value: SRBRGDOCSAIPROD
     - name: KEY_VAULT_NAME
       value: srbkvprodocai
+    - name: GDC_ENDPOINT
+      value: https://srbwidp05.sareb.srb:8090/sintws/IDocService
   - name: buildConfiguration
     value: Release
   - name: solutionPath
@@ -68,6 +74,9 @@ variables:
     value: src/plugins/DocumentIA.AssetResolver/DocumentIA.AssetResolver.csproj
   - name: testsProject
     value: src/backend/DocumentIA.Tests.Unit/DocumentIA.Tests.Unit.csproj
+  # GDC (endpoint por entorno via GDC_ENDPOINT; timeout constante)
+  - name: gdcTimeoutSeconds
+    value: '60'
   # CU Resiliencia baseline (post-2026-06-01)
   - name: cuMaxConcurrentCalls
     value: '4'
@@ -315,8 +324,8 @@ stages:
                         "Classification__GptFallback__Temperature=0.0",
                         "Classification__GptFallback__MaxTokens=150",
                         "Classification__GptFallback__TimeoutSeconds=30",
-                        "GDC__Endpoint=https://srbwidd03.sareb.srb:8090/sintws/IDocService",
-                        "GDC__TimeoutSeconds=60",
+                        "GDC__Endpoint=$(GDC_ENDPOINT)",
+                        "GDC__TimeoutSeconds=$(gdcTimeoutSeconds)",
                         "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicUsername)",
                         "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicPassword)",
                         "GDC__ApplicationId=CKP1",

@@ -132,7 +132,7 @@ az functionapp config appsettings set `
     --resource-group $resourceGroup `
     --name $functionAppName `
     --settings `
-        "GDC__Endpoint=https://srbwidd03.sareb.srb:8090/sintws/IDocService" `
+        "GDC__Endpoint=https://srbwidp05.sareb.srb:8090/sintws/IDocService" `
         "GDC__TimeoutSeconds=60" `
         "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=$keyVaultName;SecretName=GDC--HttpBasicUsername)" `
         "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=$keyVaultName;SecretName=GDC--HttpBasicPassword)" `

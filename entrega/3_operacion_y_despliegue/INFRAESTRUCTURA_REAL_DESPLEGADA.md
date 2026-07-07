@@ -108,7 +108,7 @@ SRBRGDOCSAIPROD (Resource Group)
 #### **GDC (Legacy Document Management System)**
 | Setting | Value |
 |---------|-------|
-| **Endpoint** | https://srbwidd03.sareb.srb:8090/sintws/IDocService |
+| **Endpoint** | https://srbwidp05.sareb.srb:8090/sintws/IDocService (réplica PRD, valor configurado en el Function App; primario srbwidp04) |
 | **HTTP Basic Auth** | Username + Password (from KeyVault) |
 | **Application ID** | CKP1 |
 | **Document Type ID** | document |
@@ -293,7 +293,7 @@ SRBRGDOCSAIPROD (Resource Group)
 | CU Service | https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/ | Production |
 | DI Service | https://srbdiprodocai.cognitiveservices.azure.com/ | Production |
 | OpenAI Service | https://upe48-mm2avmdm-swedencentral.openai.azure.com | Production |
-| GDC Legacy | https://srbwidd03.sareb.srb:8090/sintws/IDocService | Production |
+| GDC Legacy | https://srbwidp05.sareb.srb:8090/sintws/IDocService | Production (réplica PRD; primario srbwidp04) |
 
 ---
 

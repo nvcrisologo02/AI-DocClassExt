@@ -28,7 +28,7 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 | LLM (fallback + prompt) | Azure OpenAI GPT-4o-mini |
 | Base de datos | SQL Server 2022 (EF Core 8 Code-First) |
 | Almacenamiento blob | Azure Blob Storage (Azurite en local) |
-| Gestor documental | GDC SINTWS (SOAP, srbwidd03.sareb.srb:8090) |
+| Gestor documental | GDC SINTWS (SOAP, srbwidp04.sareb.srb:8090) |
 | Frontend operativo | WPF .NET 8 (MVVM, RestSharp) |
 | Frontend Admin | Blazor Server .NET 8 | 
 | **Backend Status** | ✅ Upgraded to .NET 10 Isolated (Jun 2026) |
@@ -82,7 +82,7 @@ flowchart TB
     end
 
     subgraph Externos["Sistemas Externos"]
-        GDC["GDC SINTWS<br/>srbwidd03.sareb.srb:8090"]
+        GDC["GDC SINTWS<br/>srbwidp04.sareb.srb:8090"]
         PLUGIN_EXT["Plugins REST/SOAP<br/>(Atlas, Catastro, Excel)"]
     end
 
@@ -388,7 +388,7 @@ flowchart TB
     end
 
     subgraph OnPrem["Infraestructura SAREB"]
-        GDC_PROD["GDC SINTWS<br/>srbwidd03.sareb.srb:8090"]
+        GDC_PROD["GDC SINTWS<br/>srbwidp04.sareb.srb:8090<br/>(réplica srbwidp05)"]
         SQL_TEMP["SQL Server (Docker local)<br/>temporal hasta Azure SQL"]
     end
 

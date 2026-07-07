@@ -1326,7 +1326,7 @@ R: El certificado del GDC SINTWS es emitido por una CA interna de SAREB no confi
 R: Verificar que `assemblyPath` en el plugins.json apunta a la ruta correcta. En local: ruta absoluta a `plugins/SarebEnrichments.dll`. En Azure (deploy): ruta relativa `plugins/SarebEnrichments.dll` (el script `deploy-manual.ps1` ajusta automaticamente).
 
 **P: Timeout en GDC (120s).**
-R: La actividad `SubirGDCActivity` tiene un timeout hardcoded de 120s en el orchestrator. Si GDC es lento, el resultado se marca con `gdc.exitoso=false` y `gdc.mensaje="Timeout"`, pero el documento se persiste igualmente. Verificar estado de red hacia `srbwidd03.sareb.srb:8090`.
+R: La actividad `SubirGDCActivity` tiene un timeout hardcoded de 120s en el orchestrator. Si GDC es lento, el resultado se marca con `gdc.exitoso=false` y `gdc.mensaje="Timeout"`, pero el documento se persiste igualmente. Verificar estado de red hacia el host GDC del entorno (prod: `srbwidp04.sareb.srb:8090`; dev: `srbwidd03.sareb.srb:8090`).
 
 **P: "Cold start" lento en Azure.**
 R: Normal en Consumption Plan (2-10s). Para reducirlo: considerar Premium Plan con warm instances, o mantener un health check periodico.
