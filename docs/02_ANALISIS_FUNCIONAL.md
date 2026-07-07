@@ -306,7 +306,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | **IDUFIR / CRU** | Codigo Registral Unico de 14 digitos que identifica una finca de forma univoca a nivel nacional. |
 | **Referencia Catastral** | Codigo de 20 caracteres que identifica un inmueble en el Catastro. Validado por `CatastralReferenceValidator`. |
 | **NIF/NIE/CIF** | Documentos de identidad fiscal espanoles. Validados algoritmicamente por `NifValidator`. |
-| **GDC SINTWS** | Servicio SOAP del Gestor Documental Corporativo de SAREB (host: srbwidd03.sareb.srb:8090). |
+| **GDC SINTWS** | Servicio SOAP del Gestor Documental Corporativo de SAREB (host prod: srbwidp04.sareb.srb:8090; dev: srbwidd03.sareb.srb:8090). |
 | **Fallback** | Mecanismo automatico que redirige al proveedor alternativo (GPT) cuando el primario (DI/CU) tiene baja confianza o falla. |
 | **Plugin** | Componente de integracion extensible (REST, SOAP o DLL .NET custom) que enriquece datos extraidos con fuentes externas. |
 | **AssetResolver** | Plugin HTTP que consulta la tabla `DM_POSICION_AAII_TB` para resolver el activo inmobiliario (IdActivo). Soporta tres criterios: IDUFIR, Referencia Catastral y Direccion (fuzzy scoring). Criterios configurables con AND/OR. |
@@ -403,7 +403,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | **Formatos aceptados** | Solo PDF. Puede recibirse como Base64 sin saltos de línea (RFC 4648) o recuperarse desde GDC vía `documento.objectIdGDC`. |
 | **Tamaño maximo** | Limitado por el tamaño maximo de input de Durable Functions (~60 KB entity size en Storage). Documentos grandes pueden requerir blob-reference pattern (no implementado). |
 | **Timeouts** | GDC: 120s (hardcoded en orchestrator). Servicios AI: configurable por proveedor (DI: 120s, GPT: 30-60s, CU: configurable). |
-| **Conectividad GDC** | Requiere acceso de red a `srbwidd03.sareb.srb:8090`. SSL bypass configurable para certificado CA corporativo no confiado en Linux. |
+| **Conectividad GDC** | Requiere acceso de red al host GDC del entorno (prod: `srbwidp04.sareb.srb:8090`; dev: `srbwidd03.sareb.srb:8090`). SSL bypass configurable para certificado CA corporativo no confiado en Linux. |
 | **Region Azure** | Function App y mayoria de servicios en West Europe. Content Understanding en Sweden Central (unica region disponible con la funcionalidad requerida). |
 | **Modelo Consumption** | Function App en plan Consumption: cold start posible (~2-10s). Timeout maximo por ejecucion: 10 min (default) o 230s (HTTP trigger). |
 | **Idioma** | Documentos en espanol. Prompts GPT y reglas de validacion asumen idioma espanol. |
