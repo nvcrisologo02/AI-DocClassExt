@@ -1285,4 +1285,61 @@ public class DocumentProcessOrchestratorTests
         prepInput.Should().NotBeNull();
         prepInput!.MaxPaginasClasificacion.Should().Be(5);
     }
+
+    [Fact]
+    public async Task RunOrchestrator_BlobFirstSinMarkdown_FallbackLayoutDocumentoCompletoPropagaBlobPath()
+    {
+        // Regresión: en modo blob-first el orquestador vacía Content.Base64 (ahorro de memoria) y
+        // trabaja solo con BlobPath. El fallback DI Layout de "documento completo" construía el
+        // ExtraerMarkdownLayoutInput con Content.Base64 (vacío) sin propagar BlobPath, por lo que el
+        // provider enviaba base64Source vacío y Azure DI respondía 400 InvalidContent
+        // ("The file is corrupted or format is unsupported").
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Documento.Content.Base64 = string.Empty;
+        entrada.Documento.BlobPath = "documents/blob-first.pdf";
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/blob-first.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        // El layout no devuelve markdown en ninguna llamada → fuerza el fallback de documento completo.
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Markdown = null,
+            Paginas = 0
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.95,
+            ConfianzaGPT = 0.95,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "nota.simple",
+            ContentExtraido = null
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+        // Extracción sin markdown → markdownNormalizacion vacío → dispara el fallback DI Layout.
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+
+        await orchestrator.RunOrchestrator(context);
+
+        var layoutInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
+        layoutInput.Should().NotBeNull();
+        layoutInput!.BlobPath.Should().NotBeNullOrWhiteSpace(
+            "en blob-first el fallback de documento completo debe usar BlobPath (urlSource) y no un base64 vacío");
+        layoutInput.BlobPath.Should().Be("documents/blob-first.pdf");
+    }
 }
