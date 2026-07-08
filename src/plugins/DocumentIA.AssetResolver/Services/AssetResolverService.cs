@@ -82,6 +82,13 @@ public class AssetResolverService
         int CandidatosEvaluados,
         string Razon);
 
+    private sealed record GrupoResolucion(
+        bool SinCriterios,
+        CriteriosUsados? CriteriosUsados,
+        List<ActivoEncontrado> ActivosAAII,
+        List<ActivoEncontrado> ActivosAACC,
+        string CriterioUtilizado);
+
     private static readonly Dictionary<string, FieldProjection> ValidFieldsByRequestName = BuildValidFieldsByRequestName();
 
     private static readonly Dictionary<string, FieldProjection> ValidFieldsByColumnName =
@@ -129,6 +136,83 @@ public class AssetResolverService
         var response = new GetAAIIInfoResponse { CorrelationId = request.CorrelationId };
         var modoCombinacion = NormalizeModoCombinacion(request.ModoCombinacionCriterios);
 
+        // Resolver campos solicitados por origen; #ALL# expande a todas las columnas de ese origen.
+        List<string> erroresAaii = [];
+        List<string> erroresAacc = [];
+
+        var camposValidosAaii = request.AAII_Search
+            ? ResolveRequestedFields(request.RequestedFields, ValidFieldsByRequestName, AllColumnNames, out erroresAaii)
+            : [];
+
+        var camposValidosAacc = request.AACC_Search
+            ? ResolveRequestedFields(request.RequestedFields, ValidFieldsByRequestNameAacc, AllColumnNamesAacc, out erroresAacc)
+            : [];
+
+        var resolucion = await ResolverGrupoAsync(
+            request.ExtractedData,
+            request,
+            aplicarOverrides: true,
+            modoCombinacion,
+            camposValidosAaii,
+            camposValidosAacc,
+            ct);
+
+        if (resolucion.SinCriterios)
+        {
+            response.Message = "No se encontraron criterios de búsqueda (IDUFIR, ReferenciaCatastral, Dirección o DirecciónTipificada) en los datos extraídos.";
+            return response;
+        }
+
+        if (!request.AAII_Search && !request.AACC_Search)
+        {
+            response.Message = "No hay ningún origen habilitado para búsqueda. Activa AAII_Search y/o AACC_Search.";
+            return response;
+        }
+
+        response.CriteriosUsados = resolucion.CriteriosUsados;
+        response.CamposConErrorAAII = erroresAaii;
+        response.CamposConErrorAACC = erroresAacc;
+        response.CamposConError = [.. erroresAaii.Concat(erroresAacc).Distinct(StringComparer.OrdinalIgnoreCase)];
+
+        response.ActivosAAII = resolucion.ActivosAAII;
+        response.ActivosAACC = resolucion.ActivosAACC;
+        response.CountAAII = response.ActivosAAII.Count;
+        response.CountAACC = response.ActivosAACC.Count;
+
+        response.Activos =
+        [
+            .. response.ActivosAAII,
+            .. response.ActivosAACC
+        ];
+
+        response.Count = response.Activos.Count;
+        response.Found = response.Count > 0;
+        response.CriterioUtilizado = resolucion.CriterioUtilizado;
+
+        response.Message = response.Count == 0
+            ? $"No se encontraron activos con los criterios proporcionados ({response.CriterioUtilizado})."
+            : $"Se encontraron {response.Count} activos (AAII={response.CountAAII}, AACC={response.CountAACC}).";
+
+        return response;
+    }
+
+    /// <summary>
+    /// Resuelve un grupo de criterios (detección por aliases, consultas AAII/AACC y
+    /// combinación AND/OR) de forma aislada. Con aplicarOverrides=false se ignoran los
+    /// overrides globales del request y la dirección tipificada (modo multi-grupo).
+    /// </summary>
+    private async Task<GrupoResolucion> ResolverGrupoAsync(
+        Dictionary<string, string?> datos,
+        GetAAIIInfoRequest request,
+        bool aplicarOverrides,
+        string modoCombinacion,
+        List<string> camposValidosAaii,
+        List<string> camposValidosAacc,
+        CancellationToken ct)
+    {
+        var idufirOverride = aplicarOverrides ? request.IdufirOverride : null;
+        var refCatastralOverride = aplicarOverrides ? request.ReferenciaCatastralOverride : null;
+
         // 1. Detectar valores de búsqueda (aliases del request tienen prioridad sobre config global)
         var aliasesIdufir = request.MapeoIdufir is { Count: > 0 }
             ? request.MapeoIdufir
@@ -140,14 +224,11 @@ public class AssetResolverService
         // Regla de negocio: la resolución por aliases solo debe ejecutarse si ambos campos
         // vienen vacíos. Si uno viene indicado (override o mapeado en la tipología),
         // la búsqueda se realiza exclusivamente por el/los campos indicados.
-        // Nota: no consideramos presencia directa en `ExtractedData` como indicador;
-        // en su lugar, el hecho de que exista un mapeo en la tipología indica que
-        // la intención es buscar por ese campo.
-        bool indicatedIdufir = (!string.IsNullOrWhiteSpace(request.IdufirOverride)
-            && !request.IdufirOverride.Trim().Equals("No consta", StringComparison.OrdinalIgnoreCase))
+        bool indicatedIdufir = (!string.IsNullOrWhiteSpace(idufirOverride)
+            && !idufirOverride.Trim().Equals("No consta", StringComparison.OrdinalIgnoreCase))
             || (request.MapeoIdufir is { Count: > 0 });
-        bool indicatedRefCat = (!string.IsNullOrWhiteSpace(request.ReferenciaCatastralOverride)
-            && !request.ReferenciaCatastralOverride.Trim().Equals("No consta", StringComparison.OrdinalIgnoreCase))
+        bool indicatedRefCat = (!string.IsNullOrWhiteSpace(refCatastralOverride)
+            && !refCatastralOverride.Trim().Equals("No consta", StringComparison.OrdinalIgnoreCase))
             || (request.MapeoReferenciaCatastral is { Count: > 0 });
 
         // Respetar flags de habilitación: si un criterio está deshabilitado, vaciar aliases
@@ -160,33 +241,29 @@ public class AssetResolverService
 
         if (!indicatedIdufir && !indicatedRefCat)
         {
-            // Ninguno indicado: intentar resolver ambos mediante aliases
-            idufir = DetectarValor(request.ExtractedData, request.IdufirOverride, aliasesIdufir);
-            refCatastral = DetectarValor(request.ExtractedData, request.ReferenciaCatastralOverride, aliasesRefCat);
+            idufir = DetectarValor(datos, idufirOverride, aliasesIdufir);
+            refCatastral = DetectarValor(datos, refCatastralOverride, aliasesRefCat);
         }
         else if (indicatedIdufir && !indicatedRefCat)
         {
-            // Solo IDUFIR indicado: resolver IDUFIR y no intentar resolver referencia catastral
-            idufir = DetectarValor(request.ExtractedData, request.IdufirOverride, aliasesIdufir);
+            idufir = DetectarValor(datos, idufirOverride, aliasesIdufir);
             refCatastral = null;
         }
         else if (!indicatedIdufir && indicatedRefCat)
         {
-            // Solo ReferenciaCatastral indicada: resolver referencia y no intentar IDUFIR
             idufir = null;
-            refCatastral = DetectarValor(request.ExtractedData, request.ReferenciaCatastralOverride, aliasesRefCat);
+            refCatastral = DetectarValor(datos, refCatastralOverride, aliasesRefCat);
         }
         else
         {
-            // Ambos indicados: resolver ambos
-            idufir = DetectarValor(request.ExtractedData, request.IdufirOverride, aliasesIdufir);
-            refCatastral = DetectarValor(request.ExtractedData, request.ReferenciaCatastralOverride, aliasesRefCat);
+            idufir = DetectarValor(datos, idufirOverride, aliasesIdufir);
+            refCatastral = DetectarValor(datos, refCatastralOverride, aliasesRefCat);
         }
 
         var direccionResuelta = request.BusquedaDireccionHabilitada
-            ? ResolverDireccion(request)
+            ? ResolverDireccion(datos, request)
             : null;
-        var direccionTipificadaResuelta = request.BusquedaDireccionTipificadaHabilitada
+        var direccionTipificadaResuelta = aplicarOverrides && request.BusquedaDireccionTipificadaHabilitada
             ? ResolverDireccionTipificada(request)
             : null;
 
@@ -195,17 +272,10 @@ public class AssetResolverService
             && direccionResuelta is null
             && direccionTipificadaResuelta is null)
         {
-            response.Message = "No se encontraron criterios de búsqueda (IDUFIR, ReferenciaCatastral, Dirección o DirecciónTipificada) en los datos extraídos.";
-            return response;
+            return new GrupoResolucion(true, null, [], [], string.Empty);
         }
 
-        if (!request.AAII_Search && !request.AACC_Search)
-        {
-            response.Message = "No hay ningún origen habilitado para búsqueda. Activa AAII_Search y/o AACC_Search.";
-            return response;
-        }
-
-        response.CriteriosUsados = new CriteriosUsados
+        var criteriosUsados = new CriteriosUsados
         {
             Idufir = idufir,
             ReferenciaCatastral = refCatastral,
@@ -240,23 +310,7 @@ public class AssetResolverService
                 }
         };
 
-        // 2. Resolver campos solicitados por origen; #ALL# expande a todas las columnas de ese origen.
-        List<string> erroresAaii = [];
-        List<string> erroresAacc = [];
-
-        var camposValidosAaii = request.AAII_Search
-            ? ResolveRequestedFields(request.RequestedFields, ValidFieldsByRequestName, AllColumnNames, out erroresAaii)
-            : [];
-
-        var camposValidosAacc = request.AACC_Search
-            ? ResolveRequestedFields(request.RequestedFields, ValidFieldsByRequestNameAacc, AllColumnNamesAacc, out erroresAacc)
-            : [];
-
-        response.CamposConErrorAAII = erroresAaii;
-        response.CamposConErrorAACC = erroresAacc;
-        response.CamposConError = [.. erroresAaii.Concat(erroresAacc).Distinct(StringComparer.OrdinalIgnoreCase)];
-
-        // 3. Consultar BD por origen habilitado y combinar resultados por criterio en cada origen.
+        // 2. Consultar BD por origen habilitado y combinar resultados por criterio en cada origen.
         List<(string Nombre, List<DmPosicionAAII> Resultados)> resultadosAaiiPorCriterio = [];
         List<(string Nombre, List<DmPosicionAACC> Resultados)> resultadosAaccPorCriterio = [];
 
@@ -281,17 +335,17 @@ public class AssetResolverService
                     request.UmbralScoreDireccion > 0.0 ? request.UmbralScoreDireccion : 0.75,
                     ct);
 
-                response.CriteriosUsados!.Direccion!.Score = direccionResultado.MejorScore;
-                response.CriteriosUsados.Direccion.CandidatosEvaluados = direccionResultado.CandidatosEvaluados;
-                response.CriteriosUsados.Direccion.Razon = direccionResultado.Razon;
+                criteriosUsados.Direccion!.Score = direccionResultado.MejorScore;
+                criteriosUsados.Direccion.CandidatosEvaluados = direccionResultado.CandidatosEvaluados;
+                criteriosUsados.Direccion.Razon = direccionResultado.Razon;
                 resultadosAaiiPorCriterio.Add(("Direccion", direccionResultado.Resultados));
             }
 
             if (direccionTipificadaResuelta is not null)
             {
                 var direccionTipificadaResultado = await BuscarPorDireccionTipificadaAsync(direccionTipificadaResuelta, ct);
-                response.CriteriosUsados!.DireccionTipificada!.CandidatosEvaluados = direccionTipificadaResultado.CandidatosEvaluados;
-                response.CriteriosUsados.DireccionTipificada.Razon = direccionTipificadaResultado.Razon;
+                criteriosUsados.DireccionTipificada!.CandidatosEvaluados = direccionTipificadaResultado.CandidatosEvaluados;
+                criteriosUsados.DireccionTipificada.Razon = direccionTipificadaResultado.Razon;
                 resultadosAaiiPorCriterio.Add(("DireccionTipificada", direccionTipificadaResultado.Resultados));
             }
         }
@@ -317,12 +371,12 @@ public class AssetResolverService
                     request.UmbralScoreDireccion > 0.0 ? request.UmbralScoreDireccion : 0.75,
                     ct);
 
-                if (response.CriteriosUsados?.Direccion is not null
-                    && direccionResultado.MejorScore > response.CriteriosUsados.Direccion.Score)
+                if (criteriosUsados.Direccion is not null
+                    && direccionResultado.MejorScore > criteriosUsados.Direccion.Score)
                 {
-                    response.CriteriosUsados.Direccion.Score = direccionResultado.MejorScore;
-                    response.CriteriosUsados.Direccion.CandidatosEvaluados = direccionResultado.CandidatosEvaluados;
-                    response.CriteriosUsados.Direccion.Razon = direccionResultado.Razon;
+                    criteriosUsados.Direccion.Score = direccionResultado.MejorScore;
+                    criteriosUsados.Direccion.CandidatosEvaluados = direccionResultado.CandidatosEvaluados;
+                    criteriosUsados.Direccion.Razon = direccionResultado.Razon;
                 }
 
                 resultadosAaccPorCriterio.Add(("Direccion", direccionResultado.Resultados));
@@ -332,11 +386,11 @@ public class AssetResolverService
             {
                 var direccionTipificadaResultado = await BuscarPorDireccionTipificadaAaccAsync(direccionTipificadaResuelta, ct);
 
-                if (response.CriteriosUsados?.DireccionTipificada is not null
-                    && direccionTipificadaResultado.CandidatosEvaluados > response.CriteriosUsados.DireccionTipificada.CandidatosEvaluados)
+                if (criteriosUsados.DireccionTipificada is not null
+                    && direccionTipificadaResultado.CandidatosEvaluados > criteriosUsados.DireccionTipificada.CandidatosEvaluados)
                 {
-                    response.CriteriosUsados.DireccionTipificada.CandidatosEvaluados = direccionTipificadaResultado.CandidatosEvaluados;
-                    response.CriteriosUsados.DireccionTipificada.Razon = direccionTipificadaResultado.Razon;
+                    criteriosUsados.DireccionTipificada.CandidatosEvaluados = direccionTipificadaResultado.CandidatosEvaluados;
+                    criteriosUsados.DireccionTipificada.Razon = direccionTipificadaResultado.Razon;
                 }
 
                 resultadosAaccPorCriterio.Add(("DireccionTipificada", direccionTipificadaResultado.Resultados));
@@ -346,38 +400,25 @@ public class AssetResolverService
         var resultadosAaii = CombinarResultados(resultadosAaiiPorCriterio, modoCombinacion);
         var resultadosAacc = CombinarResultadosAacc(resultadosAaccPorCriterio, modoCombinacion);
 
-        response.ActivosAAII = resultadosAaii.Select(r => BuildActivoEncontrado(r, camposValidosAaii)).ToList();
-        response.ActivosAACC = resultadosAacc.Select(r => BuildActivoEncontradoAacc(r, camposValidosAacc)).ToList();
-        response.CountAAII = response.ActivosAAII.Count;
-        response.CountAACC = response.ActivosAACC.Count;
-
-        response.Activos =
-        [
-            .. response.ActivosAAII,
-            .. response.ActivosAACC
-        ];
-
-        response.Count = response.Activos.Count;
-        response.Found = response.Count > 0;
+        var activosAaii = resultadosAaii.Select(r => BuildActivoEncontrado(r, camposValidosAaii)).ToList();
+        var activosAacc = resultadosAacc.Select(r => BuildActivoEncontradoAacc(r, camposValidosAacc)).ToList();
 
         var criterioAaii = BuildCriterioUtilizado(resultadosAaiiPorCriterio, modoCombinacion);
         var criterioAacc = BuildCriterioUtilizadoAacc(resultadosAaccPorCriterio, modoCombinacion);
-        response.CriterioUtilizado = string.Join(" | ", new[]
+        var criterioUtilizado = string.Join(" | ", new[]
         {
             request.AAII_Search ? $"AAII:{(string.IsNullOrWhiteSpace(criterioAaii) ? "-" : criterioAaii)}" : null,
             request.AACC_Search ? $"AACC:{(string.IsNullOrWhiteSpace(criterioAacc) ? "-" : criterioAacc)}" : null
         }.Where(x => !string.IsNullOrWhiteSpace(x)));
 
-        response.Message = response.Count == 0
-            ? $"No se encontraron activos con los criterios proporcionados ({response.CriterioUtilizado})."
-            : $"Se encontraron {response.Count} activos (AAII={response.CountAAII}, AACC={response.CountAACC}).";
-
-        return response;
+        return new GrupoResolucion(false, criteriosUsados, activosAaii, activosAacc, criterioUtilizado);
     }
 
     // ── Búsqueda fuzzy por dirección ──────────────────────────────────────────────────────────────
 
-    private DireccionResolvedValues? ResolverDireccion(GetAAIIInfoRequest request)
+    private DireccionResolvedValues? ResolverDireccion(
+        Dictionary<string, string?> datos,
+        GetAAIIInfoRequest request)
     {
         var aliasesCompleta = request.MapeoDireccionCompleta is { Count: > 0 }
             ? request.MapeoDireccionCompleta
@@ -395,11 +436,11 @@ public class AssetResolverService
             ? request.MapeoDireccionCodigoPostal
             : _aliases.DireccionCodigoPostal;
 
-        var rawCompleta = DetectarValor(request.ExtractedData, null, aliasesCompleta);
-        var rawVia = DetectarValor(request.ExtractedData, null, aliasesVia);
-        var rawNum = DetectarValor(request.ExtractedData, null, aliasesNum);
-        var rawMun = DetectarValor(request.ExtractedData, null, aliasesMun);
-        var rawCp = DetectarValor(request.ExtractedData, null, aliasesCp);
+        var rawCompleta = DetectarValor(datos, null, aliasesCompleta);
+        var rawVia = DetectarValor(datos, null, aliasesVia);
+        var rawNum = DetectarValor(datos, null, aliasesNum);
+        var rawMun = DetectarValor(datos, null, aliasesMun);
+        var rawCp = DetectarValor(datos, null, aliasesCp);
 
         if (!string.IsNullOrWhiteSpace(rawCompleta))
         {
