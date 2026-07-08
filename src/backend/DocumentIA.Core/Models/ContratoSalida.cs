@@ -1027,6 +1027,11 @@ public class ObtenerActivoInput
     public List<string> MapeoDireccionCodigoPostal { get; set; } = new();
     /// <summary>Umbral mínimo de score para aceptar un match por dirección (0.0–1.0, default 0.75).</summary>
     public double UmbralScoreDireccion { get; set; } = 0.75;
+    /// <summary>
+    /// Nombres de campos de DatosExtraidos que son colecciones de activos (array de
+    /// objetos); cada elemento se expande a un grupo de criterios para el AssetResolver.
+    /// </summary>
+    public List<string> MapeoColeccionActivos { get; set; } = new();
 }
 
 /// <summary>

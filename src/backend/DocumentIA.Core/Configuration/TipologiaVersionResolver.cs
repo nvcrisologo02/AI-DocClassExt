@@ -210,6 +210,7 @@ public class TipologiaVersionResolver : ITipologiaVersionResolver
                 AssetResolverMapeoDireccionMunicipio: config.AssetResolver?.MapeoDireccionMunicipio,
                 AssetResolverMapeoDireccionCodigoPostal: config.AssetResolver?.MapeoDireccionCodigoPostal,
                 AssetResolverUmbralScoreDireccion: config.AssetResolver?.UmbralScoreDireccion ?? 0.75,
+                AssetResolverMapeoColeccionActivos: config.AssetResolver?.MapeoColeccionActivos,
                 TipologiaNombre: config.TipologiaNombre ?? (config.ResolvedTdn2 ?? string.Empty),
                 TipologiaMGDCMatricula: config.ResolvedMatricula ?? string.Empty,
                 GdcTipoDocumento: config.ResolvedGdcTipo ?? string.Empty,

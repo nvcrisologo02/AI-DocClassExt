@@ -377,6 +377,64 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public void BuildObtenerActivoInput_PropagaMapeoColeccionActivos()
+    {
+        var entrada = new ContratoEntrada
+        {
+            Instrucciones = new Instrucciones { AssetResolver = null },
+            Trazabilidad = new Trazabilidad { CorrelationId = "corr-003" }
+        };
+
+        var salida = new ContratoSalida
+        {
+            Identificacion = new Identificacion { Tipologia = "tasa.basura.1_0" },
+            DatosExtraidos = new Dictionary<string, object>()
+        };
+
+        var tipologia = new ResolvedTipologia(
+            RequestedValue: "tasa.basura@1.0",
+            TipologiaId: "tasa.basura",
+            Version: "1.0",
+            TechnicalKey: "tasa.basura.1_0",
+            IsDefault: true,
+            AssetResolverEnabled: true,
+            AssetResolverMapeoReferenciaCatastral: new List<string> { "ReferenciaCastatral" },
+            AssetResolverMapeoColeccionActivos: new List<string> { "DireccionPropiedades" });
+
+        var input = DocumentProcessOrchestrator.BuildObtenerActivoInput(entrada, salida, tipologia);
+
+        input.MapeoColeccionActivos.Should().BeEquivalentTo(new[] { "DireccionPropiedades" });
+    }
+
+    [Fact]
+    public void BuildObtenerActivoInput_SinMapeoColeccionActivos_DevuelveListaVacia()
+    {
+        var entrada = new ContratoEntrada
+        {
+            Instrucciones = new Instrucciones { AssetResolver = null },
+            Trazabilidad = new Trazabilidad { CorrelationId = "corr-004" }
+        };
+
+        var salida = new ContratoSalida
+        {
+            Identificacion = new Identificacion { Tipologia = "nota.simple.1_0" },
+            DatosExtraidos = new Dictionary<string, object>()
+        };
+
+        var tipologia = new ResolvedTipologia(
+            RequestedValue: "nota.simple@1.0",
+            TipologiaId: "nota.simple",
+            Version: "1.0",
+            TechnicalKey: "nota.simple.1_0",
+            IsDefault: true,
+            AssetResolverEnabled: true);
+
+        var input = DocumentProcessOrchestrator.BuildObtenerActivoInput(entrada, salida, tipologia);
+
+        input.MapeoColeccionActivos.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_DuplicadoDetectado_RetornaSalidaReutilizada()
     {
         var orchestrator = CreateOrchestrator();

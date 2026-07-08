@@ -68,6 +68,7 @@ public class DocumentProcessOrchestrator
         var mapeoDireccionMunicipio = tipologiaResuelta.AssetResolverMapeoDireccionMunicipio;
         var mapeoDireccionCodigoPostal = tipologiaResuelta.AssetResolverMapeoDireccionCodigoPostal;
         var umbralScoreDireccion = tipologiaResuelta.AssetResolverUmbralScoreDireccion;
+        var mapeoColeccionActivos = tipologiaResuelta.AssetResolverMapeoColeccionActivos;
 
         return new ObtenerActivoInput
         {
@@ -88,7 +89,8 @@ public class DocumentProcessOrchestrator
             MapeoDireccionNumero = mapeoDireccionNumero ?? new(),
             MapeoDireccionMunicipio = mapeoDireccionMunicipio ?? new(),
             MapeoDireccionCodigoPostal = mapeoDireccionCodigoPostal ?? new(),
-            UmbralScoreDireccion = umbralScoreDireccion
+            UmbralScoreDireccion = umbralScoreDireccion,
+            MapeoColeccionActivos = mapeoColeccionActivos?.ToList() ?? new List<string>()
         };
     }
     [Function("DocumentProcessOrchestrator")]
