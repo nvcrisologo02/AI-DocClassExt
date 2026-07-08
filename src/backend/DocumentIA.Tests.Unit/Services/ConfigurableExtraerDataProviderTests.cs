@@ -139,6 +139,40 @@ public class ConfigurableExtraerDataProviderTests
     }
 
     [Fact]
+    public async Task ObtenerDatosAsync_CuExtraccionException_RegistraModelKeyEnFallbackRazon()
+    {
+        using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true);
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CuExtraccionException(
+                "default.cu",
+                "TimeoutException",
+                "CU supero el hard timeout",
+                new TimeoutException("hard timeout")));
+
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object>()
+            });
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        result.FallbackUsado.Should().BeTrue();
+        result.FallbackRazon.Should().Be("exception:TimeoutException:cuModelKey=default.cu");
+    }
+
+    [Fact]
     public async Task ObtenerDatosAsync_CuInsuficiente_ActivaFallbackGpt()
     {
         using var fixture = TestFixture.Create(minFieldsRatio: 0.90, fallbackEnabled: true);

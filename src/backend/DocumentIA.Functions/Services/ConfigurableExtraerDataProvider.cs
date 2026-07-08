@@ -133,6 +133,16 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
                 obtenidosEsperados,
                 esperados);
         }
+        catch (CuExtraccionException ex)
+        {
+            fallbackRazon = $"exception:{ex.RazonTipo}:cuModelKey={ex.ModelKey}";
+            _logger.LogWarning(
+                ex,
+                "Extracción CU falló para {Tipologia} con modelKey {ModelKey} ({RazonTipo}). Activando fallback GPT.",
+                input.Tipologia,
+                ex.ModelKey,
+                ex.RazonTipo);
+        }
         catch (Exception ex)
         {
             fallbackRazon = $"exception:{ex.GetType().Name}";

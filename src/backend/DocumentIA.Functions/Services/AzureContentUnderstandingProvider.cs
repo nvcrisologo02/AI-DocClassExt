@@ -186,7 +186,9 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                     analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
                     RegisterCircuitFailure(modelKey, input.Tipologia, "hard-timeout");
                     TrackHardTimeout(input.Tipologia, modelKey, attempt, hardTimeoutSeconds);
-                    throw new TimeoutException(
+                    throw new CuExtraccionException(
+                        modelKey,
+                        nameof(TimeoutException),
                         $"Azure Content Understanding superó el hard timeout de {hardTimeoutSeconds}s para la tipología '{input.Tipologia}' y modelKey '{modelKey}'.",
                         ex);
                 }
@@ -232,6 +234,10 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             }
 
             RegisterCircuitSuccess(modelKey, input.Tipologia);
+        }
+        catch (Exception ex) when (ex is not CuExtraccionException && !cancellationToken.IsCancellationRequested)
+        {
+            throw new CuExtraccionException(modelKey, ex.GetType().Name, ex.Message, ex);
         }
         finally
         {
@@ -369,7 +375,9 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         }
 
         TrackCircuitRejected(tipologia, preferredModelKey);
-        throw new InvalidOperationException(
+        throw new CuExtraccionException(
+            preferredModelKey,
+            "CircuitRejected",
             $"Circuit breaker abierto para modelKey '{preferredModelKey}' y no hay fallback disponible para tipología '{tipologia}'.");
     }
 
