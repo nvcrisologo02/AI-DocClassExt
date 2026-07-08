@@ -148,18 +148,43 @@ public class AssetResolverService
             ? ResolveRequestedFields(request.RequestedFields, ValidFieldsByRequestNameAacc, AllColumnNamesAacc, out erroresAacc)
             : [];
 
-        var resolucion = await ResolverGrupoAsync(
-            request.ExtractedData,
-            request,
-            aplicarOverrides: true,
-            modoCombinacion,
-            camposValidosAaii,
-            camposValidosAacc,
-            ct);
+        // Modo multi-grupo: cada grupo identifica un activo potencial y se resuelve de
+        // forma aislada. Sin Grupos, ExtractedData actúa como grupo único (modo clásico).
+        var modoMultiGrupo = request.Grupos is { Count: > 0 };
+        var grupos = modoMultiGrupo
+            ? request.Grupos!
+            : new List<Dictionary<string, string?>> { request.ExtractedData };
 
-        if (resolucion.SinCriterios)
+        const string MensajeSinCriterios =
+            "No se encontraron criterios de búsqueda (IDUFIR, ReferenciaCatastral, Dirección o DirecciónTipificada) en los datos extraídos.";
+
+        var resoluciones = new List<GrupoResolucion>();
+        for (var indice = 0; indice < grupos.Count; indice++)
         {
-            response.Message = "No se encontraron criterios de búsqueda (IDUFIR, ReferenciaCatastral, Dirección o DirecciónTipificada) en los datos extraídos.";
+            var datos = grupos[indice] ?? new Dictionary<string, string?>();
+            var resolucion = await ResolverGrupoAsync(
+                datos, request, aplicarOverrides: !modoMultiGrupo, modoCombinacion,
+                camposValidosAaii, camposValidosAacc, ct);
+            resoluciones.Add(resolucion);
+
+            response.ActivosPorGrupo.Add(new GrupoResultado
+            {
+                Indice = indice,
+                CriteriosEntrada = datos,
+                CriteriosUsados = resolucion.CriteriosUsados,
+                ActivosAAII = resolucion.ActivosAAII,
+                ActivosAACC = resolucion.ActivosAACC,
+                Activos = [.. resolucion.ActivosAAII, .. resolucion.ActivosAACC],
+                Count = resolucion.ActivosAAII.Count + resolucion.ActivosAACC.Count,
+                CriterioUtilizado = resolucion.CriterioUtilizado,
+                Mensaje = resolucion.SinCriterios ? MensajeSinCriterios : null
+            });
+        }
+
+        // Compatibilidad modo clásico: mismos early-return y mensajes que el flujo original.
+        if (!modoMultiGrupo && resoluciones[0].SinCriterios)
+        {
+            response.Message = MensajeSinCriterios;
             return response;
         }
 
@@ -169,13 +194,18 @@ public class AssetResolverService
             return response;
         }
 
-        response.CriteriosUsados = resolucion.CriteriosUsados;
+        if (!modoMultiGrupo)
+        {
+            response.CriteriosUsados = resoluciones[0].CriteriosUsados;
+        }
+
         response.CamposConErrorAAII = erroresAaii;
         response.CamposConErrorAACC = erroresAacc;
         response.CamposConError = [.. erroresAaii.Concat(erroresAacc).Distinct(StringComparer.OrdinalIgnoreCase)];
 
-        response.ActivosAAII = resolucion.ActivosAAII;
-        response.ActivosAACC = resolucion.ActivosAACC;
+        // Concatenación sin dedup entre grupos: un activo que responde a N grupos aparece N veces.
+        response.ActivosAAII = response.ActivosPorGrupo.SelectMany(g => g.ActivosAAII).ToList();
+        response.ActivosAACC = response.ActivosPorGrupo.SelectMany(g => g.ActivosAACC).ToList();
         response.CountAAII = response.ActivosAAII.Count;
         response.CountAACC = response.ActivosAACC.Count;
 
@@ -187,11 +217,18 @@ public class AssetResolverService
 
         response.Count = response.Activos.Count;
         response.Found = response.Count > 0;
-        response.CriterioUtilizado = resolucion.CriterioUtilizado;
 
-        response.Message = response.Count == 0
-            ? $"No se encontraron activos con los criterios proporcionados ({response.CriterioUtilizado})."
-            : $"Se encontraron {response.Count} activos (AAII={response.CountAAII}, AACC={response.CountAACC}).";
+        response.CriterioUtilizado = modoMultiGrupo
+            ? string.Join(" | ", response.ActivosPorGrupo.Select(g => $"Grupo{g.Indice}:[{(string.IsNullOrWhiteSpace(g.CriterioUtilizado) ? "-" : g.CriterioUtilizado)}]"))
+            : resoluciones[0].CriterioUtilizado;
+
+        response.Message = modoMultiGrupo
+            ? (response.Count == 0
+                ? $"No se encontraron activos en ninguno de los {grupos.Count} grupos."
+                : $"Se procesaron {grupos.Count} grupos: {response.Count} activos (AAII={response.CountAAII}, AACC={response.CountAACC}).")
+            : (response.Count == 0
+                ? $"No se encontraron activos con los criterios proporcionados ({response.CriterioUtilizado})."
+                : $"Se encontraron {response.Count} activos (AAII={response.CountAAII}, AACC={response.CountAACC}).");
 
         return response;
     }
@@ -1205,5 +1242,27 @@ public class AssetResolverService
         public string IdActivo { get; set; } = string.Empty;
         public DateTime? FchCierre { get; set; }
         public Dictionary<string, object?> CamposSolicitados { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Resultado de la resolución de un grupo de criterios (un activo potencial por grupo).
+    /// </summary>
+    public class GrupoResultado
+    {
+        /// <summary>Índice del grupo en la petición (0-based).</summary>
+        public int Indice { get; set; }
+        /// <summary>Criterios de entrada del grupo (eco para trazabilidad).</summary>
+        public Dictionary<string, string?> CriteriosEntrada { get; set; } = new();
+        /// <summary>Criterios efectivamente resueltos para este grupo.</summary>
+        public CriteriosUsados? CriteriosUsados { get; set; }
+        public List<ActivoEncontrado> ActivosAAII { get; set; } = [];
+        public List<ActivoEncontrado> ActivosAACC { get; set; } = [];
+        /// <summary>Agregado AAII + AACC del grupo.</summary>
+        public List<ActivoEncontrado> Activos { get; set; } = [];
+        public int Count { get; set; }
+        /// <summary>Criterio utilizado en este grupo (mismo formato que el top-level).</summary>
+        public string? CriterioUtilizado { get; set; }
+        /// <summary>Mensaje del grupo (p.ej. sin criterios resolubles).</summary>
+        public string? Mensaje { get; set; }
     }
 }

@@ -137,6 +137,15 @@ public class AssetResolverController : ControllerBase
 
         /// <summary>Umbral mínimo de score para aceptar un match por dirección (0.0–1.0, default 0.75).</summary>
         public double UmbralScoreDireccion { get; set; } = 0.75;
+
+        /// <summary>
+        /// Grupos de criterios de búsqueda (uno por activo potencial). Cada grupo es un
+        /// diccionario campo→valor que se resuelve con los mismos aliases Mapeo* que
+        /// ExtractedData. Si es null o vacío, se usa ExtractedData como grupo único
+        /// (comportamiento clásico). En modo multi-grupo los overrides globales
+        /// (IdufirOverride, ReferenciaCatastralOverride, DireccionTipificada) se ignoran.
+        /// </summary>
+        public List<Dictionary<string, string?>>? Grupos { get; set; }
     }
 
     public class DireccionTipificadaInput
@@ -175,5 +184,10 @@ public class AssetResolverController : ControllerBase
         public string? Error { get; set; }
         /// <summary>Criterio de búsqueda utilizado, incluyendo combinaciones AND/OR si aplica.</summary>
         public string? CriterioUtilizado { get; set; }
+        /// <summary>
+        /// Resultados agrupados por grupo de criterios de entrada. Siempre informado:
+        /// en modo clásico contiene un único grupo (Indice=0) con ExtractedData.
+        /// </summary>
+        public List<AssetResolverService.GrupoResultado> ActivosPorGrupo { get; set; } = [];
     }
 }
