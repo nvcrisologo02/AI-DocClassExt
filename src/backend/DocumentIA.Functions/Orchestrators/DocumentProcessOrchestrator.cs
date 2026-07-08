@@ -1502,7 +1502,12 @@ public class DocumentProcessOrchestrator
                         {
                             Tipologia = salida.Identificacion.Tipologia,
                             DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name
+                            NombreDocumento = entrada.Documento.Name,
+                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
+                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
+                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
+                                ? salida.Integridad.RutaBlobStorage
+                                : entrada.Documento.BlobPath
                         });
 
                     if (!string.IsNullOrWhiteSpace(markdownCompleto.Markdown))
@@ -1679,7 +1684,12 @@ public class DocumentProcessOrchestrator
                         {
                             Tipologia = salida.Identificacion.Tipologia,
                             DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name
+                            NombreDocumento = entrada.Documento.Name,
+                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
+                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
+                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
+                                ? salida.Integridad.RutaBlobStorage
+                                : entrada.Documento.BlobPath
                         });
 
                     if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
