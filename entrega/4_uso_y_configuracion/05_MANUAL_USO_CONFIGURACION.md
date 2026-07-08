@@ -1053,6 +1053,8 @@ Ver contrato funcional de precedencia en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md
 
 Cada criterio se puede habilitar/deshabilitar independientemente, y los resultados se combinan segun un **modo de combinacion configurable** (AND u OR).
 
+Ademas, cuando los datos extraidos contienen una **coleccion de objetos** (un array donde cada elemento representa un activo distinto, p.ej. `DireccionPropiedades`), el AssetResolver puede resolver **un activo por cada elemento** y devolver los resultados agrupados. Ver [5.7b.6b Resolucion Multi-Activo por Colecciones](#57b6b-resolucion-multi-activo-por-colecciones-grupos).
+
 ### 5.7b.2 Habilitacion por Precedencia
 
 ```
@@ -1083,6 +1085,7 @@ En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion
     "mapeoDireccionNumero": ["NumeroVia", "Numero"],
     "mapeoDireccionMunicipio": ["Municipio", "Localidad"],
     "mapeoDireccionCodigoPostal": ["CodigoPostal", "CP"],
+    "mapeoColeccionActivos": ["DireccionPropiedades"],
     "umbralScoreDireccion": 0.75
   }
 }
@@ -1106,6 +1109,7 @@ En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion
 | `mapeoDireccionNumero` | string[] | `[]` | Claves para numero de via. |
 | `mapeoDireccionMunicipio` | string[] | `[]` | Claves para municipio. |
 | `mapeoDireccionCodigoPostal` | string[] | `[]` | Claves para codigo postal. |
+| `mapeoColeccionActivos` | string[] | `[]` | Claves de `DatosExtraidos` que son colecciones (array de objetos) donde cada elemento representa un activo. Se expande a un grupo de criterios por elemento; las sub-propiedades se resuelven con los mismos `mapeo*` anteriores. Ver [5.7b.6b](#57b6b-resolucion-multi-activo-por-colecciones-grupos). |
 | `umbralScoreDireccion` | double | `0.75` | Score minimo [0.0-1.0] para aceptar un match por direccion. |
 
 ### 5.7b.4 Logica de Deteccion de Criterios
@@ -1156,6 +1160,24 @@ Cuando `busquedaDireccionHabilitada = true`, el servicio:
   "razon": "Match encontrado con score 0.92"
 }
 ```
+
+### 5.7b.6b Resolucion Multi-Activo por Colecciones (Grupos)
+
+Cuando un documento describe **varios activos a la vez** (p.ej. un array `DireccionPropiedades` con N objetos, cada uno con su `ReferenciaCatastral` y/o `Direccion`), el AssetResolver puede resolver un activo por cada elemento en lugar de un unico activo por documento.
+
+**Activacion**: declarar en `mapeoColeccionActivos` el/los nombres de campo de `DatosExtraidos` que son colecciones de activos. Se usa el **primer campo presente** cuyo valor sea un array de objetos no vacio.
+
+**Como funciona**:
+
+1. El backend recorre la coleccion y genera **un grupo de criterios por elemento**. Las sub-propiedades de cada objeto (`ReferenciaCatastral`, `Direccion`, …) se resuelven con los mismos `mapeoReferenciaCatastral`, `mapeoDireccion*`, `mapeoIdufir` ya configurados.
+2. Cada grupo se resuelve de forma **aislada**, aplicando dentro de el el `modoCombinacionCriterios` (AND/OR) igual que en el modo clasico.
+3. La respuesta incluye `activosPorGrupo` (detalle por elemento de entrada) **ademas** de la lista plana `activos`. La lista plana **no deduplica entre grupos**: si un mismo activo responde a dos elementos, aparece en ambos grupos y dos veces en la lista plana.
+
+**Compatibilidad**: si no se declara `mapeoColeccionActivos`, o el campo no existe / no es un array de objetos, el comportamiento es identico al modo clasico (un unico grupo a partir de los campos planos de `DatosExtraidos`).
+
+> Los overrides globales por instrucciones (`camposBusqueda.idufir`, `camposBusqueda.referenciaCatastral`) y la direccion tipificada **no aplican** en modo multi-grupo: cada grupo se resuelve exclusivamente por los `mapeo*`.
+
+Detalle tecnico del contrato (`Grupos` / `ActivosPorGrupo`) en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](../2_arquitectura_y_diseno/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md#54-grupos-de-criterios-multi-activo).
 
 ### 5.7b.7 Ejemplos de Configuracion por Caso de Uso
 
@@ -1215,6 +1237,23 @@ Cuando `busquedaDireccionHabilitada = true`, el servicio:
     "mapeoIdufir": ["IDUFIR_CRU"],
     "mapeoDireccionCompleta": ["Localizacion"],
     "umbralScoreDireccion": 0.7
+  }
+}
+```
+
+#### Coleccion de activos (multi-activo por grupos)
+Documento con un array `DireccionPropiedades` donde cada elemento trae `ReferenciaCatastral` y `Direccion`; se resuelve un activo por elemento y la respuesta incluye `activosPorGrupo`:
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "modoCombinacionCriterios": "OR",
+    "mapeoColeccionActivos": ["DireccionPropiedades"],
+    "busquedaReferenciaCatastralHabilitada": true,
+    "mapeoReferenciaCatastral": ["ReferenciaCatastral"],
+    "busquedaDireccionHabilitada": true,
+    "mapeoDireccionCompleta": ["Direccion"],
+    "camposSolicitados": ["DES_SERVICER"]
   }
 }
 ```
