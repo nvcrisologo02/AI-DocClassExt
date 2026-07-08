@@ -444,6 +444,27 @@ public class ObtenerActivoActivityTests
     }
 
     [Fact]
+    public async Task Run_ColeccionVacia_NoEnviaGrupos()
+    {
+        JsonValueKind gruposKind = JsonValueKind.Undefined;
+
+        var sut = CreateSut(OkJson(BuildPluginResponseOk()), req =>
+        {
+            var raw = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(raw);
+            gruposKind = doc.RootElement.TryGetProperty("grupos", out var g) ? g.ValueKind : JsonValueKind.Undefined;
+        });
+
+        var input = CreateInput();
+        input.MapeoColeccionActivos = new List<string> { "DireccionPropiedades" };
+        input.DatosExtraidos["DireccionPropiedades"] = JsonSerializer.SerializeToElement(Array.Empty<object>());
+
+        await sut.Run(input);
+
+        gruposKind.Should().BeOneOf(JsonValueKind.Null, JsonValueKind.Undefined);
+    }
+
+    [Fact]
     public async Task Run_ColeccionConElementosNoObjeto_IgnoraElementosInvalidos()
     {
         JsonElement? gruposCapturados = null;
