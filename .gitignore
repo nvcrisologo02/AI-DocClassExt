@@ -128,3 +128,6 @@ objectids.txt
 # Claude
 .claude/
 CLAUDE.md
+
+# graphify (grafo de conocimiento generado, ~13MB; se regenera con `graphify update .`)
+graphify-out/
