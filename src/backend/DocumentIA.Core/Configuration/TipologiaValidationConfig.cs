@@ -367,5 +367,13 @@ namespace DocumentIA.Core.Configuration
         public List<string> MapeoDireccionCodigoPostal { get; set; } = new();
         /// <summary>Umbral mínimo de score para aceptar un match por dirección (0.0–1.0, default 0.75).</summary>
         public double UmbralScoreDireccion { get; set; } = 0.75;
+        /// <summary>
+        /// Nombres de campos de DatosExtraidos que son colecciones (array de objetos) donde
+        /// cada elemento representa un activo. Las sub-propiedades de cada elemento se
+        /// resuelven con los mismos aliases Mapeo* existentes (MapeoIdufir,
+        /// MapeoReferenciaCatastral, MapeoDireccion*). Se usa el primer campo presente
+        /// cuyo valor sea un array de objetos no vacío.
+        /// </summary>
+        public List<string> MapeoColeccionActivos { get; set; } = new();
     }
 }
