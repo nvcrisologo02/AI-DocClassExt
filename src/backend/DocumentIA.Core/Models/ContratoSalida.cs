@@ -828,6 +828,11 @@ public class ResultadoAssetResolver
     /// Error técnico devuelto por AssetResolver, si aplica.
     /// </summary>
     public string? Error { get; set; }
+    /// <summary>
+    /// Resultados agrupados por grupo de criterios (resolución multi-activo).
+    /// null en ejecuciones anteriores a esta funcionalidad.
+    /// </summary>
+    public List<GrupoActivosEncontrados>? ActivosPorGrupo { get; set; }
 }
 
 public class CriteriosBusquedaActivo
@@ -968,6 +973,27 @@ public class ActivoEncontrado
     public DateTime? FchCierre { get; set; }
     /// <summary>Campos adicionales solicitados con su valor.</summary>
     public Dictionary<string, object?> CamposSolicitados { get; set; } = new();
+}
+
+/// <summary>
+/// Resultado de un grupo de criterios en la resolución multi-activo del AssetResolver.
+/// </summary>
+public class GrupoActivosEncontrados
+{
+    /// <summary>Índice del grupo en la petición (0-based).</summary>
+    public int Indice { get; set; }
+    /// <summary>Criterios de entrada del grupo (eco para trazabilidad).</summary>
+    public Dictionary<string, string?> CriteriosEntrada { get; set; } = new();
+    /// <summary>Criterios efectivamente resueltos para este grupo.</summary>
+    public CriteriosBusquedaActivo? CriteriosUsados { get; set; }
+    /// <summary>Activos encontrados para este grupo (AAII + AACC).</summary>
+    public List<ActivoEncontrado> Activos { get; set; } = new();
+    /// <summary>Número de activos del grupo.</summary>
+    public int Count { get; set; }
+    /// <summary>Criterio utilizado en este grupo.</summary>
+    public string? CriterioUtilizado { get; set; }
+    /// <summary>Mensaje del grupo (p.ej. sin criterios resolubles).</summary>
+    public string? Mensaje { get; set; }
 }
 
 /// <summary>

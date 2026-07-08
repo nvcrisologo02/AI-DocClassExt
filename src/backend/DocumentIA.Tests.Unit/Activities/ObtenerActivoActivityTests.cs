@@ -368,4 +368,158 @@ public class ObtenerActivoActivityTests
         resultado.CriteriosUsados.DireccionTipificada.CandidatosEvaluados.Should().Be(3);
         resultado.CriteriosUsados.DireccionTipificada.Razon.Should().Contain("tipificados");
     }
+
+    private static HttpResponseMessage OkJson(object payload) => new(HttpStatusCode.OK)
+    {
+        Content = new StringContent(JsonSerializer.Serialize(payload), System.Text.Encoding.UTF8, "application/json")
+    };
+
+    private static object BuildPluginResponseOk() => new
+    {
+        CorrelationId = "test-corr-001",
+        Found = true,
+        Count = 1,
+        CriteriosUsados = (object?)null,
+        Activos = new[]
+        {
+            new { IdActivo = "100001", FchCierre = DateTime.UtcNow, CamposSolicitados = new Dictionary<string, object?>() }
+        },
+        CamposConError = new List<string>(),
+        Message = "ok",
+        DuracionMs = 10,
+        Error = (string?)null
+    };
+
+    [Fact]
+    public async Task Run_ColeccionActivos_ExpandeGruposEnPayload()
+    {
+        JsonElement? gruposCapturados = null;
+        JsonElement? extractedCapturado = null;
+
+        var sut = CreateSut(OkJson(BuildPluginResponseOk()), req =>
+        {
+            var raw = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(raw);
+            gruposCapturados = doc.RootElement.GetProperty("grupos").Clone();
+            extractedCapturado = doc.RootElement.GetProperty("extractedData").Clone();
+        });
+
+        var input = CreateInput();
+        input.MapeoColeccionActivos = new List<string> { "DireccionPropiedades" };
+        input.DatosExtraidos["DireccionPropiedades"] = JsonSerializer.SerializeToElement(new[]
+        {
+            new { ReferenciaCastatral = "REF-A", Direccion = "Calle Mayor 1, Madrid" },
+            new { ReferenciaCastatral = "REF-B", Direccion = "Calle Sol 2, Getafe" }
+        });
+
+        await sut.Run(input);
+
+        gruposCapturados.Should().NotBeNull();
+        gruposCapturados!.Value.ValueKind.Should().Be(JsonValueKind.Array);
+        gruposCapturados.Value.GetArrayLength().Should().Be(2);
+        gruposCapturados.Value[0].GetProperty("ReferenciaCastatral").GetString().Should().Be("REF-A");
+        gruposCapturados.Value[1].GetProperty("Direccion").GetString().Should().Be("Calle Sol 2, Getafe");
+        // El campo colección no viaja en el ExtractedData plano
+        extractedCapturado!.Value.TryGetProperty("DireccionPropiedades", out _).Should().BeFalse();
+        // Los campos planos se mantienen
+        extractedCapturado.Value.GetProperty("IDUFIR").GetString().Should().Be("12345678901234");
+    }
+
+    [Fact]
+    public async Task Run_SinColeccionActivos_NoEnviaGrupos()
+    {
+        JsonValueKind gruposKind = JsonValueKind.Undefined;
+
+        var sut = CreateSut(OkJson(BuildPluginResponseOk()), req =>
+        {
+            var raw = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(raw);
+            gruposKind = doc.RootElement.TryGetProperty("grupos", out var g) ? g.ValueKind : JsonValueKind.Undefined;
+        });
+
+        await sut.Run(CreateInput());
+
+        // Sin MapeoColeccionActivos el payload no lleva grupos (null o ausente)
+        gruposKind.Should().BeOneOf(JsonValueKind.Null, JsonValueKind.Undefined);
+    }
+
+    [Fact]
+    public async Task Run_ColeccionConElementosNoObjeto_IgnoraElementosInvalidos()
+    {
+        JsonElement? gruposCapturados = null;
+
+        var sut = CreateSut(OkJson(BuildPluginResponseOk()), req =>
+        {
+            var raw = req.Content!.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(raw);
+            gruposCapturados = doc.RootElement.GetProperty("grupos").Clone();
+        });
+
+        var input = CreateInput();
+        input.MapeoColeccionActivos = new List<string> { "DireccionPropiedades" };
+        input.DatosExtraidos["DireccionPropiedades"] = JsonSerializer.SerializeToElement(new object[]
+        {
+            "un-string-suelto",
+            new { ReferenciaCastatral = "REF-A" }
+        });
+
+        await sut.Run(input);
+
+        gruposCapturados!.Value.GetArrayLength().Should().Be(1);
+        gruposCapturados.Value[0].GetProperty("ReferenciaCastatral").GetString().Should().Be("REF-A");
+    }
+
+    [Fact]
+    public async Task Run_PluginDevuelveActivosPorGrupo_MapeaAResultado()
+    {
+        var pluginResponse = new
+        {
+            CorrelationId = "test-corr-001",
+            Found = true,
+            Count = 2,
+            CriteriosUsados = (object?)null,
+            Activos = new[]
+            {
+                new { IdActivo = "100001", FchCierre = DateTime.UtcNow, CamposSolicitados = new Dictionary<string, object?>() },
+                new { IdActivo = "100002", FchCierre = DateTime.UtcNow, CamposSolicitados = new Dictionary<string, object?>() }
+            },
+            CamposConError = new List<string>(),
+            Message = "Se procesaron 2 grupos: 2 activos (AAII=2, AACC=0).",
+            DuracionMs = 20,
+            Error = (string?)null,
+            ActivosPorGrupo = new[]
+            {
+                new
+                {
+                    Indice = 0,
+                    CriteriosEntrada = new Dictionary<string, string?> { ["ReferenciaCastatral"] = "REF-A" },
+                    CriteriosUsados = new { Idufir = (string?)null, ReferenciaCatastral = "REF-A", ModoCombinacionCriterios = "OR" },
+                    Activos = new[] { new { IdActivo = "100001", FchCierre = DateTime.UtcNow, CamposSolicitados = new Dictionary<string, object?>() } },
+                    Count = 1,
+                    CriterioUtilizado = "AAII:ReferenciaCatastral",
+                    Mensaje = (string?)null
+                },
+                new
+                {
+                    Indice = 1,
+                    CriteriosEntrada = new Dictionary<string, string?> { ["ReferenciaCastatral"] = "REF-B" },
+                    CriteriosUsados = new { Idufir = (string?)null, ReferenciaCatastral = "REF-B", ModoCombinacionCriterios = "OR" },
+                    Activos = new[] { new { IdActivo = "100002", FchCierre = DateTime.UtcNow, CamposSolicitados = new Dictionary<string, object?>() } },
+                    Count = 1,
+                    CriterioUtilizado = "AAII:ReferenciaCatastral",
+                    Mensaje = (string?)null
+                }
+            }
+        };
+
+        var sut = CreateSut(OkJson(pluginResponse));
+        var resultado = await sut.Run(CreateInput());
+
+        resultado.ActivosPorGrupo.Should().NotBeNull().And.HaveCount(2);
+        resultado.ActivosPorGrupo![0].Indice.Should().Be(0);
+        resultado.ActivosPorGrupo[0].Activos.Should().ContainSingle(a => a.IdActivo == "100001");
+        resultado.ActivosPorGrupo[0].CriteriosUsados!.ReferenciaCatastral.Should().Be("REF-A");
+        resultado.ActivosPorGrupo[1].Activos.Should().ContainSingle(a => a.IdActivo == "100002");
+        resultado.Activos.Should().HaveCount(2);
+    }
 }
