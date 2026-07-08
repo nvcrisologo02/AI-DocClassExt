@@ -9,6 +9,7 @@ Consumir datos extraídos (IDUFIR, Referencia Catastral u otros aliases) y devol
 - Soporta búsqueda en uno o ambos orígenes mediante flags de request: `AAII_Search` y `AACC_Search`.
 - Devuelve resultados separados por origen: `ActivosAAII` y `ActivosAACC`.
 - Mantiene `Activos` como agregado legacy para compatibilidad.
+- Soporta resolución **multi-activo**: el request admite `Grupos` (N juegos de criterios, uno por activo) y la respuesta expone `ActivosPorGrupo`. Sin `Grupos`, `ExtractedData` actúa como grupo único (comportamiento clásico).
 
 ## Últimos cambios (2026-04-15)
 
@@ -53,6 +54,30 @@ Consumir datos extraídos (IDUFIR, Referencia Catastral u otros aliases) y devol
   "RequestedFields": ["ID_ACTIVO_SAREB"]
 }
 ```
+
+### Resolución multi-activo (grupos)
+
+Para resolver varios activos en una sola llamada, enviar `Grupos`: cada elemento es un
+diccionario campo→valor equivalente a un `ExtractedData`, y se resuelve con los mismos
+aliases `Mapeo*`. La respuesta incluye `ActivosPorGrupo` (detalle por grupo) además de la
+lista plana `Activos` (concatenada, sin dedup entre grupos). En modo multi-grupo se
+ignoran los overrides globales (`IdufirOverride`, `ReferenciaCatastralOverride`,
+`DireccionTipificada`).
+
+```json
+{
+  "CorrelationId": "c1",
+  "MapeoReferenciaCatastral": ["ReferenciaCatastral"],
+  "RequestedFields": ["ID_ACTIVO_SAREB"],
+  "Grupos": [
+    { "ReferenciaCatastral": "REF-A" },
+    { "ReferenciaCatastral": "REF-B" }
+  ]
+}
+```
+
+Ver la especificación completa en
+`docs/especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md` (§5.4).
 
 ## Tests
 
