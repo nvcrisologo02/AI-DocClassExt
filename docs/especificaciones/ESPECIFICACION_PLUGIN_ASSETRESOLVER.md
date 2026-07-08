@@ -108,6 +108,7 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
 | `mapeoDireccionMunicipio` | string[] | `[]` | Claves para municipio. |
 | `mapeoDireccionCodigoPostal` | string[] | `[]` | Claves para codigo postal. |
 | `umbralScoreDireccion` | double | `0.75` | Score minimo [0.0-1.0] para match por direccion. |
+| `Grupos` | array de objetos | No | Grupos de criterios (uno por activo potencial); cada grupo es un diccionario campo→valor resuelto con los mismos aliases `Mapeo*` que `ExtractedData`. Si es null/vacío, `ExtractedData` actúa como grupo único (modo clásico). En modo multi-grupo se ignoran `IdufirOverride`, `ReferenciaCatastralOverride` y `DireccionTipificada`. |
 
 #### Response
 
@@ -166,6 +167,27 @@ El plugin **AssetResolver** es un servicio HTTP independiente que resuelve el **
   "error": null
 }
 ```
+
+##### ActivosPorGrupo
+
+La respuesta incluye siempre `ActivosPorGrupo`, con el detalle por grupo de criterios
+(en modo clásico contiene un único grupo con `Indice = 0`):
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `Indice` | int | Posición del grupo en la petición (0-based) |
+| `CriteriosEntrada` | objeto | Eco del diccionario de criterios recibido |
+| `CriteriosUsados` | objeto | Criterios efectivamente resueltos para el grupo |
+| `ActivosAAII` / `ActivosAACC` | array | Activos por origen del grupo |
+| `Activos` | array | Agregado AAII + AACC del grupo |
+| `Count` | int | Número de activos del grupo |
+| `CriterioUtilizado` | string | Criterio aplicado en el grupo |
+| `Mensaje` | string | Mensaje del grupo (p.ej. sin criterios resolubles) |
+
+Las listas planas (`Activos`, `ActivosAAII`, `ActivosAACC`) concatenan los resultados de
+todos los grupos **sin deduplicar entre grupos**: un activo que responde a dos grupos
+aparece en ambos grupos y dos veces en la lista plana. `CriteriosUsados` top-level solo
+se informa en modo clásico (grupo único).
 
 ---
 
@@ -340,6 +362,27 @@ Mapeo de campos:
 
 ---
 
+## 5.4 Grupos de Criterios (Multi-Activo)
+
+Para tipologías cuyos datos extraídos contienen una colección de objetos donde cada
+elemento identifica un activo (p.ej. `DireccionPropiedades`), el backend expande la
+colección y envía `Grupos`: una lista de diccionarios campo→valor.
+
+Semántica:
+
+1. Cada grupo se resuelve de forma aislada con la misma lógica del modo clásico:
+   detección por aliases `Mapeo*`, consultas AAII/AACC y combinación
+   `ModoCombinacionCriterios` (AND/OR) **dentro del grupo**.
+2. Un grupo sin criterios resolubles devuelve `Count = 0` con `Mensaje` explicativo y
+   no aborta el resto de grupos.
+3. La configuración de tipología que activa la expansión en el backend es
+   `AssetResolver.MapeoColeccionActivos` (lista de nombres de campos de
+   `DatosExtraidos` que son colecciones de activos; se usa el primer campo presente
+   cuyo valor sea un array de objetos no vacío). Las sub-propiedades de cada elemento
+   se resuelven con los `Mapeo*` existentes.
+
+---
+
 ## 6. Configuracion del Plugin
 
 ### 6.1 appsettings.json
@@ -474,6 +517,29 @@ Siempre se incluyen en la respuesta:
   }
 }
 ```
+
+### 8.5 Colección de Activos (multi-activo por grupos)
+
+Tipología con array `DireccionPropiedades` donde cada elemento trae
+`ReferenciaCastatral` y `Direccion`:
+
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "mapeoColeccionActivos": ["DireccionPropiedades"],
+    "mapeoReferenciaCatastral": ["ReferenciaCastatral"],
+    "busquedaDireccionHabilitada": true,
+    "mapeoDireccionCompleta": ["Direccion"],
+    "modoCombinacionCriterios": "OR",
+    "camposSolicitados": ["DES_SERVICER"]
+  }
+}
+```
+
+Con `DatosExtraidos.DireccionPropiedades = [ {ReferenciaCastatral: "A", ...},
+{ReferenciaCastatral: "B", ...} ]`, el backend envía 2 grupos y la respuesta contiene
+`ActivosPorGrupo` con los activos de cada elemento.
 
 ---
 
@@ -615,6 +681,7 @@ El umbral de 0.75 es el valor inicial acordado. Puede ajustarse por tipologia en
 
 | Fecha | Version | Cambios |
 |-------|---------|---------|
+| 2026-07-08 | 1.4.0 | - Grupos de criterios (multi-activo): request `Grupos`, response `ActivosPorGrupo`, config de tipología `MapeoColeccionActivos`. Retrocompatible: sin `Grupos` el comportamiento es idéntico. |
 | 2026-04-20 | 1.3.0 | - Alta de busqueda por Direccion Tipificada (`busquedaDireccionTipificadaHabilitada` + objeto `direccionTipificada`).<br/>- Direccion fuzzy: parseo mejorado para cadenas con piso/puerta y provincia en tercer segmento.<br/>- Combinacion OR robusta cuando todos los criterios devuelven 0 resultados.<br/>- Script funcional actualizado con escenarios tipificados y columna `IdsActivos` en resumen. |
 | 2026-04-17 | 1.2.0 | - Busqueda por direccion como criterio de primera clase (no fallback).<br/>- Flags `busquedaIdufirHabilitada`, `busquedaReferenciaCatastralHabilitada`, `busquedaDireccionHabilitada`.<br/>- Modo combinacion AND/OR configurable.<br/>- Parseo automatico de direccion completa. |
 | 2026-03-15 | 1.1.0 | - Direccion como fallback cuando IDUFIR/RefCat no tienen resultados.<br/>- Scoring fuzzy por direccion. |
