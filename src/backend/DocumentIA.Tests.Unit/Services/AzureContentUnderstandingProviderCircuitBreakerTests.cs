@@ -96,6 +96,71 @@ public class AzureContentUnderstandingProviderCircuitBreakerTests
         openAfterCooldown.Should().BeFalse();
     }
 
+    [Fact]
+    public void ResolveRetryModelKey_ConSecundarioDisponible_DevuelveAlternativo()
+    {
+        var sut = CreateProvider(new AzureContentUnderstandingOptions
+        {
+            EnableCircuitBreaker = true,
+            CircuitBreakerFailureThreshold = 5,
+            CircuitBreakerOpenSeconds = 60
+        });
+
+        var extractionConfig = new TipologiaExtractionConfig
+        {
+            Enabled = true,
+            ModelKey = "primary-cu",
+            SecondaryModelKey = "secondary-cu"
+        };
+
+        var resolved = (string)InvokePrivate(
+            sut, "ResolveRetryModelKey", "primary-cu", extractionConfig, "nota.simple_bal")!;
+
+        resolved.Should().Be("secondary-cu");
+    }
+
+    [Fact]
+    public void ResolveRetryModelKey_SinSecundario_DevuelveActual()
+    {
+        var sut = CreateProvider(new AzureContentUnderstandingOptions());
+
+        var extractionConfig = new TipologiaExtractionConfig
+        {
+            Enabled = true,
+            ModelKey = "primary-cu"
+        };
+
+        var resolved = (string)InvokePrivate(
+            sut, "ResolveRetryModelKey", "primary-cu", extractionConfig, "nota.simple")!;
+
+        resolved.Should().Be("primary-cu");
+    }
+
+    [Fact]
+    public void ResolveRetryModelKey_SecundarioConCircuitoAbierto_DevuelveActual()
+    {
+        var sut = CreateProvider(new AzureContentUnderstandingOptions
+        {
+            EnableCircuitBreaker = true,
+            CircuitBreakerFailureThreshold = 1,
+            CircuitBreakerOpenSeconds = 60
+        });
+
+        InvokePrivate(sut, "RegisterCircuitFailure", "secondary-cu", "nota.simple_bal", "test");
+
+        var extractionConfig = new TipologiaExtractionConfig
+        {
+            Enabled = true,
+            ModelKey = "primary-cu",
+            SecondaryModelKey = "secondary-cu"
+        };
+
+        var resolved = (string)InvokePrivate(
+            sut, "ResolveRetryModelKey", "primary-cu", extractionConfig, "nota.simple_bal")!;
+
+        resolved.Should().Be("primary-cu");
+    }
+
     private static AzureContentUnderstandingProvider CreateProvider(AzureContentUnderstandingOptions options)
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "DocumentIA.Tests", Guid.NewGuid().ToString("N"));
