@@ -1,3 +1,4 @@
+#nullable enable
 using DocumentIA.Core.Configuration;
 using FluentAssertions;
 
@@ -6,13 +7,39 @@ namespace DocumentIA.Tests.Unit.Configuration;
 public class AzureContentUnderstandingOptionsTests
 {
     [Fact]
-    public void Defaults_TimeoutYReintentos_SonRealistasParaDocumentosLargos()
+    public void Defaults_ShouldMatchResilienceBaseline()
     {
         var options = new AzureContentUnderstandingOptions();
 
-        // p90 de análisis CU exitoso en prod es 95-170s: 90s por intento mataba
-        // análisis legítimos; 3 intentos quemaban ~280s sin resultado.
+        options.MaxConcurrentCalls.Should().Be(2);
         options.HardTimeoutSeconds.Should().Be(300);
+        options.EnableCircuitBreaker.Should().BeTrue();
+        options.CircuitBreakerFailureThreshold.Should().Be(5);
+        options.CircuitBreakerOpenSeconds.Should().Be(45);
         options.MaxRetries.Should().Be(2);
+        options.InitialRetryDelayMs.Should().Be(500);
+    }
+
+    [Fact]
+    public void CustomValues_ShouldBeApplied()
+    {
+        var options = new AzureContentUnderstandingOptions
+        {
+            MaxConcurrentCalls = 4,
+            HardTimeoutSeconds = 120,
+            EnableCircuitBreaker = false,
+            CircuitBreakerFailureThreshold = 7,
+            CircuitBreakerOpenSeconds = 60,
+            MaxRetries = 4,
+            InitialRetryDelayMs = 750
+        };
+
+        options.MaxConcurrentCalls.Should().Be(4);
+        options.HardTimeoutSeconds.Should().Be(120);
+        options.EnableCircuitBreaker.Should().BeFalse();
+        options.CircuitBreakerFailureThreshold.Should().Be(7);
+        options.CircuitBreakerOpenSeconds.Should().Be(60);
+        options.MaxRetries.Should().Be(4);
+        options.InitialRetryDelayMs.Should().Be(750);
     }
 }
