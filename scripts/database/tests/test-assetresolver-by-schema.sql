@@ -95,7 +95,7 @@ Qualified AS (
     SELECT Id, 'REF' AS Kind, [name] AS FieldName, CAST(NULL AS NVARCHAR(200)) AS ColeccionName
     FROM FieldsFlat f
     WHERE LOWER([name]) IN ('referenciacatastral','refcatastral','catastral')
-       OR EXISTS (SELECT 1 FROM OPENJSON(f.rules) WITH (ruleType NVARCHAR(100) '$.ruleType') r WHERE LOWER(r.ruleType)='catastral')
+       OR (ISJSON(f.rules) = 1 AND EXISTS (SELECT 1 FROM OPENJSON(f.rules) WITH (ruleType NVARCHAR(100) '$.ruleType') r WHERE LOWER(r.ruleType)='catastral'))
     UNION ALL
     -- planos idufir
     SELECT Id, 'IDU', [name], NULL
@@ -106,7 +106,7 @@ Qualified AS (
     SELECT Id, 'REF', PropName, ColeccionName
     FROM FieldsNested n
     WHERE LOWER(PropName) IN ('referenciacatastral','refcatastral','catastral')
-       OR EXISTS (SELECT 1 FROM OPENJSON(n.rules) WITH (ruleType NVARCHAR(100) '$.ruleType') r WHERE LOWER(r.ruleType)='catastral')
+       OR (ISJSON(n.rules) = 1 AND EXISTS (SELECT 1 FROM OPENJSON(n.rules) WITH (ruleType NVARCHAR(100) '$.ruleType') r WHERE LOWER(r.ruleType)='catastral'))
     UNION ALL
     -- anidados idufir
     SELECT Id, 'IDU', PropName, ColeccionName
