@@ -1957,7 +1957,21 @@ public class DocumentProcessOrchestrator
                 entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
 
             // Resultado final
-            if (conErroresValidacion)
+            var camposUtilesExtraccion = resultadoExtraccion.DatosExtraidos.Keys.Count(
+                k => !string.Equals(k, "Paginas", StringComparison.OrdinalIgnoreCase)
+                  && !string.Equals(k, "Markdown", StringComparison.OrdinalIgnoreCase));
+
+            if (resultadoExtraccion.FallbackUsado && camposUtilesExtraccion == 0)
+            {
+                salida.Resultado.Estado = "EXTRACCION_INCOMPLETA";
+                salida.Resultado.MensajeError =
+                    $"Fallback de extracción sin datos. Razón: {resultadoExtraccion.FallbackRazon}";
+                logger.LogWarning(
+                    "Fallback de extracción sin datos para {Documento}. Razón: {Razon}",
+                    entrada.Documento.Name,
+                    resultadoExtraccion.FallbackRazon);
+            }
+            else if (conErroresValidacion)
             {
                 salida.Resultado.Estado = "VALIDACION_CON_ERRORES";
                 logger.LogWarning("Procesamiento completado con errores de validacion");

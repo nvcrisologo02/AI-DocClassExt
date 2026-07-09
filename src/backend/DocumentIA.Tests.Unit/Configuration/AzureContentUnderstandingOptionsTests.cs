@@ -12,11 +12,11 @@ public class AzureContentUnderstandingOptionsTests
         var options = new AzureContentUnderstandingOptions();
 
         options.MaxConcurrentCalls.Should().Be(2);
-        options.HardTimeoutSeconds.Should().Be(90);
+        options.HardTimeoutSeconds.Should().Be(300);
         options.EnableCircuitBreaker.Should().BeTrue();
         options.CircuitBreakerFailureThreshold.Should().Be(5);
         options.CircuitBreakerOpenSeconds.Should().Be(45);
-        options.MaxRetries.Should().Be(3);
+        options.MaxRetries.Should().Be(2);
         options.InitialRetryDelayMs.Should().Be(500);
     }
 

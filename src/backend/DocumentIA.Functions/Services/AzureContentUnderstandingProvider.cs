@@ -60,8 +60,9 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             throw new InvalidOperationException($"La extracción Azure no está habilitada para la tipología '{input.Tipologia}'");
         }
 
-        var modelKey = !string.IsNullOrWhiteSpace(input.ModelKeyEfectivo)
-            ? input.ModelKeyEfectivo
+        var modelKeyFijadoPorRequest = !string.IsNullOrWhiteSpace(input.ModelKeyEfectivo);
+        var modelKey = modelKeyFijadoPorRequest
+            ? input.ModelKeyEfectivo!
             : ResolveModelKeyRoundRobin(extractionConfig);
         modelKey = ResolveModelKeyWithCircuit(modelKey, extractionConfig, input.Tipologia);
         var model = _modelRegistryLoader.GetModel(modelKey);
@@ -155,6 +156,28 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                         maxAttempts,
                         retryDelay.TotalMilliseconds);
                     await Task.Delay(retryDelay, cancellationToken);
+
+                    if (!modelKeyFijadoPorRequest)
+                    {
+                        var nextModelKey = ResolveRetryModelKey(modelKey, extractionConfig, input.Tipologia);
+                        if (!string.Equals(nextModelKey, modelKey, StringComparison.OrdinalIgnoreCase))
+                        {
+                            TrackRetryFailover(input.Tipologia, modelKey, nextModelKey, attempt);
+                            _logger.LogWarning(
+                                "Reintento CU con failover de modelo para {Tipologia}: {FromModelKey} -> {ToModelKey} (intento {Attempt})",
+                                input.Tipologia,
+                                modelKey,
+                                nextModelKey,
+                                attempt);
+                            modelKey = nextModelKey;
+                            model = _modelRegistryLoader.GetModel(modelKey);
+                            ValidateAzureCuModel(model);
+                            client = CreateClient(model);
+                            contentType = ResolveContentType(model, fileName, binaryData);
+                            processingLocation = ResolveProcessingLocation(model);
+                            contentRange = string.IsNullOrWhiteSpace(model.InputRange) ? null : model.InputRange;
+                        }
+                    }
                 }
                 catch (OperationCanceledException ex)
                     when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
@@ -163,7 +186,9 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                     analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
                     RegisterCircuitFailure(modelKey, input.Tipologia, "hard-timeout");
                     TrackHardTimeout(input.Tipologia, modelKey, attempt, hardTimeoutSeconds);
-                    throw new TimeoutException(
+                    throw new CuExtraccionException(
+                        modelKey,
+                        nameof(TimeoutException),
                         $"Azure Content Understanding superó el hard timeout de {hardTimeoutSeconds}s para la tipología '{input.Tipologia}' y modelKey '{modelKey}'.",
                         ex);
                 }
@@ -183,10 +208,36 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                         maxAttempts,
                         retryDelay.TotalMilliseconds);
                     await Task.Delay(retryDelay, cancellationToken);
+
+                    if (!modelKeyFijadoPorRequest)
+                    {
+                        var nextModelKey = ResolveRetryModelKey(modelKey, extractionConfig, input.Tipologia);
+                        if (!string.Equals(nextModelKey, modelKey, StringComparison.OrdinalIgnoreCase))
+                        {
+                            TrackRetryFailover(input.Tipologia, modelKey, nextModelKey, attempt);
+                            _logger.LogWarning(
+                                "Reintento CU con failover de modelo para {Tipologia}: {FromModelKey} -> {ToModelKey} (intento {Attempt})",
+                                input.Tipologia,
+                                modelKey,
+                                nextModelKey,
+                                attempt);
+                            modelKey = nextModelKey;
+                            model = _modelRegistryLoader.GetModel(modelKey);
+                            ValidateAzureCuModel(model);
+                            client = CreateClient(model);
+                            contentType = ResolveContentType(model, fileName, binaryData);
+                            processingLocation = ResolveProcessingLocation(model);
+                            contentRange = string.IsNullOrWhiteSpace(model.InputRange) ? null : model.InputRange;
+                        }
+                    }
                 }
             }
 
             RegisterCircuitSuccess(modelKey, input.Tipologia);
+        }
+        catch (Exception ex) when (ex is not CuExtraccionException && !cancellationToken.IsCancellationRequested)
+        {
+            throw new CuExtraccionException(modelKey, ex.GetType().Name, ex.Message, ex);
         }
         finally
         {
@@ -324,7 +375,9 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         }
 
         TrackCircuitRejected(tipologia, preferredModelKey);
-        throw new InvalidOperationException(
+        throw new CuExtraccionException(
+            preferredModelKey,
+            "CircuitRejected",
             $"Circuit breaker abierto para modelKey '{preferredModelKey}' y no hay fallback disponible para tipología '{tipologia}'.");
     }
 
@@ -338,6 +391,20 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         return string.Equals(currentModelKey, extractionConfig.ModelKey, StringComparison.OrdinalIgnoreCase)
             ? extractionConfig.SecondaryModelKey
             : extractionConfig.ModelKey;
+    }
+
+    private string ResolveRetryModelKey(
+        string currentModelKey,
+        TipologiaExtractionConfig extractionConfig,
+        string tipologia)
+    {
+        var alternative = GetAlternativeModelKey(extractionConfig, currentModelKey);
+        if (string.IsNullOrWhiteSpace(alternative) || IsCircuitOpen(alternative, tipologia))
+        {
+            return currentModelKey;
+        }
+
+        return alternative;
     }
 
     private bool IsCircuitOpen(string modelKey, string tipologia)
@@ -517,6 +584,17 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         {
             ["tipologia"] = tipologia,
             ["modelKey"] = modelKey
+        });
+    }
+
+    private void TrackRetryFailover(string tipologia, string fromModelKey, string toModelKey, int attempt)
+    {
+        _telemetryClient.TrackEvent("CU.RetryFailover", new Dictionary<string, string>
+        {
+            ["tipologia"] = tipologia,
+            ["fromModelKey"] = fromModelKey,
+            ["toModelKey"] = toModelKey,
+            ["attempt"] = attempt.ToString()
         });
     }
 
