@@ -1,7 +1,7 @@
 # AssetResolver — Activación por esquema de extracción (refcat / IDUFIR)
 
 **Fecha:** 2026-07-09
-**Estado:** Aprobado (pendiente de plan de implementación)
+**Estado:** Implementado y **aplicado en dev y prod** (2026-07-09). Ver "Registro de despliegue".
 
 ## Problema
 
@@ -218,3 +218,32 @@ Correcciones incorporadas:
   `nota.simple.1_0`) no aparecen en el dry-run.
 - **Rollback:** tras aplicar, ejecutar el script de rollback contra la tabla de backup y
   verificar que `ConfiguracionJson` vuelve byte-a-byte al original en las filas afectadas.
+
+## Registro de despliegue (2026-07-09)
+
+Aplicado en **dev** y **prod** (`srbsqlprodocai` / DB `DocumentIA`). Estado verificado en
+prod tras la aplicación (tipologías Publicadas + Activas con `AssetResolver.enabled=true`):
+
+| Tipología | Ver. | Casing | mapeoReferenciaCatastral | mapeoIdufir | mapeoColeccionActivos |
+| --- | --- | --- | --- | --- | --- |
+| IBI_1.1 | 1.1 | camel | `["ReferenciaCatastral"]` | — | — |
+| nota.simple | 1.5 | camel | `["ReferenciaCatastral"]` | `["IDUFIR_CRU"]` | — |
+| nota.simple.1_4 | 1.4 | camel | `["ReferenciaCatastral"]` | `["IDUFIR_CRU"]` | — |
+| tasacion | 1.0 | camel | `["ReferenciaCatastral"]` | — | — |
+| cera.15 | 1.0 | Pascal | `["ReferenciaCatastral"]` | — | `["Resumen"]` |
+| cera.16 | 2.0 | Pascal | `["ReferenciaCatastral"]` | `[]` | `["Resumen"]` |
+| cera.44.vado | 1.0 | Pascal | `["ReferenciaCatastral"]` | — | `["Resumen"]` |
+| cera.46 | 1.0 | Pascal | `["ReferenciaCatastral"]` | — | `["Resumen"]` |
+| nota.simple_bal | 1.5 | Pascal | `["ReferenciaCatastral"]` | `["IDUFIR_CRU"]` | — |
+
+Notas:
+
+- `cera.16` quedó con `mapeoColeccionActivos = ["Resumen"]` (no las 3 colecciones que
+  detectaba el esquema: `Calcula`/`DireccionPropiedades`/`Resumen`): se ajustó
+  manualmente para excluir `Calcula` (tabla de cálculo tributario, no representa activos),
+  conforme a la revisión de negocio señalada en la sección 6.
+- Backup por entorno en tablas `Tipologias_AssetResolverBak_<stamp>` (retención hasta
+  validar; borrado manual).
+- Scripts finales: `enable-assetresolver-by-schema.sql` (+ variante `.ssms.sql` para SSMS
+  sin SQLCMD Mode), `rollback-assetresolver-by-schema.sql`, harness
+  `tests/test-assetresolver-by-schema.sql` (+ `.notempdb.sql`).

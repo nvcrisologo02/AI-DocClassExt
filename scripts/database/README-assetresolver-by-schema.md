@@ -1,5 +1,10 @@
 # Activación de AssetResolver por esquema (refcat/IDUFIR)
 
+> **Estado:** aplicado en **dev** y **prod** el 2026-07-09. Resultado verificado y detalle
+> por tipología en `docs/superpowers/specs/2026-07-09-assetresolver-activacion-por-esquema-design.md`
+> (sección "Registro de despliegue"). Este runbook queda como referencia para re-ejecución
+> o para nuevas tipologías.
+
 ## Ficheros
 
 - `enable-assetresolver-by-schema.sql` — backup + activación.
