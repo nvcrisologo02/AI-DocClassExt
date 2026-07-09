@@ -45,7 +45,7 @@ FieldsNested AS (
     FROM FieldsFlat f
     CROSS APPLY OPENJSON(f.itemsProps)
         WITH ([name] NVARCHAR(200) '$.name', rules NVARCHAR(MAX) '$.rules' AS JSON) p
-    WHERE f.[type] = 'array' AND f.itemsProps IS NOT NULL
+    WHERE LOWER(f.[type]) = 'array' AND f.itemsProps IS NOT NULL
 ),
 Qualified AS (
     -- planos refcat
@@ -88,7 +88,7 @@ BEGIN
       N'SELECT t.Id, t.Codigo, t.Version, t.ConfiguracionJson, SYSUTCDATETIME() AS FechaBackup '
     + N'INTO dbo.' + QUOTENAME(@bak) + N' FROM dbo.Tipologias t JOIN #obj o ON o.Id=t.Id;';
     EXEC sys.sp_executesql @mk;
-    PRINT 'Backup creado: dbo.' + @bak;
+    PRINT 'Backup preparado (persiste solo con @WhatIf=0): dbo.' + @bak;
 END
 
 -- 3) Construir nuevo JSON preservando assetResolver preexistente

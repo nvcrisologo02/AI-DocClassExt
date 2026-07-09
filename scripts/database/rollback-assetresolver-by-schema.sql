@@ -26,7 +26,13 @@ DECLARE @WhatIf BIT = TRY_CAST('$(WhatIf)' AS BIT);
 IF @WhatIf IS NULL SET @WhatIf = 1;
 
 DECLARE @bak SYSNAME = N'$(BackupTable)';
-IF @bak IS NULL OR @bak = N'' OR @bak = N'$(BackupTable)'
+-- sqlcmd sustituye el token de scripting $(BackupTable) en TODO el fichero antes de
+-- ejecutar, incluida cualquier comparacion literal contra ese mismo texto; comparar
+-- @bak con N'$(BackupTable)' seria por tanto una tautologia (siempre TRUE tras la
+-- sustitucion). Se detecta la ausencia de sustitucion por la presencia de parentesis,
+-- que nunca aparecen en un nombre de tabla valido mientras que si forman parte del
+-- token sin sustituir "$(BackupTable)".
+IF @bak IS NULL OR @bak = N'' OR @bak LIKE N'%[()]%'
     THROW 50010, 'Falta -v BackupTable (nombre de la tabla de respaldo a restaurar)', 1;
 
 IF OBJECT_ID(N'dbo.' + QUOTENAME(@bak)) IS NULL

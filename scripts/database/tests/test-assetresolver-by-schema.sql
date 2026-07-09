@@ -9,9 +9,10 @@ END
 GO
 CREATE DATABASE [$(TestDb)];
 GO
--- Compatibilidad >=140 requerida por STRING_AGG (OPENJSON basta con >=130); se fija
--- explicitamente porque una instancia con `model` en un nivel inferior propagaria un
--- nivel de compatibilidad insuficiente a la BBDD recien creada.
+-- STRING_AGG no depende del nivel de compatibilidad (disponible en cualquier compat
+-- level sobre motor 2017+); el nivel 150 se fija aqui por robustez general (OPENJSON,
+-- etc.), explicitamente porque una instancia con `model` en un nivel inferior
+-- propagaria un nivel de compatibilidad insuficiente a la BBDD recien creada.
 ALTER DATABASE [$(TestDb)] SET COMPATIBILITY_LEVEL = 150;
 GO
 USE [$(TestDb)];
@@ -88,7 +89,7 @@ FieldsNested AS (
     FROM FieldsFlat f
     CROSS APPLY OPENJSON(f.itemsProps)
         WITH ([name] NVARCHAR(200) '$.name', rules NVARCHAR(MAX) '$.rules' AS JSON) p
-    WHERE f.[type] = 'array' AND f.itemsProps IS NOT NULL
+    WHERE LOWER(f.[type]) = 'array' AND f.itemsProps IS NOT NULL
 ),
 Qualified AS (
     -- planos refcat
@@ -197,7 +198,7 @@ FieldsNested AS (
     FROM FieldsFlat f
     CROSS APPLY OPENJSON(f.itemsProps)
         WITH ([name] NVARCHAR(200) '$.name', rules NVARCHAR(MAX) '$.rules' AS JSON) p
-    WHERE f.[type] = 'array' AND f.itemsProps IS NOT NULL
+    WHERE LOWER(f.[type]) = 'array' AND f.itemsProps IS NOT NULL
 ),
 Qualified AS (
     SELECT Id, 'REF' AS Kind, [name] AS FieldName, CAST(NULL AS NVARCHAR(200)) AS ColeccionName
@@ -298,7 +299,7 @@ FieldsNested AS (
     FROM FieldsFlat f
     CROSS APPLY OPENJSON(f.itemsProps)
         WITH ([name] NVARCHAR(200) '$.name', rules NVARCHAR(MAX) '$.rules' AS JSON) p
-    WHERE f.[type] = 'array' AND f.itemsProps IS NOT NULL
+    WHERE LOWER(f.[type]) = 'array' AND f.itemsProps IS NOT NULL
 ),
 Qualified AS (
     SELECT Id, 'REF' AS Kind, [name] AS FieldName, CAST(NULL AS NVARCHAR(200)) AS ColeccionName
@@ -355,7 +356,7 @@ DROP TABLE #obj;
 GO
 
 IF EXISTS (SELECT 1 FROM dbo.Tipologias t JOIN #snap s ON s.Id=t.Id
-           WHERE ISNULL(t.ConfiguracionJson,'') <> ISNULL(s.ConfiguracionJson,''))
+           WHERE ISNULL(t.ConfiguracionJson,'') COLLATE Latin1_General_BIN2 <> ISNULL(s.ConfiguracionJson,'') COLLATE Latin1_General_BIN2)
     BEGIN PRINT 'FAIL: no idempotente'; THROW 50005,'idempotencia',1; END
 PRINT 'OK: idempotencia';
 GO
@@ -377,7 +378,7 @@ JOIN #orig o ON o.Id = t.Id;
 
 DECLARE @fail INT = 0;
 IF EXISTS (SELECT 1 FROM dbo.Tipologias t JOIN #orig o ON o.Id=t.Id
-           WHERE ISNULL(t.ConfiguracionJson,'')<>ISNULL(o.ConfiguracionJson,''))
+           WHERE ISNULL(t.ConfiguracionJson,'') COLLATE Latin1_General_BIN2 <> ISNULL(o.ConfiguracionJson,'') COLLATE Latin1_General_BIN2)
     BEGIN SET @fail=1; PRINT 'FAIL: rollback no restaura original'; END;
 
 IF @fail=1 THROW 50006,'rollback',1;
