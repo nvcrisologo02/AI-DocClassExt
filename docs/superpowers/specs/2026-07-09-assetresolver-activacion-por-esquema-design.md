@@ -149,6 +149,40 @@ commiteado** se añade backup + restauración:
   antes de `COMMIT`.
 - No toca `PluginTipologiaConfigs` ni código.
 
+### 6. Robustez a casing (camelCase / PascalCase) — hallazgo de prod (2026-07-09)
+
+Al validar contra **prod DocumentIA** (solo lectura) se descubrió que los
+`ConfiguracionJson` conviven en **dos casings**: unos en **camelCase** (`fields`,
+`assetResolver`, `name`, `items.properties`…) y otros en **PascalCase** (`Fields`,
+`AssetResolver`, `Name`, `Items.Properties`…), según el flujo que los persistió. El
+backend los lee case-insensitive (`PropertyNameCaseInsensitive=true`), pero los **paths
+de `OPENJSON`/`JSON_VALUE`/`JSON_QUERY` son sensibles a mayúsculas**, por lo que la
+versión inicial del descubrimiento (paths camelCase) **saltaba enteras todas las
+tipologías PascalCase** (p.ej. `cera.15/16/44.vado/46`, `nota.simple_bal`), incluidas
+las que tienen `ReferenciaCatastral` anidado en un array (`Resumen`,
+`DireccionPropiedades`, `Calcula`).
+
+Correcciones incorporadas:
+
+- **Lectura robusta a casing:** cada extracción usa `COALESCE(JSON_*('$.xxx'),
+  JSON_*('$.Xxx'))` (`fields/Fields`, `name/Name`, `type/Type`, `rules/Rules`,
+  `ruleType/RuleType`, `items.properties/Items.Properties`). Como dentro de una fila solo
+  existe un casing, `COALESCE` elige el presente.
+- **Escritura que preserva el casing (dos ramas):** por fila se detecta
+  `IsPascal = (JSON_QUERY(cfg,'$.Fields') IS NOT NULL)`. Las filas camelCase escriben en
+  `$.assetResolver.*` (claves camelCase); las PascalCase en `$.AssetResolver.*` (claves
+  PascalCase: `Enabled`, `MapeoReferenciaCatastral`, `MapeoIdufir`,
+  `MapeoColeccionActivos`, `Busqueda*Habilitada`). **Motivo:** escribir el casing
+  contrario crearía una clave duplicada (`assetResolver` junto a `AssetResolver`) que
+  rompe la lectura case-insensitive de System.Text.Json.
+- El **rollback no cambia** (restaura el `ConfiguracionJson` original literal, es
+  casing-agnóstico).
+- **Revisión pendiente de negocio:** `cera.16` mapea 3 colecciones
+  (`Calcula`, `DireccionPropiedades`, `Resumen`) por tener `ReferenciaCatastral` en cada
+  una; `Calcula` es una tabla de cálculo tributario y probablemente no representa activos
+  — revisar si debe excluirse. La activity usa el primer campo colección presente en los
+  datos extraídos.
+
 ## Manejo de bordes
 
 - **Sin campos cualificantes** → la fila no se selecciona; no se modifica.

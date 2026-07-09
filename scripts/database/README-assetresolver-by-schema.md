@@ -72,6 +72,22 @@ que disparen ejecuciones consecutivas), pero conviene tenerlo presente: si por e
 lanza el `enable` dos veces seguidas muy rápido, esperar al menos un segundo entre
 ejecuciones o verificar el nombre de tabla resultante antes de continuar.
 
+## Robustez a casing (camelCase / PascalCase)
+
+Los `ConfiguracionJson` en prod conviven en **dos casings**: unos en camelCase
+(`fields`, `assetResolver`…) y otros en PascalCase (`Fields`, `AssetResolver`…). Como los
+paths de `OPENJSON`/`JSON_VALUE`/`JSON_QUERY` son **sensibles a mayúsculas**, el `enable`:
+
+- **lee** cada clave con `COALESCE($.xxx, $.Xxx)` (detecta ambos casings), y
+- **escribe** en dos ramas según el casing de la fila (`$.assetResolver.*` vs
+  `$.AssetResolver.*`), para no crear una clave duplicada que rompa la lectura
+  case-insensitive del backend.
+
+En el dry-run, la columna `IsPascal` indica el casing de cada fila. Tipologías afectadas
+que sólo aparecen por esta corrección (PascalCase, antes ignoradas): `cera.15`, `cera.16`
+(3 colecciones: `Calcula`/`DireccionPropiedades`/`Resumen` — revisar si `Calcula` procede),
+`cera.44.vado`, `cera.46` (refcat anidado en `Resumen`), `nota.simple_bal` (planos).
+
 ## Retención
 
 Las tablas `Tipologias_AssetResolverBak_*` se conservan hasta validar; borrado manual y
