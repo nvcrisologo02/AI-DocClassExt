@@ -120,9 +120,29 @@ Ejemplos con los datos actuales:
     resultante para revisión.
   - Parámetro `@WhatIf` (default 1) que hace `ROLLBACK`; con `@WhatIf = 0` se hace `COMMIT`.
 
+### 4.1. Rollback (restauración de un cambio ya aplicado)
+
+El `@WhatIf` solo previene un `COMMIT` no deseado; para deshacer un cambio **ya
+commiteado** se añade backup + restauración:
+
+- **Backup previo (dentro de la misma transacción, antes del `UPDATE`):** volcado de las
+  filas afectadas a una tabla de respaldo sellada con timestamp:
+  `Tipologias_AssetResolverBak_<YYYYMMDD_HHMMSS>` con `Id`, `Codigo`, `Version`,
+  `ConfiguracionJson` (valor **original**) y `FechaBackup`. Se crea solo si hay filas a
+  afectar. Nunca se sobreescribe (nombre único por ejecución).
+- **Script de rollback** (`scripts/database/rollback-assetresolver-by-schema.sql`):
+  parametrizado con `@BackupTable`, restaura `Tipologias.ConfiguracionJson` desde la tabla
+  de backup por `Id`, con el mismo patrón dry-run/`@WhatIf` + transacción. Restaura
+  **exactamente** el JSON original (no un JSON reconstruido), por lo que revierte también
+  cualquier `assetResolver` preexistente que se hubiera tocado.
+- **Retención:** las tablas de backup se conservan hasta validar el cambio en el entorno;
+  su borrado es manual y explícito (no forma parte del script).
+
 ### 5. Entrega y operación
 
-- Fichero: `scripts/database/enable-assetresolver-by-schema.sql`.
+- Ficheros:
+  - `scripts/database/enable-assetresolver-by-schema.sql` (backup + activación).
+  - `scripts/database/rollback-assetresolver-by-schema.sql` (restauración desde backup).
 - Sin credenciales embebidas: la conexión la aporta quien ejecuta (sqlcmd / SSMS / pipeline)
   contra la BBDD DocumentIA del entorno correspondiente.
 - Ejecución **por entorno** en orden dev → pre → prod, revisando el dry-run en cada uno
@@ -162,3 +182,5 @@ Ejemplos con los datos actuales:
   `CriteriosUsados` refleja refcat/IDUFIR (según lo declarado).
 - **No regresión:** tipologías sin refcat/IDUFIR (`resumen.documental`, `tdn.clasificacion`,
   `nota.simple.1_0`) no aparecen en el dry-run.
+- **Rollback:** tras aplicar, ejecutar el script de rollback contra la tabla de backup y
+  verificar que `ConfiguracionJson` vuelve byte-a-byte al original en las filas afectadas.
