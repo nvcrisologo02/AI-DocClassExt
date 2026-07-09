@@ -221,8 +221,9 @@ Correcciones incorporadas:
 
 ## Registro de despliegue (2026-07-09)
 
-**Work item:** AB#99875 (PBI "Activar AssetResolver por esquema en tipologías con
-referencia catastral / IDUFIR (robusto a casing)").
+**Work items:** Epic AB#98375 "EP 5 – Configuración y tipologías" → Feature AB#99876
+"F 5.4 – AssetResolver: activación por esquema en tipologías (refcat/IDUFIR, robusto a
+casing)" → PBI AB#99875 "Activar AssetResolver por esquema…". Los tres en estado Done.
 
 Aplicado en **dev** y **prod** (`srbsqlprodocai` / DB `DocumentIA`). Estado verificado en
 prod tras la aplicación (tipologías Publicadas + Activas con `AssetResolver.enabled=true`):
