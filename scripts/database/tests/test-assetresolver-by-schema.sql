@@ -359,3 +359,27 @@ IF EXISTS (SELECT 1 FROM dbo.Tipologias t JOIN #snap s ON s.Id=t.Id
     BEGIN PRINT 'FAIL: no idempotente'; THROW 50005,'idempotencia',1; END
 PRINT 'OK: idempotencia';
 GO
+
+-- ===== Rollback (Task 3): restaurar desde el snapshot original y verificar byte a byte =====
+-- El script real (scripts/database/rollback-assetresolver-by-schema.sql) restaura desde
+-- la tabla de backup fisica Tipologias_AssetResolverBak_<stamp> creada por
+-- enable-assetresolver-by-schema.sql (@BackupTable + OBJECT_ID + sp_executesql). Este
+-- harness omitio a proposito esa tabla fisica en sus aplicaciones (ver la nota de la
+-- seccion "Aplicacion (Task 2)": el timestamp con resolucion de segundo podria
+-- colisionar entre las dos aplicaciones del mismo test). Para una verificacion
+-- autocontenida se restaura aqui directamente desde #orig -- el snapshot de
+-- ConfiguracionJson tomado ANTES de la primera aplicacion, la misma fuente de verdad
+-- que contendria la tabla de backup real -- por Id, y se compara el resultado byte a
+-- byte contra ese snapshot.
+UPDATE t SET ConfiguracionJson = o.ConfiguracionJson
+FROM dbo.Tipologias t
+JOIN #orig o ON o.Id = t.Id;
+
+DECLARE @fail INT = 0;
+IF EXISTS (SELECT 1 FROM dbo.Tipologias t JOIN #orig o ON o.Id=t.Id
+           WHERE ISNULL(t.ConfiguracionJson,'')<>ISNULL(o.ConfiguracionJson,''))
+    BEGIN SET @fail=1; PRINT 'FAIL: rollback no restaura original'; END;
+
+IF @fail=1 THROW 50006,'rollback',1;
+PRINT 'OK: rollback';
+GO
