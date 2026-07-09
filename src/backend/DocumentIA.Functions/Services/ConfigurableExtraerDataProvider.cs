@@ -5,6 +5,7 @@ using DocumentIA.Functions.Mocks;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Globalization;
+using System.Text.Json;
 
 namespace DocumentIA.Functions.Services;
 
@@ -16,6 +17,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private readonly AzureDocumentIntelligenceExtraerDataProvider _diExtraerProvider;
     private readonly GptDirectExtraerDataProvider _gptDirectProvider;
     private readonly GptFallbackExtraerDataProvider _gptFallbackProvider;
+    private readonly ILayoutMarkdownProvider _layoutMarkdownProvider;
     private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
     private readonly ExtractionRoutingSettings _routingSettings;
@@ -28,6 +30,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         AzureDocumentIntelligenceExtraerDataProvider diExtraerProvider,
         GptDirectExtraerDataProvider gptDirectProvider,
         GptFallbackExtraerDataProvider gptFallbackProvider,
+        ILayoutMarkdownProvider layoutMarkdownProvider,
         ExtractionModelRegistryLoader extractionModelRegistryLoader,
         PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<ExtractionRoutingSettings> routingSettings,
@@ -39,6 +42,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         _diExtraerProvider = diExtraerProvider;
         _gptDirectProvider = gptDirectProvider;
         _gptFallbackProvider = gptFallbackProvider;
+        _layoutMarkdownProvider = layoutMarkdownProvider;
         _extractionModelRegistryLoader = extractionModelRegistryLoader;
         _promptModelRegistryLoader = promptModelRegistryLoader;
         _routingSettings = routingSettings.Value;
@@ -149,6 +153,43 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             _logger.LogWarning(ex, "Extracción CU falló para {Tipologia}. Activando fallback GPT.", input.Tipologia);
         }
 
+        var markdownContexto = resultadoCu?.MarkdownExtraido;
+        var paginasLayout = 0;
+
+        // Si CU no dejó markdown y la normalización tampoco trae texto, generar contexto
+        // con DI prebuilt-layout: sin él, el LLM de fallback no tiene documento que leer.
+        if (string.IsNullOrWhiteSpace(markdownContexto) && !TieneContextoTextual(input.DatosNormalizados))
+        {
+            try
+            {
+                var layout = await _layoutMarkdownProvider.ExtraerMarkdownAsync(
+                    new ExtraerMarkdownLayoutInput
+                    {
+                        Tipologia = input.Tipologia,
+                        DocumentoBase64 = input.Entrada.Documento.Content?.Base64 ?? string.Empty,
+                        NombreDocumento = input.Entrada.Documento.Name,
+                        BlobPath = input.Entrada.Documento.BlobPath
+                    },
+                    cancellationToken);
+
+                markdownContexto = layout.Markdown;
+                paginasLayout = layout.Paginas;
+
+                _logger.LogInformation(
+                    "Contexto de fallback generado con DI layout para {Tipologia}. Longitud={Length}, Paginas={Paginas}",
+                    input.Tipologia,
+                    markdownContexto?.Length ?? 0,
+                    paginasLayout);
+            }
+            catch (Exception layoutEx)
+            {
+                _logger.LogWarning(
+                    layoutEx,
+                    "No se pudo generar markdown de layout para el fallback de {Tipologia}. Se continúa sin contexto.",
+                    input.Tipologia);
+            }
+        }
+
         ExtraccionResultado resultadoGpt;
         var promptConfig = HasPromptDefinition(config.PromptConfig)
             ? OpenAIPromptDataProvider.ResolvePromptConfig(config.PromptConfig, null)
@@ -166,7 +207,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
                 input,
                 config,
                 promptConfig,
-                resultadoCu?.MarkdownExtraido,
+                markdownContexto,
                 cancellationToken);
         }
         else
@@ -174,14 +215,24 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             resultadoGpt = await _gptFallbackProvider.ObtenerDatosConFallbackAsync(
                 input,
                 config,
-                resultadoCu?.MarkdownExtraido,
+                markdownContexto,
                 cancellationToken);
+        }
 
-            var paginasCu = resultadoCu?.Paginas ?? 0;
-            if (resultadoGpt.Paginas <= 0 && paginasCu > 0)
-            {
-                resultadoGpt.Paginas = paginasCu;
-            }
+        var paginasContexto = resultadoCu?.Paginas ?? 0;
+        if (paginasContexto <= 0)
+        {
+            paginasContexto = paginasLayout;
+        }
+
+        if (resultadoGpt.Paginas <= 0 && paginasContexto > 0)
+        {
+            resultadoGpt.Paginas = paginasContexto;
+        }
+
+        if (string.IsNullOrWhiteSpace(resultadoGpt.MarkdownExtraido))
+        {
+            resultadoGpt.MarkdownExtraido = markdownContexto;
         }
 
         resultadoGpt.FallbackUsado = true;
@@ -316,5 +367,38 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             model = null;
             return false;
         }
+    }
+
+    private static bool TieneContextoTextual(IDictionary<string, object> datosNormalizados)
+    {
+        if (datosNormalizados is null || datosNormalizados.Count == 0)
+        {
+            return false;
+        }
+
+        // Mismas claves que GptFallbackExtraerDataProvider.ObtenerContextoTexto
+        var claves = new[] { "Markdown", "markdown", "Texto", "texto", "ContentText", "contentText" };
+
+        foreach (var clave in claves)
+        {
+            if (!datosNormalizados.TryGetValue(clave, out var raw) || raw is null)
+            {
+                continue;
+            }
+
+            if (raw is string s && !string.IsNullOrWhiteSpace(s))
+            {
+                return true;
+            }
+
+            if (raw is JsonElement json
+                && json.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(json.GetString()))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

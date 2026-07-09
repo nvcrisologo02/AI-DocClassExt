@@ -5,6 +5,7 @@ using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
+using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Mocks;
 using DocumentIA.Functions.Services;
 using FluentAssertions;
@@ -408,6 +409,82 @@ public class ConfigurableExtraerDataProviderTests
         fixture.GptProvider.VerifyAll();
     }
 
+    [Fact]
+    public async Task ObtenerDatosAsync_CuFallaSinMarkdown_GeneraContextoLayoutParaElFallback()
+    {
+        using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true);
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CuExtraccionException("default.cu", "TimeoutException", "hard timeout"));
+
+        fixture.LayoutProvider
+            .Setup(p => p.ExtraerMarkdownAsync(
+                It.IsAny<ExtraerMarkdownLayoutInput>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraerMarkdownLayoutResultado { Markdown = "## markdown layout", Paginas = 24 });
+
+        string? markdownRecibido = null;
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<ExtraccionInput, TipologiaValidationConfig, string?, CancellationToken>(
+                (_, _, md, _) => markdownRecibido = md)
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object> { ["CampoA"] = "v" }
+            });
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        result.FallbackUsado.Should().BeTrue();
+        markdownRecibido.Should().Be("## markdown layout");
+        result.Paginas.Should().Be(24);
+    }
+
+    [Fact]
+    public async Task ObtenerDatosAsync_LayoutFalla_ContinuaFallbackSinContexto()
+    {
+        using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true);
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CuExtraccionException("default.cu", "TimeoutException", "hard timeout"));
+
+        fixture.LayoutProvider
+            .Setup(p => p.ExtraerMarkdownAsync(
+                It.IsAny<ExtraerMarkdownLayoutInput>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException("layout caido"));
+
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                null,
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object>()
+            });
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        result.FallbackUsado.Should().BeTrue();
+        fixture.GptProvider.VerifyAll();
+    }
+
     private sealed class TestFixture : IDisposable
     {
         private readonly string _tempDir;
@@ -416,6 +493,7 @@ public class ConfigurableExtraerDataProviderTests
         public Mock<AzureContentUnderstandingProvider> AzureProvider { get; }
         public Mock<GptDirectExtraerDataProvider> DirectGptProvider { get; }
         public Mock<GptFallbackExtraerDataProvider> GptProvider { get; }
+        public Mock<ILayoutMarkdownProvider> LayoutProvider { get; }
         public Mock<ILogger<ConfigurableExtraerDataProvider>> Logger { get; }
 
         private readonly TipologiaConfigLoader _tipologiaConfigLoader;
@@ -548,6 +626,13 @@ public class ConfigurableExtraerDataProviderTests
 
             _routingSettings = new ExtractionRoutingSettings { DefaultProvider = "azure-content-understanding" };
             Logger = new Mock<ILogger<ConfigurableExtraerDataProvider>>();
+
+            LayoutProvider = new Mock<ILayoutMarkdownProvider>();
+            LayoutProvider
+                .Setup(p => p.ExtraerMarkdownAsync(
+                    It.IsAny<ExtraerMarkdownLayoutInput>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ExtraerMarkdownLayoutResultado { Markdown = null, Paginas = 0 });
         }
 
         private static TipologiaConfigLoader CreateLoaderFromTempDirectory(string tempDir)
@@ -643,6 +728,7 @@ public class ConfigurableExtraerDataProviderTests
                 null!,  // diExtraerProvider — no usado en estos tests (ruta CU/GPT)
                 DirectGptProvider.Object,
                 GptProvider.Object,
+                LayoutProvider.Object,
                 _extractionModelRegistryLoader,
                 _promptModelRegistryLoader,
                 Options.Create(_routingSettings),
