@@ -1,6 +1,7 @@
 #nullable enable
 using System.Reflection;
 using DocumentIA.Core.Configuration;
+using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Services;
 using FluentAssertions;
@@ -159,6 +160,31 @@ public class AzureContentUnderstandingProviderCircuitBreakerTests
             sut, "ResolveRetryModelKey", "primary-cu", extractionConfig, "nota.simple_bal")!;
 
         resolved.Should().Be("primary-cu");
+    }
+
+    [Fact]
+    public void ResolveModelKeyWithCircuit_SinFallbackDisponible_LanzaCuExtraccionExceptionCircuitRejected()
+    {
+        var sut = CreateProvider(new AzureContentUnderstandingOptions
+        {
+            EnableCircuitBreaker = true,
+            CircuitBreakerFailureThreshold = 1,
+            CircuitBreakerOpenSeconds = 60
+        });
+
+        InvokePrivate(sut, "RegisterCircuitFailure", "primary-cu", "nota.simple", "test");
+
+        var extractionConfig = new TipologiaExtractionConfig
+        {
+            Enabled = true,
+            ModelKey = "primary-cu"
+        };
+
+        var act = () => InvokePrivate(sut, "ResolveModelKeyWithCircuit", "primary-cu", extractionConfig, "nota.simple");
+
+        act.Should().Throw<System.Reflection.TargetInvocationException>()
+            .WithInnerException<CuExtraccionException>()
+            .Which.RazonTipo.Should().Be("CircuitRejected");
     }
 
     private static AzureContentUnderstandingProvider CreateProvider(AzureContentUnderstandingOptions options)
