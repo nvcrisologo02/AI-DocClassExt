@@ -164,3 +164,198 @@ IF EXISTS (SELECT 1 FROM #Descubrimiento d JOIN dbo.Tipologias t ON t.Id=d.Id
 IF @fail=1 THROW 50001, 'Descubrimiento: aserciones fallidas', 1;
 PRINT 'OK: descubrimiento';
 GO
+
+-- ===== Aplicación (Task 2): snapshot original + aplicación real + aserciones =====
+
+-- Snapshot ANTES de cualquier aplicación (lo necesita la aserción de rollback de la Task 3).
+SELECT Id, ConfiguracionJson INTO #orig FROM dbo.Tipologias;
+GO
+
+-- Aplicación 1: reutiliza el mismo módulo de descubrimiento corregido (arriba) + el
+-- JSON_MODIFY del script real (scripts/database/enable-assetresolver-by-schema.sql),
+-- con @WhatIf=0 fijo (copia intencional del bloque de UPDATE, es un harness de test).
+-- Se omite aquí el paso de backup a tabla física del script real: su nombre depende de
+-- un timestamp con resolución de segundo y este bloque se reaplica dos veces en el
+-- mismo test (aplicación + idempotencia), lo que podría colisionar de nombre; el backup
+-- ya se revisa de forma aislada al ejecutar el script real.
+;WITH TipologiasJsonValido AS (
+    SELECT Id, ConfiguracionJson
+    FROM dbo.Tipologias
+    WHERE ISJSON(ConfiguracionJson) = 1
+),
+FieldsFlat AS (
+    SELECT t.Id, j.[name], j.[type], j.rules, j.itemsProps
+    FROM TipologiasJsonValido t
+    CROSS APPLY OPENJSON(t.ConfiguracionJson, '$.fields')
+        WITH ([name] NVARCHAR(200) '$.name',
+              [type] NVARCHAR(50)  '$.type',
+              rules  NVARCHAR(MAX) '$.rules' AS JSON,
+              itemsProps NVARCHAR(MAX) '$.items.properties' AS JSON) j
+),
+FieldsNested AS (
+    SELECT f.Id, f.[name] AS ColeccionName, p.[name] AS PropName, p.rules
+    FROM FieldsFlat f
+    CROSS APPLY OPENJSON(f.itemsProps)
+        WITH ([name] NVARCHAR(200) '$.name', rules NVARCHAR(MAX) '$.rules' AS JSON) p
+    WHERE f.[type] = 'array' AND f.itemsProps IS NOT NULL
+),
+Qualified AS (
+    SELECT Id, 'REF' AS Kind, [name] AS FieldName, CAST(NULL AS NVARCHAR(200)) AS ColeccionName
+    FROM FieldsFlat f
+    WHERE LOWER([name]) IN ('referenciacatastral','refcatastral','catastral')
+       OR (ISJSON(f.rules) = 1 AND EXISTS (SELECT 1 FROM OPENJSON(f.rules) WITH (ruleType NVARCHAR(100) '$.ruleType') r WHERE LOWER(r.ruleType)='catastral'))
+    UNION ALL
+    SELECT Id, 'IDU', [name], NULL
+    FROM FieldsFlat
+    WHERE LOWER([name]) IN ('idufir_cru','idufir','cru','codigoregistrounico')
+    UNION ALL
+    SELECT Id, 'REF', PropName, ColeccionName
+    FROM FieldsNested n
+    WHERE LOWER(PropName) IN ('referenciacatastral','refcatastral','catastral')
+       OR (ISJSON(n.rules) = 1 AND EXISTS (SELECT 1 FROM OPENJSON(n.rules) WITH (ruleType NVARCHAR(100) '$.ruleType') r WHERE LOWER(r.ruleType)='catastral'))
+    UNION ALL
+    SELECT Id, 'IDU', PropName, ColeccionName
+    FROM FieldsNested
+    WHERE LOWER(PropName) IN ('idufir_cru','idufir','cru','codigoregistrounico')
+)
+SELECT q.Id,
+    (SELECT '[' + STRING_AGG('"' + STRING_ESCAPE(FieldName,'json') + '"', ',') WITHIN GROUP (ORDER BY FieldName) + ']'
+     FROM (SELECT DISTINCT FieldName FROM Qualified x WHERE x.Id=q.Id AND x.Kind='REF') a) AS RefcatArr,
+    (SELECT '[' + STRING_AGG('"' + STRING_ESCAPE(FieldName,'json') + '"', ',') WITHIN GROUP (ORDER BY FieldName) + ']'
+     FROM (SELECT DISTINCT FieldName FROM Qualified x WHERE x.Id=q.Id AND x.Kind='IDU') b) AS IdufirArr,
+    (SELECT '[' + STRING_AGG('"' + STRING_ESCAPE(ColeccionName,'json') + '"', ',') WITHIN GROUP (ORDER BY ColeccionName) + ']'
+     FROM (SELECT DISTINCT ColeccionName FROM Qualified x WHERE x.Id=q.Id AND x.ColeccionName IS NOT NULL) c) AS ColeccionArr
+INTO #obj
+FROM (SELECT DISTINCT Id FROM Qualified) q
+JOIN dbo.Tipologias t ON t.Id = q.Id AND t.Estado = 1 AND t.Activa = 1;
+
+;WITH NuevoJson AS (
+    SELECT t.Id,
+        JSON_MODIFY(
+          JSON_MODIFY(
+            JSON_MODIFY(
+              JSON_MODIFY(
+                JSON_MODIFY(
+                  JSON_MODIFY(t.ConfiguracionJson,'$.assetResolver',
+                     JSON_QUERY(ISNULL(JSON_QUERY(t.ConfiguracionJson,'$.assetResolver'),'{}'))),
+                  '$.assetResolver.enabled', CAST(1 AS BIT)),
+                '$.assetResolver.busquedaReferenciaCatastralHabilitada', CAST(1 AS BIT)),
+              '$.assetResolver.busquedaIdufirHabilitada', CAST(1 AS BIT)),
+            '$.assetResolver.mapeoReferenciaCatastral', JSON_QUERY(o.RefcatArr)),
+          '$.assetResolver.mapeoIdufir', JSON_QUERY(o.IdufirArr)) AS Base,
+        o.ColeccionArr
+    FROM dbo.Tipologias t JOIN #obj o ON o.Id=t.Id
+)
+UPDATE t SET ConfiguracionJson =
+    JSON_MODIFY(n.Base,'$.assetResolver.mapeoColeccionActivos', JSON_QUERY(n.ColeccionArr))
+FROM dbo.Tipologias t JOIN NuevoJson n ON n.Id=t.Id;
+
+DROP TABLE #obj;
+GO
+
+-- ===== Aserciones de aplicación =====
+
+-- a) preservación de assetResolver preexistente
+IF NOT EXISTS (SELECT 1 FROM dbo.Tipologias
+    WHERE Codigo='preexisting-ar'
+      AND JSON_VALUE(ConfiguracionJson,'$.assetResolver.enabled')='true'
+      AND JSON_VALUE(ConfiguracionJson,'$.assetResolver.busquedaDireccionHabilitada')='true'
+      AND JSON_VALUE(ConfiguracionJson,'$.assetResolver.mapeoReferenciaCatastral[0]')='ReferenciaCatastral')
+    BEGIN PRINT 'FAIL: preexisting-ar no preservado'; THROW 50002,'preexisting-ar',1; END
+
+-- b) omisión de mapeoIdufir cuando no hay idufir (ibi-flat-refcat)
+IF JSON_QUERY((SELECT ConfiguracionJson FROM dbo.Tipologias WHERE Codigo='ibi-flat-refcat'),'$.assetResolver.mapeoIdufir') IS NOT NULL
+    BEGIN PRINT 'FAIL: ibi-flat-refcat no debe tener mapeoIdufir'; THROW 50003,'ibi mapeoIdufir',1; END
+
+-- c) decoy sin assetResolver
+IF JSON_QUERY((SELECT ConfiguracionJson FROM dbo.Tipologias WHERE Codigo='valor-decoy'),'$.assetResolver') IS NOT NULL
+    BEGIN PRINT 'FAIL: valor-decoy no debe tener assetResolver'; THROW 50004,'decoy',1; END
+
+PRINT 'OK: aplicacion';
+GO
+
+-- ===== Idempotencia: snapshot tras la 1ª aplicación, reaplicar, comparar =====
+SELECT Id, ConfiguracionJson INTO #snap FROM dbo.Tipologias;
+GO
+
+-- Aplicación 2: bloque de descubrimiento + UPDATE idéntico a la aplicación 1.
+;WITH TipologiasJsonValido AS (
+    SELECT Id, ConfiguracionJson
+    FROM dbo.Tipologias
+    WHERE ISJSON(ConfiguracionJson) = 1
+),
+FieldsFlat AS (
+    SELECT t.Id, j.[name], j.[type], j.rules, j.itemsProps
+    FROM TipologiasJsonValido t
+    CROSS APPLY OPENJSON(t.ConfiguracionJson, '$.fields')
+        WITH ([name] NVARCHAR(200) '$.name',
+              [type] NVARCHAR(50)  '$.type',
+              rules  NVARCHAR(MAX) '$.rules' AS JSON,
+              itemsProps NVARCHAR(MAX) '$.items.properties' AS JSON) j
+),
+FieldsNested AS (
+    SELECT f.Id, f.[name] AS ColeccionName, p.[name] AS PropName, p.rules
+    FROM FieldsFlat f
+    CROSS APPLY OPENJSON(f.itemsProps)
+        WITH ([name] NVARCHAR(200) '$.name', rules NVARCHAR(MAX) '$.rules' AS JSON) p
+    WHERE f.[type] = 'array' AND f.itemsProps IS NOT NULL
+),
+Qualified AS (
+    SELECT Id, 'REF' AS Kind, [name] AS FieldName, CAST(NULL AS NVARCHAR(200)) AS ColeccionName
+    FROM FieldsFlat f
+    WHERE LOWER([name]) IN ('referenciacatastral','refcatastral','catastral')
+       OR (ISJSON(f.rules) = 1 AND EXISTS (SELECT 1 FROM OPENJSON(f.rules) WITH (ruleType NVARCHAR(100) '$.ruleType') r WHERE LOWER(r.ruleType)='catastral'))
+    UNION ALL
+    SELECT Id, 'IDU', [name], NULL
+    FROM FieldsFlat
+    WHERE LOWER([name]) IN ('idufir_cru','idufir','cru','codigoregistrounico')
+    UNION ALL
+    SELECT Id, 'REF', PropName, ColeccionName
+    FROM FieldsNested n
+    WHERE LOWER(PropName) IN ('referenciacatastral','refcatastral','catastral')
+       OR (ISJSON(n.rules) = 1 AND EXISTS (SELECT 1 FROM OPENJSON(n.rules) WITH (ruleType NVARCHAR(100) '$.ruleType') r WHERE LOWER(r.ruleType)='catastral'))
+    UNION ALL
+    SELECT Id, 'IDU', PropName, ColeccionName
+    FROM FieldsNested
+    WHERE LOWER(PropName) IN ('idufir_cru','idufir','cru','codigoregistrounico')
+)
+SELECT q.Id,
+    (SELECT '[' + STRING_AGG('"' + STRING_ESCAPE(FieldName,'json') + '"', ',') WITHIN GROUP (ORDER BY FieldName) + ']'
+     FROM (SELECT DISTINCT FieldName FROM Qualified x WHERE x.Id=q.Id AND x.Kind='REF') a) AS RefcatArr,
+    (SELECT '[' + STRING_AGG('"' + STRING_ESCAPE(FieldName,'json') + '"', ',') WITHIN GROUP (ORDER BY FieldName) + ']'
+     FROM (SELECT DISTINCT FieldName FROM Qualified x WHERE x.Id=q.Id AND x.Kind='IDU') b) AS IdufirArr,
+    (SELECT '[' + STRING_AGG('"' + STRING_ESCAPE(ColeccionName,'json') + '"', ',') WITHIN GROUP (ORDER BY ColeccionName) + ']'
+     FROM (SELECT DISTINCT ColeccionName FROM Qualified x WHERE x.Id=q.Id AND x.ColeccionName IS NOT NULL) c) AS ColeccionArr
+INTO #obj
+FROM (SELECT DISTINCT Id FROM Qualified) q
+JOIN dbo.Tipologias t ON t.Id = q.Id AND t.Estado = 1 AND t.Activa = 1;
+
+;WITH NuevoJson AS (
+    SELECT t.Id,
+        JSON_MODIFY(
+          JSON_MODIFY(
+            JSON_MODIFY(
+              JSON_MODIFY(
+                JSON_MODIFY(
+                  JSON_MODIFY(t.ConfiguracionJson,'$.assetResolver',
+                     JSON_QUERY(ISNULL(JSON_QUERY(t.ConfiguracionJson,'$.assetResolver'),'{}'))),
+                  '$.assetResolver.enabled', CAST(1 AS BIT)),
+                '$.assetResolver.busquedaReferenciaCatastralHabilitada', CAST(1 AS BIT)),
+              '$.assetResolver.busquedaIdufirHabilitada', CAST(1 AS BIT)),
+            '$.assetResolver.mapeoReferenciaCatastral', JSON_QUERY(o.RefcatArr)),
+          '$.assetResolver.mapeoIdufir', JSON_QUERY(o.IdufirArr)) AS Base,
+        o.ColeccionArr
+    FROM dbo.Tipologias t JOIN #obj o ON o.Id=t.Id
+)
+UPDATE t SET ConfiguracionJson =
+    JSON_MODIFY(n.Base,'$.assetResolver.mapeoColeccionActivos', JSON_QUERY(n.ColeccionArr))
+FROM dbo.Tipologias t JOIN NuevoJson n ON n.Id=t.Id;
+
+DROP TABLE #obj;
+GO
+
+IF EXISTS (SELECT 1 FROM dbo.Tipologias t JOIN #snap s ON s.Id=t.Id
+           WHERE ISNULL(t.ConfiguracionJson,'') <> ISNULL(s.ConfiguracionJson,''))
+    BEGIN PRINT 'FAIL: no idempotente'; THROW 50005,'idempotencia',1; END
+PRINT 'OK: idempotencia';
+GO
