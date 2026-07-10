@@ -221,20 +221,30 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             };
         }
 
-        // Phase 2 solo se ejecuta si confianza de Phase 1 > 0.6
-        if (confianzaPhase1 <= 0.6)
-        {
-            stopwatch.Stop();
-            _logger.LogInformation(
-                "Clasificación GPT detenida tras Phase 1. Confianza={Confianza} <= 0.6. TDN1={Tdn1}",
-                confianzaPhase1.ToString("F3"),
-                tdn1Code);
-            return BuildVirtualResult(
-                model,
-                tipologiaDetectada: tdn1Code,
-                propuesta: tdn1Code,
-                resumen: resumenPhase1);
-        }
+        // [EXPERIMENTO] Gate de confianza Phase 1 comentado temporalmente.
+        // Antes: si confianzaPhase1 <= 0.6 se cortaba tras Phase 1 devolviendo un resultado
+        // virtual (TDN1, ClasificacionParcial=true) y NO se intentaba identificar el TDN2.
+        // Ahora se ejecuta siempre la Phase 2 (mientras se afinan los prompts de confianza)
+        // para intentar identificar el TDN2 aunque la confianza reportada en Phase 1 sea baja.
+        // La confianza final del resultado la aporta Phase 2 tal cual (ver más abajo).
+        // Decisión de reactivar/parametrizar este gate: pendiente tras validar resultados.
+        // if (confianzaPhase1 <= 0.6)
+        // {
+        //     stopwatch.Stop();
+        //     _logger.LogInformation(
+        //         "Clasificación GPT detenida tras Phase 1. Confianza={Confianza} <= 0.6. TDN1={Tdn1}",
+        //         confianzaPhase1.ToString("F3"),
+        //         tdn1Code);
+        //     return BuildVirtualResult(
+        //         model,
+        //         tipologiaDetectada: tdn1Code,
+        //         propuesta: tdn1Code,
+        //         resumen: resumenPhase1);
+        // }
+        _logger.LogInformation(
+            "Continuando a Phase 2 sin aplicar gate de confianza Phase 1. ConfianzaPhase1={Confianza}, TDN1={Tdn1}",
+            confianzaPhase1.ToString("F3"),
+            tdn1Code);
 
         var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code);
         if (string.IsNullOrWhiteSpace(phase2Catalog))
