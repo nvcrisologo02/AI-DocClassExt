@@ -180,13 +180,15 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                     "GPT devolvió propuesta sin TDN1 extraíble: '{Propuesta}'. Marcando como tipología virtual.",
                     propuesta);
                 
+                // Confianza autoreportada por el modelo (antes se forzaba a 0.1).
+                var confianzaVirtualPropuesta = phase1Parsed.Value.Confianza ?? 0.9;
                 return new ResultadoClasificacion
                 {
                     Modelo = model.DeploymentName,
                     ProveedorClasif = "GPT4oMini",
                     TipologiaDetectada = "Desconocido",
-                    Confianza = 0.1,
-                    ConfianzaGPT = 0.1,
+                    Confianza = confianzaVirtualPropuesta,
+                    ConfianzaGPT = confianzaVirtualPropuesta,
                     ClasificacionParcial = true,
                     FallbackRazon = "tdn1_virtual_propuesta",
                     PropuestaTipologia = propuesta,
@@ -239,6 +241,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         //         model,
         //         tipologiaDetectada: tdn1Code,
         //         propuesta: tdn1Code,
+        //         confianza: confianzaPhase1,
         //         resumen: resumenPhase1);
         // }
         _logger.LogInformation(
@@ -254,6 +257,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 model,
                 tipologiaDetectada: tdn1Code,
                 propuesta: tdn1Code,
+                confianza: confianzaPhase1,
                 resumen: resumenPhase1);
         }
 
@@ -297,6 +301,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return BuildUnclassifiedResult(model, phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason, propuesta);
         }
 
+        var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
+
         var tipologiaCode = ResolveTipologiaByTdn2(phase2Parsed.Value.Tdn2);
         if (string.IsNullOrWhiteSpace(tipologiaCode))
         {
@@ -307,12 +313,12 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 model,
                 tipologiaDetectada: tipologiaVirtual,
                 propuesta: justificacionVirtual,
+                confianza: confianzaPhase2,
                 resumen: resumenPhase1);
         }
 
         stopwatch.Stop();
 
-        var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
         _logger.LogInformation(
             "Clasificación GPT Fase 2 completada. Tipologia={Tipologia}, ConfianzaSelfReported={ConfianzaSelfReported}, ConfianzaFinal={ConfianzaFinal}",
             tipologiaCode,
@@ -613,15 +619,16 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, string? resumen = null)
+    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null)
     {
         return new ResultadoClasificacion
         {
             Modelo = model.DeploymentName,
             ProveedorClasif = "GPT4oMini",
             TipologiaDetectada = tipologiaDetectada,
-            Confianza = 0.1,
-            ConfianzaGPT = 0.1,
+            // Confianza autoreportada por el modelo (antes se forzaba a 0.1).
+            Confianza = confianza,
+            ConfianzaGPT = confianza,
             ClasificacionParcial = true,
             FallbackRazon = "Tipologia Virtual",
             PropuestaTipologia = propuesta,
