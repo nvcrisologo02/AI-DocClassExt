@@ -128,6 +128,8 @@ var host = new HostBuilder()
 
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<AzureContentUnderstandingOptions>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
+        services.Configure<AzureOpenAIResilienceOptions>(
+            context.Configuration.GetSection("AzureOpenAIResilience"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
         
         // Manual binding for Flows dictionary (complex type not supported by default configuration binding)
