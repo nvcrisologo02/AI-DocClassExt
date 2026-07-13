@@ -303,7 +303,21 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (!phase2Parsed.Success || phase2Parsed.Value is null)
         {
             stopwatch.Stop();
-            return BuildUnclassifiedResult(model, phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason, propuesta);
+            // Phase 2 sin TDN2 parseable (JSON inválido, tdn2 null/vacío o respuesta truncada):
+            // se degrada a tipología virtual conservando el TDN1 ya resuelto en Phase 1,
+            // igual que los caminos "familia sin catálogo TDN2" y "TDN2 sin mapeo publicado".
+            _logger.LogWarning(
+                "Phase 2 sin TDN2 parseable ({Razon}). Degradando a tipología virtual TDN1={Tdn1} con confianza Phase 1={Confianza}.",
+                phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason,
+                tdn1Code,
+                confianzaPhase1.ToString("F3"));
+            return BuildVirtualResult(
+                model,
+                tipologiaDetectada: tdn1Code,
+                propuesta: string.IsNullOrWhiteSpace(propuesta) ? tdn1Code : propuesta,
+                confianza: confianzaPhase1,
+                resumen: resumenPhase1,
+                fallbackRazon: phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason);
         }
 
         var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
@@ -632,7 +646,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null)
+    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null, string? fallbackRazon = null)
     {
         return new ResultadoClasificacion
         {
@@ -643,7 +657,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             Confianza = confianza,
             ConfianzaGPT = confianza,
             ClasificacionParcial = true,
-            FallbackRazon = "Tipologia Virtual",
+            FallbackRazon = fallbackRazon ?? "Tipologia Virtual",
             PropuestaTipologia = propuesta,
             ResumenCombinado = resumen
         };
