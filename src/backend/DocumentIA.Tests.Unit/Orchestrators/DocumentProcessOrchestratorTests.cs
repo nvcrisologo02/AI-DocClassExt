@@ -1144,6 +1144,37 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualConTdn2Detectado_PersisteTdn2EnIdentificacion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "ESIN",
+            Tdn2Detectado = "ESIN-40",
+            ClasificacionParcial = true,
+            FallbackRazon = "Tipologia Virtual",
+            PropuestaTipologia = "Informe de solvencia del titular"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("ESIN");
+        salida.Identificacion.Tdn1.Should().Be("ESIN");
+        salida.Identificacion.Tdn2.Should().Be("ESIN-40");
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_SkipDuplicateCheck_OmiteVerificarDuplicadoActivity()
     {
         var orchestrator = CreateOrchestrator();
