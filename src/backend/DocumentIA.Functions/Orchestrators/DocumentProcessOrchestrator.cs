@@ -977,17 +977,31 @@ public class DocumentProcessOrchestrator
                         ? $"Tipología parcial TDN1: GlobalFallback identificó familia '{tipologiaParcial}' con confianza baja. Pipeline detenido."
                         : "Tipología virtual TDN1: GPT no resolvió código de catálogo. Pipeline detenido con PropuestaTipologia.";
                     
+                    // Conservar el markdown ya extraído (paso 2.8 / normalización) para que
+                    // PersistirActivity lo comprima en Documentos.NormalizacionMarkdownCompressed,
+                    // igual que en la ruta normal de ClassificationOnly.
+                    var markdownVirtual = datosNormalizados.TryGetValue("Markdown", out var markdownVirtualObj) &&
+                        markdownVirtualObj is string markdownVirtualTexto &&
+                        !string.IsNullOrWhiteSpace(markdownVirtualTexto)
+                        ? markdownVirtualTexto
+                        : null;
+
                     salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                     {
                         Normalizaciones = new List<string>
                         {
                             mensajeNormalizacion
                         },
-                        Markdown = null,
+                        Markdown = markdownVirtual,
                         Validaciones = new List<string>(),
                         Inconsistencias = new List<string>(),
                         ConfianzaValidacion = 1.0
                     };
+
+                    if (!string.IsNullOrWhiteSpace(markdownVirtual))
+                    {
+                        salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+                    }
 
                     var motivoOmision = esFase2SinTdn2Parseable
                         ? $"Tipología parcial TDN1 sin TDN2 parseable: {tipologiaParcial}"

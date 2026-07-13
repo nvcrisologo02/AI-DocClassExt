@@ -1114,7 +1114,7 @@ public class DocumentProcessOrchestratorTests
         var orchestrator = CreateOrchestrator();
         var context = new FakeTaskOrchestrationContext(BuildEntrada());
 
-        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
         context.SetupActivity("VerificarDuplicadoActivity", false);
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
@@ -1137,6 +1137,9 @@ public class DocumentProcessOrchestratorTests
         salida.Identificacion.Tdn1.Should().Be("PRES");
         salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be("fase2_parsing_error");
         salida.DatosExtraidos.Should().ContainKey("Resumen");
+        // El markdown disponible debe conservarse para que PersistirActivity lo comprima en Documentos
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# markdown normalizado");
+        salida.DetalleEjecucion.Postproceso.Normalizaciones.Should().Contain("Markdown");
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
     }
 
