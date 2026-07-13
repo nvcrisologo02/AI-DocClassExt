@@ -15,6 +15,7 @@ using DocumentIA.Plugins.Integration;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Services.Classification;
+using DocumentIA.Functions.Services.Resilience;
 using Microsoft.Extensions.Options;
 using System.IO;
 using Azure.Identity;
@@ -155,6 +156,8 @@ var host = new HostBuilder()
         services.Configure<PipelineSettings>(context.Configuration.GetSection("Pipeline"));
 
         services.AddSingleton<PromptTraceTelemetryService>();
+
+        services.AddSingleton<IAzureOpenAIResilienceExecutor, AzureOpenAIResilienceExecutor>();
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
