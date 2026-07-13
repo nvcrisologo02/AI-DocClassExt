@@ -1,3 +1,4 @@
+using System.ClientModel.Primitives;
 using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -7,6 +8,7 @@ using Azure.Identity;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Services.Resilience;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using OpenAI.Chat;
@@ -20,6 +22,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
     private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<OpenAIPromptDataProvider> _logger;
     private readonly PromptTraceTelemetryService _promptTraceTelemetry;
+    private readonly IAzureOpenAIResilienceExecutor _resilience;
 
     // Cache de clientes por endpoint/auth/deployment para evitar recrearlos en cada llamada
     private readonly Dictionary<string, ChatClient> _clientCache = new(StringComparer.OrdinalIgnoreCase);
@@ -30,12 +33,14 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<PromptDefaultsSettings> promptDefaults,
         PromptTraceTelemetryService promptTraceTelemetry,
+        IAzureOpenAIResilienceExecutor resilience,
         ILogger<OpenAIPromptDataProvider> logger)
     {
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _promptModelRegistryLoader = promptModelRegistryLoader;
         _promptDefaults = promptDefaults.Value;
         _promptTraceTelemetry = promptTraceTelemetry;
+        _resilience = resilience;
         _logger = logger;
     }
 
@@ -190,7 +195,11 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(TimeSpan.FromSeconds(modelConfig.TimeoutSeconds));
 
-            var response = await chatClient.CompleteChatAsync(messages, options, cts.Token);
+            var circuitKey = $"{modelConfig.Endpoint}|{modelConfig.DeploymentName}";
+            var response = await _resilience.ExecuteAsync(
+                circuitKey,
+                ct => chatClient.CompleteChatAsync(messages, options, ct),
+                cts.Token);
 
             stopwatch.Stop();
 
@@ -199,6 +208,18 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 Modelo = modelConfig.DeploymentName,
                 Resultado = response.Value.Content[0].Text,
                 TiempoMs = (int)stopwatch.ElapsedMilliseconds
+            };
+        }
+        catch (RateLimitExhaustedException ex)
+        {
+            stopwatch.Stop();
+            _logger.LogWarning(ex,
+                "Prompt pospuesto por rate limit (429) para tipología {Tipologia}.", input.Tipologia);
+            return new PromptResultado
+            {
+                Modelo = modelConfig.DeploymentName,
+                TiempoMs = (int)stopwatch.ElapsedMilliseconds,
+                Error = $"rate_limit_exhausted: {ex.Message}"
             };
         }
         catch (Exception ex)
@@ -303,13 +324,17 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             systemPrompt: systemPrompt,
             userPrompt: userText);
 
-        var response = await chatClient.CompleteChatAsync(
-            new List<ChatMessage>
-            {
-                new SystemChatMessage(systemPrompt),
-                new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText))
-            },
-            options,
+        var circuitKey = $"{modelConfig.Endpoint}|{modelConfig.DeploymentName}";
+        var response = await _resilience.ExecuteAsync(
+            circuitKey,
+            ct => chatClient.CompleteChatAsync(
+                new List<ChatMessage>
+                {
+                    new SystemChatMessage(systemPrompt),
+                    new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText))
+                },
+                options,
+                ct),
             cts.Token);
 
         var text = response.Value.Content[0].Text;
@@ -553,10 +578,16 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                     "PromptModelConfig.DeploymentName es obligatorio.");
             }
 
+            var clientOptions = new AzureOpenAIClientOptions
+            {
+                RetryPolicy = new ClientRetryPolicy(maxRetries: 0)
+            };
+
             AzureOpenAIClient azureClient;
             if (string.Equals(modelConfig.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
             {
-                azureClient = new AzureOpenAIClient(new Uri(modelConfig.Endpoint), new DefaultAzureCredential());
+                azureClient = new AzureOpenAIClient(
+                    new Uri(modelConfig.Endpoint), new DefaultAzureCredential(), clientOptions);
             }
             else
             {
@@ -568,7 +599,8 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
                 azureClient = new AzureOpenAIClient(
                     new Uri(modelConfig.Endpoint),
-                    new AzureKeyCredential(modelConfig.ApiKey));
+                    new AzureKeyCredential(modelConfig.ApiKey),
+                    clientOptions);
             }
 
             var client = azureClient.GetChatClient(modelConfig.DeploymentName);
