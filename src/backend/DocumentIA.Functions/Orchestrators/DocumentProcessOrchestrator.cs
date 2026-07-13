@@ -793,6 +793,30 @@ public class DocumentProcessOrchestrator
                             GenerarResumenPorDefecto = true
                         });
 
+                    if (resultadoClasificacion.RateLimitExcedido)
+                    {
+                        MarcarFinActividad(
+                            "Clasificar",
+                            "Failed",
+                            "Rate limit 429: clasificación pospuesta");
+
+                        const string mensajeReintento =
+                            "Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde.";
+
+                        logger.LogWarning(
+                            "Clasificación pospuesta por rate limit (429). Documento marcado PENDIENTE_REINTENTO.");
+
+                        salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
+                        salida.Resultado.Estado = "PENDIENTE_REINTENTO";
+                        salida.Resultado.MensajeError = mensajeReintento;
+                        salida.Resultado.EstadoCalidad = "ERROR";
+                        salida.Resultado.ConfianzaGlobal = 0;
+                        salida.Resultado.ConfianzaClasificacion = 0;
+
+                        FinalizarSeguimiento("PendienteReintento", mensajeReintento);
+                        return salida;
+                    }
+
                         var mensajeClasificacion = resultadoClasificacion.FallbackLLM
                             ? $"Fallback Azure OpenAI activado ({resultadoClasificacion.FallbackRazon ?? "sin razon informada"})"
                             : (!string.IsNullOrWhiteSpace(resultadoClasificacion.FallbackRazon)
