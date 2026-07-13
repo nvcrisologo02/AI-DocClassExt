@@ -197,4 +197,8 @@ Espejo de `AzureContentUnderstandingProviderCircuitBreakerTests`:
 
 ## 8. Trazabilidad
 
-- Work item ADO: _(pendiente de crear antes de ejecutar el plan — padre + tasks, referenciar `AB#` reales)_.
+- Feature ADO: `AB#99893` — "Resiliencia 429 (rate limit) en clasificación GPT y prompts".
+- Tasks: `AB#99894` (opciones config), `AB#99895` (executor), `AB#99896` (integración clasificación GPT),
+  `AB#99897` (flag + ClasificarActivity), `AB#99898` (short-circuit orquestador),
+  `AB#99899` (persistencia/UI del estado), `AB#99900` (integración prompts).
+- Cada commit referencia el `AB#` de su task correspondiente.
