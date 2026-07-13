@@ -330,10 +330,25 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | `OK` | Procesamiento completado correctamente. |
 | `OK` _(clasificación parcial — tipología virtual)_ | Solo cuando `nivelClasificacion` activa clasificación GPT y el modelo no puede mapear a ningún código de catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` contiene la propuesta libre del modelo. El pipeline se detiene: extracción y validación se omiten. |
 | `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. El pipeline continúa (extracción, validación) con la tipología parcial. |
+| `PENDIENTE_REINTENTO` | La clasificación GPT se pospuso porque la cuota de Azure OpenAI quedó agotada (`429 Too Many Requests`) tras agotar los reintentos y/o con el circuito abierto. Es un estado **retriable**: el documento debe reencolarse/reprocesarse más tarde, no representa un fallo definitivo. Va acompañado de `estadoCalidad = "ERROR"`, confianzas a `0` y `mensajeError` con el detalle (p. ej. `"Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`). No debe confundirse con `NO_CLASIFICADO` (documento genuinamente no clasificable). |
 | `VALIDACION_CON_ERRORES` | Extracción completada pero alguna regla de validación no se cumplió. Los datos se devuelven. |
 | `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. Se devuelven datos con advertencia. |
 | `DUPLICADO` | El documento ya existe en la base de datos (mismo SHA256 + `classificationOnly` + `nivelClasificacion`). Se devuelve la ejecución anterior reutilizada. Ver `reutilizadaPorDuplicado = true`. |
 | `ERROR` | Error irrecuperable durante el procesamiento (clasificación fallida, excepción no controlada). Consultar `mensajeError`. |
+
+> **Ejemplo — `PENDIENTE_REINTENTO`** (extracto de `resultado`):
+> ```json
+> {
+>   "resultado": {
+>     "estado": "PENDIENTE_REINTENTO",
+>     "mensajeError": "Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde.",
+>     "estadoCalidad": "ERROR",
+>     "confianzaClasificacion": 0,
+>     "confianzaExtraccion": 0,
+>     "confianzaValidacion": 0
+>   }
+> }
+> ```
 
 ---
 

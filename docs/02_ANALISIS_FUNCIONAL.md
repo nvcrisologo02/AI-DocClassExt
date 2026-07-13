@@ -106,6 +106,8 @@ flowchart TB
 | ExpectedType informado | Omite clasificacion (confianza=1.0), usa la tipologia indicada directamente. |
 | Confianza clasificacion < umbral | Estado final `BAJA_CONFIANZA_CLASIFICACION`. No extrae ni valida. |
 | Tipologia no resoluble | Estado final `ERROR` con mensaje "No se ha podido identificar la tipologia". |
+| Cuota de Azure OpenAI agotada durante la clasificacion GPT (limite de peticiones excedido, tras reintentos automaticos) | Estado final `PENDIENTE_REINTENTO`. Desenlace limpio y retriable: el documento no se pierde ni queda en error definitivo, solo pospone la clasificacion para reprocesarse mas tarde. Operacion puede identificarlo y reencolar el documento; se distingue de `NO_CLASIFICADO` (documento genuinamente no clasificable) y de `ERROR` (fallo no recuperable). Ver RN3. |
+| Cuota de Azure OpenAI agotada durante un prompt de enriquecimiento (no en la clasificacion) | El prompt devuelve un resultado degradado de forma controlada; no bloquea el pipeline ni marca el documento como `PENDIENTE_REINTENTO`. |
 | Extraccion con baja completitud | Activa fallback GPT-4o-mini para campos faltantes. |
 | Plugin critico (Priority=1) falla | Detiene cadena de plugins. Datos parciales se preservan. |
 | AssetResolver habilitado y activo encontrado | `ObtenerActivoActivity` resuelve IdActivo desde `DM_POSICION_AAII_TB` antes de la integracion. |
@@ -216,6 +218,11 @@ ConfianzaGlobal = MIN(ConfianzaClasificacion, ConfianzaExtraccion, ConfianzaVali
 | >= umbralRevision (0.70) | `REVISION` |
 | < umbralRevision | `ERROR` |
 
+**Excepcion — cuota de Azure OpenAI agotada:** cuando la clasificacion GPT no puede completarse por falta de cuota
+(ver CU1), el resultado final es `Estado = PENDIENTE_REINTENTO` aunque `EstadoCalidad` se marque como `ERROR`
+(confianzas a 0). Es un caso diferenciado: se trata como reintento pendiente, no como fallo definitivo, y la
+agregacion de metricas no lo contabiliza como un error real de clasificacion.
+
 ### RN4: Severidades de Validacion
 
 | Severidad | Impacto |
@@ -298,6 +305,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | **Confianza** | Metrica [0.0-1.0] que indica el grado de certeza de la IA sobre su resultado. Se calcula por clasificacion, extraccion y validacion. |
 | **ConfianzaAgregada / ConfianzaGlobal** | MIN(confianza clasificacion, confianza extraccion, confianza validacion). |
 | **EstadoCalidad** | Clasificacion del resultado final: OK (>=0.85), REVISION (>=0.70), ERROR (<0.70). Umbrales configurables por tipologia. |
+| **PENDIENTE_REINTENTO** | Estado final de un documento cuya clasificacion GPT se ha pospuesto porque la cuota de Azure OpenAI estaba agotada (limite de peticiones excedido) tras los reintentos automaticos. Es un desenlace limpio y retriable, no un fallo definitivo: el documento debe reprocesarse mas tarde. Se diferencia de `NO_CLASIFICADO` (el documento no encaja en ninguna tipologia) y de `ERROR` (fallo no recuperable). Operacion puede identificarlo y reencolar el documento; el Monitor del portal Admin lo muestra con un aviso visual. |
 | **CorrelationId** | UUID que vincula todas las operaciones de una misma peticion para trazabilidad end-to-end. Auto-generado si no se informa. |
 | **IdActivo** | Identificador del activo inmobiliario de SAREB asociado al documento. Puede venir en la peticion o ser resuelto por un plugin de enriquecimiento. |
 | **IdGDC** | Identificador del objeto en el Gestor Documental Corporativo tras la subida exitosa. |
@@ -352,7 +360,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RNF06 | Auditabilidad | Cada operacion registrada en tabla Auditoria | PersistirActivity escribe AuditoriaEntity con accion, nivel, mensaje, timestamp. | CUMPLIDO |
 | RNF07 | Extensibilidad | Anadir nueva tipologia sin cambiar codigo | Registro/configuracion en BD via Admin portal o Admin API. JSON fisico solo como seed/plantilla. Sin recompilacion. | CUMPLIDO |
 | RNF08 | Observabilidad | Telemetria en Application Insights | Structured logging + Application Insights SDK. Metricas custom por actividad. | CUMPLIDO |
-| RNF09 | Resiliencia | Tolerancia a fallos en servicios externos | Circuit breaker + retry exponencial en plugins y GDC. Fallback IA automatico. | CUMPLIDO |
+| RNF09 | Resiliencia | Tolerancia a fallos en servicios externos | Circuit breaker + retry exponencial en plugins, GDC y llamadas a Azure OpenAI (clasificacion GPT y prompts). Ante cuota agotada, la clasificacion produce el desenlace limpio y retriable `PENDIENTE_REINTENTO` en vez de un error crudo. Fallback IA automatico. | CUMPLIDO |
 | RNF10 | Mantenibilidad | Cobertura de tests unitarios >= 70% en modulos criticos | 33 clases de test. Validacion, plugins, configuracion bien cubiertos. | EN PROGRESO |
 
 ---
