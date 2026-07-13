@@ -1,5 +1,8 @@
 using System;
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
@@ -18,6 +21,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using OpenAI.Chat;
 using Xunit;
 
 #nullable enable
@@ -326,6 +330,146 @@ Contenido del documento:
             result.Temperature.Should().Be(0.25);
             result.UserPromptTemplate.Should().Contain("Plantilla tipologia");
             result.UserPromptTemplate.Should().Contain("CONTENIDO_DOC");
+        }
+
+        // ========== Phase 2 sin TDN2 parseable → virtual TDN1 (AB#99891) ==========
+
+        [Theory]
+        [InlineData("respuesta truncada que no es json")]
+        [InlineData("{\"tdn2\": null, \"confianza\": 0.4}")]
+        [InlineData("{\"tdn2\": \"\", \"confianza\": 0.4}")]
+        public async Task ClasificarAsync_CuandoPhase2NoDevuelveTdn2Parseable_DegradaAVirtualTdn1(string phase2Response)
+        {
+            // Given: Phase 1 resuelve TDN1=TASA con confianza 0.72 y Phase 2 no devuelve un tdn2 parseable
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult(phase2Response));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: conserva el TDN1 de Phase 1 como tipología virtual en vez de descartar todo con "Desconocido"
+            result.TipologiaDetectada.Should().Be("TASA");
+            result.ClasificacionParcial.Should().BeTrue();
+            result.Confianza.Should().Be(0.72);
+            result.ConfianzaGPT.Should().Be(0.72);
+            result.FallbackRazon.Should().Be("fase2_parsing_error");
+            result.ResumenCombinado.Should().Be("Resumen Phase 1");
+            result.PropuestaTipologia.Should().Be("TASA: informe de tasacion de activo");
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_CuandoPhase1NoResuelveTdn1_SigueDevolviendoDesconocido()
+        {
+            // Given: Phase 1 no devuelve tdn1 ni propuesta con código extraíble
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .Setup(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult("respuesta que no es json"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: sin TDN1 de Phase 1 no hay nada que conservar → Desconocido
+            result.TipologiaDetectada.Should().Be("Desconocido");
+            result.Confianza.Should().Be(0.0);
+            result.FallbackRazon.Should().Be("fase1_parsing_error");
+        }
+
+        private void SeedClassificationCaches()
+        {
+            _memoryCache.Set("modelos:clasificacion", new ClassificationModelRegistry
+            {
+                Models =
+                {
+                    new ClassificationModelConfig
+                    {
+                        Key = "classification.gpt4o-mini-fallback",
+                        Provider = "azure-openai",
+                        UseAsFallback = true,
+                        Endpoint = "https://unit-test.openai.azure.com",
+                        DeploymentName = "gpt-4o-mini",
+                        AuthMode = "DefaultAzureCredential",
+                        TimeoutSeconds = 5,
+                        MaxTokens = 500
+                    }
+                }
+            });
+            _memoryCache.Set("clasificacion:catalogo:tdn1", "- TASA: Tasaciones y Valoraciones, informes de tasacion");
+            _memoryCache.Set("clasificacion:catalogo:tdn2:TASA", "TASA-09 | Tasacion: informe activo");
+        }
+
+        private GptClasificarDataProvider CreateProvider(
+            IClassificationPromptProvider promptProvider,
+            IAzureOpenAIResilienceExecutor resilience)
+        {
+            return new GptClasificarDataProvider(
+                new ClassificationModelRegistryLoader(_memoryCache, _scopeFactoryMock.Object),
+                new ClassificationTipologiaPromptBuilder(
+                    _memoryCache,
+                    _scopeFactoryMock.Object,
+                    new Mock<ILogger<ClassificationTipologiaPromptBuilder>>().Object),
+                _tipologiaConfigLoader,
+                _scopeFactoryMock.Object,
+                _routingSettings,
+                _promptDefaults,
+                Options.Create(new ClassificationPromptsSettings()),
+                promptProvider,
+                _promptTraceTelemetryMock,
+                resilience,
+                _loggerMock.Object);
+        }
+
+        private static ClassificationPromptSet CreatePromptSet()
+        {
+            return new ClassificationPromptSet
+            {
+                Phase1SystemPrompt = "sys fase 1",
+                Phase1UserPrompt = "{CONTEXT_PROMPT}\n{TDN1_CATALOG}\n{DOCUMENT_TEXT}",
+                Phase2SystemPrompt = "sys fase 2",
+                Phase2UserPrompt = "{TDN1_CODE}\n{TDN2_CATALOG}\n{DOCUMENT_TEXT}",
+                Version = 1,
+                Source = "UnitTest"
+            };
+        }
+
+        private static ClientResult<ChatCompletion> CreateChatResult(string responseText)
+        {
+            var completion = OpenAIChatModelFactory.ChatCompletion(
+                role: ChatMessageRole.Assistant,
+                content: new ChatMessageContent(responseText));
+            return ClientResult.FromValue(completion, new Mock<PipelineResponse>().Object);
         }
 
         // ========== Helper Methods ==========
