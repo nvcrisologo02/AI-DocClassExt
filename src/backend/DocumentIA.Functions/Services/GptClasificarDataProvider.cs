@@ -500,18 +500,22 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             MaxOutputTokenCount = Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens)
         };
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
+        var perAttemptTimeout = TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds));
 
         var chatClient = CreateChatClient(model);
         var circuitKey = $"{model.Endpoint}|{model.DeploymentName}";
         var response = await _resilience.ExecuteAsync(
             circuitKey,
-            ct => chatClient.CompleteChatAsync(
-                new List<ChatMessage> { systemMessage, userMessage },
-                options,
-                ct),
-            cts.Token);
+            async ct =>
+            {
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attemptCts.CancelAfter(perAttemptTimeout);
+                return await chatClient.CompleteChatAsync(
+                    new List<ChatMessage> { systemMessage, userMessage },
+                    options,
+                    attemptCts.Token);
+            },
+            cancellationToken);
 
         return response.Value.Content[0].Text;
     }

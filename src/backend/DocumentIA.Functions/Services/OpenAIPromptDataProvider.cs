@@ -192,14 +192,18 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 systemPrompt: systemPrompt,
                 userPrompt: userText);
 
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(TimeSpan.FromSeconds(modelConfig.TimeoutSeconds));
+            var perAttemptTimeout = TimeSpan.FromSeconds(modelConfig.TimeoutSeconds);
 
             var circuitKey = $"{modelConfig.Endpoint}|{modelConfig.DeploymentName}";
             var response = await _resilience.ExecuteAsync(
                 circuitKey,
-                ct => chatClient.CompleteChatAsync(messages, options, ct),
-                cts.Token);
+                async ct =>
+                {
+                    using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    attemptCts.CancelAfter(perAttemptTimeout);
+                    return await chatClient.CompleteChatAsync(messages, options, attemptCts.Token);
+                },
+                cancellationToken);
 
             stopwatch.Stop();
 
@@ -312,8 +316,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             MaxOutputTokenCount = Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0)
         };
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctsToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(modelConfig.TimeoutSeconds));
+        var perAttemptTimeout = TimeSpan.FromSeconds(modelConfig.TimeoutSeconds);
 
         _promptTraceTelemetry.TrackPrompt(
             provider: "gpt-prompt",
@@ -327,15 +330,20 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         var circuitKey = $"{modelConfig.Endpoint}|{modelConfig.DeploymentName}";
         var response = await _resilience.ExecuteAsync(
             circuitKey,
-            ct => chatClient.CompleteChatAsync(
-                new List<ChatMessage>
-                {
-                    new SystemChatMessage(systemPrompt),
-                    new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText))
-                },
-                options,
-                ct),
-            cts.Token);
+            async ct =>
+            {
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attemptCts.CancelAfter(perAttemptTimeout);
+                return await chatClient.CompleteChatAsync(
+                    new List<ChatMessage>
+                    {
+                        new SystemChatMessage(systemPrompt),
+                        new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText))
+                    },
+                    options,
+                    attemptCts.Token);
+            },
+            ctsToken);
 
         var text = response.Value.Content[0].Text;
         using var json = JsonDocument.Parse(text);
