@@ -1,3 +1,4 @@
+using System.ClientModel.Primitives;
 using System.Diagnostics;
 using System.Text.Json;
 using Azure;
@@ -8,6 +9,7 @@ using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Services.Resilience;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -31,6 +33,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly IClassificationPromptProvider _promptProvider;
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly PromptTraceTelemetryService _promptTraceTelemetry;
+    private readonly IAzureOpenAIResilienceExecutor _resilience;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
 
     public GptClasificarDataProvider(
@@ -43,6 +46,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         IOptions<ClassificationPromptsSettings> promptSettings,
         IClassificationPromptProvider promptProvider,
         PromptTraceTelemetryService promptTraceTelemetry,
+        IAzureOpenAIResilienceExecutor resilience,
         ILogger<GptClasificarDataProvider> logger)
     {
         _modelRegistryLoader = modelRegistryLoader;
@@ -54,6 +58,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         _promptSettings = promptSettings.Value;
         _promptProvider = promptProvider;
         _promptTraceTelemetry = promptTraceTelemetry;
+        _resilience = resilience;
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
         // _tipologiasPromptSection se elimina: el IMemoryCache de ClassificationTipologiaPromptBuilder
@@ -499,9 +504,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
 
         var chatClient = CreateChatClient(model);
-        var response = await chatClient.CompleteChatAsync(
-            new List<ChatMessage> { systemMessage, userMessage },
-            options,
+        var circuitKey = $"{model.Endpoint}|{model.DeploymentName}";
+        var response = await _resilience.ExecuteAsync(
+            circuitKey,
+            ct => chatClient.CompleteChatAsync(
+                new List<ChatMessage> { systemMessage, userMessage },
+                options,
+                ct),
             cts.Token);
 
         return response.Value.Content[0].Text;
@@ -734,17 +743,22 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
     private ChatClient CreateChatClient(ClassificationModelConfig model)
     {
+        var clientOptions = new AzureOpenAIClientOptions
+        {
+            RetryPolicy = new ClientRetryPolicy(maxRetries: 0)
+        };
+
         AzureOpenAIClient azureClient;
 
         if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
         {
-            azureClient = new AzureOpenAIClient(new Uri(model.Endpoint), new DefaultAzureCredential());
+            azureClient = new AzureOpenAIClient(
+                new Uri(model.Endpoint), new DefaultAzureCredential(), clientOptions);
         }
         else
         {
             azureClient = new AzureOpenAIClient(
-                new Uri(model.Endpoint),
-                new AzureKeyCredential(model.ApiKey));
+                new Uri(model.Endpoint), new AzureKeyCredential(model.ApiKey), clientOptions);
         }
 
         return azureClient.GetChatClient(model.DeploymentName);

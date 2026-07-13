@@ -8,6 +8,7 @@ using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Services.Classification;
+using DocumentIA.Functions.Services.Resilience;
 using FluentAssertions;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Extensibility;
@@ -240,6 +241,7 @@ Documento: {contenido}",
                 Options.Create(new ClassificationPromptsSettings()),
                 new Mock<IClassificationPromptProvider>().Object,
                 _promptTraceTelemetryService,
+                Mock.Of<IAzureOpenAIResilienceExecutor>(),
                 _loggerMock.Object);
         }
 
