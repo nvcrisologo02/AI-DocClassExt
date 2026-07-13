@@ -333,7 +333,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 tipologiaDetectada: tipologiaVirtual,
                 propuesta: justificacionVirtual,
                 confianza: confianzaPhase2,
-                resumen: resumenPhase1);
+                resumen: resumenPhase1,
+                tdn2Detectado: phase2Parsed.Value.Tdn2);
         }
 
         stopwatch.Stop();
@@ -348,6 +349,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         {
             Modelo = model.DeploymentName,
             TipologiaDetectada = tipologiaCode,
+            Tdn2Detectado = phase2Parsed.Value.Tdn2,
             Confianza = confianzaPhase2,
             ConfianzaGPT = confianzaPhase2,
             ProveedorClasif = "GPT4oMini",
@@ -646,13 +648,14 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null, string? fallbackRazon = null)
+    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null, string? fallbackRazon = null, string? tdn2Detectado = null)
     {
         return new ResultadoClasificacion
         {
             Modelo = model.DeploymentName,
             ProveedorClasif = "GPT4oMini",
             TipologiaDetectada = tipologiaDetectada,
+            Tdn2Detectado = tdn2Detectado,
             // Confianza autoreportada por el modelo (antes se forzaba a 0.1).
             Confianza = confianza,
             ConfianzaGPT = confianza,

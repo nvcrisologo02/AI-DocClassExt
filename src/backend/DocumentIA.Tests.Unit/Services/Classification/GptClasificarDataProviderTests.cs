@@ -485,6 +485,105 @@ Contenido del documento:
                 new Mock<ILogger<ConfigurableClasificarDataProvider>>().Object);
         }
 
+        [Fact]
+        public async Task ClasificarAsync_CuandoTdn2NoTieneTipologiaPublicada_DevuelveVirtualConTdn2Detectado()
+        {
+            // Given: Phase 2 devuelve un TDN2 válido del catálogo pero sin tipología publicada que lo mapee
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+            SetupTipologiaRepository();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult("{\"tdn2\": \"TASA-10\", \"confianza\": 0.8}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: virtual TDN1, pero el TDN2 elegido por Phase 2 se conserva para persistencia/evaluación
+            result.ClasificacionParcial.Should().BeTrue();
+            result.TipologiaDetectada.Should().Be("TASA");
+            result.Tdn2Detectado.Should().Be("TASA-10");
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_CuandoTdn2ResuelveATipologiaPublicada_TambienInformaTdn2Detectado()
+        {
+            // Given: Phase 2 devuelve un TDN2 con tipología publicada (TASA-09 → tasa.09)
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+            SetupTipologiaRepository(new TipologiaEntity
+            {
+                Codigo = "tasa.09",
+                Nombre = "Tasación: Informe activo",
+                Activa = true,
+                Estado = EstadoTipologia.Published,
+                ConfiguracionJson = "{\"tipologiaId\":\"tasa.09\",\"classification\":{\"tdn1\":\"TASA\",\"tdn2\":\"TASA-09\"}}"
+            });
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult("{\"tdn2\": \"TASA-09\", \"confianza\": 0.9}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then
+            result.ClasificacionParcial.Should().BeFalse();
+            result.TipologiaDetectada.Should().Be("tasa.09");
+            result.Tdn2Detectado.Should().Be("TASA-09");
+        }
+
+        private void SetupTipologiaRepository(params TipologiaEntity[] tipologias)
+        {
+            var repoMock = new Mock<ITipologiaRepository>();
+            repoMock
+                .Setup(r => r.GetAllPublishedAsync())
+                .ReturnsAsync(tipologias.ToList());
+
+            var serviceProviderMock = new Mock<IServiceProvider>();
+            serviceProviderMock
+                .Setup(sp => sp.GetService(typeof(ITipologiaRepository)))
+                .Returns(repoMock.Object);
+
+            var scopeMock = new Mock<IServiceScope>();
+            scopeMock
+                .SetupGet(s => s.ServiceProvider)
+                .Returns(serviceProviderMock.Object);
+
+            _scopeFactoryMock
+                .Setup(sf => sf.CreateScope())
+                .Returns(scopeMock.Object);
+        }
+
         private void SeedClassificationCaches()
         {
             _memoryCache.Set("modelos:clasificacion", new ClassificationModelRegistry

@@ -360,6 +360,12 @@ public class ResultadoClasificacion
     /// </summary>
     public bool ClasificacionParcial { get; set; }
     /// <summary>
+    /// Código TDN2 elegido en la Fase 2 de clasificación jerárquica (ej. "ESIN-40"),
+    /// aunque no exista tipología publicada que lo mapee. Permite evaluar el acierto
+    /// TDN2 y persistirlo en Identificacion.Tdn2 también en resultados virtuales.
+    /// </summary>
+    public string? Tdn2Detectado { get; set; }
+    /// <summary>
     /// Propuesta libre de tipología cuando no existe mapeo final de catálogo.
     /// </summary>
     public string PropuestaTipologia { get; set; } = string.Empty;

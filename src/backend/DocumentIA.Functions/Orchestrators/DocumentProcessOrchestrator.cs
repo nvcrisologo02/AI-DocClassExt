@@ -893,6 +893,13 @@ public class DocumentProcessOrchestrator
             resultadoClasificacion.ContentExtraido = null; // limpiar: no exponer en respuesta
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
 
+            // Propagar el TDN2 elegido en Phase 2 (aunque no exista tipología publicada que lo
+            // mapee) para que PersistirActivity lo guarde en Documentos.Tdn2 y en el contrato.
+            if (!string.IsNullOrWhiteSpace(resultadoClasificacion.Tdn2Detectado))
+            {
+                salida.Identificacion.Tdn2 = resultadoClasificacion.Tdn2Detectado;
+            }
+
             if (resultadoClasificacion.ClasificacionParcial)
             {
                 var tipologiaParcial = resultadoClasificacion.TipologiaDetectada ?? string.Empty;
