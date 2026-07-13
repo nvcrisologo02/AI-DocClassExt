@@ -15,6 +15,7 @@ using DocumentIA.Plugins.Integration;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Services.Classification;
+using DocumentIA.Functions.Services.Resilience;
 using Microsoft.Extensions.Options;
 using System.IO;
 using Azure.Identity;
@@ -128,6 +129,8 @@ var host = new HostBuilder()
 
         services.Configure<ExtractionRoutingSettings>(context.Configuration.GetSection("Extraction"));
         services.Configure<AzureContentUnderstandingOptions>(context.Configuration.GetSection("Extraction:AzureContentUnderstanding"));
+        services.Configure<AzureOpenAIResilienceOptions>(
+            context.Configuration.GetSection("AzureOpenAIResilience"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
         
         // Manual binding for Flows dictionary (complex type not supported by default configuration binding)
@@ -153,6 +156,8 @@ var host = new HostBuilder()
         services.Configure<PipelineSettings>(context.Configuration.GetSection("Pipeline"));
 
         services.AddSingleton<PromptTraceTelemetryService>();
+
+        services.AddSingleton<IAzureOpenAIResilienceExecutor, AzureOpenAIResilienceExecutor>();
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();

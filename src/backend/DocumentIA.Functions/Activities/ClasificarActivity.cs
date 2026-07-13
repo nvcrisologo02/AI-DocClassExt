@@ -2,6 +2,7 @@ using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Services.Resilience;
 using System.Text.Json;
 
 namespace DocumentIA.Functions.Activities;
@@ -39,9 +40,26 @@ public class ClasificarActivity
             return forced;
         }
 
-        var resultado = await _clasificadorProvider.ClasificarAsync(clasificacionInput);
-        _logger.LogInformation("Clasificación completada: {Tipologia} (confianza: {Confianza})", resultado.TipologiaDetectada, resultado.Confianza);
-        return resultado;
+        try
+        {
+            var resultado = await _clasificadorProvider.ClasificarAsync(clasificacionInput);
+            _logger.LogInformation("Clasificación completada: {Tipologia} (confianza: {Confianza})", resultado.TipologiaDetectada, resultado.Confianza);
+            return resultado;
+        }
+        catch (RateLimitExhaustedException ex)
+        {
+            _logger.LogWarning(ex,
+                "Clasificación pospuesta por rate limit (429) en documento {Documento}.",
+                clasificacionInput.Entrada.Documento.Name);
+
+            return new ResultadoClasificacion
+            {
+                RateLimitExcedido = true,
+                FallbackRazon = "rate_limit_exhausted",
+                TipologiaDetectada = "Desconocido",
+                Confianza = 0
+            };
+        }
     }
 
     private static ClasificacionInput ParseInput(object input)

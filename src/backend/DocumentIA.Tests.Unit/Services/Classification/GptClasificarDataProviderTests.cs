@@ -8,6 +8,7 @@ using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Services.Classification;
+using DocumentIA.Functions.Services.Resilience;
 using FluentAssertions;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
@@ -37,6 +38,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
         private readonly PromptTraceTelemetryService _promptTraceTelemetryMock;
         private readonly IOptions<ClassificationRoutingSettings> _routingSettings;
         private readonly IOptions<PromptDefaultsSettings> _promptDefaults;
+        private readonly Mock<IAzureOpenAIResilienceExecutor> _resilienceMock;
         private readonly GptClasificarDataProvider _provider;
 
         public GptClasificarDataProviderTests()
@@ -57,7 +59,8 @@ namespace DocumentIA.Tests.Unit.Services.Classification
 
             _routingSettings = Options.Create(new ClassificationRoutingSettings());
             _tipologiaConfigLoader = new TipologiaConfigLoader(_memoryCache, _scopeFactoryMock.Object);
-            
+            _resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+
             _promptDefaults = Options.Create(new PromptDefaultsSettings
             {
                 ModelKey = "default.gpt4o-mini",
@@ -114,6 +117,7 @@ Contenido del documento:
                 Options.Create(new ClassificationPromptsSettings()),
                 new Mock<IClassificationPromptProvider>().Object,
                 _promptTraceTelemetryMock,
+                _resilienceMock.Object,
                 _loggerMock.Object);
         }
 
@@ -159,6 +163,7 @@ Contenido del documento:
                 Options.Create(new ClassificationPromptsSettings()),
                 new Mock<IClassificationPromptProvider>().Object,
                 _promptTraceTelemetryMock,
+                _resilienceMock.Object,
                 _loggerMock.Object);
 
             var input = CreateClasificacionInput(generarResumenPorDefecto: true);
@@ -243,6 +248,7 @@ Contenido del documento:
                 Options.Create(new ClassificationPromptsSettings()),
                 new Mock<IClassificationPromptProvider>().Object,
                 _promptTraceTelemetryMock,
+                _resilienceMock.Object,
                 _loggerMock.Object);
 
             var input = CreateClasificacionInput(generarResumenPorDefecto: true);

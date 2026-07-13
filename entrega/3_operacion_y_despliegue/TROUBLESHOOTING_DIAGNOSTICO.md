@@ -1,6 +1,6 @@
 # Troubleshooting & Diagnóstico — DocumentIA
 
-**Última actualización:** 2026-06-10  
+**Última actualización:** 2026-07-13  
 **Público objetivo:** Operadores, DevOps, Soporte 2º nivel
 
 ---
@@ -467,6 +467,52 @@
 
 ---
 
+### CASO 7: Documentos en `PENDIENTE_REINTENTO` / latencia alta en clasificación GPT (429 Azure OpenAI)
+
+**Síntomas:**
+- Documentos terminan con `Estado = "PENDIENTE_REINTENTO"` y `EstadoCalidad = "ERROR"`
+- `MensajeError = "Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`
+- Confianzas de clasificación a 0
+- Latencias altas en `ClasificarActivity` o en ejecución de prompts bajo carga
+- Prompts (enriquecimiento) devuelven `PromptResultado.Error` con prefijo `rate_limit_exhausted:` (no bloqueante, no escala el documento)
+
+**Causas posibles:**
+1. Rate limiting (429) de Azure OpenAI por cuota/TPM del deployment agotada
+2. Picos de carga concurrente sobre el mismo endpoint/deployment (clasificación GPT y prompts comparten la misma cuota cuando apuntan al mismo recurso)
+3. Circuit breaker abierto tras varios fallos consecutivos: el cooldown está activo y las llamadas se rechazan rápido sin reintentar
+
+**Diagnóstico:**
+
+1. **Revisar reintentos y apertura de circuito en AppInsights:**
+   ```kusto
+   customEvents
+   | where name in ("AOAI.RateLimitRetry", "AOAI.CircuitOpen", "AOAI.CircuitRejected", "AOAI.CircuitClosed")
+   | where timestamp > ago(6h)
+   | project timestamp, name, circuitKey=tostring(customDimensions["circuitKey"]),
+             attempt=tostring(customDimensions["attempt"]),
+             delayMs=tostring(customDimensions["delayMs"]),
+             statusCode=tostring(customDimensions["statusCode"])
+   | order by timestamp desc
+   ```
+   Ver el catálogo completo de queries en [OBSERVABILIDAD_KQL.md](OBSERVABILIDAD_KQL.md).
+
+2. **Diferenciar el estado del documento:**
+   - `PENDIENTE_REINTENTO` → cuota de Azure OpenAI agotada tras reintentos/cooldown; estado limpio y retriable, no es un fallo del documento
+   - `NO_CLASIFICADO` → documento genuinamente no clasificable; no confundir con rate limit
+
+3. **Revisar cuota y uso del deployment en Azure Portal:**
+   - Azure OpenAI resource → deployment usado por clasificación/prompts → Metrics → comparar `Rate Limit Requests` / uso de TPM vs límite asignado
+
+**Solución paso a paso:**
+
+1. **Reprocesar los documentos en `PENDIENTE_REINTENTO`** cuando la cuota se haya recuperado
+2. **Revisar y, si procede, ampliar la cuota/TPM** del deployment de Azure OpenAI en Azure Portal (o repartir carga entre deployments)
+3. **Ajustar la configuración `AzureOpenAIResilience`** (ver manual de configuración): `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`
+4. **Rollback si es necesario:** `MaxRetries: 0` + `EnableCircuitBreaker: false` desactiva el reintento/circuito y vuelve al comportamiento anterior (error crudo del SDK ante 429)
+5. Los prompts con `rate_limit_exhausted:` no requieren acción sobre el documento (degradado no bloqueante); revisar solo si el volumen es alto y afecta a la calidad del enriquecimiento
+
+---
+
 ## 3. Debugging Profundo
 
 ### 3.1 Seguimiento de logs en Application Insights
@@ -772,6 +818,7 @@ Content-Type: application/json
 | **HTTP 5xx / Function crash** | Dev Backend | - Exceptions en AppInsights traces<br>- Orchestration Instance ID<br>- Documento (Base64 si < 1MB) | 1h |
 | **Timeout > 10 min** | Dev Backend + CU Team | - customStatus timeline<br>- Logs de activity<br>- Métricas CU (P95 ms) | 4h |
 | **Rate limiting CU (429)** | CU Team / Azure Support | - Timestamp de error<br>- Cuota actual vs límite<br>- Pattern de requests | 2h |
+| **Rate limiting Azure OpenAI (429) / `PENDIENTE_REINTENTO`** | Dev Backend / Azure Support | - Eventos `AOAI.RateLimitRetry` / `AOAI.CircuitOpen`<br>- `circuitKey` afectado<br>- Cuota/TPM del deployment | 2h |
 | **Storage / Blob access denied** | Infra / RBAC | - Error exact + timestamp<br>- Logs Azure Storage<br>- Role assignments | 2h |
 | **SQL connection timeout** | Database Admin | - SQL logs<br>- Connection pool stats<br>- DTU / CPU usage | 4h |
 | **Documento duplicado por error** | Dev Backend | - Documento<br>- SHA256<br>- BD audit trail | Normal |

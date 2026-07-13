@@ -494,6 +494,38 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ClasificarRateLimitExcedido_RetornaEstadoPendienteReintento()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            RateLimitExcedido = true,
+            FallbackRazon = "rate_limit_exhausted",
+            TipologiaDetectada = "Desconocido",
+            Confianza = 0
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+        salida.Resultado.EstadoCalidad.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Contain("429");
+        salida.Resultado.ConfianzaGlobal.Should().Be(0);
+        salida.Resultado.ConfianzaClasificacion.Should().Be(0);
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("PendienteReintento");
+        salida.DetalleEjecucion.Clasificacion.RateLimitExcedido.Should().BeTrue();
+
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ExtraerActivity").Should().BeNull();
+        context.GetActivityCallCount("PersistirActivity").Should().Be(0);
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClasificacionUsaDocumentoPreparado_PropagaOverrideYMetadata()
     {
         var orchestrator = CreateOrchestrator();

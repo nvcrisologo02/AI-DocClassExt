@@ -343,6 +343,11 @@ public class ResultadoClasificacion
     /// </summary>
     public string? FallbackRazon { get; set; }
     /// <summary>
+    /// True cuando la clasificación no pudo completarse por rate limit (429) tras agotar
+    /// reintentos/cooldown. El orquestador lo traduce a Estado="PENDIENTE_REINTENTO".
+    /// </summary>
+    public bool RateLimitExcedido { get; set; }
+    /// <summary>
     /// Umbral de fallback de clasificación aplicado en esta ejecución.
     /// </summary>
     public double? UmbralFallbackAplicado { get; set; }

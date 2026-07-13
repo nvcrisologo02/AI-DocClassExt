@@ -1256,6 +1256,7 @@ async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
 | Documento duplicado, !forceReprocess | VerificarDuplicado | `DUPLICADO` (reutilizado) | No (ya existe) |
 | Confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (parcial) |
 | Tipologia no resuelta | ResolverTipologia | `ERROR` | Si (parcial) |
+| Cuota Azure OpenAI agotada (429 sostenido tras reintentos/cooldown) | Clasificar | `PENDIENTE_REINTENTO` (ver 3.9.5) | Si (parcial) |
 
 ### 3.9.3 Timeout GDC
 
@@ -1281,6 +1282,47 @@ if (winner == timeoutTask)
 | Plugin critico (P=1) falla | Detener cadena plugins, datos parciales se preservan |
 | GDC timeout/error | Marca error en GDC, continua a persistencia |
 | BD no disponible | Exception no capturada → `runtimeStatus = Failed` |
+
+### 3.9.5 Resiliencia ante Rate Limiting (429) de Azure OpenAI
+
+Componente reutilizable `AzureOpenAIResilienceExecutor` (interfaz `IAzureOpenAIResilienceExecutor`, namespace `DocumentIA.Functions.Services.Resilience`, en `src/backend/DocumentIA.Functions/Services/Resilience/`) que envuelve las llamadas `ChatClient.CompleteChatAsync` del SDK `Azure.AI.OpenAI` v2 / `System.ClientModel`. Se aplica a **clasificación GPT** (`GptClasificarDataProvider`) y a **prompts** (`OpenAIPromptDataProvider`), portando el mismo patrón que ya usa `AzureContentUnderstandingProvider` para extracción (ver `ResilientGdcService` / `ResilientPlugin` en 3.4.2 y 3.7.2 como decoradores análogos). El SDK desactiva su reintento por defecto (`ClientRetryPolicy(maxRetries: 0)`) para que el executor sea la única autoridad de reintento; las respuestas de error del SDK se exponen como `ClientResultException`.
+
+**Mecanismo**
+
+1. **Reintento in-call** ante 429, 500, 502, 503, 504: respeta el header `Retry-After` de la respuesta si viene; si no, aplica backoff exponencial desde `InitialRetryDelayMs`. El delay efectivo se acota con `MaxRetryDelaySeconds`. El timeout por-intento (`TimeoutSeconds` del modelo) es independiente del envelope de reintentos — cada intento tiene su propio timeout y el delay entre reintentos no lo consume. Errores no reintentables (p.ej. 400) se propagan sin tocar el circuito.
+2. **Circuit breaker con cooldown**, clave `circuitKey = "{endpoint}|{deployment}"`: clasificación y prompts que apuntan al mismo recurso Azure OpenAI comparten circuito (misma bolsa de cuota). Tras `CircuitBreakerFailureThreshold` fallos consecutivos el circuito abre durante `CircuitBreakerOpenSeconds`; las llamadas siguientes fallan rápido sin reintentar hasta expirar el cooldown. Un éxito resetea el contador y cierra el circuito. El estado es en memoria por instancia (no compartido entre instancias escaladas del Function host), igual que en el patrón de Content Understanding.
+3. Al agotar reintentos o con el circuito abierto, el executor lanza `RateLimitExhaustedException`.
+
+**Desenlace determinista**
+
+| Contexto | Comportamiento |
+|----------|----------------|
+| Clasificación GPT | `ClasificarActivity` captura `RateLimitExhaustedException` y devuelve `ResultadoClasificacion` con `RateLimitExcedido=true`, `FallbackRazon="rate_limit_exhausted"`, `TipologiaDetectada="Desconocido"`, `Confianza=0` — señal por dato, no excepción marshalada a través de la frontera Durable. `DocumentProcessOrchestrator` hace short-circuit a `Estado="PENDIENTE_REINTENTO"`, `EstadoCalidad="ERROR"`, confianzas a 0 y `MensajeError="Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`. Es un estado retriable, diferenciado de `NO_CLASIFICADO` (documento genuinamente no clasificable), pensado para reencolar/reprocesar más tarde. `Resultado.Estado` es un string libre (no enum cerrado); se persiste verbatim en `DocumentoEjecucion.EstadoFinal`, la agregación de métricas no lo cuenta como `ERROR`, y el Monitor lo muestra con badge `bg-warning`. |
+| Prompts | Degradado graceful: `PromptResultado.Error` con prefijo `rate_limit_exhausted:`, sin escalar el documento a `PENDIENTE_REINTENTO` (no bloqueante). Se beneficia igual del reintento + cooldown. |
+
+**Configuración**
+
+Sección de nivel superior `AzureOpenAIResilience` (`EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`) — ver `05_MANUAL_USO_CONFIGURACION.md` para el detalle de cada clave. Rollback instantáneo al comportamiento previo: `MaxRetries: 0` + `EnableCircuitBreaker: false`.
+
+**Telemetría** (Application Insights, `TelemetryClient` customEvents)
+
+| Evento | Cuándo | Propiedades |
+|--------|--------|-------------|
+| `AOAI.RateLimitRetry` | En cada reintento | `circuitKey`, `attempt`, `delayMs`, `statusCode` |
+| `AOAI.CircuitOpen` | El circuito se abre | `circuitKey` |
+| `AOAI.CircuitClosed` | El circuito se cierra (cooldown expirado o éxito) | `circuitKey` |
+| `AOAI.CircuitRejected` | Llamada rechazada por circuito abierto (fail-fast) | `circuitKey` |
+
+Análogos a los eventos `CU.CircuitOpen/Closed/Failover/Rejected` de la extracción con Content Understanding.
+
+**Fuera de alcance**
+
+- Failover a modelo alterno (sí existe en Content Understanding, no en GPT).
+- Retry de Durable Functions sobre la actividad de clasificación.
+- Extensión al proveedor de extracción `GptFallbackExtraerDataProvider` (el componente queda listo para aplicarlo).
+- Limitación conocida (`AB#99901`): si GPT se configura únicamente como `GlobalFallbackProvider` (no como paso del flujo), una rama con catch amplio en `ConfigurableClasificarDataProvider` absorbe la excepción antes de llegar a `PENDIENTE_REINTENTO`. El flujo por defecto `hybrid-rules-gpt-di` no está afectado.
+
+Feature Azure DevOps: `AB#99893`.
 
 ---
 
@@ -1322,6 +1364,7 @@ stateDiagram-v2
 
     EnProceso --> BlobSubido : SubirBlobActivity OK
     BlobSubido --> Clasificado : ClasificarActivity OK
+    BlobSubido --> RateLimitAgotado : ClasificarActivity 429 agotado<br/>(RateLimitExhaustedException)
 
     Clasificado --> BajaConfianza : Confianza < umbral
     Clasificado --> TipologiaResuelta : ResolverTipologia OK
@@ -1349,6 +1392,7 @@ stateDiagram-v2
     Duplicado --> [*]
     BajaConfianza --> Persistido
     ErrorTipologia --> Persistido
+    RateLimitAgotado --> Persistido
     OK --> [*]
     Revision --> [*]
     ValidacionConErrores --> [*]
@@ -1362,6 +1406,7 @@ stateDiagram-v2
         ErrorEstado : Estado = ERROR
         Duplicado : Estado = DUPLICADO (reutilizado)
         ErrorTipologia : Estado = ERROR (tipologia)
+        RateLimitAgotado : Estado = PENDIENTE_REINTENTO (3.9.5)
     }
 ```
 

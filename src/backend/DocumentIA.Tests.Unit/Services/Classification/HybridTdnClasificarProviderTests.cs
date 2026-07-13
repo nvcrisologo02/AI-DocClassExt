@@ -1,5 +1,7 @@
 using System;
+using System.ClientModel;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
@@ -8,6 +10,7 @@ using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Services.Classification;
+using DocumentIA.Functions.Services.Resilience;
 using FluentAssertions;
 using Microsoft.ApplicationInsights;
 using Microsoft.ApplicationInsights.Channel;
@@ -17,6 +20,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using OpenAI.Chat;
 using UglyToad.PdfPig.Core;
 using UglyToad.PdfPig.Fonts.Standard14Fonts;
 using UglyToad.PdfPig.Writer;
@@ -26,6 +30,27 @@ using Xunit;
 
 namespace DocumentIA.Tests.Unit.Services.Classification
 {
+    /// <summary>
+    /// Mock del executor de resiliencia que reenvía la operación real (sin retry propio),
+    /// preservando el comportamiento previo de estos tests (llamada real al endpoint fake
+    /// configurado en cada CreateGptProviderForTests, hasta timeout/error de red).
+    /// </summary>
+    internal static class ResilienceMockFactory
+    {
+        public static IAzureOpenAIResilienceExecutor CreatePassthrough()
+        {
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .Setup(x => x.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .Returns<string, Func<CancellationToken, Task<ClientResult<ChatCompletion>>>, CancellationToken>(
+                    (_, operation, ct) => operation(ct));
+
+            return resilienceMock.Object;
+        }
+    }
 
     public class DocumentWindowExtractorTests
     {
@@ -524,6 +549,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 Options.Create(new ClassificationPromptsSettings()),
                 new Mock<IClassificationPromptProvider>().Object,
                 promptTraceTelemetry,
+                ResilienceMockFactory.CreatePassthrough(),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<GptClasificarDataProvider>.Instance);
         }
     }
@@ -868,6 +894,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 Options.Create(new ClassificationPromptsSettings()),
                 new Mock<IClassificationPromptProvider>().Object,
                 promptTraceTelemetry,
+                ResilienceMockFactory.CreatePassthrough(),
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<GptClasificarDataProvider>.Instance);
         }
 

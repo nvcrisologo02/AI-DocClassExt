@@ -964,6 +964,43 @@ Invoke-RestMethod \
 
 > **Nota sobre `authMode`:** Con `"ManagedIdentity"` el campo `apiKey` se ignora y la autenticacion se realiza via Managed Identity de la Function App (sin credenciales en BD).
 
+### 5.6.2 Resiliencia ante 429 (rate limit) en Azure OpenAI
+
+Ante errores `429 Too Many Requests` (cuota agotada) devueltos por Azure OpenAI, las llamadas de **clasificacion GPT** y de **prompts** pasan por un componente de resiliencia que reintenta la llamada de forma controlada y, si la cuota sigue agotada, corta el circuito para no seguir golpeando el servicio.
+
+Aplica a: clasificacion GPT y prompts. Ambos comparten circuito cuando apuntan al mismo endpoint+deployment de Azure OpenAI (misma bolsa de cuota).
+
+Mecanismo:
+
+1. **Reintento in-call** ante 429/500/502/503/504, respetando el header `Retry-After` (o backoff exponencial si no viene), acotado por `MaxRetryDelaySeconds`.
+2. **Circuit breaker con cooldown**: tras varios fallos consecutivos el circuito abre y las siguientes llamadas fallan rapido (sin reintentar) durante el cooldown; un exito lo cierra.
+
+Configuracion global en Functions (`appsettings.json`), seccion `AzureOpenAIResilience`:
+
+```json
+"AzureOpenAIResilience": {
+  "EnableCircuitBreaker": true,
+  "CircuitBreakerFailureThreshold": 5,
+  "CircuitBreakerOpenSeconds": 45,
+  "MaxRetries": 3,
+  "InitialRetryDelayMs": 500,
+  "MaxRetryDelaySeconds": 60
+}
+```
+
+| Campo | Tipo | Default | Notas |
+|-------|------|---------|-------|
+| `EnableCircuitBreaker` | bool | `true` | Habilita el circuit breaker. Si `false`, solo aplica el reintento in-call. |
+| `CircuitBreakerFailureThreshold` | int | `5` | Fallos consecutivos que abren el circuito. |
+| `CircuitBreakerOpenSeconds` | int | `45` | Duracion del cooldown con el circuito abierto (fail-fast, sin reintentar). |
+| `MaxRetries` | int | `3` | Reintentos adicionales tras el primer intento (`0` = sin reintentos). |
+| `InitialRetryDelayMs` | int | `500` | Delay base del backoff exponencial. |
+| `MaxRetryDelaySeconds` | int | `60` | Tope del delay entre reintentos (cap aplicado sobre `Retry-After`/backoff). |
+
+**Rollback instantaneo** al comportamiento anterior: `MaxRetries: 0` + `EnableCircuitBreaker: false`.
+
+> Si la cuota queda agotada tras agotar reintentos/cooldown, la clasificacion GPT termina en el estado `PENDIENTE_REINTENTO` (salida limpia, documento retriable). Ver documentacion funcional/troubleshooting para el detalle de este estado y como reencolar el documento.
+
 ---
 
 ## 5.7 Configuracion de Plugins

@@ -65,6 +65,10 @@
 - `CU.CircuitClosed` – Circuit breaker normalizado
 - `CU.CircuitFailover` – Switchover a fallback
 - `CU.CircuitRejected` – Request rechazado por circuit
+- `AOAI.RateLimitRetry` – Reintento ante 429/5xx en llamadas a Azure OpenAI (clasificación GPT y prompts)
+- `AOAI.CircuitOpen` – Circuit breaker de Azure OpenAI activado (cuota agotada tras fallos consecutivos)
+- `AOAI.CircuitClosed` – Circuit breaker de Azure OpenAI normalizado (cooldown expirado o éxito)
+- `AOAI.CircuitRejected` – Request a Azure OpenAI rechazado por circuito abierto (fail-fast) — análogos a los `CU.Circuit*` de Content Understanding
 - `GDC.UploadSuccess`, `GDC.UploadFailed` – Subida a GDC
 - `Classification.Phase1Success`, `Classification.Phase1Failed` – Fases GPT
 - Otros eventos: `Orchestration.Started`, `Orchestration.Failed`, `Duplicado.Detected`
@@ -648,6 +652,92 @@ requests
 
 ---
 
+### Resiliencia Azure OpenAI (429) — Rate Limiting
+
+> Eventos análogos a los `CU.Circuit*` de Content Understanding (ver [Query 11](#query-11-circuit-breaker-status) y [Query 3](#query-3-service-health--cu-service-availability)), pero para las llamadas a Azure OpenAI usadas en clasificación GPT (`GptClasificarDataProvider`) y prompts (`OpenAIPromptDataProvider`), vía `AzureOpenAIResilienceExecutor`. Clasificación y prompts que apuntan al mismo endpoint/deployment comparten circuito (`circuitKey = "{endpoint}|{deployment}"`).
+
+#### Query 23: Tasa de Reintentos 429 por CircuitKey (Trend)
+
+```kusto
+// Reintentos de Azure OpenAI ante 429/5xx, por circuitKey en el tiempo
+// Retorna: bin temporal, circuitKey, reintentos, delay medio, intento máximo
+customEvents
+| where timestamp > ago(24h)
+| where name == "AOAI.RateLimitRetry"
+| extend CircuitKey = tostring(customDimensions.["circuitKey"]),
+         Attempt = toint(customDimensions.["attempt"]),
+         DelayMs = toint(customDimensions.["delayMs"]),
+         StatusCode = tostring(customDimensions.["statusCode"])
+| summarize Reintentos=count(), AvgDelayMs=avg(DelayMs), MaxAttempt=max(Attempt) by bin(timestamp, 15m), CircuitKey
+| sort by timestamp desc
+```
+
+**Cómo leer:**
+- Reintentos sostenidos en un mismo `circuitKey` → cuota de Azure OpenAI agotada de forma prolongada; considerar aumentar TPM/cuota o repartir carga entre deployments
+- `MaxAttempt` cerca de `MaxRetries` (config `AzureOpenAIResilience`) → llamadas al borde de agotar reintentos, antes de que el circuito abra
+- `StatusCode` = 429 → rate limit; 500/502/503/504 → error transitorio del servicio
+
+---
+
+#### Query 24: Aperturas de Circuito Azure OpenAI (Recientes)
+
+```kusto
+// Aperturas del circuit breaker de Azure OpenAI (últimas 24h)
+// Retorna: circuitKey, número de aperturas, última apertura
+customEvents
+| where timestamp > ago(24h)
+| where name == "AOAI.CircuitOpen"
+| extend CircuitKey = tostring(customDimensions.["circuitKey"])
+| summarize Aperturas=count(), UltimaApertura=max(timestamp) by CircuitKey
+| sort by UltimaApertura desc
+```
+
+**Cómo leer:**
+- Aperturas frecuentes en un `circuitKey` → cuota del recurso Azure OpenAI saturada tras `CircuitBreakerFailureThreshold` fallos consecutivos
+- Correlacionar con [Query 23](#query-23-tasa-de-reintentos-429-por-circuitkey-trend) para ver el volumen de 429 que precedió a la apertura
+- Cooldown configurado en `CircuitBreakerOpenSeconds` (por defecto 45s); pasado ese tiempo debería aparecer `AOAI.CircuitClosed`
+
+---
+
+#### Query 25: Llamadas Rechazadas por Circuito Abierto (Fail-Fast)
+
+```kusto
+// Llamadas a Azure OpenAI rechazadas por circuito abierto (fail-fast, sin reintento)
+// Retorna: circuitKey, rechazadas, primera y última ocurrencia
+customEvents
+| where timestamp > ago(24h)
+| where name == "AOAI.CircuitRejected"
+| extend CircuitKey = tostring(customDimensions.["circuitKey"])
+| summarize Rechazadas=count(), Primera=min(timestamp), Ultima=max(timestamp) by CircuitKey
+| sort by Rechazadas desc
+```
+
+**Cómo leer:**
+- Rechazadas alto → muchos documentos cayendo directo a `PENDIENTE_REINTENTO` sin siquiera reintentar (circuito ya abierto)
+- Ventana entre `Primera` y `Ultima` ≈ `CircuitBreakerOpenSeconds` → el cooldown está actuando como se espera
+- Ventana mucho mayor → fallos consecutivos reabriendo el circuito repetidamente, revisar salud/cuota del recurso Azure OpenAI
+
+---
+
+#### Query 26: Documentos en PENDIENTE_REINTENTO (Cuota Azure OpenAI Agotada)
+
+```kusto
+// Documentos que terminaron en PENDIENTE_REINTENTO por 429 sostenido en clasificación GPT
+// Retorna: timestamp, operationId, nombre de documento, estado de ejecución
+requests
+| where timestamp > ago(24h)
+| where tostring(customDimensions.["ExecutionState"]) == "PENDIENTE_REINTENTO"
+| project timestamp, operation_Id, customDimensions.["DocumentName"], customDimensions.["ExecutionState"]
+| sort by timestamp desc
+```
+
+**Cómo leer:**
+- `PENDIENTE_REINTENTO` es un estado diferenciado y retriable (no confundir con `NO_CLASIFICADO`, que es un documento genuinamente no clasificable) — pensado para que operación reencole el documento más tarde
+- Volumen alto → correlacionar con [Query 24](#query-24-aperturas-de-circuito-azure-openai-recientes) y [Query 25](#query-25-llamadas-rechazadas-por-circuito-abierto-fail-fast) para confirmar que la causa es cuota agotada de Azure OpenAI
+- Solo aplica a clasificación GPT: en prompts (enriquecimiento no bloqueante) el mismo agotamiento de cuota degrada de forma graceful (`PromptResultado.Error` con prefijo `rate_limit_exhausted:`) sin escalar el documento a este estado
+
+---
+
 ## 5. Alertas & Notificaciones
 
 ### 5.1 Alertas Recomendadas
@@ -894,6 +984,7 @@ traces
 | Documentos tardan > 5m | [Query 6](#query-5-cu-performance--breakdown-temporal), [Query 18](#query-18-activity-success-rate-últimas-24h) | Activity lento | Ver duración por activity |
 | Confianza = 0 en muchos docs | [Query 12](#query-12-confianza-distribution-todas-las-clasificaciones-últimas-24h), ver logs GPT | GPT fallo o timeout | Revisar GPT provider |
 | CU.CircuitOpen events | [Query 11](#query-11-circuit-breaker-status), [Query 3](#query-3-service-health--cu-service-availability) | CU service unstable | Escalate Azure, aumentar timeout |
+| PENDIENTE_REINTENTO en muchos docs / AOAI.CircuitOpen events | [Query 26](#query-26-documentos-en-pendiente_reintento-cuota-azure-openai-agotada), [Query 24](#query-24-aperturas-de-circuito-azure-openai-recientes) | Cuota Azure OpenAI agotada (429 sostenido) | Reencolar tras cooldown, revisar TPM/cuota del deployment |
 | Memory cresce continuamente | [Query 19](#query-19-function-app-cpu--memory-usage) | Memory leak | Revisar TelemetryClient disposal |
 | Cost dispara 2x | [Query 20](#query-20-cost-estimation--tokens-by-provider) | Tokens se duplican | Revisar payload size, prompts |
 
