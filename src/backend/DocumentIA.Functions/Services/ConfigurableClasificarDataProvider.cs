@@ -70,7 +70,12 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             {
                 providerResult.UmbralFallbackAplicado = ResolveFallbackThreshold(input);
                 providerResult.FallbackLLM = false;
-                providerResult.FallbackRazon = null;
+                // En resultados parciales (tipología virtual TDN1) la razón es el marcador
+                // que usa el orquestador para detener el pipeline con Estado=OK; no borrarla.
+                if (!providerResult.ClasificacionParcial)
+                {
+                    providerResult.FallbackRazon = null;
+                }
                 providerResult.DetalleProveedores = BuildDetalle(evaluated, null);
                 return providerResult;
             }

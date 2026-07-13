@@ -912,12 +912,17 @@ public class DocumentProcessOrchestrator
                     resultadoClasificacion.FallbackRazon,
                     "global_fallback_baja_confianza",
                     StringComparison.OrdinalIgnoreCase);
+                var esFase2SinTdn2Parseable = string.Equals(
+                    resultadoClasificacion.FallbackRazon,
+                    GptHierarchicalClassificationParser.Phase2ParsingErrorReason,
+                    StringComparison.OrdinalIgnoreCase);
                 var esVirtual = string.IsNullOrWhiteSpace(tipologiaParcial)
                     || string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase)
                     || esTipologiaVirtual
                     || esTdn1ExtraidoDePropuesta
                     || esGlobalFallbackFinal
-                    || esGlobalFallbackBajaConfianza;
+                    || esGlobalFallbackBajaConfianza
+                    || esFase2SinTdn2Parseable;
 
                 if (esVirtual)
                 {
@@ -962,7 +967,9 @@ public class DocumentProcessOrchestrator
                             "ResumenCombinado de clasificación propagado a DatosExtraidos para tipología virtual");
                     }
                     
-                    var mensajeNormalizacion = esTdn1ExtraidoDePropuesta
+                    var mensajeNormalizacion = esFase2SinTdn2Parseable
+                        ? $"Tipología parcial TDN1: Phase 2 no devolvió TDN2 parseable para familia '{tipologiaParcial}'. Pipeline detenido."
+                        : esTdn1ExtraidoDePropuesta
                         ? $"Tipología parcial TDN1: se extrajo código '{tipologiaParcial}' de propuesta. Pipeline detenido sin clasificación TDN2."
                         : esGlobalFallbackFinal
                         ? $"Tipología parcial TDN1: GlobalFallback identificó familia '{tipologiaParcial}' sin TDN2. Pipeline detenido."
@@ -982,7 +989,9 @@ public class DocumentProcessOrchestrator
                         ConfianzaValidacion = 1.0
                     };
 
-                    var motivoOmision = esTdn1ExtraidoDePropuesta
+                    var motivoOmision = esFase2SinTdn2Parseable
+                        ? $"Tipología parcial TDN1 sin TDN2 parseable: {tipologiaParcial}"
+                        : esTdn1ExtraidoDePropuesta
                         ? $"Tipología parcial TDN1: {tipologiaParcial}"
                         : esGlobalFallbackFinal
                         ? $"GlobalFallback TDN1: {tipologiaParcial}"
@@ -1015,7 +1024,9 @@ public class DocumentProcessOrchestrator
                             "PersistirActivity",
                             salida));
 
-                    var mensajeFinal = esTdn1ExtraidoDePropuesta
+                    var mensajeFinal = esFase2SinTdn2Parseable
+                        ? $"Tipología parcial TDN1: '{tipologiaParcial}' sin TDN2 parseable en Phase 2"
+                        : esTdn1ExtraidoDePropuesta
                         ? $"Tipología parcial TDN1: '{tipologiaParcial}' extraído de propuesta, sin TDN2"
                         : esGlobalFallbackFinal
                         ? $"Tipología parcial TDN1: GlobalFallback identificó '{tipologiaParcial}' sin TDN2"

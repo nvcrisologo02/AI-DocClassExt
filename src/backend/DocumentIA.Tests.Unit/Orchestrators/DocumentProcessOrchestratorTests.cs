@@ -1109,6 +1109,38 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ParcialPorFase2SinTdn2Parseable_EstadoOkConTdn1Virtual()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.72,
+            ConfianzaGPT = 0.72,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "PRES",
+            ClasificacionParcial = true,
+            FallbackRazon = "fase2_parsing_error",
+            PropuestaTipologia = "Presupuesto de adecuación de inmueble",
+            ResumenCombinado = "Resumen del presupuesto"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("PRES");
+        salida.Identificacion.Tdn1.Should().Be("PRES");
+        salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be("fase2_parsing_error");
+        salida.DatosExtraidos.Should().ContainKey("Resumen");
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_SkipDuplicateCheck_OmiteVerificarDuplicadoActivity()
     {
         var orchestrator = CreateOrchestrator();

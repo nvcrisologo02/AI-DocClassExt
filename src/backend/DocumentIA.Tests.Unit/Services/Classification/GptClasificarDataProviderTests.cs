@@ -407,6 +407,84 @@ Contenido del documento:
             result.FallbackRazon.Should().Be("fase1_parsing_error");
         }
 
+        [Fact]
+        public async Task Router_ResultadoParcialSatisfactorio_ConservaFallbackRazon()
+        {
+            // Given: el provider GPT devuelve un virtual TDN1 (fase2_parsing_error) con confianza 0.72,
+            // que supera el umbral 0.6 y por tanto el router lo considera satisfactorio
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult("{\"tdn2\": null}"));
+
+            var gptProvider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var router = CreateRouter(gptProvider);
+
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.Provider = "gpt";
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await router.ClasificarAsync(input);
+
+            // Then: el router NO debe borrar FallbackRazon de un resultado parcial —
+            // el orquestador la necesita para tratar el resultado como tipología virtual
+            result.ClasificacionParcial.Should().BeTrue();
+            result.TipologiaDetectada.Should().Be("TASA");
+            result.FallbackRazon.Should().Be("fase2_parsing_error");
+            result.FallbackLLM.Should().BeFalse();
+        }
+
+        private ConfigurableClasificarDataProvider CreateRouter(GptClasificarDataProvider gptProvider)
+        {
+            var windowExtractor = new DocumentWindowExtractor(new Mock<ILogger<DocumentWindowExtractor>>().Object);
+            var ruleClassifier = new RuleBasedTdnClassifier(new Mock<ILogger<RuleBasedTdnClassifier>>().Object);
+            var hybridOptions = Options.Create(new HybridTdnOptions());
+            var modelRegistryLoader = new ClassificationModelRegistryLoader(_memoryCache, _scopeFactoryMock.Object);
+
+            var hybridProvider = new HybridTdnClasificarProvider(
+                new Mock<ILogger<HybridTdnClasificarProvider>>().Object,
+                new Mock<IClasificarDataProvider>().Object,
+                new Mock<ILayoutMarkdownProvider>().Object,
+                windowExtractor,
+                ruleClassifier,
+                new FoundryTdnRescueClassifier(
+                    new Mock<ILogger<FoundryTdnRescueClassifier>>().Object,
+                    gptProvider),
+                hybridOptions,
+                new TelemetryClient());
+
+            var azureProvider = new AzureDocumentIntelligenceClasificarProvider(
+                new Mock<System.Net.Http.IHttpClientFactory>().Object,
+                modelRegistryLoader,
+                new Mock<DocumentIA.Core.Services.IBlobStorageService>().Object,
+                new Mock<ILogger<AzureDocumentIntelligenceClasificarProvider>>().Object);
+
+            return new ConfigurableClasificarDataProvider(
+                new MockClasificarDataProvider(),
+                azureProvider,
+                gptProvider,
+                hybridProvider,
+                ruleClassifier,
+                windowExtractor,
+                hybridOptions,
+                modelRegistryLoader,
+                _routingSettings,
+                new Mock<ILogger<ConfigurableClasificarDataProvider>>().Object);
+        }
+
         private void SeedClassificationCaches()
         {
             _memoryCache.Set("modelos:clasificacion", new ClassificationModelRegistry
