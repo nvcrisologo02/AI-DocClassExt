@@ -162,6 +162,12 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
 
             return fallbackResult;
         }
+        catch (Resilience.RateLimitExhaustedException)
+        {
+            // La 429 agotada debe propagar para que la activity/orquestador marque
+            // PENDIENTE_REINTENTO, no degradarse a un resultado "Desconocido".
+            throw;
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Fallback global {FallbackProvider} falló.", fallbackProvider);
@@ -215,7 +221,9 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             ?? 0.6;
     }
 
-    private async Task<ResultadoClasificacion> ExecuteProviderAsync(
+    // protected virtual: seam de test para simular el resultado/fallo de cada provider
+    // sin construir los providers concretos (constructores con dependencias pesadas).
+    protected virtual async Task<ResultadoClasificacion> ExecuteProviderAsync(
         string provider,
         ClasificacionInput input,
         CancellationToken cancellationToken)

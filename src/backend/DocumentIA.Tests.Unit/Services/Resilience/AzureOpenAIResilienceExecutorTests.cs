@@ -52,6 +52,37 @@ public class AzureOpenAIResilienceExecutorTests
     }
 
     [Fact]
+    public void ComputeDelay_WhenMaxRetryDelaySecondsIsZero_CapsToZeroWithoutOneSecondFloor()
+    {
+        // Con MaxRetryDelaySeconds=0 el cap efectivo debe ser 0 (sin piso de 1s),
+        // por lo que el backoff (5s) se recorta a 0.
+        var sut = CreateSut(new AzureOpenAIResilienceOptions
+        {
+            InitialRetryDelayMs = 5000,
+            MaxRetryDelaySeconds = 0
+        });
+
+        var delay = sut.ComputeDelay(attempt: 1, new FakeClientResultException(429));
+
+        delay.Should().Be(TimeSpan.Zero);
+    }
+
+    [Fact]
+    public void ComputeDelay_WhenBackoffExceedsCap_ClampsToConfiguredCap()
+    {
+        // Regresión: el cap positivo sigue recortando el backoff.
+        var sut = CreateSut(new AzureOpenAIResilienceOptions
+        {
+            InitialRetryDelayMs = 5000,
+            MaxRetryDelaySeconds = 2
+        });
+
+        var delay = sut.ComputeDelay(attempt: 1, new FakeClientResultException(429));
+
+        delay.Should().Be(TimeSpan.FromSeconds(2));
+    }
+
+    [Fact]
     public async Task ExecuteAsync_Success_ReturnsResultAndDoesNotRetry()
     {
         var sut = CreateSut(new AzureOpenAIResilienceOptions { MaxRetries = 3, InitialRetryDelayMs = 1 });

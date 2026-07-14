@@ -71,13 +71,13 @@ public class AzureOpenAIResilienceExecutor : IAzureOpenAIResilienceExecutor
             lastError);
     }
 
-    private TimeSpan ComputeDelay(int attempt, ClientResultException ex)
+    internal TimeSpan ComputeDelay(int attempt, ClientResultException ex)
     {
         var backoff = TimeSpan.FromMilliseconds(
             _options.InitialRetryDelayMs * Math.Pow(2, attempt - 1));
         var retryAfter = TryGetRetryAfter(ex);
         var delay = retryAfter is not null && retryAfter.Value > backoff ? retryAfter.Value : backoff;
-        var cap = TimeSpan.FromSeconds(Math.Max(1, _options.MaxRetryDelaySeconds));
+        var cap = TimeSpan.FromSeconds(Math.Max(0, _options.MaxRetryDelaySeconds));
         return delay > cap ? cap : delay;
     }
 
@@ -113,6 +113,9 @@ public class AzureOpenAIResilienceExecutor : IAzureOpenAIResilienceExecutor
     internal static bool IsRetryableStatus(int status)
         => Array.IndexOf(RetryableStatusCodes, status) >= 0;
 
+    // Nota: además de leer el estado, este método tiene efecto lateral deliberado:
+    // si el cooldown expiró cierra el circuito y emite AOAI.CircuitClosed. No es un
+    // predicado puro; se invoca en la ruta de decisión de reintento (no en logs).
     private bool IsCircuitOpen(string circuitKey)
     {
         if (!_options.EnableCircuitBreaker)
