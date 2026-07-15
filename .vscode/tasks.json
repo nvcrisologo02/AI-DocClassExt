@@ -16,7 +16,14 @@
       "isBackground": true,
       "problemMatcher": {
         "owner": "azure-functions",
-        "pattern": [],
+        "pattern": [
+          {
+            "regexp": "\\b\\B",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
         "background": {
           "activeOnStart": true,
           "beginsPattern": "^.*Azure Functions Core Tools.*$",
@@ -39,7 +46,14 @@
       "isBackground": true,
       "problemMatcher": {
         "owner": "azure-functions",
-        "pattern": [],
+        "pattern": [
+          {
+            "regexp": "\\b\\B",
+            "file": 1,
+            "location": 2,
+            "message": 3
+          }
+        ],
         "background": {
           "activeOnStart": true,
           "beginsPattern": "^.*Azure Functions Core Tools.*$",
