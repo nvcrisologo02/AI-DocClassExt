@@ -58,6 +58,7 @@ El `.sql` sale a `artifacts/db-config/update_<Tabla>_<timestamp>.sql` (carpeta i
 | `-Where` | No | Filtra las filas del origen. Sin el `WHERE`: `-Where "IsActive = 1"`. |
 | `-Schema` | No | Por defecto `dbo`. |
 | `-OutputFile` | No | Ruta del `.sql`. |
+| `-NoBackup` | No | Omite el backup de la tabla destino (que va activado por defecto). |
 | `-EntraAuth` | No | Obtiene el token vía `az login`. |
 | `-SourceAccessToken` | No | Token explícito, alternativa a `-EntraAuth`. |
 
@@ -85,15 +86,39 @@ operador que ejecuta el script, con acceso de lectura a dev. **No lo alimentes d
 fuente no confiable** (CI, entrada de usuario): sería inyección SQL clásica contra el
 origen. El destino nunca se toca desde el script, así que el riesgo se limita al origen.
 
+## Backup de la tabla destino
+
+Por defecto, el `.sql` generado hace un **backup completo de la tabla destino antes de
+actualizar**: un `SELECT * INTO [<esquema>].[<Tabla>__bak_<timestamp>]`. Detalles del diseño:
+
+- Se crea **fuera de la transacción**, así que **persiste aunque el `UPDATE` se revierta o
+  falle** (si estuviera dentro, un `ROLLBACK` borraría también el backup).
+- El nombre lleva un timestamp de **ejecución** (`FORMAT(SYSUTCDATETIME(),...)`), no de
+  generación: cada corrida del `.sql` crea su propio backup y no pisa los anteriores ni
+  falla al re-ejecutar el mismo fichero.
+- Con `XACT_ABORT ON`, si el backup falla el lote se aborta y el `UPDATE` **no** llega a
+  ejecutarse: nunca hay `UPDATE` sin backup.
+
+**Requisito:** el usuario que ejecuta el `.sql` en el destino necesita permiso
+`CREATE TABLE` (p. ej. `db_ddladmin` o `db_owner`). Si no lo tiene, el backup falla con
+`CREATE TABLE permission denied` y —correctamente— el `UPDATE` no se aplica. En ese caso,
+pide el permiso o genera el script con **`-NoBackup`**.
+
+Para restaurar, el backup es un snapshot completo de las filas; restaura con un
+`UPDATE ... FROM [<Tabla>__bak_<timestamp>]` por la clave, o el método que prefieras. Los
+backups no se limpian solos: bórralos cuando ya no los necesites.
+
 ## Ejecutar el .sql en el destino
 
-El fichero va en **UTF-8 con BOM**, envuelto en una transacción con `XACT_ABORT ON`.
+El fichero va en **UTF-8 con BOM**, con el backup y los `UPDATE` en una transacción con
+`XACT_ABORT ON`.
 
 - **SSMS:** abre y ejecuta. Detecta el BOM correctamente.
 - **sqlcmd:** usa `-f 65001` para la code page de entrada.
 
-Para ensayar sin persistir, sustituye `COMMIT TRANSACTION` por `ROLLBACK TRANSACTION` al
-final del fichero.
+Para ensayar sin persistir los cambios, sustituye `COMMIT TRANSACTION` por
+`ROLLBACK TRANSACTION` al final del fichero. Ojo: el **backup sí persiste** aunque hagas
+`ROLLBACK`, porque se crea fuera de la transacción (justamente para eso).
 
 ## Tests
 

@@ -258,7 +258,7 @@ Describe 'New-UpdateScript' {
             -KeyColumns @('Codigo') -SetColumns @('Nombre') `
             -SourceLabel 'x/y' -WhereClause '' -Timestamp '2026-07-16 10:22:31'
 
-        $sql | Should -Match ([regex]::Escape('SOLO UPDATE: no inserta ni borra filas.'))
+        $sql | Should -Match ([regex]::Escape('SOLO UPDATE: no inserta ni borra filas de la tabla destino.'))
     }
     It 'envuelve todo en una transaccion con XACT_ABORT' {
         $sql = New-UpdateScript -Meta $script:meta -Rows $script:rows `
@@ -294,6 +294,53 @@ Describe 'New-UpdateScript' {
         $sql | Should -Match ([regex]::Escape('Filas  : 0'))
         $sql | Should -Match ([regex]::Escape('(el origen no devolvio filas; nada que actualizar)'))
         $sql | Should -Match ([regex]::Escape('COMMIT TRANSACTION;'))
+    }
+    It 'por defecto (sin -IncludeBackup) no emite bloque de backup' {
+        $sql = New-UpdateScript -Meta $script:meta -Rows $script:rows `
+            -KeyColumns @('Codigo') -SetColumns @('Nombre') `
+            -SourceLabel 'x/y' -WhereClause '' -Timestamp '2026-07-16 10:22:31'
+
+        $sql | Should -Not -Match ([regex]::Escape('SELECT * INTO'))
+        $sql | Should -Match ([regex]::Escape('-- Backup : NO'))
+    }
+    It 'con -IncludeBackup emite un SELECT INTO por sp_executesql con nombre timestamped' {
+        $sql = New-UpdateScript -Meta $script:meta -Rows $script:rows `
+            -KeyColumns @('Codigo') -SetColumns @('Nombre') `
+            -SourceLabel 'x/y' -WhereClause '' -Timestamp '2026-07-16 10:22:31' -IncludeBackup $true
+
+        $sql | Should -Match ([regex]::Escape('SELECT * INTO [dbo].'))
+        $sql | Should -Match ([regex]::Escape("N'CatalogoTdn1__bak_' + FORMAT(SYSUTCDATETIME(), 'yyyyMMdd_HHmmss')"))
+        $sql | Should -Match ([regex]::Escape('EXEC sp_executesql @baksql;'))
+        $sql | Should -Match ([regex]::Escape('FROM [dbo].[CatalogoTdn1];'))
+    }
+    It 'crea el backup FUERA de la transaccion (antes de BEGIN TRANSACTION)' {
+        # Si el backup quedara dentro de la transaccion, un ROLLBACK lo borraria.
+        $sql = New-UpdateScript -Meta $script:meta -Rows $script:rows `
+            -KeyColumns @('Codigo') -SetColumns @('Nombre') `
+            -SourceLabel 'x/y' -WhereClause '' -Timestamp '2026-07-16 10:22:31' -IncludeBackup $true
+
+        $idxBackup = $sql.IndexOf('SELECT * INTO')
+        $idxBegin  = $sql.IndexOf('BEGIN TRANSACTION;')
+        $idxBackup | Should -BeGreaterThan -1
+        $idxBackup | Should -BeLessThan $idxBegin
+    }
+    It 'no emite backup si no hay filas que actualizar aunque se pida' {
+        $sql = New-UpdateScript -Meta $script:meta -Rows @() `
+            -KeyColumns @('Codigo') -SetColumns @('Nombre') `
+            -SourceLabel 'x/y' -WhereClause '' -Timestamp '2026-07-16 10:22:31' -IncludeBackup $true
+
+        $sql | Should -Not -Match ([regex]::Escape('SELECT * INTO'))
+        $sql | Should -Match ([regex]::Escape('-- Backup : NO'))
+    }
+    It 'con backup activo sigue sin emitir INSERT, DELETE ni MERGE en la tabla destino' {
+        # SELECT * INTO crea una tabla nueva; no es INSERT/DELETE/MERGE sobre el destino.
+        $sql = New-UpdateScript -Meta $script:meta -Rows $script:rows `
+            -KeyColumns @('Codigo') -SetColumns @('Nombre') `
+            -SourceLabel 'x/y' -WhereClause '' -Timestamp '2026-07-16 10:22:31' -IncludeBackup $true
+
+        $sql | Should -Not -Match ([regex]::Escape('INSERT INTO'))
+        $sql | Should -Not -Match ([regex]::Escape('DELETE FROM'))
+        $sql | Should -Not -Match ([regex]::Escape('MERGE'))
     }
 }
 

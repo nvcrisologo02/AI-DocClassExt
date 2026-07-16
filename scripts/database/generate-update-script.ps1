@@ -56,6 +56,11 @@
 .PARAMETER OutputFile
   Ruta del .sql a generar. Por defecto: artifacts/db-config/update_<Tabla>_<timestamp>.sql
 
+.PARAMETER NoBackup
+  Por defecto, el .sql generado hace un backup de la tabla DESTINO antes de actualizar:
+  un 'SELECT * INTO <Tabla>__bak_<timestamp>' que se crea FUERA de la transaccion, de modo
+  que persiste aunque el UPDATE se revierta. Con -NoBackup se omite ese bloque.
+
 .PARAMETER EntraAuth
   Obtiene un token de Entra ID via 'az account get-access-token' y lo aplica a la
   conexion. Requiere 'az login' previo.
@@ -101,6 +106,7 @@ param(
     [string]$Where,
     [string]$Schema = 'dbo',
     [string]$OutputFile,
+    [switch]$NoBackup,
     [switch]$EntraAuth,
     [string]$SourceAccessToken
 )
@@ -267,14 +273,18 @@ function New-UpdateScript {
         [string[]]$SetColumns,
         [string]$SourceLabel,
         [string]$WhereClause,
-        [string]$Timestamp
+        [string]$Timestamp,
+        [bool]$IncludeBackup = $false
     )
 
     $qTable   = "$(Quote-Id $Meta.Schema).$(Quote-Id $Meta.Table)"
+    $qSchema  = Quote-Id $Meta.Schema
     $rowList  = @($Rows)
     $keyList  = ($KeyColumns | ForEach-Object { Quote-Id $_ }) -join ', '
     $setList  = ($SetColumns | ForEach-Object { Quote-Id $_ }) -join ', '
     $filtro   = if ($WhereClause) { $WhereClause } else { '(ninguno)' }
+    # El backup solo tiene sentido si hay algo que actualizar.
+    $doBackup = $IncludeBackup -and $rowList.Count -gt 0
 
     $sb = New-Object System.Text.StringBuilder
     [void]$sb.AppendLine('-- ============================================================================')
@@ -285,12 +295,35 @@ function New-UpdateScript {
     [void]$sb.AppendLine("-- Set    : $setList")
     [void]$sb.AppendLine("-- Filtro : $filtro")
     [void]$sb.AppendLine("-- Filas  : $($rowList.Count)        Generado: $Timestamp")
+    if ($doBackup) {
+        [void]$sb.AppendLine("-- Backup : SI - crea $qSchema.[<Tabla>__bak_<timestamp>] antes de actualizar")
+    } else {
+        [void]$sb.AppendLine('-- Backup : NO')
+    }
     [void]$sb.AppendLine('--')
-    [void]$sb.AppendLine('-- SOLO UPDATE: no inserta ni borra filas.')
+    [void]$sb.AppendLine('-- SOLO UPDATE: no inserta ni borra filas de la tabla destino.')
     [void]$sb.AppendLine('-- Para ensayar sin persistir, sustituye COMMIT TRANSACTION por ROLLBACK TRANSACTION.')
     [void]$sb.AppendLine('-- ============================================================================')
     [void]$sb.AppendLine('SET XACT_ABORT ON;')
     [void]$sb.AppendLine('SET NOCOUNT ON;')
+    [void]$sb.AppendLine('')
+
+    if ($doBackup) {
+        # Nombre base del backup con las comillas simples escapadas para el literal N'...'.
+        $tableEsc = $Meta.Table.Replace("'", "''")
+        [void]$sb.AppendLine('-- ---- Backup de la tabla destino ANTES de actualizar (snapshot completo) ----')
+        [void]$sb.AppendLine('-- Se crea FUERA de la transaccion, por lo que PERSISTE aunque el UPDATE se')
+        [void]$sb.AppendLine('-- revierta o falle. El nombre lleva un timestamp de ejecucion: cada corrida')
+        [void]$sb.AppendLine('-- genera su propio backup y no pisa los anteriores. Con XACT_ABORT ON, si el')
+        [void]$sb.AppendLine('-- backup falla (p. ej. sin permiso de CREATE TABLE) el lote se aborta y el')
+        [void]$sb.AppendLine('-- UPDATE no llega a ejecutarse: nunca hay UPDATE sin backup.')
+        [void]$sb.AppendLine("DECLARE @bak sysname = N'${tableEsc}__bak_' + FORMAT(SYSUTCDATETIME(), 'yyyyMMdd_HHmmss');")
+        [void]$sb.AppendLine("DECLARE @baksql nvarchar(max) = N'SELECT * INTO $qSchema.' + QUOTENAME(@bak) + N' FROM $qTable;';")
+        [void]$sb.AppendLine('EXEC sp_executesql @baksql;')
+        [void]$sb.AppendLine("PRINT 'Backup de la tabla destino creado: $qSchema.' + QUOTENAME(@bak);")
+        [void]$sb.AppendLine('')
+    }
+
     [void]$sb.AppendLine('BEGIN TRANSACTION;')
     [void]$sb.AppendLine('')
 
@@ -501,7 +534,7 @@ function Invoke-Main {
         $stamp     = Get-Date -Format 'yyyyMMdd-HHmmss'
         $timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
         $sql  = New-UpdateScript -Meta $meta -Rows $rows -KeyColumns $KeyColumns -SetColumns $setColumns `
-                    -SourceLabel $label -WhereClause $Where -Timestamp $timestamp
+                    -SourceLabel $label -WhereClause $Where -Timestamp $timestamp -IncludeBackup (-not $NoBackup)
         $path = Resolve-OutputPath -OutputFile $OutputFile -Table $Table -Timestamp $stamp
 
         Write-SqlFile -Path $path -Content $sql
