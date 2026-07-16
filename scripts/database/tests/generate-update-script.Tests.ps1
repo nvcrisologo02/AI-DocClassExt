@@ -120,6 +120,25 @@ Describe 'Resolve-UpdateColumns' {
         { Resolve-UpdateColumns -Meta $m -KeyColumns @('K') -Columns $null } |
             Should -Throw '*ninguna columna*'
     }
+    It 'excluye por defecto las columnas rowversion/timestamp' {
+        # SQL Server las genera solo y rechaza que un UPDATE les asigne valor.
+        $m = New-TableMetaObject -Schema 'dbo' -Table 'T' `
+            -Columns @('Id', 'K', 'A', 'RowVer') -IdentityCol 'Id' `
+            -ComputedCols @() -NullableCols @() -RowversionCols @('RowVer')
+        Resolve-UpdateColumns -Meta $m -KeyColumns @('K') -Columns $null | Should -Be @('A')
+    }
+    It 'lanza si -Columns incluye una columna rowversion' {
+        $m = New-TableMetaObject -Schema 'dbo' -Table 'T' `
+            -Columns @('Id', 'K', 'RowVer') -IdentityCol 'Id' `
+            -ComputedCols @() -NullableCols @() -RowversionCols @('RowVer')
+        { Resolve-UpdateColumns -Meta $m -KeyColumns @('K') -Columns @('RowVer') } |
+            Should -Throw '*rowversion*'
+    }
+    It 'devuelve el nombre canonico aunque -Columns venga con otro casing' {
+        # -contains es case-insensitive; el SET debe llevar el nombre real del esquema.
+        Resolve-UpdateColumns -Meta $script:meta -KeyColumns @('Codigo') -Columns @('tdn2_prompt') |
+            Should -Be @('TDN2_Prompt')
+    }
 }
 
 Describe 'Assert-KeyColumns' {
@@ -315,6 +334,61 @@ Describe 'Write-SqlFile' {
     It 'preserva los acentos al releer como UTF-8' {
         Write-SqlFile -Path $script:path -Content "-- Clasificación de documentos"
         [System.IO.File]::ReadAllText($script:path) | Should -BeLike '*Clasificación de documentos*'
+    }
+}
+
+Describe 'Read-TableRows (con conexion simulada)' {
+    BeforeAll {
+        # Mock de la conexion sobre un reader REAL: se arma un DataTable y su
+        # CreateDataReader() devuelve un System.Data.DataTableReader, que implementa
+        # la misma interfaz que Read-TableRows consume ($rd.Read(), $rd[$col],
+        # $rd.Close()). Asi el test ejercita el desenrollado del ArrayList que un test
+        # contra BBDD real no habria hecho evidente. Se define en BeforeAll (no en el
+        # cuerpo del Describe) porque las funciones del cuerpo solo viven en discovery.
+        function script:New-MockConnection {
+            param([hashtable[]]$Rows, [string[]]$Cols)
+            $dt = New-Object System.Data.DataTable
+            foreach ($c in $Cols) { [void]$dt.Columns.Add($c, [string]) }
+            foreach ($r in $Rows) {
+                $dr = $dt.NewRow()
+                foreach ($c in $Cols) { $dr[$c] = $r[$c] }
+                [void]$dt.Rows.Add($dr)
+            }
+
+            $cmd = [pscustomobject]@{ CommandTimeout = 0; CommandText = ''; Parameters = @() }
+            # La coma unaria evita que el ScriptMethod enumere el DataTableReader (es
+            # IEnumerable) y devuelva el ultimo registro en vez del propio reader.
+            $cmd | Add-Member ScriptMethod ExecuteReader { return , $dt.CreateDataReader() }.GetNewClosure()
+
+            $cn = [pscustomobject]@{}
+            $cn | Add-Member ScriptMethod CreateCommand { return $cmd }.GetNewClosure()
+            return $cn
+        }
+
+        $script:meta = New-TableMetaObject -Schema 'dbo' -Table 'CatalogoTdn1' `
+            -Columns @('Codigo', 'Nombre') -IdentityCol $null -ComputedCols @() -NullableCols @()
+    }
+
+    It 'devuelve una coleccion vacia (no null) cuando el origen no tiene filas' {
+        $cn = New-MockConnection -Rows @() -Cols @('Codigo', 'Nombre')
+        $rows = Read-TableRows -Connection $cn -Meta $meta -SelectColumns @('Codigo', 'Nombre') -Where ''
+        # El bug original: sin la coma unaria esto era $null y .Count crasheaba.
+        $null -eq $rows | Should -BeFalse
+        @($rows).Count | Should -Be 0
+    }
+    It 'devuelve una coleccion de 1 elemento cuando el origen tiene una fila' {
+        $cn = New-MockConnection -Rows @(@{ Codigo = 'ESC'; Nombre = 'Escrituras' }) -Cols @('Codigo', 'Nombre')
+        $rows = Read-TableRows -Connection $cn -Meta $meta -SelectColumns @('Codigo', 'Nombre') -Where ''
+        @($rows).Count | Should -Be 1
+        @($rows)[0]['Codigo'] | Should -Be 'ESC'
+    }
+    It 'devuelve todas las filas cuando el origen tiene varias' {
+        $cn = New-MockConnection -Rows @(
+            @{ Codigo = 'ESC'; Nombre = 'Escrituras' },
+            @{ Codigo = 'NOT'; Nombre = 'Notas' }
+        ) -Cols @('Codigo', 'Nombre')
+        $rows = Read-TableRows -Connection $cn -Meta $meta -SelectColumns @('Codigo', 'Nombre') -Where ''
+        @($rows).Count | Should -Be 2
     }
 }
 

@@ -46,6 +46,9 @@
 
 .PARAMETER Where
   Predicado que filtra las filas del ORIGEN, sin la palabra WHERE. Ej: "IsActive = 1"
+  SEGURIDAD: se concatena crudo (es un filtro arbitrario). Pensado para que lo escriba a
+  mano el operador con acceso de lectura a dev. No alimentar desde fuentes no confiables
+  (CI, entrada de usuario): seria inyeccion SQL contra el origen. El destino no se toca.
 
 .PARAMETER Schema
   Esquema SQL. Por defecto "dbo".
@@ -149,15 +152,19 @@ function New-TableMetaObject {
         [string[]]$Columns,
         [string]$IdentityCol,
         [string[]]$ComputedCols,
-        [string[]]$NullableCols
+        [string[]]$NullableCols,
+        # Columnas rowversion/timestamp: SQL Server las genera solo y rechaza que un
+        # UPDATE les asigne un valor, asi que nunca deben entrar en el SET.
+        [string[]]$RowversionCols = @()
     )
     return [pscustomobject]@{
-        Schema       = $Schema
-        Table        = $Table
-        Columns      = @($Columns)
-        IdentityCol  = $IdentityCol
-        ComputedCols = @($ComputedCols)
-        NullableCols = @($NullableCols)
+        Schema         = $Schema
+        Table          = $Table
+        Columns        = @($Columns)
+        IdentityCol    = $IdentityCol
+        ComputedCols   = @($ComputedCols)
+        NullableCols   = @($NullableCols)
+        RowversionCols = @($RowversionCols)
     }
 }
 
@@ -187,27 +194,36 @@ function Resolve-UpdateColumns {
     $requested = @($Columns | Where-Object { $_ })
 
     if ($requested.Count -gt 0) {
+        $canonical = @()
         foreach ($c in $requested) {
-            if ($Meta.Columns -notcontains $c) {
+            # -contains es case-insensitive; localizamos el nombre canonico de la
+            # columna para devolverlo con el casing real del esquema, no el del usuario.
+            $match = $Meta.Columns | Where-Object { $_ -eq $c } | Select-Object -First 1
+            if (-not $match) {
                 throw "La columna '$c' indicada en -Columns no existe en $($Meta.Schema).$($Meta.Table)."
             }
-            if ($keys -contains $c) {
+            if ($keys -contains $match) {
                 throw "La columna '$c' es una columna clave y no puede actualizarse. Quitala de -Columns."
             }
-            if ($c -eq $Meta.IdentityCol) {
+            if ($match -eq $Meta.IdentityCol) {
                 throw "La columna '$c' es la columna identidad y no puede actualizarse."
             }
-            if ($Meta.ComputedCols -contains $c) {
+            if ($Meta.ComputedCols -contains $match) {
                 throw "La columna '$c' es una columna computada y no puede actualizarse."
             }
+            if ($Meta.RowversionCols -contains $match) {
+                throw "La columna '$c' es rowversion/timestamp: SQL Server la genera sola y no admite UPDATE."
+            }
+            $canonical += $match
         }
-        return $requested
+        return $canonical
     }
 
     $resolved = @($Meta.Columns | Where-Object {
         $keys -notcontains $_ -and
         $_ -ne $Meta.IdentityCol -and
-        $Meta.ComputedCols -notcontains $_
+        $Meta.ComputedCols -notcontains $_ -and
+        $Meta.RowversionCols -notcontains $_
     })
 
     if ($resolved.Count -eq 0) {
@@ -326,13 +342,14 @@ function Get-TableMeta {
     param($Connection, [string]$Schema, [string]$Table)
 
     $full = "$Schema.$Table"
-    $cols = @(); $identity = $null; $computed = @(); $nullable = @()
+    $cols = @(); $identity = $null; $computed = @(); $nullable = @(); $rowversion = @()
 
     $cmd = $Connection.CreateCommand()
     $cmd.CommandTimeout = 0
     $cmd.CommandText = @"
-SELECT c.name, c.is_identity, c.is_computed, c.is_nullable
+SELECT c.name, c.is_identity, c.is_computed, c.is_nullable, t.name AS type_name
 FROM sys.columns c
+JOIN sys.types t ON t.user_type_id = c.user_type_id
 WHERE c.object_id = OBJECT_ID(@full)
 ORDER BY c.column_id;
 "@
@@ -348,6 +365,8 @@ ORDER BY c.column_id;
             if ([bool]$rd.GetValue(1)) { $identity = $n }
             if ([bool]$rd.GetValue(2)) { $computed += $n }
             if ([bool]$rd.GetValue(3)) { $nullable += $n }
+            $typeName = [string]$rd.GetValue(4)
+            if ($typeName -in @('timestamp', 'rowversion')) { $rowversion += $n }
         }
     } finally { $rd.Close() }
 
@@ -356,7 +375,8 @@ ORDER BY c.column_id;
     }
 
     return New-TableMetaObject -Schema $Schema -Table $Table -Columns $cols `
-        -IdentityCol $identity -ComputedCols $computed -NullableCols $nullable
+        -IdentityCol $identity -ComputedCols $computed -NullableCols $nullable `
+        -RowversionCols $rowversion
 }
 
 function Get-DuplicateKeys {
@@ -404,7 +424,10 @@ function Read-TableRows {
             [void]$rows.Add($row)
         }
     } finally { $rd.Close() }
-    return $rows
+    # La coma unaria evita que PowerShell desenrolle el ArrayList al retornarlo: sin
+    # ella, 0 filas devuelve $null (y $rows.Count crashea bajo StrictMode) y 1 fila
+    # devuelve el hashtable suelto en vez de un array de 1.
+    return , $rows
 }
 
 # ============================ Salida =============================================
