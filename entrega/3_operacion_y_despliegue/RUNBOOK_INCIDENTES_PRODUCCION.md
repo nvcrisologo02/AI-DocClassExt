@@ -681,6 +681,23 @@ Ver `OBSERVABILIDAD_KQL.md` para más queries de circuit breaker (patrón análo
 
 ---
 
+### 9️⃣ Réplica de analizador CU a West Europe (Copy API cross-resource bloqueada)
+
+**Síntomas:**
+- `scripts/deployment/copy-cu-analyzer.ps1` (cross-resource) falla en `:copy` con `ModelNotFound / "has not granted the necessary permissions"`, aunque `grantCopyAuthorization` responda `200`.
+
+**Causa (verificado 2026-07-17):** la Copy API cross-resource de CU **no funciona en este entorno** (el grant devuelve un stub sin `source`; `:getCopyAuthorization` da `404`). No se resuelve con permisos: persiste incluso con `Cognitive Services User` de la MI del destino sobre el origen. Probable limitación con analizadores project-scoped de Foundry.
+
+**Resolución:** replicar **reconstruyendo/reentrenando** en el destino:
+```powershell
+./scripts/deployment/recreate-cu-analyzer.ps1 -SourceAnalyzerId <id> -ResourceGroup SRBRGDOCSAIPROD -SyncDefaults
+```
+Requiere que la MI de `srbaisrv-westeurope` tenga `Storage Blob Data Reader` sobre `srbstgproapppdocai` (ya concedido). Validar con documentos de prueba antes de repuntar `modelKey` en `ModeloConfigs`. Detalle: `TROUBLESHOOTING_DIAGNOSTICO.md` CASO 8 y guía de extracción CU §12.
+
+**Escalation:** si se requiere el snapshot exacto vía Copy API → **caso de soporte Azure** (P3) con la evidencia (grant sin `source`, token-flow 404). No bloquea producción: el secundario es failover.
+
+---
+
 ## Árbol de Diagnóstico
 
 ```
