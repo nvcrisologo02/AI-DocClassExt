@@ -1179,6 +1179,21 @@ public class DocumentProcessOrchestrator
             salida.Identificacion.TipologiaFamilia = tipologiaResuelta.TipologiaId;
             salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
             salida.Identificacion.TipologiaNombre = tipologiaResuelta.TipologiaNombre;
+
+            // TDN de la tipología resuelta de catálogo. Los caminos parciales (Tdn1) y el
+            // Tdn2Detectado de Fase 2 (Tdn2) tienen precedencia si ya los informaron.
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1)
+                && !string.IsNullOrWhiteSpace(tipologiaResuelta.Tdn1))
+            {
+                salida.Identificacion.Tdn1 = tipologiaResuelta.Tdn1;
+            }
+
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn2)
+                && !string.IsNullOrWhiteSpace(tipologiaResuelta.Tdn2))
+            {
+                salida.Identificacion.Tdn2 = tipologiaResuelta.Tdn2;
+            }
+
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
             var promptActivoEnPeticion = (tipologiaResuelta.PromptEnabled && tipologiaResuelta.PromptHasDefinition)
                 || entrada.Instrucciones.Prompt != null;

@@ -246,7 +246,9 @@ public class DocumentProcessOrchestratorTests
         bool skipGdc = true,
         bool assetResolverEnabled = false,
         bool promptEnabled = false,
-        bool promptHasDefinition = false)
+        bool promptHasDefinition = false,
+        string tdn1 = "",
+        string tdn2 = "")
         => new(
             RequestedValue: "nota.simple",
             TipologiaId: "nota.simple",
@@ -257,7 +259,9 @@ public class DocumentProcessOrchestratorTests
             SkipGDCUpload: skipGdc,
             PromptEnabled: promptEnabled,
             AssetResolverEnabled: assetResolverEnabled,
-            PromptHasDefinition: promptHasDefinition);
+            PromptHasDefinition: promptHasDefinition,
+            Tdn1: tdn1,
+            Tdn2: tdn2);
 
     [Fact]
     public void BuildObtenerActivoInput_WithInstructionOverrides_PrioritizesRequestValues()
@@ -1172,6 +1176,48 @@ public class DocumentProcessOrchestratorTests
         salida.Identificacion.Tdn1.Should().Be("ESIN");
         salida.Identificacion.Tdn2.Should().Be("ESIN-40");
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaCatalogoResuelta_PueblaTdn1YTdn2DesdeTipologia()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(tdn1: "SERE", tdn2: "SERE-01"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("nota.simple.1_0");
+        salida.Identificacion.Tdn1.Should().Be("SERE");
+        salida.Identificacion.Tdn2.Should().Be("SERE-01");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaCatalogoConTdn2Detectado_ConservaTdn2DeFase2()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.Tdn2Detectado = "SERE-99";
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", clasificacion);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(tdn1: "SERE", tdn2: "SERE-01"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tdn1.Should().Be("SERE");
+        salida.Identificacion.Tdn2.Should().Be("SERE-99");
     }
 
     [Fact]
