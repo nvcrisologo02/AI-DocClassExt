@@ -171,9 +171,9 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
             var options = new ChatCompletionOptions
             {
-                Temperature = (float)promptConfig.Temperature,
                 MaxOutputTokenCount = promptConfig.MaxTokens
             };
+            OpenAiModelCapabilities.ApplyTemperature(options, modelConfig.DeploymentName, promptConfig.Temperature);
 
             var traceContenido = !string.IsNullOrWhiteSpace(input.MarkdownExtraido)
                 ? input.MarkdownExtraido!
@@ -312,9 +312,9 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)resumenConfig.Temperature,
             MaxOutputTokenCount = Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0)
         };
+        OpenAiModelCapabilities.ApplyTemperature(options, modelConfig.DeploymentName, resumenConfig.Temperature);
 
         var perAttemptTimeout = TimeSpan.FromSeconds(modelConfig.TimeoutSeconds);
 

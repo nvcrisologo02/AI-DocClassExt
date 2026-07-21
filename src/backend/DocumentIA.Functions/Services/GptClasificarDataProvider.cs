@@ -512,9 +512,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)model.Temperature,
             MaxOutputTokenCount = Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens)
         };
+        OpenAiModelCapabilities.ApplyTemperature(options, model.DeploymentName, model.Temperature);
 
         var perAttemptTimeout = TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds));
 
