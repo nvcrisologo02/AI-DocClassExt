@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using DocumentIA.Core.Extensions;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Data.Entities;
@@ -16,15 +17,18 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
     private readonly ILogger<ObtenerUltimaEjecucionDuplicadoActivity> _logger;
     private readonly IDocumentoRepository _documentoRepository;
     private readonly IDocumentoEjecucionRepository _documentoEjecucionRepository;
+    private readonly ITipologiaRepository _tipologiaRepository;
 
     public ObtenerUltimaEjecucionDuplicadoActivity(
         ILogger<ObtenerUltimaEjecucionDuplicadoActivity> logger,
         IDocumentoRepository documentoRepository,
-        IDocumentoEjecucionRepository documentoEjecucionRepository)
+        IDocumentoEjecucionRepository documentoEjecucionRepository,
+        ITipologiaRepository tipologiaRepository)
     {
         _logger = logger;
         _documentoRepository = documentoRepository;
         _documentoEjecucionRepository = documentoEjecucionRepository;
+        _tipologiaRepository = tipologiaRepository;
     }
 
     [Function("ObtenerUltimaEjecucionDuplicadoActivity")]
@@ -74,6 +78,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
             }
 
             RehidratarResultadoSiIncompleto(salida, ultimaConSalida);
+            await RehidratarTdnSiIncompletoAsync(salida, documento);
 
             salida.Resultado.ReutilizadaPorDuplicado = true;
             salida.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
@@ -113,6 +118,76 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
             });
 
         return parsed ?? new ObtenerUltimaEjecucionDuplicadoInput();
+    }
+
+    /// <summary>
+    /// Completa Identificacion.Tdn1/Tdn2 cuando la salida histórica no los trae, en cascada:
+    /// JSON guardado → Documentos.Tdn1/Tdn2 → configuración de la tipología publicada.
+    /// Las ejecuciones anteriores al poblado de TDN en el camino feliz no los serializaron.
+    /// </summary>
+    private async Task RehidratarTdnSiIncompletoAsync(ContratoSalida salida, DocumentoEntity documento)
+    {
+        if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1)
+            && !string.IsNullOrWhiteSpace(documento.Tdn1))
+        {
+            salida.Identificacion.Tdn1 = documento.Tdn1;
+        }
+
+        if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn2)
+            && !string.IsNullOrWhiteSpace(documento.Tdn2))
+        {
+            salida.Identificacion.Tdn2 = documento.Tdn2;
+        }
+
+        if (!string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1)
+            && !string.IsNullOrWhiteSpace(salida.Identificacion.Tdn2))
+        {
+            return;
+        }
+
+        var codigoTipologia = salida.Identificacion.Tipologia;
+        if (string.IsNullOrWhiteSpace(codigoTipologia)
+            || string.Equals(codigoTipologia, "Desconocido", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            var tipologia = await _tipologiaRepository.GetByCodigoAsync(codigoTipologia);
+            if (tipologia is null)
+            {
+                _logger.LogWarning(
+                    "No se encontró tipología {Codigo} para rehidratar TDN en reutilización por duplicado",
+                    codigoTipologia);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1))
+            {
+                var tdn1 = tipologia.GetTdn1();
+                if (!string.IsNullOrWhiteSpace(tdn1))
+                {
+                    salida.Identificacion.Tdn1 = tdn1;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn2))
+            {
+                var tdn2 = tipologia.GetTdn2();
+                if (!string.IsNullOrWhiteSpace(tdn2))
+                {
+                    salida.Identificacion.Tdn2 = tdn2;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Error rehidratando TDN desde tipología {Codigo} en reutilización por duplicado",
+                codigoTipologia);
+        }
     }
 
     private static void RehidratarResultadoSiIncompleto(ContratoSalida salida, DocumentoEjecucionEntity ejecucion)
