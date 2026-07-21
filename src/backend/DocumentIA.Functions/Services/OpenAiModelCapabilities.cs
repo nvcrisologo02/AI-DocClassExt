@@ -38,4 +38,20 @@ public static partial class OpenAiModelCapabilities
             options.Temperature = (float)temperature;
         }
     }
+
+    /// <summary>
+    /// Configura temperature y límite de salida según la familia del modelo.
+    /// Para modelos de razonamiento no se envía ninguno de los dos: rechazan
+    /// temperature != default y el SDK estable serializa el límite como
+    /// 'max_tokens', que estos modelos rechazan (exigen 'max_completion_tokens').
+    /// </summary>
+    public static void ConfigureChatOptions(ChatCompletionOptions options, string? deploymentName, double temperature, int? maxOutputTokens)
+    {
+        ApplyTemperature(options, deploymentName, temperature);
+
+        if (SupportsTemperature(deploymentName) && maxOutputTokens is > 0)
+        {
+            options.MaxOutputTokenCount = maxOutputTokens;
+        }
+    }
 }

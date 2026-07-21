@@ -169,11 +169,8 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
                 userMessage
             };
 
-            var options = new ChatCompletionOptions
-            {
-                MaxOutputTokenCount = promptConfig.MaxTokens
-            };
-            OpenAiModelCapabilities.ApplyTemperature(options, modelConfig.DeploymentName, promptConfig.Temperature);
+            var options = new ChatCompletionOptions();
+            OpenAiModelCapabilities.ConfigureChatOptions(options, modelConfig.DeploymentName, promptConfig.Temperature, promptConfig.MaxTokens);
 
             var traceContenido = !string.IsNullOrWhiteSpace(input.MarkdownExtraido)
                 ? input.MarkdownExtraido!
@@ -311,10 +308,10 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
         var options = new ChatCompletionOptions
         {
-            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            MaxOutputTokenCount = Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0)
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
-        OpenAiModelCapabilities.ApplyTemperature(options, modelConfig.DeploymentName, resumenConfig.Temperature);
+        OpenAiModelCapabilities.ConfigureChatOptions(options, modelConfig.DeploymentName, resumenConfig.Temperature,
+            Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0));
 
         var perAttemptTimeout = TimeSpan.FromSeconds(modelConfig.TimeoutSeconds);
 
