@@ -198,9 +198,9 @@ public class GptFallbackExtraerDataProvider
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)model.Temperature,
             MaxOutputTokenCount = model.MaxTokens
         };
+        OpenAiModelCapabilities.ApplyTemperature(options, model.DeploymentName, model.Temperature);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
