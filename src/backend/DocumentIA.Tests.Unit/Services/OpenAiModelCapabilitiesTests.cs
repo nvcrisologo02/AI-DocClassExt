@@ -71,5 +71,41 @@ namespace DocumentIA.Tests.Unit.Services
 
             options.Temperature.Should().BeApproximately(0.7f, 0.0001f);
         }
+
+        [Fact]
+        public void ConfigureChatOptions_ModeloClasico_AsignaTemperatureYMaxTokens()
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-4o-mini", 0.0, 2000);
+
+            options.Temperature.Should().Be(0f);
+            options.MaxOutputTokenCount.Should().Be(2000);
+        }
+
+        [Fact]
+        public void ConfigureChatOptions_ModeloRazonamiento_NoEnviaTemperatureNiMaxTokens()
+        {
+            // El SDK estable (OpenAI 2.1.0) serializa MaxOutputTokenCount como
+            // 'max_tokens', que la familia gpt-5 rechaza con HTTP 400
+            // (exige 'max_completion_tokens'): no se debe enviar ninguno de los dos.
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5-mini", 0.0, 2000);
+
+            options.Temperature.Should().BeNull();
+            options.MaxOutputTokenCount.Should().BeNull();
+        }
+
+        [Fact]
+        public void ConfigureChatOptions_MaxTokensNulo_NoAsignaLimite()
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-4o-mini", 0.0, null);
+
+            options.Temperature.Should().Be(0f);
+            options.MaxOutputTokenCount.Should().BeNull();
+        }
     }
 }

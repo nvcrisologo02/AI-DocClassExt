@@ -29,13 +29,18 @@ por MFA, usar el método pyodbc+token documentado en la guía de BBDD).
 
 ## Fix de código obligatorio antes de activar (paso 3)
 
-La familia gpt-5 **rechaza `temperature` distinta de la por defecto** y genera reasoning
-tokens que cuentan contra el límite de salida:
+La familia gpt-5 rechaza con HTTP 400 dos parámetros que el flujo enviaba siempre:
+`temperature` distinta de la por defecto, y `max_tokens` (el SDK estable
+Azure.AI.OpenAI 2.1.0 serializa `MaxOutputTokenCount` como `max_tokens`; estos
+modelos exigen `max_completion_tokens`, que ese SDK no sabe emitir).
 
-1. `GptClasificarDataProvider`, `GptFallbackExtraerDataProvider` y `OpenAIPromptDataProvider`
-   fijan `Temperature` incondicionalmente en `ChatCompletionOptions` — hacerla condicional
-   (omitir si el deployment es familia gpt-5, o si `Temperature == 0` tratarla como "no enviar").
-2. Valorar exponer `reasoning_effort` (minimal/low recomendado para clasificación).
+1. Implementado en `OpenAiModelCapabilities.ConfigureChatOptions` (detección de familia
+   por prefijo del deployment): para gpt-5/o-series no se envían ni `temperature` ni el
+   límite de salida (queda acotado por el propio modelo); para modelos clásicos nada cambia.
+   Nota: mientras no se suba el SDK, el `MaxTokens` de BBDD no aplica a deployments gpt-5.
+2. Valorar subir `Azure.AI.OpenAI` (>=2.9.0-beta): recuperaría el cap de salida vía
+   `max_completion_tokens` y permitiría `reasoning_effort` (minimal/low recomendado
+   para clasificación).
 3. `MaxTokens` de clasificación: el script 02 ya lo sube 150 → 2000 en la fila de BBDD.
 
 Sin el fix, activar el paso 4 provoca 400 en todas las llamadas GPT.
