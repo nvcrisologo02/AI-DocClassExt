@@ -1,5 +1,16 @@
 <#
 .SYNOPSIS
+    ADVERTENCIA (verificado 2026-07-17): el modo CROSS-RESOURCE de este script NO
+    funciona en este entorno. La Copy API cross-resource de Content Understanding
+    (grantCopyAuthorization + :copy) responde "has not granted the necessary
+    permissions" incluso con la identidad administrada del destino con rol
+    'Cognitive Services User' sobre el origen; el grant devuelve un cuerpo sin
+    'source' y el flujo con token (:getCopyAuthorization) da 404. Probable
+    limitacion de servicio con analizadores project-scoped de Foundry.
+    -> Para replicar entre regiones usa 'recreate-cu-analyzer.ps1' (reconstruye/
+       reentrena en el destino). El modo -SameResource (snapshot/rollback) de ESTE
+       script SI funciona porque no cruza recursos.
+
     Copia un analyzer de Azure AI Content Understanding SIN reentrenar ni reconstruir
     el knowledge. Soporta dos modos:
 
@@ -146,8 +157,26 @@ else {
     if (-not $SourceResourceGroup) { $SourceResourceGroup = $ResourceGroup }
     if (-not $TargetResourceGroup) { $TargetResourceGroup = $ResourceGroup }
 
-    $sourceResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$SourceResourceGroup/providers/Microsoft.CognitiveServices/accounts/$SourceResourceName"
-    $targetResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$TargetResourceGroup/providers/Microsoft.CognitiveServices/accounts/$TargetResourceName"
+    # La Copy API de CU compara los resource IDs de forma CASE-SENSITIVE, y ARM
+    # puede almacenar el nombre del RG con distinto casing por recurso (p. ej.
+    # 'srbrgdocsaiprod' en el origen vs 'SRBRGDOCSAIPROD' en el destino). Si
+    # construimos el ID por interpolacion con el RG que pasa el usuario, el casing
+    # puede no coincidir con el que la grantCopyAuthorization registra en el origen
+    # y la copia falla con "has not granted the necessary permissions".
+    # Por eso resolvemos el ID CANONICO via ARM (az es case-insensitive al buscar
+    # y devuelve el casing real almacenado).
+    $sourceResourceId = (az cognitiveservices account show -n $SourceResourceName -g $SourceResourceGroup --query id -o tsv 2>$null)
+    $targetResourceId = (az cognitiveservices account show -n $TargetResourceName -g $TargetResourceGroup --query id -o tsv 2>$null)
+    if (-not $sourceResourceId) {
+        $sourceResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$SourceResourceGroup/providers/Microsoft.CognitiveServices/accounts/$SourceResourceName"
+        Write-Host "AVISO: no se pudo resolver el resource ID canonico del ORIGEN via ARM; usando el construido. Si la copia falla con 'has not granted...', revisa el casing del RG." -ForegroundColor DarkYellow
+    }
+    if (-not $targetResourceId) {
+        $targetResourceId = "/subscriptions/$SubscriptionId/resourceGroups/$TargetResourceGroup/providers/Microsoft.CognitiveServices/accounts/$TargetResourceName"
+        Write-Host "AVISO: no se pudo resolver el resource ID canonico del DESTINO via ARM; usando el construido. Si la copia falla con 'has not granted...', revisa el casing del RG." -ForegroundColor DarkYellow
+    }
+    $sourceResourceId = $sourceResourceId.Trim()
+    $targetResourceId = $targetResourceId.Trim()
 }
 
 $SourceEndpoint = $SourceEndpoint.TrimEnd('/')
@@ -441,6 +470,9 @@ if (-not $isSameResource) {
 
     $auth = Invoke-RestMethod -Uri $grantUri -Method Post -Headers $grantHeaders -Body $grantBody
     Write-Host "      OK. Autorizacion emitida (expira: $($auth.expiresAt))" -ForegroundColor Green
+    # Diagnostico: que registro exactamente el origen (para cotejar con el copy).
+    Write-Host "      grant.source           : $($auth.source)" -ForegroundColor DarkGray
+    Write-Host "      grant.targetResourceId : $($auth.targetAzureResourceId)" -ForegroundColor DarkGray
     $step++
 }
 
@@ -463,7 +495,37 @@ $copyBody = if ($isSameResource) {
 $copyHeaders = Get-AuthHeaders -Key $TargetKey
 $copyHeaders["Content-Type"] = "application/json"
 
-$resp = Invoke-WebRequest -Uri $copyUri -Method Post -Headers $copyHeaders -Body $copyBody
+# Diagnostico: cuerpo exacto que enviamos al destino.
+Write-Host "      copy URI : $copyUri" -ForegroundColor DarkGray
+Write-Host "      copy body: $copyBody" -ForegroundColor DarkGray
+
+# La autorizacion de copia emitida en el origen puede tardar unos segundos en
+# propagarse al plano donde el destino la valida al hacer el pull. Reintentamos
+# el copy ante el error transitorio 'ModelNotFound / has not granted...' con
+# backoff creciente antes de rendirnos.
+$maxAttempts = 6
+$resp = $null
+for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+    try {
+        $resp = Invoke-WebRequest -Uri $copyUri -Method Post -Headers $copyHeaders -Body $copyBody -ErrorAction Stop
+        break
+    }
+    catch {
+        $errBody = ""
+        try { $errBody = $_.ErrorDetails.Message } catch { }
+        if (-not $errBody) { $errBody = $_.Exception.Message }
+        $isGrantLag = ($errBody -match 'has not granted') -or ($errBody -match 'ModelNotFound')
+        if ($isGrantLag -and $attempt -lt $maxAttempts) {
+            $wait = 15 * $attempt
+            Write-Host "      Intento $attempt/${maxAttempts}: la autorizacion aun no se valida en el destino. Reintento en ${wait}s..." -ForegroundColor DarkYellow
+            Start-Sleep -Seconds $wait
+            continue
+        }
+        Write-Host "      Copy fallo tras $attempt intento(s). Respuesta del servicio:" -ForegroundColor Red
+        Write-Host "      $errBody" -ForegroundColor Red
+        throw
+    }
+}
 Wait-CopyOperation -Response $resp -Key $TargetKey
 $step++
 

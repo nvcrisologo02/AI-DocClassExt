@@ -502,6 +502,23 @@ Nota de diseño:
 
 La **Copy API de Content Understanding** copia el analizador **completo** —schema, configuración (extractiva/generativa, prompts, clasificación/segmentación) **y el estado entrenado ("knowledge")**— **sin reentrenar ni reconstruir nada**. El analizador destino queda **funcionalmente idéntico** al origen: mismos inputs → mismos resultados.
 
+> [!WARNING]
+> **Estado real (verificado 2026-07-17): la Copy API CROSS-RESOURCE NO funciona en este entorno.**
+> `grantCopyAuthorization` responde `200` pero con un cuerpo **sin el campo `source`** (stub), y el `:copy`
+> devuelve siempre `ModelNotFound / "has not granted the necessary permissions"`, incluso tras: (a) corregir
+> el casing del RG, (b) reintentos esperando propagación, y (c) **asignar `Cognitive Services User` a la
+> identidad administrada del recurso destino sobre el origen** — que es lo que exige el *pull* cross-resource
+> (lo hace la MI del destino, no tu usuario). El flujo con token (`:getCopyAuthorization`) da `404` en esta
+> api-version. Todo apunta a una limitación de servicio con analizadores **project-scoped de Foundry**;
+> pendiente de **caso de soporte Azure**.
+>
+> **Método de réplica cross-resource que SÍ funciona** (y el que se usó de verdad el 1-jun-2026):
+> **reconstruir/reentrenar** el analizador en el destino desde su definición (`PUT create-or-replace`),
+> reentrenando desde el blob de datos etiquetados. Usa **`scripts/deployment/recreate-cu-analyzer.ps1`**
+> ([12.2b](#122b-réplica-cross-resource-real-recreatereentrenar)). No es un snapshot bit a bit, pero es
+> funcionalmente equivalente. **La copia intra-recurso** (same-resource, snapshot/rollback, [12.6]) **sí
+> funciona** porque no cruza recursos.
+
 Cubre dos escenarios de este proyecto:
 
 | Escenario | Modo | Pasos | Para qué |
@@ -631,6 +648,40 @@ Notas de uso:
 - **`-SyncDefaults`** (solo cross-resource): replica los *defaults* de modelo del origen en el destino **mapeando por modelo subyacente**, no por nombre de deployment (los sufijos difieren entre recursos). Si un modelo del origen no está desplegado en el destino, lo avisa en vez de dejar un mapeo roto. Es idempotente: relanzarlo no rompe nada.
 - **`-SkipPreflight`**: omite las validaciones. Solo para depurar.
 - Los defaults del script ya apuntan a los recursos reales de [12.1](#121-recursos-reales); solo hay que sobreescribirlos para otro entorno.
+
+> [!IMPORTANT]
+> Para **replicar entre regiones (cross-resource)**, `copy-cu-analyzer.ps1` **no funciona hoy** (ver aviso al inicio de §12). Usa `recreate-cu-analyzer.ps1` ([12.2b](#122b-réplica-cross-resource-real-recreatereentrenar)). El modo **same-resource** (snapshot/rollback) de `copy-cu-analyzer.ps1` sí funciona.
+
+### 12.2b Réplica cross-resource real: recreate/reentrenar (recomendado)
+
+Mientras la Copy API cross-resource siga bloqueada, la réplica Sweden → West Europe se hace **reconstruyendo** el analizador en el destino desde su definición (`PUT create-or-replace`, api-version `2025-11-01`). El servicio **reentrena** desde `knowledgeSources` (los datos etiquetados en blob). El resultado es funcionalmente equivalente al origen, aunque **no es un snapshot bit a bit**: valida con documentos de prueba antes de repuntar el registro.
+
+Script: **`scripts/deployment/recreate-cu-analyzer.ps1`** (GET definición del origen → quita campos read-only → `PUT` en destino → poll del build hasta `ready`).
+
+```powershell
+# --- Replicar Sweden -> West Europe reconstruyendo/reentrenando en el destino ---
+./scripts/deployment/recreate-cu-analyzer.ps1 `
+    -SourceAnalyzerId CU_NS_1.6_0_GGAA `
+    -ResourceGroup SRBRGDOCSAIPROD `
+    -SyncDefaults
+
+# --- Desde un export local (scripts/arm/…), sobrescribiendo si ya existe ---
+./scripts/deployment/recreate-cu-analyzer.ps1 `
+    -FromExport scripts/arm/analyzer-CU_NS_1.5_0-export.json `
+    -SourceAnalyzerId CU_NS_1.5_0 -ResourceGroup SRBRGDOCSAIPROD -SyncDefaults -Force
+```
+
+> [!IMPORTANT]
+> **Prerrequisito de este método:** el recurso **destino** debe poder **leer el blob de datos etiquetados**
+> con **su identidad administrada**. Es decir, la MI de `srbaisrv-westeurope` necesita el rol
+> **`Storage Blob Data Reader`** sobre la cuenta de storage del etiquetado (`srbstgproapppdocai`). Ya está
+> concedido (fue lo que habilitó la réplica del 1-jun-2026). Si faltara, el build termina en `failed` por no
+> poder leer los documentos de `knowledgeSources`.
+
+- **`-SyncDefaults`**: igual que en `copy-cu-analyzer.ps1`, alinea los alias de modelo del destino antes de reconstruir. Necesario si el destino no mapea `gpt-4.1` / `text-embedding-3-large` a un deployment.
+- **`-Force`**: sobrescribe el analizador destino si ya existe (`allowReplace=true`).
+- **`-FromExport <ruta>`**: usa una definición local (p. ej. un export de `scripts/arm/`) en vez de hacer GET al origen.
+- Al versionar, este método encaja con la política de "**construir desde el proyecto**" ([12.7](#127-añadir-o-quitar-campos-de-un-analizador-existente)): la versión nueva ya se construye reentrenando, así que replicarla al secundario reentrenando es coherente.
 
 ### 12.3 Pasos REST manuales (equivalentes al script)
 

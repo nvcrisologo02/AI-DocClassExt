@@ -513,6 +513,38 @@
 
 ---
 
+### CASO 8: Réplica de analizador CU a West Europe falla — `"has not granted the necessary permissions"`
+
+**Síntomas:**
+
+- Al replicar un analizador de Content Understanding de Sweden Central → West Europe con `scripts/deployment/copy-cu-analyzer.ps1` (cross-resource), el paso `:copy` falla con:
+  ```
+  NotFound / ModelNotFound: The resource '.../upe48-mm2avmdm-swedencentral' has not granted
+  the necessary permissions for the source analyzer '<id>' to copy to the target resource.
+  ```
+- El paso `grantCopyAuthorization` responde `200` (parece OK) pero el copy falla igualmente.
+
+**Causa (verificado 2026-07-17):**
+
+- **La Copy API cross-resource NO funciona en este entorno.** El `grantCopyAuthorization` devuelve un cuerpo **sin el campo `source`** (stub), el `:copy` no valida la autorización, y el flujo con token (`:getCopyAuthorization`) da `404`.
+- **No es (solo) permisos.** Se descartó por orden: casing del RG, propagación (reintentos), analizadores referenciados, permisos del usuario (tiene `Cognitive Services User` en ambos), e incluso tras **conceder `Cognitive Services User` a la identidad administrada del destino sobre el origen** (el requisito del *pull* cross-resource) el error persiste. Probable limitación de servicio con analizadores **project-scoped de Foundry**.
+
+**Solución (método operativo):**
+
+1. **Replicar reconstruyendo/reentrenando** en el destino, no copiando:
+   ```powershell
+   ./scripts/deployment/recreate-cu-analyzer.ps1 `
+       -SourceAnalyzerId <id> -ResourceGroup SRBRGDOCSAIPROD -SyncDefaults
+   ```
+   Hace `PUT create-or-replace` en el destino y reentrena desde el blob de datos etiquetados (`knowledgeSources`).
+2. **Prerrequisito:** la identidad administrada del destino (`srbaisrv-westeurope`) necesita **`Storage Blob Data Reader`** sobre `srbstgproapppdocai` (ya concedido). Si el build acaba en `failed`, revisar ese rol.
+3. **Validar** el analizador reconstruido con documentos de prueba antes de repuntar `modelKey` en `ModeloConfigs`: es equivalente funcional, no un snapshot bit a bit.
+4. Si se necesita el snapshot exacto vía Copy API, **abrir caso de soporte Azure** con la evidencia (grant sin `source`, `:getCopyAuthorization` → 404).
+
+> Detalle completo: `docs/guias/GUIA_EXTRACCION_AZURE_CONTENT_UNDERSTANDING.md` §12 (aviso al inicio + §12.2b).
+
+---
+
 ## 3. Debugging Profundo
 
 ### 3.1 Seguimiento de logs en Application Insights
