@@ -25,10 +25,12 @@ public class TipologiaAdminService
         Converters = { new JsonStringEnumConverter() }
     };
     private readonly HttpClient _httpClient;
+    private readonly ICurrentUserService _currentUser;
 
-    public TipologiaAdminService(HttpClient httpClient)
+    public TipologiaAdminService(HttpClient httpClient, ICurrentUserService currentUser)
     {
         _httpClient = httpClient;
+        _currentUser = currentUser;
     }
 
     public async Task<IReadOnlyCollection<TipologiaEntity>> GetTipologiasAsync()
@@ -54,7 +56,7 @@ public class TipologiaAdminService
                     Nombre = tipologia.Nombre,
                     Version = tipologia.Version,
                     ConfiguracionJson = tipologia.ConfiguracionJson ?? string.Empty,
-                    Usuario = "ADMIN-UI"
+                    Usuario = _currentUser.UserName
                 });
         }
 
@@ -67,7 +69,7 @@ public class TipologiaAdminService
                 Nombre = tipologia.Nombre,
                 Version = tipologia.Version,
                 ConfiguracionJson = tipologia.ConfiguracionJson ?? string.Empty,
-                Usuario = "ADMIN-UI"
+                Usuario = _currentUser.UserName
             });
     }
 
@@ -77,12 +79,12 @@ public class TipologiaAdminService
         return ValidarTipologia(tipologia, tipologias, currentId);
     }
 
-    public async Task PublishTipologiaAsync(int id, string usuario)
+    public async Task PublishTipologiaAsync(int id)
     {
         await SendRequiredAsync<TipologiaEntity>(
             HttpMethod.Post,
             $"management/tipologias/{id}/publicar",
-            new UsuarioRequest { Usuario = usuario });
+            new UsuarioRequest { Usuario = _currentUser.UserName });
     }
 
     public async Task RetireTipologiaAsync(int id)
@@ -90,7 +92,7 @@ public class TipologiaAdminService
         await SendRequiredAsync<TipologiaEntity>(
             HttpMethod.Post,
             $"management/tipologias/{id}/retirar",
-            new UsuarioRequest { Usuario = "ADMIN-UI" });
+            new UsuarioRequest { Usuario = _currentUser.UserName });
     }
 
     public async Task PasarTipologiaADraftAsync(int id)
@@ -98,7 +100,7 @@ public class TipologiaAdminService
         await SendRequiredAsync<TipologiaEntity>(
             HttpMethod.Post,
             $"management/tipologias/{id}/draft",
-            new UsuarioRequest { Usuario = "ADMIN-UI" });
+            new UsuarioRequest { Usuario = _currentUser.UserName });
     }
 
     public async Task<IReadOnlyCollection<TipologiaAuditEntry>> GetTipologiaAuditAsync(int id, int take = 200)
@@ -167,7 +169,7 @@ public class TipologiaAdminService
                     Provider = modelo.Provider,
                     ConfiguracionJson = modelo.ConfiguracionJson,
                     Activo = modelo.Activo,
-                    Usuario = "ADMIN-UI"
+                    Usuario = _currentUser.UserName
                 });
         }
 
@@ -181,7 +183,7 @@ public class TipologiaAdminService
                 Provider = modelo.Provider,
                 ConfiguracionJson = modelo.ConfiguracionJson,
                 Activo = modelo.Activo,
-                Usuario = "ADMIN-UI"
+                Usuario = _currentUser.UserName
             });
     }
 
@@ -208,16 +210,16 @@ public class TipologiaAdminService
             new PluginConfigUpsertRequest
             {
                 ConfiguracionJson = configuracionJson,
-                Usuario = "ADMIN-UI"
+                Usuario = _currentUser.UserName
             });
     }
 
-    public async Task PublishPluginConfigAsync(string tipologiaCodigo, string usuario)
+    public async Task PublishPluginConfigAsync(string tipologiaCodigo)
     {
         await SendRequiredAsync<PluginTipologiaConfigEntity>(
             HttpMethod.Post,
             $"management/plugins-tipologias/{Uri.EscapeDataString(tipologiaCodigo)}/publicar",
-            new UsuarioRequest { Usuario = usuario });
+            new UsuarioRequest { Usuario = _currentUser.UserName });
     }
 
     public async Task RetirePluginConfigAsync(string tipologiaCodigo)

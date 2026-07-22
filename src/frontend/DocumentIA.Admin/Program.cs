@@ -7,6 +7,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
 // Azure App Service expone variables de entorno con "_" simple (ej: FunctionsAdminApi_BaseUrl).
 // .NET solo convierte "__" (doble guión) a ":" en la jerarquía de configuración.
 // Este helper lee primero la clave jerárquica (:) y, como fallback, la plana con _ simple.

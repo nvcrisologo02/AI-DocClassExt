@@ -4,6 +4,7 @@
 @using DocumentIA.Admin.Components.Prompts
 @using DocumentIA.Admin.Components.Common
 @inject PromptManagementService PromptService
+@inject DocumentIA.Admin.Services.ICurrentUserService CurrentUser
 
 <div class="container-fluid mt-4 mb-4">
     <h1 class="mb-4">
@@ -282,7 +283,7 @@
             }
             else
             {
-                var request = new UpdatePromptTemplateRequest(EditingPrompt.Content, EditingPrompt.Description, "admin");
+                var request = new UpdatePromptTemplateRequest(EditingPrompt.Content, EditingPrompt.Description, CurrentUser.UserName);
                 await PromptService.UpdatePromptTemplateAsync(EditingPrompt.Id, request);
             }
 
@@ -306,7 +307,7 @@
 
         try
         {
-            await PromptService.ActivatePromptVersionAsync(prompt.Id, "admin");
+            await PromptService.ActivatePromptVersionAsync(prompt.Id, CurrentUser.UserName);
             await LoadPrompts();
         }
         catch (Exception ex)
@@ -346,7 +347,7 @@
         {
             if (!string.IsNullOrEmpty(SelectedPromptKey))
             {
-                await PromptService.RollbackPromptVersionAsync(SelectedPromptKey, version.Version, "admin");
+                await PromptService.RollbackPromptVersionAsync(SelectedPromptKey, version.Version, CurrentUser.UserName);
                 CancelVersionHistory();
                 await LoadPrompts();
             }

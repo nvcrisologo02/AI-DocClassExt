@@ -7,13 +7,18 @@ namespace DocumentIA.Tests.Admin.Services;
 
 public class TipologiaAdminServiceModelosTests
 {
+    private sealed class FakeCurrentUser : ICurrentUserService
+    {
+        public string UserName => "test-user";
+    }
+
     private static TipologiaAdminService CreateService(Func<HttpRequestMessage, HttpResponseMessage> responder)
     {
         var client = new HttpClient(new StubHttpMessageHandler(responder))
         {
             BaseAddress = new Uri("http://localhost/api/")
         };
-        return new TipologiaAdminService(client);
+        return new TipologiaAdminService(client, new FakeCurrentUser());
     }
 
     private static HttpResponseMessage RouteModelos(HttpRequestMessage request)

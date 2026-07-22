@@ -200,7 +200,7 @@
 
         try
         {
-            await AdminService.PublishPluginConfigAsync(_tipologiaCodigo.Trim(), "ADMIN-UI");
+            await AdminService.PublishPluginConfigAsync(_tipologiaCodigo.Trim());
             _error = false;
             _message = "Configuración publicada.";
             await Reload();
