@@ -34,4 +34,17 @@ public class ConfirmDialogTests : TestContext
         (await confirmTask!).Should().BeFalse();
         cut.FindAll(".modal").Should().BeEmpty();
     }
+
+    [Fact]
+    public async Task Dispose_ConDialogoAbierto_ResuelveFalse()
+    {
+        var cut = RenderComponent<ConfirmDialog>();
+
+        Task<bool>? confirmTask = null;
+        await cut.InvokeAsync(() => { confirmTask = cut.Instance.ShowAsync("¿Seguro?"); });
+
+        DisposeComponents();
+
+        (await confirmTask!).Should().BeFalse();
+    }
 }

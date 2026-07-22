@@ -1,6 +1,7 @@
 @* Modal de confirmación reutilizable. Uso:
    <ConfirmDialog @ref="_confirm" />
    if (!await _confirm!.ShowAsync("¿Borrar X?")) return; *@
+@implements IDisposable
 
 @if (_visible)
 {
@@ -54,4 +55,6 @@
         _tcs?.TrySetResult(result);
         StateHasChanged();
     }
+
+    public void Dispose() => _tcs?.TrySetResult(false);
 }

@@ -14,7 +14,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var baseUrl = Config["FunctionsAdminApi:BaseUrl"] ?? Config["FunctionsAdminApi_BaseUrl"];
+        var baseUrl = AdminConfigReader.Get(Config, "FunctionsAdminApi", "BaseUrl");
         if (Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
         {
             _host = uri.Host;
