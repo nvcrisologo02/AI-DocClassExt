@@ -2,6 +2,7 @@
 @using DocumentIA.Admin.Models
 @using DocumentIA.Admin.Services
 @using DocumentIA.Admin.Components.Prompts
+@using DocumentIA.Admin.Components.Common
 @inject PromptManagementService PromptService
 
 <div class="container-fluid mt-4 mb-4">
@@ -166,6 +167,8 @@
     }
 </div>
 
+<ConfirmDialog @ref="_confirm" />
+
 @code {
     private List<PromptTemplateListItemDto> Prompts = [];
     private List<PromptTemplateDto>? VersionHistory;
@@ -175,6 +178,7 @@
     private PromptTemplateDto? EditingPrompt;
     private string? SelectedPromptKey;
     private string? ErrorMessage;
+    private ConfirmDialog? _confirm;
 
     protected override async Task OnInitializedAsync()
     {
@@ -278,6 +282,13 @@
 
     private async Task ActivatePromptItem(PromptTemplateListItemDto prompt)
     {
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a activar '{prompt.PromptKey}' v{prompt.Version}.\nLa versión activa actual quedará desactivada y esta pasará a usarse en las clasificaciones.",
+            "Activar versión", "Activar", "btn-success"))
+        {
+            return;
+        }
+
         try
         {
             await PromptService.ActivatePromptVersionAsync(prompt.Id, "admin");
@@ -291,6 +302,13 @@
 
     private async Task DeletePromptItem(string promptKey)
     {
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a eliminar la versión draft del prompt '{promptKey}'.\nEsta acción no se puede deshacer.",
+            "Eliminar prompt", "Eliminar"))
+        {
+            return;
+        }
+
         try
         {
             var versions = await PromptService.GetPromptTemplatesByKeyAsync(promptKey);

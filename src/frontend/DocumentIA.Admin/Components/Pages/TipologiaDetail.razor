@@ -1,6 +1,7 @@
 @page "/tipologias/{Id:int}"
 @using System.Text.Json
 @using DocumentIA.Core.Configuration
+@using DocumentIA.Admin.Components.Common
 @inject TipologiaAdminService AdminService
 @inject NavigationManager Navigation
 
@@ -310,6 +311,8 @@ else
             }
         </div>
     </div>
+
+    <ConfirmDialog @ref="_confirm" />
 }
 
 @code {
@@ -333,6 +336,7 @@ else
     private string _diffChangeTypeFilter = "all";
     private IReadOnlyCollection<TipologiaAdminService.TipologiaVersionItem> _versionOptions = Array.Empty<TipologiaAdminService.TipologiaVersionItem>();
     private TipologiaAdminService.TipologiaDiffResult? _diffResult;
+    private ConfirmDialog? _confirm;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -484,6 +488,13 @@ else
 
     private async Task PublishAsync()
     {
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a publicar la tipología '{_tipologia?.Codigo}' v{_tipologia?.Version}.\nPasará a usarse en las próximas clasificaciones.",
+            "Publicar tipología", "Publicar", "btn-success"))
+        {
+            return;
+        }
+
         try
         {
             await AdminService.PublishTipologiaAsync(Id, "ADMIN-UI");
@@ -501,6 +512,13 @@ else
 
     private async Task PasarADraftAsync()
     {
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a pasar a Draft la tipología '{_tipologia?.Codigo}' v{_tipologia?.Version}.\nDejará de estar disponible para clasificación hasta que se vuelva a publicar.",
+            "Pasar a Draft", "Pasar a Draft", "btn-warning"))
+        {
+            return;
+        }
+
         try
         {
             await AdminService.PasarTipologiaADraftAsync(Id);
@@ -518,6 +536,13 @@ else
 
     private async Task RetireAsync()
     {
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a retirar la tipología '{_tipologia?.Codigo}' v{_tipologia?.Version}.\nDejará de usarse en clasificación.",
+            "Retirar tipología", "Retirar", "btn-warning"))
+        {
+            return;
+        }
+
         try
         {
             await AdminService.RetireTipologiaAsync(Id);
