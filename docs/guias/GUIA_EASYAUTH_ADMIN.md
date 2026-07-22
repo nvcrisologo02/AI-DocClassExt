@@ -24,6 +24,13 @@
 2. Publicar un cambio menor (p. ej. pasar una tipología a Draft y volver a publicar).
 3. En el detalle de la tipología, sección "Auditoría de cambios", la columna
    Usuario debe mostrar el UPN del usuario en lugar de "ADMIN-UI".
+4. Con la sesión ya abierta y el circuito Blazor establecido, esperar varios
+   minutos sin recargar la página (para que la conexión SignalR haya quedado
+   activa tras el render inicial) y entonces publicar/guardar de nuevo. La
+   auditoría debe seguir mostrando el UPN, no "no-autenticado". Si aparece
+   "no-autenticado" con EasyAuth activo, reportarlo como incidencia: indicaría
+   una limitación del transporte SignalR para propagar cabeceras HTTP al
+   circuito ya establecido.
 
 ## Notas
 
