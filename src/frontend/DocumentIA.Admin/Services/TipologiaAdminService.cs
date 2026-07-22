@@ -140,10 +140,17 @@ public class TipologiaAdminService
 
     public async Task<ModeloConfigEntity?> GetModeloByIdAsync(int id)
     {
-        var modelos = await GetRequiredAsync<List<ModeloConfigEntity>>($"management/modelos/clasificacion") ?? [];
-        modelos.AddRange(await GetRequiredAsync<List<ModeloConfigEntity>>($"management/modelos/extraccion") ?? []);
-        modelos.AddRange(await GetRequiredAsync<List<ModeloConfigEntity>>($"management/modelos/prompt") ?? []);
-        return modelos.FirstOrDefault(m => m.Id == id);
+        foreach (var tipo in new[] { TipoModelo.Clasificacion, TipoModelo.Extraccion, TipoModelo.Prompt, TipoModelo.Layout })
+        {
+            var modelos = await GetModelosByTipoAsync(tipo);
+            var match = modelos.FirstOrDefault(m => m.Id == id);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return null;
     }
 
     public async Task<ModeloConfigEntity> SaveModeloAsync(ModeloConfigEntity modelo)
