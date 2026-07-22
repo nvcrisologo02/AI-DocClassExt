@@ -67,6 +67,8 @@
     protected override async Task OnParametersSetAsync()
     {
         _notFound = false;
+        _error = false;
+        _message = null;
         if (Id.HasValue)
         {
             var existing = await AdminService.GetModeloByIdAsync(Id.Value);
