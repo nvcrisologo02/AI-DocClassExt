@@ -16,7 +16,12 @@ static string? GetConfig(IConfiguration cfg, string section, string key)
 void ConfigureFunctionsHttpClient(IServiceProvider serviceProvider, HttpClient client)
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-    var baseUrl = GetConfig(configuration, "FunctionsAdminApi", "BaseUrl") ?? "http://localhost:7071/api/";
+    var baseUrl = GetConfig(configuration, "FunctionsAdminApi", "BaseUrl");
+    if (string.IsNullOrWhiteSpace(baseUrl))
+    {
+        // Sin configuración explícita se apunta a local, nunca a un entorno remoto.
+        baseUrl = "http://localhost:7071/api/";
+    }
 
     client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
 
