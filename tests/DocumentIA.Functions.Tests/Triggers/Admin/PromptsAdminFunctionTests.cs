@@ -1,6 +1,8 @@
 using Xunit;
 using FluentAssertions;
 using Moq;
+using Azure.Core.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Azure.Functions.Worker;
@@ -46,41 +48,21 @@ public class PromptsAdminFunctionTests : IDisposable
 
     private HttpRequestData CreateMockHttpRequest(string method, string? body = null)
     {
-        var mockFunctionContext = new Mock<FunctionContext>();
-        var mockRequest = new Mock<HttpRequestData>(mockFunctionContext.Object);
-
-        mockRequest.Setup(r => r.Method).Returns(method);
-
-        if (body != null)
+        var services = new ServiceCollection();
+        services.AddOptions();
+        services.Configure<WorkerOptions>(options =>
         {
-            var stream = new MemoryStream(Encoding.UTF8.GetBytes(body));
-            mockRequest.Setup(r => r.Body).Returns(stream);
-        }
-
-        mockRequest.Setup(r => r.CreateResponse()).Returns(() =>
-        {
-            var responseStream = new MemoryStream();
-            var mockResponse = new Mock<HttpResponseData>(mockFunctionContext.Object);
-            
-            mockResponse.Setup(r => r.Body).Returns(responseStream);
-            mockResponse.SetupProperty(r => r.StatusCode);
-            mockResponse.Setup(r => r.Headers).Returns(new Microsoft.Azure.Functions.Worker.Http.HttpHeadersCollection());
-
-            // Mock WriteAsJsonAsync to manually serialize to the Body stream
-            mockResponse.Setup(r => r.WriteAsJsonAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
-                .Returns<object, CancellationToken>((obj, ct) =>
-                {
-                    var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-                    var bytes = Encoding.UTF8.GetBytes(json);
-                    responseStream.Write(bytes, 0, bytes.Length);
-                    responseStream.Position = 0;
-                    return new ValueTask(Task.CompletedTask);
-                });
-
-            return mockResponse.Object;
+            options.Serializer = new JsonObjectSerializer(new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
         });
+        var serviceProvider = services.BuildServiceProvider();
 
-        return mockRequest.Object;
+        var mockFunctionContext = new Mock<FunctionContext>();
+        mockFunctionContext.Setup(c => c.InstanceServices).Returns(serviceProvider);
+
+        return new FakeHttpRequestData(mockFunctionContext.Object, method, body);
     }
 
     private async Task<(HttpStatusCode status, T? data)> ExecuteAndDeserialize<T>(Func<Task<HttpResponseData>> action)
