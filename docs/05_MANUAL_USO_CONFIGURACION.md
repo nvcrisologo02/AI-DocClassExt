@@ -1,4 +1,4 @@
-# 5. Manual de Uso y Configuracion — DocumentIA MVP
+# 5. Manual de Uso y Configuracion — DocumentIA
 
 > Ultima actualizacion: 2026-06-05  
 > Proyecto: AI DocClassExt — SAREB  

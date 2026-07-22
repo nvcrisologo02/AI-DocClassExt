@@ -1707,4 +1707,4 @@ flowchart TB
 
 ---
 
-*Documento generado: Mayo 2026 | DocumentIA MVP v1.0 | AI DocClassExt — SAREB*
+*Documento generado: Mayo 2026 | DocumentIA v1.0 | AI DocClassExt — SAREB*

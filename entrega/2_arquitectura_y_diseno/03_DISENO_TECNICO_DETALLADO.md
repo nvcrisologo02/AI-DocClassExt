@@ -1,4 +1,4 @@
-# 3. Diseno Tecnico Detallado — DocumentIA MVP
+# 3. Diseno Tecnico Detallado — DocumentIA
 
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. El campo `Tipologias.PromptGPT` está deprecado (ver 12_MIGRACION_PROMPTGPT_V1_4.md); las columnas legacy asociadas se han retirado del schema.
@@ -1325,7 +1325,7 @@ Feature Azure DevOps: `AB#99893`.
 
 ## 3.10 Proteccion de Datos y Seguridad
 
-### 3.10.1 Estado Actual (MVP)
+### 3.10.1 Estado Actual
 
 | Aspecto | Implementacion |
 |---------|---------------|
@@ -1336,11 +1336,11 @@ Feature Azure DevOps: `AB#99893`.
 | Datos en transito | HTTPS (Functions + AI Services + Blob) |
 | Datos en reposo BD | TDE (Azure SQL) / sin cifrado (Docker local) |
 | Datos en reposo Blob | SSE con Microsoft-managed keys |
-| Logs | Structured logging (sin implementación específica de masking PII en MVP) |
+| Logs | Structured logging (sin implementación específica de masking PII) |
 
 ### 3.10.2 Protección de datos y GDPR
 
-La protección de datos y GDPR queda fuera del alcance del MVP por decisión de producto, por lo que no se considera funcionalidad pendiente. Si se retoma en el futuro, deberá redefinirse el alcance técnico como una nueva iniciativa.
+La protección de datos y GDPR queda fuera del alcance actual por decisión de producto, por lo que no se considera funcionalidad pendiente. Si se retoma en el futuro, deberá redefinirse el alcance técnico como una nueva iniciativa.
 
 ---
 

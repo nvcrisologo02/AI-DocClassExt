@@ -1,4 +1,4 @@
-# 1. Arquitectura del Sistema — DocumentIA MVP
+# 1. Arquitectura del Sistema — DocumentIA
 
 > Proyecto: AI DocClassExt — SAREB
 
@@ -293,10 +293,10 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 
 | Aspecto | Detalle |
 |---------|---------|
-| **Contexto** | Se necesita persistir documentos, resultados, auditoria y configuracion con schema evolutivo durante el MVP. |
+| **Contexto** | Se necesita persistir documentos, resultados, auditoria y configuracion con schema evolutivo durante la evolución del sistema. |
 | **Opciones** | (A) EF Core Code-First, (B) Database-First, (C) Dapper raw SQL |
 | **Decision** | **(A) EF Core Code-First** |
-| **Justificacion** | - Migraciones automaticas aplican cambios de schema sin scripts manuales. <br/>- `DbContext.Database.Migrate()` en startup para dev local. <br/>- Seed data desde archivos JSON de config. <br/>- Facilidad de evolucionar el modelo durante MVP. <br/>- Repository pattern para desacoplamiento. |
+| **Justificacion** | - Migraciones automaticas aplican cambios de schema sin scripts manuales. <br/>- `DbContext.Database.Migrate()` en startup para dev local. <br/>- Seed data desde archivos JSON de config. <br/>- Facilidad de evolucionar el modelo durante la evolución del sistema. <br/>- Repository pattern para desacoplamiento. |
 | **Trade-offs** | Menos control sobre SQL generado. Para consultas criticas de rendimiento futuras se puede usar raw SQL/Dapper puntualmente. |
 
 ### ADR-003: Azure DI + GPT fallback para clasificacion
@@ -322,7 +322,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 
 | Aspecto | Detalle |
 |---------|---------|
-| **Contexto** | El MVP necesita funcionar rapidamente con API Keys, pero la produccion final debe usar Managed Identity (zero-secret). |
+| **Contexto** | El sistema necesita funcionar rapidamente con API Keys, pero la produccion final debe usar Managed Identity (zero-secret). |
 | **Decision** | Implementar ambos modos desde el inicio, seleccionables por configuracion (`AuthMode: "ApiKey"` o `"DefaultAzureCredential"`). |
 | **Estado** | ApiKey activo en produccion. MI preparado en codigo, pendiente asignacion roles RBAC (`Cognitive Services User`) a la System Managed Identity `<MANAGED_IDENTITY_PRINCIPAL_ID>`. |
 
@@ -415,7 +415,7 @@ flowchart TB
     ADMIN_USER["fa:fa-user-cog Administrador<br/>Gestiona tipologias y modelos"]
     CLIENT_SYS["fa:fa-server Sistema Cliente API<br/>Envia documentos via REST"]
 
-    DOCUMENTIA["fa:fa-cogs DocumentIA MVP<br/>Sistema de clasificacion<br/>y extraccion documental"]
+    DOCUMENTIA["fa:fa-cogs DocumentIA<br/>Sistema de clasificacion<br/>y extraccion documental"]
 
     GDC_EXT["fa:fa-archive GDC SINTWS<br/>Gestor Documental Corporativo"]
     AI_EXT["fa:fa-brain Azure AI Services<br/>DI + CU + OpenAI"]
@@ -437,7 +437,7 @@ flowchart TB
     CLIENT["fa:fa-server Sistema Cliente"]
     ADMIN_USER["fa:fa-user-cog Administrador"]
 
-    subgraph DocumentIA["DocumentIA MVP"]
+    subgraph DocumentIA["DocumentIA"]
         FUNCAPP["Azure Functions<br/>.NET 10 Isolated<br/>Durable Orchestrator<br/>+ 17 Activities<br/>+ HTTP Triggers (Ingest + Healthcheck)"]
         SQLDB["SQL Server 2022<br/>DocumentIA DB<br/>9 tablas EF Core"]
         BLOBST["Azure Blob Storage<br/>Contenedor: documents<br/>PDFs originales"]

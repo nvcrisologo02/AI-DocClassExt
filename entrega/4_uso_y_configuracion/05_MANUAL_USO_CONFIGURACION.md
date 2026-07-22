@@ -1,4 +1,4 @@
-# 5. Manual de Uso y Configuracion — DocumentIA MVP
+# 5. Manual de Uso y Configuracion — DocumentIA
 
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. ConfiguracionJson es la única fuente de verdad; las columnas legacy de esquema han sido removidas.

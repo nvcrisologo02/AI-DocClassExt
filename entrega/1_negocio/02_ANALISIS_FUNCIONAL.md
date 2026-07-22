@@ -1,4 +1,4 @@
-# 2. Analisis Funcional — DocumentIA MVP
+# 2. Analisis Funcional — DocumentIA
 
 > Ultima actualizacion: 2026-03-31  
 > Proyecto: AI DocClassExt — SAREB
@@ -32,7 +32,7 @@ flowchart LR
     end
 
     subgraph Sistemas
-        DIA["DocumentIA MVP"]
+        DIA["DocumentIA"]
         GDC["GDC SINTWS<br/>(Gestor Documental)"]
         AI["Azure AI Services"]
         EXT["Sistemas Externos<br/>(Atlas, Catastro)"]
@@ -64,7 +64,7 @@ flowchart TB
     SCA["Sistema Cliente API"]
     ADM["Administrador"]
 
-    subgraph DocumentIA["DocumentIA MVP"]
+    subgraph DocumentIA["DocumentIA"]
         CU1["CU1: Ingestar documento<br/>para procesamiento"]
         CU2["CU2: Consultar estado<br/>de procesamiento"]
         CU3["CU3: Gestionar<br/>tipologias"]
@@ -300,7 +300,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | Termino | Definicion |
 |---------|-----------|
 | **Tipologia** | Tipo documental configurable (ej: nota-simple, tasacion, resumen-documental). Tiene codigo, version, umbrales y configuracion de extraccion/validacion/plugins. |
-| **Nota Simple** | Extracto del Registro de la Propiedad que informa sobre la situacion juridica de una finca (titulares, cargas, dominio). Tipologia principal del MVP: `nota-simple@1.4`. |
+| **Nota Simple** | Extracto del Registro de la Propiedad que informa sobre la situacion juridica de una finca (titulares, cargas, dominio). Tipologia principal del sistema: `nota-simple@1.4`. |
 | **Tasacion** | Informe de valoracion de un inmueble realizado por una sociedad de tasacion. |
 | **Confianza** | Metrica [0.0-1.0] que indica el grado de certeza de la IA sobre su resultado. Se calcula por clasificacion, extraccion y validacion. |
 | **ConfianzaAgregada / ConfianzaGlobal** | MIN(confianza clasificacion, confianza extraccion, confianza validacion). |
@@ -402,7 +402,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 
 | Restriccion | Detalle |
 |------------|---------|
-| **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional queda fuera del alcance del MVP actual. |
+| **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional queda fuera del alcance actual. |
 | **Formatos aceptados** | Solo PDF. Puede recibirse como Base64 sin saltos de línea (RFC 4648) o recuperarse desde GDC vía `documento.objectIdGDC`. |
 | **Tamaño maximo** | Limitado por el tamaño maximo de input de Durable Functions (~60 KB entity size en Storage). Documentos grandes pueden requerir blob-reference pattern (no implementado). |
 | **Timeouts** | GDC: 120s (hardcoded en orchestrator). Servicios AI: configurable por proveedor (DI: 120s, GPT: 30-60s, CU: configurable). |

@@ -1,4 +1,4 @@
-# 8. Checklists de Revision Azure y Azure DevOps — DocumentIA MVP
+# 8. Checklists de Revision Azure y Azure DevOps — DocumentIA
 
 > Ultima actualizacion: 2026-04-06  
 > Proyecto: AI DocClassExt — SAREB
