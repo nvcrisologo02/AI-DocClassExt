@@ -375,6 +375,96 @@ Contenido del documento:
             result.PropuestaTipologia.Should().Be("TASA: informe de tasacion de activo");
         }
 
+        // ========== Robustez resolución tipología: mapeo propuesta -> catálogo (AB#99984) ==========
+
+        [Fact]
+        public async Task ClasificarAsync_CuandoPropuestaNombraFamiliaSinPrefijoDeCodigo_ResuelveTdn1PorCatalogoEnLugarDeDesconocido()
+        {
+            // Given: Phase 1 no devuelve 'tdn1' y la propuesta describe la familia en prosa libre,
+            // sin anteponer el código de catálogo (formato que ExtraerTdn1DePropuesta no soporta,
+            // pero que el prompt de Phase 1 tampoco exige: 'propuesta' es "texto libre").
+            // Caso reproducido a partir del baseline de evaluación (AB#99948): 18 documentos
+            // clasificables cayeron a Tdn1 vacío por este motivo (familia TASA entre ellos).
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+            SetupTipologiaRepository(new TipologiaEntity
+            {
+                Codigo = "tasa.09",
+                Nombre = "Tasación: Informe activo",
+                Activa = true,
+                Estado = EstadoTipologia.Published,
+                ConfiguracionJson = "{\"tipologiaId\":\"tasa.09\",\"classification\":{\"tdn1\":\"TASA\",\"tdn2\":\"TASA-09\"}}"
+            });
+
+            const string propuestaSinPrefijo =
+                "Informe de tasación completo de Sociedad de Tasación con metodología (comparación, coste), " +
+                "comparables de mercado y valor de tasación-hipotecario del inmueble, propio de Tasaciones y Valoraciones.";
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    $"{{\"tdn1\": null, \"propuesta\": \"{propuestaSinPrefijo}\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.97}}"))
+                .ReturnsAsync(CreateChatResult("{\"tdn2\": \"TASA-09\", \"confianza\": 0.9}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: NO debe degradar a Desconocido/virtual; debe resolver TASA por mapeo
+            // tolerante propuesta->catálogo, completar Phase 2 con normalidad y dejar traza
+            // distintiva en FallbackRazon que lo diferencie de un Desconocido legítimo.
+            result.TipologiaDetectada.Should().Be("tasa.09");
+            result.Tdn2Detectado.Should().Be("TASA-09");
+            result.ClasificacionParcial.Should().BeFalse();
+            result.FallbackRazon.Should().Be("tdn1_resuelto_por_mapeo_propuesta");
+            result.PropuestaTipologia.Should().Be(propuestaSinPrefijo);
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_CuandoPropuestaNoMencionaNingunaFamiliaDelCatalogo_SigueDevolviendoDesconocido()
+        {
+            // Given: Phase 1 no devuelve 'tdn1' y la propuesta es un genuino "no clasificable"
+            // (documento ilegible/sin contenido). El mapeo tolerante NO debe inventar una familia.
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .Setup(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": null, \"propuesta\": \"documento ilegible o sin contenido identificable para clasificar\", \"confianza\": 0.1}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: sigue siendo Desconocido legítimo (no hay familia real mencionada en el texto)
+            result.TipologiaDetectada.Should().Be("Desconocido");
+            result.ClasificacionParcial.Should().BeTrue();
+            result.FallbackRazon.Should().Be("tdn1_virtual_propuesta");
+        }
+
         [Fact]
         public async Task ClasificarAsync_CuandoPhase1NoResuelveTdn1_SigueDevolviendoDesconocido()
         {
