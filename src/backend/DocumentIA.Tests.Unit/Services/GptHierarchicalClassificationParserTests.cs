@@ -299,4 +299,67 @@ public class GptHierarchicalClassificationParserTests
         GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(null, catalogo).Should().BeNull();
         GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta("TASA: informe", new Dictionary<string, string>()).Should().BeNull();
     }
+
+    // ========== ResolverTdn1PorCatalogoDesdePropuesta - vía 3: raíz de nombre (AB#99984 v2) ==========
+
+    [Fact]
+    public void ResolverTdn1PorCatalogoDesdePropuesta_WhenPropuestaNombraFamiliaEnProsaSinCodigoNiNombreCompleto_ResolvesPorRaizTasa()
+    {
+        var catalogo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TASA"] = "Tasaciones y Valoraciones"
+        };
+        const string propuesta = "Tasación de un inmueble realizada por una sociedad homologada.";
+
+        var resultado = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogo);
+
+        resultado.Should().Be("TASA");
+    }
+
+    [Fact]
+    public void ResolverTdn1PorCatalogoDesdePropuesta_WhenPropuestaNombraFamiliaEnProsaSinCodigoNiNombreCompleto_ResolvesPorRaizPres()
+    {
+        var catalogo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["PRES"] = "Presupuestos"
+        };
+        const string propuesta = "Presupuesto de obra para la reforma de la vivienda.";
+
+        var resultado = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogo);
+
+        resultado.Should().Be("PRES");
+    }
+
+    [Fact]
+    public void ResolverTdn1PorCatalogoDesdePropuesta_WhenRaizEsAmbiguaEntreVariasFamilias_ReturnsNull()
+    {
+        // El cluster CERJ/CERT/CERA comparte la misma raíz "certificado": la guarda de colisión
+        // debe descartar esa raíz por completo y no resolver ninguna de las tres.
+        var catalogo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["CERJ"] = "Certificados, justificantes y recibos",
+            ["CERT"] = "Certificados técnicos",
+            ["CERA"] = "Certificados, autoliquidaciones, justificantes y recibos de pago / cobro"
+        };
+        const string propuesta = "Certificado de estar al corriente de pago emitido por el organismo competente.";
+
+        var resultado = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogo);
+
+        resultado.Should().BeNull();
+    }
+
+    [Fact]
+    public void ResolverTdn1PorCatalogoDesdePropuesta_WhenCodigoEnMayusculasYRaizCoinciden_PriorizaCodigoDeVia1()
+    {
+        var catalogo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TASA"] = "Tasaciones y Valoraciones",
+            ["OTRO"] = "Tasaciones especiales"
+        };
+        const string propuesta = "Documento de la familia OTRO: tasación de un inmueble.";
+
+        var resultado = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogo);
+
+        resultado.Should().Be("OTRO");
+    }
 }
