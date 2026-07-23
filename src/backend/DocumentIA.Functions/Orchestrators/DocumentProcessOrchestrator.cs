@@ -752,6 +752,39 @@ public class DocumentProcessOrchestrator
                         exMd,
                         "Paso 2.8: No se pudo extraer markdown DI Layout previo. Se continúa sin markdown.");
                 }
+
+                // 2.8b: Respaldo - si el layout falló o no devolvió markdown útil, se reutiliza el
+                // markdown ya persistido en BD para este mismo documento (por SHA256/MD5), si existe.
+                if (!datosNormalizados.ContainsKey("Markdown")
+                    && (!string.IsNullOrWhiteSpace(salida.Integridad.SHA256) || !string.IsNullOrWhiteSpace(salida.Integridad.MD5)))
+                {
+                    try
+                    {
+                        var markdownPersistido = await context.CallActivityAsync<RecuperarMarkdownPersistidoResultado>(
+                            "RecuperarMarkdownPersistidoActivity",
+                            new RecuperarMarkdownPersistidoInput
+                            {
+                                Sha256 = salida.Integridad.SHA256,
+                                Md5 = salida.Integridad.MD5,
+                                NombreDocumento = entrada.Documento.Name
+                            });
+
+                        if (markdownPersistido.Encontrado && !string.IsNullOrWhiteSpace(markdownPersistido.Markdown))
+                        {
+                            datosNormalizados["Markdown"] = markdownPersistido.Markdown;
+                            RegistrarMarkdown(markdownPersistido.Markdown, "MarkdownPersistidoBD");
+                            logger.LogInformation(
+                                "Paso 2.8b: markdown recuperado de BD ({Len} chars)",
+                                markdownPersistido.Markdown.Length);
+                        }
+                    }
+                    catch (Exception exBd)
+                    {
+                        logger.LogWarning(
+                            exBd,
+                            "Paso 2.8b: No se pudo recuperar markdown persistido en BD. Se continúa sin markdown.");
+                    }
+                }
             }
 
             // 3. Clasificacion
