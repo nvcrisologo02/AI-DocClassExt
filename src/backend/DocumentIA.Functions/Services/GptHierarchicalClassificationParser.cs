@@ -245,6 +245,12 @@ public static class GptHierarchicalClassificationParser
     ///     cualquier posición del texto (no solo al inicio).
     ///  2) El nombre de una familia del catálogo citado literalmente en el texto libre (solo
     ///     nombres suficientemente distintivos, para minimizar falsos positivos).
+    ///  3) La raíz de la primera palabra significativa del nombre de familia (p.ej. "tasacion"
+    ///     para "Tasaciones y Valoraciones"), para el caso frecuente en que GPT nombra la familia
+    ///     en prosa sin anteponer el código ni citar el nombre completo del catálogo (p.ej.
+    ///     "Tasación de un inmueble"). Solo se usan raíces que identifican una única familia: si
+    ///     dos o más familias comparten raíz (p.ej. el cluster "Certificados..." de CERJ/CERT/CERA)
+    ///     esa raíz se descarta por completo para evitar mis-clasificar dentro del cluster.
     /// </para>
     /// Debe invocarse únicamente cuando las vías anteriores ya fallaron: así solo actúa en el
     /// camino que hoy degrada a "Desconocido", sin alterar el comportamiento de los "Desconocido"
@@ -287,7 +293,122 @@ public static class GptHierarchicalClassificationParser
             }
         }
 
+        // 3) Raíz de la primera palabra significativa del nombre de familia. Primero se calcula
+        // la raíz de cada familia y se descartan las ambiguas (compartidas por más de un código):
+        // esa es la guarda de colisión que evita, por ejemplo, resolver el cluster CERJ/CERT/CERA
+        // (todas empiezan por "Certificados...") a partir de un simple "certificado" en prosa.
+        var textoNormalizado = NormalizarTextoSinAcentos(texto);
+        var codigosPorRaiz = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var entrada in nombresPorCodigo)
+        {
+            var raiz = DerivarRaizDePrimeraPalabra(entrada.Value);
+            if (raiz is null)
+            {
+                continue;
+            }
+
+            if (!codigosPorRaiz.TryGetValue(raiz, out var codigos))
+            {
+                codigos = new List<string>();
+                codigosPorRaiz[raiz] = codigos;
+            }
+
+            codigos.Add(entrada.Key);
+        }
+
+        foreach (var entrada in codigosPorRaiz)
+        {
+            if (entrada.Value.Count > 1)
+            {
+                continue; // Raíz ambigua: compartida por varias familias, no se resuelve por esta vía.
+            }
+
+            if (textoNormalizado.Contains(entrada.Key, StringComparison.Ordinal))
+            {
+                return entrada.Value[0].ToUpperInvariant();
+            }
+        }
+
         return null;
+    }
+
+    private static readonly HashSet<string> PalabrasVaciasIniciales = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "de", "del", "la", "los", "las", "el", "en", "y"
+    };
+
+    private const int LongitudMinimaRaiz = 6;
+
+    /// <summary>
+    /// Deriva la raíz normalizada (sin acentos, en minúsculas, aproximadamente singularizada) de la
+    /// primera palabra significativa de un nombre de familia del catálogo TDN1, para usarla como
+    /// patrón de búsqueda tolerante en el texto libre de "propuesta" (vía 3, AB#99984). Devuelve
+    /// null si el nombre no tiene ninguna palabra significativa o la raíz resultante es demasiado
+    /// corta para ser un patrón fiable.
+    /// </summary>
+    private static string? DerivarRaizDePrimeraPalabra(string nombreFamilia)
+    {
+        var palabras = nombreFamilia.Split(
+            new[] { ' ', ',', ';', '/' },
+            StringSplitOptions.RemoveEmptyEntries);
+
+        string? primeraPalabra = null;
+        foreach (var palabra in palabras)
+        {
+            if (!PalabrasVaciasIniciales.Contains(palabra))
+            {
+                primeraPalabra = palabra;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(primeraPalabra))
+        {
+            return null;
+        }
+
+        var normalizada = NormalizarTextoSinAcentos(primeraPalabra);
+
+        // Singularización aproximada: quita la terminación de plural más habitual en español para
+        // que la raíz capte tanto la forma singular como la plural del nombre de catálogo
+        // (p.ej. "tasaciones" -> "tasacion", igual que "tasación" sin acentos).
+        string raiz;
+        if (normalizada.Length > LongitudMinimaRaiz + 2 && normalizada.EndsWith("es", StringComparison.Ordinal))
+        {
+            raiz = normalizada[..^2];
+        }
+        else if (normalizada.Length > LongitudMinimaRaiz + 1 && normalizada.EndsWith("s", StringComparison.Ordinal))
+        {
+            raiz = normalizada[..^1];
+        }
+        else
+        {
+            raiz = normalizada;
+        }
+
+        return raiz.Length >= LongitudMinimaRaiz ? raiz : null;
+    }
+
+    /// <summary>
+    /// Pasa un texto a minúsculas y elimina diacríticos (vía normalización NFD y descarte de
+    /// marcas combinantes), para comparar de forma tolerante a acentos entre el texto libre de
+    /// GPT y los nombres del catálogo (vía 3, AB#99984).
+    /// </summary>
+    private static string NormalizarTextoSinAcentos(string valor)
+    {
+        var descompuesto = valor.Normalize(System.Text.NormalizationForm.FormD);
+        var builder = new System.Text.StringBuilder(descompuesto.Length);
+
+        foreach (var caracter in descompuesto)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(caracter) !=
+                System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                builder.Append(caracter);
+            }
+        }
+
+        return builder.ToString().ToLowerInvariant();
     }
 }
 
