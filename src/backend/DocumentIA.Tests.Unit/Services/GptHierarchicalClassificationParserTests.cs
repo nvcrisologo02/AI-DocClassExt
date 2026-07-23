@@ -215,4 +215,88 @@ public class GptHierarchicalClassificationParserTests
         result.Success.Should().BeTrue();
         result.Value!.Confianza.Should().BeNull();
     }
+
+    // ========== ParseTdn1CatalogNombresPorCodigo (AB#99984) ==========
+
+    [Fact]
+    public void ParseTdn1CatalogNombresPorCodigo_WhenCatalogHasMultipleFamilias_ReturnsCodigoNombreMap()
+    {
+        const string catalogo = "- TASA: Tasaciones y Valoraciones, Documentos de estimación del valor de un activo.\n" +
+            "- PRES: Presupuestos, Cómputo anticipado del coste de una obra.\n" +
+            "- FICH: Fichas, Folios con datos esquemáticos.";
+
+        var mapa = GptHierarchicalClassificationParser.ParseTdn1CatalogNombresPorCodigo(catalogo);
+
+        mapa.Should().HaveCount(3);
+        mapa["TASA"].Should().Be("Tasaciones y Valoraciones");
+        mapa["PRES"].Should().Be("Presupuestos");
+        mapa["FICH"].Should().Be("Fichas");
+    }
+
+    [Fact]
+    public void ParseTdn1CatalogNombresPorCodigo_WhenCatalogIsEmpty_ReturnsEmptyMap()
+    {
+        var mapa = GptHierarchicalClassificationParser.ParseTdn1CatalogNombresPorCodigo(null);
+
+        mapa.Should().BeEmpty();
+    }
+
+    // ========== ResolverTdn1PorCatalogoDesdePropuesta (AB#99984) ==========
+
+    [Fact]
+    public void ResolverTdn1PorCatalogoDesdePropuesta_WhenPropuestaMentionsCatalogCodeMidText_ResolvesCodigo()
+    {
+        // Caso real observado en el baseline de evaluación: GPT identifica la familia
+        // correctamente en prosa libre, pero no antepone el código de catálogo al inicio del
+        // texto (ExtraerTdn1DePropuesta no puede extraerlo por el ancla '^').
+        var catalogo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TASA"] = "Tasaciones y Valoraciones"
+        };
+        const string propuesta = "Informe de tasación de Sociedad de Tasación con metodología de comparación " +
+            "y coste, propio de la familia TASA de valoración de inmuebles.";
+
+        var resultado = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogo);
+
+        resultado.Should().Be("TASA");
+    }
+
+    [Fact]
+    public void ResolverTdn1PorCatalogoDesdePropuesta_WhenPropuestaMentionsFamiliaNombreWithoutCode_ResolvesCodigo()
+    {
+        var catalogo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TASA"] = "Tasaciones y Valoraciones"
+        };
+        const string propuesta = "El documento recoge un informe con metodologías de comparación y coste, " +
+            "encajando en Tasaciones y Valoraciones del activo analizado.";
+
+        var resultado = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogo);
+
+        resultado.Should().Be("TASA");
+    }
+
+    [Fact]
+    public void ResolverTdn1PorCatalogoDesdePropuesta_WhenPropuestaIsGenuinelyUnclassifiable_ReturnsNull()
+    {
+        var catalogo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["TASA"] = "Tasaciones y Valoraciones",
+            ["FICH"] = "Fichas"
+        };
+        const string propuesta = "null: documento ilegible o sin contenido identificable para clasificar en familias TDN1.";
+
+        var resultado = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogo);
+
+        resultado.Should().BeNull();
+    }
+
+    [Fact]
+    public void ResolverTdn1PorCatalogoDesdePropuesta_WhenPropuestaOrCatalogIsEmpty_ReturnsNull()
+    {
+        var catalogo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) { ["TASA"] = "Tasaciones y Valoraciones" };
+
+        GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(null, catalogo).Should().BeNull();
+        GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta("TASA: informe", new Dictionary<string, string>()).Should().BeNull();
+    }
 }

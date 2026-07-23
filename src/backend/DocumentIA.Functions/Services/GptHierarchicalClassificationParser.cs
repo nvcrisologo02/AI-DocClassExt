@@ -7,6 +7,16 @@ public static class GptHierarchicalClassificationParser
     public const string Phase1ParsingErrorReason = "fase1_parsing_error";
     public const string Phase2ParsingErrorReason = "fase2_parsing_error";
 
+    /// <summary>
+    /// Motivo informado cuando el TDN1 no vino explícito en el JSON de Phase 1 ni fue
+    /// extraíble por el prefijo convencional "CODIGO: ..." (<see cref="ExtraerTdn1DePropuesta"/>),
+    /// pero sí se pudo resolver mapeando el texto libre de "propuesta" contra el catálogo TDN1
+    /// (código o nombre de familia mencionado literalmente). Distingue esta resolución tolerante
+    /// de un "Desconocido" legítimo (documento no clasificable, p.ej. ilegible) en las trazas y en
+    /// el contrato de salida (AB#99984).
+    /// </summary>
+    public const string PropuestaCatalogMappingReason = "tdn1_resuelto_por_mapeo_propuesta";
+
     public static GptHierarchicalParsingResult<GptPhase1Classification> ParsePhase1(string responseText)
     {
         if (string.IsNullOrWhiteSpace(responseText))
@@ -175,6 +185,106 @@ public static class GptHierarchicalClassificationParser
         if (match.Success && match.Groups.Count > 1)
         {
             return match.Groups[1].Value;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Parsea el catálogo TDN1 en el formato "- CODIGO: Nombre, Descripcion" (una familia por
+    /// línea, tal como lo genera <c>ClassificationTipologiaPromptBuilder.BuildTdn1Catalog</c>) y
+    /// devuelve el diccionario Codigo -&gt; Nombre. Reutiliza el mismo catálogo que ya se le muestra
+    /// a GPT en el prompt de Phase 1, sin necesidad de una consulta adicional a BD.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ParseTdn1CatalogNombresPorCodigo(string? catalogoTdn1)
+    {
+        var mapa = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(catalogoTdn1))
+        {
+            return mapa;
+        }
+
+        foreach (var lineaCruda in catalogoTdn1.Split('\n'))
+        {
+            var linea = lineaCruda.Trim().TrimStart('-', ' ');
+            var separadorCodigo = linea.IndexOf(':');
+            if (separadorCodigo <= 0)
+            {
+                continue;
+            }
+
+            var codigo = linea[..separadorCodigo].Trim();
+            if (codigo.Length == 0 || mapa.ContainsKey(codigo))
+            {
+                continue;
+            }
+
+            var resto = linea[(separadorCodigo + 1)..].Trim();
+            var separadorNombre = resto.IndexOf(',');
+            var nombre = (separadorNombre > 0 ? resto[..separadorNombre] : resto).Trim();
+
+            if (nombre.Length > 0)
+            {
+                mapa[codigo] = nombre;
+            }
+        }
+
+        return mapa;
+    }
+
+    /// <summary>
+    /// Resolución tolerante de TDN1 a partir del texto libre de "propuesta" cuando GPT no
+    /// devolvió un código explícito en 'tdn1' ni siguió la convención "CODIGO: descripción" al
+    /// inicio del texto (ver <see cref="ExtraerTdn1DePropuesta"/>). El prompt de Phase 1 solo pide
+    /// a GPT "texto libre" en 'propuesta', por lo que esa convención NO está garantizada y es
+    /// habitual que GPT identifique correctamente la familia documental en prosa sin anteponer su
+    /// código de catálogo (AB#99984).
+    /// <para>
+    /// Busca, en este orden:
+    ///  1) Un código de catálogo (4 letras) mencionado como palabra completa en mayúsculas, en
+    ///     cualquier posición del texto (no solo al inicio).
+    ///  2) El nombre de una familia del catálogo citado literalmente en el texto libre (solo
+    ///     nombres suficientemente distintivos, para minimizar falsos positivos).
+    /// </para>
+    /// Debe invocarse únicamente cuando las vías anteriores ya fallaron: así solo actúa en el
+    /// camino que hoy degrada a "Desconocido", sin alterar el comportamiento de los "Desconocido"
+    /// legítimos (documentos sin propuesta útil, p.ej. ilegibles o vacíos).
+    /// </summary>
+    public static string? ResolverTdn1PorCatalogoDesdePropuesta(
+        string? propuesta,
+        IReadOnlyDictionary<string, string> nombresPorCodigo)
+    {
+        if (string.IsNullOrWhiteSpace(propuesta) || nombresPorCodigo is null || nombresPorCodigo.Count == 0)
+        {
+            return null;
+        }
+
+        var texto = propuesta.Trim();
+
+        // 1) Código de catálogo como palabra completa en mayúsculas, en cualquier posición.
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
+            texto,
+            @"\b[A-Z]{4}\b",
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromMilliseconds(100)))
+        {
+            if (nombresPorCodigo.ContainsKey(match.Value))
+            {
+                return match.Value.ToUpperInvariant();
+            }
+        }
+
+        // 2) Nombre de familia mencionado en el texto libre. Umbral mínimo de longitud para
+        // evitar falsos positivos con nombres cortos o genéricos que pudieran aparecer por
+        // casualidad en la prosa (p.ej. nombres de una sola palabra corta).
+        const int longitudMinimaNombre = 10;
+        foreach (var entrada in nombresPorCodigo)
+        {
+            if (entrada.Value.Length >= longitudMinimaNombre &&
+                texto.Contains(entrada.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return entrada.Key.ToUpperInvariant();
+            }
         }
 
         return null;
