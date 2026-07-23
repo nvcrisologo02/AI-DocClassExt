@@ -124,3 +124,22 @@ public class ExtraerMarkdownLayoutResultado
     public string? Markdown { get; set; }
     public int Paginas { get; set; }
 }
+
+/// <summary>
+/// Input para recuperar markdown ya persistido en BD (Documentos.NormalizacionMarkdownCompressed)
+/// como respaldo cuando la extraccion de markdown DI Layout previa a clasificacion falla o no
+/// devuelve contenido util.
+/// </summary>
+public class RecuperarMarkdownPersistidoInput
+{
+    public string? Sha256 { get; set; }
+    public string? Md5 { get; set; }
+    public string NombreDocumento { get; set; } = string.Empty;
+}
+
+public class RecuperarMarkdownPersistidoResultado
+{
+    public bool Encontrado { get; set; }
+    public string? Markdown { get; set; }
+    public int? DocumentoId { get; set; }
+}

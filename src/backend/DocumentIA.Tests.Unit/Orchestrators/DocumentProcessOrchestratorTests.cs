@@ -1054,6 +1054,84 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_Paso28b_LayoutFalla_RecuperaMarkdownPersistidoDeBD()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ExtraerMarkdownLayoutActivity", new InvalidOperationException("DI Layout no disponible"));
+        context.SetupActivity("RecuperarMarkdownPersistidoActivity", new RecuperarMarkdownPersistidoResultado
+        {
+            Encontrado = true,
+            Markdown = "# Markdown recuperado de BD",
+            DocumentoId = 42
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.1,
+            ConfianzaGPT = 0.1,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            ClasificacionParcial = true
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("MarkdownPersistidoBD");
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
+
+        var recuperarInput = context.GetLastActivityInput<RecuperarMarkdownPersistidoInput>("RecuperarMarkdownPersistidoActivity");
+        recuperarInput.Should().NotBeNull();
+        recuperarInput!.Sha256.Should().Be("sha256abc");
+        recuperarInput.Md5.Should().Be("md5abc");
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.DatosNormalizados.Should().ContainKey("Markdown");
+        clasifInput.DatosNormalizados["Markdown"].Should().Be("# Markdown recuperado de BD");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Paso28b_LayoutFallaYSinMarkdownPersistido_ContinuaSinMarkdownComoHoy()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ExtraerMarkdownLayoutActivity", new InvalidOperationException("DI Layout no disponible"));
+        context.SetupActivity("RecuperarMarkdownPersistidoActivity", new RecuperarMarkdownPersistidoResultado
+        {
+            Encontrado = false
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.1,
+            ConfianzaGPT = 0.1,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            ClasificacionParcial = true
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().BeNull();
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeFalse();
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.DatosNormalizados.Should().NotContainKey("Markdown");
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClasificacionParcial_AsignaTdn1EnIdentificacion()
     {
         var orchestrator = CreateOrchestrator();
