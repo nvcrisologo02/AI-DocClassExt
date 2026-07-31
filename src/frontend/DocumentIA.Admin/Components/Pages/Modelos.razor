@@ -7,6 +7,11 @@
 
 <h1>Modelos</h1>
 
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert alert-danger">@_message</div>
+}
+
 <p>
     <button class="btn btn-primary" @onclick="CreateModelo">Nuevo modelo</button>
 </p>
@@ -55,6 +60,7 @@
     }
 
     private ConfirmDialog? _confirm;
+    private string? _message;
 
     private async Task DeleteModeloAsync(ModeloConfigEntity row)
     {
@@ -65,8 +71,17 @@
             return;
         }
 
-        await AdminService.DeleteModeloAsync(row.Id);
-        await ReloadAsync();
+        try
+        {
+            _message = null;
+            await AdminService.DeleteModeloAsync(row.Id);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+
         StateHasChanged();
     }
 

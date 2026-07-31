@@ -260,6 +260,8 @@ public class TipologiaAdminService
 
     public async Task DeleteCatalogoTdn1Async(int id)
     {
+        EnsureWritesAllowed();
+
         using var request = new HttpRequestMessage(HttpMethod.Delete, $"management/catalogotdn1/{id}");
         using var response = await _httpClient.SendAsync(request);
         await EnsureSuccessAsync(response);
@@ -300,6 +302,8 @@ public class TipologiaAdminService
 
     public async Task DeleteCatalogoTdn2Async(int id)
     {
+        EnsureWritesAllowed();
+
         using var request = new HttpRequestMessage(HttpMethod.Delete, $"management/catalogotdn2/{id}");
         using var response = await _httpClient.SendAsync(request);
         await EnsureSuccessAsync(response);
@@ -326,6 +330,8 @@ public class TipologiaAdminService
 
     private async Task<T> SendRequiredAsync<T>(HttpMethod method, string relativeUrl, object? body)
     {
+        EnsureWritesAllowed();
+
         using var request = new HttpRequestMessage(method, relativeUrl);
         if (body is not null)
         {
@@ -338,6 +344,23 @@ public class TipologiaAdminService
         var result = await response.Content.ReadFromJsonAsync<T>(JsonOptions);
         return result ?? throw new InvalidOperationException("La API devolvió una respuesta vacía.");
     }
+
+    /// <summary>
+    /// Bloquea cualquier modificación cuando no hay identidad con la que auditarla.
+    /// La comprobación vive en el servicio y no en las páginas para que ninguna vista
+    /// pueda saltársela por olvido.
+    /// </summary>
+    private void EnsureWritesAllowed()
+    {
+        if (!_currentUser.IsAuthenticated)
+        {
+            throw new InvalidOperationException(ReadOnlyModeMessage);
+        }
+    }
+
+    internal const string ReadOnlyModeMessage =
+        "Modo solo lectura: no hay un usuario autenticado, así que no es posible registrar quién realiza el cambio. "
+        + "Active la autenticación del Admin (App Service Authentication) para poder modificar la configuración.";
 
     private static async Task EnsureSuccessAsync(HttpResponseMessage response)
     {

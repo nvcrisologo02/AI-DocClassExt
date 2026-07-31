@@ -16,10 +16,23 @@ public class PromptManagementService
     };
 
     private readonly HttpClient _httpClient;
+    private readonly ICurrentUserService _currentUser;
 
-    public PromptManagementService(HttpClient httpClient)
+    public PromptManagementService(HttpClient httpClient, ICurrentUserService currentUser)
     {
         _httpClient = httpClient;
+        _currentUser = currentUser;
+    }
+
+    /// <summary>
+    /// Bloquea cualquier modificacion de prompts cuando no hay identidad con la que auditarla.
+    /// </summary>
+    private void EnsureWritesAllowed()
+    {
+        if (!_currentUser.IsAuthenticated)
+        {
+            throw new InvalidOperationException(TipologiaAdminService.ReadOnlyModeMessage);
+        }
     }
 
     /// <summary>Obtiene lista resumida de todos los templates de prompts.</summary>
@@ -77,6 +90,8 @@ public class PromptManagementService
     /// <summary>Crea un nuevo template de prompt en estado draft (IsActive=false).</summary>
     public async Task<PromptTemplateDto> CreatePromptTemplateAsync(CreatePromptTemplateRequest request)
     {
+        EnsureWritesAllowed();
+
         try
         {
             var response = await _httpClient.PostAsJsonAsync("management/prompts", request);
@@ -105,6 +120,8 @@ public class PromptManagementService
     /// <remarks>Solo es posible si IsActive=false. Si IsActive=true devuelve 403 Forbidden.</remarks>
     public async Task<PromptTemplateDto> UpdatePromptTemplateAsync(long id, UpdatePromptTemplateRequest request)
     {
+        EnsureWritesAllowed();
+
         try
         {
             var response = await _httpClient.PutAsJsonAsync($"management/prompts/{id}", request);
@@ -131,6 +148,8 @@ public class PromptManagementService
     /// <remarks>Operación atómica: desactiva todas las versiones IsActive=true para la misma key, luego activa la especificada.</remarks>
     public async Task<PromptTemplateDto> ActivatePromptVersionAsync(long id, string publishedBy)
     {
+        EnsureWritesAllowed();
+
         try
         {
             var request = new ActivatePromptVersionRequest(id, publishedBy);
@@ -155,6 +174,8 @@ public class PromptManagementService
     /// <remarks>Desactiva la versión activa actual y activa la versión target especificada.</remarks>
     public async Task<PromptTemplateDto> RollbackPromptVersionAsync(string promptKey, int targetVersion, string publishedBy)
     {
+        EnsureWritesAllowed();
+
         try
         {
             var request = new RollbackPromptVersionRequest(promptKey, targetVersion, publishedBy);
@@ -179,6 +200,8 @@ public class PromptManagementService
     /// <remarks>No es posible eliminar templates activos. Devuelve 403 Forbidden si IsActive=true.</remarks>
     public async Task DeletePromptTemplateAsync(long id)
     {
+        EnsureWritesAllowed();
+
         try
         {
             var response = await _httpClient.DeleteAsync($"management/prompts/{id}");

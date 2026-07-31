@@ -9,7 +9,23 @@ public sealed record EnvironmentBannerState(string Label, string CssClass)
 {
     private const string UnknownFromBackend = "Unknown";
 
-    public static EnvironmentBannerState Resolve(bool loaded, bool backendUnreachable, string? environment)
+    public static EnvironmentBannerState Resolve(
+        bool loaded,
+        bool backendUnreachable,
+        string? environment,
+        bool readOnlyMode = false)
+    {
+        var state = ResolveEnvironment(loaded, backendUnreachable, environment);
+
+        if (!loaded || !readOnlyMode)
+        {
+            return state;
+        }
+
+        return state with { Label = $"{state.Label} · solo lectura (sin usuario autenticado)" };
+    }
+
+    private static EnvironmentBannerState ResolveEnvironment(bool loaded, bool backendUnreachable, string? environment)
     {
         if (!loaded)
         {
