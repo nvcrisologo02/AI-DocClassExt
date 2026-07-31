@@ -1,0 +1,66 @@
+@using DocumentIA.Admin.Services
+@inject IHttpClientFactory HttpFactory
+@inject IConfiguration Config
+
+<div class="w-100 text-center py-1 small fw-semibold @BannerClass" title="Backend: @_host">
+    @Label &nbsp;·&nbsp; <span style="font-family:monospace">@_host</span>
+</div>
+
+@code {
+    private string _host = "(sin configurar)";
+    private string? _environment;
+    private bool _loaded;
+    private bool _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var baseUrl = AdminConfigReader.Get(Config, "FunctionsAdminApi", "BaseUrl");
+        if (Uri.TryCreate(baseUrl, UriKind.Absolute, out var uri))
+        {
+            _host = uri.Host;
+        }
+        else
+        {
+            _host = "localhost (por defecto)";
+        }
+
+        try
+        {
+            var client = HttpFactory.CreateClient(nameof(SystemConfigService));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var response = await client.GetAsync("management/configuration", cts.Token);
+            if (response.IsSuccessStatusCode)
+            {
+                _environment = EnvironmentInfoParser.GetEnvironment(await response.Content.ReadAsStringAsync(cts.Token));
+            }
+            else
+            {
+                _error = true;
+            }
+        }
+        catch
+        {
+            _error = true;
+        }
+
+        _loaded = true;
+    }
+
+    private bool IsProduction => string.Equals(_environment, "Production", StringComparison.OrdinalIgnoreCase);
+
+    private string Label => !_loaded
+        ? "Conectando con el backend…"
+        : _error
+            ? "⚠ Backend no accesible"
+            : IsProduction
+                ? "⛔ ENTORNO: PRODUCCIÓN"
+                : $"Entorno backend: {_environment ?? "desconocido"}";
+
+    private string BannerClass => !_loaded
+        ? "bg-light text-muted"
+        : _error
+            ? "bg-warning text-dark"
+            : IsProduction
+                ? "bg-danger text-white"
+                : "bg-info text-dark";
+}

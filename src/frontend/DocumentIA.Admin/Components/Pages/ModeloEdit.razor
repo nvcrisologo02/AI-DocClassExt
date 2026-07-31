@@ -49,8 +49,8 @@
 </div>
 
 <div class="mb-3">
-    <button class="btn btn-outline-primary" type="button" @onclick="ValidateJsonAsync">Validar JSON</button>
-    <button class="btn btn-primary ms-2" type="button" @onclick="SaveAsync">Guardar</button>
+    <button class="btn btn-outline-primary" type="button" @onclick="ValidateJsonAsync" disabled="@_notFound">Validar JSON</button>
+    <button class="btn btn-primary ms-2" type="button" @onclick="SaveAsync" disabled="@_notFound">Guardar</button>
     <a class="btn btn-secondary ms-2" href="/modelos">Volver</a>
 </div>
 
@@ -62,14 +62,25 @@
     private string? _message;
     private JsonEditorComponent? _jsonEditor;
 
+    private bool _notFound;
+
     protected override async Task OnParametersSetAsync()
     {
+        _notFound = false;
+        _error = false;
+        _message = null;
         if (Id.HasValue)
         {
             var existing = await AdminService.GetModeloByIdAsync(Id.Value);
             if (existing is not null)
             {
                 _model = existing;
+            }
+            else
+            {
+                _notFound = true;
+                _error = true;
+                _message = $"No existe un modelo con Id {Id.Value}. No se puede editar.";
             }
         }
     }
@@ -93,6 +104,13 @@
 
     private async Task SaveAsync()
     {
+        if (_notFound)
+        {
+            _error = true;
+            _message = "No se puede guardar: el modelo solicitado no existe.";
+            return;
+        }
+
         // Obtener JSON del editor
         if (_jsonEditor != null)
         {

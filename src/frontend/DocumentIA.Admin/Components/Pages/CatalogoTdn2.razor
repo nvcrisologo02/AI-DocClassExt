@@ -1,6 +1,7 @@
 @page "/catalogotdn2"
 @inject TipologiaAdminService AdminService
 @inject NavigationManager Navigation
+@using DocumentIA.Admin.Components.Common
 
 <PageTitle>Catálogo TDN2</PageTitle>
 
@@ -54,13 +55,15 @@ else
                     <td>@row.Nombre</td>
                     <td>
                         <button class="btn btn-sm btn-outline-secondary" @onclick="() => EditItem(row.Id)">Editar</button>
-                        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="() => DeleteAsync(row.Id)">Borrar</button>
+                        <button class="btn btn-sm btn-outline-danger ms-2" @onclick="() => DeleteAsync(row)">Borrar</button>
                     </td>
                 </tr>
             }
         </tbody>
     </table>
 }
+
+<ConfirmDialog @ref="_confirm" />
 
 @code {
     private bool _loading = true;
@@ -117,11 +120,20 @@ else
         Navigation.NavigateTo($"/catalogotdn2/edit/{id}");
     }
 
-    private async Task DeleteAsync(int id)
+    private ConfirmDialog? _confirm;
+
+    private async Task DeleteAsync(CatalogoTdn2Item row)
     {
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a borrar el TDN2 '{row.Codigo} — {row.Nombre}' (familia {row.CodigoTdn1}).\nEsta acción no se puede deshacer.",
+            "Borrar TDN2", "Borrar"))
+        {
+            return;
+        }
+
         try
         {
-            await AdminService.DeleteCatalogoTdn2Async(id);
+            await AdminService.DeleteCatalogoTdn2Async(row.Id);
             await ReloadAsync();
         }
         catch (Exception ex)

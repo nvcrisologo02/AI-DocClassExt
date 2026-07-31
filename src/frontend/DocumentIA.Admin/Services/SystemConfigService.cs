@@ -141,20 +141,6 @@ public class SystemConfigService
                     TimestampUtc = root.TryGetProperty("timestampUtc", out var ts) ? ts.GetString() : null,
                 };
 
-                // Extraer información de SQL Connection - obtener el valor real
-                if (root.TryGetProperty("effectiveSqlConnection", out var sqlConn))
-                {
-                    if (sqlConn.TryGetProperty("value", out var connValue))
-                    {
-                        var connStr = connValue.GetString();
-                        // Solo mostrar si no está masked
-                        if (!string.IsNullOrWhiteSpace(connStr) && !connStr.Equals("***", StringComparison.OrdinalIgnoreCase))
-                        {
-                            config.SqlConnectionString = connStr;
-                        }
-                    }
-                }
-
                 // Extraer información de configuración
                 if (root.TryGetProperty("settings", out var settings))
                 {
@@ -233,6 +219,5 @@ public class FunctionsConfiguration
 {
     public string? Environment { get; set; }
     public string? TimestampUtc { get; set; }
-    public string? SqlConnectionString { get; set; }
     public List<string>? SettingsList { get; set; }
 }

@@ -1,5 +1,6 @@
 @page "/plugins-tipologias"
 @inject TipologiaAdminService AdminService
+@using DocumentIA.Admin.Components.Common
 
 <PageTitle>Plugins por Tipología</PageTitle>
 
@@ -62,6 +63,8 @@
     </div>
 </div>
 
+<ConfirmDialog @ref="_confirm" />
+
 @code {
     private IReadOnlyCollection<PluginTipologiaConfigEntity> _items = Array.Empty<PluginTipologiaConfigEntity>();
     private IReadOnlyCollection<TipologiaEntity> _tipologias = Array.Empty<TipologiaEntity>();
@@ -71,6 +74,7 @@
     private bool _error;
     private string? _message;
     private JsonEditorComponent? _jsonEditor;
+    private ConfirmDialog? _confirm;
 
     protected override async Task OnInitializedAsync()
     {
@@ -187,9 +191,16 @@
             return;
         }
 
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a publicar la configuración de plugins de '{_tipologiaCodigo.Trim()}'.\nPasará a aplicarse en las próximas ejecuciones.",
+            "Publicar plugins", "Publicar", "btn-success"))
+        {
+            return;
+        }
+
         try
         {
-            await AdminService.PublishPluginConfigAsync(_tipologiaCodigo.Trim(), "ADMIN-UI");
+            await AdminService.PublishPluginConfigAsync(_tipologiaCodigo.Trim());
             _error = false;
             _message = "Configuración publicada.";
             await Reload();
@@ -207,6 +218,13 @@
         {
             _error = true;
             _message = "TipologiaCodigo es obligatorio.";
+            return;
+        }
+
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a retirar la configuración de plugins de '{_tipologiaCodigo.Trim()}'.",
+            "Retirar plugins", "Retirar", "btn-warning"))
+        {
             return;
         }
 
