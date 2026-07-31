@@ -1,4 +1,4 @@
-# 2. Analisis Funcional — DocumentIA MVP
+# 2. Analisis Funcional — DocumentIA
 
 > Ultima actualizacion: 2026-03-31  
 > Proyecto: AI DocClassExt — SAREB
@@ -32,7 +32,7 @@ flowchart LR
     end
 
     subgraph Sistemas
-        DIA["DocumentIA MVP"]
+        DIA["DocumentIA"]
         GDC["GDC SINTWS<br/>(Gestor Documental)"]
         AI["Azure AI Services"]
         EXT["Sistemas Externos<br/>(Atlas, Catastro)"]
@@ -64,7 +64,7 @@ flowchart TB
     SCA["Sistema Cliente API"]
     ADM["Administrador"]
 
-    subgraph DocumentIA["DocumentIA MVP"]
+    subgraph DocumentIA["DocumentIA"]
         CU1["CU1: Ingestar documento<br/>para procesamiento"]
         CU2["CU2: Consultar estado<br/>de procesamiento"]
         CU3["CU3: Gestionar<br/>tipologias"]
@@ -300,7 +300,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | Termino | Definicion |
 |---------|-----------|
 | **Tipologia** | Tipo documental configurable (ej: nota-simple, tasacion, resumen-documental). Tiene codigo, version, umbrales y configuracion de extraccion/validacion/plugins. |
-| **Nota Simple** | Extracto del Registro de la Propiedad que informa sobre la situacion juridica de una finca (titulares, cargas, dominio). Tipologia principal del MVP: `nota-simple@1.4`. |
+| **Nota Simple** | Extracto del Registro de la Propiedad que informa sobre la situacion juridica de una finca (titulares, cargas, dominio). Tipologia principal del sistema: `nota-simple@1.4`. |
 | **Tasacion** | Informe de valoracion de un inmueble realizado por una sociedad de tasacion. |
 | **Confianza** | Metrica [0.0-1.0] que indica el grado de certeza de la IA sobre su resultado. Se calcula por clasificacion, extraccion y validacion. |
 | **ConfianzaAgregada / ConfianzaGlobal** | MIN(confianza clasificacion, confianza extraccion, confianza validacion). |
@@ -342,7 +342,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RF12 | El sistema debe ejecutar prompts libres configurables por tipologia y resumen por defecto controlado | PromptActivity con OpenAI, configurable via `promptConfig` en tipologia JSON. El resumen ejecutivo por defecto se devuelve en `Resumen`; el prompt propio/ad-hoc se mantiene en `ResultadoPrompt`. | DONE |
 | RF13 | El sistema debe soportar versionado de tipologias | Resolucion `nota-simple` → default version, `nota-simple@1.4` → version especifica. | DONE |
 | RF14 | El sistema debe calcular hashes SHA256, MD5 y CRC32 para integridad | NormalizarActivity calcula los tres hashes. SHA256 usado para deduplicacion, MD5 para GDC. | DONE |
-| RF15 | El sistema debe proteger datos personales segun GDPR/LOPD | Masking de datos sensibles, cifrado en reposo, retencion configurable. | DESCARTADO MVP (EP7 Removed) |
+| RF15 | El sistema debe proteger datos personales segun GDPR/LOPD | Masking de datos sensibles, cifrado en reposo, retencion configurable. | DESCARTADO (EP7 Removed) |
 | RF16 | El sistema debe resolver el activo inmobiliario desde datos extraidos | `ObtenerActivoActivity` consulta `DM_POSICION_AAII_TB` via AssetResolver. Devuelve `IdActivo` si match unico. Habilitacion configurable por tipologia/instrucciones. | DONE |
 | RF17 | El sistema debe permitir excluir campos del score de confianza de extraccion por tipologia | `avoidConfidence: true` en un campo lo excluye del score y de `CamposBajaConfianza`, manteniendo completitud y trazabilidad en `ConfianzaPorCampo`. | DONE |
 
@@ -377,7 +377,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | **EP4** | Persistencia y auditoria | DONE | HU7 |
 | **EP5** | Configuracion y tipologias | IN PROGRESS | HU8, HU9, HU10 |
 | **EP6** | Observabilidad y pruebas | IN PROGRESS | HU11 |
-| **EP7** | Proteccion de datos / GDPR | REMOVED (fuera de alcance MVP) | HU12 |
+| **EP7** | Proteccion de datos / GDPR | REMOVED (fuera de alcance actual) | HU12 |
 | **EP8** | Mantenimiento Blob | PLANNED | HU13 |
 | **EP9** | GDC integracion completa | IN PROGRESS | — |
 | **EP10** | Resolucion de Activo | DONE | HU14 |
@@ -397,7 +397,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | HU9 | Versionado de tipologias | Como administrador de tipologias, quiero manejar multiples versiones de una tipologia simultanamente. | Resolucion `familia@version`. Default version configurable. | DONE |
 | HU10 | Configuracion de plugins | Como administrador de tipologias, quiero asignar y configurar plugins de integracion por tipologia. | Endpoints `/management/plugins-tipologias`. JSON con priority, retry, enabled. | DONE |
 | HU11 | Observabilidad | Como operador, quiero metricas y logs en Application Insights para diagnosticar problemas. | Structured logging, telemetria AI SDK, metricas por actividad en seguimiento. | IN PROGRESS |
-| HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | REMOVED (fuera de alcance MVP) |
+| HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | REMOVED (fuera de alcance actual) |
 | HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Lifecycle rules en Storage + soft delete + archivado por antigüedad. | PLANNED |
 | HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR, Referencia Catastral y/o Direccion. | `ObtenerActivoActivity` busca en AssetResolver con tres criterios configurables (habilitar/deshabilitar cada uno). Soporta AND/OR. Si match unico, `IdActivo` se propaga. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). | DONE |
 
@@ -407,7 +407,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 
 | Restriccion | Detalle |
 |------------|---------|
-| **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional (EP7) queda fuera del alcance del MVP actual (`Removed` en ADO el 2026-05-26). |
+| **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional (EP7) queda fuera del alcance actual (`Removed` en ADO el 2026-05-26). |
 | **Formatos aceptados** | Solo PDF. Puede recibirse como Base64 sin saltos de línea (RFC 4648) o recuperarse desde GDC vía `documento.objectIdGDC`. |
 | **Tamaño maximo** | Limitado por el tamaño maximo de input de Durable Functions (~60 KB entity size en Storage). Documentos grandes pueden requerir blob-reference pattern (no implementado). |
 | **Timeouts** | GDC: 120s (hardcoded en orchestrator). Servicios AI: configurable por proveedor (DI: 120s, GPT: 30-60s, CU: configurable). |

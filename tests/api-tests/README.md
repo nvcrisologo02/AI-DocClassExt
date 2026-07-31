@@ -1,6 +1,6 @@
-# API Tests - DocumentIA MVP
+# API Tests - DocumentIA
 
-Scripts de prueba para las Azure Functions del MVP.
+Scripts de prueba para las Azure Functions del sistema.
 
 ## Prerequisitos
 

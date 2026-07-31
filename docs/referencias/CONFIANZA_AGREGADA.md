@@ -38,7 +38,7 @@ ConfianzaGlobal = MIN(ConfianzaClasificacion, ConfianzaExtraccion, ConfianzaVali
 | **REVISION** | `0.70 ≤ ConfianzaGlobal < 0.85` | Requiere revisión humana |
 | **ERROR** | `ConfianzaGlobal < 0.70` | Alta probabilidad de dato incorrecto o fallido |
 
-Los umbrales son configurables por tipología (ver §5). Los defaults `0.85` y `0.70` representan los criterios consensuados para el MVP.
+Los umbrales son configurables por tipología (ver §5). Los defaults `0.85` y `0.70` representan los criterios consensuados para el sistema.
 
 > `EstadoCalidad` es un campo **independiente** de `Estado`. `Estado` refleja el resultado del proceso (OK, VALIDACION_CON_ERRORES, ERROR, DUPLICADO…). `EstadoCalidad` refleja la fiabilidad de los datos obtenidos.
 

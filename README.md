@@ -1,4 +1,4 @@
-﻿# Sistema de Clasificacion y Extraccion IA - MVP
+﻿# Sistema de Clasificacion y Extraccion IA
 
 Sistema modular de procesamiento de documentos con clasificacion y extraccion automatica basado en Azure AI Document Intelligence y Azure OpenAI.
 
@@ -93,7 +93,7 @@ Ver carpeta docs/ para:
 
 ## Licencia
 
-Uso interno - Proyecto MVP
+Uso interno
 
 ## Notas de desarrollo (2026-04-15)
 
