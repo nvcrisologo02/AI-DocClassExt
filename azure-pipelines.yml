@@ -16,6 +16,8 @@ variables:
       value: AI DocClassExt DEV
     - name: AZURE_FUNCTIONS_APP_NAME
       value: srbappdevdocai
+    - name: ENVIRONMENT_NAME
+      value: Development
     - name: AZURE_ADMIN_WEB_APP_NAME
       value: srbwebadmindevdocai
     - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
@@ -33,6 +35,8 @@ variables:
       value: AI DocClassExt PRE
     - name: AZURE_FUNCTIONS_APP_NAME
       value: srbapppredocai
+    - name: ENVIRONMENT_NAME
+      value: Preproduction
     - name: AZURE_ADMIN_WEB_APP_NAME
       value: srbwebadminpredocai
     - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
@@ -50,6 +54,8 @@ variables:
       value: AI DocClassExt PRO
     - name: AZURE_FUNCTIONS_APP_NAME
       value: srbappprodocai
+    - name: ENVIRONMENT_NAME
+      value: Production
     - name: AZURE_ADMIN_WEB_APP_NAME
       value: srbwebadminprodocai
     - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
@@ -342,7 +348,8 @@ stages:
                         "GDC__ProcesoCarga=PC01",
                         "GDC__TipoExpediente=AI",
                         "GDC__Publico=verdadero",
-                        "GDC__BypassSslValidation=true"
+                        "GDC__BypassSslValidation=true",
+                        "EnvironmentName=$(ENVIRONMENT_NAME)"
                       )
 
                       # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe

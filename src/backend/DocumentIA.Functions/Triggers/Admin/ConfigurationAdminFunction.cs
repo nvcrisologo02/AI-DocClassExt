@@ -63,7 +63,12 @@ public class ConfigurationAdminFunction
         var responsePayload = new
         {
             timestampUtc = DateTime.UtcNow,
-            environment = Environment.GetEnvironmentVariable("AZURE_FUNCTIONS_ENVIRONMENT")
+            // EnvironmentName es un ajuste propio, solo informativo, que despliega el pipeline por
+            // entorno. No se usa AZURE_FUNCTIONS_ENVIRONMENT como fuente principal porque cambia el
+            // comportamiento del host (fallback a base de datos InMemory y omision de la validacion
+            // de certificados TLS cuando vale Development), efectos indeseados en un entorno desplegado.
+            environment = Environment.GetEnvironmentVariable("EnvironmentName")
+                ?? Environment.GetEnvironmentVariable("AZURE_FUNCTIONS_ENVIRONMENT")
                 ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
                 ?? "Unknown",
             effectiveSqlConnection = new
