@@ -514,6 +514,18 @@ flowchart TB
 | Rate limit Azure DI | Varía por tier (S0: 15 TPS) | Durable Functions serializa por instancia; N instancias paralelas podrian saturar |
 | SSL GDC | Certificado CA corporativo SAREB no confiado en Linux | `GDC:BypassSslValidation=true` (solo para host Linux; en Windows la CA se instala en el cert store) |
 
+### Seguridad del Admin (DocumentIA.Admin) — estado y plan (AB#99999)
+
+Estado verificado (2026-07-31) de los App Service del Admin (dev y prod): autenticación deshabilitada (sin App Service Authentication), restricciones de acceso "Allow all", `publicNetworkAccess` habilitado, sin private endpoints. La integración VNet del Admin de prod es de salida (no limita el acceso entrante).
+
+Plan de autenticación: **App Service Authentication (EasyAuth)** con app registration single-tenant y un grupo de seguridad con los usuarios autorizados (`Assignment required = Yes`). La solicitud al equipo de identidad y la configuración del App Service se documentan en:
+
+- [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md) — solicitud a identidad (app registration + grupo de usuarios autorizados).
+- [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) — activación de App Service Authentication en el Admin.
+- [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) — restricción de acceso de red al Admin (limita desde dónde, no quién; el sitio scm tiene reglas propias).
+
+**Mitigación mientras EasyAuth no está activo:** modo solo lectura automático — sin identidad (`X-MS-CLIENT-PRINCIPAL-NAME` ausente), la capa de servicios del Admin (`TipologiaAdminService`, `PromptManagementService`) rechaza toda operación de escritura; solo quedan disponibles las consultas. Ver [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) §3.8.4.
+
 ---
 
 ## 1.9 Referencias a Documentacion Relacionada
@@ -526,3 +538,6 @@ flowchart TB
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato de API REST detallado |
 | [MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Guia de desarrollo de plugins |
 | [ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md](especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md) | Integracion con GDC SINTWS |
+| [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) | Activar App Service Authentication en el Admin |
+| [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | Restringir el acceso de red al Admin |
+| [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md) | Solicitud a identidad (app registration + grupo) para el Admin |

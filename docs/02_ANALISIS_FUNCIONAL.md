@@ -71,6 +71,7 @@ flowchart TB
         CU4["CU4: Gestionar<br/>modelos AI"]
         CU5["CU5: Configurar plugins<br/>por tipologia"]
         CU6["CU6: Consultar<br/>tipologias publicadas"]
+        CU8["CU8: Gestionar prompts<br/>de clasificacion"]
     end
 
     SCA --> CU1
@@ -79,6 +80,7 @@ flowchart TB
     ADM --> CU3
     ADM --> CU4
     ADM --> CU5
+    ADM --> CU8
 ```
 
 ### CU1: Ingestar Documento para Procesamiento
@@ -128,8 +130,9 @@ flowchart TB
 | Campo | Detalle |
 |-------|---------|
 | **Actor principal** | Administrador |
+| **Precondicion** | Requiere usuario autenticado (ver RN8); sin autenticacion, el Admin opera en modo solo lectura y estas operaciones se rechazan. |
 | **Endpoints** | `GET/POST/PUT /management/tipologias`, `POST .../publicar`, `POST .../retirar`, `POST .../draft` |
-| **Ciclo de vida** | Draft → Published → Retired. Solo tipologias Published estan activas para clasificacion. |
+| **Ciclo de vida** | Draft → Published → Retired. Solo tipologias Published estan activas para clasificacion. Publicar, retirar y volver a borrador piden confirmacion explicita en el Admin. |
 | **Datos gestionados** | Codigo, nombre, version, umbrales, modelos asociados, prompt GPT y `ConfiguracionJson` persistido en BD. Los JSON fisicos son seed/referencia, no fuente operativa. |
 
 ### CU4: Gestionar Modelos AI
@@ -137,17 +140,20 @@ flowchart TB
 | Campo | Detalle |
 |-------|---------|
 | **Actor principal** | Administrador |
+| **Precondicion** | Requiere usuario autenticado (ver RN8); sin autenticacion, el Admin opera en modo solo lectura y estas operaciones se rechazan. |
 | **Endpoints** | `GET /management/modelos/{tipo}`, `POST /management/modelos`, `PUT .../modelos/{id}`, `DELETE .../modelos/{id}` |
 | **Tipos** | Clasificacion, Extraccion, Prompt, Layout |
-| **Datos** | Key unica, provider, modelo, `ConfiguracionJson` en la tabla `ModeloConfigs`, activo/inactivo. |
+| **Datos** | Key unica, provider, modelo, `ConfiguracionJson` en la tabla `ModeloConfigs`, activo/inactivo. Los campos sensibles del `ConfiguracionJson` (`apiKey`, `password`, `secret`, `accountKey`, de forma recursiva) se devuelven siempre enmascarados como `"***"` en todas las respuestas; al guardar, si el campo llega como `"***"` se conserva el valor almacenado (round-trip seguro), de forma que editar sin tocar la clave no la destruye. |
+| **Baja** | `DELETE` es un soft-delete (`Activo=false`): el modelo no se borra fisicamente. Pide confirmacion ("Desactivar modelo"). |
 
 ### CU5: Configurar Plugins por Tipologia
 
 | Campo | Detalle |
 |-------|---------|
 | **Actor principal** | Administrador |
+| **Precondicion** | Requiere usuario autenticado (ver RN8); sin autenticacion, el Admin opera en modo solo lectura y estas operaciones se rechazan. |
 | **Endpoints** | `GET/PUT /management/plugins-tipologias/{codigo}`, `POST .../publicar`, `POST .../retirar` |
-| **Datos** | `ConfiguracionJson` en BD con array de plugins: pluginKey, pluginType (REST/SOAP/Custom), enabled, priority, configuration, retryPolicy. |
+| **Datos** | `ConfiguracionJson` en BD con array de plugins: pluginKey, pluginType (REST/SOAP/Custom), enabled, priority, configuration, retryPolicy. Publicar y retirar piden confirmacion explicita en el Admin. |
 
 ### CU6: Consultar Tipologias Publicadas
 
@@ -170,6 +176,17 @@ flowchart TB
 | **Resultado** | `detalleEjecucion.assetResolver` con activos encontrados, criterios usados, campos solicitados y duracion. |
 | **Si no hay match** | `assetResolver.exitoso = false`, `activos = []`, pipeline continua sin IdActivo desde este paso. |
 | **Si hay match multiple** | Se retornan todos los activos pero no se resuelve IdActivo automaticamente (requiere match unico). |
+
+### CU8: Gestionar Prompts de Clasificacion
+
+| Campo | Detalle |
+|-------|---------|
+| **Actor principal** | Administrador |
+| **Precondicion** | Requiere usuario autenticado (ver RN8); sin autenticacion, el Admin opera en modo solo lectura y estas operaciones se rechazan. |
+| **Endpoints** | `GET/POST /management/prompts`, `GET .../by-key/{promptKey}`, `PUT .../prompts/{id}`, `PUT .../prompts/{id}/activate`, `POST .../prompts/rollback`, `DELETE .../prompts/{id}` |
+| **Datos gestionados** | `PromptTemplate` versionado por `promptKey` + `version` (estado Activo/Draft, contenido de 10 a 16000 caracteres, usuario y fecha de creacion/actualizacion/publicacion). Son los prompts que usa la clasificacion jerarquica GPT (TDN1/TDN2), independientes del prompt propio de cada tipologia (gestionado en CU3). |
+| **Regla clave** | La version activa es inmutable (ver RN9): no admite `PUT`/`DELETE` directos (403 Forbidden). Editar un prompt activo desde el Admin crea una nueva version en borrador con el contenido copiado; al activarla, la version anterior pasa a Draft automaticamente. |
+| **Postcondicion** | Como mucho una version activa por `promptKey`; la clasificacion GPT que referencia esa clave usa siempre el contenido de la version activa. |
 
 ---
 
@@ -292,6 +309,20 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 - Si un criterio esta deshabilitado, no se intenta detectar ni usar, incluso si hay aliases globales.
 - Si se encuentra exactamente 1 activo, su `ID_ACTIVO_SAREB` se asigna como `IdActivo` del documento.
 - Si se encuentran 0 o multiples activos, no se resuelve IdActivo en este paso (puede ser resuelto por plugins posteriores).
+
+### RN8: Modo de Acceso del Portal Admin (autenticacion y auditoria)
+
+- Las operaciones de escritura del Admin (crear/editar/publicar/retirar/activar/eliminar tipologias, modelos, prompts y configuracion de plugins) requieren una identidad de usuario autenticada.
+- La identidad se resuelve desde la cabecera `X-MS-CLIENT-PRINCIPAL-NAME`, inyectada por App Service Authentication (EasyAuth) cuando esta activa en el Admin desplegado en Azure.
+- Mientras EasyAuth no este activo, el Admin opera en **modo solo lectura**: las consultas siguen funcionando, pero cualquier escritura se rechaza, porque no hay forma de auditar quien realizo el cambio. En desarrollo local (`localhost`) esta restriccion no aplica: el usuario se identifica automaticamente con el usuario del sistema operativo (prefijo `dev-`).
+- Sin identidad (entornos desplegados sin EasyAuth activo), la auditoria registra el usuario como `no-autenticado`. Los literales antiguos `ADMIN-UI`/`admin` ya no se usan.
+
+### RN9: Versionado Inmutable de Prompts de Clasificacion
+
+- Cada `PromptTemplate` (clave + version) tiene estado Activo o Draft. Solo puede existir una version activa por clave.
+- Una version activa es **inmutable**: no admite `PUT`/`DELETE` directos (`403 Forbidden`). Para cambiar su contenido hay que crear una nueva version en borrador (con el contenido copiado) y activarla; al activarla, la version anterior pasa a Draft automaticamente.
+- Activar una version y eliminar una version en borrador son operaciones que requieren confirmacion explicita en el Admin.
+- La validacion de contenido es unicamente de longitud (10-16000 caracteres); los placeholders (`{TDN1_CATALOG}`, `{DOCUMENT_TEXT}`, etc.) no se validan automaticamente, para permitir iteracion flexible del prompt.
 
 ---
 

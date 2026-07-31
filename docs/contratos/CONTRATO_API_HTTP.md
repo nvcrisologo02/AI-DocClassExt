@@ -478,11 +478,37 @@ Estos endpoints gestionan configuración de tipologías, modelos y plugins en ba
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/management/modelos` | Lista modelos por tipo/estado. |
-| `GET` | `/api/management/modelos/{key}` | Obtiene un modelo por clave. |
-| `PUT` | `/api/management/modelos/{key}` | Crea/actualiza borrador (`Draft`). |
-| `POST` | `/api/management/modelos/{key}/publicar` | Publica (`Published`) el modelo. |
-| `POST` | `/api/management/modelos/{key}/retirar` | Retira (`Retired`) el modelo. |
+| `GET` | `/api/management/modelos/{tipo}` | Lista modelos del tipo indicado (`clasificacion`, `extraccion`, `prompt`, `layout`). |
+| `POST` | `/api/management/modelos` | Crea un modelo nuevo. |
+| `PUT` | `/api/management/modelos/{id}` | Actualiza un modelo existente. |
+| `DELETE` | `/api/management/modelos/{id}` | Desactiva el modelo (soft-delete, `Activo=false`). Responde `200` con la entidad. |
+
+**Enmascarado de secretos y round-trip:** en todas las respuestas anteriores (GET/POST/PUT/DELETE), `ConfiguracionJson` sale con los valores de las propiedades sensibles enmascarados como `"***"`. Se considera sensible cualquier propiedad cuyo nombre contenga (sin distinguir mayúsculas) `apikey`, `password`, `secret` o `accountkey`, aplicado recursivamente en objetos y arrays anidados. En escritura (`POST`/`PUT`), si una propiedad sensible llega con el valor exacto `"***"`, se conserva el valor previamente almacenado para esa misma ruta del JSON; esto permite editar un modelo (p. ej. cambiar el proveedor) sin reenviar la clave real y sin destruirla. Para sustituir un secreto basta con enviar el valor nuevo en claro en lugar de `"***"`.
+
+### 9.2.bis Prompts de clasificación
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/management/prompts` | Lista todas las plantillas (todas las versiones, con `IsActive`). |
+| `GET` | `/api/management/prompts/{id}` | Obtiene una plantilla por Id. |
+| `GET` | `/api/management/prompts/by-key/{promptKey}` | Lista las versiones de una `PromptKey`. |
+| `POST` | `/api/management/prompts` | Crea una nueva versión en borrador (`IsActive=false`). |
+| `PUT` | `/api/management/prompts/{id}` | Actualiza una versión en borrador. |
+| `PUT` | `/api/management/prompts/{id}/activate` | Activa la versión indicada; desactiva la versión activa anterior de la misma `PromptKey`. |
+| `POST` | `/api/management/prompts/rollback` | Reactiva una versión anterior (`PromptKey` + `TargetVersion`); desactiva la versión activa actual. |
+| `DELETE` | `/api/management/prompts/{id}` | Elimina físicamente una versión en borrador. |
+
+**Inmutabilidad de la versión activa:** `PUT` y `DELETE` devuelven **`403 Forbidden`** si la versión (`IsActive=true`) está activa. El flujo correcto para cambiar el contenido de un prompt en producción es: crear una nueva versión borrador (`POST`) con el contenido deseado y activarla (`PUT .../activate`); la versión anterior se desactiva automáticamente y sigue disponible para rollback. `DELETE` sobre una versión en borrador (`IsActive=false`) es un borrado físico (no soft-delete) y responde `204 No Content`.
+
+**Validación de contenido:** solo se valida la longitud de `Content` (mínimo 10, máximo 16000 caracteres). Los placeholders (`{CONTEXT_PROMPT}`, `{TDN1_CATALOG}`, `{TDN2_CATALOG}`, `{TDN1_CODE}`, `{DOCUMENT_TEXT}`, `{campo}`, `{contenido}`) **no se validan en backend**; es flexibilidad deliberada para permitir edición iterativa de prompts sin bloquear por nombres de placeholder. Detalle completo en [ESPECIFICACION_PROMPTS_CONFIGURABLES.md](../especificaciones/ESPECIFICACION_PROMPTS_CONFIGURABLES.md).
+
+### 9.2.ter Configuración efectiva
+
+| Método | Ruta | Descripción |
+|---|---|---|
+| `GET` | `/api/management/configuration` | Diagnóstico de configuración efectiva del Function App (valores enmascarados, entorno, orígenes de configuración). |
+
+El campo `environment` de la respuesta se resuelve con esta precedencia: app setting **`EnvironmentName`** (nuevo; lo despliega el pipeline por entorno: `Development`/`Preproduction`/`Production`) → `AZURE_FUNCTIONS_ENVIRONMENT` → `DOTNET_ENVIRONMENT` → `"Unknown"`. No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal: en un Function App desplegado, esa variable también cambia el comportamiento del host (fallback a base de datos InMemory y omisión de validación de certificados TLS cuando vale `"Development"`), efecto no deseado en un entorno real.
 
 ### 9.3 Plugins por tipología
 

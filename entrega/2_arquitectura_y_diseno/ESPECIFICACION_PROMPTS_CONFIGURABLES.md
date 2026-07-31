@@ -33,10 +33,10 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 | **Longitud máxima total (system + user)** | 32,000 caracteres | Límite conservador para contexto GPT-4 (128k tokens disponibles) |
 | **Número de placeholders por prompt** | Ilimitado | Validación por nombre de placeholder, no por cantidad |
 
-### Validaciones en tiempo de guardado:
-- Error si excede 16,000 caracteres por prompt individual
-- Warning si excede 12,000 caracteres (soft limit)
-- Validación de placeholders obligatorios presentes
+### Validaciones en tiempo de guardado (implementadas):
+- Error si el contenido supera 16,000 caracteres
+- Error si el contenido tiene menos de 10 caracteres
+- **No se valida la presencia de placeholders obligatorios.** Es una decisión deliberada: se prioriza la flexibilidad para edición iterativa de prompts sobre la detección temprana de placeholders faltantes. La tabla de la sección 3 describe los placeholders y su obligatoriedad *conceptual*, pero el backend no la hace cumplir; un prompt guardado sin un placeholder "obligatorio" se acepta igualmente.
 
 ---
 
@@ -66,6 +66,8 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 - **Phase1 User:** `{phase1Catalog}` obligatorio
 - **Phase2 System:** ninguno obligatorio
 - **Phase2 User:** `{tdn1Code}`, `{phase2Catalog}` obligatorios
+
+> **Nota de implementación:** esta tabla documenta la obligatoriedad conceptual por diseño, pero el backend no valida placeholders, solo el rango de longitud (10–16000 caracteres). Guardar un prompt sin uno de estos placeholders no produce error de la API.
 
 ---
 
@@ -137,15 +139,15 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 
 **Decisión:** Inmutabilidad de prompts publicados + creación de nuevas versiones
 
-**Flujo operativo:**
-1. **Crear borrador** (API POST `/admin/prompts`) → `IsActive = false`
-2. **Activar versión** (API PUT `/admin/prompts/{id}/activate`) → `IsActive = true`, desactivar versión anterior activa
-3. **Rollback** (API POST `/admin/prompts/{id}/rollback`) → Activar versión anterior, desactivar actual
+**Flujo operativo (rutas implementadas):**
+1. **Crear borrador** (API POST `/api/management/prompts`) → `IsActive = false`
+2. **Activar versión** (API PUT `/api/management/prompts/{id}/activate`) → `IsActive = true`, desactiva la versión anterior activa de la misma `PromptKey`
+3. **Rollback** (API POST `/api/management/prompts/rollback`, con `PromptKey` + `TargetVersion`) → activa la versión target, desactiva la actual
 
 **Reglas de negocio:**
 - Solo 1 versión activa por `PromptKey` en un momento dado
-- No se permite edición del campo `Content` de una versión activa
-- No se permite borrado físico (solo marcar como inactiva)
+- `PUT /api/management/prompts/{id}` y `DELETE /api/management/prompts/{id}` devuelven **`403 Forbidden`** si la versión (`IsActive=true`) está activa: no se permite editar ni eliminar el contenido de una versión activa
+- `DELETE` sobre una versión **no activa** (borrador) sí es un borrado físico de la fila (`204 No Content`); el "no se permite borrado" solo aplica a la versión activa
 - Auditoría completa: `CreatedBy`, `UpdatedBy`, `PublishedBy`, `PublishedAtUtc`
 
 **Alternativa descartada:** Edición in-place de versión activa

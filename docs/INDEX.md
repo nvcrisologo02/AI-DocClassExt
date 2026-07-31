@@ -81,6 +81,15 @@ Guías detalladas para tareas específicas:
   - Troubleshooting de performance
   - *Líneas: ~1,210 | Tiempo: 1h estudio*
 
+### Para Seguridad del Admin
+- **[GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md)**
+  - Activar App Service Authentication (EasyAuth) en `DocumentIA.Admin`
+  - Configuración en Azure Portal y verificación de la cabecera `X-MS-CLIENT-PRINCIPAL-NAME`
+- **[GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md)**
+  - Restringir el acceso de red al Admin (medida transitoria mientras no haya EasyAuth)
+- **[SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md)**
+  - Solicitud al equipo de identidad: app registration + grupo de seguridad para EasyAuth
+
 ---
 
 ## 🔍 **Especificaciones & Modelos (docs/especificaciones/)**
@@ -329,6 +338,9 @@ Guías detalladas para tareas específicas:
 | **🆕 Migración BD** | DATABASE_MIGRATION_STRATEGY | `procedimientos/` |
 | **🆕 CI/CD y pipelines** | CI_CD_DEPLOYMENT_DETAILS | `procedimientos/` |
 | **🆕 Responsabilidades equipo** | TEAM_MATRIX_RESPONSABILIDADES | `referencias/` |
+| Activar autenticación del Admin (EasyAuth) | GUIA_EASYAUTH_ADMIN | `guias/` |
+| Restringir acceso de red al Admin | GUIA_RESTRICCION_ACCESO_ADMIN | `guias/` |
+| Solicitar app registration para el Admin | SOLICITUD_APP_REGISTRATION_ADMIN | `guias/` |
 
 ---
 
@@ -348,7 +360,10 @@ docs/
 │   ├── QUICKSTART_DESARROLLADORES.md   ⭐
 │   ├── EXTENSIBILIDAD_PLUGIN_SYSTEM.md
 │   ├── TROUBLESHOOTING_DIAGNOSTICO.md
-│   └── PERFORMANCE_TUNING.md
+│   ├── PERFORMANCE_TUNING.md
+│   ├── GUIA_EASYAUTH_ADMIN.md
+│   ├── GUIA_RESTRICCION_ACCESO_ADMIN.md
+│   └── SOLICITUD_APP_REGISTRATION_ADMIN.md
 │
 ├── 📁 especificaciones/
 │   ├── DATA_MODELS_ER_DIAGRAM.md       ⭐

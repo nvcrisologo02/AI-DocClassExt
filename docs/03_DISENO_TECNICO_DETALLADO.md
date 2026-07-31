@@ -1221,6 +1221,18 @@ Los archivos JSON en `config/tipologias/` son únicamente **fuente de seed**: al
 | Retirar | `POST /management/tipologias/{id}/retirar` | Published → Retired. Invisible en pipeline. |
 | Reactivar | `POST /management/tipologias/{id}/draft` | Retired/Published → Draft |
 
+### 3.8.4 Identidad, auditoría y modo solo lectura del Admin
+
+`DocumentIA.Admin` (Blazor Server) resuelve la identidad del operador con `ICurrentUserService`/`CurrentUserService`:
+
+- Con **App Service Authentication (EasyAuth)** activo, la identidad se lee de la cabecera `X-MS-CLIENT-PRINCIPAL-NAME` que inyecta la plataforma.
+- Sin EasyAuth y fuera de desarrollo local, no hay identidad: `UserName = "no-autenticado"` e `IsAuthenticated = false`.
+- En desarrollo local (`IWebHostEnvironment.IsDevelopment()`), se usa `dev-<usuario del SO>` y se considera identificado (la app solo es accesible desde la propia máquina).
+
+**Modo solo lectura (AB#99999):** cuando `IsAuthenticated = false`, cualquier operación de escritura (crear/editar/publicar/retirar/activar/eliminar tipologías, modelos, prompts o configuración de plugins) se rechaza antes de llamar a la Admin API. La comprobación (`EnsureWritesAllowed()`) vive en la **capa de servicios** (`TipologiaAdminService`, `PromptManagementService`), no en las páginas Blazor, para que ninguna vista pueda saltársela por omisión. El rechazo lanza `InvalidOperationException` con el mensaje "Modo solo lectura: no hay un usuario autenticado, así que no es posible registrar quién realiza el cambio...". Las consultas (GET) no están sujetas a esta restricción.
+
+**Auditoría:** el valor resuelto por `ICurrentUserService.UserName` es el que viaja como `usuario`/`CreatedBy`/`UpdatedBy`/`PublishedBy` en las peticiones a la Admin API. Los literales legacy `"ADMIN-UI"` y `"admin"` ya no se usan.
+
 ---
 
 ## 3.9 Manejo de Errores en Durable Functions
@@ -1702,14 +1714,29 @@ Reglas de validación del trigger:
 | POST | `/management/tipologias/{id}/publicar` | Publicar | Function |
 | POST | `/management/tipologias/{id}/retirar` | Retirar | Function |
 | POST | `/management/tipologias/{id}/draft` | Volver a Draft | Function |
-| GET | `/management/modelos/{tipo}` | Listar modelos (Clasificacion/Extraccion/Prompt) | Function |
+| GET | `/management/modelos/{tipo}` | Listar modelos por tipo (clasificacion/extraccion/prompt/layout) | Function |
 | POST | `/management/modelos` | Crear modelo | Function |
 | PUT | `/management/modelos/{id}` | Actualizar modelo | Function |
-| DELETE | `/management/modelos/{id}` | Eliminar modelo | Function |
+| DELETE | `/management/modelos/{id}` | Desactivar modelo (soft-delete, `Activo=false`, responde `200`) | Function |
+| GET | `/management/prompts` | Listar plantillas de prompt (todas las versiones) | Function |
+| GET | `/management/prompts/{id}` | Obtener plantilla de prompt por Id | Function |
+| GET | `/management/prompts/by-key/{promptKey}` | Listar versiones de una `PromptKey` | Function |
+| POST | `/management/prompts` | Crear versión borrador (`IsActive=false`) | Function |
+| PUT | `/management/prompts/{id}` | Actualizar borrador. `403` si la versión está activa | Function |
+| PUT | `/management/prompts/{id}/activate` | Activar versión (desactiva la anterior activa de la misma clave) | Function |
+| POST | `/management/prompts/rollback` | Reactivar una versión previa (desactiva la actual) | Function |
+| DELETE | `/management/prompts/{id}` | Eliminar borrador. `403` si la versión está activa | Function |
+| GET | `/management/configuration` | Diagnóstico de configuración efectiva (incluye `environment`) | Function |
 | GET | `/management/plugins-tipologias/{codigo}` | Config plugins de tipologia | Function |
 | PUT | `/management/plugins-tipologias/{codigo}` | Actualizar config plugins | Function |
 | POST | `/management/plugins-tipologias/{codigo}/publicar` | Publicar config plugins | Function |
 | POST | `/management/plugins-tipologias/{codigo}/retirar` | Retirar config plugins | Function |
+
+En todas las respuestas de `/management/modelos*` (GET/POST/PUT/DELETE), el campo `ConfiguracionJson` sale con los valores de propiedades sensibles (nombre que contiene `apikey`, `password`, `secret` o `accountkey`, de forma recursiva) enmascarados como `"***"`. En escritura (POST/PUT), si una propiedad sensible llega con el valor `"***"` se conserva el valor previamente almacenado (round-trip seguro): esto permite editar un modelo sin reenviar la clave real y sin destruirla; para sustituirla basta con enviar el valor nuevo en claro.
+
+La validación de contenido de `/management/prompts` (POST/PUT) es únicamente de longitud (10–16000 caracteres); los placeholders del contenido (`{CONTEXT_PROMPT}`, `{TDN1_CATALOG}`, `{TDN2_CATALOG}`, `{TDN1_CODE}`, `{DOCUMENT_TEXT}`, etc.) no se validan en backend — flexibilidad deliberada para edición iterativa. Ver [ESPECIFICACION_PROMPTS_CONFIGURABLES.md](especificaciones/ESPECIFICACION_PROMPTS_CONFIGURABLES.md).
+
+El campo `environment` de `/management/configuration` se resuelve con prioridad desde el app setting `EnvironmentName` (nuevo, desplegado por pipeline), con fallback a `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` y por último `"Unknown"`. No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque en un Function App desplegado altera el comportamiento del host (fallback a BD InMemory y omisión de validación TLS cuando vale `"Development"`).
 
 ---
 

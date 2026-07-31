@@ -137,6 +137,7 @@ Settings clave a confirmar (ver detalle completo en `docs/auxiliares/migracion-d
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Connection string `srbappiprodocai` |
 | `AssetResolver__BaseUrl` | `https://srbwebpluginassetresolver.azurewebsites.net/` |
 | `AssetResolver__ApiKey` | Key Vault reference a `AssetResolverApiKey` |
+| `EnvironmentName` | `Production` (dev: `Development` · pre: `Preproduction`). Alimenta el campo `environment` de `GET management/configuration` con prioridad sobre `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` (no usar estos como fuente principal: en un Function App desplegado cambian el comportamiento del host — fallback a BD InMemory y omision de validacion TLS si valen `Development`). Lo fija la variable de pipeline `ENVIRONMENT_NAME` en **ambos** `azure-pipelines.yml` y `azure-pipelines-admin.yml` |
 
 ---
 
@@ -145,11 +146,15 @@ Settings clave a confirmar (ver detalle completo en `docs/auxiliares/migracion-d
 | # | Tarea | Detalle | OK |
 |---|-------|---------|-----|
 | 7.1 | Verificar modo de ejecucion del pipeline | `trigger: none` y `pr: none` en `azure-pipelines.yml`: el despliegue es **manual** ("Run pipeline" en AzDO) con el parametro `targetEnvironment`. No hay disparo automatico por merge | ☐ |
+| 7.1a | Verificar que `azure-pipelines-admin.yml` resuelve `AZURE_ASSET_RESOLVER_WEB_APP_NAME` por entorno | Antes estaba fijo al assetresolver de PRODUCCION y la validacion de app settings fallaba en dev con un error criptico (AB#99997); ahora hay una variable por entorno igual que en `azure-pipelines.yml` | ☐ |
+| 7.1b | Confirmar el step "Ensure Functions environment name" del pipeline de Admin | Asegura el app setting `EnvironmentName` en el Function App tambien al desplegar el Admin (idempotente vía `ensure-app-settings.ps1`, no pisa valores existentes); asi el aviso de entorno del Admin funciona aunque solo se despliegue el Admin | ☐ |
 | 7.2 | Confirmar que el Stage Build ejecuta restore/build/test/publish | AzDO Run logs | ☐ |
 | 7.3 | Confirmar que el Stage DeployFunctions ejecuta zipDeploy | Task `AzureFunctionApp@2` en run | ☐ |
 | 7.4 | Confirmar que se aplica modo Key Vault en app settings | Task `AzureCLI@2` post-deploy | ☐ |
-| 7.5 | Confirmar Stage `ValidateConfiguration` (valida contrato de App Settings) | Task `Validate App Settings contract` en run. El smoke test del endpoint NO forma parte del pipeline; se ejecuta a mano post-deploy (Bloque 8, tarea 9.2) | ☐ |
+| 7.5 | Confirmar Stage `ValidateConfiguration` (valida contrato de App Settings) | Task `Validate App Settings contract` en run. El smoke test del endpoint NO forma parte del pipeline; se ejecuta a mano post-deploy (Bloque 8, tarea 9.2). Si `validate-azure-appsettings-contract.ps1` no puede leer los settings de una app (no existe en el RG o sin permisos), falla con un mensaje explicito indicando la app y el resource group, en vez del error generico de PowerShell "The property 'value' cannot be found" | ☐ |
 | 7.6 | Verificar estado final del run | `Succeeded` en Build y DeployFunctions | ☐ |
+
+> **Rama para encolar el pipeline:** tanto `azure-pipelines.yml` como `azure-pipelines-admin.yml` son de lanzamiento manual (`trigger: none`) y deben encolarse seleccionando la rama **`develop`** en "Run pipeline". La rama por defecto (`master`) no recibe los cambios de `ENVIRONMENT_NAME` / `AZURE_ASSET_RESOLVER_WEB_APP_NAME` hasta el siguiente merge a `master`.
 
 ---
 
@@ -380,6 +385,18 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 
 ---
 
+## Seguridad del Admin — exposicion y autenticacion (explotacion pendiente)
+
+Estado verificado 2026-07-31 en los App Service del Admin de dev y prod: autenticacion deshabilitada, restricciones de acceso "Allow all", `publicNetworkAccess` habilitado, sin private endpoints. La integracion VNet del Admin de prod es de salida (no limita el acceso entrante).
+
+| # | Tarea | Detalle | OK |
+|---|-------|---------|----|
+| S.1 | Activar App Service Authentication (EasyAuth) en el Admin | App registration single-tenant + grupo de seguridad con los usuarios autorizados y "Assignment required = Yes". Solicitud al equipo de identidad redactada en [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md); configuracion del App Service en [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) | ☐ |
+| S.2 | (Medida transitoria, opcional) Restringir el acceso de red al Admin | Limita desde donde se accede, no quien; el sitio `scm` tiene reglas propias. Ver [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | ☐ |
+| S.3 | Confirmar que el modo solo lectura automatico esta activo mientras no haya EasyAuth | Sin usuario autenticado, el Admin rechaza toda escritura con "Modo solo lectura: no hay un usuario autenticado..."; las consultas siguen funcionando. No aplica en desarrollo local (localhost) | ☑ |
+
+---
+
 ## Referencias
 
 | Documento | Contenido |
@@ -389,3 +406,7 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Configuracion tecnica detallada |
 | [auxiliares/planes/11_PLAN_CONFIGURACION_LIMPIA.md](auxiliares/planes/11_PLAN_CONFIGURACION_LIMPIA.md) | Plan de remediacion y gobierno de configuracion |
 | [../azure-pipelines.yml](../azure-pipelines.yml) | Pipeline CI/CD: Build + DeployFunctions + DeployAdmin + DeployAssetResolver + ValidateConfiguration |
+| [../azure-pipelines-admin.yml](../azure-pipelines-admin.yml) | Pipeline hotfix del Admin: BuildAdmin + DeployAdmin (incluye RBAC KV, settings Functions API, `EnvironmentName` y validacion de contrato) |
+| [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) | Activar App Service Authentication (EasyAuth) en el Admin |
+| [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | Restringir el acceso de red al Admin |
+| [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md) | Solicitud a identidad: app registration + grupo de seguridad para EasyAuth |
