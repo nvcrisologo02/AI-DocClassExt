@@ -110,12 +110,15 @@ function Invoke-AzJson {
             }
         }
 
-        $text = if ($jsonStartIndex -ge 0) {
-            ($lines[$jsonStartIndex..($lines.Count - 1)] -join [Environment]::NewLine).Trim()
+        # az puede terminar con codigo 0 sin devolver JSON: ocurre, por ejemplo, cuando el
+        # recurso consultado no existe en el resource group indicado o no es visible para la
+        # identidad actual. En ese caso la salida solo trae avisos (o esta vacia) y no hay
+        # nada que interpretar: se devuelve $null y el llamante lo reporta con contexto.
+        if ($jsonStartIndex -lt 0) {
+            return $null
         }
-        else {
-            ($lines | Out-String).Trim()
-        }
+
+        $text = ($lines[$jsonStartIndex..($lines.Count - 1)] -join [Environment]::NewLine).Trim()
 
         if ([string]::IsNullOrWhiteSpace($text)) {
             return $null
@@ -225,6 +228,13 @@ foreach ($app in @($contract.apps)) {
     }
     else {
         throw "Tipo de app no soportado en contrato: $($app.kind)"
+    }
+
+    if ($null -eq $settings) {
+        $failures.Add("[$($app.id)] No se pudieron leer los App Settings de '$appName' en el resource group '$ResourceGroup'. Comprueba que la aplicacion existe en ese grupo y que la identidad del pipeline tiene permisos de lectura sobre ella.")
+        Write-Host "  [ERROR] Sin respuesta de Azure para '$appName' en '$ResourceGroup' (revisa nombre de la app y permisos)" -ForegroundColor Red
+        Write-Host ""
+        continue
     }
 
     $settingsByName = @{}
