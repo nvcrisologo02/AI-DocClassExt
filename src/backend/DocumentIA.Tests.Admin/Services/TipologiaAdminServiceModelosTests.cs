@@ -10,6 +10,8 @@ public class TipologiaAdminServiceModelosTests
     private sealed class FakeCurrentUser : ICurrentUserService
     {
         public string UserName => "test-user";
+
+        public bool IsAuthenticated => true;
     }
 
     private static TipologiaAdminService CreateService(Func<HttpRequestMessage, HttpResponseMessage> responder)

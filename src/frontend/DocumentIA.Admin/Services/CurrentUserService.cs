@@ -4,6 +4,13 @@ namespace DocumentIA.Admin.Services;
 public interface ICurrentUserService
 {
     string UserName { get; }
+
+    /// <summary>
+    /// Indica si la sesión tiene una identidad con la que responder de sus cambios.
+    /// Mientras no la haya, el Admin opera en modo solo lectura: sin identidad no se
+    /// puede auditar quién modifica la configuración de clasificación.
+    /// </summary>
+    bool IsAuthenticated { get; }
 }
 
 /// <summary>
@@ -44,6 +51,17 @@ public class CurrentUserService : ICurrentUserService
         }
     }
 
+    public bool IsAuthenticated
+    {
+        get
+        {
+            var current = ReadHeader();
+            return ResolveIsAuthenticated(
+                !string.IsNullOrWhiteSpace(current) ? current : _capturedHeaderValue,
+                _environment.IsDevelopment());
+        }
+    }
+
     private string? ReadHeader()
         => _httpContextAccessor.HttpContext?.Request.Headers[PrincipalNameHeader];
 
@@ -56,4 +74,13 @@ public class CurrentUserService : ICurrentUserService
 
         return isDevelopment ? $"dev-{Environment.UserName}" : "no-autenticado";
     }
+
+    /// <summary>
+    /// Hay identidad cuando EasyAuth inyecta la cabecera. El desarrollo local se considera
+    /// identificado porque la aplicación solo es accesible desde la propia máquina; los
+    /// entornos desplegados no declaran ASPNETCORE_ENVIRONMENT, por lo que se evalúan
+    /// siempre como no identificados hasta que se active la autenticación.
+    /// </summary>
+    public static bool ResolveIsAuthenticated(string? headerValue, bool isDevelopment)
+        => !string.IsNullOrWhiteSpace(headerValue) || isDevelopment;
 }

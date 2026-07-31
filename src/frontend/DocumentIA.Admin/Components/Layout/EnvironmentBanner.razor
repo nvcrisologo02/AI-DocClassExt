@@ -1,6 +1,7 @@
 @using DocumentIA.Admin.Services
 @inject IHttpClientFactory HttpFactory
 @inject IConfiguration Config
+@inject ICurrentUserService CurrentUser
 
 <div class="w-100 text-center py-1 small fw-semibold @BannerClass" title="Backend: @_host">
     @Label &nbsp;·&nbsp; <span style="font-family:monospace">@_host</span>
@@ -46,7 +47,8 @@
         _loaded = true;
     }
 
-    private EnvironmentBannerState State => EnvironmentBannerState.Resolve(_loaded, _error, _environment);
+    private EnvironmentBannerState State =>
+        EnvironmentBannerState.Resolve(_loaded, _error, _environment, readOnlyMode: !CurrentUser.IsAuthenticated);
 
     private string Label => State.Label;
 
