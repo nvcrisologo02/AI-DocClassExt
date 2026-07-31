@@ -39,11 +39,44 @@ Texto para el ticket:
 >   - Un client secret (o, si el equipo de identidad lo prefiere, que sea el
 >     propio equipo quien configure la autenticación directamente en el App
 >     Service correspondiente, sin necesidad de compartir el secret).
-> - **Restricción de acceso recomendada**: activar **"Assignment required" =
+> - **Restricción de acceso requerida**: activar **"Assignment required" =
 >   Yes** en la enterprise application asociada, y asignar únicamente el
->   grupo de administradores de DocumentIA (no todo el tenant). Así, aunque
->   cualquier usuario corporativo pudiera en teoría autenticarse, solo el
->   grupo asignado podrá iniciar sesión en la aplicación.
+>   grupo de administradores de DocumentIA descrito en el punto siguiente (no
+>   todo el tenant). Así, aunque cualquier usuario corporativo pudiera en
+>   teoría autenticarse, solo los miembros de ese grupo podrán iniciar sesión
+>   en la aplicación.
+> - **Creación del grupo de acceso**: se solicita además la creación de un
+>   **grupo de seguridad** en Entra ID para gobernar quién puede entrar al
+>   Admin, y que se den de alta en él los usuarios del listado que se adjunta
+>   en este mismo ticket (ver "Listado de usuarios"). Datos propuestos:
+>   - Nombre propuesto: `[completar: nombre segun la convencion de nomenclatura
+>     corporativa, p. ej. SEC-DocumentIA-Admins]`.
+>   - Tipo: grupo de **seguridad** (no Microsoft 365), con miembros asignados
+>     de forma directa (no dinámico).
+>   - Uso: asignación a la enterprise application del Admin de DocumentIA.
+>   - Miembros iniciales: los indicados en el listado adjunto.
+>   - Gestión posterior de altas y bajas: se solicita indicar el procedimiento
+>     para añadir o retirar miembros más adelante. Si es posible, designar como
+>     **propietario del grupo** al responsable funcional de DocumentIA, de modo
+>     que las altas y bajas ordinarias no requieran un ticket nuevo.
+>   - Si se opta por una app registration por entorno, indicar si se desea un
+>     único grupo para los tres entornos o un grupo por entorno. Lo habitual es
+>     un único grupo para dev y pre, y un grupo diferenciado para producción.
+
+### Listado de usuarios
+
+Adjuntar al ticket la relación de personas que deben tener acceso:
+
+| Nombre y apellidos | Usuario corporativo (UPN) | Entornos | Observaciones |
+|---|---|---|---|
+| [completar] | [completar] | dev / pre / prod | |
+
+> Nota para quien tramite la solicitud: la asignación de **grupos** a una
+> enterprise application requiere licencia Microsoft Entra ID P1 o superior.
+> Si el tenant no dispusiera de ella, la alternativa es asignar los usuarios
+> del listado **individualmente** a la aplicación; en ese caso conviene
+> confirmar en el mismo ticket cuál de las dos vías se aplicará, para saber
+> cómo se gestionarán después las altas y bajas.
 
 ## Alternativa que suele ser más sencilla de conceder
 
@@ -56,6 +89,19 @@ sobre el directorio: no da acceso a gestionar usuarios, grupos, ni otras
 aplicaciones del tenant. Es, por tanto, un rol acotado que suele ser más
 rápido de conceder que delegar la creación en el equipo de identidad para
 cada app puntual.
+
+## Resumen de lo que se solicita
+
+Para que no se pierda ningún punto al abrir el ticket:
+
+1. App registration single-tenant (una por entorno, o una con los tres redirect URIs).
+2. Los redirect URIs indicados, sin permisos de Graph más allá del inicio de sesión.
+3. Creación del grupo de seguridad de acceso al Admin.
+4. Alta en ese grupo de los usuarios del listado adjunto.
+5. Asignación del grupo a la enterprise application con "Assignment required = Yes".
+6. Devolución de Application (client) ID y Directory (tenant) ID, y del client secret
+   (o configuración directa de Authentication en el App Service por parte del equipo).
+7. Procedimiento y propietario para gestionar altas y bajas del grupo en el futuro.
 
 ## Qué ya está preparado en la aplicación
 
