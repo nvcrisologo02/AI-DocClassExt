@@ -1448,14 +1448,38 @@ dotnet run --launch-profile http
 # Disponible en http://localhost:5000
 ```
 
-La configuracion de la URL base y la Function Key usadas por el Admin apuntan a la Function App de produccion (`appsettings.json`):
+La URL base y la Function Key que usa el Admin para hablar con la Function App se configuran por entorno; el `appsettings.json` del repositorio ya **no** trae la URL de produccion:
 
 ```json
 "FunctionsAdminApi": {
-  "BaseUrl": "https://srbappprodocai.azurewebsites.net/api/",
-  "FunctionKey": "<clave de host de la Function App>"
+  "BaseUrl": "",
+  "FunctionKey": ""
 }
 ```
+
+Sin configuracion explicita, la aplicacion apunta a `localhost`. En Azure, el pipeline de despliegue del Admin fija `FunctionsAdminApi__BaseUrl` con el valor correcto de cada entorno (dev/pre/prod) al desplegar.
+
+### 5.9.0 Aviso de entorno, modo solo lectura y auditoria
+
+Un banner fijo en la parte superior de todas las paginas del Admin muestra contra que entorno se esta trabajando. No es un elemento cosmetico: condiciona como se interpreta cualquier cambio que se vaya a hacer.
+
+| Situacion | Color | Texto |
+|-----------|-------|------|
+| Entorno identificado, no productivo | Azul | `Entorno backend: Development` (o el nombre que informe el backend) |
+| Entorno de produccion | Rojo | `⛔ ENTORNO: PRODUCCIÓN` |
+| Backend no accesible o no publica su entorno | Ambar | `⚠ Backend no accesible` / `⚠ Entorno del backend sin identificar` |
+
+Un entorno sin identificar se trata siempre como advertencia (ambar), nunca como estado normal: el aviso solo tranquiliza cuando sabe de verdad contra que entorno se trabaja.
+
+Si la sesion no tiene un usuario autenticado, el banner añade el sufijo `· solo lectura (sin usuario autenticado)`.
+
+**Modo solo lectura sin usuario autenticado.** Mientras el Admin desplegado no tenga activa la autenticacion (App Service Authentication / EasyAuth), todas las operaciones de escritura (crear, editar, publicar, retirar, activar, borrar tipologias, modelos, prompts o configuracion de plugins) se rechazan con el mensaje:
+
+> «Modo solo lectura: no hay un usuario autenticado, así que no es posible registrar quién realiza el cambio. Active la autenticación del Admin (App Service Authentication) para poder modificar la configuración.»
+
+Las consultas (listar, ver detalle, comparar versiones, auditoria) siguen funcionando con normalidad. La comprobacion vive en la capa de servicios del Admin (no en las paginas), para que ninguna vista pueda saltarsela por omision. En desarrollo local (`localhost`) esta restriccion no aplica. En cuanto se activa la autenticacion del entorno, el modo solo lectura se desactiva solo.
+
+**Auditoria con usuario real.** El usuario que queda registrado en la auditoria de tipologias, plugins, modelos y prompts es el que informa la cabecera `X-MS-CLIENT-PRINCIPAL-NAME` inyectada por App Service Authentication. Sin autenticacion activa se registra `no-autenticado`; en desarrollo local, `dev-<usuario del sistema>`. Los literales antiguos `ADMIN-UI` y `admin` ya no se usan.
 
 ### 5.9.1 Seccion Tipologias
 
@@ -1473,7 +1497,9 @@ Ademas, en el detalle se incluyen capacidades EP5:
 | Bloque | Objetivo |
 |--------|----------|
 | **Comparar versiones (A-2)** | Ver diferencias entre dos versiones de la misma familia. |
-| **Auditoria (A-3)** | Revisar cambios por usuario/accion con timestamp UTC. |
+| **Auditoria (A-3)** | Revisar cambios por usuario/accion con timestamp UTC. El usuario es el real de la sesion (ver 5.9.0), no un literal generico. |
+
+Publicar, retirar y pasar a borrador (draft) una tipologia muestran un dialogo de confirmacion con el impacto antes de ejecutar la accion.
 
 ### 5.9.1a Comparar Versiones con Filtro Rapido (A-2)
 
@@ -1510,11 +1536,33 @@ El boton se encuentra alineado a la derecha de la barra de modos (Arbol / Codigo
 
 ### 5.9.3 Seccion Modelos
 
-Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI). Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
+Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI) de los cuatro tipos: Clasificacion, Extraccion, Prompt y Layout. Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
+
+- **Editar** funciona igual para los cuatro tipos, incluidos los modelos de tipo Layout (antes de esta correccion, editar un modelo Layout creaba un duplicado en vez de actualizar el existente).
+- **Borrar** es un desactivado logico (soft-delete: `Activo=false`), no un borrado fisico. El dialogo de confirmacion lo indica explicitamente: "Desactivar modelo".
+- El **JSON de configuracion** que se ve y edita en el Admin trae los campos sensibles (claves cuyo nombre contiene `apikey`, `password`, `secret` o `accountkey`, de forma recursiva) enmascarados como `"***"`. Al guardar sin tocar esos campos, el valor enmascarado se conserva tal cual estaba en BD (round-trip seguro): no hace falta reintroducir la clave para guardar otros cambios. Si se sustituye `"***"` por un valor nuevo, ese valor pasa a ser el almacenado.
 
 ### 5.9.4 Seccion Configuracion Consulta
 
-Permite editar la configuracion global de consulta del sistema (umbrales, timeouts, parametros de fallback GPT, etc.) en formato JSON directamente desde el Admin.
+Vista consolidada, de solo consulta, del estado de configuracion del sistema: tipologias (totales y por estado), modelos, plugins e informacion del entorno de la Function App. Esta pantalla ya no muestra la cadena de conexion SQL del sistema.
+
+### 5.9.5 Seccion Prompts de Clasificacion
+
+Pagina `/admin/prompts` ("Gestión de Prompts de Clasificación"). Gestiona los prompts versionados que usa la clasificacion jerarquica GPT (placeholders como `{TDN1_CATALOG}`, `{TDN2_CATALOG}`, `{DOCUMENT_TEXT}`), independientes del prompt propio de cada tipologia (pestaña "Prompt" de 5.9.1).
+
+- El listado muestra, por cada `PromptKey`: version, estado (**Activo** / **Draft**), descripcion, fecha de publicacion y tamaño.
+- **La version activa es inmutable.** Pulsar "Editar" sobre un prompt cuya ultima version esta activa no la modifica: abre una nueva version en borrador con el mismo contenido, titulada "Nueva versión draft — `{clave}` v`{version}`". Los cambios se guardan en esa nueva version.
+- **Activar** una version desactiva automaticamente la version activa anterior de la misma clave. Pide confirmacion, indicando que la version actual quedara desactivada.
+- **Eliminar** solo esta disponible sobre versiones en borrador (no sobre la version activa) y pide confirmacion; la accion no se puede deshacer.
+- El historial de versiones permite **Restaurar** (rollback) cualquier version anterior, que pasa a ser la activa.
+- La validacion de contenido es solo de longitud (10-16000 caracteres); los placeholders no se validan automaticamente, para permitir iteracion flexible del prompt.
+
+### 5.9.6 Plugins y catalogos TDN1/TDN2
+
+Ademas de las secciones anteriores, el Admin incluye:
+
+- **Plugins por tipologia** (`/plugins-tipologias`): editar la configuracion de plugins de una tipologia y **Publicar**/**Retirar** requieren confirmacion previa con el impacto de la accion.
+- **Catalogo TDN1** (`/catalogotdn1`) y **Catalogo TDN2**: alta, edicion y borrado de los codigos de primer y segundo nivel usados por la clasificacion jerarquica GPT (ver 5.1.3 y RN7 en el analisis funcional). Borrar un codigo pide confirmacion ("Esta accion no se puede deshacer").
 
 ---
 

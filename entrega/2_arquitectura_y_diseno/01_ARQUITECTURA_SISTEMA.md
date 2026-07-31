@@ -511,6 +511,14 @@ flowchart TB
 | Rate limit Azure DI | Varía por tier (S0: 15 TPS) | Durable Functions serializa por instancia; N instancias paralelas podrian saturar |
 | SSL GDC | Certificado CA corporativo SAREB no confiado en Linux | `GDC:BypassSslValidation=true` (solo para host Linux; en Windows la CA se instala en el cert store) |
 
+### Seguridad del Admin (DocumentIA.Admin) — estado y plan
+
+Estado verificado (2026-07-31) de los App Service del Admin (dev y prod): autenticación deshabilitada (sin App Service Authentication), restricciones de acceso "Allow all", `publicNetworkAccess` habilitado, sin private endpoints. La integración VNet del Admin de prod es de salida (no limita el acceso entrante).
+
+Plan de autenticación: **App Service Authentication (EasyAuth)** con app registration single-tenant y un grupo de seguridad con los usuarios autorizados (`Assignment required = Yes`). La solicitud a identidad (app registration + grupo de usuarios autorizados) y la configuración del App Service se documentan en las guías operativas GUIA_EASYAUTH_ADMIN, GUIA_RESTRICCION_ACCESO_ADMIN (restricción de acceso de red — limita desde dónde, no quién) y SOLICITUD_APP_REGISTRATION_ADMIN.
+
+**Mitigación mientras EasyAuth no está activo:** modo solo lectura automático — sin identidad (`X-MS-CLIENT-PRINCIPAL-NAME` ausente), la capa de servicios del Admin (`TipologiaAdminService`, `PromptManagementService`) rechaza toda operación de escritura; solo quedan disponibles las consultas. Ver [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) §3.8.4.
+
 ---
 
 ## 1.9 Referencias a Documentacion Relacionada

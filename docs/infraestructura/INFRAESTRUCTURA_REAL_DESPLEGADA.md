@@ -195,6 +195,7 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 | **SecretsSource** | AzureVault | hardcoded |
 | **KeyVaultName** | `{kv}` | pipeline var por entorno |
 | **RunDatabaseMigrationsOnStartup** | false | pipeline var |
+| **EnvironmentName** | dev: `Development` · pre: `Preproduction` · pro: `Production` | pipeline var por entorno (`ENVIRONMENT_NAME`); la aplican **ambos** `azure-pipelines.yml` y `azure-pipelines-admin.yml` (paso "Ensure Functions environment name" en el segundo, idempotente). La lee `GET management/configuration` con prioridad sobre `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` |
 
 #### **Extraction Configuration**
 | Setting | Value |
@@ -289,8 +290,9 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 
 - **`azure-pipelines-bootstrap.yml`** — primera alta de entorno / remediación de prerrequisitos (permisos, carga de secretos en Key Vault, referencias KV, settings de Admin/AssetResolver, validación de contrato).
 - **`azure-pipelines.yml`** — despliegue repetible de código una vez el entorno está preparado.
+- **`azure-pipelines-admin.yml`** — hotfix del Admin (Blazor): `BuildAdmin` → `DeployAdmin`. Incluye la variable por entorno **`AZURE_ASSET_RESOLVER_WEB_APP_NAME`** (antes fija a PRODUCCIÓN, causaba un error críptico al validar en dev — AB#99997) y el step **"Ensure Functions environment name"**, que aplica `EnvironmentName=$(ENVIRONMENT_NAME)` en el Function App aunque solo se despliegue el Admin.
 
-Ambos aceptan el parámetro **`targetEnvironment: dev | pre | prod`**, que resuelve suscripción, RG, nombres de apps, Key Vault, service connection y `GDC_ENDPOINT`.
+Los tres aceptan el parámetro **`targetEnvironment: dev | pre | prod`**, que resuelve suscripción, RG, nombres de apps, Key Vault, service connection y `GDC_ENDPOINT`. Ambos pipelines de código (`azure-pipelines.yml` y `azure-pipelines-admin.yml`) son `trigger: none`: deben encolarse manualmente seleccionando la rama **`develop`**, que es donde viven estos cambios hasta el siguiente merge a `master`.
 
 ### **Pipeline principal (`azure-pipelines.yml`)**
 
@@ -299,7 +301,7 @@ Ambos aceptan el parámetro **`targetEnvironment: dev | pre | prod`**, que resue
 | **1. Build & Test** | .NET 10 SDK → restore → build (Release) → unit tests → publish 3 proyectos → subir 3 artifacts | siempre |
 | **2. Run Migrations** | dotnet-ef 9.x → aplicar migraciones EF Core (`DocumentIA.Data` / startup `DocumentIA.Functions`) | ⛔ `condition: false` (deshabilitado) |
 | **3. Deploy Functions** | zipDeploy a `{app}` → aplicar ~65 App Settings → validar variables de resiliencia CU + PromptTracing | `succeeded()` |
-| **3b. Deploy Admin** | zipDeploy a `{admin}` → asignar Managed Identity → verificar/asignar RBAC "Key Vault Secrets User" → settings Functions API | dentro del stage DeployFunctions |
+| **3b. Deploy Admin** | zipDeploy a `{admin}` → asignar Managed Identity → verificar/asignar RBAC "Key Vault Secrets User" → settings Functions API → asegurar `EnvironmentName` en `{app}` | dentro del stage DeployFunctions |
 | **4. Deploy AssetResolver** | zipDeploy a `{assetresolver}` → settings DB connection + API key | `dependsOn: DeployFunctions` |
 | **5. Validate Contract** | `validate-azure-appsettings-contract.ps1` sobre las 3 apps; falla si faltan settings | `dependsOn: DeployFunctions + DeployAssetResolver` |
 
@@ -363,6 +365,7 @@ Cada entorno tiene su propio Key Vault (`srbkvdevdocai` · `srbkvpredocai` · `s
 - ✅ RBAC "Key Vault Secrets User" (sin secretos en código — todo desde Key Vault).
 - ✅ SQL con autenticación por Managed Identity (patrón PROD replicado en DEV/PRE).
 - ⚠️ GDC con SSL bypass (`BypassSslValidation=true`) — workaround del sistema legado.
+- ⚠️ **App Service del Admin (dev y prod) sin autenticación** (verificado 2026-07-31): App Service Authentication deshabilitada, restricciones de acceso "Allow all", acceso público habilitado, sin private endpoints (la integración VNet de prod es de salida, no limita el acceso entrante). Plan de remediación: EasyAuth (`docs/guias/GUIA_EASYAUTH_ADMIN.md` + `docs/guias/SOLICITUD_APP_REGISTRATION_ADMIN.md`) y, como medida transitoria, restricción de acceso de red (`docs/guias/GUIA_RESTRICCION_ACCESO_ADMIN.md`). Mientras tanto, el modo solo lectura automático del Admin (sin usuario autenticado) rechaza toda escritura.
 
 ### ⚡ Concurrencia y resiliencia
 - **CU MaxConcurrentCalls:** 4 (App Settings post-deploy).
