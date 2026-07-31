@@ -46,21 +46,9 @@
         _loaded = true;
     }
 
-    private bool IsProduction => string.Equals(_environment, "Production", StringComparison.OrdinalIgnoreCase);
+    private EnvironmentBannerState State => EnvironmentBannerState.Resolve(_loaded, _error, _environment);
 
-    private string Label => !_loaded
-        ? "Conectando con el backend…"
-        : _error
-            ? "⚠ Backend no accesible"
-            : IsProduction
-                ? "⛔ ENTORNO: PRODUCCIÓN"
-                : $"Entorno backend: {_environment ?? "desconocido"}";
+    private string Label => State.Label;
 
-    private string BannerClass => !_loaded
-        ? "bg-light text-muted"
-        : _error
-            ? "bg-warning text-dark"
-            : IsProduction
-                ? "bg-danger text-white"
-                : "bg-info text-dark";
+    private string BannerClass => State.CssClass;
 }
