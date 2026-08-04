@@ -114,12 +114,12 @@ public class EjecucionesAdminFunction
 
     [Function("Admin_GetEjecucionDetalle")]
     public async Task<HttpResponseData> GetEjecucionDetalle(
-        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/ejecuciones/{id:int}/detalle")] HttpRequestData req,
-        int id)
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/ejecuciones/{guid}/detalle")] HttpRequestData req,
+        string guid)
     {
-        _logger.LogInformation("Admin_GetEjecucionDetalle: id={Id}", id);
+        _logger.LogInformation("Admin_GetEjecucionDetalle: guid={Guid}", guid);
 
-        var ejecucion = await _ejecucionRepository.GetByIdAsync(id);
+        var ejecucion = await _ejecucionRepository.GetByGuidAsync(guid);
         if (ejecucion is null)
         {
             return req.CreateResponse(HttpStatusCode.NotFound);
@@ -135,7 +135,7 @@ public class EjecucionesAdminFunction
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "No se pudo deserializar ContratoSalidaCompletoJson para ejecucion {Id}", id);
+                _logger.LogWarning(ex, "No se pudo deserializar ContratoSalidaCompletoJson para ejecucion {Guid}", guid);
             }
         }
 
