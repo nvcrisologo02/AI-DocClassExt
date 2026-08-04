@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace DocumentIA.Data.Repositories
@@ -14,6 +15,16 @@ namespace DocumentIA.Data.Repositories
         public double DuracionMediaMs { get; set; }
     }
 
+    public class SeriePunto
+    {
+        public DateTime Fecha { get; set; }
+        public int Total { get; set; }
+        public int Ok { get; set; }
+        public int Revision { get; set; }
+        public int Error { get; set; }
+        public int Fallbacks { get; set; }
+    }
+
     public class EjecucionAgregadosResult
     {
         public int TotalEjecuciones { get; set; }
@@ -26,5 +37,6 @@ namespace DocumentIA.Data.Repositories
         public double DuracionMediaMs { get; set; }
         public List<AgregadoGrupo> PorTipologia { get; set; } = new List<AgregadoGrupo>();
         public List<AgregadoGrupo> PorModelo { get; set; } = new List<AgregadoGrupo>();
+        public List<SeriePunto> Serie { get; set; } = new List<SeriePunto>();
     }
 }

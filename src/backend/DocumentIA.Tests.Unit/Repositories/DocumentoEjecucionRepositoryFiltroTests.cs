@@ -145,6 +145,55 @@ public class DocumentoEjecucionRepositoryFiltroTests
         items[0].Documento!.NombreArchivo.Should().Contain("escritura");
     }
 
+    [Fact]
+    public async Task GetAgregadosAsync_Should_ContarPorCategoriaDeEstado()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var r = await repo.GetAgregadosAsync(Filtro(Base, Base.AddDays(10)));
+
+        r.TotalEjecuciones.Should().Be(5);
+        r.Ok.Should().Be(2, "OK y Completado cuentan como exito");
+        r.Error.Should().Be(2, "Error y Fallido cuentan como error");
+        r.Revision.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetAgregadosAsync_Should_IncluirDiasSinEjecucionesAcero()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var r = await repo.GetAgregadosAsync(Filtro(Base, Base.AddDays(7)));
+
+        r.Serie.Should().HaveCount(7, "un punto por dia natural del rango, con huecos incluidos");
+        r.Serie.Select(p => p.Fecha).Should().BeInAscendingOrder();
+        r.Serie.Should().Contain(p => p.Fecha.Date == Base.AddDays(1).Date && p.Total == 0);
+        r.Serie.Single(p => p.Fecha.Date == Base.Date).Total.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetAgregadosAsync_Should_RespetarElMismoFiltroQueElListado()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(10));
+        filtro.Tipologia = "NOTS";
+
+        var agregados = await repo.GetAgregadosAsync(filtro);
+        var (_, totalListado) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        agregados.TotalEjecuciones.Should().Be(totalListado,
+            "la cabecera de KPIs y la tabla deben describir el mismo conjunto");
+        agregados.Serie.Sum(p => p.Total).Should().Be(totalListado,
+            "la serie debe sumar exactamente el total del filtro");
+    }
+
     private static EjecucionFiltro Filtro(DateTime desde, DateTime hasta) =>
         new() { Desde = desde, Hasta = hasta };
 

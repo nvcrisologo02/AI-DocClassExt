@@ -63,10 +63,9 @@ namespace DocumentIA.Data.Repositories
                 .ToListAsync();
         }
 
-        public async Task<EjecucionAgregadosResult> GetAgregadosAsync(int dias = 30)
+        public async Task<EjecucionAgregadosResult> GetAgregadosAsync(EjecucionFiltro filtro)
         {
-            var desde = DateTime.UtcNow.AddDays(-dias);
-            var q = _context.DocumentoEjecuciones.Where(e => e.FechaEjecucion >= desde);
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.Include(e => e.Documento), filtro);
 
             var total = await q.CountAsync();
 
@@ -115,10 +114,35 @@ namespace DocumentIA.Data.Repositories
                 .OrderByDescending(g => g.Total)
                 .ToListAsync();
 
+            var porDia = await q
+                .GroupBy(e => e.FechaEjecucion.Date)
+                .Select(g => new SeriePunto
+                {
+                    Fecha     = g.Key,
+                    Total     = g.Count(),
+                    Ok        = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision  = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error     = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                    Fallbacks = g.Count(e => e.UseFallbackLLM)
+                })
+                .ToListAsync();
+
+            // Los dias sin ejecuciones deben aparecer a cero: si se omitieran, el
+            // grafico uniria dos dias no consecutivos con una linea recta y daria a
+            // entender que hubo actividad intermedia.
+            var porDiaIndexado = porDia.ToDictionary(p => p.Fecha.Date);
+            var serie = new List<SeriePunto>();
+            for (var dia = filtro.Desde.Date; dia < filtro.Hasta.Date; dia = dia.AddDays(1))
+            {
+                serie.Add(porDiaIndexado.TryGetValue(dia, out var punto)
+                    ? punto
+                    : new SeriePunto { Fecha = dia });
+            }
+
             return new EjecucionAgregadosResult
             {
                 TotalEjecuciones  = total,
-                PeriodoDias       = dias,
+                PeriodoDias       = (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays),
                 Ok                = ok,
                 Revision          = revision,
                 Error             = error,
@@ -126,7 +150,8 @@ namespace DocumentIA.Data.Repositories
                 ConfianzaGlobalMedia = confianzaMedia,
                 DuracionMediaMs   = duracionMedia,
                 PorTipologia      = byTipologia,
-                PorModelo         = byModelo
+                PorModelo         = byModelo,
+                Serie             = serie
             };
         }
 
