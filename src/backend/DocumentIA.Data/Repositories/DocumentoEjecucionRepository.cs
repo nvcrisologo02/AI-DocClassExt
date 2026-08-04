@@ -129,5 +129,71 @@ namespace DocumentIA.Data.Repositories
                 PorModelo         = byModelo
             };
         }
+
+        private static IQueryable<DocumentoEjecucionEntity> AplicarFiltro(
+            IQueryable<DocumentoEjecucionEntity> q, EjecucionFiltro filtro)
+        {
+            q = q.Where(e => e.FechaEjecucion >= filtro.Desde && e.FechaEjecucion < filtro.Hasta);
+
+            if (!string.IsNullOrWhiteSpace(filtro.Tipologia))
+            {
+                q = q.Where(e => e.Tipologia == filtro.Tipologia);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtro.Estado))
+            {
+                var estado = filtro.Estado.Trim().ToUpperInvariant();
+                if (estado == "OK")
+                {
+                    q = q.Where(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal));
+                }
+                else if (estado == "REVISION")
+                {
+                    q = q.Where(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal));
+                }
+                else if (estado == "ERROR")
+                {
+                    q = q.Where(e => EstadoEjecucion.Error.Contains(e.EstadoFinal));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtro.Flujo))
+            {
+                var soloClasificacion = filtro.Flujo.Equals("Clasificacion", StringComparison.OrdinalIgnoreCase);
+                q = q.Where(e => e.ClassificationOnly == soloClasificacion);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtro.Busqueda))
+            {
+                var busqueda = filtro.Busqueda.Trim();
+                if (Guid.TryParse(busqueda, out _))
+                {
+                    q = q.Where(e => e.EjecucionGuid == busqueda);
+                }
+                else
+                {
+                    q = q.Where(e => e.Documento != null && e.Documento.NombreArchivo.Contains(busqueda));
+                }
+            }
+
+            return q;
+        }
+
+        public async Task<(IReadOnlyList<DocumentoEjecucionEntity> Items, int Total)> GetPagedAsync(
+            EjecucionFiltro filtro, int page, int pageSize)
+        {
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.Include(e => e.Documento), filtro);
+
+            var total = await q.CountAsync();
+
+            var items = await q
+                .OrderByDescending(e => e.FechaEjecucion)
+                .ThenByDescending(e => e.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return (items, total);
+        }
     }
 }
