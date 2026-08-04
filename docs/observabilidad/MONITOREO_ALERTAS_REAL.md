@@ -1,7 +1,7 @@
 # Monitoreo y Alertas — Configuración REAL
 
-**Estado:** ✅ Verificado en código (2026-06-10)  
-**Fuente:** `src/backend/DocumentIA.Functions/` + `azure-pipelines*.yml`  
+**Estado:** ✅ Verificado en código (2026-06-10); alertas de Azure Monitor y action group verificados en Azure (2026-08-04, AB#99083)  
+**Fuente:** `src/backend/DocumentIA.Functions/` + `azure-pipelines*.yml` + `scripts/observability/create-monitor-alerts.ps1`  
 **Producción:** SRBRGDOCSAIPROD
 
 ---
@@ -248,20 +248,57 @@ ExponentialBackoff = true
 
 ---
 
-## ❌ Alertas NO Implementadas en Azure Monitor
+## 🔔 Alertas Implementadas en Azure Monitor (AB#99083, 2026-08-04)
 
-**Estado:** ✅ Confirmado — No hay alert rules en portal
+**Estado:** ✅ 5 scheduled query rules activas sobre `srbappiprodocai` + action group de correo asociado.
 
-**Por qué:**
-- Pipeline manual (no CI/CD automático) → sin triggering
-- No hay runbook de auto-remediation
-- Monitoreo es ad-hoc via workbooks + queries manuales
-- SLA no definido (user menciona "ahora no falla nada")
+| Regla | Condición | Ventana / Frecuencia | Sev |
+|-------|-----------|----------------------|-----|
+| `srbalerterrprodocai` | % de `DocumentProcessed` con `EstadoFinal` ∈ (Error, ERROR, Fallido) > 10% (mín. 5 docs) | 5 min / 5 min | 2 |
+| `srbalertlatprodocai` | p95 de `DocumentIA.Duracion.Total` > 120 s | 15 min / 15 min | 2 |
+| `srbalertfbkprodocai` | % de `DocumentProcessed` con `UseFallbackLLM=true` > 20% (mín. 5 docs) | 30 min / 15 min | 3 |
+| `srbalertexcprodocai` | > 10 excepciones (cubre fallos GDC mientras no exista evento específico) | 5 min / 5 min | 2 |
+| `srbalertidleprodocai` | 0 requests en horario laboral (L-V 8:00-18:00 Europe/Madrid) | 60 min / 15 min | 2 |
 
-**Recomendación:** Implementar alertas si:
-1. Definen SLAs (ej: P95 CU < 30s, disponibilidad > 99%)
-2. Requieren escalation automática
-3. Necesitan notificaciones Slack/email
+Además existen 2 metric alerts previas de plataforma: `srbalertcpuprodocai` (CPU) y `srbalertmemprodocai` (memoria).
+
+**Criterios de diseño** (difieren del plan original 7.3.4 por alinearse a la telemetría real):
+- El criterio de error es `EstadoFinal in (Error, ERROR, Fallido)` — no `!= "OK"` — para no contar REVISION como fallo.
+- Las alertas de ratio exigen un mínimo de 5 documentos por ventana para evitar falsos positivos con volumen bajo.
+- No existen los eventos `GdcUploadFailed` / `GptFallbackUsed` en el código; el fallback se mide con la dimensión `UseFallbackLLM` de `DocumentProcessed`.
+
+**Gestión (script idempotente):** `scripts/observability/create-monitor-alerts.ps1` crea o actualiza las 5 reglas. Re-ejecutable sin riesgo; parámetro `-ActionGroupId` para asociar el action group.
+
+### Action group de avisos (correo)
+
+- **Recurso:** `srbagoperprodocai` (short name `docaiops`), RG `SRBRGDOCSAIPROD`, ubicación Global.
+- **Receptores actuales:** `ignacio.varas@sareb.es` (common alert schema activado).
+- Asociado a las 5 scheduled query rules (no a las metric alerts de CPU/memoria).
+
+### Cómo dar de alta (o quitar) correos de aviso
+
+Los destinatarios se gestionan **solo en el action group**; las alertas no se tocan.
+
+**Opción A — Azure Portal (recomendada para operación):**
+1. Portal → Azure Monitor → **Alerts** → **Action groups** → `srbagoperprodocai` → **Edit**.
+2. En **Notifications**, añadir una fila *Email/SMS message/Push/Voice* → tipo **Email**, con nombre identificativo y la dirección.
+3. Marcar *Enable the common alert schema* → **Yes**. Guardar.
+4. El nuevo destinatario recibe un correo de confirmación de `azure-noreply@microsoft.com` (si la dirección es nueva para Azure, con validación OTP que debe completar antes de recibir avisos). Vigilar la cuarentena del filtro corporativo.
+5. (Opcional) Probar con **Test** sobre el action group (sample type *Log alert V2*).
+
+**Opción B — CLI:** el comando `az monitor action-group` falla tras el proxy corporativo (TLS); usar `az rest` contra ARM con el JSON completo de receptores (PUT reemplaza la lista entera — incluir siempre los receptores existentes):
+
+```bash
+az rest --method put \
+  --url "https://management.azure.com/subscriptions/<subId>/resourceGroups/SRBRGDOCSAIPROD/providers/microsoft.insights/actionGroups/srbagoperprodocai?api-version=2023-01-01" \
+  --body '{ "location": "Global", "properties": { "groupShortName": "docaiops", "enabled": true,
+      "emailReceivers": [
+        { "name": "ignacio", "emailAddress": "ignacio.varas@sareb.es", "useCommonAlertSchema": true },
+        { "name": "nuevo",   "emailAddress": "nueva.persona@sareb.es", "useCommonAlertSchema": true }
+      ] } }'
+```
+
+**Límites del servicio:** máx. 100 correos/hora por dirección y región (Azure suspende y avisa si se supera); hasta 1.000 receptores de email por action group.
 
 ---
 
@@ -379,7 +416,7 @@ customEvents
 
 ## 📞 Escalation
 
-**Sin alertas automáticas hoy → escalation manual requerido:**
+**Las 5 alertas de Azure Monitor notifican por correo al action group `srbagoperprodocai`; a partir del aviso, aplicar esta priorización:**
 
 1. **P1 (Crítico):** CU circuit abierto > 30 min → contactar Azure CU support
 2. **P2 (Alto):** P95 CU > 120 seg → revisar workbook + diagnosticar tipología
@@ -398,6 +435,7 @@ customEvents
 | `src/backend/DocumentIA.Functions/appsettings.json` | Local dev config (override en pipeline) |
 | `docs/observabilidad/workbooks/documentia-cu-performance.workbook.json` | Dashboard interactivo AppInsights |
 | `scripts/reports/export-cu-performance-insights.ps1` | Script exporta KQL queries a CSV/JSON |
+| `scripts/observability/create-monitor-alerts.ps1` | Crea/actualiza las 5 alert rules de Azure Monitor (idempotente, `-ActionGroupId` opcional) |
 | `azure-pipelines.yml` / `azure-pipelines-functions.yml` | Config resiliencia (circuit breaker, retries, timeout) |
 
 ---
@@ -410,5 +448,7 @@ customEvents
 - ✅ Circuit breaker thresholds verificados en pipeline YAML
 - ✅ Workbook queries verificadas en JSON schema
 - ✅ Connection string verificada en `set-app-settings.ps1`
+- ✅ 5 scheduled query rules y action group verificados en Azure (`az monitor scheduled-query list`, `actions.actionGroups`)
+- ✅ Queries de alerta validadas contra datos reales de App Insights (370 `DocumentProcessed` en 7 días, p95 duración 29,6 s)
 
-**Última verificación:** 2026-06-10 (código fuente)
+**Última verificación:** 2026-08-04 (alertas en Azure); 2026-06-10 (código fuente)

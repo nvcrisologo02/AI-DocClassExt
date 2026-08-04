@@ -31,6 +31,22 @@
 
 ---
 
+## Detección Automática (alertas de Azure Monitor)
+
+Desde 2026-08-04 (AB#99083) existen 5 alert rules sobre `srbappiprodocai` que **notifican por correo** al action group `srbagoperprodocai`. Al recibir un aviso, entrar por el incidente correspondiente:
+
+| Correo de alerta | Qué significa | Entrada al runbook |
+|------------------|---------------|--------------------|
+| `srbalerterrprodocai` (errores > 10%) | Documentos terminando en Error/Fallido | Árbol de diagnóstico → incidentes de extracción/persistencia |
+| `srbalertlatprodocai` (p95 > 120 s) | Latencia E2E excesiva | Incident #7 (High Latency) |
+| `srbalertfbkprodocai` (fallback > 20%) | CU degradado, GPT asumiendo extracción | Incidente CU (circuit breaker / timeout) |
+| `srbalertexcprodocai` (> 10 excepciones/5 min) | Fallo transversal (incluye GDC) | Verificación Rápida + Failures en App Insights |
+| `srbalertidleprodocai` (0 requests en horario laboral) | Function App caída o sin flujo de entrada | Verificación Rápida (disponibilidad) |
+
+Gestión de reglas y **alta de nuevos correos de aviso**: `docs/observabilidad/MONITOREO_ALERTAS_REAL.md` (script `scripts/observability/create-monitor-alerts.ps1`).
+
+---
+
 ## Incidentes Comunes
 
 ### 1️⃣ Azure Content Understanding (CU) Circuit Breaker / Timeout

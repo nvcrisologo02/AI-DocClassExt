@@ -386,6 +386,7 @@ Cada entorno tiene su propio Key Vault (`srbkvdevdocai` · `srbkvpredocai` · `s
 - ✅ Application Insights por entorno (`srbappidevdocai` · `srbappipredocai` · `srbappiprodocai`).
 - ✅ Prompt tracing habilitado (límite 20.000 caracteres por prompt).
 - ✅ Sampling 20 eventos/seg (host.json).
+- ✅ Alertas Azure Monitor en PRO (2026-08-04, AB#99083): 5 scheduled query rules sobre `srbappiprodocai` (`srbalerterrprodocai`, `srbalertlatprodocai`, `srbalertfbkprodocai`, `srbalertexcprodocai`, `srbalertidleprodocai`) + 2 metric alerts de plataforma (`srbalertcpuprodocai`, `srbalertmemprodocai`), notificando por correo al action group `srbagoperprodocai`. Gestión: `scripts/observability/create-monitor-alerts.ps1`; detalle en `docs/observabilidad/MONITOREO_ALERTAS_REAL.md`.
 
 ---
 

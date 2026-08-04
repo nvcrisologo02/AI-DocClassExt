@@ -755,6 +755,8 @@ requests
 
 ### 5.2 Crear una Alerta Custom
 
+> **Nota (2026-08-04, AB#99083):** producción ya cuenta con 5 alert rules activas sobre `srbappiprodocai` (errores, latencia p95, fallback LLM, excepciones, inactividad) asociadas al action group de correo `srbagoperprodocai`, gestionadas con `scripts/observability/create-monitor-alerts.ps1`. Antes de crear una alerta manual, revisar `MONITOREO_ALERTAS_REAL.md` (incluye el alta de nuevos destinatarios); para alertas nuevas permanentes, preferir añadirlas al script.
+
 #### Paso 1: Abrir Application Insights
 
 ```
