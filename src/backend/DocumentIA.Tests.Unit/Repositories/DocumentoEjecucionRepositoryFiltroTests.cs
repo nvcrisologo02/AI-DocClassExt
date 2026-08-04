@@ -176,6 +176,43 @@ public class DocumentoEjecucionRepositoryFiltroTests
     }
 
     [Fact]
+    public async Task GetAgregadosAsync_Should_IncluirElDiaEnCursoCuandoHastaNoEsMedianoche()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(3).AddHours(15));
+
+        var r = await repo.GetAgregadosAsync(filtro);
+        var (_, totalListado) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        r.Serie.Should().HaveCount(4, "el dia en curso debe entrar en la serie aunque Hasta no sea medianoche");
+        r.Serie.Select(p => p.Fecha).Should().BeInAscendingOrder();
+        r.Serie.Last().Fecha.Date.Should().Be(Base.AddDays(3).Date);
+        r.Serie.Sum(p => p.Total).Should().Be(totalListado,
+            "la serie debe seguir sumando el total aunque Hasta no sea medianoche");
+    }
+
+    [Fact]
+    public async Task GetAgregadosAsync_Should_DevolverUnSoloDiaCuandoDesdeYHastaCoincidenElMismoDia()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddHours(12));
+
+        var r = await repo.GetAgregadosAsync(filtro);
+        var (_, totalListado) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        r.Serie.Should().HaveCount(1, "Desde y Hasta caen el mismo dia natural");
+        r.Serie.Single().Fecha.Date.Should().Be(Base.Date);
+        r.Serie.Sum(p => p.Total).Should().Be(totalListado,
+            "la serie no debe salir vacia cuando el rango cae en un solo dia con ejecuciones");
+    }
+
+    [Fact]
     public async Task GetAgregadosAsync_Should_RespetarElMismoFiltroQueElListado()
     {
         await using var context = CreateContext();

@@ -132,7 +132,8 @@ namespace DocumentIA.Data.Repositories
             // entender que hubo actividad intermedia.
             var porDiaIndexado = porDia.ToDictionary(p => p.Fecha.Date);
             var serie = new List<SeriePunto>();
-            for (var dia = filtro.Desde.Date; dia < filtro.Hasta.Date; dia = dia.AddDays(1))
+            var ultimoDia = filtro.Hasta.AddTicks(-1).Date;
+            for (var dia = filtro.Desde.Date; dia <= ultimoDia; dia = dia.AddDays(1))
             {
                 serie.Add(porDiaIndexado.TryGetValue(dia, out var punto)
                     ? punto
