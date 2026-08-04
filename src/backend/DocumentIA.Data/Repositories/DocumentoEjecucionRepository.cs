@@ -75,9 +75,9 @@ namespace DocumentIA.Data.Repositories
 
             if (total > 0)
             {
-                ok        = await q.CountAsync(e => e.EstadoFinal == "OK" || e.EstadoFinal == "Completado" || e.EstadoFinal == "Completed");
-                revision  = await q.CountAsync(e => e.EstadoFinal == "REVISION" || e.EstadoFinal == "Revision");
-                error     = await q.CountAsync(e => e.EstadoFinal == "Error" || e.EstadoFinal == "Fallido" || e.EstadoFinal == "ERROR");
+                ok        = await q.CountAsync(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal));
+                revision  = await q.CountAsync(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal));
+                error     = await q.CountAsync(e => EstadoEjecucion.Error.Contains(e.EstadoFinal));
                 fallbacks = await q.CountAsync(e => e.UseFallbackLLM);
                 confianzaMedia = await q.AverageAsync(e => e.ConfianzaGlobal);
                 duracionMedia  = await q.AverageAsync(e => (double)e.DuracionTotalMs);
@@ -89,9 +89,9 @@ namespace DocumentIA.Data.Repositories
                 {
                     Grupo          = g.Key,
                     Total          = g.Count(),
-                    Ok             = g.Count(e => e.EstadoFinal == "OK" || e.EstadoFinal == "Completado" || e.EstadoFinal == "Completed"),
-                    Revision       = g.Count(e => e.EstadoFinal == "REVISION" || e.EstadoFinal == "Revision"),
-                    Error          = g.Count(e => e.EstadoFinal == "Error" || e.EstadoFinal == "Fallido" || e.EstadoFinal == "ERROR"),
+                    Ok             = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision       = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error          = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
                     Fallbacks      = g.Count(e => e.UseFallbackLLM),
                     ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
@@ -105,9 +105,9 @@ namespace DocumentIA.Data.Repositories
                 {
                     Grupo          = g.Key,
                     Total          = g.Count(),
-                    Ok             = g.Count(e => e.EstadoFinal == "OK" || e.EstadoFinal == "Completado" || e.EstadoFinal == "Completed"),
-                    Revision       = g.Count(e => e.EstadoFinal == "REVISION" || e.EstadoFinal == "Revision"),
-                    Error          = g.Count(e => e.EstadoFinal == "Error" || e.EstadoFinal == "Fallido" || e.EstadoFinal == "ERROR"),
+                    Ok             = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision       = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error          = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
                     Fallbacks      = g.Count(e => e.UseFallbackLLM),
                     ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
