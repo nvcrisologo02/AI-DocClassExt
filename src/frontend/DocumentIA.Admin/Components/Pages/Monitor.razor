@@ -491,8 +491,8 @@
                         <tbody>
                             @foreach (var e in _filteredEjecuciones)
                             {
-                                bool expanded = _expanded.Contains(e.Id);
-                                <tr class="@(expanded ? "table-active" : "")" style="cursor:pointer" @onclick="async () => await ToggleExpand(e.Id)">
+                                bool expanded = _expanded.Contains(e.EjecucionGuid);
+                                <tr class="@(expanded ? "table-active" : "")" style="cursor:pointer" @onclick="async () => await ToggleExpand(e.EjecucionGuid)">
                                     <td class="text-center text-muted small">@(expanded ? "▾" : "▸")</td>
                                     <td class="text-nowrap small">@ToSpainTime(e.FechaEjecucion).ToString("dd/MM/yyyy HH:mm:ss")</td>
                                     <td class="small text-truncate" style="max-width:150px" title="@e.NombreDocumento">@(e.NombreDocumento ?? "—")</td>
@@ -526,14 +526,14 @@
                                 {
                                     <tr class="table-active">
                                         <td colspan="10" class="p-3">
-                                            @if (_loadingDetails.Contains(e.Id))
+                                            @if (_loadingDetails.Contains(e.EjecucionGuid))
                                             {
                                                 <div class="d-flex align-items-center gap-2 py-2 text-muted small">
                                                     <div class="spinner-border spinner-border-sm" role="status"></div>
                                                     Cargando detalle…
                                                 </div>
                                             }
-                                            else if (_details.TryGetValue(e.Id, out var det) && det != null)
+                                            else if (_details.TryGetValue(e.EjecucionGuid, out var det) && det != null)
                                             {
                                                 <!-- ── BLOQUE DETALLE RICO ── -->
                                                 <div class="detail-panel">
@@ -829,9 +829,10 @@
 
 @code {
     private List<EjecucionResumenDto> _ejecuciones = [];
-    private HashSet<int> _expanded = [];
-    private Dictionary<int, EjecucionDetalleDto?> _details = new();
-    private HashSet<int> _loadingDetails = [];
+    private HashSet<string> _expanded = [];
+    private Dictionary<string, EjecucionDetalleDto?> _details = new();
+    private HashSet<string> _loadingDetails = [];
+    private MonitorFiltroDto _filtro = new();
     private bool _isLoading = false;
     private string? _errorMessage;
     private int _top = 50;
@@ -895,7 +896,8 @@
         _errorMessage = null;
         try
         {
-            _ejecuciones = await MonitorService.GetUltimasEjecucionesAsync(_top);
+            var pagina = await MonitorService.GetEjecucionesAsync(_filtro, 1, _top);
+            _ejecuciones = pagina.Items;
             await LoadSystemHealthAsync();
             _ultimaActualizacion = DateTime.Now;
         }
@@ -909,15 +911,15 @@
         }
     }
 
-    private async Task ToggleExpand(int id)
+    private async Task ToggleExpand(string guid)
     {
-        if (!_expanded.Add(id))
+        if (!_expanded.Add(guid))
         {
-            _expanded.Remove(id);
+            _expanded.Remove(guid);
         }
-        else if (!_details.ContainsKey(id))
+        else if (!_details.ContainsKey(guid))
         {
-            await LoadDetalleAsync(id);
+            await LoadDetalleAsync(guid);
         }
     }
 
@@ -929,7 +931,9 @@
         StateHasChanged();
         try
         {
-            _dashboard = await MonitorService.GetAgregadosAsync(_dashboardDias);
+            _filtro.Hasta = DateTime.UtcNow;
+            _filtro.Desde = _filtro.Hasta.AddDays(-_dashboardDias);
+            _dashboard = await MonitorService.GetAgregadosAsync(_filtro);
         }
         catch
         {
@@ -954,22 +958,22 @@
         }
     }
 
-    private async Task LoadDetalleAsync(int id)
+    private async Task LoadDetalleAsync(string guid)
     {
-        _loadingDetails.Add(id);
+        _loadingDetails.Add(guid);
         StateHasChanged();
         try
         {
-            var detalle = await MonitorService.GetEjecucionDetalleAsync(id);
-            _details[id] = detalle;
+            var detalle = await MonitorService.GetEjecucionDetalleAsync(guid);
+            _details[guid] = detalle;
         }
         catch
         {
-            _details[id] = null;
+            _details[guid] = null;
         }
         finally
         {
-            _loadingDetails.Remove(id);
+            _loadingDetails.Remove(guid);
         }
     }
 

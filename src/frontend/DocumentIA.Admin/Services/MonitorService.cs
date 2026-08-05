@@ -190,6 +190,51 @@ public class DashboardAgregadosDto
     public double DuracionMediaMs { get; set; }
     public List<AgregadoGrupoDto> PorTipologia { get; set; } = [];
     public List<AgregadoGrupoDto> PorModelo { get; set; } = [];
+    public List<SeriePuntoDto> Serie { get; set; } = [];
+}
+
+public class SeriePuntoDto
+{
+    public DateTime Fecha { get; set; }
+    public int Total { get; set; }
+    public int Ok { get; set; }
+    public int Revision { get; set; }
+    public int Error { get; set; }
+    public int Fallbacks { get; set; }
+}
+
+public class PagedResultDto<T>
+{
+    public List<T> Items { get; set; } = [];
+    public int Total { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+public class MonitorFiltroDto
+{
+    public DateTime Desde { get; set; } = DateTime.UtcNow.AddDays(-7);
+    public DateTime Hasta { get; set; } = DateTime.UtcNow;
+    public string? Tipologia { get; set; }
+    public string? Estado { get; set; }
+    public string? Flujo { get; set; }
+    public string? Busqueda { get; set; }
+
+    public string ToQueryString()
+    {
+        var partes = new List<string>
+        {
+            $"desde={Uri.EscapeDataString(Desde.ToString("o"))}",
+            $"hasta={Uri.EscapeDataString(Hasta.ToString("o"))}"
+        };
+        if (!string.IsNullOrWhiteSpace(Tipologia)) partes.Add($"tipologia={Uri.EscapeDataString(Tipologia)}");
+        if (!string.IsNullOrWhiteSpace(Estado)) partes.Add($"estado={Uri.EscapeDataString(Estado)}");
+        if (!string.IsNullOrWhiteSpace(Flujo)) partes.Add($"flujo={Uri.EscapeDataString(Flujo)}");
+        if (!string.IsNullOrWhiteSpace(Busqueda)) partes.Add($"q={Uri.EscapeDataString(Busqueda)}");
+        return string.Join("&", partes);
+    }
+
+    public MonitorFiltroDto Clonar() => (MonitorFiltroDto)MemberwiseClone();
 }
 
 public class HealthComponentDto
@@ -238,13 +283,14 @@ public class MonitorService
         _httpClient = httpClient;
     }
 
-    public async Task<List<EjecucionResumenDto>> GetUltimasEjecucionesAsync(int top = 50)
+    public async Task<PagedResultDto<EjecucionResumenDto>> GetEjecucionesAsync(
+        MonitorFiltroDto filtro, int page = 1, int pageSize = 25)
     {
         try
         {
-            var result = await _httpClient.GetFromJsonAsync<List<EjecucionResumenDto>>(
-                $"management/ejecuciones?top={top}", JsonOptions);
-            return result ?? [];
+            var result = await _httpClient.GetFromJsonAsync<PagedResultDto<EjecucionResumenDto>>(
+                $"management/ejecuciones?{filtro.ToQueryString()}&page={page}&pageSize={pageSize}", JsonOptions);
+            return result ?? new PagedResultDto<EjecucionResumenDto>();
         }
         catch (HttpRequestException ex)
         {
@@ -252,12 +298,12 @@ public class MonitorService
         }
     }
 
-    public async Task<EjecucionDetalleDto?> GetEjecucionDetalleAsync(int id)
+    public async Task<EjecucionDetalleDto?> GetEjecucionDetalleAsync(string guid)
     {
         try
         {
             return await _httpClient.GetFromJsonAsync<EjecucionDetalleDto>(
-                $"management/ejecuciones/{id}/detalle", JsonOptions);
+                $"management/ejecuciones/{Uri.EscapeDataString(guid)}/detalle", JsonOptions);
         }
         catch (HttpRequestException ex)
         {
@@ -265,12 +311,12 @@ public class MonitorService
         }
     }
 
-    public async Task<DashboardAgregadosDto?> GetAgregadosAsync(int dias = 30)
+    public async Task<DashboardAgregadosDto?> GetAgregadosAsync(MonitorFiltroDto filtro)
     {
         try
         {
             return await _httpClient.GetFromJsonAsync<DashboardAgregadosDto>(
-                $"management/ejecuciones/agregados?dias={dias}", JsonOptions);
+                $"management/ejecuciones/agregados?{filtro.ToQueryString()}", JsonOptions);
         }
         catch
         {
