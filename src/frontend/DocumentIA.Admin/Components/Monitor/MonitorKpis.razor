@@ -1,0 +1,61 @@
+@* Unica cabecera de KPIs del Monitor. Se alimenta SOLO de agregados, nunca de
+   la pagina de la tabla: si calculara sobre las filas descargadas describiria
+   un conjunto distinto del que dice el selector de rango. *@
+
+<div class="row g-3 mb-4 @(Cargando ? "opacity-50" : "")">
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Ejecuciones</div>
+            <div class="h3 mb-0">@(Agregados?.TotalEjecuciones ?? 0)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Correctas</div>
+            <div class="h3 mb-0 text-success">@Porcentaje(Agregados?.Ok)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">En revisión</div>
+            <div class="h3 mb-0 text-warning">@Porcentaje(Agregados?.Revision)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Con error</div>
+            <div class="h3 mb-0 text-danger">@Porcentaje(Agregados?.Error)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Fallback LLM</div>
+            <div class="h3 mb-0">@Porcentaje(Agregados?.FallbacksTotal)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Duración media</div>
+            <div class="h3 mb-0">@Duracion()</div>
+        </div></div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public DashboardAgregadosDto? Agregados { get; set; }
+    [Parameter] public bool Cargando { get; set; }
+
+    private string Porcentaje(int? valor)
+    {
+        var total = Agregados?.TotalEjecuciones ?? 0;
+        if (total == 0 || valor is null) return "—";
+        return $"{Math.Round(100.0 * valor.Value / total)}%";
+    }
+
+    private string Duracion()
+    {
+        var ms = Agregados?.DuracionMediaMs ?? 0;
+        if (ms <= 0) return "—";
+        return ms >= 1000 ? $"{Math.Round(ms / 1000.0, 1)} s" : $"{Math.Round(ms)} ms";
+    }
+}
