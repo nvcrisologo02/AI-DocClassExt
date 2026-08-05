@@ -82,6 +82,9 @@ namespace DocumentIA.Functions.Activities
                         ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
                         Paginas = salida.Identificacion.Paginas,
                         CorrelationId = salida.Identificacion.Guid,
+                        // Solicitante del alta. En reprocesos no se toca: el documento conserva
+                        // quien lo trajo por primera vez y cada reenvio queda en su ejecucion.
+                        SubmittedBy = submittedBy,
                         NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown),
                         // Registrar IdGDC e IdActivo si están disponibles
                         IdGDC = salida.Integridad.GestorDocumental,
