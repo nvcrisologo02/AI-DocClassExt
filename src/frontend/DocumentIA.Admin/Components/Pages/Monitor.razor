@@ -219,7 +219,7 @@
 
 @if (_modalGuid is not null)
 {
-    <EjecucionJsonModal Guid="_modalGuid"
+    <EjecucionJsonModal Guid="@_modalGuid"
                          Detalle="_detalles.GetValueOrDefault(_modalGuid)"
                          Cargando="_modalCargando"
                          NoEncontrado="_guidsNoEncontrados.Contains(_modalGuid)"
