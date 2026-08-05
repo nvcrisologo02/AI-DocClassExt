@@ -217,16 +217,21 @@ Monitored in Application Insights + Azure Monitor:
 - SQL DTU usage
 - Memory by instance
 
-### Alert Rules (Current)
+### Alert Rules (reales, 2026-08-04, AB#99083)
 
-| Alert | Threshold | Action |
-|-------|-----------|--------|
-| P99 latency | > 30 sec | Page on-call dev |
-| Error rate | > 5% | Page on-call dev |
-| SQL DTU | > 80% | Email (manual scale) |
-| Storage full | > 90% | Email |
+Scheduled query rules sobre `srbappiprodocai` (RG `SRBRGDOCSAIPROD`), gestionadas con `scripts/observability/create-monitor-alerts.ps1`:
 
-See OBSERVABILIDAD_KQL.md for query details.
+| Alerta | Condición | Sev | Acción |
+|--------|-----------|-----|--------|
+| `srbalerterrprodocai` | Errores `DocumentProcessed` > 10% en 5 min | 2 | Email (action group) |
+| `srbalertlatprodocai` | p95 `DocumentIA.Duracion.Total` > 120 s en 15 min | 2 | Email (action group) |
+| `srbalertfbkprodocai` | Fallback LLM > 20% en 30 min | 3 | Email (action group) |
+| `srbalertexcprodocai` | > 10 excepciones en 5 min | 2 | Email (action group) |
+| `srbalertidleprodocai` | 0 requests en 60 min (horario laboral) | 2 | Email (action group) |
+
+Metric alerts de plataforma preexistentes: `srbalertcpuprodocai` (CPU), `srbalertmemprodocai` (memoria).
+
+**Action group:** `srbagoperprodocai` (correo a operaciones). Alta/baja de destinatarios y detalle completo en `docs/observabilidad/MONITOREO_ALERTAS_REAL.md`. Queries en OBSERVABILIDAD_KQL.md.
 
 ---
 
