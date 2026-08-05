@@ -931,9 +931,12 @@
         StateHasChanged();
         try
         {
-            _filtro.Hasta = DateTime.UtcNow;
-            _filtro.Desde = _filtro.Hasta.AddDays(-_dashboardDias);
-            _dashboard = await MonitorService.GetAgregadosAsync(_filtro);
+            // Filtro propio del dashboard: no debe compartirse con el filtro
+            // del listado principal (_filtro), consultado en RefreshAsync.
+            var filtroDashboard = _filtro.Clonar();
+            filtroDashboard.Hasta = DateTime.UtcNow;
+            filtroDashboard.Desde = filtroDashboard.Hasta.AddDays(-_dashboardDias);
+            _dashboard = await MonitorService.GetAgregadosAsync(filtroDashboard);
         }
         catch
         {
