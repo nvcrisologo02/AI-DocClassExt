@@ -1,0 +1,92 @@
+<div class="card @(Cargando ? "opacity-50" : "")">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Fecha</th>
+                    <th>Documento</th>
+                    <th>Tipología</th>
+                    <th>Flujo</th>
+                    <th>Estado</th>
+                    <th class="text-end">Duración</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (Pagina is null || Pagina.Items.Count == 0)
+                {
+                    <tr><td colspan="7" class="text-center text-muted py-4">
+                        No hay ejecuciones que cumplan el filtro seleccionado.
+                    </td></tr>
+                }
+                else
+                {
+                    @foreach (var e in Pagina.Items)
+                    {
+                        <tr>
+                            <td class="text-nowrap">@e.FechaEjecucion.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                            <td class="text-truncate" style="max-width: 22rem;">@(e.NombreDocumento ?? "—")</td>
+                            <td>@(e.Tipologia ?? "—")</td>
+                            <td>@e.TipoFlujo</td>
+                            <td><span class="badge @ClaseEstado(e.EstadoFinal)">@e.EstadoFinal</span></td>
+                            <td class="text-end text-nowrap">@FormatearDuracion(e.DuracionTotalMs)</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        @onclick="() => DetalleSolicitado.InvokeAsync(e.EjecucionGuid)">
+                                    Detalle
+                                </button>
+                                <a class="btn btn-sm btn-outline-secondary" href="/monitor/@e.EjecucionGuid"
+                                   title="Abrir en su propia página">↗</a>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+
+    @if (Pagina is not null && Pagina.Total > Pagina.PageSize)
+    {
+        <div class="card-footer d-flex justify-content-between align-items-center">
+            <span class="text-muted small">
+                @(((Pagina.Page - 1) * Pagina.PageSize) + 1)–@(Math.Min(Pagina.Page * Pagina.PageSize, Pagina.Total))
+                de @Pagina.Total
+            </span>
+            <div class="btn-group">
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(Pagina.Page <= 1)"
+                        @onclick="() => PaginaCambiada.InvokeAsync(Pagina.Page - 1)">Anterior</button>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(Pagina.Page >= UltimaPagina)"
+                        @onclick="() => PaginaCambiada.InvokeAsync(Pagina.Page + 1)">Siguiente</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public PagedResultDto<EjecucionResumenDto>? Pagina { get; set; }
+    [Parameter] public bool Cargando { get; set; }
+    [Parameter] public EventCallback<int> PaginaCambiada { get; set; }
+    [Parameter] public EventCallback<string> DetalleSolicitado { get; set; }
+
+    // Con Total == 0 la condicion del pie (Total > PageSize) es falsa y el pie
+    // no se pinta, asi que no hace falta cubrir la division por cero aqui; el
+    // guard de PageSize == 0 es solo para no romper si el padre pasara una
+    // pagina mal formada.
+    private int UltimaPagina => Pagina is null || Pagina.PageSize == 0
+        ? 1
+        : (int)Math.Ceiling((double)Pagina.Total / Pagina.PageSize);
+
+    // Los valores vienen del backend (ver EstadoEjecucion en DocumentIA.Data):
+    // OK/Completado/Completed, REVISION/Revision, Error/ERROR/Fallido son las
+    // unicas variantes historicas; cualquier otra cosa cae al caso por defecto.
+    private static string ClaseEstado(string? estado) => estado switch
+    {
+        "OK" or "Completado" or "Completed" => "bg-success",
+        "REVISION" or "Revision" => "bg-warning text-dark",
+        "Error" or "ERROR" or "Fallido" => "bg-danger",
+        _ => "bg-secondary"
+    };
+
+    private static string FormatearDuracion(int ms) =>
+        ms >= 1000 ? $"{Math.Round(ms / 1000.0, 1)} s" : $"{ms} ms";
+}
