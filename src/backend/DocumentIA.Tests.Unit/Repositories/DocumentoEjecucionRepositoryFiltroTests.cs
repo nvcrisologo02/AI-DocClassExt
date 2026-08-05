@@ -197,6 +197,77 @@ public class DocumentoEjecucionRepositoryFiltroTests
     }
 
     [Fact]
+    public async Task GetPagedAsync_Should_PriorizarSubmittedByPropioDeLaEjecucionSobreElDelDocumento()
+    {
+        // El mismo documento deduplicado puede reprocesarse desde otro origen: el
+        // SubmittedBy de la ejecucion (si existe) debe ganar sobre el del documento.
+        await using var context = CreateContext();
+        var doc = new DocumentoEntity { Id = 1, NombreArchivo = "doc.pdf", SHA256 = "a", SubmittedBy = "batch-integracion" };
+        context.Documentos.Add(doc);
+        var ejecucion = Ejecucion(1, "11111111-1111-1111-1111-111111111111", Base, "NOTS", "OK", docId: 1, soloClasificacion: true);
+        ejecucion.SubmittedBy = "usuario-manual";
+        context.DocumentoEjecuciones.Add(ejecucion);
+        context.SaveChanges();
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtroPorPropio = Filtro(Base, Base.AddDays(1));
+        filtroPorPropio.SubmittedBy = "manual";
+        var (itemsPropio, totalPropio) = await repo.GetPagedAsync(filtroPorPropio, 1, 25);
+
+        var filtroPorDocumento = Filtro(Base, Base.AddDays(1));
+        filtroPorDocumento.SubmittedBy = "integracion";
+        var (_, totalDocumento) = await repo.GetPagedAsync(filtroPorDocumento, 1, 25);
+
+        totalPropio.Should().Be(1, "el SubmittedBy propio de la ejecucion debe encontrarse");
+        itemsPropio[0].SubmittedBy.Should().Be("usuario-manual");
+        totalDocumento.Should().Be(0, "el SubmittedBy propio gana: el del documento ya no debe usarse cuando hay uno propio");
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_Should_CaerAlSubmittedByDelDocumentoCuandoLaEjecucionNoLoTiene()
+    {
+        await using var context = CreateContext();
+        var doc = new DocumentoEntity { Id = 1, NombreArchivo = "doc.pdf", SHA256 = "a", SubmittedBy = "batch-integracion" };
+        context.Documentos.Add(doc);
+        var ejecucion = Ejecucion(1, "11111111-1111-1111-1111-111111111111", Base, "NOTS", "OK", docId: 1, soloClasificacion: true);
+        // Ejecucion sin SubmittedBy propio: debe caer al del documento (COALESCE).
+        context.DocumentoEjecuciones.Add(ejecucion);
+        context.SaveChanges();
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(1));
+        filtro.SubmittedBy = "integracion";
+        var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        total.Should().Be(1);
+        items[0].SubmittedBy.Should().BeNull("el valor propio no esta informado, el efectivo viene del documento via COALESCE");
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_Should_EncontrarConElMismoFiltroTantoElValorPropioComoElDelDocumento()
+    {
+        await using var context = CreateContext();
+        var doc1 = new DocumentoEntity { Id = 1, NombreArchivo = "doc1.pdf", SHA256 = "a", SubmittedBy = "equipo-test-uno" };
+        var doc2 = new DocumentoEntity { Id = 2, NombreArchivo = "doc2.pdf", SHA256 = "b", SubmittedBy = "otro-origen" };
+        context.Documentos.AddRange(doc1, doc2);
+
+        var ejecucionConPropio = Ejecucion(1, "11111111-1111-1111-1111-111111111111", Base, "NOTS", "OK", docId: 2, soloClasificacion: true);
+        ejecucionConPropio.SubmittedBy = "equipo-test-dos";
+        var ejecucionSinPropio = Ejecucion(2, "22222222-2222-2222-2222-222222222222", Base, "NOTS", "OK", docId: 1, soloClasificacion: true);
+
+        context.DocumentoEjecuciones.AddRange(ejecucionConPropio, ejecucionSinPropio);
+        context.SaveChanges();
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(1));
+        filtro.SubmittedBy = "equipo-test";
+        var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        total.Should().Be(2, "debe encontrar tanto la ejecucion con valor propio como la que cae al valor del documento");
+        items.Select(i => i.Id).Should().BeEquivalentTo(new[] { 1, 2 });
+    }
+
+    [Fact]
     public async Task GetPagedAsync_Should_NoRomperCuandoLaEjecucionNoTieneDocumentoAsociado()
     {
         await using var context = CreateContext();

@@ -95,7 +95,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         _documentoRepoMock.Verify(r => r.AddAsync(It.IsAny<DocumentoEntity>()), Times.Once);
         _documentoRepoMock.Verify(r => r.UpdateAsync(It.IsAny<DocumentoEntity>()), Times.Never);
@@ -128,7 +128,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         documentoCapturado.Should().NotBeNull();
         documentoCapturado!.NombreArchivo.Should().Be($"documento-{salida.Identificacion.Guid}.pdf");
@@ -154,7 +154,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         _documentoRepoMock.Verify(r => r.UpdateAsync(It.IsAny<DocumentoEntity>()), Times.Once);
         _documentoRepoMock.Verify(r => r.AddAsync(It.IsAny<DocumentoEntity>()), Times.Never);
@@ -180,9 +180,73 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         _ejecucionRepoMock.Verify(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Run_ConSubmittedByInformado_PersisteSubmittedByEnEjecucion()
+    {
+        const string sha256 = "sha256_submittedby";
+        var salida = BuildSalidaMinima(sha256);
+        var documentoCreado = new DocumentoEntity { Id = 4, SHA256 = sha256 };
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync(documentoCreado);
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) =>
+            {
+                ejecucionCapturada = e;
+                return e;
+            });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida, SubmittedBy = "usuario-prueba" });
+
+        ejecucionCapturada.Should().NotBeNull();
+        ejecucionCapturada!.SubmittedBy.Should().Be("usuario-prueba");
+    }
+
+    [Fact]
+    public async Task Run_SinSubmittedBy_DejaSubmittedByNuloEnEjecucion()
+    {
+        const string sha256 = "sha256_sin_submittedby";
+        var salida = BuildSalidaMinima(sha256);
+        var documentoCreado = new DocumentoEntity { Id = 6, SHA256 = sha256 };
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync(documentoCreado);
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) =>
+            {
+                ejecucionCapturada = e;
+                return e;
+            });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida, SubmittedBy = null });
+
+        ejecucionCapturada.Should().NotBeNull();
+        ejecucionCapturada!.SubmittedBy.Should().BeNull();
     }
 
     [Fact]
@@ -205,7 +269,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         _auditoriaRepoMock.Verify(r => r.AddAsync(It.IsAny<AuditoriaEntity>()), Times.Once);
     }
@@ -230,7 +294,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         _context.ResultadosProcesamiento.Should().HaveCount(1);
         _context.ResultadosProcesamiento.First().DocumentoId.Should().Be(10);
@@ -263,7 +327,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         documentoCapturado.Should().NotBeNull();
         documentoCapturado!.FechaExpiracionBlob.Should().Be(new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc));
@@ -304,7 +368,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         documentoCapturado.Should().NotBeNull();
         documentoCapturado!.FechaExpiracionBlob.Should().BeNull();
@@ -333,7 +397,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         _telemetryServiceMock.Verify(t => t.TrackEvent(
             "DocumentProcessed",
@@ -372,7 +436,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
             .Returns(Task.CompletedTask);
 
-        await _sut.Run(salida);
+        await _sut.Run(new PersistirInput { Salida = salida });
 
         _telemetryServiceMock.Verify(t => t.TrackMetric(
             "DocumentIA.Duracion.Total",
@@ -407,7 +471,7 @@ public class PersistirActivityTests : IDisposable
             .Setup(t => t.TrackEvent(It.IsAny<string>(), It.IsAny<IDictionary<string, string>>()))
             .Throws(new InvalidOperationException("telemetry down"));
 
-        var act = async () => await _sut.Run(salida);
+        var act = async () => await _sut.Run(new PersistirInput { Salida = salida });
 
         await act.Should().NotThrowAsync();
         _ejecucionRepoMock.Verify(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()), Times.Once);

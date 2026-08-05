@@ -209,12 +209,13 @@ namespace DocumentIA.Data.Repositories
             if (!string.IsNullOrWhiteSpace(filtro.SubmittedBy))
             {
                 var submittedBy = filtro.SubmittedBy.Trim();
-                // SubmittedBy vive en Documentos, no en DocumentoEjecuciones; la navegacion
-                // y la columna pueden ser nulas (ejecuciones huerfanas o documentos sin
-                // trazabilidad de origen), de ahi el doble chequeo antes del Contains.
-                q = q.Where(e => e.Documento != null
-                    && e.Documento.SubmittedBy != null
-                    && e.Documento.SubmittedBy.Contains(submittedBy));
+                // SubmittedBy propio de la ejecucion tiene prioridad (el mismo documento
+                // deduplicado puede reprocesarse desde otro origen); si la ejecucion no lo
+                // informa, cae al SubmittedBy original del documento. El "??" sobre la
+                // navegacion anulable se traduce a COALESCE por EF Core (LEFT JOIN con
+                // columna a NULL cuando la ejecucion es huerfana).
+                q = q.Where(e => (e.SubmittedBy ?? e.Documento.SubmittedBy) != null
+                    && (e.SubmittedBy ?? e.Documento.SubmittedBy)!.Contains(submittedBy));
             }
 
             return q;

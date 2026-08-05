@@ -48,8 +48,11 @@ namespace DocumentIA.Functions.Activities
         }
 
         [Function(nameof(PersistirActivity))]
-        public async Task Run([ActivityTrigger] ContratoSalida salida)
+        public async Task Run([ActivityTrigger] PersistirInput input)
         {
+            var salida = input.Salida;
+            var submittedBy = input.SubmittedBy;
+
             var nombreArchivoPersistible = ResolveNombreArchivoPersistible(salida.Identificacion.Documento, salida.Identificacion.Guid);
 
             _logger.LogInformation("Persistiendo resultado para documento {Documento}", 
@@ -205,6 +208,7 @@ namespace DocumentIA.Functions.Activities
                     InstanceId = salida.DetalleEjecucion.InstanceId,
                     OperationId = salida.DetalleEjecucion.OperationId,
                     Tipologia = salida.Identificacion.Tipologia,
+                    SubmittedBy = submittedBy,
                     EstadoFinal = salida.Resultado.Estado,
                     ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
                     ModeloClasificacion = salida.DetalleEjecucion.Clasificacion.Modelo,
