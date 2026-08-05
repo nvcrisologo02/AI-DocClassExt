@@ -161,6 +161,77 @@ public class PersistirActivityTests : IDisposable
     }
 
     [Fact]
+    public async Task Run_DocumentoNuevo_PersisteSubmittedByEnElDocumento()
+    {
+        const string sha256 = "sha256_alta_con_solicitante";
+        var salida = BuildSalidaMinima(sha256);
+
+        DocumentoEntity? documentoCapturado = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) =>
+            {
+                documentoCapturado = d;
+                d.Id = 7;
+                return d;
+            });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput
+        {
+            Salida = salida,
+            SubmittedBy = "DocumentIA.Batch/nombre.apellido@sareb.es"
+        });
+
+        documentoCapturado.Should().NotBeNull();
+        documentoCapturado!.SubmittedBy.Should().Be("DocumentIA.Batch/nombre.apellido@sareb.es");
+    }
+
+    [Fact]
+    public async Task Run_DocumentoExistente_NoPisaElSubmittedByOriginal()
+    {
+        const string sha256 = "sha256_reproceso_conserva_solicitante";
+        var salida = BuildSalidaMinima(sha256);
+        var documentoExistente = new DocumentoEntity
+        {
+            Id = 9,
+            SHA256 = sha256,
+            SubmittedBy = "DocumentIA.Batch/primer.solicitante@sareb.es"
+        };
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync(documentoExistente);
+        _documentoRepoMock
+            .Setup(r => r.UpdateAsync(It.IsAny<DocumentoEntity>()))
+            .Returns(Task.CompletedTask);
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput
+        {
+            Salida = salida,
+            SubmittedBy = "DocumentIA.Batch.ClassificationLite/otro.usuario@sareb.es"
+        });
+
+        // El documento conserva quien lo trajo; el reenvio queda recogido en la ejecucion.
+        documentoExistente.SubmittedBy.Should().Be("DocumentIA.Batch/primer.solicitante@sareb.es");
+    }
+
+    [Fact]
     public async Task Run_DocumentoNuevo_LlamaEjecucionRepoAddAsync()
     {
         const string sha256 = "sha256_ejecucion";
