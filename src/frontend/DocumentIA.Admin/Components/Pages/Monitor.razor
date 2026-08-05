@@ -313,7 +313,10 @@
     // que es el unico sitio que toca _modalGuid.
     private void AbrirModal(string guid) => Navigation.NavigateTo($"/monitor/{guid}", replace: false);
 
-    private void CerrarModal() => Navigation.NavigateTo("/monitor");
+    // replace: true evita que el cierre deje entrada propia en el historial del
+    // navegador; sin esto, abrir y cerrar el modal hacia que el boton Atras lo
+    // volviera a abrir en vez de salir de /monitor (AB#99968).
+    private void CerrarModal() => Navigation.NavigateTo("/monitor", replace: true);
 
     // El catalogo del desplegable se carga una unica vez, con un filtro propio
     // que ignora tipologia, periodo y el resto de dimensiones. Si se recalculara

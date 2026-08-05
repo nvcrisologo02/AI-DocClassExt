@@ -1,6 +1,8 @@
-@* Presentacion del detalle de una ejecucion. La usan tanto la fila desplegable
-   del Monitor como la pagina /monitor/{guid}: existe una sola vez para que las
-   dos vistas no puedan divergir. *@
+@* Presentacion del detalle de una ejecucion, usada por la fila desplegable del
+   Monitor (MonitorTabla). La pagina propia /monitor/{guid} ya no existe: ese
+   guid abre en su lugar el modal de JSON (EjecucionJsonModal), que muestra un
+   detalle mas reducido y comparte con este componente el helper
+   MonitorFormato.ConCodigoYNombre en vez de duplicar la logica. *@
 
 <style>
     .detail-section-label {
@@ -324,19 +326,11 @@ else
 
     // ── Tipologia / familia con nombre de catalogo ─────────────────────────────
 
-    private string TipologiaConNombre() => ConCodigoYNombre(
+    private string TipologiaConNombre() => MonitorFormato.ConCodigoYNombre(
         Detalle?.Identificacion?.Tipologia, Detalle?.TipologiaNombreCatalogo);
 
-    private string FamiliaConNombre() => ConCodigoYNombre(
+    private string FamiliaConNombre() => MonitorFormato.ConCodigoYNombre(
         Detalle?.Identificacion?.TipologiaFamilia, Detalle?.TipologiaFamiliaNombreCatalogo);
-
-    // Si el codigo esta retirado del catalogo el nombre llega nulo: se muestra
-    // solo el codigo, sin inventar un nombre.
-    private static string ConCodigoYNombre(string? codigo, string? nombre)
-    {
-        if (string.IsNullOrWhiteSpace(codigo)) return "—";
-        return string.IsNullOrWhiteSpace(nombre) ? codigo : $"{codigo} — {nombre}";
-    }
 
     // ── Actividad / timeline ──────────────────────────────────────────────────
 

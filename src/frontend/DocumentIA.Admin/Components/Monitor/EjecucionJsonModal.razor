@@ -167,13 +167,8 @@
         }
     }
 
-    // Si el codigo esta retirado del catalogo el nombre llega nulo: se muestra
-    // solo el codigo, sin inventar un nombre (mismo criterio que EjecucionDetalle).
-    private string TipologiaTexto()
-    {
-        var codigo = Detalle?.Identificacion?.Tipologia;
-        var nombre = Detalle?.TipologiaNombreCatalogo;
-        if (string.IsNullOrWhiteSpace(codigo)) return "—";
-        return string.IsNullOrWhiteSpace(nombre) ? codigo : $"{codigo} — {nombre}";
-    }
+    // Composicion "codigo — nombre" compartida con EjecucionDetalle via
+    // MonitorFormato para que las dos vistas no puedan divergir.
+    private string TipologiaTexto() => MonitorFormato.ConCodigoYNombre(
+        Detalle?.Identificacion?.Tipologia, Detalle?.TipologiaNombreCatalogo);
 }

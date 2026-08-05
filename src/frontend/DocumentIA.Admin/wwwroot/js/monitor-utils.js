@@ -43,7 +43,9 @@ window.monitorUtils = {
             document.body.appendChild(anchor);
             anchor.click();
             document.body.removeChild(anchor);
-            URL.revokeObjectURL(url);
+            // Revocar en el mismo tick puede cortar la descarga en navegadores
+            // antiguos que todavia no han leido el blob; se retrasa un momento.
+            setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
             return true;
         } catch (error) {
             console.error('Error al descargar el JSON:', error);

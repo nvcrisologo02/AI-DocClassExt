@@ -275,6 +275,22 @@ public class SystemHealthDto
     public HealthComponentsDto Components { get; set; } = new();
 }
 
+// ─── Utilidades de formato compartidas ───────────────────────────────────────
+
+// Composicion "codigo — nombre" usada tanto por la fila desplegable del
+// Monitor (EjecucionDetalle) como por el modal de JSON (EjecucionJsonModal):
+// una sola implementacion para que las dos vistas no puedan divergir.
+public static class MonitorFormato
+{
+    // Si el codigo esta retirado del catalogo el nombre llega nulo: se muestra
+    // solo el codigo, sin inventar un nombre.
+    public static string ConCodigoYNombre(string? codigo, string? nombre)
+    {
+        if (string.IsNullOrWhiteSpace(codigo)) return "—";
+        return string.IsNullOrWhiteSpace(nombre) ? codigo : $"{codigo} — {nombre}";
+    }
+}
+
 // ─── Servicio ─────────────────────────────────────────────────────────────────
 
 public class MonitorService
