@@ -8,14 +8,17 @@
                     <th>Tipología</th>
                     <th>Flujo</th>
                     <th>Estado</th>
+                    <th class="text-end">Confianza</th>
                     <th class="text-end">Duración</th>
+                    <th class="text-center">Fallback</th>
+                    <th>GUID</th>
                     <th></th>
                 </tr>
             </thead>
             <tbody>
                 @if (Pagina is null || Pagina.Items.Count == 0)
                 {
-                    <tr><td colspan="7" class="text-center text-muted py-4">
+                    <tr><td colspan="10" class="text-center text-muted py-4">
                         No hay ejecuciones que cumplan el filtro seleccionado.
                     </td></tr>
                 }
@@ -29,7 +32,24 @@
                             <td>@(e.Tipologia ?? "—")</td>
                             <td>@e.TipoFlujo</td>
                             <td><span class="badge @ClaseEstado(e.EstadoFinal)">@e.EstadoFinal</span></td>
+                            <td class="text-end">
+                                @if (e.ConfianzaGlobal > 0)
+                                {
+                                    <span class="@ConfianzaClass(e.ConfianzaGlobal)">@e.ConfianzaGlobal.ToString("P0")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                            </td>
                             <td class="text-end text-nowrap">@FormatearDuracion(e.DuracionTotalMs)</td>
+                            <td class="text-center">
+                                @if (e.UseFallbackLLM)
+                                {
+                                    <span class="badge bg-warning text-dark">Fallback</span>
+                                }
+                            </td>
+                            <td class="small text-muted" style="font-family:monospace;font-size:0.7rem" title="@e.EjecucionGuid">@e.EjecucionGuid[..8]…</td>
                             <td class="text-end">
                                 <button class="btn btn-sm btn-outline-secondary"
                                         @onclick="() => DetalleSolicitado.InvokeAsync(e.EjecucionGuid)">
@@ -45,7 +65,7 @@
         </table>
     </div>
 
-    @if (Pagina is not null && Pagina.Total > Pagina.PageSize)
+    @if (Pagina is not null && Pagina.Total >= Pagina.PageSize)
     {
         <div class="card-footer d-flex justify-content-between align-items-center">
             <span class="text-muted small">
@@ -89,4 +109,12 @@
 
     private static string FormatearDuracion(int ms) =>
         ms >= 1000 ? $"{Math.Round(ms / 1000.0, 1)} s" : $"{ms} ms";
+
+    private static string ConfianzaClass(double c) => c switch
+    {
+        >= 0.7 => "text-success fw-semibold",
+        >= 0.5 => "text-warning fw-semibold",
+        > 0 => "text-danger fw-semibold",
+        _ => "text-muted"
+    };
 }
