@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -304,6 +305,11 @@ public class MonitorService
         {
             return await _httpClient.GetFromJsonAsync<EjecucionDetalleDto>(
                 $"management/ejecuciones/{Uri.EscapeDataString(guid)}/detalle", JsonOptions);
+        }
+        // 404 significa que la ejecucion no existe: no es un fallo de comunicacion, se distingue del resto.
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
         }
         catch (HttpRequestException ex)
         {
