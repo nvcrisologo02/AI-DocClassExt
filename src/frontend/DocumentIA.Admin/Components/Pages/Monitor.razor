@@ -241,9 +241,35 @@
 
     protected override async Task OnInitializedAsync()
     {
+        var tareaTipologias = CargarTipologiasAsync();
         await RecargarTodoAsync();
+        await tareaTipologias;
         StartTimer();
     }
+
+    // El catalogo del desplegable se carga una unica vez, con un filtro propio
+    // que ignora tipologia, periodo y el resto de dimensiones. Si se recalculara
+    // a partir de _agregados (que sí respeta el filtro activo), elegir una
+    // tipologia recortaria la propia consulta y el desplegable perderia el resto
+    // de opciones. Cargarlo aparte tambien evita repetir esta peticion en cada
+    // refresco, a diferencia de clonar el filtro activo con Tipologia = null.
+    private async Task CargarTipologiasAsync()
+    {
+        var catalogo = await MonitorService.GetAgregadosAsync(FiltroCatalogoTipologias());
+        if (catalogo is null) return;
+
+        _tipologias = catalogo.PorTipologia
+            .Select(g => g.Grupo)
+            .Where(g => !string.IsNullOrWhiteSpace(g) && g != "(sin tipología)")
+            .OrderBy(g => g)
+            .ToList();
+    }
+
+    private static MonitorFiltroDto FiltroCatalogoTipologias() => new()
+    {
+        Desde = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+        Hasta = DateTime.UtcNow.AddYears(1)
+    };
 
     // Al cambiar el filtro se recargan agregados y primera pagina. Al cambiar de
     // pagina solo se pide la pagina: los agregados no dependen de ella.
@@ -273,15 +299,6 @@
 
             _agregados = await tareaAgregados;
             _pagina = await tareaPagina;
-
-            if (_agregados is not null)
-            {
-                _tipologias = _agregados.PorTipologia
-                    .Select(g => g.Grupo)
-                    .Where(g => !string.IsNullOrWhiteSpace(g) && g != "(sin tipología)")
-                    .OrderBy(g => g)
-                    .ToList();
-            }
         }
         catch (InvalidOperationException ex)
         {
