@@ -206,6 +206,17 @@ namespace DocumentIA.Data.Repositories
                 }
             }
 
+            if (!string.IsNullOrWhiteSpace(filtro.SubmittedBy))
+            {
+                var submittedBy = filtro.SubmittedBy.Trim();
+                // SubmittedBy vive en Documentos, no en DocumentoEjecuciones; la navegacion
+                // y la columna pueden ser nulas (ejecuciones huerfanas o documentos sin
+                // trazabilidad de origen), de ahi el doble chequeo antes del Contains.
+                q = q.Where(e => e.Documento != null
+                    && e.Documento.SubmittedBy != null
+                    && e.Documento.SubmittedBy.Contains(submittedBy));
+            }
+
             return q;
         }
 

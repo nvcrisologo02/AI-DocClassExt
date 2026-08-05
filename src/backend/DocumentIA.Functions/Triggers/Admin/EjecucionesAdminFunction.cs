@@ -3,8 +3,10 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
+using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 
 namespace DocumentIA.Functions.Triggers.Admin;
@@ -17,13 +19,16 @@ public class EjecucionesAdminFunction
     };
 
     private readonly IDocumentoEjecucionRepository _ejecucionRepository;
+    private readonly DocumentIADbContext _dbContext;
     private readonly ILogger<EjecucionesAdminFunction> _logger;
 
     public EjecucionesAdminFunction(
         IDocumentoEjecucionRepository ejecucionRepository,
+        DocumentIADbContext dbContext,
         ILogger<EjecucionesAdminFunction> logger)
     {
         _ejecucionRepository = ejecucionRepository;
+        _dbContext = dbContext;
         _logger = logger;
     }
 
@@ -61,7 +66,8 @@ public class EjecucionesAdminFunction
             Tipologia = Valor("tipologia"),
             Estado = Valor("estado"),
             Flujo = Valor("flujo"),
-            Busqueda = Valor("q")
+            Busqueda = Valor("q"),
+            SubmittedBy = Valor("submittedby")
         };
     }
 
@@ -104,6 +110,7 @@ public class EjecucionesAdminFunction
             e.DuracionIntegracionMs,
             e.DuracionPersistenciaMs,
             NombreDocumento = e.Documento?.NombreArchivo,
+            SubmittedBy = e.Documento?.SubmittedBy,
             Actividades = ParseActivitySummaries(e.ActivityTimelineJson)
         }).ToList();
 
@@ -257,12 +264,20 @@ public class EjecucionesAdminFunction
             })
             .ToList();
 
+        var (tipologiaNombreCatalogo, tipologiaFamiliaNombreCatalogo) =
+            await ResolverNombresCatalogoAsync(ejecucion.Tipologia);
+
         var result = new
         {
             ejecucion.Id,
             ejecucion.EjecucionGuid,
             ejecucion.ModeloClasificacion,
             ejecucion.ClassificationOnly,
+            ejecucion.Tipologia,
+            TipologiaNombreCatalogo = tipologiaNombreCatalogo,
+            TipologiaFamiliaNombreCatalogo = tipologiaFamiliaNombreCatalogo,
+            // JSON original tal cual se almaceno, para el visor crudo en el detalle.
+            ContratoSalidaCompletoJson = ejecucion.ContratoSalidaCompletoJson,
             Identificacion = identificacion,
             Integridad = integridad,
             Resultado = resultado,
@@ -298,6 +313,37 @@ public class EjecucionesAdminFunction
         var response = req.CreateResponse(HttpStatusCode.OK);
         await response.WriteAsJsonAsync(agregados);
         return response;
+    }
+
+    /// <summary>
+    /// Resuelve el nombre de subtipo (CatalogoTdn2) y familia (CatalogoTdn1) a partir del
+    /// codigo de tipologia guardado en la ejecucion. Los codigos de ejecucion se persisten
+    /// en minusculas y con punto (ej "decl.08") mientras el catalogo usa mayusculas y guion
+    /// (ej "DECL-08"); hay que normalizar antes de comparar. Ejecuciones antiguas pueden
+    /// referenciar codigos ya retirados del catalogo: en ese caso se devuelve null sin fallar.
+    /// </summary>
+    private async Task<(string? NombreSubtipo, string? NombreFamilia)> ResolverNombresCatalogoAsync(string? codigoTipologia)
+    {
+        if (string.IsNullOrWhiteSpace(codigoTipologia))
+        {
+            return (null, null);
+        }
+
+        var codigoNormalizado = codigoTipologia.Trim().ToUpperInvariant().Replace('.', '-');
+
+        var subtipo = await _dbContext.CatalogoTdn2
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Codigo == codigoNormalizado);
+        if (subtipo is null)
+        {
+            return (null, null);
+        }
+
+        var familia = await _dbContext.CatalogoTdn1
+            .AsNoTracking()
+            .FirstOrDefaultAsync(x => x.Codigo == subtipo.CodigoTdn1);
+
+        return (subtipo.Nombre, familia?.Nombre);
     }
 
     private static string ToDisplayString(object? value) => value switch

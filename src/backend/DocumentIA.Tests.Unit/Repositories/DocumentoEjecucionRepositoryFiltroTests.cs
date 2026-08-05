@@ -162,6 +162,80 @@ public class DocumentoEjecucionRepositoryFiltroTests
     }
 
     [Fact]
+    public async Task GetPagedAsync_Should_FiltrarPorSubmittedByFragmento()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(10));
+        filtro.SubmittedBy = "integracion";
+
+        var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        total.Should().Be(4, "solo el documento 1 tiene 'batch-integracion' en SubmittedBy");
+        items.Should().OnlyContain(e => e.Documento!.SubmittedBy!.Contains("integracion"));
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_Should_NoRomperCuandoElDocumentoTieneSubmittedByNulo()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        // doc2 (ejecucion 3) tiene SubmittedBy nulo; filtrar no debe reventar
+        // ni devolverlo como falso positivo.
+        var filtro = Filtro(Base, Base.AddDays(10));
+        filtro.SubmittedBy = "compraventa";
+
+        Func<Task> act = () => repo.GetPagedAsync(filtro, 1, 25);
+
+        await act.Should().NotThrowAsync("un SubmittedBy nulo en el documento no debe reventar la consulta");
+        var (_, total) = await repo.GetPagedAsync(filtro, 1, 25);
+        total.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_Should_NoRomperCuandoLaEjecucionNoTieneDocumentoAsociado()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        // Ejecucion huerfana: DocumentoId que no existe en Documentos. Solo afecta a
+        // este contexto en memoria (CreateContext crea una base aislada por test), no
+        // altera los totales del resto de pruebas.
+        context.DocumentoEjecuciones.Add(
+            Ejecucion(6, "66666666-6666-6666-6666-666666666666", Base.AddDays(1), "NOTS", "OK", docId: 999, soloClasificacion: true));
+        context.SaveChanges();
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(10));
+        filtro.SubmittedBy = "integracion";
+
+        Func<Task> act = () => repo.GetPagedAsync(filtro, 1, 25);
+
+        await act.Should().NotThrowAsync("una ejecucion sin documento asociado no debe reventar el filtro por SubmittedBy");
+    }
+
+    [Fact]
+    public async Task GetAgregadosAsync_Should_RespetarElMismoFiltroQueElListadoConSubmittedBy()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(10));
+        filtro.SubmittedBy = "integracion";
+
+        var agregados = await repo.GetAgregadosAsync(filtro);
+        var (_, totalListado) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        agregados.TotalEjecuciones.Should().Be(totalListado,
+            "la cabecera de KPIs y la tabla deben describir el mismo conjunto tambien con SubmittedBy");
+        agregados.Serie.Sum(p => p.Total).Should().Be(totalListado);
+    }
+
+    [Fact]
     public async Task GetAgregadosAsync_Should_ContarPorCategoriaDeEstado()
     {
         await using var context = CreateContext();
@@ -260,8 +334,10 @@ public class DocumentoEjecucionRepositoryFiltroTests
 
     private static void Seed(DocumentIADbContext context)
     {
-        var doc1 = new DocumentoEntity { Id = 1, NombreArchivo = "nota-simple.pdf", SHA256 = "a" };
-        var doc2 = new DocumentoEntity { Id = 2, NombreArchivo = "escritura-compraventa.pdf", SHA256 = "b" };
+        // doc2 se deja con SubmittedBy nulo a proposito: cubre documentos sin
+        // trazabilidad de origen registrada (ejecuciones previas a AB#99966).
+        var doc1 = new DocumentoEntity { Id = 1, NombreArchivo = "nota-simple.pdf", SHA256 = "a", SubmittedBy = "batch-integracion" };
+        var doc2 = new DocumentoEntity { Id = 2, NombreArchivo = "escritura-compraventa.pdf", SHA256 = "b", SubmittedBy = null };
         context.Documentos.AddRange(doc1, doc2);
 
         context.DocumentoEjecuciones.AddRange(

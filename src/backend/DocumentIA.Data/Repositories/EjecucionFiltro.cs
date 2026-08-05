@@ -18,5 +18,7 @@ namespace DocumentIA.Data.Repositories
         public string? Flujo { get; set; }
         /// <summary>GUID exacto o fragmento del nombre de documento.</summary>
         public string? Busqueda { get; set; }
+        /// <summary>Fragmento de quien solicito la ejecucion (Documentos.SubmittedBy).</summary>
+        public string? SubmittedBy { get; set; }
     }
 }
