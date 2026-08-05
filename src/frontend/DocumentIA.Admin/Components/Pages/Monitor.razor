@@ -1,6 +1,7 @@
 @page "/monitor"
 @inject MonitorService MonitorService
 @rendermode InteractiveServer
+@implements IDisposable
 
 <PageTitle>Monitor de Ejecuciones</PageTitle>
 
@@ -234,8 +235,15 @@
     private string? _error;
     private SystemHealthDto? _systemHealth;
     private bool _loadingSystemHealth;
+    private Timer? _timer;
+    private bool _disposed;
+    private static readonly TimeSpan IntervaloAutoRefresco = TimeSpan.FromSeconds(30);
 
-    protected override async Task OnInitializedAsync() => await RecargarTodoAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await RecargarTodoAsync();
+        StartTimer();
+    }
 
     // Al cambiar el filtro se recargan agregados y primera pagina. Al cambiar de
     // pagina solo se pide la pagina: los agregados no dependen de ella.
@@ -313,6 +321,47 @@
         {
             _loadingSystemHealth = false;
         }
+    }
+
+    private void StartTimer()
+    {
+        _timer = new Timer(OnAutoRefrescoTick, null, IntervaloAutoRefresco, IntervaloAutoRefresco);
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    // El callback del Timer corre en un hilo del pool, fuera del contexto de
+    // sincronizacion de Blazor: InvokeAsync lo devuelve a ese contexto antes de
+    // tocar el estado del componente. _disposed evita reentrar tras el Dispose
+    // (navegacion fuera de la pagina) y ObjectDisposedException se captura porque
+    // en ese caso no queda nada que actualizar; dejarla sin capturar tumbaria el
+    // circuito completo, no solo este refresco. _cargando evita solapar este
+    // refresco automatico con otro ya en curso (manual o automatico).
+    private void OnAutoRefrescoTick(object? state)
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(async () =>
+        {
+            if (_disposed || _cargando) return;
+            try
+            {
+                await RecargarTodoAsync();
+                StateHasChanged();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        StopTimer();
     }
 
     private async Task OnDetalleSolicitadoAsync(string guid)
