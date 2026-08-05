@@ -56,8 +56,9 @@
                                         @onclick="() => FilaAlternada.InvokeAsync(e.EjecucionGuid)">
                                     @(expandida ? "Ocultar" : "Detalle")
                                 </button>
-                                <a class="btn btn-sm btn-outline-secondary" href="/monitor/@e.EjecucionGuid"
-                                   title="Abrir en su propia página">↗</a>
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        title="Abrir detalle en modal"
+                                        @onclick="() => AbrirDetalle.InvokeAsync(e.EjecucionGuid)">↗</button>
                             </td>
                         </tr>
                         @if (expandida)
@@ -116,6 +117,9 @@
     [Parameter] public IReadOnlyDictionary<string, EjecucionDetalleDto> Detalles { get; set; } = new Dictionary<string, EjecucionDetalleDto>();
     [Parameter] public IReadOnlySet<string> CargandoDetalle { get; set; } = new HashSet<string>();
     [Parameter] public EventCallback<string> FilaAlternada { get; set; }
+    // Abre el modal de detalle JSON en Monitor.razor; el componente no conoce
+    // NavigationManager, solo delega el GUID hacia arriba (igual que FilaAlternada).
+    [Parameter] public EventCallback<string> AbrirDetalle { get; set; }
 
     // Con Total == 0 la condicion del pie (Total > PageSize) es falsa y el pie
     // no se pinta, asi que no hace falta cubrir la division por cero aqui; el

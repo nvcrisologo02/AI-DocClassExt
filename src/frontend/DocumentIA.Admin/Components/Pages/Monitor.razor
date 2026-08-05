@@ -1,5 +1,7 @@
 @page "/monitor"
+@page "/monitor/{Guid}"
 @inject MonitorService MonitorService
+@inject NavigationManager Navigation
 @rendermode InteractiveServer
 @implements IDisposable
 
@@ -213,9 +215,24 @@
 <MonitorTabla Pagina="_pagina" Cargando="_cargando"
               PaginaCambiada="OnPaginaCambiada"
               Expandidos="_expandidos" Detalles="_detalles" CargandoDetalle="_cargandoDetalle"
-              FilaAlternada="OnFilaAlternadaAsync" />
+              FilaAlternada="OnFilaAlternadaAsync" AbrirDetalle="AbrirModal" />
+
+@if (_modalGuid is not null)
+{
+    <EjecucionJsonModal Guid="_modalGuid"
+                         Detalle="_detalles.GetValueOrDefault(_modalGuid)"
+                         Cargando="_modalCargando"
+                         NoEncontrado="_guidsNoEncontrados.Contains(_modalGuid)"
+                         ErrorMensaje="_modalError"
+                         OnCerrar="CerrarModal" />
+}
 
 @code {
+    // Ruta opcional /monitor/{Guid}: mantiene el detalle enlazable (AB#99968)
+    // sin la pagina propia que existia antes; ver AbrirModal/CerrarModal y
+    // OnParametersSetAsync mas abajo.
+    [Parameter] public string? Guid { get; set; }
+
     private MonitorFiltroDto _filtro = new();
     private PagedResultDto<EjecucionResumenDto>? _pagina;
     private DashboardAgregadosDto? _agregados;
@@ -235,6 +252,14 @@
     private bool _disposed;
     private int _intervaloAutoRefrescoSegundos = 30;
 
+    // Estado del modal de detalle JSON. _modalGuid nulo significa cerrado.
+    // Comparte cache de detalle (_detalles) con la fila desplegable: si el
+    // usuario ya expandio la fila, abrir el modal no repite la peticion.
+    private string? _modalGuid;
+    private bool _modalCargando;
+    private string? _modalError;
+    private readonly HashSet<string> _guidsNoEncontrados = [];
+
     protected override async Task OnInitializedAsync()
     {
         var tareaTipologias = CargarTipologiasAsync();
@@ -242,6 +267,53 @@
         await tareaTipologias;
         StartTimer();
     }
+
+    // Se ejecuta tras OnInitializedAsync en la primera carga y de nuevo cada
+    // vez que AbrirModal/CerrarModal cambian la URL: al navegar entre
+    // /monitor y /monitor/{guid} el router reutiliza esta misma instancia de
+    // componente (mismo tipo de pagina en las dos rutas), asi que
+    // OnInitializedAsync no se repite y todo el ciclo de apertura/cierre del
+    // modal vive aqui.
+    protected override async Task OnParametersSetAsync()
+    {
+        var guidRuta = string.IsNullOrWhiteSpace(Guid) ? null : Guid;
+        if (guidRuta == _modalGuid) return;
+
+        _modalGuid = guidRuta;
+        _modalError = null;
+        if (guidRuta is null) return;
+
+        if (_detalles.ContainsKey(guidRuta) || _guidsNoEncontrados.Contains(guidRuta)) return;
+
+        _modalCargando = true;
+        try
+        {
+            var detalle = await MonitorService.GetEjecucionDetalleAsync(guidRuta);
+            if (detalle is not null)
+            {
+                _detalles[guidRuta] = detalle;
+            }
+            else
+            {
+                _guidsNoEncontrados.Add(guidRuta);
+            }
+        }
+        catch (InvalidOperationException ex)
+        {
+            _modalError = ex.Message;
+        }
+        finally
+        {
+            _modalCargando = false;
+        }
+    }
+
+    // Navegar en vez de asignar el estado directamente es lo que mantiene la
+    // URL sincronizada (AB#99968): el cambio de ruta dispara OnParametersSetAsync,
+    // que es el unico sitio que toca _modalGuid.
+    private void AbrirModal(string guid) => Navigation.NavigateTo($"/monitor/{guid}", replace: false);
+
+    private void CerrarModal() => Navigation.NavigateTo("/monitor");
 
     // El catalogo del desplegable se carga una unica vez, con un filtro propio
     // que ignora tipologia, periodo y el resto de dimensiones. Si se recalculara
