@@ -219,9 +219,10 @@ Contenido del documento:
             // When: ResolveResumenPrompt interpolates the template
             var result = InvokeResolveResumenPrompt(input, contextoTexto);
 
-            // Then: The {contenido} placeholder should be replaced with actual content
+            // Then: {contenido} se resuelve, pero con la referencia al bloque CONTENIDO DEL
+            // DOCUMENTO del prompt de Fase 1, no con el documento otra vez (AB#100006)
             result.Should().NotBeNull();
-            result!.UserPromptTemplate.Should().Contain(contextoTexto);
+            result!.UserPromptTemplate.Should().Contain(GptClasificarDataProvider.ResumenContenidoReferencia);
             result.UserPromptTemplate.Should().NotContain("{contenido}");
         }
 
@@ -329,7 +330,72 @@ Contenido del documento:
             result.MaxTokens.Should().Be(999);
             result.Temperature.Should().Be(0.25);
             result.UserPromptTemplate.Should().Contain("Plantilla tipologia");
-            result.UserPromptTemplate.Should().Contain("CONTENIDO_DOC");
+            // AB#100006: también en el override por tipología, {contenido} se interpola con la
+            // referencia al bloque ya enviado, no con el documento duplicado.
+            result.UserPromptTemplate.Should().NotContain("CONTENIDO_DOC");
+            result.UserPromptTemplate.Should().Contain(GptClasificarDataProvider.ResumenContenidoReferencia);
+        }
+
+        // ========== Documento duplicado en el prompt de Fase 1 (AB#100006) ==========
+
+        [Fact]
+        public void ResolveResumenPrompt_NoDuplicaElDocumento_InterpolaContenidoConReferenciaAlBloquePrincipal()
+        {
+            // Given: GenerarResumenPorDefecto=true y un template de resumen con {contenido}.
+            // El documento ya viaja en el bloque CONTENIDO DEL DOCUMENTO del user prompt de
+            // Fase 1 (placeholder {DOCUMENT_TEXT}), así que la interpolación del prompt de
+            // resumen no debe volver a incluirlo: duplicarlo dobla los tokens de entrada.
+            var input = CreateClasificacionInput(generarResumenPorDefecto: true);
+            var contextoTexto = "CONTENIDO_ACTUAL_DEL_DOCUMENTO";
+
+            // When
+            var result = InvokeResolveResumenPrompt(input, contextoTexto);
+
+            // Then: {contenido} se sustituye por una referencia al bloque ya enviado
+            result.Should().NotBeNull();
+            result!.UserPromptTemplate.Should().NotContain(contextoTexto);
+            result.UserPromptTemplate.Should().NotContain("{contenido}");
+            result.UserPromptTemplate.Should().Contain("ya está incluido");
+        }
+
+        [Fact]
+        public void ResolveResumenPrompt_CuandoTemplateNoTienePlaceholderContenido_NoAnadeReferencia()
+        {
+            // Given: un template de resumen sin {contenido}; no hay nada que interpolar
+            var defaultsSinPlaceholder = Options.Create(new PromptDefaultsSettings
+            {
+                ModelKey = "default.gpt4o-mini",
+                SystemPrompt = "Sistema...",
+                UserPromptTemplate = "Genera un resumen ejecutivo del documento en 500 caracteres.",
+                MaxTokens = 1600,
+                Temperature = 0.0,
+                ContentMode = "markdown"
+            });
+
+            var provider = new GptClasificarDataProvider(
+                new ClassificationModelRegistryLoader(_memoryCache, _scopeFactoryMock.Object),
+                new ClassificationTipologiaPromptBuilder(
+                    _memoryCache,
+                    _scopeFactoryMock.Object,
+                    new Mock<ILogger<ClassificationTipologiaPromptBuilder>>().Object),
+                _tipologiaConfigLoader,
+                _scopeFactoryMock.Object,
+                _routingSettings,
+                defaultsSinPlaceholder,
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
+                _promptTraceTelemetryMock,
+                _resilienceMock.Object,
+                _loggerMock.Object);
+
+            var input = CreateClasificacionInput(generarResumenPorDefecto: true);
+
+            // When
+            var result = InvokeResolveResumenPromptOnProvider(provider, input, "CONTENIDO_DOC");
+
+            // Then: el template queda tal cual, sin documento ni referencia inyectados
+            result.Should().NotBeNull();
+            result!.UserPromptTemplate.Should().Be("Genera un resumen ejecutivo del documento en 500 caracteres.");
         }
 
         // ========== Phase 2 sin TDN2 parseable → virtual TDN1 (AB#99891) ==========
@@ -767,24 +833,22 @@ Contenido del documento:
 
         private PromptConfig? InvokeResolveResumenPrompt(ClasificacionInput input, string contextoTexto)
         {
-            // Reflection-based invocation of private ResolveResumenPrompt method
-            var method = typeof(GptClasificarDataProvider)
-                .GetMethod("ResolveResumenPrompt", 
-                    System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            
-            return (PromptConfig?)method?.Invoke(_provider, new object[] { input, contextoTexto });
+            // Reflection-based invocation of private ResolveResumenPrompt method.
+            // contextoTexto se conserva en la firma del helper para documentar en cada test
+            // qué documento estaría en juego, aunque desde AB#100006 el método ya no lo recibe.
+            return InvokeResolveResumenPromptOnProvider(_provider, input, contextoTexto);
         }
 
         private PromptConfig? InvokeResolveResumenPromptOnProvider(
-            GptClasificarDataProvider provider, 
-            ClasificacionInput input, 
+            GptClasificarDataProvider provider,
+            ClasificacionInput input,
             string contextoTexto)
         {
             var method = typeof(GptClasificarDataProvider)
                 .GetMethod("ResolveResumenPrompt",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            
-            return (PromptConfig?)method?.Invoke(provider, new object[] { input, contextoTexto });
+
+            return (PromptConfig?)method?.Invoke(provider, new object[] { input });
         }
     }
 }
