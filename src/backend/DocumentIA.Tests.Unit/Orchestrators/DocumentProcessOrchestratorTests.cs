@@ -717,7 +717,7 @@ public class DocumentProcessOrchestratorTests
         context.GetLastActivityInput<object>("ValidarActivity").Should().BeNull();
         context.GetLastActivityInput<object>("ObtenerActivoActivity").Should().BeNull();
         context.GetLastActivityInput<object>("IntegrarActivity").Should().BeNull();
-        context.GetLastActivityInput<ContratoSalida>("PersistirActivity").Should().NotBeNull();
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity").Should().NotBeNull();
     }
 
     [Theory]
@@ -1375,7 +1375,7 @@ public class DocumentProcessOrchestratorTests
         salida.Resultado.Estado.Should().Be("OK");
         context.GetActivityCallCount("ExtraerActivity").Should().Be(1);
         context.GetActivityCallCount("ValidarActivity").Should().Be(1);
-        context.GetLastActivityInput<ContratoSalida>("PersistirActivity").Should().NotBeNull();
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity").Should().NotBeNull();
     }
 
     [Fact]

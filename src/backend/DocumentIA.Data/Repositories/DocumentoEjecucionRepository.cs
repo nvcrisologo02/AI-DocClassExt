@@ -63,10 +63,9 @@ namespace DocumentIA.Data.Repositories
                 .ToListAsync();
         }
 
-        public async Task<EjecucionAgregadosResult> GetAgregadosAsync(int dias = 30)
+        public async Task<EjecucionAgregadosResult> GetAgregadosAsync(EjecucionFiltro filtro)
         {
-            var desde = DateTime.UtcNow.AddDays(-dias);
-            var q = _context.DocumentoEjecuciones.Where(e => e.FechaEjecucion >= desde);
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.Include(e => e.Documento), filtro);
 
             var total = await q.CountAsync();
 
@@ -75,9 +74,9 @@ namespace DocumentIA.Data.Repositories
 
             if (total > 0)
             {
-                ok        = await q.CountAsync(e => e.EstadoFinal == "OK" || e.EstadoFinal == "Completado" || e.EstadoFinal == "Completed");
-                revision  = await q.CountAsync(e => e.EstadoFinal == "REVISION" || e.EstadoFinal == "Revision");
-                error     = await q.CountAsync(e => e.EstadoFinal == "Error" || e.EstadoFinal == "Fallido" || e.EstadoFinal == "ERROR");
+                ok        = await q.CountAsync(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal));
+                revision  = await q.CountAsync(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal));
+                error     = await q.CountAsync(e => EstadoEjecucion.Error.Contains(e.EstadoFinal));
                 fallbacks = await q.CountAsync(e => e.UseFallbackLLM);
                 confianzaMedia = await q.AverageAsync(e => e.ConfianzaGlobal);
                 duracionMedia  = await q.AverageAsync(e => (double)e.DuracionTotalMs);
@@ -89,9 +88,9 @@ namespace DocumentIA.Data.Repositories
                 {
                     Grupo          = g.Key,
                     Total          = g.Count(),
-                    Ok             = g.Count(e => e.EstadoFinal == "OK" || e.EstadoFinal == "Completado" || e.EstadoFinal == "Completed"),
-                    Revision       = g.Count(e => e.EstadoFinal == "REVISION" || e.EstadoFinal == "Revision"),
-                    Error          = g.Count(e => e.EstadoFinal == "Error" || e.EstadoFinal == "Fallido" || e.EstadoFinal == "ERROR"),
+                    Ok             = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision       = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error          = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
                     Fallbacks      = g.Count(e => e.UseFallbackLLM),
                     ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
@@ -105,9 +104,9 @@ namespace DocumentIA.Data.Repositories
                 {
                     Grupo          = g.Key,
                     Total          = g.Count(),
-                    Ok             = g.Count(e => e.EstadoFinal == "OK" || e.EstadoFinal == "Completado" || e.EstadoFinal == "Completed"),
-                    Revision       = g.Count(e => e.EstadoFinal == "REVISION" || e.EstadoFinal == "Revision"),
-                    Error          = g.Count(e => e.EstadoFinal == "Error" || e.EstadoFinal == "Fallido" || e.EstadoFinal == "ERROR"),
+                    Ok             = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision       = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error          = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
                     Fallbacks      = g.Count(e => e.UseFallbackLLM),
                     ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
@@ -115,10 +114,36 @@ namespace DocumentIA.Data.Repositories
                 .OrderByDescending(g => g.Total)
                 .ToListAsync();
 
+            var porDia = await q
+                .GroupBy(e => e.FechaEjecucion.Date)
+                .Select(g => new SeriePunto
+                {
+                    Fecha     = g.Key,
+                    Total     = g.Count(),
+                    Ok        = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision  = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error     = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                    Fallbacks = g.Count(e => e.UseFallbackLLM)
+                })
+                .ToListAsync();
+
+            // Los dias sin ejecuciones deben aparecer a cero: si se omitieran, el
+            // grafico uniria dos dias no consecutivos con una linea recta y daria a
+            // entender que hubo actividad intermedia.
+            var porDiaIndexado = porDia.ToDictionary(p => p.Fecha.Date);
+            var serie = new List<SeriePunto>();
+            var ultimoDia = filtro.Hasta.AddTicks(-1).Date;
+            for (var dia = filtro.Desde.Date; dia <= ultimoDia; dia = dia.AddDays(1))
+            {
+                serie.Add(porDiaIndexado.TryGetValue(dia, out var punto)
+                    ? punto
+                    : new SeriePunto { Fecha = dia });
+            }
+
             return new EjecucionAgregadosResult
             {
                 TotalEjecuciones  = total,
-                PeriodoDias       = dias,
+                PeriodoDias       = (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays),
                 Ok                = ok,
                 Revision          = revision,
                 Error             = error,
@@ -126,8 +151,91 @@ namespace DocumentIA.Data.Repositories
                 ConfianzaGlobalMedia = confianzaMedia,
                 DuracionMediaMs   = duracionMedia,
                 PorTipologia      = byTipologia,
-                PorModelo         = byModelo
+                PorModelo         = byModelo,
+                Serie             = serie
             };
+        }
+
+        private static IQueryable<DocumentoEjecucionEntity> AplicarFiltro(
+            IQueryable<DocumentoEjecucionEntity> q, EjecucionFiltro filtro)
+        {
+            q = q.Where(e => e.FechaEjecucion >= filtro.Desde && e.FechaEjecucion < filtro.Hasta);
+
+            if (!string.IsNullOrWhiteSpace(filtro.Tipologia))
+            {
+                q = q.Where(e => e.Tipologia == filtro.Tipologia);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtro.Estado))
+            {
+                var estado = filtro.Estado.Trim().ToUpperInvariant();
+                if (estado == "OK")
+                {
+                    q = q.Where(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal));
+                }
+                else if (estado == "REVISION")
+                {
+                    q = q.Where(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal));
+                }
+                else if (estado == "ERROR")
+                {
+                    q = q.Where(e => EstadoEjecucion.Error.Contains(e.EstadoFinal));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtro.Flujo))
+            {
+                var soloClasificacion = filtro.Flujo.Equals("Clasificacion", StringComparison.OrdinalIgnoreCase);
+                q = q.Where(e => e.ClassificationOnly == soloClasificacion);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtro.Busqueda))
+            {
+                var busqueda = filtro.Busqueda.Trim();
+                // Guid.TryParse acepta formatos sin guiones o con llaves; comparar la
+                // forma normalizada evita que un GUID valido pero no canonico caiga
+                // en cero resultados en vez de en la busqueda por nombre.
+                if (Guid.TryParse(busqueda, out var guid))
+                {
+                    var guidNormalizado = guid.ToString();
+                    q = q.Where(e => e.EjecucionGuid == guidNormalizado);
+                }
+                else
+                {
+                    q = q.Where(e => e.Documento != null && e.Documento.NombreArchivo.Contains(busqueda));
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtro.SubmittedBy))
+            {
+                var submittedBy = filtro.SubmittedBy.Trim();
+                // SubmittedBy propio de la ejecucion tiene prioridad (el mismo documento
+                // deduplicado puede reprocesarse desde otro origen); si la ejecucion no lo
+                // informa, cae al SubmittedBy original del documento. El "??" sobre la
+                // navegacion anulable se traduce a COALESCE por EF Core (LEFT JOIN con
+                // columna a NULL cuando la ejecucion es huerfana).
+                q = q.Where(e => (e.SubmittedBy ?? e.Documento.SubmittedBy) != null
+                    && (e.SubmittedBy ?? e.Documento.SubmittedBy)!.Contains(submittedBy));
+            }
+
+            return q;
+        }
+
+        public async Task<(IReadOnlyList<DocumentoEjecucionEntity> Items, int Total)> GetPagedAsync(
+            EjecucionFiltro filtro, int page, int pageSize)
+        {
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.Include(e => e.Documento), filtro);
+
+            var total = await q.CountAsync();
+
+            var items = await q
+                .OrderByDescending(e => e.FechaEjecucion)
+                .ThenByDescending(e => e.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync();
+
+            return (items, total);
         }
     }
 }

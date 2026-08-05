@@ -1,0 +1,4 @@
+# Librerias de terceros servidas en local (vendored): se guardan byte a byte.
+# Sin esto Git normaliza los saltos de linea y el contenido deja de coincidir
+# con el hash SRI publicado por el origen, impidiendo verificar su integridad.
+src/frontend/DocumentIA.Admin/wwwroot/lib/** -text

@@ -1,0 +1,96 @@
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+<div class="card mb-3"><div class="card-body">
+    <h6 class="text-muted mb-3">Evolución diaria</h6>
+    <div id="@_elementId" style="min-height: 260px;"></div>
+</div></div>
+
+@code {
+    [Parameter] public List<SeriePuntoDto> Serie { get; set; } = [];
+
+    private readonly string _elementId = $"gr-{Guid.NewGuid():N}";
+    private bool _creado;
+    private string? _huellaRenderizada;
+
+    // El padre puede volver a renderizar sin que la serie haya cambiado (por
+    // ejemplo el auto-refresh del Monitor); la huella evita repetir la
+    // llamada a JS cuando los datos pintados ya son los mismos.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var huella = CalcularHuella();
+        if (huella == _huellaRenderizada)
+        {
+            return;
+        }
+        _huellaRenderizada = huella;
+
+        if (Serie.Count == 0)
+        {
+            if (_creado)
+            {
+                await Destruir();
+            }
+            return;
+        }
+
+        var categorias = Serie.Select(p => p.Fecha.ToString("dd/MM")).ToArray();
+        var series = new object[]
+        {
+            new { name = "Total",     data = Serie.Select(p => p.Total).ToArray() },
+            new { name = "Con error", data = Serie.Select(p => p.Error).ToArray() }
+        };
+
+        if (!_creado)
+        {
+            var opciones = new
+            {
+                chart = new { type = "area", height = 260, toolbar = new { show = false }, animations = new { enabled = false } },
+                stroke = new { curve = "smooth", width = 2 },
+                dataLabels = new { enabled = false },
+                colors = new[] { "#0d6efd", "#dc3545" },
+                fill = new { type = "gradient", gradient = new { opacityFrom = 0.3, opacityTo = 0.05 } },
+                xaxis = new { categories = categorias },
+                legend = new { position = "top", horizontalAlign = "right" },
+                series
+            };
+            _creado = await JS.InvokeAsync<bool>("documentIaCharts.crear", _elementId, opciones);
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("documentIaCharts.actualizar", _elementId, series, categorias);
+        }
+    }
+
+    private string CalcularHuella() =>
+        string.Join('|', Serie.Select(p => $"{p.Fecha:yyyyMMdd}:{p.Total}:{p.Error}"));
+
+    // En Blazor Server el componente puede desaparecer sin recargar la pagina
+    // (filtro sin resultados, navegacion) o el circuito puede haberse cerrado
+    // ya; en ambos casos hay que evitar dejar la instancia de JS colgando o
+    // el grafico visible con datos obsoletos.
+    private async Task Destruir()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("documentIaCharts.destruir", _elementId);
+        }
+        catch (JSDisconnectedException)
+        {
+            // El circuito ya se cerro: no hay nada que destruir en el navegador.
+        }
+        finally
+        {
+            _creado = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (!_creado)
+        {
+            return;
+        }
+        await Destruir();
+    }
+}

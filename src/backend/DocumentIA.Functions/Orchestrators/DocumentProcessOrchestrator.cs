@@ -123,6 +123,12 @@ public class DocumentProcessOrchestrator
         salida.DetalleEjecucion.InstanceId = context.InstanceId;
         salida.DetalleEjecucion.OperationId = entrada.Trazabilidad.OperationId;
 
+        // Solicitante de esta ejecucion concreta; no forma parte del contrato de salida,
+        // viaja solo en el input interno de PersistirActivity.
+        var submittedByEjecucion = string.IsNullOrWhiteSpace(entrada.Trazabilidad.SubmittedBy)
+            ? null
+            : entrada.Trazabilidad.SubmittedBy;
+
         var entradaPorObjectIdGdc = !string.IsNullOrWhiteSpace(entrada.Documento.ObjectIdGDC);
         var actividadesNegocio = new List<string>();
         if (entradaPorObjectIdGdc)
@@ -1076,7 +1082,7 @@ public class DocumentProcessOrchestrator
                         "Persistir",
                         () => context.CallActivityAsync(
                             "PersistirActivity",
-                            salida));
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
                     var mensajeFinal = esFase2SinTdn2Parseable
                         ? $"Tipología parcial TDN1: '{tipologiaParcial}' sin TDN2 parseable en Phase 2"
@@ -1490,7 +1496,7 @@ public class DocumentProcessOrchestrator
                     "Persistir",
                     () => context.CallActivityAsync(
                         "PersistirActivity",
-                        salida));
+                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
                 FinalizarSeguimiento("Completed", "ClassificationOnly completado");
                 return salida;
@@ -1571,7 +1577,7 @@ public class DocumentProcessOrchestrator
                     "Persistir",
                     () => context.CallActivityAsync(
                         "PersistirActivity",
-                        salida));
+                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
                 FinalizarSeguimiento("Completed", mensajePaginasExcedidas);
                 return salida;
@@ -2115,7 +2121,7 @@ public class DocumentProcessOrchestrator
                 "Persistir",
                 () => context.CallActivityAsync(
                     "PersistirActivity",
-                    salida));
+                    new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
             FinalizarSeguimiento("Completed");
         }

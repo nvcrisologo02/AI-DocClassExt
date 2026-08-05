@@ -1,0 +1,141 @@
+@implements IDisposable
+
+<div class="card mb-3"><div class="card-body">
+    <div class="row g-2 align-items-end">
+        <div class="col-12 col-lg-3">
+            <label class="form-label small text-muted mb-1">Rango</label>
+            <select class="form-select" value="@_rangoSeleccionado" @onchange="OnRangoCambiado">
+                <option value="1">Últimas 24 horas</option>
+                <option value="7">Últimos 7 días</option>
+                <option value="30">Últimos 30 días</option>
+                <option value="90">Últimos 90 días</option>
+            </select>
+        </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small text-muted mb-1">Tipología</label>
+            <select class="form-select" value="@Filtro.Tipologia" @onchange="OnTipologiaCambiada">
+                <option value="">Todas</option>
+                @foreach (var t in Tipologias)
+                {
+                    <option value="@t">@t</option>
+                }
+            </select>
+        </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small text-muted mb-1">Estado</label>
+            <select class="form-select" value="@Filtro.Estado" @onchange="OnEstadoCambiado">
+                <option value="">Todos</option>
+                <option value="OK">Correctas</option>
+                <option value="REVISION">En revisión</option>
+                <option value="ERROR">Con error</option>
+            </select>
+        </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small text-muted mb-1">Flujo</label>
+            <select class="form-select" value="@Filtro.Flujo" @onchange="OnFlujoCambiado">
+                <option value="">Todos</option>
+                <option value="Clasificacion">Clasificación</option>
+                <option value="Completo">Completo</option>
+            </select>
+        </div>
+        <div class="col-12 col-lg-3">
+            <label class="form-label small text-muted mb-1">Buscar</label>
+            <input class="form-control" placeholder="GUID exacto o nombre de documento"
+                   value="@Filtro.Busqueda" @oninput="OnBusquedaCambiada" />
+        </div>
+        <div class="col-12 col-lg-3">
+            <label class="form-label small text-muted mb-1">Solicitado por</label>
+            <input class="form-control" placeholder="Fragmento del solicitante"
+                   value="@Filtro.SubmittedBy" @oninput="OnSolicitanteCambiado" />
+        </div>
+    </div>
+</div></div>
+
+@code {
+    [Parameter, EditorRequired] public MonitorFiltroDto Filtro { get; set; } = new();
+    [Parameter] public IReadOnlyList<string> Tipologias { get; set; } = [];
+    [Parameter] public EventCallback<MonitorFiltroDto> FiltroCambiado { get; set; }
+
+    private int _rangoSeleccionado = 7;
+    // Cada campo con retardo tiene su propio Timer: compartir uno solo entre
+    // busqueda y solicitante haria que escribir en uno cancelara el retardo
+    // pendiente del otro.
+    private Timer? _debounceBusqueda;
+    private Timer? _debounceSolicitante;
+    private bool _disposed;
+
+    private async Task OnRangoCambiado(ChangeEventArgs e)
+    {
+        _rangoSeleccionado = int.TryParse(e.Value?.ToString(), out var d) ? d : 7;
+        var nuevo = Filtro.Clonar();
+        nuevo.Hasta = DateTime.UtcNow;
+        nuevo.Desde = nuevo.Hasta.AddDays(-_rangoSeleccionado);
+        await FiltroCambiado.InvokeAsync(nuevo);
+    }
+
+    private async Task OnTipologiaCambiada(ChangeEventArgs e) => await Emitir(f => f.Tipologia = Texto(e));
+    private async Task OnEstadoCambiado(ChangeEventArgs e) => await Emitir(f => f.Estado = Texto(e));
+    private async Task OnFlujoCambiado(ChangeEventArgs e) => await Emitir(f => f.Flujo = Texto(e));
+
+    // La busqueda se retrasa para no lanzar una consulta por pulsacion. El
+    // callback del Timer corre en un hilo del pool, fuera del contexto de
+    // sincronizacion de Blazor: InvokeAsync lo devuelve a ese contexto antes
+    // de tocar el estado del componente. Si el componente ya se elimino
+    // (navegacion fuera de la pagina) mientras el retardo estaba pendiente,
+    // InvokeAsync puede fallar; se ignora porque no queda nada que actualizar
+    // y una excepcion sin capturar aqui (metodo "async void" del Timer)
+    // terminaria el circuito completo, no solo esta actualizacion.
+    private void OnBusquedaCambiada(ChangeEventArgs e)
+    {
+        var texto = Texto(e);
+        _debounceBusqueda?.Dispose();
+        _debounceBusqueda = new Timer(async _ =>
+        {
+            if (_disposed) return;
+            try
+            {
+                await InvokeAsync(async () => await Emitir(f => f.Busqueda = texto));
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private void OnSolicitanteCambiado(ChangeEventArgs e)
+    {
+        var texto = Texto(e);
+        _debounceSolicitante?.Dispose();
+        _debounceSolicitante = new Timer(async _ =>
+        {
+            if (_disposed) return;
+            try
+            {
+                await InvokeAsync(async () => await Emitir(f => f.SubmittedBy = texto));
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private async Task Emitir(Action<MonitorFiltroDto> cambio)
+    {
+        var nuevo = Filtro.Clonar();
+        cambio(nuevo);
+        await FiltroCambiado.InvokeAsync(nuevo);
+    }
+
+    private static string? Texto(ChangeEventArgs e)
+    {
+        var v = e.Value?.ToString();
+        return string.IsNullOrWhiteSpace(v) ? null : v;
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _debounceBusqueda?.Dispose();
+        _debounceSolicitante?.Dispose();
+    }
+}
