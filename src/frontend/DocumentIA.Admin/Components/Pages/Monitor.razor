@@ -7,9 +7,17 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h1 class="h4 mb-0">Monitor de Ejecuciones</h1>
-    <button class="btn btn-sm btn-outline-secondary" @onclick="RecargarTodoAsync" disabled="@_cargando">
-        Actualizar
-    </button>
+    <div class="d-flex align-items-center gap-2">
+        <label class="text-muted small mb-0">Auto-actualizar</label>
+        <select class="form-select form-select-sm" style="width:auto" value="@_intervaloAutoRefrescoSegundos" @onchange="OnIntervaloAutoRefrescoCambiado">
+            <option value="0">Off</option>
+            <option value="30">30 s</option>
+            <option value="60">60 s</option>
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="RecargarTodoAsync" disabled="@_cargando">
+            Actualizar
+        </button>
+    </div>
 </div>
 
 @if (_error is not null)
@@ -237,7 +245,7 @@
     private bool _loadingSystemHealth;
     private Timer? _timer;
     private bool _disposed;
-    private static readonly TimeSpan IntervaloAutoRefresco = TimeSpan.FromSeconds(30);
+    private int _intervaloAutoRefrescoSegundos = 30;
 
     protected override async Task OnInitializedAsync()
     {
@@ -342,13 +350,25 @@
 
     private void StartTimer()
     {
-        _timer = new Timer(OnAutoRefrescoTick, null, IntervaloAutoRefresco, IntervaloAutoRefresco);
+        if (_intervaloAutoRefrescoSegundos <= 0) return;
+        var intervalo = TimeSpan.FromSeconds(_intervaloAutoRefrescoSegundos);
+        _timer = new Timer(OnAutoRefrescoTick, null, intervalo, intervalo);
     }
 
     private void StopTimer()
     {
         _timer?.Dispose();
         _timer = null;
+    }
+
+    // Cambiar el intervalo no debe recargar la pagina ni tocar el filtro
+    // seleccionado: solo reprograma el temporizador con el nuevo periodo (o lo
+    // detiene si se elige "Off").
+    private void OnIntervaloAutoRefrescoCambiado(ChangeEventArgs e)
+    {
+        _intervaloAutoRefrescoSegundos = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        StopTimer();
+        StartTimer();
     }
 
     // El callback del Timer corre en un hilo del pool, fuera del contexto de
