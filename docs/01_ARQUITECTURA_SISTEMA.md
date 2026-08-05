@@ -165,7 +165,7 @@ flowchart LR
 | **DocumentIA.Plugins** | Infraestructura de plugins: IIntegrationPlugin, PluginFactory, PluginManager, ResilientPlugin, RestPlugin, SoapPlugin, CustomPlugin |
 | **DocumentIA.Tests.Unit** | 33 clases de test (xUnit + Moq + FluentAssertions) |
 | **DocumentIA.Desktop** | WPF MVVM: ingesta de documentos, polling de estado en tiempo real, visualizacion de timeline |
-| **DocumentIA.Admin** | Blazor Server: CRUD tipologias, gestion modelos AI, configuracion plugins |
+| **DocumentIA.Admin** | Blazor Server: CRUD tipologias, gestion modelos AI, configuracion plugins, Monitor de ejecuciones (KPIs, serie temporal y detalle por GUID consultados en servidor via `/management/ejecuciones*`) |
 | **SarebEnrichments** | Plugin custom .NET: enriquecimiento de Nota Simple (cargas, riesgo, datos de activo) |
 
 ---

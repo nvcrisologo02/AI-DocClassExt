@@ -1,6 +1,6 @@
 # 📚 Índice Maestro de Documentación — DocumentIA
 
-> **Última actualización:** 2026-06-10  
+> **Última actualización:** 2026-08-05  
 > **Versión:** 1.5.1
 > **Rama:** develop
 > **Nuevos:** 6 documentos operacionales críticos agregados

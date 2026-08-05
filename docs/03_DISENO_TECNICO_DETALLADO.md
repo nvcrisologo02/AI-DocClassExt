@@ -92,7 +92,7 @@ flowchart TD
 | 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 | 12 | Integrar | `IntegrarActivity` | datos + tipologia + plugins config | DatosFinales + plugins results | Ejecucion por prioridad |
 | 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP (`searchEntities` + `create`) con timeout 120s |
-| 14 | Persistir | `PersistirActivity` | ContratoSalida completo | void | BD + auditoria |
+| 14 | Persistir | `PersistirActivity` | `PersistirInput` (ContratoSalida completo + `SubmittedBy` de `trazabilidad`) | void | BD + auditoria. `PersistirInput` es un envoltorio interno del orquestador (no altera los contratos de entrada/salida): permite guardar el solicitante en `DocumentoEjecucionEntity.SubmittedBy`. |
 
 ### 3.1.1 Comportamiento del orquestador segun entrada y configuracion
 
@@ -944,6 +944,7 @@ erDiagram
         int Id PK
         int DocumentoId FK "→ DocumentoEntity"
         string EjecucionGuid UK "indice unico"
+        string SubmittedBy "nullable — solicitante (trazabilidad.submittedBy); migracion 20260805100351"
         string ContratoSalidaCompletoJson
         string ActivityTimelineJson
         int DuracionClasifMs
@@ -1731,6 +1732,11 @@ Reglas de validación del trigger:
 | PUT | `/management/plugins-tipologias/{codigo}` | Actualizar config plugins | Function |
 | POST | `/management/plugins-tipologias/{codigo}/publicar` | Publicar config plugins | Function |
 | POST | `/management/plugins-tipologias/{codigo}/retirar` | Retirar config plugins | Function |
+| GET | `/management/ejecuciones` | Listado paginado de ejecuciones. Query: `desde`, `hasta` (default: ultimos 7 dias), `tipologia`, `estado`, `flujo`, `submittedby`, `q` (nombre de documento o GUID), `page`, `pageSize`. Respuesta: `{items, total, page, pageSize}` | Function |
+| GET | `/management/ejecuciones/agregados` | KPIs y serie temporal diaria calculados en servidor sobre el mismo filtro que el listado | Function |
+| GET | `/management/ejecuciones/{guid}/detalle` | Detalle completo por GUID de ejecucion: contrato de salida completo (`ContratoSalidaCompletoJson`), timeline de actividades y nombres de tipologia resueltos contra el catalogo TDN1/TDN2 | Function |
+
+Los endpoints `/management/ejecuciones*` son los que consume el Monitor del Admin (páginas `/monitor` y `/monitor/{guid}`). El campo `submittedBy` del listado y del detalle se resuelve con `COALESCE(DocumentoEjecuciones.SubmittedBy, Documentos.SubmittedBy)`: las ejecuciones anteriores a la migración `20260805100351_AgregarSubmittedByEjecucion` no tienen el valor propio y heredan el del documento (esto preserva, por ejemplo, el marcador `migracion-dev` de la migración operativa DEV→PRO).
 
 En todas las respuestas de `/management/modelos*` (GET/POST/PUT/DELETE), el campo `ConfiguracionJson` sale con los valores de propiedades sensibles (nombre que contiene `apikey`, `password`, `secret` o `accountkey`, de forma recursiva) enmascarados como `"***"`. En escritura (POST/PUT), si una propiedad sensible llega con el valor `"***"` se conserva el valor previamente almacenado (round-trip seguro): esto permite editar un modelo sin reenviar la clave real y sin destruirla; para sustituirla basta con enviar el valor nuevo en claro.
 

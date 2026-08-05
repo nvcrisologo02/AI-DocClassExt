@@ -126,6 +126,7 @@ erDiagram
         string InstanceId "ID de Durable Functions"
         string OperationId "W3C TraceId (App Insights operation_Id)"
         datetime FechaEjecucion
+        string SubmittedBy "Solicitante (trazabilidad.submittedBy)"
         string Tipologia
         string EstadoFinal "OK|REVISION|ERROR"
         double ConfianzaGlobal
@@ -436,6 +437,7 @@ erDiagram
 | **InstanceId** | NVARCHAR(200) | ID de Durable Functions (Azure) |
 | **OperationId** | NVARCHAR(100) | W3C TraceId para App Insights |
 | **FechaEjecucion** | DATETIME2 | Timestamp de inicio |
+| **SubmittedBy** | NVARCHAR(200) | Solicitante de la ejecución (`trazabilidad.submittedBy`). NULL en ejecuciones anteriores a la migración `20260805100351_AgregarSubmittedByEjecucion`; las consultas del Monitor aplican fallback al `SubmittedBy` del documento |
 | **Tipologia** | NVARCHAR(100) | Tipología procesada |
 | **EstadoFinal** | NVARCHAR(50) | OK, REVISION, ERROR |
 | **ConfianzaGlobal** | FLOAT | Confianza agregada final |
@@ -731,10 +733,16 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
 | **1.13** | 2026-05-25 | Agregó NivelClasificacion |
 | **1.14** | 2026-05-26 | Agregó FechaExpiracionBlob + políticas de retención |
 | **1.15** | 2026-06-02 | Agregó TDN2_Prompt a CatalogoTdn1 |
-| **v1.5** | 2026-06-05 | [ACTUAL] Marca PromptGPT, ModeloClasificacionDI, UmbralClasificacion como [Obsolete] |
+| **v1.5** | 2026-06-05 | Marca PromptGPT, ModeloClasificacionDI, UmbralClasificacion como [Obsolete] |
+| **1.16** | 2026-08-05 | [ACTUAL] Agregó SubmittedBy a DocumentoEjecuciones (`20260805100351_AgregarSubmittedByEjecucion`). Aplicada en dev; **pendiente de aplicar en PRO** en el próximo despliegue |
 | **v2.0** | 2026-07-31 | [PLANIFICADO] Elimina PromptGPT, ModeloClasificacionDI, UmbralClasificacion |
 
 ### 5.2 Cambios Recientes (Últimos 30 días)
+
+0. **SubmittedBy en DocumentoEjecuciones** (2026-08-05)
+   - Asocia el solicitante (`trazabilidad.submittedBy`) a cada ejecución, no solo al documento
+   - Sin cambios en los contratos de entrada/salida: el orquestador lo pasa a `PersistirActivity` vía el envoltorio interno `PersistirInput`
+   - Las consultas del Monitor aplican `COALESCE` con el `SubmittedBy` del documento para el histórico
 
 1. **TDN2_Prompt en CatalogoTdn1** (2026-06-02)
    - Permite prompts personalizados por familia TDN1 para Phase 2

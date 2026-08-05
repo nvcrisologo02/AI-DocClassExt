@@ -312,6 +312,10 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 > Para **entorno limpio** (BD vacía) o para **promocionar datos de configuración** entre entornos (dev→pre→prod), ver el procedimiento completo paso a paso en **BLOQUE 7b** (migraciones de esquema + carga de datos con `replicate-config-data.ps1`).
 
+> ⚠️ **Pendiente en PRO (2026-08-05):** la migración `20260805100351_AgregarSubmittedByEjecucion` (columna `SubmittedBy` en `DocumentoEjecuciones`) está aplicada en **dev** pero **no en PRO**. Aplicarla con este procedimiento en el próximo despliegue, **antes** de desplegar las Functions que la usan.
+
+> ⚠️ **Orden de despliegue Functions → Admin (2026-08-05):** los endpoints `/management/ejecuciones*` cambiaron de contrato (listado paginado `{items,total,page,pageSize}`, detalle por `{guid}/detalle`, agregados con filtro). El Admin actual depende de ellos: desplegar **primero la Function App y después el Admin**; en orden inverso, el Monitor quedará roto durante la ventana de despliegue.
+
 ---
 
 ### B6 — Verificacion post-deploy (siempre)

@@ -188,6 +188,16 @@ flowchart TB
 | **Regla clave** | La version activa es inmutable (ver RN9): no admite `PUT`/`DELETE` directos (403 Forbidden). Editar un prompt activo desde el Admin crea una nueva version en borrador con el contenido copiado; al activarla, la version anterior pasa a Draft automaticamente. |
 | **Postcondicion** | Como mucho una version activa por `promptKey`; la clasificacion GPT que referencia esa clave usa siempre el contenido de la version activa. |
 
+### CU9: Monitorizar Ejecuciones (Monitor del Admin)
+
+| Campo | Detalle |
+|-------|---------|
+| **Actor principal** | Administrador |
+| **Endpoints** | `GET /management/ejecuciones` (listado paginado), `GET /management/ejecuciones/agregados` (KPIs + serie diaria), `GET /management/ejecuciones/{guid}/detalle` |
+| **UI** | Pagina `/monitor` del Admin: KPIs, grafico de serie temporal, tabla paginada con fila desplegable y modal con el JSON completo del contrato de salida (copiar URL, copiar JSON, descargar). Cada ejecucion es enlazable por `/monitor/{guid}`. |
+| **Filtros** | Rango de fechas (default: ultimos 7 dias), tipologia, estado, flujo, solicitante (`submittedby`, el `trazabilidad.submittedBy` de la peticion) y busqueda libre por nombre de documento o GUID. Un unico filtro gobierna KPIs, grafico y tabla; la consulta y los agregados se calculan en servidor. |
+| **Nota** | El solicitante mostrado/filtrado usa `DocumentoEjecuciones.SubmittedBy` con fallback al `SubmittedBy` del documento (`COALESCE`), para cubrir ejecuciones anteriores a la migracion de 2026-08-05. |
+
 ---
 
 ## 2.4 Reglas de Negocio Criticas
@@ -366,7 +376,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RF05 | El sistema debe soportar multiples tipologias con configuracion independiente | Cada tipologia tiene su propia configuracion de extraccion, validacion, plugins y umbrales. | DONE |
 | RF06 | El sistema debe subir documentos al GDC via SOAP | `SubirGDCActivity` envia documento al GDC con matricula y metadata. Soporta timeout de 120s. | DONE |
 | RF07 | El sistema debe enriquecer datos via plugins configurables | PluginFactory crea REST/SOAP/Custom plugins. Ejecucion por prioridad con retry. | DONE |
-| RF08 | El sistema debe persistir resultados y auditoria en BD | `PersistirActivity` guarda DocumentoEntity, ResultadoProcesamientoEntity, DocumentoEjecucionEntity, AuditoriaEntity. | DONE |
+| RF08 | El sistema debe persistir resultados y auditoria en BD | `PersistirActivity` guarda DocumentoEntity, ResultadoProcesamientoEntity, DocumentoEjecucionEntity, AuditoriaEntity. Cada ejecucion registra ademas el solicitante (`SubmittedBy` de la trazabilidad de entrada). | DONE |
 | RF09 | El sistema debe exponer progreso de procesamiento en tiempo real | customStatus con timeline de actividades consultable via statusQueryUri. | DONE |
 | RF10 | El sistema debe soportar gestion CRUD de tipologias via API | Endpoints `/management/tipologias` con ciclo Draft→Published→Retired. | DONE |
 | RF11 | El sistema debe soportar gestion de modelos AI (clasificacion, extraccion, prompt, layout) | Endpoints `/management/modelos` con CRUD y activacion. | DONE |
@@ -376,6 +386,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RF15 | El sistema debe proteger datos personales segun GDPR/LOPD | Masking de datos sensibles, cifrado en reposo, retencion configurable. | DESCARTADO (EP7 Removed) |
 | RF16 | El sistema debe resolver el activo inmobiliario desde datos extraidos | `ObtenerActivoActivity` consulta `DM_POSICION_AAII_TB` via AssetResolver. Devuelve `IdActivo` si match unico. Habilitacion configurable por tipologia/instrucciones. | DONE |
 | RF17 | El sistema debe permitir excluir campos del score de confianza de extraccion por tipologia | `avoidConfidence: true` en un campo lo excluye del score y de `CamposBajaConfianza`, manteniendo completitud y trazabilidad en `ConfianzaPorCampo`. | DONE |
+| RF18 | El sistema debe permitir monitorizar ejecuciones desde el Admin | Monitor con consulta en servidor: KPIs, serie temporal diaria, paginacion, filtros (rango, tipologia, estado, flujo, solicitante, busqueda) y detalle enlazable por GUID con el contrato de salida completo. Ver CU9. | DONE |
 
 ---
 

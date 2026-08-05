@@ -4,6 +4,8 @@
 **Work items:** AB#99965, AB#99966, AB#99967, AB#99968 (Feature AB#99958)
 **Fuera de alcance:** AB#99969 y AB#99970 (Configuración), que van en un ciclo posterior. AB#99971 y AB#99972 ya están completados.
 
+> **Nota post-implementación (2026-08-05).** Lo implementado difiere de este diseño en tres puntos: (1) la ruta del detalle en la API es `GET /management/ejecuciones/{guid}/detalle`, no `/{guid}`; (2) el detalle se abre en un **modal** con el JSON completo del contrato de salida en el visor jsoneditor (copiar URL, copiar JSON, descargar), además de la fila desplegable y la página `/monitor/{guid}`; (3) se añadió el filtro por solicitante (`submittedby`), respaldado por la columna `DocumentoEjecuciones.SubmittedBy` (migración `20260805100351`, AB#99966) con `COALESCE` al `SubmittedBy` del documento para el histórico.
+
 ---
 
 ## 1. Problema

@@ -144,7 +144,7 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 | Campo | Tipo | Descripción |
 |---|---|---|
 | `correlationId` | string | ID de correlación para trazabilidad. Si no se envía, el sistema genera un UUID. |
-| `submittedBy` | string | Identificador del sistema o usuario que envía el documento. |
+| `submittedBy` | string | Identificador del sistema o usuario que envía el documento. Se persiste en el documento y en cada ejecución (`DocumentoEjecuciones.SubmittedBy`, desde 2026-08-05) y es filtrable en el Monitor del Admin. |
 | `idActivo` | string? | ID del activo al que pertenece el documento. Opcional; puede ser resuelto por plugins. |
 
 Reglas de validación de entrada:

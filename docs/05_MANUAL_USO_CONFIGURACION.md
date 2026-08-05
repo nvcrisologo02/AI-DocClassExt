@@ -412,7 +412,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `documento.objectIdGDC` | string? | Condicional | ObjectId del documento ya archivado en GDC. Requerido cuando NO se informa `documento.content.base64`. |
 | `trazabilidad` | object | No | Informacion de trazabilidad. |
 | `trazabilidad.correlationId` | string | No | UUID de correlacion. Auto-generado si no se informa. |
-| `trazabilidad.submittedBy` | string | No | Identificador del sistema/usuario que envia. |
+| `trazabilidad.submittedBy` | string | No | Identificador del sistema/usuario que envia. Queda registrado en cada ejecucion y permite filtrar por solicitante en el Monitor del Admin. |
 | `trazabilidad.idActivo` | string? | No | ID del activo inmobiliario. Puede ser resuelto por plugins. |
 
 ### Reglas de validacion de entrada
