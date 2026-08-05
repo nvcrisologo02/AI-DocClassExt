@@ -297,6 +297,14 @@ public class MonitorService
         {
             throw new InvalidOperationException($"Error al obtener ejecuciones del backend: {ex.Message}", ex);
         }
+        // Una ventana de despliegue con el backend en una version distinta (Admin y
+        // Functions se despliegan por separado) puede devolver una forma de JSON
+        // que ya no coincide con el contrato esperado; sin este catch, JsonException
+        // escapa de OnInitializedAsync y tumba el circuito de Blazor Server.
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"Respuesta invalida al obtener ejecuciones del backend: {ex.Message}", ex);
+        }
     }
 
     public async Task<EjecucionDetalleDto?> GetEjecucionDetalleAsync(string guid)
@@ -315,8 +323,17 @@ public class MonitorService
         {
             throw new InvalidOperationException($"Error al obtener detalle de ejecución: {ex.Message}", ex);
         }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"Respuesta invalida al obtener detalle de ejecución: {ex.Message}", ex);
+        }
     }
 
+    // Los agregados alimentan el cuadro de mando, no la tabla principal: un fallo
+    // aqui no debe impedir ver el listado, asi que se ignora en vez de propagarse
+    // como InvalidOperationException. Se distinguen los dos tipos de fallo
+    // esperados (comunicacion y deserializacion) en vez de un catch generico para
+    // no enmascarar tambien errores de programacion.
     public async Task<DashboardAgregadosDto?> GetAgregadosAsync(MonitorFiltroDto filtro)
     {
         try
@@ -324,7 +341,11 @@ public class MonitorService
             return await _httpClient.GetFromJsonAsync<DashboardAgregadosDto>(
                 $"management/ejecuciones/agregados?{filtro.ToQueryString()}", JsonOptions);
         }
-        catch
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
         {
             return null;
         }
