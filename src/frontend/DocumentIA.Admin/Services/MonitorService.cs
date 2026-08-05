@@ -27,6 +27,7 @@ public class EjecucionResumenDto
     public int? DuracionIntegracionMs { get; set; }
     public int? DuracionPersistenciaMs { get; set; }
     public string? NombreDocumento { get; set; }
+    public string? SubmittedBy { get; set; }
     public List<ActividadResumenDto> Actividades { get; set; } = [];
 }
 
@@ -153,6 +154,10 @@ public class EjecucionDetalleDto
     public string EjecucionGuid { get; set; } = string.Empty;
     public string? ModeloClasificacion { get; set; }
     public bool ClassificationOnly { get; set; }
+    public string? TipologiaNombreCatalogo { get; set; }
+    public string? TipologiaFamiliaNombreCatalogo { get; set; }
+    // Contrato crudo tal cual almacenado; reservado para el visor de la siguiente entrega, no se usa aun.
+    public string? ContratoSalidaCompletoJson { get; set; }
     public IdentificacionDetalleDto? Identificacion { get; set; }
     public IntegridadDetalleDto? Integridad { get; set; }
     public ResultadoDetalleDto? Resultado { get; set; }
@@ -220,6 +225,7 @@ public class MonitorFiltroDto
     public string? Estado { get; set; }
     public string? Flujo { get; set; }
     public string? Busqueda { get; set; }
+    public string? SubmittedBy { get; set; }
 
     public string ToQueryString()
     {
@@ -232,6 +238,7 @@ public class MonitorFiltroDto
         if (!string.IsNullOrWhiteSpace(Estado)) partes.Add($"estado={Uri.EscapeDataString(Estado)}");
         if (!string.IsNullOrWhiteSpace(Flujo)) partes.Add($"flujo={Uri.EscapeDataString(Flujo)}");
         if (!string.IsNullOrWhiteSpace(Busqueda)) partes.Add($"q={Uri.EscapeDataString(Busqueda)}");
+        if (!string.IsNullOrWhiteSpace(SubmittedBy)) partes.Add($"submittedby={Uri.EscapeDataString(SubmittedBy)}");
         return string.Join("&", partes);
     }
 

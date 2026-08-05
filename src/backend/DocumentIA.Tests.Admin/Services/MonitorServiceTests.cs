@@ -71,4 +71,34 @@ public class MonitorServiceTests
 
         agregados.Should().BeNull();
     }
+
+    [Fact]
+    public void ToQueryString_ConSubmittedBy_IncluyeElParametroCodificado()
+    {
+        var filtro = new MonitorFiltroDto { SubmittedBy = "juan perez" };
+
+        var query = filtro.ToQueryString();
+
+        query.Should().Contain("submittedby=juan%20perez");
+    }
+
+    [Fact]
+    public void ToQueryString_SinSubmittedBy_NoIncluyeElParametro()
+    {
+        var filtro = new MonitorFiltroDto { SubmittedBy = null };
+
+        var query = filtro.ToQueryString();
+
+        query.Should().NotContain("submittedby");
+    }
+
+    [Fact]
+    public void Clonar_CopiaSubmittedBy()
+    {
+        var filtro = new MonitorFiltroDto { SubmittedBy = "juan perez" };
+
+        var clon = filtro.Clonar();
+
+        clon.SubmittedBy.Should().Be("juan perez");
+    }
 }

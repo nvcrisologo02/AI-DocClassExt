@@ -43,6 +43,11 @@
             <input class="form-control" placeholder="GUID exacto o nombre de documento"
                    value="@Filtro.Busqueda" @oninput="OnBusquedaCambiada" />
         </div>
+        <div class="col-12 col-lg-3">
+            <label class="form-label small text-muted mb-1">Solicitado por</label>
+            <input class="form-control" placeholder="Fragmento del solicitante"
+                   value="@Filtro.SubmittedBy" @oninput="OnSolicitanteCambiado" />
+        </div>
     </div>
 </div></div>
 
@@ -52,7 +57,11 @@
     [Parameter] public EventCallback<MonitorFiltroDto> FiltroCambiado { get; set; }
 
     private int _rangoSeleccionado = 7;
-    private Timer? _debounce;
+    // Cada campo con retardo tiene su propio Timer: compartir uno solo entre
+    // busqueda y solicitante haria que escribir en uno cancelara el retardo
+    // pendiente del otro.
+    private Timer? _debounceBusqueda;
+    private Timer? _debounceSolicitante;
     private bool _disposed;
 
     private async Task OnRangoCambiado(ChangeEventArgs e)
@@ -79,13 +88,30 @@
     private void OnBusquedaCambiada(ChangeEventArgs e)
     {
         var texto = Texto(e);
-        _debounce?.Dispose();
-        _debounce = new Timer(async _ =>
+        _debounceBusqueda?.Dispose();
+        _debounceBusqueda = new Timer(async _ =>
         {
             if (_disposed) return;
             try
             {
                 await InvokeAsync(async () => await Emitir(f => f.Busqueda = texto));
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+        }, null, 300, Timeout.Infinite);
+    }
+
+    private void OnSolicitanteCambiado(ChangeEventArgs e)
+    {
+        var texto = Texto(e);
+        _debounceSolicitante?.Dispose();
+        _debounceSolicitante = new Timer(async _ =>
+        {
+            if (_disposed) return;
+            try
+            {
+                await InvokeAsync(async () => await Emitir(f => f.SubmittedBy = texto));
             }
             catch (ObjectDisposedException)
             {
@@ -109,6 +135,7 @@
     public void Dispose()
     {
         _disposed = true;
-        _debounce?.Dispose();
+        _debounceBusqueda?.Dispose();
+        _debounceSolicitante?.Dispose();
     }
 }

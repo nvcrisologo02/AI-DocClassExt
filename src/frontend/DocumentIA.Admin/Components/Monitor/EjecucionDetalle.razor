@@ -35,10 +35,11 @@ else
             <div class="detail-section-label">Identificación</div>
             <dl class="row mb-0 small">
                 <dt class="col-sm-2">Documento</dt><dd class="col-sm-4">@(Detalle.Identificacion?.Documento ?? "—")</dd>
-                <dt class="col-sm-2">Tipología</dt><dd class="col-sm-4">@(Detalle.Identificacion?.Tipologia ?? "—")</dd>
-                <dt class="col-sm-2">Familia</dt><dd class="col-sm-4">@(Detalle.Identificacion?.TipologiaFamilia ?? "—")</dd>
+                <dt class="col-sm-2">Tipología</dt><dd class="col-sm-4">@TipologiaConNombre()</dd>
+                <dt class="col-sm-2">Familia</dt><dd class="col-sm-4">@FamiliaConNombre()</dd>
                 <dt class="col-sm-2">Versión</dt><dd class="col-sm-4">@(Detalle.Identificacion?.TipologiaVersion ?? "—")</dd>
                 <dt class="col-sm-2">Páginas</dt><dd class="col-sm-4">@(Detalle.Identificacion?.Paginas.ToString() ?? "—")</dd>
+                <dt class="col-sm-2">Solicitado por</dt><dd class="col-sm-4">@(SubmittedBy ?? "—")</dd>
                 <dt class="col-sm-2">GUID</dt><dd class="col-sm-4"><code style="font-size:0.75rem;user-select:all">@Detalle.EjecucionGuid</code></dd>
             </dl>
         </div>
@@ -314,8 +315,28 @@ else
 
 @code {
     [Parameter, EditorRequired] public EjecucionDetalleDto? Detalle { get; set; }
+    // No forma parte del contrato de detalle (management/ejecuciones/{guid}/detalle);
+    // lo aporta quien despliega el componente (la fila del monitor conoce el
+    // solicitante desde el listado). Sin valor en la pagina /monitor/{guid} standalone.
+    [Parameter] public string? SubmittedBy { get; set; }
 
     private int _duracionTotalTimelineMs => Detalle?.Timeline.Sum(a => a.DuracionMs) ?? 0;
+
+    // ── Tipologia / familia con nombre de catalogo ─────────────────────────────
+
+    private string TipologiaConNombre() => ConCodigoYNombre(
+        Detalle?.Identificacion?.Tipologia, Detalle?.TipologiaNombreCatalogo);
+
+    private string FamiliaConNombre() => ConCodigoYNombre(
+        Detalle?.Identificacion?.TipologiaFamilia, Detalle?.TipologiaFamiliaNombreCatalogo);
+
+    // Si el codigo esta retirado del catalogo el nombre llega nulo: se muestra
+    // solo el codigo, sin inventar un nombre.
+    private static string ConCodigoYNombre(string? codigo, string? nombre)
+    {
+        if (string.IsNullOrWhiteSpace(codigo)) return "—";
+        return string.IsNullOrWhiteSpace(nombre) ? codigo : $"{codigo} — {nombre}";
+    }
 
     // ── Actividad / timeline ──────────────────────────────────────────────────
 

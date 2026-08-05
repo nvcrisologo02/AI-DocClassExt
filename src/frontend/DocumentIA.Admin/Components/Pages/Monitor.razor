@@ -212,32 +212,20 @@
 
 <MonitorTabla Pagina="_pagina" Cargando="_cargando"
               PaginaCambiada="OnPaginaCambiada"
-              DetalleSolicitado="OnDetalleSolicitadoAsync" />
-
-@if (_detalleAbierto is not null)
-{
-    <div class="card mt-3"><div class="card-body">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-            <h5 class="mb-0">Detalle</h5>
-            <div class="d-flex gap-2">
-                <a class="btn btn-sm btn-outline-secondary" href="/monitor/@_detalleAbierto.EjecucionGuid">
-                    Abrir en su página
-                </a>
-                <button class="btn btn-sm btn-outline-secondary" @onclick="() => _detalleAbierto = null">
-                    Cerrar
-                </button>
-            </div>
-        </div>
-        <EjecucionDetalle Detalle="_detalleAbierto" />
-    </div></div>
-}
+              Expandidos="_expandidos" Detalles="_detalles" CargandoDetalle="_cargandoDetalle"
+              FilaAlternada="OnFilaAlternadaAsync" />
 
 @code {
     private MonitorFiltroDto _filtro = new();
     private PagedResultDto<EjecucionResumenDto>? _pagina;
     private DashboardAgregadosDto? _agregados;
-    private EjecucionDetalleDto? _detalleAbierto;
     private IReadOnlyList<string> _tipologias = [];
+    // Estado de expansion de la tabla: que filas estan abiertas y el detalle ya
+    // cargado por GUID, para no repetir la peticion al volver a expandir la
+    // misma fila.
+    private readonly HashSet<string> _expandidos = [];
+    private readonly Dictionary<string, EjecucionDetalleDto> _detalles = new();
+    private readonly HashSet<string> _cargandoDetalle = [];
     private int _paginaActual = 1;
     private bool _cargando;
     private string? _error;
@@ -285,13 +273,24 @@
     {
         _filtro = nuevo;
         _paginaActual = 1;
+        ColapsarFilas();
         await RecargarTodoAsync();
     }
 
     private async Task OnPaginaCambiada(int pagina)
     {
         _paginaActual = pagina;
+        ColapsarFilas();
         await RecargarPaginaAsync();
+    }
+
+    // Al cambiar de filtro o pagina las filas expandidas dejan de tener sentido
+    // (la fila ya no esta en pantalla); se colapsan para no arrastrar detalle
+    // cargado de una fila que ya no se ve.
+    private void ColapsarFilas()
+    {
+        _expandidos.Clear();
+        _cargandoDetalle.Clear();
     }
 
     private async Task RecargarTodoAsync()
@@ -401,15 +400,34 @@
         StopTimer();
     }
 
-    private async Task OnDetalleSolicitadoAsync(string guid)
+    // Alterna la fila: si estaba expandida se colapsa sin volver a pedir nada;
+    // si se expande y el detalle no esta en cache todavia se pide bajo demanda.
+    private async Task OnFilaAlternadaAsync(string guid)
     {
+        if (!_expandidos.Add(guid))
+        {
+            _expandidos.Remove(guid);
+            return;
+        }
+
+        if (_detalles.ContainsKey(guid)) return;
+
+        _cargandoDetalle.Add(guid);
         try
         {
-            _detalleAbierto = await MonitorService.GetEjecucionDetalleAsync(guid);
+            var detalle = await MonitorService.GetEjecucionDetalleAsync(guid);
+            if (detalle is not null)
+            {
+                _detalles[guid] = detalle;
+            }
         }
         catch (InvalidOperationException ex)
         {
             _error = ex.Message;
+        }
+        finally
+        {
+            _cargandoDetalle.Remove(guid);
         }
     }
 
