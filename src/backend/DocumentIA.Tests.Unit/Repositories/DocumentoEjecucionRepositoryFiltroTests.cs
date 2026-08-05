@@ -130,6 +130,22 @@ public class DocumentoEjecucionRepositoryFiltroTests
     }
 
     [Fact]
+    public async Task GetPagedAsync_Should_BuscarPorGuidSinGuiones()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(10));
+        filtro.Busqueda = "11111111111111111111111111111111";
+
+        var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        total.Should().Be(1, "un GUID valido pero no canonico debe normalizarse antes de comparar, no caer al fallback de nombre");
+        items[0].EjecucionGuid.Should().Be("11111111-1111-1111-1111-111111111111");
+    }
+
+    [Fact]
     public async Task GetPagedAsync_Should_BuscarPorFragmentoDeNombreDeDocumento()
     {
         await using var context = CreateContext();

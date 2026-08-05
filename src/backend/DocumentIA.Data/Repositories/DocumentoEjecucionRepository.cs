@@ -192,9 +192,13 @@ namespace DocumentIA.Data.Repositories
             if (!string.IsNullOrWhiteSpace(filtro.Busqueda))
             {
                 var busqueda = filtro.Busqueda.Trim();
-                if (Guid.TryParse(busqueda, out _))
+                // Guid.TryParse acepta formatos sin guiones o con llaves; comparar la
+                // forma normalizada evita que un GUID valido pero no canonico caiga
+                // en cero resultados en vez de en la busqueda por nombre.
+                if (Guid.TryParse(busqueda, out var guid))
                 {
-                    q = q.Where(e => e.EjecucionGuid == busqueda);
+                    var guidNormalizado = guid.ToString();
+                    q = q.Where(e => e.EjecucionGuid == guidNormalizado);
                 }
                 else
                 {
