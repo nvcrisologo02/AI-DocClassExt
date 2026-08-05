@@ -1,0 +1,405 @@
+@* Presentacion del detalle de una ejecucion. La usan tanto la fila desplegable
+   del Monitor como la pagina /monitor/{guid}: existe una sola vez para que las
+   dos vistas no puedan divergir. *@
+
+<style>
+    .detail-section-label {
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #6c757d;
+        margin-bottom: 0.35rem;
+    }
+    .activity-dot {
+        font-size: 0.85rem;
+        font-weight: 700;
+        min-width: 1rem;
+        text-align: center;
+    }
+    .activity-bar-bg {
+        background-color: #e9ecef;
+        flex: 1;
+    }
+</style>
+
+@if (Detalle is null)
+{
+    <div class="text-muted">Sin datos de detalle.</div>
+}
+else
+{
+    <!-- Identificacion -->
+    <div class="row g-3 mb-3">
+        <div class="col-12">
+            <div class="detail-section-label">Identificación</div>
+            <dl class="row mb-0 small">
+                <dt class="col-sm-2">Documento</dt><dd class="col-sm-4">@(Detalle.Identificacion?.Documento ?? "—")</dd>
+                <dt class="col-sm-2">Tipología</dt><dd class="col-sm-4">@(Detalle.Identificacion?.Tipologia ?? "—")</dd>
+                <dt class="col-sm-2">Familia</dt><dd class="col-sm-4">@(Detalle.Identificacion?.TipologiaFamilia ?? "—")</dd>
+                <dt class="col-sm-2">Versión</dt><dd class="col-sm-4">@(Detalle.Identificacion?.TipologiaVersion ?? "—")</dd>
+                <dt class="col-sm-2">Páginas</dt><dd class="col-sm-4">@(Detalle.Identificacion?.Paginas.ToString() ?? "—")</dd>
+                <dt class="col-sm-2">GUID</dt><dd class="col-sm-4"><code style="font-size:0.75rem;user-select:all">@Detalle.EjecucionGuid</code></dd>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Fila 1: Timeline · Resultado · Clasificacion + Extraccion -->
+    <div class="row g-3 mb-3">
+
+        <!-- Timeline de actividades -->
+        <div class="col-md-5">
+            <div class="detail-section-label">Línea de tiempo</div>
+            @if (Detalle.Timeline.Count > 0)
+            {
+                <div>
+                    @foreach (var act in Detalle.Timeline)
+                    {
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="activity-dot @ActivityDotClass(act.Estado)" title="@act.Estado">@ActivityIcon(act.Estado)</span>
+                            <span class="small fw-semibold" style="min-width:8rem">@act.Nombre</span>
+                            <div class="flex-grow-1 activity-bar-bg rounded" style="height:4px">
+                                <div class="rounded @ActivityBarClass(act.Estado)" style="height:4px;width:@(BarWidth(act.DuracionMs, _duracionTotalTimelineMs))%"></div>
+                            </div>
+                            <span class="small text-nowrap @DuracionClass(act.DuracionMs)" style="min-width:4rem;text-align:right">@FormatDuracion(act.DuracionMs)</span>
+                            @if (act.FallbackActivado)
+                            {
+                                <span class="badge bg-warning text-dark" style="font-size:0.6rem">Fallback</span>
+                            }
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(act.Mensaje))
+                        {
+                            <div class="text-muted ps-4 mb-1" style="font-size:0.72rem">@act.Mensaje</div>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(act.FallbackRazon))
+                        {
+                            <div class="text-warning ps-4 mb-1" style="font-size:0.72rem">↳ @act.FallbackRazon</div>
+                        }
+                    }
+                </div>
+            }
+            else
+            {
+                <span class="text-muted small">Sin datos de línea de tiempo</span>
+            }
+        </div>
+
+        <!-- Resultado + Confianza -->
+        <div class="col-md-3">
+            <div class="detail-section-label">Resultado</div>
+            @if (Detalle.Resultado != null)
+            {
+                <div class="mb-2 d-flex flex-wrap gap-1">
+                    <span class="badge @(Detalle.ClassificationOnly ? "bg-primary" : "bg-secondary")">@(Detalle.ClassificationOnly ? "Solo clasificación" : "Completo")</span>
+                    <span class="badge @EstadoBadgeClass(Detalle.Resultado.Estado)">@Detalle.Resultado.Estado</span>
+                    @if (!string.IsNullOrEmpty(Detalle.Resultado.EstadoCalidad))
+                    {
+                        <span class="badge @CalidadBadgeClass(Detalle.Resultado.EstadoCalidad)">@Detalle.Resultado.EstadoCalidad</span>
+                    }
+                    @if (Detalle.Resultado.ReutilizadaPorDuplicado)
+                    {
+                        <span class="badge bg-secondary">Duplicado</span>
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(Detalle.Resultado.MensajeError))
+                {
+                    <div class="text-danger small mb-2">@Detalle.Resultado.MensajeError</div>
+                }
+                <table class="table table-sm table-borderless mb-0" style="width:auto;font-size:0.82rem">
+                    <tbody>
+                        @foreach (var (lbl, c) in new (string, double)[] {
+                            ("Global",        Detalle.Resultado.ConfianzaGlobal),
+                            ("Clasificación", Detalle.Resultado.ConfianzaClasificacion),
+                            ("Extracción",    Detalle.Resultado.ConfianzaExtraccion),
+                            ("Validación",    Detalle.Resultado.ConfianzaValidacion)
+                        })
+                        {
+                            <tr>
+                                <td class="text-muted py-0 pe-2">@lbl</td>
+                                <td class="py-0 fw-semibold @ConfianzaClass(c)">@(c > 0 ? c.ToString("P1") : "—")</td>
+                                @if (c > 0)
+                                {
+                                    <td class="py-0 ps-1">
+                                        <div style="width:60px;height:5px;background:#e9ecef;border-radius:3px">
+                                            <div style="width:@((int)(c * 60))px;height:5px;border-radius:3px" class="@ConfianzaBarClass(c)"></div>
+                                        </div>
+                                    </td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <span class="text-muted small">Sin datos de resultado</span>
+            }
+        </div>
+
+        <!-- Clasificacion + Extraccion -->
+        <div class="col-md-4">
+            @if (Detalle.Clasificacion != null)
+            {
+                <div class="detail-section-label">Clasificación</div>
+                <div class="small mb-2">
+                    @if (!string.IsNullOrEmpty(Detalle.Clasificacion.ProveedorClasif))
+                    {
+                        <div><span class="text-muted">Proveedor:</span> <span class="fw-semibold">@Detalle.Clasificacion.ProveedorClasif</span></div>
+                    }
+                    @if (!string.IsNullOrEmpty(Detalle.Clasificacion.Modelo))
+                    {
+                        <div><span class="text-muted">Modelo:</span> @Detalle.Clasificacion.Modelo</div>
+                    }
+                    <div>
+                        <span class="text-muted">Confianza:</span>
+                        @if (Detalle.Clasificacion.ConfianzaDI > 0) { <span class="text-muted" style="font-size:0.75rem">DI:</span><span class="ms-1 @ConfianzaClass(Detalle.Clasificacion.ConfianzaDI)">@Detalle.Clasificacion.ConfianzaDI.ToString("P1")</span> }
+                        @if (Detalle.Clasificacion.ConfianzaGPT > 0) { <span class="text-muted ms-2" style="font-size:0.75rem">GPT:</span><span class="ms-1 @ConfianzaClass(Detalle.Clasificacion.ConfianzaGPT)">@Detalle.Clasificacion.ConfianzaGPT.ToString("P1")</span> }
+                    </div>
+                    @if (Detalle.Clasificacion.FallbackLLM)
+                    {
+                        <div class="text-warning mt-1">⚠ Fallback GPT@(!string.IsNullOrEmpty(Detalle.Clasificacion.FallbackRazon) ? $": {Detalle.Clasificacion.FallbackRazon}" : "")</div>
+                    }
+                </div>
+            }
+            @if (Detalle.Extraccion != null && !string.IsNullOrEmpty(Detalle.Extraccion.ProveedorExtrac))
+            {
+                <div class="detail-section-label">Extracción</div>
+                <div class="small">
+                    <div><span class="text-muted">Proveedor:</span> <span class="fw-semibold">@Detalle.Extraccion.ProveedorExtrac</span></div>
+                    @if (!string.IsNullOrEmpty(Detalle.Extraccion.Modelo)) { <div><span class="text-muted">Modelo:</span> @Detalle.Extraccion.Modelo</div> }
+                    @if (Detalle.Extraccion.FallbackUsado)
+                    {
+                        <div class="text-warning">⚠ Fallback@(!string.IsNullOrEmpty(Detalle.Extraccion.FallbackRazon) ? $": {Detalle.Extraccion.FallbackRazon}" : "")</div>
+                    }
+                    @if (Detalle.Extraccion.CamposConDuda.Count > 0)
+                    {
+                        <div class="text-warning" style="font-size:0.75rem">⚠ Duda: @string.Join(", ", Detalle.Extraccion.CamposConDuda)</div>
+                    }
+                </div>
+            }
+        </div>
+    </div>
+
+    <!-- Fila 2: Datos extraidos · Validaciones · Plugins/GDC/Integridad -->
+    <div class="row g-3">
+
+        <!-- Datos extraidos -->
+        <div class="col-md-5">
+            <div class="detail-section-label">Campos extraídos (@Detalle.DatosExtraidos.Count)</div>
+            @if (Detalle.DatosExtraidos.Count > 0)
+            {
+                <div style="max-height:220px;overflow-y:auto">
+                    <table class="table table-sm table-borderless mb-0" style="font-size:0.82rem">
+                        <tbody>
+                            @foreach (var campo in Detalle.DatosExtraidos)
+                            {
+                                var conDuda = Detalle.Extraccion?.CamposConDuda?.Contains(campo.Campo, StringComparer.OrdinalIgnoreCase) == true;
+                                var tieneConf = Detalle.Extraccion?.ConfianzaPorCampo?.TryGetValue(campo.Campo, out var confVal) == true;
+                                <tr class="@(conDuda ? "table-warning" : "")">
+                                    <td class="text-muted py-0 pe-2 text-nowrap" style="max-width:9rem;overflow:hidden;text-overflow:ellipsis" title="@campo.Campo">@campo.Campo</td>
+                                    <td class="py-0" style="word-break:break-word">@(string.IsNullOrEmpty(campo.Valor) ? "—" : campo.Valor)</td>
+                                    @if (tieneConf)
+                                    {
+                                        Detalle.Extraccion!.ConfianzaPorCampo.TryGetValue(campo.Campo, out var cv);
+                                        <td class="py-0 ps-1 text-muted text-nowrap" style="font-size:0.72rem">@cv.ToString("P0")</td>
+                                    }
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <span class="text-muted small">@(Detalle.ClassificationOnly ? "Sin extracción por flujo de solo clasificación" : "Sin campos extraídos")</span>
+            }
+        </div>
+
+        <!-- Validaciones -->
+        <div class="col-md-4">
+            @{
+                var erroresV = Detalle.Validaciones.Where(v => !v.Pasado).ToList();
+                var okV = Detalle.Validaciones.Where(v => v.Pasado).ToList();
+                var numErrV = erroresV.Count(v => v.Severidad == "Error");
+                var numWarnV = erroresV.Count(v => v.Severidad != "Error");
+            }
+            <div class="detail-section-label">
+                Validaciones
+                @if (numErrV > 0) { <span class="badge bg-danger ms-1">@numErrV err</span> }
+                @if (numWarnV > 0) { <span class="badge bg-warning text-dark ms-1">@numWarnV warn</span> }
+                @if (okV.Count > 0) { <span class="badge bg-success ms-1">@okV.Count ok</span> }
+            </div>
+            @if (erroresV.Count > 0)
+            {
+                <div style="max-height:220px;overflow-y:auto">
+                    @foreach (var v in erroresV)
+                    {
+                        <div class="d-flex align-items-start gap-1 mb-1 small">
+                            <span class="@(v.Severidad == "Error" ? "text-danger" : "text-warning") fw-bold" style="min-width:1rem">@(v.Severidad == "Error" ? "✗" : "⚠")</span>
+                            <div>
+                                <span class="fw-semibold">@v.Campo</span>
+                                @if (!string.IsNullOrEmpty(v.Mensaje)) { <span class="text-muted">: @v.Mensaje</span> }
+                                @if (!string.IsNullOrEmpty(v.ValorOriginal)) { <div class="text-muted" style="font-size:0.72rem">Valor: @v.ValorOriginal</div> }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+            else if (Detalle.Validaciones.Count > 0)
+            {
+                <div class="text-success small">✓ Todas las validaciones pasadas (@okV.Count)</div>
+            }
+            else
+            {
+                <span class="text-muted small">Sin datos de validación</span>
+            }
+        </div>
+
+        <!-- Plugins · GDC · Integridad -->
+        <div class="col-md-3">
+
+            @if (Detalle.Plugins.Count > 0)
+            {
+                <div class="detail-section-label">Plugins (@Detalle.Plugins.Count)</div>
+                @foreach (var p in Detalle.Plugins)
+                {
+                    <div class="d-flex align-items-center gap-1 mb-1 small">
+                        <span class="@(p.Success ? "text-success" : "text-danger") fw-bold" style="min-width:1rem">@(p.Success ? "✓" : "✗")</span>
+                        <span class="text-truncate" title="@p.PluginKey">@p.PluginKey</span>
+                        <span class="text-muted ms-auto text-nowrap">@FormatDuracion(p.DurationMs)</span>
+                    </div>
+                    @if (!p.Success && !string.IsNullOrEmpty(p.Error))
+                    {
+                        <div class="text-danger ps-3" style="font-size:0.72rem">@p.Error</div>
+                    }
+                }
+            }
+
+            @if (Detalle.GDC != null)
+            {
+                <div class="detail-section-label @(Detalle.Plugins.Count > 0 ? "mt-2" : "")">GDC</div>
+                <div class="small">
+                    <div class="d-flex align-items-center gap-1">
+                        <span class="@(Detalle.GDC.Exitoso ? "text-success" : "text-danger") fw-bold">@(Detalle.GDC.Exitoso ? "✓" : "✗")</span>
+                        <span>@(Detalle.GDC.Exitoso ? "Subido" : "Error")</span>
+                        @if (Detalle.GDC.YaExistia) { <span class="badge bg-secondary" style="font-size:0.62rem">Ya existía</span> }
+                        @if (Detalle.GDC.Intentos > 1) { <span class="text-muted" style="font-size:0.72rem">@Detalle.GDC.Intentos intentos</span> }
+                    </div>
+                    @if (!string.IsNullOrEmpty(Detalle.GDC.ObjectId)) { <div class="text-muted" style="font-size:0.72rem">ID: @Detalle.GDC.ObjectId</div> }
+                    @if (!string.IsNullOrEmpty(Detalle.GDC.ErrorDetalle)) { <div class="text-danger" style="font-size:0.72rem">@Detalle.GDC.ErrorDetalle</div> }
+                </div>
+            }
+
+            @if (Detalle.Integridad != null)
+            {
+                <div class="detail-section-label mt-2">Integridad</div>
+                <div class="small">
+                    @if (!string.IsNullOrEmpty(Detalle.Integridad.IdActivo))
+                    {
+                        <div>
+                            <span class="text-muted">IdActivo:</span> @Detalle.Integridad.IdActivo
+                            @if (Detalle.Integridad.IdActivoCambiado)
+                            {
+                                <span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem">cambiado</span>
+                            }
+                        </div>
+                    }
+                    @if (!string.IsNullOrEmpty(Detalle.Integridad.GestorDocumental)) { <div><span class="text-muted">Gestor documental:</span> @Detalle.Integridad.GestorDocumental</div> }
+                    @if (!string.IsNullOrEmpty(Detalle.Integridad.SHA256)) { <div class="text-muted" style="font-size:0.65rem;word-break:break-all">SHA: @Detalle.Integridad.SHA256[..Math.Min(12, Detalle.Integridad.SHA256.Length)]…</div> }
+                </div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter, EditorRequired] public EjecucionDetalleDto? Detalle { get; set; }
+
+    private int _duracionTotalTimelineMs => Detalle?.Timeline.Sum(a => a.DuracionMs) ?? 0;
+
+    // ── Actividad / timeline ──────────────────────────────────────────────────
+
+    private static string ActivityIcon(string estado) => estado?.ToLowerInvariant() switch
+    {
+        "completed" or "completado" => "✓",
+        "running" or "ejecutando"   => "▶",
+        "skipped" or "omitido"      => "↷",
+        "failed" or "fallido" or "error" => "✗",
+        "timeout"                   => "⏱",
+        _                           => "◯"
+    };
+
+    private static string ActivityDotClass(string estado) => estado?.ToLowerInvariant() switch
+    {
+        "completed" or "completado"      => "text-success",
+        "running" or "ejecutando"        => "text-warning",
+        "skipped" or "omitido"           => "text-primary",
+        "failed" or "fallido" or "error" => "text-danger",
+        "timeout"                        => "text-danger",
+        _                                => "text-secondary"
+    };
+
+    private static string ActivityBarClass(string estado) => estado?.ToLowerInvariant() switch
+    {
+        "completed" or "completado"      => "bg-success",
+        "running" or "ejecutando"        => "bg-warning",
+        "skipped" or "omitido"           => "bg-primary",
+        "failed" or "fallido" or "error" => "bg-danger",
+        _                                => "bg-secondary"
+    };
+
+    private static int BarWidth(int ms, int total) =>
+        total > 0 ? (int)Math.Clamp(Math.Round(100.0 * ms / total), 2, 100) : 0;
+
+    private static string DuracionClass(int ms) => ms switch
+    {
+        > 60000 => "text-danger",
+        > 30000 => "text-warning",
+        _       => ""
+    };
+
+    private static string FormatDuracion(int ms)
+    {
+        if (ms < 1000) return $"{ms} ms";
+        if (ms < 60000) return $"{ms / 1000.0:F1} s";
+        return $"{ms / 60000}m {(ms % 60000) / 1000}s";
+    }
+
+    // ── Estado / calidad badges ────────────────────────────────────────────────
+
+    private static string EstadoBadgeClass(string estado) => estado switch
+    {
+        "Completado" or "Completed" or "OK" => "bg-success",
+        "Error" or "Fallido"                => "bg-danger",
+        "Duplicado"                         => "bg-secondary",
+        "Running" or "Pending"              => "bg-warning text-dark",
+        "PENDIENTE_REINTENTO"               => "bg-warning text-dark",
+        _                                   => "bg-info text-dark"
+    };
+
+    private static string CalidadBadgeClass(string calidad) => calidad switch
+    {
+        "OK"       => "bg-success",
+        "REVISION" => "bg-warning text-dark",
+        "ERROR"    => "bg-danger",
+        _          => "bg-secondary"
+    };
+
+    // ── Confianza ──────────────────────────────────────────────────────────────
+
+    private static string ConfianzaClass(double c) => c switch
+    {
+        >= 0.7 => "text-success fw-semibold",
+        >= 0.5 => "text-warning fw-semibold",
+        > 0    => "text-danger fw-semibold",
+        _      => "text-muted"
+    };
+
+    private static string ConfianzaBarClass(double c) => c switch
+    {
+        >= 0.7 => "bg-success",
+        >= 0.5 => "bg-warning",
+        > 0    => "bg-danger",
+        _      => "bg-secondary"
+    };
+}
