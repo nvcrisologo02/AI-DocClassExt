@@ -321,8 +321,11 @@ public class EjecucionesAdminFunction
     /// en minusculas y con punto (ej "decl.08") mientras el catalogo usa mayusculas y guion
     /// (ej "DECL-08"); hay que normalizar antes de comparar. Ejecuciones antiguas pueden
     /// referenciar codigos ya retirados del catalogo: en ese caso se devuelve null sin fallar.
+    /// Muchas ejecuciones solo registran el codigo de familia sin subtipo (ej "ESIN"); si no
+    /// hay subtipo se reintenta contra CatalogoTdn1 con el prefijo antes del primer guion.
+    /// Internal para permitir pruebas directas via InternalsVisibleTo (DocumentIA.Tests.Unit).
     /// </summary>
-    private async Task<(string? NombreSubtipo, string? NombreFamilia)> ResolverNombresCatalogoAsync(string? codigoTipologia)
+    internal async Task<(string? NombreSubtipo, string? NombreFamilia)> ResolverNombresCatalogoAsync(string? codigoTipologia)
     {
         if (string.IsNullOrWhiteSpace(codigoTipologia))
         {
@@ -334,16 +337,21 @@ public class EjecucionesAdminFunction
         var subtipo = await _dbContext.CatalogoTdn2
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Codigo == codigoNormalizado);
-        if (subtipo is null)
+        if (subtipo is not null)
         {
-            return (null, null);
+            var familiaDelSubtipo = await _dbContext.CatalogoTdn1
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.Codigo == subtipo.CodigoTdn1);
+
+            return (subtipo.Nombre, familiaDelSubtipo?.Nombre);
         }
 
+        var codigoFamilia = codigoNormalizado.Split('-', 2)[0];
         var familia = await _dbContext.CatalogoTdn1
             .AsNoTracking()
-            .FirstOrDefaultAsync(x => x.Codigo == subtipo.CodigoTdn1);
+            .FirstOrDefaultAsync(x => x.Codigo == codigoFamilia);
 
-        return (subtipo.Nombre, familia?.Nombre);
+        return (null, familia?.Nombre);
     }
 
     private static string ToDisplayString(object? value) => value switch
