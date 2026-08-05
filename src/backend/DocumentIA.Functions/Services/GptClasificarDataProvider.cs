@@ -23,6 +23,15 @@ namespace DocumentIA.Functions.Services;
 /// </summary>
 public class GptClasificarDataProvider : IClasificarDataProvider
 {
+    /// <summary>
+    /// AB#100006: en clasificación, el documento ya viaja en el bloque CONTENIDO DEL DOCUMENTO
+    /// del user prompt de Fase 1 ({DOCUMENT_TEXT}). El {contenido} del prompt de resumen se
+    /// interpola con esta referencia en lugar del texto completo para no duplicar el documento
+    /// (y sus tokens) dentro del mismo mensaje.
+    /// </summary>
+    internal const string ResumenContenidoReferencia =
+        "(el documento ya está incluido más arriba en este mismo mensaje, en la sección \"CONTENIDO DEL DOCUMENTO (texto/markdown)\"; úsalo como contenido)";
+
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
     private readonly ClassificationTipologiaPromptBuilder _tipologiaPromptBuilder;
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
@@ -84,7 +93,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             _routingSettings.NivelClasificacionDefault);
 
         var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
-        var resumenPrompt = ResolveResumenPrompt(input, contextoTexto);
+        var resumenPrompt = ResolveResumenPrompt(input);
         var contextoPrompt = BuildInstructionPromptContext(input.Entrada.Instrucciones.Prompt);
 
         // Obtener prompts configurables desde BD/cache/fallback
@@ -389,7 +398,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private PromptConfig? ResolveResumenPrompt(ClasificacionInput input, string? contextoTexto)
+    private PromptConfig? ResolveResumenPrompt(ClasificacionInput input)
     {
         if (!input.GenerarResumenPorDefecto)
         {
@@ -407,7 +416,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 SystemPrompt = dbResumenPrompt.SystemPrompt,
                 UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
                     dbResumenPrompt.UserPromptTemplate,
-                    contextoTexto ?? string.Empty,
+                    ResumenContenidoReferencia,
                     input.DatosNormalizados),
                 MaxTokens = dbResumenPrompt.MaxTokens,
                 Temperature = dbResumenPrompt.Temperature,
@@ -437,7 +446,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             SystemPrompt = effectivePrompt.SystemPrompt,
             UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
                 effectivePrompt.UserPromptTemplate,
-                contextoTexto ?? string.Empty,
+                ResumenContenidoReferencia,
                 input.DatosNormalizados),
             MaxTokens = effectivePrompt.MaxTokens,
             Temperature = effectivePrompt.Temperature,

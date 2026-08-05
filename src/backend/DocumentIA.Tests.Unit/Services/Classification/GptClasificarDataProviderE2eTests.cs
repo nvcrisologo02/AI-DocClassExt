@@ -94,8 +94,10 @@ Documento: {contenido}",
             resumenPrompt.UserPromptTemplate.Should().Contain("4. Acciones recomendadas");
             resumenPrompt.UserPromptTemplate.Should().Contain("5. Contenido");
             
-            // And: The template should have been interpolated with actual content
-            resumenPrompt.UserPromptTemplate.Should().Contain(contextoTexto);
+            // And: AB#100006 — {contenido} se interpola con la referencia al bloque CONTENIDO
+            // DEL DOCUMENTO del prompt de Fase 1, no con el documento duplicado
+            resumenPrompt.UserPromptTemplate.Should().NotContain(contextoTexto);
+            resumenPrompt.UserPromptTemplate.Should().Contain(GptClasificarDataProvider.ResumenContenidoReferencia);
             resumenPrompt.UserPromptTemplate.Should().NotContain("{contenido}");
         }
 
@@ -193,8 +195,10 @@ Documento: {contenido}",
             resumenPrompt.MaxTokens.Should().Be(999);
             resumenPrompt.Temperature.Should().Be(0.1);
             
-            // And: Content should still be interpolated
-            resumenPrompt.UserPromptTemplate.Should().Contain(contextoTexto);
+            // And: AB#100006 — también en el override por tipología, {contenido} se resuelve
+            // con la referencia al bloque ya enviado, no con el documento duplicado
+            resumenPrompt.UserPromptTemplate.Should().NotContain(contextoTexto);
+            resumenPrompt.UserPromptTemplate.Should().Contain(GptClasificarDataProvider.ResumenContenidoReferencia);
         }
 
         // ========== Helper Methods ==========
@@ -254,7 +258,7 @@ Documento: {contenido}",
                 .GetMethod("ResolveResumenPrompt",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
             
-            return (PromptConfig?)method?.Invoke(provider, new object[] { input, contextoTexto });
+            return (PromptConfig?)method?.Invoke(provider, new object[] { input });
         }
     }
 }
