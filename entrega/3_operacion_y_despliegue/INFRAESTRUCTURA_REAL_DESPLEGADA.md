@@ -365,6 +365,26 @@ Cada entorno tiene su propio Key Vault (`srbkvdevdocai` · `srbkvpredocai` · `s
 
 ---
 
+## Identidad y acceso al Admin (EasyAuth)
+
+Autenticacion del Admin mediante App Service Authentication (EasyAuth) con app
+registration de Entra ID por entorno y grupo de seguridad con "Assignment
+required = Yes". Procedimiento y comandos: `docs/guias/GUIA_EASYAUTH_ADMIN.md`
+del repositorio.
+
+| Entorno | App registration | Client ID | Grupo de acceso | Secret (Key Vault) | Estado |
+|---------|------------------|-----------|-----------------|--------------------|--------|
+| DEV | `DocumentIA Admin - DEV` | `32aba075-f88e-4012-9ed4-44655123001d` | `GSEC-DocumentIA-Admin-DEV` | `srbkvdevdocai` / `AdminEasyAuthClientSecret` | App registration y grupo verificados (2026-08-06); activacion en App Service pendiente |
+| PRE | — | — | — | `srbkvpredocai` / `AdminEasyAuthClientSecret` (previsto) | Pendiente de solicitud |
+| PROD | — | — | — | `srbkvprodocai` / `AdminEasyAuthClientSecret` (previsto) | Pendiente de solicitud |
+
+Tenant: `1a213c5a-2e3d-4ae4-b0ba-075c42f9700e`. El secret de EasyAuth se
+almacena en el Key Vault del entorno y el App Service lo lee via referencia en
+el app setting `MICROSOFT_PROVIDER_AUTHENTICATION_SECRET`. Mientras EasyAuth no
+este activo en un entorno, el Admin desplegado opera en modo solo lectura.
+
+---
+
 ## Características clave del despliegue
 
 ### Seguridad

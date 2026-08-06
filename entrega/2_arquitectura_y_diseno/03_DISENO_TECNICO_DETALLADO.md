@@ -1232,6 +1232,14 @@ Los archivos JSON en `config/tipologias/` son únicamente **fuente de seed**: al
 
 ---
 
+Los datos del proveedor de identidad por entorno (app registration, grupo de
+acceso, ubicación del secret) se mantienen en la sección "Identidad y acceso al
+Admin (EasyAuth)" de INFRAESTRUCTURA_REAL_DESPLEGADA y en la guía de activación
+GUIA_EASYAUTH_ADMIN. A fecha 2026-08-06, DEV dispone de app registration y grupo
+verificados (activación del App Service pendiente); PRE y PROD siguen sin
+proveedor, por lo que sus despliegues operan en modo solo lectura.
+
+
 ## 3.9 Manejo de Errores en Durable Functions
 
 ### 3.9.1 Patron EjecutarPasoNegocio
