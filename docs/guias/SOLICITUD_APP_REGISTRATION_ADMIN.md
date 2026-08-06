@@ -28,6 +28,11 @@ Texto para el ticket:
 >   - `https://srbwebadminpredocai.azurewebsites.net/.auth/login/aad/callback`
 >   - `https://srbwebadminprodocai.azurewebsites.net/.auth/login/aad/callback`
 >
+> - **Emisión de ID tokens (imprescindible)**: en Authentication → "Implicit
+>   grant and hybrid flows", marcar **"ID tokens (used for implicit and hybrid
+>   flows)"**. App Service Authentication lo requiere; sin esta opción el inicio
+>   de sesión falla con el error `AADSTS700054`.
+>
 >   Se puede optar por una app registration por entorno (una para dev, otra
 >   para pre, otra para prod) o por una única app registration con los tres
 >   redirect URIs anteriores. Lo habitual, y más limpio operativamente
@@ -95,7 +100,7 @@ cada app puntual.
 Para que no se pierda ningún punto al abrir el ticket:
 
 1. App registration single-tenant (una por entorno, o una con los tres redirect URIs).
-2. Los redirect URIs indicados, sin permisos de Graph más allá del inicio de sesión.
+2. Los redirect URIs indicados y la emisión de ID tokens habilitada, sin permisos de Graph más allá del inicio de sesión.
 3. Creación del grupo de seguridad de acceso al Admin.
 4. Alta en ese grupo de los usuarios del listado adjunto.
 5. Asignación del grupo a la enterprise application con "Assignment required = Yes".

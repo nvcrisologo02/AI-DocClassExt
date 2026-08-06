@@ -41,6 +41,24 @@
   en la app registration: **Enterprise application > Properties > Assignment required = Yes**
   y asignar usuarios/grupos en **Users and groups**.
 
+## Resolución de problemas
+
+- **Tras el login, el callback (`/.auth/login/aad/callback`) falla y el payload del
+  POST trae `AADSTS700054: response_type 'id_token' is not enabled for the
+  application`**: la app registration no tiene habilitada la emisión de ID tokens,
+  que EasyAuth necesita (flujo híbrido OpenID Connect). Arreglo (requiere ser owner
+  de la app registration o rol equivalente): Entra ID → App registrations → la app →
+  Authentication → "Implicit grant and hybrid flows" → marcar **ID tokens** → Save;
+  o por CLI: `az ad app update --id <client-id> --enable-id-token-issuance true`.
+  Aplica al momento, sin reiniciar el App Service. El error real viaja en el
+  *payload* del POST de Entra al callback (visible en las herramientas de
+  desarrollador del navegador, pestaña Payload), no en el cuerpo de la respuesta.
+- **Visitar `/.auth/login/aad/callback` directamente devuelve 401**: es el
+  comportamiento esperado; esa URL es donde Entra devuelve el token, no una página
+  para navegar. Las URLs de personas son la raíz de la app o `/.auth/login/aad`.
+- **`Cannot use auth v2 commands when the app is using auth v1`** al usar
+  `az webapp auth`: ver el paso de upgrade del esquema en la sección de comandos.
+
 ## Datos y comandos por entorno
 
 Los identificadores de esta sección no son secretos (el client secret nunca se
@@ -56,6 +74,7 @@ documenta: viaja por canal seguro y se almacena en Key Vault).
 | Enterprise application (Service Principal) ID | `e3ffe62e-41b6-4f32-a971-468c76166eec` |
 | Redirect URI | `https://srbwebadmindevdocai.azurewebsites.net/.auth/login/aad/callback` |
 | Assignment required | Sí |
+| Emisión de ID tokens | **Requerida** (Authentication → "Implicit grant and hybrid flows" → *ID tokens*); sin ella el login falla con `AADSTS700054` |
 | Grupo de acceso asignado | `GSEC-DocumentIA-Admin-DEV` |
 | Client secret | En Key Vault `srbkvdevdocai`, secreto `AdminEasyAuthClientSecret` |
 | App Service | `srbwebadmindevdocai` (RG `SRBRGDEVDOCSAI`, suscripción Core Desarrollo `8764f9ff-fe37-4c03-bde9-6294622bef6d`) |
