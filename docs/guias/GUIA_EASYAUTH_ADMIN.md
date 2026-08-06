@@ -73,7 +73,17 @@ az webapp config appsettings set --subscription 8764f9ff-fe37-4c03-bde9-6294622b
   --resource-group SRBRGDEVDOCSAI --name srbwebadmindevdocai \
   --settings "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET=@Microsoft.KeyVault(VaultName=srbkvdevdocai;SecretName=AdminEasyAuthClientSecret)"
 
-# 3) Configurar el proveedor Microsoft y activar la autenticación
+# 3) Si el App Service sigue en el esquema de auth v1 (classic) — es el caso de las
+#    apps que nunca han configurado Authentication —, los comandos "az webapp auth"
+#    modernos fallan con "Cannot use auth v2 commands when the app is using auth v1".
+#    Comprobar y, si procede, hacer el upgrade unico a v2 (irreversible; inocuo
+#    cuando no hay auth configurada porque no migra nada):
+az webapp auth config-version show --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d \
+  --resource-group SRBRGDEVDOCSAI --name srbwebadmindevdocai
+az webapp auth config-version upgrade --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d \
+  --resource-group SRBRGDEVDOCSAI --name srbwebadmindevdocai
+
+# 4) Configurar el proveedor Microsoft y activar la autenticación
 az webapp auth microsoft update --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d \
   --resource-group SRBRGDEVDOCSAI --name srbwebadmindevdocai \
   --client-id 32aba075-f88e-4012-9ed4-44655123001d \
