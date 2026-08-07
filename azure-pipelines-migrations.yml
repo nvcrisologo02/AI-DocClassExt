@@ -1,0 +1,138 @@
+name: Migrations-$(Date:yyyyMMdd)$(Rev:.r)
+
+trigger: none
+pr: none
+
+parameters:
+  - name: targetEnvironment
+    type: string
+    default: dev
+    values:
+      - dev
+      - pre
+      - prod
+  - name: addTransientFirewallRule
+    displayName: Add transient firewall rule for agent IP
+    type: boolean
+    default: true
+
+pool:
+  vmImage: windows-latest
+
+variables:
+  - name: sqlDatabaseName
+    value: DocumentIA
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: azureSubscription
+      value: AI DocClassExt DEV
+    - name: azureResourceGroup
+      value: SRBRGDEVDOCSAI
+    - name: sqlServerName
+      value: srbsqldevdocai
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: azureSubscription
+      value: AI DocClassExt PRE
+    - name: azureResourceGroup
+      value: SRBRGPREDOCSAI
+    - name: sqlServerName
+      value: srbsqlpredocai
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: azureSubscription
+      value: AI DocClassExt PRO
+    - name: azureResourceGroup
+      value: SRBRGDOCSAIPROD
+    - name: sqlServerName
+      value: srbsqlprodocai
+
+stages:
+- stage: Generate
+  displayName: Generate migrations script
+  jobs:
+  - job: Generate
+    displayName: dotnet ef migrations script (idempotent)
+    steps:
+    - checkout: self
+    - task: UseDotNet@2
+      inputs:
+        packageType: 'sdk'
+        version: '8.0.x'
+    - pwsh: dotnet tool install --global dotnet-ef --version "8.0.*"
+      displayName: Install dotnet-ef
+    - pwsh: |
+        dotnet ef migrations script --idempotent `
+          --context DocumentIADbContext `
+          --project src/backend/DocumentIA.Data/DocumentIA.Data.csproj `
+          --startup-project src/backend/DocumentIA.Data/DocumentIA.Data.csproj `
+          --output "$(Build.ArtifactStagingDirectory)/migrations.sql"
+      displayName: Generate idempotent migrations script
+      env:
+        SqlConnectionString: 'Server=tcp:localhost,1433;Database=design-time-placeholder;'
+    - pwsh: |
+        $script = Get-Content "$(Build.ArtifactStagingDirectory)/migrations.sql" -Raw
+        if (-not $script -or $script.Length -lt 100) { throw "migrations.sql vacio o sospechosamente corto" }
+        Write-Host ("migrations.sql generado: {0} caracteres" -f $script.Length)
+      displayName: Sanity check migrations.sql
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)/migrations.sql'
+        ArtifactName: 'MigrationsScript'
+        publishLocation: 'Container'
+
+- stage: Apply
+  displayName: Apply to ${{ parameters.targetEnvironment }}
+  dependsOn: Generate
+  jobs:
+  - deployment: Apply
+    displayName: Apply migrations to Azure SQL
+    environment: ${{ parameters.targetEnvironment }}
+    pool:
+      vmImage: windows-latest
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - download: current
+            artifact: MigrationsScript
+          - ${{ if eq(parameters.addTransientFirewallRule, true) }}:
+            - task: AzureCLI@2
+              displayName: Add transient firewall rule (agent IP)
+              continueOnError: true
+              inputs:
+                azureSubscription: '$(azureSubscription)'
+                scriptType: 'pscore'
+                scriptLocation: 'inlineScript'
+                inlineScript: |
+                  $ip = (Invoke-RestMethod -Uri "https://api.ipify.org")
+                  Write-Host "IP publica del agente: $ip"
+                  az sql server firewall-rule create `
+                    --resource-group "$(azureResourceGroup)" `
+                    --server "$(sqlServerName)" `
+                    --name "pipeline-migrations-$(Build.BuildId)" `
+                    --start-ip-address $ip `
+                    --end-ip-address $ip
+          - task: AzureCLI@2
+            displayName: Apply migrations script
+            inputs:
+              azureSubscription: '$(azureSubscription)'
+              scriptType: 'pscore'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                pwsh -File .\scripts\deployment\apply-migrations.ps1 `
+                  -SqlServerFqdn "$(sqlServerName).database.windows.net" `
+                  -Database "$(sqlDatabaseName)" `
+                  -ScriptPath "$(Pipeline.Workspace)/MigrationsScript/migrations.sql" `
+                  -MigrationsDir "src/backend/DocumentIA.Data/Migrations"
+          - ${{ if eq(parameters.addTransientFirewallRule, true) }}:
+            - task: AzureCLI@2
+              displayName: Remove transient firewall rule
+              condition: always()
+              inputs:
+                azureSubscription: '$(azureSubscription)'
+                scriptType: 'pscore'
+                scriptLocation: 'inlineScript'
+                inlineScript: |
+                  az sql server firewall-rule delete `
+                    --resource-group "$(azureResourceGroup)" `
+                    --server "$(sqlServerName)" `
+                    --name "pipeline-migrations-$(Build.BuildId)"
