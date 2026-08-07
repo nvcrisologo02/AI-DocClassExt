@@ -33,6 +33,12 @@ $token = az account get-access-token --resource "https://database.windows.net/" 
 if (-not $token) { throw "No se pudo obtener token Entra para Azure SQL (az account get-access-token)" }
 
 function Get-LastAppliedMigration {
+    $exists = @(Invoke-Sqlcmd -ServerInstance $SqlServerFqdn -Database $Database -AccessToken $token `
+        -Query "SELECT 1 AS T FROM sys.tables WHERE name = '__EFMigrationsHistory'")
+    if ($exists.Count -eq 0) {
+        Write-Host "La tabla __EFMigrationsHistory no existe (BD sin migrar): todo pendiente."
+        return $null
+    }
     $rows = @(Invoke-Sqlcmd -ServerInstance $SqlServerFqdn -Database $Database -AccessToken $token `
         -Query "SELECT TOP 1 MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC")
     if ($rows.Count -eq 0) { return $null }
