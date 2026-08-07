@@ -1,4 +1,4 @@
-# 2. Analisis Funcional — DocumentIA MVP
+# 2. Analisis Funcional — DocumentIA
 
 > Ultima actualizacion: 2026-03-31  
 > Proyecto: AI DocClassExt — SAREB
@@ -32,7 +32,7 @@ flowchart LR
     end
 
     subgraph Sistemas
-        DIA["DocumentIA MVP"]
+        DIA["DocumentIA"]
         GDC["GDC SINTWS<br/>(Gestor Documental)"]
         AI["Azure AI Services"]
         EXT["Sistemas Externos<br/>(Atlas, Catastro)"]
@@ -64,13 +64,14 @@ flowchart TB
     SCA["Sistema Cliente API"]
     ADM["Administrador"]
 
-    subgraph DocumentIA["DocumentIA MVP"]
+    subgraph DocumentIA["DocumentIA"]
         CU1["CU1: Ingestar documento<br/>para procesamiento"]
         CU2["CU2: Consultar estado<br/>de procesamiento"]
         CU3["CU3: Gestionar<br/>tipologias"]
         CU4["CU4: Gestionar<br/>modelos AI"]
         CU5["CU5: Configurar plugins<br/>por tipologia"]
         CU6["CU6: Consultar<br/>tipologias publicadas"]
+        CU8["CU8: Gestionar prompts<br/>de clasificacion"]
     end
 
     SCA --> CU1
@@ -79,6 +80,7 @@ flowchart TB
     ADM --> CU3
     ADM --> CU4
     ADM --> CU5
+    ADM --> CU8
 ```
 
 ### CU1: Ingestar Documento para Procesamiento
@@ -106,6 +108,8 @@ flowchart TB
 | ExpectedType informado | Omite clasificacion (confianza=1.0), usa la tipologia indicada directamente. |
 | Confianza clasificacion < umbral | Estado final `BAJA_CONFIANZA_CLASIFICACION`. No extrae ni valida. |
 | Tipologia no resoluble | Estado final `ERROR` con mensaje "No se ha podido identificar la tipologia". |
+| Cuota de Azure OpenAI agotada durante la clasificacion GPT (limite de peticiones excedido, tras reintentos automaticos) | Estado final `PENDIENTE_REINTENTO`. Desenlace limpio y retriable: el documento no se pierde ni queda en error definitivo, solo pospone la clasificacion para reprocesarse mas tarde. Operacion puede identificarlo y reencolar el documento; se distingue de `NO_CLASIFICADO` (documento genuinamente no clasificable) y de `ERROR` (fallo no recuperable). Ver RN3. |
+| Cuota de Azure OpenAI agotada durante un prompt de enriquecimiento (no en la clasificacion) | El prompt devuelve un resultado degradado de forma controlada; no bloquea el pipeline ni marca el documento como `PENDIENTE_REINTENTO`. |
 | Extraccion con baja completitud | Activa fallback GPT-4o-mini para campos faltantes. |
 | Plugin critico (Priority=1) falla | Detiene cadena de plugins. Datos parciales se preservan. |
 | AssetResolver habilitado y activo encontrado | `ObtenerActivoActivity` resuelve IdActivo desde `DM_POSICION_AAII_TB` antes de la integracion. |
@@ -126,8 +130,9 @@ flowchart TB
 | Campo | Detalle |
 |-------|---------|
 | **Actor principal** | Administrador |
+| **Precondicion** | Requiere usuario autenticado (ver RN8); sin autenticacion, el Admin opera en modo solo lectura y estas operaciones se rechazan. |
 | **Endpoints** | `GET/POST/PUT /management/tipologias`, `POST .../publicar`, `POST .../retirar`, `POST .../draft` |
-| **Ciclo de vida** | Draft → Published → Retired. Solo tipologias Published estan activas para clasificacion. |
+| **Ciclo de vida** | Draft → Published → Retired. Solo tipologias Published estan activas para clasificacion. Publicar, retirar y volver a borrador piden confirmacion explicita en el Admin. |
 | **Datos gestionados** | Codigo, nombre, version, umbrales, modelos asociados, prompt GPT y `ConfiguracionJson` persistido en BD. Los JSON fisicos son seed/referencia, no fuente operativa. |
 
 ### CU4: Gestionar Modelos AI
@@ -135,17 +140,20 @@ flowchart TB
 | Campo | Detalle |
 |-------|---------|
 | **Actor principal** | Administrador |
+| **Precondicion** | Requiere usuario autenticado (ver RN8); sin autenticacion, el Admin opera en modo solo lectura y estas operaciones se rechazan. |
 | **Endpoints** | `GET /management/modelos/{tipo}`, `POST /management/modelos`, `PUT .../modelos/{id}`, `DELETE .../modelos/{id}` |
 | **Tipos** | Clasificacion, Extraccion, Prompt, Layout |
-| **Datos** | Key unica, provider, modelo, `ConfiguracionJson` en la tabla `ModeloConfigs`, activo/inactivo. |
+| **Datos** | Key unica, provider, modelo, `ConfiguracionJson` en la tabla `ModeloConfigs`, activo/inactivo. Los campos sensibles del `ConfiguracionJson` (`apiKey`, `password`, `secret`, `accountKey`, de forma recursiva) se devuelven siempre enmascarados como `"***"` en todas las respuestas; al guardar, si el campo llega como `"***"` se conserva el valor almacenado (round-trip seguro), de forma que editar sin tocar la clave no la destruye. |
+| **Baja** | `DELETE` es un soft-delete (`Activo=false`): el modelo no se borra fisicamente. Pide confirmacion ("Desactivar modelo"). |
 
 ### CU5: Configurar Plugins por Tipologia
 
 | Campo | Detalle |
 |-------|---------|
 | **Actor principal** | Administrador |
+| **Precondicion** | Requiere usuario autenticado (ver RN8); sin autenticacion, el Admin opera en modo solo lectura y estas operaciones se rechazan. |
 | **Endpoints** | `GET/PUT /management/plugins-tipologias/{codigo}`, `POST .../publicar`, `POST .../retirar` |
-| **Datos** | `ConfiguracionJson` en BD con array de plugins: pluginKey, pluginType (REST/SOAP/Custom), enabled, priority, configuration, retryPolicy. |
+| **Datos** | `ConfiguracionJson` en BD con array de plugins: pluginKey, pluginType (REST/SOAP/Custom), enabled, priority, configuration, retryPolicy. Publicar y retirar piden confirmacion explicita en el Admin. |
 
 ### CU6: Consultar Tipologias Publicadas
 
@@ -168,6 +176,17 @@ flowchart TB
 | **Resultado** | `detalleEjecucion.assetResolver` con activos encontrados, criterios usados, campos solicitados y duracion. |
 | **Si no hay match** | `assetResolver.exitoso = false`, `activos = []`, pipeline continua sin IdActivo desde este paso. |
 | **Si hay match multiple** | Se retornan todos los activos pero no se resuelve IdActivo automaticamente (requiere match unico). |
+
+### CU8: Gestionar Prompts de Clasificacion
+
+| Campo | Detalle |
+|-------|---------|
+| **Actor principal** | Administrador |
+| **Precondicion** | Requiere usuario autenticado (ver RN8); sin autenticacion, el Admin opera en modo solo lectura y estas operaciones se rechazan. |
+| **Endpoints** | `GET/POST /management/prompts`, `GET .../by-key/{promptKey}`, `PUT .../prompts/{id}`, `PUT .../prompts/{id}/activate`, `POST .../prompts/rollback`, `DELETE .../prompts/{id}` |
+| **Datos gestionados** | `PromptTemplate` versionado por `promptKey` + `version` (estado Activo/Draft, contenido de 10 a 16000 caracteres, usuario y fecha de creacion/actualizacion/publicacion). Son los prompts que usa la clasificacion jerarquica GPT (TDN1/TDN2), independientes del prompt propio de cada tipologia (gestionado en CU3). |
+| **Regla clave** | La version activa es inmutable (ver RN9): no admite `PUT`/`DELETE` directos (403 Forbidden). Editar un prompt activo desde el Admin crea una nueva version en borrador con el contenido copiado; al activarla, la version anterior pasa a Draft automaticamente. |
+| **Postcondicion** | Como mucho una version activa por `promptKey`; la clasificacion GPT que referencia esa clave usa siempre el contenido de la version activa. |
 
 ---
 
@@ -215,6 +234,11 @@ ConfianzaGlobal = MIN(ConfianzaClasificacion, ConfianzaExtraccion, ConfianzaVali
 | >= umbralOK (0.85) | `OK` |
 | >= umbralRevision (0.70) | `REVISION` |
 | < umbralRevision | `ERROR` |
+
+**Excepcion — cuota de Azure OpenAI agotada:** cuando la clasificacion GPT no puede completarse por falta de cuota
+(ver CU1), el resultado final es `Estado = PENDIENTE_REINTENTO` aunque `EstadoCalidad` se marque como `ERROR`
+(confianzas a 0). Es un caso diferenciado: se trata como reintento pendiente, no como fallo definitivo, y la
+agregacion de metricas no lo contabiliza como un error real de clasificacion.
 
 ### RN4: Severidades de Validacion
 
@@ -286,6 +310,20 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 - Si se encuentra exactamente 1 activo, su `ID_ACTIVO_SAREB` se asigna como `IdActivo` del documento.
 - Si se encuentran 0 o multiples activos, no se resuelve IdActivo en este paso (puede ser resuelto por plugins posteriores).
 
+### RN8: Modo de Acceso del Portal Admin (autenticacion y auditoria)
+
+- Las operaciones de escritura del Admin (crear/editar/publicar/retirar/activar/eliminar tipologias, modelos, prompts y configuracion de plugins) requieren una identidad de usuario autenticada.
+- La identidad se resuelve desde la cabecera `X-MS-CLIENT-PRINCIPAL-NAME`, inyectada por App Service Authentication (EasyAuth) cuando esta activa en el Admin desplegado en Azure.
+- Mientras EasyAuth no este activo, el Admin opera en **modo solo lectura**: las consultas siguen funcionando, pero cualquier escritura se rechaza, porque no hay forma de auditar quien realizo el cambio. En desarrollo local (`localhost`) esta restriccion no aplica: el usuario se identifica automaticamente con el usuario del sistema operativo (prefijo `dev-`).
+- Sin identidad (entornos desplegados sin EasyAuth activo), la auditoria registra el usuario como `no-autenticado`. Los literales antiguos `ADMIN-UI`/`admin` ya no se usan.
+
+### RN9: Versionado Inmutable de Prompts de Clasificacion
+
+- Cada `PromptTemplate` (clave + version) tiene estado Activo o Draft. Solo puede existir una version activa por clave.
+- Una version activa es **inmutable**: no admite `PUT`/`DELETE` directos (`403 Forbidden`). Para cambiar su contenido hay que crear una nueva version en borrador (con el contenido copiado) y activarla; al activarla, la version anterior pasa a Draft automaticamente.
+- Activar una version y eliminar una version en borrador son operaciones que requieren confirmacion explicita en el Admin.
+- La validacion de contenido es unicamente de longitud (10-16000 caracteres); los placeholders (`{TDN1_CATALOG}`, `{DOCUMENT_TEXT}`, etc.) no se validan automaticamente, para permitir iteracion flexible del prompt.
+
 ---
 
 ## 2.5 Glosario de Terminos del Dominio
@@ -293,11 +331,12 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | Termino | Definicion |
 |---------|-----------|
 | **Tipologia** | Tipo documental configurable (ej: nota-simple, tasacion, resumen-documental). Tiene codigo, version, umbrales y configuracion de extraccion/validacion/plugins. |
-| **Nota Simple** | Extracto del Registro de la Propiedad que informa sobre la situacion juridica de una finca (titulares, cargas, dominio). Tipologia principal del MVP: `nota-simple@1.4`. |
+| **Nota Simple** | Extracto del Registro de la Propiedad que informa sobre la situacion juridica de una finca (titulares, cargas, dominio). Tipologia principal del sistema: `nota-simple@1.4`. |
 | **Tasacion** | Informe de valoracion de un inmueble realizado por una sociedad de tasacion. |
 | **Confianza** | Metrica [0.0-1.0] que indica el grado de certeza de la IA sobre su resultado. Se calcula por clasificacion, extraccion y validacion. |
 | **ConfianzaAgregada / ConfianzaGlobal** | MIN(confianza clasificacion, confianza extraccion, confianza validacion). |
 | **EstadoCalidad** | Clasificacion del resultado final: OK (>=0.85), REVISION (>=0.70), ERROR (<0.70). Umbrales configurables por tipologia. |
+| **PENDIENTE_REINTENTO** | Estado final de un documento cuya clasificacion GPT se ha pospuesto porque la cuota de Azure OpenAI estaba agotada (limite de peticiones excedido) tras los reintentos automaticos. Es un desenlace limpio y retriable, no un fallo definitivo: el documento debe reprocesarse mas tarde. Se diferencia de `NO_CLASIFICADO` (el documento no encaja en ninguna tipologia) y de `ERROR` (fallo no recuperable). Operacion puede identificarlo y reencolar el documento; el Monitor del portal Admin lo muestra con un aviso visual. |
 | **CorrelationId** | UUID que vincula todas las operaciones de una misma peticion para trazabilidad end-to-end. Auto-generado si no se informa. |
 | **IdActivo** | Identificador del activo inmobiliario de SAREB asociado al documento. Puede venir en la peticion o ser resuelto por un plugin de enriquecimiento. |
 | **IdGDC** | Identificador del objeto en el Gestor Documental Corporativo tras la subida exitosa. |
@@ -306,7 +345,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | **IDUFIR / CRU** | Codigo Registral Unico de 14 digitos que identifica una finca de forma univoca a nivel nacional. |
 | **Referencia Catastral** | Codigo de 20 caracteres que identifica un inmueble en el Catastro. Validado por `CatastralReferenceValidator`. |
 | **NIF/NIE/CIF** | Documentos de identidad fiscal espanoles. Validados algoritmicamente por `NifValidator`. |
-| **GDC SINTWS** | Servicio SOAP del Gestor Documental Corporativo de SAREB (host: srbwidd03.sareb.srb:8090). |
+| **GDC SINTWS** | Servicio SOAP del Gestor Documental Corporativo de SAREB (host prod: srbwidp04.sareb.srb:8090; dev: srbwidd03.sareb.srb:8090). |
 | **Fallback** | Mecanismo automatico que redirige al proveedor alternativo (GPT) cuando el primario (DI/CU) tiene baja confianza o falla. |
 | **Plugin** | Componente de integracion extensible (REST, SOAP o DLL .NET custom) que enriquece datos extraidos con fuentes externas. |
 | **AssetResolver** | Plugin HTTP que consulta la tabla `DM_POSICION_AAII_TB` para resolver el activo inmobiliario (IdActivo). Soporta tres criterios: IDUFIR, Referencia Catastral y Direccion (fuzzy scoring). Criterios configurables con AND/OR. |
@@ -351,7 +390,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RNF06 | Auditabilidad | Cada operacion registrada en tabla Auditoria | PersistirActivity escribe AuditoriaEntity con accion, nivel, mensaje, timestamp. |
 | RNF07 | Extensibilidad | Anadir nueva tipologia sin cambiar codigo | Registro/configuracion en BD via Admin portal o Admin API. JSON fisico solo como seed/plantilla. Sin recompilacion. |
 | RNF08 | Observabilidad | Telemetria en Application Insights | Structured logging + Application Insights SDK. Metricas custom por actividad. |
-| RNF09 | Resiliencia | Tolerancia a fallos en servicios externos | Circuit breaker + retry exponencial en plugins y GDC. Fallback IA automatico. |
+| RNF09 | Resiliencia | Tolerancia a fallos en servicios externos | Circuit breaker + retry exponencial en plugins, GDC y llamadas a Azure OpenAI (clasificacion GPT y prompts). Ante cuota agotada, la clasificacion produce el desenlace limpio y retriable `PENDIENTE_REINTENTO` en vez de un error crudo. Fallback IA automatico. |
 | RNF10 | Mantenibilidad | Cobertura de tests unitarios en modulos criticos | 33 clases de test. Validacion, plugins, configuracion cubiertos. |
 
 ---
@@ -394,11 +433,11 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 
 | Restriccion | Detalle |
 |------------|---------|
-| **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional queda fuera del alcance del MVP actual. |
+| **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional queda fuera del alcance actual. |
 | **Formatos aceptados** | Solo PDF. Puede recibirse como Base64 sin saltos de línea (RFC 4648) o recuperarse desde GDC vía `documento.objectIdGDC`. |
 | **Tamaño maximo** | Limitado por el tamaño maximo de input de Durable Functions (~60 KB entity size en Storage). Documentos grandes pueden requerir blob-reference pattern (no implementado). |
 | **Timeouts** | GDC: 120s (hardcoded en orchestrator). Servicios AI: configurable por proveedor (DI: 120s, GPT: 30-60s, CU: configurable). |
-| **Conectividad GDC** | Requiere acceso de red a `srbwidd03.sareb.srb:8090`. SSL bypass configurable para certificado CA corporativo no confiado en Linux. |
+| **Conectividad GDC** | Requiere acceso de red al host GDC del entorno (prod: `srbwidp04.sareb.srb:8090`; dev: `srbwidd03.sareb.srb:8090`). SSL bypass configurable para certificado CA corporativo no confiado en Linux. |
 | **Region Azure** | Function App y mayoria de servicios en West Europe. Content Understanding en Sweden Central (unica region disponible con la funcionalidad requerida). |
 | **Modelo Consumption** | Function App en plan Consumption: cold start posible (~2-10s). Timeout maximo por ejecucion: 10 min (default) o 230s (HTTP trigger). |
 | **Idioma** | Documentos en espanol. Prompts GPT y reglas de validacion asumen idioma espanol. |

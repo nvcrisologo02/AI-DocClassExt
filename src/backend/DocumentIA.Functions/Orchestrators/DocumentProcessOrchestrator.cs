@@ -68,6 +68,7 @@ public class DocumentProcessOrchestrator
         var mapeoDireccionMunicipio = tipologiaResuelta.AssetResolverMapeoDireccionMunicipio;
         var mapeoDireccionCodigoPostal = tipologiaResuelta.AssetResolverMapeoDireccionCodigoPostal;
         var umbralScoreDireccion = tipologiaResuelta.AssetResolverUmbralScoreDireccion;
+        var mapeoColeccionActivos = tipologiaResuelta.AssetResolverMapeoColeccionActivos;
 
         return new ObtenerActivoInput
         {
@@ -88,7 +89,8 @@ public class DocumentProcessOrchestrator
             MapeoDireccionNumero = mapeoDireccionNumero ?? new(),
             MapeoDireccionMunicipio = mapeoDireccionMunicipio ?? new(),
             MapeoDireccionCodigoPostal = mapeoDireccionCodigoPostal ?? new(),
-            UmbralScoreDireccion = umbralScoreDireccion
+            UmbralScoreDireccion = umbralScoreDireccion,
+            MapeoColeccionActivos = mapeoColeccionActivos?.ToList() ?? new List<string>()
         };
     }
     [Function("DocumentProcessOrchestrator")]
@@ -120,6 +122,12 @@ public class DocumentProcessOrchestrator
         // Poblar identificadores de correlación (instanceId es determinista y replay-safe)
         salida.DetalleEjecucion.InstanceId = context.InstanceId;
         salida.DetalleEjecucion.OperationId = entrada.Trazabilidad.OperationId;
+
+        // Solicitante de esta ejecucion concreta; no forma parte del contrato de salida,
+        // viaja solo en el input interno de PersistirActivity.
+        var submittedByEjecucion = string.IsNullOrWhiteSpace(entrada.Trazabilidad.SubmittedBy)
+            ? null
+            : entrada.Trazabilidad.SubmittedBy;
 
         var entradaPorObjectIdGdc = !string.IsNullOrWhiteSpace(entrada.Documento.ObjectIdGDC);
         var actividadesNegocio = new List<string>();
@@ -750,6 +758,39 @@ public class DocumentProcessOrchestrator
                         exMd,
                         "Paso 2.8: No se pudo extraer markdown DI Layout previo. Se continúa sin markdown.");
                 }
+
+                // 2.8b: Respaldo - si el layout falló o no devolvió markdown útil, se reutiliza el
+                // markdown ya persistido en BD para este mismo documento (por SHA256/MD5), si existe.
+                if (!datosNormalizados.ContainsKey("Markdown")
+                    && (!string.IsNullOrWhiteSpace(salida.Integridad.SHA256) || !string.IsNullOrWhiteSpace(salida.Integridad.MD5)))
+                {
+                    try
+                    {
+                        var markdownPersistido = await context.CallActivityAsync<RecuperarMarkdownPersistidoResultado>(
+                            "RecuperarMarkdownPersistidoActivity",
+                            new RecuperarMarkdownPersistidoInput
+                            {
+                                Sha256 = salida.Integridad.SHA256,
+                                Md5 = salida.Integridad.MD5,
+                                NombreDocumento = entrada.Documento.Name
+                            });
+
+                        if (markdownPersistido.Encontrado && !string.IsNullOrWhiteSpace(markdownPersistido.Markdown))
+                        {
+                            datosNormalizados["Markdown"] = markdownPersistido.Markdown;
+                            RegistrarMarkdown(markdownPersistido.Markdown, "MarkdownPersistidoBD");
+                            logger.LogInformation(
+                                "Paso 2.8b: markdown recuperado de BD ({Len} chars)",
+                                markdownPersistido.Markdown.Length);
+                        }
+                    }
+                    catch (Exception exBd)
+                    {
+                        logger.LogWarning(
+                            exBd,
+                            "Paso 2.8b: No se pudo recuperar markdown persistido en BD. Se continúa sin markdown.");
+                    }
+                }
             }
 
             // 3. Clasificacion
@@ -790,6 +831,30 @@ public class DocumentProcessOrchestrator
                             TotalPaginas = docClasif.TotalPaginas,
                             GenerarResumenPorDefecto = true
                         });
+
+                    if (resultadoClasificacion.RateLimitExcedido)
+                    {
+                        MarcarFinActividad(
+                            "Clasificar",
+                            "Failed",
+                            "Rate limit 429: clasificación pospuesta");
+
+                        const string mensajeReintento =
+                            "Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde.";
+
+                        logger.LogWarning(
+                            "Clasificación pospuesta por rate limit (429). Documento marcado PENDIENTE_REINTENTO.");
+
+                        salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
+                        salida.Resultado.Estado = "PENDIENTE_REINTENTO";
+                        salida.Resultado.MensajeError = mensajeReintento;
+                        salida.Resultado.EstadoCalidad = "ERROR";
+                        salida.Resultado.ConfianzaGlobal = 0;
+                        salida.Resultado.ConfianzaClasificacion = 0;
+
+                        FinalizarSeguimiento("PendienteReintento", mensajeReintento);
+                        return salida;
+                    }
 
                         var mensajeClasificacion = resultadoClasificacion.FallbackLLM
                             ? $"Fallback Azure OpenAI activado ({resultadoClasificacion.FallbackRazon ?? "sin razon informada"})"
@@ -867,6 +932,13 @@ public class DocumentProcessOrchestrator
             resultadoClasificacion.ContentExtraido = null; // limpiar: no exponer en respuesta
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
 
+            // Propagar el TDN2 elegido en Phase 2 (aunque no exista tipología publicada que lo
+            // mapee) para que PersistirActivity lo guarde en Documentos.Tdn2 y en el contrato.
+            if (!string.IsNullOrWhiteSpace(resultadoClasificacion.Tdn2Detectado))
+            {
+                salida.Identificacion.Tdn2 = resultadoClasificacion.Tdn2Detectado;
+            }
+
             if (resultadoClasificacion.ClasificacionParcial)
             {
                 var tipologiaParcial = resultadoClasificacion.TipologiaDetectada ?? string.Empty;
@@ -886,12 +958,17 @@ public class DocumentProcessOrchestrator
                     resultadoClasificacion.FallbackRazon,
                     "global_fallback_baja_confianza",
                     StringComparison.OrdinalIgnoreCase);
+                var esFase2SinTdn2Parseable = string.Equals(
+                    resultadoClasificacion.FallbackRazon,
+                    GptHierarchicalClassificationParser.Phase2ParsingErrorReason,
+                    StringComparison.OrdinalIgnoreCase);
                 var esVirtual = string.IsNullOrWhiteSpace(tipologiaParcial)
                     || string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase)
                     || esTipologiaVirtual
                     || esTdn1ExtraidoDePropuesta
                     || esGlobalFallbackFinal
-                    || esGlobalFallbackBajaConfianza;
+                    || esGlobalFallbackBajaConfianza
+                    || esFase2SinTdn2Parseable;
 
                 if (esVirtual)
                 {
@@ -936,7 +1013,9 @@ public class DocumentProcessOrchestrator
                             "ResumenCombinado de clasificación propagado a DatosExtraidos para tipología virtual");
                     }
                     
-                    var mensajeNormalizacion = esTdn1ExtraidoDePropuesta
+                    var mensajeNormalizacion = esFase2SinTdn2Parseable
+                        ? $"Tipología parcial TDN1: Phase 2 no devolvió TDN2 parseable para familia '{tipologiaParcial}'. Pipeline detenido."
+                        : esTdn1ExtraidoDePropuesta
                         ? $"Tipología parcial TDN1: se extrajo código '{tipologiaParcial}' de propuesta. Pipeline detenido sin clasificación TDN2."
                         : esGlobalFallbackFinal
                         ? $"Tipología parcial TDN1: GlobalFallback identificó familia '{tipologiaParcial}' sin TDN2. Pipeline detenido."
@@ -944,19 +1023,35 @@ public class DocumentProcessOrchestrator
                         ? $"Tipología parcial TDN1: GlobalFallback identificó familia '{tipologiaParcial}' con confianza baja. Pipeline detenido."
                         : "Tipología virtual TDN1: GPT no resolvió código de catálogo. Pipeline detenido con PropuestaTipologia.";
                     
+                    // Conservar el markdown ya extraído (paso 2.8 / normalización) para que
+                    // PersistirActivity lo comprima en Documentos.NormalizacionMarkdownCompressed,
+                    // igual que en la ruta normal de ClassificationOnly.
+                    var markdownVirtual = datosNormalizados.TryGetValue("Markdown", out var markdownVirtualObj) &&
+                        markdownVirtualObj is string markdownVirtualTexto &&
+                        !string.IsNullOrWhiteSpace(markdownVirtualTexto)
+                        ? markdownVirtualTexto
+                        : null;
+
                     salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                     {
                         Normalizaciones = new List<string>
                         {
                             mensajeNormalizacion
                         },
-                        Markdown = null,
+                        Markdown = markdownVirtual,
                         Validaciones = new List<string>(),
                         Inconsistencias = new List<string>(),
                         ConfianzaValidacion = 1.0
                     };
 
-                    var motivoOmision = esTdn1ExtraidoDePropuesta
+                    if (!string.IsNullOrWhiteSpace(markdownVirtual))
+                    {
+                        salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
+                    }
+
+                    var motivoOmision = esFase2SinTdn2Parseable
+                        ? $"Tipología parcial TDN1 sin TDN2 parseable: {tipologiaParcial}"
+                        : esTdn1ExtraidoDePropuesta
                         ? $"Tipología parcial TDN1: {tipologiaParcial}"
                         : esGlobalFallbackFinal
                         ? $"GlobalFallback TDN1: {tipologiaParcial}"
@@ -987,9 +1082,11 @@ public class DocumentProcessOrchestrator
                         "Persistir",
                         () => context.CallActivityAsync(
                             "PersistirActivity",
-                            salida));
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
-                    var mensajeFinal = esTdn1ExtraidoDePropuesta
+                    var mensajeFinal = esFase2SinTdn2Parseable
+                        ? $"Tipología parcial TDN1: '{tipologiaParcial}' sin TDN2 parseable en Phase 2"
+                        : esTdn1ExtraidoDePropuesta
                         ? $"Tipología parcial TDN1: '{tipologiaParcial}' extraído de propuesta, sin TDN2"
                         : esGlobalFallbackFinal
                         ? $"Tipología parcial TDN1: GlobalFallback identificó '{tipologiaParcial}' sin TDN2"
@@ -1121,6 +1218,21 @@ public class DocumentProcessOrchestrator
             salida.Identificacion.TipologiaFamilia = tipologiaResuelta.TipologiaId;
             salida.Identificacion.TipologiaVersion = tipologiaResuelta.Version;
             salida.Identificacion.TipologiaNombre = tipologiaResuelta.TipologiaNombre;
+
+            // TDN de la tipología resuelta de catálogo. Los caminos parciales (Tdn1) y el
+            // Tdn2Detectado de Fase 2 (Tdn2) tienen precedencia si ya los informaron.
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1)
+                && !string.IsNullOrWhiteSpace(tipologiaResuelta.Tdn1))
+            {
+                salida.Identificacion.Tdn1 = tipologiaResuelta.Tdn1;
+            }
+
+            if (string.IsNullOrWhiteSpace(salida.Identificacion.Tdn2)
+                && !string.IsNullOrWhiteSpace(tipologiaResuelta.Tdn2))
+            {
+                salida.Identificacion.Tdn2 = tipologiaResuelta.Tdn2;
+            }
+
             salida.DetalleEjecucion.RunTipologia = tipologiaResuelta.TechnicalKey;
             var promptActivoEnPeticion = (tipologiaResuelta.PromptEnabled && tipologiaResuelta.PromptHasDefinition)
                 || entrada.Instrucciones.Prompt != null;
@@ -1384,7 +1496,7 @@ public class DocumentProcessOrchestrator
                     "Persistir",
                     () => context.CallActivityAsync(
                         "PersistirActivity",
-                        salida));
+                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
                 FinalizarSeguimiento("Completed", "ClassificationOnly completado");
                 return salida;
@@ -1465,7 +1577,7 @@ public class DocumentProcessOrchestrator
                     "Persistir",
                     () => context.CallActivityAsync(
                         "PersistirActivity",
-                        salida));
+                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
                 FinalizarSeguimiento("Completed", mensajePaginasExcedidas);
                 return salida;
@@ -1502,7 +1614,12 @@ public class DocumentProcessOrchestrator
                         {
                             Tipologia = salida.Identificacion.Tipologia,
                             DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name
+                            NombreDocumento = entrada.Documento.Name,
+                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
+                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
+                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
+                                ? salida.Integridad.RutaBlobStorage
+                                : entrada.Documento.BlobPath
                         });
 
                     if (!string.IsNullOrWhiteSpace(markdownCompleto.Markdown))
@@ -1679,7 +1796,12 @@ public class DocumentProcessOrchestrator
                         {
                             Tipologia = salida.Identificacion.Tipologia,
                             DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name
+                            NombreDocumento = entrada.Documento.Name,
+                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
+                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
+                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
+                                ? salida.Integridad.RutaBlobStorage
+                                : entrada.Documento.BlobPath
                         });
 
                     if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
@@ -1945,7 +2067,21 @@ public class DocumentProcessOrchestrator
                 entrada.Instrucciones.SkipGDCUpload ?? tipologiaResuelta.SkipGDCUpload);
 
             // Resultado final
-            if (conErroresValidacion)
+            var camposUtilesExtraccion = resultadoExtraccion.DatosExtraidos.Keys.Count(
+                k => !string.Equals(k, "Paginas", StringComparison.OrdinalIgnoreCase)
+                  && !string.Equals(k, "Markdown", StringComparison.OrdinalIgnoreCase));
+
+            if (resultadoExtraccion.FallbackUsado && camposUtilesExtraccion == 0)
+            {
+                salida.Resultado.Estado = "EXTRACCION_INCOMPLETA";
+                salida.Resultado.MensajeError =
+                    $"Fallback de extracción sin datos. Razón: {resultadoExtraccion.FallbackRazon}";
+                logger.LogWarning(
+                    "Fallback de extracción sin datos para {Documento}. Razón: {Razon}",
+                    entrada.Documento.Name,
+                    resultadoExtraccion.FallbackRazon);
+            }
+            else if (conErroresValidacion)
             {
                 salida.Resultado.Estado = "VALIDACION_CON_ERRORES";
                 logger.LogWarning("Procesamiento completado con errores de validacion");
@@ -1985,7 +2121,7 @@ public class DocumentProcessOrchestrator
                 "Persistir",
                 () => context.CallActivityAsync(
                     "PersistirActivity",
-                    salida));
+                    new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
             FinalizarSeguimiento("Completed");
         }

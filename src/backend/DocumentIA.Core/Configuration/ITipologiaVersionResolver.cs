@@ -31,6 +31,7 @@ public sealed record ResolvedTipologia(
     List<string>? AssetResolverMapeoDireccionMunicipio = null,
     List<string>? AssetResolverMapeoDireccionCodigoPostal = null,
     double AssetResolverUmbralScoreDireccion = 0.75,
+    List<string>? AssetResolverMapeoColeccionActivos = null,
     // Tipology metadata for output contract enrichment
     string TipologiaNombre = "",
     string TipologiaMGDCMatricula = "",

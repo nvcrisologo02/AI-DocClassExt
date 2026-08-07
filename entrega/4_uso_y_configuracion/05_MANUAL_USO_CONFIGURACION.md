@@ -1,4 +1,4 @@
-# 5. Manual de Uso y Configuracion — DocumentIA MVP
+# 5. Manual de Uso y Configuracion — DocumentIA
 
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. ConfiguracionJson es la única fuente de verdad; las columnas legacy de esquema han sido removidas.
@@ -964,6 +964,43 @@ Invoke-RestMethod \
 
 > **Nota sobre `authMode`:** Con `"ManagedIdentity"` el campo `apiKey` se ignora y la autenticacion se realiza via Managed Identity de la Function App (sin credenciales en BD).
 
+### 5.6.2 Resiliencia ante 429 (rate limit) en Azure OpenAI
+
+Ante errores `429 Too Many Requests` (cuota agotada) devueltos por Azure OpenAI, las llamadas de **clasificacion GPT** y de **prompts** pasan por un componente de resiliencia que reintenta la llamada de forma controlada y, si la cuota sigue agotada, corta el circuito para no seguir golpeando el servicio.
+
+Aplica a: clasificacion GPT y prompts. Ambos comparten circuito cuando apuntan al mismo endpoint+deployment de Azure OpenAI (misma bolsa de cuota).
+
+Mecanismo:
+
+1. **Reintento in-call** ante 429/500/502/503/504, respetando el header `Retry-After` (o backoff exponencial si no viene), acotado por `MaxRetryDelaySeconds`.
+2. **Circuit breaker con cooldown**: tras varios fallos consecutivos el circuito abre y las siguientes llamadas fallan rapido (sin reintentar) durante el cooldown; un exito lo cierra.
+
+Configuracion global en Functions (`appsettings.json`), seccion `AzureOpenAIResilience`:
+
+```json
+"AzureOpenAIResilience": {
+  "EnableCircuitBreaker": true,
+  "CircuitBreakerFailureThreshold": 5,
+  "CircuitBreakerOpenSeconds": 45,
+  "MaxRetries": 3,
+  "InitialRetryDelayMs": 500,
+  "MaxRetryDelaySeconds": 60
+}
+```
+
+| Campo | Tipo | Default | Notas |
+|-------|------|---------|-------|
+| `EnableCircuitBreaker` | bool | `true` | Habilita el circuit breaker. Si `false`, solo aplica el reintento in-call. |
+| `CircuitBreakerFailureThreshold` | int | `5` | Fallos consecutivos que abren el circuito. |
+| `CircuitBreakerOpenSeconds` | int | `45` | Duracion del cooldown con el circuito abierto (fail-fast, sin reintentar). |
+| `MaxRetries` | int | `3` | Reintentos adicionales tras el primer intento (`0` = sin reintentos). |
+| `InitialRetryDelayMs` | int | `500` | Delay base del backoff exponencial. |
+| `MaxRetryDelaySeconds` | int | `60` | Tope del delay entre reintentos (cap aplicado sobre `Retry-After`/backoff). |
+
+**Rollback instantaneo** al comportamiento anterior: `MaxRetries: 0` + `EnableCircuitBreaker: false`.
+
+> Si la cuota queda agotada tras agotar reintentos/cooldown, la clasificacion GPT termina en el estado `PENDIENTE_REINTENTO` (salida limpia, documento retriable). Ver documentacion funcional/troubleshooting para el detalle de este estado y como reencolar el documento.
+
 ---
 
 ## 5.7 Configuracion de Plugins
@@ -1053,6 +1090,8 @@ Ver contrato funcional de precedencia en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md
 
 Cada criterio se puede habilitar/deshabilitar independientemente, y los resultados se combinan segun un **modo de combinacion configurable** (AND u OR).
 
+Ademas, cuando los datos extraidos contienen una **coleccion de objetos** (un array donde cada elemento representa un activo distinto, p.ej. `DireccionPropiedades`), el AssetResolver puede resolver **un activo por cada elemento** y devolver los resultados agrupados. Ver [5.7b.6b Resolucion Multi-Activo por Colecciones](#57b6b-resolucion-multi-activo-por-colecciones-grupos).
+
 ### 5.7b.2 Habilitacion por Precedencia
 
 ```
@@ -1083,6 +1122,7 @@ En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion
     "mapeoDireccionNumero": ["NumeroVia", "Numero"],
     "mapeoDireccionMunicipio": ["Municipio", "Localidad"],
     "mapeoDireccionCodigoPostal": ["CodigoPostal", "CP"],
+    "mapeoColeccionActivos": ["DireccionPropiedades"],
     "umbralScoreDireccion": 0.75
   }
 }
@@ -1106,6 +1146,7 @@ En la tabla `Tipologias`, el campo `ConfiguracionJson` puede incluir una seccion
 | `mapeoDireccionNumero` | string[] | `[]` | Claves para numero de via. |
 | `mapeoDireccionMunicipio` | string[] | `[]` | Claves para municipio. |
 | `mapeoDireccionCodigoPostal` | string[] | `[]` | Claves para codigo postal. |
+| `mapeoColeccionActivos` | string[] | `[]` | Claves de `DatosExtraidos` que son colecciones (array de objetos) donde cada elemento representa un activo. Se expande a un grupo de criterios por elemento; las sub-propiedades se resuelven con los mismos `mapeo*` anteriores. Ver [5.7b.6b](#57b6b-resolucion-multi-activo-por-colecciones-grupos). |
 | `umbralScoreDireccion` | double | `0.75` | Score minimo [0.0-1.0] para aceptar un match por direccion. |
 
 ### 5.7b.4 Logica de Deteccion de Criterios
@@ -1156,6 +1197,24 @@ Cuando `busquedaDireccionHabilitada = true`, el servicio:
   "razon": "Match encontrado con score 0.92"
 }
 ```
+
+### 5.7b.6b Resolucion Multi-Activo por Colecciones (Grupos)
+
+Cuando un documento describe **varios activos a la vez** (p.ej. un array `DireccionPropiedades` con N objetos, cada uno con su `ReferenciaCatastral` y/o `Direccion`), el AssetResolver puede resolver un activo por cada elemento en lugar de un unico activo por documento.
+
+**Activacion**: declarar en `mapeoColeccionActivos` el/los nombres de campo de `DatosExtraidos` que son colecciones de activos. Se usa el **primer campo presente** cuyo valor sea un array de objetos no vacio.
+
+**Como funciona**:
+
+1. El backend recorre la coleccion y genera **un grupo de criterios por elemento**. Las sub-propiedades de cada objeto (`ReferenciaCatastral`, `Direccion`, …) se resuelven con los mismos `mapeoReferenciaCatastral`, `mapeoDireccion*`, `mapeoIdufir` ya configurados.
+2. Cada grupo se resuelve de forma **aislada**, aplicando dentro de el el `modoCombinacionCriterios` (AND/OR) igual que en el modo clasico.
+3. La respuesta incluye `activosPorGrupo` (detalle por elemento de entrada) **ademas** de la lista plana `activos`. La lista plana **no deduplica entre grupos**: si un mismo activo responde a dos elementos, aparece en ambos grupos y dos veces en la lista plana.
+
+**Compatibilidad**: si no se declara `mapeoColeccionActivos`, o el campo no existe / no es un array de objetos, el comportamiento es identico al modo clasico (un unico grupo a partir de los campos planos de `DatosExtraidos`).
+
+> Los overrides globales por instrucciones (`camposBusqueda.idufir`, `camposBusqueda.referenciaCatastral`) y la direccion tipificada **no aplican** en modo multi-grupo: cada grupo se resuelve exclusivamente por los `mapeo*`.
+
+Detalle tecnico del contrato (`Grupos` / `ActivosPorGrupo`) en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](../2_arquitectura_y_diseno/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md#54-grupos-de-criterios-multi-activo).
 
 ### 5.7b.7 Ejemplos de Configuracion por Caso de Uso
 
@@ -1215,6 +1274,23 @@ Cuando `busquedaDireccionHabilitada = true`, el servicio:
     "mapeoIdufir": ["IDUFIR_CRU"],
     "mapeoDireccionCompleta": ["Localizacion"],
     "umbralScoreDireccion": 0.7
+  }
+}
+```
+
+#### Coleccion de activos (multi-activo por grupos)
+Documento con un array `DireccionPropiedades` donde cada elemento trae `ReferenciaCatastral` y `Direccion`; se resuelve un activo por elemento y la respuesta incluye `activosPorGrupo`:
+```json
+{
+  "assetResolver": {
+    "enabled": true,
+    "modoCombinacionCriterios": "OR",
+    "mapeoColeccionActivos": ["DireccionPropiedades"],
+    "busquedaReferenciaCatastralHabilitada": true,
+    "mapeoReferenciaCatastral": ["ReferenciaCatastral"],
+    "busquedaDireccionHabilitada": true,
+    "mapeoDireccionCompleta": ["Direccion"],
+    "camposSolicitados": ["DES_SERVICER"]
   }
 }
 ```
@@ -1323,7 +1399,7 @@ R: El certificado del GDC SINTWS es emitido por una CA interna de SAREB no confi
 R: Verificar que `assemblyPath` en el plugins.json apunta a la ruta correcta. En local: ruta absoluta a `plugins/SarebEnrichments.dll`. En Azure (deploy): ruta relativa `plugins/SarebEnrichments.dll` (el script `deploy-manual.ps1` ajusta automaticamente).
 
 **P: Timeout en GDC (120s).**
-R: La actividad `SubirGDCActivity` tiene un timeout hardcoded de 120s en el orchestrator. Si GDC es lento, el resultado se marca con `gdc.exitoso=false` y `gdc.mensaje="Timeout"`, pero el documento se persiste igualmente. Verificar estado de red hacia `srbwidd03.sareb.srb:8090`.
+R: La actividad `SubirGDCActivity` tiene un timeout hardcoded de 120s en el orchestrator. Si GDC es lento, el resultado se marca con `gdc.exitoso=false` y `gdc.mensaje="Timeout"`, pero el documento se persiste igualmente. Verificar estado de red hacia el host GDC del entorno (prod: `srbwidp04.sareb.srb:8090`; dev: `srbwidd03.sareb.srb:8090`).
 
 **P: "Cold start" lento en Azure.**
 R: Normal en Consumption Plan (2-10s). Para reducirlo: considerar Premium Plan con warm instances, o mantener un health check periodico.
@@ -1372,14 +1448,38 @@ dotnet run --launch-profile http
 # Disponible en http://localhost:5000
 ```
 
-La configuracion de la URL base y la Function Key usadas por el Admin apuntan a la Function App de produccion (`appsettings.json`):
+La URL base y la Function Key que usa el Admin para hablar con la Function App se configuran por entorno; el `appsettings.json` del repositorio ya **no** trae la URL de produccion:
 
 ```json
 "FunctionsAdminApi": {
-  "BaseUrl": "https://srbappprodocai.azurewebsites.net/api/",
-  "FunctionKey": "<clave de host de la Function App>"
+  "BaseUrl": "",
+  "FunctionKey": ""
 }
 ```
+
+Sin configuracion explicita, la aplicacion apunta a `localhost`. En Azure, el pipeline de despliegue del Admin fija `FunctionsAdminApi__BaseUrl` con el valor correcto de cada entorno (dev/pre/prod) al desplegar.
+
+### 5.9.0 Aviso de entorno, modo solo lectura y auditoria
+
+Un banner fijo en la parte superior de todas las paginas del Admin muestra contra que entorno se esta trabajando. No es un elemento cosmetico: condiciona como se interpreta cualquier cambio que se vaya a hacer.
+
+| Situacion | Color | Texto |
+|-----------|-------|------|
+| Entorno identificado, no productivo | Azul | `Entorno backend: Development` (o el nombre que informe el backend) |
+| Entorno de produccion | Rojo | `⛔ ENTORNO: PRODUCCIÓN` |
+| Backend no accesible o no publica su entorno | Ambar | `⚠ Backend no accesible` / `⚠ Entorno del backend sin identificar` |
+
+Un entorno sin identificar se trata siempre como advertencia (ambar), nunca como estado normal: el aviso solo tranquiliza cuando sabe de verdad contra que entorno se trabaja.
+
+Si la sesion no tiene un usuario autenticado, el banner añade el sufijo `· solo lectura (sin usuario autenticado)`.
+
+**Modo solo lectura sin usuario autenticado.** Mientras el Admin desplegado no tenga activa la autenticacion (App Service Authentication / EasyAuth), todas las operaciones de escritura (crear, editar, publicar, retirar, activar, borrar tipologias, modelos, prompts o configuracion de plugins) se rechazan con el mensaje:
+
+> «Modo solo lectura: no hay un usuario autenticado, así que no es posible registrar quién realiza el cambio. Active la autenticación del Admin (App Service Authentication) para poder modificar la configuración.»
+
+Las consultas (listar, ver detalle, comparar versiones, auditoria) siguen funcionando con normalidad. La comprobacion vive en la capa de servicios del Admin (no en las paginas), para que ninguna vista pueda saltarsela por omision. En desarrollo local (`localhost`) esta restriccion no aplica. En cuanto se activa la autenticacion del entorno, el modo solo lectura se desactiva solo.
+
+**Auditoria con usuario real.** El usuario que queda registrado en la auditoria de tipologias, plugins, modelos y prompts es el que informa la cabecera `X-MS-CLIENT-PRINCIPAL-NAME` inyectada por App Service Authentication. Sin autenticacion activa se registra `no-autenticado`; en desarrollo local, `dev-<usuario del sistema>`. Los literales antiguos `ADMIN-UI` y `admin` ya no se usan.
 
 ### 5.9.1 Seccion Tipologias
 
@@ -1397,7 +1497,9 @@ Ademas, en el detalle se incluyen capacidades EP5:
 | Bloque | Objetivo |
 |--------|----------|
 | **Comparar versiones (A-2)** | Ver diferencias entre dos versiones de la misma familia. |
-| **Auditoria (A-3)** | Revisar cambios por usuario/accion con timestamp UTC. |
+| **Auditoria (A-3)** | Revisar cambios por usuario/accion con timestamp UTC. El usuario es el real de la sesion (ver 5.9.0), no un literal generico. |
+
+Publicar, retirar y pasar a borrador (draft) una tipologia muestran un dialogo de confirmacion con el impacto antes de ejecutar la accion.
 
 ### 5.9.1a Comparar Versiones con Filtro Rapido (A-2)
 
@@ -1434,11 +1536,33 @@ El boton se encuentra alineado a la derecha de la barra de modos (Arbol / Codigo
 
 ### 5.9.3 Seccion Modelos
 
-Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI). Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
+Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI) de los cuatro tipos: Clasificacion, Extraccion, Prompt y Layout. Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
+
+- **Editar** funciona igual para los cuatro tipos, incluidos los modelos de tipo Layout (antes de esta correccion, editar un modelo Layout creaba un duplicado en vez de actualizar el existente).
+- **Borrar** es un desactivado logico (soft-delete: `Activo=false`), no un borrado fisico. El dialogo de confirmacion lo indica explicitamente: "Desactivar modelo".
+- El **JSON de configuracion** que se ve y edita en el Admin trae los campos sensibles (claves cuyo nombre contiene `apikey`, `password`, `secret` o `accountkey`, de forma recursiva) enmascarados como `"***"`. Al guardar sin tocar esos campos, el valor enmascarado se conserva tal cual estaba en BD (round-trip seguro): no hace falta reintroducir la clave para guardar otros cambios. Si se sustituye `"***"` por un valor nuevo, ese valor pasa a ser el almacenado.
 
 ### 5.9.4 Seccion Configuracion Consulta
 
-Permite editar la configuracion global de consulta del sistema (umbrales, timeouts, parametros de fallback GPT, etc.) en formato JSON directamente desde el Admin.
+Vista consolidada, de solo consulta, del estado de configuracion del sistema: tipologias (totales y por estado), modelos, plugins e informacion del entorno de la Function App. Esta pantalla ya no muestra la cadena de conexion SQL del sistema.
+
+### 5.9.5 Seccion Prompts de Clasificacion
+
+Pagina `/admin/prompts` ("Gestión de Prompts de Clasificación"). Gestiona los prompts versionados que usa la clasificacion jerarquica GPT (placeholders como `{TDN1_CATALOG}`, `{TDN2_CATALOG}`, `{DOCUMENT_TEXT}`), independientes del prompt propio de cada tipologia (pestaña "Prompt" de 5.9.1).
+
+- El listado muestra, por cada `PromptKey`: version, estado (**Activo** / **Draft**), descripcion, fecha de publicacion y tamaño.
+- **La version activa es inmutable.** Pulsar "Editar" sobre un prompt cuya ultima version esta activa no la modifica: abre una nueva version en borrador con el mismo contenido, titulada "Nueva versión draft — `{clave}` v`{version}`". Los cambios se guardan en esa nueva version.
+- **Activar** una version desactiva automaticamente la version activa anterior de la misma clave. Pide confirmacion, indicando que la version actual quedara desactivada.
+- **Eliminar** solo esta disponible sobre versiones en borrador (no sobre la version activa) y pide confirmacion; la accion no se puede deshacer.
+- El historial de versiones permite **Restaurar** (rollback) cualquier version anterior, que pasa a ser la activa.
+- La validacion de contenido es solo de longitud (10-16000 caracteres); los placeholders no se validan automaticamente, para permitir iteracion flexible del prompt.
+
+### 5.9.6 Plugins y catalogos TDN1/TDN2
+
+Ademas de las secciones anteriores, el Admin incluye:
+
+- **Plugins por tipologia** (`/plugins-tipologias`): editar la configuracion de plugins de una tipologia y **Publicar**/**Retirar** requieren confirmacion previa con el impacto de la accion.
+- **Catalogo TDN1** (`/catalogotdn1`) y **Catalogo TDN2**: alta, edicion y borrado de los codigos de primer y segundo nivel usados por la clasificacion jerarquica GPT (ver 5.1.3 y RN7 en el analisis funcional). Borrar un codigo pide confirmacion ("Esta accion no se puede deshacer").
 
 ---
 

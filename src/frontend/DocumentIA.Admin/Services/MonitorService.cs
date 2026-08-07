@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -26,6 +27,7 @@ public class EjecucionResumenDto
     public int? DuracionIntegracionMs { get; set; }
     public int? DuracionPersistenciaMs { get; set; }
     public string? NombreDocumento { get; set; }
+    public string? SubmittedBy { get; set; }
     public List<ActividadResumenDto> Actividades { get; set; } = [];
 }
 
@@ -152,6 +154,10 @@ public class EjecucionDetalleDto
     public string EjecucionGuid { get; set; } = string.Empty;
     public string? ModeloClasificacion { get; set; }
     public bool ClassificationOnly { get; set; }
+    public string? TipologiaNombreCatalogo { get; set; }
+    public string? TipologiaFamiliaNombreCatalogo { get; set; }
+    // Contrato crudo tal cual almacenado; reservado para el visor de la siguiente entrega, no se usa aun.
+    public string? ContratoSalidaCompletoJson { get; set; }
     public IdentificacionDetalleDto? Identificacion { get; set; }
     public IntegridadDetalleDto? Integridad { get; set; }
     public ResultadoDetalleDto? Resultado { get; set; }
@@ -190,6 +196,53 @@ public class DashboardAgregadosDto
     public double DuracionMediaMs { get; set; }
     public List<AgregadoGrupoDto> PorTipologia { get; set; } = [];
     public List<AgregadoGrupoDto> PorModelo { get; set; } = [];
+    public List<SeriePuntoDto> Serie { get; set; } = [];
+}
+
+public class SeriePuntoDto
+{
+    public DateTime Fecha { get; set; }
+    public int Total { get; set; }
+    public int Ok { get; set; }
+    public int Revision { get; set; }
+    public int Error { get; set; }
+    public int Fallbacks { get; set; }
+}
+
+public class PagedResultDto<T>
+{
+    public List<T> Items { get; set; } = [];
+    public int Total { get; set; }
+    public int Page { get; set; }
+    public int PageSize { get; set; }
+}
+
+public class MonitorFiltroDto
+{
+    public DateTime Desde { get; set; } = DateTime.UtcNow.AddDays(-7);
+    public DateTime Hasta { get; set; } = DateTime.UtcNow;
+    public string? Tipologia { get; set; }
+    public string? Estado { get; set; }
+    public string? Flujo { get; set; }
+    public string? Busqueda { get; set; }
+    public string? SubmittedBy { get; set; }
+
+    public string ToQueryString()
+    {
+        var partes = new List<string>
+        {
+            $"desde={Uri.EscapeDataString(Desde.ToString("o"))}",
+            $"hasta={Uri.EscapeDataString(Hasta.ToString("o"))}"
+        };
+        if (!string.IsNullOrWhiteSpace(Tipologia)) partes.Add($"tipologia={Uri.EscapeDataString(Tipologia)}");
+        if (!string.IsNullOrWhiteSpace(Estado)) partes.Add($"estado={Uri.EscapeDataString(Estado)}");
+        if (!string.IsNullOrWhiteSpace(Flujo)) partes.Add($"flujo={Uri.EscapeDataString(Flujo)}");
+        if (!string.IsNullOrWhiteSpace(Busqueda)) partes.Add($"q={Uri.EscapeDataString(Busqueda)}");
+        if (!string.IsNullOrWhiteSpace(SubmittedBy)) partes.Add($"submittedby={Uri.EscapeDataString(SubmittedBy)}");
+        return string.Join("&", partes);
+    }
+
+    public MonitorFiltroDto Clonar() => (MonitorFiltroDto)MemberwiseClone();
 }
 
 public class HealthComponentDto
@@ -222,6 +275,22 @@ public class SystemHealthDto
     public HealthComponentsDto Components { get; set; } = new();
 }
 
+// ─── Utilidades de formato compartidas ───────────────────────────────────────
+
+// Composicion "codigo — nombre" usada tanto por la fila desplegable del
+// Monitor (EjecucionDetalle) como por el modal de JSON (EjecucionJsonModal):
+// una sola implementacion para que las dos vistas no puedan divergir.
+public static class MonitorFormato
+{
+    // Si el codigo esta retirado del catalogo el nombre llega nulo: se muestra
+    // solo el codigo, sin inventar un nombre.
+    public static string ConCodigoYNombre(string? codigo, string? nombre)
+    {
+        if (string.IsNullOrWhiteSpace(codigo)) return "—";
+        return string.IsNullOrWhiteSpace(nombre) ? codigo : $"{codigo} — {nombre}";
+    }
+}
+
 // ─── Servicio ─────────────────────────────────────────────────────────────────
 
 public class MonitorService
@@ -238,41 +307,68 @@ public class MonitorService
         _httpClient = httpClient;
     }
 
-    public async Task<List<EjecucionResumenDto>> GetUltimasEjecucionesAsync(int top = 50)
+    public async Task<PagedResultDto<EjecucionResumenDto>> GetEjecucionesAsync(
+        MonitorFiltroDto filtro, int page = 1, int pageSize = 25)
     {
         try
         {
-            var result = await _httpClient.GetFromJsonAsync<List<EjecucionResumenDto>>(
-                $"management/ejecuciones?top={top}", JsonOptions);
-            return result ?? [];
+            var result = await _httpClient.GetFromJsonAsync<PagedResultDto<EjecucionResumenDto>>(
+                $"management/ejecuciones?{filtro.ToQueryString()}&page={page}&pageSize={pageSize}", JsonOptions);
+            return result ?? new PagedResultDto<EjecucionResumenDto>();
         }
         catch (HttpRequestException ex)
         {
             throw new InvalidOperationException($"Error al obtener ejecuciones del backend: {ex.Message}", ex);
         }
+        // Una ventana de despliegue con el backend en una version distinta (Admin y
+        // Functions se despliegan por separado) puede devolver una forma de JSON
+        // que ya no coincide con el contrato esperado; sin este catch, JsonException
+        // escapa de OnInitializedAsync y tumba el circuito de Blazor Server.
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"Respuesta invalida al obtener ejecuciones del backend: {ex.Message}", ex);
+        }
     }
 
-    public async Task<EjecucionDetalleDto?> GetEjecucionDetalleAsync(int id)
+    public async Task<EjecucionDetalleDto?> GetEjecucionDetalleAsync(string guid)
     {
         try
         {
             return await _httpClient.GetFromJsonAsync<EjecucionDetalleDto>(
-                $"management/ejecuciones/{id}/detalle", JsonOptions);
+                $"management/ejecuciones/{Uri.EscapeDataString(guid)}/detalle", JsonOptions);
+        }
+        // 404 significa que la ejecucion no existe: no es un fallo de comunicacion, se distingue del resto.
+        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
         }
         catch (HttpRequestException ex)
         {
             throw new InvalidOperationException($"Error al obtener detalle de ejecución: {ex.Message}", ex);
         }
+        catch (JsonException ex)
+        {
+            throw new InvalidOperationException($"Respuesta invalida al obtener detalle de ejecución: {ex.Message}", ex);
+        }
     }
 
-    public async Task<DashboardAgregadosDto?> GetAgregadosAsync(int dias = 30)
+    // Los agregados alimentan el cuadro de mando, no la tabla principal: un fallo
+    // aqui no debe impedir ver el listado, asi que se ignora en vez de propagarse
+    // como InvalidOperationException. Se distinguen los dos tipos de fallo
+    // esperados (comunicacion y deserializacion) en vez de un catch generico para
+    // no enmascarar tambien errores de programacion.
+    public async Task<DashboardAgregadosDto?> GetAgregadosAsync(MonitorFiltroDto filtro)
     {
         try
         {
             return await _httpClient.GetFromJsonAsync<DashboardAgregadosDto>(
-                $"management/ejecuciones/agregados?dias={dias}", JsonOptions);
+                $"management/ejecuciones/agregados?{filtro.ToQueryString()}", JsonOptions);
         }
-        catch
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
         {
             return null;
         }

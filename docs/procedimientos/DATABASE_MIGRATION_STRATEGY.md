@@ -4,9 +4,9 @@
 
 Using: **Entity Framework Core 8** with SQL Server
 
-Migrations are stored in: `src/backend/DocumentIA.Functions/Data/Migrations/`
+Migrations are stored in: `src/backend/DocumentIA.Data/Migrations/`
 
-Current schema version: **v1.5.0** (19 migrations total)
+Current schema version: 27 migrations total; latest `20260805100351_AgregarSubmittedByEjecucion` (applied in dev, **pending in PRO**)
 
 ---
 

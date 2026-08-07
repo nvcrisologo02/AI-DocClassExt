@@ -1,4 +1,4 @@
-# 1. Arquitectura del Sistema — DocumentIA MVP
+# 1. Arquitectura del Sistema — DocumentIA
 
 > Proyecto: AI DocClassExt — SAREB
 
@@ -26,7 +26,7 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 | LLM (fallback + prompt) | Azure OpenAI GPT-4o-mini |
 | Base de datos | SQL Server 2022 (EF Core 8 Code-First) |
 | Almacenamiento blob | Azure Blob Storage (Azurite en local) |
-| Gestor documental | GDC SINTWS (SOAP, srbwidd03.sareb.srb:8090) |
+| Gestor documental | GDC SINTWS (SOAP, srbwidp04.sareb.srb:8090) |
 | Frontend operativo | WPF .NET 8 (MVVM, RestSharp) |
 | Frontend Admin | Blazor Server .NET 8 |
 | CI/CD | Azure DevOps Pipelines (self-hosted agent) |
@@ -79,7 +79,7 @@ flowchart TB
     end
 
     subgraph Externos["Sistemas Externos"]
-        GDC["GDC SINTWS<br/>srbwidd03.sareb.srb:8090"]
+        GDC["GDC SINTWS<br/>srbwidp04.sareb.srb:8090"]
         PLUGIN_EXT["Plugins REST/SOAP<br/>(Atlas, Catastro, Excel)"]
     end
 
@@ -293,10 +293,10 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 
 | Aspecto | Detalle |
 |---------|---------|
-| **Contexto** | Se necesita persistir documentos, resultados, auditoria y configuracion con schema evolutivo durante el MVP. |
+| **Contexto** | Se necesita persistir documentos, resultados, auditoria y configuracion con schema evolutivo durante la evolución del sistema. |
 | **Opciones** | (A) EF Core Code-First, (B) Database-First, (C) Dapper raw SQL |
 | **Decision** | **(A) EF Core Code-First** |
-| **Justificacion** | - Migraciones automaticas aplican cambios de schema sin scripts manuales. <br/>- `DbContext.Database.Migrate()` en startup para dev local. <br/>- Seed data desde archivos JSON de config. <br/>- Facilidad de evolucionar el modelo durante MVP. <br/>- Repository pattern para desacoplamiento. |
+| **Justificacion** | - Migraciones automaticas aplican cambios de schema sin scripts manuales. <br/>- `DbContext.Database.Migrate()` en startup para dev local. <br/>- Seed data desde archivos JSON de config. <br/>- Facilidad de evolucionar el modelo durante la evolución del sistema. <br/>- Repository pattern para desacoplamiento. |
 | **Trade-offs** | Menos control sobre SQL generado. Para consultas criticas de rendimiento futuras se puede usar raw SQL/Dapper puntualmente. |
 
 ### ADR-003: Azure DI + GPT fallback para clasificacion
@@ -322,7 +322,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 
 | Aspecto | Detalle |
 |---------|---------|
-| **Contexto** | El MVP necesita funcionar rapidamente con API Keys, pero la produccion final debe usar Managed Identity (zero-secret). |
+| **Contexto** | El sistema necesita funcionar rapidamente con API Keys, pero la produccion final debe usar Managed Identity (zero-secret). |
 | **Decision** | Implementar ambos modos desde el inicio, seleccionables por configuracion (`AuthMode: "ApiKey"` o `"DefaultAzureCredential"`). |
 | **Estado** | ApiKey activo en produccion. MI preparado en codigo, pendiente asignacion roles RBAC (`Cognitive Services User`) a la System Managed Identity `<MANAGED_IDENTITY_PRINCIPAL_ID>`. |
 
@@ -385,7 +385,7 @@ flowchart TB
     end
 
     subgraph OnPrem["Infraestructura SAREB"]
-        GDC_PROD["GDC SINTWS<br/>srbwidd03.sareb.srb:8090"]
+        GDC_PROD["GDC SINTWS<br/>srbwidp04.sareb.srb:8090<br/>(réplica srbwidp05)"]
         SQL_TEMP["SQL Server (Docker local)<br/>temporal hasta Azure SQL"]
     end
 
@@ -415,7 +415,7 @@ flowchart TB
     ADMIN_USER["fa:fa-user-cog Administrador<br/>Gestiona tipologias y modelos"]
     CLIENT_SYS["fa:fa-server Sistema Cliente API<br/>Envia documentos via REST"]
 
-    DOCUMENTIA["fa:fa-cogs DocumentIA MVP<br/>Sistema de clasificacion<br/>y extraccion documental"]
+    DOCUMENTIA["fa:fa-cogs DocumentIA<br/>Sistema de clasificacion<br/>y extraccion documental"]
 
     GDC_EXT["fa:fa-archive GDC SINTWS<br/>Gestor Documental Corporativo"]
     AI_EXT["fa:fa-brain Azure AI Services<br/>DI + CU + OpenAI"]
@@ -437,7 +437,7 @@ flowchart TB
     CLIENT["fa:fa-server Sistema Cliente"]
     ADMIN_USER["fa:fa-user-cog Administrador"]
 
-    subgraph DocumentIA["DocumentIA MVP"]
+    subgraph DocumentIA["DocumentIA"]
         FUNCAPP["Azure Functions<br/>.NET 10 Isolated<br/>Durable Orchestrator<br/>+ 17 Activities<br/>+ HTTP Triggers (Ingest + Healthcheck)"]
         SQLDB["SQL Server 2022<br/>DocumentIA DB<br/>9 tablas EF Core"]
         BLOBST["Azure Blob Storage<br/>Contenedor: documents<br/>PDFs originales"]
@@ -510,6 +510,14 @@ flowchart TB
 | Timeout Activity | Sin limite explicito (excepto GDC: 120s) | Posibilidad de definir timeouts por activity |
 | Rate limit Azure DI | Varía por tier (S0: 15 TPS) | Durable Functions serializa por instancia; N instancias paralelas podrian saturar |
 | SSL GDC | Certificado CA corporativo SAREB no confiado en Linux | `GDC:BypassSslValidation=true` (solo para host Linux; en Windows la CA se instala en el cert store) |
+
+### Seguridad del Admin (DocumentIA.Admin) — estado y plan
+
+Estado verificado (2026-07-31) de los App Service del Admin (dev y prod): autenticación deshabilitada (sin App Service Authentication), restricciones de acceso "Allow all", `publicNetworkAccess` habilitado, sin private endpoints. La integración VNet del Admin de prod es de salida (no limita el acceso entrante).
+
+Plan de autenticación: **App Service Authentication (EasyAuth)** con app registration single-tenant y un grupo de seguridad con los usuarios autorizados (`Assignment required = Yes`). La solicitud a identidad (app registration + grupo de usuarios autorizados) y la configuración del App Service se documentan en las guías operativas GUIA_EASYAUTH_ADMIN, GUIA_RESTRICCION_ACCESO_ADMIN (restricción de acceso de red — limita desde dónde, no quién) y SOLICITUD_APP_REGISTRATION_ADMIN.
+
+**Mitigación mientras EasyAuth no está activo:** modo solo lectura automático — sin identidad (`X-MS-CLIENT-PRINCIPAL-NAME` ausente), la capa de servicios del Admin (`TipologiaAdminService`, `PromptManagementService`) rechaza toda operación de escritura; solo quedan disponibles las consultas. Ver [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) §3.8.4.
 
 ---
 

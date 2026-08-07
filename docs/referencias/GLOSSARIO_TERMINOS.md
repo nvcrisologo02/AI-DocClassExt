@@ -313,7 +313,7 @@ Estado global de la ejecución Durable Functions: `Pending`, `Running`, `Complet
 | **ASGI** | Asynchronous Server Gateway Interface | Web framework Python |
 | **HTTP** | Hypertext Transfer Protocol | Protocolo comunicación |
 | **BD / DB** | Base de Datos / Database | SQL Server central |
-| **MVP** | Minimum Viable Product | Etapa proyecto |
+| **MVP** | Minimum Viable Product | Fase inicial histórica del proyecto (ya superada) |
 | **v1.4** | Versión 1.4 | Release/schema versión |
 
 ---
@@ -451,7 +451,7 @@ Documento normalizado
 - Este glosario se mantiene como referencia viva. Cambios en conceptos o introducción de nuevos términos deben documentarse aquí.
 - Para detalles profundos de implementación, consultar documentos especializados en la carpeta `docs/` y comentarios en código.
 - Las definiciones priorizan claridad sobre exhaustividad; para casos edge o detalles arquitectónicos, remitir a documentación técnica específica.
-- Las URLs de referencias asumen estructura de carpetas de DocumentIA MVP; validar rutas antes de usar en otros contextos.
+- Las URLs de referencias asumen estructura de carpetas de DocumentIA; validar rutas antes de usar en otros contextos.
 
 ---
 

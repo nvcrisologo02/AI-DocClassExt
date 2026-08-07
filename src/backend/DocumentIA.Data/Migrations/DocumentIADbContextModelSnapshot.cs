@@ -11285,6 +11285,10 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<string>("SubmittedBy")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<string>("Tipologia")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
@@ -11829,9 +11833,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 6, 15, 5, 34, 32, 346, DateTimeKind.Utc).AddTicks(3061),
+                            FechaCreacion = new DateTime(2026, 8, 5, 10, 3, 49, 922, DateTimeKind.Utc).AddTicks(1216),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 6, 15, 5, 34, 32, 346, DateTimeKind.Utc).AddTicks(3056),
+                            PublicadaEn = new DateTime(2026, 8, 5, 10, 3, 49, 922, DateTimeKind.Utc).AddTicks(1212),
                             PublicadaPor = "seed",
                             Version = "1.0",
                             VersionPublicada = "1.0"

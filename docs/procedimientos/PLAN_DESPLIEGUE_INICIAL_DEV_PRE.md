@@ -253,6 +253,7 @@ Caso real DEV validado:
 Importante:
 - El script set-app-settings actual esta hardcodeado a PROD.
 - Antes de usarlo en DEV/PRE, crear variante parametrizada o actualizar script para recibir parametros de entorno.
+- El app setting `EnvironmentName` (dev: `Development` · pre: `Preproduction`) ya no requiere paso manual: lo aplica automaticamente la variable de pipeline `ENVIRONMENT_NAME` tanto en `azure-pipelines.yml` como en `azure-pipelines-admin.yml` (paso "Ensure Functions environment name", idempotente). Alimenta el campo `environment` de `GET management/configuration` con prioridad sobre `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT`.
 
 Ejemplo de aplicacion minima de referencias Key Vault en Functions:
 
@@ -360,11 +361,13 @@ Pipelines:
 
 - Bootstrap por entorno: [azure-pipelines-bootstrap.yml](azure-pipelines-bootstrap.yml)
 - Despliegue multi-entorno: [azure-pipelines.yml](azure-pipelines.yml)
+- Hotfix del Admin: [azure-pipelines-admin.yml](azure-pipelines-admin.yml)
 
 Uso esperado:
 
 - Bootstrap: primera alta de entorno, remediacion de prerequisitos o reconfiguracion.
 - Pipeline principal: despliegue repetible de codigo una vez que el entorno ya esta preparado.
+- Pipeline de Admin: hotfix del Blazor cuando no hace falta redesplegar Functions/AssetResolver; tambien asegura `EnvironmentName` en la Function App.
 - Si el entorno falla en validacion, volver al bootstrap; no saltar directamente al deploy.
 
 Parametros minimos para bootstrap:
@@ -376,7 +379,7 @@ Nota de secretos en bootstrap:
 - El pipeline consume secretos desde variables seguras `DOCIA_SECRET_*`.
 - Si faltan secretos, el paso de prerequisitos fallara y no avanzara.
 
-Parametros para despliegue multi-entorno:
+Parametros para despliegue multi-entorno (y para el pipeline de Admin):
 
 - targetEnvironment: dev | pre | prod
 
@@ -384,6 +387,8 @@ Comportamiento:
 
 - El pipeline resuelve service connection, nombres de apps/RG/KV y suscripcion segun targetEnvironment.
 - Mantiene endpoints AI compartidos y valida contrato de app settings al final.
+- El pipeline de Admin resuelve tambien `AZURE_ASSET_RESOLVER_WEB_APP_NAME` por entorno (antes fijo a PRODUCCION, provocaba un error criptico al validar en dev).
+- `azure-pipelines.yml` y `azure-pipelines-admin.yml` son `trigger: none`: al lanzarlos manualmente en Azure DevOps, seleccionar la rama `develop` (la rama por defecto no recibe estos cambios hasta el siguiente merge a `master`).
 
 ### 6.12 Que necesitas crear o revisar en Azure DevOps
 

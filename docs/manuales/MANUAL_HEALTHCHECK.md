@@ -1,7 +1,7 @@
 # Manual de Healthcheck por Componentes
 
 > Ultima actualizacion: 2026-05-01  
-> Proyecto: AI DocClassExt — DocumentIA MVP  
+> Proyecto: AI DocClassExt — DocumentIA  
 > Endpoint: `POST /api/healthcheck` (Function App `srbappprodocai`)  
 > Codigo: `src/backend/DocumentIA.Functions/Services/SystemHealthService.cs` + `Triggers/HealthcheckFunction.cs`
 

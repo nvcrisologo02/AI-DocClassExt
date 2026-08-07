@@ -1,6 +1,6 @@
 # Entrega de Documentación — DocumentIA
 
-**Sistema:** DocumentIA — Clasificación y Extracción Automática de Documentos (MVP)
+**Sistema:** DocumentIA — Clasificación y Extracción Automática de Documentos
 **Fecha de entrega:** 2026-06-30
 
 ---
@@ -10,7 +10,7 @@
 | | |
 |---|---|
 | **Objetivo del sistema** | Automatizar la clasificación y la extracción de datos estructurados de documentos (principalmente Notas Simples Registrales y tipologías afines), validando los resultados e integrándolos con los sistemas corporativos (GDC, AssetResolver). Reduce el procesamiento manual y normaliza la información documental. |
-| **Alcance** | Pipeline de procesamiento de extremo a extremo: ingestión, normalización, deduplicación, clasificación, extracción, validación e integración. Construido sobre Azure (Durable Functions en .NET, Azure AI Document Intelligence, Azure Content Understanding y Azure OpenAI como fallback). La configuración de tipologías, modelos y plugins es dinámica (base de datos). Corresponde al MVP del sistema, desplegado en producción. |
+| **Alcance** | Pipeline de procesamiento de extremo a extremo: ingestión, normalización, deduplicación, clasificación, extracción, validación e integración. Construido sobre Azure (Durable Functions en .NET, Azure AI Document Intelligence, Azure Content Understanding y Azure OpenAI como fallback). La configuración de tipologías, modelos y plugins es dinámica (base de datos). Sistema desplegado en producción. |
 | **Documentos de lectura obligatoria** | 1) [Arquitectura del Sistema](2_arquitectura_y_diseno/01_ARQUITECTURA_SISTEMA.md) · 2) [Análisis Funcional](1_negocio/02_ANALISIS_FUNCIONAL.md) · 3) [Manual de Uso y Configuración](4_uso_y_configuracion/05_MANUAL_USO_CONFIGURACION.md) · 4) [Infraestructura Real Desplegada](3_operacion_y_despliegue/INFRAESTRUCTURA_REAL_DESPLEGADA.md) · 5) [Runbook de Incidentes](3_operacion_y_despliegue/RUNBOOK_INCIDENTES_PRODUCCION.md). |
 | **Ruta de navegación recomendada** | (1) Negocio → (2) Arquitectura y diseño → (3) Uso y configuración → (4) Operación y despliegue. Comenzar por el [Índice](00_INDICE.md), que selecciona los documentos por perfil. |
 

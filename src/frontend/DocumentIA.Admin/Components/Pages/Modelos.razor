@@ -1,10 +1,16 @@
 @page "/modelos"
 @inject TipologiaAdminService AdminService
 @inject NavigationManager Navigation
+@using DocumentIA.Admin.Components.Common
 
 <PageTitle>Modelos</PageTitle>
 
 <h1>Modelos</h1>
+
+@if (!string.IsNullOrWhiteSpace(_message))
+{
+    <div class="alert alert-danger">@_message</div>
+}
 
 <p>
     <button class="btn btn-primary" @onclick="CreateModelo">Nuevo modelo</button>
@@ -21,6 +27,8 @@
 
 <h3>Layout</h3>
 @RenderTable(_layout)
+
+<ConfirmDialog @ref="_confirm" />
 
 @code {
     private IReadOnlyCollection<ModeloConfigEntity> _clasificacion = Array.Empty<ModeloConfigEntity>();
@@ -51,10 +59,29 @@
         Navigation.NavigateTo($"/modelos/edit/{id}");
     }
 
-    private async Task DeleteModeloAsync(int id)
+    private ConfirmDialog? _confirm;
+    private string? _message;
+
+    private async Task DeleteModeloAsync(ModeloConfigEntity row)
     {
-        await AdminService.DeleteModeloAsync(id);
-        await ReloadAsync();
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a desactivar el modelo '{row.Key}' ({row.Tipo}).\nLas tipologías que lo referencien dejarán de resolverlo.",
+            "Desactivar modelo", "Desactivar"))
+        {
+            return;
+        }
+
+        try
+        {
+            _message = null;
+            await AdminService.DeleteModeloAsync(row.Id);
+            await ReloadAsync();
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+
         StateHasChanged();
     }
 
@@ -88,7 +115,7 @@
             builder.CloseElement();
             builder.OpenElement(seq++, "button");
             builder.AddAttribute(seq++, "class", "btn btn-sm btn-outline-danger ms-2");
-            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => DeleteModeloAsync(row.Id)));
+            builder.AddAttribute(seq++, "onclick", EventCallback.Factory.Create(this, () => DeleteModeloAsync(row)));
             builder.AddContent(seq++, "Borrar");
             builder.CloseElement();
             builder.CloseElement();

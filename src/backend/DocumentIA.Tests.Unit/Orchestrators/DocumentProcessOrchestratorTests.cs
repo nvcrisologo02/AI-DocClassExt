@@ -246,7 +246,9 @@ public class DocumentProcessOrchestratorTests
         bool skipGdc = true,
         bool assetResolverEnabled = false,
         bool promptEnabled = false,
-        bool promptHasDefinition = false)
+        bool promptHasDefinition = false,
+        string tdn1 = "",
+        string tdn2 = "")
         => new(
             RequestedValue: "nota.simple",
             TipologiaId: "nota.simple",
@@ -257,7 +259,9 @@ public class DocumentProcessOrchestratorTests
             SkipGDCUpload: skipGdc,
             PromptEnabled: promptEnabled,
             AssetResolverEnabled: assetResolverEnabled,
-            PromptHasDefinition: promptHasDefinition);
+            PromptHasDefinition: promptHasDefinition,
+            Tdn1: tdn1,
+            Tdn2: tdn2);
 
     [Fact]
     public void BuildObtenerActivoInput_WithInstructionOverrides_PrioritizesRequestValues()
@@ -377,6 +381,64 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public void BuildObtenerActivoInput_PropagaMapeoColeccionActivos()
+    {
+        var entrada = new ContratoEntrada
+        {
+            Instrucciones = new Instrucciones { AssetResolver = null },
+            Trazabilidad = new Trazabilidad { CorrelationId = "corr-003" }
+        };
+
+        var salida = new ContratoSalida
+        {
+            Identificacion = new Identificacion { Tipologia = "tasa.basura.1_0" },
+            DatosExtraidos = new Dictionary<string, object>()
+        };
+
+        var tipologia = new ResolvedTipologia(
+            RequestedValue: "tasa.basura@1.0",
+            TipologiaId: "tasa.basura",
+            Version: "1.0",
+            TechnicalKey: "tasa.basura.1_0",
+            IsDefault: true,
+            AssetResolverEnabled: true,
+            AssetResolverMapeoReferenciaCatastral: new List<string> { "ReferenciaCastatral" },
+            AssetResolverMapeoColeccionActivos: new List<string> { "DireccionPropiedades" });
+
+        var input = DocumentProcessOrchestrator.BuildObtenerActivoInput(entrada, salida, tipologia);
+
+        input.MapeoColeccionActivos.Should().BeEquivalentTo(new[] { "DireccionPropiedades" });
+    }
+
+    [Fact]
+    public void BuildObtenerActivoInput_SinMapeoColeccionActivos_DevuelveListaVacia()
+    {
+        var entrada = new ContratoEntrada
+        {
+            Instrucciones = new Instrucciones { AssetResolver = null },
+            Trazabilidad = new Trazabilidad { CorrelationId = "corr-004" }
+        };
+
+        var salida = new ContratoSalida
+        {
+            Identificacion = new Identificacion { Tipologia = "nota.simple.1_0" },
+            DatosExtraidos = new Dictionary<string, object>()
+        };
+
+        var tipologia = new ResolvedTipologia(
+            RequestedValue: "nota.simple@1.0",
+            TipologiaId: "nota.simple",
+            Version: "1.0",
+            TechnicalKey: "nota.simple.1_0",
+            IsDefault: true,
+            AssetResolverEnabled: true);
+
+        var input = DocumentProcessOrchestrator.BuildObtenerActivoInput(entrada, salida, tipologia);
+
+        input.MapeoColeccionActivos.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_DuplicadoDetectado_RetornaSalidaReutilizada()
     {
         var orchestrator = CreateOrchestrator();
@@ -433,6 +495,38 @@ public class DocumentProcessOrchestratorTests
 
         salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
         salida.Resultado.MensajeError.Should().Contain("no clasificable");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificarRateLimitExcedido_RetornaEstadoPendienteReintento()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            RateLimitExcedido = true,
+            FallbackRazon = "rate_limit_exhausted",
+            TipologiaDetectada = "Desconocido",
+            Confianza = 0
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+        salida.Resultado.EstadoCalidad.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Contain("429");
+        salida.Resultado.ConfianzaGlobal.Should().Be(0);
+        salida.Resultado.ConfianzaClasificacion.Should().Be(0);
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("PendienteReintento");
+        salida.DetalleEjecucion.Clasificacion.RateLimitExcedido.Should().BeTrue();
+
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ExtraerActivity").Should().BeNull();
+        context.GetActivityCallCount("PersistirActivity").Should().Be(0);
     }
 
     [Fact]
@@ -623,7 +717,7 @@ public class DocumentProcessOrchestratorTests
         context.GetLastActivityInput<object>("ValidarActivity").Should().BeNull();
         context.GetLastActivityInput<object>("ObtenerActivoActivity").Should().BeNull();
         context.GetLastActivityInput<object>("IntegrarActivity").Should().BeNull();
-        context.GetLastActivityInput<ContratoSalida>("PersistirActivity").Should().NotBeNull();
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity").Should().NotBeNull();
     }
 
     [Theory]
@@ -960,6 +1054,84 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_Paso28b_LayoutFalla_RecuperaMarkdownPersistidoDeBD()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ExtraerMarkdownLayoutActivity", new InvalidOperationException("DI Layout no disponible"));
+        context.SetupActivity("RecuperarMarkdownPersistidoActivity", new RecuperarMarkdownPersistidoResultado
+        {
+            Encontrado = true,
+            Markdown = "# Markdown recuperado de BD",
+            DocumentoId = 42
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.1,
+            ConfianzaGPT = 0.1,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            ClasificacionParcial = true
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("MarkdownPersistidoBD");
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
+
+        var recuperarInput = context.GetLastActivityInput<RecuperarMarkdownPersistidoInput>("RecuperarMarkdownPersistidoActivity");
+        recuperarInput.Should().NotBeNull();
+        recuperarInput!.Sha256.Should().Be("sha256abc");
+        recuperarInput.Md5.Should().Be("md5abc");
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.DatosNormalizados.Should().ContainKey("Markdown");
+        clasifInput.DatosNormalizados["Markdown"].Should().Be("# Markdown recuperado de BD");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Paso28b_LayoutFallaYSinMarkdownPersistido_ContinuaSinMarkdownComoHoy()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ExtraerMarkdownLayoutActivity", new InvalidOperationException("DI Layout no disponible"));
+        context.SetupActivity("RecuperarMarkdownPersistidoActivity", new RecuperarMarkdownPersistidoResultado
+        {
+            Encontrado = false
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.1,
+            ConfianzaGPT = 0.1,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            ClasificacionParcial = true
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().BeNull();
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeFalse();
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.DatosNormalizados.Should().NotContainKey("Markdown");
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClasificacionParcial_AsignaTdn1EnIdentificacion()
     {
         var orchestrator = CreateOrchestrator();
@@ -1016,6 +1188,114 @@ public class DocumentProcessOrchestratorTests
         salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be("tdn1_virtual_propuesta");
         salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Solicitud de cambio de titularidad");
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ParcialPorFase2SinTdn2Parseable_EstadoOkConTdn1Virtual()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.72,
+            ConfianzaGPT = 0.72,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "PRES",
+            ClasificacionParcial = true,
+            FallbackRazon = "fase2_parsing_error",
+            PropuestaTipologia = "Presupuesto de adecuación de inmueble",
+            ResumenCombinado = "Resumen del presupuesto"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("PRES");
+        salida.Identificacion.Tdn1.Should().Be("PRES");
+        salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be("fase2_parsing_error");
+        salida.DatosExtraidos.Should().ContainKey("Resumen");
+        // El markdown disponible debe conservarse para que PersistirActivity lo comprima en Documentos
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# markdown normalizado");
+        salida.DetalleEjecucion.Postproceso.Normalizaciones.Should().Contain("Markdown");
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualConTdn2Detectado_PersisteTdn2EnIdentificacion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "ESIN",
+            Tdn2Detectado = "ESIN-40",
+            ClasificacionParcial = true,
+            FallbackRazon = "Tipologia Virtual",
+            PropuestaTipologia = "Informe de solvencia del titular"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("ESIN");
+        salida.Identificacion.Tdn1.Should().Be("ESIN");
+        salida.Identificacion.Tdn2.Should().Be("ESIN-40");
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaCatalogoResuelta_PueblaTdn1YTdn2DesdeTipologia()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(tdn1: "SERE", tdn2: "SERE-01"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().Be("nota.simple.1_0");
+        salida.Identificacion.Tdn1.Should().Be("SERE");
+        salida.Identificacion.Tdn2.Should().Be("SERE-01");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaCatalogoConTdn2Detectado_ConservaTdn2DeFase2()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.Tdn2Detectado = "SERE-99";
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", clasificacion);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(tdn1: "SERE", tdn2: "SERE-01"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tdn1.Should().Be("SERE");
+        salida.Identificacion.Tdn2.Should().Be("SERE-99");
     }
 
     [Fact]
@@ -1095,7 +1375,39 @@ public class DocumentProcessOrchestratorTests
         salida.Resultado.Estado.Should().Be("OK");
         context.GetActivityCallCount("ExtraerActivity").Should().Be(1);
         context.GetActivityCallCount("ValidarActivity").Should().Be(1);
-        context.GetLastActivityInput<ContratoSalida>("PersistirActivity").Should().NotBeNull();
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity").Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_FallbackExtraccionSinDatos_DegradaEstadoAExtraccionIncompleta()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: true));
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt-4o-mini",
+            Proveedor = "azure-openai",
+            FallbackUsado = true,
+            FallbackRazon = "exception:TimeoutException:cuModelKey=default.cu",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>()
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("EXTRACCION_INCOMPLETA");
+        salida.Resultado.MensajeError.Should().Contain("cuModelKey=default.cu");
     }
 
     [Fact]
@@ -1284,5 +1596,62 @@ public class DocumentProcessOrchestratorTests
         var prepInput = context.GetLastActivityInput<PrepararDocumentoClasificacionInput>("PrepararDocumentoClasificacionActivity");
         prepInput.Should().NotBeNull();
         prepInput!.MaxPaginasClasificacion.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_BlobFirstSinMarkdown_FallbackLayoutDocumentoCompletoPropagaBlobPath()
+    {
+        // Regresión: en modo blob-first el orquestador vacía Content.Base64 (ahorro de memoria) y
+        // trabaja solo con BlobPath. El fallback DI Layout de "documento completo" construía el
+        // ExtraerMarkdownLayoutInput con Content.Base64 (vacío) sin propagar BlobPath, por lo que el
+        // provider enviaba base64Source vacío y Azure DI respondía 400 InvalidContent
+        // ("The file is corrupted or format is unsupported").
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Documento.Content.Base64 = string.Empty;
+        entrada.Documento.BlobPath = "documents/blob-first.pdf";
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/blob-first.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        // El layout no devuelve markdown en ninguna llamada → fuerza el fallback de documento completo.
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Markdown = null,
+            Paginas = 0
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.95,
+            ConfianzaGPT = 0.95,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "nota.simple",
+            ContentExtraido = null
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+        // Extracción sin markdown → markdownNormalizacion vacío → dispara el fallback DI Layout.
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+
+        await orchestrator.RunOrchestrator(context);
+
+        var layoutInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
+        layoutInput.Should().NotBeNull();
+        layoutInput!.BlobPath.Should().NotBeNullOrWhiteSpace(
+            "en blob-first el fallback de documento completo debe usar BlobPath (urlSource) y no un base64 vacío");
+        layoutInput.BlobPath.Should().Be("documents/blob-first.pdf");
     }
 }

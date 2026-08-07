@@ -1,6 +1,6 @@
 # Troubleshooting & Diagnóstico — DocumentIA
 
-**Última actualización:** 2026-06-10  
+**Última actualización:** 2026-07-13  
 **Público objetivo:** Operadores, DevOps, Soporte 2º nivel
 
 ---
@@ -467,6 +467,84 @@
 
 ---
 
+### CASO 7: Documentos en `PENDIENTE_REINTENTO` / latencia alta en clasificación GPT (429 Azure OpenAI)
+
+**Síntomas:**
+- Documentos terminan con `Estado = "PENDIENTE_REINTENTO"` y `EstadoCalidad = "ERROR"`
+- `MensajeError = "Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`
+- Confianzas de clasificación a 0
+- Latencias altas en `ClasificarActivity` o en ejecución de prompts bajo carga
+- Prompts (enriquecimiento) devuelven `PromptResultado.Error` con prefijo `rate_limit_exhausted:` (no bloqueante, no escala el documento)
+
+**Causas posibles:**
+1. Rate limiting (429) de Azure OpenAI por cuota/TPM del deployment agotada
+2. Picos de carga concurrente sobre el mismo endpoint/deployment (clasificación GPT y prompts comparten la misma cuota cuando apuntan al mismo recurso)
+3. Circuit breaker abierto tras varios fallos consecutivos: el cooldown está activo y las llamadas se rechazan rápido sin reintentar
+
+**Diagnóstico:**
+
+1. **Revisar reintentos y apertura de circuito en AppInsights:**
+   ```kusto
+   customEvents
+   | where name in ("AOAI.RateLimitRetry", "AOAI.CircuitOpen", "AOAI.CircuitRejected", "AOAI.CircuitClosed")
+   | where timestamp > ago(6h)
+   | project timestamp, name, circuitKey=tostring(customDimensions["circuitKey"]),
+             attempt=tostring(customDimensions["attempt"]),
+             delayMs=tostring(customDimensions["delayMs"]),
+             statusCode=tostring(customDimensions["statusCode"])
+   | order by timestamp desc
+   ```
+   Ver el catálogo completo de queries en [OBSERVABILIDAD_KQL.md](../observabilidad/OBSERVABILIDAD_KQL.md).
+
+2. **Diferenciar el estado del documento:**
+   - `PENDIENTE_REINTENTO` → cuota de Azure OpenAI agotada tras reintentos/cooldown; estado limpio y retriable, no es un fallo del documento
+   - `NO_CLASIFICADO` → documento genuinamente no clasificable; no confundir con rate limit
+
+3. **Revisar cuota y uso del deployment en Azure Portal:**
+   - Azure OpenAI resource → deployment usado por clasificación/prompts → Metrics → comparar `Rate Limit Requests` / uso de TPM vs límite asignado
+
+**Solución paso a paso:**
+
+1. **Reprocesar los documentos en `PENDIENTE_REINTENTO`** cuando la cuota se haya recuperado
+2. **Revisar y, si procede, ampliar la cuota/TPM** del deployment de Azure OpenAI en Azure Portal (o repartir carga entre deployments)
+3. **Ajustar la configuración `AzureOpenAIResilience`** (ver manual de configuración): `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`
+4. **Rollback si es necesario:** `MaxRetries: 0` + `EnableCircuitBreaker: false` desactiva el reintento/circuito y vuelve al comportamiento anterior (error crudo del SDK ante 429)
+5. Los prompts con `rate_limit_exhausted:` no requieren acción sobre el documento (degradado no bloqueante); revisar solo si el volumen es alto y afecta a la calidad del enriquecimiento
+
+---
+
+### CASO 8: Réplica de analizador CU a West Europe falla — `"has not granted the necessary permissions"`
+
+**Síntomas:**
+
+- Al replicar un analizador de Content Understanding de Sweden Central → West Europe con `scripts/deployment/copy-cu-analyzer.ps1` (cross-resource), el paso `:copy` falla con:
+  ```
+  NotFound / ModelNotFound: The resource '.../upe48-mm2avmdm-swedencentral' has not granted
+  the necessary permissions for the source analyzer '<id>' to copy to the target resource.
+  ```
+- El paso `grantCopyAuthorization` responde `200` (parece OK) pero el copy falla igualmente.
+
+**Causa (verificado 2026-07-17):**
+
+- **La Copy API cross-resource NO funciona en este entorno.** El `grantCopyAuthorization` devuelve un cuerpo **sin el campo `source`** (stub), el `:copy` no valida la autorización, y el flujo con token (`:getCopyAuthorization`) da `404`.
+- **No es (solo) permisos.** Se descartó por orden: casing del RG, propagación (reintentos), analizadores referenciados, permisos del usuario (tiene `Cognitive Services User` en ambos), e incluso tras **conceder `Cognitive Services User` a la identidad administrada del destino sobre el origen** (el requisito del *pull* cross-resource) el error persiste. Probable limitación de servicio con analizadores **project-scoped de Foundry**.
+
+**Solución (método operativo):**
+
+1. **Replicar reconstruyendo/reentrenando** en el destino, no copiando:
+   ```powershell
+   ./scripts/deployment/recreate-cu-analyzer.ps1 `
+       -SourceAnalyzerId <id> -ResourceGroup SRBRGDOCSAIPROD -SyncDefaults
+   ```
+   Hace `PUT create-or-replace` en el destino y reentrena desde el blob de datos etiquetados (`knowledgeSources`).
+2. **Prerrequisito:** la identidad administrada del destino (`srbaisrv-westeurope`) necesita **`Storage Blob Data Reader`** sobre `srbstgproapppdocai` (ya concedido). Si el build acaba en `failed`, revisar ese rol.
+3. **Validar** el analizador reconstruido con documentos de prueba antes de repuntar `modelKey` en `ModeloConfigs`: es equivalente funcional, no un snapshot bit a bit.
+4. Si se necesita el snapshot exacto vía Copy API, **abrir caso de soporte Azure** con la evidencia (grant sin `source`, `:getCopyAuthorization` → 404).
+
+> Detalle completo: `docs/guias/GUIA_EXTRACCION_AZURE_CONTENT_UNDERSTANDING.md` §12 (aviso al inicio + §12.2b).
+
+---
+
 ## 3. Debugging Profundo
 
 ### 3.1 Seguimiento de logs en Application Insights
@@ -772,6 +850,7 @@ Content-Type: application/json
 | **HTTP 5xx / Function crash** | Dev Backend | - Exceptions en AppInsights traces<br>- Orchestration Instance ID<br>- Documento (Base64 si < 1MB) | 1h |
 | **Timeout > 10 min** | Dev Backend + CU Team | - customStatus timeline<br>- Logs de activity<br>- Métricas CU (P95 ms) | 4h |
 | **Rate limiting CU (429)** | CU Team / Azure Support | - Timestamp de error<br>- Cuota actual vs límite<br>- Pattern de requests | 2h |
+| **Rate limiting Azure OpenAI (429) / `PENDIENTE_REINTENTO`** | Dev Backend / Azure Support | - Eventos `AOAI.RateLimitRetry` / `AOAI.CircuitOpen`<br>- `circuitKey` afectado<br>- Cuota/TPM del deployment | 2h |
 | **Storage / Blob access denied** | Infra / RBAC | - Error exact + timestamp<br>- Logs Azure Storage<br>- Role assignments | 2h |
 | **SQL connection timeout** | Database Admin | - SQL logs<br>- Connection pool stats<br>- DTU / CPU usage | 4h |
 | **Documento duplicado por error** | Dev Backend | - Documento<br>- SHA256<br>- BD audit trail | Normal |
@@ -860,3 +939,4 @@ az functionapp config appsettings set \
 | Fecha | Cambio |
 |---|---|
 | 2026-06-10 | Versión inicial con 6 casos, KQL queries, scripts PowerShell |
+| 2026-07-13 | Añadido CASO 7: rate limiting (429) de Azure OpenAI en clasificación GPT/prompts y estado `PENDIENTE_REINTENTO` |

@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
+using DocumentIA.Functions.Services;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.EntityFrameworkCore;
@@ -37,8 +38,10 @@ public class ModelosAdminFunction
             .OrderBy(m => m.Key)
             .ToListAsync();
 
+        var payload = modelos.Select(ToMaskedDto).ToList();
+
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(modelos);
+        await response.WriteAsJsonAsync(payload);
         return response;
     }
 
@@ -73,13 +76,18 @@ public class ModelosAdminFunction
             return await CreateError(req, HttpStatusCode.Conflict, $"Ya existe un modelo con key '{payload.Key}'.");
         }
 
+        // No hay ConfiguracionJson almacenado previo en creacion; si el cliente envia "***" (p. ej.
+        // copiando un payload previamente enmascarado) se guarda tal cual, sin poder recuperar el
+        // valor original.
+        var configuracionJson = ModelConfigSecretMasker.UnmaskJson(payload.ConfiguracionJson, storedJson: null);
+
         var entity = new ModeloConfigEntity
         {
             Tipo = tipoModelo,
             Key = payload.Key.Trim(),
             Provider = payload.Provider.Trim(),
             Activo = payload.Activo,
-            ConfiguracionJson = payload.ConfiguracionJson,
+            ConfiguracionJson = configuracionJson ?? payload.ConfiguracionJson,
             CreadoPor = payload.Usuario ?? "SYSTEM",
             FechaCreacion = DateTime.UtcNow,
             FechaActualizacion = DateTime.UtcNow
@@ -89,7 +97,7 @@ public class ModelosAdminFunction
         await _dbContext.SaveChangesAsync();
 
         var response = req.CreateResponse(HttpStatusCode.Created);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(ToMaskedDto(entity));
         return response;
     }
 
@@ -120,17 +128,21 @@ public class ModelosAdminFunction
             return await CreateError(req, HttpStatusCode.BadRequest, jsonError!);
         }
 
+        // Preserva secretos existentes cuando el cliente reenvia "***" (valor enmascarado en el GET
+        // previo) sin haberlo modificado.
+        var configuracionJson = ModelConfigSecretMasker.UnmaskJson(payload.ConfiguracionJson, entity.ConfiguracionJson);
+
         entity.Tipo = tipoModelo;
         entity.Key = payload.Key?.Trim() ?? entity.Key;
         entity.Provider = payload.Provider?.Trim() ?? entity.Provider;
         entity.Activo = payload.Activo;
-        entity.ConfiguracionJson = payload.ConfiguracionJson;
+        entity.ConfiguracionJson = configuracionJson ?? payload.ConfiguracionJson;
         entity.FechaActualizacion = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync();
 
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(ToMaskedDto(entity));
         return response;
     }
 
@@ -151,7 +163,7 @@ public class ModelosAdminFunction
         await _dbContext.SaveChangesAsync();
 
         var response = req.CreateResponse(HttpStatusCode.OK);
-        await response.WriteAsJsonAsync(entity);
+        await response.WriteAsJsonAsync(ToMaskedDto(entity));
         return response;
     }
 
@@ -216,6 +228,36 @@ public class ModelosAdminFunction
         var response = req.CreateResponse(statusCode);
         await response.WriteAsJsonAsync(new { error = message });
         return response;
+    }
+
+    /// <summary>
+    /// Proyecta la entidad a un DTO de salida con el ConfiguracionJson enmascarado, sin mutar la
+    /// entidad trackeada por EF (evita persistir accidentalmente el valor enmascarado).
+    /// </summary>
+    private static ModeloConfigDto ToMaskedDto(ModeloConfigEntity entity) => new()
+    {
+        Id = entity.Id,
+        Tipo = entity.Tipo,
+        Key = entity.Key,
+        Provider = entity.Provider,
+        Activo = entity.Activo,
+        ConfiguracionJson = ModelConfigSecretMasker.MaskJson(entity.ConfiguracionJson) ?? entity.ConfiguracionJson,
+        FechaCreacion = entity.FechaCreacion,
+        FechaActualizacion = entity.FechaActualizacion,
+        CreadoPor = entity.CreadoPor
+    };
+
+    private sealed class ModeloConfigDto
+    {
+        public int Id { get; set; }
+        public TipoModelo Tipo { get; set; }
+        public string Key { get; set; } = string.Empty;
+        public string Provider { get; set; } = string.Empty;
+        public bool Activo { get; set; } = true;
+        public string ConfiguracionJson { get; set; } = "{}";
+        public DateTime FechaCreacion { get; set; }
+        public DateTime? FechaActualizacion { get; set; }
+        public string? CreadoPor { get; set; }
     }
 
     private sealed class ModeloUpsertRequest

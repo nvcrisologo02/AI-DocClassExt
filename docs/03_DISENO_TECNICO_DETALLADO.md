@@ -1,4 +1,4 @@
-# 3. Diseno Tecnico Detallado — DocumentIA MVP
+# 3. Diseno Tecnico Detallado — DocumentIA
 
 > Ultima actualizacion: 2026-06-05  
 > Proyecto: AI DocClassExt — SAREB  
@@ -92,7 +92,7 @@ flowchart TD
 | 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 | 12 | Integrar | `IntegrarActivity` | datos + tipologia + plugins config | DatosFinales + plugins results | Ejecucion por prioridad |
 | 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP (`searchEntities` + `create`) con timeout 120s |
-| 14 | Persistir | `PersistirActivity` | ContratoSalida completo | void | BD + auditoria |
+| 14 | Persistir | `PersistirActivity` | `PersistirInput` (ContratoSalida completo + `SubmittedBy` de `trazabilidad`) | void | BD + auditoria. `PersistirInput` es un envoltorio interno del orquestador (no altera los contratos de entrada/salida): permite guardar el solicitante en `DocumentoEjecucionEntity.SubmittedBy`. |
 
 ### 3.1.1 Comportamiento del orquestador segun entrada y configuracion
 
@@ -944,6 +944,7 @@ erDiagram
         int Id PK
         int DocumentoId FK "→ DocumentoEntity"
         string EjecucionGuid UK "indice unico"
+        string SubmittedBy "nullable — solicitante (trazabilidad.submittedBy); migracion 20260805100351"
         string ContratoSalidaCompletoJson
         string ActivityTimelineJson
         int DuracionClasifMs
@@ -1221,7 +1222,27 @@ Los archivos JSON en `config/tipologias/` son únicamente **fuente de seed**: al
 | Retirar | `POST /management/tipologias/{id}/retirar` | Published → Retired. Invisible en pipeline. |
 | Reactivar | `POST /management/tipologias/{id}/draft` | Retired/Published → Draft |
 
+### 3.8.4 Identidad, auditoría y modo solo lectura del Admin
+
+`DocumentIA.Admin` (Blazor Server) resuelve la identidad del operador con `ICurrentUserService`/`CurrentUserService`:
+
+- Con **App Service Authentication (EasyAuth)** activo, la identidad se lee de la cabecera `X-MS-CLIENT-PRINCIPAL-NAME` que inyecta la plataforma.
+- Sin EasyAuth y fuera de desarrollo local, no hay identidad: `UserName = "no-autenticado"` e `IsAuthenticated = false`.
+- En desarrollo local (`IWebHostEnvironment.IsDevelopment()`), se usa `dev-<usuario del SO>` y se considera identificado (la app solo es accesible desde la propia máquina).
+
+**Modo solo lectura (AB#99999):** cuando `IsAuthenticated = false`, cualquier operación de escritura (crear/editar/publicar/retirar/activar/eliminar tipologías, modelos, prompts o configuración de plugins) se rechaza antes de llamar a la Admin API. La comprobación (`EnsureWritesAllowed()`) vive en la **capa de servicios** (`TipologiaAdminService`, `PromptManagementService`), no en las páginas Blazor, para que ninguna vista pueda saltársela por omisión. El rechazo lanza `InvalidOperationException` con el mensaje "Modo solo lectura: no hay un usuario autenticado, así que no es posible registrar quién realiza el cambio...". Las consultas (GET) no están sujetas a esta restricción.
+
+**Auditoría:** el valor resuelto por `ICurrentUserService.UserName` es el que viaja como `usuario`/`CreatedBy`/`UpdatedBy`/`PublishedBy` en las peticiones a la Admin API. Los literales legacy `"ADMIN-UI"` y `"admin"` ya no se usan.
+
 ---
+
+Los datos del proveedor de identidad por entorno (app registration, grupo de
+acceso, ubicación del secret) se mantienen en la sección "Identidad y acceso al
+Admin (EasyAuth)" de INFRAESTRUCTURA_REAL_DESPLEGADA y en la guía de activación
+GUIA_EASYAUTH_ADMIN. A fecha 2026-08-06, DEV dispone de app registration y grupo
+verificados (activación del App Service pendiente); PRE y PROD siguen sin
+proveedor, por lo que sus despliegues operan en modo solo lectura.
+
 
 ## 3.9 Manejo de Errores en Durable Functions
 
@@ -1256,6 +1277,7 @@ async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
 | Documento duplicado, !forceReprocess | VerificarDuplicado | `DUPLICADO` (reutilizado) | No (ya existe) |
 | Confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (parcial) |
 | Tipologia no resuelta | ResolverTipologia | `ERROR` | Si (parcial) |
+| Cuota Azure OpenAI agotada (429 sostenido tras reintentos/cooldown) | Clasificar | `PENDIENTE_REINTENTO` (ver 3.9.5) | Si (parcial) |
 
 ### 3.9.3 Timeout GDC
 
@@ -1282,11 +1304,52 @@ if (winner == timeoutTask)
 | GDC timeout/error | Marca error en GDC, continua a persistencia |
 | BD no disponible | Exception no capturada → `runtimeStatus = Failed` |
 
+### 3.9.5 Resiliencia ante Rate Limiting (429) de Azure OpenAI
+
+Componente reutilizable `AzureOpenAIResilienceExecutor` (interfaz `IAzureOpenAIResilienceExecutor`, namespace `DocumentIA.Functions.Services.Resilience`, en `src/backend/DocumentIA.Functions/Services/Resilience/`) que envuelve las llamadas `ChatClient.CompleteChatAsync` del SDK `Azure.AI.OpenAI` v2 / `System.ClientModel`. Se aplica a **clasificación GPT** (`GptClasificarDataProvider`) y a **prompts** (`OpenAIPromptDataProvider`), portando el mismo patrón que ya usa `AzureContentUnderstandingProvider` para extracción (ver `ResilientGdcService` / `ResilientPlugin` en 3.4.2 y 3.7.2 como decoradores análogos). El SDK desactiva su reintento por defecto (`ClientRetryPolicy(maxRetries: 0)`) para que el executor sea la única autoridad de reintento; las respuestas de error del SDK se exponen como `ClientResultException`.
+
+**Mecanismo**
+
+1. **Reintento in-call** ante 429, 500, 502, 503, 504: respeta el header `Retry-After` de la respuesta si viene; si no, aplica backoff exponencial desde `InitialRetryDelayMs`. El delay efectivo se acota con `MaxRetryDelaySeconds`. El timeout por-intento (`TimeoutSeconds` del modelo) es independiente del envelope de reintentos — cada intento tiene su propio timeout y el delay entre reintentos no lo consume. Errores no reintentables (p.ej. 400) se propagan sin tocar el circuito.
+2. **Circuit breaker con cooldown**, clave `circuitKey = "{endpoint}|{deployment}"`: clasificación y prompts que apuntan al mismo recurso Azure OpenAI comparten circuito (misma bolsa de cuota). Tras `CircuitBreakerFailureThreshold` fallos consecutivos el circuito abre durante `CircuitBreakerOpenSeconds`; las llamadas siguientes fallan rápido sin reintentar hasta expirar el cooldown. Un éxito resetea el contador y cierra el circuito. El estado es en memoria por instancia (no compartido entre instancias escaladas del Function host), igual que en el patrón de Content Understanding.
+3. Al agotar reintentos o con el circuito abierto, el executor lanza `RateLimitExhaustedException`.
+
+**Desenlace determinista**
+
+| Contexto | Comportamiento |
+|----------|----------------|
+| Clasificación GPT | `ClasificarActivity` captura `RateLimitExhaustedException` y devuelve `ResultadoClasificacion` con `RateLimitExcedido=true`, `FallbackRazon="rate_limit_exhausted"`, `TipologiaDetectada="Desconocido"`, `Confianza=0` — señal por dato, no excepción marshalada a través de la frontera Durable. `DocumentProcessOrchestrator` hace short-circuit a `Estado="PENDIENTE_REINTENTO"`, `EstadoCalidad="ERROR"`, confianzas a 0 y `MensajeError="Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`. Es un estado retriable, diferenciado de `NO_CLASIFICADO` (documento genuinamente no clasificable), pensado para reencolar/reprocesar más tarde. `Resultado.Estado` es un string libre (no enum cerrado); se persiste verbatim en `DocumentoEjecucion.EstadoFinal`, la agregación de métricas no lo cuenta como `ERROR`, y el Monitor lo muestra con badge `bg-warning`. |
+| Prompts | Degradado graceful: `PromptResultado.Error` con prefijo `rate_limit_exhausted:`, sin escalar el documento a `PENDIENTE_REINTENTO` (no bloqueante). Se beneficia igual del reintento + cooldown. |
+
+**Configuración**
+
+Sección de nivel superior `AzureOpenAIResilience` (`EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`) — ver `05_MANUAL_USO_CONFIGURACION.md` para el detalle de cada clave. Rollback instantáneo al comportamiento previo: `MaxRetries: 0` + `EnableCircuitBreaker: false`.
+
+**Telemetría** (Application Insights, `TelemetryClient` customEvents)
+
+| Evento | Cuándo | Propiedades |
+|--------|--------|-------------|
+| `AOAI.RateLimitRetry` | En cada reintento | `circuitKey`, `attempt`, `delayMs`, `statusCode` |
+| `AOAI.CircuitOpen` | El circuito se abre | `circuitKey` |
+| `AOAI.CircuitClosed` | El circuito se cierra (cooldown expirado o éxito) | `circuitKey` |
+| `AOAI.CircuitRejected` | Llamada rechazada por circuito abierto (fail-fast) | `circuitKey` |
+
+Análogos a los eventos `CU.CircuitOpen/Closed/Failover/Rejected` de la extracción con Content Understanding.
+
+**Fuera de alcance**
+
+- Failover a modelo alterno (sí existe en Content Understanding, no en GPT).
+- Retry de Durable Functions sobre la actividad de clasificación.
+- Extensión al proveedor de extracción `GptFallbackExtraerDataProvider` (el componente queda listo para aplicarlo).
+- Limitación conocida (`AB#99901`): si GPT se configura únicamente como `GlobalFallbackProvider` (no como paso del flujo), una rama con catch amplio en `ConfigurableClasificarDataProvider` absorbe la excepción antes de llegar a `PENDIENTE_REINTENTO`. El flujo por defecto `hybrid-rules-gpt-di` no está afectado.
+
+Feature Azure DevOps: `AB#99893`.
+
 ---
 
 ## 3.10 Proteccion de Datos y Seguridad
 
-### 3.10.1 Estado Actual (MVP)
+### 3.10.1 Estado Actual
 
 | Aspecto | Implementacion |
 |---------|---------------|
@@ -1297,14 +1360,14 @@ if (winner == timeoutTask)
 | Datos en transito | HTTPS (Functions + AI Services + Blob) |
 | Datos en reposo BD | TDE (Azure SQL) / sin cifrado (Docker local) |
 | Datos en reposo Blob | SSE con Microsoft-managed keys |
-| Logs | Structured logging (sin implementación específica de masking PII en MVP) |
+| Logs | Structured logging (sin implementación específica de masking PII) |
 
 ### 3.10.2 Estado EP7 (actualizado)
 
 | Item | Estado |
 |------|--------|
 | EP7 — Protección de datos y GDPR (WI 98519) | `Removed` en ADO (2026-05-26) por decisión de producto |
-| Implicación documental | No se considera funcionalidad pendiente del MVP |
+| Implicación documental | No se considera funcionalidad pendiente |
 | Evolución futura | Si se retoma, deberá abrirse como nueva iniciativa y redefinir alcance técnico |
 
 ---
@@ -1322,6 +1385,7 @@ stateDiagram-v2
 
     EnProceso --> BlobSubido : SubirBlobActivity OK
     BlobSubido --> Clasificado : ClasificarActivity OK
+    BlobSubido --> RateLimitAgotado : ClasificarActivity 429 agotado<br/>(RateLimitExhaustedException)
 
     Clasificado --> BajaConfianza : Confianza < umbral
     Clasificado --> TipologiaResuelta : ResolverTipologia OK
@@ -1349,6 +1413,7 @@ stateDiagram-v2
     Duplicado --> [*]
     BajaConfianza --> Persistido
     ErrorTipologia --> Persistido
+    RateLimitAgotado --> Persistido
     OK --> [*]
     Revision --> [*]
     ValidacionConErrores --> [*]
@@ -1362,6 +1427,7 @@ stateDiagram-v2
         ErrorEstado : Estado = ERROR
         Duplicado : Estado = DUPLICADO (reutilizado)
         ErrorTipologia : Estado = ERROR (tipologia)
+        RateLimitAgotado : Estado = PENDIENTE_REINTENTO (3.9.5)
     }
 ```
 
@@ -1657,14 +1723,34 @@ Reglas de validación del trigger:
 | POST | `/management/tipologias/{id}/publicar` | Publicar | Function |
 | POST | `/management/tipologias/{id}/retirar` | Retirar | Function |
 | POST | `/management/tipologias/{id}/draft` | Volver a Draft | Function |
-| GET | `/management/modelos/{tipo}` | Listar modelos (Clasificacion/Extraccion/Prompt) | Function |
+| GET | `/management/modelos/{tipo}` | Listar modelos por tipo (clasificacion/extraccion/prompt/layout) | Function |
 | POST | `/management/modelos` | Crear modelo | Function |
 | PUT | `/management/modelos/{id}` | Actualizar modelo | Function |
-| DELETE | `/management/modelos/{id}` | Eliminar modelo | Function |
+| DELETE | `/management/modelos/{id}` | Desactivar modelo (soft-delete, `Activo=false`, responde `200`) | Function |
+| GET | `/management/prompts` | Listar plantillas de prompt (todas las versiones) | Function |
+| GET | `/management/prompts/{id}` | Obtener plantilla de prompt por Id | Function |
+| GET | `/management/prompts/by-key/{promptKey}` | Listar versiones de una `PromptKey` | Function |
+| POST | `/management/prompts` | Crear versión borrador (`IsActive=false`) | Function |
+| PUT | `/management/prompts/{id}` | Actualizar borrador. `403` si la versión está activa | Function |
+| PUT | `/management/prompts/{id}/activate` | Activar versión (desactiva la anterior activa de la misma clave) | Function |
+| POST | `/management/prompts/rollback` | Reactivar una versión previa (desactiva la actual) | Function |
+| DELETE | `/management/prompts/{id}` | Eliminar borrador. `403` si la versión está activa | Function |
+| GET | `/management/configuration` | Diagnóstico de configuración efectiva (incluye `environment`) | Function |
 | GET | `/management/plugins-tipologias/{codigo}` | Config plugins de tipologia | Function |
 | PUT | `/management/plugins-tipologias/{codigo}` | Actualizar config plugins | Function |
 | POST | `/management/plugins-tipologias/{codigo}/publicar` | Publicar config plugins | Function |
 | POST | `/management/plugins-tipologias/{codigo}/retirar` | Retirar config plugins | Function |
+| GET | `/management/ejecuciones` | Listado paginado de ejecuciones. Query: `desde`, `hasta` (default: ultimos 7 dias), `tipologia`, `estado`, `flujo`, `submittedby`, `q` (nombre de documento o GUID), `page`, `pageSize`. Respuesta: `{items, total, page, pageSize}` | Function |
+| GET | `/management/ejecuciones/agregados` | KPIs y serie temporal diaria calculados en servidor sobre el mismo filtro que el listado | Function |
+| GET | `/management/ejecuciones/{guid}/detalle` | Detalle completo por GUID de ejecucion: contrato de salida completo (`ContratoSalidaCompletoJson`), timeline de actividades y nombres de tipologia resueltos contra el catalogo TDN1/TDN2 | Function |
+
+Los endpoints `/management/ejecuciones*` son los que consume el Monitor del Admin (páginas `/monitor` y `/monitor/{guid}`). El campo `submittedBy` del listado y del detalle se resuelve con `COALESCE(DocumentoEjecuciones.SubmittedBy, Documentos.SubmittedBy)`: las ejecuciones anteriores a la migración `20260805100351_AgregarSubmittedByEjecucion` no tienen el valor propio y heredan el del documento (esto preserva, por ejemplo, el marcador `migracion-dev` de la migración operativa DEV→PRO).
+
+En todas las respuestas de `/management/modelos*` (GET/POST/PUT/DELETE), el campo `ConfiguracionJson` sale con los valores de propiedades sensibles (nombre que contiene `apikey`, `password`, `secret` o `accountkey`, de forma recursiva) enmascarados como `"***"`. En escritura (POST/PUT), si una propiedad sensible llega con el valor `"***"` se conserva el valor previamente almacenado (round-trip seguro): esto permite editar un modelo sin reenviar la clave real y sin destruirla; para sustituirla basta con enviar el valor nuevo en claro.
+
+La validación de contenido de `/management/prompts` (POST/PUT) es únicamente de longitud (10–16000 caracteres); los placeholders del contenido (`{CONTEXT_PROMPT}`, `{TDN1_CATALOG}`, `{TDN2_CATALOG}`, `{TDN1_CODE}`, `{DOCUMENT_TEXT}`, etc.) no se validan en backend — flexibilidad deliberada para edición iterativa. Ver [ESPECIFICACION_PROMPTS_CONFIGURABLES.md](especificaciones/ESPECIFICACION_PROMPTS_CONFIGURABLES.md).
+
+El campo `environment` de `/management/configuration` se resuelve con prioridad desde el app setting `EnvironmentName` (nuevo, desplegado por pipeline), con fallback a `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` y por último `"Unknown"`. No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque en un Function App desplegado altera el comportamiento del host (fallback a BD InMemory y omisión de validación TLS cuando vale `"Development"`).
 
 ---
 

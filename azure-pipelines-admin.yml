@@ -28,6 +28,10 @@ variables:
       value: srbwebadmindevdocai
     - name: AZURE_FUNCTIONS_APP_NAME
       value: srbappdevdocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverdev
+    - name: ENVIRONMENT_NAME
+      value: Development
     - name: KEY_VAULT_NAME
       value: srbkvdevdocai
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
@@ -39,6 +43,10 @@ variables:
       value: srbwebadminpredocai
     - name: AZURE_FUNCTIONS_APP_NAME
       value: srbapppredocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverpre
+    - name: ENVIRONMENT_NAME
+      value: Preproduction
     - name: KEY_VAULT_NAME
       value: srbkvpredocai
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
@@ -50,6 +58,10 @@ variables:
       value: srbwebadminprodocai
     - name: AZURE_FUNCTIONS_APP_NAME
       value: srbappprodocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolver
+    - name: ENVIRONMENT_NAME
+      value: Production
     - name: KEY_VAULT_NAME
       value: srbkvprodocai
 
@@ -205,6 +217,27 @@ stages:
                           -SettingsJson $adminSettingsJson
 
                 - task: AzureCLI@2
+                  displayName: Ensure Functions environment name
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: pscore
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                        # El aviso de entorno del Admin necesita que el backend sepa identificarse.
+                        # Se asegura aqui (ademas de en el pipeline de Functions) para que desplegar
+                        # el Admin baste: ensure-app-settings.ps1 no sobrescribe valores existentes.
+                        $functionsSettings = @(
+                          "EnvironmentName=$(ENVIRONMENT_NAME)"
+                        )
+
+                        $functionsSettingsJson = $functionsSettings | ConvertTo-Json -Compress -AsArray
+                        & .\scripts\configuration\ensure-app-settings.ps1 `
+                          -AppKind functionapp `
+                          -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                          -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          -SettingsJson $functionsSettingsJson
+
+                - task: AzureCLI@2
                   displayName: Validate Admin App settings contract
                   inputs:
                     azureSubscription: $(AZURE_SERVICE_CONNECTION)
@@ -215,5 +248,5 @@ stages:
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -AdminWebAppName "$(AZURE_ADMIN_WEB_APP_NAME)" `
                         -FunctionsAppName "$(AZURE_FUNCTIONS_APP_NAME)" `
-                        -AssetResolverWebAppName "srbwebpluginassetresolver"
+                        -AssetResolverWebAppName "$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)"
 

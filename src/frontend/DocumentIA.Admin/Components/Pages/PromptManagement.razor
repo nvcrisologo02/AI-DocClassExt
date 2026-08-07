@@ -2,7 +2,9 @@
 @using DocumentIA.Admin.Models
 @using DocumentIA.Admin.Services
 @using DocumentIA.Admin.Components.Prompts
+@using DocumentIA.Admin.Components.Common
 @inject PromptManagementService PromptService
+@inject DocumentIA.Admin.Services.ICurrentUserService CurrentUser
 
 <div class="container-fluid mt-4 mb-4">
     <h1 class="mb-4">
@@ -55,7 +57,7 @@
                         {
                             <tr>
                                 <td><code style="background: #f0f0f0; padding: 3px 6px; border-radius: 3px;">@prompt.PromptKey</code></td>
-                                <td class="text-center">v@prompt.Version</td>
+                                <td class="text-center">v@(prompt.Version)</td>
                                 <td class="text-center">
                                     @if (prompt.IsActive)
                                     {
@@ -105,7 +107,11 @@
         <!-- Vista Edición -->
         <div class="card">
             <div class="card-header bg-primary text-white">
-                <strong>@(EditingPrompt?.Id == 0 ? "Crear Nuevo Prompt" : $"Editar Prompt - {EditingPrompt?.PromptKey} v{EditingPrompt?.Version}")</strong>
+                <strong>@(EditingPrompt?.Id == 0 && string.IsNullOrEmpty(EditingPrompt?.PromptKey)
+                    ? "Crear Nuevo Prompt"
+                    : EditingPrompt?.Id == 0
+                        ? $"Nueva versión draft — {EditingPrompt?.PromptKey} v{EditingPrompt?.Version}"
+                        : $"Editar Prompt - {EditingPrompt?.PromptKey} v{EditingPrompt?.Version}")</strong>
             </div>
             <div class="card-body">
                 <PromptEditor 
@@ -166,6 +172,8 @@
     }
 </div>
 
+<ConfirmDialog @ref="_confirm" />
+
 @code {
     private List<PromptTemplateListItemDto> Prompts = [];
     private List<PromptTemplateDto>? VersionHistory;
@@ -175,6 +183,7 @@
     private PromptTemplateDto? EditingPrompt;
     private string? SelectedPromptKey;
     private string? ErrorMessage;
+    private ConfirmDialog? _confirm;
 
     protected override async Task OnInitializedAsync()
     {
@@ -210,11 +219,22 @@
         {
             var versions = await PromptService.GetPromptTemplatesByKeyAsync(promptKey);
             var latest = versions.FirstOrDefault();
-            if (latest != null)
+            if (latest is null)
+            {
+                return;
+            }
+
+            if (latest.IsActive)
+            {
+                // La versión activa es inmutable: se abre una nueva versión draft con su contenido.
+                EditingPrompt = latest with { Id = 0, IsActive = false, Version = latest.Version + 1 };
+            }
+            else
             {
                 EditingPrompt = latest;
-                ShowEditor = true;
             }
+
+            ShowEditor = true;
         }
         catch (Exception ex)
         {
@@ -263,7 +283,7 @@
             }
             else
             {
-                var request = new UpdatePromptTemplateRequest(EditingPrompt.Content, EditingPrompt.Description, "admin");
+                var request = new UpdatePromptTemplateRequest(EditingPrompt.Content, EditingPrompt.Description, CurrentUser.UserName);
                 await PromptService.UpdatePromptTemplateAsync(EditingPrompt.Id, request);
             }
 
@@ -278,9 +298,16 @@
 
     private async Task ActivatePromptItem(PromptTemplateListItemDto prompt)
     {
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a activar '{prompt.PromptKey}' v{prompt.Version}.\nLa versión activa actual quedará desactivada y esta pasará a usarse en las clasificaciones.",
+            "Activar versión", "Activar", "btn-success"))
+        {
+            return;
+        }
+
         try
         {
-            await PromptService.ActivatePromptVersionAsync(prompt.Id, "admin");
+            await PromptService.ActivatePromptVersionAsync(prompt.Id, CurrentUser.UserName);
             await LoadPrompts();
         }
         catch (Exception ex)
@@ -291,6 +318,13 @@
 
     private async Task DeletePromptItem(string promptKey)
     {
+        if (_confirm is null || !await _confirm.ShowAsync(
+            $"Se va a eliminar la versión draft del prompt '{promptKey}'.\nEsta acción no se puede deshacer.",
+            "Eliminar prompt", "Eliminar"))
+        {
+            return;
+        }
+
         try
         {
             var versions = await PromptService.GetPromptTemplatesByKeyAsync(promptKey);
@@ -313,7 +347,7 @@
         {
             if (!string.IsNullOrEmpty(SelectedPromptKey))
             {
-                await PromptService.RollbackPromptVersionAsync(SelectedPromptKey, version.Version, "admin");
+                await PromptService.RollbackPromptVersionAsync(SelectedPromptKey, version.Version, CurrentUser.UserName);
                 CancelVersionHistory();
                 await LoadPrompts();
             }

@@ -215,6 +215,12 @@ public class PromptsAdminFunction
             return await CreateError(req, HttpStatusCode.NotFound, $"No existe PromptTemplate con Id {id}.");
         }
 
+        if (entity.IsActive)
+        {
+            return await CreateError(req, HttpStatusCode.Forbidden,
+                "No se puede actualizar un PromptTemplate activo. Cree una nueva versión draft y actívela.");
+        }
+
         var payload = await ReadBody<UpdatePromptTemplateRequest>(req);
         if (payload is null)
         {
@@ -429,7 +435,7 @@ public class PromptsAdminFunction
 
         if (entity.IsActive)
         {
-            return await CreateError(req, HttpStatusCode.Conflict,
+            return await CreateError(req, HttpStatusCode.Forbidden,
                 "No se puede eliminar un PromptTemplate activo. Desactívelo primero.");
         }
 

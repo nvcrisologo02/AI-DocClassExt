@@ -1,3 +1,4 @@
+using System.ClientModel.Primitives;
 using System.Diagnostics;
 using System.Text.Json;
 using Azure;
@@ -8,6 +9,7 @@ using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Services.Resilience;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -21,6 +23,15 @@ namespace DocumentIA.Functions.Services;
 /// </summary>
 public class GptClasificarDataProvider : IClasificarDataProvider
 {
+    /// <summary>
+    /// AB#100006: en clasificación, el documento ya viaja en el bloque CONTENIDO DEL DOCUMENTO
+    /// del user prompt de Fase 1 ({DOCUMENT_TEXT}). El {contenido} del prompt de resumen se
+    /// interpola con esta referencia en lugar del texto completo para no duplicar el documento
+    /// (y sus tokens) dentro del mismo mensaje.
+    /// </summary>
+    internal const string ResumenContenidoReferencia =
+        "(el documento ya está incluido más arriba en este mismo mensaje, en la sección \"CONTENIDO DEL DOCUMENTO (texto/markdown)\"; úsalo como contenido)";
+
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
     private readonly ClassificationTipologiaPromptBuilder _tipologiaPromptBuilder;
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
@@ -31,6 +42,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     private readonly IClassificationPromptProvider _promptProvider;
     private readonly ILogger<GptClasificarDataProvider> _logger;
     private readonly PromptTraceTelemetryService _promptTraceTelemetry;
+    private readonly IAzureOpenAIResilienceExecutor _resilience;
     private readonly Lazy<ClassificationModelConfig> _fallbackModel;
 
     public GptClasificarDataProvider(
@@ -43,6 +55,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         IOptions<ClassificationPromptsSettings> promptSettings,
         IClassificationPromptProvider promptProvider,
         PromptTraceTelemetryService promptTraceTelemetry,
+        IAzureOpenAIResilienceExecutor resilience,
         ILogger<GptClasificarDataProvider> logger)
     {
         _modelRegistryLoader = modelRegistryLoader;
@@ -54,6 +67,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         _promptSettings = promptSettings.Value;
         _promptProvider = promptProvider;
         _promptTraceTelemetry = promptTraceTelemetry;
+        _resilience = resilience;
         _logger = logger;
         _fallbackModel = new Lazy<ClassificationModelConfig>(ResolveFallbackModel);
         // _tipologiasPromptSection se elimina: el IMemoryCache de ClassificationTipologiaPromptBuilder
@@ -79,7 +93,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             _routingSettings.NivelClasificacionDefault);
 
         var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
-        var resumenPrompt = ResolveResumenPrompt(input, contextoTexto);
+        var resumenPrompt = ResolveResumenPrompt(input);
         var contextoPrompt = BuildInstructionPromptContext(input.Entrada.Instrucciones.Prompt);
 
         // Obtener prompts configurables desde BD/cache/fallback
@@ -156,7 +170,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         
         var propuesta = phase1Parsed.Value.Propuesta;
         var tdn1Code = phase1Parsed.Value.Tdn1;
-        
+
         // Intentar extraer TDN1 de la propuesta si no se obtuvo del modelo
         if (string.IsNullOrWhiteSpace(tdn1Code))
         {
@@ -168,8 +182,33 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                     tdn1Code);
             }
         }
-        
-        // Si no se resolvió TDN1 de ninguna forma, retornar sin clasificar
+
+        // AB#99984: el prompt de Phase 1 solo exige "texto libre" en 'propuesta' (no obliga a
+        // GPT a anteponer el código de catálogo), por lo que es habitual que GPT identifique
+        // correctamente la familia documental en prosa sin que ExtraerTdn1DePropuesta pueda
+        // extraerla. Antes de declarar Desconocido, intentar un mapeo tolerante propuesta ->
+        // catálogo TDN1 (código o nombre de familia mencionado en el texto). Solo entra en juego
+        // cuando las vías anteriores ya fallaron, por lo que no cambia el comportamiento de los
+        // "Desconocido" legítimos (documentos sin propuesta útil, p.ej. ilegibles o vacíos).
+        var tdn1ResueltoPorMapeoPropuesta = false;
+        if (string.IsNullOrWhiteSpace(tdn1Code))
+        {
+            var catalogoNombresPorCodigo = GptHierarchicalClassificationParser.ParseTdn1CatalogNombresPorCodigo(phase1Catalog);
+            tdn1Code = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogoNombresPorCodigo);
+            if (!string.IsNullOrWhiteSpace(tdn1Code))
+            {
+                tdn1ResueltoPorMapeoPropuesta = true;
+                _logger.LogInformation(
+                    "GPT no devolvió tdn1 ni fue extraíble por prefijo convencional, pero se resolvió '{Tdn1}' " +
+                    "mapeando la propuesta contra el catálogo TDN1 (código o nombre de familia mencionado en el " +
+                    "texto libre). Continuando a Phase 2. Propuesta='{Propuesta}'",
+                    tdn1Code,
+                    propuesta);
+            }
+        }
+
+        // Si no se resolvió TDN1 de ninguna forma (ni explícito, ni por prefijo, ni por mapeo
+        // tolerante contra el catálogo), retornar sin clasificar: Desconocido legítimo.
         if (string.IsNullOrWhiteSpace(tdn1Code))
         {
             stopwatch.Stop();
@@ -180,13 +219,15 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                     "GPT devolvió propuesta sin TDN1 extraíble: '{Propuesta}'. Marcando como tipología virtual.",
                     propuesta);
                 
+                // Confianza autoreportada por el modelo (antes se forzaba a 0.1).
+                var confianzaVirtualPropuesta = phase1Parsed.Value.Confianza ?? 0.9;
                 return new ResultadoClasificacion
                 {
                     Modelo = model.DeploymentName,
                     ProveedorClasif = "GPT4oMini",
                     TipologiaDetectada = "Desconocido",
-                    Confianza = 0.1,
-                    ConfianzaGPT = 0.1,
+                    Confianza = confianzaVirtualPropuesta,
+                    ConfianzaGPT = confianzaVirtualPropuesta,
                     ClasificacionParcial = true,
                     FallbackRazon = "tdn1_virtual_propuesta",
                     PropuestaTipologia = propuesta,
@@ -215,26 +256,39 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 Confianza = confianzaPhase1,
                 ConfianzaGPT = confianzaPhase1,
                 ClasificacionParcial = true,
-                FallbackRazon = "tdn1_solicitado",
+                FallbackRazon = tdn1ResueltoPorMapeoPropuesta
+                    ? GptHierarchicalClassificationParser.PropuestaCatalogMappingReason
+                    : "tdn1_solicitado",
                 PropuestaTipologia = propuesta,
                 ResumenCombinado = phase1Parsed.Value.Resumen
             };
         }
 
-        // Phase 2 solo se ejecuta si confianza de Phase 1 > 0.6
-        if (confianzaPhase1 <= 0.6)
-        {
-            stopwatch.Stop();
-            _logger.LogInformation(
-                "Clasificación GPT detenida tras Phase 1. Confianza={Confianza} <= 0.6. TDN1={Tdn1}",
-                confianzaPhase1.ToString("F3"),
-                tdn1Code);
-            return BuildVirtualResult(
-                model,
-                tipologiaDetectada: tdn1Code,
-                propuesta: tdn1Code,
-                resumen: resumenPhase1);
-        }
+        // [EXPERIMENTO] Gate de confianza Phase 1 comentado temporalmente.
+        // Antes: si confianzaPhase1 <= 0.6 se cortaba tras Phase 1 devolviendo un resultado
+        // virtual (TDN1, ClasificacionParcial=true) y NO se intentaba identificar el TDN2.
+        // Ahora se ejecuta siempre la Phase 2 (mientras se afinan los prompts de confianza)
+        // para intentar identificar el TDN2 aunque la confianza reportada en Phase 1 sea baja.
+        // La confianza final del resultado la aporta Phase 2 tal cual (ver más abajo).
+        // Decisión de reactivar/parametrizar este gate: pendiente tras validar resultados.
+        // if (confianzaPhase1 <= 0.6)
+        // {
+        //     stopwatch.Stop();
+        //     _logger.LogInformation(
+        //         "Clasificación GPT detenida tras Phase 1. Confianza={Confianza} <= 0.6. TDN1={Tdn1}",
+        //         confianzaPhase1.ToString("F3"),
+        //         tdn1Code);
+        //     return BuildVirtualResult(
+        //         model,
+        //         tipologiaDetectada: tdn1Code,
+        //         propuesta: tdn1Code,
+        //         confianza: confianzaPhase1,
+        //         resumen: resumenPhase1);
+        // }
+        _logger.LogInformation(
+            "Continuando a Phase 2 sin aplicar gate de confianza Phase 1. ConfianzaPhase1={Confianza}, TDN1={Tdn1}",
+            confianzaPhase1.ToString("F3"),
+            tdn1Code);
 
         var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code);
         if (string.IsNullOrWhiteSpace(phase2Catalog))
@@ -244,6 +298,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 model,
                 tipologiaDetectada: tdn1Code,
                 propuesta: tdn1Code,
+                confianza: confianzaPhase1,
                 resumen: resumenPhase1);
         }
 
@@ -284,8 +339,24 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (!phase2Parsed.Success || phase2Parsed.Value is null)
         {
             stopwatch.Stop();
-            return BuildUnclassifiedResult(model, phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason, propuesta);
+            // Phase 2 sin TDN2 parseable (JSON inválido, tdn2 null/vacío o respuesta truncada):
+            // se degrada a tipología virtual conservando el TDN1 ya resuelto en Phase 1,
+            // igual que los caminos "familia sin catálogo TDN2" y "TDN2 sin mapeo publicado".
+            _logger.LogWarning(
+                "Phase 2 sin TDN2 parseable ({Razon}). Degradando a tipología virtual TDN1={Tdn1} con confianza Phase 1={Confianza}.",
+                phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason,
+                tdn1Code,
+                confianzaPhase1.ToString("F3"));
+            return BuildVirtualResult(
+                model,
+                tipologiaDetectada: tdn1Code,
+                propuesta: string.IsNullOrWhiteSpace(propuesta) ? tdn1Code : propuesta,
+                confianza: confianzaPhase1,
+                resumen: resumenPhase1,
+                fallbackRazon: phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason);
         }
+
+        var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
 
         var tipologiaCode = ResolveTipologiaByTdn2(phase2Parsed.Value.Tdn2);
         if (string.IsNullOrWhiteSpace(tipologiaCode))
@@ -297,12 +368,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 model,
                 tipologiaDetectada: tipologiaVirtual,
                 propuesta: justificacionVirtual,
-                resumen: resumenPhase1);
+                confianza: confianzaPhase2,
+                resumen: resumenPhase1,
+                tdn2Detectado: phase2Parsed.Value.Tdn2);
         }
 
         stopwatch.Stop();
 
-        var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
         _logger.LogInformation(
             "Clasificación GPT Fase 2 completada. Tipologia={Tipologia}, ConfianzaSelfReported={ConfianzaSelfReported}, ConfianzaFinal={ConfianzaFinal}",
             tipologiaCode,
@@ -313,16 +385,20 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         {
             Modelo = model.DeploymentName,
             TipologiaDetectada = tipologiaCode,
+            Tdn2Detectado = phase2Parsed.Value.Tdn2,
             Confianza = confianzaPhase2,
             ConfianzaGPT = confianzaPhase2,
             ProveedorClasif = "GPT4oMini",
             PropuestaTipologia = propuesta,
             ResultadoPromptCombinado = phase2Parsed.Value.ResultadoPrompt,
-            ResumenCombinado = resumenPhase1  // Usar resumen de Phase 1 (no se regenera en Phase 2)
+            ResumenCombinado = resumenPhase1,  // Usar resumen de Phase 1 (no se regenera en Phase 2)
+            FallbackRazon = tdn1ResueltoPorMapeoPropuesta
+                ? GptHierarchicalClassificationParser.PropuestaCatalogMappingReason
+                : null
         };
     }
 
-    private PromptConfig? ResolveResumenPrompt(ClasificacionInput input, string? contextoTexto)
+    private PromptConfig? ResolveResumenPrompt(ClasificacionInput input)
     {
         if (!input.GenerarResumenPorDefecto)
         {
@@ -340,7 +416,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 SystemPrompt = dbResumenPrompt.SystemPrompt,
                 UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
                     dbResumenPrompt.UserPromptTemplate,
-                    contextoTexto ?? string.Empty,
+                    ResumenContenidoReferencia,
                     input.DatosNormalizados),
                 MaxTokens = dbResumenPrompt.MaxTokens,
                 Temperature = dbResumenPrompt.Temperature,
@@ -370,7 +446,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             SystemPrompt = effectivePrompt.SystemPrompt,
             UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
                 effectivePrompt.UserPromptTemplate,
-                contextoTexto ?? string.Empty,
+                ResumenContenidoReferencia,
                 input.DatosNormalizados),
             MaxTokens = effectivePrompt.MaxTokens,
             Temperature = effectivePrompt.Temperature,
@@ -474,19 +550,27 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         var options = new ChatCompletionOptions
         {
-            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat(),
-            Temperature = (float)model.Temperature,
-            MaxOutputTokenCount = Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens)
+            ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
+        OpenAiModelCapabilities.ConfigureChatOptions(options, model.DeploymentName, model.Temperature,
+            Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens));
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
+        var perAttemptTimeout = TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds));
 
         var chatClient = CreateChatClient(model);
-        var response = await chatClient.CompleteChatAsync(
-            new List<ChatMessage> { systemMessage, userMessage },
-            options,
-            cts.Token);
+        var circuitKey = $"{model.Endpoint}|{model.DeploymentName}";
+        var response = await _resilience.ExecuteAsync(
+            circuitKey,
+            async ct =>
+            {
+                using var attemptCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                attemptCts.CancelAfter(perAttemptTimeout);
+                return await chatClient.CompleteChatAsync(
+                    new List<ChatMessage> { systemMessage, userMessage },
+                    options,
+                    attemptCts.Token);
+            },
+            cancellationToken);
 
         return response.Value.Content[0].Text;
     }
@@ -603,17 +687,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, string? resumen = null)
+    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null, string? fallbackRazon = null, string? tdn2Detectado = null)
     {
         return new ResultadoClasificacion
         {
             Modelo = model.DeploymentName,
             ProveedorClasif = "GPT4oMini",
             TipologiaDetectada = tipologiaDetectada,
-            Confianza = 0.1,
-            ConfianzaGPT = 0.1,
+            Tdn2Detectado = tdn2Detectado,
+            // Confianza autoreportada por el modelo (antes se forzaba a 0.1).
+            Confianza = confianza,
+            ConfianzaGPT = confianza,
             ClasificacionParcial = true,
-            FallbackRazon = "Tipologia Virtual",
+            FallbackRazon = fallbackRazon ?? "Tipologia Virtual",
             PropuestaTipologia = propuesta,
             ResumenCombinado = resumen
         };
@@ -717,17 +803,22 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
     private ChatClient CreateChatClient(ClassificationModelConfig model)
     {
+        var clientOptions = new AzureOpenAIClientOptions
+        {
+            RetryPolicy = new ClientRetryPolicy(maxRetries: 0)
+        };
+
         AzureOpenAIClient azureClient;
 
         if (string.Equals(model.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase))
         {
-            azureClient = new AzureOpenAIClient(new Uri(model.Endpoint), new DefaultAzureCredential());
+            azureClient = new AzureOpenAIClient(
+                new Uri(model.Endpoint), new DefaultAzureCredential(), clientOptions);
         }
         else
         {
             azureClient = new AzureOpenAIClient(
-                new Uri(model.Endpoint),
-                new AzureKeyCredential(model.ApiKey));
+                new Uri(model.Endpoint), new AzureKeyCredential(model.ApiKey), clientOptions);
         }
 
         return azureClient.GetChatClient(model.DeploymentName);

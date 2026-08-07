@@ -7,20 +7,25 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+
 // Azure App Service expone variables de entorno con "_" simple (ej: FunctionsAdminApi_BaseUrl).
 // .NET solo convierte "__" (doble guión) a ":" en la jerarquía de configuración.
-// Este helper lee primero la clave jerárquica (:) y, como fallback, la plana con _ simple.
-static string? GetConfig(IConfiguration cfg, string section, string key)
-    => cfg[$"{section}:{key}"] ?? cfg[$"{section}_{key}"];
-
+// AdminConfigReader lee primero la clave jerárquica (:) y, como fallback, la plana con _ simple.
 void ConfigureFunctionsHttpClient(IServiceProvider serviceProvider, HttpClient client)
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
-    var baseUrl = GetConfig(configuration, "FunctionsAdminApi", "BaseUrl") ?? "http://localhost:7071/api/";
+    var baseUrl = AdminConfigReader.Get(configuration, "FunctionsAdminApi", "BaseUrl");
+    if (string.IsNullOrWhiteSpace(baseUrl))
+    {
+        // Sin configuración explícita se apunta a local, nunca a un entorno remoto.
+        baseUrl = "http://localhost:7071/api/";
+    }
 
     client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
 
-    var functionKey = GetConfig(configuration, "FunctionsAdminApi", "FunctionKey");
+    var functionKey = AdminConfigReader.Get(configuration, "FunctionsAdminApi", "FunctionKey");
     if (!string.IsNullOrWhiteSpace(functionKey))
     {
         client.DefaultRequestHeaders.Add("x-functions-key", functionKey);

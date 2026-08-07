@@ -33,14 +33,20 @@ public class ObtenerActivoActivity
         {
             var client = _httpClientFactory.CreateClient("AssetResolver");
 
-            // Construir payload para el plugin
+            // Expansión multi-activo: si la tipología declara un campo colección y éste
+            // es un array de objetos, cada elemento se convierte en un grupo de criterios.
+            var grupos = ExpandirColeccionActivos(input.DatosExtraidos, input.MapeoColeccionActivos, out var campoColeccion);
+
+            // Construir payload para el plugin (el campo colección no viaja aplanado)
             var payload = new
             {
                 CorrelationId = input.CorrelationId,
                 DocumentType = input.Tipologia,
-                ExtractedData = input.DatosExtraidos?.ToDictionary(
-                    kv => kv.Key,
-                    kv => FlattenToString(kv.Value)) ?? new Dictionary<string, string?>(),
+                ExtractedData = input.DatosExtraidos?
+                    .Where(kv => campoColeccion is null || !string.Equals(kv.Key, campoColeccion, StringComparison.OrdinalIgnoreCase))
+                    .ToDictionary(kv => kv.Key, kv => FlattenToString(kv.Value))
+                    ?? new Dictionary<string, string?>(),
+                Grupos = grupos,
                 RequestedFields = input.CamposSolicitados,
                 IdufirOverride = input.IdufirOverride,
                 ReferenciaCatastralOverride = input.ReferenciaCatastralOverride,
@@ -91,53 +97,28 @@ public class ObtenerActivoActivity
 
             resultado.Exitoso = pluginResp.Found;
             resultado.Count = pluginResp.Count;
-            resultado.CriteriosUsados = pluginResp.CriteriosUsados != null
-                ? new CriteriosBusquedaActivo
-                {
-                    Idufir = pluginResp.CriteriosUsados.Idufir,
-                    ReferenciaCatastral = pluginResp.CriteriosUsados.ReferenciaCatastral,
-                    ModoCombinacionCriterios = pluginResp.CriteriosUsados.ModoCombinacionCriterios ?? "OR",
-                    Direccion = pluginResp.CriteriosUsados.Direccion != null
-                        ? new DireccionCriterioActivo
-                        {
-                            DireccionCompleta    = pluginResp.CriteriosUsados.Direccion.DireccionCompleta,
-                            NombreVia           = pluginResp.CriteriosUsados.Direccion.NombreVia,
-                            Numero              = pluginResp.CriteriosUsados.Direccion.Numero,
-                            Municipio           = pluginResp.CriteriosUsados.Direccion.Municipio,
-                            CodigoPostal        = pluginResp.CriteriosUsados.Direccion.CodigoPostal,
-                            DireccionNormalizada = pluginResp.CriteriosUsados.Direccion.DireccionNormalizada,
-                            Score               = pluginResp.CriteriosUsados.Direccion.Score,
-                            CandidatosEvaluados = pluginResp.CriteriosUsados.Direccion.CandidatosEvaluados,
-                            Razon               = pluginResp.CriteriosUsados.Direccion.Razon
-                        }
-                        : null,
-                    DireccionTipificada = pluginResp.CriteriosUsados.DireccionTipificada != null
-                        ? new DireccionTipificadaCriterioActivo
-                        {
-                            Pais = pluginResp.CriteriosUsados.DireccionTipificada.Pais,
-                            Provincia = pluginResp.CriteriosUsados.DireccionTipificada.Provincia,
-                            ComunidadAutonoma = pluginResp.CriteriosUsados.DireccionTipificada.ComunidadAutonoma,
-                            Municipio = pluginResp.CriteriosUsados.DireccionTipificada.Municipio,
-                            Poblacion = pluginResp.CriteriosUsados.DireccionTipificada.Poblacion,
-                            TipoVia = pluginResp.CriteriosUsados.DireccionTipificada.TipoVia,
-                            Calle = pluginResp.CriteriosUsados.DireccionTipificada.Calle,
-                            Numero = pluginResp.CriteriosUsados.DireccionTipificada.Numero,
-                            Bloque = pluginResp.CriteriosUsados.DireccionTipificada.Bloque,
-                            Puerta = pluginResp.CriteriosUsados.DireccionTipificada.Puerta,
-                            CodigoPostal = pluginResp.CriteriosUsados.DireccionTipificada.CodigoPostal,
-                            Planta = pluginResp.CriteriosUsados.DireccionTipificada.Planta,
-                            CandidatosEvaluados = pluginResp.CriteriosUsados.DireccionTipificada.CandidatosEvaluados,
-                            Razon = pluginResp.CriteriosUsados.DireccionTipificada.Razon
-                        }
-                        : null
-                }
-                : new CriteriosBusquedaActivo();
+            resultado.CriteriosUsados = MapCriteriosUsados(pluginResp.CriteriosUsados) ?? new CriteriosBusquedaActivo();
             resultado.Activos = pluginResp.Activos?.Select(a => new ActivoEncontrado
             {
                 IdActivo = a.IdActivo,
                 FchCierre = a.FchCierre,
                 CamposSolicitados = a.CamposSolicitados ?? new Dictionary<string, object?>()
             }).ToList() ?? [];
+            resultado.ActivosPorGrupo = pluginResp.ActivosPorGrupo?.Select(g => new GrupoActivosEncontrados
+            {
+                Indice = g.Indice,
+                CriteriosEntrada = g.CriteriosEntrada ?? new Dictionary<string, string?>(),
+                CriteriosUsados = MapCriteriosUsados(g.CriteriosUsados),
+                Activos = g.Activos?.Select(a => new ActivoEncontrado
+                {
+                    IdActivo = a.IdActivo,
+                    FchCierre = a.FchCierre,
+                    CamposSolicitados = a.CamposSolicitados ?? new Dictionary<string, object?>()
+                }).ToList() ?? [],
+                Count = g.Count,
+                CriterioUtilizado = g.CriterioUtilizado,
+                Mensaje = g.Mensaje
+            }).ToList();
             resultado.CamposConError = pluginResp.CamposConError ?? [];
             resultado.Mensaje = pluginResp.Message ?? string.Empty;
             resultado.Error = pluginResp.Error ?? resultado.Error;
@@ -159,6 +140,114 @@ public class ObtenerActivoActivity
             resultado.DuracionMs = (int)sw.ElapsedMilliseconds;
             return resultado;
         }
+    }
+
+    /// <summary>
+    /// Busca el primer campo de MapeoColeccionActivos presente en DatosExtraidos cuyo
+    /// valor sea un array JSON de objetos no vacío y lo expande a grupos de criterios.
+    /// Devuelve null (sin grupos) si no hay colección aplicable.
+    /// </summary>
+    private List<Dictionary<string, string?>>? ExpandirColeccionActivos(
+        Dictionary<string, object>? datosExtraidos,
+        List<string> mapeoColeccionActivos,
+        out string? campoColeccion)
+    {
+        campoColeccion = null;
+        if (datosExtraidos is null || mapeoColeccionActivos is not { Count: > 0 })
+            return null;
+
+        foreach (var nombre in mapeoColeccionActivos)
+        {
+            var match = datosExtraidos.FirstOrDefault(
+                kv => string.Equals(kv.Key, nombre, StringComparison.OrdinalIgnoreCase));
+            if (match.Key is null)
+                continue;
+
+            var grupos = ExtraerGrupos(match.Value);
+            if (grupos is { Count: > 0 })
+            {
+                campoColeccion = match.Key;
+                _logger.LogInformation(
+                    "Colección de activos '{Campo}' expandida a {Grupos} grupos de criterios.",
+                    match.Key, grupos.Count);
+                return grupos;
+            }
+        }
+
+        return null;
+    }
+
+    private List<Dictionary<string, string?>>? ExtraerGrupos(object? valor)
+    {
+        if (valor is not System.Text.Json.JsonElement je || je.ValueKind != System.Text.Json.JsonValueKind.Array)
+            return null;
+
+        var grupos = new List<Dictionary<string, string?>>();
+        foreach (var elemento in je.EnumerateArray())
+        {
+            if (elemento.ValueKind != System.Text.Json.JsonValueKind.Object)
+            {
+                _logger.LogWarning(
+                    "Elemento no-objeto ({Kind}) ignorado en colección de activos.",
+                    elemento.ValueKind);
+                continue;
+            }
+
+            var grupo = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var prop in elemento.EnumerateObject())
+            {
+                grupo[prop.Name] = FlattenToString(prop.Value);
+            }
+
+            grupos.Add(grupo);
+        }
+
+        return grupos.Count > 0 ? grupos : null;
+    }
+
+    private static CriteriosBusquedaActivo? MapCriteriosUsados(PluginCriteriosUsados? criterios)
+    {
+        if (criterios is null) return null;
+
+        return new CriteriosBusquedaActivo
+        {
+            Idufir = criterios.Idufir,
+            ReferenciaCatastral = criterios.ReferenciaCatastral,
+            ModoCombinacionCriterios = criterios.ModoCombinacionCriterios ?? "OR",
+            Direccion = criterios.Direccion != null
+                ? new DireccionCriterioActivo
+                {
+                    DireccionCompleta = criterios.Direccion.DireccionCompleta,
+                    NombreVia = criterios.Direccion.NombreVia,
+                    Numero = criterios.Direccion.Numero,
+                    Municipio = criterios.Direccion.Municipio,
+                    CodigoPostal = criterios.Direccion.CodigoPostal,
+                    DireccionNormalizada = criterios.Direccion.DireccionNormalizada,
+                    Score = criterios.Direccion.Score,
+                    CandidatosEvaluados = criterios.Direccion.CandidatosEvaluados,
+                    Razon = criterios.Direccion.Razon
+                }
+                : null,
+            DireccionTipificada = criterios.DireccionTipificada != null
+                ? new DireccionTipificadaCriterioActivo
+                {
+                    Pais = criterios.DireccionTipificada.Pais,
+                    Provincia = criterios.DireccionTipificada.Provincia,
+                    ComunidadAutonoma = criterios.DireccionTipificada.ComunidadAutonoma,
+                    Municipio = criterios.DireccionTipificada.Municipio,
+                    Poblacion = criterios.DireccionTipificada.Poblacion,
+                    TipoVia = criterios.DireccionTipificada.TipoVia,
+                    Calle = criterios.DireccionTipificada.Calle,
+                    Numero = criterios.DireccionTipificada.Numero,
+                    Bloque = criterios.DireccionTipificada.Bloque,
+                    Puerta = criterios.DireccionTipificada.Puerta,
+                    CodigoPostal = criterios.DireccionTipificada.CodigoPostal,
+                    Planta = criterios.DireccionTipificada.Planta,
+                    CandidatosEvaluados = criterios.DireccionTipificada.CandidatosEvaluados,
+                    Razon = criterios.DireccionTipificada.Razon
+                }
+                : null
+        };
     }
 
     // ── DTOs internos para deserializar la respuesta del plugin ──
@@ -211,6 +300,18 @@ public class ObtenerActivoActivity
         public string? Message { get; set; }
         public int DuracionMs { get; set; }
         public string? Error { get; set; }
+        public List<PluginGrupoResultado>? ActivosPorGrupo { get; set; }
+    }
+
+    private class PluginGrupoResultado
+    {
+        public int Indice { get; set; }
+        public Dictionary<string, string?>? CriteriosEntrada { get; set; }
+        public PluginCriteriosUsados? CriteriosUsados { get; set; }
+        public List<PluginActivoEncontrado>? Activos { get; set; }
+        public int Count { get; set; }
+        public string? CriterioUtilizado { get; set; }
+        public string? Mensaje { get; set; }
     }
 
     private class PluginCriteriosUsados

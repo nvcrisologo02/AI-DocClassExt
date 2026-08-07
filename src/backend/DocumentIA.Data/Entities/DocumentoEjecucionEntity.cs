@@ -30,7 +30,11 @@ namespace DocumentIA.Data.Entities
         
         [MaxLength(100)]
         public string? Tipologia { get; set; }
-        
+
+        /// <summary>Solicitante de esta ejecucion concreta. Puede diferir del solicitante original del documento (Documento.SubmittedBy) cuando el mismo documento deduplicado se reprocesa desde otro origen.</summary>
+        [MaxLength(200)]
+        public string? SubmittedBy { get; set; }
+
         [Required]
         [MaxLength(50)]
         public string EstadoFinal { get; set; } = string.Empty;

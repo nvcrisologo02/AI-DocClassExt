@@ -1,0 +1,174 @@
+@* Modal sobre el Monitor con el JSON crudo de una ejecucion (ContratoSalidaCompletoJson).
+   Sustituye a la antigua pagina /monitor/{guid}; Monitor.razor sigue exponiendo esa
+   URL y abre este modal ya cargado, ver AB#99968. *@
+@rendermode InteractiveServer
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<div class="modal-backdrop fade show"></div>
+<div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+     @ref="_modalRef" @onkeydown="OnKeyDownAsync">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title mb-0">
+                    Detalle de ejecución
+                    <div class="text-muted" style="font-size:0.75rem;font-family:monospace;user-select:all">@Guid</div>
+                </h5>
+                <button type="button" class="btn-close" aria-label="Cerrar" @onclick="CerrarAsync"></button>
+            </div>
+            <div class="modal-body">
+                @if (Cargando)
+                {
+                    <div class="d-flex align-items-center gap-2 py-4 text-muted">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        Cargando…
+                    </div>
+                }
+                else if (!string.IsNullOrEmpty(ErrorMensaje))
+                {
+                    <div class="alert alert-danger mb-0">@ErrorMensaje</div>
+                }
+                else if (NoEncontrado)
+                {
+                    <div class="alert alert-warning mb-0">
+                        No existe ninguna ejecución con el identificador <code>@Guid</code>.
+                    </div>
+                }
+                else if (Detalle is null)
+                {
+                    <div class="text-muted">Sin datos de detalle.</div>
+                }
+                else
+                {
+                    <dl class="row mb-3 small">
+                        <dt class="col-sm-2">Tipología</dt>
+                        <dd class="col-sm-10">@TipologiaTexto()</dd>
+                    </dl>
+                    @if (string.IsNullOrEmpty(Detalle.ContratoSalidaCompletoJson))
+                    {
+                        <div class="alert alert-secondary mb-0">Esta ejecución no tiene contrato almacenado.</div>
+                    }
+                    else
+                    {
+                        <JsonEditorComponent JsonContent="@Detalle.ContratoSalidaCompletoJson"
+                                              Mode="tree" ReadOnly="true" Height="65vh"
+                                              ShowValidationMessage="false" />
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="CopiarUrlAsync">
+                    @(_urlCopiada ? "Copiado" : "Copiar URL")
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@JsonNoDisponible" @onclick="CopiarJsonAsync">
+                    @(_jsonCopiado ? "Copiado" : "Copiar JSON")
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" disabled="@JsonNoDisponible" @onclick="DescargarJsonAsync">
+                    Descargar JSON
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" @onclick="CerrarAsync">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Guid { get; set; } = string.Empty;
+    [Parameter] public EjecucionDetalleDto? Detalle { get; set; }
+    [Parameter] public bool Cargando { get; set; }
+    [Parameter] public bool NoEncontrado { get; set; }
+    [Parameter] public string? ErrorMensaje { get; set; }
+    [Parameter] public EventCallback OnCerrar { get; set; }
+
+    private ElementReference _modalRef;
+    private bool _urlCopiada;
+    private bool _jsonCopiado;
+
+    private bool JsonNoDisponible => string.IsNullOrEmpty(Detalle?.ContratoSalidaCompletoJson);
+
+    // Foco inicial en el contenedor del modal para que Escape funcione sin
+    // que el usuario tenga que hacer clic dentro primero.
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                await _modalRef.FocusAsync();
+            }
+            catch (JSException)
+            {
+                // El foco es una mejora de usabilidad, no una condicion bloqueante.
+            }
+        }
+    }
+
+    private async Task OnKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            await CerrarAsync();
+        }
+    }
+
+    private async Task CerrarAsync() => await OnCerrar.InvokeAsync();
+
+    private async Task CopiarUrlAsync()
+    {
+        var url = Navigation.ToAbsoluteUri($"/monitor/{Guid}").ToString();
+        if (await CopiarAsync(url))
+        {
+            await MostrarFeedbackAsync(activar: () => _urlCopiada = true, desactivar: () => _urlCopiada = false);
+        }
+    }
+
+    private async Task CopiarJsonAsync()
+    {
+        if (JsonNoDisponible) return;
+        if (await CopiarAsync(Detalle!.ContratoSalidaCompletoJson!))
+        {
+            await MostrarFeedbackAsync(activar: () => _jsonCopiado = true, desactivar: () => _jsonCopiado = false);
+        }
+    }
+
+    private async Task<bool> CopiarAsync(string texto)
+    {
+        try
+        {
+            return await JS.InvokeAsync<bool>("monitorUtils.copyToClipboard", texto);
+        }
+        catch (JSException)
+        {
+            return false;
+        }
+    }
+
+    // Marca el boton como "Copiado" un par de segundos y vuelve al texto original.
+    private async Task MostrarFeedbackAsync(Action activar, Action desactivar)
+    {
+        activar();
+        StateHasChanged();
+        await Task.Delay(2000);
+        desactivar();
+        StateHasChanged();
+    }
+
+    private async Task DescargarJsonAsync()
+    {
+        if (JsonNoDisponible) return;
+        try
+        {
+            await JS.InvokeVoidAsync("monitorUtils.downloadJson", $"ejecucion-{Guid}.json", Detalle!.ContratoSalidaCompletoJson);
+        }
+        catch (JSException)
+        {
+            // Sin backend que informar: el fallo queda solo en consola del navegador.
+        }
+    }
+
+    // Composicion "codigo — nombre" compartida con EjecucionDetalle via
+    // MonitorFormato para que las dos vistas no puedan divergir.
+    private string TipologiaTexto() => MonitorFormato.ConCodigoYNombre(
+        Detalle?.Identificacion?.Tipologia, Detalle?.TipologiaNombreCatalogo);
+}

@@ -31,6 +31,22 @@
 
 ---
 
+## Detección Automática (alertas de Azure Monitor)
+
+Desde 2026-08-04 (AB#99083) existen 5 alert rules sobre `srbappiprodocai` que **notifican por correo** al action group `srbagoperprodocai`. Al recibir un aviso, entrar por el incidente correspondiente:
+
+| Correo de alerta | Qué significa | Entrada al runbook |
+|------------------|---------------|--------------------|
+| `srbalerterrprodocai` (errores > 10%) | Documentos terminando en Error/Fallido | Árbol de diagnóstico → incidentes de extracción/persistencia |
+| `srbalertlatprodocai` (p95 > 120 s) | Latencia E2E excesiva | Incident #7 (High Latency) |
+| `srbalertfbkprodocai` (fallback > 20%) | CU degradado, GPT asumiendo extracción | Incidente CU (circuit breaker / timeout) |
+| `srbalertexcprodocai` (> 10 excepciones/5 min) | Fallo transversal (incluye GDC) | Verificación Rápida + Failures en App Insights |
+| `srbalertidleprodocai` (0 requests en horario laboral) | Function App caída o sin flujo de entrada | Verificación Rápida (disponibilidad) |
+
+Gestión de reglas y **alta de nuevos correos de aviso**: `docs/observabilidad/MONITOREO_ALERTAS_REAL.md` (script `scripts/observability/create-monitor-alerts.ps1`).
+
+---
+
 ## Incidentes Comunes
 
 ### 1️⃣ Azure Content Understanding (CU) Circuit Breaker / Timeout
@@ -206,7 +222,8 @@ traces
 **Verificación Rápida (2 min):**
 ```powershell
 # Test GDC connectivity
-$gdcEndpoint = "https://srbwidd03.sareb.srb:8090/sintws/IDocService"
+# PROD apunta a la réplica srbwidp05 (primario srbwidp04); en dev el host es srbwidd03
+$gdcEndpoint = "https://srbwidp05.sareb.srb:8090/sintws/IDocService"
 $username = (az keyvault secret show --vault-name srbkvprodocai --name "GDC--HttpBasicUsername" --query "value" -o tsv)
 $password = (az keyvault secret show --vault-name srbkvprodocai --name "GDC--HttpBasicPassword" --query "value" -o tsv)
 
@@ -597,6 +614,100 @@ customEvents
 
 ---
 
+### 8️⃣ Azure OpenAI (AOAI) Rate Limit / Cuota Agotada (429) en Clasificación GPT y Prompts
+**Patrón:** Errores 429 sostenidos de Azure OpenAI; el circuit breaker abre para proteger el recurso; documentos de clasificación GPT quedan en estado retriable
+
+**Impacto:** La clasificación de los documentos afectados se **pospone** (estado retriable `PENDIENTE_REINTENTO`), **no se pierden ni terminan en error crudo**. Los prompts (enriquecimiento) se degradan de forma no bloqueante. El circuit breaker protege el recurso Azure OpenAI durante el cooldown; no requiere intervención de emergencia salvo que se prolongue.
+
+**Síntomas:**
+- ❌ Documentos de clasificación GPT terminan con `Estado = "PENDIENTE_REINTENTO"` (no error crudo), `EstadoCalidad = "ERROR"`, `MensajeError = "Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`
+- 🔴 AppInsights: eventos `AOAI.CircuitOpen` y `AOAI.CircuitRejected` frecuentes
+- 📊 Evento `AOAI.RateLimitRetry` en aumento (reintentos por 429/500/502/503/504)
+- 🟡 Prompts devuelven `PromptResultado.Error` con prefijo `rate_limit_exhausted:` (degradado, no escala el documento a `PENDIENTE_REINTENTO`)
+
+**Causas Raíz Posibles:**
+- Cuota/TPM (tokens-por-minuto) del deployment de Azure OpenAI agotada por volumen de documentos
+- Spike de volumen de clasificación GPT + prompts, que comparten el mismo recurso (`circuitKey = "{endpoint}|{deployment}"`)
+- `CircuitBreakerFailureThreshold` (default 5) insuficiente para el patrón de tráfico actual
+- Incidencia de servicio en Azure OpenAI (no solo cuota)
+
+**Verificación Rápida (1 min):**
+```kusto
+customEvents
+| where timestamp > ago(10m)
+| where name in ("AOAI.CircuitOpen", "AOAI.CircuitRejected", "AOAI.RateLimitRetry")
+| project timestamp, name, circuitKey=tostring(customDimensions["circuitKey"]), statusCode=tostring(customDimensions["statusCode"]), attempt=tostring(customDimensions["attempt"])
+| order by timestamp desc
+| take 20
+```
+
+**Diagnóstico Profundo:**
+```kusto
+// Documentos pospuestos por cuota agotada
+customEvents
+| where timestamp > ago(2h)
+| where name == "DocumentProcessed" and customDimensions["EstadoFinal"] == "PENDIENTE_REINTENTO"
+| summarize docs=count() by tostring(customDimensions["Tipologia"]), bin(timestamp, 15m)
+| order by timestamp desc
+
+// Evolución de reintentos y aperturas/cierres de circuito
+customEvents
+| where timestamp > ago(2h)
+| where name startswith "AOAI."
+| summarize count=count() by name, bin(timestamp, 10m)
+| order by timestamp desc
+```
+Ver `docs/observabilidad/OBSERVABILIDAD_KQL.md` para más queries de circuit breaker (patrón análogo al de Content Understanding, sección `CU.Circuit*`).
+
+**Acciones:**
+1. **Inmediato (≤ 5 min):**
+   - Confirmar con la query de Verificación Rápida que el patrón es 429 sostenido (no otra incidencia de Azure OpenAI)
+   - Revisar cuota/TPM asignada al deployment en Azure OpenAI Studio y compararla con el volumen actual de clasificación GPT + prompts
+   - Confirmar si clasificación y prompts comparten `circuitKey` (mismo endpoint/deployment) — si es así, ambos se degradan a la vez
+
+2. **Si la cuota es insuficiente para el volumen:**
+   - Solicitar aumento de cuota/TPM del deployment de Azure OpenAI (Azure Portal o soporte Azure)
+   - Mientras se gestiona, dejar que el circuit breaker proteja el recurso; no forzar reintentos manuales masivos
+
+3. **Esperar recuperación:**
+   - El circuito cierra automáticamente al expirar el cooldown (`CircuitBreakerOpenSeconds`, default 45s) con la siguiente llamada exitosa (evento `AOAI.CircuitClosed`)
+   - No requiere reinicio de la Function app
+
+4. **Reprocesar documentos `PENDIENTE_REINTENTO`:**
+   - Verificar que ya no se generan nuevos eventos `AOAI.CircuitOpen` / `AOAI.RateLimitRetry`
+   - Reencolar/reprocesar los documentos en `PENDIENTE_REINTENTO` según el mecanismo operativo estándar de reintento
+
+5. **Si el patrón se repite con frecuencia (tuning):**
+   - Ajustar la sección `AzureOpenAIResilience` en appsettings (`CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`) — ver `docs/manuales/MANUAL_CONFIGURACION.md`
+   - Evaluar reducir concurrencia de llamadas a Azure OpenAI o distribuir el volumen en el tiempo
+
+**Rollback:**
+- Para desactivar la lógica de resiliencia 429 y volver al comportamiento previo (retry por defecto del SDK, sin estado retriable diferenciado): `AzureOpenAIResilience.MaxRetries = 0` y `AzureOpenAIResilience.EnableCircuitBreaker = false` en appsettings
+
+**Escalation:**
+- Si `PENDIENTE_REINTENTO` persiste > 30 min tras confirmar cuota disponible → P2 → Tech Lead
+- Si requiere aumento de cuota/TPM en Azure OpenAI → coordinar con Azure Support (tiempos de aprovisionamiento variables)
+- Si afecta > 1h de forma sostenida al volumen de producción → P1 → CTO + Azure Support
+
+---
+
+### 9️⃣ Réplica de analizador CU a West Europe (Copy API cross-resource bloqueada)
+
+**Síntomas:**
+- `scripts/deployment/copy-cu-analyzer.ps1` (cross-resource) falla en `:copy` con `ModelNotFound / "has not granted the necessary permissions"`, aunque `grantCopyAuthorization` responda `200`.
+
+**Causa (verificado 2026-07-17):** la Copy API cross-resource de CU **no funciona en este entorno** (el grant devuelve un stub sin `source`; `:getCopyAuthorization` da `404`). No se resuelve con permisos: persiste incluso con `Cognitive Services User` de la MI del destino sobre el origen. Probable limitación con analizadores project-scoped de Foundry.
+
+**Resolución:** replicar **reconstruyendo/reentrenando** en el destino:
+```powershell
+./scripts/deployment/recreate-cu-analyzer.ps1 -SourceAnalyzerId <id> -ResourceGroup SRBRGDOCSAIPROD -SyncDefaults
+```
+Requiere que la MI de `srbaisrv-westeurope` tenga `Storage Blob Data Reader` sobre `srbstgproapppdocai` (ya concedido). Validar con documentos de prueba antes de repuntar `modelKey` en `ModeloConfigs`. Detalle: `TROUBLESHOOTING_DIAGNOSTICO.md` CASO 8 y guía de extracción CU §12.
+
+**Escalation:** si se requiere el snapshot exacto vía Copy API → **caso de soporte Azure** (P3) con la evidencia (grant sin `source`, token-flow 404). No bloquea producción: el secundario es failover.
+
+---
+
 ## Árbol de Diagnóstico
 
 ```
@@ -616,7 +727,8 @@ customEvents
 │  │  ├─ DI endpoint down? → Check Azure DI status
 │  │  ├─ Rule engine error? → Check logs
 │  │  ├─ DurableSerializationException? → Incident #6
-│  │  └─ GPT fallback error? → Check OpenAI quota
+│  │  ├─ GPT fallback error? → Check OpenAI quota
+│  │  └─ Documento en PENDIENTE_REINTENTO / 429 Azure OpenAI? → Incident #8
 │  │
 │  └─ Integration error?
 │     ├─ GDC down? → Incident #3

@@ -15,6 +15,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
     private readonly Mock<ILogger<ObtenerUltimaEjecucionDuplicadoActivity>> _logger;
     private readonly Mock<IDocumentoRepository> _documentoRepository;
     private readonly Mock<IDocumentoEjecucionRepository> _documentoEjecucionRepository;
+    private readonly Mock<ITipologiaRepository> _tipologiaRepository;
     private readonly ObtenerUltimaEjecucionDuplicadoActivity _sut;
 
     public ObtenerUltimaEjecucionDuplicadoActivityTests()
@@ -22,11 +23,13 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
         _logger = new Mock<ILogger<ObtenerUltimaEjecucionDuplicadoActivity>>();
         _documentoRepository = new Mock<IDocumentoRepository>(MockBehavior.Strict);
         _documentoEjecucionRepository = new Mock<IDocumentoEjecucionRepository>(MockBehavior.Strict);
+        _tipologiaRepository = new Mock<ITipologiaRepository>(MockBehavior.Strict);
 
         _sut = new ObtenerUltimaEjecucionDuplicadoActivity(
             _logger.Object,
             _documentoRepository.Object,
-            _documentoEjecucionRepository.Object);
+            _documentoEjecucionRepository.Object,
+            _tipologiaRepository.Object);
     }
 
     [Fact]
@@ -186,5 +189,171 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
         var result = await _sut.Run("sha-3");
 
         result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Run_WhenStoredOutputHasTdn_KeepsStoredValues()
+    {
+        var documento = new DocumentoEntity
+        {
+            Id = 80,
+            SHA256 = "sha-tdn-1",
+            Tdn1 = "OTRO",
+            Tdn2 = "OTRO-99"
+        };
+
+        SetupEjecucionConSalida(documento, new ContratoSalida
+        {
+            Identificacion = new Identificacion
+            {
+                Documento = "doc.pdf",
+                Tipologia = "comu.48",
+                Tdn1 = "COMU",
+                Tdn2 = "COMU-48"
+            }
+        });
+
+        var result = await _sut.Run(documento.SHA256);
+
+        result.Should().NotBeNull();
+        result!.Identificacion.Tdn1.Should().Be("COMU");
+        result.Identificacion.Tdn2.Should().Be("COMU-48");
+        _tipologiaRepository.Verify(r => r.GetByCodigoAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Run_WhenStoredOutputLacksTdn_FillsFromDocumentoEntity()
+    {
+        var documento = new DocumentoEntity
+        {
+            Id = 81,
+            SHA256 = "sha-tdn-2",
+            Tdn1 = "COMU",
+            Tdn2 = "COMU-48"
+        };
+
+        SetupEjecucionConSalida(documento, new ContratoSalida
+        {
+            Identificacion = new Identificacion
+            {
+                Documento = "doc.pdf",
+                Tipologia = "comu.48"
+            }
+        });
+
+        var result = await _sut.Run(documento.SHA256);
+
+        result.Should().NotBeNull();
+        result!.Identificacion.Tdn1.Should().Be("COMU");
+        result.Identificacion.Tdn2.Should().Be("COMU-48");
+        _tipologiaRepository.Verify(r => r.GetByCodigoAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Run_WhenStoredOutputAndEntityLackTdn_FillsFromTipologiaConfig()
+    {
+        var documento = new DocumentoEntity
+        {
+            Id = 82,
+            SHA256 = "sha-tdn-3"
+        };
+
+        SetupEjecucionConSalida(documento, new ContratoSalida
+        {
+            Identificacion = new Identificacion
+            {
+                Documento = "doc.pdf",
+                Tipologia = "comu.48"
+            }
+        });
+
+        _tipologiaRepository
+            .Setup(r => r.GetByCodigoAsync("comu.48"))
+            .ReturnsAsync(new TipologiaEntity
+            {
+                Codigo = "comu.48",
+                ConfiguracionJson = "{\"classification\":{\"tdn1\":\"COMU\",\"tdn2\":\"COMU-48\"}}"
+            });
+
+        var result = await _sut.Run(documento.SHA256);
+
+        result.Should().NotBeNull();
+        result!.Identificacion.Tdn1.Should().Be("COMU");
+        result.Identificacion.Tdn2.Should().Be("COMU-48");
+        result.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Run_WhenTipologiaDesconocida_LeavesTdnNull()
+    {
+        var documento = new DocumentoEntity
+        {
+            Id = 83,
+            SHA256 = "sha-tdn-4"
+        };
+
+        SetupEjecucionConSalida(documento, new ContratoSalida
+        {
+            Identificacion = new Identificacion
+            {
+                Documento = "doc.pdf",
+                Tipologia = "Desconocido"
+            }
+        });
+
+        var result = await _sut.Run(documento.SHA256);
+
+        result.Should().NotBeNull();
+        result!.Identificacion.Tdn1.Should().BeNull();
+        result.Identificacion.Tdn2.Should().BeNull();
+        _tipologiaRepository.Verify(r => r.GetByCodigoAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Run_WhenTipologiaLookupFails_StillReturnsReusedOutput()
+    {
+        var documento = new DocumentoEntity
+        {
+            Id = 84,
+            SHA256 = "sha-tdn-5"
+        };
+
+        SetupEjecucionConSalida(documento, new ContratoSalida
+        {
+            Identificacion = new Identificacion
+            {
+                Documento = "doc.pdf",
+                Tipologia = "comu.48"
+            }
+        });
+
+        _tipologiaRepository
+            .Setup(r => r.GetByCodigoAsync("comu.48"))
+            .ThrowsAsync(new InvalidOperationException("BD no disponible"));
+
+        var result = await _sut.Run(documento.SHA256);
+
+        result.Should().NotBeNull();
+        result!.Identificacion.Tdn1.Should().BeNull();
+        result.Identificacion.Tdn2.Should().BeNull();
+        result.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+    }
+
+    private void SetupEjecucionConSalida(DocumentoEntity documento, ContratoSalida salidaHistorica)
+    {
+        var ejecucion = new DocumentoEjecucionEntity
+        {
+            Id = 2000 + documento.Id,
+            DocumentoId = documento.Id,
+            ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaHistorica)
+        };
+
+        _documentoRepository
+            .Setup(r => r.GetBySHA256Async(documento.SHA256))
+            .ReturnsAsync(documento);
+
+        _documentoEjecucionRepository
+            .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
+            .ReturnsAsync(new[] { ejecucion });
     }
 }

@@ -7,6 +7,16 @@ public static class GptHierarchicalClassificationParser
     public const string Phase1ParsingErrorReason = "fase1_parsing_error";
     public const string Phase2ParsingErrorReason = "fase2_parsing_error";
 
+    /// <summary>
+    /// Motivo informado cuando el TDN1 no vino explícito en el JSON de Phase 1 ni fue
+    /// extraíble por el prefijo convencional "CODIGO: ..." (<see cref="ExtraerTdn1DePropuesta"/>),
+    /// pero sí se pudo resolver mapeando el texto libre de "propuesta" contra el catálogo TDN1
+    /// (código o nombre de familia mencionado literalmente). Distingue esta resolución tolerante
+    /// de un "Desconocido" legítimo (documento no clasificable, p.ej. ilegible) en las trazas y en
+    /// el contrato de salida (AB#99984).
+    /// </summary>
+    public const string PropuestaCatalogMappingReason = "tdn1_resuelto_por_mapeo_propuesta";
+
     public static GptHierarchicalParsingResult<GptPhase1Classification> ParsePhase1(string responseText)
     {
         if (string.IsNullOrWhiteSpace(responseText))
@@ -178,6 +188,227 @@ public static class GptHierarchicalClassificationParser
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Parsea el catálogo TDN1 en el formato "- CODIGO: Nombre, Descripcion" (una familia por
+    /// línea, tal como lo genera <c>ClassificationTipologiaPromptBuilder.BuildTdn1Catalog</c>) y
+    /// devuelve el diccionario Codigo -&gt; Nombre. Reutiliza el mismo catálogo que ya se le muestra
+    /// a GPT en el prompt de Phase 1, sin necesidad de una consulta adicional a BD.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> ParseTdn1CatalogNombresPorCodigo(string? catalogoTdn1)
+    {
+        var mapa = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (string.IsNullOrWhiteSpace(catalogoTdn1))
+        {
+            return mapa;
+        }
+
+        foreach (var lineaCruda in catalogoTdn1.Split('\n'))
+        {
+            var linea = lineaCruda.Trim().TrimStart('-', ' ');
+            var separadorCodigo = linea.IndexOf(':');
+            if (separadorCodigo <= 0)
+            {
+                continue;
+            }
+
+            var codigo = linea[..separadorCodigo].Trim();
+            if (codigo.Length == 0 || mapa.ContainsKey(codigo))
+            {
+                continue;
+            }
+
+            var resto = linea[(separadorCodigo + 1)..].Trim();
+            var separadorNombre = resto.IndexOf(',');
+            var nombre = (separadorNombre > 0 ? resto[..separadorNombre] : resto).Trim();
+
+            if (nombre.Length > 0)
+            {
+                mapa[codigo] = nombre;
+            }
+        }
+
+        return mapa;
+    }
+
+    /// <summary>
+    /// Resolución tolerante de TDN1 a partir del texto libre de "propuesta" cuando GPT no
+    /// devolvió un código explícito en 'tdn1' ni siguió la convención "CODIGO: descripción" al
+    /// inicio del texto (ver <see cref="ExtraerTdn1DePropuesta"/>). El prompt de Phase 1 solo pide
+    /// a GPT "texto libre" en 'propuesta', por lo que esa convención NO está garantizada y es
+    /// habitual que GPT identifique correctamente la familia documental en prosa sin anteponer su
+    /// código de catálogo (AB#99984).
+    /// <para>
+    /// Busca, en este orden:
+    ///  1) Un código de catálogo (4 letras) mencionado como palabra completa en mayúsculas, en
+    ///     cualquier posición del texto (no solo al inicio).
+    ///  2) El nombre de una familia del catálogo citado literalmente en el texto libre (solo
+    ///     nombres suficientemente distintivos, para minimizar falsos positivos).
+    ///  3) La raíz de la primera palabra significativa del nombre de familia (p.ej. "tasacion"
+    ///     para "Tasaciones y Valoraciones"), para el caso frecuente en que GPT nombra la familia
+    ///     en prosa sin anteponer el código ni citar el nombre completo del catálogo (p.ej.
+    ///     "Tasación de un inmueble"). Solo se usan raíces que identifican una única familia: si
+    ///     dos o más familias comparten raíz (p.ej. el cluster "Certificados..." de CERJ/CERT/CERA)
+    ///     esa raíz se descarta por completo para evitar mis-clasificar dentro del cluster.
+    /// </para>
+    /// Debe invocarse únicamente cuando las vías anteriores ya fallaron: así solo actúa en el
+    /// camino que hoy degrada a "Desconocido", sin alterar el comportamiento de los "Desconocido"
+    /// legítimos (documentos sin propuesta útil, p.ej. ilegibles o vacíos).
+    /// </summary>
+    public static string? ResolverTdn1PorCatalogoDesdePropuesta(
+        string? propuesta,
+        IReadOnlyDictionary<string, string> nombresPorCodigo)
+    {
+        if (string.IsNullOrWhiteSpace(propuesta) || nombresPorCodigo is null || nombresPorCodigo.Count == 0)
+        {
+            return null;
+        }
+
+        var texto = propuesta.Trim();
+
+        // 1) Código de catálogo como palabra completa en mayúsculas, en cualquier posición.
+        foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(
+            texto,
+            @"\b[A-Z]{4}\b",
+            System.Text.RegularExpressions.RegexOptions.None,
+            TimeSpan.FromMilliseconds(100)))
+        {
+            if (nombresPorCodigo.ContainsKey(match.Value))
+            {
+                return match.Value.ToUpperInvariant();
+            }
+        }
+
+        // 2) Nombre de familia mencionado en el texto libre. Umbral mínimo de longitud para
+        // evitar falsos positivos con nombres cortos o genéricos que pudieran aparecer por
+        // casualidad en la prosa (p.ej. nombres de una sola palabra corta).
+        const int longitudMinimaNombre = 10;
+        foreach (var entrada in nombresPorCodigo)
+        {
+            if (entrada.Value.Length >= longitudMinimaNombre &&
+                texto.Contains(entrada.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return entrada.Key.ToUpperInvariant();
+            }
+        }
+
+        // 3) Raíz de la primera palabra significativa del nombre de familia. Primero se calcula
+        // la raíz de cada familia y se descartan las ambiguas (compartidas por más de un código):
+        // esa es la guarda de colisión que evita, por ejemplo, resolver el cluster CERJ/CERT/CERA
+        // (todas empiezan por "Certificados...") a partir de un simple "certificado" en prosa.
+        var textoNormalizado = NormalizarTextoSinAcentos(texto);
+        var codigosPorRaiz = new Dictionary<string, List<string>>(StringComparer.Ordinal);
+        foreach (var entrada in nombresPorCodigo)
+        {
+            var raiz = DerivarRaizDePrimeraPalabra(entrada.Value);
+            if (raiz is null)
+            {
+                continue;
+            }
+
+            if (!codigosPorRaiz.TryGetValue(raiz, out var codigos))
+            {
+                codigos = new List<string>();
+                codigosPorRaiz[raiz] = codigos;
+            }
+
+            codigos.Add(entrada.Key);
+        }
+
+        foreach (var entrada in codigosPorRaiz)
+        {
+            if (entrada.Value.Count > 1)
+            {
+                continue; // Raíz ambigua: compartida por varias familias, no se resuelve por esta vía.
+            }
+
+            if (textoNormalizado.Contains(entrada.Key, StringComparison.Ordinal))
+            {
+                return entrada.Value[0].ToUpperInvariant();
+            }
+        }
+
+        return null;
+    }
+
+    private static readonly HashSet<string> PalabrasVaciasIniciales = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "de", "del", "la", "los", "las", "el", "en", "y"
+    };
+
+    private const int LongitudMinimaRaiz = 6;
+
+    /// <summary>
+    /// Deriva la raíz normalizada (sin acentos, en minúsculas, aproximadamente singularizada) de la
+    /// primera palabra significativa de un nombre de familia del catálogo TDN1, para usarla como
+    /// patrón de búsqueda tolerante en el texto libre de "propuesta" (vía 3, AB#99984). Devuelve
+    /// null si el nombre no tiene ninguna palabra significativa o la raíz resultante es demasiado
+    /// corta para ser un patrón fiable.
+    /// </summary>
+    private static string? DerivarRaizDePrimeraPalabra(string nombreFamilia)
+    {
+        var palabras = nombreFamilia.Split(
+            new[] { ' ', ',', ';', '/' },
+            StringSplitOptions.RemoveEmptyEntries);
+
+        string? primeraPalabra = null;
+        foreach (var palabra in palabras)
+        {
+            if (!PalabrasVaciasIniciales.Contains(palabra))
+            {
+                primeraPalabra = palabra;
+                break;
+            }
+        }
+
+        if (string.IsNullOrEmpty(primeraPalabra))
+        {
+            return null;
+        }
+
+        var normalizada = NormalizarTextoSinAcentos(primeraPalabra);
+
+        // Singularización aproximada: quita la terminación de plural más habitual en español para
+        // que la raíz capte tanto la forma singular como la plural del nombre de catálogo
+        // (p.ej. "tasaciones" -> "tasacion", igual que "tasación" sin acentos).
+        string raiz;
+        if (normalizada.Length > LongitudMinimaRaiz + 2 && normalizada.EndsWith("es", StringComparison.Ordinal))
+        {
+            raiz = normalizada[..^2];
+        }
+        else if (normalizada.Length > LongitudMinimaRaiz + 1 && normalizada.EndsWith("s", StringComparison.Ordinal))
+        {
+            raiz = normalizada[..^1];
+        }
+        else
+        {
+            raiz = normalizada;
+        }
+
+        return raiz.Length >= LongitudMinimaRaiz ? raiz : null;
+    }
+
+    /// <summary>
+    /// Pasa un texto a minúsculas y elimina diacríticos (vía normalización NFD y descarte de
+    /// marcas combinantes), para comparar de forma tolerante a acentos entre el texto libre de
+    /// GPT y los nombres del catálogo (vía 3, AB#99984).
+    /// </summary>
+    private static string NormalizarTextoSinAcentos(string valor)
+    {
+        var descompuesto = valor.Normalize(System.Text.NormalizationForm.FormD);
+        var builder = new System.Text.StringBuilder(descompuesto.Length);
+
+        foreach (var caracter in descompuesto)
+        {
+            if (System.Globalization.CharUnicodeInfo.GetUnicodeCategory(caracter) !=
+                System.Globalization.UnicodeCategory.NonSpacingMark)
+            {
+                builder.Append(caracter);
+            }
+        }
+
+        return builder.ToString().ToLowerInvariant();
     }
 }
 

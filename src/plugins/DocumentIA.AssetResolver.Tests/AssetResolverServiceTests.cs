@@ -377,4 +377,210 @@ public class AssetResolverServiceTests
         Assert.Empty(response.ActivosAAII);
         Assert.Single(response.ActivosAACC);
     }
+
+    private static AssetResolverService CreateService(AssetResolverDbContext db)
+    {
+        var aliases = new FieldAliasesConfig();
+        return new AssetResolverService(db, Options.Create(aliases), NullLogger<AssetResolverService>.Instance);
+    }
+
+    private static void SeedActivo(AssetResolverDbContext d, decimal id, string? idufir = null, string? refCat = null)
+    {
+        d.DmPosicionAAII.Add(new DmPosicionAAII
+        {
+            IdActivoSareb = id,
+            FchCierreDt = new DateTime(2026, 1, 1),
+            IdIdufir = idufir,
+            IdRefCatast = refCat,
+            FchAlta = new DateTime(2020, 1, 1),
+            DesServicer = "S",
+            FchCierre = new DateTime(2026, 1, 1)
+        });
+    }
+
+    [Fact]
+    public async Task BuscarActivos_Grupos_DosGrupos_DevuelveActivosPorGrupo()
+    {
+        using var db = CreateInMemoryDb(Guid.NewGuid().ToString(), d =>
+        {
+            SeedActivo(d, 10m, refCat: "REF-A");
+            SeedActivo(d, 20m, refCat: "REF-B");
+            d.SaveChanges();
+        });
+        var service = CreateService(db);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "g1",
+            MapeoReferenciaCatastral = new List<string> { "ReferenciaCatastral" },
+            AACC_Search = false,
+            Grupos = new List<Dictionary<string, string?>>
+            {
+                new() { ["ReferenciaCatastral"] = "REF-A" },
+                new() { ["ReferenciaCatastral"] = "REF-B" }
+            }
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.True(response.Found);
+        Assert.Equal(2, response.ActivosPorGrupo.Count);
+        Assert.Equal(0, response.ActivosPorGrupo[0].Indice);
+        Assert.Equal("10", Assert.Single(response.ActivosPorGrupo[0].Activos).IdActivo);
+        Assert.Equal("20", Assert.Single(response.ActivosPorGrupo[1].Activos).IdActivo);
+        Assert.Equal(2, response.Activos.Count);
+        Assert.Null(response.CriteriosUsados); // top-level solo en modo grupo único
+        Assert.Equal("REF-A", response.ActivosPorGrupo[0].CriteriosUsados?.ReferenciaCatastral);
+    }
+
+    [Fact]
+    public async Task BuscarActivos_Grupos_MismoActivoEnDosGrupos_NoDeduplicaEntreGrupos()
+    {
+        using var db = CreateInMemoryDb(Guid.NewGuid().ToString(), d =>
+        {
+            SeedActivo(d, 10m, refCat: "REF-A");
+            d.SaveChanges();
+        });
+        var service = CreateService(db);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "g2",
+            MapeoReferenciaCatastral = new List<string> { "ReferenciaCatastral" },
+            AACC_Search = false,
+            Grupos = new List<Dictionary<string, string?>>
+            {
+                new() { ["ReferenciaCatastral"] = "REF-A" },
+                new() { ["ReferenciaCatastral"] = "REF-A" }
+            }
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.Equal(2, response.Count);
+        Assert.Equal(2, response.Activos.Count);
+        Assert.All(response.Activos, a => Assert.Equal("10", a.IdActivo));
+        Assert.Single(response.ActivosPorGrupo[0].Activos);
+        Assert.Single(response.ActivosPorGrupo[1].Activos);
+    }
+
+    [Fact]
+    public async Task BuscarActivos_SinGrupos_MantieneComportamientoYExponeGrupoUnico()
+    {
+        using var db = CreateInMemoryDb(Guid.NewGuid().ToString(), d =>
+        {
+            SeedActivo(d, 10m, idufir: "ID-1");
+            d.SaveChanges();
+        });
+        var service = CreateService(db);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "g3",
+            ExtractedData = new Dictionary<string, string?> { ["IDUFIR"] = "ID-1" },
+            MapeoIdufir = new List<string> { "IDUFIR" },
+            AACC_Search = false
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.True(response.Found);
+        Assert.Equal(1, response.Count);
+        Assert.NotNull(response.CriteriosUsados);
+        Assert.Equal("ID-1", response.CriteriosUsados!.Idufir);
+        var grupo = Assert.Single(response.ActivosPorGrupo);
+        Assert.Equal(0, grupo.Indice);
+        Assert.Single(grupo.Activos);
+    }
+
+    [Fact]
+    public async Task BuscarActivos_Grupos_GrupoSinCriterios_NoAbortaResto()
+    {
+        using var db = CreateInMemoryDb(Guid.NewGuid().ToString(), d =>
+        {
+            SeedActivo(d, 20m, refCat: "REF-B");
+            d.SaveChanges();
+        });
+        var service = CreateService(db);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "g4",
+            MapeoReferenciaCatastral = new List<string> { "ReferenciaCatastral" },
+            AACC_Search = false,
+            Grupos = new List<Dictionary<string, string?>>
+            {
+                new() { ["CampoIrrelevante"] = "x" },
+                new() { ["ReferenciaCatastral"] = "REF-B" }
+            }
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.True(response.Found);
+        Assert.Equal(1, response.Count);
+        Assert.Equal(0, response.ActivosPorGrupo[0].Count);
+        Assert.NotNull(response.ActivosPorGrupo[0].Mensaje);
+        Assert.Equal(1, response.ActivosPorGrupo[1].Count);
+    }
+
+    [Fact]
+    public async Task BuscarActivos_Grupos_IgnoraOverridesGlobales()
+    {
+        using var db = CreateInMemoryDb(Guid.NewGuid().ToString(), d =>
+        {
+            SeedActivo(d, 10m, idufir: "ID-GLOBAL");
+            SeedActivo(d, 20m, refCat: "REF-B");
+            d.SaveChanges();
+        });
+        var service = CreateService(db);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "g5",
+            IdufirOverride = "ID-GLOBAL",
+            MapeoReferenciaCatastral = new List<string> { "ReferenciaCatastral" },
+            AACC_Search = false,
+            Grupos = new List<Dictionary<string, string?>>
+            {
+                new() { ["ReferenciaCatastral"] = "REF-B" }
+            }
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        Assert.Equal(1, response.Count);
+        Assert.Equal("20", response.Activos[0].IdActivo);
+    }
+
+    [Fact]
+    public async Task BuscarActivos_Grupos_ModoAnd_IntersecaCriteriosDentroDelGrupo()
+    {
+        using var db = CreateInMemoryDb(Guid.NewGuid().ToString(), d =>
+        {
+            SeedActivo(d, 10m, idufir: "ID-1", refCat: "REF-A");
+            SeedActivo(d, 20m, refCat: "REF-OTRA");
+            d.SaveChanges();
+        });
+        var service = CreateService(db);
+
+        var request = new AssetResolverController.GetAAIIInfoRequest
+        {
+            CorrelationId = "g6",
+            ModoCombinacionCriterios = "AND",
+            MapeoIdufir = new List<string> { "IDUFIR" },
+            MapeoReferenciaCatastral = new List<string> { "ReferenciaCatastral" },
+            AACC_Search = false,
+            Grupos = new List<Dictionary<string, string?>>
+            {
+                new() { ["IDUFIR"] = "ID-1", ["ReferenciaCatastral"] = "REF-OTRA" }
+            }
+        };
+
+        var response = await service.BuscarActivosAsync(request);
+
+        // AND: ID-1 → activo 10; REF-OTRA → activo 20; intersección vacía
+        Assert.False(response.Found);
+        Assert.Equal(0, response.ActivosPorGrupo[0].Count);
+    }
 }

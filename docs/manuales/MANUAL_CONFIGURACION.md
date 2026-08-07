@@ -290,9 +290,18 @@ Extraction:DefaultProvider                         = azure-content-understanding
 GDC:Endpoint                                       = https://...
 SqlConnectionString                                = Server=...
 AzureWebJobsStorage                                = DefaultEndpointsProtocol=https;...
+EnvironmentName                                    = Production
 ```
 
 > **Recomendación:** usar Azure Key Vault references para secretos (`ApiKey`, `Password`, `SqlConnectionString`).
+
+### 9.1 `EnvironmentName`
+
+App setting no secreto que declara el entorno del Function App (`Development` / `Preproduction` / `Production`). Lo consume `GET management/configuration` (campo `environment`) con esta prioridad: `EnvironmentName` → `AZURE_FUNCTIONS_ENVIRONMENT` → `DOTNET_ENVIRONMENT` → `"Unknown"`.
+
+No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque, en un Function App ya desplegado, esa variable también cambia el comportamiento del propio host (fallback a base de datos InMemory y omisión de validación TLS cuando vale `Development`); `EnvironmentName` permite declarar el entorno de cara al Admin sin ese efecto secundario.
+
+Lo fija el pipeline (variable `ENVIRONMENT_NAME`: dev=`Development`, pre=`Preproduction`, prod=`Production`) en `azure-pipelines.yml` y también en `azure-pipelines-admin.yml` (paso "Ensure Functions environment name", idempotente), de forma que el aviso de entorno del Admin funciona aunque solo se despliegue el Admin.
 
 ---
 

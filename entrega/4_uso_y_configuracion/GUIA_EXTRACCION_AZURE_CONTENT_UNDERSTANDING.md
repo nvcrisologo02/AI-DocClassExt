@@ -12,6 +12,8 @@
 8. [Mapeo de campos](#8-mapeo-de-campos)
 9. [Proveedor mock (sin Azure)](#9-proveedor-mock-sin-azure)
 10. [Preguntas frecuentes](#10-preguntas-frecuentes)
+11. [Clasificación por defecto con Azure Document Intelligence](#11-clasificación-por-defecto-con-azure-document-intelligence)
+12. [Copiar un analizador con la Copy API (sin reentrenar)](#12-copiar-un-analizador-con-la-copy-api-sin-reentrenar)
 
 ---
 
@@ -493,3 +495,315 @@ Registro de modelos de clasificación:
 Nota de diseño:
 
 - La tipología **no** selecciona el modelo de clasificación. La clasificación ocurre antes y es precisamente la que determina la tipología del documento.
+
+---
+
+## 12. Copiar un analizador con la Copy API (sin reentrenar)
+
+La **Copy API de Content Understanding** copia el analizador **completo** —schema, configuración (extractiva/generativa, prompts, clasificación/segmentación) **y el estado entrenado ("knowledge")**— **sin reentrenar ni reconstruir nada**. El analizador destino queda **funcionalmente idéntico** al origen: mismos inputs → mismos resultados.
+
+> [!WARNING]
+> **Estado real (verificado 2026-07-17): la Copy API CROSS-RESOURCE NO funciona en este entorno.**
+> `grantCopyAuthorization` responde `200` pero con un cuerpo **sin el campo `source`** (stub), y el `:copy`
+> devuelve siempre `ModelNotFound / "has not granted the necessary permissions"`, incluso tras: (a) corregir
+> el casing del RG, (b) reintentos esperando propagación, y (c) **asignar `Cognitive Services User` a la
+> identidad administrada del recurso destino sobre el origen** — que es lo que exige el *pull* cross-resource
+> (lo hace la MI del destino, no tu usuario). El flujo con token (`:getCopyAuthorization`) da `404` en esta
+> api-version. Todo apunta a una limitación de servicio con analizadores **project-scoped de Foundry**;
+> pendiente de **caso de soporte Azure**.
+>
+> **Método de réplica cross-resource que SÍ funciona** (y el que se usó de verdad el 1-jun-2026):
+> **reconstruir/reentrenar** el analizador en el destino desde su definición (`PUT create-or-replace`),
+> reentrenando desde el blob de datos etiquetados. Usa **`scripts/deployment/recreate-cu-analyzer.ps1`**
+> ([12.2b](#122b-réplica-cross-resource-real-recreatereentrenar)). No es un snapshot bit a bit, pero es
+> funcionalmente equivalente. **La copia intra-recurso** (same-resource, snapshot/rollback, [12.6]) **sí
+> funciona** porque no cruza recursos.
+
+Cubre dos escenarios de este proyecto:
+
+| Escenario | Modo | Pasos | Para qué |
+|-----------|------|-------|----------|
+| **Replicar entre regiones** | cross-resource | 2 (autorizar + copiar) | Sweden Central → West Europe, para failover / reparto de carga |
+| **Snapshot / rollback** ([12.6](#126-copia-intra-recurso-snapshot-de-rollback)) | same-resource | 1 (copiar) | Clonar a un ID nuevo para congelar un estado. **No permite editar campos** |
+| **Añadir / quitar campos** ([12.7](#127-añadir-o-quitar-campos-de-un-analizador-existente)) | — | — | Editar el schema en el **proyecto** de Studio y reconstruir. La copia **no** sirve para esto |
+
+> **¿Queda igual de entrenado?** Sí. Es una copia del snapshot entrenado, no un nuevo entrenamiento. Ver los matices en [12.4](#124-garantías-y-matices).
+
+### 12.1 Recursos reales
+
+El CU **primario** está en **Sweden Central** y el **secundario** en **West Europe**. Cuando se crea o reentrena un analizador en Sweden hay que **replicarlo** al de West Europe.
+
+| Rol | Recurso | Región | Endpoint |
+|-----|---------|--------|----------|
+| **Origen** (primario) | `upe48-mm2avmdm-swedencentral` | `swedencentral` | `https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/` |
+| **Destino** (secundario) | `srbaisrv-westeurope` | `westeurope` | `https://srbaisrv-westeurope.services.ai.azure.com/` |
+
+- Subscription: `647c7246-54bc-4d31-b909-431cacf03272` (*Producción Central*).
+- Resource group: `SRBRGDOCSAIPROD` (ambos recursos). El casing que devuelve `az` varía (`srbrgdocsaiprod` en el origen), pero los nombres de RG son *case-insensitive*: es el mismo grupo.
+- Ambos recursos son **kind `AIServices`** (Foundry), SKU `S0`. Es un requisito: un recurso `FormRecognizer` (como `srbdiprodocai`) **no puede alojar analizadores de CU**.
+- API version: `2025-11-01`.
+- Analizador actual de nota simple: `CU_NS_1.5_0` (export en `scripts/arm/analyzer-CU_NS_1.5_0-export.json`).
+- El endpoint de CU es el de **AI Foundry** (`*.services.ai.azure.com`), **no** el que devuelve `az cognitiveservices account show --query properties.endpoint` (que es `*.cognitiveservices.azure.com`). Confírmalo con:
+  ```bash
+  az cognitiveservices account show -n <recurso> -g SRBRGDOCSAIPROD \
+      --query 'properties.endpoints."Content Understanding"' -o tsv
+  ```
+
+#### Permisos: hace falta **data plane**, no control plane
+
+> [!IMPORTANT]
+> La credencial necesita el rol **`Cognitive Services User`** sobre **ambos** recursos (origen y destino).
+> **`Contributor` y `Cognitive Services Contributor` NO sirven**: su lista de `dataActions` está **vacía** — solo cubren control plane. Con ellos, cualquier llamada a `/contentunderstanding/*` devuelve **`401 PermissionDenied`** (p. ej. falta `Microsoft.CognitiveServices/accounts/MultiModalIntelligence/defaults/read`), aunque puedas crear y borrar el recurso entero desde el portal.
+
+Comprobar qué roles tienes realmente sobre cada recurso:
+
+```bash
+az role assignment list --all --assignee $(az ad signed-in-user show --query id -o tsv) \
+    --include-inherited --include-groups \
+    --query "[].{role:roleDefinitionName, scope:scope}" -o table
+```
+
+Conceder el rol que falta (requiere `User Access Administrator` u `Owner` en el scope):
+
+```bash
+az role assignment create \
+    --assignee $(az ad signed-in-user show --query id -o tsv) \
+    --role "Cognitive Services User" \
+    --scope "/subscriptions/647c7246-54bc-4d31-b909-431cacf03272/resourceGroups/SRBRGDOCSAIPROD/providers/Microsoft.CognitiveServices/accounts/srbaisrv-westeurope"
+```
+
+> Los roles granulares `Cognitive Service Content Understanding Owner/Contributor/Reader` (anunciados en mayo de 2026) **aún no están disponibles** en este tenant: `az role definition list --name "..."` devuelve vacío. Hasta entonces, `Cognitive Services User` es la vía.
+
+La copia soporta cruzar subscriptions e incluso tenants, siempre que la credencial tenga el rol en ambos extremos.
+
+#### Model deployments: los alias los resuelve `/contentunderstanding/defaults`
+
+Los analizadores **no** referencian nombres de deployment, sino **alias** de modelo:
+
+```jsonc
+{ "analyzerId": "CU_NS_1.5_0", "models": { "completion": "gpt-4.1", "embedding": "text-embedding-3-large" } }
+```
+
+El alias → deployment lo resuelve el recurso vía `GET/PATCH /contentunderstanding/defaults`. Por eso **los nombres de deployment pueden diferir entre origen y destino** sin romper nada, siempre que los *defaults* del destino mapeen los mismos alias. Si no los mapean, **la copia se crea pero falla al analizar**.
+
+Estado actual (los sufijos numéricos son aleatorios y **no coinciden** entre recursos):
+
+| Alias | Origen (`swedencentral`) | Destino (`westeurope`) |
+|-------|--------------------------|------------------------|
+| `gpt-4.1` | `gpt-4.1-715420` · GlobalStandard · 150 | `gpt-4.1-892749` · GlobalStandard · 250 |
+| `gpt-4.1-mini` | `gpt-4.1-mini-622960` · GlobalStandard · 250 | `gpt-4.1-mini-590191` · GlobalStandard · 250 |
+| `text-embedding-3-large` | `text-embedding-3-large-030358` · GlobalStandard · 150 | `text-embedding-3-large-010650` · GlobalStandard · 250 |
+
+CU exige los tres modelos (`gpt-4.1`, `gpt-4.1-mini`, `text-embedding-3-large`). El origen despliega además `gpt-4o` y uno llamado `gpt-4o-mini` que **en realidad sirve `gpt-4.1-mini`** (el nombre engaña); ninguno de los dos está en los *defaults*, así que no afectan a CU.
+
+Consultar los defaults de un recurso:
+
+```bash
+TOKEN=$(az account get-access-token --resource "https://cognitiveservices.azure.com" --query accessToken -o tsv)
+curl -s -H "Authorization: Bearer $TOKEN" \
+    "https://srbaisrv-westeurope.services.ai.azure.com/contentunderstanding/defaults?api-version=2025-11-01"
+```
+
+Para alinearlos, usa `-SyncDefaults` ([12.2](#122-script-recomendado)) en lugar de hacerlo a mano.
+
+### 12.2 Script recomendado
+
+`scripts/deployment/copy-cu-analyzer.ps1` cubre **los dos modos**, con poll de la operación de larga duración y verificación final. Soporta API key o Entra ID (`az login`).
+
+```powershell
+# --- Replicar Sweden -> West Europe (cross-resource), con Entra ID ---
+./scripts/deployment/copy-cu-analyzer.ps1 `
+    -SourceAnalyzerId CU_NS_1.5_0 `
+    -ResourceGroup SRBRGDOCSAIPROD
+
+# --- Replicar alineando primero los defaults de modelo del destino ---
+./scripts/deployment/copy-cu-analyzer.ps1 `
+    -SourceAnalyzerId CU_NS_1.5_0 `
+    -ResourceGroup SRBRGDOCSAIPROD `
+    -SyncDefaults
+
+# --- Replicar con API keys explícitas ---
+./scripts/deployment/copy-cu-analyzer.ps1 `
+    -SourceAnalyzerId CU_NS_1.5_0 `
+    -ResourceGroup SRBRGDOCSAIPROD `
+    -SourceKey <key-sweden> -TargetKey <key-westeurope>
+
+# --- Versionar en el mismo recurso (same-resource) ---
+./scripts/deployment/copy-cu-analyzer.ps1 -SameResource `
+    -SourceAnalyzerId CU_NS_1.5_0 `
+    -TargetAnalyzerId CU_NS_1.6_0
+```
+
+**Preflight (automático).** Antes de tocar nada, el script valida y aborta con un mensaje accionable si algo falta:
+
+1. Data plane accesible en el **origen** (si no: imprime el `az role assignment create` exacto — ver [12.1](#121-recursos-reales)).
+2. El analizador origen **existe**, y extrae los alias de modelo que usa.
+3. Data plane accesible en el **destino**.
+4. Los *defaults* del destino **resuelven esos alias**. Si no, aborta sugiriendo `-SyncDefaults` — evita el fallo silencioso de "el analizador se copia pero no analiza".
+
+Notas de uso:
+
+- **Cross-resource:** `-ResourceGroup` es obligatorio. Por defecto `TargetAnalyzerId = SourceAnalyzerId` (mismo ID en ambas regiones), lo que simplifica el registro en `ModeloConfigs`.
+- **`-SameResource`:** no usa `-ResourceGroup` ni endpoint destino (el destino es el propio recurso origen). `-TargetAnalyzerId` es **obligatorio** y debe ser **distinto** del origen.
+- **`-SyncDefaults`** (solo cross-resource): replica los *defaults* de modelo del origen en el destino **mapeando por modelo subyacente**, no por nombre de deployment (los sufijos difieren entre recursos). Si un modelo del origen no está desplegado en el destino, lo avisa en vez de dejar un mapeo roto. Es idempotente: relanzarlo no rompe nada.
+- **`-SkipPreflight`**: omite las validaciones. Solo para depurar.
+- Los defaults del script ya apuntan a los recursos reales de [12.1](#121-recursos-reales); solo hay que sobreescribirlos para otro entorno.
+
+> [!IMPORTANT]
+> Para **replicar entre regiones (cross-resource)**, `copy-cu-analyzer.ps1` **no funciona hoy** (ver aviso al inicio de §12). Usa `recreate-cu-analyzer.ps1` ([12.2b](#122b-réplica-cross-resource-real-recreatereentrenar)). El modo **same-resource** (snapshot/rollback) de `copy-cu-analyzer.ps1` sí funciona.
+
+### 12.2b Réplica cross-resource real: recreate/reentrenar (recomendado)
+
+Mientras la Copy API cross-resource siga bloqueada, la réplica Sweden → West Europe se hace **reconstruyendo** el analizador en el destino desde su definición (`PUT create-or-replace`, api-version `2025-11-01`). El servicio **reentrena** desde `knowledgeSources` (los datos etiquetados en blob). El resultado es funcionalmente equivalente al origen, aunque **no es un snapshot bit a bit**: valida con documentos de prueba antes de repuntar el registro.
+
+Script: **`scripts/deployment/recreate-cu-analyzer.ps1`** (GET definición del origen → quita campos read-only → `PUT` en destino → poll del build hasta `ready`).
+
+```powershell
+# --- Replicar Sweden -> West Europe reconstruyendo/reentrenando en el destino ---
+./scripts/deployment/recreate-cu-analyzer.ps1 `
+    -SourceAnalyzerId CU_NS_1.6_0_GGAA `
+    -ResourceGroup SRBRGDOCSAIPROD `
+    -SyncDefaults
+
+# --- Desde un export local (scripts/arm/…), sobrescribiendo si ya existe ---
+./scripts/deployment/recreate-cu-analyzer.ps1 `
+    -FromExport scripts/arm/analyzer-CU_NS_1.5_0-export.json `
+    -SourceAnalyzerId CU_NS_1.5_0 -ResourceGroup SRBRGDOCSAIPROD -SyncDefaults -Force
+```
+
+> [!IMPORTANT]
+> **Prerrequisito de este método:** el recurso **destino** debe poder **leer el blob de datos etiquetados**
+> con **su identidad administrada**. Es decir, la MI de `srbaisrv-westeurope` necesita el rol
+> **`Storage Blob Data Reader`** sobre la cuenta de storage del etiquetado (`srbstgproapppdocai`). Ya está
+> concedido (fue lo que habilitó la réplica del 1-jun-2026). Si faltara, el build termina en `failed` por no
+> poder leer los documentos de `knowledgeSources`.
+
+- **`-SyncDefaults`**: igual que en `copy-cu-analyzer.ps1`, alinea los alias de modelo del destino antes de reconstruir. Necesario si el destino no mapea `gpt-4.1` / `text-embedding-3-large` a un deployment.
+- **`-Force`**: sobrescribe el analizador destino si ya existe (`allowReplace=true`).
+- **`-FromExport <ruta>`**: usa una definición local (p. ej. un export de `scripts/arm/`) en vez de hacer GET al origen.
+- Al versionar, este método encaja con la política de "**construir desde el proyecto**" ([12.7](#127-añadir-o-quitar-campos-de-un-analizador-existente)): la versión nueva ya se construye reentrenando, así que replicarla al secundario reentrenando es coherente.
+
+### 12.3 Pasos REST manuales (equivalentes al script)
+
+**Paso 1 — Grant Copy Authorization (sobre el ORIGEN, Sweden):**
+```http
+POST https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/contentunderstanding/analyzers/CU_NS_1.5_0:grantCopyAuthorization?api-version=2025-11-01
+Content-Type: application/json
+Ocp-Apim-Subscription-Key: {key-sweden}
+
+{
+  "targetAzureResourceId": "/subscriptions/647c7246-54bc-4d31-b909-431cacf03272/resourceGroups/{RG}/providers/Microsoft.CognitiveServices/accounts/srbaisrv-westeurope",
+  "targetRegion": "westeurope"
+}
+```
+Devuelve un token de autorización con `expiresAt` (caduca en 24 h).
+
+**Paso 2 — Copy (sobre el DESTINO, West Europe):** operación de larga duración, se poll-ea el `Operation-Location`.
+```http
+POST https://srbaisrv-westeurope.services.ai.azure.com/contentunderstanding/analyzers/CU_NS_1.5_0:copy?api-version=2025-11-01
+Content-Type: application/json
+Ocp-Apim-Subscription-Key: {key-westeurope}
+
+{
+  "sourceAzureResourceId": "/subscriptions/647c7246-54bc-4d31-b909-431cacf03272/resourceGroups/{RG}/providers/Microsoft.CognitiveServices/accounts/upe48-mm2avmdm-swedencentral",
+  "sourceAnalyzerId": "CU_NS_1.5_0",
+  "sourceRegion": "swedencentral"
+}
+```
+
+**Paso 3 — Verificar (sobre el DESTINO):**
+```http
+GET https://srbaisrv-westeurope.services.ai.azure.com/contentunderstanding/analyzers/CU_NS_1.5_0?api-version=2025-11-01
+Ocp-Apim-Subscription-Key: {key-westeurope}
+```
+
+> Alternativa SDK: `scripts/azure_contentunderstanding_sample.py` usa el SDK de Python; los métodos equivalentes son `grant_copy_authorization` (origen) y `begin_copy_analyzer` (destino). Firma .NET: `GrantCopyAuthorizationAsync` + `CopyAnalyzerAsync(WaitUntil.Completed, ...)`.
+
+### 12.4 Garantías y matices
+
+- **Igual de entrenado:** la copia replica el estado entrenado; el destino produce los mismos resultados que el origen para los mismos documentos. No hay reentrenamiento.
+- **Es un snapshot puntual:** si más adelante **reentrenas o modificas** el analizador en Sweden, el de West Europe **no** se actualiza solo → hay que **volver a ejecutar la copia**.
+- **Los `defaults` de modelo NO se copian:** la Copy API replica el analizador, pero el mapeo alias → deployment es **configuración del recurso destino** ([12.1](#121-recursos-reales)). Si el destino no mapea los alias que el analizador usa, la copia se crea con `status` correcto y **falla en tiempo de análisis**. Por eso el preflight lo comprueba y `-SyncDefaults` lo corrige.
+- **Analizadores referenciados:** si el analizador usa clasificación/segmentación que referencia a otros analizadores, hay que **copiar también esos referenciados**.
+- **Naming de versiones:** al versionar (`CU_NS_1.5_0` → `CU_NS_1.6_0`), la versión nueva se **construye desde el proyecto** ([12.7](#127-añadir-o-quitar-campos-de-un-analizador-existente)), no se obtiene copiando la anterior. Una vez construida y probada, se replica a West Europe y se actualiza el registro correspondiente.
+- **La copia no cambia el schema:** el analizador destino tiene exactamente los mismos campos que el origen. Si necesitas campos distintos, la copia no es la herramienta ([12.6](#126-copia-intra-recurso-snapshot-de-rollback)).
+
+### 12.5 Registro en BD tras la copia
+
+Copiar el analizador **no** cambia la configuración de la aplicación. Para que el CU secundario se use realmente, el registro debe estar publicado en `ModeloConfigs` (ver [sección 4](#4-configuración-y-seed)). El proyecto usa `modelKey` (primario, Sweden) y `secondaryModelKey` (secundario, West Europe); p. ej. `nota.simple.1_4.azure-cu.sweden` / `nota.simple.1_4.azure-cu.westeurope`, cada uno con su `processingLocation` (`swedencentral` / `westeurope`) apuntando al mismo `analyzerId` copiado.
+
+### 12.6 Copia intra-recurso: snapshot de rollback
+
+> [!WARNING]
+> **La copia intra-recurso NO sirve para añadir ni quitar campos.** Replica el analizador con su `fieldSchema` **congelado**, y un analizador construido es **inmutable**: la API GA no expone ningún `PATCH`/update de `fieldSchema`. Para cambiar campos, ve a [12.7](#127-añadir-o-quitar-campos-de-un-analizador-existente).
+
+Para lo que **sí** sirve: crear un **clon con un ID nuevo** que congela el estado actual, como *backup* o punto de rollback antes de publicar una versión nueva. Es la variante **de un solo paso** de la Copy API (no requiere `grantCopyAuthorization`, que es solo para cruzar recursos). El analizador original queda intacto.
+
+Con el script:
+
+```powershell
+./scripts/deployment/copy-cu-analyzer.ps1 -SameResource `
+    -SourceAnalyzerId CU_NS_1.5_0 `
+    -TargetAnalyzerId CU_NS_1.5_0_backup
+```
+
+REST equivalente (un solo POST, sin `grantCopyAuthorization`):
+
+```http
+POST https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/contentunderstanding/analyzers/CU_NS_1.5_0_backup:copy?api-version=2025-11-01
+Content-Type: application/json
+Ocp-Apim-Subscription-Key: {key-sweden}
+
+{ "sourceAnalyzerId": "CU_NS_1.5_0" }
+```
+
+SDK equivalentes: Python `begin_copy_analyzer(analyzer_id="CU_NS_1.5_0_backup", source_analyzer_id="CU_NS_1.5_0")` · .NET `CopyAnalyzerAsync(WaitUntil.Completed, "CU_NS_1.5_0_backup", "CU_NS_1.5_0")`.
+
+### 12.7 Añadir o quitar campos de un analizador existente
+
+Los campos **no** se editan sobre el analizador, sino sobre el **proyecto** de Content Understanding Studio del que se construyó. Modelo mental:
+
+```
+Proyecto (Studio)  ──build──▶  Analyzer v1   ← artefacto inmutable
+   │  schema                   Analyzer v2   ← otro build del mismo proyecto
+   │  datos etiquetados        Analyzer v3
+   └── vive en Blob Storage
+```
+
+Un **proyecto** produce **N analizadores**. Es el patrón que ya sigue este repositorio:
+
+| Analizadores | `tags.projectId` compartido |
+|---|---|
+| `CU_NS_1.4_3`, `CU_NS_1.5_0` | `01ecc742-3215-4bf8-bdc2-ea7a7ef00fd1` (Nota Simple) |
+| `CERA16`, `CERA16_v1` | `30189708-d5c2-48ab-8ecf-beb626f8fabb` |
+
+> **El proyecto no es un objeto de la API.** La API GA `2025-11-01` expone **un único grupo de operaciones: `Content Analyzers`** — no hay grupo `Projects`. El proyecto son blobs, y el analizador los referencia:
+> ```jsonc
+> "knowledgeSources": [{ "kind": "labeledData",
+>   "containerUrl": "https://srbstgproapppdocai.blob.core.windows.net/documentai",
+>   "prefix": "labelingProjects/{projectId}/train" }],
+> "tags": { "projectId": "{projectId}" }
+> ```
+> Duplicar un proyecto implicaría copiar ese prefijo a un GUID nuevo con `azcopy` (requiere **Storage Blob Data Contributor** sobre `srbstgproapppdocai`). Es **no soportado y frágil**: Studio mantiene su propio registro. **Normalmente no hace falta** — ver la nota de seguridad abajo.
+
+**Flujo recomendado (Studio):**
+
+1. Abre [CU Studio](https://aka.ms/cu-studio) y entra en el proyecto correspondiente (para Nota Simple, `projectId` `01ecc742-…`).
+2. **Edita el schema**: añade o elimina campos.
+3. **Etiqueta los campos nuevos** en la pestaña *Knowledge* / *Label data*. *Auto label* prerellena con el analizador actual y tú corriges. Sin este paso los campos nuevos van *zero-shot*.
+4. **Build analyzer** con un ID de versión nuevo (p. ej. `CU_NS_1.6_0`).
+5. **Prueba** contra documentos representativos.
+6. **Replica** a West Europe con la copia cruzada ([12.2](#122-script-recomendado)) y **repunta** `modelKey` en `ModeloConfigs`. La versión anterior queda como rollback.
+
+> [!NOTE]
+> **Editar el proyecto no afecta a los analizadores ya construidos.** La documentación es explícita: *"After you add samples, rebuild the analyzer so the analyzer can use the samples"*. `CU_NS_1.5_0` sigue sirviendo en producción con su snapshot mientras iteras el schema para la 1.6.
+
+**Atajo por API (solo si no necesitas etiquetar).** La [guía de migración](https://learn.microsoft.com/azure/ai-services/content-understanding/how-to/migration-preview-to-ga#update-analyzers) documenta este patrón, y es la única vía sin Studio:
+
+```http
+GET  /contentunderstanding/analyzers/CU_NS_1.5_0?api-version=2025-11-01
+     -> editas fieldSchema.fields (añades/quitas), conservas knowledgeSources y models
+PUT  /contentunderstanding/analyzers/CU_NS_1.6_0?api-version=2025-11-01
+```
+
+Ojo con dos cosas: para **reutilizar un ID** hay que **borrar** antes el analizador existente; y los campos **nuevos** creados así van **zero-shot** (ningún ejemplo etiquetado los cubre), así que la calidad será peor que por Studio. Es una vía razonable para **eliminar** campos, y floja para añadirlos.

@@ -1,6 +1,8 @@
 using Xunit;
 using FluentAssertions;
 using Moq;
+using Azure.Core.Serialization;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Azure.Functions.Worker;
@@ -46,41 +48,21 @@ public class PromptsAdminFunctionTests : IDisposable
 
     private HttpRequestData CreateMockHttpRequest(string method, string? body = null)
     {
-        var mockFunctionContext = new Mock<FunctionContext>();
-        var mockRequest = new Mock<HttpRequestData>(mockFunctionContext.Object);
-
-        mockRequest.Setup(r => r.Method).Returns(method);
-
-        if (body != null)
+        var services = new ServiceCollection();
+        services.AddOptions();
+        services.Configure<WorkerOptions>(options =>
         {
-            var stream = new MemoryStream(Encoding.UTF8.GetBytes(body));
-            mockRequest.Setup(r => r.Body).Returns(stream);
-        }
-
-        mockRequest.Setup(r => r.CreateResponse()).Returns(() =>
-        {
-            var responseStream = new MemoryStream();
-            var mockResponse = new Mock<HttpResponseData>(mockFunctionContext.Object);
-            
-            mockResponse.Setup(r => r.Body).Returns(responseStream);
-            mockResponse.SetupProperty(r => r.StatusCode);
-            mockResponse.Setup(r => r.Headers).Returns(new Microsoft.Azure.Functions.Worker.Http.HttpHeadersCollection());
-
-            // Mock WriteAsJsonAsync to manually serialize to the Body stream
-            mockResponse.Setup(r => r.WriteAsJsonAsync(It.IsAny<object>(), It.IsAny<CancellationToken>()))
-                .Returns<object, CancellationToken>((obj, ct) =>
-                {
-                    var json = JsonSerializer.Serialize(obj, new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-                    var bytes = Encoding.UTF8.GetBytes(json);
-                    responseStream.Write(bytes, 0, bytes.Length);
-                    responseStream.Position = 0;
-                    return new ValueTask(Task.CompletedTask);
-                });
-
-            return mockResponse.Object;
+            options.Serializer = new JsonObjectSerializer(new JsonSerializerOptions
+            {
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            });
         });
+        var serviceProvider = services.BuildServiceProvider();
 
-        return mockRequest.Object;
+        var mockFunctionContext = new Mock<FunctionContext>();
+        mockFunctionContext.Setup(c => c.InstanceServices).Returns(serviceProvider);
+
+        return new FakeHttpRequestData(mockFunctionContext.Object, method, body);
     }
 
     private async Task<(HttpStatusCode status, T? data)> ExecuteAndDeserialize<T>(Func<Task<HttpResponseData>> action)
@@ -306,16 +288,14 @@ public class PromptsAdminFunctionTests : IDisposable
         // Assert
         status.Should().Be(HttpStatusCode.BadRequest);
         error.Should().NotBeNull();
-        error!.Errors.Should().NotBeNull();
-        var allErrors = string.Join(" ", error!.Errors!.Values.SelectMany(v => v));
-        allErrors.Should().Contain("10");
-        allErrors.Should().Contain("16000");
+        error!.Message.Should().Contain("al menos 10 caracteres");
     }
 
+    // El contrato vigente permite placeholders libres para edición iterativa de prompts.
     [Fact]
-    public async Task Admin_CreatePromptTemplate_MissingRequiredPlaceholder_ReturnsBadRequest()
+    public async Task Admin_CreatePromptTemplate_WithoutPlaceholders_CreatesDraft()
     {
-        // Arrange - Phase1 requires CONTEXT_PROMPT and DOCUMENT_TEXT
+        // Arrange - contenido sin placeholders, pero con más de 10 caracteres
         var payload = new CreatePromptTemplateRequest
         {
             PromptKey = "classification.phase1.system",
@@ -325,21 +305,25 @@ public class PromptsAdminFunctionTests : IDisposable
         var request = CreateMockHttpRequest("POST", JsonSerializer.Serialize(payload));
 
         // Act
-        var (status, error) = await ExecuteAndDeserialize<ValidationErrorResponse>(
+        var (status, data) = await ExecuteAndDeserialize<PromptTemplateDto>(
             () => _function.CreatePromptTemplate(request));
 
         // Assert
-        status.Should().Be(HttpStatusCode.BadRequest);
-        error.Should().NotBeNull();
-        error!.Errors.Should().NotBeNull();
-        var allErrors = string.Join(" ", error!.Errors!.Values.SelectMany(v => v));
-        (allErrors.Contains("CONTEXT_PROMPT") || allErrors.Contains("DOCUMENT_TEXT")).Should().BeTrue();
+        status.Should().Be(HttpStatusCode.Created);
+        data.Should().NotBeNull();
+        data!.IsActive.Should().BeFalse();
+        data.PromptKey.Should().Be("classification.phase1.system");
+
+        // Verify in database
+        var dbEntity = await _dbContext.PromptTemplates.FirstOrDefaultAsync(p => p.Id == data.Id);
+        dbEntity.Should().NotBeNull();
     }
 
+    // El contrato vigente permite placeholders libres para edición iterativa de prompts.
     [Fact]
-    public async Task Admin_CreatePromptTemplate_InvalidPlaceholder_ReturnsBadRequest()
+    public async Task Admin_CreatePromptTemplate_UnknownPlaceholder_CreatesDraft()
     {
-        // Arrange
+        // Arrange - contenido con placeholder desconocido, se crea igualmente el draft
         var payload = new CreatePromptTemplateRequest
         {
             PromptKey = "classification.phase1.system",
@@ -349,15 +333,18 @@ public class PromptsAdminFunctionTests : IDisposable
         var request = CreateMockHttpRequest("POST", JsonSerializer.Serialize(payload));
 
         // Act
-        var (status, error) = await ExecuteAndDeserialize<ValidationErrorResponse>(
+        var (status, data) = await ExecuteAndDeserialize<PromptTemplateDto>(
             () => _function.CreatePromptTemplate(request));
 
         // Assert
-        status.Should().Be(HttpStatusCode.BadRequest);
-        error.Should().NotBeNull();
-        error!.Errors.Should().NotBeNull();
-        var allErrors = string.Join(" ", error!.Errors!.Values.SelectMany(v => v));
-        allErrors.Should().Contain("INVALID_PLACEHOLDER");
+        status.Should().Be(HttpStatusCode.Created);
+        data.Should().NotBeNull();
+        data!.IsActive.Should().BeFalse();
+        data.PromptKey.Should().Be("classification.phase1.system");
+
+        // Verify in database
+        var dbEntity = await _dbContext.PromptTemplates.FirstOrDefaultAsync(p => p.Id == data.Id);
+        dbEntity.Should().NotBeNull();
     }
 
     // ==================== Tests: PUT Admin_UpdatePromptTemplate ====================

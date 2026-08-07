@@ -26,7 +26,8 @@ azure-pipelines-functions.yml (Functions-only: rápido hotfix)
 azure-pipelines-admin.yml (Admin-only: hotfix del Blazor)
 ├─ Stages: BuildAdmin → DeployAdmin
 ├─ Trigger: Manual
-└─ Target: srbwebadminprodocai
+├─ Target: srbwebadminprodocai (per-environment via targetEnvironment)
+└─ Also sets EnvironmentName on the Function App ("Ensure Functions environment name" step)
 
 azure-pipelines-assetresolver.yml (Plugin-only: AssetResolver hotfix)
 ├─ Stages: Build → Deploy (optional)
@@ -220,6 +221,33 @@ $assetResolverSettings = @(
 
 **Duration:** ~1 minute
 **Gate:** If validation fails, deployment is marked as failed
+
+> **Clearer failure message (AB#99998):** if `az` returns no JSON for an app (app doesn't exist in the resource group, or the pipeline identity has no read permission), the script now fails with an explicit message naming the app and resource group, instead of the generic PowerShell error `The property 'value' cannot be found`.
+
+---
+
+## Admin-Only Pipeline (azure-pipelines-admin.yml)
+
+Hotfix pipeline for the Blazor Admin: `trigger: none`, parameter `targetEnvironment` (`dev` | `pre` | `prod`, default `dev`). Per-environment variables resolve `AZURE_SERVICE_CONNECTION`, `AZURE_RESOURCE_GROUP`, `AZURE_ADMIN_WEB_APP_NAME`, `AZURE_FUNCTIONS_APP_NAME`, `KEY_VAULT_NAME` and:
+
+- **`AZURE_ASSET_RESOLVER_WEB_APP_NAME`** — per-environment AssetResolver app name, used only for the final validation step. Before this fix the value was hardcoded to the PRODUCTION AssetResolver (`srbwebpluginassetresolver`) regardless of `targetEnvironment`, so validating dev/pre failed with a cryptic error. Now each environment resolves its own AssetResolver name (dev: `srbwebpluginassetresolverdev` · pre: `srbwebpluginassetresolverpre` · prod: `srbwebpluginassetresolver`), matching `azure-pipelines.yml`.
+- **`ENVIRONMENT_NAME`** (dev: `Development` · pre: `Preproduction` · prod: `Production`).
+
+**Stages:**
+
+```
+BuildAdmin (restore + publish DocumentIA.Admin, .NET 9 SDK) → artifact drop-admin
+DeployAdmin:
+  1. zipDeploy to {AZURE_ADMIN_WEB_APP_NAME}
+  2. Ensure Admin Web App identity + Key Vault RBAC (same manageKeyVaultRbac gate as azure-pipelines.yml)
+  3. Set Admin App settings (Functions API): FunctionsAdminApi__BaseUrl / __FunctionKey
+  4. Ensure Functions environment name  ← new step
+  5. Validate Admin App settings contract
+```
+
+**Step 4 — "Ensure Functions environment name":** applies the app setting `EnvironmentName=$(ENVIRONMENT_NAME)` to the **Function App** (not the Admin app itself), via the same idempotent `ensure-app-settings.ps1` used elsewhere (it never overwrites an existing value). This exists because the Admin's environment banner reads the backend's declared environment (`GET management/configuration` → `environment`, sourced from the Function App's `EnvironmentName` setting) — so deploying only the Admin still guarantees the Function App has the setting it needs to answer correctly.
+
+> **Which branch to queue from:** both `azure-pipelines.yml` and `azure-pipelines-admin.yml` are manual (`trigger: none`); select branch **`develop`** when running them. The default branch (`master`) does not have the `ENVIRONMENT_NAME` / `AZURE_ASSET_RESOLVER_WEB_APP_NAME` changes until the next merge to `master`.
 
 ---
 
@@ -736,9 +764,12 @@ All sensitive data stored in KeyVault; referenced in App Settings as:
 ```
 Extraction--AzureContentUnderstanding--ApiKey (maps to Extraction:AzureContentUnderstanding:ApiKey)
 Classification--AzureDocumentIntelligence--ApiKey
-Database--ConnectionString
-GDC--AuthToken
+SqlConnectionString
+GDC--HttpBasicUsername
+GDC--HttpBasicPassword
 ```
+
+> **Nota — config no-secreta por entorno:** el endpoint de GDC **no** es un secreto. `GDC__Endpoint` es un App Setting que el pipeline fija por entorno con la variable `GDC_ENDPOINT` (`azure-pipelines.yml`): dev=`srbwidd03.sareb.srb:8090`, prod=`srbwidp05.sareb.srb:8090` (réplica PRD; primario `srbwidp04`), pre pendiente. ⚠️ En PROD existe un secreto huérfano `GDC--Endpoint` en el Key Vault que, por el volcado masivo de secretos en `Program.cs`, **tiene precedencia** sobre el App Setting; debe eliminarse para que el pipeline sea la única fuente de verdad del endpoint.
 
 ### How to Rotate a Secret
 
