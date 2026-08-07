@@ -164,7 +164,7 @@ Settings clave a confirmar (ver detalle completo en `docs/auxiliares/migracion-d
 |---|-------|---------|-----|
 | 8.1 | Si `RunDatabaseMigrationsOnStartup=true`: verificar que el primer arranque aplica migraciones automaticamente | Logs de Function App en AppInsights o Kudu | ☐ |
 | 8.2 | Si se aplican de forma manual (recomendado en prod): generar script SQL idempotente | `dotnet ef migrations script --idempotent -p src/backend/DocumentIA.Data -s src/backend/DocumentIA.Functions -o migrations.sql` | ☐ |
-| 8.3 | Aplicar `migrations.sql` contra Azure SQL via sqlcmd o Azure Portal Query Editor | `sqlcmd -S srbsqlprodocai.database.windows.net -d DocumentIA -i migrations.sql` | ☐ |
+| 8.3 | Aplicar migrations con el pipeline **Migrations-BD** (`azure-pipelines-migrations.yml`), parámetro `targetEnvironment=prod`; revisar el artefacto `MigrationsScript` y aprobar el stage `Apply` | Run del pipeline en ADO | ☐ |
 | 8.4 | Una vez aplicadas las migraciones, cambiar `RunDatabaseMigrationsOnStartup=false` | `az functionapp config appsettings set --settings RunDatabaseMigrationsOnStartup=false ...` | ☐ |
 | 8.5 | Verificar conectividad y tablas creadas | `sqlcmd ... -Q "SELECT name FROM sys.tables"` o `.\scripts\database\Query-Tipologias.ps1` | ☐ |
 
@@ -200,6 +200,8 @@ dotnet ef database update `
     -o .\artifacts\db-config\schema-migrations.sql
   sqlcmd -S srbsqldevdocai.database.windows.net -d DocumentIA -G -C -i .\artifacts\db-config\schema-migrations.sql
   ```
+
+  > Vía estándar: pipeline **Migrations-BD**. El comando sqlcmd anterior queda solo como contingencia manual documentada.
 
 #### Paso 2 — Cargar/replicar los datos de configuración entre entornos
 
@@ -307,7 +309,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 |---|-------|---------|-----|
 | B5.1 | Generar script idempotente | `dotnet ef migrations script --idempotent -p src/backend/DocumentIA.Data -s src/backend/DocumentIA.Functions -o migrations.sql` | ☐ |
 | B5.2 | Revisar `migrations.sql` antes de aplicar | Especialmente: columnas ADD, tablas CREATE, indices | ☐ |
-| B5.3 | Aplicar en Azure SQL (o Docker si es local) | `sqlcmd -S srbsqlprodocai.database.windows.net -d DocumentIA -i migrations.sql` | ☐ |
+| B5.3 | Aplicar en Azure SQL con el pipeline **Migrations-BD** (`targetEnvironment` según entorno); en local usar `dotnet ef database update` | Run del pipeline en ADO / CLI local | ☐ |
 | B5.4 | Verificar tablas y columnas nuevas | `sqlcmd ... -Q "SELECT name FROM sys.tables"` o `.\scripts\database\Query-Tipologias.ps1` | ☐ |
 
 > Para **entorno limpio** (BD vacía) o para **promocionar datos de configuración** entre entornos (dev→pre→prod), ver el procedimiento completo paso a paso en **BLOQUE 7b** (migraciones de esquema + carga de datos con `replicate-config-data.ps1`).
