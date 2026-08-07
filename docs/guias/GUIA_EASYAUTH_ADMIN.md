@@ -64,7 +64,7 @@
 Los identificadores de esta sección no son secretos (el client secret nunca se
 documenta: viaja por canal seguro y se almacena en Key Vault).
 
-### DEV (verificado 2026-08-06)
+### DEV (activada y verificada 2026-08-06)
 
 | Elemento | Valor |
 |---|---|
@@ -129,12 +129,61 @@ Recordatorios operativos de DEV:
   forma individual (alta previa a la creación del grupo). Si no es deliberado,
   retirarlo para que todo el acceso se gobierne por el grupo.
 
-### PRE y PROD (pendientes)
+### PRO (app registration verificada 2026-08-06; activación pendiente)
 
-Sin app registration todavía. Al solicitarlas (ver
-[SOLICITUD_APP_REGISTRATION_ADMIN.md](SOLICITUD_APP_REGISTRATION_ADMIN.md)),
-replicar este mismo esquema por entorno: app registration single-tenant con el
-redirect URI del entorno, grupo de acceso propio (en producción, diferenciado),
-"Assignment required = Yes", secret en el Key Vault del entorno
-(`srbkvpredocai` / `srbkvprodocai`) y los mismos comandos sustituyendo
-suscripción, resource group, App Service e identificadores.
+| Elemento | Valor |
+|---|---|
+| App registration | `DocumentIA Admin - PRO` (single-tenant) |
+| Application (client) ID | `c216f80f-8fa4-40cf-b28a-6b7f6a640fce` |
+| Directory (tenant) ID | `1a213c5a-2e3d-4ae4-b0ba-075c42f9700e` |
+| Enterprise application (Service Principal) ID | `1fe8b941-2941-47f2-af08-b276be1af101` |
+| Redirect URI | `https://srbwebadminprodocai.azurewebsites.net/.auth/login/aad/callback` |
+| Assignment required | Sí |
+| Emisión de ID tokens | Habilitada (verificado) |
+| Grupo de acceso asignado | `GSEC-DocumentIA-Admin-PRO` (único principal asignado) |
+| Client secret | En Key Vault `srbkvprodocai`, secreto `AdminEasyAuthClientSecret` |
+| App Service | `srbwebadminprodocai` (RG `SRBRGDOCSAIPROD`, suscripción Producción Central `647c7246-54bc-4d31-b909-431cacf03272`) |
+
+Activación (misma secuencia que DEV, con los valores de producción):
+
+```bash
+# 1) Guardar el client secret en el Key Vault de produccion (valor recibido por canal seguro)
+az keyvault secret set --vault-name srbkvprodocai --name AdminEasyAuthClientSecret --value "<CLIENT_SECRET>"
+
+# 2) App setting que EasyAuth lee, como referencia a Key Vault
+az webapp config appsettings set --subscription 647c7246-54bc-4d31-b909-431cacf03272   --resource-group SRBRGDOCSAIPROD --name srbwebadminprodocai   --settings "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET=@Microsoft.KeyVault(VaultName=srbkvprodocai;SecretName=AdminEasyAuthClientSecret)"
+
+# 3) Upgrade del esquema de auth a v2 si sigue en v1 (ver seccion de resolucion de problemas)
+az webapp auth config-version show --subscription 647c7246-54bc-4d31-b909-431cacf03272   --resource-group SRBRGDOCSAIPROD --name srbwebadminprodocai
+az webapp auth config-version upgrade --subscription 647c7246-54bc-4d31-b909-431cacf03272   --resource-group SRBRGDOCSAIPROD --name srbwebadminprodocai
+
+# 4) Configurar el proveedor Microsoft y activar la autenticacion
+az webapp auth microsoft update --subscription 647c7246-54bc-4d31-b909-431cacf03272   --resource-group SRBRGDOCSAIPROD --name srbwebadminprodocai   --client-id c216f80f-8fa4-40cf-b28a-6b7f6a640fce   --issuer https://login.microsoftonline.com/1a213c5a-2e3d-4ae4-b0ba-075c42f9700e/v2.0   --client-secret-setting-name MICROSOFT_PROVIDER_AUTHENTICATION_SECRET
+
+az webapp auth update --subscription 647c7246-54bc-4d31-b909-431cacf03272   --resource-group SRBRGDOCSAIPROD --name srbwebadminprodocai   --enabled true --action RedirectToLoginPage
+
+# 5) Reinicio para que el middleware enganche a la primera
+az webapp restart --subscription 647c7246-54bc-4d31-b909-431cacf03272   --resource-group SRBRGDOCSAIPROD --name srbwebadminprodocai
+```
+
+Consideraciones específicas de producción:
+
+- **Momento de activación**: al activar, cualquier sesión abierta del Admin de
+  producción exigirá login; avisar a los usuarios del grupo. El backend de
+  clasificación no se ve afectado (autenticación independiente por function key).
+- **Al completar el login**, el modo solo lectura se desactiva: las escrituras en
+  producción quedan operativas con auditoría de UPN real. Verificar con la
+  sección "Verificación" completa (incluido el paso 4).
+- **Aviso de entorno**: la franja roja "ENTORNO: PRODUCCIÓN" depende del app
+  setting `EnvironmentName=Production` en el Function App de producción, que
+  aplica el pipeline (encolado desde `develop`) o puede fijarse a mano; es
+  independiente de la autenticación.
+- **Caducidad del client secret**: registrar la fecha igual que en DEV.
+
+### PRE (pendiente)
+
+Sin app registration todavía. Al solicitarla, replicar el esquema de DEV/PRO:
+app registration single-tenant con el redirect URI de pre
+(`https://srbwebadminpredocai.azurewebsites.net/.auth/login/aad/callback`),
+**emisión de ID tokens habilitada**, grupo de acceso propio, "Assignment
+required = Yes" y secret en `srbkvpredocai`.
