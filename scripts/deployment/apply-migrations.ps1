@@ -1,10 +1,11 @@
+# Aplica el script idempotente de migrations EF Core con pre-check y verificacion.
+# Exit codes: 0 = BD al dia (aplicado o ya estaba); 2 = pendientes sin aplicar (solo con -SkipApply); otro = fallo
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$SqlServerFqdn,
     [Parameter(Mandatory = $true)][string]$Database,
     [Parameter(Mandatory = $true)][string]$ScriptPath,
     [Parameter(Mandatory = $true)][string]$MigrationsDir,
-    # Exit codes: 0 = BD al dia (aplicado o ya estaba); 2 = pendientes sin aplicar (solo con -SkipApply); otro = fallo
     [switch]$SkipApply
 )
 
@@ -34,7 +35,7 @@ if (-not $token) { throw "No se pudo obtener token Entra para Azure SQL (az acco
 
 function Get-LastAppliedMigration {
     $exists = @(Invoke-Sqlcmd -ServerInstance $SqlServerFqdn -Database $Database -AccessToken $token `
-        -Query "SELECT 1 AS T FROM sys.tables WHERE name = '__EFMigrationsHistory'")
+        -Query "SELECT 1 AS T FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id WHERE s.name = 'dbo' AND t.name = '__EFMigrationsHistory'")
     if ($exists.Count -eq 0) {
         Write-Host "La tabla __EFMigrationsHistory no existe (BD sin migrar): todo pendiente."
         return $null
@@ -60,7 +61,7 @@ if ($SkipApply) {
 
 Write-Host "Aplicando script idempotente: $ScriptPath"
 Invoke-Sqlcmd -ServerInstance $SqlServerFqdn -Database $Database -AccessToken $token `
-    -InputFile $ScriptPath -QueryTimeout 3600
+    -InputFile $ScriptPath -QueryTimeout 3600 -AbortOnError
 
 $after = Get-LastAppliedMigration
 Write-Host "Ultima migration tras aplicar: $after"
