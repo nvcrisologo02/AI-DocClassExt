@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Database,
     [Parameter(Mandatory = $true)][string]$ScriptPath,
     [Parameter(Mandatory = $true)][string]$MigrationsDir,
+    # Exit codes: 0 = BD al dia (aplicado o ya estaba); 2 = pendientes sin aplicar (solo con -SkipApply); otro = fallo
     [switch]$SkipApply
 )
 
@@ -21,9 +22,10 @@ $expected = Get-ChildItem -Path $MigrationsDir -Filter '*.Designer.cs' |
 if (-not $expected) { throw "No se han encontrado migrations en $MigrationsDir" }
 Write-Host "Ultima migration del repo: $expected"
 
-if (-not (Get-Module -ListAvailable -Name SqlServer)) {
+$sqlServerModule = Get-Module -ListAvailable -Name SqlServer | Where-Object { $_.Version -ge [version]'21.1.18256' }
+if (-not $sqlServerModule) {
     Write-Host "Instalando modulo SqlServer (CurrentUser)..."
-    Install-Module -Name SqlServer -Scope CurrentUser -Force -AllowClobber
+    Install-Module -Name SqlServer -Scope CurrentUser -Force -AllowClobber -MinimumVersion 21.1.18256
 }
 Import-Module SqlServer
 
@@ -47,7 +49,7 @@ if ($before -eq $expected) {
 
 if ($SkipApply) {
     Write-Host "SkipApply activo: hay migrations pendientes pero no se aplica nada (solo pre-check)."
-    exit 0
+    exit 2
 }
 
 Write-Host "Aplicando script idempotente: $ScriptPath"
