@@ -180,10 +180,42 @@ Consideraciones específicas de producción:
   independiente de la autenticación.
 - **Caducidad del client secret**: registrar la fecha igual que en DEV.
 
-### PRE (pendiente)
+### PRE (app registration verificada 2026-08-07; activación pendiente)
 
-Sin app registration todavía. Al solicitarla, replicar el esquema de DEV/PRO:
-app registration single-tenant con el redirect URI de pre
-(`https://srbwebadminpredocai.azurewebsites.net/.auth/login/aad/callback`),
-**emisión de ID tokens habilitada**, grupo de acceso propio, "Assignment
-required = Yes" y secret en `srbkvpredocai`.
+| Elemento | Valor |
+|---|---|
+| App registration | `DocumentIA Admin - PRE` (single-tenant) |
+| Application (client) ID | `5dbd017b-03a0-44cc-9376-f60e217aecfa` |
+| Directory (tenant) ID | `1a213c5a-2e3d-4ae4-b0ba-075c42f9700e` |
+| Enterprise application (Service Principal) ID | `70166628-91e1-4fcb-a43d-1d16c7133507` |
+| Redirect URI | `https://srbwebadminpredocai.azurewebsites.net/.auth/login/aad/callback` |
+| Assignment required | Sí |
+| Emisión de ID tokens | Habilitada (verificado) |
+| Grupo de acceso asignado | `GSEC-DocumentIA-Admin-PRE` |
+| Client secret | En Key Vault `srbkvpredocai`, secreto `AdminEasyAuthClientSecret` |
+| App Service | `srbwebadminpredocai` (RG `SRBRGPREDOCSAI`, suscripción Core Preproduccion `a4f6b357-8f13-4488-9ee8-b9f635426f91`) |
+
+Activación (misma secuencia que DEV/PRO, con los valores de preproducción):
+
+```bash
+# 1) Guardar el client secret en el Key Vault de pre (valor recibido por canal seguro)
+az keyvault secret set --vault-name srbkvpredocai --name AdminEasyAuthClientSecret --value "<CLIENT_SECRET>"
+
+# 2) App setting que EasyAuth lee, como referencia a Key Vault
+az webapp config appsettings set --subscription a4f6b357-8f13-4488-9ee8-b9f635426f91   --resource-group SRBRGPREDOCSAI --name srbwebadminpredocai   --settings "MICROSOFT_PROVIDER_AUTHENTICATION_SECRET=@Microsoft.KeyVault(VaultName=srbkvpredocai;SecretName=AdminEasyAuthClientSecret)"
+
+# 3) Upgrade del esquema de auth a v2 si sigue en v1
+az webapp auth config-version upgrade --subscription a4f6b357-8f13-4488-9ee8-b9f635426f91   --resource-group SRBRGPREDOCSAI --name srbwebadminpredocai
+
+# 4) Configurar el proveedor Microsoft y activar la autenticacion
+az webapp auth microsoft update --subscription a4f6b357-8f13-4488-9ee8-b9f635426f91   --resource-group SRBRGPREDOCSAI --name srbwebadminpredocai   --client-id 5dbd017b-03a0-44cc-9376-f60e217aecfa   --issuer https://login.microsoftonline.com/1a213c5a-2e3d-4ae4-b0ba-075c42f9700e/v2.0   --client-secret-setting-name MICROSOFT_PROVIDER_AUTHENTICATION_SECRET
+
+az webapp auth update --subscription a4f6b357-8f13-4488-9ee8-b9f635426f91   --resource-group SRBRGPREDOCSAI --name srbwebadminpredocai   --enabled true --action RedirectToLoginPage
+
+# 5) Reinicio para que el middleware enganche a la primera
+az webapp restart --subscription a4f6b357-8f13-4488-9ee8-b9f635426f91   --resource-group SRBRGPREDOCSAI --name srbwebadminpredocai
+```
+
+Nota: en la enterprise application de PRE hay, además del grupo, un usuario
+asignado de forma individual (mismo patrón que se observó en DEV). Si no es
+deliberado, retirarlo para que todo el acceso se gobierne por el grupo.

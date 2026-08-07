@@ -367,7 +367,7 @@ required = Yes". Procedimiento y comandos: [GUIA_EASYAUTH_ADMIN.md](../guias/GUI
 | Entorno | App registration | Client ID | Grupo de acceso | Secret (Key Vault) | Estado |
 |---------|------------------|-----------|-----------------|--------------------|--------|
 | DEV | `DocumentIA Admin - DEV` | `32aba075-f88e-4012-9ed4-44655123001d` | `GSEC-DocumentIA-Admin-DEV` | `srbkvdevdocai` / `AdminEasyAuthClientSecret` | **Activada** (login corporativo operativo desde 2026-08-06) |
-| PRE | — | — | — | `srbkvpredocai` / `AdminEasyAuthClientSecret` (previsto) | Pendiente de solicitud |
+| PRE | `DocumentIA Admin - PRE` | `5dbd017b-03a0-44cc-9376-f60e217aecfa` | `GSEC-DocumentIA-Admin-PRE` | `srbkvpredocai` / `AdminEasyAuthClientSecret` | App registration verificada (2026-08-07, ID tokens habilitados); activación en App Service pendiente |
 | PROD | `DocumentIA Admin - PRO` | `c216f80f-8fa4-40cf-b28a-6b7f6a640fce` | `GSEC-DocumentIA-Admin-PRO` | `srbkvprodocai` / `AdminEasyAuthClientSecret` | App registration verificada (2026-08-06, ID tokens habilitados); activación en App Service pendiente |
 
 Tenant: `1a213c5a-2e3d-4ae4-b0ba-075c42f9700e`. El secret de EasyAuth se
