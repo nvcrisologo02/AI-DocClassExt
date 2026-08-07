@@ -127,6 +127,7 @@ stages:
             - task: AzureCLI@2
               displayName: Remove transient firewall rule
               condition: always()
+              continueOnError: true
               inputs:
                 azureSubscription: '$(azureSubscription)'
                 scriptType: 'pscore'
