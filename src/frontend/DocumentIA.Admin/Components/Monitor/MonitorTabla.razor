@@ -28,7 +28,7 @@
                     {
                         var expandida = Expandidos.Contains(e.EjecucionGuid);
                         <tr class="@(expandida ? "table-active" : "")">
-                            <td class="text-nowrap">@e.FechaEjecucion.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</td>
+                            <td class="text-nowrap">@HoraEspana.Formatear(e.FechaEjecucion, "dd/MM/yyyy HH:mm")</td>
                             <td class="text-truncate" style="max-width: 22rem;">@(e.NombreDocumento ?? "—")</td>
                             <td>@(e.Tipologia ?? "—")</td>
                             <td>@e.TipoFlujo</td>
@@ -89,18 +89,31 @@
         </table>
     </div>
 
-    @if (Pagina is not null && Pagina.Total >= Pagina.PageSize)
+    @* El pie se muestra siempre que haya resultados, no solo cuando hay mas de una
+       pagina: el selector de tamaño vive aqui y debe seguir accesible para poder
+       volver a 50 o 100 despues de filtrar hasta unas pocas filas. *@
+    @if (Pagina is not null && Pagina.Total > 0)
     {
-        <div class="card-footer d-flex justify-content-between align-items-center">
+        <div class="card-footer d-flex justify-content-between align-items-center flex-wrap gap-2">
             <span class="text-muted small">
                 @(((Pagina.Page - 1) * Pagina.PageSize) + 1)–@(Math.Min(Pagina.Page * Pagina.PageSize, Pagina.Total))
                 de @Pagina.Total
             </span>
-            <div class="btn-group">
-                <button class="btn btn-sm btn-outline-secondary" disabled="@(Pagina.Page <= 1)"
-                        @onclick="() => PaginaCambiada.InvokeAsync(Pagina.Page - 1)">Anterior</button>
-                <button class="btn btn-sm btn-outline-secondary" disabled="@(Pagina.Page >= UltimaPagina)"
-                        @onclick="() => PaginaCambiada.InvokeAsync(Pagina.Page + 1)">Siguiente</button>
+            <div class="d-flex align-items-center gap-2">
+                <label class="text-muted small mb-0">Por página</label>
+                <select class="form-select form-select-sm" style="width:auto"
+                        value="@TamanoPagina" @onchange="OnTamanoCambiado">
+                    @foreach (var opcion in TamanosDisponibles)
+                    {
+                        <option value="@opcion">@opcion</option>
+                    }
+                </select>
+                <div class="btn-group">
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@(Pagina.Page <= 1)"
+                            @onclick="() => PaginaCambiada.InvokeAsync(Pagina.Page - 1)">Anterior</button>
+                    <button class="btn btn-sm btn-outline-secondary" disabled="@(Pagina.Page >= UltimaPagina)"
+                            @onclick="() => PaginaCambiada.InvokeAsync(Pagina.Page + 1)">Siguiente</button>
+                </div>
             </div>
         </div>
     }
@@ -120,6 +133,19 @@
     // Abre el modal de detalle JSON en Monitor.razor; el componente no conoce
     // NavigationManager, solo delega el GUID hacia arriba (igual que FilaAlternada).
     [Parameter] public EventCallback<string> AbrirDetalle { get; set; }
+    [Parameter] public int TamanoPagina { get; set; } = 25;
+    [Parameter] public EventCallback<int> TamanoPaginaCambiado { get; set; }
+
+    // Los mismos valores que admite el backend (pageSize se limita a 1..200).
+    private static readonly int[] TamanosDisponibles = [25, 50, 100];
+
+    private async Task OnTamanoCambiado(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out var v))
+        {
+            await TamanoPaginaCambiado.InvokeAsync(v);
+        }
+    }
 
     // Con Total == 0 la condicion del pie (Total > PageSize) es falsa y el pie
     // no se pinta, asi que no hace falta cubrir la division por cero aqui; el
