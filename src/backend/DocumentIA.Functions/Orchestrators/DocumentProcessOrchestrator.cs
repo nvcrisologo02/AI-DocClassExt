@@ -1104,6 +1104,52 @@ public class DocumentProcessOrchestrator
             }
 
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
+
+            // Salidas tempranas sin tipología resuelta: la petición puede pedir igualmente prompt
+            // ad-hoc o resumen por defecto. Se ejecuta con el markdown que haya dejado el Paso 2.8.
+            // El estado sigue siendo NO_CLASIFICADO: no se está clasificando, se responde a lo pedido.
+            async Task EjecutarPromptEnSalidaTempranaAsync()
+            {
+                var forzarResumen = entrada.Instrucciones.ForzarResumenPorDefecto
+                    && !salida.DatosExtraidos.ContainsKey("Resumen");
+
+                if (entrada.Instrucciones.Prompt is null && !forzarResumen)
+                {
+                    return;
+                }
+
+                var markdownDisponible = datosNormalizados.TryGetValue("Markdown", out var markdownSalidaTempranaObj)
+                    && markdownSalidaTempranaObj is string markdownSalidaTemprana
+                    && !string.IsNullOrWhiteSpace(markdownSalidaTemprana)
+                    ? markdownSalidaTemprana
+                    : null;
+
+                // La actividad "Prompt" solo se registra en el seguimiento en el camino normal
+                // (Paso 4.5). En una salida temprana aún no existe: sin este alta, ObtenerTraza("Prompt")
+                // lanzaría por no encontrar coincidencia y EjecutarPromptLibreAsync nunca llegaria a invocar PromptActivity.
+                if (!seguimiento.Actividades.Any(a => string.Equals(a.Nombre, "Prompt", StringComparison.Ordinal)))
+                {
+                    seguimiento.ActividadesTotales++;
+                    seguimiento.Actividades.Add(new TrazaActividad { Nombre = "Prompt", Estado = "Pending" });
+                }
+
+                try
+                {
+                    await EjecutarPromptLibreAsync(
+                        markdownDisponible,
+                        new Dictionary<string, object>(),
+                        resultadoClasificacion.ResultadoPromptCombinado,
+                        resultadoClasificacion.ResumenCombinado,
+                        forzarResumen);
+                }
+                catch (Exception exPromptSalidaTemprana)
+                {
+                    logger.LogWarning(
+                        exPromptSalidaTemprana,
+                        "No se pudo ejecutar el prompt en salida temprana sin tipología resuelta. Se continúa con el cierre de la ejecución.");
+                }
+            }
+
             ResolvedTipologia tipologiaResuelta;
             var esNivelTdn1 =
                 string.Equals(
@@ -1176,6 +1222,8 @@ public class DocumentProcessOrchestrator
                     salida.Resultado.ConfianzaValidacion = 0;
                     salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
 
+                    await EjecutarPromptEnSalidaTempranaAsync();
+
                     FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
                     return salida;
                 }
@@ -1209,6 +1257,8 @@ public class DocumentProcessOrchestrator
                 salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
                 salida.Resultado.ConfianzaExtraccion = 0;
                 salida.Resultado.ConfianzaValidacion = 0;
+
+                await EjecutarPromptEnSalidaTempranaAsync();
 
                 FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
                 return salida;
