@@ -1,0 +1,384 @@
+@page "/monitor-v2"
+@page "/monitor-v2/{Guid}"
+@inject MonitorService MonitorService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+@implements IDisposable
+
+@* Panel de calidad. Convive con /monitor, que se mantiene intacto: esta pagina
+   añade la lectura por confianza y el cruce con el estado de proceso, y reutiliza
+   sin cambios el listado, el detalle desplegable y el modal de JSON. *@
+
+<PageTitle>Monitor de calidad</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h4 mb-0">Monitor de calidad</h1>
+        <small class="text-muted">Horas en hora peninsular (@HoraEspana.NombreZona)</small>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+        <label class="text-muted small mb-0">Auto-actualizar</label>
+        <select class="form-select form-select-sm" style="width:auto" value="@_intervaloAutoRefrescoSegundos" @onchange="OnIntervaloAutoRefrescoCambiado">
+            <option value="0">Off</option>
+            <option value="30">30 s</option>
+            <option value="60">60 s</option>
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="RecargarTodoAsync" disabled="@_cargando">Actualizar</button>
+    </div>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<MonitorFiltros Filtro="_filtro" Tipologias="_tipologias" FiltroCambiado="OnFiltroCambiado" />
+
+<MonitorCalidadKpis Agregados="_agregados" Cargando="_cargando" />
+
+<MonitorLecturas Proceso="_agregados?.PorEstadoProceso ?? []"
+                 CalidadOk="_agregados?.CalidadOk ?? 0"
+                 CalidadRevision="_agregados?.CalidadRevision ?? 0"
+                 CalidadError="_agregados?.CalidadError ?? 0"
+                 EstadoSeleccionado="OnEstadoSeleccionado"
+                 CalidadSeleccionada="OnCalidadSeleccionada" />
+
+<MonitorMatriz Celdas="_agregados?.Matriz ?? []" CeldaSeleccionada="OnCeldaSeleccionada" />
+
+<MonitorHistograma Bins="_agregados?.Histograma ?? []" TramoSeleccionado="OnTramoSeleccionado" />
+
+<MonitorGraficos Serie="_agregados?.Serie ?? []" />
+
+@if (HayRecorte)
+{
+    <div class="alert alert-secondary d-flex justify-content-between align-items-center py-2">
+        <span>Mostrando <strong>@DescripcionRecorte()</strong></span>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="LimpiarRecorteAsync">Quitar filtro</button>
+    </div>
+}
+
+<MonitorTabla Pagina="_pagina" Cargando="_cargando"
+              PaginaCambiada="OnPaginaCambiada"
+              TamanoPagina="_tamanoPagina" TamanoPaginaCambiado="OnTamanoPaginaCambiado"
+              Expandidos="_expandidos" Detalles="_detalles" CargandoDetalle="_cargandoDetalle"
+              FilaAlternada="OnFilaAlternadaAsync" AbrirDetalle="AbrirModal" />
+
+@if (_modalGuid is not null)
+{
+    <EjecucionJsonModal Guid="@_modalGuid"
+                        Detalle="_detalles.GetValueOrDefault(_modalGuid)"
+                        Cargando="_modalCargando"
+                        NoEncontrado="_guidsNoEncontrados.Contains(_modalGuid)"
+                        ErrorMensaje="@_modalError"
+                        OnCerrar="CerrarModal" />
+}
+
+@code {
+    [Parameter] public string? Guid { get; set; }
+
+    private MonitorFiltroDto _filtro = new();
+    private PagedResultDto<EjecucionResumenDto>? _pagina;
+    private DashboardAgregadosDto? _agregados;
+    private IReadOnlyList<string> _tipologias = [];
+    private readonly HashSet<string> _expandidos = [];
+    private readonly Dictionary<string, EjecucionDetalleDto> _detalles = new();
+    private readonly HashSet<string> _cargandoDetalle = [];
+    private int _paginaActual = 1;
+    private int _tamanoPagina = 25;
+    private bool _cargando;
+    private string? _error;
+    private Timer? _timer;
+    private bool _disposed;
+    private int _intervaloAutoRefrescoSegundos = 30;
+
+    private string? _modalGuid;
+    private bool _modalCargando;
+    private string? _modalError;
+    private readonly HashSet<string> _guidsNoEncontrados = [];
+
+    // El recorte procede de pulsar un grafico. Vive aparte del filtro de la
+    // cabecera para poder retirarlo sin tocar el resto de la seleccion, y para
+    // que quede claro en pantalla que el listado no muestra todo el periodo.
+    private bool HayRecorte =>
+        _filtro.EstadoProceso is not null || _filtro.Calidad is not null || _filtro.ConfianzaMin is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tareaTipologias = CargarTipologiasAsync();
+        await RecargarTodoAsync();
+        await tareaTipologias;
+        StartTimer();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var guidRuta = string.IsNullOrWhiteSpace(Guid) ? null : Guid;
+        if (guidRuta == _modalGuid) return;
+
+        _modalGuid = guidRuta;
+        _modalError = null;
+        if (guidRuta is null) return;
+        if (_detalles.ContainsKey(guidRuta) || _guidsNoEncontrados.Contains(guidRuta)) return;
+
+        _modalCargando = true;
+        try
+        {
+            var detalle = await MonitorService.GetEjecucionDetalleAsync(guidRuta);
+            if (detalle is not null) _detalles[guidRuta] = detalle;
+            else _guidsNoEncontrados.Add(guidRuta);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _modalError = ex.Message;
+        }
+        finally
+        {
+            _modalCargando = false;
+        }
+    }
+
+    private void AbrirModal(string guid) => Navigation.NavigateTo($"/monitor-v2/{guid}", replace: false);
+    private void CerrarModal() => Navigation.NavigateTo("/monitor-v2", replace: true);
+
+    private async Task CargarTipologiasAsync()
+    {
+        var catalogo = await MonitorService.GetAgregadosAsync(
+            new MonitorFiltroDto { RangoDias = MonitorFiltroDto.RangoDiasHistorico });
+        if (catalogo is null) return;
+
+        _tipologias = catalogo.PorTipologia
+            .Select(g => g.Grupo)
+            .Where(g => !string.IsNullOrWhiteSpace(g) && g != "(sin tipología)")
+            .OrderBy(g => g)
+            .ToList();
+    }
+
+    // ── recortes desde los graficos ──────────────────────────────────────────
+    // Los agregados no se recalculan al aplicar un recorte: el panorama debe
+    // seguir describiendo el periodo completo mientras el listado muestra el
+    // subconjunto, que es justo lo que permite comparar la parte con el todo.
+
+    private Task OnEstadoSeleccionado(string estado) =>
+        AplicarRecorteAsync(f => { f.EstadoProceso = estado; f.Calidad = null; LimpiarTramo(f); });
+
+    private Task OnCalidadSeleccionada(string calidad) =>
+        AplicarRecorteAsync(f => { f.Calidad = calidad; f.EstadoProceso = null; LimpiarTramo(f); });
+
+    private Task OnCeldaSeleccionada((string EstadoProceso, string Calidad) celda) =>
+        AplicarRecorteAsync(f => { f.EstadoProceso = celda.EstadoProceso; f.Calidad = celda.Calidad; LimpiarTramo(f); });
+
+    private Task OnTramoSeleccionado((double Desde, double Hasta) tramo) =>
+        AplicarRecorteAsync(f =>
+        {
+            f.ConfianzaMin = tramo.Desde;
+            f.ConfianzaMax = tramo.Hasta;
+            f.EstadoProceso = null;
+            f.Calidad = null;
+        });
+
+    private static void LimpiarTramo(MonitorFiltroDto f)
+    {
+        f.ConfianzaMin = null;
+        f.ConfianzaMax = null;
+    }
+
+    private async Task AplicarRecorteAsync(Action<MonitorFiltroDto> cambio)
+    {
+        var nuevo = _filtro.Clonar();
+        cambio(nuevo);
+        _filtro = nuevo;
+        _paginaActual = 1;
+        ColapsarFilas();
+        await RecargarPaginaAsync();
+    }
+
+    private async Task LimpiarRecorteAsync()
+    {
+        var nuevo = _filtro.Clonar();
+        nuevo.EstadoProceso = null;
+        nuevo.Calidad = null;
+        LimpiarTramo(nuevo);
+        _filtro = nuevo;
+        _paginaActual = 1;
+        ColapsarFilas();
+        await RecargarPaginaAsync();
+    }
+
+    private string DescripcionRecorte()
+    {
+        var partes = new List<string>();
+        if (_filtro.EstadoProceso is not null) partes.Add($"proceso {_filtro.EstadoProceso}");
+        if (_filtro.Calidad is not null) partes.Add($"calidad {EtiquetaCalidad(_filtro.Calidad)}");
+        if (_filtro.ConfianzaMin is { } min && _filtro.ConfianzaMax is { } max)
+        {
+            partes.Add($"confianza {min:0.00} – {max:0.00}".Replace('.', ','));
+        }
+        return string.Join(" · ", partes);
+    }
+
+    private static string EtiquetaCalidad(string clave) => clave switch
+    {
+        "OK" => "suficiente",
+        "REVISION" => "requiere revisión",
+        "ERROR" => "insuficiente",
+        _ => clave
+    };
+
+    // ── carga ────────────────────────────────────────────────────────────────
+
+    private async Task OnFiltroCambiado(MonitorFiltroDto nuevo)
+    {
+        _filtro = nuevo;
+        _paginaActual = 1;
+        ColapsarFilas();
+        await RecargarTodoAsync();
+    }
+
+    private async Task OnPaginaCambiada(int pagina)
+    {
+        _paginaActual = pagina;
+        ColapsarFilas();
+        await RecargarPaginaAsync();
+    }
+
+    private async Task OnTamanoPaginaCambiado(int tamano)
+    {
+        _tamanoPagina = tamano;
+        _paginaActual = 1;
+        ColapsarFilas();
+        await RecargarPaginaAsync();
+    }
+
+    private void ColapsarFilas()
+    {
+        _expandidos.Clear();
+        _cargandoDetalle.Clear();
+    }
+
+    // Los agregados se piden sin el recorte de los graficos: describen el periodo
+    // entero, no la seleccion.
+    private MonitorFiltroDto FiltroAgregados()
+    {
+        var f = _filtro.Clonar();
+        f.EstadoProceso = null;
+        f.Calidad = null;
+        LimpiarTramo(f);
+        return f;
+    }
+
+    private async Task RecargarTodoAsync()
+    {
+        _cargando = true;
+        _error = null;
+        try
+        {
+            var tareaAgregados = MonitorService.GetAgregadosAsync(FiltroAgregados());
+            var tareaPagina = MonitorService.GetEjecucionesAsync(_filtro, _paginaActual, _tamanoPagina);
+            await Task.WhenAll(tareaAgregados, tareaPagina);
+
+            _agregados = await tareaAgregados;
+            _pagina = await tareaPagina;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task RecargarPaginaAsync()
+    {
+        _cargando = true;
+        try
+        {
+            _pagina = await MonitorService.GetEjecucionesAsync(_filtro, _paginaActual, _tamanoPagina);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private void StartTimer()
+    {
+        if (_intervaloAutoRefrescoSegundos <= 0) return;
+        var intervalo = TimeSpan.FromSeconds(_intervaloAutoRefrescoSegundos);
+        _timer = new Timer(OnAutoRefrescoTick, null, intervalo, intervalo);
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private void OnIntervaloAutoRefrescoCambiado(ChangeEventArgs e)
+    {
+        _intervaloAutoRefrescoSegundos = int.TryParse(e.Value?.ToString(), out var v) ? v : 0;
+        StopTimer();
+        StartTimer();
+    }
+
+    private void OnAutoRefrescoTick(object? state)
+    {
+        if (_disposed) return;
+        _ = InvokeAsync(async () =>
+        {
+            if (_disposed || _cargando) return;
+            try
+            {
+                await RecargarTodoAsync();
+                StateHasChanged();
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            // Mismo motivo que en la pagina original: este refresco no tiene
+            // usuario esperando, y lo que escape termina el circuito completo.
+            catch (Exception ex)
+            {
+                _error = $"Fallo en la actualizacion automatica: {ex.Message}";
+                StateHasChanged();
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        StopTimer();
+    }
+
+    private async Task OnFilaAlternadaAsync(string guid)
+    {
+        if (!_expandidos.Add(guid))
+        {
+            _expandidos.Remove(guid);
+            return;
+        }
+
+        if (_detalles.ContainsKey(guid)) return;
+
+        _cargandoDetalle.Add(guid);
+        try
+        {
+            var detalle = await MonitorService.GetEjecucionDetalleAsync(guid);
+            if (detalle is not null) _detalles[guid] = detalle;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cargandoDetalle.Remove(guid);
+        }
+    }
+}

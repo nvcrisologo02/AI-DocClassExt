@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -184,6 +185,20 @@ public class AgregadoGrupoDto
     public double DuracionMediaMs { get; set; }
 }
 
+public class MatrizCeldaDto
+{
+    public string EstadoProceso { get; set; } = string.Empty;
+    public string Calidad { get; set; } = string.Empty;
+    public int Total { get; set; }
+}
+
+public class HistogramaBinDto
+{
+    public double Desde { get; set; }
+    public double Hasta { get; set; }
+    public int Total { get; set; }
+}
+
 public class DashboardAgregadosDto
 {
     public int TotalEjecuciones { get; set; }
@@ -197,6 +212,15 @@ public class DashboardAgregadosDto
     public List<AgregadoGrupoDto> PorTipologia { get; set; } = [];
     public List<AgregadoGrupoDto> PorModelo { get; set; } = [];
     public List<SeriePuntoDto> Serie { get; set; } = [];
+
+    // Calidad por confianza (Monitor v2). Ok/Revision/Error de arriba cuentan por
+    // estado de proceso; estos, por la confianza del resultado.
+    public int CalidadOk { get; set; }
+    public int CalidadRevision { get; set; }
+    public int CalidadError { get; set; }
+    public List<AgregadoGrupoDto> PorEstadoProceso { get; set; } = [];
+    public List<MatrizCeldaDto> Matriz { get; set; } = [];
+    public List<HistogramaBinDto> Histograma { get; set; } = [];
 }
 
 public class SeriePuntoDto
@@ -237,6 +261,14 @@ public class MonitorFiltroDto
     public string? Busqueda { get; set; }
     public string? SubmittedBy { get; set; }
 
+    // Recortes de Monitor v2: estado de proceso exacto, calidad por confianza y
+    // tramo del histograma. Van aparte de Estado (las tres categorias historicas)
+    // porque aquel deja fuera estados como VALIDACION_CON_ERRORES.
+    public string? EstadoProceso { get; set; }
+    public string? Calidad { get; set; }
+    public double? ConfianzaMin { get; set; }
+    public double? ConfianzaMax { get; set; }
+
     public string ToQueryString()
     {
         var hasta = DateTime.UtcNow;
@@ -251,6 +283,12 @@ public class MonitorFiltroDto
         if (!string.IsNullOrWhiteSpace(Flujo)) partes.Add($"flujo={Uri.EscapeDataString(Flujo)}");
         if (!string.IsNullOrWhiteSpace(Busqueda)) partes.Add($"q={Uri.EscapeDataString(Busqueda)}");
         if (!string.IsNullOrWhiteSpace(SubmittedBy)) partes.Add($"submittedby={Uri.EscapeDataString(SubmittedBy)}");
+        if (!string.IsNullOrWhiteSpace(EstadoProceso)) partes.Add($"estadoproceso={Uri.EscapeDataString(EstadoProceso)}");
+        if (!string.IsNullOrWhiteSpace(Calidad)) partes.Add($"calidad={Uri.EscapeDataString(Calidad)}");
+        // Punto decimal explicito: con la cultura espanola el separador seria una
+        // coma y el backend leeria el numero mal.
+        if (ConfianzaMin is { } min) partes.Add($"confmin={min.ToString(CultureInfo.InvariantCulture)}");
+        if (ConfianzaMax is { } max) partes.Add($"confmax={max.ToString(CultureInfo.InvariantCulture)}");
         return string.Join("&", partes);
     }
 

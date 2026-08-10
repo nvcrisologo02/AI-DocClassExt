@@ -1,0 +1,115 @@
+@* Las dos lecturas del mismo conjunto, lado a lado: que hizo el proceso y cuanta
+   confianza merece el resultado. Presentarlas juntas es lo que evita volver a
+   confundirlas, que es el origen del contador "En revisión" que siempre valia
+   cero. Cada tramo navega al listado con ese recorte. *@
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="mb-0">Resultado del proceso</h6>
+                <small class="text-muted d-block mb-3">¿Terminó la tubería?</small>
+                @if (Proceso.Count == 0)
+                {
+                    <span class="text-muted small">Sin datos en el período</span>
+                }
+                else
+                {
+                    <div class="d-flex mb-2" style="height:22px;gap:2px">
+                        @foreach (var g in Proceso)
+                        {
+                            <button type="button" class="btn p-0 border-0"
+                                    style="width:@Ancho(g.Total, TotalProceso)%;background:@ColorProceso(g.Grupo);border-radius:3px"
+                                    title="@g.Grupo: @g.Total"
+                                    @onclick="() => EstadoSeleccionado.InvokeAsync(g.Grupo)"></button>
+                        }
+                    </div>
+                    <div class="d-flex flex-wrap gap-3" style="font-size:0.75rem">
+                        @foreach (var g in Proceso)
+                        {
+                            <span>
+                                <span class="d-inline-block rounded" style="width:9px;height:9px;background:@ColorProceso(g.Grupo)"></span>
+                                @g.Grupo <span class="fw-semibold">@g.Total</span>
+                                <span class="text-muted">@Porcentaje(g.Total, TotalProceso)</span>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h6 class="mb-0">Calidad por confianza</h6>
+                <small class="text-muted d-block mb-3">¿Merece confianza el resultado?</small>
+                @if (TotalCalidad == 0)
+                {
+                    <span class="text-muted small">Sin datos en el período</span>
+                }
+                else
+                {
+                    <div class="d-flex mb-2" style="height:22px;gap:2px">
+                        @foreach (var c in Calidades)
+                        {
+                            <button type="button" class="btn p-0 border-0"
+                                    style="width:@Ancho(c.Total, TotalCalidad)%;background:@c.Color;border-radius:3px"
+                                    title="@c.Etiqueta: @c.Total"
+                                    @onclick="() => CalidadSeleccionada.InvokeAsync(c.Clave)"></button>
+                        }
+                    </div>
+                    <div class="d-flex flex-wrap gap-3" style="font-size:0.75rem">
+                        @foreach (var c in Calidades)
+                        {
+                            <span>
+                                <span class="d-inline-block rounded" style="width:9px;height:9px;background:@c.Color"></span>
+                                @c.Etiqueta <span class="fw-semibold">@c.Total</span>
+                                <span class="text-muted">@Porcentaje(c.Total, TotalCalidad)</span>
+                            </span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<AgregadoGrupoDto> Proceso { get; set; } = [];
+    [Parameter] public int CalidadOk { get; set; }
+    [Parameter] public int CalidadRevision { get; set; }
+    [Parameter] public int CalidadError { get; set; }
+    [Parameter] public EventCallback<string> EstadoSeleccionado { get; set; }
+    [Parameter] public EventCallback<string> CalidadSeleccionada { get; set; }
+
+    private record Tramo(string Clave, string Etiqueta, int Total, string Color);
+
+    private int TotalProceso => Proceso.Sum(g => g.Total);
+    private int TotalCalidad => CalidadOk + CalidadRevision + CalidadError;
+
+    private List<Tramo> Calidades =>
+    [
+        new("OK", "Suficiente", CalidadOk, "#0ca30c"),
+        new("REVISION", "Requiere revisión", CalidadRevision, "#fab219"),
+        new("ERROR", "Insuficiente", CalidadError, "#d03b3b")
+    ];
+
+    // Verde solo para el estado que representa "termino sin incidencias"; el
+    // resto se distingue por gravedad. Cualquier estado no previsto cae en gris
+    // en vez de heredar un color que insinue algo que no sabemos.
+    private static string ColorProceso(string estado) => estado switch
+    {
+        "OK" or "Completado" or "Completed" => "#0ca30c",
+        "VALIDACION_CON_ERRORES" or "EXTRACCION_INCOMPLETA" => "#ec835a",
+        "Error" or "ERROR" or "Fallido" or "PAGINAS_EXCEDIDAS" => "#d03b3b",
+        "NO_CLASIFICADO" or "BAJA_CONFIANZA_CLASIFICACION" => "#fab219",
+        _ => "#898781"
+    };
+
+    private static double Ancho(int parte, int total) =>
+        total == 0 ? 0 : Math.Max(0.5, 100.0 * parte / total);
+
+    private static string Porcentaje(int parte, int total) =>
+        total == 0 ? "" : $"{100.0 * parte / total:0.#}%";
+}

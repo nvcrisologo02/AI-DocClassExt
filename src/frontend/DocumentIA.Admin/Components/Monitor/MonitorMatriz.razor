@@ -1,0 +1,128 @@
+@* Cruce entre estado de proceso y calidad por confianza. Es la pieza que hace
+   visible el caso que ningun contador aislado muestra: ejecuciones que
+   completaron la tuberia pero cuyo resultado no merece confianza suficiente.
+   Cada celda navega al listado con ese recorte ya aplicado. *@
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Proceso × calidad</span>
+        <small class="text-muted">Pulsa una celda para ver esas ejecuciones</small>
+    </div>
+    <div class="card-body">
+        @if (Celdas.Count == 0)
+        {
+            <span class="text-muted small">Sin datos en el período</span>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm mb-0" style="font-size:0.82rem">
+                    <thead>
+                        <tr>
+                            <th></th>
+                            @foreach (var c in Calidades)
+                            {
+                                <th class="text-center" style="font-weight:500">
+                                    @c.Etiqueta<br />
+                                    <span class="text-muted" style="font-size:0.7rem">@c.Rango</span>
+                                </th>
+                            }
+                            <th class="text-end">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var estado in Estados)
+                        {
+                            <tr>
+                                <th class="text-nowrap" style="font-weight:500">@estado</th>
+                                @foreach (var c in Calidades)
+                                {
+                                    var n = Valor(estado, c.Clave);
+                                    <td class="text-center p-1">
+                                        @if (n > 0)
+                                        {
+                                            <button type="button"
+                                                    class="btn btn-sm w-100 border-0 @(Intensidad(n) >= 3 ? "text-white" : "")"
+                                                    style="background:@Fondo(n);font-variant-numeric:tabular-nums"
+                                                    title="@estado · @c.Etiqueta: @n ejecuciones"
+                                                    @onclick="() => CeldaSeleccionada.InvokeAsync((estado, c.Clave))">
+                                                @n
+                                            </button>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">—</span>
+                                        }
+                                    </td>
+                                }
+                                <td class="text-end fw-semibold">@TotalFila(estado)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="d-flex align-items-center gap-2 mt-2" style="font-size:0.7rem">
+                <span class="text-muted">menos</span>
+                @foreach (var paso in Pasos)
+                {
+                    <span style="display:inline-block;width:26px;height:10px;border-radius:2px;background:@paso"></span>
+                }
+                <span class="text-muted">más ejecuciones</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<MatrizCeldaDto> Celdas { get; set; } = [];
+    [Parameter] public EventCallback<(string EstadoProceso, string Calidad)> CeldaSeleccionada { get; set; }
+
+    private record Calidad(string Clave, string Etiqueta, string Rango);
+
+    private static readonly Calidad[] Calidades =
+    [
+        new("OK", "Suficiente", "≥ 0,85"),
+        new("REVISION", "Revisión", "0,70 – 0,85"),
+        new("ERROR", "Insuficiente", "< 0,70")
+    ];
+
+    // Un solo tono, mas oscuro cuanto mayor es el recuento: la magnitud ya la
+    // lleva el color, asi que no hace falta gastar tonos distintos por categoria.
+    private static readonly string[] Pasos =
+    [
+        "#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#104281"
+    ];
+
+    // Los estados se toman de los datos, no de una lista fija: cualquier estado
+    // nuevo del orquestador aparece solo, sin quedar fuera del recuento.
+    private List<string> Estados => Celdas
+        .GroupBy(c => c.EstadoProceso)
+        .OrderByDescending(g => g.Sum(c => c.Total))
+        .Select(g => g.Key)
+        .ToList();
+
+    private int Valor(string estado, string calidad) => Celdas
+        .Where(c => c.EstadoProceso == estado && c.Calidad == calidad)
+        .Sum(c => c.Total);
+
+    private int TotalFila(string estado) => Celdas
+        .Where(c => c.EstadoProceso == estado)
+        .Sum(c => c.Total);
+
+    // Escala logaritmica: con un estado dominante (el 99% de las ejecuciones
+    // completan) una escala lineal dejaria el resto de celdas indistinguibles.
+    private int Intensidad(int n)
+    {
+        var max = Celdas.Count == 0 ? 0 : Celdas.Max(c => c.Total);
+        if (n <= 0 || max <= 0) return -1;
+        var q = Math.Log10(n + 1) / Math.Log10(max + 1);
+        return Math.Min(Pasos.Length - 1, (int)(q * Pasos.Length));
+    }
+
+    private string Fondo(int n)
+    {
+        var i = Intensidad(n);
+        return i < 0 ? "transparent" : Pasos[i];
+    }
+}

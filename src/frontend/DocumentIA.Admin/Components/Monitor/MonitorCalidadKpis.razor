@@ -1,0 +1,74 @@
+@* Cabecera de Monitor v2. A diferencia de MonitorKpis, separa el indicador de
+   proceso (¿termino la tuberia?) de los tres de calidad (¿merece confianza el
+   resultado?), que es la distincion que el panel entero pretende dejar clara. *@
+
+<div class="row g-3 mb-4 @(Cargando ? "opacity-50" : "")">
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Ejecuciones</div>
+            <div class="h3 mb-0">@(Agregados?.TotalEjecuciones ?? 0)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Proceso completado</div>
+            <div class="h3 mb-0" style="color:#0ca30c">@Porcentaje(ProcesoCompletado)</div>
+            <div class="text-muted" style="font-size:0.7rem">@ProcesoCompletado de @(Agregados?.TotalEjecuciones ?? 0)</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Confianza suficiente</div>
+            <div class="h3 mb-0" style="color:#0ca30c">@Porcentaje(Agregados?.CalidadOk)</div>
+            <div class="text-muted" style="font-size:0.7rem">≥ 0,85</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Requieren revisión</div>
+            <div class="h3 mb-0" style="color:#7a5300">@(Agregados?.CalidadRevision ?? 0)</div>
+            <div class="text-muted" style="font-size:0.7rem">0,70 – 0,85</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Confianza insuficiente</div>
+            <div class="h3 mb-0" style="color:#d03b3b">@(Agregados?.CalidadError ?? 0)</div>
+            <div class="text-muted" style="font-size:0.7rem">&lt; 0,70</div>
+        </div></div>
+    </div>
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Duración media</div>
+            <div class="h3 mb-0">@Duracion()</div>
+            <div class="text-muted" style="font-size:0.7rem">@Porcentaje(Agregados?.FallbacksTotal) fallback</div>
+        </div></div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public DashboardAgregadosDto? Agregados { get; set; }
+    [Parameter] public bool Cargando { get; set; }
+
+    // "Completado" agrupa las variantes historicas del estado de exito; el resto
+    // de estados cuentan como no completados, sin excepciones silenciosas.
+    private static readonly string[] EstadosCompletado = ["OK", "Completado", "Completed"];
+
+    private int ProcesoCompletado => Agregados?.PorEstadoProceso
+        .Where(g => EstadosCompletado.Contains(g.Grupo))
+        .Sum(g => g.Total) ?? 0;
+
+    private string Porcentaje(int? valor)
+    {
+        var total = Agregados?.TotalEjecuciones ?? 0;
+        if (total == 0 || valor is null) return "—";
+        return $"{Math.Round(100.0 * valor.Value / total, 1)}%";
+    }
+
+    private string Duracion()
+    {
+        var ms = Agregados?.DuracionMediaMs ?? 0;
+        if (ms <= 0) return "—";
+        return ms >= 1000 ? $"{Math.Round(ms / 1000.0, 1)} s" : $"{Math.Round(ms)} ms";
+    }
+}
