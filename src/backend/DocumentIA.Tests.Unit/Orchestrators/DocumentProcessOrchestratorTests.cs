@@ -1929,11 +1929,64 @@ public class DocumentProcessOrchestratorTests
         var salida = await orchestrator.RunOrchestrator(context);
 
         // Con ExtractionEnabled=false y sin markdown previo, el Paso 4 ya intenta un fallback de
-        // layout (previo a este cambio) antes de llegar a EjecutarPromptLibreAsync; al fallar
-        // tambien ese intento, la obtencion bajo demanda del prompt vuelve a intentarlo. Ambos
-        // intentos fallan y la ejecucion no se rompe, que es el contrato que fija este test.
-        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(2);
+        // layout de documento completo antes de llegar a EjecutarPromptLibreAsync. Al fallar ese
+        // intento queda marcado como ya intentado, por lo que la obtencion bajo demanda del prompt
+        // no lo reintenta con el mismo input: un solo intento fallido y la ejecucion no se rompe.
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
         salida.Should().NotBeNull();
         salida.DetalleEjecucion.MarkdownGenerado.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaSinMarkdown_ExtraeMarkdownBajoDemandaEnSalidaTemprana()
+    {
+        // Camino donde la obtencion bajo demanda dentro de EjecutarPromptLibreAsync es el UNICO
+        // mecanismo que puede aportar markdown: la salida temprana por tipologia no resoluble no
+        // pasa por el bloque de fallback del Paso 4 (ese bloque solo existe en el camino normal de
+        // extraccion), asi que sin el bloque bajo demanda el prompt se ejecutaria sin contenido.
+        // Se usa ExpectedType para saltar tambien el Paso 2.8 (markdown previo a clasificacion),
+        // que de lo contrario aportaria markdown por su cuenta y enmascararia el mecanismo bajo demanda;
+        // con ExpectedType informado, ClasificarActivity ni siquiera se invoca (ver Paso 3 del orquestador).
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "Desconocido");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Contenido real del documento en salida temprana",
+            Paginas = 2
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen basado en el contenido de salida temprana.",
+            TiempoMs = 1100
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.MarkdownExtraido.Should().Be("# Contenido real del documento en salida temprana");
+        salida.DatosExtraidos.Should().ContainKey("ResultadoPrompt");
+        salida.DatosExtraidos["ResultadoPrompt"].Should().Be("Resumen basado en el contenido de salida temprana.");
     }
 }

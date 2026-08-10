@@ -291,6 +291,12 @@ public class DocumentProcessOrchestrator
             }
         }
 
+        // Evita reintentar el layout bajo demanda cuando el Paso 4 ya lo intento (y fallo) para el
+        // documento completo: con el mismo input, un segundo intento solo pagaria DI Layout dos
+        // veces para fallar dos veces. Declarada aqui porque las funciones locales solo capturan
+        // variables ya declaradas en su punto de definicion.
+        var layoutDocumentoCompletoIntentado = false;
+
         async Task EjecutarPromptLibreAsync(
             string? markdownParaPrompt,
             Dictionary<string, object> datosExtraidos,
@@ -302,7 +308,7 @@ public class DocumentProcessOrchestrator
             // modo la llamada a layout se paga solo cuando hay un prompt o un resumen que la necesita.
             // El markdown obtenido no se propaga a datosNormalizados: esa variable se declara despues
             // de esta funcion local y C# no permite capturarla.
-            if (string.IsNullOrWhiteSpace(markdownParaPrompt))
+            if (string.IsNullOrWhiteSpace(markdownParaPrompt) && !layoutDocumentoCompletoIntentado)
             {
                 try
                 {
@@ -1879,6 +1885,10 @@ public class DocumentProcessOrchestrator
             }
             else
             {
+                // Marca el intento de layout de documento completo antes de invocarlo (exito o fallo):
+                // asi el prompt libre sabe que no debe reintentarlo con el mismo input.
+                layoutDocumentoCompletoIntentado = true;
+
                 try
                 {
                     logger.LogInformation(
