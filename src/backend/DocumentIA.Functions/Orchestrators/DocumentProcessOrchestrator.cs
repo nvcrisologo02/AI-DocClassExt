@@ -361,9 +361,44 @@ public class DocumentProcessOrchestrator
                 Prompt = entrada.Instrucciones.Prompt
             };
 
-            var resultadoPrompt = await EjecutarPasoNegocio(
-                "Prompt",
-                () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
+            // No se usa EjecutarPasoNegocio: marca "Completed" en cuanto la actividad devuelve sin
+            // excepción y añade "Prompt" a ActividadesCompletadas. Como la guarda de contenido
+            // devuelve un resultado con error en lugar de lanzar, marcarla después como "Failed"
+            // sobrescribiría el estado pero no la quitaría de esa lista. El estado se decide una vez.
+            MarcarInicioActividad("Prompt");
+
+            PromptResultado resultadoPrompt;
+            try
+            {
+                resultadoPrompt = await context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput);
+            }
+            catch (Exception ex)
+            {
+                MarcarFinActividad("Prompt", "Failed", ex.Message);
+                throw;
+            }
+
+            if (resultadoPrompt.SinContenido)
+            {
+                MarcarFinActividad("Prompt", "Failed", resultadoPrompt.Error);
+
+                salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+                salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+                {
+                    Modelo = resultadoPrompt.Modelo,
+                    TiempoMs = resultadoPrompt.TiempoMs,
+                    CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
+                    Error = resultadoPrompt.Error
+                };
+
+                logger.LogError(
+                    "Prompt abortado por falta de contenido del documento. Tipología={Tipologia}",
+                    salida.Identificacion.Tipologia);
+
+                return;
+            }
+
+            MarcarFinActividad("Prompt", "Completed");
 
             if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
             {
@@ -1463,6 +1498,15 @@ public class DocumentProcessOrchestrator
                         resultadoPromptCombinadoClasificacion,
                         resumenCombinadoClasificacion,
                         forzarResumenDedicadoClassificationOnly);
+
+                    // La guarda de contenido decidió abortar: ese estado prevalece sobre cualquier
+                    // resultado posterior (OK/NO_CLASIFICADO). Sin este corte, ClassificationOnly
+                    // seguiría hasta el final del bloque y el Estado="OK" de más abajo lo pisaría.
+                    if (salida.Resultado.Estado == "SIN_CONTENIDO_DOCUMENTO")
+                    {
+                        FinalizarSeguimiento("Failed", salida.DetalleEjecucion.Prompt?.Error);
+                        return salida;
+                    }
                 }
 
                 MarcarActividadOmitida("Extraer", "ClassificationOnly activo");
@@ -2012,6 +2056,15 @@ public class DocumentProcessOrchestrator
                     resultadoExtraccion.ResultadoPromptCombinado ?? resultadoPromptCombinadoClasificacion,
                     resultadoExtraccion.ResumenCombinado ?? resumenCombinadoClasificacion,
                     forzarResumenDedicado);
+
+                // La guarda de contenido decidió abortar: ese estado prevalece sobre el resultado
+                // final que calculan Validar/Integrar más abajo (OK/EXTRACCION_INCOMPLETA/etc.).
+                // Sin este corte el flujo seguiría hasta el Paso 8 y lo pisaría.
+                if (salida.Resultado.Estado == "SIN_CONTENIDO_DOCUMENTO")
+                {
+                    FinalizarSeguimiento("Failed", salida.DetalleEjecucion.Prompt?.Error);
+                    return salida;
+                }
             }
 
             // 5. Validacion - ACTUALIZADO PARA USAR MOTOR DE VALIDACION
