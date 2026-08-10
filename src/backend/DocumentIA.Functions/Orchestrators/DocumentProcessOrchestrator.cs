@@ -1480,6 +1480,10 @@ public class DocumentProcessOrchestrator
 
                 if (forzarResumenDedicadoClassificationOnly && string.IsNullOrWhiteSpace(markdownClasificacion))
                 {
+                    // Marca el intento de layout de documento completo antes de invocarlo (exito o fallo):
+                    // asi el prompt libre bajo demanda no reintenta con el mismo input si este falla.
+                    layoutDocumentoCompletoIntentado = true;
+
                     try
                     {
                         logger.LogInformation(

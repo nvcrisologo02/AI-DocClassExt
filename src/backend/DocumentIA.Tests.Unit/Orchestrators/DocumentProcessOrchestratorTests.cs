@@ -968,6 +968,49 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ClassificationOnly_LayoutDedicadoFalla_NoReintentaEnPromptBajoDemanda()
+    {
+        // Regresión AB#100029: si el layout dedicado de ClassificationOnly (resumen forzado sin
+        // markdown) falla, el prompt bajo demanda reintentaba con el mismo input, pagando DI Layout
+        // dos veces para fallar dos veces. Tras el fix se intenta una sola vez y se continúa sin
+        // markdown hacia PromptActivity.
+        var orchestrator = CreateOrchestrator();
+        // ExpectedType omite la Clasificación real y el Paso 2.8 (extracción de markdown previa a
+        // clasificar), que es una llamada a ExtraerMarkdownLayoutActivity independiente del bloque
+        // dedicado de ClassificationOnly: así el conteo de la aserción aísla exclusivamente el
+        // camino bajo prueba (bloque dedicado + reintento bajo demanda).
+        var context = new FakeTaskOrchestrationContext(
+            BuildEntrada(classificationOnly: true, forzarResumenPorDefecto: true, expectedType: "nota.simple"));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivityThrow("ExtraerMarkdownLayoutActivity", new InvalidOperationException("DI Layout no disponible"));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-4o-mini",
+            Resumen = "Resumen sin markdown"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.MarkdownExtraido.Should().BeNull();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClassificationOnlyNivelTdn1_NoDegradaANoClasificadoCuandoTdn1EsValido()
     {
         var orchestrator = CreateOrchestrator();
