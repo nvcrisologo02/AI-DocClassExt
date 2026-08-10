@@ -1,7 +1,7 @@
 # Prompt y resumen independientes de la clasificación
 
 **Fecha:** 2026-08-10
-**Estado:** Pendiente de aprobación (spec escrito, work items creados, sin implementación)
+**Estado:** Implementado en `feature/100027-100031-prompt-con-contenido` (mergeada a develop) + `bugfix/100045-layout-preclasif-blobfirst`
 **Work items:** AB#100027 (padre) — AB#100028 (Cambio A), AB#100029 (Cambio B), AB#100030 (Apunte C)
 
 ## Origen
@@ -37,7 +37,7 @@ Tres documentos enviados al ingest de `srbappdevdocai` con prompt ad-hoc
 | Documento | Markdown DI Layout | Prompt | Resultado |
 | --- | --- | --- | --- |
 | `prueba.xlsx` (33 KB, catálogo de tipologías) | Generado | gpt-5-mini, 9,5 s | Resumen fiel al contenido real |
-| `prueba.pptx` (3 MB, ~20 diapositivas) | Generado | gpt-5-mini, 4,3 s | Resumen fiel al contenido real |
+| `prueba.pptx` (3 MB, 5 diapositivas) | Generado | gpt-5-mini, 4,3 s | Resumen fiel al contenido real |
 | `control.pdf` (1 página, texto) | Generado | **No ejecutado** | `NO_CLASIFICADO` → el prompt se salta |
 
 DI Layout autodetectó ambos formatos Office a partir de los bytes; no hay lista blanca de formatos
@@ -55,7 +55,7 @@ Hallazgos secundarios de la misma prueba, fuera del alcance de este spec:
   contenido menciona "nota simple"; la extracción de Content Understanding falló después sobre
   Office y la ejecución cerró en `VALIDACION_CON_ERRORES`. La limitación de extracción a PDF se
   acepta como correcta.
-- El PPTX de ~20 diapositivas reporta `Paginas = 1` (ver "Apunte C").
+- El PPTX de 5 diapositivas reporta `Paginas = 1` (ver "Apunte C").
 
 ## Alcance
 
@@ -153,14 +153,35 @@ se llama al modelo. Mientras esa guarda no esté implementada, el comportamiento
 —llamada a ciegas y respuesta inútil persistida como resumen— se mantiene, y por eso el orden de
 implementación importa.
 
-### Apunte C — Conteo de páginas en Office (a valorar, no comprometido) (AB#100030)
+### Apunte C — Conteo de páginas en Office (AB#100030) — medido y resuelto
 
-`Identificacion.Paginas` vale 1 para un PPTX de ~20 diapositivas y 0 en las ejecuciones con
-`expectedType`. Afecta a la telemetría y a cualquier estimación de coste por página. La vía barata
-es tomar `Paginas` del resultado de layout cuando venga informado, que es lo que ya se hace en
-otros puntos del orquestador (líneas 745-746, 1704-1705, 1819-1821). Si el arreglo exige lógica por
-formato —una hoja de cálculo no tiene "páginas" en el mismo sentido—, se difiere. Se documenta como
-tarea aparte, sin comprometer su ejecución.
+**Medición del 2026-08-10** (llamada directa a `prebuilt-layout` de `srbdidevdocai`, api-version
+`2024-11-30`, con los mismos ficheros de la evidencia):
+
+| Fichero | Contenido real | `analyzeResult.pages` devuelto por DI |
+| --- | --- | --- |
+| `prueba.pptx` | 5 diapositivas | **5** (`pageNumber` 1..5) |
+| `prueba.xlsx` | 1 hoja | **1** |
+
+**Document Intelligence devuelve el conteo correcto**; la pérdida estaba en nuestro código, en dos
+puntos, ambos corregidos:
+
+1. **Vía bajo demanda (`ExpectedType` informado)**: el bloque de markdown bajo demanda no propagaba
+   `Paginas`, y por esa vía no interviene ni el Paso 2.7 (el recorte solo entiende de PDF) ni el
+   Paso 2.8 (no se ejecuta con `ExpectedType`). Corregido: se propaga con la misma regla que el
+   Paso 2.8, solo si nadie la informó antes (commit `9f04771`, AB#100030).
+2. **Paso 2.8 roto para todo no-PDF (AB#100045)**: la primera hipótesis —que la extracción "pisaba"
+   un 5 correcto del layout— quedó **refutada** al reprocesar en dev: el 5 del layout no llegaba
+   nunca. Causa raíz confirmada con App Insights: el ingest blob-first vacía `Content.Base64`
+   (`IngestAPITrigger.cs:319`); con un no-PDF el recorte PdfPig lanza `PdfDocumentFormatException`;
+   `docClasif` hereda el base64 vacío; y el Paso 2.8 llamaba a layout sin base64 ni BlobPath → DI
+   respondía `400 InvalidContent` en ~30 ms, capturado en silencio. Consecuencias: la clasificación
+   hybrid-tdn de Office corría sin contexto textual, y los resúmenes de Office solo funcionaban si
+   la tipología resuelta tenía extracción CU (que descarga el blob por sí misma). Corregido en
+   `bugfix/100045-layout-preclasif-blobfirst`: el Paso 2.8 informa `BlobPath` solo cuando el base64
+   viene vacío (el resolutor de AB#100031 prioriza BlobPath y pisaría el recorte de los PDF; hay
+   test de no regresión), y `PdfRecorteService` detecta no-PDF por cabecera `%PDF` y devuelve el
+   documento completo sin recortar en vez de lanzar.
 
 ## Pruebas
 
