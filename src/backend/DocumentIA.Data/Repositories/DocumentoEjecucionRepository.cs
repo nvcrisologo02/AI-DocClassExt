@@ -140,8 +140,67 @@ namespace DocumentIA.Data.Repositories
                     : new SeriePunto { Fecha = dia });
             }
 
+            // ── Calidad por confianza ─────────────────────────────────────────
+            // Se calcula sobre ConfianzaGlobal en vez de leer un EstadoCalidad
+            // almacenado porque ese valor solo existe dentro del contrato JSON de
+            // cada ejecucion, no en columna, y desde ahi no se puede agrupar.
+            // Consecuencia asumida: una tipologia con umbrales propios se cuenta
+            // aqui con los globales. Ver CalidadEjecucion.
+            var porCalidad = await q
+                .GroupBy(e => e.ConfianzaGlobal >= CalidadEjecucion.UmbralOk
+                    ? CalidadEjecucion.Ok
+                    : e.ConfianzaGlobal >= CalidadEjecucion.UmbralRevision
+                        ? CalidadEjecucion.Revision
+                        : CalidadEjecucion.Error)
+                .Select(g => new { Calidad = g.Key, Total = g.Count() })
+                .ToListAsync();
+
+            var porEstadoProceso = await q
+                .GroupBy(e => e.EstadoFinal)
+                .Select(g => new AgregadoGrupo
+                {
+                    Grupo           = g.Key,
+                    Total           = g.Count(),
+                    Ok              = g.Count(e => e.ConfianzaGlobal >= CalidadEjecucion.UmbralOk),
+                    Revision        = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralOk
+                                                && e.ConfianzaGlobal >= CalidadEjecucion.UmbralRevision),
+                    Error           = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralRevision),
+                    Fallbacks       = g.Count(e => e.UseFallbackLLM),
+                    ConfianzaMedia  = g.Average(e => e.ConfianzaGlobal),
+                    DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
+                })
+                .OrderByDescending(g => g.Total)
+                .ToListAsync();
+
+            var matriz = await q
+                .GroupBy(e => new
+                {
+                    e.EstadoFinal,
+                    Calidad = e.ConfianzaGlobal >= CalidadEjecucion.UmbralOk
+                        ? CalidadEjecucion.Ok
+                        : e.ConfianzaGlobal >= CalidadEjecucion.UmbralRevision
+                            ? CalidadEjecucion.Revision
+                            : CalidadEjecucion.Error
+                })
+                .Select(g => new MatrizCelda
+                {
+                    EstadoProceso = g.Key.EstadoFinal,
+                    Calidad       = g.Key.Calidad,
+                    Total         = g.Count()
+                })
+                .ToListAsync();
+
+            var histograma = await ConstruirHistogramaAsync(q, total);
+
             return new EjecucionAgregadosResult
             {
+                CalidadOk        = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Ok)?.Total ?? 0,
+                CalidadRevision  = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Revision)?.Total ?? 0,
+                CalidadError     = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Error)?.Total ?? 0,
+                PorEstadoProceso = porEstadoProceso,
+                Matriz           = matriz,
+                Histograma       = histograma,
+
                 TotalEjecuciones  = total,
                 PeriodoDias       = (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays),
                 Ok                = ok,
@@ -154,6 +213,34 @@ namespace DocumentIA.Data.Repositories
                 PorModelo         = byModelo,
                 Serie             = serie
             };
+        }
+
+        // Tramos del histograma de confianza. Mas finos cerca de los umbrales,
+        // que es donde la decision de revisar o no se juega: agrupar todo en
+        // decimos escondería si la masa se acumula justo por encima de 0,85.
+        private static readonly double[] LimitesHistograma =
+            { 0.0, 0.40, 0.50, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.01 };
+
+        private static async Task<List<HistogramaBin>> ConstruirHistogramaAsync(
+            IQueryable<DocumentoEjecucionEntity> q, int total)
+        {
+            var bins = new List<HistogramaBin>();
+            if (total == 0)
+            {
+                return bins;
+            }
+
+            // Una consulta por tramo en vez de un GROUP BY con un CASE de doce
+            // ramas: el SQL resultante seria ilegible y EF no siempre lo traduce.
+            for (var i = 0; i < LimitesHistograma.Length - 1; i++)
+            {
+                var desde = LimitesHistograma[i];
+                var hasta = LimitesHistograma[i + 1];
+                var n = await q.CountAsync(e => e.ConfianzaGlobal >= desde && e.ConfianzaGlobal < hasta);
+                bins.Add(new HistogramaBin { Desde = desde, Hasta = hasta, Total = n });
+            }
+
+            return bins;
         }
 
         private static IQueryable<DocumentoEjecucionEntity> AplicarFiltro(
@@ -181,6 +268,41 @@ namespace DocumentIA.Data.Repositories
                 {
                     q = q.Where(e => EstadoEjecucion.Error.Contains(e.EstadoFinal));
                 }
+            }
+
+            // Estado de proceso exacto: es lo que permite aislar VALIDACION_CON_ERRORES
+            // y demas estados que las tres categorias historicas no contemplan.
+            if (!string.IsNullOrWhiteSpace(filtro.EstadoProceso))
+            {
+                var estadoProceso = filtro.EstadoProceso.Trim();
+                q = q.Where(e => e.EstadoFinal == estadoProceso);
+            }
+
+            if (!string.IsNullOrWhiteSpace(filtro.Calidad))
+            {
+                switch (filtro.Calidad.Trim().ToUpperInvariant())
+                {
+                    case CalidadEjecucion.Ok:
+                        q = q.Where(e => e.ConfianzaGlobal >= CalidadEjecucion.UmbralOk);
+                        break;
+                    case CalidadEjecucion.Revision:
+                        q = q.Where(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralOk
+                                      && e.ConfianzaGlobal >= CalidadEjecucion.UmbralRevision);
+                        break;
+                    case CalidadEjecucion.Error:
+                        q = q.Where(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralRevision);
+                        break;
+                }
+            }
+
+            if (filtro.ConfianzaMin is { } min)
+            {
+                q = q.Where(e => e.ConfianzaGlobal >= min);
+            }
+
+            if (filtro.ConfianzaMax is { } max)
+            {
+                q = q.Where(e => e.ConfianzaGlobal < max);
             }
 
             if (!string.IsNullOrWhiteSpace(filtro.Flujo))

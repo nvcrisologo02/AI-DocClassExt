@@ -286,10 +286,10 @@ namespace DocumentIA.Core.Configuration
         public double ExtracWeightWarnings { get; set; } = 0.15;
         /// <summary>Confianza global mínima para estado OK.</summary>
         [System.Text.Json.Serialization.JsonPropertyName("umbralOK")]
-        public double UmbralOK { get; set; } = 0.85;
+        public double UmbralOK { get; set; } = DocumentIA.Data.Repositories.CalidadEjecucion.UmbralOk;
         /// <summary>Confianza global mínima para estado REVISION (por debajo es ERROR).</summary>
         [System.Text.Json.Serialization.JsonPropertyName("umbralRevision")]
-        public double UmbralRevision { get; set; } = 0.70;
+        public double UmbralRevision { get; set; } = DocumentIA.Data.Repositories.CalidadEjecucion.UmbralRevision;
     }
 
     public class ExtractionModelRegistry

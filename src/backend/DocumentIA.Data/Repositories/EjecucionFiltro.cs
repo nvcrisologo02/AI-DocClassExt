@@ -20,5 +20,19 @@ namespace DocumentIA.Data.Repositories
         public string? Busqueda { get; set; }
         /// <summary>Fragmento de quien solicito la ejecucion (Documentos.SubmittedBy).</summary>
         public string? SubmittedBy { get; set; }
+
+        /// <summary>
+        /// Valor exacto de EstadoFinal. A diferencia de <see cref="Estado"/>, que
+        /// agrupa en las tres categorias historicas y deja fuera estados como
+        /// VALIDACION_CON_ERRORES, aqui se filtra por el estado tal cual.
+        /// </summary>
+        public string? EstadoProceso { get; set; }
+
+        /// <summary>Calidad por confianza: OK, REVISION o ERROR. Ver CalidadEjecucion.</summary>
+        public string? Calidad { get; set; }
+
+        /// <summary>Tramo de confianza global; Max es exclusivo. Alimenta el histograma.</summary>
+        public double? ConfianzaMin { get; set; }
+        public double? ConfianzaMax { get; set; }
     }
 }
