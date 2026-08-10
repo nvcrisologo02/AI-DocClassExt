@@ -25,6 +25,8 @@ variables:
       value: srbappdevdocai
     - name: azureResourceGroup
       value: SRBRGDEVDOCSAI
+    - name: diUseInlineContent
+      value: 'true'
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: azureSubscription
       value: AI DocClassExt PRE
@@ -32,6 +34,8 @@ variables:
       value: srbapppredocai
     - name: azureResourceGroup
       value: SRBRGPREDOCSAI
+    - name: diUseInlineContent
+      value: 'true'
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: azureSubscription
       value: AI DocClassExt PRO
@@ -39,6 +43,8 @@ variables:
       value: srbappprodocai
     - name: azureResourceGroup
       value: SRBRGDOCSAIPROD
+    - name: diUseInlineContent
+      value: 'false'
   - name: cuMaxConcurrentCalls
     value: '4'
   - name: cuHardTimeoutSeconds
@@ -131,7 +137,8 @@ stages:
                   "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=$(cuInitialRetryDelayMs)",
                   "PromptTracing__Enabled=$(promptTracingEnabled)",
                   "PromptTracing__IncludePromptText=$(promptTracingIncludePromptText)",
-                  "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)"
+                  "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)",
+                  "DocumentIntelligence__UseInlineContent=$(diUseInlineContent)"
                 )
 
                 # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
@@ -154,13 +161,14 @@ stages:
                   "Extraction__AzureContentUnderstanding__InitialRetryDelayMs",
                   "PromptTracing__Enabled",
                   "PromptTracing__IncludePromptText",
-                  "PromptTracing__MaxPromptTextChars"
+                  "PromptTracing__MaxPromptTextChars",
+                  "DocumentIntelligence__UseInlineContent"
                 )
                 
                 $appliedSettings = az functionapp config appsettings list `
                   --resource-group "$(azureResourceGroup)" `
                   --name "$(functionAppName)" `
-                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__')].{name: name, value: value}" `
+                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'DocumentIntelligence__')].{name: name, value: value}" `
                   -o json | ConvertFrom-Json
                 
                 $appliedNames = $appliedSettings | Select-Object -ExpandProperty name
