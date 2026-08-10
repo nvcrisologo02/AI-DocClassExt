@@ -154,6 +154,7 @@ var host = new HostBuilder()
         services.Configure<ClassificationPromptsSettings>(context.Configuration.GetSection("ClassificationPrompts"));
         services.Configure<PromptTracingSettings>(context.Configuration.GetSection("PromptTracing"));
         services.Configure<PipelineSettings>(context.Configuration.GetSection("Pipeline"));
+        services.Configure<DocumentIntelligenceSettings>(context.Configuration.GetSection("DocumentIntelligence"));
 
         services.AddSingleton<PromptTraceTelemetryService>();
 
