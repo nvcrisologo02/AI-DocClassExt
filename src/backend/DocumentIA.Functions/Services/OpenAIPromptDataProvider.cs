@@ -123,6 +123,22 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             "Ejecutando prompt para tipología {Tipologia} con modelKey={ModelKey} deployment={DeploymentName}.",
             input.Tipologia, modelKey, modelConfig.DeploymentName);
 
+        if (!TieneContenidoUtilizable(input))
+        {
+            const string mensaje = "Sin contenido del documento: no se ejecuta el prompt ni el resumen.";
+
+            _logger.LogError(
+                "Prompt para tipología {Tipologia} abortado: no hay markdown ni documento base64 disponible.",
+                input.Tipologia);
+
+            return new PromptResultado
+            {
+                Modelo = modelConfig.DeploymentName,
+                Error = mensaje,
+                SinContenido = true
+            };
+        }
+
         var stopwatch = Stopwatch.StartNew();
         try
         {
@@ -360,6 +376,15 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         var tipologia = string.IsNullOrWhiteSpace(input.Tipologia) ? "desconocida" : input.Tipologia;
         return $"Documento clasificado como {tipologia}.";
     }
+
+    /// <summary>
+    /// True si hay algo del documento que mandar al modelo. Sin esto, el prompt viajaría con el
+    /// hueco {contenido} vacío y el modelo respondería pidiendo que se le adjunte el documento,
+    /// texto que se persistiría como si fuera un resumen válido.
+    /// </summary>
+    public static bool TieneContenidoUtilizable(PromptActivityInput input) =>
+        !string.IsNullOrWhiteSpace(input.MarkdownExtraido)
+        || !string.IsNullOrWhiteSpace(input.DocumentoBase64);
 
     private UserChatMessage BuildUserMessage(
         PromptConfig promptConfig,

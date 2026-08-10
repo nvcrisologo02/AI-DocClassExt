@@ -9,6 +9,6 @@ namespace DocumentIA.Data.Repositories
     {
         public static readonly string[] Ok = { "OK", "Completado", "Completed" };
         public static readonly string[] Revision = { "REVISION", "Revision" };
-        public static readonly string[] Error = { "Error", "ERROR", "Fallido" };
+        public static readonly string[] Error = { "Error", "ERROR", "Fallido", "SIN_CONTENIDO_DOCUMENTO" }; // sin contenido del documento es un fallo de proceso, cuenta y filtra como error
     }
 }

@@ -291,6 +291,12 @@ public class DocumentProcessOrchestrator
             }
         }
 
+        // Evita reintentar el layout bajo demanda cuando el Paso 4 ya lo intento (y fallo) para el
+        // documento completo: con el mismo input, un segundo intento solo pagaria DI Layout dos
+        // veces para fallar dos veces. Declarada aqui porque las funciones locales solo capturan
+        // variables ya declaradas en su punto de definicion.
+        var layoutDocumentoCompletoIntentado = false;
+
         async Task EjecutarPromptLibreAsync(
             string? markdownParaPrompt,
             Dictionary<string, object> datosExtraidos,
@@ -298,6 +304,51 @@ public class DocumentProcessOrchestrator
             string? resumenCombinado = null,
             bool forzarResumenPorDefecto = false)
         {
+            // Si no hay contenido textual, se intenta obtenerlo aqui y no en el Paso 2.8: de este
+            // modo la llamada a layout se paga solo cuando hay un prompt o un resumen que la necesita.
+            // El markdown obtenido no se propaga a datosNormalizados: esa variable se declara despues
+            // de esta funcion local y C# no permite capturarla.
+            if (string.IsNullOrWhiteSpace(markdownParaPrompt) && !layoutDocumentoCompletoIntentado)
+            {
+                try
+                {
+                    var markdownBajoDemanda = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                        "ExtraerMarkdownLayoutActivity",
+                        new ExtraerMarkdownLayoutInput
+                        {
+                            Tipologia = salida.Identificacion.Tipologia,
+                            DocumentoBase64 = entrada.Documento.Content.Base64,
+                            NombreDocumento = entrada.Documento.Name,
+                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
+                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
+                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
+                                ? salida.Integridad.RutaBlobStorage
+                                : entrada.Documento.BlobPath
+                        });
+
+                    if (!string.IsNullOrWhiteSpace(markdownBajoDemanda?.Markdown))
+                    {
+                        markdownParaPrompt = markdownBajoDemanda.Markdown;
+                        RegistrarMarkdown(markdownBajoDemanda.Markdown, "LayoutBajoDemandaPrompt");
+                        logger.LogInformation(
+                            "Prompt: markdown obtenido bajo demanda vía DI Layout ({Len} chars)",
+                            markdownBajoDemanda.Markdown!.Length);
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "Prompt: DI Layout no devolvió markdown útil bajo demanda para {Doc}.",
+                            entrada.Documento.Name);
+                    }
+                }
+                catch (Exception exMarkdownPrompt)
+                {
+                    logger.LogWarning(
+                        exMarkdownPrompt,
+                        "Prompt: no se pudo obtener markdown bajo demanda. Se continúa sin contenido.");
+                }
+            }
+
             var promptInput = new PromptActivityInput
             {
                 Tipologia = salida.Identificacion.Tipologia,
@@ -310,9 +361,44 @@ public class DocumentProcessOrchestrator
                 Prompt = entrada.Instrucciones.Prompt
             };
 
-            var resultadoPrompt = await EjecutarPasoNegocio(
-                "Prompt",
-                () => context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput));
+            // No se usa EjecutarPasoNegocio: marca "Completed" en cuanto la actividad devuelve sin
+            // excepción y añade "Prompt" a ActividadesCompletadas. Como la guarda de contenido
+            // devuelve un resultado con error en lugar de lanzar, marcarla después como "Failed"
+            // sobrescribiría el estado pero no la quitaría de esa lista. El estado se decide una vez.
+            MarcarInicioActividad("Prompt");
+
+            PromptResultado resultadoPrompt;
+            try
+            {
+                resultadoPrompt = await context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput);
+            }
+            catch (Exception ex)
+            {
+                MarcarFinActividad("Prompt", "Failed", ex.Message);
+                throw;
+            }
+
+            if (resultadoPrompt.SinContenido)
+            {
+                MarcarFinActividad("Prompt", "Failed", resultadoPrompt.Error);
+
+                salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+                salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+                {
+                    Modelo = resultadoPrompt.Modelo,
+                    TiempoMs = resultadoPrompt.TiempoMs,
+                    CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
+                    Error = resultadoPrompt.Error
+                };
+
+                logger.LogError(
+                    "Prompt abortado por falta de contenido del documento. Tipología={Tipologia}",
+                    salida.Identificacion.Tipologia);
+
+                return;
+            }
+
+            MarcarFinActividad("Prompt", "Completed");
 
             if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
             {
@@ -1104,6 +1190,52 @@ public class DocumentProcessOrchestrator
             }
 
             var tipologiaEntrada = resultadoClasificacion.TipologiaDetectada ?? "Desconocida";
+
+            // Salidas tempranas sin tipología resuelta: la petición puede pedir igualmente prompt
+            // ad-hoc o resumen por defecto. Se ejecuta con el markdown que haya dejado el Paso 2.8.
+            // El estado sigue siendo NO_CLASIFICADO: no se está clasificando, se responde a lo pedido.
+            async Task EjecutarPromptEnSalidaTempranaAsync()
+            {
+                var forzarResumen = entrada.Instrucciones.ForzarResumenPorDefecto
+                    && !salida.DatosExtraidos.ContainsKey("Resumen");
+
+                if (entrada.Instrucciones.Prompt is null && !forzarResumen)
+                {
+                    return;
+                }
+
+                var markdownDisponible = datosNormalizados.TryGetValue("Markdown", out var markdownSalidaTempranaObj)
+                    && markdownSalidaTempranaObj is string markdownSalidaTemprana
+                    && !string.IsNullOrWhiteSpace(markdownSalidaTemprana)
+                    ? markdownSalidaTemprana
+                    : null;
+
+                // La actividad "Prompt" solo se registra en el seguimiento en el camino normal
+                // (Paso 4.5). En una salida temprana aún no existe: sin este alta, ObtenerTraza("Prompt")
+                // lanzaría por no encontrar coincidencia y EjecutarPromptLibreAsync nunca llegaria a invocar PromptActivity.
+                if (!seguimiento.Actividades.Any(a => string.Equals(a.Nombre, "Prompt", StringComparison.Ordinal)))
+                {
+                    seguimiento.ActividadesTotales++;
+                    seguimiento.Actividades.Add(new TrazaActividad { Nombre = "Prompt", Estado = "Pending" });
+                }
+
+                try
+                {
+                    await EjecutarPromptLibreAsync(
+                        markdownDisponible,
+                        new Dictionary<string, object>(),
+                        resultadoClasificacion.ResultadoPromptCombinado,
+                        resultadoClasificacion.ResumenCombinado,
+                        forzarResumen);
+                }
+                catch (Exception exPromptSalidaTemprana)
+                {
+                    logger.LogWarning(
+                        exPromptSalidaTemprana,
+                        "No se pudo ejecutar el prompt en salida temprana sin tipología resuelta. Se continúa con el cierre de la ejecución.");
+                }
+            }
+
             ResolvedTipologia tipologiaResuelta;
             var esNivelTdn1 =
                 string.Equals(
@@ -1176,6 +1308,20 @@ public class DocumentProcessOrchestrator
                     salida.Resultado.ConfianzaValidacion = 0;
                     salida.DetalleEjecucion.Postproceso.Inconsistencias.Add($"Error: {mensajeTipologiaNoIdentificada}");
 
+                    await EjecutarPromptEnSalidaTempranaAsync();
+
+                    // El prompt en salida temprana puede activar la guarda de contenido
+                    // (SIN_CONTENIDO_DOCUMENTO), que sí debe persistirse: sin esta llamada la
+                    // ejecución desaparecería de DocumentoEjecuciones (único escritor: PersistirActivity).
+                    if (string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+                    {
+                        await EjecutarPasoNegocioSinResultado(
+                            "Persistir",
+                            () => context.CallActivityAsync(
+                                "PersistirActivity",
+                                new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                    }
+
                     FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
                     return salida;
                 }
@@ -1209,6 +1355,20 @@ public class DocumentProcessOrchestrator
                 salida.Resultado.ConfianzaClasificacion = RedondearSalida(resultadoClasificacion.Confianza);
                 salida.Resultado.ConfianzaExtraccion = 0;
                 salida.Resultado.ConfianzaValidacion = 0;
+
+                await EjecutarPromptEnSalidaTempranaAsync();
+
+                // El prompt en salida temprana puede activar la guarda de contenido
+                // (SIN_CONTENIDO_DOCUMENTO), que sí debe persistirse: sin esta llamada la
+                // ejecución desaparecería de DocumentoEjecuciones (único escritor: PersistirActivity).
+                if (string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+                {
+                    await EjecutarPasoNegocioSinResultado(
+                        "Persistir",
+                        () => context.CallActivityAsync(
+                            "PersistirActivity",
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                }
 
                 FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
                 return salida;
@@ -1320,6 +1480,10 @@ public class DocumentProcessOrchestrator
 
                 if (forzarResumenDedicadoClassificationOnly && string.IsNullOrWhiteSpace(markdownClasificacion))
                 {
+                    // Marca el intento de layout de documento completo antes de invocarlo (exito o fallo):
+                    // asi el prompt libre bajo demanda no reintenta con el mismo input si este falla.
+                    layoutDocumentoCompletoIntentado = true;
+
                     try
                     {
                         logger.LogInformation(
@@ -1481,7 +1645,11 @@ public class DocumentProcessOrchestrator
                 }
 
                 var confidenceCfgClassificationOnly = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
-                salida.Resultado.Estado = "OK";
+                // El estado de fallo por falta de contenido no debe ser pisado por el cierre OK.
+                if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+                {
+                    salida.Resultado.Estado = "OK";
+                }
                 salida.Resultado.ConfianzaGlobal = RedondearSalida(
                     ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
                 salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
@@ -1784,6 +1952,10 @@ public class DocumentProcessOrchestrator
             }
             else
             {
+                // Marca el intento de layout de documento completo antes de invocarlo (exito o fallo):
+                // asi el prompt libre sabe que no debe reintentarlo con el mismo input.
+                layoutDocumentoCompletoIntentado = true;
+
                 try
                 {
                     logger.LogInformation(
@@ -2071,25 +2243,29 @@ public class DocumentProcessOrchestrator
                 k => !string.Equals(k, "Paginas", StringComparison.OrdinalIgnoreCase)
                   && !string.Equals(k, "Markdown", StringComparison.OrdinalIgnoreCase));
 
-            if (resultadoExtraccion.FallbackUsado && camposUtilesExtraccion == 0)
+            // El estado de fallo por falta de contenido no debe ser pisado por los estados de cierre.
+            if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
             {
-                salida.Resultado.Estado = "EXTRACCION_INCOMPLETA";
-                salida.Resultado.MensajeError =
-                    $"Fallback de extracción sin datos. Razón: {resultadoExtraccion.FallbackRazon}";
-                logger.LogWarning(
-                    "Fallback de extracción sin datos para {Documento}. Razón: {Razon}",
-                    entrada.Documento.Name,
-                    resultadoExtraccion.FallbackRazon);
-            }
-            else if (conErroresValidacion)
-            {
-                salida.Resultado.Estado = "VALIDACION_CON_ERRORES";
-                logger.LogWarning("Procesamiento completado con errores de validacion");
-            }
-            else
-            {
-                salida.Resultado.Estado = "OK";
-                logger.LogInformation($"Procesamiento completado exitosamente para {entrada.Documento.Name}");
+                if (resultadoExtraccion.FallbackUsado && camposUtilesExtraccion == 0)
+                {
+                    salida.Resultado.Estado = "EXTRACCION_INCOMPLETA";
+                    salida.Resultado.MensajeError =
+                        $"Fallback de extracción sin datos. Razón: {resultadoExtraccion.FallbackRazon}";
+                    logger.LogWarning(
+                        "Fallback de extracción sin datos para {Documento}. Razón: {Razon}",
+                        entrada.Documento.Name,
+                        resultadoExtraccion.FallbackRazon);
+                }
+                else if (conErroresValidacion)
+                {
+                    salida.Resultado.Estado = "VALIDACION_CON_ERRORES";
+                    logger.LogWarning("Procesamiento completado con errores de validacion");
+                }
+                else
+                {
+                    salida.Resultado.Estado = "OK";
+                    logger.LogInformation($"Procesamiento completado exitosamente para {entrada.Documento.Name}");
+                }
             }
 
             // Confianza global = MIN(Clasif, Extrac, Valid)

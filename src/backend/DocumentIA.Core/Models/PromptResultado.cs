@@ -20,6 +20,13 @@ public class PromptResultado
     public string? Error { get; set; }
 
     /// <summary>
+    /// True cuando la ejecución se abortó porque no había contenido del documento (ni markdown
+    /// ni base64 utilizable). Distingue este caso de otros errores, para que el orquestador
+    /// pueda marcar la ejecución con un estado propio sin inspeccionar el texto del error.
+    /// </summary>
+    public bool SinContenido { get; set; }
+
+    /// <summary>
     /// Indica si el resultado fue obtenido en una llamada combinada con el fallback de extracción,
     /// es decir, una única llamada LLM que produjo tanto los campos extraídos como este resultado.
     /// </summary>

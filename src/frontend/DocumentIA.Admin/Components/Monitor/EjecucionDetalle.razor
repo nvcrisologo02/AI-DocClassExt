@@ -385,7 +385,7 @@ else
     private static string EstadoBadgeClass(string estado) => estado switch
     {
         "Completado" or "Completed" or "OK" => "bg-success",
-        "Error" or "Fallido"                => "bg-danger",
+        "Error" or "Fallido" or "SIN_CONTENIDO_DOCUMENTO" => "bg-danger",
         "Duplicado"                         => "bg-secondary",
         "Running" or "Pending"              => "bg-warning text-dark",
         "PENDIENTE_REINTENTO"               => "bg-warning text-dark",

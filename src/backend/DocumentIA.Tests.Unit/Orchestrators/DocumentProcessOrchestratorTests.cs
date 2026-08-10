@@ -968,6 +968,49 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ClassificationOnly_LayoutDedicadoFalla_NoReintentaEnPromptBajoDemanda()
+    {
+        // Regresión AB#100029: si el layout dedicado de ClassificationOnly (resumen forzado sin
+        // markdown) falla, el prompt bajo demanda reintentaba con el mismo input, pagando DI Layout
+        // dos veces para fallar dos veces. Tras el fix se intenta una sola vez y se continúa sin
+        // markdown hacia PromptActivity.
+        var orchestrator = CreateOrchestrator();
+        // ExpectedType omite la Clasificación real y el Paso 2.8 (extracción de markdown previa a
+        // clasificar), que es una llamada a ExtraerMarkdownLayoutActivity independiente del bloque
+        // dedicado de ClassificationOnly: así el conteo de la aserción aísla exclusivamente el
+        // camino bajo prueba (bloque dedicado + reintento bajo demanda).
+        var context = new FakeTaskOrchestrationContext(
+            BuildEntrada(classificationOnly: true, forzarResumenPorDefecto: true, expectedType: "nota.simple"));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 2,
+            PaginasIncluidas = 2,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivityThrow("ExtraerMarkdownLayoutActivity", new InvalidOperationException("DI Layout no disponible"));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-4o-mini",
+            Resumen = "Resumen sin markdown"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.MarkdownExtraido.Should().BeNull();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClassificationOnlyNivelTdn1_NoDegradaANoClasificadoCuandoTdn1EsValido()
     {
         var orchestrator = CreateOrchestrator();
@@ -1653,5 +1696,503 @@ public class DocumentProcessOrchestratorTests
         layoutInput!.BlobPath.Should().NotBeNullOrWhiteSpace(
             "en blob-first el fallback de documento completo debe usar BlobPath (urlSource) y no un base64 vacío");
         layoutInput.BlobPath.Should().Be("documents/blob-first.pdf");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaConPromptAdHoc_EjecutaPrompt()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            SystemPrompt = "Eres un analista documental.",
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen del documento en tres puntos.",
+            TiempoMs = 1200
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        context.GetActivityCallCount("PromptActivity").Should().Be(1);
+        salida.DatosExtraidos.Should().ContainKey("ResultadoPrompt");
+        salida.DatosExtraidos["ResultadoPrompt"].Should().Be("Resumen del documento en tres puntos.");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaSinPrompt_NoEjecutaPrompt()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        context.GetActivityCallCount("PromptActivity").Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaNoResolubleConPromptAdHoc_EjecutaPrompt()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "TipologiaInexistente"
+        });
+        context.SetupActivityThrow(
+            "ResolverTipologiaActivity",
+            new KeyNotFoundException("No existe la tipologia: TipologiaInexistente"));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen sin tipologia resuelta.",
+            TiempoMs = 900
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        context.GetActivityCallCount("PromptActivity").Should().Be(1);
+        salida.DatosExtraidos["ResultadoPrompt"].Should().Be("Resumen sin tipologia resuelta.");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaConForzarResumen_EjecutaPrompt()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(forzarResumenPorDefecto: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resumen = "Resumen ejecutivo del documento.",
+            TiempoMs = 800
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("PromptActivity").Should().Be(1);
+        salida.DatosExtraidos.Should().ContainKey("Resumen");
+        salida.DatosExtraidos["Resumen"].Should().Be("Resumen ejecutivo del documento.");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinMarkdown_ExtraeMarkdownBajoDemanda()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Contenido real del documento",
+            Paginas = 3
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen basado en el contenido.",
+            TiempoMs = 1500
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.MarkdownExtraido.Should().Be("# Contenido real del documento");
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptConMarkdownDisponible_NoExtraeMarkdownBajoDemanda()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        entrada.Instrucciones.Classification.Markdown = "# Markdown aportado por el caller";
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen con markdown previo.",
+            TiempoMs = 700
+        });
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(0);
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput!.MarkdownExtraido.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinMarkdownYLayoutFalla_NoRompeLaEjecucion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivityThrow(
+            "ExtraerMarkdownLayoutActivity",
+            new InvalidOperationException("DI layout no disponible"));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Respuesta sin contenido.",
+            TiempoMs = 400
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // Con ExtractionEnabled=false y sin markdown previo, el Paso 4 ya intenta un fallback de
+        // layout de documento completo antes de llegar a EjecutarPromptLibreAsync. Al fallar ese
+        // intento queda marcado como ya intentado, por lo que la obtencion bajo demanda del prompt
+        // no lo reintenta con el mismo input: un solo intento fallido y la ejecucion no se rompe.
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+        salida.Should().NotBeNull();
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaSinMarkdown_ExtraeMarkdownBajoDemandaEnSalidaTemprana()
+    {
+        // Camino donde la obtencion bajo demanda dentro de EjecutarPromptLibreAsync es el UNICO
+        // mecanismo que puede aportar markdown: la salida temprana por tipologia no resoluble no
+        // pasa por el bloque de fallback del Paso 4 (ese bloque solo existe en el camino normal de
+        // extraccion), asi que sin el bloque bajo demanda el prompt se ejecutaria sin contenido.
+        // Se usa ExpectedType para saltar tambien el Paso 2.8 (markdown previo a clasificacion),
+        // que de lo contrario aportaria markdown por su cuenta y enmascararia el mecanismo bajo demanda;
+        // con ExpectedType informado, ClasificarActivity ni siquiera se invoca (ver Paso 3 del orquestador).
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "Desconocido");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Contenido real del documento en salida temprana",
+            Paginas = 2
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen basado en el contenido de salida temprana.",
+            TiempoMs = 1100
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.MarkdownExtraido.Should().Be("# Contenido real del documento en salida temprana");
+        salida.DatosExtraidos.Should().ContainKey("ResultadoPrompt");
+        salida.DatosExtraidos["ResultadoPrompt"].Should().Be("Resumen basado en el contenido de salida temprana.");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinContenido_PersisteEjecucionFallidaSinResumen()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.ForzarResumenPorDefecto = true;
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/sin-contenido.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "dGVzdA==",
+            TotalPaginas = 1,
+            PaginasIncluidas = 1,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Markdown = "# markdown de prueba",
+            Paginas = 1
+        });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+        // Sin ResumenCombinado: si lo llevara, AplicarResumenCombinado lo escribiria en DatosExtraidos
+        // antes de llegar al prompt, contaminando la aserción NotContainKey("Resumen") de más abajo.
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>()
+        });
+
+        // La guarda ya ha decidido en el proveedor: la actividad devuelve el resultado marcado.
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            Error = "Sin contenido del documento: no se ejecuta el prompt ni el resumen.",
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        salida.DatosExtraidos.Should().NotContainKey("Resumen");
+        salida.DatosExtraidos.Should().NotContainKey("ResultadoPrompt");
+
+        var traza = salida.DetalleEjecucion.Seguimiento.Actividades.Single(a => a.Nombre == "Prompt");
+        traza.Estado.Should().Be("Failed");
+        salida.DetalleEjecucion.Seguimiento.ActividadesCompletadas.Should().NotContain("Prompt");
+
+        // Regresión: PersistirActivity es el único escritor de DocumentoEjecuciones y el monitor
+        // solo lee esa tabla. Un corte antes de Persistir haría desaparecer la ejecución en vez de
+        // dejarla visible como fallida; por eso el flujo debe llegar hasta Persistir con el estado
+        // SIN_CONTENIDO_DOCUMENTO intacto (no pisado por Validar/Integrar).
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput.Should().NotBeNull();
+        persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaYPromptSinContenido_GanaSinContenido()
+    {
+        // Montaje de tipología desconocida (AB#100028) cruzado con PromptActivity sin contenido:
+        // el estado más grave (SIN_CONTENIDO_DOCUMENTO) debe prevalecer sobre NO_CLASIFICADO.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            SystemPrompt = "Eres un analista documental.",
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            Error = "Sin contenido del documento: no se ejecuta el prompt ni el resumen.",
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaYPromptSinContenido_PersisteLaEjecucion()
+    {
+        // Regresión AB#100031: la salida temprana por tipología desconocida (AB#100028) llamaba al
+        // prompt en salida temprana pero devolvía sin pasar por PersistirActivity. Si ese prompt
+        // activa la guarda de contenido (SIN_CONTENIDO_DOCUMENTO), la ejecución debe quedar
+        // persistida igualmente: PersistirActivity es el único escritor de DocumentoEjecuciones.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            SystemPrompt = "Eres un analista documental.",
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            Error = "Sin contenido del documento: no se ejecuta el prompt ni el resumen.",
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput.Should().NotBeNull();
+        persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
     }
 }

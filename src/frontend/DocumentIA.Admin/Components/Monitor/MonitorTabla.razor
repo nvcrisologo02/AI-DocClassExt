@@ -157,12 +157,14 @@
 
     // Los valores vienen del backend (ver EstadoEjecucion en DocumentIA.Data):
     // OK/Completado/Completed, REVISION/Revision, Error/ERROR/Fallido son las
-    // unicas variantes historicas; cualquier otra cosa cae al caso por defecto.
+    // variantes historicas; SIN_CONTENIDO_DOCUMENTO es un estado de fallo mas
+    // reciente que no vive en esa lista cerrada pero tambien debe verse como
+    // error aqui. Cualquier otro valor cae al caso por defecto.
     private static string ClaseEstado(string? estado) => estado switch
     {
         "OK" or "Completado" or "Completed" => "bg-success",
         "REVISION" or "Revision" => "bg-warning text-dark",
-        "Error" or "ERROR" or "Fallido" => "bg-danger",
+        "Error" or "ERROR" or "Fallido" or "SIN_CONTENIDO_DOCUMENTO" => "bg-danger",
         _ => "bg-secondary"
     };
 
