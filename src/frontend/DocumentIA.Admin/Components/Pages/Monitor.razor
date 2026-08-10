@@ -338,8 +338,7 @@
 
     private static MonitorFiltroDto FiltroCatalogoTipologias() => new()
     {
-        Desde = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-        Hasta = DateTime.UtcNow.AddYears(1)
+        RangoDias = MonitorFiltroDto.RangoDiasHistorico
     };
 
     // Al cambiar el filtro se recargan agregados y primera pagina. Al cambiar de
@@ -465,6 +464,16 @@
             }
             catch (ObjectDisposedException)
             {
+            }
+            // A diferencia de una accion del usuario, este refresco no tiene a quien
+            // devolverle el fallo: lo que escape de aqui llega al dispatcher del
+            // circuito y lo termina, tirando la pagina entera por un refresco
+            // fallido. Se deja constancia visible y se sigue con el siguiente ciclo,
+            // que puede volver a funcionar si el fallo era transitorio.
+            catch (Exception ex)
+            {
+                _error = $"Fallo en la actualizacion automatica: {ex.Message}";
+                StateHasChanged();
             }
         });
     }

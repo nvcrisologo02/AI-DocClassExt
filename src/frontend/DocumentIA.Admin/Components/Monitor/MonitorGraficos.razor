@@ -41,24 +41,44 @@
             new { name = "Con error", data = Serie.Select(p => p.Error).ToArray() }
         };
 
-        if (!_creado)
+        // Dibujar es la unica parte del Monitor que depende de JS, y ocurre fuera de
+        // cualquier accion del usuario (tambien en cada auto-refresco). Una excepcion
+        // aqui escapa del ciclo de render y termina el circuito de Blazor Server, con
+        // lo que un fallo cosmetico deja la pagina entera en error. Se degrada a
+        // "sin grafico" y se olvida la huella para reintentar en el siguiente
+        // refresco, por si el fallo era transitorio.
+        try
         {
-            var opciones = new
+            if (!_creado)
             {
-                chart = new { type = "area", height = 260, toolbar = new { show = false }, animations = new { enabled = false } },
-                stroke = new { curve = "smooth", width = 2 },
-                dataLabels = new { enabled = false },
-                colors = new[] { "#0d6efd", "#dc3545" },
-                fill = new { type = "gradient", gradient = new { opacityFrom = 0.3, opacityTo = 0.05 } },
-                xaxis = new { categories = categorias },
-                legend = new { position = "top", horizontalAlign = "right" },
-                series
-            };
-            _creado = await JS.InvokeAsync<bool>("documentIaCharts.crear", _elementId, opciones);
+                var opciones = new
+                {
+                    chart = new { type = "area", height = 260, toolbar = new { show = false }, animations = new { enabled = false } },
+                    stroke = new { curve = "smooth", width = 2 },
+                    dataLabels = new { enabled = false },
+                    colors = new[] { "#0d6efd", "#dc3545" },
+                    fill = new { type = "gradient", gradient = new { opacityFrom = 0.3, opacityTo = 0.05 } },
+                    xaxis = new { categories = categorias },
+                    legend = new { position = "top", horizontalAlign = "right" },
+                    series
+                };
+                _creado = await JS.InvokeAsync<bool>("documentIaCharts.crear", _elementId, opciones);
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("documentIaCharts.actualizar", _elementId, series, categorias);
+            }
         }
-        else
+        // El circuito ya se cerro (corte de WebSocket): no hay navegador al que
+        // dibujar y tampoco proximo refresco que reintentar.
+        catch (JSDisconnectedException)
         {
-            await JS.InvokeVoidAsync("documentIaCharts.actualizar", _elementId, series, categorias);
+            _huellaRenderizada = null;
+        }
+        // Fallo de la libreria de graficos con estos datos.
+        catch (JSException)
+        {
+            _huellaRenderizada = null;
         }
     }
 
