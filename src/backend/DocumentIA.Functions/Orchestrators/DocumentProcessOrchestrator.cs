@@ -1310,6 +1310,18 @@ public class DocumentProcessOrchestrator
 
                     await EjecutarPromptEnSalidaTempranaAsync();
 
+                    // El prompt en salida temprana puede activar la guarda de contenido
+                    // (SIN_CONTENIDO_DOCUMENTO), que sí debe persistirse: sin esta llamada la
+                    // ejecución desaparecería de DocumentoEjecuciones (único escritor: PersistirActivity).
+                    if (string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+                    {
+                        await EjecutarPasoNegocioSinResultado(
+                            "Persistir",
+                            () => context.CallActivityAsync(
+                                "PersistirActivity",
+                                new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                    }
+
                     FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
                     return salida;
                 }
@@ -1345,6 +1357,18 @@ public class DocumentProcessOrchestrator
                 salida.Resultado.ConfianzaValidacion = 0;
 
                 await EjecutarPromptEnSalidaTempranaAsync();
+
+                // El prompt en salida temprana puede activar la guarda de contenido
+                // (SIN_CONTENIDO_DOCUMENTO), que sí debe persistirse: sin esta llamada la
+                // ejecución desaparecería de DocumentoEjecuciones (único escritor: PersistirActivity).
+                if (string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+                {
+                    await EjecutarPasoNegocioSinResultado(
+                        "Persistir",
+                        () => context.CallActivityAsync(
+                            "PersistirActivity",
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                }
 
                 FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
                 return salida;

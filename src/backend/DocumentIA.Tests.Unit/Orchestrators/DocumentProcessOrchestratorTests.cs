@@ -2101,4 +2101,55 @@ public class DocumentProcessOrchestratorTests
 
         salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
     }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaYPromptSinContenido_PersisteLaEjecucion()
+    {
+        // Regresión AB#100031: la salida temprana por tipología desconocida (AB#100028) llamaba al
+        // prompt en salida temprana pero devolvía sin pasar por PersistirActivity. Si ese prompt
+        // activa la guarda de contenido (SIN_CONTENIDO_DOCUMENTO), la ejecución debe quedar
+        // persistida igualmente: PersistirActivity es el único escritor de DocumentoEjecuciones.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            SystemPrompt = "Eres un analista documental.",
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            Error = "Sin contenido del documento: no se ejecuta el prompt ni el resumen.",
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput.Should().NotBeNull();
+        persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+    }
 }
