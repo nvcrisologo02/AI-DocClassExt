@@ -114,12 +114,12 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
             ? values.FirstOrDefault()
             : null;
 
+        startResponse.Dispose();
+
         if (string.IsNullOrWhiteSpace(operationLocation))
         {
             throw new InvalidOperationException("La respuesta de DI layout no devolvió operation-location");
         }
-
-        startResponse.Dispose();
 
         var deadline = DateTimeOffset.UtcNow.AddSeconds(Math.Max(10, model.TimeoutSeconds));
         JsonDocument? finalResult = null;
