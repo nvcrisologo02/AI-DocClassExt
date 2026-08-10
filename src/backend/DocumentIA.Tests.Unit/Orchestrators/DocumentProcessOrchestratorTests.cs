@@ -1899,6 +1899,98 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_MarkdownBajoDemandaConPaginas_PropagaAIdentificacion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(nombre: "presentacion.pptx", expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        // NormalizarActivity no devuelve "Paginas" en produccion (solo hashes y tamano), asi que
+        // el documento llega aqui con Paginas=0: es justo el caso de un Office con ExpectedType,
+        // donde ni el Paso 2.7 (recorte, solo PDF) ni el Paso 2.8 (no corre con ExpectedType)
+        // pueden informarlas.
+        var normalizadoSinPaginas = BuildNormalizarResult();
+        normalizadoSinPaginas.Remove("Paginas");
+
+        context.SetupActivity("NormalizarActivity", normalizadoSinPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/presentacion.pptx");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Diapositivas",
+            Paginas = 5
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen de la presentacion.",
+            TiempoMs = 900
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Identificacion.Paginas.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_MarkdownBajoDemandaConPaginas_NoPisaUnValorPrevio()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var normalizadoConPaginas = BuildNormalizarResult();
+        normalizadoConPaginas["Paginas"] = 12;
+
+        context.SetupActivity("NormalizarActivity", normalizadoConPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Contenido",
+            Paginas = 3
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen.",
+            TiempoMs = 500
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Identificacion.Paginas.Should().Be(12);
+    }
+
+    [Fact]
     public async Task RunOrchestrator_PromptConMarkdownDisponible_NoExtraeMarkdownBajoDemanda()
     {
         var orchestrator = CreateOrchestrator();

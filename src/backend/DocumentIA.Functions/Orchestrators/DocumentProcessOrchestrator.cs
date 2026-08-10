@@ -333,6 +333,15 @@ public class DocumentProcessOrchestrator
                         logger.LogInformation(
                             "Prompt: markdown obtenido bajo demanda vía DI Layout ({Len} chars)",
                             markdownBajoDemanda.Markdown!.Length);
+
+                        // Por esta vía (ExpectedType informado) no se ejecuta el Paso 2.8, que es
+                        // quien normalmente informa las páginas, y el recorte del Paso 2.7 solo sabe
+                        // de PDF: sin esto un documento Office queda con Paginas=0. Solo se rellena
+                        // si nadie lo hizo antes, igual que en el Paso 2.8.
+                        if (salida.Identificacion.Paginas <= 0 && markdownBajoDemanda.Paginas > 0)
+                        {
+                            salida.Identificacion.Paginas = markdownBajoDemanda.Paginas;
+                        }
                     }
                     else
                     {
