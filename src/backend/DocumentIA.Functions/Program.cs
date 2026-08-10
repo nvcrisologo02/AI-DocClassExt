@@ -177,6 +177,7 @@ var host = new HostBuilder()
 
         services.AddSingleton<MockClasificarDataProvider>();
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
+        services.AddSingleton<DocumentIntelligenceSourceResolver>();
         services.AddSingleton<ILayoutMarkdownProvider, AzureDocumentIntelligenceLayoutMarkdownProvider>();
         services.AddSingleton<PdfRecorteService>();
         services.AddSingleton<ClassificationTipologiaPromptBuilder>();
