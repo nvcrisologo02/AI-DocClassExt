@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -184,6 +185,20 @@ public class AgregadoGrupoDto
     public double DuracionMediaMs { get; set; }
 }
 
+public class MatrizCeldaDto
+{
+    public string EstadoProceso { get; set; } = string.Empty;
+    public string Calidad { get; set; } = string.Empty;
+    public int Total { get; set; }
+}
+
+public class HistogramaBinDto
+{
+    public double Desde { get; set; }
+    public double Hasta { get; set; }
+    public int Total { get; set; }
+}
+
 public class DashboardAgregadosDto
 {
     public int TotalEjecuciones { get; set; }
@@ -197,6 +212,15 @@ public class DashboardAgregadosDto
     public List<AgregadoGrupoDto> PorTipologia { get; set; } = [];
     public List<AgregadoGrupoDto> PorModelo { get; set; } = [];
     public List<SeriePuntoDto> Serie { get; set; } = [];
+
+    // Calidad por confianza (Monitor v2). Ok/Revision/Error de arriba cuentan por
+    // estado de proceso; estos, por la confianza del resultado.
+    public int CalidadOk { get; set; }
+    public int CalidadRevision { get; set; }
+    public int CalidadError { get; set; }
+    public List<AgregadoGrupoDto> PorEstadoProceso { get; set; } = [];
+    public List<MatrizCeldaDto> Matriz { get; set; } = [];
+    public List<HistogramaBinDto> Histograma { get; set; } = [];
 }
 
 public class SeriePuntoDto
@@ -219,26 +243,52 @@ public class PagedResultDto<T>
 
 public class MonitorFiltroDto
 {
-    public DateTime Desde { get; set; } = DateTime.UtcNow.AddDays(-7);
-    public DateTime Hasta { get; set; } = DateTime.UtcNow;
+    // Ventana temporal expresada en dias hacia atras, no como fechas absolutas: se
+    // materializa contra el reloj en cada consulta (ver ToQueryString). Guardando
+    // Desde/Hasta absolutos, calculados una sola vez al construir el filtro, el
+    // auto-refresco de la pagina repetia siempre la misma consulta y ninguna
+    // ejecucion posterior a la carga de la pagina entraba nunca en la ventana.
+    public int RangoDias { get; set; } = 7;
+
+    // Ventana lo bastante ancha para servir de catalogo historico. No es
+    // "sin limite" porque el backend genera un punto de serie por dia del rango:
+    // un extremo en el año 2000 producia miles de puntos inutiles por consulta.
+    public const int RangoDiasHistorico = 3650;
+
     public string? Tipologia { get; set; }
     public string? Estado { get; set; }
     public string? Flujo { get; set; }
     public string? Busqueda { get; set; }
     public string? SubmittedBy { get; set; }
 
+    // Recortes de Monitor v2: estado de proceso exacto, calidad por confianza y
+    // tramo del histograma. Van aparte de Estado (las tres categorias historicas)
+    // porque aquel deja fuera estados como VALIDACION_CON_ERRORES.
+    public string? EstadoProceso { get; set; }
+    public string? Calidad { get; set; }
+    public double? ConfianzaMin { get; set; }
+    public double? ConfianzaMax { get; set; }
+
     public string ToQueryString()
     {
+        var hasta = DateTime.UtcNow;
+        var desde = hasta.AddDays(-RangoDias);
         var partes = new List<string>
         {
-            $"desde={Uri.EscapeDataString(Desde.ToString("o"))}",
-            $"hasta={Uri.EscapeDataString(Hasta.ToString("o"))}"
+            $"desde={Uri.EscapeDataString(desde.ToString("o"))}",
+            $"hasta={Uri.EscapeDataString(hasta.ToString("o"))}"
         };
         if (!string.IsNullOrWhiteSpace(Tipologia)) partes.Add($"tipologia={Uri.EscapeDataString(Tipologia)}");
         if (!string.IsNullOrWhiteSpace(Estado)) partes.Add($"estado={Uri.EscapeDataString(Estado)}");
         if (!string.IsNullOrWhiteSpace(Flujo)) partes.Add($"flujo={Uri.EscapeDataString(Flujo)}");
         if (!string.IsNullOrWhiteSpace(Busqueda)) partes.Add($"q={Uri.EscapeDataString(Busqueda)}");
         if (!string.IsNullOrWhiteSpace(SubmittedBy)) partes.Add($"submittedby={Uri.EscapeDataString(SubmittedBy)}");
+        if (!string.IsNullOrWhiteSpace(EstadoProceso)) partes.Add($"estadoproceso={Uri.EscapeDataString(EstadoProceso)}");
+        if (!string.IsNullOrWhiteSpace(Calidad)) partes.Add($"calidad={Uri.EscapeDataString(Calidad)}");
+        // Punto decimal explicito: con la cultura espanola el separador seria una
+        // coma y el backend leeria el numero mal.
+        if (ConfianzaMin is { } min) partes.Add($"confmin={min.ToString(CultureInfo.InvariantCulture)}");
+        if (ConfianzaMax is { } max) partes.Add($"confmax={max.ToString(CultureInfo.InvariantCulture)}");
         return string.Join("&", partes);
     }
 
@@ -328,6 +378,14 @@ public class MonitorService
         {
             throw new InvalidOperationException($"Respuesta invalida al obtener ejecuciones del backend: {ex.Message}", ex);
         }
+        // El timeout de HttpClient no llega como HttpRequestException sino como
+        // TaskCanceledException (derivada de OperationCanceledException), igual que
+        // la cancelacion por navegar fuera de la pagina. Sin traducirla escapa de
+        // los catch de la pagina y termina el circuito de Blazor Server.
+        catch (OperationCanceledException ex)
+        {
+            throw new InvalidOperationException($"El backend no respondio a tiempo al obtener ejecuciones: {ex.Message}", ex);
+        }
     }
 
     public async Task<EjecucionDetalleDto?> GetEjecucionDetalleAsync(string guid)
@@ -350,6 +408,10 @@ public class MonitorService
         {
             throw new InvalidOperationException($"Respuesta invalida al obtener detalle de ejecución: {ex.Message}", ex);
         }
+        catch (OperationCanceledException ex)
+        {
+            throw new InvalidOperationException($"El backend no respondio a tiempo al obtener el detalle: {ex.Message}", ex);
+        }
     }
 
     // Los agregados alimentan el cuadro de mando, no la tabla principal: un fallo
@@ -369,6 +431,10 @@ public class MonitorService
             return null;
         }
         catch (JsonException)
+        {
+            return null;
+        }
+        catch (OperationCanceledException)
         {
             return null;
         }

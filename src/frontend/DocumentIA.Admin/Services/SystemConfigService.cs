@@ -39,9 +39,10 @@ public class SystemConfigService
         // Obtener configuración de Functions
         var functionsConfig = await GetFunctionsConfigurationAsync();
 
-        // Zona horaria de España
-        var spainTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Romance Standard Time");
-        var spainTime = TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, spainTimeZone);
+        // Zona horaria de España. Se resuelve en HoraEspana, que prueba el
+        // identificador IANA antes que el de Windows: el contenedor de Linux del
+        // App Service no siempre traduce "Romance Standard Time".
+        var spainTime = HoraEspana.Desde(DateTime.UtcNow);
 
         return new SystemConfiguration
         {
@@ -49,7 +50,7 @@ public class SystemConfigService
             Environment = _configuration["ASPNETCORE_ENVIRONMENT"] ?? Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production",
             DotNetVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
             OS = System.Runtime.InteropServices.RuntimeInformation.OSDescription,
-            TimeZone = spainTimeZone.DisplayName,
+            TimeZone = HoraEspana.NombreZona,
             Timestamp = spainTime,
 
             // Configuración de APIs

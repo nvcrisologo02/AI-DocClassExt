@@ -1,0 +1,99 @@
+@* Estado de los componentes del backend, en una sola tira. A diferencia de la
+   tarjeta del Monitor original, aqui solo se detalla lo que va mal: en una
+   pantalla que ya lleva cuatro bloques de analisis, repetir "ok" seis veces
+   ocupa sitio sin decir nada. Un componente caido si muestra su mensaje. *@
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">
+        <span class="fw-semibold me-1" style="font-size:0.82rem">Salud del sistema</span>
+
+        @if (Cargando)
+        {
+            <span class="spinner-border spinner-border-sm text-secondary" role="status"></span>
+        }
+
+        @if (Salud is null)
+        {
+            <span class="badge bg-secondary">sin datos</span>
+        }
+        else
+        {
+            @foreach (var c in Componentes())
+            {
+                <span class="badge rounded-pill d-inline-flex align-items-center gap-1"
+                      style="font-size:0.72rem;@Estilo(c.Estado)" title="@(c.Mensaje ?? c.Estado)">
+                    <span>@Icono(c.Estado)</span>@c.Nombre
+                </span>
+            }
+
+            <span class="ms-auto text-muted" style="font-size:0.75rem">
+                @HoraEspana.Formatear(Salud.Timestamp, "HH:mm:ss")
+            </span>
+        }
+    </div>
+
+    @* El detalle solo aparece cuando hay algo que contar. *@
+    @if (Salud is not null && Problemas().Count > 0)
+    {
+        <div class="card-body pt-0 pb-2">
+            @foreach (var c in Problemas())
+            {
+                <div style="font-size:0.75rem" class="@(EsGrave(c.Estado) ? "text-danger" : "text-warning")">
+                    <span class="fw-semibold">@c.Nombre:</span> @(string.IsNullOrWhiteSpace(c.Mensaje) ? c.Estado : c.Mensaje)
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public SystemHealthDto? Salud { get; set; }
+    [Parameter] public bool Cargando { get; set; }
+
+    private record Componente(string Nombre, string? Estado, string? Mensaje);
+
+    private List<Componente> Componentes()
+    {
+        if (Salud is null) return [];
+        var c = Salud.Components;
+        return
+        [
+            new("functions", c.Functions.Status, c.Functions.Message),
+            new("assetResolver", c.AssetResolver.Status, c.AssetResolver.Message),
+            new("gdc", c.Gdc.Status, c.Gdc.Message),
+            new("clasificación", c.ModelProviders.Classification.Status, c.ModelProviders.Classification.Message),
+            new("extracción", c.ModelProviders.Extraction.Status, c.ModelProviders.Extraction.Message),
+            new("prompt", c.ModelProviders.Prompt.Status, c.ModelProviders.Prompt.Message)
+        ];
+    }
+
+    private List<Componente> Problemas() =>
+        Componentes().Where(c => !EsSano(c.Estado)).ToList();
+
+    private static bool EsSano(string? estado) =>
+        estado?.ToLowerInvariant() is "healthy" or "ok";
+
+    private static bool EsGrave(string? estado) =>
+        estado?.ToLowerInvariant() is "unhealthy" or "error";
+
+    // El icono acompaña siempre al color: en una tira de seis pastillas el color
+    // solo no basta para quien no lo distingue.
+    private static string Icono(string? estado) => estado?.ToLowerInvariant() switch
+    {
+        "healthy" or "ok" => "✓",
+        "degraded" => "!",
+        "unhealthy" or "error" => "✗",
+        _ => "?"
+    };
+
+    // Colores en linea y no utilidades de Bootstrap: el proyecto sirve la 5.1 y
+    // las variantes -subtle / -emphasis solo existen desde la 5.3, de modo que la
+    // pastilla se quedaba sin fondo y no se veia.
+    private static string Estilo(string? estado) => estado?.ToLowerInvariant() switch
+    {
+        "healthy" or "ok" => "background:#e8f6e8;color:#0a6b0a",
+        "degraded" => "background:#fdf3dd;color:#7a5300",
+        "unhealthy" or "error" => "background:#fbeaea;color:#a52c2c",
+        _ => "background:#eeeeec;color:#52514e"
+    };
+}

@@ -1,0 +1,58 @@
+@* Distribucion de la confianza global con los dos umbrales dibujados. Sirve para
+   decidir si 0,70 y 0,85 estan bien puestos: si la masa se acumula justo por
+   encima de un umbral, moverlo unas centesimas reclasifica cientos de
+   documentos. Cada barra navega al listado con ese tramo aplicado. *@
+
+<div class="card shadow-sm mb-4">
+    <div class="card-header py-2 d-flex justify-content-between align-items-center">
+        <span class="fw-semibold">Distribución de la confianza global</span>
+        <small class="text-muted">Pulsa una barra para ver ese tramo</small>
+    </div>
+    <div class="card-body">
+        @if (Total == 0)
+        {
+            <span class="text-muted small">Sin datos en el período</span>
+        }
+        else
+        {
+            <div class="d-flex align-items-end gap-1" style="height:190px">
+                @foreach (var b in Bins)
+                {
+                    var alto = Maximo > 0 ? (int)Math.Round(100.0 * b.Total / Maximo) : 0;
+                    <div class="d-flex flex-column justify-content-end align-items-center flex-fill" style="height:100%">
+                        <span class="text-muted mb-1" style="font-size:0.65rem">@(b.Total > 0 ? b.Total.ToString() : "")</span>
+                        <button type="button"
+                                class="btn p-0 border-0 w-100"
+                                style="height:@(Math.Max(alto, b.Total > 0 ? 2 : 0))%;background:@Color(b.Desde);border-radius:4px 4px 0 0"
+                                title="Confianza @Etiqueta(b.Desde) – @Etiqueta(b.Hasta): @b.Total ejecuciones"
+                                disabled="@(b.Total == 0)"
+                                @onclick="() => TramoSeleccionado.InvokeAsync((b.Desde, b.Hasta))">
+                        </button>
+                        <span class="text-muted mt-1" style="font-size:0.62rem">@Etiqueta(b.Desde)</span>
+                    </div>
+                }
+            </div>
+
+            <div class="d-flex gap-3 mt-3" style="font-size:0.72rem">
+                <span><span class="d-inline-block rounded" style="width:10px;height:10px;background:#0ca30c"></span> Suficiente (≥ 0,85)</span>
+                <span><span class="d-inline-block rounded" style="width:10px;height:10px;background:#fab219"></span> Revisión (0,70 – 0,85)</span>
+                <span><span class="d-inline-block rounded" style="width:10px;height:10px;background:#d03b3b"></span> Insuficiente (&lt; 0,70)</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<HistogramaBinDto> Bins { get; set; } = [];
+    [Parameter] public EventCallback<(double Desde, double Hasta)> TramoSeleccionado { get; set; }
+
+    private int Total => Bins.Sum(b => b.Total);
+    private int Maximo => Bins.Count == 0 ? 0 : Bins.Max(b => b.Total);
+
+    // El color lo decide el umbral en el que cae el tramo, no su magnitud: aqui
+    // el color significa "fiable / a revisar / no utilizable".
+    private static string Color(double desde) =>
+        desde >= 0.85 ? "#0ca30c" : desde >= 0.70 ? "#fab219" : "#d03b3b";
+
+    private static string Etiqueta(double v) => v.ToString("0.00").Replace('.', ',');
+}

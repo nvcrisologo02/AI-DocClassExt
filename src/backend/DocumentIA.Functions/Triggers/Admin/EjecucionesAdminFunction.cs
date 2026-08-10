@@ -44,6 +44,12 @@ public class EjecucionesAdminFunction
         string? Valor(string clave) =>
             query.TryGetValue(clave, out var v) && !string.IsNullOrWhiteSpace(v) ? v.Trim() : null;
 
+        // Los tramos de confianza viajan con punto decimal, independientemente de
+        // la cultura del proceso que atienda la peticion.
+        double? Numero(string clave) =>
+            double.TryParse(Valor(clave), System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : null;
+
         var ahora = DateTime.UtcNow;
         var hasta = DateTime.TryParse(Valor("hasta"), null,
             System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
@@ -67,7 +73,11 @@ public class EjecucionesAdminFunction
             Estado = Valor("estado"),
             Flujo = Valor("flujo"),
             Busqueda = Valor("q"),
-            SubmittedBy = Valor("submittedby")
+            SubmittedBy = Valor("submittedby"),
+            EstadoProceso = Valor("estadoproceso"),
+            Calidad = Valor("calidad"),
+            ConfianzaMin = Numero("confmin"),
+            ConfianzaMax = Numero("confmax")
         };
     }
 

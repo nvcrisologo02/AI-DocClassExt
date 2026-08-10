@@ -4,7 +4,7 @@
     <div class="row g-2 align-items-end">
         <div class="col-12 col-lg-3">
             <label class="form-label small text-muted mb-1">Rango</label>
-            <select class="form-select" value="@_rangoSeleccionado" @onchange="OnRangoCambiado">
+            <select class="form-select" value="@Filtro.RangoDias" @onchange="OnRangoCambiado">
                 <option value="1">Últimas 24 horas</option>
                 <option value="7">Últimos 7 días</option>
                 <option value="30">Últimos 30 días</option>
@@ -56,7 +56,6 @@
     [Parameter] public IReadOnlyList<string> Tipologias { get; set; } = [];
     [Parameter] public EventCallback<MonitorFiltroDto> FiltroCambiado { get; set; }
 
-    private int _rangoSeleccionado = 7;
     // Cada campo con retardo tiene su propio Timer: compartir uno solo entre
     // busqueda y solicitante haria que escribir en uno cancelara el retardo
     // pendiente del otro.
@@ -64,14 +63,10 @@
     private Timer? _debounceSolicitante;
     private bool _disposed;
 
-    private async Task OnRangoCambiado(ChangeEventArgs e)
-    {
-        _rangoSeleccionado = int.TryParse(e.Value?.ToString(), out var d) ? d : 7;
-        var nuevo = Filtro.Clonar();
-        nuevo.Hasta = DateTime.UtcNow;
-        nuevo.Desde = nuevo.Hasta.AddDays(-_rangoSeleccionado);
-        await FiltroCambiado.InvokeAsync(nuevo);
-    }
+    // El rango es la anchura de la ventana, no sus extremos: los calcula el propio
+    // filtro en cada consulta para que el auto-refresco siga viendo lo mas reciente.
+    private async Task OnRangoCambiado(ChangeEventArgs e) =>
+        await Emitir(f => f.RangoDias = int.TryParse(e.Value?.ToString(), out var d) ? d : 7);
 
     private async Task OnTipologiaCambiada(ChangeEventArgs e) => await Emitir(f => f.Tipologia = Texto(e));
     private async Task OnEstadoCambiado(ChangeEventArgs e) => await Emitir(f => f.Estado = Texto(e));
@@ -99,6 +94,13 @@
             catch (ObjectDisposedException)
             {
             }
+            // Este delegado es "async void": lo que escape de aqui no lo recoge
+            // nadie y termina el proceso, no solo la pagina. El consumidor del
+            // evento ya muestra los fallos esperados; lo que llegue hasta aqui no
+            // tiene ya forma de reportarse sin tirar el servidor.
+            catch (Exception)
+            {
+            }
         }, null, 300, Timeout.Infinite);
     }
 
@@ -114,6 +116,10 @@
                 await InvokeAsync(async () => await Emitir(f => f.SubmittedBy = texto));
             }
             catch (ObjectDisposedException)
+            {
+            }
+            // Mismo motivo que en la busqueda: delegado "async void".
+            catch (Exception)
             {
             }
         }, null, 300, Timeout.Infinite);
