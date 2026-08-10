@@ -622,10 +622,15 @@ Contenido del documento:
                 hybridOptions,
                 new TelemetryClient());
 
+            var sourceResolver = new DocumentIntelligenceSourceResolver(
+                new Mock<DocumentIA.Core.Services.IBlobStorageService>().Object,
+                Options.Create(new DocumentIntelligenceSettings()),
+                new Mock<ILogger<DocumentIntelligenceSourceResolver>>().Object);
+
             var azureProvider = new AzureDocumentIntelligenceClasificarProvider(
                 new Mock<System.Net.Http.IHttpClientFactory>().Object,
                 modelRegistryLoader,
-                new Mock<DocumentIA.Core.Services.IBlobStorageService>().Object,
+                sourceResolver,
                 new Mock<ILogger<AzureDocumentIntelligenceClasificarProvider>>().Object);
 
             return new ConfigurableClasificarDataProvider(
