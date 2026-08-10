@@ -55,6 +55,30 @@ public class PrepararDocumentoClasificacionActivityTests
         result.DocumentoBase64Clasif.Should().Be(input.DocumentoBase64);
     }
 
+    [Fact]
+    public async Task Run_DocumentoNoPdf_NoLanzaYDevuelveDocumentoCompleto()
+    {
+        // AB#100045: un no-PDF (XLSX/PPTX empiezan por "PK") hacia lanzar PdfPig y el orquestador
+        // se quedaba sin base64 para el Paso 2.8. El recorte debe saltarse limpiamente y devolver
+        // el documento tal cual.
+        var recorteService = new PdfRecorteService(NullLogger<PdfRecorteService>.Instance);
+        var blobStorageService = new Mock<IBlobStorageService>().Object;
+        var sut = new PrepararDocumentoClasificacionActivity(recorteService, blobStorageService, NullLogger<PrepararDocumentoClasificacionActivity>.Instance);
+        var contenidoPptx = Convert.ToBase64String(new byte[] { 0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00 });
+        var input = new PrepararDocumentoClasificacionInput
+        {
+            DocumentoBase64 = contenidoPptx,
+            NombreDocumento = "documento.pptx",
+            MaxPaginasClasificacion = 3
+        };
+
+        var result = await sut.Run(input);
+
+        result.RecorteAplicado.Should().BeFalse();
+        result.TotalPaginas.Should().Be(0);
+        result.DocumentoBase64Clasif.Should().Be(contenidoPptx);
+    }
+
     private static string BuildPdfBase64WithPages(int pages)
     {
         var builder = new PdfDocumentBuilder();
