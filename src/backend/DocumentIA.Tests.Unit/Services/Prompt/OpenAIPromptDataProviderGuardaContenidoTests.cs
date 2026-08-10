@@ -1,7 +1,10 @@
 #nullable enable
 using System;
+using System.ClientModel;
+using System.ClientModel.Primitives;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using System.Threading.Tasks;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
@@ -17,6 +20,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
+using OpenAI.Chat;
 using Xunit;
 
 namespace DocumentIA.Tests.Unit.Services.Prompt;
@@ -97,6 +101,44 @@ public class OpenAIPromptDataProviderGuardaContenidoTests : IDisposable
     }
 
     [Fact]
+    public async Task EjecutarPromptAsync_ForzarResumenConMarkdown_PasaPorResilienceYDevuelveResumen()
+    {
+        // Camino positivo de la guarda (contrapartida del test anterior): con markdown disponible
+        // la guarda NO debe bloquear nada y el proveedor sí debe invocar al modelo a través de
+        // IAzureOpenAIResilienceExecutor.ExecuteAsync (mock Strict: solo responde a lo configurado).
+        var resiliencia = new Mock<IAzureOpenAIResilienceExecutor>(MockBehavior.Strict);
+        resiliencia
+            .Setup(x => x.ExecuteAsync(
+                It.IsAny<string>(),
+                It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateChatResult("{\"resumen\": \"Resumen de prueba generado por el modelo.\"}"));
+
+        var sut = CrearSut(resiliencia.Object);
+
+        var input = new PromptActivityInput
+        {
+            Tipologia = "prpe.09",
+            MarkdownExtraido = "# Contenido real del documento",
+            DocumentoBase64 = null,
+            ForzarResumenPorDefecto = true
+        };
+
+        var resultado = await sut.EjecutarPromptAsync(input);
+
+        resultado.SinContenido.Should().BeFalse();
+        resultado.Resumen.Should().Be("Resumen de prueba generado por el modelo.");
+        resultado.Error.Should().BeNullOrEmpty();
+
+        resiliencia.Verify(
+            x => x.ExecuteAsync(
+                It.IsAny<string>(),
+                It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
     public void TieneContenidoUtilizable_ConMarkdown_EsTrue()
     {
         var input = new PromptActivityInput { MarkdownExtraido = "# Documento" };
@@ -129,6 +171,14 @@ public class OpenAIPromptDataProviderGuardaContenidoTests : IDisposable
     }
 
     // ========== Helpers ==========
+
+    private static ClientResult<ChatCompletion> CreateChatResult(string responseText)
+    {
+        var completion = OpenAIChatModelFactory.ChatCompletion(
+            role: ChatMessageRole.Assistant,
+            content: new ChatMessageContent(responseText));
+        return ClientResult.FromValue(completion, new Mock<PipelineResponse>().Object);
+    }
 
     private OpenAIPromptDataProvider CrearSut(IAzureOpenAIResilienceExecutor resilience)
     {
