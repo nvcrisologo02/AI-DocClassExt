@@ -3,6 +3,7 @@ using DocumentIA.Admin.Components.Monitor;
 using DocumentIA.Admin.Services;
 using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.RegularExpressions;
 
 namespace DocumentIA.Tests.Admin.Components;
 
@@ -121,6 +122,42 @@ public class MonitorLecturasTests : TestContext
             ]));
 
         cut.Markup.Should().Contain("VALIDACION_CON_ERRORES").And.Contain("PAGINAS_EXCEDIDAS");
+    }
+
+    // El ancho se interpola dentro de un atributo style. Con la cultura espanola
+    // un double sale con coma ("width:99,7%"), que el navegador descarta por
+    // invalida: la barra desaparecia y solo quedaba la leyenda.
+    [Fact]
+    public void Barras_ElAnchoUsaPuntoDecimalParaQueElNavegadorLoAcepte()
+    {
+        var cut = RenderComponent<MonitorLecturas>(p => p
+            .Add(c => c.Proceso,
+            [
+                new AgregadoGrupoDto { Grupo = "OK", Total = 1722 },
+                new AgregadoGrupoDto { Grupo = "VALIDACION_CON_ERRORES", Total = 5 }
+            ]));
+
+        var anchos = Regex.Matches(cut.Markup, @"width:([^;%]+)%")
+            .Select(m => m.Groups[1].Value).ToList();
+
+        anchos.Should().NotBeEmpty();
+        anchos.Should().OnlyContain(a => !a.Contains(","),
+            "una coma decimal invalida la regla CSS y la barra no se pinta");
+    }
+
+    [Fact]
+    public void Barras_ElAnchoNoArrastraDecimalesInterminables()
+    {
+        var cut = RenderComponent<MonitorLecturas>(p => p
+            .Add(c => c.CalidadOk, 1672)
+            .Add(c => c.CalidadRevision, 4)
+            .Add(c => c.CalidadError, 51));
+
+        var anchos = Regex.Matches(cut.Markup, @"width:([\d.]+)%")
+            .Select(m => m.Groups[1].Value).ToList();
+
+        anchos.Should().NotBeEmpty();
+        anchos.Should().OnlyContain(a => !a.Contains(".") || a.Split(new[]{'.'})[1].Length <= 2);
     }
 
     [Fact]

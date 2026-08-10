@@ -1,3 +1,4 @@
+@using System.Globalization
 @* Las dos lecturas del mismo conjunto, lado a lado: que hizo el proceso y cuanta
    confianza merece el resultado. Presentarlas juntas es lo que evita volver a
    confundirlas, que es el origen del contador "En revisión" que siempre valia
@@ -107,8 +108,16 @@
         _ => "#898781"
     };
 
-    private static double Ancho(int parte, int total) =>
-        total == 0 ? 0 : Math.Max(0.5, 100.0 * parte / total);
+    // El ancho se interpola dentro de un atributo style, asi que tiene que salir
+    // con punto decimal pase lo que pase: con la cultura espanola un double se
+    // escribe "99,7" y el navegador descarta la regla entera, de modo que la
+    // barra desaparecia y solo quedaba la leyenda. Dos decimales bastan y evitan
+    // arrastrar un "99,71048060220035".
+    private static string Ancho(int parte, int total)
+    {
+        var pct = total == 0 ? 0 : Math.Max(0.5, 100.0 * parte / total);
+        return pct.ToString("0.##", CultureInfo.InvariantCulture);
+    }
 
     private static string Porcentaje(int parte, int total) =>
         total == 0 ? "" : $"{100.0 * parte / total:0.#}%";

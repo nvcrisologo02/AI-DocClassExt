@@ -1,48 +1,44 @@
-@* Cabecera de Monitor v2. A diferencia de MonitorKpis, separa el indicador de
-   proceso (¿termino la tuberia?) de los tres de calidad (¿merece confianza el
-   resultado?), que es la distincion que el panel entero pretende dejar clara. *@
+@* Cabecera de Monitor v2. El total es la cifra que encabeza la pagina y va
+   destacada; los cinco indicadores que la acompañan separan la lectura de
+   proceso (¿termino la tuberia?) de la de calidad (¿merece confianza?), que es
+   la distincion que el panel entero pretende dejar clara. *@
 
-<div class="row g-3 mb-4 @(Cargando ? "opacity-50" : "")">
-    <div class="col-6 col-lg-2">
-        <div class="card h-100"><div class="card-body text-center">
-            <div class="text-muted small">Ejecuciones</div>
-            <div class="h3 mb-0">@(Agregados?.TotalEjecuciones ?? 0)</div>
-        </div></div>
-    </div>
-    <div class="col-6 col-lg-2">
-        <div class="card h-100"><div class="card-body text-center">
-            <div class="text-muted small">Proceso completado</div>
-            <div class="h3 mb-0" style="color:#0ca30c">@Porcentaje(ProcesoCompletado)</div>
-            <div class="text-muted" style="font-size:0.7rem">@ProcesoCompletado de @(Agregados?.TotalEjecuciones ?? 0)</div>
-        </div></div>
-    </div>
-    <div class="col-6 col-lg-2">
-        <div class="card h-100"><div class="card-body text-center">
-            <div class="text-muted small">Confianza suficiente</div>
-            <div class="h3 mb-0" style="color:#0ca30c">@Porcentaje(Agregados?.CalidadOk)</div>
-            <div class="text-muted" style="font-size:0.7rem">≥ 0,85</div>
-        </div></div>
-    </div>
-    <div class="col-6 col-lg-2">
-        <div class="card h-100"><div class="card-body text-center">
-            <div class="text-muted small">Requieren revisión</div>
-            <div class="h3 mb-0" style="color:#7a5300">@(Agregados?.CalidadRevision ?? 0)</div>
-            <div class="text-muted" style="font-size:0.7rem">0,70 – 0,85</div>
-        </div></div>
-    </div>
-    <div class="col-6 col-lg-2">
-        <div class="card h-100"><div class="card-body text-center">
-            <div class="text-muted small">Confianza insuficiente</div>
-            <div class="h3 mb-0" style="color:#d03b3b">@(Agregados?.CalidadError ?? 0)</div>
-            <div class="text-muted" style="font-size:0.7rem">&lt; 0,70</div>
-        </div></div>
-    </div>
-    <div class="col-6 col-lg-2">
-        <div class="card h-100"><div class="card-body text-center">
-            <div class="text-muted small">Duración media</div>
-            <div class="h3 mb-0">@Duracion()</div>
-            <div class="text-muted" style="font-size:0.7rem">@Porcentaje(Agregados?.FallbacksTotal) fallback</div>
-        </div></div>
+<div class="mv2-card p-3 mb-3 @(Cargando ? "opacity-50" : "")">
+    <div class="d-flex flex-wrap align-items-start gap-4">
+
+        <div style="min-width:150px">
+            <div class="mv2-kpi-label">Ejecuciones</div>
+            <div class="mv2-hero">@Formato(Agregados?.TotalEjecuciones ?? 0)</div>
+            <div class="mv2-kpi-foot">en el período seleccionado</div>
+        </div>
+
+        <div class="mv2-kpis flex-fill">
+            <div>
+                <div class="mv2-kpi-label">Proceso completado</div>
+                <div class="mv2-kpi-value" style="color:#0ca30c">@Porcentaje(ProcesoCompletado)</div>
+                <div class="mv2-kpi-foot">@Formato(ProcesoCompletado) de @Formato(Agregados?.TotalEjecuciones ?? 0)</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Confianza suficiente</div>
+                <div class="mv2-kpi-value" style="color:#0ca30c">@Porcentaje(Agregados?.CalidadOk)</div>
+                <div class="mv2-kpi-foot">≥ 0,85</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Requieren revisión</div>
+                <div class="mv2-kpi-value" style="color:#9a6700">@Formato(Agregados?.CalidadRevision ?? 0)</div>
+                <div class="mv2-kpi-foot">0,70 – 0,85</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Confianza insuficiente</div>
+                <div class="mv2-kpi-value" style="color:#d03b3b">@Formato(Agregados?.CalidadError ?? 0)</div>
+                <div class="mv2-kpi-foot">&lt; 0,70</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Duración media</div>
+                <div class="mv2-kpi-value">@Duracion()</div>
+                <div class="mv2-kpi-foot">@Porcentaje(Agregados?.FallbacksTotal) con fallback</div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -57,6 +53,8 @@
     private int ProcesoCompletado => Agregados?.PorEstadoProceso
         .Where(g => EstadosCompletado.Contains(g.Grupo))
         .Sum(g => g.Total) ?? 0;
+
+    private static string Formato(int v) => v.ToString("N0");
 
     private string Porcentaje(int? valor)
     {
