@@ -298,6 +298,51 @@ public class DocumentProcessOrchestrator
             string? resumenCombinado = null,
             bool forzarResumenPorDefecto = false)
         {
+            // Si no hay contenido textual, se intenta obtenerlo aqui y no en el Paso 2.8: de este
+            // modo la llamada a layout se paga solo cuando hay un prompt o un resumen que la necesita.
+            // El markdown obtenido no se propaga a datosNormalizados: esa variable se declara despues
+            // de esta funcion local y C# no permite capturarla.
+            if (string.IsNullOrWhiteSpace(markdownParaPrompt))
+            {
+                try
+                {
+                    var markdownBajoDemanda = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
+                        "ExtraerMarkdownLayoutActivity",
+                        new ExtraerMarkdownLayoutInput
+                        {
+                            Tipologia = salida.Identificacion.Tipologia,
+                            DocumentoBase64 = entrada.Documento.Content.Base64,
+                            NombreDocumento = entrada.Documento.Name,
+                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
+                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
+                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
+                                ? salida.Integridad.RutaBlobStorage
+                                : entrada.Documento.BlobPath
+                        });
+
+                    if (!string.IsNullOrWhiteSpace(markdownBajoDemanda?.Markdown))
+                    {
+                        markdownParaPrompt = markdownBajoDemanda.Markdown;
+                        RegistrarMarkdown(markdownBajoDemanda.Markdown, "LayoutBajoDemandaPrompt");
+                        logger.LogInformation(
+                            "Prompt: markdown obtenido bajo demanda vía DI Layout ({Len} chars)",
+                            markdownBajoDemanda.Markdown!.Length);
+                    }
+                    else
+                    {
+                        logger.LogWarning(
+                            "Prompt: DI Layout no devolvió markdown útil bajo demanda para {Doc}.",
+                            entrada.Documento.Name);
+                    }
+                }
+                catch (Exception exMarkdownPrompt)
+                {
+                    logger.LogWarning(
+                        exMarkdownPrompt,
+                        "Prompt: no se pudo obtener markdown bajo demanda. Se continúa sin contenido.");
+                }
+            }
+
             var promptInput = new PromptActivityInput
             {
                 Tipologia = salida.Identificacion.Tipologia,

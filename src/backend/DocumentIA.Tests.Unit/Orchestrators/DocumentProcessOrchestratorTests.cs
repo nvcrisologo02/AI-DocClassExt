@@ -1809,4 +1809,131 @@ public class DocumentProcessOrchestratorTests
         salida.DatosExtraidos.Should().ContainKey("Resumen");
         salida.DatosExtraidos["Resumen"].Should().Be("Resumen ejecutivo del documento.");
     }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinMarkdown_ExtraeMarkdownBajoDemanda()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Contenido real del documento",
+            Paginas = 3
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen basado en el contenido.",
+            TiempoMs = 1500
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput.Should().NotBeNull();
+        promptInput!.MarkdownExtraido.Should().Be("# Contenido real del documento");
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptConMarkdownDisponible_NoExtraeMarkdownBajoDemanda()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        entrada.Instrucciones.Classification.Markdown = "# Markdown aportado por el caller";
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen con markdown previo.",
+            TiempoMs = 700
+        });
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(0);
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput!.MarkdownExtraido.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinMarkdownYLayoutFalla_NoRompeLaEjecucion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivityThrow(
+            "ExtraerMarkdownLayoutActivity",
+            new InvalidOperationException("DI layout no disponible"));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Respuesta sin contenido.",
+            TiempoMs = 400
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // Con ExtractionEnabled=false y sin markdown previo, el Paso 4 ya intenta un fallback de
+        // layout (previo a este cambio) antes de llegar a EjecutarPromptLibreAsync; al fallar
+        // tambien ese intento, la obtencion bajo demanda del prompt vuelve a intentarlo. Ambos
+        // intentos fallan y la ejecucion no se rompe, que es el contrato que fija este test.
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(2);
+        salida.Should().NotBeNull();
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeFalse();
+    }
 }
