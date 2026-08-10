@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
-using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Logging;
 
@@ -13,18 +12,18 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
 {
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
-    private readonly IBlobStorageService _blobStorageService;
+    private readonly DocumentIntelligenceSourceResolver _sourceResolver;
     private readonly ILogger<AzureDocumentIntelligenceClasificarProvider> _logger;
 
     public AzureDocumentIntelligenceClasificarProvider(
         IHttpClientFactory httpClientFactory,
         ClassificationModelRegistryLoader modelRegistryLoader,
-        IBlobStorageService blobStorageService,
+        DocumentIntelligenceSourceResolver sourceResolver,
         ILogger<AzureDocumentIntelligenceClasificarProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
         _modelRegistryLoader = modelRegistryLoader;
-        _blobStorageService = blobStorageService;
+        _sourceResolver = sourceResolver;
         _logger = logger;
     }
 
@@ -36,36 +35,15 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
 
         var baseEndpoint = model.Endpoint.TrimEnd('/');
         var analyzeUrl = $"{baseEndpoint}/documentintelligence/documentClassifiers/{Uri.EscapeDataString(model.ClassifierId)}:analyze?_overload=classifyDocument&api-version={Uri.EscapeDataString(apiVersion)}";
-        // Blob-first: si no hay override y hay BlobPath → usar urlSource (Azure DI descarga directo del blob)
-        // Si el SAS apunta a loopback (Azulite/local), usar base64Source porque DI no puede descargar desde localhost.
-        object requestBodyObj;
-        var usingUrlSource = false;
-        var blobPath = input.Entrada.Documento.BlobPath;
-        if (string.IsNullOrWhiteSpace(input.DocumentoBase64Override) && !string.IsNullOrWhiteSpace(blobPath))
-        {
-            var sasUrl = await _blobStorageService.GenerateSasUrlAsync(blobPath, TimeSpan.FromMinutes(30));
-            if (IsLoopbackUrl(sasUrl))
-            {
-                var bytes = await _blobStorageService.DownloadDocumentAsync(blobPath);
-                requestBodyObj = new { base64Source = Convert.ToBase64String(bytes) };
-                _logger.LogWarning("ClasificarProvider detectó SAS local/loopback. Se usa base64Source para BlobPath={BlobPath}", blobPath);
-            }
-            else
-            {
-                requestBodyObj = new { urlSource = sasUrl };
-                usingUrlSource = true;
-                _logger.LogInformation("ClasificarProvider usando urlSource (SAS) para BlobPath={BlobPath}", blobPath);
-            }
-        }
-        else
-        {
-            var documentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
-                ? input.DocumentoBase64Override
-                : input.Entrada.Documento.Content.Base64;
-            requestBodyObj = new { base64Source = documentoBase64 };
-        }
 
-        var requestBody = JsonSerializer.Serialize(requestBodyObj);
+        var blobPath = input.Entrada.Documento.BlobPath;
+        var source = await _sourceResolver.ResolveAsync(
+            blobPath,
+            base64Override: input.DocumentoBase64Override,
+            base64Entrada: input.Entrada.Documento.Content.Base64,
+            cancellationToken);
+
+        var requestBody = JsonSerializer.Serialize(source.Body);
 
         using var client = _httpClientFactory.CreateClient();
         var startResponse = await SendAnalyzeRequestAsync(client, analyzeUrl, requestBody, model, cancellationToken);
@@ -73,15 +51,15 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
         {
             var body = await startResponse.Content.ReadAsStringAsync(cancellationToken);
 
-            if (usingUrlSource
+            if (source.UsingUrlSource
                 && !string.IsNullOrWhiteSpace(blobPath)
                 && (int)startResponse.StatusCode == 400
                 && body.Contains("InvalidContent", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning("DI respondió InvalidContent con urlSource para BlobPath={BlobPath}. Reintentando con base64Source.", blobPath);
 
-                var bytes = await _blobStorageService.DownloadDocumentAsync(blobPath);
-                requestBody = JsonSerializer.Serialize(new { base64Source = Convert.ToBase64String(bytes) });
+                var inlineBody = await _sourceResolver.BuildInlineBodyAsync(blobPath!, cancellationToken);
+                requestBody = JsonSerializer.Serialize(inlineBody);
                 startResponse.Dispose();
                 startResponse = await SendAnalyzeRequestAsync(client, analyzeUrl, requestBody, model, cancellationToken);
 
@@ -246,18 +224,6 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
 
     private static bool IsAzureDiProvider(string provider) =>
         provider.ToLowerInvariant() is "azure-document-intelligence" or "azure-di" or "di";
-
-    private static bool IsLoopbackUrl(string url)
-    {
-        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
-        {
-            return false;
-        }
-
-        return uri.IsLoopback ||
-               string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase) ||
-               string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
-    }
 
     private static async Task<HttpResponseMessage> SendAnalyzeRequestAsync(
         HttpClient client,
