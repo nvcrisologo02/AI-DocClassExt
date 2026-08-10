@@ -1991,7 +1991,7 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
-    public async Task RunOrchestrator_PromptSinContenido_MarcaEjecucionSinContenidoYNoPersisteResumen()
+    public async Task RunOrchestrator_PromptSinContenido_PersisteEjecucionFallidaSinResumen()
     {
         var orchestrator = CreateOrchestrator();
         var entrada = BuildEntrada();
@@ -2023,6 +2023,11 @@ public class DocumentProcessOrchestratorTests
             DatosExtraidos = new Dictionary<string, object>()
         });
         context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>()
+        });
 
         // La guarda ya ha decidido en el proveedor: la actividad devuelve el resultado marcado.
         context.SetupActivity("PromptActivity", new PromptResultado
@@ -2042,11 +2047,14 @@ public class DocumentProcessOrchestratorTests
         traza.Estado.Should().Be("Failed");
         salida.DetalleEjecucion.Seguimiento.ActividadesCompletadas.Should().NotContain("Prompt");
 
-        // Regresión: sin el corte explícito tras el prompt, el flujo seguiría hasta Validar/Integrar/
-        // Persistir y el Estado="OK" final pisaría SIN_CONTENIDO_DOCUMENTO.
-        context.GetActivityCallCount("ValidarActivity").Should().Be(0);
-        context.GetActivityCallCount("IntegrarActivity").Should().Be(0);
-        context.GetActivityCallCount("PersistirActivity").Should().Be(0);
+        // Regresión: PersistirActivity es el único escritor de DocumentoEjecuciones y el monitor
+        // solo lee esa tabla. Un corte antes de Persistir haría desaparecer la ejecución en vez de
+        // dejarla visible como fallida; por eso el flujo debe llegar hasta Persistir con el estado
+        // SIN_CONTENIDO_DOCUMENTO intacto (no pisado por Validar/Integrar).
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput.Should().NotBeNull();
+        persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
     }
 
     [Fact]

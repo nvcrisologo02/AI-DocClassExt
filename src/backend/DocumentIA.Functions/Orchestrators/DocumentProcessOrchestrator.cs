@@ -1498,15 +1498,6 @@ public class DocumentProcessOrchestrator
                         resultadoPromptCombinadoClasificacion,
                         resumenCombinadoClasificacion,
                         forzarResumenDedicadoClassificationOnly);
-
-                    // La guarda de contenido decidió abortar: ese estado prevalece sobre cualquier
-                    // resultado posterior (OK/NO_CLASIFICADO). Sin este corte, ClassificationOnly
-                    // seguiría hasta el final del bloque y el Estado="OK" de más abajo lo pisaría.
-                    if (salida.Resultado.Estado == "SIN_CONTENIDO_DOCUMENTO")
-                    {
-                        FinalizarSeguimiento("Failed", salida.DetalleEjecucion.Prompt?.Error);
-                        return salida;
-                    }
                 }
 
                 MarcarActividadOmitida("Extraer", "ClassificationOnly activo");
@@ -1626,7 +1617,11 @@ public class DocumentProcessOrchestrator
                 }
 
                 var confidenceCfgClassificationOnly = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
-                salida.Resultado.Estado = "OK";
+                // El estado de fallo por falta de contenido no debe ser pisado por el cierre OK.
+                if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+                {
+                    salida.Resultado.Estado = "OK";
+                }
                 salida.Resultado.ConfianzaGlobal = RedondearSalida(
                     ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
                 salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
@@ -2056,15 +2051,6 @@ public class DocumentProcessOrchestrator
                     resultadoExtraccion.ResultadoPromptCombinado ?? resultadoPromptCombinadoClasificacion,
                     resultadoExtraccion.ResumenCombinado ?? resumenCombinadoClasificacion,
                     forzarResumenDedicado);
-
-                // La guarda de contenido decidió abortar: ese estado prevalece sobre el resultado
-                // final que calculan Validar/Integrar más abajo (OK/EXTRACCION_INCOMPLETA/etc.).
-                // Sin este corte el flujo seguiría hasta el Paso 8 y lo pisaría.
-                if (salida.Resultado.Estado == "SIN_CONTENIDO_DOCUMENTO")
-                {
-                    FinalizarSeguimiento("Failed", salida.DetalleEjecucion.Prompt?.Error);
-                    return salida;
-                }
             }
 
             // 5. Validacion - ACTUALIZADO PARA USAR MOTOR DE VALIDACION
@@ -2229,25 +2215,29 @@ public class DocumentProcessOrchestrator
                 k => !string.Equals(k, "Paginas", StringComparison.OrdinalIgnoreCase)
                   && !string.Equals(k, "Markdown", StringComparison.OrdinalIgnoreCase));
 
-            if (resultadoExtraccion.FallbackUsado && camposUtilesExtraccion == 0)
+            // El estado de fallo por falta de contenido no debe ser pisado por los estados de cierre.
+            if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
             {
-                salida.Resultado.Estado = "EXTRACCION_INCOMPLETA";
-                salida.Resultado.MensajeError =
-                    $"Fallback de extracción sin datos. Razón: {resultadoExtraccion.FallbackRazon}";
-                logger.LogWarning(
-                    "Fallback de extracción sin datos para {Documento}. Razón: {Razon}",
-                    entrada.Documento.Name,
-                    resultadoExtraccion.FallbackRazon);
-            }
-            else if (conErroresValidacion)
-            {
-                salida.Resultado.Estado = "VALIDACION_CON_ERRORES";
-                logger.LogWarning("Procesamiento completado con errores de validacion");
-            }
-            else
-            {
-                salida.Resultado.Estado = "OK";
-                logger.LogInformation($"Procesamiento completado exitosamente para {entrada.Documento.Name}");
+                if (resultadoExtraccion.FallbackUsado && camposUtilesExtraccion == 0)
+                {
+                    salida.Resultado.Estado = "EXTRACCION_INCOMPLETA";
+                    salida.Resultado.MensajeError =
+                        $"Fallback de extracción sin datos. Razón: {resultadoExtraccion.FallbackRazon}";
+                    logger.LogWarning(
+                        "Fallback de extracción sin datos para {Documento}. Razón: {Razon}",
+                        entrada.Documento.Name,
+                        resultadoExtraccion.FallbackRazon);
+                }
+                else if (conErroresValidacion)
+                {
+                    salida.Resultado.Estado = "VALIDACION_CON_ERRORES";
+                    logger.LogWarning("Procesamiento completado con errores de validacion");
+                }
+                else
+                {
+                    salida.Resultado.Estado = "OK";
+                    logger.LogInformation($"Procesamiento completado exitosamente para {entrada.Documento.Name}");
+                }
             }
 
             // Confianza global = MIN(Clasif, Extrac, Valid)
