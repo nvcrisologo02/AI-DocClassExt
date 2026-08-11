@@ -401,10 +401,10 @@ Contenido del documento:
         // ========== Phase 2 sin TDN2 parseable → virtual TDN1 (AB#99891) ==========
 
         [Theory]
-        [InlineData("respuesta truncada que no es json")]
-        [InlineData("{\"tdn2\": null, \"confianza\": 0.4}")]
-        [InlineData("{\"tdn2\": \"\", \"confianza\": 0.4}")]
-        public async Task ClasificarAsync_CuandoPhase2NoDevuelveTdn2Parseable_DegradaAVirtualTdn1(string phase2Response)
+        [InlineData("respuesta truncada que no es json", "fase2_parsing_error")]
+        [InlineData("{\"tdn2\": null, \"confianza\": 0.4}", "fase2_ninguna_tipologia_en_conjunto")]
+        [InlineData("{\"tdn2\": \"\", \"confianza\": 0.4}", "fase2_parsing_error")]
+        public async Task ClasificarAsync_CuandoPhase2NoDevuelveTdn2Parseable_DegradaAVirtualTdn1(string phase2Response, string fallbackRazonEsperada)
         {
             // Given: Phase 1 resuelve TDN1=TASA con confianza 0.72 y Phase 2 no devuelve un tdn2 parseable
             var promptProviderMock = new Mock<IClassificationPromptProvider>();
@@ -436,7 +436,7 @@ Contenido del documento:
             result.ClasificacionParcial.Should().BeTrue();
             result.Confianza.Should().Be(0.72);
             result.ConfianzaGPT.Should().Be(0.72);
-            result.FallbackRazon.Should().Be("fase2_parsing_error");
+            result.FallbackRazon.Should().Be(fallbackRazonEsperada);
             result.ResumenCombinado.Should().Be("Resumen Phase 1");
             result.PropuestaTipologia.Should().Be("TASA: informe de tasacion de activo");
         }
@@ -566,8 +566,8 @@ Contenido del documento:
         [Fact]
         public async Task Router_ResultadoParcialSatisfactorio_ConservaFallbackRazon()
         {
-            // Given: el provider GPT devuelve un virtual TDN1 (fase2_parsing_error) con confianza 0.72,
-            // que supera el umbral 0.6 y por tanto el router lo considera satisfactorio
+            // Given: el provider GPT devuelve un virtual TDN1 (fase2_ninguna_tipologia_en_conjunto) con
+            // confianza 0.72, que supera el umbral 0.6 y por tanto el router lo considera satisfactorio
             var promptProviderMock = new Mock<IClassificationPromptProvider>();
             promptProviderMock
                 .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
@@ -599,7 +599,7 @@ Contenido del documento:
             // el orquestador la necesita para tratar el resultado como tipología virtual
             result.ClasificacionParcial.Should().BeTrue();
             result.TipologiaDetectada.Should().Be("TASA");
-            result.FallbackRazon.Should().Be("fase2_parsing_error");
+            result.FallbackRazon.Should().Be("fase2_ninguna_tipologia_en_conjunto");
             result.FallbackLLM.Should().BeFalse();
         }
 

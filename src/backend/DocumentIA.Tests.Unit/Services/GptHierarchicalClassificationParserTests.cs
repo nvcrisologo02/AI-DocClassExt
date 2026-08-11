@@ -216,6 +216,24 @@ public class GptHierarchicalClassificationParserTests
         result.Value!.Confianza.Should().BeNull();
     }
 
+    [Fact]
+    public void ParsePhase2_Tdn2NullExplicito_FallaConMotivoNingunaTipologia()
+    {
+        var result = GptHierarchicalClassificationParser.ParsePhase2("{\"tdn2\": null, \"confianza\": 0.9}");
+
+        result.Success.Should().BeFalse();
+        result.ErrorReason.Should().Be(GptHierarchicalClassificationParser.Fase2NingunaTipologiaReason);
+    }
+
+    [Fact]
+    public void ParsePhase2_Tdn2StringVacio_SigueSiendoParsingError()
+    {
+        var result = GptHierarchicalClassificationParser.ParsePhase2("{\"tdn2\": \"\"}");
+
+        result.Success.Should().BeFalse();
+        result.ErrorReason.Should().Be(GptHierarchicalClassificationParser.Phase2ParsingErrorReason);
+    }
+
     // ========== ParseTdn1CatalogNombresPorCodigo (AB#99984) ==========
 
     [Fact]
