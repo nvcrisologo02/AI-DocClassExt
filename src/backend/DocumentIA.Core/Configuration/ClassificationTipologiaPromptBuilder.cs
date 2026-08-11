@@ -38,9 +38,15 @@ public class ClassificationTipologiaPromptBuilder
         }) ?? string.Empty;
     }
 
-    public string BuildTdn1Catalog()
+    public string BuildTdn1Catalog(IReadOnlyCollection<string>? codigosPermitidos = null)
     {
-        return _cache.GetOrCreate("clasificacion:catalogo:tdn1", entry =>
+        var restringido = codigosPermitidos is { Count: > 0 };
+        var conjunto = restringido ? NormalizarConjunto(codigosPermitidos!) : null;
+        var cacheKey = restringido
+            ? $"clasificacion:catalogo:tdn1:r:{ComputeSetHash(conjunto!)}"
+            : "clasificacion:catalogo:tdn1";
+
+        return _cache.GetOrCreate(cacheKey, entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
 
@@ -51,11 +57,20 @@ public class ClassificationTipologiaPromptBuilder
                 .GetAwaiter()
                 .GetResult();
 
+            if (conjunto is not null)
+            {
+                var familiasPermitidas = ResolverFamiliasDeCodigos(scope.ServiceProvider, conjunto);
+                familias = familias
+                    .Where(f => familiasPermitidas.Contains(f.Codigo?.Trim() ?? string.Empty))
+                    .ToList();
+            }
+
             var catalog = string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Nombre}, {f.Descripcion}"));
-            
+
             _logger.LogInformation(
-                "BuildTdn1Catalog: Generado catálogo con {FamilyCount} familias. Catálogo length={CatalogLength} chars. Familias: {Familias}",
+                "BuildTdn1Catalog: Generado catálogo con {FamilyCount} familias (restringido={Restringido}). Catálogo length={CatalogLength} chars. Familias: {Familias}",
                 familias.Count(),
+                conjunto is not null,
                 catalog.Length,
                 string.Join(", ", familias.Select(f => f.Codigo)));
 
@@ -63,15 +78,58 @@ public class ClassificationTipologiaPromptBuilder
         }) ?? string.Empty;
     }
 
-    public string BuildTdn2CatalogByFamilia(string tdn1Codigo)
+    /// <summary>
+    /// Familias TDN1 (ResolvedTdn1) de las tipologías publicadas cuyo Codigo pertenece al conjunto.
+    /// </summary>
+    private static HashSet<string> ResolverFamiliasDeCodigos(IServiceProvider scopedProvider, HashSet<string> conjunto)
+    {
+        var repository = scopedProvider.GetRequiredService<ITipologiaRepository>();
+        var tipologias = repository.GetAllPublishedAsync().GetAwaiter().GetResult();
+
+        var familias = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tipologia in tipologias)
+        {
+            if (string.IsNullOrWhiteSpace(tipologia.Codigo) ||
+                !conjunto.Contains(tipologia.Codigo.Trim()) ||
+                string.IsNullOrWhiteSpace(tipologia.ConfiguracionJson))
+            {
+                continue;
+            }
+
+            try
+            {
+                var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(
+                    tipologia.ConfiguracionJson,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                var tdn1 = config?.ResolvedTdn1?.Trim();
+                if (!string.IsNullOrWhiteSpace(tdn1))
+                {
+                    familias.Add(tdn1);
+                }
+            }
+            catch
+            {
+                // Tipología malformada: se ignora, igual que en BuildFromDatabase.
+            }
+        }
+
+        return familias;
+    }
+
+    public string BuildTdn2CatalogByFamilia(string tdn1Codigo, IReadOnlyCollection<string>? codigosPermitidos = null)
     {
         if (string.IsNullOrWhiteSpace(tdn1Codigo))
         {
             throw new ArgumentException("El código de familia TDN1 es obligatorio.", nameof(tdn1Codigo));
         }
 
+        var restringido = codigosPermitidos is { Count: > 0 };
+        var conjunto = restringido ? NormalizarConjunto(codigosPermitidos!) : null;
+
         var normalizedFamily = tdn1Codigo.Trim().ToUpperInvariant();
-        var cacheKey = $"clasificacion:catalogo:tdn2:{normalizedFamily}";
+        var cacheKey = restringido
+            ? $"clasificacion:catalogo:tdn2:{normalizedFamily}:r:{ComputeSetHash(conjunto!)}"
+            : $"clasificacion:catalogo:tdn2:{normalizedFamily}";
 
         return _cache.GetOrCreate(cacheKey, entry =>
         {
@@ -79,22 +137,29 @@ public class ClassificationTipologiaPromptBuilder
 
             using var scope = _scopeFactory.CreateScope();
             var catalogoRepository = scope.ServiceProvider.GetRequiredService<ICatalogoTdnRepository>();
-            
-            // FALLBACK LOGIC: Primero intentar obtener prompt personalizado
-            _logger.LogInformation("BuildTdn2CatalogByFamilia: Buscando custom TDN2_Prompt para familia '{Family}' en CatalogoTdn1...", normalizedFamily);
-            var customPrompt = catalogoRepository
-                .GetTdn2PromptByFamiliaAsync(normalizedFamily)
-                .GetAwaiter()
-                .GetResult();
 
-            if (!string.IsNullOrWhiteSpace(customPrompt))
+            if (conjunto is null)
             {
-                _logger.LogInformation("✓ Custom TDN2_Prompt encontrado para familia '{Family}'. Longitud: {Length} chars. Usando custom prompt.", normalizedFamily, customPrompt.Length);
-                return customPrompt;
-            }
+                // FALLBACK LOGIC: Primero intentar obtener prompt personalizado
+                _logger.LogInformation("BuildTdn2CatalogByFamilia: Buscando custom TDN2_Prompt para familia '{Family}' en CatalogoTdn1...", normalizedFamily);
+                var customPrompt = catalogoRepository
+                    .GetTdn2PromptByFamiliaAsync(normalizedFamily)
+                    .GetAwaiter()
+                    .GetResult();
 
-            // FALLBACK: Si no hay prompt personalizado, generar dinámicamente
-            _logger.LogInformation("⚠ Custom TDN2_Prompt NO encontrado o está vacío para familia '{Family}'. Cayendo a generación dinámica.", normalizedFamily);
+                if (!string.IsNullOrWhiteSpace(customPrompt))
+                {
+                    _logger.LogInformation("✓ Custom TDN2_Prompt encontrado para familia '{Family}'. Longitud: {Length} chars. Usando custom prompt.", normalizedFamily, customPrompt.Length);
+                    return customPrompt;
+                }
+
+                // FALLBACK: Si no hay prompt personalizado, generar dinámicamente
+                _logger.LogInformation("⚠ Custom TDN2_Prompt NO encontrado o está vacío para familia '{Family}'. Cayendo a generación dinámica.", normalizedFamily);
+            }
+            else
+            {
+                _logger.LogInformation("BuildTdn2CatalogByFamilia: Modo restringido para familia '{Family}'. Se omite el TDN2_Prompt custom y se genera dinámicamente filtrado.", normalizedFamily);
+            }
 
             var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
             var db = scope.ServiceProvider.GetRequiredService<DocumentIADbContext>();
@@ -128,6 +193,19 @@ public class ClassificationTipologiaPromptBuilder
                 })
                 .Where(x => x.Config != null && string.Equals(x.Config.ResolvedTdn1?.Trim(), normalizedFamily, StringComparison.OrdinalIgnoreCase))
                 .ToList();
+
+            if (conjunto is not null)
+            {
+                tipologiasEnFamilia = tipologiasEnFamilia
+                    .Where(x =>
+                    {
+                        var codigo = !string.IsNullOrWhiteSpace(x.Tipologia.Codigo)
+                            ? x.Tipologia.Codigo.Trim()
+                            : x.Config!.TipologiaId?.Trim() ?? string.Empty;
+                        return conjunto.Contains(codigo);
+                    })
+                    .ToList();
+            }
 
             // Construir catálogo enriquecido con tipologiacodigo, tipologiaNombre, gptdescription, tdn2
             foreach (var item in tipologiasEnFamilia)
@@ -252,5 +330,16 @@ public class ClassificationTipologiaPromptBuilder
         }
 
         return string.Join("\n", lines);
+    }
+
+    private static HashSet<string> NormalizarConjunto(IReadOnlyCollection<string> codigos)
+        => new(codigos.Select(c => c.Trim()).Where(c => c.Length > 0), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Hash estable del conjunto (ordenado, uppercase) para claves de caché.</summary>
+    private static string ComputeSetHash(IEnumerable<string> codigos)
+    {
+        var canonical = string.Join("|", codigos.Select(c => c.Trim().ToUpperInvariant()).OrderBy(c => c, StringComparer.Ordinal));
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical));
+        return Convert.ToHexString(bytes)[..16];
     }
 }
