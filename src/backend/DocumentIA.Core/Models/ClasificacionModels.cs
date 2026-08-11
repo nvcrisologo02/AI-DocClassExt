@@ -14,4 +14,10 @@ public class ClasificacionInput
     public int CharsTextoNativo { get; set; }
     public int TotalPaginas { get; set; }
     public bool GenerarResumenPorDefecto { get; set; }
+
+    /// <summary>
+    /// true = ignorar Instrucciones.RestriccionTipologias en esta llamada. Lo activa el router
+    /// para la pasada única de "propuesta libre" cuando el resultado restringido es Desconocido.
+    /// </summary>
+    public bool OmitirRestriccionTipologias { get; set; }
 }

@@ -32,6 +32,33 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     internal const string ResumenContenidoReferencia =
         "(el documento ya está incluido más arriba en este mismo mensaje, en la sección \"CONTENIDO DEL DOCUMENTO (texto/markdown)\"; úsalo como contenido)";
 
+    /// <summary>Instrucción añadida al system prompt de Fase 1 en modo restringido.</summary>
+    internal const string RestriccionPhase1Instruction =
+        "\n\nRESTRICCIÓN DE CATÁLOGO: en esta petición SOLO puedes clasificar el documento en las familias " +
+        "listadas en el catálogo anterior. Si el documento no encaja claramente en ninguna de ellas, responde " +
+        "{\"tdn1\": null, \"propuesta\": \"<qué crees que es el documento>\", \"confianza\": 0.0}. No fuerces la clasificación.";
+
+    /// <summary>Instrucción añadida al system prompt de Fase 2 en modo restringido.</summary>
+    internal const string RestriccionPhase2Instruction =
+        "\n\nRESTRICCIÓN DE CATÁLOGO: en esta petición SOLO puedes elegir una de las tipologías listadas en el " +
+        "catálogo anterior. Si el documento no corresponde a ninguna de ellas, responde {\"tdn2\": null, \"confianza\": 0.0}. " +
+        "No fuerces la clasificación.";
+
+    /// <summary>
+    /// Conjunto de códigos permitidos de la petición, o null si no hay restricción activa
+    /// (sin instrucción, lista vacía, o pasada de propuesta libre con OmitirRestriccionTipologias).
+    /// </summary>
+    internal static IReadOnlyCollection<string>? ResolverRestriccion(ClasificacionInput input)
+    {
+        if (input.OmitirRestriccionTipologias)
+        {
+            return null;
+        }
+
+        var codigos = input.Entrada.Instrucciones.RestriccionTipologias?.Codigos;
+        return codigos is { Count: > 0 } ? codigos : null;
+    }
+
     private readonly ClassificationModelRegistryLoader _modelRegistryLoader;
     private readonly ClassificationTipologiaPromptBuilder _tipologiaPromptBuilder;
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
@@ -92,6 +119,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             input.Entrada.Instrucciones.Classification.NivelClasificacion,
             _routingSettings.NivelClasificacionDefault);
 
+        var restriccionCodigos = ResolverRestriccion(input);
+
         var contextoTexto = ObtenerContextoTexto(input.DatosNormalizados);
         var resumenPrompt = ResolveResumenPrompt(input);
         var contextoPrompt = BuildInstructionPromptContext(input.Entrada.Instrucciones.Prompt);
@@ -108,7 +137,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
 
         // Construir prompt Phase 1 desde configuración
-        var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
+        var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog(restriccionCodigos);
         var phase1SystemText = promptSet.Phase1SystemPrompt;
         var phase1UserText = promptSet.Phase1UserPrompt
             .Replace("{CONTEXT_PROMPT}", contextoPrompt)
@@ -123,6 +152,11 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (resumenPrompt is not null)
         {
             phase1UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
+
+        if (restriccionCodigos is not null)
+        {
+            phase1SystemText += RestriccionPhase1Instruction;
         }
 
         if (string.IsNullOrWhiteSpace(contextoTexto))
@@ -205,6 +239,25 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                     tdn1Code,
                     propuesta);
             }
+        }
+
+        if (restriccionCodigos is not null && string.IsNullOrWhiteSpace(tdn1Code))
+        {
+            stopwatch.Stop();
+            _logger.LogInformation(
+                "Clasificación restringida: Fase 1 sin familia del conjunto permitido. Devolviendo Desconocido. Propuesta='{Propuesta}'",
+                propuesta);
+            return new ResultadoClasificacion
+            {
+                Modelo = model.DeploymentName,
+                ProveedorClasif = "GPT4oMini",
+                TipologiaDetectada = "Desconocido",
+                Confianza = 0.0,
+                ConfianzaGPT = 0.0,
+                FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
+                PropuestaTipologia = propuesta,
+                ResumenCombinado = resumenPhase1
+            };
         }
 
         // Si no se resolvió TDN1 de ninguna forma (ni explícito, ni por prefijo, ni por mapeo
@@ -290,10 +343,30 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             confianzaPhase1.ToString("F3"),
             tdn1Code);
 
-        var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code);
+        var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code, restriccionCodigos);
         if (string.IsNullOrWhiteSpace(phase2Catalog))
         {
             stopwatch.Stop();
+
+            if (restriccionCodigos is not null)
+            {
+                _logger.LogInformation(
+                    "Clasificación restringida: la familia TDN1={Tdn1} no tiene tipologías del conjunto permitido. Devolviendo Desconocido. Propuesta='{Propuesta}'",
+                    tdn1Code,
+                    propuesta);
+                return new ResultadoClasificacion
+                {
+                    Modelo = model.DeploymentName,
+                    ProveedorClasif = "GPT4oMini",
+                    TipologiaDetectada = "Desconocido",
+                    Confianza = 0.0,
+                    ConfianzaGPT = 0.0,
+                    FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
+                    PropuestaTipologia = propuesta,
+                    ResumenCombinado = resumenPhase1
+                };
+            }
+
             return BuildVirtualResult(
                 model,
                 tipologiaDetectada: tdn1Code,
@@ -312,6 +385,11 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             .Replace("{TDN1_CODE}", tdn1Code)
             .Replace("{TDN2_CATALOG}", phase2Catalog)
             .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
+
+        if (restriccionCodigos is not null)
+        {
+            phase2SystemText += RestriccionPhase2Instruction;
+        }
 
         // Log prompts finales si está habilitado
         if (_promptSettings.EnableFullPromptLogging)
@@ -338,6 +416,28 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         if (!phase2Parsed.Success || phase2Parsed.Value is null)
         {
+            if (restriccionCodigos is not null &&
+                string.Equals(
+                    phase2Parsed.ErrorReason,
+                    GptHierarchicalClassificationParser.Fase2NingunaTipologiaReason,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                stopwatch.Stop();
+                _logger.LogInformation(
+                    "Clasificación restringida: Fase 2 indicó que ninguna tipología del conjunto encaja. Devolviendo Desconocido.");
+                return new ResultadoClasificacion
+                {
+                    Modelo = model.DeploymentName,
+                    ProveedorClasif = "GPT4oMini",
+                    TipologiaDetectada = "Desconocido",
+                    Confianza = 0.0,
+                    ConfianzaGPT = 0.0,
+                    FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
+                    PropuestaTipologia = propuesta,
+                    ResumenCombinado = resumenPhase1
+                };
+            }
+
             stopwatch.Stop();
             // Phase 2 sin TDN2 parseable (JSON inválido, tdn2 null/vacío o respuesta truncada):
             // se degrada a tipología virtual conservando el TDN1 ya resuelto en Phase 1,
