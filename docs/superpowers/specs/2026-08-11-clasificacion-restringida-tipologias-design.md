@@ -73,6 +73,7 @@ Cambios en `ConfigurableClasificarDataProvider` (`src/backend/DocumentIA.Functio
 
 - Lista con un solo código = modo "confirma si es X o dime que no". Válido, sin lógica especial.
 - Restricción + `ClassificationOnly` conviven sin regla extra.
+- Restricción + `nivelClasificacion = TDN1` → HTTP 400: el nivel TDN1 devuelve familias, no tipologías, y no puede honrar una restricción expresada a granularidad de código de tipología. La restricción requiere `TDN1_TDN2`.
 - 429/rate-limit agotado sigue propagando `PENDIENTE_REINTENTO` (no se degrada a DESCONOCIDO), como hoy.
 - Chequeo de duplicados: sin cambios (va por hash del documento); un mismo documento con conjuntos distintos sigue la política actual de duplicados.
 - Provider `mock` pasa por la misma validación de pertenencia en el router (útil para E2E).
