@@ -443,6 +443,15 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         var tipologiaCode = ResolveTipologiaByTdn2(phase2Parsed.Value.Tdn2);
         if (string.IsNullOrWhiteSpace(tipologiaCode))
         {
+            if (restriccionCodigos is not null)
+            {
+                stopwatch.Stop();
+                _logger.LogInformation(
+                    "Clasificación restringida: el TDN2 '{Tdn2}' de Fase 2 no mapea a ninguna tipología publicada. Devolviendo Desconocido.",
+                    phase2Parsed.Value.Tdn2);
+                return BuildRestriccionDesconocidoResult(model, propuesta, resumenPhase1);
+            }
+
             stopwatch.Stop();
             var tipologiaVirtual = BuildVirtualTipologiaDetectada(propuesta, tdn1Code, phase2Parsed.Value.Tdn2);
             var justificacionVirtual = BuildVirtualJustificacion(propuesta, tipologiaVirtual, phase2Parsed.Value.Tdn2, tdn1Code);

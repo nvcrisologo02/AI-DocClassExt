@@ -406,7 +406,10 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             TipologiaDetectada = "Desconocido",
             Confianza = 0.0,
             FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
-            DetalleProveedores = resultado.DetalleProveedores,
+            // Copia defensiva: el resultado "desconocido" no debe compartir la misma
+            // instancia de lista que "resultado", para no mutar su traza si se añade
+            // la propuesta libre más abajo.
+            DetalleProveedores = new List<PropuestaProveedor>(resultado.DetalleProveedores),
             ResumenCombinado = resultado.ResumenCombinado,
             RestriccionTipologias = eco,
             UmbralFallbackAplicado = resultado.UmbralFallbackAplicado
@@ -453,7 +456,6 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                 !string.Equals(libre.TipologiaDetectada, "Desconocido", StringComparison.OrdinalIgnoreCase))
             {
                 desconocido.PropuestaTipologia = libre.TipologiaDetectada;
-                desconocido.DetalleProveedores ??= new List<PropuestaProveedor>();
                 desconocido.DetalleProveedores.Add(new PropuestaProveedor
                 {
                     Proveedor = RestriccionTipologiasMotivos.PropuestaLibre,
