@@ -247,17 +247,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             _logger.LogInformation(
                 "Clasificación restringida: Fase 1 sin familia del conjunto permitido. Devolviendo Desconocido. Propuesta='{Propuesta}'",
                 propuesta);
-            return new ResultadoClasificacion
-            {
-                Modelo = model.DeploymentName,
-                ProveedorClasif = "GPT4oMini",
-                TipologiaDetectada = "Desconocido",
-                Confianza = 0.0,
-                ConfianzaGPT = 0.0,
-                FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
-                PropuestaTipologia = propuesta,
-                ResumenCombinado = resumenPhase1
-            };
+            return BuildRestriccionDesconocidoResult(model, propuesta, resumenPhase1);
         }
 
         // Si no se resolvió TDN1 de ninguna forma (ni explícito, ni por prefijo, ni por mapeo
@@ -354,17 +344,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                     "Clasificación restringida: la familia TDN1={Tdn1} no tiene tipologías del conjunto permitido. Devolviendo Desconocido. Propuesta='{Propuesta}'",
                     tdn1Code,
                     propuesta);
-                return new ResultadoClasificacion
-                {
-                    Modelo = model.DeploymentName,
-                    ProveedorClasif = "GPT4oMini",
-                    TipologiaDetectada = "Desconocido",
-                    Confianza = 0.0,
-                    ConfianzaGPT = 0.0,
-                    FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
-                    PropuestaTipologia = propuesta,
-                    ResumenCombinado = resumenPhase1
-                };
+                return BuildRestriccionDesconocidoResult(model, propuesta, resumenPhase1);
             }
 
             return BuildVirtualResult(
@@ -425,17 +405,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 stopwatch.Stop();
                 _logger.LogInformation(
                     "Clasificación restringida: Fase 2 indicó que ninguna tipología del conjunto encaja. Devolviendo Desconocido.");
-                return new ResultadoClasificacion
-                {
-                    Modelo = model.DeploymentName,
-                    ProveedorClasif = "GPT4oMini",
-                    TipologiaDetectada = "Desconocido",
-                    Confianza = 0.0,
-                    ConfianzaGPT = 0.0,
-                    FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
-                    PropuestaTipologia = propuesta,
-                    ResumenCombinado = resumenPhase1
-                };
+                return BuildRestriccionDesconocidoResult(model, propuesta, resumenPhase1);
             }
 
             stopwatch.Stop();
@@ -796,6 +766,28 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             ConfianzaGPT = 0.0,
             FallbackRazon = reason,
             PropuestaTipologia = propuesta
+        };
+    }
+
+    /// <summary>
+    /// Resultado "Desconocido" del modo restringido: el documento no encaja en el conjunto
+    /// de tipologías permitido por la petición.
+    /// </summary>
+    private static ResultadoClasificacion BuildRestriccionDesconocidoResult(
+        ClassificationModelConfig model,
+        string propuesta,
+        string? resumen)
+    {
+        return new ResultadoClasificacion
+        {
+            Modelo = model.DeploymentName,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            Confianza = 0.0,
+            ConfianzaGPT = 0.0,
+            FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
+            PropuestaTipologia = propuesta,
+            ResumenCombinado = resumen
         };
     }
 
