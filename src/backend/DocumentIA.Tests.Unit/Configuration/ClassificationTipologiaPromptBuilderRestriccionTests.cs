@@ -151,4 +151,38 @@ public class ClassificationTipologiaPromptBuilderRestriccionTests : IDisposable
 
         a.Should().Be(b);
     }
+
+    [Fact]
+    public void BuildCatalogoPlanoRestringido_SoloListaTipologiasDelConjunto()
+    {
+        var catalogo = _builder.BuildCatalogoPlanoRestringido(new[] { "nota-simple", "CONT-01" });
+
+        catalogo.Should().Contain("nota-simple").And.Contain("CONT-01");
+        catalogo.Should().NotContain("REGI-02");
+    }
+
+    [Fact]
+    public void BuildCatalogoPlanoRestringido_IncluyeDescripcionDeLaTipologia()
+    {
+        var catalogo = _builder.BuildCatalogoPlanoRestringido(new[] { "nota-simple" });
+
+        catalogo.Should().Contain("Nota simple registral");
+    }
+
+    [Fact]
+    public void BuildCatalogoPlanoRestringido_ConjuntoVacio_Lanza()
+    {
+        var act = () => _builder.BuildCatalogoPlanoRestringido(Array.Empty<string>());
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildCatalogoPlanoRestringido_MismoConjuntoDistintoCase_CompartenResultado()
+    {
+        var a = _builder.BuildCatalogoPlanoRestringido(new[] { "nota-simple", "CONT-01" });
+        var b = _builder.BuildCatalogoPlanoRestringido(new[] { "cont-01", "NOTA-SIMPLE" });
+
+        a.Should().Be(b);
+    }
 }

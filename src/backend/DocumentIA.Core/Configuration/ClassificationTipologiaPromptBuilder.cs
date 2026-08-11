@@ -248,7 +248,28 @@ public class ClassificationTipologiaPromptBuilder
         }) ?? string.Empty;
     }
 
-    private string BuildFromDatabase()
+    /// <summary>
+    /// Catálogo plano para la clasificación restringida en fase única: una línea por tipología
+    /// permitida publicada, con su familia TDN1, su TDN2 y la descripción GPT completa.
+    /// </summary>
+    public string BuildCatalogoPlanoRestringido(IReadOnlyCollection<string> codigosPermitidos)
+    {
+        if (codigosPermitidos is not { Count: > 0 })
+        {
+            throw new ArgumentException("El conjunto de códigos permitidos es obligatorio.", nameof(codigosPermitidos));
+        }
+
+        var conjunto = NormalizarConjunto(codigosPermitidos);
+        var cacheKey = $"clasificacion:catalogo:plano:r:{ComputeSetHash(conjunto)}";
+
+        return _cache.GetOrCreate(cacheKey, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+            return BuildFromDatabase(conjunto);
+        }) ?? string.Empty;
+    }
+
+    private string BuildFromDatabase(HashSet<string>? conjunto = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
@@ -297,6 +318,11 @@ public class ClassificationTipologiaPromptBuilder
                 var codigoCanónico = !string.IsNullOrWhiteSpace(tipologia.Codigo)
                     ? tipologia.Codigo
                     : config.TipologiaId;
+
+                if (conjunto is not null && !conjunto.Contains(codigoCanónico))
+                {
+                    continue;
+                }
 
                 if (!seen.Add(codigoCanónico))
                 {
