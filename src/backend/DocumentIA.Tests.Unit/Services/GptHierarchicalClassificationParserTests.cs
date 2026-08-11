@@ -380,4 +380,47 @@ public class GptHierarchicalClassificationParserTests
 
         resultado.Should().Be("OTRO");
     }
+
+    // ========== ParseRestringido (AB#100060) ==========
+
+    [Fact]
+    public void ParseRestringido_CodigoValido_DevuelveTipologiaTrimmed()
+    {
+        var r = GptHierarchicalClassificationParser.ParseRestringido(
+            "{\"tipologia\": \" acui.02 \", \"propuesta\": \"acta CTO\", \"confianza\": 0.9}");
+
+        r.Success.Should().BeTrue();
+        r.Value!.Tipologia.Should().Be("acui.02");
+        r.Value.Confianza.Should().Be(0.9);
+    }
+
+    [Fact]
+    public void ParseRestringido_TipologiaNull_EsExitoConTipologiaNull()
+    {
+        var r = GptHierarchicalClassificationParser.ParseRestringido(
+            "{\"tipologia\": null, \"propuesta\": \"parece un acta\", \"resumen\": \"doc x\"}");
+
+        r.Success.Should().BeTrue();
+        r.Value!.Tipologia.Should().BeNull();
+        r.Value.Propuesta.Should().Be("parece un acta");
+        r.Value.Resumen.Should().Be("doc x");
+    }
+
+    [Fact]
+    public void ParseRestringido_SinPropuesta_EsParsingError()
+    {
+        var r = GptHierarchicalClassificationParser.ParseRestringido("{\"tipologia\": \"x\"}");
+
+        r.Success.Should().BeFalse();
+        r.ErrorReason.Should().Be(GptHierarchicalClassificationParser.RestringidoParsingErrorReason);
+    }
+
+    [Fact]
+    public void ParseRestringido_JsonInvalido_EsParsingError()
+    {
+        var r = GptHierarchicalClassificationParser.ParseRestringido("no es json");
+
+        r.Success.Should().BeFalse();
+        r.ErrorReason.Should().Be(GptHierarchicalClassificationParser.RestringidoParsingErrorReason);
+    }
 }
