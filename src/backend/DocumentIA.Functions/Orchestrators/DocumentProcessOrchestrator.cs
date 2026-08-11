@@ -333,6 +333,15 @@ public class DocumentProcessOrchestrator
                         logger.LogInformation(
                             "Prompt: markdown obtenido bajo demanda vía DI Layout ({Len} chars)",
                             markdownBajoDemanda.Markdown!.Length);
+
+                        // Por esta vía (ExpectedType informado) no se ejecuta el Paso 2.8, que es
+                        // quien normalmente informa las páginas, y el recorte del Paso 2.7 solo sabe
+                        // de PDF: sin esto un documento Office queda con Paginas=0. Solo se rellena
+                        // si nadie lo hizo antes, igual que en el Paso 2.8.
+                        if (salida.Identificacion.Paginas <= 0 && markdownBajoDemanda.Paginas > 0)
+                        {
+                            salida.Identificacion.Paginas = markdownBajoDemanda.Paginas;
+                        }
                     }
                     else
                     {
@@ -818,7 +827,15 @@ public class DocumentProcessOrchestrator
                         {
                             Tipologia = string.Empty,
                             DocumentoBase64 = docClasif.DocumentoBase64Clasif,
-                            NombreDocumento = entrada.Documento.Name
+                            NombreDocumento = entrada.Documento.Name,
+                            // Blob-first: si el recorte fallo (documento no-PDF), DocumentoBase64Clasif
+                            // hereda el Content.Base64 que el trigger vacio al subir el blob. Sin
+                            // BlobPath, DI recibia un base64Source vacio y devolvia 400 InvalidContent
+                            // en cada documento Office (AB#100045). Solo se informa cuando no hay
+                            // base64: el resolutor prioriza BlobPath y pisaria el recorte de los PDF.
+                            BlobPath = string.IsNullOrWhiteSpace(docClasif.DocumentoBase64Clasif)
+                                ? (!string.IsNullOrWhiteSpace(blobPath) ? blobPath : entrada.Documento.BlobPath)
+                                : null
                         });
 
                     if (!string.IsNullOrWhiteSpace(markdownPreClasif.Markdown))

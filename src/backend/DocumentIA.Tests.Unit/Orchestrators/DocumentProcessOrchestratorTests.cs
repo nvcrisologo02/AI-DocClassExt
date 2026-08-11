@@ -1899,6 +1899,199 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_BlobFirstConRecorteFallido_Paso28RecibeBlobPath()
+    {
+        // Escenario blob-first real (AB#100045): el trigger sube el blob y vacia Content.Base64.
+        // Con un documento no-PDF el recorte lanza y docClasif hereda el base64 vacio; el Paso 2.8
+        // debe apoyarse en BlobPath para que DI Layout pueda obtener el documento.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(nombre: "documento.pptx");
+        entrada.Documento.Content.Base64 = string.Empty;
+        entrada.Documento.BlobPath = "documents/2026/08/hash-nuevo.pptx";
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        // La NormalizarActivity real no devuelve "Paginas" (solo hashes y tamano): para un Office
+        // el conteo debe llegar del layout, y con la clave inyectada el guard <= 0 lo impediria.
+        var normalizadoSinPaginas = BuildNormalizarResult();
+        normalizadoSinPaginas.Remove("Paginas");
+
+        context.SetupActivity("NormalizarActivity", normalizadoSinPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/2026/08/hash-nuevo.pptx");
+        context.SetupActivityThrow(
+            "PrepararDocumentoClasificacionActivity",
+            new InvalidOperationException("PdfPig: Could not find the version header comment at the start of the document."));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Diapositiva 1",
+            Paginas = 5
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        var layoutInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
+        layoutInput.Should().NotBeNull();
+        layoutInput!.BlobPath.Should().Be("documents/2026/08/hash-nuevo.pptx");
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("LayoutPreClasificacion");
+        salida.Identificacion.Paginas.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_RecorteValido_Paso28NoInformaBlobPath()
+    {
+        // El resolutor de origen DI prioriza BlobPath sobre el base64 de entrada: si el Paso 2.8
+        // lo informara siempre, el recorte de los PDF dejaria de usarse y DI recibiria el documento
+        // completo. Con recorte valido, BlobPath debe ir a null.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0ZS1wZGY=",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            CharsTextoNativo = 1200,
+            RecorteAplicado = true
+        });
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Contenido PDF",
+            Paginas = 10
+        });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "nota.simple",
+            TipologiaId: "nota.simple",
+            Version: "1.0",
+            TechnicalKey: "nota.simple",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        await orchestrator.RunOrchestrator(context);
+
+        var layoutInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
+        layoutInput.Should().NotBeNull();
+        layoutInput!.DocumentoBase64.Should().Be("cmVjb3J0ZS1wZGY=");
+        layoutInput.BlobPath.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_MarkdownBajoDemandaConPaginas_PropagaAIdentificacion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(nombre: "presentacion.pptx", expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        // NormalizarActivity no devuelve "Paginas" en produccion (solo hashes y tamano), asi que
+        // el documento llega aqui con Paginas=0: es justo el caso de un Office con ExpectedType,
+        // donde ni el Paso 2.7 (recorte, solo PDF) ni el Paso 2.8 (no corre con ExpectedType)
+        // pueden informarlas.
+        var normalizadoSinPaginas = BuildNormalizarResult();
+        normalizadoSinPaginas.Remove("Paginas");
+
+        context.SetupActivity("NormalizarActivity", normalizadoSinPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/presentacion.pptx");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Diapositivas",
+            Paginas = 5
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen de la presentacion.",
+            TiempoMs = 900
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Identificacion.Paginas.Should().Be(5);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_MarkdownBajoDemandaConPaginas_NoPisaUnValorPrevio()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var normalizadoConPaginas = BuildNormalizarResult();
+        normalizadoConPaginas["Paginas"] = 12;
+
+        context.SetupActivity("NormalizarActivity", normalizadoConPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Contenido",
+            Paginas = 3
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen.",
+            TiempoMs = 500
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Identificacion.Paginas.Should().Be(12);
+    }
+
+    [Fact]
     public async Task RunOrchestrator_PromptConMarkdownDisponible_NoExtraeMarkdownBajoDemanda()
     {
         var orchestrator = CreateOrchestrator();
