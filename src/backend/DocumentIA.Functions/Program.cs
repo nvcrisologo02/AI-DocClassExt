@@ -337,6 +337,7 @@ var host = new HostBuilder()
                 provider.GetRequiredService<IServiceScopeFactory>()));
 
         services.AddSingleton<PromptInstruccionesValidator>();
+        services.AddSingleton<RestriccionTipologiasValidator>();
 
         services.AddSingleton<LayoutModelRegistryLoader>(provider =>
             new LayoutModelRegistryLoader(

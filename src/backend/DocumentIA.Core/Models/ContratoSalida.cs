@@ -400,6 +400,21 @@ public class ResultadoClasificacion
     /// Resumen resultante de ejecución combinada.
     /// </summary>
     public string? ResumenCombinado { get; set; }
+    /// <summary>
+    /// Eco de la restricción de tipologías aplicada en esta ejecución (null si la petición
+    /// no traía restricción). Incluye los códigos efectivos y los ignorados por no publicados.
+    /// </summary>
+    public RestriccionTipologiasAplicada? RestriccionTipologias { get; set; }
+}
+
+/// <summary>Detalle de la restricción de tipologías aplicada a la clasificación.</summary>
+public class RestriccionTipologiasAplicada
+{
+    /// <summary>Códigos permitidos efectivos (ya normalizados) usados en la clasificación.</summary>
+    public List<string> Codigos { get; set; } = new();
+
+    /// <summary>Códigos del caller descartados por no corresponder a tipologías publicadas.</summary>
+    public List<string>? CodigosIgnorados { get; set; }
 }
 
 public class PropuestaProveedor

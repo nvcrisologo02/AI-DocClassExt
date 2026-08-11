@@ -2,6 +2,7 @@ using System;
 using System.ClientModel;
 using System.ClientModel.Primitives;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using DocumentIA.Core.Configuration;
@@ -401,10 +402,10 @@ Contenido del documento:
         // ========== Phase 2 sin TDN2 parseable → virtual TDN1 (AB#99891) ==========
 
         [Theory]
-        [InlineData("respuesta truncada que no es json")]
-        [InlineData("{\"tdn2\": null, \"confianza\": 0.4}")]
-        [InlineData("{\"tdn2\": \"\", \"confianza\": 0.4}")]
-        public async Task ClasificarAsync_CuandoPhase2NoDevuelveTdn2Parseable_DegradaAVirtualTdn1(string phase2Response)
+        [InlineData("respuesta truncada que no es json", "fase2_parsing_error")]
+        [InlineData("{\"tdn2\": null, \"confianza\": 0.4}", "fase2_parsing_error")]
+        [InlineData("{\"tdn2\": \"\", \"confianza\": 0.4}", "fase2_parsing_error")]
+        public async Task ClasificarAsync_CuandoPhase2NoDevuelveTdn2Parseable_DegradaAVirtualTdn1(string phase2Response, string fallbackRazonEsperada)
         {
             // Given: Phase 1 resuelve TDN1=TASA con confianza 0.72 y Phase 2 no devuelve un tdn2 parseable
             var promptProviderMock = new Mock<IClassificationPromptProvider>();
@@ -436,9 +437,46 @@ Contenido del documento:
             result.ClasificacionParcial.Should().BeTrue();
             result.Confianza.Should().Be(0.72);
             result.ConfianzaGPT.Should().Be(0.72);
-            result.FallbackRazon.Should().Be("fase2_parsing_error");
+            result.FallbackRazon.Should().Be(fallbackRazonEsperada);
             result.ResumenCombinado.Should().Be("Resumen Phase 1");
             result.PropuestaTipologia.Should().Be("TASA: informe de tasacion de activo");
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_CuandoPhase2DevuelveTdn2NullExplicitoSinModoRestringido_PreservaFallbackRazonLegacy()
+        {
+            // Given: Phase 1 resuelve TDN1=TASA y Phase 2 responde "tdn2": null explícito (ninguna
+            // tipología del catálogo encaja). Sin modo restringido, el provider debe seguir emitiendo
+            // el motivo histórico Phase2ParsingErrorReason para no romper el contrato que consume
+            // DocumentProcessOrchestrator al detectar el corte "virtual TDN1" (AB#100050).
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult("{\"tdn2\": null, \"confianza\": 0.4}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: FallbackRazon es el motivo legacy, no el nuevo Fase2NingunaTipologiaReason
+            result.TipologiaDetectada.Should().Be("TASA");
+            result.ClasificacionParcial.Should().BeTrue();
+            result.FallbackRazon.Should().Be(GptHierarchicalClassificationParser.Phase2ParsingErrorReason);
         }
 
         // ========== Robustez resolución tipología: mapeo propuesta -> catálogo (AB#99984) ==========
@@ -566,8 +604,9 @@ Contenido del documento:
         [Fact]
         public async Task Router_ResultadoParcialSatisfactorio_ConservaFallbackRazon()
         {
-            // Given: el provider GPT devuelve un virtual TDN1 (fase2_parsing_error) con confianza 0.72,
-            // que supera el umbral 0.6 y por tanto el router lo considera satisfactorio
+            // Given: el provider GPT devuelve un virtual TDN1 (fase2_parsing_error, motivo legacy que
+            // el provider preserva incluso ante un "tdn2": null explícito) con confianza 0.72, que
+            // supera el umbral 0.6 y por tanto el router lo considera satisfactorio
             var promptProviderMock = new Mock<IClassificationPromptProvider>();
             promptProviderMock
                 .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
@@ -721,6 +760,82 @@ Contenido del documento:
             result.ClasificacionParcial.Should().BeFalse();
             result.TipologiaDetectada.Should().Be("tasa.09");
             result.Tdn2Detectado.Should().Be("TASA-09");
+        }
+
+        // ========== Modo restringido: TDN2 sin mapeo publicado (AB#100046) ==========
+
+        [Fact]
+        public async Task ClasificarAsync_ModoRestringido_CuandoTdn2NoTieneTipologiaPublicada_DevuelveDesconocido()
+        {
+            // Given: mismo escenario que ClasificarAsync_CuandoTdn2NoTieneTipologiaPublicada_
+            // DevuelveVirtualConTdn2Detectado (Phase 2 devuelve un TDN2 sin tipología publicada
+            // que lo mapee), pero con restricción de tipologías activa. Antes del fix (AB#100046)
+            // esta rama no interceptaba el modo restringido y devolvía un resultado virtual con
+            // un TipologiaDetectada sintético, que el router podía reutilizar como
+            // PropuestaTipologia pese a estar fuera del catálogo permitido.
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            var codigosPermitidos = new List<string> { "TASA-10" };
+            SeedClassificationCaches();
+            SeedClassificationCachesRestringido(codigosPermitidos);
+            SetupTipologiaRepository(); // sin tipologías publicadas: TASA-10 no mapea a ninguna
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult("{\"tdn2\": \"TASA-10\", \"confianza\": 0.8}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+            input.Entrada.Instrucciones.RestriccionTipologias = new RestriccionTipologias
+            {
+                Codigos = codigosPermitidos
+            };
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: modo restringido intercepta y devuelve Desconocido, no un virtual sintético
+            result.TipologiaDetectada.Should().Be("Desconocido");
+            result.Confianza.Should().Be(0.0);
+            result.ClasificacionParcial.Should().BeFalse();
+            result.FallbackRazon.Should().Be(RestriccionTipologiasMotivos.FueraDeConjunto);
+            result.PropuestaTipologia.Should().Be("TASA: informe de tasacion de activo");
+        }
+
+        /// <summary>
+        /// Siembra las claves de caché de catálogo TDN1/TDN2 usadas en modo restringido. La clave
+        /// incluye un hash del conjunto permitido (ver ClassificationTipologiaPromptBuilder.
+        /// ComputeSetHash); se replica aquí el mismo algoritmo para no depender de
+        /// ICatalogoTdnRepository/DocumentIADbContext, que no están mockeados en este harness.
+        /// </summary>
+        private void SeedClassificationCachesRestringido(List<string> codigosPermitidos)
+        {
+            var hash = ComputeRestrictedCacheHash(codigosPermitidos);
+            _memoryCache.Set(
+                $"clasificacion:catalogo:tdn1:r:{hash}",
+                "- TASA: Tasaciones y Valoraciones, informes de tasacion");
+            _memoryCache.Set(
+                $"clasificacion:catalogo:tdn2:TASA:r:{hash}",
+                "TASA-10 | Tasacion restringida");
+        }
+
+        private static string ComputeRestrictedCacheHash(IEnumerable<string> codigos)
+        {
+            var canonical = string.Join(
+                "|",
+                codigos.Select(c => c.Trim().ToUpperInvariant()).OrderBy(c => c, StringComparer.Ordinal));
+            var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical));
+            return Convert.ToHexString(bytes)[..16];
         }
 
         private void SetupTipologiaRepository(params TipologiaEntity[] tipologias)

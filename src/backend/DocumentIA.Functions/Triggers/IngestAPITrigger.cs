@@ -19,6 +19,7 @@ public class IngestAPITrigger
 {
     private readonly ILogger<IngestAPITrigger> _logger;
     private readonly PromptInstruccionesValidator _promptInstruccionesValidator;
+    private readonly RestriccionTipologiasValidator _restriccionTipologiasValidator;
     private readonly IBlobStorageService _blobStorageService;
     private readonly ClassificationRoutingSettings _classificationRoutingSettings;
 
@@ -30,11 +31,13 @@ public class IngestAPITrigger
     public IngestAPITrigger(
         ILogger<IngestAPITrigger> logger,
         PromptInstruccionesValidator promptInstruccionesValidator,
+        RestriccionTipologiasValidator restriccionTipologiasValidator,
         IBlobStorageService blobStorageService,
         IOptions<ClassificationRoutingSettings> classificationRoutingOptions)
     {
         _logger = logger;
         _promptInstruccionesValidator = promptInstruccionesValidator;
+        _restriccionTipologiasValidator = restriccionTipologiasValidator;
         _blobStorageService = blobStorageService;
         _classificationRoutingSettings = classificationRoutingOptions.Value;
     }
@@ -150,6 +153,31 @@ public class IngestAPITrigger
                 var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
                 await badResponse.WriteStringAsync(promptValidationError ?? "instrucciones.prompt inválido.");
                 return badResponse;
+            }
+
+            if (contratoEntrada.Instrucciones.RestriccionTipologias is not null)
+            {
+                // La restricción opera a granularidad de tipología (TDN2); el nivel TDN1 no puede honrarla.
+                if (string.Equals(
+                    contratoEntrada.Instrucciones.Classification.NivelClasificacion,
+                    ClassificationLevelResolver.LevelTdn1,
+                    StringComparison.OrdinalIgnoreCase))
+                {
+                    var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                    await badResponse.WriteStringAsync(
+                        "instrucciones.restriccionTipologias requiere nivelClasificacion TDN1_TDN2 (no es compatible con TDN1).");
+                    return badResponse;
+                }
+
+                var restriccionValidation = await _restriccionTipologiasValidator.ValidateAndNormalizeAsync(
+                    contratoEntrada.Instrucciones.RestriccionTipologias);
+                if (!restriccionValidation.IsValid)
+                {
+                    var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                    await badResponse.WriteStringAsync(
+                        restriccionValidation.Error ?? "instrucciones.restriccionTipologias inválida.");
+                    return badResponse;
+                }
             }
 
             if (contratoEntrada.Instrucciones.ClassificationOnly &&

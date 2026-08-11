@@ -17,6 +17,14 @@ public static class GptHierarchicalClassificationParser
     /// </summary>
     public const string PropuestaCatalogMappingReason = "tdn1_resuelto_por_mapeo_propuesta";
 
+    /// <summary>
+    /// Motivo informado cuando el modelo responde explícitamente "tdn2": null en Fase 2,
+    /// indicando que ninguna tipología del catálogo mostrado encaja. Aplica a cualquier
+    /// clasificación (restringida o no); es el modo restringido quien, aguas arriba de
+    /// <see cref="GptClasificarDataProvider"/>, consume este motivo de forma diferenciada.
+    /// </summary>
+    public const string Fase2NingunaTipologiaReason = "fase2_ninguna_tipologia_en_conjunto";
+
     public static GptHierarchicalParsingResult<GptPhase1Classification> ParsePhase1(string responseText)
     {
         if (string.IsNullOrWhiteSpace(responseText))
@@ -104,11 +112,19 @@ public static class GptHierarchicalClassificationParser
                     "La respuesta de fase 2 debe ser un objeto JSON.");
             }
 
-            if (!root.TryGetProperty("tdn2", out var tdn2Element) || tdn2Element.ValueKind != JsonValueKind.String)
+            if (!root.TryGetProperty("tdn2", out var tdn2Element) ||
+                (tdn2Element.ValueKind != JsonValueKind.String && tdn2Element.ValueKind != JsonValueKind.Null))
             {
                 return GptHierarchicalParsingResult<GptPhase2Classification>.Fail(
                     Phase2ParsingErrorReason,
-                    "La respuesta de fase 2 debe incluir 'tdn2' como string.");
+                    "La respuesta de fase 2 debe incluir 'tdn2' como string o null.");
+            }
+
+            if (tdn2Element.ValueKind == JsonValueKind.Null)
+            {
+                return GptHierarchicalParsingResult<GptPhase2Classification>.Fail(
+                    Fase2NingunaTipologiaReason,
+                    "El modelo indicó explícitamente que ninguna tipología del catálogo encaja (tdn2 null).");
             }
 
             var tdn2 = NormalizeCodeOrNull(tdn2Element.GetString());
