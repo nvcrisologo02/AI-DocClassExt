@@ -49,6 +49,14 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         ClasificacionInput input,
         CancellationToken cancellationToken = default)
     {
+        var resultado = await ClasificarCoreAsync(input, cancellationToken);
+        return await AplicarRestriccionTipologiasAsync(resultado, input, cancellationToken);
+    }
+
+    private async Task<ResultadoClasificacion> ClasificarCoreAsync(
+        ClasificacionInput input,
+        CancellationToken cancellationToken)
+    {
         var requestedProvider = input.Entrada.Instrucciones.Classification.Provider;
         var resolvedFlow = ResolveFlowName(requestedProvider);
         var flowProviders = ResolveFlowProviders(resolvedFlow);
@@ -277,7 +285,30 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             return false;
         }
 
+        var conjunto = ResolverConjuntoRestringido(input);
+        if (conjunto is not null && !conjunto.Contains(resultado.TipologiaDetectada))
+        {
+            return false;
+        }
+
         return resultado.Confianza >= threshold;
+    }
+
+    /// <summary>Conjunto de códigos permitidos de la petición, o null si no aplica restricción.</summary>
+    private static HashSet<string>? ResolverConjuntoRestringido(ClasificacionInput input)
+    {
+        if (input.OmitirRestriccionTipologias)
+        {
+            return null;
+        }
+
+        var codigos = input.Entrada.Instrucciones.RestriccionTipologias?.Codigos;
+        if (codigos is not { Count: > 0 })
+        {
+            return null;
+        }
+
+        return new HashSet<string>(codigos, StringComparer.OrdinalIgnoreCase);
     }
 
     private List<PropuestaProveedor> BuildDetalle(List<ResultadoClasificacion> evaluated, string? baseDiscardReason)
@@ -328,6 +359,118 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             model = null;
             return false;
         }
+    }
+
+    /// <summary>
+    /// Post-proceso universal de la restricción de tipologías: valida la pertenencia del
+    /// resultado final al conjunto permitido (sea cual sea el proveedor que lo produjo),
+    /// degrada a "Desconocido" cuando no pertenece y resuelve la propuesta libre opcional.
+    /// </summary>
+    private async Task<ResultadoClasificacion> AplicarRestriccionTipologiasAsync(
+        ResultadoClasificacion resultado,
+        ClasificacionInput input,
+        CancellationToken cancellationToken)
+    {
+        var conjunto = ResolverConjuntoRestringido(input);
+        if (conjunto is null)
+        {
+            return resultado;
+        }
+
+        var restriccion = input.Entrada.Instrucciones.RestriccionTipologias!;
+        var eco = new RestriccionTipologiasAplicada
+        {
+            Codigos = new List<string>(restriccion.Codigos),
+            CodigosIgnorados = restriccion.CodigosIgnorados is null
+                ? null
+                : new List<string>(restriccion.CodigosIgnorados)
+        };
+
+        if (!string.IsNullOrWhiteSpace(resultado.TipologiaDetectada) &&
+            conjunto.Contains(resultado.TipologiaDetectada))
+        {
+            resultado.RestriccionTipologias = eco;
+            return resultado;
+        }
+
+        // Fuera del conjunto (o Desconocido): degradar conservando la traza de proveedores.
+        _logger.LogInformation(
+            "Restricción de tipologías: resultado final '{Tipologia}' fuera del conjunto permitido [{Conjunto}]. Devolviendo Desconocido.",
+            resultado.TipologiaDetectada,
+            string.Join(", ", restriccion.Codigos));
+
+        var desconocido = new ResultadoClasificacion
+        {
+            Modelo = resultado.Modelo,
+            ProveedorClasif = resultado.ProveedorClasif,
+            TipologiaDetectada = "Desconocido",
+            Confianza = 0.0,
+            FallbackRazon = RestriccionTipologiasMotivos.FueraDeConjunto,
+            DetalleProveedores = resultado.DetalleProveedores,
+            ResumenCombinado = resultado.ResumenCombinado,
+            RestriccionTipologias = eco,
+            UmbralFallbackAplicado = resultado.UmbralFallbackAplicado
+        };
+
+        if (!restriccion.ProponerSiDesconocido)
+        {
+            return desconocido;
+        }
+
+        // Propuesta libre: reutilizar el mejor candidato descartado de la cadena si lo hay...
+        var umbral = input.UmbralFallbackEfectivo ?? 0.6;
+        var candidatoPrevio = (resultado.DetalleProveedores ?? new List<PropuestaProveedor>())
+            .Where(p => !string.IsNullOrWhiteSpace(p.Tipologia)
+                        && !string.Equals(p.Tipologia, "Desconocido", StringComparison.OrdinalIgnoreCase)
+                        && !conjunto.Contains(p.Tipologia)
+                        && p.Confianza >= umbral)
+            .OrderByDescending(p => p.Confianza)
+            .FirstOrDefault();
+
+        if (candidatoPrevio is not null)
+        {
+            desconocido.PropuestaTipologia = candidatoPrevio.Tipologia!;
+            return desconocido;
+        }
+
+        // ...o ejecutar una única pasada GPT sin restricción. Su fallo no debe romper el resultado.
+        try
+        {
+            var inputLibre = new ClasificacionInput
+            {
+                Entrada = input.Entrada,
+                DatosNormalizados = input.DatosNormalizados,
+                UmbralFallbackEfectivo = input.UmbralFallbackEfectivo,
+                DocumentoBase64Override = input.DocumentoBase64Override,
+                CharsTextoNativo = input.CharsTextoNativo,
+                TotalPaginas = input.TotalPaginas,
+                GenerarResumenPorDefecto = false,
+                OmitirRestriccionTipologias = true
+            };
+
+            var libre = await ExecuteProviderAsync("gpt", inputLibre, cancellationToken);
+            if (!string.IsNullOrWhiteSpace(libre.TipologiaDetectada) &&
+                !string.Equals(libre.TipologiaDetectada, "Desconocido", StringComparison.OrdinalIgnoreCase))
+            {
+                desconocido.PropuestaTipologia = libre.TipologiaDetectada;
+                desconocido.DetalleProveedores ??= new List<PropuestaProveedor>();
+                desconocido.DetalleProveedores.Add(new PropuestaProveedor
+                {
+                    Proveedor = RestriccionTipologiasMotivos.PropuestaLibre,
+                    Tipologia = libre.TipologiaDetectada,
+                    Confianza = libre.Confianza,
+                    MotivoDescarte = null
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "La pasada de propuesta libre falló; se devuelve Desconocido sin propuesta.");
+        }
+
+        return desconocido;
     }
 
 }
