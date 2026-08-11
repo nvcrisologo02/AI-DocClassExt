@@ -1,7 +1,7 @@
 # Prompt y resumen independientes de la clasificación
 
 **Fecha:** 2026-08-10
-**Estado:** Implementado en `feature/100027-100031-prompt-con-contenido` (mergeada a develop) + `bugfix/100045-layout-preclasif-blobfirst`
+**Estado:** Implementado, verificado E2E en dev y mergeado a `develop` (`94b26c3`). AB#100027 a AB#100030 y AB#100045 en Done
 **Work items:** AB#100027 (padre) — AB#100028 (Cambio A), AB#100029 (Cambio B), AB#100030 (Apunte C)
 
 ## Origen
@@ -23,9 +23,15 @@ El análisis descartó esa vía por dos motivos, en este orden:
 2. **La necesidad real era extraer texto de esos formatos**, no pasar el documento. Y esa
    capacidad ya existe: DI Layout `2024-11-30` soporta DOCX, XLSX, PPTX y HTML.
 
-Verificado empíricamente en dev el 2026-08-10 (ver "Evidencia"): **XLSX y PPTX ya se procesan de
-punta a punta hoy**, sin cambio alguno. Lo que queda no es habilitar formatos, sino corregir dos
-condiciones del orquestador que impiden que el prompt y el resumen se ejecuten con contenido.
+Verificado empíricamente en dev el 2026-08-10 (ver "Evidencia"): XLSX y PPTX producían resúmenes
+correctos sin cambio alguno, así que el trabajo no era habilitar formatos sino corregir las
+condiciones del orquestador que impedían que el prompt y el resumen se ejecutaran con contenido.
+
+> **Matiz añadido después (AB#100045).** Esa primera lectura era optimista: los resúmenes de Office
+> salían bien porque el markdown lo aportaba la **extracción de Content Understanding** de la
+> tipología resuelta, que descarga el blob por su cuenta. El layout **pre-clasificación** fallaba con
+> todo documento no-PDF, de modo que la clasificación de Office corría sin contexto textual. La causa
+> raíz y su corrección están en el "Apunte C".
 
 ## Evidencia
 
@@ -36,8 +42,8 @@ Tres documentos enviados al ingest de `srbappdevdocai` con prompt ad-hoc
 
 | Documento | Markdown DI Layout | Prompt | Resultado |
 | --- | --- | --- | --- |
-| `prueba.xlsx` (33 KB, catálogo de tipologías) | Generado | gpt-5-mini, 9,5 s | Resumen fiel al contenido real |
-| `prueba.pptx` (3 MB, 5 diapositivas) | Generado | gpt-5-mini, 4,3 s | Resumen fiel al contenido real |
+| `prueba.xlsx` (33 KB, catálogo de tipologías) | Generado (vía extracción CU, **no** layout — ver AB#100045) | gpt-5-mini, 9,5 s | Resumen fiel al contenido real |
+| `prueba.pptx` (3 MB, 5 diapositivas) | Generado (vía extracción CU, **no** layout — ver AB#100045) | gpt-5-mini, 4,3 s | Resumen fiel al contenido real |
 | `control.pdf` (1 página, texto) | Generado | **No ejecutado** | `NO_CLASIFICADO` → el prompt se salta |
 
 DI Layout autodetectó ambos formatos Office a partir de los bytes; no hay lista blanca de formatos

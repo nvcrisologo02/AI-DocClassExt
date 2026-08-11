@@ -328,8 +328,9 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | Estado | Descripción |
 |---|---|
 | `OK` | Procesamiento completado correctamente. |
-| `OK` _(clasificación parcial — tipología virtual)_ | Solo cuando `nivelClasificacion` activa clasificación GPT y el modelo no puede mapear a ningún código de catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` contiene la propuesta libre del modelo. El pipeline se detiene: extracción y validación se omiten. |
-| `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. El pipeline continúa (extracción, validación) con la tipología parcial. |
+| `OK` _(clasificación parcial — tipología virtual)_ | Solo cuando `nivelClasificacion` activa clasificación GPT y el modelo no puede mapear a ningún código de catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` contiene la propuesta libre del modelo. El pipeline se detiene: extracción y validación se omiten. **Si la petición incluye `instrucciones.prompt` o `forzarResumenPorDefecto`, el prompt y el resumen sí se ejecutan** antes de cerrar (ver nota más abajo). |
+| `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. El pipeline continúa (extracción, validación) con la tipología parcial. **Cuando el estado proviene de una tipología no resoluble o `Desconocido`, el prompt y el resumen se ejecutan igualmente si la petición los pidió**; `datosExtraidos.ResultadoPrompt` y/o `datosExtraidos.Resumen` vienen informados pese al `NO_CLASIFICADO`. |
+| `SIN_CONTENIDO_DOCUMENTO` | Se solicitó un prompt o un resumen pero no se pudo obtener **ningún texto del documento**: ni markdown de extracción, ni layout previo, ni recuperación bajo demanda. El modelo **no se invoca** (antes se le llamaba con el hueco de contenido vacío y devolvía respuestas del tipo *"No has incluido el documento"* que se persistían como resumen válido). Va acompañado de la actividad `Prompt` en `Failed` y sin `Resumen` ni `ResultadoPrompt` en `datosExtraidos`. Causas habituales: documento ilegible o corrupto, o Document Intelligence no disponible. |
 | `PENDIENTE_REINTENTO` | La clasificación GPT se pospuso porque la cuota de Azure OpenAI quedó agotada (`429 Too Many Requests`) tras agotar los reintentos y/o con el circuito abierto. Es un estado **retriable**: el documento debe reencolarse/reprocesarse más tarde, no representa un fallo definitivo. Va acompañado de `estadoCalidad = "ERROR"`, confianzas a `0` y `mensajeError` con el detalle (p. ej. `"Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`). No debe confundirse con `NO_CLASIFICADO` (documento genuinamente no clasificable). |
 | `VALIDACION_CON_ERRORES` | Extracción completada pero alguna regla de validación no se cumplió. Los datos se devuelven. |
 | `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. Se devuelven datos con advertencia. |
@@ -349,6 +350,29 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 >   }
 > }
 > ```
+
+> **Ejemplo — `SIN_CONTENIDO_DOCUMENTO`** (extracto de `resultado`):
+> ```json
+> {
+>   "resultado": {
+>     "estado": "SIN_CONTENIDO_DOCUMENTO",
+>     "mensajeError": "No hay contenido textual del documento para ejecutar el prompt.",
+>     "estadoCalidad": "ERROR"
+>   }
+> }
+> ```
+
+> **Prompt y resumen no dependen de la clasificación.** Si la petición informa `instrucciones.prompt`
+> o `instrucciones.forzarResumenPorDefecto`, el prompt y el resumen se ejecutan aunque el documento
+> no llegue a clasificarse. El estado sigue reflejando el resultado de la clasificación
+> (`NO_CLASIFICADO`, confianzas a `0`): no se está clasificando el documento, se está respondiendo a
+> lo que la petición pidió.
+>
+> El contenido para el prompt se resuelve en cascada: markdown de extracción → markdown de layout
+> pre-clasificación → **extracción bajo demanda vía Document Intelligence Layout**, que cubre el caso
+> de tipologías con `expectedType` que no ejecutan ninguno de los dos pasos anteriores. Si tras esa
+> cascada sigue sin haber texto, la ejecución cierra en `SIN_CONTENIDO_DOCUMENTO` en lugar de invocar
+> al modelo a ciegas.
 
 ---
 

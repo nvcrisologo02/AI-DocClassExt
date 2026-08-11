@@ -87,6 +87,7 @@ Estados habituales y accion recomendada:
 | `VALIDACION_CON_ERRORES` | Se extrajeron datos pero hay inconsistencias | Revisar campos marcados y corregir/confirmar |
 | `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
 | `DUPLICADO` | El documento ya habia sido procesado | Usar resultado existente o seguir criterio de negocio |
+| `SIN_CONTENIDO_DOCUMENTO` | Se pidio un resumen o un prompt pero no se pudo leer el documento | Comprobar que el documento no esta corrupto ni es un escaneado sin texto. Si es legible, escalar: puede ser una incidencia del servicio de extraccion |
 | `ERROR` | El procesamiento no pudo completarse | Reintentar y, si persiste, escalar a soporte |
 
 #### Paso 5: Revisar confianza del resultado
@@ -492,7 +493,7 @@ En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el 
 | `.idActivoCambiado` | bool | `true` si plugin cambio el IdActivo |
 | **datosExtraidos** | Dictionary&lt;string, object&gt; | Campos extraidos del documento |
 | **resultado** | | |
-| `.estado` | string | Estado final: `OK`, `VALIDACION_CON_ERRORES`, `BAJA_CONFIANZA_CLASIFICACION`, `DUPLICADO`, `ERROR` |
+| `.estado` | string | Estado final: `OK`, `VALIDACION_CON_ERRORES`, `BAJA_CONFIANZA_CLASIFICACION`, `DUPLICADO`, `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO`, `PENDIENTE_REINTENTO`, `ERROR` |
 | `.mensajeError` | string? | Detalle cuando estado = ERROR |
 | `.confianzaGlobal` | double | MIN(clasif, extrac, validacion). Rango [0.0-1.0] |
 | `.estadoCalidad` | string | `OK` (>=0.85), `REVISION` (>=0.70), `ERROR` (<0.70) |
@@ -624,6 +625,9 @@ Detalles del backfill:
 | `VALIDACION_CON_ERRORES` | Extraccion OK pero validacion detecto errores | Revisar `postproceso.inconsistencias`. Datos pueden requerir correccion manual. |
 | `BAJA_CONFIANZA_CLASIFICACION` | IA no pudo clasificar con confianza suficiente | Verificar documento manualmente. Posible documento no soportado. |
 | `DUPLICADO` | Documento ya procesado (SHA256 identico) | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
+| `NO_CLASIFICADO` | No se identifico la tipologia del documento | Revisar el documento; si el tipo es conocido, reenviar con `expectedType`. Si la peticion pedia prompt o resumen, estos si vienen informados en `datosExtraidos`. |
+| `SIN_CONTENIDO_DOCUMENTO` | Se pidio prompt o resumen y no se obtuvo texto del documento por ninguna via | El modelo no se invoca a proposito: es preferible un fallo explicito a un resumen inventado. Ver `docs/guias/TROUBLESHOOTING_DIAGNOSTICO.md`. |
+| `PENDIENTE_REINTENTO` | Cuota de Azure OpenAI agotada durante la clasificacion | Estado retriable: reencolar el documento mas tarde. No es un fallo del documento. |
 | `ERROR` | Error en el procesamiento | Consultar `resultado.mensajeError` y `detalleEjecucion.seguimiento`. |
 
 ### EstadoCalidad

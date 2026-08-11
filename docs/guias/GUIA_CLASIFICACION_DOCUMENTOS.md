@@ -78,6 +78,7 @@ Tras el procesamiento, recibirás:
 | 🟡 **REVISION** (0.70–0.85) | El sistema tiene dudas; los datos pueden ser correctos pero conviene revisar | Revisión humana recomendada |
 | 🔴 **ERROR** (< 0.70) | Alta probabilidad de que algo no sea correcto | Revisión humana obligatoria |
 | ⚪ **NO_CLASIFICADO** | El sistema no pudo identificar el tipo de documento | Intervención manual necesaria |
+| ⚫ **SIN_CONTENIDO_DOCUMENTO** | Se pidió un prompt o un resumen y no se pudo leer el documento por ninguna vía; el modelo no llegó a invocarse | Revisar si el documento es legible; si lo es, comprobar la salud de Document Intelligence |
 
 ---
 
@@ -122,7 +123,7 @@ Son dos campos independientes en el resultado:
 
 | Campo | Descripción | Valores posibles |
 |---|---|---|
-| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO` |
+| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO`, `PENDIENTE_REINTENTO`, `BAJA_CONFIANZA_CLASIFICACION` |
 | `EstadoCalidad` | Fiabilidad de los datos obtenidos | `OK`, `REVISION`, `ERROR` |
 
 Un documento puede terminar en `Estado=OK` pero `EstadoCalidad=REVISION` (proceso completado, pero con confianza media que requiere revisión humana).
@@ -938,7 +939,8 @@ x-functions-key: <function-key>    (producción)
 | `VALIDACION_CON_ERRORES` | Completado pero con errores de validación de campos |
 | `ERROR` | Error técnico en alguna actividad del pipeline |
 | `DUPLICADO` | Documento ya procesado; se reutiliza el resultado anterior |
-| `NO_CLASIFICADO` | No se pudo identificar el tipo de documento |
+| `NO_CLASIFICADO` | No se pudo identificar el tipo de documento. Si la petición pidió prompt o resumen, se ejecutan igualmente y viajan en `datosExtraidos` |
+| `SIN_CONTENIDO_DOCUMENTO` | Se pidió prompt o resumen y no se obtuvo texto del documento por ninguna vía; el modelo no se invoca y no se persiste resumen |
 
 ---
 
@@ -1490,6 +1492,7 @@ SHA256 del documento coincide con ejecución anterior
 | Error / Situación | Causa | Solución |
 |---|---|---|
 | `Estado = NO_CLASIFICADO` | GPT no pudo identificar el tipo | Revisar el documento; si es un tipo conocido, usar `expectedType` |
+| `Estado = SIN_CONTENIDO_DOCUMENTO` | Se pidió prompt/resumen y no se pudo extraer texto (documento ilegible, o Document Intelligence caído o sin permisos) | Comprobar `detalleEjecucion.markdownGenerado` y buscar `InvalidContent` en la traza; ver TROUBLESHOOTING_DIAGNOSTICO §2 |
 | `Estado = ERROR` + `mensajeError = "KeyNotFoundException"` | `expectedType` no existe en el registro | Verificar la familia/versión en `TipologiaVersionResolver` |
 | `Estado = ERROR` + error en plugin `refCatExcel` | El plugin de prioridad 1 falló | Verificar disponibilidad del servicio en `localhost:8082`; desactivar plugin si no está disponible |
 | `EstadoCalidad = REVISION` | Confianza global entre 0.70 y 0.85 | Revisar manualmente los datos extraídos |

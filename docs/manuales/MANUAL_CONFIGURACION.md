@@ -74,7 +74,7 @@ Sección: `Classification:GptFallback`
 | `TimeoutSeconds` | int | Timeout de la llamada GPT. | `30` |
 
 > **Comportamiento especial:** Si DI clasifica como `RESTO` (tipología genérica), el fallback GPT se activa **de forma obligatoria**, independientemente del umbral y de si `Enabled = false`.  
-> Si GPT devuelve `Desconocido` o confianza < 0.3, el orquestador termina de forma controlada con `Estado = NO_CLASIFICADO` (sin error técnico de ejecución).
+> Si GPT devuelve `Desconocido` o confianza < 0.3, el orquestador termina de forma controlada con `Estado = NO_CLASIFICADO` (sin error técnico de ejecución). Si la petición incluye `instrucciones.prompt` o `forzarResumenPorDefecto`, el prompt y el resumen se ejecutan igualmente antes de cerrar: no dependen de que el documento sea clasificable.
 
 ---
 

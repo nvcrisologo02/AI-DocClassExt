@@ -1,7 +1,7 @@
 # Document Intelligence — transporte inline y guarda de contenido vacío
 
 **Fecha:** 2026-08-10
-**Estado:** Aprobado. Work items creados, pendiente de plan de implementación
+**Estado:** Implementado, verificado en dev y mergeado a `develop`. AB#100031 y sus tasks en Done
 **Work item:** AB#100031 (tasks AB#100032 a AB#100037)
 
 ## Problema

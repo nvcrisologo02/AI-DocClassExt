@@ -732,9 +732,31 @@ requests
 ```
 
 **Cómo leer:**
-- `PENDIENTE_REINTENTO` es un estado diferenciado y retriable (no confundir con `NO_CLASIFICADO`, que es un documento genuinamente no clasificable) — pensado para que operación reencole el documento más tarde
+- `PENDIENTE_REINTENTO` es un estado diferenciado y retriable (no confundir con `NO_CLASIFICADO`, que es un documento genuinamente no clasificable, ni con `SIN_CONTENIDO_DOCUMENTO`, donde no se pudo leer el documento y el modelo no llegó a invocarse) — pensado para que operación reencole el documento más tarde
 - Volumen alto → correlacionar con [Query 24](#query-24-aperturas-de-circuito-azure-openai-recientes) y [Query 25](#query-25-llamadas-rechazadas-por-circuito-abierto-fail-fast) para confirmar que la causa es cuota agotada de Azure OpenAI
 - Solo aplica a clasificación GPT: en prompts (enriquecimiento no bloqueante) el mismo agotamiento de cuota degrada de forma graceful (`PromptResultado.Error` con prefijo `rate_limit_exhausted:`) sin escalar el documento a este estado
+
+---
+
+#### Query 27: Documentos sin contenido legible (prompt/resumen no ejecutable)
+
+```kusto
+// Documentos en los que se pidió prompt o resumen y no se pudo obtener texto por ninguna vía.
+// El modelo NO se invoca: es un fallo deliberado, no un resumen degradado.
+traces
+| where timestamp > ago(24h)
+| where message has "SIN_CONTENIDO_DOCUMENTO"
+    or message has "no se pudo obtener markdown bajo demanda"
+    or message has "DI Layout no devolvió markdown útil"
+| project timestamp, operation_Id, message
+| sort by timestamp desc
+```
+
+**Cómo leer:**
+- Una subida sostenida apunta a Document Intelligence caído, sin permisos o con transporte mal configurado, **no** a documentos malos: revisar `DocumentIntelligence__UseInlineContent` por entorno y los `400 InvalidContent` asociados
+- Casos aislados suelen ser documentos genuinamente ilegibles (escaneados sin texto, ficheros corruptos)
+- Si aparecen documentos Office (`.xlsx`, `.pptx`, `.docx`), comprobar que la ejecución lleva `origenMarkdown = LayoutPreClasificacion` o `LayoutBajoDemandaPrompt`: un `markdownGenerado = false` sistemático en Office indica regresión del transporte por `BlobPath` del paso 2.8
+- Este estado **sustituye** al comportamiento anterior, en el que el modelo respondía *"No has incluido el documento"* y esa respuesta se persistía como resumen con confianza 1.0. Al desplegar el cambio, parte del volumen que antes contaba como `OK` pasa a contarse aquí
 
 ---
 
