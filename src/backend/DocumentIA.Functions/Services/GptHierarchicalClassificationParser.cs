@@ -19,7 +19,9 @@ public static class GptHierarchicalClassificationParser
 
     /// <summary>
     /// Motivo informado cuando el modelo responde explícitamente "tdn2": null en Fase 2,
-    /// indicando que ninguna tipología del catálogo mostrado encaja (modo restringido).
+    /// indicando que ninguna tipología del catálogo mostrado encaja. Aplica a cualquier
+    /// clasificación (restringida o no); es el modo restringido quien, aguas arriba de
+    /// <see cref="GptClasificarDataProvider"/>, consume este motivo de forma diferenciada.
     /// </summary>
     public const string Fase2NingunaTipologiaReason = "fase2_ninguna_tipologia_en_conjunto";
 

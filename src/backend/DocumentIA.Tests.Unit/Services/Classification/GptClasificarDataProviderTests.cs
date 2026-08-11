@@ -402,7 +402,7 @@ Contenido del documento:
 
         [Theory]
         [InlineData("respuesta truncada que no es json", "fase2_parsing_error")]
-        [InlineData("{\"tdn2\": null, \"confianza\": 0.4}", "fase2_ninguna_tipologia_en_conjunto")]
+        [InlineData("{\"tdn2\": null, \"confianza\": 0.4}", "fase2_parsing_error")]
         [InlineData("{\"tdn2\": \"\", \"confianza\": 0.4}", "fase2_parsing_error")]
         public async Task ClasificarAsync_CuandoPhase2NoDevuelveTdn2Parseable_DegradaAVirtualTdn1(string phase2Response, string fallbackRazonEsperada)
         {
@@ -439,6 +439,43 @@ Contenido del documento:
             result.FallbackRazon.Should().Be(fallbackRazonEsperada);
             result.ResumenCombinado.Should().Be("Resumen Phase 1");
             result.PropuestaTipologia.Should().Be("TASA: informe de tasacion de activo");
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_CuandoPhase2DevuelveTdn2NullExplicitoSinModoRestringido_PreservaFallbackRazonLegacy()
+        {
+            // Given: Phase 1 resuelve TDN1=TASA y Phase 2 responde "tdn2": null explícito (ninguna
+            // tipología del catálogo encaja). Sin modo restringido, el provider debe seguir emitiendo
+            // el motivo histórico Phase2ParsingErrorReason para no romper el contrato que consume
+            // DocumentProcessOrchestrator al detectar el corte "virtual TDN1" (AB#100050).
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult("{\"tdn2\": null, \"confianza\": 0.4}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: FallbackRazon es el motivo legacy, no el nuevo Fase2NingunaTipologiaReason
+            result.TipologiaDetectada.Should().Be("TASA");
+            result.ClasificacionParcial.Should().BeTrue();
+            result.FallbackRazon.Should().Be(GptHierarchicalClassificationParser.Phase2ParsingErrorReason);
         }
 
         // ========== Robustez resolución tipología: mapeo propuesta -> catálogo (AB#99984) ==========
@@ -566,8 +603,9 @@ Contenido del documento:
         [Fact]
         public async Task Router_ResultadoParcialSatisfactorio_ConservaFallbackRazon()
         {
-            // Given: el provider GPT devuelve un virtual TDN1 (fase2_ninguna_tipologia_en_conjunto) con
-            // confianza 0.72, que supera el umbral 0.6 y por tanto el router lo considera satisfactorio
+            // Given: el provider GPT devuelve un virtual TDN1 (fase2_parsing_error, motivo legacy que
+            // el provider preserva incluso ante un "tdn2": null explícito) con confianza 0.72, que
+            // supera el umbral 0.6 y por tanto el router lo considera satisfactorio
             var promptProviderMock = new Mock<IClassificationPromptProvider>();
             promptProviderMock
                 .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
@@ -599,7 +637,7 @@ Contenido del documento:
             // el orquestador la necesita para tratar el resultado como tipología virtual
             result.ClasificacionParcial.Should().BeTrue();
             result.TipologiaDetectada.Should().Be("TASA");
-            result.FallbackRazon.Should().Be("fase2_ninguna_tipologia_en_conjunto");
+            result.FallbackRazon.Should().Be("fase2_parsing_error");
             result.FallbackLLM.Should().BeFalse();
         }
 

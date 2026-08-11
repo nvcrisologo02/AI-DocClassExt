@@ -342,18 +342,30 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             // Phase 2 sin TDN2 parseable (JSON inválido, tdn2 null/vacío o respuesta truncada):
             // se degrada a tipología virtual conservando el TDN1 ya resuelto en Phase 1,
             // igual que los caminos "familia sin catálogo TDN2" y "TDN2 sin mapeo publicado".
+            var razonPrecisa = phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason;
             _logger.LogWarning(
                 "Phase 2 sin TDN2 parseable ({Razon}). Degradando a tipología virtual TDN1={Tdn1} con confianza Phase 1={Confianza}.",
-                phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason,
+                razonPrecisa,
                 tdn1Code,
                 confianzaPhase1.ToString("F3"));
+
+            // El orquestador detecta el corte "virtual TDN1" comparando FallbackRazon con
+            // GptHierarchicalClassificationParser.Phase2ParsingErrorReason (ver
+            // DocumentProcessOrchestrator). Un "tdn2": null explícito (Fase2NingunaTipologiaReason)
+            // es, a estos efectos de clasificación sin restricción, el mismo caso de "Phase 2 no
+            // aportó TDN2 utilizable": se normaliza al motivo histórico para no romper ese contrato
+            // aguas abajo. El modo restringido (Task 5) intercepta este motivo ANTES de llegar aquí.
+            var fallbackRazon = razonPrecisa == GptHierarchicalClassificationParser.Fase2NingunaTipologiaReason
+                ? GptHierarchicalClassificationParser.Phase2ParsingErrorReason
+                : razonPrecisa;
+
             return BuildVirtualResult(
                 model,
                 tipologiaDetectada: tdn1Code,
                 propuesta: string.IsNullOrWhiteSpace(propuesta) ? tdn1Code : propuesta,
                 confianza: confianzaPhase1,
                 resumen: resumenPhase1,
-                fallbackRazon: phase2Parsed.ErrorReason ?? GptHierarchicalClassificationParser.Phase2ParsingErrorReason);
+                fallbackRazon: fallbackRazon);
         }
 
         var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
