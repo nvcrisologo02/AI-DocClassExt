@@ -32,17 +32,49 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     internal const string ResumenContenidoReferencia =
         "(el documento ya está incluido más arriba en este mismo mensaje, en la sección \"CONTENIDO DEL DOCUMENTO (texto/markdown)\"; úsalo como contenido)";
 
-    /// <summary>Instrucción añadida al system prompt de Fase 1 en modo restringido.</summary>
-    internal const string RestriccionPhase1Instruction =
-        "\n\nRESTRICCIÓN DE CATÁLOGO: en esta petición SOLO puedes clasificar el documento en las familias " +
-        "listadas en el catálogo anterior. Si el documento no encaja claramente en ninguna de ellas, responde " +
-        "{\"tdn1\": null, \"propuesta\": \"<qué crees que es el documento>\", \"confianza\": 0.0}. No fuerces la clasificación.";
+    /// <summary>Instrucción de la clasificación restringida en fase única (system prompt).</summary>
+    internal const string RestriccionFasePlanaInstruction =
+        "\n\nCLASIFICACIÓN RESTRINGIDA A UN CONJUNTO ACOTADO: el solicitante garantiza que este documento " +
+        "debería corresponder a UNA de las tipologías del catálogo anterior. Elige la MÁS compatible con el " +
+        "contenido del documento, aunque este pudiera encajar de forma natural en otra categoría documental " +
+        "no listada. Responde con tipologia null SOLO si el contenido no guarda ninguna relación razonable " +
+        "con ninguna de las tipologías listadas. No inventes códigos fuera del catálogo.";
 
-    /// <summary>Instrucción añadida al system prompt de Fase 2 en modo restringido.</summary>
-    internal const string RestriccionPhase2Instruction =
-        "\n\nRESTRICCIÓN DE CATÁLOGO: en esta petición SOLO puedes elegir una de las tipologías listadas en el " +
-        "catálogo anterior. Si el documento no corresponde a ninguna de ellas, responde {\"tdn2\": null, \"confianza\": 0.0}. " +
-        "No fuerces la clasificación.";
+    /// <summary>Instrucción de formato de respuesta de la clasificación restringida (sin resumen).</summary>
+    internal const string RestriccionFasePlanaResponseInstruction =
+        "Responde exclusivamente en JSON válido con esta estructura: {\"tipologia\": \"CODIGO_TIPOLOGIA\" | null, " +
+        "\"propuesta\": \"texto libre\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe reflejar tu certeza. " +
+        "No incluyas texto fuera del JSON.";
+
+    /// <summary>Instrucción de formato de respuesta de la clasificación restringida (con resumen).</summary>
+    internal const string RestriccionFasePlanaResponseInstructionConResumen =
+        "Responde exclusivamente en JSON válido con esta estructura: {\"tipologia\": \"CODIGO_TIPOLOGIA\" | null, " +
+        "\"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo " +
+        "'confianza' debe reflejar tu certeza. No incluyas texto fuera del JSON.";
+
+    /// <summary>System prompt dedicado de la clasificación restringida en fase única.
+    /// No reutiliza las plantillas de Fase 1 de BD: aquellas incrustan el formato de respuesta
+    /// jerárquico ("tdn1"/familias) y contradirían el formato plano ("tipologia"). AB#100063: este
+    /// texto es el ÚNICO fallback de código para <c>PromptTemplates.classification.restricted.system</c>
+    /// (ver <c>ClassificationPromptProvider.LoadFromFallbackConfiguration</c>); no se duplica en
+    /// appsettings. En ejecución, <see cref="ClasificarRestringidoAsync"/> ya no lee esta constante
+    /// directamente, sino <c>promptSet.RestrictedSystemPrompt</c>.</summary>
+    internal const string RestriccionFasePlanaSystemPrompt =
+        "Eres un sistema experto en clasificación documental del sector inmobiliario y financiero español. " +
+        "Tu tarea es clasificar el documento en UNA de las tipologías del catálogo restringido que se te " +
+        "proporciona, comparando el CONTENIDO del documento con la descripción de cada tipología." +
+        RestriccionFasePlanaInstruction;
+
+    /// <summary>User prompt dedicado de la clasificación restringida en fase única (plantilla).
+    /// No reutiliza la plantilla de Fase 1 de BD: aquella etiqueta el catálogo como "Familias TDN1
+    /// disponibles", lenguaje jerárquico que no aplica al catálogo plano restringido. AB#100063:
+    /// este texto es el ÚNICO fallback de código para
+    /// <c>PromptTemplates.classification.restricted.user</c>; en ejecución se lee desde
+    /// <c>promptSet.RestrictedUserPrompt</c> (ver comentario de <see cref="RestriccionFasePlanaSystemPrompt"/>).</summary>
+    internal const string RestriccionFasePlanaUserPromptTemplate =
+        "{CONTEXT_PROMPT}\n\nTIPOLOGÍAS CANDIDATAS (el solicitante garantiza que el documento debería ser una de estas):\n" +
+        "{CATALOGO}\n\n" +
+        "CONTENIDO DEL DOCUMENTO (texto/markdown):\n{DOCUMENT_TEXT}";
 
     /// <summary>
     /// Conjunto de códigos permitidos de la petición, o null si no hay restricción activa
@@ -132,12 +164,18 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             promptSet.Source,
             promptSet.Version);
 
+        if (restriccionCodigos is not null)
+        {
+            return await ClasificarRestringidoAsync(
+                input, model, restriccionCodigos, contextoTexto, contextoPrompt, resumenPrompt, promptSet, stopwatch, cancellationToken);
+        }
+
         var phase1ResponseInstruction = resumenPrompt is null
             ? ClassificationTipologiaPromptBuilder.Phase1ResponseFormatInstruction
             : "Responde exclusivamente en JSON válido con esta estructura: {\"tdn1\": \"CODIGO_TDN1\" | null, \"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo 'confianza' debe ser un número entre 0.0 (ninguna certeza) y 1.0 (certeza absoluta) que refleje tu nivel de confianza en la clasificación. No incluyas texto fuera del JSON.";
 
         // Construir prompt Phase 1 desde configuración
-        var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog(restriccionCodigos);
+        var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
         var phase1SystemText = promptSet.Phase1SystemPrompt;
         var phase1UserText = promptSet.Phase1UserPrompt
             .Replace("{CONTEXT_PROMPT}", contextoPrompt)
@@ -152,11 +190,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (resumenPrompt is not null)
         {
             phase1UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
-        }
-
-        if (restriccionCodigos is not null)
-        {
-            phase1SystemText += RestriccionPhase1Instruction;
         }
 
         if (string.IsNullOrWhiteSpace(contextoTexto))
@@ -239,15 +272,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                     tdn1Code,
                     propuesta);
             }
-        }
-
-        if (restriccionCodigos is not null && string.IsNullOrWhiteSpace(tdn1Code))
-        {
-            stopwatch.Stop();
-            _logger.LogInformation(
-                "Clasificación restringida: Fase 1 sin familia del conjunto permitido. Devolviendo Desconocido. Propuesta='{Propuesta}'",
-                propuesta);
-            return BuildRestriccionDesconocidoResult(model, propuesta, resumenPhase1);
         }
 
         // Si no se resolvió TDN1 de ninguna forma (ni explícito, ni por prefijo, ni por mapeo
@@ -333,19 +357,10 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             confianzaPhase1.ToString("F3"),
             tdn1Code);
 
-        var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code, restriccionCodigos);
+        var phase2Catalog = _tipologiaPromptBuilder.BuildTdn2CatalogByFamilia(tdn1Code);
         if (string.IsNullOrWhiteSpace(phase2Catalog))
         {
             stopwatch.Stop();
-
-            if (restriccionCodigos is not null)
-            {
-                _logger.LogInformation(
-                    "Clasificación restringida: la familia TDN1={Tdn1} no tiene tipologías del conjunto permitido. Devolviendo Desconocido. Propuesta='{Propuesta}'",
-                    tdn1Code,
-                    propuesta);
-                return BuildRestriccionDesconocidoResult(model, propuesta, resumenPhase1);
-            }
 
             return BuildVirtualResult(
                 model,
@@ -358,18 +373,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         // Phase 2: NO incluir instrucción de resumen
         // El resumen ya fue generado en Phase 1 (phase1Parsed.Value.Resumen)
         // Phase 2 solo debe refinar la clasificación TDN2 dentro de la familia conocida
-        
+
         // Construir prompt Phase 2 desde configuración
         var phase2SystemText = promptSet.Phase2SystemPrompt;
         var phase2UserText = promptSet.Phase2UserPrompt
             .Replace("{TDN1_CODE}", tdn1Code)
             .Replace("{TDN2_CATALOG}", phase2Catalog)
             .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
-
-        if (restriccionCodigos is not null)
-        {
-            phase2SystemText += RestriccionPhase2Instruction;
-        }
 
         // Log prompts finales si está habilitado
         if (_promptSettings.EnableFullPromptLogging)
@@ -396,18 +406,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         if (!phase2Parsed.Success || phase2Parsed.Value is null)
         {
-            if (restriccionCodigos is not null &&
-                string.Equals(
-                    phase2Parsed.ErrorReason,
-                    GptHierarchicalClassificationParser.Fase2NingunaTipologiaReason,
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                stopwatch.Stop();
-                _logger.LogInformation(
-                    "Clasificación restringida: Fase 2 indicó que ninguna tipología del conjunto encaja. Devolviendo Desconocido.");
-                return BuildRestriccionDesconocidoResult(model, propuesta, resumenPhase1);
-            }
-
             stopwatch.Stop();
             // Phase 2 sin TDN2 parseable (JSON inválido, tdn2 null/vacío o respuesta truncada):
             // se degrada a tipología virtual conservando el TDN1 ya resuelto en Phase 1,
@@ -424,7 +422,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             // DocumentProcessOrchestrator). Un "tdn2": null explícito (Fase2NingunaTipologiaReason)
             // es, a estos efectos de clasificación sin restricción, el mismo caso de "Phase 2 no
             // aportó TDN2 utilizable": se normaliza al motivo histórico para no romper ese contrato
-            // aguas abajo. El modo restringido (Task 5) intercepta este motivo ANTES de llegar aquí.
+            // aguas abajo.
             var fallbackRazon = razonPrecisa == GptHierarchicalClassificationParser.Fase2NingunaTipologiaReason
                 ? GptHierarchicalClassificationParser.Phase2ParsingErrorReason
                 : razonPrecisa;
@@ -443,15 +441,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         var tipologiaCode = ResolveTipologiaByTdn2(phase2Parsed.Value.Tdn2);
         if (string.IsNullOrWhiteSpace(tipologiaCode))
         {
-            if (restriccionCodigos is not null)
-            {
-                stopwatch.Stop();
-                _logger.LogInformation(
-                    "Clasificación restringida: el TDN2 '{Tdn2}' de Fase 2 no mapea a ninguna tipología publicada. Devolviendo Desconocido.",
-                    phase2Parsed.Value.Tdn2);
-                return BuildRestriccionDesconocidoResult(model, propuesta, resumenPhase1);
-            }
-
             stopwatch.Stop();
             var tipologiaVirtual = BuildVirtualTipologiaDetectada(propuesta, tdn1Code, phase2Parsed.Value.Tdn2);
             var justificacionVirtual = BuildVirtualJustificacion(propuesta, tipologiaVirtual, phase2Parsed.Value.Tdn2, tdn1Code);
@@ -487,6 +476,197 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 ? GptHierarchicalClassificationParser.PropuestaCatalogMappingReason
                 : null
         };
+    }
+
+    /// <summary>
+    /// Clasificación restringida en fase única (AB#100060/AB#100061): el documento se compara
+    /// directamente contra el catálogo plano del conjunto acotado de tipologías candidatas, sin
+    /// pasar por la jerarquía TDN1/TDN2, con una única llamada al modelo. Usa las plantillas
+    /// dedicadas <c>promptSet.RestrictedSystemPrompt</c>/<c>promptSet.RestrictedUserPrompt</c>
+    /// (AB#100063: resueltas desde BD → cache → fallback, igual que <c>promptSet.Phase1*</c>/
+    /// <c>Phase2*</c>) en lugar de las plantillas de Fase 1 (<c>promptSet.Phase1*</c>): estas
+    /// últimas incrustan su propio formato de respuesta jerárquico ("tdn1"/familias), que
+    /// contradiría el formato plano ("tipologia") de esta clasificación. El fallback de código de
+    /// estas plantillas dedicadas son las constantes <see cref="RestriccionFasePlanaSystemPrompt"/>/
+    /// <see cref="RestriccionFasePlanaUserPromptTemplate"/> (ver <c>ClassificationPromptProvider</c>).
+    /// Replica el resto de la mecánica de invocación de <see cref="ClasificarAsync"/> Fase 1: mismo
+    /// orden de bloques (resumen, contexto vacío) y mismo stage/maxTokens en
+    /// <see cref="CompleteChatAsync"/>.
+    /// </summary>
+    private async Task<ResultadoClasificacion> ClasificarRestringidoAsync(
+        ClasificacionInput input,
+        ClassificationModelConfig model,
+        IReadOnlyCollection<string> restriccionCodigos,
+        string? contextoTexto,
+        string contextoPrompt,
+        PromptConfig? resumenPrompt,
+        ClassificationPromptSet promptSet,
+        Stopwatch stopwatch,
+        CancellationToken cancellationToken)
+    {
+        var catalogo = _tipologiaPromptBuilder.BuildCatalogoPlanoRestringido(restriccionCodigos);
+        if (string.IsNullOrWhiteSpace(catalogo))
+        {
+            stopwatch.Stop();
+            _logger.LogWarning(
+                "Clasificación restringida: catálogo plano vacío para el conjunto [{Conjunto}].",
+                string.Join(", ", restriccionCodigos));
+            return BuildRestriccionDesconocidoResult(model, string.Empty, null);
+        }
+
+        // AB#100063: las instrucciones de formato de respuesta (JSON) se mantienen en código, NO en
+        // BD. Son el contrato del parser (GptHierarchicalClassificationParser.ParseRestringido): si
+        // el Admin edita el texto de promptSet.RestrictedSystemPrompt/RestrictedUserPrompt desde BD
+        // (tono, énfasis, ejemplos) no puede romper el parseo de la respuesta, porque esta
+        // instrucción siempre se añade después, desde código.
+        var responseInstruction = resumenPrompt is null
+            ? RestriccionFasePlanaResponseInstruction
+            : RestriccionFasePlanaResponseInstructionConResumen;
+
+        // Montaje de system/user a partir de las plantillas dedicadas de la fase única restringida,
+        // resueltas desde promptSet (BD → cache → fallback a las constantes de código, AB#100063) y
+        // no de las plantillas de Fase 1, que incrustan el formato de respuesta jerárquico.
+        // Mismo orden de bloques que Fase 1: system base + instrucción de restricción (ya incluida
+        // en el prompt resuelto), bloque de resumen si aplica, y por último la instrucción de
+        // formato de respuesta (en código, ver comentario anterior).
+        var systemText = promptSet.RestrictedSystemPrompt;
+        var userText = promptSet.RestrictedUserPrompt
+            .Replace("{CONTEXT_PROMPT}", contextoPrompt)
+            .Replace("{CATALOGO}", catalogo)
+            .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
+
+        if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
+        {
+            systemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
+        }
+
+        if (resumenPrompt is not null)
+        {
+            userText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+        }
+
+        systemText += $"\n\n{responseInstruction}";
+
+        if (string.IsNullOrWhiteSpace(contextoTexto))
+        {
+            _logger.LogWarning(
+                "No hay contexto textual preprocesado para la clasificación restringida en {Documento}. Se continuará con contexto mínimo.",
+                input.Entrada.Documento.Name);
+
+            userText +=
+                $"\n\nNo hay contenido textual disponible para este fallback. " +
+                $"Nombre de archivo: {input.Entrada.Documento.Name}.";
+        }
+
+        // Log prompts finales si está habilitado
+        if (_promptSettings.EnableFullPromptLogging)
+        {
+            _logger.LogInformation(
+                "[Classification] FULL FINAL PROMPT (Restringido.System, {Length} chars):\n{Content}",
+                systemText.Length,
+                systemText);
+            _logger.LogInformation(
+                "[Classification] FULL FINAL PROMPT (Restringido.User, {Length} chars):\n{Content}",
+                userText.Length,
+                userText);
+        }
+
+        var responseText = await CompleteChatAsync(
+            model,
+            "classification.restricted",
+            input.Entrada.Instrucciones.ExpectedType,
+            systemText,
+            userText,
+            cancellationToken,
+            resumenPrompt?.MaxTokens);
+
+        var parsed = GptHierarchicalClassificationParser.ParseRestringido(responseText);
+        if (!parsed.Success || parsed.Value is null)
+        {
+            stopwatch.Stop();
+            _logger.LogWarning(
+                "Clasificación restringida sin respuesta parseable ({Razon}). Devolviendo Desconocido.",
+                parsed.ErrorReason ?? GptHierarchicalClassificationParser.RestringidoParsingErrorReason);
+            return BuildRestriccionDesconocidoResult(model, string.Empty, null);
+        }
+
+        var v = parsed.Value;
+        var canonico = v.Tipologia is null
+            ? null
+            : restriccionCodigos.FirstOrDefault(c => string.Equals(c, v.Tipologia, StringComparison.OrdinalIgnoreCase));
+
+        if (canonico is null)
+        {
+            stopwatch.Stop();
+            if (v.Tipologia is not null)
+            {
+                _logger.LogWarning(
+                    "Clasificación restringida: el modelo devolvió '{Tipologia}', fuera del conjunto permitido. Devolviendo Desconocido.",
+                    v.Tipologia);
+            }
+            return BuildRestriccionDesconocidoResult(model, v.Propuesta, v.Resumen);
+        }
+
+        stopwatch.Stop();
+        var confianza = v.Confianza ?? 0.9;
+        _logger.LogInformation(
+            "Clasificación restringida en fase única completada. Tipologia={Tipologia}, Confianza={Confianza:F3}",
+            canonico, confianza);
+
+        return new ResultadoClasificacion
+        {
+            Modelo = model.DeploymentName,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = canonico,
+            Tdn2Detectado = ResolverTdn2PorCodigoTipologia(canonico),
+            Confianza = confianza,
+            ConfianzaGPT = confianza,
+            PropuestaTipologia = v.Propuesta,
+            ResumenCombinado = v.Resumen
+        };
+    }
+
+    /// <summary>ResolvedTdn2 del config de la tipología publicada con ese Codigo (o null).</summary>
+    private string? ResolverTdn2PorCodigoTipologia(string codigo)
+    {
+        if (string.IsNullOrWhiteSpace(codigo))
+        {
+            return null;
+        }
+
+        using var scope = _scopeFactory.CreateScope();
+        var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
+        var tipologias = repository.GetAllPublishedAsync().GetAwaiter().GetResult();
+
+        foreach (var tipologia in tipologias)
+        {
+            if (!string.Equals(tipologia.Codigo, codigo, StringComparison.OrdinalIgnoreCase) ||
+                string.IsNullOrWhiteSpace(tipologia.ConfiguracionJson))
+            {
+                continue;
+            }
+
+            try
+            {
+                var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(tipologia.ConfiguracionJson, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+
+                if (config is null)
+                {
+                    continue;
+                }
+
+                return config.ResolvedTdn2;
+            }
+            catch
+            {
+                // Ignorar tipologías malformadas y continuar la búsqueda.
+            }
+        }
+
+        return null;
     }
 
     private PromptConfig? ResolveResumenPrompt(ClasificacionInput input)

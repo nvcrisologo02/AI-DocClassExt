@@ -100,30 +100,11 @@ public class ClassificationTipologiaPromptBuilderRestriccionTests : IDisposable
     }
 
     [Fact]
-    public void BuildTdn1Catalog_ConRestriccion_SoloListaFamiliasDeLosCodigosPermitidos()
-    {
-        var catalogo = _builder.BuildTdn1Catalog(new[] { "nota-simple" });
-
-        catalogo.Should().Contain("REGI");
-        catalogo.Should().NotContain("CONT");
-    }
-
-    [Fact]
     public void BuildTdn1Catalog_SinRestriccion_ListaTodasLasFamilias()
     {
         var catalogo = _builder.BuildTdn1Catalog();
 
         catalogo.Should().Contain("REGI").And.Contain("CONT");
-    }
-
-    [Fact]
-    public void BuildTdn2CatalogByFamilia_ConRestriccion_IgnoraPromptCustomYFiltraTipologias()
-    {
-        var catalogo = _builder.BuildTdn2CatalogByFamilia("REGI", new[] { "nota-simple" });
-
-        catalogo.Should().NotContain("PROMPT CUSTOM");
-        catalogo.Should().Contain("nota-simple");
-        catalogo.Should().NotContain("REGI-02");
     }
 
     [Fact]
@@ -135,19 +116,35 @@ public class ClassificationTipologiaPromptBuilderRestriccionTests : IDisposable
     }
 
     [Fact]
-    public void BuildTdn1Catalog_ConjuntosDistintos_NoCompartenCache()
+    public void BuildCatalogoPlanoRestringido_SoloListaTipologiasDelConjunto()
     {
-        var restringido = _builder.BuildTdn1Catalog(new[] { "nota-simple" });
-        var completo = _builder.BuildTdn1Catalog();
+        var catalogo = _builder.BuildCatalogoPlanoRestringido(new[] { "nota-simple", "CONT-01" });
 
-        restringido.Should().NotBe(completo);
+        catalogo.Should().Contain("nota-simple").And.Contain("CONT-01");
+        catalogo.Should().NotContain("REGI-02");
     }
 
     [Fact]
-    public void BuildTdn1Catalog_MismoConjuntoDistintoOrdenYCase_CompartenCache()
+    public void BuildCatalogoPlanoRestringido_IncluyeDescripcionDeLaTipologia()
     {
-        var a = _builder.BuildTdn1Catalog(new[] { "nota-simple", "CONT-01" });
-        var b = _builder.BuildTdn1Catalog(new[] { "cont-01", "NOTA-SIMPLE" });
+        var catalogo = _builder.BuildCatalogoPlanoRestringido(new[] { "nota-simple" });
+
+        catalogo.Should().Contain("Nota simple registral");
+    }
+
+    [Fact]
+    public void BuildCatalogoPlanoRestringido_ConjuntoVacio_Lanza()
+    {
+        var act = () => _builder.BuildCatalogoPlanoRestringido(Array.Empty<string>());
+
+        act.Should().Throw<ArgumentException>();
+    }
+
+    [Fact]
+    public void BuildCatalogoPlanoRestringido_MismoConjuntoDistintoCase_CompartenResultado()
+    {
+        var a = _builder.BuildCatalogoPlanoRestringido(new[] { "nota-simple", "CONT-01" });
+        var b = _builder.BuildCatalogoPlanoRestringido(new[] { "cont-01", "NOTA-SIMPLE" });
 
         a.Should().Be(b);
     }

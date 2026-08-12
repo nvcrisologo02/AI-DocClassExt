@@ -70,6 +70,8 @@ public class ClassificationPromptProviderTests
             Phase1UserPrompt = "Cached P1 User",
             Phase2SystemPrompt = "Cached P2 System",
             Phase2UserPrompt = "Cached P2 User",
+            RestrictedSystemPrompt = "Cached Restricted System",
+            RestrictedUserPrompt = "Cached Restricted User",
             Version = 5,
             Source = "Database",
             ResolvedAtUtc = DateTime.UtcNow.AddMinutes(-1)
@@ -125,13 +127,29 @@ public class ClassificationPromptProviderTests
             Content = "DB P2 System", 
             IsActive = true 
         };
-        var phase2User = new PromptTemplateEntity 
-        { 
-            Id = 4, 
-            PromptKey = "classification.phase2.user", 
-            Version = 10, 
-            Content = "DB P2 User", 
-            IsActive = true 
+        var phase2User = new PromptTemplateEntity
+        {
+            Id = 4,
+            PromptKey = "classification.phase2.user",
+            Version = 10,
+            Content = "DB P2 User",
+            IsActive = true
+        };
+        var restrictedSystem = new PromptTemplateEntity
+        {
+            Id = 5,
+            PromptKey = "classification.restricted.system",
+            Version = 10,
+            Content = "DB Restricted System",
+            IsActive = true
+        };
+        var restrictedUser = new PromptTemplateEntity
+        {
+            Id = 6,
+            PromptKey = "classification.restricted.user",
+            Version = 10,
+            Content = "DB Restricted User",
+            IsActive = true
         };
 
         // Mock GetActivePromptAsync for each key
@@ -143,6 +161,10 @@ public class ClassificationPromptProviderTests
             .ReturnsAsync(phase2System);
         mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase2.user", It.IsAny<CancellationToken>()))
             .ReturnsAsync(phase2User);
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(restrictedSystem);
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(restrictedUser);
 
         mockServiceProvider.Setup(sp => sp.GetService(typeof(IPromptTemplateRepository)))
             .Returns(mockRepository.Object);
@@ -161,6 +183,9 @@ public class ClassificationPromptProviderTests
         result.Phase1UserPrompt.Should().Be("DB P1 User");
         result.Phase2SystemPrompt.Should().Be("DB P2 System");
         result.Phase2UserPrompt.Should().Be("DB P2 User");
+        result.RestrictedSystemPrompt.Should().Be("DB Restricted System");
+        result.RestrictedUserPrompt.Should().Be("DB Restricted User");
+        result.RestrictedSource.Should().Be("Database");
         result.Version.Should().Be(10);
         result.Source.Should().Be("Database");
 
@@ -219,6 +244,8 @@ public class ClassificationPromptProviderTests
         result.Phase1UserPrompt.Should().Be("Fallback Phase1 User");
         result.Phase2SystemPrompt.Should().Be("Fallback Phase2 System");
         result.Phase2UserPrompt.Should().Be("Fallback Phase2 User");
+        result.RestrictedSystemPrompt.Should().Be(GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt);
+        result.RestrictedUserPrompt.Should().Be(GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate);
         result.Version.Should().Be(0);
         result.Source.Should().Be("Fallback");
     }
@@ -299,13 +326,31 @@ public class ClassificationPromptProviderTests
                 IsActive = true 
             });
         mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase2.user", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new PromptTemplateEntity 
-            { 
-                Id = 4, 
-                PromptKey = "classification.phase2.user", 
+            .ReturnsAsync(new PromptTemplateEntity
+            {
+                Id = 4,
+                PromptKey = "classification.phase2.user",
                 Version = 11, // Different version!
-                Content = "DB P2 User", 
-                IsActive = true 
+                Content = "DB P2 User",
+                IsActive = true
+            });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity
+            {
+                Id = 5,
+                PromptKey = "classification.restricted.system",
+                Version = 10,
+                Content = "DB Restricted System",
+                IsActive = true
+            });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity
+            {
+                Id = 6,
+                PromptKey = "classification.restricted.user",
+                Version = 10,
+                Content = "DB Restricted User",
+                IsActive = true
             });
 
         mockServiceProvider.Setup(sp => sp.GetService(typeof(IPromptTemplateRepository)))
@@ -375,13 +420,31 @@ public class ClassificationPromptProviderTests
                 IsActive = true 
             });
         mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase2.user", It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new PromptTemplateEntity 
-            { 
-                Id = 4, 
-                PromptKey = "classification.phase2.user", 
-                Version = 15, 
-                Content = "DB P2 User", 
-                IsActive = true 
+            .ReturnsAsync(new PromptTemplateEntity
+            {
+                Id = 4,
+                PromptKey = "classification.phase2.user",
+                Version = 15,
+                Content = "DB P2 User",
+                IsActive = true
+            });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity
+            {
+                Id = 5,
+                PromptKey = "classification.restricted.system",
+                Version = 15,
+                Content = "DB Restricted System",
+                IsActive = true
+            });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity
+            {
+                Id = 6,
+                PromptKey = "classification.restricted.user",
+                Version = 15,
+                Content = "DB Restricted User",
+                IsActive = true
             });
 
         mockServiceProvider.Setup(sp => sp.GetService(typeof(IPromptTemplateRepository)))
@@ -401,7 +464,9 @@ public class ClassificationPromptProviderTests
         result.Version.Should().Be(15);
         result.Source.Should().Be("Database");
 
-        // Verify LogInformation was called for consistent version confirmation
+        // Verify LogInformation was called for consistent version confirmation. AB#100063: el mensaje
+        // se refiere solo al contrato original de 4 claves (Fase 1/2); el par restringido se resuelve
+        // de forma independiente y no participa en este chequeo de versión.
         _mockLogger.Verify(
             logger => logger.Log(
                 LogLevel.Information,
@@ -445,5 +510,130 @@ public class ClassificationPromptProviderTests
         cachedResult.Should().NotBeNull();
         cachedResult!.Version.Should().Be(0);
         cachedResult.Source.Should().Be("Fallback");
+    }
+
+    // ========== AB#100063: classification.restricted.system / classification.restricted.user ==========
+    // El par restringido se resuelve de forma INDEPENDIENTE del contrato de 4 claves de Fase 1/2:
+    // su ausencia (total o parcial) en BD nunca debe descartar los prompts de Fase 1/2 ya resueltos
+    // desde BD, para no perder configuración afinada en producción solo porque las 2 filas nuevas
+    // todavía no se hayan sembrado/activado.
+
+    [Fact]
+    public async Task GetPromptSetAsync_FourKeysInDbZeroRestricted_PhaseFromDatabaseRestrictedFromConstants()
+    {
+        // Arrange: Phase1/Phase2 completos en BD (4 claves), pero NINGUNO de los 2 prompts de
+        // clasificación restringida existe todavía. A diferencia del contrato de 4 claves, esto NO
+        // debe invalidar la resolución de Phase1/Phase2: deben seguir viniendo de BD, y solo el par
+        // restringido cae a las constantes de código (sin logging de warning: es un estado esperado).
+        var mockRepository = new Mock<IPromptTemplateRepository>();
+        var mockScope = new Mock<IServiceScope>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase1.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 1, PromptKey = "classification.phase1.system", Version = 10, Content = "DB P1 System", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase1.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 2, PromptKey = "classification.phase1.user", Version = 10, Content = "DB P1 User", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase2.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 3, PromptKey = "classification.phase2.system", Version = 10, Content = "DB P2 System", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase2.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 4, PromptKey = "classification.phase2.user", Version = 10, Content = "DB P2 User", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PromptTemplateEntity?)null);
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PromptTemplateEntity?)null);
+
+        mockServiceProvider.Setup(sp => sp.GetService(typeof(IPromptTemplateRepository)))
+            .Returns(mockRepository.Object);
+
+        mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+        _mockScopeFactory.Setup(sf => sf.CreateScope()).Returns(mockScope.Object);
+
+        var provider = CreateProvider();
+
+        // Act
+        var result = await provider.GetPromptSetAsync();
+
+        // Assert: Phase1/Phase2 SIGUEN viniendo de BD (Source="Database"), NO de fallback.
+        result.Should().NotBeNull();
+        result.Source.Should().Be("Database");
+        result.Version.Should().Be(10);
+        result.Phase1SystemPrompt.Should().Be("DB P1 System");
+        result.Phase1UserPrompt.Should().Be("DB P1 User");
+        result.Phase2SystemPrompt.Should().Be("DB P2 System");
+        result.Phase2UserPrompt.Should().Be("DB P2 User");
+
+        // El par restringido cae a las constantes de código, con su propio origen "Fallback".
+        result.RestrictedSystemPrompt.Should().Be(GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt);
+        result.RestrictedUserPrompt.Should().Be(GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate);
+        result.RestrictedSource.Should().Be("Fallback");
+
+        // No debe registrarse ningún warning de "configuración incompleta": la ausencia del par
+        // restringido es un estado esperado, no un problema de configuración.
+        _mockLogger.Verify(
+            logger => logger.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Never);
+    }
+
+    [Fact]
+    public async Task GetPromptSetAsync_FourKeysInDbOneRestricted_RestrictedPairFallsBackEntirelyWithWarning()
+    {
+        // Arrange: Phase1/Phase2 completos en BD, y de los 2 prompts restringidos SOLO existe uno
+        // (par incompleto: p.ej. se sembró/activó "system" pero no "user", o viceversa). Nunca debe
+        // mezclarse una plantilla de BD con la constante de código de la otra: el par completo cae a
+        // constantes, con warning para visibilizar el estado transitorio/erróneo.
+        var mockRepository = new Mock<IPromptTemplateRepository>();
+        var mockScope = new Mock<IServiceScope>();
+        var mockServiceProvider = new Mock<IServiceProvider>();
+
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase1.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 1, PromptKey = "classification.phase1.system", Version = 10, Content = "DB P1 System", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase1.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 2, PromptKey = "classification.phase1.user", Version = 10, Content = "DB P1 User", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase2.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 3, PromptKey = "classification.phase2.system", Version = 10, Content = "DB P2 System", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.phase2.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 4, PromptKey = "classification.phase2.user", Version = 10, Content = "DB P2 User", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.system", It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new PromptTemplateEntity { Id = 5, PromptKey = "classification.restricted.system", Version = 10, Content = "DB Restricted System", IsActive = true });
+        mockRepository.Setup(r => r.GetActivePromptAsync("classification.restricted.user", It.IsAny<CancellationToken>()))
+            .ReturnsAsync((PromptTemplateEntity?)null);
+
+        mockServiceProvider.Setup(sp => sp.GetService(typeof(IPromptTemplateRepository)))
+            .Returns(mockRepository.Object);
+
+        mockScope.Setup(s => s.ServiceProvider).Returns(mockServiceProvider.Object);
+        _mockScopeFactory.Setup(sf => sf.CreateScope()).Returns(mockScope.Object);
+
+        var provider = CreateProvider();
+
+        // Act
+        var result = await provider.GetPromptSetAsync();
+
+        // Assert: Phase1/Phase2 no se ven afectados.
+        result.Should().NotBeNull();
+        result.Source.Should().Be("Database");
+        result.Version.Should().Be(10);
+        result.Phase1SystemPrompt.Should().Be("DB P1 System");
+
+        // El par restringido NUNCA mezcla BD+constante: al faltar "user", "system" (que sí existe en
+        // BD) también cae a la constante de código.
+        result.RestrictedSystemPrompt.Should().Be(GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt);
+        result.RestrictedUserPrompt.Should().Be(GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate);
+        result.RestrictedSource.Should().Be("Fallback");
+
+        // Se registra warning por el par incompleto.
+        _mockLogger.Verify(
+            logger => logger.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("Incomplete restricted prompt pair")),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+            Times.Once);
     }
 }
