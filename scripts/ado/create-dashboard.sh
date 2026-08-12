@@ -87,7 +87,7 @@ ensure_query "KPI - Bugs abiertos" \
   "$COLS AND [System.WorkItemType] = 'Bug' AND [System.State] NOT IN ('Done','Removed') ORDER BY [System.CreatedDate] DESC"
 
 ensure_query "KPI - Pdte Despliegue" \
-  "$COLS AND [System.State] = 'Pdte. Despliegue' ORDER BY [System.ChangedDate] DESC"
+  "$COLS AND [System.WorkItemType] IN ('Epic','Feature','Product Backlog Item','Task','Bug') AND [System.State] = 'Pdte. Despliegue' ORDER BY [System.ChangedDate] DESC"
 
 ensure_query "Features - Activas con hijos" \
   "SELECT [System.Id], [System.WorkItemType], [System.Title], [System.State], [System.AssignedTo] FROM WorkItemLinks WHERE (Source.[System.TeamProject] = @project AND Source.[System.WorkItemType] = 'Feature' AND Source.[System.State] IN ('New','In Progress')) AND ([System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward') AND (Target.[System.State] <> 'Removed') ORDER BY [System.Id] MODE (Recursive)"
@@ -102,10 +102,10 @@ ensure_query "Chart - Bugs por estado" \
   "$COLS AND [System.WorkItemType] = 'Bug' AND [System.State] <> 'Removed' ORDER BY [System.State]"
 
 ensure_query "Operativa - En curso" \
-  "$COLS AND [System.State] IN ('In Progress','Committed') ORDER BY [System.ChangedDate] DESC"
+  "$COLS AND [System.WorkItemType] IN ('Epic','Feature','Product Backlog Item','Task','Bug') AND [System.State] IN ('In Progress','Committed') ORDER BY [System.ChangedDate] DESC"
 
 ensure_query "Operativa - Estancados" \
-  "$COLS AND [System.State] IN ('Approved','Committed','In Progress','To Validate','Pdte. Despliegue') AND [System.ChangedDate] < @Today - 14 ORDER BY [System.ChangedDate] ASC"
+  "$COLS AND [System.WorkItemType] IN ('Epic','Feature','Product Backlog Item','Task','Bug') AND [System.State] IN ('Approved','Committed','In Progress','To Validate','Pdte. Despliegue') AND [System.ChangedDate] < @Today - 14 ORDER BY [System.ChangedDate] ASC"
 
 ensure_query "Operativa - Sin asignar" \
   "$COLS AND [System.WorkItemType] IN ('Product Backlog Item','Task','Bug') AND [System.State] NOT IN ('Done','Removed') AND [System.AssignedTo] = '' ORDER BY [System.CreatedDate] ASC"
