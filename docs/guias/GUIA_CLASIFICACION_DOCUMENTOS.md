@@ -440,6 +440,8 @@ Permite acotar la clasificación a una lista cerrada de tipologías candidatas m
 
 Requiere `classification.nivelClasificacion = "TDN1_TDN2"` (la restricción opera a granularidad de tipología, no de familia TDN1). `expectedType` sigue siendo independiente y puede combinarse.
 
+**Fase única:** con restricción activa, la vía GPT ya no recorre la jerarquía TDN1→TDN2 habitual. Compara el documento en una sola pasada contra un catálogo plano formado por las tipologías del conjunto con su `gptDescripcion` completa, y elige la más compatible por contenido. La calidad de esa `gptDescripcion` es el factor que más determina el acierto: una descripción genérica o circular tiende a `"Desconocido"`, mientras que una descripción con contenido concreto (patrón `ES:` / `NO ES:` / señales de identificación) da confianzas altas (0.85–0.95). Ver la guía dedicada [GUIA_CLASIFICACION_RESTRINGIDA.md](GUIA_CLASIFICACION_RESTRINGIDA.md) para el detalle de uso, ejemplos completos, cómo escribir buenas `gptDescripcion` y solución de problemas.
+
 ```json
 {
   "instrucciones": {
@@ -460,7 +462,7 @@ Requiere `classification.nivelClasificacion = "TDN1_TDN2"` (la restricción oper
 }
 ```
 
-Si ningún proveedor de la cadena devuelve un código dentro del conjunto, el resultado final es `identificacion.tipologia = "Desconocido"` con `detalleEjecucion.clasificacion.fallbackRazon = "fuera_de_conjunto_restringido"`. Igual que con cualquier documento no clasificado, se permiten resumen y prompt, pero no hay extracción, AssetResolver, subida a GDC ni integración.
+Si ningún proveedor de la cadena devuelve un código dentro del conjunto, el resultado final es `identificacion.tipologia = "Desconocido"` con `detalleEjecucion.clasificacion.fallbackRazon = "fuera_de_conjunto_restringido"`. Si `proponerSiDesconocido = true`, la propuesta informativa se calcula con el flujo jerárquico completo contra el catálogo entero (no contra el conjunto acotado). Igual que con cualquier documento no clasificado, se permiten resumen y prompt, pero no hay extracción, AssetResolver, subida a GDC ni integración.
 
 ---
 
