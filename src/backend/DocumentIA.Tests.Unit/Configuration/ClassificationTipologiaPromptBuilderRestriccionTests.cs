@@ -100,15 +100,6 @@ public class ClassificationTipologiaPromptBuilderRestriccionTests : IDisposable
     }
 
     [Fact]
-    public void BuildTdn1Catalog_ConRestriccion_SoloListaFamiliasDeLosCodigosPermitidos()
-    {
-        var catalogo = _builder.BuildTdn1Catalog(new[] { "nota-simple" });
-
-        catalogo.Should().Contain("REGI");
-        catalogo.Should().NotContain("CONT");
-    }
-
-    [Fact]
     public void BuildTdn1Catalog_SinRestriccion_ListaTodasLasFamilias()
     {
         var catalogo = _builder.BuildTdn1Catalog();
@@ -117,39 +108,11 @@ public class ClassificationTipologiaPromptBuilderRestriccionTests : IDisposable
     }
 
     [Fact]
-    public void BuildTdn2CatalogByFamilia_ConRestriccion_IgnoraPromptCustomYFiltraTipologias()
-    {
-        var catalogo = _builder.BuildTdn2CatalogByFamilia("REGI", new[] { "nota-simple" });
-
-        catalogo.Should().NotContain("PROMPT CUSTOM");
-        catalogo.Should().Contain("nota-simple");
-        catalogo.Should().NotContain("REGI-02");
-    }
-
-    [Fact]
     public void BuildTdn2CatalogByFamilia_SinRestriccion_UsaPromptCustom()
     {
         var catalogo = _builder.BuildTdn2CatalogByFamilia("REGI");
 
         catalogo.Should().Be("PROMPT CUSTOM DE FAMILIA COMPLETA");
-    }
-
-    [Fact]
-    public void BuildTdn1Catalog_ConjuntosDistintos_NoCompartenCache()
-    {
-        var restringido = _builder.BuildTdn1Catalog(new[] { "nota-simple" });
-        var completo = _builder.BuildTdn1Catalog();
-
-        restringido.Should().NotBe(completo);
-    }
-
-    [Fact]
-    public void BuildTdn1Catalog_MismoConjuntoDistintoOrdenYCase_CompartenCache()
-    {
-        var a = _builder.BuildTdn1Catalog(new[] { "nota-simple", "CONT-01" });
-        var b = _builder.BuildTdn1Catalog(new[] { "cont-01", "NOTA-SIMPLE" });
-
-        a.Should().Be(b);
     }
 
     [Fact]

@@ -53,9 +53,22 @@ public class GptClasificarDataProviderRestriccionTests
     }
 
     [Fact]
-    public void RestriccionInstructions_MencionanRespuestaNull()
+    public void RestriccionFasePlanaInstruction_MencionaNullYCompatible()
     {
-        GptClasificarDataProvider.RestriccionPhase1Instruction.Should().Contain("null");
-        GptClasificarDataProvider.RestriccionPhase2Instruction.Should().Contain("null");
+        GptClasificarDataProvider.RestriccionFasePlanaInstruction.Should().Contain("null");
+        GptClasificarDataProvider.RestriccionFasePlanaInstruction.Should().Contain("compatible");
+    }
+
+    [Fact]
+    public void RestriccionFasePlanaResponseInstruction_MencionaTipologia()
+    {
+        GptClasificarDataProvider.RestriccionFasePlanaResponseInstruction.Should().Contain("tipologia");
+    }
+
+    [Fact]
+    public void RestriccionFasePlanaResponseInstructionConResumen_MencionaTipologiaYResumen()
+    {
+        GptClasificarDataProvider.RestriccionFasePlanaResponseInstructionConResumen.Should().Contain("tipologia");
+        GptClasificarDataProvider.RestriccionFasePlanaResponseInstructionConResumen.Should().Contain("resumen");
     }
 }
