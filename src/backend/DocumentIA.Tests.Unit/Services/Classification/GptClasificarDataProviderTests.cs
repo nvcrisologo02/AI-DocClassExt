@@ -965,6 +965,8 @@ Contenido del documento:
                 Phase1UserPrompt = "{CONTEXT_PROMPT}\n{TDN1_CATALOG}\n{DOCUMENT_TEXT}",
                 Phase2SystemPrompt = "sys fase 2",
                 Phase2UserPrompt = "{TDN1_CODE}\n{TDN2_CATALOG}\n{DOCUMENT_TEXT}",
+                RestrictedSystemPrompt = GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt,
+                RestrictedUserPrompt = GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate,
                 Version = 1,
                 Source = "UnitTest"
             };

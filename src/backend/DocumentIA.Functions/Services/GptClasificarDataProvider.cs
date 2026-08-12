@@ -54,7 +54,11 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
     /// <summary>System prompt dedicado de la clasificación restringida en fase única.
     /// No reutiliza las plantillas de Fase 1 de BD: aquellas incrustan el formato de respuesta
-    /// jerárquico ("tdn1"/familias) y contradirían el formato plano ("tipologia").</summary>
+    /// jerárquico ("tdn1"/familias) y contradirían el formato plano ("tipologia"). AB#100063: este
+    /// texto es el ÚNICO fallback de código para <c>PromptTemplates.classification.restricted.system</c>
+    /// (ver <c>ClassificationPromptProvider.LoadFromFallbackConfiguration</c>); no se duplica en
+    /// appsettings. En ejecución, <see cref="ClasificarRestringidoAsync"/> ya no lee esta constante
+    /// directamente, sino <c>promptSet.RestrictedSystemPrompt</c>.</summary>
     internal const string RestriccionFasePlanaSystemPrompt =
         "Eres un sistema experto en clasificación documental del sector inmobiliario y financiero español. " +
         "Tu tarea es clasificar el documento en UNA de las tipologías del catálogo restringido que se te " +
@@ -63,7 +67,10 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
     /// <summary>User prompt dedicado de la clasificación restringida en fase única (plantilla).
     /// No reutiliza la plantilla de Fase 1 de BD: aquella etiqueta el catálogo como "Familias TDN1
-    /// disponibles", lenguaje jerárquico que no aplica al catálogo plano restringido.</summary>
+    /// disponibles", lenguaje jerárquico que no aplica al catálogo plano restringido. AB#100063:
+    /// este texto es el ÚNICO fallback de código para
+    /// <c>PromptTemplates.classification.restricted.user</c>; en ejecución se lee desde
+    /// <c>promptSet.RestrictedUserPrompt</c> (ver comentario de <see cref="RestriccionFasePlanaSystemPrompt"/>).</summary>
     internal const string RestriccionFasePlanaUserPromptTemplate =
         "{CONTEXT_PROMPT}\n\nTIPOLOGÍAS CANDIDATAS (el solicitante garantiza que el documento debería ser una de estas):\n" +
         "{CATALOGO}\n\n" +
@@ -160,7 +167,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (restriccionCodigos is not null)
         {
             return await ClasificarRestringidoAsync(
-                input, model, restriccionCodigos, contextoTexto, contextoPrompt, resumenPrompt, stopwatch, cancellationToken);
+                input, model, restriccionCodigos, contextoTexto, contextoPrompt, resumenPrompt, promptSet, stopwatch, cancellationToken);
         }
 
         var phase1ResponseInstruction = resumenPrompt is null
@@ -475,12 +482,16 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     /// Clasificación restringida en fase única (AB#100060/AB#100061): el documento se compara
     /// directamente contra el catálogo plano del conjunto acotado de tipologías candidatas, sin
     /// pasar por la jerarquía TDN1/TDN2, con una única llamada al modelo. Usa las plantillas
-    /// dedicadas <see cref="RestriccionFasePlanaSystemPrompt"/>/<see cref="RestriccionFasePlanaUserPromptTemplate"/>
-    /// en lugar de las plantillas de Fase 1 de BD (<c>promptSet.Phase1*</c>): estas últimas incrustan
-    /// su propio formato de respuesta jerárquico ("tdn1"/familias), que contradiría el formato plano
-    /// ("tipologia") de esta clasificación. Replica el resto de la mecánica de invocación de
-    /// <see cref="ClasificarAsync"/> Fase 1: mismo orden de bloques (resumen, contexto vacío) y mismo
-    /// stage/maxTokens en <see cref="CompleteChatAsync"/>.
+    /// dedicadas <c>promptSet.RestrictedSystemPrompt</c>/<c>promptSet.RestrictedUserPrompt</c>
+    /// (AB#100063: resueltas desde BD → cache → fallback, igual que <c>promptSet.Phase1*</c>/
+    /// <c>Phase2*</c>) en lugar de las plantillas de Fase 1 (<c>promptSet.Phase1*</c>): estas
+    /// últimas incrustan su propio formato de respuesta jerárquico ("tdn1"/familias), que
+    /// contradiría el formato plano ("tipologia") de esta clasificación. El fallback de código de
+    /// estas plantillas dedicadas son las constantes <see cref="RestriccionFasePlanaSystemPrompt"/>/
+    /// <see cref="RestriccionFasePlanaUserPromptTemplate"/> (ver <c>ClassificationPromptProvider</c>).
+    /// Replica el resto de la mecánica de invocación de <see cref="ClasificarAsync"/> Fase 1: mismo
+    /// orden de bloques (resumen, contexto vacío) y mismo stage/maxTokens en
+    /// <see cref="CompleteChatAsync"/>.
     /// </summary>
     private async Task<ResultadoClasificacion> ClasificarRestringidoAsync(
         ClasificacionInput input,
@@ -489,6 +500,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         string? contextoTexto,
         string contextoPrompt,
         PromptConfig? resumenPrompt,
+        ClassificationPromptSet promptSet,
         Stopwatch stopwatch,
         CancellationToken cancellationToken)
     {
@@ -502,17 +514,23 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return BuildRestriccionDesconocidoResult(model, string.Empty, null);
         }
 
+        // AB#100063: las instrucciones de formato de respuesta (JSON) se mantienen en código, NO en
+        // BD. Son el contrato del parser (GptHierarchicalClassificationParser.ParseRestringido): si
+        // el Admin edita el texto de promptSet.RestrictedSystemPrompt/RestrictedUserPrompt desde BD
+        // (tono, énfasis, ejemplos) no puede romper el parseo de la respuesta, porque esta
+        // instrucción siempre se añade después, desde código.
         var responseInstruction = resumenPrompt is null
             ? RestriccionFasePlanaResponseInstruction
             : RestriccionFasePlanaResponseInstructionConResumen;
 
-        // Montaje de system/user a partir de las plantillas dedicadas de la fase única restringida
-        // (no de las plantillas de Fase 1 de BD, que incrustan el formato de respuesta jerárquico).
+        // Montaje de system/user a partir de las plantillas dedicadas de la fase única restringida,
+        // resueltas desde promptSet (BD → cache → fallback a las constantes de código, AB#100063) y
+        // no de las plantillas de Fase 1, que incrustan el formato de respuesta jerárquico.
         // Mismo orden de bloques que Fase 1: system base + instrucción de restricción (ya incluida
-        // en RestriccionFasePlanaSystemPrompt), bloque de resumen si aplica, y por último la
-        // instrucción de formato de respuesta.
-        var systemText = RestriccionFasePlanaSystemPrompt;
-        var userText = RestriccionFasePlanaUserPromptTemplate
+        // en el prompt resuelto), bloque de resumen si aplica, y por último la instrucción de
+        // formato de respuesta (en código, ver comentario anterior).
+        var systemText = promptSet.RestrictedSystemPrompt;
+        var userText = promptSet.RestrictedUserPrompt
             .Replace("{CONTEXT_PROMPT}", contextoPrompt)
             .Replace("{CATALOGO}", catalogo)
             .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);

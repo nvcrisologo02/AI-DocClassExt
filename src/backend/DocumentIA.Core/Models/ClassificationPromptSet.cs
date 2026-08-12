@@ -26,14 +26,39 @@ public sealed class ClassificationPromptSet
     public required string Phase2UserPrompt { get; init; }
 
     /// <summary>
+    /// Prompt del sistema para la clasificación restringida en fase única (AB#100063), contra el
+    /// conjunto acotado de tipologías candidatas. No reutiliza Phase1SystemPrompt: aquel incrusta
+    /// el formato de respuesta jerárquico ("tdn1"/familias), incompatible con el formato plano
+    /// ("tipologia") de este modo.
+    /// </summary>
+    public required string RestrictedSystemPrompt { get; init; }
+
+    /// <summary>
+    /// Prompt del usuario para la clasificación restringida en fase única (AB#100063). No reutiliza
+    /// Phase1UserPrompt: aquel etiqueta el catálogo como "Familias TDN1 disponibles", lenguaje
+    /// jerárquico que no aplica al catálogo plano restringido.
+    /// </summary>
+    public required string RestrictedUserPrompt { get; init; }
+
+    /// <summary>
     /// Versión del prompt utilizado (coincide con PromptTemplateEntity.Version).
     /// </summary>
     public int Version { get; init; }
 
     /// <summary>
-    /// Origen de los prompts: "Database" si provienen de BD, "Fallback" si provienen de appsettings.
+    /// Origen de los 4 prompts jerárquicos (Fase 1 / Fase 2): "Database" si provienen de BD,
+    /// "Fallback" si provienen de appsettings. AB#100063: el par restringido se resuelve de forma
+    /// independiente (ver <see cref="RestrictedSource"/>) y NO afecta este valor.
     /// </summary>
     public required string Source { get; init; }
+
+    /// <summary>
+    /// Origen del par restringido (AB#100063): "Database" si <c>classification.restricted.system</c>
+    /// y <c>.user</c> están ambos activos en BD, "Fallback" si se usan las constantes de código de
+    /// <c>GptClasificarDataProvider</c> (por ausencia, par incompleto, o error de consulta). Resuelto
+    /// independientemente de <see cref="Source"/>.
+    /// </summary>
+    public string RestrictedSource { get; init; } = "Fallback";
 
     /// <summary>
     /// Timestamp de cuando se resolvieron los prompts (para auditoría/telemetría).
