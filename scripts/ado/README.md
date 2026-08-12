@@ -17,7 +17,7 @@ Crea o actualiza (idempotente) en ADO — org `sareb`, proyecto `AI DocClassExt`
 
 Los settings de los widgets Analytics no son configurables por REST de forma fiable; tras el primer run, configurarlos una vez en la UI (lápiz → Configure):
 
-1. **Burnup 30d**: Work items · Backlog: Backlog items · Sin filtros · Dates: rolling last 30 days · Plotting: count of work items.
+1. **Burnup 30d**: Team: AI DocClassExt Team · Work items: Backlog → Backlog items · Sin filtros · Burndown on: Count of Work Items · Time period: Start date = inicio del periodo a seguir (p. ej. 1 del mes en curso), End date = fecha objetivo (p. ej. fin del trimestre) · Plot burndown by: Date, intervalo Weeks · Advanced: Show burnup + Show total scope. **Ojo**: este widget no admite ventana rolling (fechas fijas); revisar las fechas al cambiar de periodo (p. ej. cada trimestre).
 2. **Lead Time**: Backlog items · Swimlanes: todas · Rolling period: 30 días.
 3. **Cycle Time**: Backlog items · Swimlanes: todas · Rolling period: 30 días.
 4. **CFD**: Backlog items · todas las columnas del board · Rolling period: 30 días.
