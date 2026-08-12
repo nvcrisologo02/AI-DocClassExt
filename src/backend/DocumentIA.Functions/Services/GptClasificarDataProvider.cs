@@ -52,6 +52,23 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         "\"propuesta\": \"texto libre\", \"resumen\": \"resumen ejecutivo\", \"confianza\": 0.0-1.0}. El campo " +
         "'confianza' debe reflejar tu certeza. No incluyas texto fuera del JSON.";
 
+    /// <summary>System prompt dedicado de la clasificación restringida en fase única.
+    /// No reutiliza las plantillas de Fase 1 de BD: aquellas incrustan el formato de respuesta
+    /// jerárquico ("tdn1"/familias) y contradirían el formato plano ("tipologia").</summary>
+    internal const string RestriccionFasePlanaSystemPrompt =
+        "Eres un sistema experto en clasificación documental del sector inmobiliario y financiero español. " +
+        "Tu tarea es clasificar el documento en UNA de las tipologías del catálogo restringido que se te " +
+        "proporciona, comparando el CONTENIDO del documento con la descripción de cada tipología." +
+        RestriccionFasePlanaInstruction;
+
+    /// <summary>User prompt dedicado de la clasificación restringida en fase única (plantilla).
+    /// No reutiliza la plantilla de Fase 1 de BD: aquella etiqueta el catálogo como "Familias TDN1
+    /// disponibles", lenguaje jerárquico que no aplica al catálogo plano restringido.</summary>
+    internal const string RestriccionFasePlanaUserPromptTemplate =
+        "{CONTEXT_PROMPT}TIPOLOGÍAS CANDIDATAS (el solicitante garantiza que el documento debería ser una de estas):\n" +
+        "{CATALOGO}\n\n" +
+        "CONTENIDO DEL DOCUMENTO (texto/markdown):\n{DOCUMENT_TEXT}";
+
     /// <summary>
     /// Conjunto de códigos permitidos de la petición, o null si no hay restricción activa
     /// (sin instrucción, lista vacía, o pasada de propuesta libre con OmitirRestriccionTipologias).
@@ -143,7 +160,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (restriccionCodigos is not null)
         {
             return await ClasificarRestringidoAsync(
-                input, model, restriccionCodigos, contextoTexto, contextoPrompt, resumenPrompt, promptSet, stopwatch, cancellationToken);
+                input, model, restriccionCodigos, contextoTexto, contextoPrompt, resumenPrompt, stopwatch, cancellationToken);
         }
 
         var phase1ResponseInstruction = resumenPrompt is null
@@ -457,10 +474,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     /// <summary>
     /// Clasificación restringida en fase única (AB#100060/AB#100061): el documento se compara
     /// directamente contra el catálogo plano del conjunto acotado de tipologías candidatas, sin
-    /// pasar por la jerarquía TDN1/TDN2, con una única llamada al modelo. Replica la mecánica de
-    /// montaje de system/user y de invocación de <see cref="ClasificarAsync"/> Fase 1: mismo orden
-    /// de bloques (resumen, contexto vacío) y mismo stage/maxTokens en <see cref="CompleteChatAsync"/>;
-    /// solo cambian el catálogo, las instrucciones y el parseo de la respuesta.
+    /// pasar por la jerarquía TDN1/TDN2, con una única llamada al modelo. Usa las plantillas
+    /// dedicadas <see cref="RestriccionFasePlanaSystemPrompt"/>/<see cref="RestriccionFasePlanaUserPromptTemplate"/>
+    /// en lugar de las plantillas de Fase 1 de BD (<c>promptSet.Phase1*</c>): estas últimas incrustan
+    /// su propio formato de respuesta jerárquico ("tdn1"/familias), que contradiría el formato plano
+    /// ("tipologia") de esta clasificación. Replica el resto de la mecánica de invocación de
+    /// <see cref="ClasificarAsync"/> Fase 1: mismo orden de bloques (resumen, contexto vacío) y mismo
+    /// stage/maxTokens en <see cref="CompleteChatAsync"/>.
     /// </summary>
     private async Task<ResultadoClasificacion> ClasificarRestringidoAsync(
         ClasificacionInput input,
@@ -469,7 +489,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         string? contextoTexto,
         string contextoPrompt,
         PromptConfig? resumenPrompt,
-        ClassificationPromptSet promptSet,
         Stopwatch stopwatch,
         CancellationToken cancellationToken)
     {
@@ -487,15 +506,15 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             ? RestriccionFasePlanaResponseInstruction
             : RestriccionFasePlanaResponseInstructionConResumen;
 
-        // Montaje de system/user replicando la mecánica de Fase 1 (mismo orden de bloques:
-        // system base, instrucción de restricción, bloque de resumen si aplica, y por último la
-        // instrucción de formato de respuesta, que aquí se añade explícitamente porque —a
-        // diferencia de Fase 1/Fase 2— el catálogo plano restringido no tiene un prompt
-        // configurable en BD que ya la incluya).
-        var systemText = promptSet.Phase1SystemPrompt + RestriccionFasePlanaInstruction;
-        var userText = promptSet.Phase1UserPrompt
+        // Montaje de system/user a partir de las plantillas dedicadas de la fase única restringida
+        // (no de las plantillas de Fase 1 de BD, que incrustan el formato de respuesta jerárquico).
+        // Mismo orden de bloques que Fase 1: system base + instrucción de restricción (ya incluida
+        // en RestriccionFasePlanaSystemPrompt), bloque de resumen si aplica, y por último la
+        // instrucción de formato de respuesta.
+        var systemText = RestriccionFasePlanaSystemPrompt;
+        var userText = RestriccionFasePlanaUserPromptTemplate
             .Replace("{CONTEXT_PROMPT}", contextoPrompt)
-            .Replace("{TDN1_CATALOG}", catalogo)
+            .Replace("{CATALOGO}", catalogo)
             .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
 
         if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))

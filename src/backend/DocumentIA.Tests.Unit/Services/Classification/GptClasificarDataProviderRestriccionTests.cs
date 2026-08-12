@@ -71,4 +71,24 @@ public class GptClasificarDataProviderRestriccionTests
         GptClasificarDataProvider.RestriccionFasePlanaResponseInstructionConResumen.Should().Contain("tipologia");
         GptClasificarDataProvider.RestriccionFasePlanaResponseInstructionConResumen.Should().Contain("resumen");
     }
+
+    // ========== Plantillas dedicadas de la fase única restringida (AB#100061) ==========
+    // No deben reutilizar las plantillas de Fase 1 de BD: aquellas incrustan el formato de
+    // respuesta jerárquico ("tdn1"/familias), que contradice el formato plano restringido.
+
+    [Fact]
+    public void RestriccionFasePlanaSystemPrompt_NoContieneLenguajeJerarquicoYMencionaTipologia()
+    {
+        GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt.Should().NotContainEquivalentOf("tdn1");
+        GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt.Should().NotContainEquivalentOf("familia");
+        GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt.Should().Contain("tipolog");
+    }
+
+    [Fact]
+    public void RestriccionFasePlanaUserPromptTemplate_UsaPlaceholdersPropiosYNoElCatalogoTdn1()
+    {
+        GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate.Should().Contain("{CATALOGO}");
+        GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate.Should().Contain("{DOCUMENT_TEXT}");
+        GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate.Should().NotContain("{TDN1_CATALOG}");
+    }
 }
