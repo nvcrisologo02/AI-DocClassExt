@@ -65,7 +65,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     /// No reutiliza la plantilla de Fase 1 de BD: aquella etiqueta el catálogo como "Familias TDN1
     /// disponibles", lenguaje jerárquico que no aplica al catálogo plano restringido.</summary>
     internal const string RestriccionFasePlanaUserPromptTemplate =
-        "{CONTEXT_PROMPT}TIPOLOGÍAS CANDIDATAS (el solicitante garantiza que el documento debería ser una de estas):\n" +
+        "{CONTEXT_PROMPT}\n\nTIPOLOGÍAS CANDIDATAS (el solicitante garantiza que el documento debería ser una de estas):\n" +
         "{CATALOGO}\n\n" +
         "CONTENIDO DEL DOCUMENTO (texto/markdown):\n{DOCUMENT_TEXT}";
 
