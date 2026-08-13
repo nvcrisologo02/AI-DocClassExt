@@ -77,9 +77,13 @@ Set aprobado el 2026-08-13 (calidad de extracción, AB#100088): dos recibos
 de IBI reales (`corpus/cera/recibo-ibi-real-1.pdf`, `recibo-ibi-real-2.pdf`,
 casos FE-FE3/FE-FE4 con `cera.16`) y dos notas simples reales
 (`corpus/nota-simple/nota-simple-real-1.pdf`, `nota-simple-real-2.pdf`,
-casos FE-FE5/FE-FE6 con `nota.simple_bal`). Nota: FE-FE5 falla de forma
-reproducible en DEV (`ExtraerActivity` cancelada con ese documento) — es un
-defecto de producto en investigación, no del harness.
+casos FE-FE5/FE-FE6 con `nota.simple_bal`). FE-FE5 destapó el bug AB#100130
+(timeout de 60 s en el modelo de extracción GPT que cancelaba `ExtraerActivity`
+con documentos largos): mitigado el 2026-08-13 subiendo `TimeoutSeconds` a 180
+en la fila `extraction.gpt4o-mini-fallback` de `ModeloConfigs` en DEV — el
+caso pasa desde entonces. Al promocionar a PRO hay que aplicar el mismo ajuste
+(PRO sigue en 60). El fix de código asociado convierte cualquier timeout futuro
+en `EXTRACCION_INCOMPLETA` (estado de negocio) en lugar de error técnico.
 
 ## Test Plan espejo en ADO
 
@@ -126,11 +130,10 @@ defecto de producto en investigación, no del harness.
   admite el payload (202) y la orquestación completa con
   `Resultado.Estado = NO_CLASIFICADO`; el caso valida ese comportamiento real
   en lugar de un `400` síncrono.
-- `S-S5` (base64 inválido) responde `500` en vez de `400`: `Convert.FromBase64String`
-  en `IngestAPITrigger.cs` no está envuelto en try/catch y la excepción cae al
-  handler genérico. Es un defecto del backend (falta validación explícita de
-  formato antes de decodificar), no del arnés de pruebas; el caso documenta el
-  comportamiento real observado mientras no se corrija.
+- `S-S5` (base64 inválido): el defecto de backend (500 por `FormatException`
+  sin capturar) está corregido en código (AB#100129, en `develop`); el caso
+  mantiene la aserción `500` hasta que el fix esté desplegado en el entorno —
+  tras el despliegue, cambiar la aserción a `400` y verificar con el smoke.
 - `FC-FC4`/`FC-FC5` (modelo de clasificación explícito `gpt-4o-mini` /
   `gpt-5-mini` por request) fallan en DEV: el registro de modelos de
   clasificación (tabla de configuración en BD, `ClassificationModelRegistryLoader`)
