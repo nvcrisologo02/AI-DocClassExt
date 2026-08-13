@@ -100,10 +100,21 @@ function New-DocumentIARequestBody {
         maxPagesForClassificationOnly         = $maxPages
         executeIntegrarWhenClassificationOnly = $executeIntegrar
         classification                        = $classification
-        extraction                            = @{ model = "auto"; umbral = 0.80 }
+        extraction                            = @{
+            model  = if (-not [string]::IsNullOrWhiteSpace($Case.extractionModel)) { $Case.extractionModel } else { "auto" }
+            umbral = if ($null -ne $Case.extractionUmbral) { [double]$Case.extractionUmbral } else { 0.80 }
+        }
     }
     if (-not [string]::IsNullOrWhiteSpace($Case.expectedType)) {
         $instrucciones["expectedType"] = $Case.expectedType
+    }
+    if ($null -ne $Case.PSObject.Properties['prompt'] -and $null -ne $Case.prompt) {
+        $promptHash = @{}
+        foreach ($p in $Case.prompt.PSObject.Properties) { $promptHash[$p.Name] = $p.Value }
+        $instrucciones["prompt"] = $promptHash
+    }
+    if ($null -ne $Case.PSObject.Properties['forzarProcesadoSinLimitePaginas'] -and $null -ne $Case.forzarProcesadoSinLimitePaginas) {
+        $instrucciones["forzarProcesadoSinLimitePaginas"] = [bool]$Case.forzarProcesadoSinLimitePaginas
     }
 
     $body = @{
@@ -114,7 +125,7 @@ function New-DocumentIARequestBody {
         }
         trazabilidad  = @{
             correlationId = "E2E-$($Case.domain)-$($Case.id)-$(Get-Date -Format 'yyyyMMddHHmmss')"
-            submittedBy   = "documentia-e2e@sareb.es"
+            submittedBy   = if (-not [string]::IsNullOrWhiteSpace($Case.submittedBy)) { $Case.submittedBy } else { "documentia-e2e@sareb.es" }
             idGDC         = $null
             idActivo      = $idActivo
         }
@@ -176,6 +187,26 @@ function Test-CaseAssertions {
         }
     }
 
+    if ($null -ne $assertions.expectOutputPathsEmpty) {
+        foreach ($path in @($assertions.expectOutputPathsEmpty)) {
+            if ([string]::IsNullOrWhiteSpace($path)) { continue }
+            $value = Get-PathValue -Object $output -Path $path
+            if ($null -ne $value -and -not [string]::IsNullOrWhiteSpace([string]$value)) {
+                $errors += "output.$path deberia estar vacio pero tiene valor='$value'"
+            }
+        }
+    }
+
+    if ($null -ne $assertions.expectOutputPathContains) {
+        foreach ($rule in @($assertions.expectOutputPathContains)) {
+            if ($null -eq $rule -or [string]::IsNullOrWhiteSpace($rule.path)) { continue }
+            $value = [string](Get-PathValue -Object $output -Path $rule.path)
+            if ($value -notlike "*$($rule.value)*") {
+                $errors += "output.$($rule.path)='$value' no contiene '$($rule.value)'"
+            }
+        }
+    }
+
     $outputJson = $output | ConvertTo-Json -Depth 30 -Compress
     if ($null -ne $assertions.expectOutputJsonContains) {
         foreach ($needle in @($assertions.expectOutputJsonContains)) {
@@ -218,7 +249,8 @@ function Invoke-DocumentIAE2ECase {
         [string]$Endpoint,
         [string]$ArtifactsDir,
         [int]$MaxRetries,
-        [int]$DelaySeconds
+        [int]$DelaySeconds,
+        [string]$FunctionKey = ""
     )
 
     $caseKey = if (-not [string]::IsNullOrWhiteSpace($Case.caseKey)) { $Case.caseKey } else { "$($Case.group)-$($Case.id)" }
@@ -227,6 +259,9 @@ function Invoke-DocumentIAE2ECase {
     $startTime = Get-Date
 
     try {
+        $ingestHeaders = @{}
+        if (-not [string]::IsNullOrWhiteSpace($FunctionKey)) { $ingestHeaders["x-functions-key"] = $FunctionKey }
+
         $body = $null
         if ($Case.payloadMode -eq "malformedJson") {
             $body = '{ "documento": '
@@ -250,7 +285,7 @@ function Invoke-DocumentIAE2ECase {
         if ($expectHttp4xx) {
             $expectedCode = [int]$assertions.expectHttpStatus
             try {
-                $response = Invoke-WebRequest -Uri $Endpoint -Method Post -Body $body -ContentType "application/json" -ErrorAction Stop
+                $response = Invoke-WebRequest -Uri $Endpoint -Method Post -Body $body -ContentType "application/json" -Headers $ingestHeaders -ErrorAction Stop
                 return [pscustomobject]@{
                     Domain = $Case.domain; Group = $Case.group; Id = $Case.id; CaseKey = $caseKey; Name = $Case.name
                     Status = "FAIL"; Reason = "Esperaba HTTP $expectedCode pero obtuvo HTTP $($response.StatusCode)"
@@ -277,7 +312,7 @@ function Invoke-DocumentIAE2ECase {
             }
         }
 
-        $initResponse = Invoke-RestMethod -Uri $Endpoint -Method Post -Body $body -ContentType "application/json" -ErrorAction Stop
+        $initResponse = Invoke-RestMethod -Uri $Endpoint -Method Post -Body $body -ContentType "application/json" -Headers $ingestHeaders -ErrorAction Stop
         $wait = Wait-ForDocumentIAOrchestration -StatusUri $initResponse.statusQueryUri -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds
         $elapsed = ((Get-Date) - $startTime).TotalSeconds
         $status = $wait.FinalStatus
