@@ -2263,7 +2263,11 @@ public class DocumentProcessOrchestrator
             // El estado de fallo por falta de contenido no debe ser pisado por los estados de cierre.
             if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
             {
-                if (resultadoExtraccion.FallbackUsado && camposUtilesExtraccion == 0)
+                // AB#100130 (Fix 2): el camino GPT directo (sin CU) fija FallbackUsado=false siempre;
+                // si esa extraccion agota su propio timeout, ExtraccionTimeoutPropio=true la marca
+                // igual que el camino con fallback, para no dejar pasar en silencio un Estado="OK"
+                // con extraccion vacia.
+                if ((resultadoExtraccion.FallbackUsado || resultadoExtraccion.ExtraccionTimeoutPropio) && camposUtilesExtraccion == 0)
                 {
                     salida.Resultado.Estado = "EXTRACCION_INCOMPLETA";
                     salida.Resultado.MensajeError =
@@ -2286,8 +2290,11 @@ public class DocumentProcessOrchestrator
             }
 
             // Confianza global = MIN(Clasif, Extrac, Valid)
+            // AB#100130: si la extracción GPT agotó su propio timeout, NO se realizó (no es que se
+            // realizó con confianza 0). Se excluye del cálculo igual que cuando Extraction.Enabled es
+            // false, en vez de forzar ConfianzaGlobal=0 y EstadoCalidad="ERROR" artificialmente.
             var confClasif = resultadoClasificacion.Confianza;
-            var confExtrac = tipologiaResuelta.ExtractionEnabled
+            var confExtrac = tipologiaResuelta.ExtractionEnabled && !resultadoExtraccion.ExtraccionTimeoutPropio
                 ? resultadoExtraccion.ConfianzaExtraccion
                 : (double?)null;
             var confValid = resultadoValidacion.ConfianzaValidacion;

@@ -174,6 +174,52 @@ public class ConfigurableExtraerDataProviderTests
     }
 
     [Fact]
+    public async Task ObtenerDatosAsync_CuFallaYFallbackGptAgotaSuPropioTimeout_PreservaAmbosMotivosSinLanzar()
+    {
+        // AB#100130: si CU falla (activa fallback GPT) y el propio fallback GPT agota su
+        // TimeoutSeconds, GptFallbackExtraerDataProvider devuelve un resultado controlado con
+        // FallbackRazon=RazonExtraccionTimeout (en lugar de lanzar). ConfigurableExtraerDataProvider
+        // NO debe sobrescribir esa razón con la del fallo de CU: debe conservar ambas (por qué se
+        // activó el fallback + por qué no completó), y el resultado debe fluir como resultado de
+        // negocio normal (sin excepción) para que ExtraerActivity/el orquestador no vean un error técnico.
+        using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true);
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CuExtraccionException(
+                "default.cu",
+                "TimeoutException",
+                "CU supero el hard timeout",
+                new TimeoutException("hard timeout")));
+
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                FallbackUsado = true,
+                FallbackRazon = GptFallbackExtraerDataProvider.RazonExtraccionTimeout,
+                ConfianzaExtraccion = 0,
+                DatosExtraidos = new Dictionary<string, object>()
+            });
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        result.FallbackUsado.Should().BeTrue();
+        result.FallbackRazon.Should().Be(
+            $"exception:TimeoutException:cuModelKey=default.cu;{GptFallbackExtraerDataProvider.RazonExtraccionTimeout}");
+        result.DatosExtraidos.Should().BeEmpty();
+        result.ConfianzaExtraccion.Should().Be(0);
+    }
+
+    [Fact]
     public async Task ObtenerDatosAsync_CuInsuficiente_ActivaFallbackGpt()
     {
         using var fixture = TestFixture.Create(minFieldsRatio: 0.90, fallbackEnabled: true);
