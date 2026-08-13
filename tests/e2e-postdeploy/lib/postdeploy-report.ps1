@@ -34,6 +34,7 @@ function New-E2EReport {
             "no-ejecutado"  { "no ejecutado" }
             "no-aplicable"  { "N/A" }
             "sin-caso"      { "SIN CASO" }
+            default         { $item.Estado }
         }
         [void]$sb.AppendLine("| $($item.Area) | $($item.Id) | $icon | $($item.Casos -join ', ') | $($item.Descripcion) |")
     }

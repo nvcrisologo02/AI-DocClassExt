@@ -55,6 +55,12 @@ cubre, el reporte lo mostrará como `SIN CASO` — ese es el mecanismo para
 hacer visibles los huecos. `conditional: "gdc"` marca ítems que cuentan como
 N/A cuando la condición no está activa.
 
+Nota sobre el % de cobertura: se calcula sobre los casos ejecutados en el
+perfil de la ejecución actual (`-Profile smoke` o `-Profile full`). Un ítem
+cubierto solo por casos de otro perfil (p. ej. un caso `full` que cubre un
+ítem cuando se ejecuta `smoke`) aparece como `SIN CASO` en ese reporte, no
+como cubierto: el runner no mira casos fuera del perfil activo.
+
 ## Ampliar el corpus
 
 `tools/generate_corpus.py` regenera el corpus sintético (reportlab,

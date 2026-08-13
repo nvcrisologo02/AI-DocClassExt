@@ -59,4 +59,13 @@ Describe "Get-E2ECoverage" {
         ($cov.Items | Where-Object Id -eq "A-01").Estado | Should -Be "no-ejecutado"
         ($cov.Items | Where-Object Id -eq "G-01").Estado | Should -Be "no-ejecutado"
     }
+    It "redondea PorcentajeCobertura AwayFromZero en un empate real (.x5)" {
+        $matrix8 = @(1..8 | ForEach-Object { [pscustomobject]@{ id = "Y-0$_"; area = "Y"; descripcion = "y$_" } })
+        $cases8 = @(1..5 | ForEach-Object { [pscustomobject]@{ caseKey = "C-$_"; covers = @("Y-0$_") } })
+        $results8 = @(1..5 | ForEach-Object { [pscustomobject]@{ CaseKey = "C-$_"; Status = "PASS" } })
+        $cov = Get-E2ECoverage -Matrix $matrix8 -Cases $cases8 -Results $results8 -ActiveConditions @()
+        $cov.Aplicables | Should -Be 8
+        $cov.Cubiertos | Should -Be 5
+        $cov.PorcentajeCobertura | Should -Be 62.5
+    }
 }

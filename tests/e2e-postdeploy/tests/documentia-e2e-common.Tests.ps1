@@ -62,4 +62,31 @@ Describe "Test-CaseAssertions nuevas aserciones" {
         $status = [pscustomobject]@{ runtimeStatus = "Completed"; output = [pscustomobject]@{ DetalleEjecucion = [pscustomobject]@{ Clasificacion = [pscustomobject]@{ ProveedorClasif = "AzureOpenAI-GPT" } } } }
         (Test-CaseAssertions -Case $case -Status $status -History @()).Success | Should -BeTrue
     }
+    It "expectOutputPathContains falla si el valor no contiene el needle" {
+        $case = [pscustomobject]@{ assertions = [pscustomobject]@{ expectOutputPathContains = @([pscustomobject]@{ path = "DetalleEjecucion.Clasificacion.ProveedorClasif"; value = "GPT" }) } }
+        $status = [pscustomobject]@{ runtimeStatus = "Completed"; output = [pscustomobject]@{ DetalleEjecucion = [pscustomobject]@{ Clasificacion = [pscustomobject]@{ ProveedorClasif = "CU" } } } }
+        $result = Test-CaseAssertions -Case $case -Status $status -History @()
+        $result.Success | Should -BeFalse
+        $result.Errors | Should -Contain "output.DetalleEjecucion.Clasificacion.ProveedorClasif='CU' no contiene 'GPT'"
+    }
+}
+
+Describe "Wait-ForDocumentIAOrchestration header de polling" {
+    BeforeEach {
+        Mock Invoke-RestMethod {
+            return [pscustomobject]@{ runtimeStatus = "Completed"; customStatus = $null }
+        }
+    }
+    It "envia x-functions-key cuando se informa FunctionKey" {
+        Wait-ForDocumentIAOrchestration -StatusUri "https://example.test/status" -MaxRetries 1 -DelaySeconds 0 -FunctionKey "k" | Out-Null
+        Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter {
+            $Headers.ContainsKey("x-functions-key") -and $Headers["x-functions-key"] -eq "k"
+        }
+    }
+    It "no envia x-functions-key cuando no se informa FunctionKey" {
+        Wait-ForDocumentIAOrchestration -StatusUri "https://example.test/status" -MaxRetries 1 -DelaySeconds 0 | Out-Null
+        Should -Invoke Invoke-RestMethod -Times 1 -ParameterFilter {
+            -not $Headers.ContainsKey("x-functions-key")
+        }
+    }
 }
