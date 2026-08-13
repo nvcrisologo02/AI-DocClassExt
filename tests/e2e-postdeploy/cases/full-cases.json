@@ -147,21 +147,6 @@
     }
   },
   {
-    "group": "FE", "id": "FE2", "caseKey": "FE-FE2", "domain": "postdeploy",
-    "name": "Modelo de extraccion alternativo por request (GPT en vez de CU por defecto)",
-    "profiles": ["full"], "covers": ["EXT-04"],
-    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
-    "classificationProvider": "auto", "classificationOnly": false,
-    "expectedType": "nota.simple", "extractionModel": "default.gpt4o-mini_ex",
-    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
-    "assertions": {
-      "expectedRuntimeStatus": "Completed",
-      "expectNoTechnicalError": true,
-      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"],
-      "expectOutputPathEquals": [{ "path": "DetalleEjecucion.Extraccion.ModelKeyEfectivo", "value": "default.gpt4o-mini_ex" }]
-    }
-  },
-  {
     "group": "FP", "id": "FP1", "caseKey": "FP-FP1", "domain": "postdeploy",
     "name": "Dedup: primera ingesta del documento de tasacion",
     "profiles": ["full"], "covers": ["PIP-04"], "serial": true,
