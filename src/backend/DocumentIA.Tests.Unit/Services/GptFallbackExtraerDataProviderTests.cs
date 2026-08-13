@@ -207,8 +207,13 @@ public class GptFallbackExtraerDataProviderTests : IDisposable
     };
 
     /// <summary>
-    /// Subclase que sustituye la invocación real al modelo por una cancelación determinista, para
-    /// poder probar el manejo de timeout/cancelación sin depender de red real ni de temporizadores.
+    /// Subclase que sustituye la invocación real al modelo por una llamada que nunca completa por sí
+    /// misma: solo termina cuando el token recibido (linkedCts.Token, que combina el cts propio del
+    /// timeout y el cancellationToken del caller) se cancela — igual que ocurriría con una llamada
+    /// HTTP real. Esto permite probar el guard de dos condiciones
+    /// (timeoutCts.IsCancellationRequested + !cancellationToken.IsCancellationRequested) sin depender
+    /// de red real, dejando que el cts propio (ligado a model.TimeoutSeconds=1 en la config de test)
+    /// dispare de verdad.
     /// </summary>
     private sealed class TimeoutSimulatingGptFallbackExtraerDataProvider : GptFallbackExtraerDataProvider
     {
@@ -223,16 +228,18 @@ public class GptFallbackExtraerDataProviderTests : IDisposable
         {
         }
 
-        protected override Task<ClientResult<ChatCompletion>> InvokeChatCompletionAsync(
+        protected override async Task<ClientResult<ChatCompletion>> InvokeChatCompletionAsync(
             ChatClient chatClient,
             List<ChatMessage> messages,
             ChatCompletionOptions options,
             CancellationToken cancellationToken)
         {
-            // Simula lo que ocurre en producción cuando el cts ligado a model.TimeoutSeconds dispara:
-            // el SDK de OpenAI/Azure lanza una OperationCanceledException con el token cancelado
-            // (aquí, cts.Token, que es un token distinto del cancellationToken original del caller).
-            throw new OperationCanceledException("Timeout simulado para pruebas.", cancellationToken);
+            // Task.Delay(Infinite, token) lanza TaskCanceledException (subclase de
+            // OperationCanceledException) exactamente cuando "token" se cancela — sea porque el
+            // temporizador propio (timeoutCts) disparó, sea porque el caller canceló su token. No hay
+            // atajo artificial: se deja que el cts real (creado en ExecuteExtractionAsync) dispare.
+            await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new InvalidOperationException("No debería alcanzarse: Task.Delay(Infinite) siempre lanza al cancelarse.");
         }
     }
 }

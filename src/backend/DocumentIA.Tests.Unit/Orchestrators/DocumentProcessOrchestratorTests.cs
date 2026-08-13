@@ -1454,6 +1454,55 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_FallbackExtraccionTimeoutPropio_NuncaDegradaEstadoCalidadAError()
+    {
+        // AB#100130 (Fix 1): cuando la llamada GPT (fallback) agota su propio TimeoutSeconds,
+        // GptFallbackExtraerDataProvider.BuildTimeoutResultado devuelve un ExtraccionResultado
+        // controlado con ExtraccionTimeoutPropio=true, ConfianzaExtraccion=0 y
+        // FallbackRazon=RazonExtraccionTimeout. El orquestador debe:
+        //  - Marcar Resultado.Estado="EXTRACCION_INCOMPLETA" (estado de negocio, no ERROR tecnico).
+        //  - Excluir la extraccion del calculo de ConfianzaGlobal (igual que Extraction.Enabled=false)
+        //    en vez de forzar ConfianzaGlobal=0 -> EstadoCalidad="ERROR" de forma artificial.
+        //  - Conservar la clasificacion y dejar rastro del motivo (EXTRACCION_TIMEOUT_GPT) en
+        //    DetalleEjecucion.Extraccion.FallbackRazon.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: true));
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt-4o-mini-test",
+            Proveedor = "azure-openai",
+            ProveedorExtrac = "GPT4oMini",
+            FallbackUsado = true,
+            FallbackRazon = GptFallbackExtraerDataProvider.RazonExtraccionTimeout,
+            ConfianzaExtraccion = 0,
+            ExtraccionTimeoutPropio = true,
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>()
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("EXTRACCION_INCOMPLETA");
+        salida.Resultado.EstadoCalidad.Should().NotBe("ERROR");
+        // Con BuildClasificacionOk (0.95) y BuildValidacionOk (0.98), al excluirse la extraccion
+        // del calculo (ConfExtrac=null), ConfianzaGlobal = Min(0.95, 0.98) = 0.95 >= UmbralOK (0.85).
+        salida.Resultado.EstadoCalidad.Should().Be("OK");
+        salida.Resultado.ConfianzaGlobal.Should().BeApproximately(0.95, 0.001);
+        salida.DetalleEjecucion.Extraccion.FallbackRazon.Should().Contain(GptFallbackExtraerDataProvider.RazonExtraccionTimeout);
+    }
+
+    [Fact]
     public async Task RunOrchestrator_FlujoCompletoConAssetResolver_EjecutaObtenerActivoEIntegrar()
     {
         var orchestrator = CreateOrchestrator();

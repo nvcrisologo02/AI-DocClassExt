@@ -209,21 +209,25 @@ public class GptFallbackExtraerDataProvider
         };
         OpenAiModelCapabilities.ConfigureChatOptions(options, model.DeploymentName, model.Temperature, model.MaxTokens);
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var timeoutSeconds = Math.Max(1, model.TimeoutSeconds);
-        cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
+        // Dos CTS separados (timeoutCts + linkedCts), igual que el hard timeout de
+        // AzureContentUnderstandingProvider: permite distinguir en el catch si quien disparó la
+        // cancelación fue el temporizador propio o el token del caller.
+        using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token);
 
         var messages = new List<ChatMessage> { systemMessage, userMessage };
 
         ClientResult<ChatCompletion> response;
         try
         {
-            response = await InvokeChatCompletionAsync(chatClient, messages, options, cts.Token);
+            response = await InvokeChatCompletionAsync(chatClient, messages, options, linkedCts.Token);
         }
-        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        catch (OperationCanceledException ex)
+            when (timeoutCts.IsCancellationRequested && !cancellationToken.IsCancellationRequested)
         {
-            // El cts propio (ligado a model.TimeoutSeconds) es quien disparó la cancelación, no el
-            // caller: se trata de un timeout de negocio, no de un error técnico. Se devuelve un
+            // El timeoutCts propio (ligado a model.TimeoutSeconds) es quien disparó la cancelación,
+            // no el caller: se trata de un timeout de negocio, no de un error técnico. Se devuelve un
             // resultado de extracción controlado (sin datos) en lugar de dejar que la excepción
             // tumbe la activity, siguiendo el mismo criterio que CuExtraccionException para CU.
             stopwatch.Stop();
@@ -290,10 +294,12 @@ public class GptFallbackExtraerDataProvider
 
     /// <summary>
     /// Resultado de extracción controlado cuando la llamada GPT (fallback o directa) agota su propio
-    /// timeout. Sin datos extraídos y confianza 0: el motor de validación/confianza aguas abajo lo
-    /// tratará como una extracción insuficiente (REVISION/BAJA_CONFIANZA), sin necesidad de estados
-    /// especiales aquí. FallbackRazon queda marcado con <see cref="RazonExtraccionTimeout"/> para
-    /// trazabilidad en DetalleEjecucion y telemetría.
+    /// timeout. Sin datos extraídos: la extracción NO se realizó (no es que se realizó con confianza
+    /// 0), por eso ExtraccionTimeoutPropio=true para que el orquestador la excluya del cálculo de
+    /// ConfianzaGlobal (igual que Extraction.Enabled=false), en vez de forzar ConfianzaGlobal=0 y
+    /// EstadoCalidad="ERROR" de forma artificial. ConfianzaExtraccion=0 se conserva como dato
+    /// informativo del componente. FallbackRazon queda marcado con <see cref="RazonExtraccionTimeout"/>
+    /// para trazabilidad en DetalleEjecucion y telemetría.
     /// </summary>
     private static ExtraccionResultado BuildTimeoutResultado(
         ExtractionModelConfig model,
@@ -313,6 +319,7 @@ public class GptFallbackExtraerDataProvider
             FallbackUsado = isFallback,
             FallbackRazon = RazonExtraccionTimeout,
             ConfianzaExtraccion = 0,
+            ExtraccionTimeoutPropio = true,
             ProveedorExtrac = "GPT4oMini",
             TiemposMs = new Dictionary<string, int>
             {

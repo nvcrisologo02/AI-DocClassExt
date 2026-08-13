@@ -2286,8 +2286,11 @@ public class DocumentProcessOrchestrator
             }
 
             // Confianza global = MIN(Clasif, Extrac, Valid)
+            // AB#100130: si la extracción GPT agotó su propio timeout, NO se realizó (no es que se
+            // realizó con confianza 0). Se excluye del cálculo igual que cuando Extraction.Enabled es
+            // false, en vez de forzar ConfianzaGlobal=0 y EstadoCalidad="ERROR" artificialmente.
             var confClasif = resultadoClasificacion.Confianza;
-            var confExtrac = tipologiaResuelta.ExtractionEnabled
+            var confExtrac = tipologiaResuelta.ExtractionEnabled && !resultadoExtraccion.ExtraccionTimeoutPropio
                 ? resultadoExtraccion.ConfianzaExtraccion
                 : (double?)null;
             var confValid = resultadoValidacion.ConfianzaValidacion;
