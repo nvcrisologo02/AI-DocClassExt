@@ -1503,6 +1503,50 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ExtraccionGptDirectaTimeoutPropio_MarcaExtraccionIncompletaSinCalidadError()
+    {
+        // AB#100130 (Fix 2): en el camino GPT DIRECTO (sin CU, alcanzable con provider
+        // azure-openai/gpt explicito o sin fallback registrado), GptDirectExtraerDataProvider
+        // fija FallbackUsado=false SIEMPRE (linea 53) — a diferencia del camino con fallback
+        // CU->GPT. Si esa extraccion agota su propio timeout, ExtraccionTimeoutPropio=true es la
+        // UNICA señal disponible: la puerta original en el orquestador
+        // (`resultadoExtraccion.FallbackUsado && camposUtilesExtraccion == 0`) no se activaba para
+        // este camino, dejando pasar en silencio un Estado="OK" con extraccion vacia. La puerta
+        // ahora tambien considera ExtraccionTimeoutPropio.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: true));
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt-4o-mini-direct-test",
+            Proveedor = "azure-openai",
+            ProveedorExtrac = "GPT4oMini",
+            FallbackUsado = false, // Camino directo: GptDirectExtraerDataProvider siempre lo fija asi.
+            FallbackRazon = GptFallbackExtraerDataProvider.RazonExtraccionTimeout,
+            ConfianzaExtraccion = 0,
+            ExtraccionTimeoutPropio = true,
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>()
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("EXTRACCION_INCOMPLETA");
+        salida.Resultado.EstadoCalidad.Should().NotBe("ERROR");
+        salida.DetalleEjecucion.Extraccion.FallbackRazon.Should().Contain(GptFallbackExtraerDataProvider.RazonExtraccionTimeout);
+    }
+
+    [Fact]
     public async Task RunOrchestrator_FlujoCompletoConAssetResolver_EjecutaObtenerActivoEIntegrar()
     {
         var orchestrator = CreateOrchestrator();
