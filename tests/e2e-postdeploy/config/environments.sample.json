@@ -1,5 +1,6 @@
 {
   "dev":   { "baseUrl": "https://srbappdevdocai.azurewebsites.net", "functionKey": "", "healthCheck": true },
   "pro":   { "baseUrl": "https://srbappprodocai.azurewebsites.net", "functionKey": "", "healthCheck": true },
-  "local": { "baseUrl": "http://localhost:7071", "functionKey": "", "healthCheck": false }
+  "local": { "baseUrl": "http://localhost:7071", "functionKey": "", "healthCheck": false },
+  "adoPat": ""
 }

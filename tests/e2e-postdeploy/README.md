@@ -10,10 +10,12 @@ funcional contra `coverage/functional-matrix.json`.
 - PowerShell 7 (`pwsh`).
 - `config/environments.json`: copiar de `environments.sample.json` y rellenar
   las function keys (el fichero está en `.gitignore`; nunca commitearlo).
-- Opcional (publicación a ADO): `$env:ADO_PAT` con permiso Test Read/Write. Si
-  no está disponible, `ado/bootstrap-testplan.ps1` cae a un token AAD de la
-  sesión `az` activa (ver sección siguiente); la publicación de resultados
-  (`ado/publish-results.ps1`) requiere `ADO_PAT` sí o sí.
+- Opcional (publicación a ADO): credencial con permiso Test Read/Write,
+  resuelta con precedencia `-Pat` (parámetro) > `$env:ADO_PAT` > `adoPat` en
+  `environments.json` > token AAD de la sesión `az` activa (ver sección
+  siguiente). `adoPat` es un campo top-level opcional de
+  `environments.json` (no por entorno; mismo fichero gitignored que las
+  function keys — nunca commitearlo).
 
 ## Uso
 
@@ -55,6 +57,12 @@ cubre, el reporte lo mostrará como `SIN CASO` — ese es el mecanismo para
 hacer visibles los huecos. `conditional: "gdc"` marca ítems que cuentan como
 N/A cuando la condición no está activa.
 
+Nota sobre el % de cobertura: se calcula sobre los casos ejecutados en el
+perfil de la ejecución actual (`-Profile smoke` o `-Profile full`). Un ítem
+cubierto solo por casos de otro perfil (p. ej. un caso `full` que cubre un
+ítem cuando se ejecuta `smoke`) aparece como `SIN CASO` en ese reporte, no
+como cubierto: el runner no mira casos fuera del perfil activo.
+
 ## Ampliar el corpus
 
 `tools/generate_corpus.py` regenera el corpus sintético (reportlab,
@@ -81,18 +89,21 @@ defecto de producto en investigación, no del harness.
   escribe `cases/ado-mapping.json` (se commitea; mapea `caseKey` a
   `testCaseId`/`suiteId`). Reejecutarlo no crea duplicados: busca por nombre
   de plan/suite y por título de Test Case antes de crear.
-- Autenticación: usa `$env:ADO_PAT` (Basic) si está definido; si no, obtiene
-  un token AAD de la sesión `az` activa (`az account get-access-token
-  --resource 499b84ac-1321-427f-aa17-267ca6975798`) y lo usa como `Bearer`.
-  Requiere `az login` previo con acceso al proyecto.
+- Autenticación: precedencia `-Pat` > `$env:ADO_PAT` > `adoPat` en
+  `environments.json` > token AAD de la sesión `az` activa (`az account
+  get-access-token --resource 499b84ac-1321-427f-aa17-267ca6975798`), usado
+  como `Bearer`. Requiere `az login` previo con acceso al proyecto si no hay
+  ninguna de las otras credenciales.
 - `ado/publish-results.ps1` es el puente que invoca `run-e2e-postdeploy.ps1
   -PublishToAdo`: lee `ado-mapping.json`, enriquece los resultados con
   `TestCaseId`/`SuiteId` y llama a `Publish-AdoTestPlanResults` (definida en
-  `tests/api-tests/ado-testplans-common.ps1`). Esa función **solo admite
-  `ADO_PAT` (Basic)**, no token AAD/Bearer; sin `ADO_PAT` la publicación se
-  omite con un aviso (no falla la batería). Los casos con estado `NA` (p. ej.
-  GDC no activo) se normalizan a `SKIP` antes de publicar para que ADO los
-  registre como `NotApplicable`.
+  `tests/api-tests/ado-testplans-common.ps1`). Esa función admite PAT
+  (Basic) o token AAD (Bearer) — PAT manda si ambos están informados — con la
+  misma precedencia de credenciales que `bootstrap-testplan.ps1`; si no hay
+  ninguna credencial disponible, la publicación se omite con un aviso (no
+  falla la batería). Los casos con estado `NA` (p. ej. GDC no activo) se
+  normalizan a `SKIP` antes de publicar para que ADO los registre como
+  `NotApplicable`.
 - Estado actual: bootstrap ejecutado el 2026-08-13 (plan `100091`, suites
   `100093`/`100094`) vía fallback AAD, con Test Cases para todos los casos de
   `cases/*-cases.json` (incluido `FE-FE2`, incorporado tras la validación
@@ -102,8 +113,10 @@ defecto de producto en investigación, no del harness.
 
 - `PIP-06` (PAGINAS_EXCEDIDAS) no se cubre: exigiría una tipología con
   `maxPaginasDocumento` bajo, y este runner no muta configuración de entorno.
-- `EXT-04` (modelo de extracción alternativo) pendiente de identificar un
-  segundo modelo válido por request.
+- La selección de modelo/provider de extracción por request se descartó por
+  decisión de producto (la extracción es CU con fallback GPT);
+  `extraction.model` viaja en el payload pero solo es efectivo para el
+  provider CU de la tipología.
 - GDC es opt-in (`-IncludeGdc`); en DEV el servidor GDC ha estado
   históricamente no disponible.
 - `expectedType` usa los identificadores reales publicados en DEV:

@@ -36,4 +36,18 @@ Describe "New-E2EReport" {
         $json.porcentajeCobertura | Should -Be 50.0
         @($json.items).Count | Should -Be 2
     }
+    It "un estado no reconocido en la matriz no se oculta: se emite crudo" {
+        $runInfo = [pscustomobject]@{
+            Environment = "dev"; Profile = "smoke"; IncludeGdc = $false
+            StartedAtUtc = "2026-08-13T10:00:00Z"; FinishedAtUtc = "2026-08-13T10:12:00Z"
+        }
+        $coverage = [pscustomobject]@{
+            Items = @([pscustomobject]@{ Id = "Z-01"; Area = "Z"; Descripcion = "z"; Estado = "estado-nuevo-desconocido"; Casos = @() })
+            TotalMatriz = 1; Aplicables = 1; Cubiertos = 0; PorcentajeCobertura = 0.0
+        }
+        $dummyResults = @([pscustomobject]@{ CaseKey = "Z-1"; Name = "caso z"; Status = "PASS"; Reason = "OK" })
+        $out = New-E2EReport -RunInfo $runInfo -Results $dummyResults -Coverage $coverage -OutDir $TestDrive
+        $md = Get-Content -Raw $out.ReportPath
+        $md | Should -Match "estado-nuevo-desconocido"
+    }
 }

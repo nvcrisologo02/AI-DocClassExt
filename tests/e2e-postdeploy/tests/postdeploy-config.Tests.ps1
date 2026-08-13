@@ -24,4 +24,14 @@ Describe "Get-E2EEnvironment" {
     It "healthCheck=false se respeta (local)" {
         (Get-E2EEnvironment -ConfigPath $script:samplePath -Environment "local").HealthCheck | Should -BeFalse
     }
+    It "falla con mensaje claro (no excepcion cruda) si el JSON esta malformado" {
+        $tmp = Join-Path $TestDrive "malformed.json"
+        '{ "dev": { "baseUrl": ' | Set-Content $tmp
+        { Get-E2EEnvironment -ConfigPath $tmp -Environment "dev" } | Should -Throw "*no contiene JSON valido*"
+    }
+    It "falla con mensaje claro si el entorno esta presente pero es null" {
+        $tmp = Join-Path $TestDrive "nullenv.json"
+        '{ "dev": null }' | Set-Content $tmp
+        { Get-E2EEnvironment -ConfigPath $tmp -Environment "dev" } | Should -Throw "*vacio*"
+    }
 }

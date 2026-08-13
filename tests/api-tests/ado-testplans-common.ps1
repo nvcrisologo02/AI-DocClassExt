@@ -2,21 +2,30 @@
 $ErrorActionPreference = "Stop"
 
 function New-AdoAuthHeaders {
-    param([string]$Pat, [string]$ContentType = "application/json")
-    if ([string]::IsNullOrWhiteSpace($Pat)) {
-        throw "AdoPat no informado. Define -AdoPat o `$env:ADO_PAT con permisos Test Read/Write."
+    # Pat manda si ambos estan informados. Retrocompatible: llamadas
+    # existentes con solo -Pat mantienen el comportamiento actual (Basic).
+    param([string]$Pat, [string]$BearerToken = "", [string]$ContentType = "application/json")
+    if (-not [string]::IsNullOrWhiteSpace($Pat)) {
+        $base64Auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Pat"))
+        return @{
+            Authorization  = "Basic $base64Auth"
+            Accept         = "application/json"
+            "Content-Type" = $ContentType
+        }
     }
-    $base64Auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Pat"))
-    return @{
-        Authorization  = "Basic $base64Auth"
-        Accept         = "application/json"
-        "Content-Type" = $ContentType
+    if (-not [string]::IsNullOrWhiteSpace($BearerToken)) {
+        return @{
+            Authorization  = "Bearer $BearerToken"
+            Accept         = "application/json"
+            "Content-Type" = $ContentType
+        }
     }
+    throw "AdoPat/BearerToken no informado. Define -Pat/-BearerToken o `$env:ADO_PAT con permisos Test Read/Write."
 }
 
 function New-AdoTestManagementHeaders {
-    param([string]$Pat)
-    $headers = New-AdoAuthHeaders -Pat $Pat
+    param([string]$Pat, [string]$BearerToken = "")
+    $headers = New-AdoAuthHeaders -Pat $Pat -BearerToken $BearerToken
     $headers.Accept = "application/json; api-version=7.0"
     return $headers
 }
@@ -33,10 +42,11 @@ function Assert-AdoCanonicalPlan {
         [string]$Pat,
         [int]$PlanId,
         [int]$RootSuiteId,
-        [string]$ExpectedName
+        [string]$ExpectedName,
+        [string]$BearerToken = ""
     )
 
-    $headers = New-AdoAuthHeaders -Pat $Pat
+    $headers = New-AdoAuthHeaders -Pat $Pat -BearerToken $BearerToken
     $projectPath = Get-AdoProjectPath -Org $Org -Project $Project
     $planUri = "$projectPath/_apis/testplan/plans/${PlanId}?api-version=7.0"
     $plan = Invoke-RestMethod -Method Get -Uri $planUri -Headers $headers -ErrorAction Stop
@@ -53,30 +63,30 @@ function Assert-AdoCanonicalPlan {
 }
 
 function Get-AdoPlanSuites {
-    param([string]$Org, [string]$Project, [string]$Pat, [int]$PlanId)
+    param([string]$Org, [string]$Project, [string]$Pat, [int]$PlanId, [string]$BearerToken = "")
 
-    $headers = New-AdoAuthHeaders -Pat $Pat
+    $headers = New-AdoAuthHeaders -Pat $Pat -BearerToken $BearerToken
     $projectPath = Get-AdoProjectPath -Org $Org -Project $Project
     $uri = "$projectPath/_apis/testplan/Plans/${PlanId}/suites?api-version=7.0"
     return (Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -ErrorAction Stop).value
 }
 
 function Get-AdoSuiteTestCases {
-    param([string]$Org, [string]$Project, [string]$Pat, [int]$PlanId, [int]$SuiteId)
+    param([string]$Org, [string]$Project, [string]$Pat, [int]$PlanId, [int]$SuiteId, [string]$BearerToken = "")
 
-    $headers = New-AdoTestManagementHeaders -Pat $Pat
+    $headers = New-AdoTestManagementHeaders -Pat $Pat -BearerToken $BearerToken
     $projectPath = Get-AdoProjectPath -Org $Org -Project $Project
     $uri = "$projectPath/_apis/test/Plans/${PlanId}/suites/${SuiteId}/testcases"
     return (Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -ErrorAction Stop).value
 }
 
 function Get-AdoPlanPointsByTestCase {
-    param([string]$Org, [string]$Project, [string]$Pat, [int]$PlanId)
+    param([string]$Org, [string]$Project, [string]$Pat, [int]$PlanId, [string]$BearerToken = "")
 
-    $headers = New-AdoAuthHeaders -Pat $Pat
+    $headers = New-AdoAuthHeaders -Pat $Pat -BearerToken $BearerToken
     $projectPath = Get-AdoProjectPath -Org $Org -Project $Project
     $apiBase = "$projectPath/_apis/test"
-    $suites = Get-AdoPlanSuites -Org $Org -Project $Project -Pat $Pat -PlanId $PlanId
+    $suites = Get-AdoPlanSuites -Org $Org -Project $Project -Pat $Pat -PlanId $PlanId -BearerToken $BearerToken
     $pointByTestCase = @{}
 
     foreach ($suite in @($suites)) {
@@ -108,15 +118,16 @@ function Assert-AdoCaseMappings {
         [string]$Pat,
         [int]$PlanId,
         [int]$RootSuiteId,
-        [string]$ExpectedPlanName
+        [string]$ExpectedPlanName,
+        [string]$BearerToken = ""
     )
 
-    $plan = Assert-AdoCanonicalPlan -Org $Org -Project $Project -Pat $Pat -PlanId $PlanId -RootSuiteId $RootSuiteId -ExpectedName $ExpectedPlanName
-    $suites = Get-AdoPlanSuites -Org $Org -Project $Project -Pat $Pat -PlanId $PlanId
+    $plan = Assert-AdoCanonicalPlan -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId -RootSuiteId $RootSuiteId -ExpectedName $ExpectedPlanName
+    $suites = Get-AdoPlanSuites -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId
     $suiteById = @{}
     foreach ($suite in @($suites)) { $suiteById[[int]$suite.id] = $suite }
 
-    $pointByTestCase = Get-AdoPlanPointsByTestCase -Org $Org -Project $Project -Pat $Pat -PlanId $PlanId
+    $pointByTestCase = Get-AdoPlanPointsByTestCase -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId
     $errors = @()
 
     foreach ($case in @($Cases)) {
@@ -149,16 +160,17 @@ function Publish-AdoTestPlanResults {
         [string]$ExpectedPlanName,
         [string]$RunName,
         [string]$AutomatedTestStorage,
-        [string]$ArtifactsDir
+        [string]$ArtifactsDir,
+        [string]$BearerToken = ""
     )
 
     $casesForValidation = @($Results | ForEach-Object {
         [pscustomobject]@{ caseKey = $_.CaseKey; group = $_.Group; id = $_.Id; suiteId = $_.SuiteId; testCaseId = $_.TestCaseId }
     })
-    $validation = Assert-AdoCaseMappings -Cases $casesForValidation -Org $Org -Project $Project -Pat $Pat -PlanId $PlanId -RootSuiteId $RootSuiteId -ExpectedPlanName $ExpectedPlanName
+    $validation = Assert-AdoCaseMappings -Cases $casesForValidation -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId -RootSuiteId $RootSuiteId -ExpectedPlanName $ExpectedPlanName
     $pointByTestCase = $validation.PointByTestCase
 
-    $headers = New-AdoAuthHeaders -Pat $Pat
+    $headers = New-AdoAuthHeaders -Pat $Pat -BearerToken $BearerToken
     $projectPath = Get-AdoProjectPath -Org $Org -Project $Project
     $apiBase = "$projectPath/_apis/test"
     $apiVer = "?api-version=7.1"

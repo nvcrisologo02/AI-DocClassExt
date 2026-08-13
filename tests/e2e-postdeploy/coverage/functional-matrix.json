@@ -21,7 +21,6 @@
   { "id": "EXT-01",  "area": "Extraccion",    "descripcion": "Extraccion de campos sobre tipologia publicada (DetalleEjecucion.Extraccion informado)" },
   { "id": "EXT-02",  "area": "Extraccion",    "descripcion": "Extraccion con model=auto (resolucion automatica de modelo)" },
   { "id": "EXT-03",  "area": "Extraccion",    "descripcion": "Umbral de extraccion por request (extraction.umbral)" },
-  { "id": "EXT-04",  "area": "Extraccion",    "descripcion": "Modelo de extraccion alternativo por request (extraction.model explicito)" },
   { "id": "SUM-01",  "area": "Resumen",       "descripcion": "Resumen documental (expectedType resumen.documental)" },
   { "id": "VAL-01",  "area": "Validacion",    "descripcion": "Estados de negocio del contrato (OK/BAJA_CONFIANZA_CLASIFICACION/NO_CLASIFICADO) sin error tecnico" },
   { "id": "FMT-01",  "area": "Formatos",      "descripcion": "PDF" },

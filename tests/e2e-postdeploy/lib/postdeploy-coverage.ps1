@@ -64,6 +64,6 @@ function Get-E2ECoverage {
         TotalMatriz         = $itemsArr.Count
         Aplicables          = $aplicables.Count
         Cubiertos           = $cubiertos.Count
-        PorcentajeCobertura = if ($aplicables.Count -gt 0) { [math]::Round(100.0 * $cubiertos.Count / $aplicables.Count, 1) } else { 0.0 }
+        PorcentajeCobertura = if ($aplicables.Count -gt 0) { [math]::Round(100.0 * $cubiertos.Count / $aplicables.Count, 1, [MidpointRounding]::AwayFromZero) } else { 0.0 }
     }
 }
