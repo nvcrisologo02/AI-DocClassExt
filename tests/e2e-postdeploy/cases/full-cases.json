@@ -1,0 +1,280 @@
+[
+  {
+    "group": "FC", "id": "FC1", "caseKey": "FC-FC1", "domain": "postdeploy",
+    "name": "Provider di intenta Document Intelligence",
+    "profiles": ["full"], "covers": ["CLS-02"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "classificationProvider": "di", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectOutputJsonContains": ["DocumentIntelligence"]
+    }
+  },
+  {
+    "group": "FC", "id": "FC2", "caseKey": "FC-FC2", "domain": "postdeploy",
+    "name": "Provider gpt exclusivo",
+    "profiles": ["full"], "covers": ["CLS-03"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "classificationProvider": "gpt", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectOutputPathContains": [{ "path": "DetalleEjecucion.Clasificacion.ProveedorClasif", "value": "GPT" }]
+    }
+  },
+  {
+    "group": "FC", "id": "FC3", "caseKey": "FC-FC3", "domain": "postdeploy",
+    "name": "Provider hybrid-tdn",
+    "profiles": ["full"], "covers": ["CLS-04"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "classificationProvider": "hybrid-tdn", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true
+    }
+  },
+  {
+    "group": "FC", "id": "FC4", "caseKey": "FC-FC4", "domain": "postdeploy",
+    "name": "Modelo de clasificacion explicito gpt-4o-mini",
+    "profiles": ["full"], "covers": ["CLS-05"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "classificationProvider": "gpt", "classificationModel": "gpt-4o-mini",
+    "classificationOnly": true, "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectOutputJsonContains": ["gpt-4o-mini"]
+    }
+  },
+  {
+    "group": "FC", "id": "FC5", "caseKey": "FC-FC5", "domain": "postdeploy",
+    "name": "Modelo de clasificacion alternativo gpt-5-mini",
+    "profiles": ["full"], "covers": ["CLS-06"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "classificationProvider": "gpt", "classificationModel": "gpt-5-mini",
+    "classificationOnly": true, "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectOutputJsonContains": ["gpt-5-mini"]
+    }
+  },
+  {
+    "group": "FC", "id": "FC6", "caseKey": "FC-FC6", "domain": "postdeploy",
+    "name": "nivelClasificacion=TDN1 solo familia",
+    "profiles": ["full"], "covers": ["CLS-07"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "classificationProvider": "auto", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3, "nivelClasificacion": "TDN1",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "NO_CLASIFICADO"],
+      "expectOutputPathsNotEmpty": ["Identificacion.Tdn1"],
+      "expectOutputPathsEmpty": ["Identificacion.Tdn2"],
+      "expectOutputPathEquals": [{ "path": "DetalleEjecucion.NivelClasificacion", "value": "TDN1" }]
+    }
+  },
+  {
+    "group": "FC", "id": "FC7", "caseKey": "FC-FC7", "domain": "postdeploy",
+    "name": "Markdown inyectado en la peticion",
+    "profiles": ["full"], "covers": ["CLS-09"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "classificationProvider": "gpt", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "markdown": "## Escritura de Compraventa\n\nEn Villaficticia, ante Notario. Finca registral 12345. Vendedora: Promociones Imaginarias S.L. Transmision por compraventa por 140.000 EUR.",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectOutputPathEquals": [{ "path": "DetalleEjecucion.OrigenMarkdown", "value": "InstruccionesCallerPreClasificacion" }]
+    }
+  },
+  {
+    "group": "FC", "id": "FC8", "caseKey": "FC-FC8", "domain": "postdeploy",
+    "name": "Umbral estricto 0.95",
+    "profiles": ["full"], "covers": ["CLS-10"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "classificationProvider": "gpt", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3, "umbral": 0.95,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true
+    }
+  },
+  {
+    "group": "FC", "id": "FC9", "caseKey": "FC-FC9", "domain": "postdeploy",
+    "name": "Prompt ad-hoc por peticion sobre resumen.documental",
+    "profiles": ["full"], "covers": ["CLS-11"],
+    "documentPath": "tests/e2e-postdeploy/corpus/resumen/informe-activo-sintetico.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "resumen.documental",
+    "prompt": {
+      "systemPrompt": "Eres un asistente experto en documentos inmobiliarios.",
+      "userPromptTemplate": "Extrae en 3 puntos clave la informacion mas relevante del siguiente documento:\n\n{{CONTENT}}"
+    },
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputJsonContains": ["PromptResult"]
+    }
+  },
+  {
+    "group": "FE", "id": "FE1", "caseKey": "FE-FE1", "domain": "postdeploy",
+    "name": "Umbral de extraccion por request 0.95",
+    "profiles": ["full"], "covers": ["EXT-03"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "nota.simple", "extractionUmbral": 0.95,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
+    }
+  },
+  {
+    "group": "FE", "id": "FE2", "caseKey": "FE-FE2", "domain": "postdeploy",
+    "name": "Modelo de extraccion alternativo por request (GPT en vez de CU por defecto)",
+    "profiles": ["full"], "covers": ["EXT-04"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "nota.simple", "extractionModel": "default.gpt4o-mini_ex",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"],
+      "expectOutputPathEquals": [{ "path": "DetalleEjecucion.Extraccion.ModelKeyEfectivo", "value": "default.gpt4o-mini_ex" }]
+    }
+  },
+  {
+    "group": "FP", "id": "FP1", "caseKey": "FP-FP1", "domain": "postdeploy",
+    "name": "Dedup: primera ingesta del documento de tasacion",
+    "profiles": ["full"], "covers": ["PIP-04"], "serial": true,
+    "documentPath": "tests/e2e-postdeploy/corpus/tasacion/tasacion-sintetica.pdf",
+    "classificationProvider": "gpt", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": false, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"]
+    }
+  },
+  {
+    "group": "FP", "id": "FP2", "caseKey": "FP-FP2", "domain": "postdeploy",
+    "name": "Dedup: segunda ingesta se reutiliza",
+    "profiles": ["full"], "covers": ["PIP-03"], "serial": true,
+    "documentPath": "tests/e2e-postdeploy/corpus/tasacion/tasacion-sintetica.pdf",
+    "classificationProvider": "gpt", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": false, "forceReprocess": false, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO", "DUPLICADO"],
+      "expectOutputPathEquals": [{ "path": "Resultado.ReutilizadaPorDuplicado", "value": "True" }]
+    }
+  },
+  {
+    "group": "FP", "id": "FP4", "caseKey": "FP-FP4", "domain": "postdeploy",
+    "name": "Bypass de limite de paginas con flag forzar",
+    "profiles": ["full"], "covers": ["PIP-05"],
+    "documentPath": "tests/e2e-postdeploy/corpus/multipagina/documento-12-paginas.pdf",
+    "classificationProvider": "gpt", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3, "forzarProcesadoSinLimitePaginas": true,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"]
+    }
+  },
+  {
+    "group": "FF", "id": "FF1", "caseKey": "FF-FF1", "domain": "postdeploy",
+    "name": "Formato DOCX por el pipeline completo",
+    "profiles": ["full"], "covers": ["FMT-02"],
+    "documentPath": "tests/e2e-postdeploy/corpus/formatos/comunicacion-sintetica.docx",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true
+    }
+  },
+  {
+    "group": "FF", "id": "FF2", "caseKey": "FF-FF2", "domain": "postdeploy",
+    "name": "Formato XLSX por el pipeline completo",
+    "profiles": ["full"], "covers": ["FMT-03"],
+    "documentPath": "tests/e2e-postdeploy/corpus/formatos/listado-activos-sintetico.xlsx",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true
+    }
+  },
+  {
+    "group": "FH", "id": "FH1", "caseKey": "FH-FH1", "domain": "postdeploy",
+    "name": "Contrato: JSON malformado devuelve 400",
+    "profiles": ["full"], "covers": ["HTTP-02"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "payloadMode": "malformedJson",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": { "expectHttpStatus": 400 }
+  },
+  {
+    "group": "FH", "id": "FH2", "caseKey": "FH-FH2", "domain": "postdeploy",
+    "name": "Contrato: payload sin documento devuelve 400",
+    "profiles": ["full"], "covers": ["HTTP-03"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "payloadMode": "missingDocumento",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": { "expectHttpStatus": 400 }
+  },
+  {
+    "group": "FH", "id": "FH3", "caseKey": "FH-FH3", "domain": "postdeploy",
+    "name": "Contrato: classificationOnly no booleano devuelve 400",
+    "profiles": ["full"], "covers": ["HTTP-04"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "payloadMode": "invalidFlagType",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": { "expectHttpStatus": 400 }
+  },
+  {
+    "group": "FH", "id": "FH4", "caseKey": "FH-FH4", "domain": "postdeploy",
+    "name": "Contrato: classificationOnly + expectedType devuelve 400",
+    "profiles": ["full"], "covers": ["HTTP-05"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "classificationProvider": "auto", "classificationOnly": true,
+    "expectedType": "nota.simple",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": { "expectHttpStatus": 400 }
+  },
+  {
+    "group": "FH", "id": "FH5", "caseKey": "FH-FH5", "domain": "postdeploy",
+    "name": "Documento corrupto rechazado",
+    "profiles": ["full"], "covers": ["HTTP-06"],
+    "documentPath": "tests/e2e-postdeploy/corpus/invalidos/corrupto.pdf",
+    "classificationProvider": "auto", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectHttpStatus": 400
+    }
+  }
+]

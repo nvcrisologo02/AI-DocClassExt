@@ -1,0 +1,76 @@
+[
+  {
+    "group": "S", "id": "S1", "caseKey": "S-S1", "domain": "postdeploy",
+    "name": "Pipeline completo auto: clasificacion + extraccion nota simple",
+    "profiles": ["smoke", "full"],
+    "covers": ["CLS-01", "CLS-08", "PIP-01", "FMT-01", "VAL-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["Identificacion.Tipologia"],
+      "expectOutputPathEquals": [{ "path": "DetalleEjecucion.NivelClasificacion", "value": "TDN1_TDN2" }]
+    }
+  },
+  {
+    "group": "S", "id": "S2", "caseKey": "S-S2", "domain": "postdeploy",
+    "name": "classificationOnly con recorte a 3 paginas",
+    "profiles": ["smoke", "full"],
+    "covers": ["PIP-02"],
+    "documentPath": "tests/e2e-postdeploy/corpus/multipagina/documento-12-paginas.pdf",
+    "classificationProvider": "gpt", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"],
+      "expectOutputPathEquals": [
+        { "path": "DetalleEjecucion.ClassificationOnly", "value": "True" },
+        { "path": "DetalleEjecucion.RecorteAplicado", "value": "True" }
+      ]
+    }
+  },
+  {
+    "group": "S", "id": "S3", "caseKey": "S-S3", "domain": "postdeploy",
+    "name": "Extraccion dirigida con expectedType nota.simple",
+    "profiles": ["smoke", "full"],
+    "covers": ["EXT-01", "EXT-02", "CLS-12"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "nota.simple",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
+    }
+  },
+  {
+    "group": "S", "id": "S4", "caseKey": "S-S4", "domain": "postdeploy",
+    "name": "Resumen documental",
+    "profiles": ["smoke", "full"],
+    "covers": ["SUM-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/resumen/informe-activo-sintetico.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "resumen.documental",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true
+    }
+  },
+  {
+    "group": "S", "id": "S5", "caseKey": "S-S5", "domain": "postdeploy",
+    "name": "Contrato: base64 invalido devuelve 400",
+    "profiles": ["smoke", "full"],
+    "covers": ["HTTP-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "payloadMode": "invalidBase64",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": { "expectHttpStatus": 400 }
+  }
+]
