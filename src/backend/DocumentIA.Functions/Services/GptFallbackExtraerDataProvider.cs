@@ -1,3 +1,4 @@
+using System.ClientModel;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using System.Text.Json;
@@ -16,6 +17,13 @@ namespace DocumentIA.Functions.Services;
 
 public class GptFallbackExtraerDataProvider
 {
+    /// <summary>
+    /// Motivo estable registrado en FallbackRazon (y propagado a DetalleEjecucion/telemetría) cuando
+    /// la propia llamada GPT (fallback o directa) agota su TimeoutSeconds configurado. Distingue este
+    /// caso de una cancelación externa (caller) y de un fallo de CU que activa el fallback.
+    /// </summary>
+    public const string RazonExtraccionTimeout = "EXTRACCION_TIMEOUT_GPT";
+
     private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<GptFallbackExtraerDataProvider> _logger;
@@ -202,12 +210,33 @@ public class GptFallbackExtraerDataProvider
         OpenAiModelCapabilities.ConfigureChatOptions(options, model.DeploymentName, model.Temperature, model.MaxTokens);
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds)));
+        var timeoutSeconds = Math.Max(1, model.TimeoutSeconds);
+        cts.CancelAfter(TimeSpan.FromSeconds(timeoutSeconds));
 
-        var response = await chatClient.CompleteChatAsync(
-            new List<ChatMessage> { systemMessage, userMessage },
-            options,
-            cts.Token);
+        var messages = new List<ChatMessage> { systemMessage, userMessage };
+
+        ClientResult<ChatCompletion> response;
+        try
+        {
+            response = await InvokeChatCompletionAsync(chatClient, messages, options, cts.Token);
+        }
+        catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+        {
+            // El cts propio (ligado a model.TimeoutSeconds) es quien disparó la cancelación, no el
+            // caller: se trata de un timeout de negocio, no de un error técnico. Se devuelve un
+            // resultado de extracción controlado (sin datos) en lugar de dejar que la excepción
+            // tumbe la activity, siguiendo el mismo criterio que CuExtraccionException para CU.
+            stopwatch.Stop();
+            _logger.LogWarning(
+                ex,
+                "Timeout de {TimeoutSeconds}s superado en extracción GPT ({Modo}) para tipología={Tipologia}, Deployment={Deployment}. Se devuelve resultado de extracción controlado.",
+                timeoutSeconds,
+                isFallback ? "fallback" : "directa",
+                input.Tipologia,
+                model.DeploymentName);
+
+            return BuildTimeoutResultado(model, isFallback, customPromptConfig, stopwatch);
+        }
 
         stopwatch.Stop();
 
@@ -242,6 +271,54 @@ public class GptFallbackExtraerDataProvider
             DatosExtraidos = parsedResponse.CamposExtraidos,
             ResumenCombinado = parsedResponse.Resumen,
             ResultadoPromptCombinado = parsedResponse.ResultadoPrompt
+        };
+    }
+
+    /// <summary>
+    /// Punto de invocación de la llamada al modelo, aislado como método virtual para poder
+    /// sustituirlo en tests unitarios (simular timeouts/cancelaciones de forma determinista sin
+    /// depender de red real ni de temporizadores).
+    /// </summary>
+    protected virtual Task<ClientResult<ChatCompletion>> InvokeChatCompletionAsync(
+        ChatClient chatClient,
+        List<ChatMessage> messages,
+        ChatCompletionOptions options,
+        CancellationToken cancellationToken)
+    {
+        return chatClient.CompleteChatAsync(messages, options, cancellationToken);
+    }
+
+    /// <summary>
+    /// Resultado de extracción controlado cuando la llamada GPT (fallback o directa) agota su propio
+    /// timeout. Sin datos extraídos y confianza 0: el motor de validación/confianza aguas abajo lo
+    /// tratará como una extracción insuficiente (REVISION/BAJA_CONFIANZA), sin necesidad de estados
+    /// especiales aquí. FallbackRazon queda marcado con <see cref="RazonExtraccionTimeout"/> para
+    /// trazabilidad en DetalleEjecucion y telemetría.
+    /// </summary>
+    private static ExtraccionResultado BuildTimeoutResultado(
+        ExtractionModelConfig model,
+        bool isFallback,
+        PromptConfig? customPromptConfig,
+        Stopwatch stopwatch)
+    {
+        var tiempoKey = customPromptConfig is not null
+            ? "gpt-fallback-combined"
+            : (isFallback ? "gpt-fallback" : "gpt-direct");
+
+        return new ExtraccionResultado
+        {
+            Proveedor = "azure-openai",
+            Modelo = model.DeploymentName,
+            LayoutEnabled = false,
+            FallbackUsado = isFallback,
+            FallbackRazon = RazonExtraccionTimeout,
+            ConfianzaExtraccion = 0,
+            ProveedorExtrac = "GPT4oMini",
+            TiemposMs = new Dictionary<string, int>
+            {
+                [tiempoKey] = (int)stopwatch.ElapsedMilliseconds
+            },
+            DatosExtraidos = new Dictionary<string, object>()
         };
     }
 
