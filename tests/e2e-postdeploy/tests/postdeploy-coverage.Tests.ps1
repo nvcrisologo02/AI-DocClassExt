@@ -60,12 +60,14 @@ Describe "Get-E2ECoverage" {
         ($cov.Items | Where-Object Id -eq "G-01").Estado | Should -Be "no-ejecutado"
     }
     It "redondea PorcentajeCobertura AwayFromZero en un empate real (.x5)" {
-        $matrix8 = @(1..8 | ForEach-Object { [pscustomobject]@{ id = "Y-0$_"; area = "Y"; descripcion = "y$_" } })
-        $cases8 = @(1..5 | ForEach-Object { [pscustomobject]@{ caseKey = "C-$_"; covers = @("Y-0$_") } })
-        $results8 = @(1..5 | ForEach-Object { [pscustomobject]@{ CaseKey = "C-$_"; Status = "PASS" } })
-        $cov = Get-E2ECoverage -Matrix $matrix8 -Cases $cases8 -Results $results8 -ActiveConditions @()
-        $cov.Aplicables | Should -Be 8
-        $cov.Cubiertos | Should -Be 5
-        $cov.PorcentajeCobertura | Should -Be 62.5
+        # 1/16 = 6.25%: ToEven daria 6.2, AwayFromZero exige 6.3 — este dataset
+        # discrimina el modo de redondeo (un revert del MidpointRounding rompe el test).
+        $matrix16 = @(1..16 | ForEach-Object { [pscustomobject]@{ id = "Y-$_"; area = "Y"; descripcion = "y$_" } })
+        $cases16 = @([pscustomobject]@{ caseKey = "C-1"; covers = @("Y-1") })
+        $results16 = @([pscustomobject]@{ CaseKey = "C-1"; Status = "PASS" })
+        $cov = Get-E2ECoverage -Matrix $matrix16 -Cases $cases16 -Results $results16 -ActiveConditions @()
+        $cov.Aplicables | Should -Be 16
+        $cov.Cubiertos | Should -Be 1
+        $cov.PorcentajeCobertura | Should -Be 6.3
     }
 }
