@@ -87,7 +87,19 @@ public class IngestAPITrigger
                     var base64FromJson = contratoEntrada.Documento?.Content?.Base64?.Trim();
                     if (!string.IsNullOrEmpty(base64FromJson))
                     {
-                        var fileBytes = Convert.FromBase64String(base64FromJson);
+                        byte[] fileBytes;
+                        try
+                        {
+                            fileBytes = Convert.FromBase64String(base64FromJson);
+                        }
+                        catch (FormatException ex)
+                        {
+                            _logger.LogWarning(ex, "documento.content.base64 no es un base64 válido.");
+                            var badBase64Response = req.CreateResponse(HttpStatusCode.BadRequest);
+                            await badBase64Response.WriteStringAsync("documento.content.base64 no es un base64 válido.");
+                            return badBase64Response;
+                        }
+
                         await UploadToBlobAndSetHashesAsync(contratoEntrada, fileBytes);
                     }
                 }

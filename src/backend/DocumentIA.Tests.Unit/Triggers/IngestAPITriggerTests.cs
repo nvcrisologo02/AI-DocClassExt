@@ -288,6 +288,53 @@ public class IngestAPITriggerTests
     }
 
     [Fact]
+    public async Task Run_WhenBase64IsInvalid_ReturnsBadRequest()
+    {
+        var logger = new Mock<ILogger<IngestAPITrigger>>();
+        var blobStorage = new Mock<IBlobStorageService>(MockBehavior.Strict);
+        var promptValidator = new PromptInstruccionesValidator(new PromptModelRegistryLoader("dummy.json"));
+        var settings = Options.Create(new ClassificationRoutingSettings
+        {
+            NivelClasificacionDefault = ClassificationLevelResolver.LevelTdn1Tdn2
+        });
+
+        var durableClient = new Mock<DurableTaskClient>(MockBehavior.Strict, "test");
+        var function = new IngestAPITrigger(logger.Object, promptValidator, CreateRestriccionValidatorSinCatalogo(), blobStorage.Object, settings);
+
+        var body = JsonSerializer.Serialize(new
+        {
+            documento = new
+            {
+                name = "test.pdf",
+                content = new { base64 = "@@no-base64@@" }
+            },
+            instrucciones = new
+            {
+                classification = new { }
+            },
+            trazabilidad = new
+            {
+                correlationId = "corr-001"
+            }
+        });
+
+        var request = HttpFunctionTestFactory.CreateRequest(
+            method: "POST",
+            url: "http://localhost/api/ingest",
+            body: body,
+            headers: new Dictionary<string, string> { ["Content-Type"] = "application/json" });
+
+        var response = await function.Run(request, durableClient.Object);
+        var responseBody = await HttpFunctionTestFactory.ReadBodyAsync(response);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        responseBody.Should().Contain("base64");
+
+        durableClient.VerifyNoOtherCalls();
+        blobStorage.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task Run_RestriccionTodosCodigosInvalidos_Devuelve400()
     {
         var logger = new Mock<ILogger<IngestAPITrigger>>();
