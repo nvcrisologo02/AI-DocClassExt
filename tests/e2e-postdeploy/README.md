@@ -65,6 +65,14 @@ del responsable del proyecto para cada fichero, con nombre neutro (sin
 identificadores reales del documento ni del sujeto, para evitar además sesgo
 de clasificación por nombre de fichero) y trazabilidad de la decisión.
 
+Set aprobado el 2026-08-13 (calidad de extracción, AB#100088): dos recibos
+de IBI reales (`corpus/cera/recibo-ibi-real-1.pdf`, `recibo-ibi-real-2.pdf`,
+casos FE-FE3/FE-FE4 con `cera.16`) y dos notas simples reales
+(`corpus/nota-simple/nota-simple-real-1.pdf`, `nota-simple-real-2.pdf`,
+casos FE-FE5/FE-FE6 con `nota.simple_bal`). Nota: FE-FE5 falla de forma
+reproducible en DEV (`ExtraerActivity` cancelada con ese documento) — es un
+defecto de producto en investigación, no del harness.
+
 ## Test Plan espejo en ADO
 
 - `ado/bootstrap-testplan.ps1` crea (idempotente) el Test Plan "E2E

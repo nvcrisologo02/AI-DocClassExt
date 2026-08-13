@@ -161,6 +161,62 @@
     }
   },
   {
+    "group": "FE", "id": "FE3", "caseKey": "FE-FE3", "domain": "postdeploy",
+    "name": "Extraccion IBI real 1 (cera.16)",
+    "profiles": ["full"], "covers": ["EXT-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/cera/recibo-ibi-real-1.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "cera.16",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
+    }
+  },
+  {
+    "group": "FE", "id": "FE4", "caseKey": "FE-FE4", "domain": "postdeploy",
+    "name": "Extraccion IBI real 2 (cera.16)",
+    "profiles": ["full"], "covers": ["EXT-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/cera/recibo-ibi-real-2.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "cera.16",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
+    }
+  },
+  {
+    "group": "FE", "id": "FE5", "caseKey": "FE-FE5", "domain": "postdeploy",
+    "name": "Extraccion nota simple real 1 (nota.simple_bal)",
+    "profiles": ["full"], "covers": ["EXT-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-real-1.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "nota.simple_bal",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
+    }
+  },
+  {
+    "group": "FE", "id": "FE6", "caseKey": "FE-FE6", "domain": "postdeploy",
+    "name": "Extraccion nota simple real 2 (nota.simple_bal)",
+    "profiles": ["full"], "covers": ["EXT-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-real-2.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "nota.simple_bal",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
+    }
+  },
+  {
     "group": "FP", "id": "FP1", "caseKey": "FP-FP1", "domain": "postdeploy",
     "name": "Dedup: primera ingesta del documento de tasacion",
     "profiles": ["full"], "covers": ["PIP-04"], "serial": true,
