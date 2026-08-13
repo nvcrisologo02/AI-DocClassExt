@@ -2,3 +2,8 @@
 # Sin esto Git normaliza los saltos de linea y el contenido deja de coincidir
 # con el hash SRI publicado por el origen, impidiendo verificar su integridad.
 src/frontend/DocumentIA.Admin/wwwroot/lib/** -text
+
+# Corpus sintetico del E2E post-despliegue: PDFs generados sin flujos binarios
+# embebidos, por lo que Git no los detecta como binarios automaticamente y
+# aplicaria conversion CRLF, corrompiendo las tablas xref internas del PDF.
+tests/e2e-postdeploy/corpus/**/*.pdf -text
