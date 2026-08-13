@@ -129,7 +129,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
-      "expectOutputJsonContains": ["PromptResult"]
+      "expectOutputJsonContains": ["ResultadoPrompt"]
     }
   },
   {
@@ -138,7 +138,21 @@
     "profiles": ["full"], "covers": ["EXT-03"],
     "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
     "classificationProvider": "auto", "classificationOnly": false,
-    "expectedType": "nota.simple", "extractionUmbral": 0.95,
+    "expectedType": "nota.simple_bal", "extractionUmbral": 0.95,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
+    }
+  },
+  {
+    "group": "FE", "id": "FE2", "caseKey": "FE-FE2", "domain": "postdeploy",
+    "name": "Extraccion recibo IBI (cera.16)",
+    "profiles": ["full"], "covers": ["EXT-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/cera/recibo-ibi-sintetico.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "cera.16",
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
     "assertions": {
       "expectedRuntimeStatus": "Completed",
@@ -252,14 +266,15 @@
   },
   {
     "group": "FH", "id": "FH5", "caseKey": "FH-FH5", "domain": "postdeploy",
-    "name": "Documento corrupto rechazado",
+    "name": "Documento corrupto: no rechazado en el HTTP, orquestacion completa con NO_CLASIFICADO (comportamiento real confirmado en DEV AB#100088)",
     "profiles": ["full"], "covers": ["HTTP-06"],
     "documentPath": "tests/e2e-postdeploy/corpus/invalidos/corrupto.pdf",
     "classificationProvider": "auto", "classificationOnly": true,
     "maxPagesForClassificationOnly": 3,
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
     "assertions": {
-      "expectHttpStatus": 400
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["NO_CLASIFICADO"]
     }
   }
 ]

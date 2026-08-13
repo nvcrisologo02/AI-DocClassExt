@@ -75,6 +75,25 @@ ESCRITURA = [
     "SEGUNDO. La parte compradora manifiesta conocer el estado de cargas.",
 ]
 
+RECIBO_IBI = [
+    "AYUNTAMIENTO DE VILLAFICTICIA",
+    "IMPUESTO SOBRE BIENES INMUEBLES (IBI) - RECIBO",
+    "",
+    "EJERCICIO: 2026",
+    "REFERENCIA CATASTRAL: 0000000XX0000X0000XX",
+    "",
+    "TITULAR: Don Fulano Ejemplar Perez",
+    "DOMICILIO TRIBUTARIO: Calle Imaginaria numero 8, Villaficticia.",
+    "",
+    "BASE LIQUIDABLE: 45.000,00 EUR",
+    "TIPO DE GRAVAMEN: 0,6941 por ciento",
+    "CUOTA A INGRESAR: 312,45 EUR",
+    "",
+    "Este recibo tiene caracter puramente informativo y contiene datos",
+    "integramente ficticios, de uso exclusivo para pruebas del sistema de",
+    "clasificacion documental.",
+]
+
 INFORME_ACTIVO = [
     "INFORME DE SITUACION DE ACTIVO INMOBILIARIO",
     "Referencia interna: ACT-354937 (dato ficticio de prueba)",
@@ -144,6 +163,7 @@ if __name__ == "__main__":
     write_pdf(ROOT / "tasacion" / "tasacion-sintetica.pdf", TASACION, pages=2)
     write_pdf(ROOT / "generico" / "escritura-compraventa-sintetica.pdf", ESCRITURA, pages=2)
     write_pdf(ROOT / "resumen" / "informe-activo-sintetico.pdf", INFORME_ACTIVO, pages=1)
+    write_pdf(ROOT / "cera" / "recibo-ibi-sintetico.pdf", RECIBO_IBI, pages=1)
     write_pdf(ROOT / "multipagina" / "documento-12-paginas.pdf", NOTA_SIMPLE, pages=12)
     write_docx(ROOT / "formatos" / "comunicacion-sintetica.docx")
     write_xlsx(ROOT / "formatos" / "listado-activos-sintetico.xlsx")

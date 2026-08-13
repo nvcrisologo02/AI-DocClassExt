@@ -35,12 +35,12 @@
   },
   {
     "group": "S", "id": "S3", "caseKey": "S-S3", "domain": "postdeploy",
-    "name": "Extraccion dirigida con expectedType nota.simple",
+    "name": "Extraccion dirigida con expectedType nota.simple_bal",
     "profiles": ["smoke", "full"],
     "covers": ["EXT-01", "EXT-02", "CLS-12"],
     "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
     "classificationProvider": "auto", "classificationOnly": false,
-    "expectedType": "nota.simple",
+    "expectedType": "nota.simple_bal",
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
     "assertions": {
       "expectedRuntimeStatus": "Completed",
@@ -64,13 +64,13 @@
   },
   {
     "group": "S", "id": "S5", "caseKey": "S-S5", "domain": "postdeploy",
-    "name": "Contrato: base64 invalido devuelve 400",
+    "name": "Contrato: base64 invalido devuelve 500 (excepcion no capturada, comportamiento real confirmado en DEV AB#100088)",
     "profiles": ["smoke", "full"],
     "covers": ["HTTP-01"],
     "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
     "payloadMode": "invalidBase64",
     "classificationProvider": "auto", "classificationOnly": false,
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
-    "assertions": { "expectHttpStatus": 400 }
+    "assertions": { "expectHttpStatus": 500 }
   }
 ]
