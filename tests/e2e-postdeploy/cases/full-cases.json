@@ -316,7 +316,7 @@
     "profiles": ["full"], "covers": ["HTTP-05"],
     "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
     "classificationProvider": "auto", "classificationOnly": true,
-    "expectedType": "nota.simple",
+    "expectedType": "nota.simple_bal",
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
     "assertions": { "expectHttpStatus": 400 }
   },
