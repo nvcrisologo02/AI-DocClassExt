@@ -10,7 +10,10 @@ funcional contra `coverage/functional-matrix.json`.
 - PowerShell 7 (`pwsh`).
 - `config/environments.json`: copiar de `environments.sample.json` y rellenar
   las function keys (el fichero está en `.gitignore`; nunca commitearlo).
-- Opcional (publicación a ADO): `$env:ADO_PAT` con permiso Test Read/Write.
+- Opcional (publicación a ADO): `$env:ADO_PAT` con permiso Test Read/Write. Si
+  no está disponible, `ado/bootstrap-testplan.ps1` cae a un token AAD de la
+  sesión `az` activa (ver sección siguiente); la publicación de resultados
+  (`ado/publish-results.ps1`) requiere `ADO_PAT` sí o sí.
 
 ## Uso
 
@@ -52,6 +55,31 @@ N/A cuando la condición no está activa.
 
 `tools/generate_corpus.py` regenera el corpus sintético (reportlab,
 python-docx, openpyxl). Ningún documento puede contener datos reales.
+
+## Test Plan espejo en ADO
+
+- `ado/bootstrap-testplan.ps1` crea (idempotente) el Test Plan "E2E
+  Post-despliegue DocumentIA" en `sareb.visualstudio.com/AI DocClassExt`, con
+  suites `Smoke` y `Full`, un Test Case WI por caso de `cases/*-cases.json` y
+  escribe `cases/ado-mapping.json` (se commitea; mapea `caseKey` a
+  `testCaseId`/`suiteId`). Reejecutarlo no crea duplicados: busca por nombre
+  de plan/suite y por título de Test Case antes de crear.
+- Autenticación: usa `$env:ADO_PAT` (Basic) si está definido; si no, obtiene
+  un token AAD de la sesión `az` activa (`az account get-access-token
+  --resource 499b84ac-1321-427f-aa17-267ca6975798`) y lo usa como `Bearer`.
+  Requiere `az login` previo con acceso al proyecto.
+- `ado/publish-results.ps1` es el puente que invoca `run-e2e-postdeploy.ps1
+  -PublishToAdo`: lee `ado-mapping.json`, enriquece los resultados con
+  `TestCaseId`/`SuiteId` y llama a `Publish-AdoTestPlanResults` (definida en
+  `tests/api-tests/ado-testplans-common.ps1`). Esa función **solo admite
+  `ADO_PAT` (Basic)**, no token AAD/Bearer; sin `ADO_PAT` la publicación se
+  omite con un aviso (no falla la batería). Los casos con estado `NA` (p. ej.
+  GDC no activo) se normalizan a `SKIP` antes de publicar para que ADO los
+  registre como `NotApplicable`.
+- Estado actual: bootstrap ejecutado el 2026-08-13 (plan `100091`, suites
+  `100093`/`100094`, 26 Test Cases) vía fallback AAD; publicación con un run
+  real contra DEV queda pendiente de la validación con backend real
+  (AB#100088).
 
 ## Limitaciones conocidas
 
