@@ -11,18 +11,32 @@
     499b84ac-1321-427f-aa17-267ca6975798).
 .NOTES
     Idempotente: reejecutar no crea plan/suites/Test Cases duplicados; solo
-    escribe de nuevo cases/ado-mapping.json.
+    escribe de nuevo cases/ado-mapping.json (y solo si el 100% de las
+    asociaciones caso-suite de esta ejecucion fueron correctas).
 #>
 param(
     [string]$Org = "https://sareb.visualstudio.com",
     [string]$Project = "AI DocClassExt",
     [string]$PlanName = "E2E Post-despliegue DocumentIA",
-    [string]$Pat = $env:ADO_PAT
+    [string]$Pat = $env:ADO_PAT,
+    [string]$ConfigPath = ""
 )
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 
-# ── Autenticacion: PAT (Basic) con prioridad; si no hay, token AAD (Bearer) ──
+# ── Autenticacion: PAT (Basic) con prioridad; si no hay, adoPat de
+#    environments.json; si tampoco, token AAD (Bearer) de la sesion 'az' ──
+function Get-AdoPatFromConfig {
+    param([string]$ConfigPath)
+    if ([string]::IsNullOrWhiteSpace($ConfigPath) -or -not (Test-Path -Path $ConfigPath)) { return "" }
+    try {
+        $cfg = Get-Content -Raw -Path $ConfigPath | ConvertFrom-Json
+    }
+    catch { return "" }
+    if ($null -ne $cfg.PSObject.Properties['adoPat']) { return [string]$cfg.adoPat }
+    return ""
+}
+
 function Get-AdoBearerToken {
     # az puede escribir avisos (p.ej. InsecureRequestWarning) por stderr sin
     # que la llamada falle; se aisla el ErrorActionPreference para no
@@ -39,20 +53,25 @@ function Get-AdoBearerToken {
 }
 
 function Resolve-AdoAuthHeaders {
-    param([string]$Pat)
-    if (-not [string]::IsNullOrWhiteSpace($Pat)) {
-        $base64Auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$Pat"))
+    param([string]$Pat, [string]$ConfigPath)
+    $resolvedPat = $Pat
+    if ([string]::IsNullOrWhiteSpace($resolvedPat)) { $resolvedPat = Get-AdoPatFromConfig -ConfigPath $ConfigPath }
+    if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) {
+        $base64Auth = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$resolvedPat"))
         return @{ Authorization = "Basic $base64Auth" }
     }
     $token = Get-AdoBearerToken
     if ([string]::IsNullOrWhiteSpace($token)) {
-        throw "Falta ADO_PAT y no hay sesion 'az' con acceso a Azure DevOps. Define `$env:ADO_PAT o ejecuta 'az login'."
+        throw "Falta ADO_PAT/adoPat y no hay sesion 'az' con acceso a Azure DevOps. Define `$env:ADO_PAT, informa 'adoPat' en environments.json o ejecuta 'az login'."
     }
-    Write-Host "[ADO] ADO_PAT no informado; usando token AAD de la sesion 'az' (fallback)." -ForegroundColor DarkGray
+    Write-Host "[ADO] ADO_PAT/adoPat no informado; usando token AAD de la sesion 'az' (fallback)." -ForegroundColor DarkGray
     return @{ Authorization = "Bearer $token" }
 }
 
-$headers = Resolve-AdoAuthHeaders -Pat $Pat
+if ([string]::IsNullOrWhiteSpace($ConfigPath)) {
+    $ConfigPath = Join-Path $PSScriptRoot ".." "config" "environments.json"
+}
+$headers = Resolve-AdoAuthHeaders -Pat $Pat -ConfigPath $ConfigPath
 $proj = [Uri]::EscapeDataString($Project)
 
 # 1) Plan (buscar por nombre; crear si no existe)
@@ -94,6 +113,7 @@ Write-Host "Casos cargados: $($allCases.Count)"
 $mapping = @{}
 $created = 0
 $linked = 0
+$associationErrors = @()
 foreach ($case in $allCases) {
     $title = "[E2E-PD] $($case.caseKey) - $($case.name)"
     $titlePrefix = "[E2E-PD] $($case.caseKey) -"
@@ -124,13 +144,22 @@ foreach ($case in $allCases) {
         $linked++
     }
     catch {
+        $associationErrors += "$($case.caseKey): Test Case $tcId no se pudo asociar a suite $($suite.id): $($_.Exception.Message)"
         Write-Host "[WARN] No se pudo asociar Test Case $tcId a suite $($suite.id): $($_.Exception.Message)" -ForegroundColor Yellow
     }
     $mapping[$case.caseKey] = @{ testCaseId = $tcId; suiteId = [int]$suite.id }
 }
 Write-Host "Test Cases nuevos: $created | Asociaciones OK: $linked / $($allCases.Count)"
 
-# 5) Escribir mapping
+if ($associationErrors.Count -gt 0) {
+    Write-Host ""
+    Write-Host "[ERROR] Fallaron $($associationErrors.Count) de $($allCases.Count) asociaciones caso-suite:" -ForegroundColor Red
+    foreach ($e in $associationErrors) { Write-Host " - $e" -ForegroundColor Red }
+    Write-Host "[ERROR] No se escribe cases/ado-mapping.json: solo se persiste si el 100% de las asociaciones de esta ejecucion fueron correctas." -ForegroundColor Red
+    exit 1
+}
+
+# 5) Escribir mapping (solo si el 100% de las asociaciones caso-suite fueron OK)
 $outPath = Join-Path $casesDir "ado-mapping.json"
 $mappingObj = [ordered]@{
     planId     = [int]$plan.id
