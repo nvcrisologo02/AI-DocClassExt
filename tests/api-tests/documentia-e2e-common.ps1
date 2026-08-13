@@ -50,15 +50,18 @@ function Wait-ForDocumentIAOrchestration {
     param(
         [string]$StatusUri,
         [int]$MaxRetries,
-        [int]$DelaySeconds
+        [int]$DelaySeconds,
+        [string]$FunctionKey = ""
     )
 
     $uri = Resolve-StatusUri -StatusUri $StatusUri
+    $statusHeaders = @{}
+    if (-not [string]::IsNullOrWhiteSpace($FunctionKey)) { $statusHeaders["x-functions-key"] = $FunctionKey }
     $history = @()
     $retries = 0
     do {
         Start-Sleep -Seconds $DelaySeconds
-        $status = Invoke-RestMethod -Uri $uri -Method Get -ErrorAction Stop
+        $status = Invoke-RestMethod -Uri $uri -Method Get -Headers $statusHeaders -ErrorAction Stop
         $history += [pscustomobject]@{
             Attempt       = $retries + 1
             RuntimeStatus = $status.runtimeStatus
@@ -313,7 +316,7 @@ function Invoke-DocumentIAE2ECase {
         }
 
         $initResponse = Invoke-RestMethod -Uri $Endpoint -Method Post -Body $body -ContentType "application/json" -Headers $ingestHeaders -ErrorAction Stop
-        $wait = Wait-ForDocumentIAOrchestration -StatusUri $initResponse.statusQueryUri -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds
+        $wait = Wait-ForDocumentIAOrchestration -StatusUri $initResponse.statusQueryUri -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds -FunctionKey $FunctionKey
         $elapsed = ((Get-Date) - $startTime).TotalSeconds
         $status = $wait.FinalStatus
 
