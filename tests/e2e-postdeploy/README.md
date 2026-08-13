@@ -113,8 +113,10 @@ defecto de producto en investigación, no del harness.
 
 - `PIP-06` (PAGINAS_EXCEDIDAS) no se cubre: exigiría una tipología con
   `maxPaginasDocumento` bajo, y este runner no muta configuración de entorno.
-- `EXT-04` (modelo de extracción alternativo) pendiente de identificar un
-  segundo modelo válido por request.
+- La selección de modelo/provider de extracción por request se descartó por
+  decisión de producto (la extracción es CU con fallback GPT);
+  `extraction.model` viaja en el payload pero solo es efectivo para el
+  provider CU de la tipología.
 - GDC es opt-in (`-IncludeGdc`); en DEV el servidor GDC ha estado
   históricamente no disponible.
 - `expectedType` usa los identificadores reales publicados en DEV:

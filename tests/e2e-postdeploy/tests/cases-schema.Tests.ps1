@@ -43,8 +43,11 @@ Describe "Esquema de casos e2e-postdeploy" {
     It "los items de matriz sin caso son solo los documentados" {
         $covered = @($script:allCases | ForEach-Object { @($_.covers) } | Sort-Object -Unique)
         $sinCaso = @($script:matrix | Where-Object { $covered -notcontains $_.id } | ForEach-Object { $_.id })
-        # PIP-06 sin caso por diseno (requiere tipologia limitada); EXT-04 pendiente de
-        # segundo modelo de extraccion; OPS-01 lo cubre el pseudo-caso de health del runner
-        $sinCaso | Sort-Object | Should -Be @("EXT-04", "OPS-01", "PIP-06")
+        # PIP-06 sin caso por diseno (requiere tipologia limitada); OPS-01 lo
+        # cubre el pseudo-caso de health del runner. EXT-04 (modelo de
+        # extraccion alternativo por request) se retiro de la matriz: la
+        # seleccion de provider/modelo de extraccion por request se descarto
+        # por decision de producto (AB#100132).
+        $sinCaso | Sort-Object | Should -Be @("OPS-01", "PIP-06")
     }
 }
