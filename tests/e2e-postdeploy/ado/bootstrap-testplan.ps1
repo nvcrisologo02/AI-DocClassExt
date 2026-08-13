@@ -88,16 +88,26 @@ $casesDir = Join-Path $PSScriptRoot ".." "cases"
 $allCases = @(Get-ChildItem $casesDir -Filter "*-cases.json" | ForEach-Object { Get-Content -Raw $_.FullName | ConvertFrom-Json } | ForEach-Object { $_ })
 Write-Host "Casos cargados: $($allCases.Count)"
 
-# 4) Test Case WI por caso (buscar por titulo exacto; crear si falta) y anadirlo a su suite
+# 4) Test Case WI por caso (buscar por prefijo estable de caseKey; crear si
+#    falta; si el titulo cambio de nombre, actualizar el WI existente en vez
+#    de crear un duplicado) y anadirlo a su suite
 $mapping = @{}
 $created = 0
 $linked = 0
 foreach ($case in $allCases) {
     $title = "[E2E-PD] $($case.caseKey) - $($case.name)"
-    $wiql = @{ query = "SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'Test Case' AND [System.Title] = '$($title.Replace("'", "''"))'" } | ConvertTo-Json
+    $titlePrefix = "[E2E-PD] $($case.caseKey) -"
+    $wiql = @{ query = "SELECT [System.Id] FROM WorkItems WHERE [System.WorkItemType] = 'Test Case' AND [System.Title] CONTAINS '$($titlePrefix.Replace("'", "''"))'" } | ConvertTo-Json
     $found = Invoke-RestMethod -Uri "$Org/$proj/_apis/wit/wiql?api-version=7.1" -Method Post -Headers $headers -Body $wiql -ContentType "application/json"
     if (@($found.workItems).Count -gt 0) {
         $tcId = [int]$found.workItems[0].id
+        $wi = Invoke-RestMethod -Uri "$Org/$proj/_apis/wit/workitems/${tcId}?api-version=7.1" -Headers $headers -Method Get
+        $currentTitle = $wi.fields.'System.Title'
+        if ($currentTitle -ne $title) {
+            $patch = @(@{ op = "replace"; path = "/fields/System.Title"; value = $title }) | ConvertTo-Json -AsArray
+            Invoke-RestMethod -Uri "$Org/$proj/_apis/wit/workitems/${tcId}?api-version=7.1" -Method Patch -Headers $headers -Body $patch -ContentType "application/json-patch+json" | Out-Null
+            Write-Host "Test Case actualizado (titulo cambiado): $tcId ('$currentTitle' -> '$title')"
+        }
     }
     else {
         $patch = @(@{ op = "add"; path = "/fields/System.Title"; value = $title }) | ConvertTo-Json -AsArray

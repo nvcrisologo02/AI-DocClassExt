@@ -8,12 +8,16 @@
 .EXAMPLE
     pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment dev -Profile smoke
     pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pro -Profile full -Parallel 2
+.NOTES
+    -Parallel: 0 (por defecto) = no especificado, se resuelve segun el perfil:
+    smoke ejecuta secuencial (1) y full ejecuta con paralelismo 2. Un valor
+    explicito (>=1) siempre prevalece sobre este default por perfil.
 #>
 param(
     [Parameter(Mandatory = $true)][ValidateSet("dev", "pro", "local")][string]$Environment,
     [ValidateSet("smoke", "full")][string]$Profile = "smoke",
     [switch]$IncludeGdc,
-    [int]$Parallel = 1,
+    [int]$Parallel = 0,
     [int]$MaxRetries = 60,
     [int]$DelaySeconds = 10,
     [switch]$PublishToAdo,
@@ -46,6 +50,8 @@ catch { Write-Host "[CONFIG] $($_.Exception.Message)" -ForegroundColor Red; exit
 if ($Environment -in @("dev", "pro") -and [string]::IsNullOrWhiteSpace($envConfig.FunctionKey)) {
     Write-Host "[CONFIG] functionKey vacia para '$Environment' en environments.json" -ForegroundColor Red; exit 2
 }
+
+if ($Parallel -lt 1) { $Parallel = if ($Profile -eq "full") { 2 } else { 1 } }
 
 if ([string]::IsNullOrWhiteSpace($CasesDir)) { $CasesDir = Join-Path $scriptRoot "cases" }
 $startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
