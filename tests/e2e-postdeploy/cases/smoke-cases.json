@@ -64,13 +64,13 @@
   },
   {
     "group": "S", "id": "S5", "caseKey": "S-S5", "domain": "postdeploy",
-    "name": "Contrato: base64 invalido devuelve 500 (excepcion no capturada, comportamiento real confirmado en DEV AB#100088)",
+    "name": "Contrato: base64 invalido devuelve 400",
     "profiles": ["smoke", "full"],
     "covers": ["HTTP-01"],
     "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
     "payloadMode": "invalidBase64",
     "classificationProvider": "auto", "classificationOnly": false,
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
-    "assertions": { "expectHttpStatus": 500 }
+    "assertions": { "expectHttpStatus": 400 }
   }
 ]
