@@ -8,6 +8,14 @@ public static class GptHierarchicalClassificationParser
     public const string Phase2ParsingErrorReason = "fase2_parsing_error";
 
     /// <summary>
+    /// Motivo informado cuando la respuesta de clasificación restringida en fase única (AB#100060)
+    /// no es JSON válido o no cumple la estructura mínima esperada. A diferencia de Phase 2,
+    /// aquí "tipologia": null es un parseo exitoso (ninguna tipología del conjunto restringido
+    /// encaja), no un error.
+    /// </summary>
+    public const string RestringidoParsingErrorReason = "restringido_parsing_error";
+
+    /// <summary>
     /// Motivo informado cuando el TDN1 no vino explícito en el JSON de Phase 1 ni fue
     /// extraíble por el prefijo convencional "CODIGO: ..." (<see cref="ExtraerTdn1DePropuesta"/>),
     /// pero sí se pudo resolver mapeando el texto libre de "propuesta" contra el catálogo TDN1
@@ -16,6 +24,14 @@ public static class GptHierarchicalClassificationParser
     /// el contrato de salida (AB#99984).
     /// </summary>
     public const string PropuestaCatalogMappingReason = "tdn1_resuelto_por_mapeo_propuesta";
+
+    /// <summary>
+    /// Motivo informado cuando el modelo responde explícitamente "tdn2": null en Fase 2,
+    /// indicando que ninguna tipología del catálogo mostrado encaja. Aplica a cualquier
+    /// clasificación (restringida o no); es el modo restringido quien, aguas arriba de
+    /// <see cref="GptClasificarDataProvider"/>, consume este motivo de forma diferenciada.
+    /// </summary>
+    public const string Fase2NingunaTipologiaReason = "fase2_ninguna_tipologia_en_conjunto";
 
     public static GptHierarchicalParsingResult<GptPhase1Classification> ParsePhase1(string responseText)
     {
@@ -104,11 +120,19 @@ public static class GptHierarchicalClassificationParser
                     "La respuesta de fase 2 debe ser un objeto JSON.");
             }
 
-            if (!root.TryGetProperty("tdn2", out var tdn2Element) || tdn2Element.ValueKind != JsonValueKind.String)
+            if (!root.TryGetProperty("tdn2", out var tdn2Element) ||
+                (tdn2Element.ValueKind != JsonValueKind.String && tdn2Element.ValueKind != JsonValueKind.Null))
             {
                 return GptHierarchicalParsingResult<GptPhase2Classification>.Fail(
                     Phase2ParsingErrorReason,
-                    "La respuesta de fase 2 debe incluir 'tdn2' como string.");
+                    "La respuesta de fase 2 debe incluir 'tdn2' como string o null.");
+            }
+
+            if (tdn2Element.ValueKind == JsonValueKind.Null)
+            {
+                return GptHierarchicalParsingResult<GptPhase2Classification>.Fail(
+                    Fase2NingunaTipologiaReason,
+                    "El modelo indicó explícitamente que ninguna tipología del catálogo encaja (tdn2 null).");
             }
 
             var tdn2 = NormalizeCodeOrNull(tdn2Element.GetString());
@@ -151,6 +175,80 @@ public static class GptHierarchicalClassificationParser
         }
     }
 
+    /// <summary>
+    /// Parsea la respuesta de la clasificación restringida en fase única (AB#100060): el modelo
+    /// recibe directamente el conjunto restringido de tipologías candidatas (sin jerarquía TDN1/TDN2)
+    /// y devuelve el código de tipología elegido o null si ninguna encaja. A diferencia de
+    /// <see cref="ParsePhase2"/>, "tipologia": null es un parseo EXITOSO (no un error), y el código
+    /// no se uppercasea porque los códigos canónicos de tipología son mixtos (p.ej. "acui.02").
+    /// </summary>
+    public static GptHierarchicalParsingResult<GptRestrictedClassification> ParseRestringido(string responseText)
+    {
+        if (string.IsNullOrWhiteSpace(responseText))
+        {
+            return GptHierarchicalParsingResult<GptRestrictedClassification>.Fail(
+                RestringidoParsingErrorReason,
+                "La respuesta de clasificación restringida está vacía.");
+        }
+
+        try
+        {
+            using var jsonDocument = JsonDocument.Parse(responseText);
+            var root = jsonDocument.RootElement;
+
+            if (root.ValueKind != JsonValueKind.Object)
+            {
+                return GptHierarchicalParsingResult<GptRestrictedClassification>.Fail(
+                    RestringidoParsingErrorReason,
+                    "La respuesta de clasificación restringida debe ser un objeto JSON.");
+            }
+
+            if (!root.TryGetProperty("propuesta", out var propuestaElement) || propuestaElement.ValueKind != JsonValueKind.String)
+            {
+                return GptHierarchicalParsingResult<GptRestrictedClassification>.Fail(
+                    RestringidoParsingErrorReason,
+                    "La respuesta de clasificación restringida debe incluir 'propuesta' como string.");
+            }
+
+            if (!root.TryGetProperty("tipologia", out var tipologiaElement) ||
+                (tipologiaElement.ValueKind != JsonValueKind.String && tipologiaElement.ValueKind != JsonValueKind.Null))
+            {
+                return GptHierarchicalParsingResult<GptRestrictedClassification>.Fail(
+                    RestringidoParsingErrorReason,
+                    "La respuesta de clasificación restringida debe incluir 'tipologia' como string o null.");
+            }
+
+            var propuesta = propuestaElement.GetString() ?? string.Empty;
+            var tipologia = tipologiaElement.ValueKind == JsonValueKind.String
+                ? TrimToNullPreservingCase(tipologiaElement.GetString())
+                : null;
+
+            string? resumen = null;
+            if (root.TryGetProperty("resumen", out var resumenElement) &&
+                resumenElement.ValueKind == JsonValueKind.String)
+            {
+                resumen = resumenElement.GetString();
+            }
+
+            double? confianza = null;
+            if (root.TryGetProperty("confianza", out var confianzaElement) &&
+                confianzaElement.ValueKind == JsonValueKind.Number)
+            {
+                var rawValue = confianzaElement.GetDouble();
+                confianza = Math.Clamp(rawValue, 0.0, 1.0);
+            }
+
+            return GptHierarchicalParsingResult<GptRestrictedClassification>.Ok(
+                new GptRestrictedClassification(tipologia, propuesta, resumen, confianza));
+        }
+        catch (JsonException ex)
+        {
+            return GptHierarchicalParsingResult<GptRestrictedClassification>.Fail(
+                RestringidoParsingErrorReason,
+                $"JSON inválido en clasificación restringida: {ex.Message}");
+        }
+    }
+
     private static string? NormalizeCodeOrNull(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
@@ -159,6 +257,22 @@ public static class GptHierarchicalClassificationParser
         }
 
         return value.Trim().ToUpperInvariant();
+    }
+
+    /// <summary>
+    /// Recorta espacios y devuelve null si el resultado queda vacío, SIN alterar mayúsculas ni
+    /// minúsculas. A diferencia de <see cref="NormalizeCodeOrNull"/> (usado por TDN1/TDN2), los
+    /// códigos de tipología del conjunto restringido son canónicamente mixtos (p.ej. "acui.02") y
+    /// no deben uppercasearse (AB#100060).
+    /// </summary>
+    private static string? TrimToNullPreservingCase(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
     }
 
     /// <summary>
@@ -415,6 +529,8 @@ public static class GptHierarchicalClassificationParser
 public sealed record GptPhase1Classification(string? Tdn1, string Propuesta, string? Resumen = null, double? Confianza = null);
 
 public sealed record GptPhase2Classification(string Tdn2, string? ResultadoPrompt = null, string? Resumen = null, double? Confianza = null);
+
+public sealed record GptRestrictedClassification(string? Tipologia, string Propuesta, string? Resumen = null, double? Confianza = null);
 
 public sealed record GptHierarchicalParsingResult<T>(bool Success, T? Value, string? ErrorReason, string? ErrorMessage)
 {

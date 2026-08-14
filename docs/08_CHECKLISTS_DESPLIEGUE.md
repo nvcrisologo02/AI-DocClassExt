@@ -238,6 +238,7 @@ pwsh ./scripts/database/replicate-config-data.ps1 -Mode Apply -EntraAuth -Mirror
 |---|-------|------------------|----|
 | 9.1 | Verificar todos los prerrequisitos de prod OK | `.\scripts\deployment\verify-prod-prereqs.ps1` | ☐ |
 | 9.2 | Smoke test del endpoint `/api/tipologias` | `.\scripts\testing\smoke-test-functions.ps1 -HostName srbappprodocai.azurewebsites.net` | ☐ |
+| 9.2b | Smoke E2E funcional post-deploy (clasificación y extracción) | `pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pro -Profile smoke`. Valida pipeline completo de ingest (clasificación, extracción, resumen, contrato) con corpus sintético marcado `submittedBy=e2e-postdeploy`. Reporte y cobertura en `tests/e2e-postdeploy/artifacts/`. Perfil `full` (45-90 min) bajo demanda en releases mayores. Ver `tests/e2e-postdeploy/README.md` | ☐ |
 | 9.3 | Verificar estado de slots/settings en Function App | Azure Portal → Configuration (sin valores vacios/errores) | ☐ |
 | 9.4 | Verificar conectividad de secretos Key Vault references | Estado `Resolved` en App Settings | ☐ |
 | 9.5 | Verificar salud en Application Insights | Exceptions/failures sin picos post-deploy | ☐ |
@@ -340,6 +341,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | `scripts\configuration\set-app-settings.ps1` | Aplicar todos los App Settings no-secretos | Primer deploy o cambio de configuracion no-secreta |
 | `scripts\deployment\deploy-manual.ps1` | Build + zip + deploy via Kudu | Deploy manual sin pipeline |
 | `scripts\testing\smoke-test-functions.ps1 -HostName <host>` | Verificar endpoint `/api/tipologias` (requiere PowerShell 7 / `pwsh`) | Post cada deploy |
+| `tests/e2e-postdeploy/run-e2e-postdeploy.ps1` | Smoke E2E funcional post-deploy (perfiles smoke/full, cobertura funcional) | Manual, tras 9.2 |
 | `scripts\database\Query-Tipologias.ps1` / `sqlcmd` | Verificar conectividad BD y estado tablas | Post migraciones |
 | `scripts\database\replicate-config-data.ps1` | Replicar datos de **configuracion** (modelos/providers, tipologias, catalogos TDN1/TDN2, plugins, prompts) entre entornos. Modos `Export`/`Apply`/`Copy`, idempotente (MERGE+IDENTITY_INSERT) | Al promocionar configuracion dev→pre→prod |
 | `scripts\legacy\list-analyzers.ps1` | Listar modelos disponibles en Document Intelligence | Diagnostico de clasificacion |

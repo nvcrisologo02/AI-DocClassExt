@@ -11833,9 +11833,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 8, 5, 10, 3, 49, 922, DateTimeKind.Utc).AddTicks(1216),
+                            FechaCreacion = new DateTime(2026, 8, 12, 6, 50, 18, 906, DateTimeKind.Utc).AddTicks(444),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 8, 5, 10, 3, 49, 922, DateTimeKind.Utc).AddTicks(1212),
+                            PublicadaEn = new DateTime(2026, 8, 12, 6, 50, 18, 906, DateTimeKind.Utc).AddTicks(435),
                             PublicadaPor = "seed",
                             Version = "1.0",
                             VersionPublicada = "1.0"

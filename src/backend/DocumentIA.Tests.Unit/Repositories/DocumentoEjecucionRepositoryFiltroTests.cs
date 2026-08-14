@@ -321,6 +321,29 @@ public class DocumentoEjecucionRepositoryFiltroTests
         r.Revision.Should().Be(1);
     }
 
+    // Una ejecucion sin contenido del documento es un fallo de proceso: debe
+    // sumar al agregado de error y salir en el filtro Estado=ERROR igual que
+    // Error/Fallido, no quedarse fuera como estado neutro.
+    [Fact]
+    public async Task GetAgregadosAsync_Should_ContarSinContenidoDocumentoComoError()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        context.DocumentoEjecuciones.Add(
+            Ejecucion(6, "66666666-6666-6666-6666-666666666666", Base.AddDays(1), "NOTS", "SIN_CONTENIDO_DOCUMENTO", docId: 1, soloClasificacion: true));
+        context.SaveChanges();
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var r = await repo.GetAgregadosAsync(Filtro(Base, Base.AddDays(10)));
+        var filtroError = Filtro(Base, Base.AddDays(10));
+        filtroError.Estado = "ERROR";
+        var (items, total) = await repo.GetPagedAsync(filtroError, 1, 25);
+
+        r.Error.Should().Be(3, "Error, Fallido y SIN_CONTENIDO_DOCUMENTO cuentan como error");
+        total.Should().Be(3, "el filtro Estado=ERROR debe incluir las ejecuciones sin contenido de documento");
+        items.Should().Contain(e => e.EstadoFinal == "SIN_CONTENIDO_DOCUMENTO");
+    }
+
     [Fact]
     public async Task GetAgregadosAsync_Should_IncluirDiasSinEjecucionesAcero()
     {

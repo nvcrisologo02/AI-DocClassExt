@@ -49,6 +49,14 @@ public class ExtraccionResultado
     public string? MarkdownExtraido { get; set; }
     /// <summary>Confianza calculada para la extracción (0-1). Calculada por ConfidenceCalculator.</summary>
     public double ConfianzaExtraccion { get; set; }
+    /// <summary>
+    /// True cuando la llamada GPT (fallback o directa) agotó su propio TimeoutSeconds y se devolvió
+    /// un resultado controlado (sin datos) en lugar de lanzar (AB#100130). Señaliza al orquestador
+    /// que la extracción NO se realizó (no que se realizó con confianza 0): debe excluirse del
+    /// cálculo de ConfianzaGlobal igual que cuando Extraction.Enabled=false, en vez de forzar
+    /// ConfianzaGlobal=0 y por tanto EstadoCalidad="ERROR" de forma artificial.
+    /// </summary>
+    public bool ExtraccionTimeoutPropio { get; set; }
     /// <summary>Proveedor que realizó la extracción: "AzureContentUnderstanding" | "DICustom" | "GPT4oMini".</summary>
     public string ProveedorExtrac { get; set; } = string.Empty;
     /// <summary>Métricas de debug del cálculo de confianza de extracción. Null si no se calculó.</summary>

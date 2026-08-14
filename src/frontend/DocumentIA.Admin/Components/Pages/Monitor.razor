@@ -42,7 +42,7 @@
                 @if (_systemHealth != null)
                 {
                     <span class="badge @HealthBadgeClass(_systemHealth.Status)">@_systemHealth.Status</span>
-                    <small class="text-muted">@_systemHealth.Timestamp.LocalDateTime.ToString("HH:mm:ss")</small>
+                    <small class="text-muted">@HoraEspana.Formatear(_systemHealth.Timestamp, "HH:mm:ss")</small>
                 }
                 else
                 {
@@ -214,6 +214,7 @@
 
 <MonitorTabla Pagina="_pagina" Cargando="_cargando"
               PaginaCambiada="OnPaginaCambiada"
+              TamanoPagina="_tamanoPagina" TamanoPaginaCambiado="OnTamanoPaginaCambiado"
               Expandidos="_expandidos" Detalles="_detalles" CargandoDetalle="_cargandoDetalle"
               FilaAlternada="OnFilaAlternadaAsync" AbrirDetalle="AbrirModal" />
 
@@ -244,6 +245,7 @@
     private readonly Dictionary<string, EjecucionDetalleDto> _detalles = new();
     private readonly HashSet<string> _cargandoDetalle = [];
     private int _paginaActual = 1;
+    private int _tamanoPagina = 25;
     private bool _cargando;
     private string? _error;
     private SystemHealthDto? _systemHealth;
@@ -338,8 +340,7 @@
 
     private static MonitorFiltroDto FiltroCatalogoTipologias() => new()
     {
-        Desde = new DateTime(2000, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-        Hasta = DateTime.UtcNow.AddYears(1)
+        RangoDias = MonitorFiltroDto.RangoDiasHistorico
     };
 
     // Al cambiar el filtro se recargan agregados y primera pagina. Al cambiar de
@@ -355,6 +356,17 @@
     private async Task OnPaginaCambiada(int pagina)
     {
         _paginaActual = pagina;
+        ColapsarFilas();
+        await RecargarPaginaAsync();
+    }
+
+    // Cambiar el tamaño vuelve a la primera pagina: mantener el numero de pagina
+    // actual con un tamaño distinto apuntaria a un tramo arbitrario del listado
+    // (la pagina 4 de 25 en no es la pagina 4 de 100 en).
+    private async Task OnTamanoPaginaCambiado(int tamano)
+    {
+        _tamanoPagina = tamano;
+        _paginaActual = 1;
         ColapsarFilas();
         await RecargarPaginaAsync();
     }
@@ -375,7 +387,7 @@
         try
         {
             var tareaAgregados = MonitorService.GetAgregadosAsync(_filtro);
-            var tareaPagina = MonitorService.GetEjecucionesAsync(_filtro, _paginaActual);
+            var tareaPagina = MonitorService.GetEjecucionesAsync(_filtro, _paginaActual, _tamanoPagina);
             var tareaSalud = LoadSystemHealthAsync();
             await Task.WhenAll(tareaAgregados, tareaPagina, tareaSalud);
 
@@ -397,7 +409,7 @@
         _cargando = true;
         try
         {
-            _pagina = await MonitorService.GetEjecucionesAsync(_filtro, _paginaActual);
+            _pagina = await MonitorService.GetEjecucionesAsync(_filtro, _paginaActual, _tamanoPagina);
         }
         catch (InvalidOperationException ex)
         {
@@ -465,6 +477,16 @@
             }
             catch (ObjectDisposedException)
             {
+            }
+            // A diferencia de una accion del usuario, este refresco no tiene a quien
+            // devolverle el fallo: lo que escape de aqui llega al dispatcher del
+            // circuito y lo termina, tirando la pagina entera por un refresco
+            // fallido. Se deja constancia visible y se sigue con el siguiente ciclo,
+            // que puede volver a funcionar si el fallo era transitorio.
+            catch (Exception ex)
+            {
+                _error = $"Fallo en la actualizacion automatica: {ex.Message}";
+                StateHasChanged();
             }
         });
     }

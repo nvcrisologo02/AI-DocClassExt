@@ -34,6 +34,8 @@ public class GptClasificarDataProviderTests
                 Phase1UserPrompt = "DB Phase1 User {CONTEXT_PROMPT}",
                 Phase2SystemPrompt = "DB Phase2 System",
                 Phase2UserPrompt = "DB Phase2 User {TDN1_CODE}",
+                RestrictedSystemPrompt = "DB Restricted System",
+                RestrictedUserPrompt = "DB Restricted User",
                 Version = 5,
                 Source = "Database",
                 ResolvedAtUtc = DateTime.UtcNow
@@ -67,6 +69,8 @@ public class GptClasificarDataProviderTests
                 Phase1UserPrompt = "Fallback Phase1 User {CONTEXT_PROMPT}",
                 Phase2SystemPrompt = "Fallback Phase2 System",
                 Phase2UserPrompt = "Fallback Phase2 User {TDN1_CODE}",
+                RestrictedSystemPrompt = "Fallback Restricted System",
+                RestrictedUserPrompt = "Fallback Restricted User",
                 Version = 0, // Version 0 indica fallback
                 Source = "Fallback",
                 ResolvedAtUtc = DateTime.UtcNow
@@ -140,6 +144,8 @@ public class GptClasificarDataProviderTests
             Phase1UserPrompt = "P1U",
             Phase2SystemPrompt = "P2S",
             Phase2UserPrompt = "P2U",
+            RestrictedSystemPrompt = "RS",
+            RestrictedUserPrompt = "RU",
             Version = 3,
             Source = "Database",
             ResolvedAtUtc = DateTime.UtcNow

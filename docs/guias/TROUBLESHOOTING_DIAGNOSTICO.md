@@ -499,6 +499,7 @@
 2. **Diferenciar el estado del documento:**
    - `PENDIENTE_REINTENTO` → cuota de Azure OpenAI agotada tras reintentos/cooldown; estado limpio y retriable, no es un fallo del documento
    - `NO_CLASIFICADO` → documento genuinamente no clasificable; no confundir con rate limit
+   - `SIN_CONTENIDO_DOCUMENTO` → se pidió prompt o resumen y no se pudo leer el documento por ninguna vía; no es un problema de clasificación ni de cuota
 
 3. **Revisar cuota y uso del deployment en Azure Portal:**
    - Azure OpenAI resource → deployment usado por clasificación/prompts → Metrics → comparar `Rate Limit Requests` / uso de TPM vs límite asignado
@@ -542,6 +543,27 @@
 4. Si se necesita el snapshot exacto vía Copy API, **abrir caso de soporte Azure** con la evidencia (grant sin `source`, `:getCopyAuthorization` → 404).
 
 > Detalle completo: `docs/guias/GUIA_EXTRACCION_AZURE_CONTENT_UNDERSTANDING.md` §12 (aviso al inicio + §12.2b).
+
+---
+
+### Caso: ejecución en `SIN_CONTENIDO_DOCUMENTO`
+
+**Síntoma:** el documento cierra en `SIN_CONTENIDO_DOCUMENTO`, sin `Resumen` ni `ResultadoPrompt`, con la actividad `Prompt` en `Failed`.
+
+**Qué significa:** se pidió un prompt o un resumen y el sistema no consiguió texto del documento por ninguna vía (markdown de extracción, layout pre-clasificación ni extracción bajo demanda). **Es un fallo deliberado**: antes de existir esta guarda se llamaba al modelo con el contenido vacío y respondía cosas como *"No has incluido el documento"*, que se persistían como resumen válido con confianza 1.0.
+
+**Diagnóstico por orden de probabilidad:**
+
+1. **Documento ilegible o corrupto.** Comprobar `detalleEjecucion.markdownGenerado = false` y buscar errores de Document Intelligence:
+   ```kql
+   traces
+   | where operation_Id == "<operationId>"
+   | where message has "InvalidContent" or message has "no se pudo obtener markdown"
+   ```
+2. **Document Intelligence no disponible o sin permisos.** Buscar `401`, `403` o `InvalidRequest` en la misma traza. En dev/pre revisar `DocumentIntelligence__UseInlineContent` (ver `03_DISENO_TECNICO_DETALLADO.md`).
+3. **Tipología sin extracción ni layout con `expectedType` informado.** Es el caso que cubre la extracción bajo demanda; si aun así falla, el problema está en la llamada a layout, no en la configuración de la tipología.
+
+**Qué NO es:** no es un problema de clasificación (`NO_CLASIFICADO`) ni de cuota de Azure OpenAI (`PENDIENTE_REINTENTO`). El modelo ni siquiera llegó a invocarse.
 
 ---
 

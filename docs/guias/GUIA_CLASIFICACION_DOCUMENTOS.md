@@ -17,6 +17,7 @@
    - 4.2 [Clasificación Forzada (ExpectedType)](#42-clasificación-forzada-expectedtype)
    - 4.3 [Fallback GPT](#43-fallback-gpt)
    - 4.4 [Clasificación Mock (Desarrollo/Test)](#44-clasificación-mock-desarrollotest)
+   - 4.5 [Clasificación Restringida a un Conjunto de Tipologías](#45-clasificación-restringida-a-un-conjunto-de-tipologías)
 5. [Tipologías Soportadas](#5-tipologías-soportadas)
 6. [Sistema de Confianza](#6-sistema-de-confianza)
 7. [Configuración de Clasificación](#7-configuración-de-clasificación)
@@ -78,6 +79,7 @@ Tras el procesamiento, recibirás:
 | 🟡 **REVISION** (0.70–0.85) | El sistema tiene dudas; los datos pueden ser correctos pero conviene revisar | Revisión humana recomendada |
 | 🔴 **ERROR** (< 0.70) | Alta probabilidad de que algo no sea correcto | Revisión humana obligatoria |
 | ⚪ **NO_CLASIFICADO** | El sistema no pudo identificar el tipo de documento | Intervención manual necesaria |
+| ⚫ **SIN_CONTENIDO_DOCUMENTO** | Se pidió un prompt o un resumen y no se pudo leer el documento por ninguna vía; el modelo no llegó a invocarse | Revisar si el documento es legible; si lo es, comprobar la salud de Document Intelligence |
 
 ---
 
@@ -122,7 +124,7 @@ Son dos campos independientes en el resultado:
 
 | Campo | Descripción | Valores posibles |
 |---|---|---|
-| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO` |
+| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO`, `PENDIENTE_REINTENTO`, `BAJA_CONFIANZA_CLASIFICACION` |
 | `EstadoCalidad` | Fiabilidad de los datos obtenidos | `OK`, `REVISION`, `ERROR` |
 
 Un documento puede terminar en `Estado=OK` pero `EstadoCalidad=REVISION` (proceso completado, pero con confianza media que requiere revisión humana).
@@ -422,6 +424,45 @@ En entornos de desarrollo, se puede usar el proveedor `mock` que devuelve siempr
 ```
 
 > Útil para: tests unitarios, desarrollo local sin conectividad a Azure, validación de flujos de extracción sin depender de la clasificación.
+
+---
+
+### 4.5 Clasificación Restringida a un Conjunto de Tipologías
+
+Permite acotar la clasificación a una lista cerrada de tipologías candidatas mediante `instrucciones.restriccionTipologias`. El sistema solo puede devolver una tipología de esa lista o el centinela `"Desconocido"`; nunca clasifica el documento fuera del conjunto informado.
+
+**Cuándo usarla:** cuando el sistema origen ya sabe que el documento solo puede pertenecer a un subconjunto acotado de tipos (por ejemplo, un lote procedente de un contexto conocido) y quiere tanto restringir la búsqueda como recibir una señal explícita de "no encaja en ninguna" en lugar de una clasificación forzada.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `restriccionTipologias.codigos` | string[] | Códigos de tipología permitidos (columna `Codigo`, ej. `"SERE-25"`, `"nota-simple"`). Comparación case-insensitive. |
+| `restriccionTipologias.proponerSiDesconocido` | bool | `true` = si el resultado es `"Desconocido"`, se añade una propuesta informativa (`identificacion.propuestaTipologia`) obtenida de una clasificación libre, sin actuar sobre ella. Default: `false`. |
+
+Requiere `classification.nivelClasificacion = "TDN1_TDN2"` (la restricción opera a granularidad de tipología, no de familia TDN1). `expectedType` sigue siendo independiente y puede combinarse.
+
+**Fase única:** con restricción activa, la vía GPT ya no recorre la jerarquía TDN1→TDN2 habitual. Compara el documento en una sola pasada contra un catálogo plano formado por las tipologías del conjunto con su `gptDescripcion` completa, y elige la más compatible por contenido. La calidad de esa `gptDescripcion` es el factor que más determina el acierto: una descripción genérica o circular tiende a `"Desconocido"`, mientras que una descripción con contenido concreto (patrón `ES:` / `NO ES:` / señales de identificación) da confianzas altas (0.85–0.95). Ver la guía dedicada [GUIA_CLASIFICACION_RESTRINGIDA.md](GUIA_CLASIFICACION_RESTRINGIDA.md) para el detalle de uso, ejemplos completos, cómo escribir buenas `gptDescripcion` y solución de problemas.
+
+```json
+{
+  "instrucciones": {
+    "classification": { "nivelClasificacion": "TDN1_TDN2" },
+    "restriccionTipologias": {
+      "codigos": ["SERE-25", "nota-simple"],
+      "proponerSiDesconocido": true
+    }
+  },
+  "documento": {
+    "name": "documento.pdf",
+    "content": { "base64": "<BASE64>" }
+  },
+  "trazabilidad": {
+    "correlationId": "RESTRICCION-001",
+    "submittedBy": "sistema-origen"
+  }
+}
+```
+
+Si ningún proveedor de la cadena devuelve un código dentro del conjunto, el resultado final es `identificacion.tipologia = "Desconocido"` con `detalleEjecucion.clasificacion.fallbackRazon = "fuera_de_conjunto_restringido"`. Si `proponerSiDesconocido = true`, la propuesta informativa se calcula con el flujo jerárquico completo contra el catálogo entero (no contra el conjunto acotado). Igual que con cualquier documento no clasificado, se permiten resumen y prompt, pero no hay extracción, AssetResolver, subida a GDC ni integración.
 
 ---
 
@@ -938,7 +979,8 @@ x-functions-key: <function-key>    (producción)
 | `VALIDACION_CON_ERRORES` | Completado pero con errores de validación de campos |
 | `ERROR` | Error técnico en alguna actividad del pipeline |
 | `DUPLICADO` | Documento ya procesado; se reutiliza el resultado anterior |
-| `NO_CLASIFICADO` | No se pudo identificar el tipo de documento |
+| `NO_CLASIFICADO` | No se pudo identificar el tipo de documento. Si la petición pidió prompt o resumen, se ejecutan igualmente y viajan en `datosExtraidos` |
+| `SIN_CONTENIDO_DOCUMENTO` | Se pidió prompt o resumen y no se obtuvo texto del documento por ninguna vía; el modelo no se invoca y no se persiste resumen |
 
 ---
 
@@ -1490,6 +1532,7 @@ SHA256 del documento coincide con ejecución anterior
 | Error / Situación | Causa | Solución |
 |---|---|---|
 | `Estado = NO_CLASIFICADO` | GPT no pudo identificar el tipo | Revisar el documento; si es un tipo conocido, usar `expectedType` |
+| `Estado = SIN_CONTENIDO_DOCUMENTO` | Se pidió prompt/resumen y no se pudo extraer texto (documento ilegible, o Document Intelligence caído o sin permisos) | Comprobar `detalleEjecucion.markdownGenerado` y buscar `InvalidContent` en la traza; ver TROUBLESHOOTING_DIAGNOSTICO §2 |
 | `Estado = ERROR` + `mensajeError = "KeyNotFoundException"` | `expectedType` no existe en el registro | Verificar la familia/versión en `TipologiaVersionResolver` |
 | `Estado = ERROR` + error en plugin `refCatExcel` | El plugin de prioridad 1 falló | Verificar disponibilidad del servicio en `localhost:8082`; desactivar plugin si no está disponible |
 | `EstadoCalidad = REVISION` | Confianza global entre 0.70 y 0.85 | Revisar manualmente los datos extraídos |

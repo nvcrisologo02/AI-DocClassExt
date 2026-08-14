@@ -134,6 +134,8 @@ public class GptClasificarDataProviderResilienceTests : IDisposable
                 Phase1UserPrompt = "user phase1 {CONTEXT_PROMPT} {TDN1_CATALOG} {DOCUMENT_TEXT}",
                 Phase2SystemPrompt = "system phase2",
                 Phase2UserPrompt = "user phase2 {TDN1_CODE} {TDN2_CATALOG} {DOCUMENT_TEXT}",
+                RestrictedSystemPrompt = GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt,
+                RestrictedUserPrompt = GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate,
                 Version = 1,
                 Source = "Fallback"
             });

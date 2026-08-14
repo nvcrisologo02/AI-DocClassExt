@@ -30,6 +30,8 @@ variables:
       value: srbkvdevdocai
     - name: GDC_ENDPOINT
       value: https://srbwidd03.sareb.srb:8090/sintws/IDocService
+    - name: DI_USE_INLINE_CONTENT
+      value: 'true'
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRE
@@ -49,6 +51,8 @@ variables:
       value: srbkvpredocai
     - name: GDC_ENDPOINT
       value: https://REEMPLAZAR-host-pre.sareb.srb:8090/sintws/IDocService  # TODO: confirmar host GDC de PRE
+    - name: DI_USE_INLINE_CONTENT
+      value: 'true'
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRO
@@ -68,6 +72,8 @@ variables:
       value: srbkvprodocai
     - name: GDC_ENDPOINT
       value: https://srbwidp05.sareb.srb:8090/sintws/IDocService
+    - name: DI_USE_INLINE_CONTENT
+      value: 'false'
   - name: buildConfiguration
     value: Release
   - name: solutionPath
@@ -331,6 +337,7 @@ stages:
                         "Classification__GptFallback__MaxTokens=150",
                         "Classification__GptFallback__TimeoutSeconds=30",
                         "GDC__Endpoint=$(GDC_ENDPOINT)",
+                        "DocumentIntelligence__UseInlineContent=$(DI_USE_INLINE_CONTENT)",
                         "GDC__TimeoutSeconds=$(gdcTimeoutSeconds)",
                         "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicUsername)",
                         "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicPassword)",

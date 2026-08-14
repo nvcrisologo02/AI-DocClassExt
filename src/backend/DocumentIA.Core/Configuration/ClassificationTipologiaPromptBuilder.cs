@@ -40,7 +40,9 @@ public class ClassificationTipologiaPromptBuilder
 
     public string BuildTdn1Catalog()
     {
-        return _cache.GetOrCreate("clasificacion:catalogo:tdn1", entry =>
+        const string cacheKey = "clasificacion:catalogo:tdn1";
+
+        return _cache.GetOrCreate(cacheKey, entry =>
         {
             entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
 
@@ -52,7 +54,7 @@ public class ClassificationTipologiaPromptBuilder
                 .GetResult();
 
             var catalog = string.Join("\n", familias.Select(f => $"- {f.Codigo}: {f.Nombre}, {f.Descripcion}"));
-            
+
             _logger.LogInformation(
                 "BuildTdn1Catalog: Generado catálogo con {FamilyCount} familias. Catálogo length={CatalogLength} chars. Familias: {Familias}",
                 familias.Count(),
@@ -79,7 +81,7 @@ public class ClassificationTipologiaPromptBuilder
 
             using var scope = _scopeFactory.CreateScope();
             var catalogoRepository = scope.ServiceProvider.GetRequiredService<ICatalogoTdnRepository>();
-            
+
             // FALLBACK LOGIC: Primero intentar obtener prompt personalizado
             _logger.LogInformation("BuildTdn2CatalogByFamilia: Buscando custom TDN2_Prompt para familia '{Family}' en CatalogoTdn1...", normalizedFamily);
             var customPrompt = catalogoRepository
@@ -117,7 +119,7 @@ public class ClassificationTipologiaPromptBuilder
                 {
                     try
                     {
-                        var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(t.ConfiguracionJson!, 
+                        var config = JsonSerializer.Deserialize<TipologiaValidationConfig>(t.ConfiguracionJson!,
                             new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                         return new { Tipologia = t, Config = config };
                     }
@@ -170,7 +172,28 @@ public class ClassificationTipologiaPromptBuilder
         }) ?? string.Empty;
     }
 
-    private string BuildFromDatabase()
+    /// <summary>
+    /// Catálogo plano para la clasificación restringida en fase única: una línea por tipología
+    /// permitida publicada, con su familia TDN1, su TDN2 y la descripción GPT completa.
+    /// </summary>
+    public string BuildCatalogoPlanoRestringido(IReadOnlyCollection<string> codigosPermitidos)
+    {
+        if (codigosPermitidos is not { Count: > 0 })
+        {
+            throw new ArgumentException("El conjunto de códigos permitidos es obligatorio.", nameof(codigosPermitidos));
+        }
+
+        var conjunto = NormalizarConjunto(codigosPermitidos);
+        var cacheKey = $"clasificacion:catalogo:plano:r:{ComputeSetHash(conjunto)}";
+
+        return _cache.GetOrCreate(cacheKey, entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
+            return BuildFromDatabase(conjunto);
+        }) ?? string.Empty;
+    }
+
+    private string BuildFromDatabase(HashSet<string>? conjunto = null)
     {
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<ITipologiaRepository>();
@@ -220,6 +243,11 @@ public class ClassificationTipologiaPromptBuilder
                     ? tipologia.Codigo
                     : config.TipologiaId;
 
+                if (conjunto is not null && !conjunto.Contains(codigoCanónico))
+                {
+                    continue;
+                }
+
                 if (!seen.Add(codigoCanónico))
                 {
                     continue;
@@ -252,5 +280,16 @@ public class ClassificationTipologiaPromptBuilder
         }
 
         return string.Join("\n", lines);
+    }
+
+    private static HashSet<string> NormalizarConjunto(IReadOnlyCollection<string> codigos)
+        => new(codigos.Select(c => c.Trim()).Where(c => c.Length > 0), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Hash estable del conjunto (ordenado, uppercase) para claves de caché.</summary>
+    private static string ComputeSetHash(IEnumerable<string> codigos)
+    {
+        var canonical = string.Join("|", codigos.Select(c => c.Trim().ToUpperInvariant()).OrderBy(c => c, StringComparer.Ordinal));
+        var bytes = System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(canonical));
+        return Convert.ToHexString(bytes)[..16];
     }
 }

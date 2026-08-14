@@ -1,0 +1,72 @@
+@* Cabecera de Monitor v2. El total es la cifra que encabeza la pagina y va
+   destacada; los cinco indicadores que la acompañan separan la lectura de
+   proceso (¿termino la tuberia?) de la de calidad (¿merece confianza?), que es
+   la distincion que el panel entero pretende dejar clara. *@
+
+<div class="mv2-card p-3 mb-3 @(Cargando ? "opacity-50" : "")">
+    <div class="d-flex flex-wrap align-items-start gap-4">
+
+        <div style="min-width:150px">
+            <div class="mv2-kpi-label">Ejecuciones</div>
+            <div class="mv2-hero">@Formato(Agregados?.TotalEjecuciones ?? 0)</div>
+            <div class="mv2-kpi-foot">en el período seleccionado</div>
+        </div>
+
+        <div class="mv2-kpis flex-fill">
+            <div>
+                <div class="mv2-kpi-label">Proceso completado</div>
+                <div class="mv2-kpi-value" style="color:#0ca30c">@Porcentaje(ProcesoCompletado)</div>
+                <div class="mv2-kpi-foot">@Formato(ProcesoCompletado) de @Formato(Agregados?.TotalEjecuciones ?? 0)</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Confianza suficiente</div>
+                <div class="mv2-kpi-value" style="color:#0ca30c">@Porcentaje(Agregados?.CalidadOk)</div>
+                <div class="mv2-kpi-foot">≥ 0,85</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Requieren revisión</div>
+                <div class="mv2-kpi-value" style="color:#9a6700">@Formato(Agregados?.CalidadRevision ?? 0)</div>
+                <div class="mv2-kpi-foot">0,70 – 0,85</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Confianza insuficiente</div>
+                <div class="mv2-kpi-value" style="color:#d03b3b">@Formato(Agregados?.CalidadError ?? 0)</div>
+                <div class="mv2-kpi-foot">&lt; 0,70</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Duración media</div>
+                <div class="mv2-kpi-value">@Duracion()</div>
+                <div class="mv2-kpi-foot">@Porcentaje(Agregados?.FallbacksTotal) con fallback</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public DashboardAgregadosDto? Agregados { get; set; }
+    [Parameter] public bool Cargando { get; set; }
+
+    // "Completado" agrupa las variantes historicas del estado de exito; el resto
+    // de estados cuentan como no completados, sin excepciones silenciosas.
+    private static readonly string[] EstadosCompletado = ["OK", "Completado", "Completed"];
+
+    private int ProcesoCompletado => Agregados?.PorEstadoProceso
+        .Where(g => EstadosCompletado.Contains(g.Grupo))
+        .Sum(g => g.Total) ?? 0;
+
+    private static string Formato(int v) => v.ToString("N0");
+
+    private string Porcentaje(int? valor)
+    {
+        var total = Agregados?.TotalEjecuciones ?? 0;
+        if (total == 0 || valor is null) return "—";
+        return $"{Math.Round(100.0 * valor.Value / total, 1)}%";
+    }
+
+    private string Duracion()
+    {
+        var ms = Agregados?.DuracionMediaMs ?? 0;
+        if (ms <= 0) return "—";
+        return ms >= 1000 ? $"{Math.Round(ms / 1000.0, 1)} s" : $"{Math.Round(ms)} ms";
+    }
+}

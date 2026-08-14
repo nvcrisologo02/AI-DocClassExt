@@ -69,7 +69,7 @@
                                     }
                                 </td>
                                 <td>@(prompt.Description ?? "-")</td>
-                                <td>@(prompt.PublishedAtUtc?.ToString("dd/MM/yyyy") ?? "-")</td>
+                                <td>@HoraEspana.Formatear(prompt.PublishedAtUtc, "dd/MM/yyyy")</td>
                                 <td class="text-center text-muted">@prompt.ContentLength</td>
                                 <td class="text-center">
                                     <button class="btn btn-sm btn-outline-primary" title="Editar" @onclick="() => StartEditPrompt(prompt.PromptKey)">
@@ -151,7 +151,7 @@
                                             <span class="badge bg-success">Activa</span>
                                         }
                                     </h6>
-                                    <small>@version.PublishedAtUtc?.ToString("dd/MM/yyyy HH:mm")</small>
+                                    <small>@HoraEspana.Formatear(version.PublishedAtUtc, "dd/MM/yyyy HH:mm")</small>
                                 </div>
                                 <p class="mb-1 text-muted">@(version.Description ?? "Sin descripción")</p>
                                 <small>Por: @(version.PublishedBy ?? "-")</small>

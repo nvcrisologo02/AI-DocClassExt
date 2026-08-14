@@ -26,6 +26,7 @@ public class EstadoEjecucionTests
     [InlineData("Error")]
     [InlineData("ERROR")]
     [InlineData("Fallido")]
+    [InlineData("SIN_CONTENIDO_DOCUMENTO")]
     public void Error_Should_ContainTodasLasVariantesDeError(string estado)
     {
         EstadoEjecucion.Error.Should().Contain(estado);

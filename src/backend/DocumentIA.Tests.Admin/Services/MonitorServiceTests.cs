@@ -72,6 +72,52 @@ public class MonitorServiceTests
         agregados.Should().BeNull();
     }
 
+    // La ventana temporal se materializa contra el reloj en cada consulta. Cuando
+    // el filtro guardaba fechas absolutas calculadas al construirlo, el
+    // auto-refresco repetia siempre la misma consulta y las ejecuciones nuevas no
+    // aparecian nunca.
+    [Fact]
+    public async Task ToQueryString_DosConsultasSeparadasEnElTiempo_AvanzanElExtremoSuperior()
+    {
+        var filtro = new MonitorFiltroDto();
+
+        var primera = ExtraerInstante(filtro.ToQueryString(), "hasta");
+        await Task.Delay(200);
+        var segunda = ExtraerInstante(filtro.ToQueryString(), "hasta");
+
+        segunda.Should().BeAfter(primera,
+            "cada refresco debe mirar hasta el instante actual; si no, las ejecuciones nuevas quedan siempre fuera de la ventana");
+    }
+
+    [Fact]
+    public void ToQueryString_RangoDias_ProduceUnaVentanaDeEsaAnchura()
+    {
+        var filtro = new MonitorFiltroDto { RangoDias = 30 };
+
+        var query = filtro.ToQueryString();
+
+        var desde = ExtraerInstante(query, "desde");
+        var hasta = ExtraerInstante(query, "hasta");
+        (hasta - desde).TotalDays.Should().BeApproximately(30, 0.01);
+    }
+
+    [Fact]
+    public void ToQueryString_ExtremoSuperior_EsElInstanteActual()
+    {
+        var hasta = ExtraerInstante(new MonitorFiltroDto().ToQueryString(), "hasta");
+
+        hasta.Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    private static DateTime ExtraerInstante(string query, string parametro)
+    {
+        var parte = query.Split('&').Single(p => p.StartsWith($"{parametro}=", StringComparison.Ordinal));
+        var valor = Uri.UnescapeDataString(parte[(parametro.Length + 1)..]);
+        return DateTime.Parse(valor, null,
+            System.Globalization.DateTimeStyles.AdjustToUniversal |
+            System.Globalization.DateTimeStyles.AssumeUniversal);
+    }
+
     [Fact]
     public void ToQueryString_ConSubmittedBy_IncluyeElParametroCodificado()
     {
@@ -100,5 +146,64 @@ public class MonitorServiceTests
         var clon = filtro.Clonar();
 
         clon.SubmittedBy.Should().Be("juan perez");
+    }
+
+    [Fact]
+    public void Clonar_CopiaRangoDias()
+    {
+        var filtro = new MonitorFiltroDto { RangoDias = 90 };
+
+        var clon = filtro.Clonar();
+
+        clon.RangoDias.Should().Be(90);
+    }
+
+    // El timeout de HttpClient (100 s por defecto) llega como TaskCanceledException,
+    // no como HttpRequestException. Sin traducirlo, escapa de los catch de la pagina
+    // del Monitor y termina el circuito de Blazor Server con "Server returned an
+    // error on close" en vez de mostrar el mensaje de error.
+    [Fact]
+    public async Task GetEjecucionesAsync_TimeoutDeHttpClient_LanzaInvalidOperationException()
+    {
+        var service = CreateService(_ => throw new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout", new TimeoutException()));
+
+        var accion = async () => await service.GetEjecucionesAsync(new MonitorFiltroDto());
+
+        await accion.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task GetEjecucionDetalleAsync_TimeoutDeHttpClient_LanzaInvalidOperationException()
+    {
+        var service = CreateService(_ => throw new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout", new TimeoutException()));
+
+        var accion = async () => await service.GetEjecucionDetalleAsync(Guid.NewGuid().ToString());
+
+        await accion.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
+    public async Task GetAgregadosAsync_TimeoutDeHttpClient_DevuelveNullSinLanzar()
+    {
+        var service = CreateService(_ => throw new TaskCanceledException(
+            "The request was canceled due to the configured HttpClient.Timeout", new TimeoutException()));
+
+        var agregados = await service.GetAgregadosAsync(new MonitorFiltroDto());
+
+        agregados.Should().BeNull("los agregados son auxiliares: un timeout no debe impedir ver el listado");
+    }
+
+    // La cancelacion propia (navegar fuera de la pagina mientras hay una peticion en
+    // vuelo) tambien llega como OperationCanceledException y no debe tumbar nada.
+    [Fact]
+    public async Task GetEjecucionesAsync_CancelacionDelLlamante_LanzaInvalidOperationException()
+    {
+        var service = CreateService(_ => throw new OperationCanceledException());
+
+        var accion = async () => await service.GetEjecucionesAsync(new MonitorFiltroDto());
+
+        await accion.Should().ThrowAsync<InvalidOperationException>();
     }
 }

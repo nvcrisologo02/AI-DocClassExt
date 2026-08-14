@@ -22,7 +22,7 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
     private readonly TipologiaConfigLoader _tipologiaConfigLoader;
     private readonly ExtractionModelRegistryLoader _modelRegistryLoader;
     private readonly ContentUnderstandingResultMapper _resultMapper;
-    private readonly IBlobStorageService _blobStorageService;
+    private readonly DocumentIntelligenceSourceResolver _sourceResolver;
     private readonly ILogger<AzureDocumentIntelligenceExtraerDataProvider> _logger;
 
     public AzureDocumentIntelligenceExtraerDataProvider(
@@ -30,14 +30,14 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
         TipologiaConfigLoader tipologiaConfigLoader,
         ExtractionModelRegistryLoader modelRegistryLoader,
         ContentUnderstandingResultMapper resultMapper,
-        IBlobStorageService blobStorageService,
+        DocumentIntelligenceSourceResolver sourceResolver,
         ILogger<AzureDocumentIntelligenceExtraerDataProvider> logger)
     {
         _httpClientFactory = httpClientFactory;
         _tipologiaConfigLoader = tipologiaConfigLoader;
         _modelRegistryLoader = modelRegistryLoader;
         _resultMapper = resultMapper;
-        _blobStorageService = blobStorageService;
+        _sourceResolver = sourceResolver;
         _logger = logger;
     }
 
@@ -59,41 +59,77 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
             $"{baseEndpoint}/documentintelligence/documentModels/{Uri.EscapeDataString(model.AnalyzerId)}:analyze" +
             $"?api-version={Uri.EscapeDataString(model.ApiVersion)}";
 
-        // Blob-first: si hay BlobPath → usar urlSource (Azure DI descarga directo del blob vía SAS URL)
-        string requestBody;
         var blobPath = input.Entrada.Documento.BlobPath;
-        if (!string.IsNullOrWhiteSpace(blobPath))
-        {
-            var sasUrl = await _blobStorageService.GenerateSasUrlAsync(blobPath, TimeSpan.FromMinutes(30));
-            requestBody = JsonSerializer.Serialize(new { urlSource = sasUrl });
-            _logger.LogInformation("ExtraerDataProvider usando urlSource (SAS) para BlobPath={BlobPath}", blobPath);
-        }
-        else
-        {
-            requestBody = JsonSerializer.Serialize(new { base64Source = input.Entrada.Documento.Content.Base64 });
-        }
+        var source = await _sourceResolver.ResolveAsync(
+            blobPath,
+            base64Override: null,
+            base64Entrada: input.Entrada.Documento.Content.Base64,
+            cancellationToken);
+
+        var requestBody = JsonSerializer.Serialize(source.Body);
 
         using var client = _httpClientFactory.CreateClient();
-        using var request = new HttpRequestMessage(HttpMethod.Post, analyzeUrl)
+
+        async Task<HttpResponseMessage> EnviarAsync(string cuerpo)
         {
-            Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
-        };
-        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        await DocumentIntelligenceAuthHelper.ApplyAuthAsync(request, model.AuthMode, model.ApiKey, cancellationToken);
+            var peticion = new HttpRequestMessage(HttpMethod.Post, analyzeUrl)
+            {
+                Content = new StringContent(cuerpo, Encoding.UTF8, "application/json")
+            };
+
+            peticion.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            await DocumentIntelligenceAuthHelper.ApplyAuthAsync(peticion, model.AuthMode, model.ApiKey, cancellationToken);
+
+            using (peticion)
+            {
+                return await client.SendAsync(peticion, cancellationToken);
+            }
+        }
 
         var stopwatch = Stopwatch.StartNew();
 
-        using var startResponse = await client.SendAsync(request, cancellationToken);
+        var startResponse = await EnviarAsync(requestBody);
+
         if (!startResponse.IsSuccessStatusCode)
         {
             var body = await startResponse.Content.ReadAsStringAsync(cancellationToken);
-            throw new InvalidOperationException(
-                $"Error iniciando extraccion DI. Status={(int)startResponse.StatusCode}. Body={body}");
+
+            // Red de seguridad: si el storage dejó de ser alcanzable para DI y el flag de
+            // transporte inline no está activo, se reintenta empujando el documento.
+            if (source.UsingUrlSource
+                && !string.IsNullOrWhiteSpace(blobPath)
+                && (int)startResponse.StatusCode == 400
+                && body.Contains("InvalidContent", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogWarning(
+                    "DI respondió InvalidContent con urlSource para BlobPath={BlobPath}. Reintentando con base64Source.",
+                    blobPath);
+
+                var inlineBody = await _sourceResolver.BuildInlineBodyAsync(blobPath!, cancellationToken);
+                startResponse.Dispose();
+                startResponse = await EnviarAsync(JsonSerializer.Serialize(inlineBody));
+
+                if (!startResponse.IsSuccessStatusCode)
+                {
+                    body = await startResponse.Content.ReadAsStringAsync(cancellationToken);
+                    startResponse.Dispose();
+                    throw new InvalidOperationException(
+                        $"Error iniciando extraccion DI. Status={(int)startResponse.StatusCode}. Body={body}");
+                }
+            }
+            else
+            {
+                startResponse.Dispose();
+                throw new InvalidOperationException(
+                    $"Error iniciando extraccion DI. Status={(int)startResponse.StatusCode}. Body={body}");
+            }
         }
 
         var operationLocation = startResponse.Headers.TryGetValues("operation-location", out var vals)
             ? vals.FirstOrDefault()
             : null;
+
+        startResponse.Dispose();
 
         if (string.IsNullOrWhiteSpace(operationLocation))
             throw new InvalidOperationException("DI no devolvio operation-location en la respuesta de inicio de analisis");

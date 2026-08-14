@@ -99,6 +99,51 @@ public class Instrucciones
     /// El llamador es responsable del coste adicional. Se registra traza de auditoría obligatoria.
     /// </summary>
     public bool ForzarProcesadoSinLimitePaginas { get; set; }
+
+    /// <summary>
+    /// Restricción opcional del catálogo de clasificación a un subconjunto de tipologías.
+    /// null = clasificar contra el catálogo completo (comportamiento por defecto).
+    /// </summary>
+    public RestriccionTipologias? RestriccionTipologias { get; set; }
+}
+
+/// <summary>
+/// Restricción de la clasificación a un conjunto acotado de tipologías candidatas.
+/// El clasificador solo puede devolver una tipología de <see cref="Codigos"/> o el
+/// centinela "Desconocido" si el documento no encaja en ninguna.
+/// </summary>
+public class RestriccionTipologias
+{
+    /// <summary>
+    /// Códigos de tipología permitidos (columna Codigo, ej. "SERE-25", "nota-simple").
+    /// El trigger los normaliza a su forma canónica de BD y descarta los no publicados.
+    /// </summary>
+    public List<string> Codigos { get; set; } = new();
+
+    /// <summary>
+    /// Si es true y el resultado final es "Desconocido", se ejecuta una única clasificación
+    /// libre contra el catálogo completo y se devuelve como propuesta informativa
+    /// (PropuestaTipologia), sin actuar sobre ella.
+    /// </summary>
+    public bool ProponerSiDesconocido { get; set; }
+
+    /// <summary>
+    /// Códigos enviados por el caller que no corresponden a ninguna tipología publicada.
+    /// Lo puebla el backend durante la validación; se devuelve en la salida como aviso.
+    /// </summary>
+    public List<string>? CodigosIgnorados { get; set; }
+}
+
+/// <summary>
+/// Motivos/marcadores asociados a la restricción de tipologías en el contrato de salida.
+/// </summary>
+public static class RestriccionTipologiasMotivos
+{
+    /// <summary>El resultado no pertenece al conjunto restringido solicitado.</summary>
+    public const string FueraDeConjunto = "fuera_de_conjunto_restringido";
+
+    /// <summary>Entrada de DetalleProveedores con la clasificación libre informativa.</summary>
+    public const string PropuestaLibre = "propuesta_libre";
 }
 
 /// <summary>

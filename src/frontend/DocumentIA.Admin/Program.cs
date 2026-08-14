@@ -7,6 +7,12 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Sin telemetria, una excepcion que termina el circuito de Blazor Server solo deja
+// rastro en el navegador ("Server returned an error on close"): el servidor no
+// conserva nada que explique que fallo. Si no hay cadena de conexion configurada
+// (ejecucion local) esta llamada no hace nada.
+builder.Services.AddApplicationInsightsTelemetry();
+
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 

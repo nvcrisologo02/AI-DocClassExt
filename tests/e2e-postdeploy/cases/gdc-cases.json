@@ -1,0 +1,15 @@
+[
+  {
+    "group": "FG", "id": "FG1", "caseKey": "FG-FG1", "domain": "postdeploy",
+    "name": "Subida a GDC habilitada (skipGDCUpload=false)",
+    "profiles": ["full"], "covers": ["GDC-01"], "requires": ["gdc"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "expectedType": "nota.simple_bal",
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": false,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true
+    }
+  }
+]

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Abstractions;
 using Microsoft.Extensions.Caching.Memory;
@@ -29,6 +30,10 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
     private const string Phase1UserKey = "classification.phase1.user";
     private const string Phase2SystemKey = "classification.phase2.system";
     private const string Phase2UserKey = "classification.phase2.user";
+
+    // AB#100063: claves de la clasificación restringida en fase única.
+    private const string RestrictedSystemKey = "classification.restricted.system";
+    private const string RestrictedUserKey = "classification.restricted.user";
 
     public ClassificationPromptProvider(
         IMemoryCache cache,
@@ -120,7 +125,10 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
         using var scope = _scopeFactory.CreateScope();
         var repository = scope.ServiceProvider.GetRequiredService<IPromptTemplateRepository>();
 
-        // Cargar los 4 prompts desde BD
+        // Contrato original de 4 claves (Fase 1 y Fase 2): todo o nada. AB#100063: el par restringido
+        // (classification.restricted.*) NO forma parte de este contrato — se resuelve más abajo de
+        // forma independiente, para no descartar los prompts de Fase 1/2 ya afinados en BD solo
+        // porque las 2 filas nuevas todavía no existan (ver ResolveRestrictedPromptsAsync).
         var phase1System = await repository.GetActivePromptAsync(Phase1SystemKey, cancellationToken);
         var phase1User = await repository.GetActivePromptAsync(Phase1UserKey, cancellationToken);
         var phase2System = await repository.GetActivePromptAsync(Phase2SystemKey, cancellationToken);
@@ -142,7 +150,10 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
         }
 
         // Todos los prompts deben tener la misma versión para coherencia
-        var versions = new[] { phase1System.Version, phase1User.Version, phase2System.Version, phase2User.Version };
+        var versions = new[]
+        {
+            phase1System.Version, phase1User.Version, phase2System.Version, phase2User.Version
+        };
         if (versions.Distinct().Count() > 1)
         {
             _logger.LogWarning(
@@ -159,16 +170,83 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
                 phase1System.Version);
         }
 
+        var (restrictedSystemPrompt, restrictedUserPrompt, restrictedSource) =
+            await ResolveRestrictedPromptsAsync(repository, cancellationToken);
+
         return new ClassificationPromptSet
         {
             Phase1SystemPrompt = phase1System.Content,
             Phase1UserPrompt = phase1User.Content,
             Phase2SystemPrompt = phase2System.Content,
             Phase2UserPrompt = phase2User.Content,
+            RestrictedSystemPrompt = restrictedSystemPrompt,
+            RestrictedUserPrompt = restrictedUserPrompt,
+            RestrictedSource = restrictedSource,
             Version = phase1System.Version, // Usar versión del primer prompt como referencia
             Source = "Database",
             ResolvedAtUtc = DateTime.UtcNow
         };
+    }
+
+    /// <summary>
+    /// AB#100063: resuelve el par restringido (classification.restricted.system/.user) de forma
+    /// independiente del contrato de 4 claves de Fase 1/2. Reglas:
+    /// - Ambas filas activas en BD → se usan tal cual (Source="Database").
+    /// - Ninguna fila en BD → fallback silencioso (Information, no warning: es un estado normal
+    ///   hasta que se siembren/activen las 2 filas) a las constantes de código.
+    /// - Solo una fila en BD (par incompleto) → fallback a constantes para AMBAS (nunca se mezcla
+    ///   una plantilla de BD con una de código), con warning.
+    /// - Error al consultar BD → fallback a constantes con warning, sin propagar la excepción (no
+    ///   debe invalidar la resolución de Fase 1/2, que ya se resolvió con éxito en este punto).
+    /// </summary>
+    private async Task<(string SystemPrompt, string UserPrompt, string Source)> ResolveRestrictedPromptsAsync(
+        IPromptTemplateRepository repository,
+        CancellationToken cancellationToken)
+    {
+        PromptTemplateEntity? restrictedSystem;
+        PromptTemplateEntity? restrictedUser;
+        try
+        {
+            restrictedSystem = await repository.GetActivePromptAsync(RestrictedSystemKey, cancellationToken);
+            restrictedUser = await repository.GetActivePromptAsync(RestrictedUserKey, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "[PromptResolution] Restricted prompt pair query FAILED. Falling back to code constants for classification.restricted.*.");
+            return (GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt, GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate, "Fallback");
+        }
+
+        if (restrictedSystem is not null && restrictedUser is not null)
+        {
+            if (restrictedSystem.Version != restrictedUser.Version)
+            {
+                _logger.LogWarning(
+                    "[PromptResolution] Restricted prompt pair VERSION MISMATCH. RestrictedSystemV={VRS}, RestrictedUserV={VRU}. Recommend activating both from the same version.",
+                    restrictedSystem.Version,
+                    restrictedUser.Version);
+            }
+
+            _logger.LogInformation(
+                "[PromptResolution] Restricted prompt pair (classification.restricted.*) resolved from DATABASE. Version={Version}",
+                restrictedSystem.Version);
+            return (restrictedSystem.Content, restrictedUser.Content, "Database");
+        }
+
+        if (restrictedSystem is null && restrictedUser is null)
+        {
+            _logger.LogInformation(
+                "[PromptResolution] Restricted prompt pair (classification.restricted.*) not present in database. Using code fallback constants.");
+        }
+        else
+        {
+            _logger.LogWarning(
+                "[PromptResolution] Incomplete restricted prompt pair in database. RestrictedSystem={RSExists}, RestrictedUser={RUExists}. Falling back to code constants for BOTH (never mixing database and code).",
+                restrictedSystem is not null,
+                restrictedUser is not null);
+        }
+
+        return (GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt, GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate, "Fallback");
     }
 
     private ClassificationPromptSet LoadFromFallbackConfiguration()
@@ -189,6 +267,12 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
             Phase1UserPrompt = _fallbackSettings.Phase1.UserPromptTemplate,
             Phase2SystemPrompt = _fallbackSettings.Phase2.SystemPrompt,
             Phase2UserPrompt = _fallbackSettings.Phase2.UserPromptTemplate,
+            // AB#100063: el fallback de la clasificación restringida no pasa por appsettings.
+            // Las constantes de GptClasificarDataProvider son la única fuente de este texto,
+            // para no duplicarlo entre código y configuración.
+            RestrictedSystemPrompt = GptClasificarDataProvider.RestriccionFasePlanaSystemPrompt,
+            RestrictedUserPrompt = GptClasificarDataProvider.RestriccionFasePlanaUserPromptTemplate,
+            RestrictedSource = "Fallback",
             Version = 0, // Versión 0 indica fallback
             Source = "Fallback",
             ResolvedAtUtc = DateTime.UtcNow
@@ -223,5 +307,15 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
             "[PromptResolution] FULL PROMPT DUMP (Phase2.User, {Length} chars):\n{Content}",
             promptSet.Phase2UserPrompt.Length,
             promptSet.Phase2UserPrompt);
+
+        _logger.LogInformation(
+            "[PromptResolution] FULL PROMPT DUMP (Restricted.System, {Length} chars):\n{Content}",
+            promptSet.RestrictedSystemPrompt.Length,
+            promptSet.RestrictedSystemPrompt);
+
+        _logger.LogInformation(
+            "[PromptResolution] FULL PROMPT DUMP (Restricted.User, {Length} chars):\n{Content}",
+            promptSet.RestrictedUserPrompt.Length,
+            promptSet.RestrictedUserPrompt);
     }
 }

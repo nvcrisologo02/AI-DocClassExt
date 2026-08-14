@@ -130,6 +130,71 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 | `assetResolver.camposBusqueda.referenciaCatastral` | string? | Nombre del campo de DatosExtraidos cuyo valor se usara como Referencia Catastral. |
 | `assetResolver.camposSolicitados` | string[]? | Columnas de `DM_POSICION_AAII_TB` a retornar. Si `null`, usa config tipologia o default (`ID_ACTIVO_SAREB`). |
 
+**`instrucciones.restriccionTipologias`** _(opcional)_
+
+Restringe la clasificación a un conjunto acotado de tipologías candidatas. El clasificador solo puede devolver una tipología del conjunto o el centinela `"Desconocido"`; nunca fuerza el resultado a una tipología fuera de la lista. Aplica a todos los proveedores: DI, reglas e híbrido se validan por pertenencia en el router (la cadena continúa con el siguiente proveedor si el resultado queda fuera del conjunto); la vía GPT clasifica en **una única pasada en fase única** contra un catálogo plano con la `gptDescripcion` completa de cada tipología permitida (sin la jerarquía TDN1→TDN2 del flujo normal). El caller garantiza con esta restricción que el documento debería corresponder a una de las tipologías listadas; el modelo elige la más compatible por contenido y solo responde `"Desconocido"` si el contenido no guarda relación razonable con ninguna. Si `proponerSiDesconocido = true` y el resultado final es `"Desconocido"`, la propuesta informativa (`identificacion.propuestaTipologia`) se obtiene con el flujo jerárquico TDN1→TDN2 completo contra el catálogo entero (la misma pasada libre que se ejecuta sin restricción), no con el catálogo acotado. Los prompts de la fase única restringida (system/user) son editables desde el Admin — ver `PromptTemplates` con `PromptKey` `classification.restricted.system`/`classification.restricted.user` en el apartado [9.2.bis](#92bis-prompts-de-clasificación); la instrucción de formato de respuesta JSON no es editable (vive en código, es el contrato del parser). `null`/ausente = comportamiento actual sin restricción (retrocompatible total).
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `restriccionTipologias.codigos` | string[] | Códigos de tipología permitidos (columna `Codigo` de tipologías publicadas, ej. `"SERE-25"`, `"nota-simple"`). Comparación case-insensitive con trim; el backend los normaliza a la forma canónica de BD. |
+| `restriccionTipologias.proponerSiDesconocido` | bool | `true` = si el resultado final es `"Desconocido"`, se ejecuta una única clasificación libre contra el catálogo completo y se devuelve como propuesta informativa en `identificacion.propuestaTipologia`, sin actuar sobre ella (se reutiliza sin llamada extra si algún proveedor de la cadena ya había propuesto un candidato fuera del conjunto con confianza suficiente). Default: `false`. |
+
+Validaciones en el trigger HTTP (`400 Bad Request`):
+
+- `restriccionTipologias.codigos` vacío o ausente.
+- Ninguno de los códigos enviados corresponde a una tipología publicada (el mensaje de error detalla los códigos rechazados).
+- `restriccionTipologias` combinada con `classification.nivelClasificacion = "TDN1"`: la restricción opera a granularidad de tipología (TDN2) y requiere `nivelClasificacion = "TDN1_TDN2"`.
+
+Códigos inválidos **parciales** (algunos códigos válidos y otros no) no bloquean la petición: se descartan con aviso y se devuelven en la salida como `detalleEjecucion.clasificacion.restriccionTipologias.codigosIgnorados`.
+
+`expectedType` sigue siendo un hint independiente y puede convivir con `restriccionTipologias` sin regla cruzada.
+
+> **Aguas abajo con `"Desconocido"` por restricción:** mismo flujo que un documento sin clasificar — se permiten resumen documental y operaciones de prompt; no hay extracción específica de tipología, ni AssetResolver, ni subida a GDC, ni integración.
+
+Ejemplo de petición con restricción:
+
+```json
+{
+  "instrucciones": {
+    "classification": { "nivelClasificacion": "TDN1_TDN2" },
+    "restriccionTipologias": {
+      "codigos": ["SERE-25", "nota-simple"],
+      "proponerSiDesconocido": true
+    }
+  },
+  "documento": {
+    "name": "documento.pdf",
+    "content": { "base64": "<contenido-en-base64>" }
+  },
+  "trazabilidad": {
+    "correlationId": "a1b2c3d4-0000-0000-0000-000000000000",
+    "submittedBy": "sistema-origen"
+  }
+}
+```
+
+Ejemplo de resultado `"Desconocido"` con propuesta informativa (`proponerSiDesconocido = true`):
+
+```json
+{
+  "identificacion": {
+    "tipologia": "Desconocido",
+    "propuestaTipologia": "escritura-compraventa"
+  },
+  "detalleEjecucion": {
+    "clasificacion": {
+      "tipologiaDetectada": "Desconocido",
+      "confianza": 0.0,
+      "fallbackRazon": "fuera_de_conjunto_restringido",
+      "restriccionTipologias": {
+        "codigos": ["SERE-25", "NOTA-SIMPLE"],
+        "codigosIgnorados": null
+      }
+    }
+  }
+}
+```
+
 **`documento`**
 
 | Campo | Tipo | Descripción |
@@ -181,7 +246,7 @@ Modo multipart/blob-first:
 
 | Código | Causa |
 |---|---|
-| `400 Bad Request` | Body inválido, `ContratoEntrada` no deserializable, `instrucciones.prompt` fuera de rango, o violación de reglas de entrada (`objectIdGDC` + `base64` simultáneos / ninguno informado, `classificationOnly` + `expectedType`). |
+| `400 Bad Request` | Body inválido, `ContratoEntrada` no deserializable, `instrucciones.prompt` fuera de rango, violación de reglas de entrada (`objectIdGDC` + `base64` simultáneos / ninguno informado, `classificationOnly` + `expectedType`), o `instrucciones.restriccionTipologias` inválida (`codigos` vacío, todos los códigos rechazados, o combinación con `nivelClasificacion = "TDN1"`). |
 | `401 Unauthorized` | Function Key ausente o inválida. |
 | `500 Internal Server Error` | Error inesperado en el trigger. |
 
@@ -328,8 +393,9 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | Estado | Descripción |
 |---|---|
 | `OK` | Procesamiento completado correctamente. |
-| `OK` _(clasificación parcial — tipología virtual)_ | Solo cuando `nivelClasificacion` activa clasificación GPT y el modelo no puede mapear a ningún código de catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` contiene la propuesta libre del modelo. El pipeline se detiene: extracción y validación se omiten. |
-| `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. El pipeline continúa (extracción, validación) con la tipología parcial. |
+| `OK` _(clasificación parcial — tipología virtual)_ | Solo cuando `nivelClasificacion` activa clasificación GPT y el modelo no puede mapear a ningún código de catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` contiene la propuesta libre del modelo. El pipeline se detiene: extracción y validación se omiten. **Si la petición incluye `instrucciones.prompt` o `forzarResumenPorDefecto`, el prompt y el resumen sí se ejecutan** antes de cerrar (ver nota más abajo). También llega a este estado cuando `instrucciones.restriccionTipologias` está activa y ningún proveedor de la cadena devuelve un código dentro del conjunto permitido; en ese caso `detalleEjecucion.clasificacion.fallbackRazon = "fuera_de_conjunto_restringido"` y, si `proponerSiDesconocido = true`, `identificacion.propuestaTipologia` lleva la clasificación libre informativa. |
+| `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. El pipeline continúa (extracción, validación) con la tipología parcial. **Cuando el estado proviene de una tipología no resoluble o `Desconocido`, el prompt y el resumen se ejecutan igualmente si la petición los pidió**; `datosExtraidos.ResultadoPrompt` y/o `datosExtraidos.Resumen` vienen informados pese al `NO_CLASIFICADO`. |
+| `SIN_CONTENIDO_DOCUMENTO` | Se solicitó un prompt o un resumen pero no se pudo obtener **ningún texto del documento**: ni markdown de extracción, ni layout previo, ni recuperación bajo demanda. El modelo **no se invoca** (antes se le llamaba con el hueco de contenido vacío y devolvía respuestas del tipo *"No has incluido el documento"* que se persistían como resumen válido). Va acompañado de la actividad `Prompt` en `Failed` y sin `Resumen` ni `ResultadoPrompt` en `datosExtraidos`. Causas habituales: documento ilegible o corrupto, o Document Intelligence no disponible. |
 | `PENDIENTE_REINTENTO` | La clasificación GPT se pospuso porque la cuota de Azure OpenAI quedó agotada (`429 Too Many Requests`) tras agotar los reintentos y/o con el circuito abierto. Es un estado **retriable**: el documento debe reencolarse/reprocesarse más tarde, no representa un fallo definitivo. Va acompañado de `estadoCalidad = "ERROR"`, confianzas a `0` y `mensajeError` con el detalle (p. ej. `"Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`). No debe confundirse con `NO_CLASIFICADO` (documento genuinamente no clasificable). |
 | `VALIDACION_CON_ERRORES` | Extracción completada pero alguna regla de validación no se cumplió. Los datos se devuelven. |
 | `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. Se devuelven datos con advertencia. |
@@ -350,6 +416,29 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 > }
 > ```
 
+> **Ejemplo — `SIN_CONTENIDO_DOCUMENTO`** (extracto de `resultado`):
+> ```json
+> {
+>   "resultado": {
+>     "estado": "SIN_CONTENIDO_DOCUMENTO",
+>     "mensajeError": "No hay contenido textual del documento para ejecutar el prompt.",
+>     "estadoCalidad": "ERROR"
+>   }
+> }
+> ```
+
+> **Prompt y resumen no dependen de la clasificación.** Si la petición informa `instrucciones.prompt`
+> o `instrucciones.forzarResumenPorDefecto`, el prompt y el resumen se ejecutan aunque el documento
+> no llegue a clasificarse. El estado sigue reflejando el resultado de la clasificación
+> (`NO_CLASIFICADO`, confianzas a `0`): no se está clasificando el documento, se está respondiendo a
+> lo que la petición pidió.
+>
+> El contenido para el prompt se resuelve en cascada: markdown de extracción → markdown de layout
+> pre-clasificación → **extracción bajo demanda vía Document Intelligence Layout**, que cubre el caso
+> de tipologías con `expectedType` que no ejecutan ninguno de los dos pasos anteriores. Si tras esa
+> cascada sigue sin haber texto, la ejecución cierra en `SIN_CONTENIDO_DOCUMENTO` en lugar de invocar
+> al modelo a ciegas.
+
 ---
 
 ## 6. `detalleEjecucion` — estructura completa
@@ -367,7 +456,8 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | `detalleEjecucion.clasificacion.confianzaGPT` | Confianza de GPT fallback (0 si no se activó). |
 | `detalleEjecucion.clasificacion.proveedorClasif` | `"DocumentIntelligence"` \| `"GPT4oMini"` |
 | `detalleEjecucion.clasificacion.fallbackLLM` | `true` si se usó GPT fallback. |
-| `detalleEjecucion.clasificacion.fallbackRazon` | Motivo del fallback. |
+| `detalleEjecucion.clasificacion.fallbackRazon` | Motivo del fallback. `"fuera_de_conjunto_restringido"` cuando la clasificación se degrada a `"Desconocido"` por `instrucciones.restriccionTipologias`. |
+| `detalleEjecucion.clasificacion.restriccionTipologias` | Eco de la restricción aplicada (`null` si la petición no traía `instrucciones.restriccionTipologias`). `{ codigos, codigosIgnorados }` con los códigos efectivos y los descartados por no publicados. |
 | `detalleEjecucion.extraccion.proveedorExtrac` | `"AzureContentUnderstanding"` \| `"DICustom"` \| `"GPT4oMini"` |
 | `detalleEjecucion.extraccion.confianzaExtraccion` | Confianza de extracción. |
 | `detalleEjecucion.extraccion.fallbackUsado` | `true` si se usó GPT fallback en extracción. |

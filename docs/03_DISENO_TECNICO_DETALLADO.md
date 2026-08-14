@@ -215,8 +215,8 @@ Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTip
 Trazas operativas expuestas en salida:
 
 - `detalleEjecucion.classificationOnly`: confirma si la ejecución quedó en rama reducida.
-- `detalleEjecucion.recorteAplicado` y `detalleEjecucion.paginasIncluidas`: auditan el recorte real usado para clasificación.
-- `detalleEjecucion.markdownGenerado` y `detalleEjecucion.origenMarkdown`: indican si se generó markdown y en qué etapa quedó fijado.
+- `detalleEjecucion.recorteAplicado` y `detalleEjecucion.paginasIncluidas`: auditan el recorte real usado para clasificación. **El recorte por páginas solo aplica a PDF**: con cualquier otro formato (Office, imágenes) `PdfRecorteService` detecta que la cabecera no es `%PDF`, devuelve el documento completo y marca `recorteAplicado = false`.
+- `detalleEjecucion.markdownGenerado` y `detalleEjecucion.origenMarkdown`: indican si se generó markdown y en qué etapa quedó fijado. Valores de `origenMarkdown`: `InstruccionesCallerPreClasificacion`, `LayoutPreClasificacion`, `MarkdownPersistidoBD`, `Clasificacion`, `LayoutResumenClassificationOnly`, `LayoutDocumentoCompletoPostClasificacion`, `LayoutPrevioExtraccion`, `FallbackLayout` y `LayoutBajoDemandaPrompt` (este último, cuando el markdown se obtuvo específicamente para poder ejecutar un prompt o un resumen).
 - `detalleEjecucion.modeloLLMUsado`: refleja el modelo LLM efectivo cuando hubo fallback/prompt.
 - `detalleEjecucion.motivoErrorTipologia`: registra el motivo cuando la tipología no pudo resolverse.
 
@@ -252,6 +252,27 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
 **D4 — Markdown pre-procesado** (`DocumentProcessOrchestrator.cs`, antes del paso 2.8):
 - Si `entrada.Instrucciones.Classification.Markdown` no es null ni vacío, se inyecta en `datosNormalizados["Markdown"]`
   y se omite la llamada a `ExtraerMarkdownLayoutActivity`.
+
+**Paso 2.8 — Layout pre-clasificación y transporte del documento**:
+- Se ejecuta cuando no hay markdown previo, `expectedType` viene vacío y el proveedor de clasificación
+  no genera su propio markdown. Garantiza contexto textual a los proveedores `gpt`, `hybrid-tdn` y `rules`.
+- El documento se envía **por recorte cuando es PDF** (`docClasif.DocumentoBase64Clasif`) y **por
+  `BlobPath` cuando ese base64 viene vacío**, que es lo que ocurre en modo blob-first con cualquier
+  formato no-PDF: el trigger vacía `Documento.Content.Base64` al subir el blob y el recorte no puede
+  producir un base64 alternativo. `BlobPath` **solo** se informa en ese caso: el resolutor de origen
+  de Document Intelligence lo prioriza sobre el base64, de modo que informarlo siempre anularía el
+  recorte de los PDF y encarecería cada clasificación.
+- Sin esta doble vía, todo XLSX, PPTX y DOCX llegaba a Document Intelligence con contenido vacío y
+  recibía un `400 InvalidContent` que se capturaba en silencio: la clasificación de Office corría sin
+  contexto textual y el conteo de páginas del layout nunca se informaba.
+
+**Contenido bajo demanda para prompt y resumen** (`EjecutarPromptLibreAsync`):
+- Si al ejecutar un prompt o un resumen no hay markdown disponible, se invoca `ExtraerMarkdownLayoutActivity`
+  en ese momento (origen `LayoutBajoDemandaPrompt`) y se propaga `identificacion.paginas` si nadie la
+  informó antes. Cubre el caso de `expectedType` sobre tipologías sin extracción ni layout, donde el
+  paso 2.8 no llega a ejecutarse.
+- La llamada se paga solo cuando hay un prompt o un resumen que la necesita, no en todas las
+  ejecuciones con tipología esperada.
 
 **D1 — Clasificación parcial reestructurada** (`DocumentProcessOrchestrator.cs`, bloque `ClasificacionParcial`):
 - Si `clasificacion.ClasificacionParcial = true`:
@@ -313,7 +334,8 @@ Estados funcionales de cierre del pipeline:
 
 - `OK`
 - `OK` _(clasificación parcial — tipología virtual)_: cuando `nivelClasificacion` activo y tipología no mapeada al catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` informado. Pipeline detenido antes de extracción.
-- `NO_CLASIFICADO`: clasificación parcial con código TDN1 conocido pero tipología TDN1/TDN2 no resuelta. Pipeline continúa con tipología parcial.
+- `NO_CLASIFICADO`: clasificación parcial con código TDN1 conocido pero tipología TDN1/TDN2 no resuelta. Pipeline continúa con tipología parcial. Cuando el estado viene de una salida temprana (tipología no resoluble o `Desconocido`), el prompt y el resumen se ejecutan igualmente si la petición los pidió.
+- `SIN_CONTENIDO_DOCUMENTO`: se pidió prompt o resumen y no se pudo obtener texto del documento por ninguna vía. No se invoca al LLM; la actividad `Prompt` queda en `Failed` y no se persiste ni `Resumen` ni `ResultadoPrompt`. **Cuenta y se filtra como error** (`EstadoEjecucion.Error` en `DocumentIA.Data/Repositories/EstadoEjecucion.cs`), de modo que los agregados del Monitor y el badge lo tratan como fallo, no como estado desconocido. Al desplegarlo, parte del volumen que antes cerraba en `OK` —con un resumen inventado sobre un documento que el sistema nunca leyó— pasa a contarse aquí: es un cambio esperado en las métricas de operación.
 - `VALIDACION_CON_ERRORES`
 - `DUPLICADO`
 - `BAJA_CONFIANZA_CLASIFICACION`

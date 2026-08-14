@@ -216,6 +216,24 @@ public class GptHierarchicalClassificationParserTests
         result.Value!.Confianza.Should().BeNull();
     }
 
+    [Fact]
+    public void ParsePhase2_Tdn2NullExplicito_FallaConMotivoNingunaTipologia()
+    {
+        var result = GptHierarchicalClassificationParser.ParsePhase2("{\"tdn2\": null, \"confianza\": 0.9}");
+
+        result.Success.Should().BeFalse();
+        result.ErrorReason.Should().Be(GptHierarchicalClassificationParser.Fase2NingunaTipologiaReason);
+    }
+
+    [Fact]
+    public void ParsePhase2_Tdn2StringVacio_SigueSiendoParsingError()
+    {
+        var result = GptHierarchicalClassificationParser.ParsePhase2("{\"tdn2\": \"\"}");
+
+        result.Success.Should().BeFalse();
+        result.ErrorReason.Should().Be(GptHierarchicalClassificationParser.Phase2ParsingErrorReason);
+    }
+
     // ========== ParseTdn1CatalogNombresPorCodigo (AB#99984) ==========
 
     [Fact]
@@ -361,5 +379,48 @@ public class GptHierarchicalClassificationParserTests
         var resultado = GptHierarchicalClassificationParser.ResolverTdn1PorCatalogoDesdePropuesta(propuesta, catalogo);
 
         resultado.Should().Be("OTRO");
+    }
+
+    // ========== ParseRestringido (AB#100060) ==========
+
+    [Fact]
+    public void ParseRestringido_CodigoValido_DevuelveTipologiaTrimmed()
+    {
+        var r = GptHierarchicalClassificationParser.ParseRestringido(
+            "{\"tipologia\": \" acui.02 \", \"propuesta\": \"acta CTO\", \"confianza\": 0.9}");
+
+        r.Success.Should().BeTrue();
+        r.Value!.Tipologia.Should().Be("acui.02");
+        r.Value.Confianza.Should().Be(0.9);
+    }
+
+    [Fact]
+    public void ParseRestringido_TipologiaNull_EsExitoConTipologiaNull()
+    {
+        var r = GptHierarchicalClassificationParser.ParseRestringido(
+            "{\"tipologia\": null, \"propuesta\": \"parece un acta\", \"resumen\": \"doc x\"}");
+
+        r.Success.Should().BeTrue();
+        r.Value!.Tipologia.Should().BeNull();
+        r.Value.Propuesta.Should().Be("parece un acta");
+        r.Value.Resumen.Should().Be("doc x");
+    }
+
+    [Fact]
+    public void ParseRestringido_SinPropuesta_EsParsingError()
+    {
+        var r = GptHierarchicalClassificationParser.ParseRestringido("{\"tipologia\": \"x\"}");
+
+        r.Success.Should().BeFalse();
+        r.ErrorReason.Should().Be(GptHierarchicalClassificationParser.RestringidoParsingErrorReason);
+    }
+
+    [Fact]
+    public void ParseRestringido_JsonInvalido_EsParsingError()
+    {
+        var r = GptHierarchicalClassificationParser.ParseRestringido("no es json");
+
+        r.Success.Should().BeFalse();
+        r.ErrorReason.Should().Be(GptHierarchicalClassificationParser.RestringidoParsingErrorReason);
     }
 }

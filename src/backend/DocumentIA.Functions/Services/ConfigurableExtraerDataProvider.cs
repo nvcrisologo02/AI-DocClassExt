@@ -236,7 +236,13 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         }
 
         resultadoGpt.FallbackUsado = true;
-        resultadoGpt.FallbackRazon = fallbackRazon;
+        // Si el propio fallback GPT devolvió un motivo (p.ej. su timeout propio), se conserva y se
+        // antepone la razón que activó el fallback CU->GPT, en lugar de sobreescribirla: ambas son
+        // relevantes para el diagnóstico ("por qué se activó el fallback" + "por qué el fallback no
+        // completó").
+        resultadoGpt.FallbackRazon = string.IsNullOrWhiteSpace(resultadoGpt.FallbackRazon)
+            ? fallbackRazon
+            : $"{fallbackRazon};{resultadoGpt.FallbackRazon}";
 
         return resultadoGpt;
     }

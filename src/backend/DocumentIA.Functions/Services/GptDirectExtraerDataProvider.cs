@@ -51,7 +51,13 @@ public class GptDirectExtraerDataProvider
             cancellationToken);
 
         resultado.FallbackUsado = false;
-        resultado.FallbackRazon = null;
+        // FallbackRazon solo tiene sentido aquí como marca de timeout propio de la llamada GPT
+        // directa (GptFallbackExtraerDataProvider.RazonExtraccionTimeout); cualquier otro valor se
+        // limpia porque en el camino directo no hay fallback CU->GPT que justifique una razón.
+        if (!string.Equals(resultado.FallbackRazon, GptFallbackExtraerDataProvider.RazonExtraccionTimeout, StringComparison.Ordinal))
+        {
+            resultado.FallbackRazon = null;
+        }
         resultado.MarkdownExtraido = markdown;
         resultado.DatosExtraidos["Markdown"] = markdown;
 

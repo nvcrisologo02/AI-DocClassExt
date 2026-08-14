@@ -17,6 +17,7 @@
    - 4.2 [Clasificación Forzada (ExpectedType)](#42-clasificación-forzada-expectedtype)
    - 4.3 [Fallback GPT](#43-fallback-gpt)
    - 4.4 [Clasificación Mock (Desarrollo/Test)](#44-clasificación-mock-desarrollotest)
+   - 4.5 [Clasificación Restringida a un Conjunto de Tipologías](#45-clasificación-restringida-a-un-conjunto-de-tipologías)
 5. [Tipologías Soportadas](#5-tipologías-soportadas)
 6. [Sistema de Confianza](#6-sistema-de-confianza)
 7. [Configuración de Clasificación](#7-configuración-de-clasificación)
@@ -422,6 +423,45 @@ En entornos de desarrollo, se puede usar el proveedor `mock` que devuelve siempr
 ```
 
 > Útil para: tests unitarios, desarrollo local sin conectividad a Azure, validación de flujos de extracción sin depender de la clasificación.
+
+---
+
+### 4.5 Clasificación Restringida a un Conjunto de Tipologías
+
+Permite acotar la clasificación a una lista cerrada de tipologías candidatas mediante `instrucciones.restriccionTipologias`. El sistema solo puede devolver una tipología de esa lista o el centinela `"Desconocido"`; nunca clasifica el documento fuera del conjunto informado.
+
+**Cuándo usarla:** cuando el sistema origen ya sabe que el documento solo puede pertenecer a un subconjunto acotado de tipos (por ejemplo, un lote procedente de un contexto conocido) y quiere tanto restringir la búsqueda como recibir una señal explícita de "no encaja en ninguna" en lugar de una clasificación forzada.
+
+| Campo | Tipo | Descripción |
+|---|---|---|
+| `restriccionTipologias.codigos` | string[] | Códigos de tipología permitidos (columna `Codigo`, ej. `"SERE-25"`, `"nota-simple"`). Comparación case-insensitive. |
+| `restriccionTipologias.proponerSiDesconocido` | bool | `true` = si el resultado es `"Desconocido"`, se añade una propuesta informativa (`identificacion.propuestaTipologia`) obtenida de una clasificación libre, sin actuar sobre ella. Default: `false`. |
+
+Requiere `classification.nivelClasificacion = "TDN1_TDN2"` (la restricción opera a granularidad de tipología, no de familia TDN1). `expectedType` sigue siendo independiente y puede combinarse.
+
+**Fase única:** con restricción activa, la vía GPT ya no recorre la jerarquía TDN1→TDN2 habitual. Compara el documento en una sola pasada contra un catálogo plano formado por las tipologías del conjunto con su `gptDescripcion` completa, y elige la más compatible por contenido. La calidad de esa `gptDescripcion` es el factor que más determina el acierto: una descripción genérica o circular tiende a `"Desconocido"`, mientras que una descripción con contenido concreto (patrón `ES:` / `NO ES:` / señales de identificación) da confianzas altas (0.85–0.95). Ver la guía dedicada [GUIA_CLASIFICACION_RESTRINGIDA.md](GUIA_CLASIFICACION_RESTRINGIDA.md) para el detalle de uso, ejemplos completos, cómo escribir buenas `gptDescripcion` y solución de problemas.
+
+```json
+{
+  "instrucciones": {
+    "classification": { "nivelClasificacion": "TDN1_TDN2" },
+    "restriccionTipologias": {
+      "codigos": ["SERE-25", "nota-simple"],
+      "proponerSiDesconocido": true
+    }
+  },
+  "documento": {
+    "name": "documento.pdf",
+    "content": { "base64": "<BASE64>" }
+  },
+  "trazabilidad": {
+    "correlationId": "RESTRICCION-001",
+    "submittedBy": "sistema-origen"
+  }
+}
+```
+
+Si ningún proveedor de la cadena devuelve un código dentro del conjunto, el resultado final es `identificacion.tipologia = "Desconocido"` con `detalleEjecucion.clasificacion.fallbackRazon = "fuera_de_conjunto_restringido"`. Si `proponerSiDesconocido = true`, la propuesta informativa se calcula con el flujo jerárquico completo contra el catálogo entero (no contra el conjunto acotado). Igual que con cualquier documento no clasificado, se permiten resumen y prompt, pero no hay extracción, AssetResolver, subida a GDC ni integración.
 
 ---
 
