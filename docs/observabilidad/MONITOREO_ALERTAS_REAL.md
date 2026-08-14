@@ -258,7 +258,7 @@ ExponentialBackoff = true
 | `srbalertlatprodocai` | p95 de `DocumentIA.Duracion.Total` > 120 s | 15 min / 15 min | 2 |
 | `srbalertfbkprodocai` | % de `DocumentProcessed` con `UseFallbackLLM=true` > 20% (mín. 5 docs) | 30 min / 15 min | 3 |
 | `srbalertexcprodocai` | > 10 excepciones (cubre fallos GDC mientras no exista evento específico) | 5 min / 5 min | 2 |
-| `srbalertidleprodocai` | 0 requests en horario laboral (L-V 8:00-18:00 Europe/Madrid) | 60 min / 15 min | 2 |
+| `srbalertidleprodocai` | 0 requests en horario laboral (L-V, evaluada 11:00-18:00 Europe/Madrid) | 180 min / 60 min | 2 |
 
 Además existen 2 metric alerts previas de plataforma: `srbalertcpuprodocai` (CPU) y `srbalertmemprodocai` (memoria).
 
@@ -266,6 +266,7 @@ Además existen 2 metric alerts previas de plataforma: `srbalertcpuprodocai` (CP
 - El criterio de error es `EstadoFinal in (Error, ERROR, Fallido)` — no `!= "OK"` — para no contar REVISION como fallo.
 - Las alertas de ratio exigen un mínimo de 5 documentos por ventana para evitar falsos positivos con volumen bajo.
 - No existen los eventos `GdcUploadFailed` / `GptFallbackUsed` en el código; el fallback se mide con la dimensión `UseFallbackLLM` de `DocumentProcessed`.
+- La alerta de inactividad se amplió de 60 a 180 min (2026-08-14): el filtro horario de la query aplica al momento de evaluación, no a la ventana, así que se evalúa desde las 11:00 para que las 3 h previas caigan enteras en jornada (8:00-18:00) y no salte de madrugada/primera hora sin tráfico. Trade-off: la última detección posible del día es ~17:xx; un tramo de silencio iniciado después de las 15:00 no alerta ese día.
 
 **Gestión (script idempotente):** `scripts/observability/create-monitor-alerts.ps1` crea o actualiza las 5 reglas. Re-ejecutable sin riesgo; parámetro `-ActionGroupId` para asociar el action group.
 

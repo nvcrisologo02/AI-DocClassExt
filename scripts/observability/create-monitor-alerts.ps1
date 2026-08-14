@@ -119,16 +119,19 @@ exceptions
     },
     @{
         Name        = "srbalertidleprodocai"
-        DisplayName = "DocumentIA - Sin actividad en horario laboral (60 min)"
-        Description = "Cero requests en 60 minutos dentro de horario laboral (L-V 8:00-18:00 Europe/Madrid). Posible caida de la Function App o del flujo de entrada. AB#99083."
+        DisplayName = "DocumentIA - Sin actividad en horario laboral (180 min)"
+        Description = "Cero requests en 180 minutos dentro de horario laboral (L-V, evaluado 11:00-18:00 Europe/Madrid para que la ventana de 3h caiga entera en jornada). Posible caida de la Function App o del flujo de entrada. AB#99083."
         Severity    = 2
-        WindowSize  = "1h"
-        Frequency   = "15m"
+        WindowSize  = "3h"
+        Frequency   = "1h"
+        # El filtro horario aplica al momento de evaluacion, no a la ventana: se evalua desde
+        # las 11:00 para que las 3h previas caigan enteras en jornada (evita el falso positivo
+        # matinal que incluia horas nocturnas sin trafico).
         Query       = @"
 requests
 | summarize n = count()
 | extend ahora = datetime_utc_to_local(now(), 'Europe/Madrid')
-| where dayofweek(ahora) between (1d .. 5d) and datetime_part('hour', ahora) >= 8 and datetime_part('hour', ahora) < 18
+| where dayofweek(ahora) between (1d .. 5d) and datetime_part('hour', ahora) >= 11 and datetime_part('hour', ahora) < 18
 | where n == 0
 "@
     }
