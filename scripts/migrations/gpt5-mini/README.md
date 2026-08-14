@@ -18,6 +18,7 @@ Contexto y proyección de costes: `docs/auxiliares/temps/2026-07-21/INFORME-COST
 | 4 | `02-activate-gpt5-models.sql` — cutover in-place de las 4 filas GPT (backup automático `ModeloConfigs__bak_<ts>`); la app lo recoge en ≤ 5 min (caché del registro) | Reversible con paso 5 |
 | 5 | (si hace falta) `03-rollback-gpt5-models.sql` | — |
 | — | `04-dev-split-gpt4-gpt5.sql` — **solo DEV** (AB#100131, ejecutado 2026-08-14): deshace el modo mixto que dejó el A/B — revierte las 4 filas `gpt4o-mini` al deployment `gpt-4o-mini` (clasificación MaxTokens 150) y renombra las filas `*-gpt5-mini-test` a `classification.gpt5-mini` / `extraction.gpt5-mini` / `prompt.gpt5-mini` (MaxTokens 2000 / 16000) como juego GPT-5 operativo seleccionable por modelKey | Ninguno: el set activo queda en gpt-4o-mini |
+| — | `05-dev-e2e-classification-aliases.sql` — **solo DEV** (AB#100131, ejecutado 2026-08-14): alta de las filas alias de clasificación `gpt-4o-mini` y `gpt-5-mini` (clonan la config real, sin IsDefault/UseAsFallback) que los casos E2E FC-FC4/FC-FC5 piden por modelKey literal. Idempotente | Ninguno: solo se resuelven por modelKey |
 
 Ejecución SQL (sesión `az login` con permisos de escritura en la BBDD):
 
