@@ -43,6 +43,20 @@ Descartado por ahora (YAGNI): caché servidor y tablas de pre-agregación; se re
 medición en la mano. Complementario e independiente del PBI AB#100165 (reducción de
 almacenamiento: duplicidad JSON / markdown binario).
 
+**Coordinación con AB#100165 (acordada 01/09):**
+
+- **`ActivityTimelineJson` se mantiene como columna persistida.** La deduplicación del timeline
+  del plan de almacenamiento se resuelve podando `$.DetalleEjecucion.Seguimiento.Actividades`
+  del contrato al persistir (AB#100166), no eliminando la columna. El DTO de AB#100183 se
+  implementa tal cual está diseñado, proyectando `ActivityTimelineJson`, sin dependencia de ese
+  plan.
+- **Ventana de BD única en PRO**: el índice cubriente de AB#100185 se aplica a mano en la misma
+  intervención que la migración de AB#100168 (columna `IdActivo` + retirada de
+  `IdActivoNormalizado`), ambas con `ONLINE=ON`.
+- **Orden global entre iniciativas**: AB#100176 (fiabilidad, bugs de producción) → AB#100182
+  (este plan) → AB#100165 (almacenamiento). Detalle en
+  `docs/especificaciones/OPTIMIZACION_ALMACENAMIENTO_BD_PRO.md`.
+
 ## Detalles de diseño
 
 ### DTO del listado

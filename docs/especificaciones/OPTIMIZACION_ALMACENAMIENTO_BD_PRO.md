@@ -38,23 +38,40 @@ markdown a binario, alerta de capacidad. La retención/archivado (opción "conse
 vigente por documento" o archivado a blob) queda pospuesta: se medirá el crecimiento un mes
 después de desplegar estos cambios y se decidirá con datos.
 
+### Decisión de diseño del timeline (actualizada 01/09, coordinada con AB#100182)
+
+El plan de rendimiento del Monitor (AB#100182, spec
+`docs/superpowers/specs/2026-09-01-monitor-admin-rendimiento-design.md`) proyecta un DTO ligero
+del listado que incluye `ActivityTimelineJson`. Para no colisionar, la deduplicación del timeline
+se **invierte**: se mantiene la columna `ActivityTimelineJson` (copia compacta que consume el
+listado) y se **poda `$.DetalleEjecucion.Seguimiento.Actividades` del contrato antes de
+persistirlo** (mismo patrón que ya se aplica a `Postproceso.Markdown`: retirar antes de
+serializar, restaurar después en el objeto en memoria). El ahorro es equivalente (~245 MB del
+lado del contrato frente a ~207 MB del lado de la columna) y ambos planes quedan independientes.
+
+Los lectores que deserializan el contrato (detalle de Admin y flujo de duplicados) re-mergean el
+timeline desde la columna cuando el contrato venga podado, de modo que sus salidas son idénticas
+a las actuales.
+
 ### Garantía de no impacto en consumidores (verificada)
 
-- La respuesta HTTP de la API se construye en memoria; nunca lee las columnas eliminadas.
-- El flujo de duplicados (`ObtenerUltimaEjecucionDuplicadoActivity`) usa exclusivamente
-  `ContratoSalidaCompletoJson`, que se mantiene.
+- La respuesta HTTP de la API se construye en memoria; nunca lee las columnas eliminadas y el
+  objeto en memoria conserva el timeline completo.
+- El flujo de duplicados (`ObtenerUltimaEjecucionDuplicadoActivity`) usa
+  `ContratoSalidaCompletoJson` (que se mantiene) y re-mergea el timeline desde
+  `ActivityTimelineJson` para devolver el contrato completo.
 - `sp_ObtenerDocumentoEjecucionesPorIdActivo`: sin ejecuciones en caché de procedimientos ni en
   Query Store (~30 días) en PRO. Se reescribe de forma defensiva conservando la forma del resultset.
-- El detalle de ejecución de Admin ya se monta desde el contrato; la lista se adapta en servidor
-  devolviendo JSON idéntico (la webapp Blazor no se modifica).
+- El detalle de ejecución de Admin se monta desde el contrato con el mismo re-merge; el listado
+  no cambia (sigue leyendo `ActivityTimelineJson`). La webapp Blazor no se modifica.
 - El histórico conserva sus columnas rellenas: solo se deja de grabar, no se borra nada.
 
 ### Tasks
 
 | WI | Título | Resumen |
 |---|---|---|
-| AB#100166 | Persistencia | `PersistirActivity` deja a NULL `ActivityTimelineJson`, `DatosFinalesJson`, `DatosOriginalesJson` en filas nuevas |
-| AB#100167 | Admin API | Lista de ejecuciones lee el timeline del contrato con fallback a la columna antigua |
+| AB#100166 | Persistencia | `PersistirActivity` deja a NULL `DatosFinalesJson` y `DatosOriginalesJson` en filas nuevas y poda `Seguimiento.Actividades` del contrato persistido (`ActivityTimelineJson` se mantiene) |
+| AB#100167 | Lectores del contrato | Detalle de Admin y flujo de duplicados re-mergean el timeline desde `ActivityTimelineJson` cuando el contrato viene podado |
 | AB#100168 | BD / SP | Columna escalar `IdActivo` indexada en `DocumentoEjecuciones`; SP por IdActivo reescrito con mismos alias vía `JSON_QUERY`; retirada de la columna calculada `IdActivoNormalizado` |
 | AB#100169 | Markdown binario | Columna `varbinary(max)` nueva (GZip sin Base64), lectura con fallback, migración del histórico por lotes apta para S0 |
 | AB#100170 | Scripts internos | `generate-real-cost-report-from-csv.ps1` y `eval/audit_notext_db.py` (repo Batch) compatibles con ambos formatos |
@@ -67,6 +84,28 @@ después de desplegar estos cambios y se decidirá con datos.
 2. AB#100170 (scripts) y AB#100172 (validación en DEV) antes de promocionar a PRO.
 3. AB#100169 (markdown binario) como segunda fase, con su migración por lotes.
 4. AB#100171 (alerta) independiente, puede ir en cualquier momento.
+
+### Coordinación con las otras iniciativas en curso
+
+Orden global acordado entre los tres planes activos (todos bajo el Epic 100005):
+
+1. **AB#100176 — Fiabilidad de resumen y persistencia** (primero): bugs de producción con
+   incidencia abierta (INC1338832); es el que más toca el orquestador y conviene estabilizarlo
+   antes. Su task de alertas (AB#100181) modifica `create-monitor-alerts.ps1`, el mismo script
+   donde después se añade la alerta de AB#100171 — no desarrollarlas en paralelo.
+2. **AB#100182 — Rendimiento del Monitor** (segundo): con la decisión del timeline ya no depende
+   de este plan. Su índice cubriente (AB#100185) se deja preparado y se aplica en PRO **en la
+   misma ventana manual** que la migración de AB#100168 (Apply del pipeline Migrations-BD
+   bloqueado; `ONLINE=ON` en ambos scripts).
+3. **AB#100165 — este plan** (tercero): sin urgencia real tras la ampliación a 20 GB; la task
+   AB#100178 (persistir salidas tempranas) del plan de fiabilidad heredará automáticamente la
+   regla de no grabar columnas duplicadas si AB#100166 ya está mergeado, y en el orden elegido
+   ocurre al revés sin conflicto (los cambios están en ficheros distintos: orquestador vs
+   `PersistirActivity`).
+
+Transversal: ramas por PBI desde `develop`, merges secuenciales (sin trabajo en paralelo sobre
+orquestador/repositorio), suite e2e completa en DEV tras cada merge y smoke pre-release PRO
+(Test Plan 100069) antes de cada subida.
 
 ### Impacto esperado
 
