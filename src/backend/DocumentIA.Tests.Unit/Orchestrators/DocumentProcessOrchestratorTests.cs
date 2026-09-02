@@ -2481,4 +2481,92 @@ public class DocumentProcessOrchestratorTests
         persistirInput.Should().NotBeNull();
         persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
     }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaNoResoluble_PersisteEjecucionNoClasificada()
+    {
+        // AB#100178: la rama NO_CLASIFICADO retornaba sin PersistirActivity y la ejecución
+        // desaparecía (caso DICTAMEN_TECNICO_CORNELLA en PRO, 25/08).
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.4,
+            TipologiaDetectada = "etiqueta-inexistente"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "etiqueta-inexistente",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput!.Salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoSinHistoricoReutilizable_PersisteEjecucionDuplicada()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", (ContratoSalida?)null);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("DUPLICADO");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput!.Salida.Resultado.Estado.Should().Be("DUPLICADO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnlyConTipologiaDesconocida_PersisteEjecucion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.ClassificationOnly = true;
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            TipologiaDetectada = "sin-catalogo"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "sin-catalogo",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+    }
 }

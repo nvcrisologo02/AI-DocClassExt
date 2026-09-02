@@ -710,6 +710,14 @@ public class DocumentProcessOrchestrator
                     salida.Resultado.ReutilizadaPorDuplicado = true;
                     salida.Resultado.MensajeReutilizacion = "Documento duplicado detectado sin ejecución histórica reutilizable.";
 
+                    // AB#100178: sin esta llamada la ejecución desaparecía (PersistirActivity es el
+                    // único escritor de DocumentoEjecuciones y el monitor solo lee esa tabla).
+                    await EjecutarPasoNegocioSinResultado(
+                        "Persistir",
+                        () => context.CallActivityAsync(
+                            "PersistirActivity",
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+
                     FinalizarSeguimiento("Completed", "Documento detectado como duplicado");
                     return salida;
                 }
@@ -956,6 +964,10 @@ public class DocumentProcessOrchestrator
                         salida.Resultado.ConfianzaClasificacion = 0;
 
                         FinalizarSeguimiento("PendienteReintento", mensajeReintento);
+
+                        // Decisión AB#100178: PENDIENTE_REINTENTO no se persiste. Es un estado
+                        // transitorio de rate limit y el cliente reenvía la misma petición;
+                        // persistir aquí generaría una fila por cada reintento.
                         return salida;
                     }
 
@@ -1327,17 +1339,13 @@ public class DocumentProcessOrchestrator
 
                     await EjecutarPromptEnSalidaTempranaAsync();
 
-                    // El prompt en salida temprana puede activar la guarda de contenido
-                    // (SIN_CONTENIDO_DOCUMENTO), que sí debe persistirse: sin esta llamada la
-                    // ejecución desaparecería de DocumentoEjecuciones (único escritor: PersistirActivity).
-                    if (string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
-                    {
-                        await EjecutarPasoNegocioSinResultado(
-                            "Persistir",
-                            () => context.CallActivityAsync(
-                                "PersistirActivity",
-                                new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
-                    }
+                    // AB#100178: toda salida temprana se persiste (antes solo SIN_CONTENIDO_DOCUMENTO;
+                    // las NO_CLASIFICADO desaparecían de DocumentoEjecuciones y del monitor).
+                    await EjecutarPasoNegocioSinResultado(
+                        "Persistir",
+                        () => context.CallActivityAsync(
+                            "PersistirActivity",
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
                     FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
                     return salida;
@@ -1375,17 +1383,13 @@ public class DocumentProcessOrchestrator
 
                 await EjecutarPromptEnSalidaTempranaAsync();
 
-                // El prompt en salida temprana puede activar la guarda de contenido
-                // (SIN_CONTENIDO_DOCUMENTO), que sí debe persistirse: sin esta llamada la
-                // ejecución desaparecería de DocumentoEjecuciones (único escritor: PersistirActivity).
-                if (string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
-                {
-                    await EjecutarPasoNegocioSinResultado(
-                        "Persistir",
-                        () => context.CallActivityAsync(
-                            "PersistirActivity",
-                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
-                }
+                // AB#100178: toda salida temprana se persiste (antes solo SIN_CONTENIDO_DOCUMENTO;
+                // las NO_CLASIFICADO desaparecían de DocumentoEjecuciones y del monitor).
+                await EjecutarPasoNegocioSinResultado(
+                    "Persistir",
+                    () => context.CallActivityAsync(
+                        "PersistirActivity",
+                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
                 FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
                 return salida;
@@ -1656,7 +1660,14 @@ public class DocumentProcessOrchestrator
                     salida.Resultado.ConfianzaExtraccion = 0;
                     salida.Resultado.ConfianzaValidacion = 0;
                     salida.DetalleEjecucion.Postproceso.Inconsistencias.Add(mensajeTipologiaNoIdentificada);
-                    
+
+                    // AB#100178: persistir también esta salida temprana (antes desaparecía).
+                    await EjecutarPasoNegocioSinResultado(
+                        "Persistir",
+                        () => context.CallActivityAsync(
+                            "PersistirActivity",
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+
                     FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
                     return salida;
                 }
