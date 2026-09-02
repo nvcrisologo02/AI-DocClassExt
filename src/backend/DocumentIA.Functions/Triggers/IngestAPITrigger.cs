@@ -28,6 +28,14 @@ public class IngestAPITrigger
         PropertyNameCaseInsensitive = true
     };
 
+    // AB#100180: extensiones que la extracción (DI Layout / conversión) sabe tratar. Un fichero
+    // fuera de esta lista consumía DI+LLM para acabar en resumen N/A con estado OK.
+    private static readonly HashSet<string> ExtensionesSoportadas = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt",
+        ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".heif", ".html", ".htm"
+    };
+
     public IngestAPITrigger(
         ILogger<IngestAPITrigger> logger,
         PromptInstruccionesValidator promptInstruccionesValidator,
@@ -84,6 +92,13 @@ public class IngestAPITrigger
 
                 if (contratoEntrada is not null)
                 {
+                    // AB#100180: validar la extensión antes de subir el binario a blob: un formato
+                    // sin soporte de extracción no debe consumir ni almacenamiento ni orquestación.
+                    if (EsExtensionNoSoportada(contratoEntrada.Documento?.Name, out var extensionRechazada))
+                    {
+                        return await CrearRespuestaExtensionNoSoportadaAsync(req, extensionRechazada);
+                    }
+
                     var base64FromJson = contratoEntrada.Documento?.Content?.Base64?.Trim();
                     if (!string.IsNullOrEmpty(base64FromJson))
                     {
@@ -235,6 +250,15 @@ public class IngestAPITrigger
                 return badResponse;
             }
 
+            // Segunda comprobación para la ruta multipart, donde el nombre puede venir del propio
+            // fichero y no del JSON de metadatos. Las entradas por ObjectIdGDC no se validan aquí
+            // (el nombre no se conoce hasta descargar de GDC): las cubre la guarda de contenido
+            // de la clasificación (AB#100180).
+            if (!hasObjectIdGdc && EsExtensionNoSoportada(contratoEntrada.Documento.Name, out var extensionMultipart))
+            {
+                return await CrearRespuestaExtensionNoSoportadaAsync(req, extensionMultipart);
+            }
+
             if (hasObjectIdGdc)
             {
                 contratoEntrada.Documento.ObjectIdGDC = objectIdGdc;
@@ -341,6 +365,29 @@ public class IngestAPITrigger
 
         await UploadToBlobAndSetHashesAsync(entrada, fileBytes);
         return entrada;
+    }
+
+    /// <summary>
+    /// AB#100180: true cuando el nombre trae una extensión que la extracción no sabe tratar.
+    /// Sin extensión no se rechaza (el formato se resolverá aguas abajo).
+    /// </summary>
+    private static bool EsExtensionNoSoportada(string? nombreDocumento, out string extension)
+    {
+        extension = string.IsNullOrWhiteSpace(nombreDocumento)
+            ? string.Empty
+            : Path.GetExtension(nombreDocumento);
+
+        return !string.IsNullOrEmpty(extension) && !ExtensionesSoportadas.Contains(extension);
+    }
+
+    private static async Task<HttpResponseData> CrearRespuestaExtensionNoSoportadaAsync(
+        HttpRequestData req,
+        string extension)
+    {
+        var badResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+        await badResponse.WriteStringAsync(
+            $"Extensión '{extension}' no soportada. Formatos admitidos: PDF, Office (doc/docx/xls/xlsx/ppt/pptx), imágenes (png/jpg/jpeg/tif/tiff/bmp/heif) y HTML.");
+        return badResponse;
     }
 
     private async Task UploadToBlobAndSetHashesAsync(ContratoEntrada entrada, byte[] fileBytes)
