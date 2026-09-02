@@ -343,10 +343,13 @@ namespace DocumentIA.Data.Repositories
             return q;
         }
 
-        public async Task<(IReadOnlyList<DocumentoEjecucionEntity> Items, int Total)> GetPagedAsync(
+        public async Task<(IReadOnlyList<EjecucionListadoItem> Items, int Total)> GetPagedAsync(
             EjecucionFiltro filtro, int page, int pageSize)
         {
-            var q = AplicarFiltro(_context.DocumentoEjecuciones.Include(e => e.Documento), filtro);
+            // Sin Include: la proyeccion referencia e.Documento y EF genera el join
+            // solo con las columnas seleccionadas, en vez de arrastrar los LOB de
+            // la ejecucion y el markdown comprimido del documento.
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtro);
 
             var total = await q.CountAsync();
 
@@ -355,6 +358,29 @@ namespace DocumentIA.Data.Repositories
                 .ThenByDescending(e => e.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .Select(e => new EjecucionListadoItem
+                {
+                    Id = e.Id,
+                    EjecucionGuid = e.EjecucionGuid,
+                    FechaEjecucion = e.FechaEjecucion,
+                    Tipologia = e.Tipologia,
+                    ClassificationOnly = e.ClassificationOnly,
+                    EstadoFinal = e.EstadoFinal,
+                    ConfianzaGlobal = e.ConfianzaGlobal,
+                    ConfianzaClasificacion = e.ConfianzaClasificacion,
+                    UseFallbackLLM = e.UseFallbackLLM,
+                    DuracionTotalMs = e.DuracionTotalMs,
+                    DuracionClasificacionMs = e.DuracionClasificacionMs,
+                    DuracionExtraccionMs = e.DuracionExtraccionMs,
+                    DuracionGDCMs = e.DuracionGDCMs,
+                    DuracionValidacionMs = e.DuracionValidacionMs,
+                    DuracionIntegracionMs = e.DuracionIntegracionMs,
+                    DuracionPersistenciaMs = e.DuracionPersistenciaMs,
+                    NombreDocumento = e.Documento != null ? e.Documento.NombreArchivo : null,
+                    SubmittedBy = e.SubmittedBy
+                        ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
+                    ActivityTimelineJson = e.ActivityTimelineJson
+                })
                 .ToListAsync();
 
             return (items, total);

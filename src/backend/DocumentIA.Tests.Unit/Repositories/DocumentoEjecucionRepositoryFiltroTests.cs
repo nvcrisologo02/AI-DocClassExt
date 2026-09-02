@@ -158,7 +158,7 @@ public class DocumentoEjecucionRepositoryFiltroTests
         var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
 
         total.Should().Be(1);
-        items[0].Documento!.NombreArchivo.Should().Contain("escritura");
+        items[0].NombreDocumento.Should().Contain("escritura");
     }
 
     [Fact]
@@ -174,7 +174,9 @@ public class DocumentoEjecucionRepositoryFiltroTests
         var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
 
         total.Should().Be(4, "solo el documento 1 tiene 'batch-integracion' en SubmittedBy");
-        items.Should().OnlyContain(e => e.Documento!.SubmittedBy!.Contains("integracion"));
+        // El DTO expone el SubmittedBy ya coalescido (propio de la ejecucion o, en su defecto,
+        // el del documento), que es exactamente el valor sobre el que filtra el repositorio.
+        items.Should().OnlyContain(e => e.SubmittedBy!.Contains("integracion"));
     }
 
     [Fact]
@@ -240,7 +242,10 @@ public class DocumentoEjecucionRepositoryFiltroTests
         var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
 
         total.Should().Be(1);
-        items[0].SubmittedBy.Should().BeNull("el valor propio no esta informado, el efectivo viene del documento via COALESCE");
+        // El DTO del listado expone el SubmittedBy efectivo (COALESCE ejecucion -> documento),
+        // que es el que la API ha devuelto siempre; antes el coalesce lo hacia la Function
+        // sobre la entidad, donde este campo llegaba a null.
+        items[0].SubmittedBy.Should().Be("batch-integracion", "sin valor propio, el efectivo viene del documento via COALESCE");
     }
 
     [Fact]
