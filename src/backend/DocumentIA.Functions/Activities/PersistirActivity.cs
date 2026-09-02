@@ -85,6 +85,10 @@ namespace DocumentIA.Functions.Activities
                         // Solicitante del alta. En reprocesos no se toca: el documento conserva
                         // quien lo trajo por primera vez y cada reenvio queda en su ejecucion.
                         SubmittedBy = submittedBy,
+                        // AB#100169: escritura dual mientras la vuelta atras deba ser posible.
+                        // La columna binaria es la forma nueva; la Base64 se mantiene poblada
+                        // para que revertir el codigo o la migracion no pierda ningun markdown.
+                        NormalizacionMarkdownGzip = MarkdownCompression.Compress(salida.DetalleEjecucion.Postproceso?.Markdown),
                         NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown),
                         // Registrar IdGDC e IdActivo si están disponibles
                         IdGDC = salida.Integridad.GestorDocumental,
@@ -145,6 +149,8 @@ namespace DocumentIA.Functions.Activities
                     if (salida.DetalleEjecucion.Clasificacion.PagesProcessed > 0)
                         documento.PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed;
                     
+                    // AB#100169: escritura dual (ver comentario en el alta del documento).
+                    documento.NormalizacionMarkdownGzip = MarkdownCompression.Compress(salida.DetalleEjecucion.Postproceso?.Markdown);
                     documento.NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown);
                     documento.FechaExpiracionBlob = fechaExpiracionBlob;
                     documento.FechaActualizacion = DateTime.UtcNow;

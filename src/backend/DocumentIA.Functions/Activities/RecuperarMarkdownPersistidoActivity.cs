@@ -38,7 +38,10 @@ public class RecuperarMarkdownPersistidoActivity
             return new RecuperarMarkdownPersistidoResultado { Encontrado = false };
         }
 
-        var markdown = MarkdownCompression.DecompressFromBase64(documento.NormalizacionMarkdownCompressed);
+        // AB#100169: columna binaria primero; la Base64 es el respaldo del historico sin migrar
+        // y de cualquier fila escrita por una version anterior tras una vuelta atras.
+        var markdown = MarkdownCompression.Decompress(documento.NormalizacionMarkdownGzip)
+            ?? MarkdownCompression.DecompressFromBase64(documento.NormalizacionMarkdownCompressed);
 
         if (string.IsNullOrWhiteSpace(markdown))
         {

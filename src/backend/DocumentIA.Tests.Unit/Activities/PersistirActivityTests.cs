@@ -1,6 +1,7 @@
 #nullable enable
 using System.Text.Json;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
@@ -655,6 +656,41 @@ public class PersistirActivityTests : IDisposable
         await _sut.Run(new PersistirInput { Salida = salida });
 
         ejecucionCapturada!.IdActivo.Should().BeNull("sin activo resuelto no debe guardarse cadena vacia");
+    }
+
+    [Fact]
+    public async Task Run_EscribeElMarkdownEnLasDosColumnas()
+    {
+        // AB#100169: la escritura dual es la garantia de vuelta atras. Si se dejara de escribir
+        // la columna Base64, revertir el codigo o la migracion perderia el markdown de los
+        // documentos procesados con la version nueva.
+        const string sha256 = "sha256_markdown_dual";
+        const string markdown = "# Markdown normalizado de prueba";
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Postproceso.Markdown = markdown;
+
+        DocumentoEntity? documentoCapturado = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { documentoCapturado = d; d.Id = 21; return d; });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        documentoCapturado.Should().NotBeNull();
+        MarkdownCompression.Decompress(documentoCapturado!.NormalizacionMarkdownGzip)
+            .Should().Be(markdown, "la columna binaria es la forma nueva");
+        MarkdownCompression.DecompressFromBase64(documentoCapturado.NormalizacionMarkdownCompressed)
+            .Should().Be(markdown, "la Base64 se mantiene poblada para poder revertir sin perder datos");
     }
 
     public void Dispose()

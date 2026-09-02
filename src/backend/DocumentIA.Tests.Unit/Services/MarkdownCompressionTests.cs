@@ -80,3 +80,54 @@ public class MarkdownCompressionTests
         decompressed.Should().Be(original);
     }
 }
+
+public class MarkdownCompressionBinarioTests
+{
+    private const string Markdown = "# Nota simple\n\nTitular: Prueba\n\n| campo | valor |\n|---|---|\n| a | b |\n";
+
+    [Fact]
+    public void CompressDecompress_IdaYVuelta_DevuelveElOriginal()
+    {
+        var comprimido = MarkdownCompression.Compress(Markdown);
+
+        comprimido.Should().NotBeNull();
+        MarkdownCompression.Decompress(comprimido).Should().Be(Markdown);
+    }
+
+    [Fact]
+    public void Compress_OcupaMenosQueLaVariantePreviaEnBaseDatos()
+    {
+        // La forma anterior era Base64 en nvarchar(max): +33% por Base64 y x2 por UTF-16.
+        var binario = MarkdownCompression.Compress(Markdown)!;
+        var base64 = MarkdownCompression.CompressToBase64(Markdown)!;
+        var bytesEnBd = base64.Length * 2; // nvarchar almacena 2 bytes por caracter
+
+        binario.Length.Should().BeLessThan(bytesEnBd);
+    }
+
+    [Fact]
+    public void Compress_ProduceLosMismosBytesQueDecodificarLaVarianteBase64()
+    {
+        // La migracion del historico convierte Base64 -> bytes sin descomprimir. Este test
+        // fija esa equivalencia: si dejara de cumplirse, la migracion corromperia datos.
+        var binario = MarkdownCompression.Compress(Markdown)!;
+        var desdeBase64 = Convert.FromBase64String(MarkdownCompression.CompressToBase64(Markdown)!);
+
+        binario.Should().BeEquivalentTo(desdeBase64);
+    }
+
+    [Fact]
+    public void Compress_NuloOVacio_DevuelveNull()
+    {
+        MarkdownCompression.Compress(null).Should().BeNull();
+        MarkdownCompression.Compress("   ").Should().BeNull();
+    }
+
+    [Fact]
+    public void Decompress_NuloVacioOCorrupto_DevuelveNullSinLanzar()
+    {
+        MarkdownCompression.Decompress(null).Should().BeNull();
+        MarkdownCompression.Decompress(Array.Empty<byte>()).Should().BeNull();
+        MarkdownCompression.Decompress(Encoding.UTF8.GetBytes("esto no es gzip")).Should().BeNull();
+    }
+}
