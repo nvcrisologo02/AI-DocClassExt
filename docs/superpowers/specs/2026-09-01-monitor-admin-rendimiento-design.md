@@ -3,6 +3,17 @@
 **Work items:** PBI AB#100182 (padre: Epic 100005), tasks AB#100183–AB#100186.
 **Fecha:** 2026-09-01
 
+> **Estado (02/09/2026): implementado, en `develop` (merge `c26a687`) y validado en DEV.**
+> Tasks AB#100183-100185 en Done; AB#100186 (medición) In Progress a la espera de PRO.
+> Medición del "después" en DEV (carga controlada, duración en servidor):
+> `Admin_GetUltimasEjecuciones` p50 28→12 ms / p95 2.327→140 ms (−94%);
+> `Admin_GetAgregados` p50 61→39 ms / p95 8.022→1.181 ms (−85%). Línea base de PRO
+> (sin desplegar): agregados p50 9.166 ms / p95 30.035 ms — ahí está el premio real.
+> No hizo falta trocear el CASE de 11 tramos: la traducción a SQL Server se verificó
+> contra el proveedor real. **Pendiente PRO**: índice por script manual
+> (`docs/auxiliares/temps/2026-09-01/indice-monitor-pro.sql`, ONLINE=ON) en la misma
+> ventana que la migración de AB#100168, y medición del después para cerrar AB#100186.
+
 ## Problema
 
 La monitorización del Admin (MonitorV2) es lenta y pesada contra la BD de PRO

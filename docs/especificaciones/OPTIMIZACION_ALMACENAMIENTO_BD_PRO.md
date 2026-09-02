@@ -1,5 +1,16 @@
 # Optimización de almacenamiento BD PRO (AB#100165)
 
+> **Estado (02/09/2026): implementado, en `develop` (merge `5c61309`) y validado en DEV.**
+> Tasks AB#100166-100172 en Done. E2E full 31 PASS / 0 FAIL; ahorro medido por ejecución
+> (mediana): 20,23 KB → 11,51 KB (−43%). Cambios sobre el plan durante la ejecución: los
+> backfills van en scripts por lotes fuera de las migraciones (el de IdActivo agotaba el
+> timeout ya con 8k filas) y el markdown usa **escritura dual** (ambas columnas) para que la
+> vuelta atrás no pierda datos — ensayada de verdad en DEV (aplicar→revertir→reaplicar).
+> **Pendiente PRO**: script de AB#100168 en la misma ventana que el índice de AB#100185,
+> después los dos backfills (`backfill-idactivo.ps1`, `migrar-markdown-a-binario.ps1`) y la
+> alerta de capacidad (`create-db-capacity-alert.ps1`). La fase de *contract* del markdown
+> (dejar de escribir la Base64 y borrarla) queda fuera de alcance hasta verificar PRO.
+
 Plan de la iniciativa para reducir el consumo de almacenamiento de la BD `DocumentIA` en PRO
 (Azure SQL, `srbsqlprodocai`), tras alcanzar el límite configurado de 2 GB (ampliado a 20 GB
 el 31/08/2026) con 2.880 MB de datos y 58.624 ejecuciones en agosto de 2026.
