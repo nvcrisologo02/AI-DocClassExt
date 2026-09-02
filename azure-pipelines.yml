@@ -213,10 +213,10 @@ stages:
           vmImage: windows-latest
         steps:
           - task: UseDotNet@2
-            displayName: Use .NET 9 SDK
+            displayName: Use .NET 10 SDK
             inputs:
               packageType: sdk
-              version: 9.x
+              version: 10.x
 
           - task: AzureKeyVault@2
             displayName: Fetch SQL connection string from Key Vault
@@ -230,7 +230,7 @@ stages:
               $ErrorActionPreference = 'Stop'
 
               Write-Host "Installing dotnet-ef..."
-              dotnet tool update --global dotnet-ef --version 9.* || dotnet tool install --global dotnet-ef --version 9.*
+              dotnet tool update --global dotnet-ef --version 8.* || dotnet tool install --global dotnet-ef --version 8.*
 
               $env:PATH = "$env:USERPROFILE\.dotnet\tools;$env:PATH"
 
