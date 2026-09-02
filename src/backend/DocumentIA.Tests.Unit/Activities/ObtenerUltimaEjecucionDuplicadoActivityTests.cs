@@ -339,6 +339,90 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
         result.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
     }
 
+    [Fact]
+    public async Task Run_SinCoincidenciaExacta_ReutilizaUltimaConContrato()
+    {
+        // Escenario INC1338832: la histórica es ClassificationOnly=true/TDN1_TDN2 (portal)
+        // y la petición nueva llega por GDC con ClassificationOnly=false.
+        var documento = new DocumentoEntity { Id = 2570, SHA256 = "sha-gdc" };
+        var salidaHistorica = new ContratoSalida
+        {
+            Resultado = new ResultadoFinal { Estado = "OK", ConfianzaGlobal = 0.9 }
+        };
+        var ejecucionHistorica = new DocumentoEjecucionEntity
+        {
+            Id = 4641,
+            DocumentoId = documento.Id,
+            ClassificationOnly = true,
+            NivelClasificacion = "TDN1_TDN2",
+            ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaHistorica)
+        };
+
+        _documentoRepository
+            .Setup(r => r.GetBySHA256Async("sha-gdc"))
+            .ReturnsAsync(documento);
+        _documentoEjecucionRepository
+            .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
+            .ReturnsAsync(new List<DocumentoEjecucionEntity> { ejecucionHistorica });
+
+        var result = await _sut.Run(new ObtenerUltimaEjecucionDuplicadoInput
+        {
+            SHA256 = "sha-gdc",
+            ClassificationOnly = false,
+            NivelClasificacion = "TDN1_TDN2"
+        });
+
+        result.Should().NotBeNull();
+        result!.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        result.Resultado.Estado.Should().Be("OK");
+    }
+
+    [Fact]
+    public async Task Run_ConCoincidenciaExacta_LaPrefierePorEncimaDeMasRecientes()
+    {
+        var documento = new DocumentoEntity { Id = 77, SHA256 = "sha-exacta" };
+        var salidaExacta = new ContratoSalida
+        {
+            Resultado = new ResultadoFinal { Estado = "OK", ConfianzaGlobal = 0.8 },
+            DatosExtraidos = new Dictionary<string, object> { ["Resumen"] = "resumen-exacto" }
+        };
+        var salidaOtra = new ContratoSalida
+        {
+            Resultado = new ResultadoFinal { Estado = "OK", ConfianzaGlobal = 0.7 },
+            DatosExtraidos = new Dictionary<string, object> { ["Resumen"] = "resumen-otro" }
+        };
+        var ejecuciones = new List<DocumentoEjecucionEntity>
+        {
+            new()
+            {
+                Id = 2, DocumentoId = 77, ClassificationOnly = false, NivelClasificacion = "TDN1",
+                ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaOtra)
+            },
+            new()
+            {
+                Id = 1, DocumentoId = 77, ClassificationOnly = true, NivelClasificacion = "TDN1_TDN2",
+                ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaExacta)
+            }
+        };
+
+        _documentoRepository
+            .Setup(r => r.GetBySHA256Async("sha-exacta"))
+            .ReturnsAsync(documento);
+        _documentoEjecucionRepository
+            .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
+            .ReturnsAsync(ejecuciones);
+
+        var result = await _sut.Run(new ObtenerUltimaEjecucionDuplicadoInput
+        {
+            SHA256 = "sha-exacta",
+            ClassificationOnly = true,
+            NivelClasificacion = "TDN1_TDN2"
+        });
+
+        result.Should().NotBeNull();
+        result!.DatosExtraidos["Resumen"].ToString().Should().Contain("resumen-exacto");
+    }
+
     private void SetupEjecucionConSalida(DocumentoEntity documento, ContratoSalida salidaHistorica)
     {
         var ejecucion = new DocumentoEjecucionEntity
