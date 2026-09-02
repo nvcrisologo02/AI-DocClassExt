@@ -424,17 +424,38 @@ stages:
                     scriptLocation: 'inlineScript'
                     inlineScript: |
                       $ErrorActionPreference = 'Stop'
-                      $settingsJson = @('RunDatabaseMigrationsOnStartup=true') | ConvertTo-Json -Compress -AsArray
-                      $restoreSettingsJson = @('RunDatabaseMigrationsOnStartup=false') | ConvertTo-Json -Compress -AsArray
+                        az functionapp config appsettings set `
+                          --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                          --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          --settings "RunDatabaseMigrationsOnStartup=false" `
+                          --only-show-errors `
+                          --output none
+                        if ($LASTEXITCODE -ne 0) {
+                          throw "No se pudo restaurar RunDatabaseMigrationsOnStartup=false en $(AZURE_FUNCTIONS_APP_NAME)."
+                        }
+
+                        $restoredSettings = az functionapp config appsettings list `
+                          --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                          --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          --only-show-errors `
+                          --output json | ConvertFrom-Json
+                        $restoredValue = @($restoredSettings | Where-Object { $_.name -eq "RunDatabaseMigrationsOnStartup" } | Select-Object -ExpandProperty value)[0]
+                        if ($restoredValue.Trim().ToLowerInvariant() -ne "false") {
+                          throw "RunDatabaseMigrationsOnStartup no ha quedado restaurado a false (valor: $restoredValue)."
+                        }
+                        Write-Host "RunDatabaseMigrationsOnStartup=false confirmado."
                       $migrationCompleted = $false
 
                       try {
                         Write-Host "Activando migraciones de arranque sólo para la prueba DEV..."
-                        & .\scripts\configuration\ensure-app-settings.ps1 `
-                          -AppKind functionapp `
-                          -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
-                          -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                          -SettingsJson $settingsJson
+                        # El helper común no sobrescribe settings existentes.
+                        # Para la prueba controlada de DEV se fuerza explícitamente el valor.
+                        az functionapp config appsettings set `
+                          --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                          --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          --settings "RunDatabaseMigrationsOnStartup=true" `
+                          --only-show-errors `
+                          --output none
 
                         az functionapp restart `
                           --resource-group "$(AZURE_RESOURCE_GROUP)" `
@@ -457,11 +478,26 @@ stages:
                       }
                       finally {
                         Write-Host "Desactivando migraciones automáticas de arranque..."
-                        & .\scripts\configuration\ensure-app-settings.ps1 `
-                          -AppKind functionapp `
-                          -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
-                          -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                          -SettingsJson $restoreSettingsJson
+                        az functionapp config appsettings set `
+                          --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                          --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          --settings "RunDatabaseMigrationsOnStartup=false" `
+                          --only-show-errors `
+                          --output none
+                        if ($LASTEXITCODE -ne 0) {
+                          throw "No se pudo restaurar RunDatabaseMigrationsOnStartup=false en $(AZURE_FUNCTIONS_APP_NAME)."
+                        }
+
+                        $restoredSettings = az functionapp config appsettings list `
+                          --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                          --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          --only-show-errors `
+                          --output json | ConvertFrom-Json
+                        $restoredValue = @($restoredSettings | Where-Object { $_.name -eq "RunDatabaseMigrationsOnStartup" } | Select-Object -ExpandProperty value)[0]
+                        if ($restoredValue.Trim().ToLowerInvariant() -ne "false") {
+                          throw "RunDatabaseMigrationsOnStartup no ha quedado restaurado a false (valor: $restoredValue)."
+                        }
+                        Write-Host "RunDatabaseMigrationsOnStartup=false confirmado."
                       }
 
                       if (-not $migrationCompleted) {
