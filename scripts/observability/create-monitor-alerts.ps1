@@ -3,7 +3,7 @@
     Crea (o actualiza) las alertas productivas de Azure Monitor sobre Application Insights (AB#99083, cierre F6.3).
 
 .DESCRIPTION
-    Crea 5 scheduled query rules (alertas de logs) sobre el recurso de Application Insights:
+    Crea 8 scheduled query rules (alertas de logs) sobre el recurso de Application Insights:
 
       1. Tasa de errores        : % de DocumentProcessed con EstadoFinal de error (>10% en 5 min, Sev 2)
       2. Latencia E2E excesiva  : p95 de DocumentIA.Duracion.Total > 120 s en 15 min (Sev 2)
@@ -11,6 +11,13 @@
       4. Excepciones elevadas   : > 10 excepciones en 5 min (Sev 2) - cubre tambien fallos GDC hasta
                                   que exista un evento especifico (GdcUploadFailed no se emite hoy)
       5. Sin actividad          : 0 requests en 60 min dentro de horario laboral L-V 8-18 Europe/Madrid (Sev 2)
+      6. Dedup fallido          : reutilizacion por duplicado que no encuentra contrato historico (1 h, Sev 3)
+      7. ExpectedType invalido  : etiquetas de negocio que no resuelven contra el catalogo (1 h, Sev 3)
+      8. Sin contenido textual  : documentos sin texto extraible llegando a la clasificacion (1 h, Sev 3)
+
+    Las reglas 6, 7 y 8 (AB#100181) vigilan los modos de fallo corregidos en AB#100177, AB#100179
+    y AB#100180: tras desplegar esos fixes deben permanecer en silencio; si saltan, indican que el
+    caso sigue ocurriendo por una via no cubierta.
 
     Ajustes respecto al plan original (docs 7.3.4 de 2026-06-09), alineados con la telemetria real del codigo:
       - No existe el evento GdcUploadFailed ni GptFallbackUsed; el fallback se mide con la dimension
@@ -133,6 +140,48 @@ requests
 | extend ahora = datetime_utc_to_local(now(), 'Europe/Madrid')
 | where dayofweek(ahora) between (1d .. 5d) and datetime_part('hour', ahora) >= 11 and datetime_part('hour', ahora) < 18
 | where n == 0
+"@
+    },
+    @{
+        Name        = "srbalertdupprodocai"
+        DisplayName = "DocumentIA - Reutilizacion por duplicado fallida (1 h)"
+        Description = "Trazas 'No hay ninguna ejecucion con contrato serializado' o su variante de filtro: una peticion duplicada no pudo reutilizar el resumen historico. Tras AB#100177 debe tender a cero. AB#100181."
+        Severity    = 3
+        WindowSize  = "1h"
+        Frequency   = "30m"
+        Query       = @"
+traces
+| where message contains 'ejecucion con contrato serializado' or message contains 'ejecuciones con salida serializada'
+| summarize n = dcount(operation_Id)
+| where n > 0
+"@
+    },
+    @{
+        Name        = "srbalertexpprodocai"
+        DisplayName = "DocumentIA - ExpectedType no resoluble (1 h)"
+        Description = "Trazas 'no resuelve contra el catalogo' o 'no resoluble': el canal de entrada esta enviando etiquetas de negocio en vez de codigos de tipologia. AB#100181."
+        Severity    = 3
+        WindowSize  = "1h"
+        Frequency   = "30m"
+        Query       = @"
+traces
+| where message contains 'no resuelve contra el catalogo' or message contains 'no resoluble'
+| summarize n = dcount(operation_Id)
+| where n > 0
+"@
+    },
+    @{
+        Name        = "srbalertsctprodocai"
+        DisplayName = "DocumentIA - Clasificacion sin contenido textual (1 h)"
+        Description = "Trazas 'sin contenido textual' o 'No hay contexto textual preprocesado': documentos sin texto extraible llegando a la clasificacion. AB#100181."
+        Severity    = 3
+        WindowSize  = "1h"
+        Frequency   = "30m"
+        Query       = @"
+traces
+| where message contains 'No hay contexto textual preprocesado' or message contains 'sin contenido textual'
+| summarize n = dcount(operation_Id)
+| where n > 0
 "@
     }
 )
