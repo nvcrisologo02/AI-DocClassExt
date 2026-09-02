@@ -194,13 +194,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         if (string.IsNullOrWhiteSpace(contextoTexto))
         {
-            _logger.LogWarning(
-                "No hay contexto textual preprocesado para el fallback de clasificación en {Documento}. Se continuará con contexto mínimo.",
+            // AB#100180: sin texto, el LLM inventaba un resumen a partir del nombre del
+            // fichero (o devolvía N/A) y la ejecución cerraba OK. No se llama al modelo.
+            _logger.LogError(
+                "Clasificación sin contenido textual para {Documento}: no se llama al LLM.",
                 input.Entrada.Documento.Name);
 
-            phase1UserText +=
-                $"\n\nNo hay contenido textual disponible para este fallback. " +
-                $"Nombre de archivo: {input.Entrada.Documento.Name}.";
+            return BuildSinContenidoResult(model);
         }
 
         // Log prompts finales si está habilitado
@@ -549,13 +549,12 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         if (string.IsNullOrWhiteSpace(contextoTexto))
         {
-            _logger.LogWarning(
-                "No hay contexto textual preprocesado para la clasificación restringida en {Documento}. Se continuará con contexto mínimo.",
+            // AB#100180: misma guarda en la ruta restringida: sin texto no se llama al modelo.
+            _logger.LogError(
+                "Clasificación restringida sin contenido textual para {Documento}: no se llama al LLM.",
                 input.Entrada.Documento.Name);
 
-            userText +=
-                $"\n\nNo hay contenido textual disponible para este fallback. " +
-                $"Nombre de archivo: {input.Entrada.Documento.Name}.";
+            return BuildSinContenidoResult(model);
         }
 
         // Log prompts finales si está habilitado
@@ -942,6 +941,24 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return fragments.Count == 0
             ? "(sin prompt adicional)"
             : string.Join("\n", fragments);
+    }
+
+    /// <summary>
+    /// Resultado de clasificación cuando no hay contenido textual del documento: no se llama al
+    /// LLM. El orquestador lo traduce a Estado="SIN_CONTENIDO_DOCUMENTO" y persiste la ejecución.
+    /// </summary>
+    private static ResultadoClasificacion BuildSinContenidoResult(ClassificationModelConfig model)
+    {
+        return new ResultadoClasificacion
+        {
+            Modelo = model.DeploymentName,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            Confianza = 0.0,
+            ConfianzaGPT = 0.0,
+            SinContenido = true,
+            FallbackRazon = "Sin contenido textual del documento para clasificar."
+        };
     }
 
     private static ResultadoClasificacion BuildUnclassifiedResult(ClassificationModelConfig model, string reason, string propuesta)

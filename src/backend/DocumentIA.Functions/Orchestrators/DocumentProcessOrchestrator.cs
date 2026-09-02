@@ -1004,6 +1004,30 @@ public class DocumentProcessOrchestrator
                         return salida;
                     }
 
+                    if (resultadoClasificacion.SinContenido)
+                    {
+                        MarcarFinActividad("Clasificar", "Failed", "Sin contenido textual del documento");
+
+                        const string mensajeSinContenido = "Sin contenido del documento: no se puede clasificar ni generar resumen.";
+
+                        salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
+                        salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+                        salida.Resultado.MensajeError = mensajeSinContenido;
+                        salida.Resultado.EstadoCalidad = "ERROR";
+                        salida.Resultado.ConfianzaGlobal = 0;
+                        salida.Resultado.ConfianzaClasificacion = 0;
+
+                        // AB#100180: se persiste (mismo criterio que la guarda de prompt AB#100027).
+                        await EjecutarPasoNegocioSinResultado(
+                            "Persistir",
+                            () => context.CallActivityAsync(
+                                "PersistirActivity",
+                                new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+
+                        FinalizarSeguimiento("Failed", mensajeSinContenido);
+                        return salida;
+                    }
+
                         var mensajeClasificacion = resultadoClasificacion.FallbackLLM
                             ? $"Fallback Azure OpenAI activado ({resultadoClasificacion.FallbackRazon ?? "sin razon informada"})"
                             : (!string.IsNullOrWhiteSpace(resultadoClasificacion.FallbackRazon)

@@ -2623,4 +2623,35 @@ public class DocumentProcessOrchestratorTests
         context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
         salida.DetalleEjecucion.Clasificacion.Modelo.Should().Be("expectedtype-input");
     }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionSinContenido_PersisteSinContenidoDocumento()
+    {
+        // AB#100180: sin texto extraíble, la clasificación respondía con resumen 'N/A' o
+        // inventado desde el nombre del fichero, y la ejecución cerraba OK.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            TipologiaDetectada = "Desconocido",
+            SinContenido = true,
+            FallbackRazon = "Sin contenido textual del documento para clasificar."
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        salida.Resultado.EstadoCalidad.Should().Be("ERROR");
+        salida.DatosExtraidos.Should().NotContainKey("Resumen");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+    }
 }
