@@ -203,9 +203,10 @@ stages:
   - stage: RunMigrations
     displayName: Run Database Migrations
     dependsOn: Build
-    # Este evolutivo se valida en DEV; PRE/PRO mantienen las migraciones
-    # deshabilitadas hasta disponer de su ventana y aprobaciones propias.
-    condition: and(succeeded(), eq('${{ parameters.targetEnvironment }}', 'dev'))
+    # El secreto de DEV usa la identidad administrada de la Function App y no
+    # puede abrirse desde el agente hospedado. La migración se ejecuta después
+    # del despliegue, usando esa misma identidad administrada.
+    condition: false
     jobs:
       - job: MigrateJob
         displayName: Apply EF Core migrations
@@ -413,6 +414,58 @@ stages:
                       } else {
                         Write-Host "✓ Todas las variables de resiliencia CU están aplicadas correctamente"
                         $appliedSettings | ForEach-Object { Write-Host "  ✓ $($_.name) = $($_.value)" }
+                      }
+
+                - task: AzureCLI@2
+                  displayName: Apply EF Core migrations through DEV Function identity
+                  inputs:
+                    azureSubscription: $(AZURE_SERVICE_CONNECTION)
+                    scriptType: 'pscore'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      $ErrorActionPreference = 'Stop'
+                      $settingsJson = @('RunDatabaseMigrationsOnStartup=true') | ConvertTo-Json -Compress -AsArray
+                      $restoreSettingsJson = @('RunDatabaseMigrationsOnStartup=false') | ConvertTo-Json -Compress -AsArray
+                      $migrationCompleted = $false
+
+                      try {
+                        Write-Host "Activando migraciones de arranque sólo para la prueba DEV..."
+                        & .\scripts\configuration\ensure-app-settings.ps1 `
+                          -AppKind functionapp `
+                          -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                          -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          -SettingsJson $settingsJson
+
+                        az functionapp restart `
+                          --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                          --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          --output none
+
+                        Write-Host "Esperando a que la Function App arranque y aplique EF Core..."
+                        Start-Sleep -Seconds 90
+                        $state = az functionapp show `
+                          --resource-group "$(AZURE_RESOURCE_GROUP)" `
+                          --name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          --query state `
+                          --output tsv
+                        if ($state -ne 'Running') {
+                          throw "La Function App no ha vuelto a Running tras la migración ($state)."
+                        }
+
+                        $migrationCompleted = $true
+                        Write-Host "La Function App ha finalizado el arranque con migraciones activadas."
+                      }
+                      finally {
+                        Write-Host "Desactivando migraciones automáticas de arranque..."
+                        & .\scripts\configuration\ensure-app-settings.ps1 `
+                          -AppKind functionapp `
+                          -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                          -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
+                          -SettingsJson $restoreSettingsJson
+                      }
+
+                      if (-not $migrationCompleted) {
+                        throw "No se ha podido validar el arranque de la Function App con la migración habilitada."
                       }
       - deployment: DeployAdminJob
         displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
