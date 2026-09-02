@@ -96,6 +96,9 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
                 return null;
             }
 
+            // AB#100167: el contrato persistido va sin Seguimiento.Actividades desde AB#100166.
+            ContratoTimelineRehidratador.Rehidratar(salida, ultimaConSalida.ActivityTimelineJson);
+
             RehidratarResultadoSiIncompleto(salida, ultimaConSalida);
             await RehidratarTdnSiIncompletoAsync(salida, documento);
 
