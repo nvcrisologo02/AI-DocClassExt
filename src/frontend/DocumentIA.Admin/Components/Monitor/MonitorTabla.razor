@@ -7,6 +7,7 @@
                     <th>Documento</th>
                     <th>Tipología</th>
                     <th>Flujo</th>
+                    <th>Origen</th>
                     <th>Estado</th>
                     <th class="text-end">Confianza</th>
                     <th class="text-end">Duración</th>
@@ -18,7 +19,7 @@
             <tbody>
                 @if (Pagina is null || Pagina.Items.Count == 0)
                 {
-                    <tr><td colspan="10" class="text-center text-muted py-4">
+                    <tr><td colspan="11" class="text-center text-muted py-4">
                         No hay ejecuciones que cumplan el filtro seleccionado.
                     </td></tr>
                 }
@@ -32,6 +33,7 @@
                             <td class="text-truncate" style="max-width: 22rem;">@(e.NombreDocumento ?? "—")</td>
                             <td>@(e.Tipologia ?? "—")</td>
                             <td>@e.TipoFlujo</td>
+                            <td><span class="@(string.IsNullOrWhiteSpace(e.SourceSystem) ? "text-muted" : "badge bg-info text-dark")">@(e.SourceSystem ?? "—")</span></td>
                             <td><span class="badge @ClaseEstado(e.EstadoFinal)">@e.EstadoFinal</span></td>
                             <td class="text-end">
                                 @if (e.ConfianzaGlobal > 0)
@@ -64,7 +66,7 @@
                         @if (expandida)
                         {
                             <tr class="table-active">
-                                <td colspan="10" class="p-3">
+                                <td colspan="11" class="p-3">
                                     @if (CargandoDetalle.Contains(e.EjecucionGuid))
                                     {
                                         <div class="d-flex align-items-center gap-2 py-2 text-muted small">
@@ -74,7 +76,7 @@
                                     }
                                     else if (Detalles.TryGetValue(e.EjecucionGuid, out var detalle))
                                     {
-                                        <EjecucionDetalle Detalle="detalle" SubmittedBy="@e.SubmittedBy" />
+                                        <EjecucionDetalle Detalle="detalle" SubmittedBy="@e.SubmittedBy" SourceSystem="@e.SourceSystem" />
                                     }
                                     else
                                     {

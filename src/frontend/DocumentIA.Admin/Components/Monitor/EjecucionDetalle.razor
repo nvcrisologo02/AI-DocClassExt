@@ -42,6 +42,7 @@ else
                 <dt class="col-sm-2">Versión</dt><dd class="col-sm-4">@(Detalle.Identificacion?.TipologiaVersion ?? "—")</dd>
                 <dt class="col-sm-2">Páginas</dt><dd class="col-sm-4">@(Detalle.Identificacion?.Paginas.ToString() ?? "—")</dd>
                 <dt class="col-sm-2">Solicitado por</dt><dd class="col-sm-4">@(SubmittedBy ?? "—")</dd>
+                <dt class="col-sm-2">Sistema origen</dt><dd class="col-sm-4">@(SourceSystem ?? "—")</dd>
                 <dt class="col-sm-2">GUID</dt><dd class="col-sm-4"><code style="font-size:0.75rem;user-select:all">@Detalle.EjecucionGuid</code></dd>
             </dl>
         </div>
@@ -321,6 +322,7 @@ else
     // lo aporta quien despliega el componente (la fila del monitor conoce el
     // solicitante desde el listado). Sin valor en la pagina /monitor/{guid} standalone.
     [Parameter] public string? SubmittedBy { get; set; }
+    [Parameter] public string? SourceSystem { get; set; }
 
     private int _duracionTotalTimelineMs => Detalle?.Timeline.Sum(a => a.DuracionMs) ?? 0;
 

@@ -29,6 +29,7 @@ public class EjecucionResumenDto
     public int? DuracionPersistenciaMs { get; set; }
     public string? NombreDocumento { get; set; }
     public string? SubmittedBy { get; set; }
+    public string? SourceSystem { get; set; }
     public List<ActividadResumenDto> Actividades { get; set; } = [];
 }
 
@@ -153,6 +154,7 @@ public class EjecucionDetalleDto
 {
     public int Id { get; set; }
     public string EjecucionGuid { get; set; } = string.Empty;
+    public string? SourceSystem { get; set; }
     public string? ModeloClasificacion { get; set; }
     public bool ClassificationOnly { get; set; }
     public string? TipologiaNombreCatalogo { get; set; }
@@ -260,6 +262,7 @@ public class MonitorFiltroDto
     public string? Flujo { get; set; }
     public string? Busqueda { get; set; }
     public string? SubmittedBy { get; set; }
+    public string? SourceSystem { get; set; }
 
     // Recortes de Monitor v2: estado de proceso exacto, calidad por confianza y
     // tramo del histograma. Van aparte de Estado (las tres categorias historicas)
@@ -283,6 +286,7 @@ public class MonitorFiltroDto
         if (!string.IsNullOrWhiteSpace(Flujo)) partes.Add($"flujo={Uri.EscapeDataString(Flujo)}");
         if (!string.IsNullOrWhiteSpace(Busqueda)) partes.Add($"q={Uri.EscapeDataString(Busqueda)}");
         if (!string.IsNullOrWhiteSpace(SubmittedBy)) partes.Add($"submittedby={Uri.EscapeDataString(SubmittedBy)}");
+        if (!string.IsNullOrWhiteSpace(SourceSystem)) partes.Add($"sourcesystem={Uri.EscapeDataString(SourceSystem)}");
         if (!string.IsNullOrWhiteSpace(EstadoProceso)) partes.Add($"estadoproceso={Uri.EscapeDataString(EstadoProceso)}");
         if (!string.IsNullOrWhiteSpace(Calidad)) partes.Add($"calidad={Uri.EscapeDataString(Calidad)}");
         // Punto decimal explicito: con la cultura espanola el separador seria una

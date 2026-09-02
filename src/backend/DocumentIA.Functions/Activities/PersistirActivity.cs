@@ -52,6 +52,9 @@ namespace DocumentIA.Functions.Activities
         {
             var salida = input.Salida;
             var submittedBy = input.SubmittedBy;
+            var sourceSystem = string.IsNullOrWhiteSpace(input.SourceSystem)
+                ? null
+                : input.SourceSystem.Trim();
 
             var nombreArchivoPersistible = ResolveNombreArchivoPersistible(salida.Identificacion.Documento, salida.Identificacion.Guid);
 
@@ -212,6 +215,7 @@ namespace DocumentIA.Functions.Activities
                     OperationId = salida.DetalleEjecucion.OperationId,
                     Tipologia = salida.Identificacion.Tipologia,
                     SubmittedBy = submittedBy,
+                    SourceSystem = sourceSystem,
                     EstadoFinal = salida.Resultado.Estado,
                     ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
                     ModeloClasificacion = salida.DetalleEjecucion.Clasificacion.Modelo,
@@ -389,7 +393,8 @@ namespace DocumentIA.Functions.Activities
                     ["EstadoFinal"]    = ejecucion.EstadoFinal ?? string.Empty,
                     ["UseFallbackLLM"] = ejecucion.UseFallbackLLM.ToString(),
                     ["NombreDocumento"] = salida.Identificacion.Documento ?? string.Empty,
-                    ["EjecucionGuid"]  = ejecucion.EjecucionGuid
+                    ["EjecucionGuid"]  = ejecucion.EjecucionGuid,
+                    ["SourceSystem"]   = ejecucion.SourceSystem ?? string.Empty
                 };
                 _telemetryService.TrackEvent("DocumentProcessed", properties);
 

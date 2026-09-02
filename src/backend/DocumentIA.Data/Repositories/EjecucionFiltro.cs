@@ -20,6 +20,8 @@ namespace DocumentIA.Data.Repositories
         public string? Busqueda { get; set; }
         /// <summary>Fragmento de quien solicito la ejecucion (Documentos.SubmittedBy).</summary>
         public string? SubmittedBy { get; set; }
+        /// <summary>Origen exacto declarado por el consumidor, por ejemplo Colabora.</summary>
+        public string? SourceSystem { get; set; }
 
         /// <summary>
         /// Valor exacto de EstadoFinal. A diferencia de <see cref="Estado"/>, que

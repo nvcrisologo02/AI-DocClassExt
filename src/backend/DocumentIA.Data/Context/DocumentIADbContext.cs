@@ -125,6 +125,10 @@ public class DocumentIADbContext : DbContext
         modelBuilder.Entity<DocumentoEjecucionEntity>()
             .HasIndex(e => e.FechaEjecucion);
 
+        // Las estadisticas del monitor combinan origen y ventana temporal.
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasIndex(e => new { e.SourceSystem, e.FechaEjecucion });
+
         modelBuilder.Entity<PluginEjecucionEntity>()
             .HasIndex(p => new { p.EjecucionId, p.PluginKey });
 

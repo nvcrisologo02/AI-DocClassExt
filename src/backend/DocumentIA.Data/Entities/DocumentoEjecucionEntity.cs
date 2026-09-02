@@ -35,6 +35,10 @@ namespace DocumentIA.Data.Entities
         [MaxLength(200)]
         public string? SubmittedBy { get; set; }
 
+        /// <summary>Sistema/aplicacion de origen declarado por el consumidor (por ejemplo, Colabora).</summary>
+        [MaxLength(100)]
+        public string? SourceSystem { get; set; }
+
         [Required]
         [MaxLength(50)]
         public string EstadoFinal { get; set; } = string.Empty;

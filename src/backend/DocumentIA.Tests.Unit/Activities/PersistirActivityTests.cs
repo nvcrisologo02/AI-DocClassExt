@@ -289,6 +289,38 @@ public class PersistirActivityTests : IDisposable
     }
 
     [Fact]
+    public async Task Run_ConSourceSystemInformado_PersisteElOrigenEnLaEjecucion()
+    {
+        const string sha256 = "sha256_source_system";
+        var salida = BuildSalidaMinima(sha256);
+        var documentoCreado = new DocumentoEntity { Id = 7, SHA256 = sha256 };
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync(documentoCreado);
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) =>
+            {
+                ejecucionCapturada = e;
+                return e;
+            });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida, SourceSystem = "  Colabora  " });
+
+        ejecucionCapturada.Should().NotBeNull();
+        ejecucionCapturada!.SourceSystem.Should().Be("Colabora");
+    }
+
+    [Fact]
     public async Task Run_SinSubmittedBy_DejaSubmittedByNuloEnEjecucion()
     {
         const string sha256 = "sha256_sin_submittedby";

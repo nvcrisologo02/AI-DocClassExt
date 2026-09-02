@@ -147,7 +147,8 @@ public class DocumentProcessOrchestratorTests
         bool classificationOnly = false,
         bool? executeIntegrarWhenClassificationOnly = null,
         int maxPagesForClassificationOnly = 0,
-        bool forzarResumenPorDefecto = false)
+        bool forzarResumenPorDefecto = false,
+        string? sourceSystem = null)
         => new()
         {
             Documento = new Documento
@@ -169,7 +170,8 @@ public class DocumentProcessOrchestratorTests
             Trazabilidad = new Trazabilidad
             {
                 CorrelationId = "test-corr-001",
-                SubmittedBy = "test-user"
+                SubmittedBy = "test-user",
+                SourceSystem = sourceSystem
             }
         };
 
@@ -684,7 +686,7 @@ public class DocumentProcessOrchestratorTests
     public async Task RunOrchestrator_ClasificacionParcial_OmitePipelinePosteriorYPersiste()
     {
         var orchestrator = CreateOrchestrator();
-        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(sourceSystem: "  Colabora  "));
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
@@ -717,7 +719,9 @@ public class DocumentProcessOrchestratorTests
         context.GetLastActivityInput<object>("ValidarActivity").Should().BeNull();
         context.GetLastActivityInput<object>("ObtenerActivoActivity").Should().BeNull();
         context.GetLastActivityInput<object>("IntegrarActivity").Should().BeNull();
-        context.GetLastActivityInput<PersistirInput>("PersistirActivity").Should().NotBeNull();
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput.Should().NotBeNull();
+        persistirInput!.SourceSystem.Should().Be("Colabora");
     }
 
     [Theory]

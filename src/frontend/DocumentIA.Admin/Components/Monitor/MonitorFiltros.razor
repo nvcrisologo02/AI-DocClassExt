@@ -48,6 +48,11 @@
             <input class="form-control" placeholder="Fragmento del solicitante"
                    value="@Filtro.SubmittedBy" @oninput="OnSolicitanteCambiado" />
         </div>
+        <div class="col-12 col-lg-3">
+            <label class="form-label small text-muted mb-1">Sistema origen</label>
+            <input class="form-control" placeholder="Ej. Colabora"
+                   value="@Filtro.SourceSystem" @oninput="OnSistemaOrigenCambiado" />
+        </div>
     </div>
 </div></div>
 
@@ -61,6 +66,7 @@
     // pendiente del otro.
     private Timer? _debounceBusqueda;
     private Timer? _debounceSolicitante;
+    private Timer? _debounceSistemaOrigen;
     private bool _disposed;
 
     // El rango es la anchura de la ventana, no sus extremos: los calcula el propio
@@ -125,6 +131,26 @@
         }, null, 300, Timeout.Infinite);
     }
 
+    private void OnSistemaOrigenCambiado(ChangeEventArgs e)
+    {
+        var texto = Texto(e);
+        _debounceSistemaOrigen?.Dispose();
+        _debounceSistemaOrigen = new Timer(async _ =>
+        {
+            if (_disposed) return;
+            try
+            {
+                await InvokeAsync(async () => await Emitir(f => f.SourceSystem = texto));
+            }
+            catch (ObjectDisposedException)
+            {
+            }
+            catch (Exception)
+            {
+            }
+        }, null, 300, Timeout.Infinite);
+    }
+
     private async Task Emitir(Action<MonitorFiltroDto> cambio)
     {
         var nuevo = Filtro.Clonar();
@@ -143,5 +169,6 @@
         _disposed = true;
         _debounceBusqueda?.Dispose();
         _debounceSolicitante?.Dispose();
+        _debounceSistemaOrigen?.Dispose();
     }
 }

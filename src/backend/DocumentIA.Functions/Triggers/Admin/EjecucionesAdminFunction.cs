@@ -74,6 +74,7 @@ public class EjecucionesAdminFunction
             Flujo = Valor("flujo"),
             Busqueda = Valor("q"),
             SubmittedBy = Valor("submittedby"),
+            SourceSystem = Valor("sourcesystem") ?? Valor("sistemaorigen"),
             EstadoProceso = Valor("estadoproceso"),
             Calidad = Valor("calidad"),
             ConfianzaMin = Numero("confmin"),
@@ -121,6 +122,7 @@ public class EjecucionesAdminFunction
             e.DuracionPersistenciaMs,
             NombreDocumento = e.Documento?.NombreArchivo,
             SubmittedBy = e.SubmittedBy ?? e.Documento?.SubmittedBy,
+            e.SourceSystem,
             Actividades = ParseActivitySummaries(e.ActivityTimelineJson)
         }).ToList();
 
@@ -281,6 +283,7 @@ public class EjecucionesAdminFunction
         {
             ejecucion.Id,
             ejecucion.EjecucionGuid,
+            ejecucion.SourceSystem,
             ejecucion.ModeloClasificacion,
             ejecucion.ClassificationOnly,
             ejecucion.Tipologia,

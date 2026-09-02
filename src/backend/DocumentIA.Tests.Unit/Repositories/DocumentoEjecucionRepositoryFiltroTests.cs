@@ -178,6 +178,47 @@ public class DocumentoEjecucionRepositoryFiltroTests
     }
 
     [Fact]
+    public async Task GetPagedAsync_Should_FiltrarPorSourceSystemExacto()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        context.DocumentoEjecuciones.Single(e => e.Id == 1).SourceSystem = "Colabora";
+        context.DocumentoEjecuciones.Single(e => e.Id == 2).SourceSystem = "Atlas";
+        context.DocumentoEjecuciones.Single(e => e.Id == 3).SourceSystem = "Colabora";
+        context.SaveChanges();
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(10));
+        filtro.SourceSystem = "  Colabora ";
+
+        var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        total.Should().Be(2);
+        items.Should().OnlyContain(e => e.SourceSystem == "Colabora");
+    }
+
+    [Fact]
+    public async Task GetAgregadosAsync_Should_RespetarElFiltroDeSourceSystem()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        context.DocumentoEjecuciones.Single(e => e.Id == 1).SourceSystem = "Colabora";
+        context.DocumentoEjecuciones.Single(e => e.Id == 2).SourceSystem = "Atlas";
+        context.DocumentoEjecuciones.Single(e => e.Id == 3).SourceSystem = "Colabora";
+        context.SaveChanges();
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro(Base, Base.AddDays(10));
+        filtro.SourceSystem = "Colabora";
+        var agregados = await repo.GetAgregadosAsync(filtro);
+        var (_, totalListado) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        agregados.TotalEjecuciones.Should().Be(2);
+        agregados.TotalEjecuciones.Should().Be(totalListado);
+        agregados.Serie.Sum(p => p.Total).Should().Be(totalListado);
+    }
+
+    [Fact]
     public async Task GetPagedAsync_Should_NoRomperCuandoElDocumentoTieneSubmittedByNulo()
     {
         await using var context = CreateContext();

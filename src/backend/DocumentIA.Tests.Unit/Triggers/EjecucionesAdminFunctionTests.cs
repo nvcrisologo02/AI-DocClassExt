@@ -65,7 +65,8 @@ public class EjecucionesAdminFunctionTests
             ["estado"] = "ERROR",
             ["flujo"] = "Clasificacion",
             ["q"] = "escritura",
-            ["submittedby"] = "batch-integracion"
+            ["submittedby"] = "batch-integracion",
+            ["sourcesystem"] = "Colabora"
         });
 
         filtro.Tipologia.Should().Be("NOTS");
@@ -73,6 +74,7 @@ public class EjecucionesAdminFunctionTests
         filtro.Flujo.Should().Be("Clasificacion");
         filtro.Busqueda.Should().Be("escritura");
         filtro.SubmittedBy.Should().Be("batch-integracion");
+        filtro.SourceSystem.Should().Be("Colabora");
     }
 
     [Fact]

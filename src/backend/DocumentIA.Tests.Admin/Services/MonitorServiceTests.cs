@@ -129,6 +129,16 @@ public class MonitorServiceTests
     }
 
     [Fact]
+    public void ToQueryString_ConSourceSystem_IncluyeElParametroExacto()
+    {
+        var filtro = new MonitorFiltroDto { SourceSystem = "Colabora" };
+
+        var query = filtro.ToQueryString();
+
+        query.Should().Contain("sourcesystem=Colabora");
+    }
+
+    [Fact]
     public void ToQueryString_SinSubmittedBy_NoIncluyeElParametro()
     {
         var filtro = new MonitorFiltroDto { SubmittedBy = null };

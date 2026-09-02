@@ -128,6 +128,10 @@ public class DocumentProcessOrchestrator
         var submittedByEjecucion = string.IsNullOrWhiteSpace(entrada.Trazabilidad.SubmittedBy)
             ? null
             : entrada.Trazabilidad.SubmittedBy;
+        var sourceSystemValue = entrada.Trazabilidad.EffectiveSourceSystem;
+        var sourceSystemEjecucion = string.IsNullOrWhiteSpace(sourceSystemValue)
+            ? null
+            : sourceSystemValue.Trim();
 
         var entradaPorObjectIdGdc = !string.IsNullOrWhiteSpace(entrada.Documento.ObjectIdGDC);
         var actividadesNegocio = new List<string>();
@@ -1185,7 +1189,7 @@ public class DocumentProcessOrchestrator
                         "Persistir",
                         () => context.CallActivityAsync(
                             "PersistirActivity",
-                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion, SourceSystem = sourceSystemEjecucion }));
 
                     var mensajeFinal = esFase2SinTdn2Parseable
                         ? $"Tipología parcial TDN1: '{tipologiaParcial}' sin TDN2 parseable en Phase 2"
@@ -1336,7 +1340,7 @@ public class DocumentProcessOrchestrator
                             "Persistir",
                             () => context.CallActivityAsync(
                                 "PersistirActivity",
-                                new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                                new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion, SourceSystem = sourceSystemEjecucion }));
                     }
 
                     FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
@@ -1384,7 +1388,7 @@ public class DocumentProcessOrchestrator
                         "Persistir",
                         () => context.CallActivityAsync(
                             "PersistirActivity",
-                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion, SourceSystem = sourceSystemEjecucion }));
                 }
 
                 FinalizarSeguimiento("Completed", mensajeTipologiaNoIdentificada);
@@ -1681,7 +1685,7 @@ public class DocumentProcessOrchestrator
                     "Persistir",
                     () => context.CallActivityAsync(
                         "PersistirActivity",
-                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion, SourceSystem = sourceSystemEjecucion }));
 
                 FinalizarSeguimiento("Completed", "ClassificationOnly completado");
                 return salida;
@@ -1762,7 +1766,7 @@ public class DocumentProcessOrchestrator
                     "Persistir",
                     () => context.CallActivityAsync(
                         "PersistirActivity",
-                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                        new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion, SourceSystem = sourceSystemEjecucion }));
 
                 FinalizarSeguimiento("Completed", mensajePaginasExcedidas);
                 return salida;
@@ -2321,7 +2325,7 @@ public class DocumentProcessOrchestrator
                 "Persistir",
                 () => context.CallActivityAsync(
                     "PersistirActivity",
-                    new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                    new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion, SourceSystem = sourceSystemEjecucion }));
 
             FinalizarSeguimiento("Completed");
         }

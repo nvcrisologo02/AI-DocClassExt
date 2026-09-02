@@ -340,6 +340,12 @@ namespace DocumentIA.Data.Repositories
                     && (e.SubmittedBy ?? e.Documento.SubmittedBy)!.Contains(submittedBy));
             }
 
+            if (!string.IsNullOrWhiteSpace(filtro.SourceSystem))
+            {
+                var sourceSystem = filtro.SourceSystem.Trim();
+                q = q.Where(e => e.SourceSystem == sourceSystem);
+            }
+
             return q;
         }
 

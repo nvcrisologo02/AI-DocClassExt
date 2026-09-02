@@ -331,6 +331,25 @@ public class Trazabilidad
     public string SubmittedBy { get; set; } = string.Empty;
 
     /// <summary>
+    /// Sistema/aplicación que origina la petición. Colabora lo envía como
+    /// <c>sistemaOrigen</c>; se conserva SourceSystem como nombre interno
+    /// inequívoco para no mezclarlo con el usuario de SubmittedBy.
+    /// </summary>
+    [JsonPropertyName("sistemaOrigen")]
+    public string? SourceSystem { get; set; }
+
+    /// <summary>
+    /// Alias de contrato para nuevos consumidores que utilicen sourceSystem.
+    /// </summary>
+    [JsonPropertyName("sourceSystem")]
+    public string? SourceSystemAlias { get; set; }
+
+    /// <summary>Devuelve el primer origen informado, priorizando el contrato actual de Colabora.</summary>
+    [JsonIgnore]
+    public string? EffectiveSourceSystem =>
+        !string.IsNullOrWhiteSpace(SourceSystem) ? SourceSystem : SourceSystemAlias;
+
+    /// <summary>
     /// Identificador de activo de negocio asociado a la petición (si aplica).
     /// </summary>
     public string? IdActivo { get; set; }
