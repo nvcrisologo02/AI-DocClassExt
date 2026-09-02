@@ -372,7 +372,28 @@ using (var scope = host.Services.CreateScope())
         {
             logger.LogInformation("Applying pending EF Core migrations at startup.");
             dbContext.Database.Migrate();
-            logger.LogInformation("EF Core migrations applied successfully.");
+            
+            if (runMigrations)
+            {
+                logger.LogWarning("Temporary DEV cleanup: removing SourceSystem schema and migration history.");
+                dbContext.Database.ExecuteSqlRaw("""
+                    SET XACT_ABORT ON;
+                    BEGIN TRANSACTION;
+                    IF EXISTS (
+                        SELECT 1 FROM sys.indexes
+                        WHERE object_id = OBJECT_ID(N'dbo.DocumentoEjecuciones')
+                          AND name = N'IX_DocumentoEjecuciones_SourceSystem_FechaEjecucion'
+                    )
+                        DROP INDEX [IX_DocumentoEjecuciones_SourceSystem_FechaEjecucion] ON [dbo].[DocumentoEjecuciones];
+                    IF COL_LENGTH(N'dbo.DocumentoEjecuciones', N'SourceSystem') IS NOT NULL
+                        ALTER TABLE [dbo].[DocumentoEjecuciones] DROP COLUMN [SourceSystem];
+                    DELETE FROM [dbo].[__EFMigrationsHistory]
+                    WHERE [MigrationId] = N'20260902130402_AgregarSourceSystemEjecucion';
+                    COMMIT TRANSACTION;
+                """);
+                logger.LogWarning("Temporary DEV cleanup completed.");
+            }
+
         }
         else
         {
