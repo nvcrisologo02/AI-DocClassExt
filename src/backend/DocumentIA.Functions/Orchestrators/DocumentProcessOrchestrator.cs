@@ -904,6 +904,39 @@ public class DocumentProcessOrchestrator
                 }
             }
 
+            // AB#100179: ExpectedType debe ser un código de tipología del catálogo. El canal GDC
+            // envía etiquetas de negocio en texto libre ("Otros", "Ficha técnica", ...) que no
+            // resuelven y, con el atajo, acababan en NO_CLASIFICADO con Confianza=1.0 sin haber
+            // clasificado. "Desconocido" se respeta: es un valor intencional (monitor / e2e).
+            if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
+                && !string.Equals(entrada.Instrucciones.ExpectedType, "Desconocido", StringComparison.OrdinalIgnoreCase))
+            {
+                ResolvedTipologia? expectedTypeResuelto = null;
+                try
+                {
+                    expectedTypeResuelto = await context.CallActivityAsync<ResolvedTipologia>(
+                        "ResolverTipologiaActivity",
+                        entrada.Instrucciones.ExpectedType);
+                }
+                catch (Exception exExpectedType)
+                {
+                    // Si la resolución falla no se decide aquí: se conserva ExpectedType y la
+                    // resolución posterior (que ya trata KeyNotFoundException) marca NO_CLASIFICADO.
+                    logger.LogWarning(
+                        exExpectedType,
+                        "Paso 3: no se pudo validar ExpectedType '{ExpectedType}'. Se conserva y decide la resolución posterior.",
+                        entrada.Instrucciones.ExpectedType);
+                }
+
+                if (expectedTypeResuelto is { IsDefault: true })
+                {
+                    logger.LogWarning(
+                        "Paso 3: ExpectedType '{ExpectedType}' no resuelve contra el catálogo de tipologías. Se ignora y se clasifica normalmente.",
+                        entrada.Instrucciones.ExpectedType);
+                    entrada.Instrucciones.ExpectedType = null;
+                }
+            }
+
             // 3. Clasificacion
             ResultadoClasificacion resultadoClasificacion;
             if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType))

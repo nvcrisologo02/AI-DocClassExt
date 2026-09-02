@@ -248,13 +248,17 @@ public class DocumentProcessOrchestratorTests
         bool promptEnabled = false,
         bool promptHasDefinition = false,
         string tdn1 = "",
-        string tdn2 = "")
+        string tdn2 = "",
+        // "nota.simple" es una tipología real del catálogo: resuelve y NO es el fallback por
+        // defecto. Relevante desde AB#100179, donde IsDefault distingue "resuelve" de
+        // "no resuelve" para validar ExpectedType.
+        bool isDefault = false)
         => new(
             RequestedValue: "nota.simple",
             TipologiaId: "nota.simple",
             Version: "1.0",
             TechnicalKey: "nota.simple.1_0",
-            IsDefault: true,
+            IsDefault: isDefault,
             ExtractionEnabled: extractionEnabled,
             SkipGDCUpload: skipGdc,
             PromptEnabled: promptEnabled,
@@ -2568,5 +2572,55 @@ public class DocumentProcessOrchestratorTests
 
         salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
         context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeNoResoluble_IgnoraElAtajoYClasifica()
+    {
+        // AB#100179: el canal GDC envía etiquetas de negocio ("Otros", "Ficha técnica")
+        // que no son códigos de tipología; antes saltaban la clasificación y acababan
+        // en NO_CLASIFICADO con Confianza=1.0.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "Ficha técnica");
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Ficha técnica",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // La clasificación real DEBE ejecutarse (el atajo queda descartado).
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().NotBe("expectedtype-input");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeValido_MantieneElAtajo()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "nota.simple");
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        // IsDefault: false => ExpectedType resuelve contra el catálogo y el atajo se mantiene.
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().Be("expectedtype-input");
     }
 }
