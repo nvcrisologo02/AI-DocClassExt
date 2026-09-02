@@ -246,6 +246,14 @@ stages:
               Write-Host "Building solution..."
               dotnet build $(solutionPath) --configuration $(buildConfiguration) --no-restore
 
+              # La factoría de diseño de EF resuelve la conexión desde variables
+              # de entorno; --connection no se consume dentro de la factoría.
+              $env:ConnectionStrings__DocumentIA = "$(SqlConnectionString)"
+              if ([string]::IsNullOrWhiteSpace($env:ConnectionStrings__DocumentIA)) {
+                throw "Key Vault no ha proporcionado SqlConnectionString."
+              }
+              Write-Host "ConnectionStrings__DocumentIA disponible para EF Core: $true"
+
               Write-Host "Applying EF Core migrations against database..."
               dotnet ef database update `
                 --project src/backend/DocumentIA.Data/ `
