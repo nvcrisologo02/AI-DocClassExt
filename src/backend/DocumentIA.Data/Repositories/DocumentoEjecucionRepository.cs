@@ -65,7 +65,10 @@ namespace DocumentIA.Data.Repositories
 
         public async Task<EjecucionAgregadosResult> GetAgregadosAsync(EjecucionFiltro filtro)
         {
-            var q = AplicarFiltro(_context.DocumentoEjecuciones.Include(e => e.Documento), filtro);
+            // Sin Include(Documento): los agregados no leen columnas del documento y,
+            // cuando el filtro de busqueda o SubmittedBy usa la navegacion, EF genera
+            // el join desde el propio Where.
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtro);
 
             var total = await q.CountAsync();
 
@@ -74,12 +77,27 @@ namespace DocumentIA.Data.Repositories
 
             if (total > 0)
             {
-                ok        = await q.CountAsync(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal));
-                revision  = await q.CountAsync(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal));
-                error     = await q.CountAsync(e => EstadoEjecucion.Error.Contains(e.EstadoFinal));
-                fallbacks = await q.CountAsync(e => e.UseFallbackLLM);
-                confianzaMedia = await q.AverageAsync(e => e.ConfianzaGlobal);
-                duracionMedia  = await q.AverageAsync(e => (double)e.DuracionTotalMs);
+                // Una sola pasada en vez de seis: GroupBy constante -> COUNT(CASE ...)
+                // sobre el mismo range-scan.
+                var globales = await q
+                    .GroupBy(e => 1)
+                    .Select(g => new
+                    {
+                        Ok        = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                        Revision  = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                        Error     = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                        Fallbacks = g.Count(e => e.UseFallbackLLM),
+                        ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
+                        DuracionMedia  = g.Average(e => (double)e.DuracionTotalMs)
+                    })
+                    .FirstAsync();
+
+                ok             = globales.Ok;
+                revision       = globales.Revision;
+                error          = globales.Error;
+                fallbacks      = globales.Fallbacks;
+                confianzaMedia = globales.ConfianzaMedia;
+                duracionMedia  = globales.DuracionMedia;
             }
 
             var byTipologia = await q
@@ -230,14 +248,39 @@ namespace DocumentIA.Data.Repositories
                 return bins;
             }
 
-            // Una consulta por tramo en vez de un GROUP BY con un CASE de doce
-            // ramas: el SQL resultante seria ilegible y EF no siempre lo traduce.
+            // Un GROUP BY unico en vez de once counts. La cadena de condicionales usa
+            // los mismos literales que LimitesHistograma y el mismo trato del borde
+            // (limite inferior inclusivo), asi que cada fila cae en el mismo tramo que
+            // con las consultas por rango. EF Core la traduce a un CASE WHEN encadenado,
+            // el mismo patron que ya usa el reparto por calidad.
+            // Si algun dia cambian los tramos hay que tocar LimitesHistograma Y esta cadena.
+            // Unica diferencia de semantica, asumida: los valores fuera de [0, 1.01) —que no
+            // deberian existir— antes no caian en ningun tramo y ahora caen en el primero
+            // (negativos) o en el ultimo (>= 1.01).
+            var porTramo = await q
+                .GroupBy(e =>
+                    e.ConfianzaGlobal < 0.40 ? 0 :
+                    e.ConfianzaGlobal < 0.50 ? 1 :
+                    e.ConfianzaGlobal < 0.60 ? 2 :
+                    e.ConfianzaGlobal < 0.65 ? 3 :
+                    e.ConfianzaGlobal < 0.70 ? 4 :
+                    e.ConfianzaGlobal < 0.75 ? 5 :
+                    e.ConfianzaGlobal < 0.80 ? 6 :
+                    e.ConfianzaGlobal < 0.85 ? 7 :
+                    e.ConfianzaGlobal < 0.90 ? 8 :
+                    e.ConfianzaGlobal < 0.95 ? 9 : 10)
+                .Select(g => new { Tramo = g.Key, Total = g.Count() })
+                .ToListAsync();
+
+            var porIndice = porTramo.ToDictionary(t => t.Tramo, t => t.Total);
             for (var i = 0; i < LimitesHistograma.Length - 1; i++)
             {
-                var desde = LimitesHistograma[i];
-                var hasta = LimitesHistograma[i + 1];
-                var n = await q.CountAsync(e => e.ConfianzaGlobal >= desde && e.ConfianzaGlobal < hasta);
-                bins.Add(new HistogramaBin { Desde = desde, Hasta = hasta, Total = n });
+                bins.Add(new HistogramaBin
+                {
+                    Desde = LimitesHistograma[i],
+                    Hasta = LimitesHistograma[i + 1],
+                    Total = porIndice.TryGetValue(i, out var n) ? n : 0
+                });
             }
 
             return bins;
@@ -343,10 +386,13 @@ namespace DocumentIA.Data.Repositories
             return q;
         }
 
-        public async Task<(IReadOnlyList<DocumentoEjecucionEntity> Items, int Total)> GetPagedAsync(
+        public async Task<(IReadOnlyList<EjecucionListadoItem> Items, int Total)> GetPagedAsync(
             EjecucionFiltro filtro, int page, int pageSize)
         {
-            var q = AplicarFiltro(_context.DocumentoEjecuciones.Include(e => e.Documento), filtro);
+            // Sin Include: la proyeccion referencia e.Documento y EF genera el join
+            // solo con las columnas seleccionadas, en vez de arrastrar los LOB de
+            // la ejecucion y el markdown comprimido del documento.
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtro);
 
             var total = await q.CountAsync();
 
@@ -355,6 +401,29 @@ namespace DocumentIA.Data.Repositories
                 .ThenByDescending(e => e.Id)
                 .Skip((page - 1) * pageSize)
                 .Take(pageSize)
+                .Select(e => new EjecucionListadoItem
+                {
+                    Id = e.Id,
+                    EjecucionGuid = e.EjecucionGuid,
+                    FechaEjecucion = e.FechaEjecucion,
+                    Tipologia = e.Tipologia,
+                    ClassificationOnly = e.ClassificationOnly,
+                    EstadoFinal = e.EstadoFinal,
+                    ConfianzaGlobal = e.ConfianzaGlobal,
+                    ConfianzaClasificacion = e.ConfianzaClasificacion,
+                    UseFallbackLLM = e.UseFallbackLLM,
+                    DuracionTotalMs = e.DuracionTotalMs,
+                    DuracionClasificacionMs = e.DuracionClasificacionMs,
+                    DuracionExtraccionMs = e.DuracionExtraccionMs,
+                    DuracionGDCMs = e.DuracionGDCMs,
+                    DuracionValidacionMs = e.DuracionValidacionMs,
+                    DuracionIntegracionMs = e.DuracionIntegracionMs,
+                    DuracionPersistenciaMs = e.DuracionPersistenciaMs,
+                    NombreDocumento = e.Documento != null ? e.Documento.NombreArchivo : null,
+                    SubmittedBy = e.SubmittedBy
+                        ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
+                    ActivityTimelineJson = e.ActivityTimelineJson
+                })
                 .ToListAsync();
 
             return (items, total);

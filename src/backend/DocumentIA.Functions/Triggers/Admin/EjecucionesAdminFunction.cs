@@ -119,8 +119,8 @@ public class EjecucionesAdminFunction
             e.DuracionValidacionMs,
             e.DuracionIntegracionMs,
             e.DuracionPersistenciaMs,
-            NombreDocumento = e.Documento?.NombreArchivo,
-            SubmittedBy = e.SubmittedBy ?? e.Documento?.SubmittedBy,
+            NombreDocumento = e.NombreDocumento,
+            SubmittedBy = e.SubmittedBy,
             Actividades = ParseActivitySummaries(e.ActivityTimelineJson)
         }).ToList();
 
