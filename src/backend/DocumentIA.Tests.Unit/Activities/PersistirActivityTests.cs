@@ -1,4 +1,5 @@
 #nullable enable
+using System.Text.Json;
 using DocumentIA.Core.Models;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
@@ -547,6 +548,56 @@ public class PersistirActivityTests : IDisposable
         await act.Should().NotThrowAsync();
         _ejecucionRepoMock.Verify(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()), Times.Once);
         _auditoriaRepoMock.Verify(r => r.AddAsync(It.IsAny<AuditoriaEntity>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Run_NoGrabaDatosDuplicadosYPodaElTimelineDelContrato()
+    {
+        // AB#100166: DatosFinales/DatosOriginales ya viajan dentro del contrato y el timeline
+        // vive en su propia columna: no se graban dos veces.
+        const string sha256 = "sha256_dedup_columnas";
+        var salida = BuildSalidaMinima(sha256);
+        salida.DatosExtraidos = new Dictionary<string, object> { ["Titular"] = "Prueba" };
+        salida.DetalleEjecucion.Integracion.DatosOriginales = new Dictionary<string, object> { ["Titular"] = "Original" };
+        salida.DetalleEjecucion.Seguimiento.Actividades = new List<TrazaActividad>
+        {
+            new() { Nombre = "Clasificar", Estado = "Completed", DuracionMs = 1200 },
+            new() { Nombre = "Persistir", Estado = "Running" }
+        };
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { d.Id = 7; return d; });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => { ejecucionCapturada = e; return e; });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        ejecucionCapturada.Should().NotBeNull();
+        ejecucionCapturada!.DatosFinalesJson.Should().BeNull("ya viaja en $.DatosExtraidos del contrato");
+        ejecucionCapturada.DatosOriginalesJson.Should().BeNull("ya viaja en $.DetalleEjecucion.Integracion.DatosOriginales");
+
+        // El timeline SI se graba en su columna (lo proyecta el listado del Monitor, AB#100183).
+        ejecucionCapturada.ActivityTimelineJson.Should().NotBeNullOrWhiteSpace();
+        ejecucionCapturada.ActivityTimelineJson.Should().Contain("Clasificar");
+
+        // ...y NO se duplica dentro del contrato persistido.
+        var contratoPersistido = JsonSerializer.Deserialize<ContratoSalida>(
+            ejecucionCapturada.ContratoSalidaCompletoJson!,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        contratoPersistido!.DetalleEjecucion.Seguimiento.Actividades.Should().BeEmpty();
+
+        // La respuesta al llamador no cambia: el objeto en memoria conserva el timeline.
+        salida.DetalleEjecucion.Seguimiento.Actividades.Should().HaveCount(2);
     }
 
     public void Dispose()

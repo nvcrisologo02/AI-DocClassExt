@@ -203,6 +203,15 @@ namespace DocumentIA.Functions.Activities
                     salida.DetalleEjecucion.Postproceso.Markdown = null;
                 }
 
+                // AB#100166: el timeline se guarda en su propia columna (ActivityTimelineJson,
+                // que proyecta el listado del Monitor) y se poda del contrato para no grabarlo
+                // dos veces. Se restaura despues: la respuesta al llamador no cambia.
+                var actividadesSeguimiento = salida.DetalleEjecucion.Seguimiento?.Actividades;
+                if (salida.DetalleEjecucion.Seguimiento != null)
+                {
+                    salida.DetalleEjecucion.Seguimiento.Actividades = new List<TrazaActividad>();
+                }
+
                 var ejecucion = new DocumentoEjecucionEntity
                 {
                     DocumentoId = documento.Id,
@@ -226,14 +235,17 @@ namespace DocumentIA.Functions.Activities
                         WriteIndented = false 
                     }),
 
-                    ActivityTimelineJson = salida.DetalleEjecucion.Seguimiento?.Actividades != null
-                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Seguimiento.Actividades)
+                    // Se serializa desde la variable capturada: en este punto la lista del
+                    // contrato ya esta podada y serializarla daria un timeline vacio.
+                    ActivityTimelineJson = actividadesSeguimiento != null
+                        ? JsonSerializer.Serialize(actividadesSeguimiento)
                         : null,
-                    
-                    DatosOriginalesJson = salida.DetalleEjecucion.Integracion?.DatosOriginales != null 
-                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Integracion.DatosOriginales) 
-                        : null,
-                    DatosFinalesJson = JsonSerializer.Serialize(salida.DatosExtraidos),
+
+                    // AB#100166: DatosOriginalesJson y DatosFinalesJson dejan de grabarse. Su
+                    // contenido esta en el contrato ($.DetalleEjecucion.Integracion.DatosOriginales
+                    // y $.DatosExtraidos). El historico conserva sus valores.
+                    DatosOriginalesJson = null,
+                    DatosFinalesJson = null,
                     DuracionTotalMs = salida.DetalleEjecucion.Seguimiento?.DuracionTotalMs ?? 0,
                     DuracionClasificacionMs = GetDuracionActividad(salida, "Clasificar"),
                     DuracionExtraccionMs = GetDuracionActividad(salida, "Extraer"),
@@ -252,6 +264,11 @@ namespace DocumentIA.Functions.Activities
                 if (salida.DetalleEjecucion.Postproceso != null)
                 {
                     salida.DetalleEjecucion.Postproceso.Markdown = markdownPostproceso;
+                }
+
+                if (salida.DetalleEjecucion.Seguimiento != null && actividadesSeguimiento != null)
+                {
+                    salida.DetalleEjecucion.Seguimiento.Actividades = actividadesSeguimiento;
                 }
 
                 // 3. Guardar detalle de cada plugin ejecutado
