@@ -423,6 +423,43 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
         result!.DatosExtraidos["Resumen"].ToString().Should().Contain("resumen-exacto");
     }
 
+    [Fact]
+    public async Task Run_ContratoPodado_DevuelveElTimelineDesdeLaColumna()
+    {
+        // AB#100167: desde AB#100166 el contrato se persiste sin Seguimiento.Actividades;
+        // el reenvio de un duplicado debe seguir devolviendo el contrato completo.
+        var documento = new DocumentoEntity { Id = 91, SHA256 = "sha-timeline" };
+        var salidaHistorica = new ContratoSalida
+        {
+            Resultado = new ResultadoFinal { Estado = "OK", ConfianzaGlobal = 0.9 }
+        };
+        salidaHistorica.DetalleEjecucion.Seguimiento.Actividades = new List<TrazaActividad>();
+
+        var ejecucion = new DocumentoEjecucionEntity
+        {
+            Id = 555,
+            DocumentoId = documento.Id,
+            ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaHistorica),
+            ActivityTimelineJson = JsonSerializer.Serialize(new List<TrazaActividad>
+            {
+                new() { Nombre = "Clasificar", Estado = "Completed", DuracionMs = 750 }
+            })
+        };
+
+        _documentoRepository
+            .Setup(r => r.GetBySHA256Async("sha-timeline"))
+            .ReturnsAsync(documento);
+        _documentoEjecucionRepository
+            .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
+            .ReturnsAsync(new List<DocumentoEjecucionEntity> { ejecucion });
+
+        var result = await _sut.Run("sha-timeline");
+
+        result.Should().NotBeNull();
+        result!.DetalleEjecucion.Seguimiento.Actividades.Should().HaveCount(1);
+        result.DetalleEjecucion.Seguimiento.Actividades[0].Nombre.Should().Be("Clasificar");
+    }
+
     private void SetupEjecucionConSalida(DocumentoEntity documento, ContratoSalida salidaHistorica)
     {
         var ejecucion = new DocumentoEjecucionEntity

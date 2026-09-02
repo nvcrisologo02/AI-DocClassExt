@@ -1,4 +1,4 @@
-#nullable enable
+﻿#nullable enable
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Data.Entities;
@@ -131,5 +131,50 @@ public class RecuperarMarkdownPersistidoActivityTests
 
         resultado.Encontrado.Should().BeFalse();
         resultado.DocumentoId.Should().Be(30);
+    }
+
+    [Fact]
+    public async Task Run_ConMarkdownBinario_LoDevuelve()
+    {
+        const string markdown = "# markdown binario";
+        var documento = new DocumentoEntity
+        {
+            Id = 301,
+            SHA256 = "sha-bin",
+            NormalizacionMarkdownGzip = MarkdownCompression.Compress(markdown)
+        };
+
+        _documentoRepository
+            .Setup(r => r.GetBySHA256Async("sha-bin"))
+            .ReturnsAsync(documento);
+
+        var result = await _sut.Run(new RecuperarMarkdownPersistidoInput { Sha256 = "sha-bin" });
+
+        result.Encontrado.Should().BeTrue();
+        result.Markdown.Should().Be(markdown);
+    }
+
+    [Fact]
+    public async Task Run_SoloConMarkdownBase64Historico_CaeAlRespaldo()
+    {
+        // Cubre el historico sin migrar y cualquier fila escrita por una version anterior
+        // tras una vuelta atras: la lectura no puede depender solo de la columna nueva.
+        const string markdown = "# markdown historico";
+        var documento = new DocumentoEntity
+        {
+            Id = 302,
+            SHA256 = "sha-hist",
+            NormalizacionMarkdownGzip = null,
+            NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(markdown)
+        };
+
+        _documentoRepository
+            .Setup(r => r.GetBySHA256Async("sha-hist"))
+            .ReturnsAsync(documento);
+
+        var result = await _sut.Run(new RecuperarMarkdownPersistidoInput { Sha256 = "sha-hist" });
+
+        result.Encontrado.Should().BeTrue();
+        result.Markdown.Should().Be(markdown);
     }
 }

@@ -4,6 +4,7 @@ using DocumentIA.Data.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DocumentIA.Data.Migrations
 {
     [DbContext(typeof(DocumentIADbContext))]
-    partial class DocumentIADbContextModelSnapshot : ModelSnapshot
+    [Migration("20260902093812_IdActivoEscalarYSpPorIdActivo")]
+    partial class IdActivoEscalarYSpPorIdActivo
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -11398,9 +11401,6 @@ namespace DocumentIA.Data.Migrations
                     b.Property<string>("NormalizacionMarkdownCompressed")
                         .HasColumnType("nvarchar(max)");
 
-                    b.Property<byte[]>("NormalizacionMarkdownGzip")
-                        .HasColumnType("varbinary(max)");
-
                     b.Property<int>("PagesProcessed")
                         .HasColumnType("int");
 
@@ -11846,9 +11846,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 9, 2, 10, 33, 12, 555, DateTimeKind.Utc).AddTicks(5942),
+                            FechaCreacion = new DateTime(2026, 9, 2, 9, 38, 11, 17, DateTimeKind.Utc).AddTicks(4836),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 9, 2, 10, 33, 12, 555, DateTimeKind.Utc).AddTicks(5934),
+                            PublicadaEn = new DateTime(2026, 9, 2, 9, 38, 11, 17, DateTimeKind.Utc).AddTicks(4831),
                             PublicadaPor = "seed",
                             Version = "1.0",
                             VersionPublicada = "1.0"

@@ -297,6 +297,27 @@ Severidad 3 a propósito: son señales de calidad para revisar, no caídas de se
 **Aplicación en PRO:** requiere ejecutar el script con permisos de Monitoring Contributor
 (`./scripts/observability/create-monitor-alerts.ps1 -ActionGroupId <id>`), no se despliega con el código.
 
+### Alerta de capacidad de la base de datos (AB#100171, 2026-09-02)
+
+| Regla | Condición | Ventana / Frecuencia | Sev |
+|-------|-----------|----------------------|-----|
+| `srbalertstoprodocai` | `storage_percent` de la BD `DocumentIA` > 80% | 60 min / 30 min | 2 |
+
+Existe para no repetir el episodio de agosto de 2026: la BD se llenó contra su límite de 2 GB
+sin aviso previo y hubo que ampliar de urgencia. Con la ampliación a 20 GB y las optimizaciones
+de AB#100165 el margen es amplio, pero el aviso al 80% da semanas de reacción en lugar de horas.
+
+Es una **metric alert de plataforma** sobre el recurso SQL, no una scheduled query rule sobre
+Application Insights: usa `az monitor metrics alert` en vez de `az monitor scheduled-query`, por
+eso vive en su propio script `scripts/observability/create-db-capacity-alert.ps1` y no en
+`create-monitor-alerts.ps1`.
+
+Severidad 2 (no 3, como las de calidad): quedarse sin espacio en la BD detiene la persistencia
+de ejecuciones, que es una caída de servicio con pérdida de trazabilidad.
+
+**Aplicación en PRO:** requiere permisos de Monitoring Contributor y no se despliega con el
+código: `./scripts/observability/create-db-capacity-alert.ps1 -ActionGroupId <id de srbagoperprodocai>`.
+
 ### Action group de avisos (correo)
 
 - **Recurso:** `srbagoperprodocai` (short name `docaiops`), RG `SRBRGDOCSAIPROD`, ubicación Global.
