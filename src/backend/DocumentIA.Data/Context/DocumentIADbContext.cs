@@ -122,6 +122,12 @@ public class DocumentIADbContext : DbContext
             .HasIndex(e => e.EjecucionGuid)
             .IsUnique();
 
+        // AB#100168: sustituye a IX_DocumentoEjecuciones_IdActivoNormalizado_DocumentoId,
+        // que colgaba de una columna calculada sobre DatosFinalesJson.
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasIndex(e => new { e.IdActivo, e.DocumentoId })
+            .HasDatabaseName("IX_DocumentoEjecuciones_IdActivo_DocumentoId");
+
         // Indice cubriente del Monitor: todos los filtros y agregados de
         // GetAgregadosAsync/GetPagedAsync resuelven sobre el indice sin tocar
         // el cluster (engordado por los LOB de contrato y timeline). Con la

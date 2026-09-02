@@ -228,6 +228,12 @@ namespace DocumentIA.Functions.Activities
                     UseFallbackLLM = salida.DetalleEjecucion.Clasificacion.FallbackLLM,
                     ClassificationOnly = salida.DetalleEjecucion.ClassificationOnly,
                     NivelClasificacion = salida.DetalleEjecucion.NivelClasificacion,
+
+                    // AB#100168: normalizado en escritura (trim + mayusculas), igual que hacia
+                    // la columna calculada, para que el filtro del SP siga comparando igual.
+                    IdActivo = string.IsNullOrWhiteSpace(salida.Integridad.IdActivo)
+                        ? null
+                        : salida.Integridad.IdActivo.Trim().ToUpperInvariant(),
                     
                     // NUEVO: Guardar respuesta completa para auditoria
                     ContratoSalidaCompletoJson = JsonSerializer.Serialize(salida, new JsonSerializerOptions 

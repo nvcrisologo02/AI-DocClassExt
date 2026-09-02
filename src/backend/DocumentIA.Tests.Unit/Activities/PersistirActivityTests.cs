@@ -600,6 +600,63 @@ public class PersistirActivityTests : IDisposable
         salida.DetalleEjecucion.Seguimiento.Actividades.Should().HaveCount(2);
     }
 
+    [Fact]
+    public async Task Run_PersisteIdActivoEscalarEnLaEjecucion()
+    {
+        // AB#100168: el filtro por IdActivo deja de depender de una columna calculada sobre
+        // DatosFinalesJson (que ya no se graba) y pasa a una columna escalar real.
+        const string sha256 = "sha256_idactivo";
+        var salida = BuildSalidaMinima(sha256);
+        salida.Integridad.IdActivo = " act-12345 ";
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { d.Id = 11; return d; });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => { ejecucionCapturada = e; return e; });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        ejecucionCapturada.Should().NotBeNull();
+        ejecucionCapturada!.IdActivo.Should().Be("ACT-12345", "se normaliza en escritura igual que hacia la columna calculada");
+    }
+
+    [Fact]
+    public async Task Run_SinIdActivo_DejaLaColumnaNula()
+    {
+        const string sha256 = "sha256_sin_idactivo";
+        var salida = BuildSalidaMinima(sha256);
+        salida.Integridad.IdActivo = null;
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { d.Id = 12; return d; });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => { ejecucionCapturada = e; return e; });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        ejecucionCapturada!.IdActivo.Should().BeNull("sin activo resuelto no debe guardarse cadena vacia");
+    }
+
     public void Dispose()
     {
         _context.Dispose();
