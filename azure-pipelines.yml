@@ -203,7 +203,9 @@ stages:
   - stage: RunMigrations
     displayName: Run Database Migrations
     dependsOn: Build
-    condition: false
+    # Este evolutivo se valida en DEV; PRE/PRO mantienen las migraciones
+    # deshabilitadas hasta disponer de su ventana y aprobaciones propias.
+    condition: and(succeeded(), eq('${{ parameters.targetEnvironment }}', 'dev'))
     jobs:
       - job: MigrateJob
         displayName: Apply EF Core migrations
