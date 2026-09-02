@@ -251,6 +251,7 @@ ExponentialBackoff = true
 ## 🔔 Alertas Implementadas en Azure Monitor (AB#99083, 2026-08-04)
 
 **Estado:** ✅ 5 scheduled query rules activas sobre `srbappiprodocai` + action group de correo asociado.
+Más 3 reglas de fiabilidad añadidas al script en AB#100181 (ver sección más abajo), pendientes de aplicar en PRO.
 
 | Regla | Condición | Ventana / Frecuencia | Sev |
 |-------|-----------|----------------------|-----|
@@ -268,7 +269,33 @@ Además existen 2 metric alerts previas de plataforma: `srbalertcpuprodocai` (CP
 - No existen los eventos `GdcUploadFailed` / `GptFallbackUsed` en el código; el fallback se mide con la dimensión `UseFallbackLLM` de `DocumentProcessed`.
 - La alerta de inactividad se amplió de 60 a 180 min (2026-08-14): el filtro horario de la query aplica al momento de evaluación, no a la ventana, así que se evalúa desde las 11:00 para que las 3 h previas caigan enteras en jornada (8:00-18:00) y no salte de madrugada/primera hora sin tráfico. Trade-off: la última detección posible del día es ~17:xx; un tramo de silencio iniciado después de las 15:00 no alerta ese día.
 
-**Gestión (script idempotente):** `scripts/observability/create-monitor-alerts.ps1` crea o actualiza las 5 reglas. Re-ejecutable sin riesgo; parámetro `-ActionGroupId` para asociar el action group.
+**Gestión (script idempotente):** `scripts/observability/create-monitor-alerts.ps1` crea o actualiza las reglas. Re-ejecutable sin riesgo; parámetro `-ActionGroupId` para asociar el action group.
+
+### Alertas de fiabilidad de resumen y persistencia (AB#100181, 2026-09-01)
+
+Tres reglas nuevas en el mismo script idempotente, que vigilan los modos de fallo de INC1338832.
+Los tres eran invisibles: no persistían o cerraban `OK`, y solo se detectaban buceando en App Insights.
+
+| Regla | Condición | Ventana / Frecuencia | Sev |
+|-------|-----------|----------------------|-----|
+| `srbalertdupprodocai` | Trazas de reutilización por duplicado sin contrato histórico reutilizable | 60 min / 30 min | 3 |
+| `srbalertexpprodocai` | Trazas de `ExpectedType` que no resuelve contra el catálogo de tipologías | 60 min / 30 min | 3 |
+| `srbalertsctprodocai` | Trazas de clasificación sin contenido textual extraíble | 60 min / 30 min | 3 |
+
+**Objetivo: quedar en silencio.** Tras desplegar AB#100177 (fallback de dedup), AB#100179 (validación
+de `ExpectedType`) y AB#100180 (guarda de contenido + allowlist de extensiones), estas tres reglas no
+deberían dispararse. Si saltan, el caso sigue ocurriendo por una vía no cubierta por los fixes:
+
+- `srbalertdupprodocai`: quedan documentos cuyas ejecuciones históricas no tienen contrato serializado.
+- `srbalertexpprodocai`: el canal de entrada (GDC) sigue enviando etiquetas de negocio en vez de códigos
+  de tipología — es la señal que respalda la coordinación pendiente con el integrador (AB#100179).
+- `srbalertsctprodocai`: siguen llegando documentos sin texto extraíble; revisar formato de origen y
+  el estado de DI Layout.
+
+Severidad 3 a propósito: son señales de calidad para revisar, no caídas de servicio.
+
+**Aplicación en PRO:** requiere ejecutar el script con permisos de Monitoring Contributor
+(`./scripts/observability/create-monitor-alerts.ps1 -ActionGroupId <id>`), no se despliega con el código.
 
 ### Action group de avisos (correo)
 

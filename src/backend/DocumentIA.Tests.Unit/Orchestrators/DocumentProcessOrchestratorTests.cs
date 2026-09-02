@@ -248,13 +248,17 @@ public class DocumentProcessOrchestratorTests
         bool promptEnabled = false,
         bool promptHasDefinition = false,
         string tdn1 = "",
-        string tdn2 = "")
+        string tdn2 = "",
+        // "nota.simple" es una tipología real del catálogo: resuelve y NO es el fallback por
+        // defecto. Relevante desde AB#100179, donde IsDefault distingue "resuelve" de
+        // "no resuelve" para validar ExpectedType.
+        bool isDefault = false)
         => new(
             RequestedValue: "nota.simple",
             TipologiaId: "nota.simple",
             Version: "1.0",
             TechnicalKey: "nota.simple.1_0",
-            IsDefault: true,
+            IsDefault: isDefault,
             ExtractionEnabled: extractionEnabled,
             SkipGDCUpload: skipGdc,
             PromptEnabled: promptEnabled,
@@ -2479,6 +2483,175 @@ public class DocumentProcessOrchestratorTests
         context.GetActivityCallCount("PersistirActivity").Should().Be(1);
         var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
         persistirInput.Should().NotBeNull();
+        persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaNoResoluble_PersisteEjecucionNoClasificada()
+    {
+        // AB#100178: la rama NO_CLASIFICADO retornaba sin PersistirActivity y la ejecución
+        // desaparecía (caso DICTAMEN_TECNICO_CORNELLA en PRO, 25/08).
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.4,
+            TipologiaDetectada = "etiqueta-inexistente"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "etiqueta-inexistente",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput!.Salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoSinHistoricoReutilizable_PersisteEjecucionDuplicada()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", (ContratoSalida?)null);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("DUPLICADO");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistirInput!.Salida.Resultado.Estado.Should().Be("DUPLICADO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnlyConTipologiaDesconocida_PersisteEjecucion()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.ClassificationOnly = true;
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            TipologiaDetectada = "sin-catalogo"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "sin-catalogo",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("NO_CLASIFICADO");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeNoResoluble_IgnoraElAtajoYClasifica()
+    {
+        // AB#100179: el canal GDC envía etiquetas de negocio ("Otros", "Ficha técnica")
+        // que no son códigos de tipología; antes saltaban la clasificación y acababan
+        // en NO_CLASIFICADO con Confianza=1.0.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "Ficha técnica");
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Ficha técnica",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // La clasificación real DEBE ejecutarse (el atajo queda descartado).
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().NotBe("expectedtype-input");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeValido_MantieneElAtajo()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "nota.simple");
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        // IsDefault: false => ExpectedType resuelve contra el catálogo y el atajo se mantiene.
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().Be("expectedtype-input");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionSinContenido_PersisteSinContenidoDocumento()
+    {
+        // AB#100180: sin texto extraíble, la clasificación respondía con resumen 'N/A' o
+        // inventado desde el nombre del fichero, y la ejecución cerraba OK.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            TipologiaDetectada = "Desconocido",
+            SinContenido = true,
+            FallbackRazon = "Sin contenido textual del documento para clasificar."
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        salida.Resultado.EstadoCalidad.Should().Be("ERROR");
+        salida.DatosExtraidos.Should().NotContainKey("Resumen");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
         persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
     }
 }

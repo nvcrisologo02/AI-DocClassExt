@@ -421,4 +421,88 @@ public class IngestAPITriggerTests
         durableClient.VerifyNoOtherCalls();
         blobStorage.VerifyNoOtherCalls();
     }
+
+    [Fact]
+    public async Task Run_ExtensionNoSoportada_Devuelve400()
+    {
+        // AB#100180: un .zip llegaba hasta DI/LLM y terminaba en resumen N/A con estado OK.
+        var logger = new Mock<ILogger<IngestAPITrigger>>();
+        var blobStorage = new Mock<IBlobStorageService>(MockBehavior.Strict);
+        var promptValidator = new PromptInstruccionesValidator(new PromptModelRegistryLoader("dummy.json"));
+        var settings = Options.Create(new ClassificationRoutingSettings
+        {
+            NivelClasificacionDefault = ClassificationLevelResolver.LevelTdn1Tdn2
+        });
+
+        var function = new IngestAPITrigger(logger.Object, promptValidator, CreateRestriccionValidatorSinCatalogo(), blobStorage.Object, settings);
+
+        var body = JsonSerializer.Serialize(new
+        {
+            documento = new
+            {
+                name = "adjuntos.zip",
+                content = new { base64 = "dGVzdA==" }
+            },
+            instrucciones = new { classification = new { } },
+            trazabilidad = new { correlationId = "corr-001", submittedBy = "tester" }
+        });
+
+        var request = HttpFunctionTestFactory.CreateRequest(
+            method: "POST",
+            url: "http://localhost/api/ingest",
+            body: body,
+            headers: new Dictionary<string, string> { ["Content-Type"] = "application/json" });
+        var durableClient = new Mock<DurableTaskClient>(MockBehavior.Strict, "test");
+
+        var response = await function.Run(request, durableClient.Object);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        durableClient.VerifyNoOtherCalls();
+        blobStorage.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Run_ExtensionSoportada_NoRechazaPorExtension()
+    {
+        var logger = new Mock<ILogger<IngestAPITrigger>>();
+        var blobStorage = new Mock<IBlobStorageService>(MockBehavior.Strict);
+        var promptValidator = new PromptInstruccionesValidator(new PromptModelRegistryLoader("dummy.json"));
+        var settings = Options.Create(new ClassificationRoutingSettings
+        {
+            NivelClasificacionDefault = ClassificationLevelResolver.LevelTdn1Tdn2
+        });
+
+        var durableClient = new Mock<DurableTaskClient>(MockBehavior.Strict, "test");
+        durableClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync("instance-ext-ok");
+
+        var function = new IngestAPITrigger(logger.Object, promptValidator, CreateRestriccionValidatorSinCatalogo(), blobStorage.Object, settings);
+
+        var body = JsonSerializer.Serialize(new
+        {
+            documento = new
+            {
+                name = "documento.pdf",
+                content = new { base64 = "dGVzdA==" }
+            },
+            instrucciones = new { classification = new { } },
+            trazabilidad = new { correlationId = "corr-001", submittedBy = "tester" }
+        });
+
+        var request = HttpFunctionTestFactory.CreateRequest(
+            method: "POST",
+            url: "http://localhost/api/ingest",
+            body: body,
+            headers: new Dictionary<string, string> { ["Content-Type"] = "application/json" });
+
+        var response = await function.Run(request, durableClient.Object);
+
+        response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
+    }
 }
