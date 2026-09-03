@@ -494,7 +494,7 @@ stages:
     condition: succeeded()
     jobs:
       - deployment: DeployAssetResolverJob
-        displayName: Deploy to $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
+        displayName: Deploy to ${{ variables.AZURE_ASSET_RESOLVER_WEB_APP_NAME }}
         environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
