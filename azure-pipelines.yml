@@ -405,7 +405,7 @@ stages:
                         $appliedSettings | ForEach-Object { Write-Host "  ✓ $($_.name) = $($_.value)" }
                       }
       - deployment: DeployAdminJob
-        displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
+        displayName: Deploy to ${{ variables.AZURE_ADMIN_WEB_APP_NAME }}
         environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
