@@ -258,7 +258,7 @@ stages:
     condition: succeeded()
     jobs:
       - deployment: DeployFunctionsJob
-        displayName: Deploy to srbappprodocai
+        displayName: Deploy to $(AZURE_FUNCTIONS_APP_NAME)
         environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
