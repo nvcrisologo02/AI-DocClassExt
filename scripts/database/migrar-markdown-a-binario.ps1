@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Copia Documentos.NormalizacionMarkdownCompressed (Base64 de GZip) a
     Documentos.NormalizacionMarkdownGzip (GZip binario). AB#100169.
@@ -99,14 +99,23 @@ SELECT @@ROWCOUNT;
 }
 
 # Comprobacion de integridad: los bytes de la columna nueva deben coincidir con la
-# decodificacion Base64 de la antigua en TODAS las filas migradas.
-$discrepancias = Invoke-Scalar @"
+# decodificacion Base64 de la antigua en TODAS las filas migradas. Va por tramos:
+# en una sola consulta agota el CommandTimeout en un S0 (le paso a PRO el 03/09,
+# decodificando 640 MB de Base64 de una vez).
+$discrepancias = 0
+$desdeCheck = 0
+while ($desdeCheck -lt $maxId) {
+    $hastaCheck = $desdeCheck + 10000
+    $discrepancias += [int](Invoke-Scalar @"
 SELECT COUNT(*) FROM dbo.Documentos
-WHERE NormalizacionMarkdownGzip IS NOT NULL
+WHERE Id > $desdeCheck AND Id <= $hastaCheck
+  AND NormalizacionMarkdownGzip IS NOT NULL
   AND NormalizacionMarkdownCompressed IS NOT NULL
   AND NormalizacionMarkdownGzip <>
       CAST(N'' AS XML).value('xs:base64Binary(sql:column("NormalizacionMarkdownCompressed"))', 'varbinary(max)');
-"@
+"@)
+    $desdeCheck = $hastaCheck
+}
 
 $restantes = Invoke-Scalar @"
 SELECT COUNT(*) FROM dbo.Documentos
