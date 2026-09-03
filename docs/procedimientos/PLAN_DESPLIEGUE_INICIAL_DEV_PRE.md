@@ -248,6 +248,13 @@ Caso real DEV validado:
 - AppId service connection DEV: efff077f-57d1-41c5-b66f-7b0d2e00fc0e
 - Rol verificado: Key Vault Secrets Officer
 
+Caso real PRE validado (2026-08-31):
+
+- Service connection: AI DocClassExt PRE (identidad `sareb-AI DocClassExt-a2694897-36aa-4f2e-9878-7de073674a6e`)
+- AppId: 1d2b166d-e608-487e-9711-5c5fba9b157a | ObjectId: 3fc220ce-15f0-4818-b64f-c2cbcba3d7b7
+- Sintoma: bootstrap denegado en `Microsoft.KeyVault/vaults/secrets/setSecret/action` con error `ForbiddenByRbac` sobre `srbkvpredocai` (el rol Colaborador heredado no cubre plano de datos)
+- Fix: asignado `Key Vault Secrets Officer` sobre el vault usando `--assignee-object-id` + `--assignee-principal-type ServicePrincipal` (evita el lookup en Graph, que puede fallar con WIF)
+
 ### 6.5 Configuracion de Function App
 
 Importante:
