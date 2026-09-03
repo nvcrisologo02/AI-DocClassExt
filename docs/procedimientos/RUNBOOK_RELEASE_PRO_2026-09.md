@@ -34,6 +34,17 @@ reescrito mantiene el mismo resultset.
       `2026-09-02/markdown-binario-pro.sql`, `2026-09-02/idactivo-sp-pro.sql`,
       `2026-09-01/indice-monitor-pro.sql`. Los tres son idempotentes (guiados por
       `__EFMigrationsHistory`) y re-ejecutables.
+- [ ] **Backup pre-release** (ver "Plan de restauración" más abajo):
+  - Anotar la marca de tiempo UTC de inicio de la ventana (`T0`) — es el punto de PITR.
+  - Crear la copia explícita de la BD (transaccionalmente consistente, la app sigue
+    funcionando mientras se crea):
+    ```bash
+    az sql db copy --subscription "Producción Central" \
+      --resource-group SRBRGDOCSAIPROD --server srbsqlprodocai --name DocumentIA \
+      --dest-name DocumentIA-prerel-202609 --service-objective S0
+    ```
+    Con ~2,9 GB tarda unos minutos; esperar a que el estado sea `Online` antes de empezar la
+    Fase 1. Coste: un S0 adicional (~céntimos/día); se borra tras el periodo de validación.
 
 ## Fase 1 — Ventana de BD (única intervención manual de esquema)
 
@@ -153,6 +164,43 @@ por tandas.
   en PRO durante un tiempo.
 - **No** aplicar retención/archivado de contratos ni compresión del contrato: pospuesto a medir
   el crecimiento un mes (spec de AB#100165).
+
+## Plan de restauración de BD
+
+**Protección disponible** (verificada el 03/09 contra la configuración real de PRO):
+
+| Mecanismo | Qué da | RPO | RTO |
+|---|---|---|---|
+| **PITR automático** (retención 7 días, diferencial cada 24 h) | Restaurar a *cualquier instante* de los últimos 7 días, en una BD nueva | Segundos (log continuo) | **Incierto en tier DTU**: restaurar 2,9 GB puede ir de decenas de minutos a horas; Azure no lo garantiza en S0 |
+| **Copia pre-release** (`DocumentIA-prerel-202609`, Fase 0) | Foto consistente justo antes de la ventana, **ya restaurada y online** | El instante de la copia (T0) | **Minutos**: solo el swap de nombres |
+
+**Escalera de recuperación — usar siempre el peldaño más bajo posible:**
+
+1. **Falla un script de la Fase 1 a medias** → relanzarlo (idempotente por bloque, completa lo
+   que falte). Sin restauración: los scripts solo tocan esquema, no datos.
+2. **Hay que deshacer un cambio de esquema concreto** → bloques `Down` de la migración
+   correspondiente (índice simple, columna calculada + índice + SP originales, o borrar la
+   columna de markdown). Sin pérdida: las columnas origen conservan todo.
+3. **El código nuevo da problemas** → redesplegar `16e51bc`. Sin tocar BD: el código antiguo
+   convive con el esquema nuevo (verificado) y la escritura dual del markdown garantiza que
+   nada escrito se pierde.
+4. **Un backfill deja datos sospechosos** → los backfills solo rellenan columnas nuevas;
+   basta `UPDATE ... SET IdActivo = NULL` / `SET NormalizacionMarkdownGzip = NULL` en el rango
+   afectado y relanzar. (El de markdown, además, verifica byte a byte y aborta solo.)
+5. **Último recurso — daño de datos amplio o de causa desconocida** → restauración completa:
+   - Opción rápida (copia): `ALTER DATABASE [DocumentIA] MODIFY NAME = [DocumentIA-danada]` y
+     `ALTER DATABASE [DocumentIA-prerel-202609] MODIFY NAME = [DocumentIA]` (T-SQL en `master`;
+     cerrar conexiones activas antes). Corte de servicio de ~1-2 min durante el swap; las
+     cadenas de conexión no cambian.
+   - Opción PITR (si el daño se detectó tarde y la copia ya no sirve):
+     `az sql db restore --dest-name DocumentIA-restore --time "<UTC>"` y el mismo swap.
+   - **Coste asumido de este peldaño**: se pierden las ejecuciones procesadas después del punto
+     de restauración (los documentos siguen en blob y GDC, pero su rastro en BD desaparece).
+     Por eso es el último recurso y por eso la decisión debe tomarse rápido si llega el caso.
+
+**Cierre**: si a los 7 días de la release no ha hecho falta, borrar la copia
+(`az sql db delete --name DocumentIA-prerel-202609 ...`) para no pagar el S0 extra. El PITR
+sigue cubriendo los 7 días rodantes de siempre.
 
 ## Vuelta atrás
 
