@@ -41,6 +41,25 @@ Contra `srbsqlprodocai.database.windows.net` / `DocumentIA`
 (`sqlcmd -G` o el patrón token az + `SqlConnection.AccessToken` si el MFA bloquea `-G`).
 Presupuestar **30-45 min** (los dos índices sobre una tabla de 1,7 GB dominan el tiempo).
 
+**Disponibilidad: esta fase NO requiere parada.** El sistema puede seguir procesando durante
+toda la ventana. Detalle por operación (scripts v2 del 03/09, sin transacción global — la
+versión inicial retenía el bloqueo de esquema durante los builds y sí habría bloqueado la tabla):
+
+| Operación | Bloqueo | Efecto |
+|---|---|---|
+| `ADD COLUMN` nullable (×2) | Sch-M de milisegundos | Solo metadatos; imperceptible |
+| `CREATE INDEX ... ONLINE=ON` (×2) | Sch-S al inicio, Sch-M breve al final | La tabla admite lecturas y escrituras durante todo el build |
+| `DROP INDEX` / `DROP COLUMN` calculada | Sch-M de milisegundos | Solo metadatos |
+| `CREATE OR ALTER PROCEDURE` | ninguno relevante | — |
+
+Impactos residuales, no de disponibilidad: (a) cada Sch-M debe esperar a que terminen las
+transacciones en curso sobre la tabla — con carga alta puede encolar peticiones unos segundos,
+de ahí la ventana de baja actividad; (b) los builds ONLINE consumen DTU del S0 y las consultas
+del Monitor pueden ir más lentas esos minutos (degradación, no corte). El índice cubriente se
+crea **antes** de borrar el simple: en ningún momento la tabla se queda sin índice de
+`FechaEjecucion`. Los tres scripts son re-ejecutables: si uno falla a medias, se relanza y
+completa lo que falte.
+
 - [ ] 1.1 `markdown-binario-pro.sql` (AB#100169) — añade la columna `varbinary` nullable.
       Operación de metadatos, instantánea.
 - [ ] 1.2 `idactivo-sp-pro.sql` (AB#100168) — columna `IdActivo` + índice (`ONLINE=ON`), retirada
