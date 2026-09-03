@@ -34,17 +34,21 @@ reescrito mantiene el mismo resultset.
       `2026-09-02/markdown-binario-pro.sql`, `2026-09-02/idactivo-sp-pro.sql`,
       `2026-09-01/indice-monitor-pro.sql`. Los tres son idempotentes (guiados por
       `__EFMigrationsHistory`) y re-ejecutables.
-- [ ] **Backup pre-release** (ver "Plan de restauración" más abajo):
-  - Anotar la marca de tiempo UTC de inicio de la ventana (`T0`) — es el punto de PITR.
-  - Crear la copia explícita de la BD (transaccionalmente consistente, la app sigue
-    funcionando mientras se crea):
+- [x] **Backup pre-release** — HECHO el 03/09/2026: copia `DocumentIA-prerel-202609` creada a
+      las **09:11:33 UTC** (`T0` de referencia; el PITR de 7 días cubre cualquier otro instante)
+      y **verificada contra el origen**: 66.233 documentos, 70.166 ejecuciones (máx. Id 70202),
+      esquema pre-release confirmado (sin `IdActivo` ni `NormalizacionMarkdownGzip`; última
+      migración `20260812065020_SeedRestrictedClassificationPrompts`). Estado `Online`, S0.
+      Comando usado, por si hay que repetirlo con otra fecha:
     ```bash
     az sql db copy --subscription "Producción Central" \
       --resource-group SRBRGDOCSAIPROD --server srbsqlprodocai --name DocumentIA \
       --dest-name DocumentIA-prerel-202609 --service-objective S0
     ```
-    Con ~2,9 GB tarda unos minutos; esperar a que el estado sea `Online` antes de empezar la
-    Fase 1. Coste: un S0 adicional (~céntimos/día); se borra tras el periodo de validación.
+    Coste: un S0 adicional (~céntimos/día); se borra tras el periodo de validación (Fase 6).
+    **Nota**: si entre este backup y la ventana de BD pasan días u horas con tráfico, valorar
+    recrear la copia justo antes de la Fase 1 — el peldaño 5 del plan de restauración pierde
+    todo lo posterior a la copia.
 
 ## Fase 1 — Ventana de BD (única intervención manual de esquema)
 
