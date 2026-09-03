@@ -1,4 +1,4 @@
-# 3. Diseno Tecnico Detallado — DocumentIA
+﻿# 3. Diseno Tecnico Detallado — DocumentIA
 
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. El campo `Tipologias.PromptGPT` está deprecado (ver 12_MIGRACION_PROMPTGPT_V1_4.md); las columnas legacy asociadas se han retirado del schema.
@@ -941,8 +941,9 @@ erDiagram
         int Id PK
         int DocumentoId FK "→ DocumentoEntity"
         string EjecucionGuid UK "indice unico"
-        string ContratoSalidaCompletoJson
-        string ActivityTimelineJson
+        string IdActivo "nullable — activo resuelto, normalizado (AB#100168)"
+        string ContratoSalidaCompletoJson "sin Seguimiento.Actividades desde AB#100166"
+        string ActivityTimelineJson "fuente unica del timeline; DatosFinales/DatosOriginales ya no se graban"
         int DuracionClasifMs
         int DuracionExtracMs
         int DuracionValidMs

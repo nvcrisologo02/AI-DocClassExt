@@ -172,7 +172,7 @@ Ejemplo del bloque `extraction` en `nota.simple.1_4.validation.json`:
 |-------|-------------|-------------|
 | `enabled` | Sí | `true` para activar la llamada a Azure. `false` deja el paso sin extracción. |
 | `provider` | Sí | `azure-content-understanding` o `mock`. |
-| `modelKey` | Sí | Clave del modelo en `models.json`. |
+| `modelKey` | Sí | Clave del modelo en `models.json`. Si la tipología **no** define ningún `modelKey` (ni `secondaryModelKey`, ni llega forzado por request), desde AB#100192 la extracción se trata como **no configurada**: resultado vacío controlado con modelo `sin-configurar`, sin llamar a CU ni al fallback GPT (antes reventaba con `KeyNotFoundException` y la ejecución cerraba `EXTRACCION_INCOMPLETA`). |
 | `autoMapUnmappedFields` | No | Si `true` (por defecto), intenta casar automáticamente campos de Azure con los campos declarados en `fields[]` por nombre coincidente. |
 | `fieldMappings` | No | Mapeos explícitos cuando el nombre del campo en Azure difiere del nombre en la tipología (ver [sección 8](#8-mapeo-de-campos)). |
 

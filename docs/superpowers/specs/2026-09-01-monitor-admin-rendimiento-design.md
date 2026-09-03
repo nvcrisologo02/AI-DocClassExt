@@ -1,0 +1,120 @@
+# Optimización de rendimiento del Monitor Admin (BD PRO > 60k ejecuciones) — Diseño
+
+**Work items:** PBI AB#100182 (padre: Epic 100005), tasks AB#100183–AB#100186.
+**Fecha:** 2026-09-01
+
+> **Estado (02/09/2026): implementado, en `develop` (merge `c26a687`) y validado en DEV.**
+> Tasks AB#100183-100185 en Done; AB#100186 (medición) In Progress a la espera de PRO.
+> Medición del "después" en DEV (carga controlada, duración en servidor):
+> `Admin_GetUltimasEjecuciones` p50 28→12 ms / p95 2.327→140 ms (−94%);
+> `Admin_GetAgregados` p50 61→39 ms / p95 8.022→1.181 ms (−85%). Línea base de PRO
+> (sin desplegar): agregados p50 9.166 ms / p95 30.035 ms — ahí está el premio real.
+> No hizo falta trocear el CASE de 11 tramos: la traducción a SQL Server se verificó
+> contra el proveedor real. **Pendiente PRO**: índice por script manual
+> (`docs/auxiliares/temps/2026-09-01/indice-monitor-pro.sql`, ONLINE=ON) en la misma
+> ventana que la migración de AB#100168, y medición del después para cerrar AB#100186.
+
+## Problema
+
+La monitorización del Admin (MonitorV2) es lenta y pesada contra la BD de PRO
+(> 60.000 filas en `DocumentoEjecuciones`, tabla de 2,88 GB). Causas verificadas en código:
+
+1. **Listado paginado con LOBs.** `DocumentoEjecucionRepository.GetPagedAsync` materializa la
+   entidad completa: cinco columnas `nvarchar(max)` por fila (`ContratoSalidaCompletoJson`
+   ~16 KB de media, `DatosOriginalesJson`, `DatosFinalesJson`, `ActivityTimelineJson`,
+   `AssetResolverResultJson`) más `Include(Documento)` que arrastra
+   `NormalizacionMarkdownCompressed` (~10 KB/fila). La Function
+   (`Admin_GetUltimasEjecuciones`) descarta casi todo y proyecta ~20 escalares: cada página
+   de 25 filas mueve del orden de 1 MB de SQL a la Function para pintar una tabla de texto.
+2. **Agregados en ~23 consultas.** `GetAgregadosAsync` lanza por refresco: 1 count total,
+   6 counts/averages globales, 5 GROUP BY (tipología, modelo, día, calidad, estado proceso,
+   matriz) y 11 counts del histograma de confianza. Cada consulta re-escanea el rango filtrado.
+3. **Índice no cubriente.** Solo existe índice sobre `FechaEjecucion`; rangos amplios fuerzan
+   key lookups contra el índice clúster (engordado por los LOBs) o directamente un scan.
+4. **Auto-refresco.** MonitorV2 repite el ciclo completo cada 30 s por defecto y se multiplica
+   por pestaña abierta.
+
+## Decisión (enfoques A + B aprobados)
+
+1. **Proyección DTO ligera en el listado** (`EjecucionListadoItem`): `Select()` solo de los
+   campos que consume la Function (escalares + `NombreArchivo`/`SubmittedBy` del documento +
+   `ActivityTimelineJson`), `AsNoTracking`, sin `Include`.
+2. **Consolidación de agregados**: quitar el `Include(Documento)` innecesario (EF resuelve el
+   join desde el `Where` cuando el filtro usa la navegación), unificar los 6 counts/averages
+   globales en un único `GroupBy(e => 1)` y el histograma en un solo GROUP BY con el índice
+   de tramo calculado en SQL. Resultado: de ~23 a ~9 round-trips.
+3. **Índice cubriente**: reemplazar el índice simple sobre `FechaEjecucion` por uno con
+   `INCLUDE` de las columnas que usan filtros, agregados y proyección del listado (sin LOBs).
+   Todos los agregados pasan a ser range-scans de índice; el listado solo hace key lookups
+   para las 25 filas de la página (por `ActivityTimelineJson`).
+4. **Medición antes/después** en DEV y PRO (App Insights, duración de
+   `Admin_GetAgregados` y `Admin_GetUltimasEjecuciones`) documentada en el PBI.
+
+Descartado por ahora (YAGNI): caché servidor y tablas de pre-agregación; se reevaluará con la
+medición en la mano. Complementario e independiente del PBI AB#100165 (reducción de
+almacenamiento: duplicidad JSON / markdown binario).
+
+**Coordinación con AB#100165 (acordada 01/09):**
+
+- **`ActivityTimelineJson` se mantiene como columna persistida.** La deduplicación del timeline
+  del plan de almacenamiento se resuelve podando `$.DetalleEjecucion.Seguimiento.Actividades`
+  del contrato al persistir (AB#100166), no eliminando la columna. El DTO de AB#100183 se
+  implementa tal cual está diseñado, proyectando `ActivityTimelineJson`, sin dependencia de ese
+  plan.
+- **Ventana de BD única en PRO**: el índice cubriente de AB#100185 se aplica a mano en la misma
+  intervención que la migración de AB#100168 (columna `IdActivo` + retirada de
+  `IdActivoNormalizado`), ambas con `ONLINE=ON`.
+- **Orden global entre iniciativas**: AB#100176 (fiabilidad, bugs de producción) → AB#100182
+  (este plan) → AB#100165 (almacenamiento). Detalle en
+  `docs/especificaciones/OPTIMIZACION_ALMACENAMIENTO_BD_PRO.md`.
+
+## Detalles de diseño
+
+### DTO del listado
+
+`EjecucionListadoItem` vive en `DocumentIA.Data/Repositories` junto a `EjecucionFiltro` y
+`EjecucionAgregados`. `GetPagedAsync` cambia de firma a
+`Task<(IReadOnlyList<EjecucionListadoItem> Items, int Total)>`. El coalesce
+`SubmittedBy ?? Documento.SubmittedBy` baja del mapeo de la Function a la proyección SQL
+(COALESCE), donde ya se hacía en el filtro. El detalle (`GetByGuidAsync`) no cambia: ahí sí
+se necesitan los JSON completos.
+
+### Histograma en una consulta
+
+Los 11 counts por tramo se sustituyen por un GROUP BY sobre una cadena de condicionales con
+los mismos literales (`< 0.40`, `< 0.50`, … `< 0.95`) que las comparaciones actuales, de modo
+que el comportamiento en los bordes es idéntico. EF Core 8+ traduce condicionales anidados a
+CASE WHEN (el mismo patrón que ya usa `porCalidad` con 3 ramas). Cambio de semántica asumido
+y documentado: un valor negativo de confianza (no debería existir) antes no caía en ningún
+tramo y ahora cae en el primero.
+
+### Índice cubriente
+
+```
+IX_DocumentoEjecuciones_FechaEjecucion_Monitor
+  ON DocumentoEjecuciones (FechaEjecucion)
+  INCLUDE (EstadoFinal, ConfianzaGlobal, UseFallbackLLM, Tipologia, ModeloClasificacion,
+           ClassificationOnly, DuracionTotalMs, DocumentoId, EjecucionGuid, SubmittedBy,
+           ConfianzaClasificacion, DuracionClasificacionMs, DuracionExtraccionMs,
+           DuracionGDCMs, DuracionValidacionMs, DuracionIntegracionMs, DuracionPersistenciaMs)
+```
+
+Sustituye al índice actual sobre `FechaEjecucion` (mismo prefijo de clave; mantener ambos
+sería redundante). Migración EF + script idempotente. **PRO se aplica a mano** (el stage
+Apply del pipeline Migrations-BD está bloqueado por Deny Public Network Access), con
+`WITH (ONLINE = ON)` añadido al script manual.
+
+### Lo que no cambia
+
+- Contratos HTTP de `Admin_GetUltimasEjecuciones`, `Admin_GetAgregados` y el detalle:
+  misma forma JSON, el frontend Blazor no se toca.
+- Semántica de filtros y agregados (los tests existentes de
+  `DocumentoEjecucionRepositoryCalidadTests` / `FiltroTests` deben seguir en verde).
+- Auto-refresco del MonitorV2 (30 s): con las consultas optimizadas deja de ser un problema;
+  si la medición dijera lo contrario, se abriría el enfoque C (caché) como trabajo aparte.
+
+## Criterio de éxito
+
+Con > 60k filas y rango de 30 días: `Admin_GetAgregados` y `Admin_GetUltimasEjecuciones` en
+cientos de ms como máximo (hoy, segundos), y el payload del listado reducido en ~dos órdenes
+de magnitud. Verificado con la medición antes/después de AB#100186.

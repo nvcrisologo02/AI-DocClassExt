@@ -51,6 +51,15 @@ namespace DocumentIA.Data.Entities
 
         [MaxLength(20)]
         public string? NivelClasificacion { get; set; }
+
+        /// <summary>
+        /// Identificador de activo resuelto en esta ejecucion, normalizado en escritura
+        /// (trim + mayusculas). Sustituye a la columna calculada IdActivoNormalizado, que se
+        /// derivaba de DatosFinalesJson (columna que dejo de grabarse en AB#100166). Es el
+        /// filtro del SP de consulta por activo.
+        /// </summary>
+        [MaxLength(100)]
+        public string? IdActivo { get; set; }
         
         [Column(TypeName = "nvarchar(max)")]
         public string? DatosOriginalesJson { get; set; }

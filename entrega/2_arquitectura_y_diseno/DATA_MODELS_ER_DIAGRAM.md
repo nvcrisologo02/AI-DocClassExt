@@ -1,4 +1,4 @@
-# Data Models & ER Diagram — DocumentIA
+﻿# Data Models & ER Diagram — DocumentIA
 
 ## 1. Introducción
 
@@ -49,7 +49,8 @@ erDiagram
         int Paginas "Número de páginas"
         int PagesProcessed "Páginas procesadas exitosamente"
         string RutaBlobStorage "Ruta en Azure Blob Storage"
-        string NormalizacionMarkdownCompressed "Contenido comprimido"
+        string NormalizacionMarkdownCompressed "Markdown Base64+GZip (historico, escritura dual)"
+        binary NormalizacionMarkdownGzip "Markdown GZip binario (AB#100169)"
         string EvidenceUri "URI para auditoría"
         string ClassifierVersion "Versión del clasificador"
         string DedupSha256 "Hash de deduplicación"
@@ -134,8 +135,9 @@ erDiagram
         bool UseFallbackLLM
         bool ClassificationOnly "Solo clasificación, sin extracción"
         string NivelClasificacion
-        string DatosOriginalesJson
-        string DatosFinalesJson
+        string IdActivo "Activo resuelto, normalizado (AB#100168)"
+        string DatosOriginalesJson "Ya no se graba (AB#100166); historico intacto"
+        string DatosFinalesJson "Ya no se graba (AB#100166); historico intacto"
         string ContratoSalidaCompletoJson "Contrato JSON completo (v1.3+)"
         string ActivityTimelineJson "Timeline de actividades con duraciones"
         string AssetResolverResultJson "Resultados de Asset Resolver"
@@ -259,7 +261,8 @@ erDiagram
 | **Paginas** | INT | NOT NULL | Número total de páginas |
 | **PagesProcessed** | INT | NOT NULL DEFAULT 0 | Páginas procesadas exitosamente |
 | **RutaBlobStorage** | NVARCHAR(500) | NULL | URL en Azure Blob Storage |
-| **NormalizacionMarkdownCompressed** | NVARCHAR(MAX) | NULL | Contenido extracto comprimido |
+| **NormalizacionMarkdownCompressed** | NVARCHAR(MAX) | NULL | Markdown normalizado como Base64 de GZip. **Forma histórica** (AB#100169): se sigue escribiendo en paralelo a la columna binaria para poder revertir sin perder datos; su retirada es una fase posterior |
+| **NormalizacionMarkdownGzip** | VARBINARY(MAX) | NULL | Markdown normalizado en GZip binario (AB#100169). Ocupa ~2,7× menos; la lectura prueba esta columna primero y cae a la Base64 |
 | **EvidenceUri** | NVARCHAR(500) | NULL | URI para auditoría externa |
 | **ClassifierVersion** | NVARCHAR(50) | NULL | Versión del modelo de clasificación |
 | **DedupSha256** | NVARCHAR(64) | NULL | Hash deduplicado (si aplica) |
@@ -426,7 +429,8 @@ erDiagram
 **FK**: `DocumentoId` → Documentos (Cascade Delete)  
 **Índices**:
 - `IX_DocumentoEjecuciones_EjecucionGuid` (UNIQUE) - Deduplicación
-- `IX_DocumentoEjecuciones_FechaEjecucion` - Auditoría temporal
+- `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` - Cubriente del Monitor Admin (AB#100185): clave `FechaEjecucion` + INCLUDE de 17 columnas escalares; sustituye al índice simple
+- `IX_DocumentoEjecuciones_IdActivo_DocumentoId` - Consulta por activo (AB#100168); sustituye al índice de la columna calculada `IdActivoNormalizado` (retirada)
 
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
@@ -444,8 +448,9 @@ erDiagram
 | **UseFallbackLLM** | BIT | Si se activó fallback |
 | **ClassificationOnly** | BIT | Solo clasificación (sin extracción) |
 | **NivelClasificacion** | NVARCHAR(20) | Level (ej: "Full") |
-| **DatosOriginalesJson** | NVARCHAR(MAX) | Estado inicial (para comparativa) |
-| **DatosFinalesJson** | NVARCHAR(MAX) | Estado final |
+| **IdActivo** | NVARCHAR(100) | Activo resuelto en esta ejecución, normalizado (AB#100168); sustituye a la columna calculada `IdActivoNormalizado` |
+| **DatosOriginalesJson** | NVARCHAR(MAX) | **Ya no se graba** (AB#100166): vive en el contrato (`$.DetalleEjecucion.Integracion.DatosOriginales`); histórico intacto |
+| **DatosFinalesJson** | NVARCHAR(MAX) | **Ya no se graba** (AB#100166): vive en el contrato (`$.DatosExtraidos`); histórico intacto |
 | **ContratoSalidaCompletoJson** | NVARCHAR(MAX) | Contrato de salida completo (v1.3+) |
 | **ActivityTimelineJson** | NVARCHAR(MAX) | Timeline de actividades con duraciones |
 | **AssetResolverResultJson** | NVARCHAR(MAX) | Resultado de Asset Resolver |

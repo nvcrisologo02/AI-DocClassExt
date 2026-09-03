@@ -1,4 +1,4 @@
-# Guía de Clasificación de Documentos — DocumentIA
+﻿# Guía de Clasificación de Documentos — DocumentIA
 
 > **Versión:** 1.0 | **Fecha:** Mayo 2026 | **Proyecto:** AI DocClassExt — SAREB  
 > **Audiencia:** Usuarios técnicos, usuarios de negocio, integradores de sistemas
@@ -60,6 +60,12 @@ Tú envías un PDF  →  DocumentIA lo "lee"  →  Identifica el tipo de documen
 | **Resumen Documental** | `resumen-documental` | Cualquier documento para el que se quiere un resumen automático |
 | **IBI** | `IBI` | Recibo del Impuesto sobre Bienes Inmuebles |
 | **TDN** | `tdn.clasificacion` | Clasificación jerárquica de documentos jurídicos e inmobiliarios (notariales, escrituras, sentencias) |
+
+**Formatos de fichero admitidos (desde AB#100180):** PDF, Office (`doc/docx/xls/xlsx/ppt/pptx`),
+imágenes (`png/jpg/jpeg/tif/tiff/bmp/heif`) y HTML. Otra extensión (p. ej. `.zip`) se rechaza en
+la ingesta con **HTTP 400 síncrono**, antes de subir a almacenamiento y sin consumir IA. Las
+entradas por `ObjectIdGDC` no se validan por extensión; su red de seguridad es la guarda de
+contenido (`SIN_CONTENIDO_DOCUMENTO`).
 
 ### ¿Qué resultado me devuelve?
 
@@ -124,7 +130,7 @@ Son dos campos independientes en el resultado:
 
 | Campo | Descripción | Valores posibles |
 |---|---|---|
-| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO`, `PENDIENTE_REINTENTO`, `BAJA_CONFIANZA_CLASIFICACION` |
+| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO`, `EXTRACCION_INCOMPLETA` (fallback de extracción sin datos), `PENDIENTE_REINTENTO` (transitorio, no persistido), `BAJA_CONFIANZA_CLASIFICACION` |
 | `EstadoCalidad` | Fiabilidad de los datos obtenidos | `OK`, `REVISION`, `ERROR` |
 
 Un documento puede terminar en `Estado=OK` pero `EstadoCalidad=REVISION` (proceso completado, pero con confianza media que requiere revisión humana).
@@ -184,6 +190,12 @@ flowchart TD
 |---|---|---|
 | `NormalizarActivity` | Calcula hashes (SHA256, MD5, CRC32), detecta páginas, normaliza el nombre del fichero | < 1 s |
 | `VerificarDuplicadoActivity` | Detecta si el documento ya fue procesado (por SHA256) | < 1 s |
+
+> **Reutilización de duplicados (desde AB#100177):** al reutilizar, se prefiere la ejecución
+> histórica con la misma combinación `classificationOnly`/`nivelClasificacion`; si no existe
+> ninguna que coincida exactamente, **se reutiliza la última ejecución con resultado completo**
+> en lugar de devolver un `DUPLICADO` vacío. Desde AB#100178, además, las salidas `DUPLICADO`
+> y `NO_CLASIFICADO` **siempre quedan persistidas** y son visibles en el Monitor.
 | `SubirBlobActivity` | Sube el PDF a Azure Blob Storage para trazabilidad y procesamiento posterior | 1–3 s |
 | `ClasificarActivity` | Identifica el tipo de documento mediante Azure DI o GPT | 3–15 s |
 | `ResolverTipologiaActivity` | Carga la configuración de la tipología detectada | < 1 s |
@@ -355,7 +367,12 @@ flowchart LR
     C --> D["Continúa con Extracción\n(si el flujo es completo)"]
 ```
 
-> **Nota:** Si el `expectedType` no existe en el registro de tipologías, el proceso termina en `ERROR` con `KeyNotFoundException`.
+> **Nota (desde AB#100179):** si el `expectedType` no resuelve contra el catálogo de tipologías
+> (por ejemplo, una etiqueta de negocio en texto libre como `"Otros"` o `"Ficha técnica"`), el
+> sistema **lo ignora con un warning y clasifica el documento normalmente** con IA, en lugar de
+> saltarse la clasificación con una etiqueta inválida. El valor `"Desconocido"` está exento de
+> esta validación (es intencional en flujos de monitorización y pruebas). El canal de origen
+> debería enviar códigos de tipología reales o dejar el campo vacío.
 
 ---
 
@@ -1533,7 +1550,8 @@ SHA256 del documento coincide con ejecución anterior
 |---|---|---|
 | `Estado = NO_CLASIFICADO` | GPT no pudo identificar el tipo | Revisar el documento; si es un tipo conocido, usar `expectedType` |
 | `Estado = SIN_CONTENIDO_DOCUMENTO` | Se pidió prompt/resumen y no se pudo extraer texto (documento ilegible, o Document Intelligence caído o sin permisos) | Comprobar `detalleEjecucion.markdownGenerado` y buscar `InvalidContent` en la traza; ver TROUBLESHOOTING_DIAGNOSTICO §2 |
-| `Estado = ERROR` + `mensajeError = "KeyNotFoundException"` | `expectedType` no existe en el registro | Verificar la familia/versión en `TipologiaVersionResolver` |
+| Se envió `expectedType` pero el documento se clasificó con IA | El `expectedType` no resuelve contra el catálogo (desde AB#100179 ya no termina en `ERROR`: se ignora con warning y se clasifica normalmente) | Enviar un código de tipología real o dejar el campo vacío; verificar la familia/versión en `TipologiaVersionResolver` |
+| `Estado = EXTRACCION_INCOMPLETA` + `fallbackRazon = "exception:..."` | La extracción CU falló (la razón incluye el mensaje de la excepción desde AB#100192) y el fallback GPT no obtuvo campos | Revisar la razón; si es un error de configuración de modelo, corregir `ModeloConfigs`/tipología |
 | `Estado = ERROR` + error en plugin `refCatExcel` | El plugin de prioridad 1 falló | Verificar disponibilidad del servicio en `localhost:8082`; desactivar plugin si no está disponible |
 | `EstadoCalidad = REVISION` | Confianza global entre 0.70 y 0.85 | Revisar manualmente los datos extraídos |
 | `EstadoCalidad = ERROR` | Confianza global < 0.70 | Revisión humana obligatoria; considerar extracción manual |

@@ -1,4 +1,4 @@
-# Data Models & ER Diagram — DocumentIA
+﻿# Data Models & ER Diagram — DocumentIA
 
 ## 1. Introducción
 
@@ -49,7 +49,8 @@ erDiagram
         int Paginas "Número de páginas"
         int PagesProcessed "Páginas procesadas exitosamente"
         string RutaBlobStorage "Ruta en Azure Blob Storage"
-        string NormalizacionMarkdownCompressed "Contenido comprimido"
+        string NormalizacionMarkdownCompressed "Markdown Base64+GZip (historico, escritura dual)"
+        binary NormalizacionMarkdownGzip "Markdown GZip binario (AB#100169)"
         string EvidenceUri "URI para auditoría"
         string ClassifierVersion "Versión del clasificador"
         string DedupSha256 "Hash de deduplicación"
@@ -135,10 +136,11 @@ erDiagram
         bool UseFallbackLLM
         bool ClassificationOnly "Solo clasificación, sin extracción"
         string NivelClasificacion
-        string DatosOriginalesJson
-        string DatosFinalesJson
-        string ContratoSalidaCompletoJson "Contrato JSON completo (v1.3+)"
-        string ActivityTimelineJson "Timeline de actividades con duraciones"
+        string IdActivo "Activo resuelto, normalizado (AB#100168)"
+        string DatosOriginalesJson "Ya no se graba (AB#100166); historico intacto"
+        string DatosFinalesJson "Ya no se graba (AB#100166); historico intacto"
+        string ContratoSalidaCompletoJson "Contrato JSON sin timeline desde AB#100166"
+        string ActivityTimelineJson "Timeline de actividades (fuente unica)"
         string AssetResolverResultJson "Resultados de Asset Resolver"
         int DuracionTotalMs
         int DuracionClasificacionMs
@@ -260,7 +262,8 @@ erDiagram
 | **Paginas** | INT | NOT NULL | Número total de páginas |
 | **PagesProcessed** | INT | NOT NULL DEFAULT 0 | Páginas procesadas exitosamente |
 | **RutaBlobStorage** | NVARCHAR(500) | NULL | URL en Azure Blob Storage |
-| **NormalizacionMarkdownCompressed** | NVARCHAR(MAX) | NULL | Contenido extracto comprimido |
+| **NormalizacionMarkdownCompressed** | NVARCHAR(MAX) | NULL | Markdown normalizado como Base64 de GZip. **Forma histórica** (AB#100169): se sigue escribiendo en paralelo a la columna binaria para que revertir código o migración no pierda datos; su retirada es una fase posterior |
+| **NormalizacionMarkdownGzip** | VARBINARY(MAX) | NULL | Markdown normalizado en GZip binario (AB#100169). Ocupa ~2,7× menos que la variante Base64; la lectura prueba esta columna primero y cae a la Base64. Histórico migrado con `scripts/database/migrar-markdown-a-binario.ps1` |
 | **EvidenceUri** | NVARCHAR(500) | NULL | URI para auditoría externa |
 | **ClassifierVersion** | NVARCHAR(50) | NULL | Versión del modelo de clasificación |
 | **DedupSha256** | NVARCHAR(64) | NULL | Hash deduplicado (si aplica) |
@@ -427,7 +430,12 @@ erDiagram
 **FK**: `DocumentoId` → Documentos (Cascade Delete)  
 **Índices**:
 - `IX_DocumentoEjecuciones_EjecucionGuid` (UNIQUE) - Deduplicación
-- `IX_DocumentoEjecuciones_FechaEjecucion` - Auditoría temporal
+- `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` - Cubriente del Monitor Admin (AB#100185):
+  clave `FechaEjecucion` + INCLUDE de las 17 columnas escalares que usan los filtros, agregados
+  y listado; sustituye al índice simple sobre `FechaEjecucion`
+- `IX_DocumentoEjecuciones_IdActivo_DocumentoId` - Consulta por activo (AB#100168); sustituye a
+  `IX_DocumentoEjecuciones_IdActivoNormalizado_DocumentoId`, que colgaba de una columna
+  calculada sobre `DatosFinalesJson` (columna que dejó de grabarse)
 
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
@@ -446,10 +454,11 @@ erDiagram
 | **UseFallbackLLM** | BIT | Si se activó fallback |
 | **ClassificationOnly** | BIT | Solo clasificación (sin extracción) |
 | **NivelClasificacion** | NVARCHAR(20) | Level (ej: "Full") |
-| **DatosOriginalesJson** | NVARCHAR(MAX) | Estado inicial (para comparativa) |
-| **DatosFinalesJson** | NVARCHAR(MAX) | Estado final |
-| **ContratoSalidaCompletoJson** | NVARCHAR(MAX) | Contrato de salida completo (v1.3+) |
-| **ActivityTimelineJson** | NVARCHAR(MAX) | Timeline de actividades con duraciones |
+| **IdActivo** | NVARCHAR(100) | Activo resuelto en esta ejecución, normalizado en escritura (trim + mayúsculas). Sustituye a la columna calculada `IdActivoNormalizado` (AB#100168); el histórico se rellenó con `scripts/database/backfill-idactivo.ps1` |
+| **DatosOriginalesJson** | NVARCHAR(MAX) | **Ya no se graba** (AB#100166): su contenido vive en el contrato (`$.DetalleEjecucion.Integracion.DatosOriginales`). NULL en filas nuevas; el histórico conserva sus valores |
+| **DatosFinalesJson** | NVARCHAR(MAX) | **Ya no se graba** (AB#100166): su contenido vive en el contrato (`$.DatosExtraidos`). NULL en filas nuevas; el histórico conserva sus valores |
+| **ContratoSalidaCompletoJson** | NVARCHAR(MAX) | Contrato de salida completo (v1.3+). Desde AB#100166 se persiste **sin** `$.DetalleEjecucion.Seguimiento.Actividades` (el timeline vive solo en su columna); los lectores que reconstruyen el contrato (detalle de Admin, flujo de duplicados) lo recomponen vía `ContratoTimelineRehidratador` |
+| **ActivityTimelineJson** | NVARCHAR(MAX) | Timeline de actividades con duraciones. Fuente única del timeline desde AB#100166; la proyecta el listado del Monitor |
 | **AssetResolverResultJson** | NVARCHAR(MAX) | Resultado de Asset Resolver |
 | **DuracionTotalMs** | INT | Duración total end-to-end |
 | **DuracionClasificacionMs** | INT | Clasificación |
@@ -734,7 +743,8 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
 | **1.14** | 2026-05-26 | Agregó FechaExpiracionBlob + políticas de retención |
 | **1.15** | 2026-06-02 | Agregó TDN2_Prompt a CatalogoTdn1 |
 | **v1.5** | 2026-06-05 | Marca PromptGPT, ModeloClasificacionDI, UmbralClasificacion como [Obsolete] |
-| **1.16** | 2026-08-05 | [ACTUAL] Agregó SubmittedBy a DocumentoEjecuciones (`20260805100351_AgregarSubmittedByEjecucion`). Aplicada en dev; **pendiente de aplicar en PRO** en el próximo despliegue |
+| **1.16** | 2026-08-05 | Agregó SubmittedBy a DocumentoEjecuciones (`20260805100351_AgregarSubmittedByEjecucion`). Aplicada en DEV y PRO |
+| **1.17** | 2026-09-02 | [ACTUAL] Release de rendimiento/almacenamiento: índice cubriente del Monitor (`20260902080254_IndiceCubrienteMonitorEjecuciones`, AB#100185); columna escalar `IdActivo` + SP por activo reescrito y retirada de `IdActivoNormalizado` (`20260902093812_IdActivoEscalarYSpPorIdActivo`, AB#100168); `Documentos.NormalizacionMarkdownGzip` con escritura dual (`20260902103313_MarkdownBinario`, AB#100169); `DatosFinalesJson`/`DatosOriginalesJson` dejan de grabarse y el contrato se persiste sin timeline (AB#100166/100167). Aplicadas en DEV (02/09) y en PRO (03/09, ventana manual única + backfills por lotes verificados: IdActivo tabla completa, markdown 64.466 filas con 0 discrepancias byte a byte) |
 | **v2.0** | 2026-07-31 | [PLANIFICADO] Elimina PromptGPT, ModeloClasificacionDI, UmbralClasificacion |
 
 ### 5.2 Cambios Recientes (Últimos 30 días)

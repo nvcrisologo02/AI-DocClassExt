@@ -348,6 +348,11 @@ public class ResultadoClasificacion
     /// </summary>
     public bool RateLimitExcedido { get; set; }
     /// <summary>
+    /// True cuando la clasificación no pudo ejecutarse por falta de contenido textual del
+    /// documento. El orquestador lo traduce a Estado="SIN_CONTENIDO_DOCUMENTO".
+    /// </summary>
+    public bool SinContenido { get; set; }
+    /// <summary>
     /// Umbral de fallback de clasificación aplicado en esta ejecución.
     /// </summary>
     public double? UmbralFallbackAplicado { get; set; }

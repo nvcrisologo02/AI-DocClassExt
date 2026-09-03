@@ -127,17 +127,20 @@ en `EXTRACCION_INCOMPLETA` (estado de negocio) en lugar de error técnico.
   `nota.simple_bal`, `cera.16` y `resumen.documental` (confirmados vía
   `GET /api/tipologias`, AB#100088).
 - El documento corrupto (`FH-FH5`) no se rechaza en el HTTP: el endpoint
-  admite el payload (202) y la orquestación completa con
-  `Resultado.Estado = NO_CLASIFICADO`; el caso valida ese comportamiento real
-  en lugar de un `400` síncrono.
-- `S-S5` (base64 inválido): el defecto de backend (500 por `FormatException`
-  sin capturar) está corregido en código (AB#100129, en `develop`); el caso
-  mantiene la aserción `500` hasta que el fix esté desplegado en el entorno —
-  tras el despliegue, cambiar la aserción a `400` y verificar con el smoke.
-- `FC-FC4`/`FC-FC5` (modelo de clasificación explícito `gpt-4o-mini` /
-  `gpt-5-mini` por request) fallan en DEV: el registro de modelos de
-  clasificación (tabla de configuración en BD, `ClassificationModelRegistryLoader`)
-  no tiene esas claves activas para el tipo Clasificación; solo resuelve el
-  modelo por defecto. No se puede corregir sin mutar configuración de entorno
-  (fuera de alcance de este runner); los casos quedan documentados como FAIL
-  esperado hasta que se dé de alta esa configuración en DEV.
+  admite el payload (202) y la orquestación completa sin producir tipología
+  real. Desde la guarda de contenido de AB#100180 la rama habitual es
+  `SIN_CONTENIDO_DOCUMENTO`; el caso acepta también `NO_CLASIFICADO` y `OK`
+  con Desconocido (las tres ramas legítimas), en lugar de un `400` síncrono.
+- Los ficheros con extensión sin soporte de extracción (`.zip`, `.xlsb`, ...)
+  se rechazan con `400` síncrono desde AB#100180; el corpus del runner solo
+  usa formatos admitidos, así que no hay caso dedicado.
+
+Limitaciones históricas ya resueltas (se dejan como referencia de informes
+antiguos en `artifacts/`):
+
+- `S-S5` (base64 inválido) devolvía `500`; corregido en AB#100129 y la
+  aserción es `400` desde entonces.
+- `FC-FC4`/`FC-FC5` (modelo de clasificación explícito por request) fallaban
+  en DEV por falta de alias en el registro de modelos; resuelto con el alta
+  de `gpt-4o-mini`/`gpt-5-mini` en BD DEV (AB#100131). Desde el 02/09/2026 el
+  perfil `full` en DEV pasa completo: 31 PASS, 0 FAIL, 1 N/A (GDC).

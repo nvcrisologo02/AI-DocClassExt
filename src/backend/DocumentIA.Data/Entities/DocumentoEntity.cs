@@ -54,8 +54,20 @@ public class DocumentoEntity
     [MaxLength(500)]
     public string? RutaBlobStorage { get; set; }
 
+    /// <summary>
+    /// Markdown normalizado en Base64 de GZip. Forma historica (AB#100169): se sigue escribiendo
+    /// en paralelo a <see cref="NormalizacionMarkdownGzip"/> para que revertir el codigo o la
+    /// migracion no pierda datos. Su retirada es una fase posterior.
+    /// </summary>
     [Column(TypeName = "nvarchar(max)")]
     public string? NormalizacionMarkdownCompressed { get; set; }
+
+    /// <summary>
+    /// Markdown normalizado en GZip binario (AB#100169). Ocupa ~2,7 veces menos que la variante
+    /// Base64 en nvarchar(max), que anade un 33% por el Base64 y otro x2 por UTF-16.
+    /// </summary>
+    [Column(TypeName = "varbinary(max)")]
+    public byte[]? NormalizacionMarkdownGzip { get; set; }
 
     // === Auditoría y trazabilidad de clasificación ===
     [MaxLength(500)]

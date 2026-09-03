@@ -251,6 +251,7 @@ ExponentialBackoff = true
 ## 🔔 Alertas Implementadas en Azure Monitor (AB#99083, 2026-08-04)
 
 **Estado:** ✅ 5 scheduled query rules activas sobre `srbappiprodocai` + action group de correo asociado.
+Más 3 reglas de fiabilidad añadidas al script en AB#100181 (ver sección más abajo), pendientes de aplicar en PRO.
 
 | Regla | Condición | Ventana / Frecuencia | Sev |
 |-------|-----------|----------------------|-----|
@@ -258,7 +259,7 @@ ExponentialBackoff = true
 | `srbalertlatprodocai` | p95 de `DocumentIA.Duracion.Total` > 120 s | 15 min / 15 min | 2 |
 | `srbalertfbkprodocai` | % de `DocumentProcessed` con `UseFallbackLLM=true` > 20% (mín. 5 docs) | 30 min / 15 min | 3 |
 | `srbalertexcprodocai` | > 10 excepciones (cubre fallos GDC mientras no exista evento específico) | 5 min / 5 min | 2 |
-| `srbalertidleprodocai` | 0 requests en horario laboral (L-V 8:00-18:00 Europe/Madrid) | 60 min / 15 min | 2 |
+| `srbalertidleprodocai` | 0 requests en horario laboral (L-V, evaluada 11:00-18:00 Europe/Madrid) | 180 min / 60 min | 2 |
 
 Además existen 2 metric alerts previas de plataforma: `srbalertcpuprodocai` (CPU) y `srbalertmemprodocai` (memoria).
 
@@ -266,8 +267,56 @@ Además existen 2 metric alerts previas de plataforma: `srbalertcpuprodocai` (CP
 - El criterio de error es `EstadoFinal in (Error, ERROR, Fallido)` — no `!= "OK"` — para no contar REVISION como fallo.
 - Las alertas de ratio exigen un mínimo de 5 documentos por ventana para evitar falsos positivos con volumen bajo.
 - No existen los eventos `GdcUploadFailed` / `GptFallbackUsed` en el código; el fallback se mide con la dimensión `UseFallbackLLM` de `DocumentProcessed`.
+- La alerta de inactividad se amplió de 60 a 180 min (2026-08-14): el filtro horario de la query aplica al momento de evaluación, no a la ventana, así que se evalúa desde las 11:00 para que las 3 h previas caigan enteras en jornada (8:00-18:00) y no salte de madrugada/primera hora sin tráfico. Trade-off: la última detección posible del día es ~17:xx; un tramo de silencio iniciado después de las 15:00 no alerta ese día.
 
-**Gestión (script idempotente):** `scripts/observability/create-monitor-alerts.ps1` crea o actualiza las 5 reglas. Re-ejecutable sin riesgo; parámetro `-ActionGroupId` para asociar el action group.
+**Gestión (script idempotente):** `scripts/observability/create-monitor-alerts.ps1` crea o actualiza las reglas. Re-ejecutable sin riesgo; parámetro `-ActionGroupId` para asociar el action group.
+
+### Alertas de fiabilidad de resumen y persistencia (AB#100181, 2026-09-01)
+
+Tres reglas nuevas en el mismo script idempotente, que vigilan los modos de fallo de INC1338832.
+Los tres eran invisibles: no persistían o cerraban `OK`, y solo se detectaban buceando en App Insights.
+
+| Regla | Condición | Ventana / Frecuencia | Sev |
+|-------|-----------|----------------------|-----|
+| `srbalertdupprodocai` | Trazas de reutilización por duplicado sin contrato histórico reutilizable | 60 min / 30 min | 3 |
+| `srbalertexpprodocai` | Trazas de `ExpectedType` que no resuelve contra el catálogo de tipologías | 60 min / 30 min | 3 |
+| `srbalertsctprodocai` | Trazas de clasificación sin contenido textual extraíble | 60 min / 30 min | 3 |
+
+**Objetivo: quedar en silencio.** Tras desplegar AB#100177 (fallback de dedup), AB#100179 (validación
+de `ExpectedType`) y AB#100180 (guarda de contenido + allowlist de extensiones), estas tres reglas no
+deberían dispararse. Si saltan, el caso sigue ocurriendo por una vía no cubierta por los fixes:
+
+- `srbalertdupprodocai`: quedan documentos cuyas ejecuciones históricas no tienen contrato serializado.
+- `srbalertexpprodocai`: el canal de entrada (GDC) sigue enviando etiquetas de negocio en vez de códigos
+  de tipología — es la señal que respalda la coordinación pendiente con el integrador (AB#100179).
+- `srbalertsctprodocai`: siguen llegando documentos sin texto extraíble; revisar formato de origen y
+  el estado de DI Layout.
+
+Severidad 3 a propósito: son señales de calidad para revisar, no caídas de servicio.
+
+**Aplicación en PRO:** requiere ejecutar el script con permisos de Monitoring Contributor
+(`./scripts/observability/create-monitor-alerts.ps1 -ActionGroupId <id>`), no se despliega con el código.
+
+### Alerta de capacidad de la base de datos (AB#100171, 2026-09-02)
+
+| Regla | Condición | Ventana / Frecuencia | Sev |
+|-------|-----------|----------------------|-----|
+| `srbalertstoprodocai` | `storage_percent` de la BD `DocumentIA` > 80% | 60 min / 30 min | 2 |
+
+Existe para no repetir el episodio de agosto de 2026: la BD se llenó contra su límite de 2 GB
+sin aviso previo y hubo que ampliar de urgencia. Con la ampliación a 20 GB y las optimizaciones
+de AB#100165 el margen es amplio, pero el aviso al 80% da semanas de reacción en lugar de horas.
+
+Es una **metric alert de plataforma** sobre el recurso SQL, no una scheduled query rule sobre
+Application Insights: usa `az monitor metrics alert` en vez de `az monitor scheduled-query`, por
+eso vive en su propio script `scripts/observability/create-db-capacity-alert.ps1` y no en
+`create-monitor-alerts.ps1`.
+
+Severidad 2 (no 3, como las de calidad): quedarse sin espacio en la BD detiene la persistencia
+de ejecuciones, que es una caída de servicio con pérdida de trazabilidad.
+
+**Aplicación en PRO:** requiere permisos de Monitoring Contributor y no se despliega con el
+código: `./scripts/observability/create-db-capacity-alert.ps1 -ActionGroupId <id de srbagoperprodocai>`.
 
 ### Action group de avisos (correo)
 

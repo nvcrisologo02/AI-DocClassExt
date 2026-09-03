@@ -408,7 +408,15 @@ Para forzar el mock en una tipología específica aunque el default sea Azure:
 El campo simplemente no aparece en `DatosExtraidos`. No se produce ningún error. La validación posterior puede marcar ese campo como faltante si tiene `required: true`.
 
 **¿Qué pasa si `ModeloConfigs` no contiene la clave referenciada en la tipología?**
-`ExtractionModelRegistryLoader.GetModel()` lanza `KeyNotFoundException` y la activity falla con un error descriptivo. El `models.json` físico solo serviría como seed de un entorno nuevo.
+`ExtractionModelRegistryLoader.GetModel()` lanza `KeyNotFoundException`; el proveedor de
+extracción la captura y activa el fallback GPT, dejando en `FallbackRazon` el tipo y el mensaje
+de la excepción (desde AB#100192), de modo que el error de configuración es diagnosticable sin
+bucear en trazas. El `models.json` físico solo serviría como seed de un entorno nuevo.
+
+**¿Y si la tipología no define ningún `modelKey` (típico del catálogo TDN restringido)?**
+Desde AB#100192 se trata como **extracción no configurada**: resultado vacío controlado con
+modelo `sin-configurar`, sin llamar a CU ni al fallback. Antes reventaba con
+`KeyNotFoundException` y la ejecución cerraba `EXTRACCION_INCOMPLETA`.
 
 ---
 

@@ -54,6 +54,39 @@ public class ConfigurableExtraerDataProviderTests
     }
 
     [Fact]
+    public async Task ObtenerDatosAsync_CuSinModelKeyConfigurado_DegradaComoNoConfiguradoSinLlamarProveedores()
+    {
+        // AB#100192: las tipologias del catalogo TDN restringido no tienen bloque extraction;
+        // los defaults dejan ModelKey vacio y GetModel("") reventaba con KeyNotFoundException,
+        // acabando en EXTRACCION_INCOMPLETA tras un fallback GPT que tampoco tenia campos.
+        using var fixture = TestFixture.Create(
+            minFieldsRatio: 0.5,
+            fallbackEnabled: true,
+            extractionModelKey: "");
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        result.Proveedor.Should().Be("none");
+        result.Modelo.Should().Be("sin-configurar");
+        result.DatosExtraidos.Should().BeEmpty();
+        result.FallbackUsado.Should().BeFalse("degradar por configuracion ausente no es un fallback");
+
+        fixture.AzureProvider.Verify(
+            p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()),
+            Times.Never);
+
+        fixture.GptProvider.Verify(
+            p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task ObtenerDatosAsync_GptDirecto_UsaProveedorDirectoSinFallback()
     {
         using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true, extractionProvider: "azure-openai");
@@ -725,7 +758,10 @@ public class ConfigurableExtraerDataProviderTests
             string extractionProvider = "azure-content-understanding",
             double? tipExtracUmbralFallback = null,
             double? tipExtracUmbralFallbackCompletitud = null,
-            double? tipExtracUmbralFallbackConfianza = null)
+            double? tipExtracUmbralFallbackConfianza = null,
+            // null = el modelKey por defecto del provider; "" reproduce una tipologia sin
+            // bloque extraction (AB#100192), donde los defaults dejan ModelKey vacio.
+            string? extractionModelKey = null)
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "DocumentIA.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
@@ -743,7 +779,7 @@ public class ConfigurableExtraerDataProviderTests
                 {
                     enabled = extractionEnabled,
                     provider = extractionProvider,
-                    modelKey = extractionProvider == "azure-openai" ? "direct.gpt" : "default.cu",
+                    modelKey = extractionModelKey ?? (extractionProvider == "azure-openai" ? "direct.gpt" : "default.cu"),
                     autoMapUnmappedFields = true,
                     fieldMappings = Array.Empty<object>()
                 },

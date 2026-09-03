@@ -61,6 +61,13 @@ Tú envías un PDF  →  DocumentIA lo "lee"  →  Identifica el tipo de documen
 | **IBI** | `IBI` | Recibo del Impuesto sobre Bienes Inmuebles |
 | **TDN** | `tdn.clasificacion` | Clasificación jerárquica de documentos jurídicos e inmobiliarios (notariales, escrituras, sentencias) |
 
+**Formatos de fichero admitidos (desde AB#100180):** PDF, Office (`doc/docx/xls/xlsx/ppt/pptx`),
+imágenes (`png/jpg/jpeg/tif/tiff/bmp/heif`) y HTML. Un fichero con otra extensión (p. ej. `.zip`)
+se rechaza en la ingesta con **HTTP 400 síncrono**, antes de subirlo a almacenamiento y sin
+consumir IA. Las entradas por `ObjectIdGDC` no se validan por extensión (el nombre no se conoce
+hasta descargar de GDC); su red de seguridad es la guarda de contenido: un documento sin texto
+extraíble cierra con `Estado = SIN_CONTENIDO_DOCUMENTO` en lugar de inventar un resultado.
+
 ### ¿Qué resultado me devuelve?
 
 Tras el procesamiento, recibirás:
@@ -123,7 +130,7 @@ Son dos campos independientes en el resultado:
 
 | Campo | Descripción | Valores posibles |
 |---|---|---|
-| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO` |
+| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO` (sin texto extraíble, AB#100027/100180), `EXTRACCION_INCOMPLETA` (fallback de extracción sin datos), `PENDIENTE_REINTENTO` (rate limit 429, transitorio y no persistido) |
 | `EstadoCalidad` | Fiabilidad de los datos obtenidos | `OK`, `REVISION`, `ERROR` |
 
 Un documento puede terminar en `Estado=OK` pero `EstadoCalidad=REVISION` (proceso completado, pero con confianza media que requiere revisión humana).
@@ -183,6 +190,14 @@ flowchart TD
 |---|---|---|
 | `NormalizarActivity` | Calcula hashes (SHA256, MD5, CRC32), detecta páginas, normaliza el nombre del fichero | < 1 s |
 | `VerificarDuplicadoActivity` | Detecta si el documento ya fue procesado (por SHA256) | < 1 s |
+
+> **Reutilización de duplicados (desde AB#100177):** al reutilizar, se prefiere la ejecución
+> histórica con la misma combinación `classificationOnly`/`nivelClasificacion`; si no existe
+> ninguna que coincida exactamente, **se reutiliza la última ejecución con resultado completo**
+> en lugar de devolver un `DUPLICADO` vacío (antes, un documento procesado por el portal y
+> reenviado por GDC se quedaba sin resumen). Desde AB#100178, además, las salidas
+> `DUPLICADO` y `NO_CLASIFICADO` **siempre quedan persistidas** en el histórico y son visibles
+> en el Monitor (antes desaparecían sin rastro).
 | `SubirBlobActivity` | Sube el PDF a Azure Blob Storage para trazabilidad y procesamiento posterior | 1–3 s |
 | `ClasificarActivity` | Identifica el tipo de documento mediante Azure DI o GPT | 3–15 s |
 | `ResolverTipologiaActivity` | Carga la configuración de la tipología detectada | < 1 s |
@@ -354,7 +369,12 @@ flowchart LR
     C --> D["Continúa con Extracción\n(si el flujo es completo)"]
 ```
 
-> **Nota:** Si el `expectedType` no existe en el registro de tipologías, el proceso termina en `ERROR` con `KeyNotFoundException`.
+> **Nota (desde AB#100179):** si el `expectedType` no resuelve contra el catálogo de tipologías
+> (por ejemplo, una etiqueta de negocio en texto libre como `"Otros"` o `"Ficha técnica"`), el
+> sistema **lo ignora con un warning y clasifica el documento normalmente** con IA, en lugar de
+> saltarse la clasificación con una etiqueta inválida. El valor `"Desconocido"` está exento de
+> esta validación (es intencional en flujos de monitorización y pruebas). El canal de origen
+> debería enviar códigos de tipología reales o dejar el campo vacío.
 
 ---
 

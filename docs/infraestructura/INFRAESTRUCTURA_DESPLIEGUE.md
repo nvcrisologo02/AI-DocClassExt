@@ -227,7 +227,7 @@ Scheduled query rules sobre `srbappiprodocai` (RG `SRBRGDOCSAIPROD`), gestionada
 | `srbalertlatprodocai` | p95 `DocumentIA.Duracion.Total` > 120 s en 15 min | 2 | Email (action group) |
 | `srbalertfbkprodocai` | Fallback LLM > 20% en 30 min | 3 | Email (action group) |
 | `srbalertexcprodocai` | > 10 excepciones en 5 min | 2 | Email (action group) |
-| `srbalertidleprodocai` | 0 requests en 60 min (horario laboral) | 2 | Email (action group) |
+| `srbalertidleprodocai` | 0 requests en 180 min (horario laboral, evaluada 11:00-18:00) | 2 | Email (action group) |
 
 Metric alerts de plataforma preexistentes: `srbalertcpuprodocai` (CPU), `srbalertmemprodocai` (memoria).
 

@@ -1,4 +1,4 @@
-# 3. Diseno Tecnico Detallado — DocumentIA
+﻿# 3. Diseno Tecnico Detallado — DocumentIA
 
 > Ultima actualizacion: 2026-06-05  
 > Proyecto: AI DocClassExt — SAREB  
@@ -967,8 +967,9 @@ erDiagram
         int DocumentoId FK "→ DocumentoEntity"
         string EjecucionGuid UK "indice unico"
         string SubmittedBy "nullable — solicitante (trazabilidad.submittedBy); migracion 20260805100351"
-        string ContratoSalidaCompletoJson
-        string ActivityTimelineJson
+        string IdActivo "nullable — activo resuelto, normalizado (AB#100168)"
+        string ContratoSalidaCompletoJson "sin Seguimiento.Actividades desde AB#100166"
+        string ActivityTimelineJson "fuente unica del timeline; DatosFinales/DatosOriginales ya no se graban"
         int DuracionClasifMs
         int DuracionExtracMs
         int DuracionValidMs

@@ -79,6 +79,31 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
 
         _logger.LogInformation("Proveedor de extracción resuelto para tipología {Tipologia}: {Provider}", input.Tipologia, provider);
 
+        // AB#100192: una tipología sin bloque 'extraction' hereda Enabled=true y ModelKey vacío;
+        // con el DefaultProvider en CU, GetModel("") reventaba con KeyNotFoundException y la
+        // ejecución cerraba EXTRACCION_INCOMPLETA tras un fallback GPT sin campos que extraer.
+        // Sin ningún modelo utilizable, la semántica es "no requiere extracción": se degrada
+        // igual que Enabled=false, sin llamar a ningún proveedor.
+        if (IsAzureContentUnderstandingProvider(provider)
+            && string.IsNullOrWhiteSpace(input.ModelKeyEfectivo)
+            && string.IsNullOrWhiteSpace(config.Extraction.ModelKey)
+            && string.IsNullOrWhiteSpace(config.Extraction.SecondaryModelKey))
+        {
+            _logger.LogWarning(
+                "Tipología {Tipologia} sin modelKey de extracción configurado (provider {Provider}). " +
+                "Se trata como extracción no configurada y se devuelve resultado vacío.",
+                input.Tipologia,
+                provider);
+
+            return new ExtraccionResultado
+            {
+                Proveedor = "none",
+                Modelo = "sin-configurar",
+                LayoutEnabled = false,
+                DatosExtraidos = new Dictionary<string, object>()
+            };
+        }
+
         if (!IsAzureContentUnderstandingProvider(provider) || !fallbackEnabled)
         {
             return provider.ToLowerInvariant() switch
@@ -149,7 +174,10 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         }
         catch (Exception ex)
         {
-            fallbackRazon = $"exception:{ex.GetType().Name}";
+            // AB#100192: se conserva el mensaje (truncado) — solo con el tipo, diagnosticar un
+            // KeyNotFoundException exigió reconstruir a mano qué clave faltaba.
+            var mensaje = ex.Message.Length > 120 ? ex.Message[..120] : ex.Message;
+            fallbackRazon = $"exception:{ex.GetType().Name}:{mensaje}";
             _logger.LogWarning(ex, "Extracción CU falló para {Tipologia}. Activando fallback GPT.", input.Tipologia);
         }
 

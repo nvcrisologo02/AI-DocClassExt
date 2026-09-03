@@ -122,8 +122,41 @@ public class DocumentIADbContext : DbContext
             .HasIndex(e => e.EjecucionGuid)
             .IsUnique();
 
+        // AB#100168: sustituye a IX_DocumentoEjecuciones_IdActivoNormalizado_DocumentoId,
+        // que colgaba de una columna calculada sobre DatosFinalesJson.
         modelBuilder.Entity<DocumentoEjecucionEntity>()
-            .HasIndex(e => e.FechaEjecucion);
+            .HasIndex(e => new { e.IdActivo, e.DocumentoId })
+            .HasDatabaseName("IX_DocumentoEjecuciones_IdActivo_DocumentoId");
+
+        // Indice cubriente del Monitor: todos los filtros y agregados de
+        // GetAgregadosAsync/GetPagedAsync resuelven sobre el indice sin tocar
+        // el cluster (engordado por los LOB de contrato y timeline). Con la
+        // clave en FechaEjecucion, el rango de fechas del Monitor es un
+        // range-scan; solo la pagina de 25 filas hace key lookup (por
+        // ActivityTimelineJson, que como LOB no se incluye).
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasIndex(e => e.FechaEjecucion)
+            .HasDatabaseName("IX_DocumentoEjecuciones_FechaEjecucion_Monitor")
+            .IncludeProperties(e => new
+            {
+                e.EstadoFinal,
+                e.ConfianzaGlobal,
+                e.UseFallbackLLM,
+                e.Tipologia,
+                e.ModeloClasificacion,
+                e.ClassificationOnly,
+                e.DuracionTotalMs,
+                e.DocumentoId,
+                e.EjecucionGuid,
+                e.SubmittedBy,
+                e.ConfianzaClasificacion,
+                e.DuracionClasificacionMs,
+                e.DuracionExtraccionMs,
+                e.DuracionGDCMs,
+                e.DuracionValidacionMs,
+                e.DuracionIntegracionMs,
+                e.DuracionPersistenciaMs
+            });
 
         modelBuilder.Entity<PluginEjecucionEntity>()
             .HasIndex(p => new { p.EjecucionId, p.PluginKey });

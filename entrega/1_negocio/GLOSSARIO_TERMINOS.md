@@ -360,7 +360,8 @@ Tipología (familia@version)
 ```
 Documento recibido
   ├─ ¿Duplicado (SHA256) + !forceReprocess? → Retorna cacheado
-  ├─ ¿ExpectedType informado? → Omite clasificación (confianza=1.0)
+  ├─ ¿ExpectedType informado Y resoluble en catálogo? → Omite clasificación (confianza=1.0)
+  │    (si no resuelve, se ignora con warning y se clasifica normalmente — AB#100179)
   └─ Clasificar: DefaultFlow + Global Fallback
        └─ ¿Confianza < umbral? → BAJA_CONFIANZA_CLASIFICACION (parar)
        └─ ¿Tipología resoluble? → Continúa extracción

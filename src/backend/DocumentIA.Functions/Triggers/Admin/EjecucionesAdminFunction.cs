@@ -6,6 +6,7 @@ using Microsoft.Azure.Functions.Worker.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Repositories;
 
@@ -119,8 +120,8 @@ public class EjecucionesAdminFunction
             e.DuracionValidacionMs,
             e.DuracionIntegracionMs,
             e.DuracionPersistenciaMs,
-            NombreDocumento = e.Documento?.NombreArchivo,
-            SubmittedBy = e.SubmittedBy ?? e.Documento?.SubmittedBy,
+            NombreDocumento = e.NombreDocumento,
+            SubmittedBy = e.SubmittedBy,
             Actividades = ParseActivitySummaries(e.ActivityTimelineJson)
         }).ToList();
 
@@ -149,6 +150,10 @@ public class EjecucionesAdminFunction
             try
             {
                 contrato = JsonSerializer.Deserialize<ContratoSalida>(ejecucion.ContratoSalidaCompletoJson, _jsonOpts);
+
+                // AB#100167: el contrato persistido va sin Seguimiento.Actividades desde
+                // AB#100166; el timeline del detalle se recompone desde su columna.
+                ContratoTimelineRehidratador.Rehidratar(contrato, ejecucion.ActivityTimelineJson);
             }
             catch (Exception ex)
             {

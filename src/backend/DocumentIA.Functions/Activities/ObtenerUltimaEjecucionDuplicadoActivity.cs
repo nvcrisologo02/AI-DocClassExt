@@ -51,14 +51,33 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
         }
 
         var ejecuciones = await _documentoEjecucionRepository.GetByDocumentoIdAsync(documento.Id);
-        var ultimaConSalida = ejecuciones.FirstOrDefault(e =>
+        var candidatas = ejecuciones
+            .Where(e => !string.IsNullOrWhiteSpace(e.ContratoSalidaCompletoJson))
+            .ToList();
+
+        var ultimaConSalida = candidatas.FirstOrDefault(e =>
             e.ClassificationOnly == request.ClassificationOnly &&
-            string.Equals(e.NivelClasificacion, request.NivelClasificacion, StringComparison.OrdinalIgnoreCase) &&
-            !string.IsNullOrWhiteSpace(e.ContratoSalidaCompletoJson));
+            string.Equals(e.NivelClasificacion, request.NivelClasificacion, StringComparison.OrdinalIgnoreCase));
+
+        if (ultimaConSalida is null && candidatas.Count > 0)
+        {
+            // AB#100177: sin coincidencia exacta de ClassificationOnly/NivelClasificacion se
+            // reutiliza la última ejecución con contrato. El filtro estricto dejaba peticiones
+            // GDC sin resumen cuando la histórica había entrado por portal (INC1338832).
+            ultimaConSalida = candidatas[0];
+            _logger.LogWarning(
+                "Sin ejecución exacta para ClassificationOnly={SolicitadoCo}/Nivel={SolicitadoNivel} en documento ID={DocumentoId}; se reutiliza la ejecución {EjecucionId} (ClassificationOnly={HistoricoCo}/Nivel={HistoricoNivel})",
+                request.ClassificationOnly,
+                request.NivelClasificacion,
+                documento.Id,
+                ultimaConSalida.Id,
+                ultimaConSalida.ClassificationOnly,
+                ultimaConSalida.NivelClasificacion);
+        }
 
         if (ultimaConSalida is null)
         {
-            _logger.LogWarning("No hay ejecuciones con salida serializada para documento ID={DocumentoId}", documento.Id);
+            _logger.LogWarning("No hay ninguna ejecución con contrato serializado para documento ID={DocumentoId}", documento.Id);
             return null;
         }
 
@@ -76,6 +95,9 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
                 _logger.LogWarning("No se pudo deserializar la salida de la ejecución {EjecucionId}", ultimaConSalida.Id);
                 return null;
             }
+
+            // AB#100167: el contrato persistido va sin Seguimiento.Actividades desde AB#100166.
+            ContratoTimelineRehidratador.Rehidratar(salida, ultimaConSalida.ActivityTimelineJson);
 
             RehidratarResultadoSiIncompleto(salida, ultimaConSalida);
             await RehidratarTdnSiIncompletoAsync(salida, documento);

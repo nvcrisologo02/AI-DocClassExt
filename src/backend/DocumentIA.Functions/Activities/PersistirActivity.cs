@@ -85,6 +85,10 @@ namespace DocumentIA.Functions.Activities
                         // Solicitante del alta. En reprocesos no se toca: el documento conserva
                         // quien lo trajo por primera vez y cada reenvio queda en su ejecucion.
                         SubmittedBy = submittedBy,
+                        // AB#100169: escritura dual mientras la vuelta atras deba ser posible.
+                        // La columna binaria es la forma nueva; la Base64 se mantiene poblada
+                        // para que revertir el codigo o la migracion no pierda ningun markdown.
+                        NormalizacionMarkdownGzip = MarkdownCompression.Compress(salida.DetalleEjecucion.Postproceso?.Markdown),
                         NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown),
                         // Registrar IdGDC e IdActivo si están disponibles
                         IdGDC = salida.Integridad.GestorDocumental,
@@ -145,6 +149,8 @@ namespace DocumentIA.Functions.Activities
                     if (salida.DetalleEjecucion.Clasificacion.PagesProcessed > 0)
                         documento.PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed;
                     
+                    // AB#100169: escritura dual (ver comentario en el alta del documento).
+                    documento.NormalizacionMarkdownGzip = MarkdownCompression.Compress(salida.DetalleEjecucion.Postproceso?.Markdown);
                     documento.NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown);
                     documento.FechaExpiracionBlob = fechaExpiracionBlob;
                     documento.FechaActualizacion = DateTime.UtcNow;
@@ -203,6 +209,15 @@ namespace DocumentIA.Functions.Activities
                     salida.DetalleEjecucion.Postproceso.Markdown = null;
                 }
 
+                // AB#100166: el timeline se guarda en su propia columna (ActivityTimelineJson,
+                // que proyecta el listado del Monitor) y se poda del contrato para no grabarlo
+                // dos veces. Se restaura despues: la respuesta al llamador no cambia.
+                var actividadesSeguimiento = salida.DetalleEjecucion.Seguimiento?.Actividades;
+                if (salida.DetalleEjecucion.Seguimiento != null)
+                {
+                    salida.DetalleEjecucion.Seguimiento.Actividades = new List<TrazaActividad>();
+                }
+
                 var ejecucion = new DocumentoEjecucionEntity
                 {
                     DocumentoId = documento.Id,
@@ -219,6 +234,12 @@ namespace DocumentIA.Functions.Activities
                     UseFallbackLLM = salida.DetalleEjecucion.Clasificacion.FallbackLLM,
                     ClassificationOnly = salida.DetalleEjecucion.ClassificationOnly,
                     NivelClasificacion = salida.DetalleEjecucion.NivelClasificacion,
+
+                    // AB#100168: normalizado en escritura (trim + mayusculas), igual que hacia
+                    // la columna calculada, para que el filtro del SP siga comparando igual.
+                    IdActivo = string.IsNullOrWhiteSpace(salida.Integridad.IdActivo)
+                        ? null
+                        : salida.Integridad.IdActivo.Trim().ToUpperInvariant(),
                     
                     // NUEVO: Guardar respuesta completa para auditoria
                     ContratoSalidaCompletoJson = JsonSerializer.Serialize(salida, new JsonSerializerOptions 
@@ -226,14 +247,17 @@ namespace DocumentIA.Functions.Activities
                         WriteIndented = false 
                     }),
 
-                    ActivityTimelineJson = salida.DetalleEjecucion.Seguimiento?.Actividades != null
-                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Seguimiento.Actividades)
+                    // Se serializa desde la variable capturada: en este punto la lista del
+                    // contrato ya esta podada y serializarla daria un timeline vacio.
+                    ActivityTimelineJson = actividadesSeguimiento != null
+                        ? JsonSerializer.Serialize(actividadesSeguimiento)
                         : null,
-                    
-                    DatosOriginalesJson = salida.DetalleEjecucion.Integracion?.DatosOriginales != null 
-                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Integracion.DatosOriginales) 
-                        : null,
-                    DatosFinalesJson = JsonSerializer.Serialize(salida.DatosExtraidos),
+
+                    // AB#100166: DatosOriginalesJson y DatosFinalesJson dejan de grabarse. Su
+                    // contenido esta en el contrato ($.DetalleEjecucion.Integracion.DatosOriginales
+                    // y $.DatosExtraidos). El historico conserva sus valores.
+                    DatosOriginalesJson = null,
+                    DatosFinalesJson = null,
                     DuracionTotalMs = salida.DetalleEjecucion.Seguimiento?.DuracionTotalMs ?? 0,
                     DuracionClasificacionMs = GetDuracionActividad(salida, "Clasificar"),
                     DuracionExtraccionMs = GetDuracionActividad(salida, "Extraer"),
@@ -252,6 +276,11 @@ namespace DocumentIA.Functions.Activities
                 if (salida.DetalleEjecucion.Postproceso != null)
                 {
                     salida.DetalleEjecucion.Postproceso.Markdown = markdownPostproceso;
+                }
+
+                if (salida.DetalleEjecucion.Seguimiento != null && actividadesSeguimiento != null)
+                {
+                    salida.DetalleEjecucion.Seguimiento.Actividades = actividadesSeguimiento;
                 }
 
                 // 3. Guardar detalle de cada plugin ejecutado

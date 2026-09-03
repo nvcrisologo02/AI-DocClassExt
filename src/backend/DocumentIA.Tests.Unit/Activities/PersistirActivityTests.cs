@@ -1,5 +1,7 @@
 #nullable enable
+using System.Text.Json;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Data.Context;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
@@ -547,6 +549,148 @@ public class PersistirActivityTests : IDisposable
         await act.Should().NotThrowAsync();
         _ejecucionRepoMock.Verify(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()), Times.Once);
         _auditoriaRepoMock.Verify(r => r.AddAsync(It.IsAny<AuditoriaEntity>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task Run_NoGrabaDatosDuplicadosYPodaElTimelineDelContrato()
+    {
+        // AB#100166: DatosFinales/DatosOriginales ya viajan dentro del contrato y el timeline
+        // vive en su propia columna: no se graban dos veces.
+        const string sha256 = "sha256_dedup_columnas";
+        var salida = BuildSalidaMinima(sha256);
+        salida.DatosExtraidos = new Dictionary<string, object> { ["Titular"] = "Prueba" };
+        salida.DetalleEjecucion.Integracion.DatosOriginales = new Dictionary<string, object> { ["Titular"] = "Original" };
+        salida.DetalleEjecucion.Seguimiento.Actividades = new List<TrazaActividad>
+        {
+            new() { Nombre = "Clasificar", Estado = "Completed", DuracionMs = 1200 },
+            new() { Nombre = "Persistir", Estado = "Running" }
+        };
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { d.Id = 7; return d; });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => { ejecucionCapturada = e; return e; });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        ejecucionCapturada.Should().NotBeNull();
+        ejecucionCapturada!.DatosFinalesJson.Should().BeNull("ya viaja en $.DatosExtraidos del contrato");
+        ejecucionCapturada.DatosOriginalesJson.Should().BeNull("ya viaja en $.DetalleEjecucion.Integracion.DatosOriginales");
+
+        // El timeline SI se graba en su columna (lo proyecta el listado del Monitor, AB#100183).
+        ejecucionCapturada.ActivityTimelineJson.Should().NotBeNullOrWhiteSpace();
+        ejecucionCapturada.ActivityTimelineJson.Should().Contain("Clasificar");
+
+        // ...y NO se duplica dentro del contrato persistido.
+        var contratoPersistido = JsonSerializer.Deserialize<ContratoSalida>(
+            ejecucionCapturada.ContratoSalidaCompletoJson!,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        contratoPersistido!.DetalleEjecucion.Seguimiento.Actividades.Should().BeEmpty();
+
+        // La respuesta al llamador no cambia: el objeto en memoria conserva el timeline.
+        salida.DetalleEjecucion.Seguimiento.Actividades.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Run_PersisteIdActivoEscalarEnLaEjecucion()
+    {
+        // AB#100168: el filtro por IdActivo deja de depender de una columna calculada sobre
+        // DatosFinalesJson (que ya no se graba) y pasa a una columna escalar real.
+        const string sha256 = "sha256_idactivo";
+        var salida = BuildSalidaMinima(sha256);
+        salida.Integridad.IdActivo = " act-12345 ";
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { d.Id = 11; return d; });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => { ejecucionCapturada = e; return e; });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        ejecucionCapturada.Should().NotBeNull();
+        ejecucionCapturada!.IdActivo.Should().Be("ACT-12345", "se normaliza en escritura igual que hacia la columna calculada");
+    }
+
+    [Fact]
+    public async Task Run_SinIdActivo_DejaLaColumnaNula()
+    {
+        const string sha256 = "sha256_sin_idactivo";
+        var salida = BuildSalidaMinima(sha256);
+        salida.Integridad.IdActivo = null;
+
+        DocumentoEjecucionEntity? ejecucionCapturada = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { d.Id = 12; return d; });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => { ejecucionCapturada = e; return e; });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        ejecucionCapturada!.IdActivo.Should().BeNull("sin activo resuelto no debe guardarse cadena vacia");
+    }
+
+    [Fact]
+    public async Task Run_EscribeElMarkdownEnLasDosColumnas()
+    {
+        // AB#100169: la escritura dual es la garantia de vuelta atras. Si se dejara de escribir
+        // la columna Base64, revertir el codigo o la migracion perderia el markdown de los
+        // documentos procesados con la version nueva.
+        const string sha256 = "sha256_markdown_dual";
+        const string markdown = "# Markdown normalizado de prueba";
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Postproceso.Markdown = markdown;
+
+        DocumentoEntity? documentoCapturado = null;
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { documentoCapturado = d; d.Id = 21; return d; });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        documentoCapturado.Should().NotBeNull();
+        MarkdownCompression.Decompress(documentoCapturado!.NormalizacionMarkdownGzip)
+            .Should().Be(markdown, "la columna binaria es la forma nueva");
+        MarkdownCompression.DecompressFromBase64(documentoCapturado.NormalizacionMarkdownCompressed)
+            .Should().Be(markdown, "la Base64 se mantiene poblada para poder revertir sin perder datos");
     }
 
     public void Dispose()
