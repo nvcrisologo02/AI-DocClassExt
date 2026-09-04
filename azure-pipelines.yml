@@ -50,7 +50,7 @@ variables:
     - name: KEY_VAULT_NAME
       value: srbkvpredocai
     - name: GDC_ENDPOINT
-      value: https://REEMPLAZAR-host-pre.sareb.srb:8090/sintws/IDocService  # TODO: confirmar host GDC de PRE
+      value: https://srbwidi03.sareb.srb:8090/sintws-162/IDocService
     - name: DI_USE_INLINE_CONTENT
       value: 'true'
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
