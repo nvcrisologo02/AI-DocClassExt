@@ -972,6 +972,137 @@ Contenido del documento:
             };
         }
 
+        // ========== Captura de consumo de IA (AB#100227) ==========
+
+        private static ClientResult<ChatCompletion> CreateChatResultConUso(
+            string responseText,
+            int inputTokens,
+            int outputTokens,
+            int cachedTokens = 0,
+            int reasoningTokens = 0)
+        {
+            var usage = OpenAIChatModelFactory.ChatTokenUsage(
+                outputTokenCount: outputTokens,
+                inputTokenCount: inputTokens,
+                totalTokenCount: inputTokens + outputTokens,
+                outputTokenDetails: OpenAIChatModelFactory.ChatOutputTokenUsageDetails(
+                    reasoningTokenCount: reasoningTokens),
+                inputTokenDetails: OpenAIChatModelFactory.ChatInputTokenUsageDetails(
+                    cachedTokenCount: cachedTokens));
+
+            var completion = OpenAIChatModelFactory.ChatCompletion(
+                role: ChatMessageRole.Assistant,
+                content: new ChatMessageContent(responseText),
+                usage: usage);
+
+            return ClientResult.FromValue(completion, new Mock<PipelineResponse>().Object);
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_RegistraUnConsumoPorCadaLlamadaAlModelo()
+        {
+            // Given: clasificacion jerarquica completa, dos llamadas al modelo
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResultConUso(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"p\", \"resumen\": \"r\", \"confianza\": 0.72}",
+                    inputTokens: 1200, outputTokens: 300, cachedTokens: 700, reasoningTokens: 120))
+                // tdn2 no parseable: degrada a tipologia virtual sin tocar el repositorio
+                // de tipologias, pero la llamada al modelo se ha hecho y se ha pagado.
+                .ReturnsAsync(CreateChatResultConUso(
+                    "{\"tdn2\": null, \"confianza\": 0.4}",
+                    inputTokens: 800, outputTokens: 50));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then: un consumo por llamada, con los tokens tal como los da la API
+            result.Consumos.Should().HaveCount(2);
+
+            var fase1 = result.Consumos[0];
+            fase1.Actividad.Should().Be(ActividadesIA.Clasificar);
+            fase1.Operacion.Should().Be("classification.phase1");
+            fase1.Proveedor.Should().Be(ProveedoresIA.AzureOpenAI);
+            fase1.Modelo.Should().Be("gpt-4o-mini");
+            fase1.TokensEntrada.Should().Be(1200);
+            fase1.TokensSalida.Should().Be(300);
+            // Los cacheados se guardan sin restar: restarlos es cosa de la calculadora.
+            fase1.TokensEntradaCache.Should().Be(700);
+            fase1.TokensRazonamiento.Should().Be(120);
+
+            result.Consumos[1].Operacion.Should().Be("classification.phase2");
+            result.Consumos[1].TokensEntrada.Should().Be(800);
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_CuandoElParseoFalla_ConservaElConsumoDeLaLlamadaPagada()
+        {
+            // Una respuesta que no se puede parsear se ha pagado igual: el consumo
+            // no puede perderse por el camino de error.
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .Setup(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResultConUso(
+                    "esto no es json",
+                    inputTokens: 999, outputTokens: 11));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+
+            var result = await provider.ClasificarAsync(input);
+
+            result.Consumos.Should().ContainSingle();
+            result.Consumos[0].TokensEntrada.Should().Be(999);
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_SinLlamadaAlModelo_NoRegistraConsumo()
+        {
+            // Documento sin contenido textual: no se llama al modelo, no se paga nada.
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Documento.Content.Base64 = string.Empty;
+            input.DatosNormalizados.Clear();
+
+            var result = await provider.ClasificarAsync(input);
+
+            result.Consumos.Should().BeEmpty();
+        }
+
         private static ClientResult<ChatCompletion> CreateChatResult(string responseText)
         {
             var completion = OpenAIChatModelFactory.ChatCompletion(

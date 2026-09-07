@@ -137,6 +137,22 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         ClasificacionInput input,
         CancellationToken cancellationToken = default)
     {
+        // El consumo de IA se acumula en una lista compartida y se adjunta aqui, en
+        // un unico punto. El cuerpo tiene multiples salidas, incluidas las de error
+        // de parseo, y todas deben llevar el consumo: esas llamadas se han pagado.
+        var consumos = new List<ConsumoIA>();
+
+        var resultado = await ClasificarCoreAsync(input, consumos, cancellationToken);
+        resultado.Consumos.AddRange(consumos);
+
+        return resultado;
+    }
+
+    private async Task<ResultadoClasificacion> ClasificarCoreAsync(
+        ClasificacionInput input,
+        List<ConsumoIA> consumos,
+        CancellationToken cancellationToken)
+    {
         var stopwatch = Stopwatch.StartNew();
         var requestedModel = input.Entrada.Instrucciones.Classification.Model;
         var model = ResolveModel(requestedModel);
@@ -167,7 +183,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         if (restriccionCodigos is not null)
         {
             return await ClasificarRestringidoAsync(
-                input, model, restriccionCodigos, contextoTexto, contextoPrompt, resumenPrompt, promptSet, stopwatch, cancellationToken);
+                input, consumos, model, restriccionCodigos, contextoTexto, contextoPrompt, resumenPrompt, promptSet, stopwatch, cancellationToken);
         }
 
         var phase1ResponseInstruction = resumenPrompt is null
@@ -216,7 +232,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 phase1UserText);
         }
 
-        var phase1ResponseText = await CompleteChatAsync(
+        var (phase1ResponseText, phase1Consumo) = await CompleteChatAsync(
             model,
             "classification.phase1",
             input.Entrada.Instrucciones.ExpectedType,
@@ -224,6 +240,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             phase1UserText,
             cancellationToken,
             resumenPrompt?.MaxTokens);
+        consumos.Add(phase1Consumo);
 
         var phase1Parsed = GptHierarchicalClassificationParser.ParsePhase1(phase1ResponseText);
         if (!phase1Parsed.Success || phase1Parsed.Value is null)
@@ -394,7 +411,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 phase2UserText);
         }
 
-        var phase2ResponseText = await CompleteChatAsync(
+        var (phase2ResponseText, phase2Consumo) = await CompleteChatAsync(
             model,
             "classification.phase2",
             input.Entrada.Instrucciones.ExpectedType,
@@ -402,6 +419,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             phase2UserText,
             cancellationToken,
             resumenPrompt?.MaxTokens);
+        consumos.Add(phase2Consumo);
+
         var phase2Parsed = GptHierarchicalClassificationParser.ParsePhase2(phase2ResponseText);
 
         if (!phase2Parsed.Success || phase2Parsed.Value is null)
@@ -495,6 +514,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
     /// </summary>
     private async Task<ResultadoClasificacion> ClasificarRestringidoAsync(
         ClasificacionInput input,
+        List<ConsumoIA> consumos,
         ClassificationModelConfig model,
         IReadOnlyCollection<string> restriccionCodigos,
         string? contextoTexto,
@@ -570,7 +590,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 userText);
         }
 
-        var responseText = await CompleteChatAsync(
+        var (responseText, restringidoConsumo) = await CompleteChatAsync(
             model,
             "classification.restricted",
             input.Entrada.Instrucciones.ExpectedType,
@@ -578,6 +598,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             userText,
             cancellationToken,
             resumenPrompt?.MaxTokens);
+        consumos.Add(restringidoConsumo);
 
         var parsed = GptHierarchicalClassificationParser.ParseRestringido(responseText);
         if (!parsed.Success || parsed.Value is null)
@@ -797,7 +818,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         }
     }
 
-    private async Task<string> CompleteChatAsync(
+    private async Task<(string Texto, ConsumoIA Consumo)> CompleteChatAsync(
         ClassificationModelConfig model,
         string operation,
         string? tipologia,
@@ -842,7 +863,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             },
             cancellationToken);
 
-        return response.Value.Content[0].Text;
+        var consumo = UsoOpenAiMapper.Mapear(
+            response.Value.Usage,
+            actividad: ActividadesIA.Clasificar,
+            operacion: operation,
+            modelo: model.DeploymentName);
+
+        return (response.Value.Content[0].Text, consumo);
     }
 
     private string? ResolveTipologiaByTdn2(string tdn2Code)

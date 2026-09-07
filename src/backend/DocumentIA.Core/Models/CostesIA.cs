@@ -1,6 +1,36 @@
 namespace DocumentIA.Core.Models;
 
 /// <summary>
+/// Nombres canonicos de proveedor en ConsumoIA.Proveedor. Viven aqui, sin
+/// dependencias de SDK, para que los use tanto Core como Functions.
+/// </summary>
+public static class ProveedoresIA
+{
+    /// <summary>
+    /// Tokens facturados por un deployment de Azure OpenAI. Tambien los que
+    /// Content Understanding consume de su deployment de Foundry conectado.
+    /// </summary>
+    public const string AzureOpenAI = "AzureOpenAI";
+
+    /// <summary>Paginas facturadas por Document Intelligence.</summary>
+    public const string DocumentIntelligence = "DocumentIntelligence";
+
+    /// <summary>Paginas y contextualizacion facturadas por Content Understanding.</summary>
+    public const string ContentUnderstanding = "ContentUnderstanding";
+}
+
+/// <summary>
+/// Actividades del pipeline en ConsumoIA.Actividad.
+/// </summary>
+public static class ActividadesIA
+{
+    public const string Clasificar = "Clasificar";
+    public const string Extraer = "Extraer";
+    public const string Prompt = "Prompt";
+    public const string Layout = "Layout";
+}
+
+/// <summary>
 /// Consumo de una unica llamada a un servicio de IA. Una ejecucion genera tantos
 /// consumos como llamadas haga, incluidas las de proveedores cuyo resultado se
 /// descarto despues: esas tambien se han pagado.
