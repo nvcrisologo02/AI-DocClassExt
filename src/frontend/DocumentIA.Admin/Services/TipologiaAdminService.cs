@@ -142,7 +142,10 @@ public class TipologiaAdminService
 
     public async Task<ModeloConfigEntity?> GetModeloByIdAsync(int id)
     {
-        foreach (var tipo in new[] { TipoModelo.Clasificacion, TipoModelo.Extraccion, TipoModelo.Prompt, TipoModelo.Layout })
+        // Se recorre el enum entero, no una lista escrita a mano: con una lista fija,
+        // un tipo nuevo queda invisible para la edicion y la pagina responde "no
+        // existe" para una fila que si existe. Paso con Tarifas (AB#100233).
+        foreach (var tipo in Enum.GetValues<TipoModelo>())
         {
             var modelos = await GetModelosByTipoAsync(tipo);
             var match = modelos.FirstOrDefault(m => m.Id == id);

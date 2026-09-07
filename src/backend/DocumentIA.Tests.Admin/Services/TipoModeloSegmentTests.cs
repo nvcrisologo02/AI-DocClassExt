@@ -73,6 +73,36 @@ public class TipoModeloSegmentTests
     }
 
     [Fact]
+    public async Task GetModeloByIdAsync_EncuentraModelosDeCualquierTipo()
+    {
+        // La busqueda por Id recorria una lista fija de cuatro tipos. Con Tarifas
+        // fuera, editar esa fila respondia "no existe un modelo con Id X" para una
+        // fila que si existe (AB#100233). Se comprueba con el ultimo valor del enum,
+        // que es el que una lista escrita a mano tiende a dejarse.
+        var ultimoTipo = Enum.GetValues<TipoModelo>().Last();
+        var segmentoDelUltimo = ultimoTipo.ToString().ToLowerInvariant();
+
+        var client = new HttpClient(new StubHttpMessageHandler(request =>
+        {
+            // Solo la ruta del ultimo tipo devuelve el modelo; el resto van vacias.
+            var esUltimo = request.RequestUri!.AbsolutePath.EndsWith($"/modelos/{segmentoDelUltimo}");
+            return StubHttpMessageHandler.Json(esUltimo
+                ? """[{"id":42,"tipo":4,"key":"tarifas.ia","provider":"catalogo","activo":true,"configuracionJson":"{}"}]"""
+                : "[]");
+        }))
+        {
+            BaseAddress = new Uri("http://localhost/api/")
+        };
+        var servicio = new TipologiaAdminService(client, new FakeCurrentUser());
+
+        var modelo = await servicio.GetModeloByIdAsync(42);
+
+        modelo.Should().NotBeNull(
+            $"un modelo de tipo {ultimoTipo} debe poder editarse como cualquier otro");
+        modelo!.Key.Should().Be("tarifas.ia");
+    }
+
+    [Fact]
     public async Task NingunTipoCompartRutaConOtro()
     {
         var rutasPorTipo = new List<string>();

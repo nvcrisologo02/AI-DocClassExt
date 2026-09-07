@@ -31,11 +31,11 @@ public class SystemConfigService
         var plugins = await _tipologiaService.GetPluginConfigsAsync();
         
         var modelos = new List<ModeloConfigEntity>();
-        modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Clasificacion));
-        modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Extraccion));
-        modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Prompt));
-        modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Layout));
-        modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Tarifas));
+        // El enum entero, para que un tipo nuevo entre en el resumen sin tocar esto.
+        foreach (var tipo in Enum.GetValues<TipoModelo>())
+        {
+            modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(tipo));
+        }
 
         // Obtener configuración de Functions
         var functionsConfig = await GetFunctionsConfigurationAsync();
