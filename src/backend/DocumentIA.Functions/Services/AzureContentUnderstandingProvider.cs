@@ -328,6 +328,10 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             MarkdownExtraido = markdownExtraido,
             ConfianzaExtraccion = confianzaExtraccion,
             ProveedorExtrac = "AzureContentUnderstanding",
+            // El bloque usage trae paginas, contextualizacion y los tokens del modelo
+            // generativo que el servicio consume de su deployment de Foundry: cada
+            // parte se tarifica a su precio (AB#100228).
+            Consumos = UsoContentUnderstandingMapper.Mapear(analysisDocument.RootElement, model.AnalyzerId),
             MetricasDebug = metricasDebug,
             TiemposMs = new Dictionary<string, int>
             {
