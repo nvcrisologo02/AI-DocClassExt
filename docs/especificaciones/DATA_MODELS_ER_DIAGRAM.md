@@ -150,6 +150,8 @@ erDiagram
         int DuracionGDCMs
         int DuracionPersistenciaMs
         int DuracionAssetResolverMs
+        decimal CosteIAEur "Coste EUR de servicios de IA (AB#100232)"
+        int TokensIA "Tokens de IA consumidos (AB#100232)"
     }
 
     PLUGIN_EJECUCIONES {
@@ -468,6 +470,8 @@ erDiagram
 | **DuracionGDCMs** | INT | Envío a GDC |
 | **DuracionPersistenciaMs** | INT | Persistencia en BD |
 | **DuracionAssetResolverMs** | INT | Asset Resolver |
+| **CosteIAEur** | DECIMAL(18,6) | Coste en euros de los servicios de IA de la ejecución (AB#100232). Solo servicios de IA: no incluye almacenamiento, cómputo ni red. NULL en ejecuciones anteriores a la funcionalidad; 0 cuando la ejecución no consumió IA. El desglose por llamada vive en el contrato, en `$.DetalleEjecucion.Costes` |
+| **TokensIA** | INT | Tokens de IA consumidos: entrada + salida + contextualización (AB#100232). No suma cacheados ni razonamiento, que ya van dentro de entrada y salida |
 
 **Navegación**:
 - → `PluginEjecuciones` (1:N)
@@ -744,10 +748,18 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
 | **1.15** | 2026-06-02 | Agregó TDN2_Prompt a CatalogoTdn1 |
 | **v1.5** | 2026-06-05 | Marca PromptGPT, ModeloClasificacionDI, UmbralClasificacion como [Obsolete] |
 | **1.16** | 2026-08-05 | Agregó SubmittedBy a DocumentoEjecuciones (`20260805100351_AgregarSubmittedByEjecucion`). Aplicada en DEV y PRO |
-| **1.17** | 2026-09-02 | [ACTUAL] Release de rendimiento/almacenamiento: índice cubriente del Monitor (`20260902080254_IndiceCubrienteMonitorEjecuciones`, AB#100185); columna escalar `IdActivo` + SP por activo reescrito y retirada de `IdActivoNormalizado` (`20260902093812_IdActivoEscalarYSpPorIdActivo`, AB#100168); `Documentos.NormalizacionMarkdownGzip` con escritura dual (`20260902103313_MarkdownBinario`, AB#100169); `DatosFinalesJson`/`DatosOriginalesJson` dejan de grabarse y el contrato se persiste sin timeline (AB#100166/100167). Aplicadas en DEV (02/09) y en PRO (03/09, ventana manual única + backfills por lotes verificados: IdActivo tabla completa, markdown 64.466 filas con 0 discrepancias byte a byte) |
+| **1.17** | 2026-09-02 | Release de rendimiento/almacenamiento: índice cubriente del Monitor (`20260902080254_IndiceCubrienteMonitorEjecuciones`, AB#100185); columna escalar `IdActivo` + SP por activo reescrito y retirada de `IdActivoNormalizado` (`20260902093812_IdActivoEscalarYSpPorIdActivo`, AB#100168); `Documentos.NormalizacionMarkdownGzip` con escritura dual (`20260902103313_MarkdownBinario`, AB#100169); `DatosFinalesJson`/`DatosOriginalesJson` dejan de grabarse y el contrato se persiste sin timeline (AB#100166/100167). Aplicadas en DEV (02/09) y en PRO (03/09, ventana manual única + backfills por lotes verificados: IdActivo tabla completa, markdown 64.466 filas con 0 discrepancias byte a byte) |
+| **1.18** | 2026-09-07 | [ACTUAL] Agregó `CosteIAEur` y `TokensIA` a DocumentoEjecuciones (`20260907075128_AddCostesIAToEjecuciones`, AB#100232). Migración puramente aditiva, sin relleno retroactivo. Pendiente de aplicar en DEV y PRO |
 | **v2.0** | 2026-07-31 | [PLANIFICADO] Elimina PromptGPT, ModeloClasificacionDI, UmbralClasificacion |
 
 ### 5.2 Cambios Recientes (Últimos 30 días)
+
+-1. **Coste de IA por ejecución** (2026-09-07, AB#100224)
+   - `CosteIAEur` y `TokensIA` en `DocumentoEjecuciones`, ambas nullable y aditivas
+   - El desglose por llamada a servicio de IA viaja dentro del contrato ya persistido, en `$.DetalleEjecucion.Costes`; no necesita columna propia
+   - El bloque se calcula y persiste siempre; solo se devuelve al llamador si la entrada trae `instrucciones.incluirCostes`
+   - Las tarifas viven en `ModeloConfigs` con `Tipo=4` (Tarifas), clave `tarifas.ia`, y se resuelven por modelo físico y fecha de vigencia
+   - Solo servicios de IA: no contabiliza almacenamiento, cómputo ni red
 
 0. **SubmittedBy en DocumentoEjecuciones** (2026-08-05)
    - Asocia el solicitante (`trazabilidad.submittedBy`) a cada ejecución, no solo al documento

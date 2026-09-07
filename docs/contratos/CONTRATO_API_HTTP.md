@@ -46,6 +46,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "executeIntegrarWhenClassificationOnly": null,
     "maxPagesForClassificationOnly": 0,
     "skipGDCUpload": null,
+    "incluirCostes": false,
     "classification": {
       "provider": "auto",
       "model": "auto",
@@ -94,6 +95,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `executeIntegrarWhenClassificationOnly` | bool? | Solo aplica cuando `classificationOnly=true`. `null/false` = no ejecutar `Integrar`. `true` = ejecutar `Integrar` si hay `trazabilidad.idActivo`. |
 | `maxPagesForClassificationOnly` | int | Solo aplica cuando `classificationOnly=true`. `0` = sin límite. `N > 0` = usa solo las primeras N páginas para clasificación. |
 | `skipGDCUpload` | bool? | `null` = respetar la configuración de la tipología. `true` = no subir al GDC. `false` = forzar subida. |
+| `incluirCostes` | bool | `true` = la salida incluye `detalleEjecucion.costes` con el consumo y el coste de los servicios de IA. Default: `false`. El bloque se calcula y persiste **siempre**; este parámetro solo decide si se devuelve. Cubre únicamente servicios de IA: no contabiliza almacenamiento, cómputo ni red. |
 | `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `gpt` \| `mock`. Si se informa `nivelClasificacion`, el sistema **fuerza automáticamente** `provider="gpt"` (D2). |
 | `classification.model` | string | Reservado. Usar `"auto"`. El model key se resuelve desde la configuración de la tipología. |
 | `classification.umbral` | double? | _(Opcional)_ Umbral de confianza para activar fallback GPT y para el check `BAJA_CONFIANZA_CLASIFICACION`. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor. |
@@ -458,6 +460,7 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | `detalleEjecucion.clasificacion.fallbackLLM` | `true` si se usó GPT fallback. |
 | `detalleEjecucion.clasificacion.fallbackRazon` | Motivo del fallback. `"fuera_de_conjunto_restringido"` cuando la clasificación se degrada a `"Desconocido"` por `instrucciones.restriccionTipologias`. |
 | `detalleEjecucion.clasificacion.restriccionTipologias` | Eco de la restricción aplicada (`null` si la petición no traía `instrucciones.restriccionTipologias`). `{ codigos, codigosIgnorados }` con los códigos efectivos y los descartados por no publicados. |
+| `detalleEjecucion.costes` | Consumo y coste de servicios de IA de la ejecución. **Solo presente si la petición trae `instrucciones.incluirCostes = true`**; en caso contrario la propiedad se omite del JSON. Ver sección 6.bis. |
 | `detalleEjecucion.extraccion.proveedorExtrac` | `"AzureContentUnderstanding"` \| `"DICustom"` \| `"GPT4oMini"` |
 | `detalleEjecucion.extraccion.confianzaExtraccion` | Confianza de extracción. |
 | `detalleEjecucion.extraccion.fallbackUsado` | `true` si se usó GPT fallback en extracción. |
@@ -483,6 +486,83 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | `detalleEjecucion.seguimiento` | Timeline de actividades con tiempos individuales. |
 
 ---
+
+## 6.bis. `detalleEjecucion.costes` — consumo y coste de IA
+
+Solo aparece cuando la petición incluye `instrucciones.incluirCostes = true`. El bloque se calcula y se persiste siempre, con independencia del parámetro: lo que este decide es únicamente si viaja en la respuesta. Una petición que no lo pida recibe exactamente la misma salida que antes de existir la funcionalidad.
+
+Cubre **solo servicios de IA**. No contabiliza Blob Storage, SQL, Functions ni ninguna otra infraestructura.
+
+```json
+"costes": {
+  "version": "1.0",
+  "consumos": [
+    {
+      "actividad": "Clasificar",
+      "operacion": "classification.phase1",
+      "proveedor": "AzureOpenAI",
+      "modelo": "gpt-5-mini",
+      "tokensEntrada": 12480,
+      "tokensEntradaCache": 7200,
+      "tokensSalida": 310,
+      "tokensRazonamiento": 128,
+      "costeEur": 0.004312,
+      "tarifaAplicada": "gpt-5-mini@2026-07-21",
+      "descartado": false
+    },
+    {
+      "actividad": "Extraer",
+      "operacion": "extraction.cu.servicio",
+      "proveedor": "ContentUnderstanding",
+      "modelo": "CU_NS_1.4_2",
+      "paginas": 10,
+      "tokensContextualizacion": 10000,
+      "costeEur": 0.056,
+      "tarifaAplicada": "CU_NS_1.4_2@2026-04-01"
+    }
+  ],
+  "costeTotalEur": 0.060312,
+  "tokensTotales": 22790,
+  "paginasTotales": 10,
+  "tarifasCompletas": true,
+  "modelosSinTarifa": [],
+  "reutilizadaPorDuplicado": false
+}
+```
+
+### Campos
+
+| Campo | Descripción |
+|---|---|
+| `costes.consumos[]` | Una entrada por llamada a un servicio de IA. Incluye las de proveedores evaluados y **descartados**: esas llamadas también se han pagado. |
+| `consumos[].actividad` | `"Clasificar"` \| `"Extraer"` \| `"Prompt"` \| `"Layout"`. |
+| `consumos[].operacion` | Punto concreto de consumo, por ejemplo `"classification.phase1"`, `"layout.prebuilt-layout"` o `"extraction.cu.modelo"`. |
+| `consumos[].proveedor` | `"AzureOpenAI"` \| `"DocumentIntelligence"` \| `"ContentUnderstanding"`. |
+| `consumos[].modelo` | Modelo físico consumido: nombre de despliegue, identificador de clasificador, `"prebuilt-layout"` o identificador de analizador. Es la clave con la que se resuelve la tarifa. |
+| `consumos[].tokensEntrada` | Tokens de entrada totales, **con los cacheados incluidos**, tal como los devuelve la API del proveedor. |
+| `consumos[].tokensEntradaCache` | Tokens de entrada servidos desde caché. Es un **subconjunto** de `tokensEntrada`, no un sumando: el sistema resta esa parte y le aplica su precio reducido. |
+| `consumos[].tokensSalida` | Tokens de salida totales, con los de razonamiento incluidos. |
+| `consumos[].tokensRazonamiento` | Subconjunto informativo de `tokensSalida`. |
+| `consumos[].tokensContextualizacion` | Tokens de contextualización facturados por Content Understanding. |
+| `consumos[].paginas` | Páginas facturadas por los servicios que facturan por página. |
+| `consumos[].costeEur` | Coste de esa llamada. `null` cuando el modelo no tiene tarifa en el catálogo. |
+| `consumos[].tarifaAplicada` | Línea de tarifa usada, con su fecha de vigencia. |
+| `consumos[].descartado` | `true` cuando el resultado de esa llamada se descartó (proveedor no satisfactorio, fallback). El coste se contabiliza igual. |
+| `costes.costeTotalEur` | Suma de los costes con tarifa conocida. |
+| `costes.tokensTotales` | Entrada + salida + contextualización. **No** suma aparte cacheados ni razonamiento, que ya están contenidos en entrada y salida. |
+| `costes.paginasTotales` | Suma de páginas facturadas. |
+| `costes.tarifasCompletas` | `false` si algún modelo consumido no tiene tarifa aplicable: el total es incompleto. |
+| `costes.modelosSinTarifa` | Modelos consumidos sin línea de tarifa. |
+| `costes.reutilizadaPorDuplicado` | `true` cuando la petición se resolvió reutilizando una ejecución anterior. |
+| `costes.costeEjecucionOriginalEur` | Solo en reutilización: coste de la ejecución original, a título informativo. |
+
+### Notas
+
+- **Una tarifa que falta nunca hace fallar una ejecución.** El consumo se registra igual con sus tokens y páginas, el coste queda a `null` y `tarifasCompletas` pasa a `false`. Es preferible a devolver una cifra inventada.
+- **La reutilización por duplicado no gasta IA.** El bloque llega a cero y marcado como reutilizado; el coste de la ejecución original va aparte, para que sumar costes sobre el histórico no cuente dos veces el mismo gasto.
+- **Una llamada combinada genera un único consumo.** Cuando una sola invocación al modelo resuelve extracción y resumen a la vez, se ha pagado una vez.
+- **El coste es una estimación** basada en un catálogo de tarifas mantenido a mano. No sustituye a la facturación real y conviene contrastarlo periódicamente.
+- El agregado también se persiste en las columnas `CosteIAEur` y `TokensIA` de `DocumentoEjecuciones`, para poder explotarlo sin abrir el contrato.
 
 ## 7. Ejemplo completo de invocación (PowerShell)
 
