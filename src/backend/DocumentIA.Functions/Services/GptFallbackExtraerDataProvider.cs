@@ -259,6 +259,12 @@ public class GptFallbackExtraerDataProvider
             ? "gpt-fallback-combined"
             : (isFallback ? "gpt-fallback" : "gpt-direct");
 
+        // Una sola llamada resuelve extraccion y, en modo combinado, tambien el
+        // prompt o el resumen: se paga una vez y por tanto es un unico consumo.
+        var operacionConsumo = customPromptConfig is not null
+            ? "extraction.gpt.combined"
+            : (isFallback ? "extraction.gpt.fallback" : "extraction.gpt.direct");
+
         return new ExtraccionResultado
         {
             Proveedor = "azure-openai",
@@ -274,7 +280,15 @@ public class GptFallbackExtraerDataProvider
             MetricasDebug = metricasDebug,
             DatosExtraidos = parsedResponse.CamposExtraidos,
             ResumenCombinado = parsedResponse.Resumen,
-            ResultadoPromptCombinado = parsedResponse.ResultadoPrompt
+            ResultadoPromptCombinado = parsedResponse.ResultadoPrompt,
+            Consumos =
+            {
+                UsoOpenAiMapper.Mapear(
+                    response.Value.Usage,
+                    actividad: ActividadesIA.Extraer,
+                    operacion: operacionConsumo,
+                    modelo: model.DeploymentName)
+            }
         };
     }
 
