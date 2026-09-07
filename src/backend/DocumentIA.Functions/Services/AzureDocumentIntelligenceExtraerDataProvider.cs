@@ -218,6 +218,16 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
                 LayoutEnabled = false,
                 ConfianzaExtraccion = confianzaExtraccion,
                 ProveedorExtrac = "DocumentIntelligence",
+                Consumos =
+                {
+                    new ConsumoIA
+                    {
+                        Actividad = ActividadesIA.Extraer,
+                        Operacion = "extraction.di",
+                        Proveedor = ProveedoresIA.DocumentIntelligence,
+                        Modelo = model.AnalyzerId
+                    }
+                },
                 MetricasDebug = metricasDebug,
                 TiemposMs = new Dictionary<string, int> { ["analysis"] = (int)stopwatch.ElapsedMilliseconds },
                 DatosExtraidos = datosExtraidos
