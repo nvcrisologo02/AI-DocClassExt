@@ -34,13 +34,17 @@ Hay un detalle que conviene no perder: en desarrollo existe un despliegue llamad
 El proxy corporativo rompe la verificación de revocación del certificado, así que hace falta `--ssl-no-revoke`:
 
 ```bash
-curl -sS --ssl-no-revoke --get https://prices.azure.com/api/retail/prices   --data-urlencode "currencyCode=EUR"   --data-urlencode "$filter=productName eq 'Azure OpenAI' and armRegionName eq 'westeurope'"
+curl -sS --ssl-no-revoke --get https://prices.azure.com/api/retail/prices \
+  --data-urlencode "currencyCode=EUR" \
+  --data-urlencode "$filter=productName eq 'Azure OpenAI' and armRegionName eq 'westeurope'"
 ```
 
 Para ver los tipos de despliegue:
 
 ```bash
-az cognitiveservices account deployment list   --name srbaisrv-westeurope --resource-group SRBRGDOCSAIPROD   --subscription "Producción Central" -o table
+az cognitiveservices account deployment list \
+  --name srbaisrv-westeurope --resource-group SRBRGDOCSAIPROD \
+  --subscription "Producción Central" -o table
 ```
 
 ## Orden respecto al despliegue
