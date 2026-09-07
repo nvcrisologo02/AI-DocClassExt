@@ -11,6 +11,10 @@
                     <th class="text-end">Confianza</th>
                     <th class="text-end">Duración</th>
                     <th class="text-center">Fallback</th>
+                    @if (MostrarCoste)
+                    {
+                        <th class="text-end">Coste IA</th>
+                    }
                     <th>GUID</th>
                     <th></th>
                 </tr>
@@ -18,7 +22,7 @@
             <tbody>
                 @if (Pagina is null || Pagina.Items.Count == 0)
                 {
-                    <tr><td colspan="10" class="text-center text-muted py-4">
+                    <tr><td colspan="@Columnas" class="text-center text-muted py-4">
                         No hay ejecuciones que cumplan el filtro seleccionado.
                     </td></tr>
                 }
@@ -50,6 +54,21 @@
                                     <span class="badge bg-warning text-dark">Fallback</span>
                                 }
                             </td>
+                            @if (MostrarCoste)
+                            {
+                                <td class="text-end text-nowrap">
+                                    @if (e.CosteIAEur is { } coste)
+                                    {
+                                        <span class="@(e.CosteEstimado ? "text-warning" : "")" title="@(e.CosteEstimado ? "Coste estimado por el relleno retroactivo" : "Coste medido en la ejecución")">
+                                            @coste.ToString("N4", EsEs) €@(e.CosteEstimado ? " ≈" : "")
+                                        </span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                </td>
+                            }
                             <td class="small text-muted" style="font-family:monospace;font-size:0.7rem" title="@e.EjecucionGuid">@e.EjecucionGuid[..8]…</td>
                             <td class="text-end">
                                 <button class="btn btn-sm btn-outline-secondary"
@@ -64,7 +83,7 @@
                         @if (expandida)
                         {
                             <tr class="table-active">
-                                <td colspan="10" class="p-3">
+                                <td colspan="@Columnas" class="p-3">
                                     @if (CargandoDetalle.Contains(e.EjecucionGuid))
                                     {
                                         <div class="d-flex align-items-center gap-2 py-2 text-muted small">
@@ -135,6 +154,13 @@
     [Parameter] public EventCallback<string> AbrirDetalle { get; set; }
     [Parameter] public int TamanoPagina { get; set; } = 25;
     [Parameter] public EventCallback<int> TamanoPaginaCambiado { get; set; }
+
+    // Columna de coste de IA (AB#100238). Falso por defecto: las paginas del Monitor
+    // no cambian; solo la seccion de costes la activa.
+    [Parameter] public bool MostrarCoste { get; set; }
+
+    private int Columnas => MostrarCoste ? 11 : 10;
+    private static readonly System.Globalization.CultureInfo EsEs = System.Globalization.CultureInfo.GetCultureInfo("es-ES");
 
     // Los mismos valores que admite el backend (pageSize se limita a 1..200).
     private static readonly int[] TamanosDisponibles = [25, 50, 100];

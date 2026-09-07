@@ -1,0 +1,267 @@
+@page "/costes"
+@page "/costes/{Guid}"
+@inject MonitorService MonitorService
+@inject NavigationManager Navigation
+@rendermode InteractiveServer
+@implements IDisposable
+
+@* Seccion de costes de IA (AB#100239). Evolucion del Monitor v2: mismos filtros,
+   mismo listado, mismo detalle y mismo modal, con la cabecera y el desglose
+   orientados al dinero. De momento no esta enlazada en el menu: se llega por la
+   ruta directamente. Solo servicios de IA; nada de almacenamiento ni computo. *@
+
+<PageTitle>Costes de IA</PageTitle>
+
+<style>
+    .mv2 { --mv2-border: rgba(11,11,11,.10); --mv2-ink-2:#52514e; --mv2-muted:#898781; }
+    .mv2 .card, .mv2 .mv2-card {
+        border: 1px solid var(--mv2-border);
+        border-radius: 12px;
+        box-shadow: none !important;
+        background: #fff;
+    }
+    .mv2 .card-header {
+        background: transparent;
+        border-bottom: 1px solid var(--mv2-border);
+        padding-top: .6rem; padding-bottom: .6rem;
+    }
+    .mv2 .card-header .fw-semibold { font-size: .875rem; }
+    .mv2 h1 { letter-spacing: -.01em; }
+    .mv2-hero { font-size: 2.9rem; font-weight: 600; line-height: 1.05; letter-spacing: -.02em; }
+    .mv2-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 1.1rem; }
+    .mv2-kpi-label { font-size: .75rem; color: var(--mv2-muted); }
+    .mv2-kpi-value { font-size: 1.5rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
+    .mv2-kpi-foot { font-size: .72rem; color: var(--mv2-ink-2); }
+    .mv2 .table > :not(caption) > * > * { padding: .5rem .6rem; }
+    .mv2 .table-light th { background: #f7f7f5; color: var(--mv2-muted); font-weight: 500; }
+</style>
+
+<div class="mv2">
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h4 mb-0">Costes de IA</h1>
+        <small class="text-muted">Solo servicios de IA · horas en hora peninsular (@HoraEspana.NombreZona)</small>
+    </div>
+    <div class="d-flex align-items-center gap-3">
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="incluirEstimados"
+                   checked="@_filtro.IncluirEstimados" @onchange="OnIncluirEstimadosCambiado" />
+            <label class="form-check-label small text-muted" for="incluirEstimados">Incluir estimados</label>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" @onclick="RecargarTodoAsync" disabled="@_cargando">Actualizar</button>
+    </div>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger">@_error</div>
+}
+
+<MonitorFiltros Filtro="_filtro" Tipologias="_tipologias" FiltroCambiado="OnFiltroCambiado" />
+
+<CostesKpis Costes="_costes" Cargando="_cargando" />
+
+<CostesDesglose Costes="_costes" />
+
+<CostesGrafico Serie="_costes?.Serie ?? []" />
+
+<MonitorTabla Pagina="_pagina" Cargando="_cargando"
+              MostrarCoste="true"
+              PaginaCambiada="OnPaginaCambiada"
+              TamanoPagina="_tamanoPagina" TamanoPaginaCambiado="OnTamanoPaginaCambiado"
+              Expandidos="_expandidos" Detalles="_detalles" CargandoDetalle="_cargandoDetalle"
+              FilaAlternada="OnFilaAlternadaAsync" AbrirDetalle="AbrirModal" />
+
+@if (_modalGuid is not null)
+{
+    <EjecucionJsonModal Guid="@_modalGuid"
+                        Detalle="_detalles.GetValueOrDefault(_modalGuid)"
+                        Cargando="_modalCargando"
+                        NoEncontrado="_guidsNoEncontrados.Contains(_modalGuid)"
+                        ErrorMensaje="@_modalError"
+                        OnCerrar="CerrarModal" />
+}
+
+</div>
+
+@code {
+    [Parameter] public string? Guid { get; set; }
+
+    private MonitorFiltroDto _filtro = new();
+    private PagedResultDto<EjecucionResumenDto>? _pagina;
+    private CostesResumenDto? _costes;
+    private IReadOnlyList<string> _tipologias = [];
+    private readonly HashSet<string> _expandidos = [];
+    private readonly Dictionary<string, EjecucionDetalleDto> _detalles = new();
+    private readonly HashSet<string> _cargandoDetalle = [];
+    private int _paginaActual = 1;
+    private int _tamanoPagina = 25;
+    private bool _cargando;
+    private string? _error;
+    private bool _disposed;
+
+    private string? _modalGuid;
+    private bool _modalCargando;
+    private string? _modalError;
+    private readonly HashSet<string> _guidsNoEncontrados = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var tareaTipologias = CargarTipologiasAsync();
+        await RecargarTodoAsync();
+        await tareaTipologias;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var guidRuta = string.IsNullOrWhiteSpace(Guid) ? null : Guid;
+        if (guidRuta == _modalGuid) return;
+
+        _modalGuid = guidRuta;
+        _modalError = null;
+        if (guidRuta is null) return;
+        if (_detalles.ContainsKey(guidRuta) || _guidsNoEncontrados.Contains(guidRuta)) return;
+
+        _modalCargando = true;
+        try
+        {
+            var detalle = await MonitorService.GetEjecucionDetalleAsync(guidRuta);
+            if (detalle is not null) _detalles[guidRuta] = detalle;
+            else _guidsNoEncontrados.Add(guidRuta);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _modalError = ex.Message;
+        }
+        finally
+        {
+            _modalCargando = false;
+        }
+    }
+
+    private void AbrirModal(string guid) => Navigation.NavigateTo($"/costes/{guid}", replace: false);
+    private void CerrarModal() => Navigation.NavigateTo("/costes", replace: true);
+
+    private async Task CargarTipologiasAsync()
+    {
+        var catalogo = await MonitorService.GetAgregadosAsync(
+            new MonitorFiltroDto { RangoDias = MonitorFiltroDto.RangoDiasHistorico });
+        if (catalogo is null) return;
+
+        _tipologias = catalogo.PorTipologia
+            .Select(g => g.Grupo)
+            .Where(g => !string.IsNullOrWhiteSpace(g) && g != "(sin tipología)")
+            .OrderBy(g => g)
+            .ToList();
+    }
+
+    private async Task OnFiltroCambiado(MonitorFiltroDto nuevo)
+    {
+        // El componente de filtros no conoce el flag de estimados: se conserva
+        // al recibir el filtro nuevo para que cambiar de tipologia no lo resetee.
+        nuevo.IncluirEstimados = _filtro.IncluirEstimados;
+        _filtro = nuevo;
+        _paginaActual = 1;
+        ColapsarFilas();
+        await RecargarTodoAsync();
+    }
+
+    private async Task OnIncluirEstimadosCambiado(ChangeEventArgs e)
+    {
+        var nuevo = _filtro.Clonar();
+        nuevo.IncluirEstimados = e.Value is bool b && b;
+        _filtro = nuevo;
+        await RecargarTodoAsync();
+    }
+
+    private async Task OnPaginaCambiada(int pagina)
+    {
+        _paginaActual = pagina;
+        ColapsarFilas();
+        await RecargarPaginaAsync();
+    }
+
+    private async Task OnTamanoPaginaCambiado(int tamano)
+    {
+        _tamanoPagina = tamano;
+        _paginaActual = 1;
+        ColapsarFilas();
+        await RecargarPaginaAsync();
+    }
+
+    private void ColapsarFilas()
+    {
+        _expandidos.Clear();
+        _cargandoDetalle.Clear();
+    }
+
+    private async Task RecargarTodoAsync()
+    {
+        _cargando = true;
+        _error = null;
+        try
+        {
+            var tareaCostes = MonitorService.GetCostesAsync(_filtro);
+            var tareaPagina = MonitorService.GetEjecucionesAsync(_filtro, _paginaActual, _tamanoPagina);
+            await Task.WhenAll(tareaCostes, tareaPagina);
+
+            _costes = await tareaCostes;
+            _pagina = await tareaPagina;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task RecargarPaginaAsync()
+    {
+        _cargando = true;
+        _error = null;
+        try
+        {
+            _pagina = await MonitorService.GetEjecucionesAsync(_filtro, _paginaActual, _tamanoPagina);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    private async Task OnFilaAlternadaAsync(string guid)
+    {
+        if (_expandidos.Remove(guid)) return;
+
+        _expandidos.Add(guid);
+        if (_detalles.ContainsKey(guid)) return;
+
+        _cargandoDetalle.Add(guid);
+        try
+        {
+            var detalle = await MonitorService.GetEjecucionDetalleAsync(guid);
+            if (detalle is not null) _detalles[guid] = detalle;
+        }
+        catch (InvalidOperationException ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _cargandoDetalle.Remove(guid);
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+    }
+}

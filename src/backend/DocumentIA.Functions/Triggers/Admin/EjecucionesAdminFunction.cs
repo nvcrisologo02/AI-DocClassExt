@@ -260,6 +260,34 @@ public class EjecucionesAdminFunction
             contrato.DetalleEjecucion.GDC.DuracionMs
         };
 
+        // AB#100239: desglose por llamada, tal como quedo en el contrato. Es la unica
+        // via de ver el detalle de consumos sin abrir el JSON completo.
+        var costes = contrato?.DetalleEjecucion.Costes == null ? null : new
+        {
+            contrato.DetalleEjecucion.Costes.CosteTotalEur,
+            contrato.DetalleEjecucion.Costes.TokensTotales,
+            contrato.DetalleEjecucion.Costes.PaginasTotales,
+            contrato.DetalleEjecucion.Costes.TarifasCompletas,
+            contrato.DetalleEjecucion.Costes.ModelosSinTarifa,
+            contrato.DetalleEjecucion.Costes.ReutilizadaPorDuplicado,
+            contrato.DetalleEjecucion.Costes.CosteEjecucionOriginalEur,
+            Consumos = contrato.DetalleEjecucion.Costes.Consumos.Select(c => new
+            {
+                c.Actividad,
+                c.Operacion,
+                c.Proveedor,
+                c.Modelo,
+                c.TokensEntrada,
+                c.TokensEntradaCache,
+                c.TokensSalida,
+                c.TokensContextualizacion,
+                c.Paginas,
+                c.CosteEur,
+                c.TarifaAplicada,
+                c.Descartado
+            }).ToList()
+        };
+
         var timeline = contrato?.DetalleEjecucion.Seguimiento.Actividades
             .Select(a => new
             {
@@ -328,6 +356,8 @@ public class EjecucionesAdminFunction
             Clasificacion = clasificacion,
             Extraccion = extraccion,
             GDC = gdc,
+            Costes = costes,
+            ejecucion.CosteEstimado,
             Timeline = timeline,
             DatosExtraidos = datosExtraidos,
             Validaciones = validaciones,
