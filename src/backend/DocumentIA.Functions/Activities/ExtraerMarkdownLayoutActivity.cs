@@ -33,7 +33,7 @@ public class ExtraerMarkdownLayoutActivity
 
         var resultado = await _provider.ExtraerMarkdownAsync(input);
 
-        TarificadorDeConsumos.Aplicar(resultado.Consumos, _tarifas, _logger);
+        TarificadorDeConsumos.Aplicar(resultado?.Consumos, _tarifas, _logger);
 
         return resultado;
     }

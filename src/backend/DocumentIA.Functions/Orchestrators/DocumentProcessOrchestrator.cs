@@ -369,7 +369,7 @@ public class DocumentProcessOrchestrator
                                 ? salida.Integridad.RutaBlobStorage
                                 : entrada.Documento.BlobPath
                         });
-                    AcumularConsumos(markdownBajoDemanda.Consumos);
+                    AcumularConsumos(markdownBajoDemanda?.Consumos);
 
                     if (!string.IsNullOrWhiteSpace(markdownBajoDemanda?.Markdown))
                     {
@@ -656,6 +656,7 @@ public class DocumentProcessOrchestrator
                                 ReutilizadaPorDuplicado = true,
                                 CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
                             };
+                            salidaDuplicado.DetalleEjecucion.Clasificacion.Consumos = new List<ConsumoIA>();
 
                             FinalizarSeguimiento("Completed", "Documento duplicado detectado por checksum GDC. Devolviendo última ejecución");
                             salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
@@ -758,6 +759,7 @@ public class DocumentProcessOrchestrator
                             ReutilizadaPorDuplicado = true,
                             CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
                         };
+                        salidaDuplicado.DetalleEjecucion.Clasificacion.Consumos = new List<ConsumoIA>();
 
                         FinalizarSeguimiento("Completed", "Documento duplicado detectado. Devolviendo última ejecución");
                         salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
@@ -1162,6 +1164,13 @@ public class DocumentProcessOrchestrator
                 RegistrarModeloLlm(resultadoClasificacion.Modelo);
             }
             resultadoClasificacion.ContentExtraido = null; // limpiar: no exponer en respuesta
+
+            // El consumo ya esta acumulado en DetalleEjecucion.Costes, que es el unico
+            // sitio donde debe verse y que se oculta segun IncluirCostes. Dejarlo aqui
+            // tambien lo colaria en la respuesta por la puerta de atras, con importes
+            // incluidos, y en el camino de duplicado devolveria el coste historico
+            // por llamada (AB#100231).
+            resultadoClasificacion.Consumos = new List<ConsumoIA>();
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
 
             // Propagar el TDN2 elegido en Phase 2 (aunque no exista tipología publicada que lo

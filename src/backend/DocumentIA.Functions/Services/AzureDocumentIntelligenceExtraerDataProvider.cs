@@ -211,10 +211,24 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
                 datosExtraidos.Count,
                 confianzaExtraccion);
 
+            // Paginas analizadas: es la unidad que factura el analizador a medida.
+            // Sin esto su coste saldria 0 y, con tarifa configurada, el agregado se
+            // declararia completo con un cero falso (AB#100229).
+            var paginasAnalizadas = 0;
+            var raizPaginas = finalResult.RootElement.TryGetProperty("analyzeResult", out var arPaginas)
+                ? arPaginas
+                : finalResult.RootElement;
+            if (raizPaginas.TryGetProperty("pages", out var pagesElExtrac)
+                && pagesElExtrac.ValueKind == JsonValueKind.Array)
+            {
+                paginasAnalizadas = pagesElExtrac.GetArrayLength();
+            }
+
             return new ExtraccionResultado
             {
                 Proveedor = model.Provider,
                 Modelo = model.AnalyzerId,
+                Paginas = paginasAnalizadas,
                 LayoutEnabled = false,
                 ConfianzaExtraccion = confianzaExtraccion,
                 ProveedorExtrac = "DocumentIntelligence",
@@ -225,7 +239,8 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
                         Actividad = ActividadesIA.Extraer,
                         Operacion = "extraction.di",
                         Proveedor = ProveedoresIA.DocumentIntelligence,
-                        Modelo = model.AnalyzerId
+                        Modelo = model.AnalyzerId,
+                        Paginas = paginasAnalizadas > 0 ? paginasAnalizadas : null
                     }
                 },
                 MetricasDebug = metricasDebug,

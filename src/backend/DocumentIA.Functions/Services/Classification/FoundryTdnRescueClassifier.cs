@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using DocumentIA.Core.Models;
@@ -70,6 +71,7 @@ namespace DocumentIA.Functions.Services.Classification
                         };
 
                         var gptResult = await _gptProvider.ClasificarAsync(input, cts.Token);
+                        result.Consumos.AddRange(gptResult.Consumos);
 
                         result.TipologiaDetectada = gptResult.TipologiaDetectada;
                         result.Confianza = gptResult.Confianza;
@@ -131,6 +133,13 @@ namespace DocumentIA.Functions.Services.Classification
     /// </summary>
     public class FoundryRescueClassificationResult
     {
+        /// <summary>
+        /// Consumo de IA de la llamada de rescate. El rescate invoca al proveedor GPT
+        /// de clasificacion, asi que factura tokens como cualquier otra llamada
+        /// (AB#100227).
+        /// </summary>
+        public List<ConsumoIA> Consumos { get; set; } = new();
+
         public string? DocumentName { get; set; }
         public string? TipologiaDetectada { get; set; }
         public double Confianza { get; set; }

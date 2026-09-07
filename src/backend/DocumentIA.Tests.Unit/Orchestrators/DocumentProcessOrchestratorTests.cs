@@ -1449,6 +1449,39 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_SinIncluirCostes_TampocoExponeConsumosPorLaClasificacion()
+    {
+        // ResultadoClasificacion forma parte del contrato de salida y su lista de
+        // consumos llega ya tarificada desde la actividad. Sin vaciarla, los importes
+        // se colarian en la respuesta por la puerta de atras aunque no se pidan.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = false;
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Costes.Should().BeNull();
+        salida.DetalleEjecucion.Clasificacion.Consumos.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ConIncluirCostes_ElDesgloseVaSoloEnElBloqueDeCostes()
+    {
+        // Un unico sitio donde mirar: el bloque de costes. La clasificacion no
+        // duplica el desglose.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = true;
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Costes!.Consumos.Should().HaveCount(2);
+        salida.DetalleEjecucion.Clasificacion.Consumos.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_SinIncluirCostes_NoDevuelveElBloque()
     {
         var orchestrator = CreateOrchestrator();

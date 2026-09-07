@@ -239,7 +239,17 @@ public class GptFallbackExtraerDataProvider
                 input.Tipologia,
                 model.DeploymentName);
 
-            return BuildTimeoutResultado(model, isFallback, customPromptConfig, stopwatch);
+            var resultadoTimeout = BuildTimeoutResultado(model, isFallback, customPromptConfig, stopwatch);
+
+            // La peticion se emitio y el proveedor la factura aunque el cliente
+            // aborte: se registra sin cifras, que es mejor que perder el rastro.
+            resultadoTimeout.Consumos.Add(UsoOpenAiMapper.Mapear(
+                uso: null,
+                actividad: ActividadesIA.Extraer,
+                operacion: "extraction.gpt.timeout",
+                modelo: model.DeploymentName));
+
+            return resultadoTimeout;
         }
 
         stopwatch.Stop();

@@ -142,7 +142,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         // de parseo, y todas deben llevar el consumo: esas llamadas se han pagado.
         var consumos = new List<ConsumoIA>();
 
-        var resultado = await ClasificarCoreAsync(input, consumos, cancellationToken);
+        ResultadoClasificacion resultado;
+        try
+        {
+            resultado = await ClasificarCoreAsync(input, consumos, cancellationToken);
+        }
+        catch (RateLimitExhaustedException ex)
+        {
+            // Las llamadas completadas antes del 429 se han pagado: viajan con la
+            // excepcion para que la actividad las conserve.
+            ex.ConsumosParciales.AddRange(consumos);
+            throw;
+        }
+
         resultado.Consumos.AddRange(consumos);
 
         return resultado;
