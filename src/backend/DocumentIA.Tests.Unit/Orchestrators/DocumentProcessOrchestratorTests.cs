@@ -1395,6 +1395,201 @@ public class DocumentProcessOrchestratorTests
         context.GetLastActivityInput<IntegrarInput>("IntegrarActivity").Should().NotBeNull();
     }
 
+    // ========== Costes de IA por ejecucion (AB#100231) ==========
+
+    private static ResultadoClasificacion BuildClasificacionConConsumos()
+    {
+        var resultado = BuildClasificacionOk();
+        resultado.Consumos.Add(new ConsumoIA
+        {
+            Actividad = ActividadesIA.Clasificar,
+            Operacion = "classification.phase1",
+            Proveedor = ProveedoresIA.AzureOpenAI,
+            Modelo = "gpt-5-mini",
+            TokensEntrada = 1000,
+            TokensSalida = 200,
+            CosteEur = 0.10m
+        });
+        return resultado;
+    }
+
+    private static global::DocumentIA.Core.Models.ExtraccionResultado BuildExtraccionConConsumos()
+    {
+        var resultado = BuildExtraccionOk();
+        resultado.Consumos.Add(new ConsumoIA
+        {
+            Actividad = ActividadesIA.Extraer,
+            Operacion = "extraction.cu.servicio",
+            Proveedor = ProveedoresIA.ContentUnderstanding,
+            Modelo = "analyzer-default",
+            Paginas = 6,
+            CosteEur = 0.05m
+        });
+        return resultado;
+    }
+
+    private static FakeTaskOrchestrationContext BuildContextoFlujoCompletoConConsumos(ContratoEntrada entrada)
+    {
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionConConsumos());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: true));
+        context.SetupActivity("ExtraerActivity", BuildExtraccionConConsumos());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>()
+        });
+
+        return context;
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SinIncluirCostes_NoDevuelveElBloque()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = false;
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.DetalleEjecucion.Costes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ConIncluirCostes_DevuelveElBloqueAgregado()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = true;
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Costes.Should().NotBeNull();
+        salida.DetalleEjecucion.Costes!.CosteTotalEur.Should().Be(0.15m);
+        salida.DetalleEjecucion.Costes.Consumos.Should().HaveCount(2);
+        salida.DetalleEjecucion.Costes.PaginasTotales.Should().Be(6);
+        salida.DetalleEjecucion.Costes.TokensTotales.Should().Be(1200);
+        salida.DetalleEjecucion.Costes.TarifasCompletas.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_LaPersistenciaRecibeElBloqueDeCostes()
+    {
+        // El bloque llega a la actividad de persistencia con el agregado completo.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = true;
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+
+        await orchestrator.RunOrchestrator(context);
+
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistido.Should().NotBeNull();
+        persistido!.Salida.DetalleEjecucion.Costes.Should().NotBeNull();
+        persistido.Salida.DetalleEjecucion.Costes!.CosteTotalEur.Should().Be(0.15m);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SinPedirCostes_PersisteIgualmenteYLuegoOculta()
+    {
+        // La ocultacion ocurre en el envoltorio, despues de que el cuerpo haya
+        // persistido: la actividad se invoca igual y solo la respuesta pierde el bloque.
+        // El fake guarda el input por referencia, asi que aqui solo se puede afirmar
+        // que la persistencia se ejecuto; que recibio el bloque lo fija el test anterior.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = false;
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        salida.DetalleEjecucion.Costes.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ConsumoDeProveedorDescartado_CuentaEnElTotal()
+    {
+        // La clasificacion evalua varios proveedores y se queda con uno, pero todos
+        // se han pagado: el descartado no puede desaparecer del total.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = true;
+
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.Consumos.Add(new ConsumoIA
+        {
+            Modelo = "sareb-classifier-v1",
+            Paginas = 3,
+            CosteEur = 0.04m,
+            Descartado = true
+        });
+        clasificacion.Consumos.Add(new ConsumoIA
+        {
+            Modelo = "gpt-5-mini",
+            TokensEntrada = 500,
+            CosteEur = 0.10m
+        });
+
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+        context.SetupActivity("ClasificarActivity", clasificacion);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Costes!.CosteTotalEur.Should().Be(0.19m);
+        salida.DetalleEjecucion.Costes.Consumos.Should().Contain(c => c.Descartado);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ModeloSinTarifa_MarcaElAgregadoIncompleto()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = true;
+
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.Consumos.Add(new ConsumoIA
+        {
+            Modelo = "modelo-sin-tarifa",
+            TokensEntrada = 100,
+            CosteEur = null
+        });
+
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+        context.SetupActivity("ClasificarActivity", clasificacion);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Costes!.TarifasCompletas.Should().BeFalse();
+        salida.DetalleEjecucion.Costes.ModelosSinTarifa.Should().Contain("modelo-sin-tarifa");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SinConsumoDeIA_DevuelveAgregadoACero()
+    {
+        // Por ejemplo clasificacion forzada por ExpectedType, que no llama a ningun servicio.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = true;
+        var context = BuildContextoFlujoCompletoConConsumos(entrada);
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Costes.Should().NotBeNull();
+        salida.DetalleEjecucion.Costes!.CosteTotalEur.Should().Be(0m);
+        salida.DetalleEjecucion.Costes.Consumos.Should().BeEmpty();
+    }
+
     [Fact]
     public async Task RunOrchestrator_FlujoCompletoConExtraccionValidacionYPersistencia_FinalizaOkYPersiste()
     {

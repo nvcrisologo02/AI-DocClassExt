@@ -97,13 +97,31 @@ public class DocumentProcessOrchestrator
     public async Task<ContratoSalida> RunOrchestrator(
         [OrchestrationTrigger] TaskOrchestrationContext context)
     {
-        var logger = context.CreateReplaySafeLogger<DocumentProcessOrchestrator>();
-
         var entrada = context.GetInput<ContratoEntrada>();
         if (entrada == null)
         {
             throw new ArgumentNullException(nameof(entrada), "Contrato de entrada no puede ser nulo");
         }
+
+        var salida = await RunOrchestratorCore(context, entrada);
+
+        // El bloque de costes se calcula y persiste siempre; este parametro solo
+        // decide si se devuelve al llamador. Anularlo lo omite del JSON de salida.
+        // Se aplica aqui, en un unico punto, porque el cuerpo tiene quince salidas
+        // distintas y la regla no puede depender de acordarse en cada una (AB#100231).
+        if (!entrada.Instrucciones.IncluirCostes)
+        {
+            salida.DetalleEjecucion.Costes = null;
+        }
+
+        return salida;
+    }
+
+    private async Task<ContratoSalida> RunOrchestratorCore(
+        TaskOrchestrationContext context,
+        ContratoEntrada entrada)
+    {
+        var logger = context.CreateReplaySafeLogger<DocumentProcessOrchestrator>();
 
         logger.LogInformation($"Iniciando procesamiento para documento: {entrada.Documento.Name}");
         logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento?.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento?.BlobPath ?? "(null)"}' | Base64Length: {entrada.Documento?.Content?.Base64?.Length ?? 0}");
@@ -297,6 +315,32 @@ public class DocumentProcessOrchestrator
         // variables ya declaradas en su punto de definicion.
         var layoutDocumentoCompletoIntentado = false;
 
+        // Consumo de servicios de IA de toda la ejecucion. Se acumula segun llegan los
+        // resultados de actividad, incluidos los de proveedores evaluados y descartados:
+        // esas llamadas tambien se han pagado. Declarada aqui porque las funciones locales
+        // solo capturan variables ya declaradas en su punto de definicion (AB#100231).
+        var consumosIA = new List<ConsumoIA>();
+
+        // Recalcula el agregado en cada acumulacion. El cuerpo persiste desde nueve
+        // puntos distintos; manteniendo el bloque siempre al dia, todos graban el
+        // valor correcto sin tener que agregar cada uno por su cuenta.
+        void AcumularConsumos(List<ConsumoIA>? consumos)
+        {
+            if (consumos is null || consumos.Count == 0)
+            {
+                return;
+            }
+
+            consumosIA.AddRange(consumos);
+            salida.DetalleEjecucion.Costes = CalculadoraCosteIA.Agregar(consumosIA);
+        }
+
+        // El bloque existe desde el principio, aunque la ejecucion no llegue a consumir
+        // IA (por ejemplo clasificacion forzada por ExpectedType). Asi una ejecucion sin
+        // gasto persiste un cero explicito, distinguible de las ejecuciones anteriores a
+        // esta funcionalidad, que quedan a nulo.
+        salida.DetalleEjecucion.Costes = CalculadoraCosteIA.Agregar(consumosIA);
+
         async Task EjecutarPromptLibreAsync(
             string? markdownParaPrompt,
             Dictionary<string, object> datosExtraidos,
@@ -325,6 +369,7 @@ public class DocumentProcessOrchestrator
                                 ? salida.Integridad.RutaBlobStorage
                                 : entrada.Documento.BlobPath
                         });
+                    AcumularConsumos(markdownBajoDemanda.Consumos);
 
                     if (!string.IsNullOrWhiteSpace(markdownBajoDemanda?.Markdown))
                     {
@@ -380,6 +425,7 @@ public class DocumentProcessOrchestrator
             try
             {
                 resultadoPrompt = await context.CallActivityAsync<PromptResultado>("PromptActivity", promptInput);
+                AcumularConsumos(resultadoPrompt.Consumos);
             }
             catch (Exception ex)
             {
@@ -605,6 +651,12 @@ public class DocumentProcessOrchestrator
                             salidaDuplicado.Resultado.ReutilizadaPorDuplicado = true;
                             salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente (checksum GDC). Se reutiliza la última ejecución.";
 
+                            salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
+                            {
+                                ReutilizadaPorDuplicado = true,
+                                CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
+                            };
+
                             FinalizarSeguimiento("Completed", "Documento duplicado detectado por checksum GDC. Devolviendo última ejecución");
                             salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
                             return salidaDuplicado;
@@ -700,6 +752,12 @@ public class DocumentProcessOrchestrator
 
                         salidaDuplicado.Resultado.ReutilizadaPorDuplicado = true;
                         salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
+
+                        salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
+                        {
+                            ReutilizadaPorDuplicado = true,
+                            CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
+                        };
 
                         FinalizarSeguimiento("Completed", "Documento duplicado detectado. Devolviendo última ejecución");
                         salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
@@ -845,6 +903,7 @@ public class DocumentProcessOrchestrator
                                 ? (!string.IsNullOrWhiteSpace(blobPath) ? blobPath : entrada.Documento.BlobPath)
                                 : null
                         });
+                    AcumularConsumos(markdownPreClasif.Consumos);
 
                     if (!string.IsNullOrWhiteSpace(markdownPreClasif.Markdown))
                     {
@@ -975,6 +1034,7 @@ public class DocumentProcessOrchestrator
                             TotalPaginas = docClasif.TotalPaginas,
                             GenerarResumenPorDefecto = true
                         });
+                    AcumularConsumos(resultadoClasificacion.Consumos);
 
                     if (resultadoClasificacion.RateLimitExcedido)
                     {
@@ -1575,6 +1635,7 @@ public class DocumentProcessOrchestrator
                                 DocumentoBase64 = docClasif.DocumentoBase64Clasif,
                                 NombreDocumento = entrada.Documento.Name
                             });
+                        AcumularConsumos(markdownParaResumen.Consumos);
 
                         if (!string.IsNullOrWhiteSpace(markdownParaResumen.Markdown))
                         {
@@ -1874,6 +1935,7 @@ public class DocumentProcessOrchestrator
                                 ? salida.Integridad.RutaBlobStorage
                                 : entrada.Documento.BlobPath
                         });
+                    AcumularConsumos(markdownCompleto.Consumos);
 
                     if (!string.IsNullOrWhiteSpace(markdownCompleto.Markdown))
                     {
@@ -1944,6 +2006,7 @@ public class DocumentProcessOrchestrator
                                 DocumentoBase64 = docClasif.DocumentoBase64Clasif,
                                 NombreDocumento = entrada.Documento.Name
                             });
+                        AcumularConsumos(markdownLayout.Consumos);
 
                         if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
                         {
@@ -1982,6 +2045,7 @@ public class DocumentProcessOrchestrator
                             ModelKeyEfectivo = modelKeyEfectivo,
                             GenerarResumenPorDefecto = !salida.DatosExtraidos.ContainsKey("Resumen")
                         }));
+                AcumularConsumos(resultadoExtraccion.Consumos);
 
                 if (resultadoExtraccion.FallbackUsado)
                 {
@@ -2060,6 +2124,7 @@ public class DocumentProcessOrchestrator
                                 ? salida.Integridad.RutaBlobStorage
                                 : entrada.Documento.BlobPath
                         });
+                    AcumularConsumos(markdownLayout.Consumos);
 
                     if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
                     {
