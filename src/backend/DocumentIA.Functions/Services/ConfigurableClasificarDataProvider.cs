@@ -1,4 +1,5 @@
 ﻿using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services.Classification;
 using Microsoft.Extensions.Logging;
@@ -49,12 +50,39 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         ClasificacionInput input,
         CancellationToken cancellationToken = default)
     {
-        var resultado = await ClasificarCoreAsync(input, cancellationToken);
-        return await AplicarRestriccionTipologiasAsync(resultado, input, cancellationToken);
+        // Consumos de todos los candidatos ejecutados, incluidos los que se descartan.
+        // El cuerpo devuelve el resultado de uno solo; sin esta lista el gasto de los
+        // demas desapareceria justo en los caminos que mas cuestan: cadena de
+        // proveedores, fallback global y restriccion de tipologias (AB#100227).
+        var consumosEvaluados = new List<IReadOnlyList<ConsumoIA>?>();
+
+        ResultadoClasificacion final;
+        try
+        {
+            var resultado = await ClasificarCoreAsync(input, consumosEvaluados, cancellationToken);
+            final = await AplicarRestriccionTipologiasAsync(resultado, input, consumosEvaluados, cancellationToken);
+        }
+        catch (Resilience.RateLimitExhaustedException ex)
+        {
+            // Los proveedores que se ejecutaron antes del 429 se han pagado: viajan
+            // con la excepcion para que la actividad los conserve. Sin esto solo
+            // sobreviviria lo que hubiese registrado el proveedor que lanzo.
+            foreach (var consumos in consumosEvaluados)
+            {
+                ConsumosIA.Fusionar(ex.ConsumosParciales, consumos, marcarDescartados: true);
+            }
+
+            throw;
+        }
+
+        ConsumosIA.FusionarEvaluados(final.Consumos, consumosEvaluados);
+
+        return final;
     }
 
     private async Task<ResultadoClasificacion> ClasificarCoreAsync(
         ClasificacionInput input,
+        List<IReadOnlyList<ConsumoIA>?> consumosEvaluados,
         CancellationToken cancellationToken)
     {
         var requestedProvider = input.Entrada.Instrucciones.Classification.Provider;
@@ -73,6 +101,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         {
             var providerResult = await ExecuteProviderAsync(provider, input, cancellationToken);
             evaluated.Add(providerResult);
+            consumosEvaluados.Add(providerResult.Consumos);
 
             if (IsSatisfactory(providerResult, input))
             {
@@ -139,6 +168,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             fallbackResult.UmbralFallbackAplicado = umbralFallback;
 
             evaluated.Add(fallbackResult);
+            consumosEvaluados.Add(fallbackResult.Consumos);
             fallbackResult.DetalleProveedores = BuildDetalle(evaluated, "sin_resultado_satisfactorio");
 
             if (!IsSatisfactory(fallbackResult, input))
@@ -369,6 +399,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
     private async Task<ResultadoClasificacion> AplicarRestriccionTipologiasAsync(
         ResultadoClasificacion resultado,
         ClasificacionInput input,
+        List<IReadOnlyList<ConsumoIA>?> consumosEvaluados,
         CancellationToken cancellationToken)
     {
         var conjunto = ResolverConjuntoRestringido(input);
@@ -452,6 +483,10 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
             };
 
             var libre = await ExecuteProviderAsync("gpt", inputLibre, cancellationToken);
+            // La propuesta libre si se devuelve al llamador (PropuestaTipologia), asi
+            // que su consumo no es un descarte: se fusiona sin marcar.
+            ConsumosIA.Fusionar(desconocido.Consumos, libre.Consumos);
+
             if (!string.IsNullOrWhiteSpace(libre.TipologiaDetectada) &&
                 !string.Equals(libre.TipologiaDetectada, "Desconocido", StringComparison.OrdinalIgnoreCase))
             {
@@ -464,6 +499,15 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                     MotivoDescarte = null
                 });
             }
+        }
+        catch (Resilience.RateLimitExhaustedException exRate)
+        {
+            // La pasada libre es informativa y no debe tumbar la ejecucion, pero lo
+            // que llego a facturar antes del 429 no puede perderse.
+            ConsumosIA.Fusionar(desconocido.Consumos, exRate.ConsumosParciales, marcarDescartados: true);
+            _logger.LogWarning(
+                exRate,
+                "La pasada de propuesta libre agotó el rate limit; se devuelve Desconocido sin propuesta.");
         }
         catch (Exception ex)
         {

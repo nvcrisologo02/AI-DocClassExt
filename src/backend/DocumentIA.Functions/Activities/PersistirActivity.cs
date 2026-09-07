@@ -218,6 +218,8 @@ namespace DocumentIA.Functions.Activities
                     salida.DetalleEjecucion.Seguimiento.Actividades = new List<TrazaActividad>();
                 }
 
+                var desgloseCoste = CalculadoraCosteIA.DesglosarPorActividad(salida.DetalleEjecucion.Costes);
+
                 var ejecucion = new DocumentoEjecucionEntity
                 {
                     DocumentoId = documento.Id,
@@ -266,6 +268,19 @@ namespace DocumentIA.Functions.Activities
                     DuracionGDCMs = GetDuracionActividad(salida, "SubirGDC"),
                     DuracionPersistenciaMs = GetDuracionActividad(salida, "Persistir"),
                     DuracionAssetResolverMs = GetDuracionActividad(salida, "ObtenerActivo"),
+
+                    // AB#100232: coste y tokens de servicios de IA. Solo el agregado va a
+                    // columna; el desglose por llamada ya viaja dentro del contrato
+                    // serializado, en $.DetalleEjecucion.Costes.
+                    CosteIAEur = salida.DetalleEjecucion.Costes?.CosteTotalEur,
+                    TokensIA = salida.DetalleEjecucion.Costes?.TokensTotales,
+                    // AB#100236: desglose por actividad en columnas escalares, para que Admin
+                    // agregue sin abrir el contrato. Una ejecucion medida nunca es estimada.
+                    CosteLayoutEur = desgloseCoste.LayoutEur,
+                    CosteClasificacionEur = desgloseCoste.ClasificacionEur,
+                    CosteExtraccionEur = desgloseCoste.ExtraccionEur,
+                    CostePromptEur = desgloseCoste.PromptEur,
+                    CosteEstimado = false,
                     AssetResolverResultJson = salida.DetalleEjecucion.AssetResolver is { Ejecutado: true }
                         ? JsonSerializer.Serialize(
                             salida.DetalleEjecucion.AssetResolver.Activos?.Select(a => new { a.IdActivo, a.FchCierre }),

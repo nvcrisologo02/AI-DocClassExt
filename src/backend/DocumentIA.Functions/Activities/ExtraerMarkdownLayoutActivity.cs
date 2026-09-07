@@ -1,3 +1,4 @@
+using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services;
@@ -10,13 +11,16 @@ public class ExtraerMarkdownLayoutActivity
 {
     private readonly ILogger<ExtraerMarkdownLayoutActivity> _logger;
     private readonly ILayoutMarkdownProvider _provider;
+    private readonly TarifaRegistryLoader _tarifas;
 
     public ExtraerMarkdownLayoutActivity(
         ILogger<ExtraerMarkdownLayoutActivity> logger,
-        ILayoutMarkdownProvider provider)
+        ILayoutMarkdownProvider provider,
+        TarifaRegistryLoader tarifas)
     {
         _logger = logger;
         _provider = provider;
+        _tarifas = tarifas;
     }
 
     [Function("ExtraerMarkdownLayoutActivity")]
@@ -27,6 +31,10 @@ public class ExtraerMarkdownLayoutActivity
             input.Tipologia,
             input.NombreDocumento);
 
-        return await _provider.ExtraerMarkdownAsync(input);
+        var resultado = await _provider.ExtraerMarkdownAsync(input);
+
+        TarificadorDeConsumos.Aplicar(resultado?.Consumos, _tarifas, _logger);
+
+        return resultado;
     }
 }

@@ -181,6 +181,7 @@ public class ModelosAdminFunction
             "extraccion" => SetTipo(TipoModelo.Extraccion, out tipoModelo),
             "prompt" => SetTipo(TipoModelo.Prompt, out tipoModelo),
             "layout" => SetTipo(TipoModelo.Layout, out tipoModelo),
+            "tarifas" => SetTipo(TipoModelo.Tarifas, out tipoModelo),
             _ => false
         };
     }

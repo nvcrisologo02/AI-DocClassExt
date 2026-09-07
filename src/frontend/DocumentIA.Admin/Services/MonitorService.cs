@@ -30,6 +30,12 @@ public class EjecucionResumenDto
     public string? NombreDocumento { get; set; }
     public string? SubmittedBy { get; set; }
     public List<ActividadResumenDto> Actividades { get; set; } = [];
+
+    /// <summary>Coste de IA; nulo si no se registro (AB#100238).</summary>
+    public decimal? CosteIAEur { get; set; }
+
+    /// <summary>True si el coste procede del relleno retroactivo.</summary>
+    public bool CosteEstimado { get; set; }
 }
 
 public class ActividadResumenDto
@@ -169,6 +175,80 @@ public class EjecucionDetalleDto
     public List<CampoExtraidoDto> DatosExtraidos { get; set; } = [];
     public List<ValidacionItemDto> Validaciones { get; set; } = [];
     public List<PluginItemDto> Plugins { get; set; } = [];
+
+    /// <summary>Bloque de costes del contrato; nulo en ejecuciones sin el (AB#100239).</summary>
+    public CostesDetalleDto? Costes { get; set; }
+    public bool CosteEstimado { get; set; }
+}
+
+public class CostesDetalleDto
+{
+    public decimal CosteTotalEur { get; set; }
+    public int TokensTotales { get; set; }
+    public int PaginasTotales { get; set; }
+    public bool TarifasCompletas { get; set; } = true;
+    public List<string> ModelosSinTarifa { get; set; } = [];
+    public bool ReutilizadaPorDuplicado { get; set; }
+    public decimal? CosteEjecucionOriginalEur { get; set; }
+    public List<ConsumoIADto> Consumos { get; set; } = [];
+}
+
+public class ConsumoIADto
+{
+    public string Actividad { get; set; } = string.Empty;
+    public string Operacion { get; set; } = string.Empty;
+    public string Proveedor { get; set; } = string.Empty;
+    public string Modelo { get; set; } = string.Empty;
+    public int? TokensEntrada { get; set; }
+    public int? TokensEntradaCache { get; set; }
+    public int? TokensSalida { get; set; }
+    public int? TokensContextualizacion { get; set; }
+    public int? Paginas { get; set; }
+    public decimal? CosteEur { get; set; }
+    public string? TarifaAplicada { get; set; }
+    public bool Descartado { get; set; }
+}
+
+/// <summary>Agregados de coste del periodo (AB#100237). Espejo de EjecucionCostesResult.</summary>
+public class CostesResumenDto
+{
+    public int TotalEjecuciones { get; set; }
+    public int PeriodoDias { get; set; }
+    public int ConCosteReal { get; set; }
+    public int ConCosteEstimado { get; set; }
+    public int SinCoste { get; set; }
+    public bool IncluyeEstimados { get; set; }
+    public int EjecucionesConImporte { get; set; }
+    public decimal CosteTotalEur { get; set; }
+    public decimal CosteMedioEur { get; set; }
+    public long TokensTotales { get; set; }
+    public decimal LayoutEur { get; set; }
+    public decimal ClasificacionEur { get; set; }
+    public decimal ExtraccionEur { get; set; }
+    public decimal PromptEur { get; set; }
+    public List<CosteGrupoDto> PorTipologia { get; set; } = [];
+    public List<CosteGrupoDto> PorModelo { get; set; } = [];
+    public List<CosteSeriePuntoDto> Serie { get; set; } = [];
+}
+
+public class CosteGrupoDto
+{
+    public string Grupo { get; set; } = string.Empty;
+    public int Total { get; set; }
+    public int ConImporte { get; set; }
+    public decimal CosteEur { get; set; }
+    public decimal CosteMedioEur { get; set; }
+    public decimal LayoutEur { get; set; }
+    public decimal ClasificacionEur { get; set; }
+    public decimal ExtraccionEur { get; set; }
+    public decimal PromptEur { get; set; }
+}
+
+public class CosteSeriePuntoDto
+{
+    public DateTime Fecha { get; set; }
+    public int Total { get; set; }
+    public decimal CosteEur { get; set; }
 }
 
 // ─── DTOs de agregados (cuadro de mando) ─────────────────────────────────────
@@ -269,6 +349,9 @@ public class MonitorFiltroDto
     public double? ConfianzaMin { get; set; }
     public double? ConfianzaMax { get; set; }
 
+    /// <summary>Solo lo lee la seccion de costes: suma tambien lo estimado por el relleno.</summary>
+    public bool IncluirEstimados { get; set; }
+
     public string ToQueryString()
     {
         var hasta = DateTime.UtcNow;
@@ -289,6 +372,7 @@ public class MonitorFiltroDto
         // coma y el backend leeria el numero mal.
         if (ConfianzaMin is { } min) partes.Add($"confmin={min.ToString(CultureInfo.InvariantCulture)}");
         if (ConfianzaMax is { } max) partes.Add($"confmax={max.ToString(CultureInfo.InvariantCulture)}");
+        if (IncluirEstimados) partes.Add("incluirestimados=true");
         return string.Join("&", partes);
     }
 
@@ -425,6 +509,29 @@ public class MonitorService
         {
             return await _httpClient.GetFromJsonAsync<DashboardAgregadosDto>(
                 $"management/ejecuciones/agregados?{filtro.ToQueryString()}", JsonOptions);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    // Mismo criterio que los agregados: alimenta la cabecera y el desglose de la
+    // seccion de costes, no el listado, asi que un fallo no impide ver la tabla.
+    public async Task<CostesResumenDto?> GetCostesAsync(MonitorFiltroDto filtro)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<CostesResumenDto>(
+                $"management/ejecuciones/costes?{filtro.ToQueryString()}", JsonOptions);
         }
         catch (HttpRequestException)
         {

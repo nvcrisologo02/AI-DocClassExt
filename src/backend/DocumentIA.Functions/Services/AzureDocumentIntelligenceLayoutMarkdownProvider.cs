@@ -196,7 +196,20 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
             {
                 Modelo = "prebuilt-layout",
                 Markdown = markdown,
-                Paginas = paginas
+                Paginas = paginas,
+                // El layout se invoca desde cuatro puntos del orquestador y cada
+                // llamada factura sus paginas por separado (AB#100229).
+                Consumos =
+                {
+                    new ConsumoIA
+                    {
+                        Actividad = ActividadesIA.Layout,
+                        Operacion = "layout.prebuilt-layout",
+                        Proveedor = ProveedoresIA.DocumentIntelligence,
+                        Modelo = "prebuilt-layout",
+                        Paginas = paginas > 0 ? paginas : null
+                    }
+                }
             };
         }
     }

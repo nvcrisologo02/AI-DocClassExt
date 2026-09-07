@@ -183,6 +183,50 @@ else
         </div>
     </div>
 
+    @if (Detalle.Costes is not null)
+    {
+        <!-- Costes de IA por llamada (AB#100239). Solo cuando el contrato trae el bloque. -->
+        <div class="row g-3 mb-3">
+            <div class="col-12">
+                <div class="detail-section-label">
+                    Costes de IA
+                    <span class="ms-2 fw-normal text-lowercase" style="letter-spacing:0">
+                        @Detalle.Costes.CosteTotalEur.ToString("N4", EsEs) €
+                        @if (Detalle.CosteEstimado) { <span class="text-warning">· estimado</span> }
+                        @if (!Detalle.Costes.TarifasCompletas) { <span class="text-warning">· tarifas incompletas: @string.Join(", ", Detalle.Costes.ModelosSinTarifa)</span> }
+                        @if (Detalle.Costes.ReutilizadaPorDuplicado) { <span class="text-muted">· reutilizada, sin consumo propio</span> }
+                    </span>
+                </div>
+                @if (Detalle.Costes.Consumos.Count > 0)
+                {
+                    <table class="table table-sm table-borderless mb-0" style="font-size:0.8rem">
+                        <thead><tr class="text-muted">
+                            <th>Actividad</th><th>Operación</th><th>Modelo</th>
+                            <th class="text-end">Entrada</th><th class="text-end">Caché</th><th class="text-end">Salida</th>
+                            <th class="text-end">Páginas</th><th class="text-end">Coste</th><th>Tarifa</th>
+                        </tr></thead>
+                        <tbody>
+                            @foreach (var c in Detalle.Costes.Consumos)
+                            {
+                                <tr class="@(c.Descartado ? "text-muted" : "")" title="@(c.Descartado ? "Llamada cuyo resultado se descartó; se pagó igualmente" : null)">
+                                    <td>@c.Actividad@(c.Descartado ? " ✕" : "")</td>
+                                    <td class="text-muted">@c.Operacion</td>
+                                    <td>@c.Modelo</td>
+                                    <td class="text-end">@Numero(c.TokensEntrada)</td>
+                                    <td class="text-end">@Numero(c.TokensEntradaCache)</td>
+                                    <td class="text-end">@Numero(c.TokensSalida)</td>
+                                    <td class="text-end">@Numero(c.Paginas)</td>
+                                    <td class="text-end fw-semibold">@(c.CosteEur is { } ce ? ce.ToString("N4", EsEs) + " €" : "—")</td>
+                                    <td class="text-muted">@(c.TarifaAplicada ?? "sin tarifa")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    }
+
     <!-- Fila 2: Datos extraidos · Validaciones · Plugins/GDC/Integridad -->
     <div class="row g-3">
 
@@ -399,6 +443,9 @@ else
         "ERROR"    => "bg-danger",
         _          => "bg-secondary"
     };
+
+    private static readonly System.Globalization.CultureInfo EsEs = System.Globalization.CultureInfo.GetCultureInfo("es-ES");
+    private static string Numero(int? n) => n is { } v ? v.ToString("N0", EsEs) : "—";
 
     // ── Confianza ──────────────────────────────────────────────────────────────
 

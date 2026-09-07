@@ -1,5 +1,6 @@
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Mocks;
 using Microsoft.Extensions.Logging;
@@ -122,9 +123,19 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         ExtraccionResultado? resultadoCu = null;
         string? fallbackRazon = null;
 
+        // Consumo de Content Understanding, cuyo resultado se descarta al degradar al
+        // fallback. Se devuelve el resultado del fallback, asi que sin esto el gasto
+        // del proveedor mas caro del pipeline desapareceria (AB#100227).
+        var consumosPrevios = new List<ConsumoIA>();
+
+        // Consumo del layout que genera el contexto del fallback. Va aparte porque
+        // ese resultado si se usa.
+        var consumosLayoutContexto = new List<ConsumoIA>();
+
         try
         {
             resultadoCu = await _azureProvider.ObtenerDatosAsync(input, cancellationToken);
+            consumosPrevios.AddRange(resultadoCu.Consumos);
 
             if (EsResultadoCuSuficiente(
                 config,
@@ -202,6 +213,10 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
 
                 markdownContexto = layout.Markdown;
                 paginasLayout = layout.Paginas;
+                // Quinto punto de llamada a layout, fuera de los del orquestador:
+                // factura sus paginas igual (AB#100229). No es un descarte: su
+                // markdown es el contexto con el que trabaja el fallback.
+                consumosLayoutContexto.AddRange(layout.Consumos);
 
                 _logger.LogInformation(
                     "Contexto de fallback generado con DI layout para {Tipologia}. Longitud={Length}, Paginas={Paginas}",
@@ -271,6 +286,11 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         resultadoGpt.FallbackRazon = string.IsNullOrWhiteSpace(resultadoGpt.FallbackRazon)
             ? fallbackRazon
             : $"{fallbackRazon};{resultadoGpt.FallbackRazon}";
+
+        // Content Understanding se ha pagado aunque su resultado se descarte en favor
+        // del fallback; el layout de contexto si se aprovecha, asi que no se marca.
+        ConsumosIA.Fusionar(resultadoGpt.Consumos, consumosPrevios, marcarDescartados: true);
+        ConsumosIA.Fusionar(resultadoGpt.Consumos, consumosLayoutContexto);
 
         return resultadoGpt;
     }

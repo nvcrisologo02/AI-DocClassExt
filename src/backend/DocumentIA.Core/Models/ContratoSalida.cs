@@ -214,6 +214,14 @@ public class DetalleEjecucion
     public string? ModeloLLMUsado { get; set; }
     /// <summary>Motivo de error en la resolución de tipología (si aplica).</summary>
     public string? MotivoErrorTipologia { get; set; }
+
+    /// <summary>
+    /// Consumo y coste de servicios de IA de la ejecucion. Se calcula y persiste siempre;
+    /// solo se devuelve al llamador cuando Instrucciones.IncluirCostes es true, en cuyo
+    /// caso el orquestador lo deja informado. Null se omite del JSON.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostesIA? Costes { get; set; }
 }
 
 public class ResultadoPromptEjecucion
@@ -397,6 +405,14 @@ public class ResultadoClasificacion
     /// Detalle de candidatos/proveedores evaluados y descartes.
     /// </summary>
     public List<PropuestaProveedor> DetalleProveedores { get; set; } = new();
+
+    /// <summary>
+    /// Consumo de servicios de IA de esta llamada. El proveedor lo rellena y el
+    /// orquestador lo acumula en DetalleEjecucion.Costes. Incluye los consumos de
+    /// proveedores evaluados y descartados: esas llamadas tambien se han pagado.
+    /// </summary>
+    public List<ConsumoIA> Consumos { get; set; } = new();
+
     /// <summary>
     /// Resultado de prompt libre en ejecución combinada con fallback.
     /// </summary>

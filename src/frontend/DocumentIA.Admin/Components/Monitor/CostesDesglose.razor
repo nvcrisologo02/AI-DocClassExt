@@ -1,0 +1,113 @@
+@using System.Globalization
+@* Desglose del coste (AB#100239). Primero por actividad, que es la lectura que
+   responde a "donde esta el dinero" y donde el layout suele llevarse casi todo;
+   despues por tipologia y por modelo, ordenados por coste y no por volumen, para
+   que arriba quede lo que mas cuesta aunque no sea lo mas frecuente. *@
+
+<div class="row g-3 mb-3">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header py-2"><span class="fw-semibold">Por actividad</span></div>
+            <div class="card-body">
+                @if (Costes is null || Costes.CosteTotalEur <= 0m)
+                {
+                    <span class="text-muted small">Sin importe en el período</span>
+                }
+                else
+                {
+                    var partes = new[]
+                    {
+                        ("Layout", Costes.LayoutEur, "#0d6efd"),
+                        ("Clasificación", Costes.ClasificacionEur, "#0ca30c"),
+                        ("Extracción", Costes.ExtraccionEur, "#fab219"),
+                        ("Prompt", Costes.PromptEur, "#6f42c1")
+                    };
+                    <div class="d-flex rounded overflow-hidden mb-3" style="height:12px;gap:1px;background:#e9ecef">
+                        @foreach (var (nombre, importe, color) in partes)
+                        {
+                            if (importe > 0m)
+                            {
+                                <div style="width:@Ancho(importe, Costes.CosteTotalEur)%;background:@color" title="@nombre: @Euros(importe)"></div>
+                            }
+                        }
+                    </div>
+                    <table class="table table-sm table-borderless mb-0" style="font-size:0.85rem">
+                        <tbody>
+                            @foreach (var (nombre, importe, color) in partes)
+                            {
+                                <tr>
+                                    <td style="width:1rem"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:@color"></span></td>
+                                    <td>@nombre</td>
+                                    <td class="text-end fw-semibold">@Euros(importe)</td>
+                                    <td class="text-end text-muted" style="width:3.5rem">@Porcentaje(importe, Costes.CosteTotalEur)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                }
+            </div>
+        </div>
+    </div>
+
+    @foreach (var panel in new[] { ("Por tipología", "Tipología", Costes?.PorTipologia ?? []), ("Por modelo", "Modelo", Costes?.PorModelo ?? []) })
+    {
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-header py-2">
+                    <span class="fw-semibold">@panel.Item1</span>
+                    <small class="text-muted ms-2">ordenado por coste</small>
+                </div>
+                <div class="card-body p-0">
+                    @if (panel.Item3.Count == 0)
+                    {
+                        <div class="p-3"><span class="text-muted small">Sin datos en el período</span></div>
+                    }
+                    else
+                    {
+                        <div style="max-height:280px;overflow-y:auto">
+                            <table class="table table-sm table-hover mb-0" style="font-size:0.8rem">
+                                <thead class="table-light" style="position:sticky;top:0;z-index:1">
+                                    <tr>
+                                        <th>@panel.Item2</th>
+                                        <th class="text-end">Coste</th>
+                                        <th class="text-end">Por ejec.</th>
+                                        <th class="text-end" title="Ejecuciones con importe sobre el total del grupo">Cobertura</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var g in panel.Item3)
+                                    {
+                                        <tr>
+                                            <td class="text-truncate" style="max-width:150px" title="@g.Grupo">@g.Grupo</td>
+                                            <td class="text-end fw-semibold">@Euros(g.CosteEur)</td>
+                                            <td class="text-end">@Euros(g.CosteMedioEur, 4)</td>
+                                            <td class="text-end @(g.ConImporte < g.Total ? "text-warning" : "text-muted")" title="@g.ConImporte de @g.Total">
+                                                @g.ConImporte/@g.Total
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public CostesResumenDto? Costes { get; set; }
+
+    private static readonly CultureInfo Es = CultureInfo.GetCultureInfo("es-ES");
+
+    private static string Euros(decimal v, int decimales = 2) => v.ToString($"N{decimales}", Es) + " €";
+
+    // Anchos y porcentajes con punto decimal: van dentro de un atributo style y
+    // con coma el navegador descarta la regla sin avisar.
+    private static string Ancho(decimal parte, decimal total) =>
+        total <= 0m ? "0" : (parte / total * 100m).ToString("0.#", CultureInfo.InvariantCulture);
+
+    private static string Porcentaje(decimal parte, decimal total) =>
+        total <= 0m ? "—" : (parte / total).ToString("P1", Es);
+}

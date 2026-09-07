@@ -211,6 +211,21 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
                 datosExtraidos.Count,
                 confianzaExtraccion);
 
+            // Paginas analizadas: es la unidad que factura el analizador a medida. Se usa
+            // SOLO para tarificar, no se informa en ExtraccionResultado.Paginas: ese campo
+            // sobrescribe Identificacion.Paginas con prioridad maxima en el orquestador y
+            // cambiaria un dato del contrato que hoy calculan clasificacion y layout
+            // (AB#100229).
+            var paginasAnalizadas = 0;
+            var raizPaginas = finalResult.RootElement.TryGetProperty("analyzeResult", out var arPaginas)
+                ? arPaginas
+                : finalResult.RootElement;
+            if (raizPaginas.TryGetProperty("pages", out var pagesElExtrac)
+                && pagesElExtrac.ValueKind == JsonValueKind.Array)
+            {
+                paginasAnalizadas = pagesElExtrac.GetArrayLength();
+            }
+
             return new ExtraccionResultado
             {
                 Proveedor = model.Provider,
@@ -218,6 +233,17 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
                 LayoutEnabled = false,
                 ConfianzaExtraccion = confianzaExtraccion,
                 ProveedorExtrac = "DocumentIntelligence",
+                Consumos =
+                {
+                    new ConsumoIA
+                    {
+                        Actividad = ActividadesIA.Extraer,
+                        Operacion = "extraction.di",
+                        Proveedor = ProveedoresIA.DocumentIntelligence,
+                        Modelo = model.AnalyzerId,
+                        Paginas = paginasAnalizadas > 0 ? paginasAnalizadas : null
+                    }
+                },
                 MetricasDebug = metricasDebug,
                 TiemposMs = new Dictionary<string, int> { ["analysis"] = (int)stopwatch.ElapsedMilliseconds },
                 DatosExtraidos = datosExtraidos

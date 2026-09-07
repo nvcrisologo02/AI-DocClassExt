@@ -77,6 +77,138 @@ public class PersistirActivityTests : IDisposable
             }
         };
 
+    // ========== Coste y tokens de IA (AB#100232) ==========
+
+    /// <summary>
+    /// Monta los repositorios y devuelve un contenedor con la entidad de ejecucion
+    /// capturada, para poder afirmar sobre las columnas grabadas.
+    /// </summary>
+    private DocumentoEjecucionEntity[] PrepararCapturaEjecucion(string sha256)
+    {
+        var capturada = new DocumentoEjecucionEntity[1];
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync(new DocumentoEntity { Id = 1, SHA256 = sha256 });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) =>
+            {
+                capturada[0] = e;
+                return e;
+            });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        return capturada;
+    }
+
+    [Fact]
+    public async Task Run_ConBloqueDeCostes_RellenaLasDosColumnas()
+    {
+        const string sha256 = "sha256_costes_con_bloque";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA
+        {
+            CosteTotalEur = 0.123456m,
+            TokensTotales = 4200,
+            PaginasTotales = 7
+        };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteIAEur.Should().Be(0.123456m);
+        capturada[0].TokensIA.Should().Be(4200);
+    }
+
+    [Fact]
+    public async Task Run_ConBloqueDeCostes_RellenaElDesglosePorActividad()
+    {
+        const string sha256 = "sha256_costes_desglose";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA
+        {
+            CosteTotalEur = 0.15m,
+            Consumos =
+            {
+                new ConsumoIA { Actividad = ActividadesIA.Layout, CosteEur = 0.09m },
+                new ConsumoIA { Actividad = ActividadesIA.Clasificar, CosteEur = 0.06m }
+            }
+        };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteLayoutEur.Should().Be(0.09m);
+        capturada[0].CosteClasificacionEur.Should().Be(0.06m);
+        capturada[0].CosteExtraccionEur.Should().BeNull();
+        capturada[0].CostePromptEur.Should().BeNull();
+        // Lo medido nunca se marca como estimado.
+        capturada[0].CosteEstimado.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_SinBloqueDeCostes_DejaLasColumnasANulo()
+    {
+        // Compatibilidad: un contrato sin bloque no rompe la persistencia.
+        const string sha256 = "sha256_costes_sin_bloque";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteIAEur.Should().BeNull();
+        capturada[0].TokensIA.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Run_EjecucionSinConsumoDeIA_GrabaCeroExplicito()
+    {
+        // Distinguible de las ejecuciones anteriores a la funcionalidad, que van a nulo.
+        const string sha256 = "sha256_costes_cero";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA();
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteIAEur.Should().Be(0m);
+        capturada[0].TokensIA.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Run_ConservaElDesgloseDeConsumosEnElContratoGuardado()
+    {
+        // El desglose por llamada no tiene columna propia: viaja dentro del contrato
+        // serializado. Si se podara como el timeline, se perderia.
+        const string sha256 = "sha256_costes_detalle";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA
+        {
+            CosteTotalEur = 0.10m,
+            Consumos =
+            {
+                new ConsumoIA
+                {
+                    Modelo = "gpt-5-mini",
+                    Operacion = "classification.phase1",
+                    TokensEntrada = 100
+                }
+            }
+        };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].ContratoSalidaCompletoJson.Should().Contain("gpt-5-mini");
+        capturada[0].ContratoSalidaCompletoJson.Should().Contain("classification.phase1");
+    }
+
     [Fact]
     public async Task Run_DocumentoNuevo_LlamaAddAsync()
     {

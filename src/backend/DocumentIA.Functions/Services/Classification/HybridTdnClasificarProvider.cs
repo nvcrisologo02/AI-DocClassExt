@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services;
 using Microsoft.ApplicationInsights;
@@ -75,7 +76,7 @@ namespace DocumentIA.Functions.Services.Classification
                     _options.PagesToInspect,
                     _options.MaxCharactersPerWindow);
 
-                await EnsureMarkdownContextAsync(input, cancellationToken);
+                await EnsureMarkdownContextAsync(input, result.Consumos, cancellationToken);
 
                 // Paso 1: Extraer ventana de contexto
                 var window = _windowExtractor.ExtractWindow(
@@ -124,6 +125,9 @@ namespace DocumentIA.Functions.Services.Classification
 
                 // Paso 3: DI con umbral de confianza
                 var diResult = await _diProvider.ClasificarAsync(input, cancellationToken);
+                // El clasificador DI factura sus paginas tanto si su resultado se
+                // acepta como si se descarta en favor del rescate (AB#100227).
+                ConsumosIA.Fusionar(result.Consumos, diResult.Consumos);
                 _logger.LogInformation(
                     "Resultado DI: tipologia={Tipologia}, confianza={Confianza}",
                     diResult.TipologiaDetectada, diResult.Confianza);
@@ -167,10 +171,16 @@ namespace DocumentIA.Functions.Services.Classification
                 result.DetalleProveedores.Add(new() { Proveedor = "DI", Tipologia = diResult.TipologiaDetectada, Confianza = diResult.Confianza, MotivoDescarte = diDescarte });
 
                 // Paso 4: Rescate con Foundry LLM
+                // El resultado de DI queda descartado en favor del rescate. El layout
+                // previo no: genera la ventana con la que el rescate trabaja.
+                MarcarConsumosDescartados(diResult.Consumos);
+
                 var rescueResult = await _rescueClassifier.ClassifyAsync(
                     window,
                     _options.RescueTimeoutMs,
                     _options.MaxRetries);
+
+                ConsumosIA.Fusionar(result.Consumos, rescueResult.Consumos);
 
                 result.TipologiaDetectada = rescueResult.TipologiaDetectada;
                 result.Confianza = rescueResult.Confianza;
@@ -234,7 +244,22 @@ namespace DocumentIA.Functions.Services.Classification
             }
         }
 
-        private async Task EnsureMarkdownContextAsync(ClasificacionInput input, CancellationToken cancellationToken)
+        /// <summary>
+        /// Marca el consumo ya acumulado como descartado: su resultado no es el que
+        /// se va a devolver, pero esas llamadas se han pagado igual.
+        /// </summary>
+        private static void MarcarConsumosDescartados(List<ConsumoIA> consumos)
+        {
+            foreach (var consumo in consumos)
+            {
+                consumo.Descartado = true;
+            }
+        }
+
+        private async Task EnsureMarkdownContextAsync(
+            ClasificacionInput input,
+            List<ConsumoIA> consumos,
+            CancellationToken cancellationToken)
         {
             if (HasUsefulTextContext(input.DatosNormalizados))
             {
@@ -267,6 +292,9 @@ namespace DocumentIA.Functions.Services.Classification
                         NombreDocumento = input.Entrada.Documento.Name
                     },
                     cancellationToken);
+
+                // El layout previo factura sus paginas aunque no aporte markdown util.
+                ConsumosIA.Fusionar(consumos, markdownResult.Consumos);
 
                 if (!string.IsNullOrWhiteSpace(markdownResult.Markdown))
                 {

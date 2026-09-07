@@ -11223,6 +11223,24 @@ namespace DocumentIA.Data.Migrations
                     b.Property<string>("ContratoSalidaCompletoJson")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal?>("CosteClasificacionEur")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<bool>("CosteEstimado")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal?>("CosteExtraccionEur")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<decimal?>("CosteIAEur")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<decimal?>("CosteLayoutEur")
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<decimal?>("CostePromptEur")
+                        .HasColumnType("decimal(18,6)");
+
                     b.Property<string>("DatosFinalesJson")
                         .HasColumnType("nvarchar(max)");
 
@@ -11296,6 +11314,9 @@ namespace DocumentIA.Data.Migrations
                     b.Property<string>("Tipologia")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<int?>("TokensIA")
+                        .HasColumnType("int");
 
                     b.Property<bool>("UseFallbackLLM")
                         .HasColumnType("bit");
@@ -11846,9 +11867,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 9, 2, 10, 33, 12, 555, DateTimeKind.Utc).AddTicks(5942),
+                            FechaCreacion = new DateTime(2026, 9, 7, 10, 33, 26, 89, DateTimeKind.Utc).AddTicks(7788),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 9, 2, 10, 33, 12, 555, DateTimeKind.Utc).AddTicks(5934),
+                            PublicadaEn = new DateTime(2026, 9, 7, 10, 33, 26, 89, DateTimeKind.Utc).AddTicks(7783),
                             PublicadaPor = "seed",
                             Version = "1.0",
                             VersionPublicada = "1.0"

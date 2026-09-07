@@ -224,7 +224,15 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             {
                 Modelo = modelConfig.DeploymentName,
                 Resultado = response.Value.Content[0].Text,
-                TiempoMs = (int)stopwatch.ElapsedMilliseconds
+                TiempoMs = (int)stopwatch.ElapsedMilliseconds,
+                Consumos =
+                {
+                    UsoOpenAiMapper.Mapear(
+                        response.Value.Usage,
+                        actividad: ActividadesIA.Prompt,
+                        operacion: "prompt.resultado",
+                        modelo: modelConfig.DeploymentName)
+                }
             };
         }
         catch (RateLimitExhaustedException ex)
@@ -367,7 +375,16 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             Resumen = FirstNonEmpty(
                 ExtractString(root, "resumen"),
                 ExtractString(root, "summary")) ?? string.Empty,
-            Resultado = ExtractString(root, "resultado_prompt") ?? string.Empty
+            Resultado = ExtractString(root, "resultado_prompt") ?? string.Empty,
+            // Resumen y resultado salen de la misma llamada: un unico consumo.
+            Consumos =
+            {
+                UsoOpenAiMapper.Mapear(
+                    response.Value.Usage,
+                    actividad: ActividadesIA.Prompt,
+                    operacion: "prompt.json",
+                    modelo: modelConfig.DeploymentName)
+            }
         };
     }
 

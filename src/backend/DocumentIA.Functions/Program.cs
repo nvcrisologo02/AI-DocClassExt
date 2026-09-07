@@ -343,6 +343,12 @@ var host = new HostBuilder()
             new LayoutModelRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),
                 provider.GetRequiredService<IServiceScopeFactory>()));
+
+        // Catalogo de tarifas de servicios de IA (AB#100226)
+        services.AddSingleton<TarifaRegistryLoader>(provider =>
+            new TarifaRegistryLoader(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>()));
         services.AddScoped<ISystemHealthService, SystemHealthService>();
 
         // Tipologia caching + mapper (AB#99737, AB#99735)
