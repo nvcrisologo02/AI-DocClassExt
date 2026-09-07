@@ -126,8 +126,13 @@ BEGIN TRAN;
 --      cu.documentPagesMinimal .. documentos digitales (DOCX, XLSX, HTML, TXT)
 --      cu.documentPagesBasic .... imagen con OCR simple
 --      cu.documentPagesStandard . imagen con analisis de layout
---    La contextualizacion si va por analizador (CU_NS_1.5_0 y CU_NS_1.6_0_GGAA,
---    ambos workflow estandar) -> "Std Contextualization Tokens".
+--    La contextualizacion si va por analizador -> "Std Contextualization Tokens".
+--    En PRO: CU_NS_1.5_0 y CU_NS_1.6_0_GGAA (workflow estandar). DEV configura
+--    ademas CU_NS_1.4_3, CERA16_v1, CERA44_vado y CERA46; se incluyen para que
+--    ningun entorno salga con tarifas incompletas.
+--
+--    DI_NS_1.4_v1 es el extractor a medida de Document Intelligence que usa DEV:
+--    medidor "S0 Custom Pages", 25,7599 EUR / 1.000 paginas.
 --
 --    NO se factura ningun add-on de formulas pese a que los analizadores llevan
 --    enableFormula activo: el medidor no aparece en la facturacion. No hay nada
@@ -207,6 +212,31 @@ DECLARE @catalogo NVARCHAR(MAX) = N'{
       "Modelo": "CU_NS_1.6_0_GGAA",
       "VigenteDesde": "2026-07-17",
       "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "CU_NS_1.4_3",
+      "VigenteDesde": "2026-04-01",
+      "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "CERA16_v1",
+      "VigenteDesde": "2026-04-01",
+      "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "CERA44_vado",
+      "VigenteDesde": "2026-04-01",
+      "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "CERA46",
+      "VigenteDesde": "2026-04-01",
+      "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "DI_NS_1.4_v1",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.0257599
     }
   ]
 }';

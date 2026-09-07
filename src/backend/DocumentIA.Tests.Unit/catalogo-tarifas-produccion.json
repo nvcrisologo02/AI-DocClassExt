@@ -73,6 +73,31 @@
       "Modelo": "CU_NS_1.6_0_GGAA",
       "VigenteDesde": "2026-07-17",
       "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "CU_NS_1.4_3",
+      "VigenteDesde": "2026-04-01",
+      "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "CERA16_v1",
+      "VigenteDesde": "2026-04-01",
+      "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "CERA44_vado",
+      "VigenteDesde": "2026-04-01",
+      "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "CERA46",
+      "VigenteDesde": "2026-04-01",
+      "EurContextualizacionPor1M": 0.859
+    },
+    {
+      "Modelo": "DI_NS_1.4_v1",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.0257599
     }
   ]
 }

@@ -71,7 +71,7 @@ public class TarifaRegistryLoaderTests
         var registry = TarifaRegistryLoader.Parse(json);
 
         registry.Moneda.Should().Be("EUR");
-        registry.Tarifas.Should().HaveCount(13);
+        registry.Tarifas.Should().HaveCount(18);
         registry.Tarifas.Should().OnlyContain(t => !string.IsNullOrWhiteSpace(t.Modelo));
         registry.Tarifas.Should().OnlyContain(t => t.VigenteDesde > DateTime.MinValue);
 
