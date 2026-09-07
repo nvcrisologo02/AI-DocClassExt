@@ -35,6 +35,7 @@ public class SystemConfigService
         modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Extraccion));
         modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Prompt));
         modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Layout));
+        modelos.AddRange(await _tipologiaService.GetModelosByTipoAsync(TipoModelo.Tarifas));
 
         // Obtener configuración de Functions
         var functionsConfig = await GetFunctionsConfigurationAsync();
@@ -70,6 +71,7 @@ public class SystemConfigService
             ModelosExtraccion = modelos.Count(m => m.Tipo == TipoModelo.Extraccion),
             ModelosPrompt = modelos.Count(m => m.Tipo == TipoModelo.Prompt),
             ModelosLayout = modelos.Count(m => m.Tipo == TipoModelo.Layout),
+            ModelosTarifas = modelos.Count(m => m.Tipo == TipoModelo.Tarifas),
 
             PluginsTotal = plugins.Count,
             PluginsDraft = plugins.Count(p => p.Estado == EstadoPluginConfig.Draft),
@@ -204,6 +206,9 @@ public class SystemConfiguration
     public int ModelosExtraccion { get; set; }
     public int ModelosPrompt { get; set; }
     public int ModelosLayout { get; set; }
+
+    /// <summary>Filas del catalogo de tarifas de IA (normalmente una).</summary>
+    public int ModelosTarifas { get; set; }
 
     // Plugins
     public int PluginsTotal { get; set; }
