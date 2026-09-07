@@ -8,7 +8,13 @@ public enum TipoModelo
     Clasificacion = 0,
     Extraccion = 1,
     Prompt = 2,
-    Layout = 3
+    Layout = 3,
+
+    /// <summary>
+    /// Catalogo de tarifas de servicios de IA. Fila unica con clave "tarifas.ia".
+    /// No es un modelo invocable: no tiene endpoint ni deployment.
+    /// </summary>
+    Tarifas = 4
 }
 
 [Table("ModeloConfigs")]
