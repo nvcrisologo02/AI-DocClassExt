@@ -1,8 +1,8 @@
 # Control de costes de IA por ejecución
 
 **Fecha:** 2026-09-07
-**Estado:** Diseño aprobado, pendiente de plan de implementación
-**Work items:** pendientes de crear (el MCP de Azure DevOps no conectó en la sesión de diseño). Ver "Trabajo previo".
+**Estado:** Diseño aprobado, plan escrito, en implementación
+**Work items:** elemento padre [100224](https://sareb.visualstudio.com/AI%20DocClassExt/_workitems/edit/100224), tareas 100225 a 100234.
 
 ## Problema
 
@@ -221,6 +221,19 @@ Unitarias, en la solución de tests que ya existe:
 - **Cobertura parcial del consumo interno de Content Understanding.** Depende de que el servicio siga declarando su bloque de uso con la forma documentada. Si cambia, el consumo se registra sin coste y el total se marca incompleto en lugar de dar una cifra falsa.
 - **Una petición que falla a mitad** deja consumo registrado de los pasos ya ejecutados. Es lo correcto, se ha pagado, pero conviene tenerlo presente al comparar totales con volumetría de documentos completados.
 
-## Trabajo previo
+## Work items
 
-La norma del proyecto pide crear los work items en Azure DevOps antes de desarrollar. El servidor no conectó durante la sesión de diseño, así que hay que crearlos antes de empezar a implementar y referenciar sus identificadores reales en las ramas y los commits. La épica de control de costes y límites operativos del pipeline es el padre natural de este trabajo.
+El trabajo cuelga del elemento 100224, bajo la épica 100005 de operación post-producción, la única activa del producto. La épica 99683, de título casi idéntico a este trabajo, está cerrada y cubría el límite de páginas, así que no sirve de padre.
+
+| Tarea | Entregable |
+| --- | --- |
+| 100225 | Modelo de consumo y coste en el contrato |
+| 100226 | Catálogo de tarifas y calculadora de coste |
+| 100227 | Captura de tokens en los proveedores generativos |
+| 100228 | Captura del bloque de uso de Content Understanding |
+| 100229 | Captura de páginas en los servicios de Document Intelligence |
+| 100230 | Tarificación de consumos dentro de las actividades |
+| 100231 | Agregación por ejecución y visibilidad del bloque en la salida |
+| 100232 | Persistencia del coste y los tokens por ejecución |
+| 100233 | Catálogo de tarifas visible y editable en Admin |
+| 100234 | Alta del catálogo de precios y documentación |
