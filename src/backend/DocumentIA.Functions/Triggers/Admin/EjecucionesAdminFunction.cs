@@ -78,8 +78,35 @@ public class EjecucionesAdminFunction
             EstadoProceso = Valor("estadoproceso"),
             Calidad = Valor("calidad"),
             ConfianzaMin = Numero("confmin"),
-            ConfianzaMax = Numero("confmax")
+            ConfianzaMax = Numero("confmax"),
+            IncluirEstimados = string.Equals(Valor("incluirestimados"), "true", StringComparison.OrdinalIgnoreCase)
         };
+    }
+
+    /// <summary>
+    /// Agregados de coste de IA del periodo (AB#100237). Mismo filtro que el resto
+    /// del Monitor mas <c>incluirestimados=true</c> para sumar tambien las
+    /// ejecuciones rellenadas retroactivamente.
+    /// </summary>
+    [Function("Admin_GetCostes")]
+    public async Task<HttpResponseData> GetCostes(
+        [HttpTrigger(AuthorizationLevel.Function, "get", Route = "management/ejecuciones/costes")] HttpRequestData req)
+    {
+        var query = req.Query.AllKeys
+            .Where(k => k is not null)
+            .ToDictionary(k => k!.ToLowerInvariant(), k => req.Query[k] ?? string.Empty);
+
+        var filtro = ParseFiltro(query);
+
+        _logger.LogInformation(
+            "Admin_GetCostes: desde={Desde} hasta={Hasta} incluirEstimados={IncluirEstimados}",
+            filtro.Desde, filtro.Hasta, filtro.IncluirEstimados);
+
+        var costes = await _ejecucionRepository.GetCostesAsync(filtro);
+
+        var response = req.CreateResponse(HttpStatusCode.OK);
+        await response.WriteAsJsonAsync(costes);
+        return response;
     }
 
     [Function("Admin_GetUltimasEjecuciones")]
@@ -122,7 +149,9 @@ public class EjecucionesAdminFunction
             e.DuracionPersistenciaMs,
             NombreDocumento = e.NombreDocumento,
             SubmittedBy = e.SubmittedBy,
-            Actividades = ParseActivitySummaries(e.ActivityTimelineJson)
+            Actividades = ParseActivitySummaries(e.ActivityTimelineJson),
+            e.CosteIAEur,
+            e.CosteEstimado
         }).ToList();
 
         var response = req.CreateResponse(HttpStatusCode.OK);

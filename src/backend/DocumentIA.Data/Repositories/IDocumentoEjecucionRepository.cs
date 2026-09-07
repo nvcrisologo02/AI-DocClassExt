@@ -12,6 +12,7 @@ namespace DocumentIA.Data.Repositories
         Task<DocumentoEjecucionEntity> AddAsync(DocumentoEjecucionEntity ejecucion);
         Task<IEnumerable<DocumentoEjecucionEntity>> GetUltimasEjecucionesAsync(int top = 10);
         Task<EjecucionAgregadosResult> GetAgregadosAsync(EjecucionFiltro filtro);
+        Task<EjecucionCostesResult> GetCostesAsync(EjecucionFiltro filtro);
         Task<(IReadOnlyList<EjecucionListadoItem> Items, int Total)> GetPagedAsync(
             EjecucionFiltro filtro, int page, int pageSize);
     }

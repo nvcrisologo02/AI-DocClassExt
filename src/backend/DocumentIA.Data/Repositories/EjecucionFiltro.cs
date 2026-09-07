@@ -34,5 +34,12 @@ namespace DocumentIA.Data.Repositories
         /// <summary>Tramo de confianza global; Max es exclusivo. Alimenta el histograma.</summary>
         public double? ConfianzaMin { get; set; }
         public double? ConfianzaMax { get; set; }
+
+        /// <summary>
+        /// Solo lo usan los agregados de coste (AB#100237). Por defecto los importes
+        /// excluyen las ejecuciones cuyo coste procede del relleno retroactivo; con
+        /// true entran tambien. Los recuentos por origen no dependen de este flag.
+        /// </summary>
+        public bool IncluirEstimados { get; set; }
     }
 }

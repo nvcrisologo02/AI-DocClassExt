@@ -422,11 +422,170 @@ namespace DocumentIA.Data.Repositories
                     NombreDocumento = e.Documento != null ? e.Documento.NombreArchivo : null,
                     SubmittedBy = e.SubmittedBy
                         ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
-                    ActivityTimelineJson = e.ActivityTimelineJson
+                    ActivityTimelineJson = e.ActivityTimelineJson,
+                    CosteIAEur = e.CosteIAEur,
+                    CosteEstimado = e.CosteEstimado
                 })
                 .ToListAsync();
 
             return (items, total);
+        }
+
+        /// <summary>
+        /// Agregados de coste de IA (AB#100237). Todo sobre columnas escalares: el
+        /// desglose por llamada vive en el contrato JSON y agregarlo por OPENJSON
+        /// sobre una ventana de 90 dias seria el problema de rendimiento que el
+        /// Monitor ya arrastra.
+        /// </summary>
+        public async Task<EjecucionCostesResult> GetCostesAsync(EjecucionFiltro filtro)
+        {
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtro);
+
+            var resultado = new EjecucionCostesResult
+            {
+                PeriodoDias = Math.Max(1, (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays)),
+                IncluyeEstimados = filtro.IncluirEstimados
+            };
+
+            resultado.TotalEjecuciones = await q.CountAsync();
+            if (resultado.TotalEjecuciones == 0)
+            {
+                resultado.Serie = SerieVacia(filtro);
+                return resultado;
+            }
+
+            // Los recuentos por origen se calculan sobre el conjunto filtrado completo:
+            // el usuario debe ver cuanto hay medido, cuanto estimado y cuanto sin coste
+            // aunque los importes de abajo excluyan lo estimado.
+            var origen = await q
+                .GroupBy(e => 1)
+                .Select(g => new
+                {
+                    Real      = g.Count(e => e.CosteIAEur != null && !e.CosteEstimado),
+                    Estimado  = g.Count(e => e.CosteIAEur != null && e.CosteEstimado),
+                    SinCoste  = g.Count(e => e.CosteIAEur == null)
+                })
+                .FirstAsync();
+            resultado.ConCosteReal = origen.Real;
+            resultado.ConCosteEstimado = origen.Estimado;
+            resultado.SinCoste = origen.SinCoste;
+
+            // Los importes: solo ejecuciones con coste, y las estimadas solo si se pide.
+            var qImporte = q.Where(e => e.CosteIAEur != null);
+            if (!filtro.IncluirEstimados)
+            {
+                qImporte = qImporte.Where(e => !e.CosteEstimado);
+            }
+
+            resultado.EjecucionesConImporte = await qImporte.CountAsync();
+            if (resultado.EjecucionesConImporte > 0)
+            {
+                var sumas = await qImporte
+                    .GroupBy(e => 1)
+                    .Select(g => new
+                    {
+                        Coste   = g.Sum(e => e.CosteIAEur) ?? 0m,
+                        Tokens  = g.Sum(e => (long?)e.TokensIA) ?? 0L,
+                        Layout  = g.Sum(e => e.CosteLayoutEur) ?? 0m,
+                        Clasif  = g.Sum(e => e.CosteClasificacionEur) ?? 0m,
+                        Extrac  = g.Sum(e => e.CosteExtraccionEur) ?? 0m,
+                        Prompt  = g.Sum(e => e.CostePromptEur) ?? 0m
+                    })
+                    .FirstAsync();
+
+                resultado.CosteTotalEur   = sumas.Coste;
+                resultado.CosteMedioEur   = Math.Round(sumas.Coste / resultado.EjecucionesConImporte, 6, MidpointRounding.AwayFromZero);
+                resultado.TokensTotales   = sumas.Tokens;
+                resultado.LayoutEur       = sumas.Layout;
+                resultado.ClasificacionEur = sumas.Clasif;
+                resultado.ExtraccionEur   = sumas.Extrac;
+                resultado.PromptEur       = sumas.Prompt;
+            }
+
+            // Por tipologia y por modelo: el total cuenta todas las del filtro, el
+            // importe solo las que entran. Asi se ve tambien la cobertura.
+            resultado.PorTipologia = await AgruparCostesAsync(
+                q, qImporte, e => e.Tipologia == null ? "(sin tipología)" : e.Tipologia);
+            resultado.PorModelo = await AgruparCostesAsync(
+                q, qImporte, e => e.ModeloClasificacion == null ? "(sin modelo)" : e.ModeloClasificacion);
+
+            var porDia = await qImporte
+                .GroupBy(e => e.FechaEjecucion.Date)
+                .Select(g => new CosteSeriePunto
+                {
+                    Fecha    = g.Key,
+                    Total    = g.Count(),
+                    CosteEur = g.Sum(e => e.CosteIAEur) ?? 0m
+                })
+                .ToListAsync();
+            var porDiaIndexado = porDia.ToDictionary(p => p.Fecha.Date);
+            resultado.Serie = SerieVacia(filtro)
+                .Select(p => porDiaIndexado.TryGetValue(p.Fecha, out var punto) ? punto : p)
+                .ToList();
+
+            return resultado;
+        }
+
+        private static async Task<List<CosteGrupo>> AgruparCostesAsync(
+            IQueryable<DocumentoEjecucionEntity> todas,
+            IQueryable<DocumentoEjecucionEntity> conImporte,
+            System.Linq.Expressions.Expression<Func<DocumentoEjecucionEntity, string>> clave)
+        {
+            var totales = await todas
+                .GroupBy(clave)
+                .Select(g => new { Grupo = g.Key, Total = g.Count() })
+                .ToListAsync();
+
+            var importes = await conImporte
+                .GroupBy(clave)
+                .Select(g => new
+                {
+                    Grupo      = g.Key,
+                    ConImporte = g.Count(),
+                    Coste      = g.Sum(e => e.CosteIAEur) ?? 0m,
+                    Layout     = g.Sum(e => e.CosteLayoutEur) ?? 0m,
+                    Clasif     = g.Sum(e => e.CosteClasificacionEur) ?? 0m,
+                    Extrac     = g.Sum(e => e.CosteExtraccionEur) ?? 0m,
+                    Prompt     = g.Sum(e => e.CostePromptEur) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.Grupo);
+
+            return totales
+                .Select(t =>
+                {
+                    importes.TryGetValue(t.Grupo, out var i);
+                    var conImp = i?.ConImporte ?? 0;
+                    return new CosteGrupo
+                    {
+                        Grupo           = t.Grupo,
+                        Total           = t.Total,
+                        ConImporte      = conImp,
+                        CosteEur        = i?.Coste ?? 0m,
+                        CosteMedioEur   = conImp > 0
+                            ? Math.Round((i?.Coste ?? 0m) / conImp, 6, MidpointRounding.AwayFromZero)
+                            : 0m,
+                        LayoutEur       = i?.Layout ?? 0m,
+                        ClasificacionEur = i?.Clasif ?? 0m,
+                        ExtraccionEur   = i?.Extrac ?? 0m,
+                        PromptEur       = i?.Prompt ?? 0m
+                    };
+                })
+                .OrderByDescending(g => g.CosteEur)
+                .ThenByDescending(g => g.Total)
+                .ToList();
+        }
+
+        /// <summary>Un punto a cero por cada dia del rango: los huecos deben verse como huecos.</summary>
+        private static List<CosteSeriePunto> SerieVacia(EjecucionFiltro filtro)
+        {
+            var serie = new List<CosteSeriePunto>();
+            var ultimoDia = filtro.Hasta.AddTicks(-1).Date;
+            for (var dia = filtro.Desde.Date; dia <= ultimoDia; dia = dia.AddDays(1))
+            {
+                serie.Add(new CosteSeriePunto { Fecha = dia });
+            }
+
+            return serie;
         }
     }
 }

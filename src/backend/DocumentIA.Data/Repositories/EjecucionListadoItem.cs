@@ -29,5 +29,11 @@ namespace DocumentIA.Data.Repositories
         public string? NombreDocumento { get; set; }
         public string? SubmittedBy { get; set; }
         public string? ActivityTimelineJson { get; set; }
+
+        /// <summary>Coste de IA de la ejecucion; nulo si no se registro (AB#100238).</summary>
+        public decimal? CosteIAEur { get; set; }
+
+        /// <summary>True si el coste procede del relleno retroactivo.</summary>
+        public bool CosteEstimado { get; set; }
     }
 }
