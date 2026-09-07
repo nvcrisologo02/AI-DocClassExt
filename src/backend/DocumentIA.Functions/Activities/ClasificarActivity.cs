@@ -1,7 +1,9 @@
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
+using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
+using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Services.Resilience;
 using System.Text.Json;
 
@@ -11,11 +13,16 @@ public class ClasificarActivity
 {
     private readonly ILogger<ClasificarActivity> _logger;
     private readonly IClasificarDataProvider _clasificadorProvider;
+    private readonly TarifaRegistryLoader _tarifas;
 
-    public ClasificarActivity(ILogger<ClasificarActivity> logger, IClasificarDataProvider clasificadorProvider)
+    public ClasificarActivity(
+        ILogger<ClasificarActivity> logger,
+        IClasificarDataProvider clasificadorProvider,
+        TarifaRegistryLoader tarifas)
     {
         _logger = logger;
         _clasificadorProvider = clasificadorProvider;
+        _tarifas = tarifas;
     }
 
     [Function("ClasificarActivity")]
@@ -43,6 +50,9 @@ public class ClasificarActivity
         try
         {
             var resultado = await _clasificadorProvider.ClasificarAsync(clasificacionInput);
+
+            TarificadorDeConsumos.Aplicar(resultado.Consumos, _tarifas, _logger);
+
             _logger.LogInformation("Clasificación completada: {Tipologia} (confianza: {Confianza})", resultado.TipologiaDetectada, resultado.Confianza);
             return resultado;
         }

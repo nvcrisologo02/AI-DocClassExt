@@ -1,4 +1,5 @@
 #nullable enable
+using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Activities;
@@ -12,6 +13,17 @@ namespace DocumentIA.Tests.Unit.Activities;
 
 public class ClasificarActivityRateLimitTests
 {
+    /// <summary>
+    /// Cargador de tarifas vacio: estos tests no verifican coste, solo necesitan
+    /// satisfacer la dependencia de la actividad (AB#100230).
+    /// </summary>
+    private static TarifaRegistryLoader CargadorDeTarifasVacio()
+    {
+        var mock = new Mock<TarifaRegistryLoader>();
+        mock.Setup(c => c.Load()).Returns(new TarifaRegistry());
+        return mock.Object;
+    }
+
     [Fact]
     public async Task Run_WhenProviderThrowsRateLimitExhausted_ReturnsFlaggedResultWithoutThrow()
     {
@@ -22,7 +34,8 @@ public class ClasificarActivityRateLimitTests
 
         var activity = new ClasificarActivity(
             Mock.Of<ILogger<ClasificarActivity>>(),
-            provider.Object);
+            provider.Object,
+            CargadorDeTarifasVacio());
 
         var input = new ClasificacionInput
         {
