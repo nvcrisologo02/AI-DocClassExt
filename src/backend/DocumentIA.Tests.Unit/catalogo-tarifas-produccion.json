@@ -4,9 +4,9 @@
     {
       "Modelo": "gpt-4o-mini",
       "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 0.5,
-      "EurEntradaCachePor1M": 0.1,
-      "EurSalidaPor1M": 1.8
+      "EurEntradaPor1M": 0.416,
+      "EurEntradaCachePor1M": 0.104,
+      "EurSalidaPor1M": 1.662
     },
     {
       "Modelo": "gpt-4.1-mini",
@@ -18,36 +18,36 @@
     {
       "Modelo": "gpt-5-mini",
       "VigenteDesde": "2026-07-21",
-      "EurEntradaPor1M": 0.425,
-      "EurEntradaCachePor1M": 0.0425,
-      "EurSalidaPor1M": 3.4003
+      "EurEntradaPor1M": 0.2361,
+      "EurEntradaCachePor1M": 0.0236,
+      "EurSalidaPor1M": 1.8891
     },
     {
       "Modelo": "gpt-4.1",
       "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 1.7,
-      "EurEntradaCachePor1M": 0.4,
-      "EurSalidaPor1M": 6.9
+      "EurEntradaPor1M": 1.717,
+      "EurEntradaCachePor1M": 0.429,
+      "EurSalidaPor1M": 6.869
     },
     {
       "Modelo": "text-embedding-3-large",
       "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 0.1
+      "EurEntradaPor1M": 0.112
     },
     {
       "Modelo": "prebuilt-layout",
       "VigenteDesde": "2026-04-01",
-      "EurPorPagina": 0.0085866
+      "EurPorPagina": 0.008586639
     },
     {
       "Modelo": "DocumentAICC_v0",
       "VigenteDesde": "2026-04-01",
-      "EurPorPagina": 0.002576
+      "EurPorPagina": 0.002575992
     },
     {
       "Modelo": "DocumentAICC_v1",
       "VigenteDesde": "2026-05-13",
-      "EurPorPagina": 0.002576
+      "EurPorPagina": 0.002575992
     },
     {
       "Modelo": "cu.documentPagesMinimal",
@@ -62,17 +62,17 @@
     {
       "Modelo": "cu.documentPagesStandard",
       "VigenteDesde": "2026-04-01",
-      "EurPorPagina": 0.0042933
+      "EurPorPagina": 0.00429332
     },
     {
       "Modelo": "CU_NS_1.5_0",
       "VigenteDesde": "2026-06-01",
-      "EurContextualizacionPor1M": 0.9
+      "EurContextualizacionPor1M": 0.859
     },
     {
       "Modelo": "CU_NS_1.6_0_GGAA",
       "VigenteDesde": "2026-07-17",
-      "EurContextualizacionPor1M": 0.9
+      "EurContextualizacionPor1M": 0.859
     }
   ]
 }

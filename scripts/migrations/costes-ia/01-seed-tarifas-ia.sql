@@ -5,24 +5,23 @@
 -- con el catalogo de precios por modelo fisico y fecha de vigencia.
 --
 -- ORIGEN DE LOS PRECIOS
---   Precios de LISTA (retail) de la Retail Prices API de Azure en EUR,
---   consultados el 2026-09-07 para la region westeurope, que es donde estan
---   los recursos (srbaisrv-westeurope y srbdiprodocai en SRBRGDOCSAIPROD).
+--   Precios EFECTIVOS derivados de la facturacion real del grupo de recursos
+--   SRBRGDOCSAIPROD el 2026-09-07 (coste dividido entre cantidad, por medidor,
+--   via Cost Management). Son mas exactos que los de la Retail Prices API, que
+--   vienen redondeados a cuatro decimales por unidad de mil.
 --
---   El tipo de despliegue determina el medidor que factura. Los SKU reales de
---   produccion, leidos con 'az cognitiveservices account deployment list':
---     gpt-4.1-892749                 gpt-4.1                 GlobalStandard
---     gpt-4.1-mini-590191            gpt-4.1-mini            GlobalStandard
---     text-embedding-3-large-010650  text-embedding-3-large  GlobalStandard
---     gpt-5-mini                     gpt-5-mini              DataZoneStandard
---   En DEV existe ademas el deployment 'gpt-4o-mini', que en realidad sirve
---   el modelo gpt-4.1-mini con SKU Standard, es decir precio REGIONAL. Por eso
---   el catalogo lleva las dos lineas: la clave es el nombre del deployment.
+--   Contrastados contra los precios de lista: coinciden. La suscripcion NO tiene
+--   descuento sobre tarifa publica, asi que el coste calculado es el real.
 --
---   SI LA SUSCRIPCION TIENE DESCUENTO sobre precio de lista, estos importes
---   quedan por encima del coste real. Contrastar contra Cost Management antes
---   de darlos por definitivos, y anadir lineas nuevas con la fecha de vigencia
---   en lugar de editar estas.
+--   El grupo de recursos tiene DOS cuentas de IA, en regiones distintas:
+--     srbaisrv-westeurope             (West Europe)    gpt-4.1, text-embedding
+--     upe48-mm2avmdm-swedencentral    (SWEDEN CENTRAL) gpt-4o-mini, gpt-5-mini,
+--                                                      gpt-4.1, text-embedding
+--   El deployment 'gpt-4o-mini' que usa el pipeline vive en la de Sweden Central
+--   y sirve el modelo gpt-4.1-mini con SKU Standard, es decir precio REGIONAL de
+--   esa region. Tomarlo de West Europe daria un 20 % de mas.
+--
+--   Anadir lineas nuevas con su fecha de vigencia en lugar de editar estas.
 --
 --   Los identificadores del clasificador DI y de los analizadores de CU se
 --   leyeron de las APIs de los recursos de produccion el 2026-09-07, asi que el
@@ -103,48 +102,45 @@ BEGIN TRAN;
 --    invalido no da error visible: deja el catalogo vacio en silencio y todos
 --    los costes salen a nulo. Por eso las anotaciones van aqui fuera.
 --
---    AZURE OPENAI. Clave = nombre del DEPLOYMENT, no del modelo, porque el tipo
---    de despliegue determina el medidor y cambia el precio hasta un 70 %:
---      gpt-4o-mini ............ sirve gpt-4.1-mini con SKU Standard  -> "gpt 4.1 mini ... regnl"
---      gpt-4.1-mini ........... gpt-4.1-mini-590191, GlobalStandard  -> "gpt 4.1 mini ... glbl"
---      gpt-5-mini ............. DataZoneStandard                     -> "5 mini pp ... Dz"
---      gpt-4.1 ................ lo consume Content Understanding      -> "gpt 4.1 ... glbl"
---      text-embedding-3-large . embeddings de CU, GlobalStandard      -> "text-embedding-3-large-glbl"
+--    AZURE OPENAI. Clave = nombre del DEPLOYMENT, no del modelo. El tipo de
+--    despliegue Y LA REGION determinan el medidor, y ambos cambian el precio:
+--      gpt-4o-mini ............ sirve gpt-4.1-mini con SKU Standard en el recurso
+--                               upe48-mm2avmdm-swedencentral (SWEDEN CENTRAL, no
+--                               West Europe) -> "gpt 4.1 mini ... regnl"
+--      gpt-4.1-mini ........... deployments GlobalStandard -> "gpt 4.1 mini ... glbl"
+--                               (sin uso facturado; precio de lista)
+--      gpt-5-mini ............. DataZoneStandard -> "GPT 5 Mini Inpt/outpt/cchd
+--                               Inpt DZone". OJO: NO es el medidor "5 mini pp ...",
+--                               que cuesta casi el doble y corresponde a otro modo.
+--      gpt-4.1 ................ lo consume Content Understanding -> "gpt 4.1 ... glbl"
+--      text-embedding-3-large . embeddings de CU -> "text-embedding-3-large-glbl"
 --
---    DOCUMENT INTELLIGENCE. Clave = identificador del modelo:
---      prebuilt-layout ........ layout a markdown  -> "S0 Pre-built Pages" 8,5866 / 1.000 pag
---      DocumentAICC_v0/_v1 .... clasificadores del recurso srbdiprodocai,
---                               leidos de la API el 2026-09-07
---                               -> "S0 pages for doc classifier" 2,576 / 1.000 pag
+--    DOCUMENT INTELLIGENCE:
+--      prebuilt-layout ........ "S0 Pre-built Pages"
+--      DocumentAICC_v0/_v1 .... clasificadores de srbdiprodocai
+--                               -> "S0 pages for doc classifier"
 --
 --    CONTENT UNDERSTANDING. Las paginas NO se tarifan por analizador sino por
 --    medidor, porque el precio depende del procesamiento aplicado y la
 --    diferencia es de casi 500 veces:
 --      cu.documentPagesMinimal .. documentos digitales (DOCX, XLSX, HTML, TXT)
---                                 -> "Doc Content Extraction Min Pages" 0,0086 / 1.000 pag
 --      cu.documentPagesBasic .... imagen con OCR simple
---                                 -> "Doc Content Extraction Basic Pages" 0,8587 / 1.000 pag
 --      cu.documentPagesStandard . imagen con analisis de layout
---                                 -> "Doc Content Extraction Standard Pages" 4,2933 / 1.000 pag
---    La contextualizacion si va por analizador, porque su precio depende del
---    workflow que resuelva. Los dos analizadores del recurso srbaisrv-westeurope
---    (CU_NS_1.5_0 y CU_NS_1.6_0_GGAA) tienen enableLayout=true y enableOcr=true
---    sobre prebuilt-document, workflow estandar
---      -> "Std Contextualization Tokens" 0,0009 / 1K tokens
+--    La contextualizacion si va por analizador (CU_NS_1.5_0 y CU_NS_1.6_0_GGAA,
+--    ambos workflow estandar) -> "Std Contextualization Tokens".
 --
---    LIMITACION CONOCIDA: los analizadores llevan enableFormula=true, que activa
---    el medidor "Add-On Formula Pages" (2,576 / 1.000 pag). El bloque usage de la
---    respuesta no lo declara por separado, asi que ese add-on no se puede imputar
---    desde el consumo y queda fuera del coste calculado.
+--    NO se factura ningun add-on de formulas pese a que los analizadores llevan
+--    enableFormula activo: el medidor no aparece en la facturacion. No hay nada
+--    que desactivar.
 DECLARE @catalogo NVARCHAR(MAX) = N'{
   "Moneda": "EUR",
   "Tarifas": [
     {
       "Modelo": "gpt-4o-mini",
       "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 0.5,
-      "EurEntradaCachePor1M": 0.1,
-      "EurSalidaPor1M": 1.8
+      "EurEntradaPor1M": 0.416,
+      "EurEntradaCachePor1M": 0.104,
+      "EurSalidaPor1M": 1.662
     },
     {
       "Modelo": "gpt-4.1-mini",
@@ -156,36 +152,36 @@ DECLARE @catalogo NVARCHAR(MAX) = N'{
     {
       "Modelo": "gpt-5-mini",
       "VigenteDesde": "2026-07-21",
-      "EurEntradaPor1M": 0.425,
-      "EurEntradaCachePor1M": 0.0425,
-      "EurSalidaPor1M": 3.4003
+      "EurEntradaPor1M": 0.2361,
+      "EurEntradaCachePor1M": 0.0236,
+      "EurSalidaPor1M": 1.8891
     },
     {
       "Modelo": "gpt-4.1",
       "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 1.7,
-      "EurEntradaCachePor1M": 0.4,
-      "EurSalidaPor1M": 6.9
+      "EurEntradaPor1M": 1.717,
+      "EurEntradaCachePor1M": 0.429,
+      "EurSalidaPor1M": 6.869
     },
     {
       "Modelo": "text-embedding-3-large",
       "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 0.1
+      "EurEntradaPor1M": 0.112
     },
     {
       "Modelo": "prebuilt-layout",
       "VigenteDesde": "2026-04-01",
-      "EurPorPagina": 0.0085866
+      "EurPorPagina": 0.008586639
     },
     {
       "Modelo": "DocumentAICC_v0",
       "VigenteDesde": "2026-04-01",
-      "EurPorPagina": 0.002576
+      "EurPorPagina": 0.002575992
     },
     {
       "Modelo": "DocumentAICC_v1",
       "VigenteDesde": "2026-05-13",
-      "EurPorPagina": 0.002576
+      "EurPorPagina": 0.002575992
     },
     {
       "Modelo": "cu.documentPagesMinimal",
@@ -200,17 +196,17 @@ DECLARE @catalogo NVARCHAR(MAX) = N'{
     {
       "Modelo": "cu.documentPagesStandard",
       "VigenteDesde": "2026-04-01",
-      "EurPorPagina": 0.0042933
+      "EurPorPagina": 0.00429332
     },
     {
       "Modelo": "CU_NS_1.5_0",
       "VigenteDesde": "2026-06-01",
-      "EurContextualizacionPor1M": 0.9
+      "EurContextualizacionPor1M": 0.859
     },
     {
       "Modelo": "CU_NS_1.6_0_GGAA",
       "VigenteDesde": "2026-07-17",
-      "EurContextualizacionPor1M": 0.9
+      "EurContextualizacionPor1M": 0.859
     }
   ]
 }';

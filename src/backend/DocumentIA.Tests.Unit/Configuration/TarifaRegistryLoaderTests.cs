@@ -77,17 +77,19 @@ public class TarifaRegistryLoaderTests
 
         // Precio regional de gpt-4.1-mini, que es lo que sirve el deployment
         // llamado gpt-4o-mini.
+        // Precio regional de Sweden Central, que es donde vive el deployment, y
+        // derivado de la facturacion real, no del precio de lista redondeado.
         var mini = registry.Tarifas.Single(t => t.Modelo == "gpt-4o-mini");
-        mini.EurEntradaPor1M.Should().Be(0.50m);
-        mini.EurEntradaCachePor1M.Should().Be(0.10m);
-        mini.EurSalidaPor1M.Should().Be(1.80m);
+        mini.EurEntradaPor1M.Should().Be(0.416m);
+        mini.EurEntradaCachePor1M.Should().Be(0.104m);
+        mini.EurSalidaPor1M.Should().Be(1.662m);
 
         // Los tres medidores de pagina de Content Understanding, con precios muy
         // distintos: confundirlos sobrevaloraria los documentos de Office.
         registry.Tarifas.Single(t => t.Modelo == "cu.documentPagesMinimal")
             .EurPorPagina.Should().Be(0.0000086m);
         registry.Tarifas.Single(t => t.Modelo == "cu.documentPagesStandard")
-            .EurPorPagina.Should().Be(0.0042933m);
+            .EurPorPagina.Should().Be(0.00429332m);
 
         // Clasificadores reales del recurso de produccion.
         registry.Tarifas.Should().Contain(t => t.Modelo == "DocumentAICC_v1");
