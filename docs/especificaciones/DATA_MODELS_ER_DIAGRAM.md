@@ -152,6 +152,11 @@ erDiagram
         int DuracionAssetResolverMs
         decimal CosteIAEur "Coste EUR de servicios de IA (AB#100232)"
         int TokensIA "Tokens de IA consumidos (AB#100232)"
+        decimal CosteLayoutEur "Desglose por actividad (AB#100236)"
+        decimal CosteClasificacionEur "Desglose por actividad (AB#100236)"
+        decimal CosteExtraccionEur "Desglose por actividad (AB#100236)"
+        decimal CostePromptEur "Desglose por actividad (AB#100236)"
+        bool CosteEstimado "True si procede del relleno retroactivo (AB#100236)"
     }
 
     PLUGIN_EJECUCIONES {
@@ -472,6 +477,11 @@ erDiagram
 | **DuracionAssetResolverMs** | INT | Asset Resolver |
 | **CosteIAEur** | DECIMAL(18,6) | Coste en euros de los servicios de IA de la ejecución (AB#100232). Solo servicios de IA: no incluye almacenamiento, cómputo ni red. NULL en ejecuciones anteriores a la funcionalidad; 0 cuando la ejecución no consumió IA. El desglose por llamada vive en el contrato, en `$.DetalleEjecucion.Costes` |
 | **TokensIA** | INT | Tokens de IA consumidos: entrada + salida + contextualización (AB#100232). No suma cacheados ni razonamiento, que ya van dentro de entrada y salida |
+| **CosteLayoutEur** | DECIMAL(18,6) | Coste de las llamadas a DI Layout (AB#100236). Las cuatro columnas de actividad suman `CosteIAEur`. NULL si la actividad no consumió |
+| **CosteClasificacionEur** | DECIMAL(18,6) | Coste de la clasificación, incluidos los proveedores evaluados y descartados (AB#100236) |
+| **CosteExtraccionEur** | DECIMAL(18,6) | Coste de la extracción, incluido el modelo generativo interno de Content Understanding (AB#100236) |
+| **CostePromptEur** | DECIMAL(18,6) | Coste del prompt libre o resumen (AB#100236) |
+| **CosteEstimado** | BIT | True cuando el importe procede del relleno retroactivo `scripts/database/backfill-costes-estimados.ps1` y no de consumo medido. La sección de costes de Admin lo presenta aparte y lo excluye de los importes salvo que se pida (AB#100236) |
 
 **Navegación**:
 - → `PluginEjecuciones` (1:N)
@@ -749,10 +759,16 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
 | **v1.5** | 2026-06-05 | Marca PromptGPT, ModeloClasificacionDI, UmbralClasificacion como [Obsolete] |
 | **1.16** | 2026-08-05 | Agregó SubmittedBy a DocumentoEjecuciones (`20260805100351_AgregarSubmittedByEjecucion`). Aplicada en DEV y PRO |
 | **1.17** | 2026-09-02 | Release de rendimiento/almacenamiento: índice cubriente del Monitor (`20260902080254_IndiceCubrienteMonitorEjecuciones`, AB#100185); columna escalar `IdActivo` + SP por activo reescrito y retirada de `IdActivoNormalizado` (`20260902093812_IdActivoEscalarYSpPorIdActivo`, AB#100168); `Documentos.NormalizacionMarkdownGzip` con escritura dual (`20260902103313_MarkdownBinario`, AB#100169); `DatosFinalesJson`/`DatosOriginalesJson` dejan de grabarse y el contrato se persiste sin timeline (AB#100166/100167). Aplicadas en DEV (02/09) y en PRO (03/09, ventana manual única + backfills por lotes verificados: IdActivo tabla completa, markdown 64.466 filas con 0 discrepancias byte a byte) |
-| **1.18** | 2026-09-07 | [ACTUAL] Agregó `CosteIAEur` y `TokensIA` a DocumentoEjecuciones (`20260907075128_AddCostesIAToEjecuciones`, AB#100232). Migración puramente aditiva, sin relleno retroactivo. Pendiente de aplicar en DEV y PRO |
+| **1.18** | 2026-09-07 | Agregó `CosteIAEur` y `TokensIA` a DocumentoEjecuciones (`20260907075128_AddCostesIAToEjecuciones`, AB#100232). Migración puramente aditiva, sin relleno retroactivo. Pendiente de aplicar en DEV y PRO |
+| **1.19** | 2026-09-07 | [ACTUAL] Agregó el desglose de coste por actividad (`CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`, `CostePromptEur`) y `CosteEstimado` a DocumentoEjecuciones (`20260907103326_AddCostesPorActividadYEstimado`, AB#100236). Migración aditiva; el relleno retroactivo es un script aparte, por marca de agua, que se lanza a mano. Pendiente de aplicar en DEV y PRO |
 | **v2.0** | 2026-07-31 | [PLANIFICADO] Elimina PromptGPT, ModeloClasificacionDI, UmbralClasificacion |
 
 ### 5.2 Cambios Recientes (Últimos 30 días)
+
+-2. **Sección de costes en Admin y desglose por actividad** (2026-09-07, AB#100235)
+   - Cuatro columnas de coste por actividad y `CosteEstimado` en `DocumentoEjecuciones`, para agregar desde Admin sin abrir el contrato JSON
+   - Página `/costes`, sin entrada de menú, con los filtros del Monitor: totales, desglose por actividad, tipología y modelo, serie diaria y listado con coste
+   - Relleno retroactivo estimado con `backfill-costes-estimados.ps1`, marcado y separado de lo medido. La factura del grupo de recursos mezcla desarrollo y preproducción, así que no es comparable con la suma de producción
 
 -1. **Coste de IA por ejecución** (2026-09-07, AB#100224)
    - `CosteIAEur` y `TokensIA` en `DocumentoEjecuciones`, ambas nullable y aditivas

@@ -94,3 +94,17 @@ Los tokens cacheados son un subconjunto de los de entrada, no un sumando. El sis
 ## Comprobación
 
 Tras cargar el catálogo, lanzar una petición con `IncluirCostes` en verdadero y revisar que el bloque de costes llega con importes distintos de cero y con las tarifas marcadas como completas. Si alguna sale incompleta, el propio bloque dice qué modelos faltan por tarifar.
+
+## Ver los costes en Admin
+
+La sección está en `/costes`, sin entrada en el menú de momento. Usa los mismos filtros que el Monitor y muestra el total del periodo, el coste por ejecución, el desglose por actividad, tipología y modelo, la evolución diaria y el listado con una columna de coste. El detalle desplegable de cada ejecución enseña el desglose por llamada.
+
+Lo estimado se presenta siempre separado de lo medido: la cabecera dice si el importe lo incluye, cada fila estimada lleva una marca, y un interruptor decide si suma. Por defecto no suma.
+
+## Coste de las ejecuciones anteriores
+
+Las ejecuciones anteriores a la funcionalidad no guardaron tokens ni páginas de extracción. Lo que se puede hacer es **estimar**, y para eso está `scripts/database/backfill-costes-estimados.ps1`.
+
+Estima el layout a partir de las páginas del contrato, que es el 94 por ciento del gasto real, y la clasificación generativa con un coste medio por documento tomado de un lote controlado. La extracción no se puede estimar. Cada fila que rellena queda marcada como estimada y el script nunca pisa un coste medido. Se lanza a mano, por lotes, y admite `-WhatIf` para ver cuántas filas tocaría.
+
+No compares la suma de estas estimaciones con la factura: la cuenta de IA de producción la consumen también desarrollo y preproducción, cuyas ejecuciones viven en otras bases de datos.
