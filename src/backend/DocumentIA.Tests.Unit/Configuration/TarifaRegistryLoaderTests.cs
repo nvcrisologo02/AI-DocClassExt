@@ -1,4 +1,6 @@
 #nullable enable
+using System.IO;
+using System.Linq;
 using DocumentIA.Core.Configuration;
 using FluentAssertions;
 
@@ -54,6 +56,31 @@ public class TarifaRegistryLoaderTests
         registry.Tarifas.Should().ContainSingle();
         registry.Tarifas[0].Modelo.Should().Be("gpt-4o-mini");
         registry.Tarifas[0].EurPorPagina.Should().Be(0.5m);
+    }
+
+    [Fact]
+    public void Parse_CatalogoDeProduccion_EsJsonValidoYSeCargaEntero()
+    {
+        // El literal que inserta scripts/migrations/costes-ia/01-seed-tarifas-ia.sql.
+        // El cargador es tolerante a JSON invalido, asi que un error de sintaxis en
+        // el script no daria fallo visible: dejaria el catalogo vacio en silencio y
+        // todos los costes saldrian a nulo. Este test lo detecta.
+        var json = File.ReadAllText(
+            Path.Combine(AppContext.BaseDirectory, "catalogo-tarifas-produccion.json"));
+
+        var registry = TarifaRegistryLoader.Parse(json);
+
+        registry.Moneda.Should().Be("EUR");
+        registry.Tarifas.Should().HaveCount(6);
+        registry.Tarifas.Should().OnlyContain(t => !string.IsNullOrWhiteSpace(t.Modelo));
+        registry.Tarifas.Should().OnlyContain(t => t.VigenteDesde > DateTime.MinValue);
+
+        // Precio regional de gpt-4.1-mini, que es lo que sirve el deployment
+        // llamado gpt-4o-mini.
+        var mini = registry.Tarifas.Single(t => t.Modelo == "gpt-4o-mini");
+        mini.EurEntradaPor1M.Should().Be(0.50m);
+        mini.EurEntradaCachePor1M.Should().Be(0.10m);
+        mini.EurSalidaPor1M.Should().Be(1.80m);
     }
 
     [Fact]

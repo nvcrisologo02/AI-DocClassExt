@@ -10,15 +10,38 @@ El script hace copia de seguridad de la tabla antes de tocar nada, es idempotent
 
 ## Antes de ejecutarlo
 
-**Los importes vienen a cero y hay que sustituirlos por los precios reales.** No es un descuido: un precio inventado da una cifra que parece buena y no lo es. Con el catálogo vacío o incompleto el sistema funciona igual, registra tokens y páginas, deja el coste a nulo y marca el agregado como incompleto.
+El catálogo trae **precios de lista reales**, consultados el 7 de septiembre de 2026 en la API pública de precios de Azure para West Europe, que es donde están los recursos. Quedan dos cosas por hacer.
 
-Los precios dependen de la región, del tipo de despliegue y de los acuerdos de la suscripción. Fuentes para obtenerlos:
+**Añadir las dos líneas que dependen de identificadores del entorno.** El clasificador de Document Intelligence y el analizador de Content Understanding se tarifan por su identificador propio, que el paso 0 del script revela. Los precios ya están anotados en el propio script, solo falta pegar la clave. Sin ellas el sistema funciona, pero esos consumos quedan sin coste y el agregado sale marcado como incompleto.
 
-- Portal de Azure, Cost Management, análisis de costes agrupando por medidor sobre el grupo de recursos de producción.
-- Páginas de precios de Azure OpenAI, Content Understanding y Document Intelligence.
-- El informe de costes en `docs/auxiliares/temps/2026-07-21/`, que ya tiene el mapeo de medidor a proceso y sirve de contraste.
+**Contrastar contra la facturación real.** Son precios de lista. Si la suscripción tiene descuento, el coste calculado saldrá por encima del real. Compara un lote pequeño contra Cost Management antes de dar los importes por definitivos.
 
-El paso 0 del script lista los modelos que el sistema tiene configurados. El catálogo debe cubrirlos todos para que el coste salga completo.
+### De dónde sale cada precio
+
+El tipo de despliegue determina qué medidor factura, y eso cambia el precio hasta un 70 por ciento entre variantes del mismo modelo. Los despliegues reales de producción, leídos de Azure:
+
+| Despliegue | Modelo real | Tipo | Medidor |
+| --- | --- | --- | --- |
+| `gpt-4.1-892749` | gpt-4.1 | GlobalStandard | global |
+| `gpt-4.1-mini-590191` | gpt-4.1-mini | GlobalStandard | global |
+| `text-embedding-3-large-010650` | text-embedding-3-large | GlobalStandard | global |
+| `gpt-5-mini` | gpt-5-mini | DataZoneStandard | zona de datos |
+
+Hay un detalle que conviene no perder: en desarrollo existe un despliegue llamado `gpt-4o-mini` que en realidad sirve el modelo gpt-4.1-mini con tipo Standard, es decir **precio regional**, más caro que el global. Por eso el catálogo lleva dos líneas distintas. La clave es el nombre del despliegue, no el del modelo.
+
+### Reproducir la consulta
+
+El proxy corporativo rompe la verificación de revocación del certificado, así que hace falta `--ssl-no-revoke`:
+
+```bash
+curl -sS --ssl-no-revoke --get https://prices.azure.com/api/retail/prices   --data-urlencode "currencyCode=EUR"   --data-urlencode "$filter=productName eq 'Azure OpenAI' and armRegionName eq 'westeurope'"
+```
+
+Para ver los tipos de despliegue:
+
+```bash
+az cognitiveservices account deployment list   --name srbaisrv-westeurope --resource-group SRBRGDOCSAIPROD   --subscription "Producción Central" -o table
+```
 
 ## Orden respecto al despliegue
 

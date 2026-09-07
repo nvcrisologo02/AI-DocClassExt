@@ -1,0 +1,43 @@
+{
+  "Moneda": "EUR",
+  "Tarifas": [
+    {
+      "Modelo": "gpt-4o-mini",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 0.5,
+      "EurEntradaCachePor1M": 0.1,
+      "EurSalidaPor1M": 1.8
+    },
+    {
+      "Modelo": "gpt-4.1-mini",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 0.3,
+      "EurEntradaCachePor1M": 0.1,
+      "EurSalidaPor1M": 1.4
+    },
+    {
+      "Modelo": "gpt-5-mini",
+      "VigenteDesde": "2026-07-21",
+      "EurEntradaPor1M": 0.425,
+      "EurEntradaCachePor1M": 0.0425,
+      "EurSalidaPor1M": 3.4003
+    },
+    {
+      "Modelo": "gpt-4.1",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 1.7,
+      "EurEntradaCachePor1M": 0.4,
+      "EurSalidaPor1M": 6.9
+    },
+    {
+      "Modelo": "text-embedding-3-large",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 0.1
+    },
+    {
+      "Modelo": "prebuilt-layout",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.0085866
+    }
+  ]
+}

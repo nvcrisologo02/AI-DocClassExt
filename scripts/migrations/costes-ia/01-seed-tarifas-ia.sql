@@ -4,22 +4,40 @@
 -- AB#100234. Da de alta la fila unica Tipo=4 (Tarifas), Key='tarifas.ia'
 -- con el catalogo de precios por modelo fisico y fecha de vigencia.
 --
--- IMPORTANTE - ANTES DE EJECUTAR
---   Los importes de este script van a 0.0 a proposito. Hay que sustituirlos
---   por los precios vigentes de la suscripcion ANTES de ejecutarlo. Un
---   precio inventado es peor que ningun precio: con el catalogo vacio o
---   incompleto el sistema funciona igual, registra tokens y paginas, deja
---   el coste a nulo y marca el agregado como TarifasCompletas=false.
+-- ORIGEN DE LOS PRECIOS
+--   Precios de LISTA (retail) de la Retail Prices API de Azure en EUR,
+--   consultados el 2026-09-07 para la region westeurope, que es donde estan
+--   los recursos (srbaisrv-westeurope y srbdiprodocai en SRBRGDOCSAIPROD).
 --
---   Los precios dependen de la region, del tipo de despliegue (Global,
---   DataZone o Regional) y de los acuerdos de la suscripcion, asi que no se
---   pueden dar por buenos sin comprobarlos. Fuentes:
---     - Portal de Azure > Cost Management > Analisis de costes, agrupando
---       por Medidor sobre el grupo de recursos SRBRGDOCSAIPROD.
---     - Paginas de precios de Azure OpenAI, Content Understanding y
---       Document Intelligence.
---     - El informe de costes en docs/auxiliares/temps/2026-07-21/ tiene el
---       mapeo de medidor a proceso y sirve de contraste.
+--   El tipo de despliegue determina el medidor que factura. Los SKU reales de
+--   produccion, leidos con 'az cognitiveservices account deployment list':
+--     gpt-4.1-892749                 gpt-4.1                 GlobalStandard
+--     gpt-4.1-mini-590191            gpt-4.1-mini            GlobalStandard
+--     text-embedding-3-large-010650  text-embedding-3-large  GlobalStandard
+--     gpt-5-mini                     gpt-5-mini              DataZoneStandard
+--   En DEV existe ademas el deployment 'gpt-4o-mini', que en realidad sirve
+--   el modelo gpt-4.1-mini con SKU Standard, es decir precio REGIONAL. Por eso
+--   el catalogo lleva las dos lineas: la clave es el nombre del deployment.
+--
+--   SI LA SUSCRIPCION TIENE DESCUENTO sobre precio de lista, estos importes
+--   quedan por encima del coste real. Contrastar contra Cost Management antes
+--   de darlos por definitivos, y anadir lineas nuevas con la fecha de vigencia
+--   en lugar de editar estas.
+--
+--   Reproducir la consulta (el proxy corporativo obliga a --ssl-no-revoke):
+--     curl -sS --ssl-no-revoke --get https://prices.azure.com/api/retail/prices
+--          --data-urlencode "currencyCode=EUR"
+--          --data-urlencode "$filter=productName eq 'Azure OpenAI' and armRegionName eq 'westeurope'"
+--   Medidores relevantes en westeurope (EUR):
+--     gpt 4.1 mini Inp/cached/Outp regnl .... 0,0005 / 0,0001 / 0,0018 por 1K tokens
+--     gpt 4.1 mini Inp/cached/Outp glbl ..... 0,0003 / 0,0001 / 0,0014 por 1K tokens
+--     5 mini pp Inp/cd Inp/Opt Dz ........... 0,4250 / 0,0425 / 3,4003 por 1M tokens
+--     gpt 4.1 Inp/cached/Outp glbl .......... 0,0017 / 0,0004 / 0,0069 por 1K tokens
+--     text-embedding-3-large-glbl ........... 0,0001 por 1K tokens
+--     S0 Pre-built Pages (DI layout) ........ 8,5866 por 1.000 paginas
+--     S0 pages for doc classifier ........... 2,5760 por 1.000 paginas
+--     Doc Content Extraction Standard Pages . 4,2933 por 1.000 paginas
+--     Std Contextualization Tokens .......... 0,0009 por 1K tokens
 --
 -- REGLA DE MANTENIMIENTO
 --   Cambiar un precio es ANADIR una linea nueva al array con su
@@ -75,23 +93,70 @@ BEGIN TRAN;
 --
 --    Los cacheados son un SUBCONJUNTO de la entrada, no un sumando: el
 --    sistema resta y aplica a esa parte el precio reducido.
+-- ATENCION: el literal siguiente debe ser JSON valido ESTRICTO. El cargador de
+--    la aplicacion rechaza comentarios y, al ser tolerante a errores, un JSON
+--    invalido no da error visible: deja el catalogo vacio en silencio y todos
+--    los costes salen a nulo. Por eso las anotaciones van aqui fuera.
+--
+--    Correspondencia linea -> deployment -> medidor que factura:
+--      gpt-4o-mini ............ sirve gpt-4.1-mini con SKU Standard  -> "gpt 4.1 mini ... regnl"
+--      gpt-4.1-mini ........... deployment gpt-4.1-mini-590191, Global -> "gpt 4.1 mini ... glbl"
+--      gpt-5-mini ............. DataZoneStandard                     -> "5 mini pp ... Dz"
+--      gpt-4.1 ................ lo consume Content Understanding      -> "gpt 4.1 ... glbl"
+--      text-embedding-3-large . embeddings de CU, Global              -> "text-embedding-3-large-glbl"
+--      prebuilt-layout ........ DI Layout                             -> "S0 Pre-built Pages"
+--
+--    FALTAN DOS LINEAS que dependen de identificadores propios del entorno y
+--    que el paso 0 revela. Anadirlas con estos precios de westeurope:
+--      - Clasificador DI, clave = ClassifierId de la fila de clasificacion:
+--          { "Modelo": "<ClassifierId>", "VigenteDesde": "2026-04-01",
+--            "EurPorPagina": 0.002576 }
+--      - Content Understanding, clave = AnalyzerId de la fila de extraccion:
+--          { "Modelo": "<AnalyzerId>", "VigenteDesde": "2026-04-01",
+--            "EurPorPagina": 0.0042933, "EurContextualizacionPor1M": 0.90 }
+--    Sin ellas el sistema funciona, pero el agregado sale marcado como
+--    incompleto y esos consumos quedan sin coste.
 DECLARE @catalogo NVARCHAR(MAX) = N'{
   "Moneda": "EUR",
   "Tarifas": [
-    { "Modelo": "gpt-4o-mini", "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 0.0, "EurEntradaCachePor1M": 0.0, "EurSalidaPor1M": 0.0 },
-
-    { "Modelo": "gpt-5-mini", "VigenteDesde": "2026-07-21",
-      "EurEntradaPor1M": 0.0, "EurEntradaCachePor1M": 0.0, "EurSalidaPor1M": 0.0 },
-
-    { "Modelo": "gpt-4.1", "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 0.0, "EurEntradaCachePor1M": 0.0, "EurSalidaPor1M": 0.0 },
-
-    { "Modelo": "text-embedding-3-large", "VigenteDesde": "2026-04-01",
-      "EurEntradaPor1M": 0.0 },
-
-    { "Modelo": "prebuilt-layout", "VigenteDesde": "2026-04-01",
-      "EurPorPagina": 0.0 }
+    {
+      "Modelo": "gpt-4o-mini",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 0.5,
+      "EurEntradaCachePor1M": 0.1,
+      "EurSalidaPor1M": 1.8
+    },
+    {
+      "Modelo": "gpt-4.1-mini",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 0.3,
+      "EurEntradaCachePor1M": 0.1,
+      "EurSalidaPor1M": 1.4
+    },
+    {
+      "Modelo": "gpt-5-mini",
+      "VigenteDesde": "2026-07-21",
+      "EurEntradaPor1M": 0.425,
+      "EurEntradaCachePor1M": 0.0425,
+      "EurSalidaPor1M": 3.4003
+    },
+    {
+      "Modelo": "gpt-4.1",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 1.7,
+      "EurEntradaCachePor1M": 0.4,
+      "EurSalidaPor1M": 6.9
+    },
+    {
+      "Modelo": "text-embedding-3-large",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 0.1
+    },
+    {
+      "Modelo": "prebuilt-layout",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.0085866
+    }
   ]
 }';
 

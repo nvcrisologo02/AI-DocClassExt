@@ -8,6 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Copia del catalogo que inserta scripts/migrations/costes-ia/01-seed-tarifas-ia.sql,
+         para verificar que ese JSON es valido: el cargador es tolerante y un error de
+         sintaxis dejaria el catalogo vacio en silencio (AB#100234). -->
+    <None Include="catalogo-tarifas-produccion.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
