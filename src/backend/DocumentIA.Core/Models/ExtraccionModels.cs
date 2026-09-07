@@ -69,6 +69,13 @@ public class ExtraccionResultado
     /// </summary>
     public string? ResultadoPromptCombinado { get; set; }
     public string? ResumenCombinado { get; set; }
+
+    /// <summary>
+    /// Consumo de servicios de IA de esta llamada. El proveedor lo rellena y el
+    /// orquestador lo acumula en DetalleEjecucion.Costes. Vacia cuando el paso no
+    /// consumio IA.
+    /// </summary>
+    public List<ConsumoIA> Consumos { get; set; } = new();
 }
 
 public class ConfidenceMetricasExtraccion
@@ -131,6 +138,13 @@ public class ExtraerMarkdownLayoutResultado
     public string Modelo { get; set; } = "prebuilt-layout";
     public string? Markdown { get; set; }
     public int Paginas { get; set; }
+
+    /// <summary>
+    /// Consumo de servicios de IA de esta llamada. El proveedor lo rellena y el
+    /// orquestador lo acumula en DetalleEjecucion.Costes. Vacia cuando el paso no
+    /// consumio IA.
+    /// </summary>
+    public List<ConsumoIA> Consumos { get; set; } = new();
 }
 
 /// <summary>

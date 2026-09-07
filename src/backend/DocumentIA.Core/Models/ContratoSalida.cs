@@ -405,6 +405,14 @@ public class ResultadoClasificacion
     /// Detalle de candidatos/proveedores evaluados y descartes.
     /// </summary>
     public List<PropuestaProveedor> DetalleProveedores { get; set; } = new();
+
+    /// <summary>
+    /// Consumo de servicios de IA de esta llamada. El proveedor lo rellena y el
+    /// orquestador lo acumula en DetalleEjecucion.Costes. Incluye los consumos de
+    /// proveedores evaluados y descartados: esas llamadas tambien se han pagado.
+    /// </summary>
+    public List<ConsumoIA> Consumos { get; set; } = new();
+
     /// <summary>
     /// Resultado de prompt libre en ejecución combinada con fallback.
     /// </summary>
