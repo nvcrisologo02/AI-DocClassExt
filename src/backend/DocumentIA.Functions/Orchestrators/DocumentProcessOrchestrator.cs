@@ -105,6 +105,16 @@ public class DocumentProcessOrchestrator
 
         var salida = await RunOrchestratorCore(context, entrada);
 
+        // El desglose por llamada solo debe verse en DetalleEjecucion.Costes, que es
+        // lo que respeta IncluirCostes. La lista de ResultadoClasificacion viaja en el
+        // contrato de salida y llega ya tarificada desde la actividad, asi que dejarla
+        // colaria los importes por la puerta de atras. Se vacia aqui y no en el cuerpo
+        // porque hay salidas tempranas (rate limit, sin contenido) que retornan antes.
+        if (salida.DetalleEjecucion.Clasificacion is not null)
+        {
+            salida.DetalleEjecucion.Clasificacion.Consumos = new List<ConsumoIA>();
+        }
+
         // El bloque de costes se calcula y persiste siempre; este parametro solo
         // decide si se devuelve al llamador. Anularlo lo omite del JSON de salida.
         // Se aplica aqui, en un unico punto, porque el cuerpo tiene quince salidas
@@ -654,9 +664,8 @@ public class DocumentProcessOrchestrator
                             salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
                             {
                                 ReutilizadaPorDuplicado = true,
-                                CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
+                                CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion?.Costes?.CosteTotalEur
                             };
-                            salidaDuplicado.DetalleEjecucion.Clasificacion.Consumos = new List<ConsumoIA>();
 
                             FinalizarSeguimiento("Completed", "Documento duplicado detectado por checksum GDC. Devolviendo última ejecución");
                             salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
@@ -757,9 +766,8 @@ public class DocumentProcessOrchestrator
                         salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
                         {
                             ReutilizadaPorDuplicado = true,
-                            CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
+                            CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion?.Costes?.CosteTotalEur
                         };
-                        salidaDuplicado.DetalleEjecucion.Clasificacion.Consumos = new List<ConsumoIA>();
 
                         FinalizarSeguimiento("Completed", "Documento duplicado detectado. Devolviendo última ejecución");
                         salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
@@ -1165,12 +1173,6 @@ public class DocumentProcessOrchestrator
             }
             resultadoClasificacion.ContentExtraido = null; // limpiar: no exponer en respuesta
 
-            // El consumo ya esta acumulado en DetalleEjecucion.Costes, que es el unico
-            // sitio donde debe verse y que se oculta segun IncluirCostes. Dejarlo aqui
-            // tambien lo colaria en la respuesta por la puerta de atras, con importes
-            // incluidos, y en el camino de duplicado devolveria el coste historico
-            // por llamada (AB#100231).
-            resultadoClasificacion.Consumos = new List<ConsumoIA>();
             salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
 
             // Propagar el TDN2 elegido en Phase 2 (aunque no exista tipología publicada que lo

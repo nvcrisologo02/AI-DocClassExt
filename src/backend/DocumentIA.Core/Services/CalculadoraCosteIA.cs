@@ -30,6 +30,15 @@ public static class CalculadoraCosteIA
             return;
         }
 
+        // Un consumo sin ninguna magnitud (el proveedor no devolvio uso, o la llamada
+        // se corto por timeout) no se tarifica: dejarlo en cero daria un importe
+        // calculado indistinguible de un cero real y declararia el agregado completo
+        // cuando en realidad falta informacion.
+        if (!TieneMagnitudes(consumo))
+        {
+            return;
+        }
+
         var coste = 0m;
 
         // Los tokens cacheados vienen INCLUIDOS en TokensEntrada. Se restan para
@@ -71,6 +80,18 @@ public static class CalculadoraCosteIA
             "{0}@{1:yyyy-MM-dd}",
             tarifa.Modelo,
             tarifa.VigenteDesde);
+    }
+
+    /// <summary>
+    /// True si el consumo trae alguna cifra que tarificar. Un consumo sin ninguna
+    /// no es gratis: es desconocido.
+    /// </summary>
+    private static bool TieneMagnitudes(ConsumoIA consumo)
+    {
+        return consumo.TokensEntrada > 0
+            || consumo.TokensSalida > 0
+            || consumo.TokensContextualizacion > 0
+            || consumo.Paginas > 0;
     }
 
     /// <summary>

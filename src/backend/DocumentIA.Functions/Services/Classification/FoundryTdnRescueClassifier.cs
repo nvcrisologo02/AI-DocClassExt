@@ -86,6 +86,13 @@ namespace DocumentIA.Functions.Services.Classification
 
                         return result;
                     }
+                    catch (Resilience.RateLimitExhaustedException exRate)
+                    {
+                        // El rescate reintenta, pero lo ya facturado antes del 429 no
+                        // puede perderse: al reintentar se vuelve a pagar (AB#100227).
+                        result.Consumos.AddRange(exRate.ConsumosParciales);
+                        throw;
+                    }
                     catch (OperationCanceledException)
                     {
                         result.Razon = "timeout_exceeded";

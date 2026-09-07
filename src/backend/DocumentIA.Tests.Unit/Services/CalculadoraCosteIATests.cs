@@ -163,16 +163,19 @@ public class CalculadoraCosteIATests
     }
 
     [Fact]
-    public void Aplicar_ModeloConTarifaPeroSinConsumo_DejaCosteACero()
+    public void Aplicar_ModeloConTarifaPeroSinCifras_NoTarifica()
     {
-        // Una llamada registrada sin cifras (el proveedor no devolvio uso) no
-        // inventa coste, pero si deja constancia de la tarifa que le tocaba.
+        // Una llamada registrada sin ninguna magnitud (el proveedor no devolvio uso,
+        // o la llamada se corto por timeout) no es gratis: es desconocida. Dejarla en
+        // cero daria un importe calculado indistinguible de un cero real y declararia
+        // el agregado completo cuando falta informacion.
         var consumo = new ConsumoIA { Modelo = "gpt-5-mini" };
 
         CalculadoraCosteIA.Aplicar(consumo, Registro(), new DateTime(2026, 8, 15));
 
-        consumo.CosteEur.Should().Be(0m);
-        consumo.TarifaAplicada.Should().Be("gpt-5-mini@2026-07-21");
+        consumo.CosteEur.Should().BeNull();
+        CalculadoraCosteIA.Agregar(new List<ConsumoIA> { consumo })
+            .TarifasCompletas.Should().BeFalse();
     }
 
     [Fact]

@@ -171,8 +171,9 @@ namespace DocumentIA.Functions.Services.Classification
                 result.DetalleProveedores.Add(new() { Proveedor = "DI", Tipologia = diResult.TipologiaDetectada, Confianza = diResult.Confianza, MotivoDescarte = diDescarte });
 
                 // Paso 4: Rescate con Foundry LLM
-                // A partir de aqui el resultado de DI queda descartado.
-                MarcarConsumosDescartados(result.Consumos);
+                // El resultado de DI queda descartado en favor del rescate. El layout
+                // previo no: genera la ventana con la que el rescate trabaja.
+                MarcarConsumosDescartados(diResult.Consumos);
 
                 var rescueResult = await _rescueClassifier.ClassifyAsync(
                     window,

@@ -211,9 +211,11 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
                 datosExtraidos.Count,
                 confianzaExtraccion);
 
-            // Paginas analizadas: es la unidad que factura el analizador a medida.
-            // Sin esto su coste saldria 0 y, con tarifa configurada, el agregado se
-            // declararia completo con un cero falso (AB#100229).
+            // Paginas analizadas: es la unidad que factura el analizador a medida. Se usa
+            // SOLO para tarificar, no se informa en ExtraccionResultado.Paginas: ese campo
+            // sobrescribe Identificacion.Paginas con prioridad maxima en el orquestador y
+            // cambiaria un dato del contrato que hoy calculan clasificacion y layout
+            // (AB#100229).
             var paginasAnalizadas = 0;
             var raizPaginas = finalResult.RootElement.TryGetProperty("analyzeResult", out var arPaginas)
                 ? arPaginas
@@ -228,7 +230,6 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
             {
                 Proveedor = model.Provider,
                 Modelo = model.AnalyzerId,
-                Paginas = paginasAnalizadas,
                 LayoutEnabled = false,
                 ConfianzaExtraccion = confianzaExtraccion,
                 ProveedorExtrac = "DocumentIntelligence",

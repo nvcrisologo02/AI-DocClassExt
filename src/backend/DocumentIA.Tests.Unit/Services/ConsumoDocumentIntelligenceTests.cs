@@ -69,11 +69,12 @@ public class ConsumoDocumentIntelligenceTests
     }
 
     [Fact]
-    public void ConsumoSinPaginasConocidas_NoInventaCoste()
+    public void ConsumoSinCifras_QuedaSinTarificarYNoSeConfundeConUnCeroReal()
     {
-        // El extractor DI a medida no expone conteo de paginas en su respuesta:
-        // se registra la llamada sin paginas y el agregado saldra a cero por ese
-        // consumo, en lugar de estimar una cifra.
+        // Una llamada de la que no se conoce la magnitud (respuesta sin conteo, o
+        // cortada por timeout) no se tarifica. Dejarla en cero daria un importe
+        // calculado indistinguible de un cero real y el agregado se declararia
+        // completo cuando en realidad falta informacion.
         var consumo = new ConsumoIA
         {
             Actividad = ActividadesIA.Extraer,
@@ -84,7 +85,11 @@ public class ConsumoDocumentIntelligenceTests
 
         CalculadoraCosteIA.Aplicar(consumo, Registro(), new DateTime(2026, 8, 15));
 
-        consumo.CosteEur.Should().Be(0m);
+        consumo.CosteEur.Should().BeNull();
+
+        var agregado = CalculadoraCosteIA.Agregar(new List<ConsumoIA> { consumo });
+        agregado.TarifasCompletas.Should().BeFalse();
+        agregado.ModelosSinTarifa.Should().Contain("prebuilt-layout");
     }
 
     [Fact]

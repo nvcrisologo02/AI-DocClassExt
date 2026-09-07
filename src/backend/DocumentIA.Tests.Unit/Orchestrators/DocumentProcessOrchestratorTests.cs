@@ -1449,6 +1449,77 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_SalidaTempranaPorRateLimit_NoExponeConsumosNiImportes()
+    {
+        // Camino de salida temprana: asigna la clasificacion y retorna antes del
+        // flujo normal. El consumo parcial ya pagado se conserva para persistirlo,
+        // pero no puede aparecer en la respuesta si no se piden costes.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = false;
+
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+
+        var rateLimit = new ResultadoClasificacion
+        {
+            RateLimitExcedido = true,
+            FallbackRazon = "rate_limit_exhausted",
+            TipologiaDetectada = "Desconocido",
+            Confianza = 0,
+            Consumos =
+            {
+                new ConsumoIA
+                {
+                    Modelo = "gpt-5-mini",
+                    Operacion = "classification.phase1",
+                    TokensEntrada = 1200,
+                    CosteEur = 0.05m,
+                    TarifaAplicada = "gpt-5-mini@2026-07-21"
+                }
+            }
+        };
+        context.SetupActivity("ClasificarActivity", rateLimit);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+        salida.DetalleEjecucion.Costes.Should().BeNull();
+        salida.DetalleEjecucion.Clasificacion.Consumos.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SalidaTempranaPorRateLimit_ConCostes_DevuelveElGastoYaPagado()
+    {
+        // El 429 no borra lo que ya se facturo antes de agotarse.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.IncluirCostes = true;
+
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            RateLimitExcedido = true,
+            FallbackRazon = "rate_limit_exhausted",
+            TipologiaDetectada = "Desconocido",
+            Consumos =
+            {
+                new ConsumoIA { Modelo = "gpt-5-mini", TokensEntrada = 1200, CosteEur = 0.05m }
+            }
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Costes.Should().NotBeNull();
+        salida.DetalleEjecucion.Costes!.CosteTotalEur.Should().Be(0.05m);
+    }
+
+    [Fact]
     public async Task RunOrchestrator_SinIncluirCostes_TampocoExponeConsumosPorLaClasificacion()
     {
         // ResultadoClasificacion forma parte del contrato de salida y su lista de
