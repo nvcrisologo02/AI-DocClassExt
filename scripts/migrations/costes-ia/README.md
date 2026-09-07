@@ -10,11 +10,11 @@ El script hace copia de seguridad de la tabla antes de tocar nada, es idempotent
 
 ## Antes de ejecutarlo
 
-El catálogo trae **precios de lista reales**, consultados el 7 de septiembre de 2026 en la API pública de precios de Azure para West Europe, que es donde están los recursos. Quedan dos cosas por hacer.
+El catálogo está **completo**, con precios de lista reales consultados el 7 de septiembre de 2026 en la API pública de precios de Azure para West Europe, y con los identificadores de clasificadores y analizadores leídos de las APIs de los propios recursos de producción.
 
-**Añadir las dos líneas que dependen de identificadores del entorno.** El clasificador de Document Intelligence y el analizador de Content Understanding se tarifan por su identificador propio, que el paso 0 del script revela. Los precios ya están anotados en el propio script, solo falta pegar la clave. Sin ellas el sistema funciona, pero esos consumos quedan sin coste y el agregado sale marcado como incompleto.
+Queda una cosa: **contrastar contra la facturación real**. Son precios de lista, así que si la suscripción tiene descuento el coste calculado saldrá por encima del real. Compara un lote pequeño contra Cost Management antes de dar los importes por definitivos.
 
-**Contrastar contra la facturación real.** Son precios de lista. Si la suscripción tiene descuento, el coste calculado saldrá por encima del real. Compara un lote pequeño contra Cost Management antes de dar los importes por definitivos.
+El paso 0 del script sigue estando para verificar que los identificadores que usa la configuración coinciden con los que aquí se tarifan. Si aparece alguno que no esté en el catálogo, su consumo quedará sin coste y el agregado saldrá marcado como incompleto, que es justo lo que hay que vigilar.
 
 ### De dónde sale cada precio
 
@@ -67,11 +67,16 @@ La tarifa se resuelve por el nombre del modelo físico que consta en cada consum
 | --- | --- |
 | Azure OpenAI | el nombre del despliegue, por ejemplo `gpt-4o-mini` o `gpt-5-mini` |
 | Layout a Markdown | `prebuilt-layout` |
-| Clasificador de Document Intelligence | su identificador de clasificador |
-| Content Understanding | su identificador de analizador |
-| Modelo generativo interno de Content Understanding | el que declara el propio servicio, por ejemplo `gpt-4.1` y `text-embedding-3-large` |
+| Clasificador de Document Intelligence | su identificador, hoy `DocumentAICC_v0` y `DocumentAICC_v1` |
+| Páginas de Content Understanding | el medidor, no el analizador: `cu.documentPagesMinimal`, `cu.documentPagesBasic` o `cu.documentPagesStandard` |
+| Contextualización de Content Understanding | el identificador del analizador, hoy `CU_NS_1.5_0` y `CU_NS_1.6_0_GGAA` |
+| Modelo generativo interno de Content Understanding | el que declara el propio servicio, hoy `gpt-4.1` y `text-embedding-3-large` |
 
 Content Understanding factura por su cuenta las páginas y la contextualización, pero los tokens del modelo generativo se cargan al despliegue de Foundry conectado y el servicio los declara aparte. Por eso llevan línea propia.
+
+**Las páginas se tarifan por medidor, no por analizador.** El precio depende del procesamiento que el servicio haya aplicado, y la diferencia es enorme: un documento digital sale a 0,0086 euros por mil páginas y una imagen con análisis de layout a 4,2933, casi quinientas veces más. Como el sistema procesa también ficheros de Office, que van siempre por el medidor barato, meterlos todos en el mismo saco inflaría su coste en ese factor.
+
+**Limitación conocida:** los analizadores actuales llevan activada la detección de fórmulas, que factura un añadido por página. La respuesta del servicio no lo declara por separado, así que ese importe no se puede imputar y queda fuera del coste calculado.
 
 ## Campos de precio
 
