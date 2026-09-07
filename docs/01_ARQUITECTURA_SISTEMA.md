@@ -337,6 +337,16 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 | **Decision** | `docker-compose.yml` con SQL Server 2022 Developer + Azurite. `Program.cs` aplica migraciones automaticamente en startup (`RunDatabaseMigrationsOnStartup=true`). |
 | **Transicion** | Cuando Azure SQL (`srbsqlprodocai`) este disponible, solo cambia `SqlConnectionString`. El seed se aplica desde `config/` automaticamente. |
 
+### ADR-007: Coste de IA por ejecucion con tarifa por modelo fisico
+
+| Aspecto | Detalle |
+|---------|---------|
+| **Contexto** | El coste de IA solo se conocia a posteriori y de forma agregada, cruzando Cost Management con la volumetria de la BD. No se podia saber lo que cuesta un documento, una tipologia ni un solicitante. |
+| **Opciones** | (A) Tarifa por fila de `ModeloConfigs`, (B) tarifa por modelo fisico consumido con vigencia temporal, (C) calculo externo periodico contra la facturacion |
+| **Decision** | **(B) Catalogo de tarifas por modelo fisico**, en una fila unica de `ModeloConfigs` (`Tipo=4`), con una linea por modelo y fecha de vigencia. |
+| **Justificacion** | - Varias filas de configuracion comparten el mismo deployment: ligar el precio a la fila lo duplicaria y se desalinearia. <br/>- La vigencia por linea permite cambiar precios sin reescribir el pasado: cada ejecucion se tarifa con lo que se facturaba entonces. <br/>- Reutiliza una columna JSON existente: sin cambio de esquema y editable desde Admin. <br/>- El calculo vive en las actividades, no en el orquestador, que debe seguir siendo determinista y no puede leer BD. |
+| **Riesgos** | El catalogo se mantiene a mano: da estimacion, no facturacion. Un modelo sin tarifa no rompe nada, pero deja el agregado marcado como incompleto. La suma por entorno no es comparable con la factura del grupo de recursos, que mezcla DEV, PRE y PRO sobre la misma cuenta de IA. |
+
 ---
 
 ## 1.6 Diagrama de Despliegue
@@ -537,6 +547,7 @@ Plan de autenticación: **App Service Authentication (EasyAuth)** con app regist
 | [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Instalacion, despliegue, operacion |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato de API REST detallado |
 | [MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Guia de desarrollo de plugins |
+| [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecucion: medicion, tarifas y consulta |
 | [ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md](especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md) | Integracion con GDC SINTWS |
 | [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) | Activar App Service Authentication en el Admin |
 | [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | Restringir el acceso de red al Admin |

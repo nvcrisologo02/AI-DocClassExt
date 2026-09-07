@@ -565,6 +565,28 @@
 
 **Qué NO es:** no es un problema de clasificación (`NO_CLASIFICADO`) ni de cuota de Azure OpenAI (`PENDIENTE_REINTENTO`). El modelo ni siquiera llegó a invocarse.
 
+### Caso: el coste de IA sale a cero o incompleto
+
+**Síntoma:** la salida trae `detalleEjecucion.costes` con `costeTotalEur` a cero, o con `tarifasCompletas` en falso y modelos listados en `modelosSinTarifa`. En el Admin, la sección `/costes` muestra ejecuciones sin importe.
+
+**Qué significa:** el cálculo no falla nunca una ejecución. Un coste ausente es un dato que falta, no un error de procesamiento. Las causas, por orden de probabilidad:
+
+1. **Falta el catálogo de tarifas en ese entorno.** Es el caso más común tras un despliegue nuevo. Comprobar que existe la fila:
+   ```sql
+   SELECT ModelKey, LEN(ConfiguracionJson) AS Tamano, Activo
+   FROM ModeloConfigs WHERE Tipo = 4;
+   ```
+   Si no devuelve nada, cargar `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql`.
+2. **El modelo consumido no está en el catálogo.** El propio bloque lo dice en `modelosSinTarifa`. Ocurre al dar de alta un deployment o un analyzer nuevo sin añadir su línea de precio. La tarifa se resuelve por **modelo físico** (nombre de deployment, analyzer, classifier o `prebuilt-layout`), no por la fila de configuración que lo invoca.
+3. **La tarifa existe pero su fecha de vigencia es posterior a la ejecución.** Cada línea lleva `vigenteDesde`; una ejecución se tarifa con lo que se facturaba entonces. Si se dio de alta el precio hoy, las ejecuciones de ayer siguen sin tarifa. Es el comportamiento correcto: añadir una línea con vigencia anterior si se quiere cubrirlas.
+4. **Caché del catálogo.** Se recarga cada cinco minutos. Tras editar las tarifas hay que esperar antes de dar por malo el resultado.
+5. **La ejecución no consumió IA.** Una reutilización por duplicado llega a cero, marcada con `reutilizadaPorDuplicado`, y el coste de la ejecución original va aparte. Una clasificación resuelta por reglas del clasificador híbrido tampoco gasta IA. Ninguno de los dos es un fallo.
+6. **JSON del catálogo inválido.** El cargador es tolerante: ante un JSON que no parsea deja el catálogo vacío en silencio, sin romper nada. Un catálogo entero sin efecto, con la fila presente en base de datos, apunta aquí. Validar el JSON antes de guardarlo desde el Admin.
+
+**Verificación:** `pwsh .\scripts\testing\test-costes-ia.ps1 -Environment <env>` comprueba de una pasada el cálculo, las tarifas completas, el cuadre del desglose y la visibilidad condicionada al parámetro.
+
+**Qué NO es:** que la suma de un entorno no cuadre con la factura de su grupo de recursos no es un defecto. Los tres entornos consumen la misma cuenta de IA de producción, así que la factura agrega ejecuciones que viven en otras bases de datos. Ver [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md).
+
 ---
 
 ## 3. Debugging Profundo
@@ -952,6 +974,7 @@ az functionapp config appsettings set \
 | [03_DISENO_TECNICO_DETALLADO.md](../03_DISENO_TECNICO_DETALLADO.md) | Configuración detallada, endpoints |
 | [05_MANUAL_USO_CONFIGURACION.md](../05_MANUAL_USO_CONFIGURACION.md) | App settings, secretos, tipologías |
 | [especificaciones/CONFIANZA_AGREGADA.md](../referencias/CONFIANZA_AGREGADA.md) | Cálculo de confianza, umbrales |
+| [manuales/MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md) | Coste de IA: qué se mide, catálogo de tarifas, sección de Admin |
 | [observabilidad/CU_RENDIMIENTO_INSIGHTS.md](../observabilidad/CU_RENDIMIENTO_INSIGHTS.md) | KQL queries para CU performance |
 
 ---
@@ -962,3 +985,4 @@ az functionapp config appsettings set \
 |---|---|
 | 2026-06-10 | Versión inicial con 6 casos, KQL queries, scripts PowerShell |
 | 2026-07-13 | Añadido CASO 7: rate limiting (429) de Azure OpenAI en clasificación GPT/prompts y estado `PENDIENTE_REINTENTO` |
+| 2026-09-07 | Añadido el caso de coste de IA a cero o incompleto (catálogo de tarifas, vigencia, caché) |

@@ -315,6 +315,8 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 > ⚠️ **Pendiente en PRO (2026-08-05):** la migración `20260805100351_AgregarSubmittedByEjecucion` (columna `SubmittedBy` en `DocumentoEjecuciones`) está aplicada en **dev** pero **no en PRO**. Aplicarla con este procedimiento en el próximo despliegue, **antes** de desplegar las Functions que la usan.
 
+> ⚠️ **Costes de IA (2026-09-07):** la funcionalidad necesita **dos migraciones** (`20260907075128_AddCostesIAToEjecuciones` y `20260907103326_AddCostesPorActividadYEstimado`, siete columnas anulables en `DocumentoEjecuciones`) **más el catálogo de tarifas**, que no viaja en las migraciones: es una fila de `ModeloConfigs` que se carga con `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql`. Sin el catálogo el sistema no falla, pero toda ejecución sale con coste nulo y `tarifasCompletas=false`. Aplicar el catálogo **después** de las migraciones y **antes** de dar por buena la verificación. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md).
+
 > ⚠️ **Orden de despliegue Functions → Admin (2026-08-05):** los endpoints `/management/ejecuciones*` cambiaron de contrato (listado paginado `{items,total,page,pageSize}`, detalle por `{guid}/detalle`, agregados con filtro). El Admin actual depende de ellos: desplegar **primero la Function App y después el Admin**; en orden inverso, el Monitor quedará roto durante la ventana de despliegue.
 
 ---
@@ -327,6 +329,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | B6.2 | Revisar Application Insights durante 5-10 min post-deploy | Failures, exceptions, duraciones normales | ☐ |
 | B6.3 | Verificar estado de secretos y referencias KV | `verify-prod-prereqs.ps1` sin errores y settings `Resolved` | ☐ |
 | B6.4 | Verificar estado de recursos criticos Azure | Function App, Storage, SQL y DI en estado saludable | ☐ |
+| B6.5 | Costes de IA: el bloque llega con importes al pedirlo y no aparece si no se pide | `pwsh .\scripts\testing\test-costes-ia.ps1 -Environment <env>` | ☐ |
 
 ---
 
@@ -341,6 +344,9 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | `scripts\configuration\set-app-settings.ps1` | Aplicar todos los App Settings no-secretos | Primer deploy o cambio de configuracion no-secreta |
 | `scripts\deployment\deploy-manual.ps1` | Build + zip + deploy via Kudu | Deploy manual sin pipeline |
 | `scripts\testing\smoke-test-functions.ps1 -HostName <host>` | Verificar endpoint `/api/tipologias` (requiere PowerShell 7 / `pwsh`) | Post cada deploy |
+| `scripts\testing\test-costes-ia.ps1 -Environment <env>` | Verificar el coste de IA por ejecucion: calculo, tarifas completas, desglose que cuadra y visibilidad condicionada a `incluirCostes` | Tras desplegar o tras tocar el catalogo de tarifas |
+| `scripts\migrations\costes-ia\01-seed-tarifas-ia.sql` | Cargar o actualizar el catalogo de tarifas de IA (fila `tarifas.ia` de `ModeloConfigs`) | Tras las migraciones de costes y al cambiar precios |
+| `scripts\database\backfill-costes-estimados.ps1` | Estimar el coste de ejecuciones anteriores a la medicion, marcandolas como estimadas | Una vez por entorno, tras cargar el catalogo |
 | `tests/e2e-postdeploy/run-e2e-postdeploy.ps1` | Smoke E2E funcional post-deploy (perfiles smoke/full, cobertura funcional) | Manual, tras 9.2 |
 | `scripts\database\Query-Tipologias.ps1` / `sqlcmd` | Verificar conectividad BD y estado tablas | Post migraciones |
 | `scripts\database\replicate-config-data.ps1` | Replicar datos de **configuracion** (modelos/providers, tipologias, catalogos TDN1/TDN2, plugins, prompts) entre entornos. Modos `Export`/`Apply`/`Copy`, idempotente (MERGE+IDENTITY_INSERT) | Al promocionar configuracion dev→pre→prod |

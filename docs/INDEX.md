@@ -169,6 +169,7 @@ Guías detalladas para tareas específicas:
   - Estructura esperada de configuración
 
 ### Manuales
+- **[MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md)** — Coste de IA por ejecución: medición, tarifas y consulta
 - **[MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md)** — Cómo usar y configurar plugins
 - **[MANUAL_VALIDACIONES.md](manuales/MANUAL_VALIDACIONES.md)** — Rules engine de validación
 
@@ -392,6 +393,7 @@ docs/
 │   └── PLANTILLA_PLUGINS_JSON.md
 │
 ├── 📁 manuales/
+│   ├── MANUAL_COSTES_IA.md
 │   ├── MANUAL_PLUGINS.md
 │   └── MANUAL_VALIDACIONES.md
 │

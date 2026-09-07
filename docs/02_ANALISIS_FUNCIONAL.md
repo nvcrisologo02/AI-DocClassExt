@@ -202,6 +202,21 @@ flowchart TB
 
 ---
 
+### CU10: Conocer el Coste de IA de una Ejecucion
+
+| Aspecto | Detalle |
+|---------|---------|
+| **Actor** | Responsable de operacion, analista de costes |
+| **Objetivo** | Saber lo que ha costado procesar un documento y donde se va el gasto de IA |
+| **Precondicion** | Catalogo de tarifas cargado (`ModeloConfigs`, `Tipo=4`, clave `tarifas.ia`) |
+| **Flujo principal** | 1. Cada llamada a un servicio de IA registra su consumo (tokens o paginas) y el modelo fisico usado. <br/>2. La actividad correspondiente aplica la tarifa vigente en la fecha de la ejecucion. <br/>3. El orquestador acumula los consumos y calcula el agregado. <br/>4. `PersistirActivity` graba el total, los tokens y el desglose por actividad. <br/>5. Si la peticion trae `instrucciones.incluirCostes`, el bloque viaja en la respuesta. |
+| **Flujo alternativo A** | Un modelo sin tarifa en el catalogo: el consumo se registra con sus cifras, el coste queda a nulo y el agregado se marca como incompleto indicando que modelos faltan. La ejecucion no falla. |
+| **Flujo alternativo B** | Reutilizacion por duplicado: no hay consumo propio. El bloque llega a cero, marcado, con el coste de la ejecucion original aparte para no contar dos veces el mismo gasto. |
+| **Postcondicion** | La ejecucion queda con su coste en BD y consultable desde la seccion `/costes` del Admin |
+| **Alcance** | Solo servicios de IA. No incluye almacenamiento, computo ni red |
+
+---
+
 ## 2.4 Reglas de Negocio Criticas
 
 ### RN1: Deduplicacion por SHA256
@@ -390,6 +405,9 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RF16 | El sistema debe resolver el activo inmobiliario desde datos extraidos | `ObtenerActivoActivity` consulta `DM_POSICION_AAII_TB` via AssetResolver. Devuelve `IdActivo` si match unico. Habilitacion configurable por tipologia/instrucciones. | DONE |
 | RF17 | El sistema debe permitir excluir campos del score de confianza de extraccion por tipologia | `avoidConfidence: true` en un campo lo excluye del score y de `CamposBajaConfianza`, manteniendo completitud y trazabilidad en `ConfianzaPorCampo`. | DONE |
 | RF18 | El sistema debe permitir monitorizar ejecuciones desde el Admin | Monitor con consulta en servidor: KPIs, serie temporal diaria, paginacion, filtros (rango, tipologia, estado, flujo, solicitante, busqueda) y detalle enlazable por GUID con el contrato de salida completo. Ver CU9. | DONE |
+| RF19 | El sistema debe registrar el coste economico y el consumo de tokens de cada llamada a un servicio de IA | Cada ejecucion persiste `CosteIAEur`, `TokensIA` y el desglose por actividad; el detalle por llamada viaja en el contrato. Solo servicios de IA. Ver CU10. | DONE |
+| RF20 | El coste debe devolverse en la salida solo si el llamador lo pide | `instrucciones.incluirCostes` (defecto `false`). El bloque se calcula y persiste siempre; sin el parametro la salida es identica a la anterior a la funcionalidad. | DONE |
+| RF21 | El sistema debe permitir consultar los costes agregados desde el Admin | Seccion `/costes` (sin entrada de menu) con los filtros del Monitor: totales del periodo, desglose por actividad, tipologia y modelo, evolucion diaria y listado con coste por ejecucion. | DONE |
 
 ---
 

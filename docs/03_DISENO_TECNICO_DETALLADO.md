@@ -1456,6 +1456,73 @@ stateDiagram-v2
 
 ---
 
+## 3.11b Subsistema de Costes de IA
+
+Registra el consumo economico de cada llamada a un servicio de IA. Solo servicios
+de IA: no contabiliza almacenamiento, computo ni red.
+
+### 3.11b.1 Recorrido del dato
+
+```
+Proveedor de IA          Actividad                Orquestador            Persistencia
+─────────────────       ──────────────           ─────────────          ─────────────
+registra ConsumoIA  ->  aplica la tarifa    ->   acumula y agrega   ->  columnas + contrato
+(tokens o paginas)      (CalculadoraCosteIA)     (AcumularConsumos)     (PersistirActivity)
+```
+
+**El calculo vive en la actividad, no en el orquestador.** El catalogo de tarifas
+esta en base de datos y el orquestador de Durable Functions debe seguir siendo
+determinista, asi que no puede consultarla. Lo que si puede hacer el orquestador es
+sumar los importes ya calculados, porque sumar decimales es determinista.
+
+### 3.11b.2 Piezas
+
+| Componente | Proyecto | Responsabilidad |
+|---|---|---|
+| `ConsumoIA`, `CostesIA` | Core.Models | Modelo del contrato: una entrada por llamada y el agregado |
+| `ProveedoresIA`, `ActividadesIA` | Core.Models | Nombres canonicos, sin dependencias de SDK |
+| `TarifaRegistryLoader` | Core.Configuration | Carga el catalogo con cache de 5 min; tolerante a JSON invalido y a fila ausente |
+| `CalculadoraCosteIA` | Core.Services | Resuelve la linea vigente por modelo y fecha, calcula y agrega |
+| `ConsumosIA` | Core.Services | Fusiona consumos entre proveedores encadenados |
+| `UsoOpenAiMapper` | Functions.Services | Traduce el bloque de uso del SDK de OpenAI |
+| `UsoContentUnderstandingMapper` | Core.Services | Traduce el bloque `usage` de Content Understanding |
+| `TarificadorDeConsumos` | Functions.Services | Aplica el catalogo en la actividad; un fallo no tumba el procesamiento |
+
+### 3.11b.3 Canal de transporte
+
+Los consumos viajan en los cuatro resultados que ya cruzan la frontera de actividad:
+`ResultadoClasificacion`, `ExtraccionResultado`, `ExtraerMarkdownLayoutResultado` y
+`PromptResultado`. No hace falta ningun canal nuevo.
+
+**Los proveedores compuestos deben fusionar.** Los routers de clasificacion y
+extraccion, el clasificador hibrido y el rescate devuelven el resultado de un solo
+proveedor y descartan el resto: sin `ConsumosIA.Fusionar`, el gasto desaparece justo
+en fallback, descarte y restriccion de tipologias, que es donde mas se paga.
+
+### 3.11b.4 Visibilidad en la salida
+
+`ResultadoClasificacion` forma parte del contrato de salida, asi que su lista de
+consumos llega tarificada. Se vacia en el envoltorio de `RunOrchestrator`, no en el
+cuerpo: hay quince puntos de retorno, incluidas salidas tempranas por rate limit y
+por documento sin contenido, y la regla no puede depender de acordarse en cada uno.
+
+El bloque `DetalleEjecucion.Costes` se anula en ese mismo punto cuando la entrada no
+trae `incluirCostes`. Al ser anulable, se omite del JSON.
+
+### 3.11b.5 Invariantes
+
+1. Los tokens cacheados vienen **incluidos** en los de entrada: se restan, no se suman.
+2. Un fallo capturando o tarificando **nunca** hace fallar una ejecucion.
+3. El bloque se calcula y persiste siempre; el parametro solo decide si se devuelve.
+4. Los consumos descartados cuentan en el total, marcados con `Descartado`.
+5. Una llamada combinada (extraccion + resumen) genera **un solo** consumo.
+6. Un consumo sin ninguna magnitud no se tarifa a cero: se deja sin coste.
+7. El importe es `decimal`, nunca `double`.
+
+Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) para el detalle funcional y de uso.
+
+---
+
 ## 3.12 Contratos API Completos
 
 ### 3.12.1 POST /api/IngestDocument — Request
@@ -1784,4 +1851,5 @@ El campo `environment` de `/management/configuration` se resuelve con prioridad 
 | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Arquitectura, ADRs, patrones |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API detallado (original) |
 | [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de confianza |
+| [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA: medicion, tarifas, consulta y relleno retroactivo |
 | [TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Catalogo de tipologias |

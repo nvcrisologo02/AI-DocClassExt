@@ -13,6 +13,7 @@ Los ficheros fisicos JSON del repositorio son artefactos de seed inicial, planti
 | Tipologias y versiones | Tabla `Tipologias` / Admin API `/management/tipologias` | `config/tipologias/*.validation.json` solo seed o referencia |
 | Modelos IA | Tabla `ModeloConfigs` / Admin API `/management/modelos` | `config/classification/models.json`, `config/extraction/models.json`, `config/prompt/models.json`, `config/layout/models.json` solo seed o referencia |
 | Plugins por tipologia | Tabla `PluginTipologiaConfigs` / Admin API `/management/plugins-tipologias/{codigo}` | `config/tipologias/*.plugins.json` solo seed o referencia |
+| Tarifas de IA | Fila `tarifas.ia` de la tabla `ModeloConfigs` (tipo Tarifas) / seccion Modelos del Admin | `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql` solo carga inicial. Ver [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md) |
 
 ## Creacion o cambio de tipologias
 

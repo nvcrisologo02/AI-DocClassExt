@@ -389,6 +389,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.maxPagesForClassificationOnly` | int | No | Solo aplica con `classificationOnly=true`. `0` = sin límite; `N > 0` = clasificar con las primeras N páginas. |
 | `instrucciones.forzarResumenPorDefecto` | bool | No | Default `false`. Si no hubo llamada GPT previa que produzca `Resumen`, `true` fuerza una llamada dedicada de `PromptActivity` para generar el resumen por defecto. |
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
+| `instrucciones.incluirCostes` | bool | No | Default `false`. `true` = la salida incluye `detalleEjecucion.costes` con el coste de IA de la ejecucion. El coste se calcula y se persiste siempre; este parametro solo decide si se devuelve. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md). |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
 | `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |
 | `instrucciones.classification.model` | string | No | Model key del registro de clasificación para la ruta GPT. `"auto"` = usar modelo fallback marcado con `useAsFallback=true`. Si se informa un model key válido de provider GPT/Azure OpenAI, se utiliza en esa petición. |
@@ -511,6 +512,80 @@ En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el 
 | `.gdc` | object | Resultado subida GDC (exitoso, objectId, intentos, duracion) |
 | `.seguimiento` | object | Timeline de actividades con estado y duracion por actividad |
 | `.prompt` | object? | Resultado del prompt libre (si habilitado en tipologia) |
+| `.costes` | object? | Coste de IA de la ejecucion. **Solo aparece si la peticion trae `instrucciones.incluirCostes=true`**; en caso contrario se omite del JSON. |
+
+### detalleEjecucion.costes
+
+Solo servicios de IA. No incluye almacenamiento, computo ni red.
+
+| Campo | Tipo | Descripcion |
+|-------|------|------------|
+| `.version` | string | Version del formato del bloque |
+| `.costeTotalEur` | decimal | Suma de los consumos tarifados, en euros |
+| `.tokensTotales` | int | Tokens de todas las llamadas generativas |
+| `.paginasTotales` | int | Paginas facturadas por los servicios documentales |
+| `.tarifasCompletas` | bool | `false` si algun modelo consumido no tiene tarifa en el catalogo. El total es entonces parcial. |
+| `.modelosSinTarifa` | string[] | Modelos consumidos sin precio, cuando `tarifasCompletas=false` |
+| `.reutilizadaPorDuplicado` | bool | `true` si la ejecucion reutilizo un resultado anterior y no consumio IA propia |
+| `.costeEjecucionOriginalEur` | decimal? | Coste de la ejecucion reutilizada. Es informativo: no se suma al total |
+| `.consumos[]` | array | Una entrada por llamada a un servicio de IA |
+
+Cada elemento de `consumos`:
+
+| Campo | Tipo | Descripcion |
+|-------|------|------------|
+| `.actividad` | string | Actividad que hizo la llamada: `Layout`, `Clasificar`, `Extraer`, `Prompt` |
+| `.operacion` | string | Operacion concreta dentro de la actividad, por ejemplo `classification.phase1`, `layout.prebuilt-layout`, `extraction.cu.modelo` |
+| `.proveedor` | string | `AzureOpenAI`, `DocumentIntelligence`, `ContentUnderstanding` |
+| `.modelo` | string | Modelo fisico consumido: nombre de deployment, analyzer, classifier o `prebuilt-layout` |
+| `.tokensEntrada` | int? | Tokens de entrada. **Incluyen los cacheados** |
+| `.tokensEntradaCache` | int? | Subconjunto de los anteriores servido desde cache, tarifado mas barato |
+| `.tokensSalida` | int? | Tokens generados |
+| `.tokensRazonamiento` | int? | Tokens de razonamiento, cuando el modelo los reporta |
+| `.paginas` | int? | Paginas facturadas por esta llamada |
+| `.costeEur` | decimal? | Coste de esta llamada. `null` si el modelo no tiene tarifa |
+| `.tarifaAplicada` | string? | Identificador de la linea de tarifa usada, para poder auditar el importe |
+| `.descartado` | bool | `true` si el resultado de esta llamada no se uso (fallback, descarte, evaluacion). **Cuenta igual en el total: se pago.** |
+
+Ejemplo:
+
+```json
+"detalleEjecucion": {
+  "costes": {
+    "version": "1.0",
+    "costeTotalEur": 0.014182,
+    "tokensTotales": 8934,
+    "paginasTotales": 3,
+    "tarifasCompletas": true,
+    "modelosSinTarifa": [],
+    "reutilizadaPorDuplicado": false,
+    "consumos": [
+      {
+        "actividad": "Layout",
+        "operacion": "layout.prebuilt-layout",
+        "proveedor": "DocumentIntelligence",
+        "modelo": "prebuilt-layout",
+        "paginas": 3,
+        "costeEur": 0.012882,
+        "tarifaAplicada": "prebuilt-layout@2026-09-01",
+        "descartado": false
+      },
+      {
+        "actividad": "Clasificar",
+        "operacion": "classification.phase1",
+        "proveedor": "AzureOpenAI",
+        "modelo": "gpt-5-mini",
+        "tokensEntrada": 7820,
+        "tokensEntradaCache": 6144,
+        "tokensSalida": 1114,
+        "costeEur": 0.001300,
+        "tarifaAplicada": "gpt-5-mini@2026-09-01",
+        "descartado": false
+      }
+    ]
+  }
+}
+```
 
 ---
 
@@ -1543,11 +1618,12 @@ El boton se encuentra alineado a la derecha de la barra de modos (Arbol / Codigo
 
 ### 5.9.3 Seccion Modelos
 
-Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI) de los cuatro tipos: Clasificacion, Extraccion, Prompt y Layout. Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
+Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI) de los cinco tipos: Clasificacion, Extraccion, Prompt, Layout y Tarifas. Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
 
 - **Editar** funciona igual para los cuatro tipos, incluidos los modelos de tipo Layout (antes de esta correccion, editar un modelo Layout creaba un duplicado en vez de actualizar el existente).
 - **Borrar** es un desactivado logico (soft-delete: `Activo=false`), no un borrado fisico. El dialogo de confirmacion lo indica explicitamente: "Desactivar modelo".
 - El **JSON de configuracion** que se ve y edita en el Admin trae los campos sensibles (claves cuyo nombre contiene `apikey`, `password`, `secret` o `accountkey`, de forma recursiva) enmascarados como `"***"`. Al guardar sin tocar esos campos, el valor enmascarado se conserva tal cual estaba en BD (round-trip seguro): no hace falta reintroducir la clave para guardar otros cambios. Si se sustituye `"***"` por un valor nuevo, ese valor pasa a ser el almacenado.
+- El tipo **Tarifas** no es un modelo invocable: es el catalogo de precios de IA. Hay una unica fila, con clave `tarifas.ia`, cuyo JSON contiene una linea por modelo fisico y fecha de vigencia. Se edita como cualquier otro modelo, pero afecta al importe que se calcula en todas las ejecuciones posteriores. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) antes de tocarlo.
 
 ### 5.9.4 Seccion Configuracion Consulta
 
@@ -1571,6 +1647,18 @@ Ademas de las secciones anteriores, el Admin incluye:
 - **Plugins por tipologia** (`/plugins-tipologias`): editar la configuracion de plugins de una tipologia y **Publicar**/**Retirar** requieren confirmacion previa con el impacto de la accion.
 - **Catalogo TDN1** (`/catalogotdn1`) y **Catalogo TDN2**: alta, edicion y borrado de los codigos de primer y segundo nivel usados por la clasificacion jerarquica GPT (ver 5.1.3 y RN7 en el analisis funcional). Borrar un codigo pide confirmacion ("Esta accion no se puede deshacer").
 
+### 5.9.7 Seccion Costes
+
+Pagina `/costes`. **No aparece en el menu de navegacion**: se accede por URL directa o desde el detalle de una ejecucion. Es la vista de coste de IA agregado y por ejecucion, con los mismos filtros del Monitor (rango de fechas, tipologia, estado, flujo, solicitante y busqueda libre).
+
+- **Totales del periodo**: coste, tokens, paginas y numero de ejecuciones con coste.
+- **Desglose** por actividad, por tipologia y por modelo, para ver donde se concentra el gasto.
+- **Evolucion diaria** del coste en el rango seleccionado.
+- **Listado de ejecuciones** con su coste, paginado, con enlace al detalle. El detalle muestra el desglose por llamada de esa ejecucion.
+- **Ejecuciones estimadas**: las anteriores a la puesta en marcha de la medicion se rellenaron de forma retroactiva a partir de la volumetria persistida. Van marcadas y se pueden excluir con el conmutador de estimados. Son una estimacion, no facturacion.
+
+Aviso de lectura: cada entorno usa la cuenta de IA de produccion, asi que la suma de un entorno no es comparable con la factura de su grupo de recursos.
+
 ---
 
 ## 5.10 Referencias
@@ -1581,3 +1669,4 @@ Ademas de las secciones anteriores, el Admin incluye:
 | [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Instalacion, despliegue, variables de entorno |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API original detallado |
 | [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de calculo de confianza |
+| [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecucion: que se mide, tarifas, consulta y relleno retroactivo |

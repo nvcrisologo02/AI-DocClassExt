@@ -4,6 +4,12 @@ Acciones para desplegar en PRO y dejar operativo el contenido de la release:
 **AB#100176** (fiabilidad de resumen y persistencia, INC1338832), **AB#100182** (rendimiento del
 Monitor), **AB#100165** (almacenamiento) y **AB#100192** (extracción sin modelKey).
 
+> **Añadido el 07/09:** `develop` incorpora también el **control de costes de IA**
+> (**AB#100224** y **AB#100235**). Si se despliega `develop` a PRO, ese código viaja con él y
+> necesita **dos migraciones más** y **el catálogo de tarifas**, que no viaja en las
+> migraciones. Los pasos están intercalados abajo (1.5, 1.6, 3.3 y 5.5). Ver
+> [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md).
+
 - **Commit a desplegar**: `origin/develop` (`091bb5a` o posterior). PRO despliega commits de
   `develop` (el actual en PRO es `16e51bc`, del 14/08); `master` se sincroniza después.
 - **Validado en DEV** el 02/09: suite unitaria 999/999, Admin 113/113, E2E smoke 6/6 y full
@@ -86,6 +92,20 @@ completa lo que falte.
       índices `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` (1 clave + 17 INCLUDE) e
       `IX_DocumentoEjecuciones_IdActivo_DocumentoId` presentes, y
       `EXEC sp_ObtenerDocumentoEjecucionesPorIdActivo @IdActivo='X'` responde sin error.
+- [ ] 1.5 **Costes de IA (AB#100224)** — aplicar las dos migraciones
+      `20260907075128_AddCostesIAToEjecuciones` y `20260907103326_AddCostesPorActividadYEstimado`:
+      siete columnas anulables en `DocumentoEjecuciones` (`CosteIAEur`, `TokensIA`, las cuatro de
+      actividad y `CosteEstimado`). Solo metadatos, instantáneas, sin bloqueo relevante. Generar el
+      script idempotente con `dotnet ef migrations script --idempotent`, igual que el resto.
+      Verificar: `SELECT name FROM sys.columns WHERE object_id = OBJECT_ID('DocumentoEjecuciones')
+      AND (name LIKE 'Coste%' OR name = 'TokensIA')` devuelve las siete.
+- [ ] 1.6 **Catálogo de tarifas (AB#100224)** — ejecutar
+      `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql`. No es esquema: inserta la fila
+      `tarifas.ia` en `ModeloConfigs` (`Tipo=4`). El script copia la tabla a
+      `ModeloConfigs__bak_<fecha>` antes de tocarla. **Debe ir antes de la Fase 2**: sin catálogo el
+      sistema no falla, pero toda ejecución posterior al despliegue queda con coste nulo y
+      `tarifasCompletas=false`, y eso solo se recupera con relleno retroactivo. Verificar:
+      `SELECT ModelKey, LEN(ConfiguracionJson) FROM ModeloConfigs WHERE Tipo = 4` devuelve una fila.
 
 > Desde este punto PRO funciona con normalidad con el código antiguo. No hay prisa entre la
 > Fase 1 y la Fase 2, pero conviene encadenarlas en la misma ventana.
@@ -114,6 +134,13 @@ por tandas.
       cualquier discrepancia. Al terminar: pendientes 0, discrepancias 0.
       *Nota*: la BD crece temporalmente ~240 MB (la copia binaria); es lo esperado — el ahorro
       llega en la fase de *contract*, fuera de esta release.
+- [ ] 3.3 **Opcional** — `pwsh ./scripts/database/backfill-costes-estimados.ps1 -Server srbsqlprodocai.database.windows.net`
+      (AB#100235). Estima el coste de las ejecuciones anteriores a la medición a partir de la
+      volumetría ya persistida y las marca con `CosteEstimado=1`. Solo llega hasta donde llega el
+      dato: en el histórico hay páginas de layout en casi todas las ejecuciones, pero **nunca
+      tokens**, así que la clasificación generativa se estima y la extracción no se cubre. Escribe
+      solo columnas escalares, nunca el contrato, y **no pisa ningún coste medido**. Ejecutar
+      **después** del paso 1.6: sin catálogo no estima nada. Se puede posponer sin riesgo.
 
 ## Fase 4 — Alertas (suscripción Producción Central, permisos Monitoring Contributor)
 
@@ -141,6 +168,11 @@ por tandas.
       (App Insights, KQL de `docs/auxiliares/temps/2026-09-01/medicion-monitor-rendimiento.md`)
       y compararlo con la línea base: agregados p50 9.166 ms / p95 30.035 ms. Registrar la tabla
       en AB#100186 y cerrarlo.
+- [ ] 5.5 Costes de IA: `pwsh ./scripts/testing/test-costes-ia.ps1 -Environment pro`. Comprueba de
+      una pasada que el bloque llega con importes y `tarifasCompletas=true` al pedir
+      `incluirCostes`, que **no** aparece sin el parámetro, y que el desglose por llamada cuadra
+      con el total. Después, abrir `/costes` en el Admin de PRO (no está en el menú: por URL).
+      Esperar cinco minutos tras el paso 1.6 antes de lanzarlo, por la caché del catálogo.
 
 ## Fase 6 — Cierres post-release
 
@@ -151,8 +183,8 @@ por tandas.
 - [ ] 6.3 Publicar la rama `fix/100170-markdown-binario` del repo **DocumentIA.Batch** y
       mezclarla (afecta solo al script de auditoría `eval/audit_notext_db.py`; los ejecutables
       no cambian).
-- [ ] 6.4 Actualizar la entrada 1.17 del historial de `DATA_MODELS_ER_DIAGRAM.md`: quitar el
-      "PRO pendiente".
+- [ ] 6.4 Actualizar las entradas 1.17, 1.18 y 1.19 del historial de
+      `DATA_MODELS_ER_DIAGRAM.md`: quitar el "PRO pendiente".
 - [ ] 6.5 A los 2-3 días: revisar que las 3 alertas de fiabilidad (AB#100181) están **en
       silencio** — su objetivo es no saltar; si alguna salta, hay una vía no cubierta por los
       fixes. Vigilar también el ratio de `EXTRACCION_INCOMPLETA` (debe bajar: las 13 tipologías
