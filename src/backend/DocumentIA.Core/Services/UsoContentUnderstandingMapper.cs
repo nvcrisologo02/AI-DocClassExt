@@ -18,11 +18,20 @@ public static class UsoContentUnderstandingMapper
     private const string SufijoSalida = "-output";
     private const string SufijoEntrada = "-input";
 
-    private static readonly string[] MedidoresDePagina =
+    /// <summary>
+    /// Medidores de pagina de Content Understanding y su clave de tarifa. Cada uno
+    /// tiene precio propio y la diferencia es enorme: el medidor standard (imagen con
+    /// analisis de layout) cuesta unas 500 veces mas que el minimal (documento
+    /// digital, DOCX o XLSX). Sumarlos y aplicar un unico precio sobrevaloraria el
+    /// coste de los documentos de Office en ese mismo factor, por eso cada medidor
+    /// genera su propio consumo. La clave no depende del analizador: depende del
+    /// procesamiento que el servicio haya aplicado.
+    /// </summary>
+    private static readonly (string Propiedad, string ClaveTarifa)[] MedidoresDePagina =
     {
-        "documentPagesMinimal",
-        "documentPagesBasic",
-        "documentPagesStandard"
+        ("documentPagesMinimal", "cu.documentPagesMinimal"),
+        ("documentPagesBasic", "cu.documentPagesBasic"),
+        ("documentPagesStandard", "cu.documentPagesStandard")
     };
 
     /// <summary>
@@ -39,19 +48,37 @@ public static class UsoContentUnderstandingMapper
             return consumos;
         }
 
-        var paginas = MedidoresDePagina.Sum(nombre => LeerEntero(usage, nombre));
-        var contextualizacion = LeerEntero(usage, "contextualizationTokens");
+        // Un consumo por medidor de pagina: cada uno se tarifa a su precio.
+        foreach (var (propiedad, claveTarifa) in MedidoresDePagina)
+        {
+            var paginas = LeerEntero(usage, propiedad);
+            if (paginas <= 0)
+            {
+                continue;
+            }
 
-        if (paginas > 0 || contextualizacion > 0)
+            consumos.Add(new ConsumoIA
+            {
+                Actividad = ActividadesIA.Extraer,
+                Operacion = $"extraction.cu.{propiedad}",
+                Proveedor = ProveedoresIA.ContentUnderstanding,
+                Modelo = claveTarifa,
+                Paginas = paginas
+            });
+        }
+
+        // La contextualizacion si va contra el analizador: su precio depende del
+        // workflow que este resuelva (estandar o avanzado).
+        var contextualizacion = LeerEntero(usage, "contextualizationTokens");
+        if (contextualizacion > 0)
         {
             consumos.Add(new ConsumoIA
             {
                 Actividad = ActividadesIA.Extraer,
-                Operacion = "extraction.cu.servicio",
+                Operacion = "extraction.cu.contextualizacion",
                 Proveedor = ProveedoresIA.ContentUnderstanding,
                 Modelo = analyzerId ?? string.Empty,
-                Paginas = paginas > 0 ? paginas : null,
-                TokensContextualizacion = contextualizacion > 0 ? contextualizacion : null
+                TokensContextualizacion = contextualizacion
             });
         }
 

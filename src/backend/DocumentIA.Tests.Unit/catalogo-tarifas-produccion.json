@@ -38,6 +38,41 @@
       "Modelo": "prebuilt-layout",
       "VigenteDesde": "2026-04-01",
       "EurPorPagina": 0.0085866
+    },
+    {
+      "Modelo": "DocumentAICC_v0",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.002576
+    },
+    {
+      "Modelo": "DocumentAICC_v1",
+      "VigenteDesde": "2026-05-13",
+      "EurPorPagina": 0.002576
+    },
+    {
+      "Modelo": "cu.documentPagesMinimal",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 8.6e-06
+    },
+    {
+      "Modelo": "cu.documentPagesBasic",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.0008587
+    },
+    {
+      "Modelo": "cu.documentPagesStandard",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.0042933
+    },
+    {
+      "Modelo": "CU_NS_1.5_0",
+      "VigenteDesde": "2026-06-01",
+      "EurContextualizacionPor1M": 0.9
+    },
+    {
+      "Modelo": "CU_NS_1.6_0_GGAA",
+      "VigenteDesde": "2026-07-17",
+      "EurContextualizacionPor1M": 0.9
     }
   ]
 }

@@ -24,6 +24,11 @@
 --   de darlos por definitivos, y anadir lineas nuevas con la fecha de vigencia
 --   en lugar de editar estas.
 --
+--   Los identificadores del clasificador DI y de los analizadores de CU se
+--   leyeron de las APIs de los recursos de produccion el 2026-09-07, asi que el
+--   catalogo esta completo. El paso 0 sigue estando para verificar que los que
+--   usa la configuracion coinciden con los que aqui se tarifan.
+--
 --   Reproducir la consulta (el proxy corporativo obliga a --ssl-no-revoke):
 --     curl -sS --ssl-no-revoke --get https://prices.azure.com/api/retail/prices
 --          --data-urlencode "currencyCode=EUR"
@@ -98,24 +103,39 @@ BEGIN TRAN;
 --    invalido no da error visible: deja el catalogo vacio en silencio y todos
 --    los costes salen a nulo. Por eso las anotaciones van aqui fuera.
 --
---    Correspondencia linea -> deployment -> medidor que factura:
+--    AZURE OPENAI. Clave = nombre del DEPLOYMENT, no del modelo, porque el tipo
+--    de despliegue determina el medidor y cambia el precio hasta un 70 %:
 --      gpt-4o-mini ............ sirve gpt-4.1-mini con SKU Standard  -> "gpt 4.1 mini ... regnl"
---      gpt-4.1-mini ........... deployment gpt-4.1-mini-590191, Global -> "gpt 4.1 mini ... glbl"
+--      gpt-4.1-mini ........... gpt-4.1-mini-590191, GlobalStandard  -> "gpt 4.1 mini ... glbl"
 --      gpt-5-mini ............. DataZoneStandard                     -> "5 mini pp ... Dz"
 --      gpt-4.1 ................ lo consume Content Understanding      -> "gpt 4.1 ... glbl"
---      text-embedding-3-large . embeddings de CU, Global              -> "text-embedding-3-large-glbl"
---      prebuilt-layout ........ DI Layout                             -> "S0 Pre-built Pages"
+--      text-embedding-3-large . embeddings de CU, GlobalStandard      -> "text-embedding-3-large-glbl"
 --
---    FALTAN DOS LINEAS que dependen de identificadores propios del entorno y
---    que el paso 0 revela. Anadirlas con estos precios de westeurope:
---      - Clasificador DI, clave = ClassifierId de la fila de clasificacion:
---          { "Modelo": "<ClassifierId>", "VigenteDesde": "2026-04-01",
---            "EurPorPagina": 0.002576 }
---      - Content Understanding, clave = AnalyzerId de la fila de extraccion:
---          { "Modelo": "<AnalyzerId>", "VigenteDesde": "2026-04-01",
---            "EurPorPagina": 0.0042933, "EurContextualizacionPor1M": 0.90 }
---    Sin ellas el sistema funciona, pero el agregado sale marcado como
---    incompleto y esos consumos quedan sin coste.
+--    DOCUMENT INTELLIGENCE. Clave = identificador del modelo:
+--      prebuilt-layout ........ layout a markdown  -> "S0 Pre-built Pages" 8,5866 / 1.000 pag
+--      DocumentAICC_v0/_v1 .... clasificadores del recurso srbdiprodocai,
+--                               leidos de la API el 2026-09-07
+--                               -> "S0 pages for doc classifier" 2,576 / 1.000 pag
+--
+--    CONTENT UNDERSTANDING. Las paginas NO se tarifan por analizador sino por
+--    medidor, porque el precio depende del procesamiento aplicado y la
+--    diferencia es de casi 500 veces:
+--      cu.documentPagesMinimal .. documentos digitales (DOCX, XLSX, HTML, TXT)
+--                                 -> "Doc Content Extraction Min Pages" 0,0086 / 1.000 pag
+--      cu.documentPagesBasic .... imagen con OCR simple
+--                                 -> "Doc Content Extraction Basic Pages" 0,8587 / 1.000 pag
+--      cu.documentPagesStandard . imagen con analisis de layout
+--                                 -> "Doc Content Extraction Standard Pages" 4,2933 / 1.000 pag
+--    La contextualizacion si va por analizador, porque su precio depende del
+--    workflow que resuelva. Los dos analizadores del recurso srbaisrv-westeurope
+--    (CU_NS_1.5_0 y CU_NS_1.6_0_GGAA) tienen enableLayout=true y enableOcr=true
+--    sobre prebuilt-document, workflow estandar
+--      -> "Std Contextualization Tokens" 0,0009 / 1K tokens
+--
+--    LIMITACION CONOCIDA: los analizadores llevan enableFormula=true, que activa
+--    el medidor "Add-On Formula Pages" (2,576 / 1.000 pag). El bloque usage de la
+--    respuesta no lo declara por separado, asi que ese add-on no se puede imputar
+--    desde el consumo y queda fuera del coste calculado.
 DECLARE @catalogo NVARCHAR(MAX) = N'{
   "Moneda": "EUR",
   "Tarifas": [
@@ -156,6 +176,41 @@ DECLARE @catalogo NVARCHAR(MAX) = N'{
       "Modelo": "prebuilt-layout",
       "VigenteDesde": "2026-04-01",
       "EurPorPagina": 0.0085866
+    },
+    {
+      "Modelo": "DocumentAICC_v0",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.002576
+    },
+    {
+      "Modelo": "DocumentAICC_v1",
+      "VigenteDesde": "2026-05-13",
+      "EurPorPagina": 0.002576
+    },
+    {
+      "Modelo": "cu.documentPagesMinimal",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 8.6e-06
+    },
+    {
+      "Modelo": "cu.documentPagesBasic",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.0008587
+    },
+    {
+      "Modelo": "cu.documentPagesStandard",
+      "VigenteDesde": "2026-04-01",
+      "EurPorPagina": 0.0042933
+    },
+    {
+      "Modelo": "CU_NS_1.5_0",
+      "VigenteDesde": "2026-06-01",
+      "EurContextualizacionPor1M": 0.9
+    },
+    {
+      "Modelo": "CU_NS_1.6_0_GGAA",
+      "VigenteDesde": "2026-07-17",
+      "EurContextualizacionPor1M": 0.9
     }
   ]
 }';

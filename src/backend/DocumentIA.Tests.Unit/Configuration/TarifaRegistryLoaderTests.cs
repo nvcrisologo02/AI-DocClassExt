@@ -71,7 +71,7 @@ public class TarifaRegistryLoaderTests
         var registry = TarifaRegistryLoader.Parse(json);
 
         registry.Moneda.Should().Be("EUR");
-        registry.Tarifas.Should().HaveCount(6);
+        registry.Tarifas.Should().HaveCount(13);
         registry.Tarifas.Should().OnlyContain(t => !string.IsNullOrWhiteSpace(t.Modelo));
         registry.Tarifas.Should().OnlyContain(t => t.VigenteDesde > DateTime.MinValue);
 
@@ -81,6 +81,17 @@ public class TarifaRegistryLoaderTests
         mini.EurEntradaPor1M.Should().Be(0.50m);
         mini.EurEntradaCachePor1M.Should().Be(0.10m);
         mini.EurSalidaPor1M.Should().Be(1.80m);
+
+        // Los tres medidores de pagina de Content Understanding, con precios muy
+        // distintos: confundirlos sobrevaloraria los documentos de Office.
+        registry.Tarifas.Single(t => t.Modelo == "cu.documentPagesMinimal")
+            .EurPorPagina.Should().Be(0.0000086m);
+        registry.Tarifas.Single(t => t.Modelo == "cu.documentPagesStandard")
+            .EurPorPagina.Should().Be(0.0042933m);
+
+        // Clasificadores reales del recurso de produccion.
+        registry.Tarifas.Should().Contain(t => t.Modelo == "DocumentAICC_v1");
+        registry.Tarifas.Should().Contain(t => t.Modelo == "CU_NS_1.6_0_GGAA");
     }
 
     [Fact]
