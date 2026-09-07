@@ -114,6 +114,47 @@ public static class CalculadoraCosteIA
     }
 
     /// <summary>
+    /// Suma el coste por actividad del pipeline. Alimenta las columnas escalares de
+    /// desglose (AB#100236), que permiten agregar desde Admin sin abrir el contrato.
+    /// Los consumos descartados cuentan en su actividad, igual que en el total, y una
+    /// actividad sin ningun consumo tarificado queda a nulo, no a cero.
+    /// </summary>
+    public static DesgloseCostePorActividad DesglosarPorActividad(CostesIA? costes)
+    {
+        var desglose = new DesgloseCostePorActividad();
+        if (costes?.Consumos is null)
+        {
+            return desglose;
+        }
+
+        foreach (var consumo in costes.Consumos)
+        {
+            if (consumo?.CosteEur is null)
+            {
+                continue;
+            }
+
+            switch (consumo.Actividad)
+            {
+                case ActividadesIA.Layout:
+                    desglose.LayoutEur = (desglose.LayoutEur ?? 0m) + consumo.CosteEur.Value;
+                    break;
+                case ActividadesIA.Clasificar:
+                    desglose.ClasificacionEur = (desglose.ClasificacionEur ?? 0m) + consumo.CosteEur.Value;
+                    break;
+                case ActividadesIA.Extraer:
+                    desglose.ExtraccionEur = (desglose.ExtraccionEur ?? 0m) + consumo.CosteEur.Value;
+                    break;
+                case ActividadesIA.Prompt:
+                    desglose.PromptEur = (desglose.PromptEur ?? 0m) + consumo.CosteEur.Value;
+                    break;
+            }
+        }
+
+        return desglose;
+    }
+
+    /// <summary>
     /// Agrega una lista de consumos. Los descartados cuentan igual: se han pagado.
     /// </summary>
     public static CostesIA Agregar(IEnumerable<ConsumoIA>? consumos)
@@ -142,4 +183,13 @@ public static class CalculadoraCosteIA
             ModelosSinTarifa = sinTarifa
         };
     }
+}
+
+/// <summary>Coste por actividad del pipeline. Nulo donde no hubo consumo tarificado.</summary>
+public class DesgloseCostePorActividad
+{
+    public decimal? LayoutEur { get; set; }
+    public decimal? ClasificacionEur { get; set; }
+    public decimal? ExtraccionEur { get; set; }
+    public decimal? PromptEur { get; set; }
 }

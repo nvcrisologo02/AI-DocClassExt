@@ -104,6 +104,27 @@ namespace DocumentIA.Data.Entities
         /// </summary>
         public int? TokensIA { get; set; }
 
+        // AB#100236: desglose del coste por actividad, para agregar desde Admin sin
+        // abrir el contrato JSON. Las cuatro suman CosteIAEur. Nullable como el total.
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CosteLayoutEur { get; set; }
+
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CosteClasificacionEur { get; set; }
+
+        /// <summary>Incluye el modelo generativo interno de Content Understanding.</summary>
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CosteExtraccionEur { get; set; }
+
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CostePromptEur { get; set; }
+
+        /// <summary>
+        /// True cuando el importe procede del relleno retroactivo y no de consumo
+        /// medido: se presenta aparte y se excluye de los agregados salvo que se pida.
+        /// </summary>
+        public bool CosteEstimado { get; set; }
+
         [Column(TypeName = "nvarchar(max)")]
         public string? AssetResolverResultJson { get; set; }
         

@@ -179,6 +179,40 @@ public class CalculadoraCosteIATests
     }
 
     [Fact]
+    public void DesglosarPorActividad_SumaCadaActividadYDejaANuloLasQueNoConsumieron()
+    {
+        var costes = new CostesIA
+        {
+            Consumos =
+            {
+                new ConsumoIA { Actividad = ActividadesIA.Layout, CosteEur = 0.05m },
+                new ConsumoIA { Actividad = ActividadesIA.Layout, CosteEur = 0.03m },
+                new ConsumoIA { Actividad = ActividadesIA.Clasificar, CosteEur = 0.10m, Descartado = true },
+                new ConsumoIA { Actividad = ActividadesIA.Clasificar, CosteEur = 0.02m },
+                new ConsumoIA { Actividad = ActividadesIA.Extraer, CosteEur = null }
+            }
+        };
+
+        var d = CalculadoraCosteIA.DesglosarPorActividad(costes);
+
+        d.LayoutEur.Should().Be(0.08m);
+        // El descartado cuenta en su actividad, igual que en el total.
+        d.ClasificacionEur.Should().Be(0.12m);
+        // Sin consumo tarificado: nulo, no cero, para distinguirlo de "costo cero".
+        d.ExtraccionEur.Should().BeNull();
+        d.PromptEur.Should().BeNull();
+    }
+
+    [Fact]
+    public void DesglosarPorActividad_SinBloque_DevuelveTodoANulo()
+    {
+        var d = CalculadoraCosteIA.DesglosarPorActividad(null);
+
+        d.LayoutEur.Should().BeNull();
+        d.ClasificacionEur.Should().BeNull();
+    }
+
+    [Fact]
     public void Agregar_SumaCostesTokensYPaginas()
     {
         var consumos = new List<ConsumoIA>

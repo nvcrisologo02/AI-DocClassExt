@@ -127,6 +127,32 @@ public class PersistirActivityTests : IDisposable
     }
 
     [Fact]
+    public async Task Run_ConBloqueDeCostes_RellenaElDesglosePorActividad()
+    {
+        const string sha256 = "sha256_costes_desglose";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA
+        {
+            CosteTotalEur = 0.15m,
+            Consumos =
+            {
+                new ConsumoIA { Actividad = ActividadesIA.Layout, CosteEur = 0.09m },
+                new ConsumoIA { Actividad = ActividadesIA.Clasificar, CosteEur = 0.06m }
+            }
+        };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteLayoutEur.Should().Be(0.09m);
+        capturada[0].CosteClasificacionEur.Should().Be(0.06m);
+        capturada[0].CosteExtraccionEur.Should().BeNull();
+        capturada[0].CostePromptEur.Should().BeNull();
+        // Lo medido nunca se marca como estimado.
+        capturada[0].CosteEstimado.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Run_SinBloqueDeCostes_DejaLasColumnasANulo()
     {
         // Compatibilidad: un contrato sin bloque no rompe la persistencia.
