@@ -89,6 +89,21 @@ namespace DocumentIA.Data.Entities
 
         public int? DuracionAssetResolverMs { get; set; }
 
+        /// <summary>
+        /// Coste en euros de los servicios de IA de esta ejecucion. Solo servicios de
+        /// IA: no incluye almacenamiento, computo ni red. Null en ejecuciones anteriores
+        /// a la funcionalidad; cero cuando la ejecucion no consumio IA. El desglose por
+        /// llamada vive en ContratoSalidaCompletoJson, en $.DetalleEjecucion.Costes.
+        /// </summary>
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CosteIAEur { get; set; }
+
+        /// <summary>
+        /// Tokens de IA consumidos: entrada mas salida mas contextualizacion. No suma
+        /// cacheados ni razonamiento, que ya van dentro de entrada y salida.
+        /// </summary>
+        public int? TokensIA { get; set; }
+
         [Column(TypeName = "nvarchar(max)")]
         public string? AssetResolverResultJson { get; set; }
         

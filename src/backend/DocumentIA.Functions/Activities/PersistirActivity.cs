@@ -266,6 +266,12 @@ namespace DocumentIA.Functions.Activities
                     DuracionGDCMs = GetDuracionActividad(salida, "SubirGDC"),
                     DuracionPersistenciaMs = GetDuracionActividad(salida, "Persistir"),
                     DuracionAssetResolverMs = GetDuracionActividad(salida, "ObtenerActivo"),
+
+                    // AB#100232: coste y tokens de servicios de IA. Solo el agregado va a
+                    // columna; el desglose por llamada ya viaja dentro del contrato
+                    // serializado, en $.DetalleEjecucion.Costes.
+                    CosteIAEur = salida.DetalleEjecucion.Costes?.CosteTotalEur,
+                    TokensIA = salida.DetalleEjecucion.Costes?.TokensTotales,
                     AssetResolverResultJson = salida.DetalleEjecucion.AssetResolver is { Ejecutado: true }
                         ? JsonSerializer.Serialize(
                             salida.DetalleEjecucion.AssetResolver.Activos?.Select(a => new { a.IdActivo, a.FchCierre }),
