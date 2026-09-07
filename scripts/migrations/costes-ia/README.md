@@ -10,41 +10,40 @@ El script hace copia de seguridad de la tabla antes de tocar nada, es idempotent
 
 ## Antes de ejecutarlo
 
-El catálogo está **completo**, con precios de lista reales consultados el 7 de septiembre de 2026 en la API pública de precios de Azure para West Europe, y con los identificadores de clasificadores y analizadores leídos de las APIs de los propios recursos de producción.
+El catálogo está **completo y validado contra la factura**. Los precios no son de lista: son los efectivos, derivados de dividir el coste facturado entre la cantidad consumida, medidor a medidor, sobre el grupo de recursos de producción.
 
-Queda una cosa: **contrastar contra la facturación real**. Son precios de lista, así que si la suscripción tiene descuento el coste calculado saldrá por encima del real. Compara un lote pequeño contra Cost Management antes de dar los importes por definitivos.
+Aplicando el catálogo a las cantidades reales de un periodo se reconstruye la factura con una desviación del 0,01 por ciento. Ese contraste confirma también que la suscripción no tiene descuento sobre tarifa pública.
 
-El paso 0 del script sigue estando para verificar que los identificadores que usa la configuración coinciden con los que aquí se tarifan. Si aparece alguno que no esté en el catálogo, su consumo quedará sin coste y el agregado saldrá marcado como incompleto, que es justo lo que hay que vigilar.
+No queda nada pendiente. El paso 0 del script sigue estando para verificar que los identificadores que usa la configuración coinciden con los que aquí se tarifan.
 
-### De dónde sale cada precio
+### Dos trampas que costaron caro averiguar
 
-El tipo de despliegue determina qué medidor factura, y eso cambia el precio hasta un 70 por ciento entre variantes del mismo modelo. Los despliegues reales de producción, leídos de Azure:
+**Hay dos cuentas de IA, en regiones distintas.** El grupo de recursos tiene `srbaisrv-westeurope` en West Europe y `upe48-mm2avmdm-swedencentral` en Sweden Central. El despliegue que usa el pipeline, llamado `gpt-4o-mini`, vive en la segunda y sirve en realidad el modelo gpt-4.1-mini con tipo Standard, es decir precio regional de Sweden Central. Tomarlo de West Europe daba un veinte por ciento de más.
 
-| Despliegue | Modelo real | Tipo | Medidor |
-| --- | --- | --- | --- |
-| `gpt-4.1-892749` | gpt-4.1 | GlobalStandard | global |
-| `gpt-4.1-mini-590191` | gpt-4.1-mini | GlobalStandard | global |
-| `text-embedding-3-large-010650` | text-embedding-3-large | GlobalStandard | global |
-| `gpt-5-mini` | gpt-5-mini | DataZoneStandard | zona de datos |
+**El nombre del medidor no es el que parece.** Para gpt-5-mini existe un medidor `5 mini pp ... Dz` que corresponde a otro modo y cuesta casi el doble. El que factura de verdad es `GPT 5 Mini Inpt/outpt/cchd Inpt DZone`.
 
-Hay un detalle que conviene no perder: en desarrollo existe un despliegue llamado `gpt-4o-mini` que en realidad sirve el modelo gpt-4.1-mini con tipo Standard, es decir **precio regional**, más caro que el global. Por eso el catálogo lleva dos líneas distintas. La clave es el nombre del despliegue, no el del modelo.
+La lección general: no basta con buscar el modelo en la lista de precios. Hay que mirar qué medidor aparece en la factura y derivar de ahí el precio unitario.
 
-### Reproducir la consulta
+### Cómo reproducir el cálculo
 
-El proxy corporativo rompe la verificación de revocación del certificado, así que hace falta `--ssl-no-revoke`:
+Precio efectivo por medidor, que es la fuente que usa este catálogo:
 
 ```bash
-curl -sS --ssl-no-revoke --get https://prices.azure.com/api/retail/prices \
-  --data-urlencode "currencyCode=EUR" \
-  --data-urlencode "$filter=productName eq 'Azure OpenAI' and armRegionName eq 'westeurope'"
+az rest --method post   --url "https://management.azure.com/subscriptions/{sub}/resourceGroups/SRBRGDOCSAIPROD/providers/Microsoft.CostManagement/query?api-version=2023-03-01"   --body @query.json
 ```
 
-Para ver los tipos de despliegue:
+Con un cuerpo que agrupe por la dimensión `Meter` y agregue `Cost` y `UsageQuantity`. El precio unitario es el cociente de ambos. Esa API tiene un límite de peticiones agresivo, así que conviene espaciar los intentos.
+
+Los precios de lista, si hacen falta para contrastar, salen de la API pública. El proxy corporativo rompe la verificación de revocación del certificado, así que hace falta `--ssl-no-revoke`:
 
 ```bash
-az cognitiveservices account deployment list \
-  --name srbaisrv-westeurope --resource-group SRBRGDOCSAIPROD \
-  --subscription "Producción Central" -o table
+curl -sS --ssl-no-revoke --get https://prices.azure.com/api/retail/prices   --data-urlencode "currencyCode=EUR"   --data-urlencode "$filter=productName eq 'Azure OpenAI' and armRegionName eq 'swedencentral'"
+```
+
+Y los tipos de despliegue:
+
+```bash
+az cognitiveservices account deployment list   --name upe48-mm2avmdm-swedencentral --resource-group SRBRGDOCSAIPROD   --subscription "Producción Central" -o table
 ```
 
 ## Orden respecto al despliegue
@@ -76,13 +75,7 @@ Content Understanding factura por su cuenta las páginas y la contextualización
 
 **Las páginas se tarifan por medidor, no por analizador.** El precio depende del procesamiento que el servicio haya aplicado, y la diferencia es enorme: un documento digital sale a 0,0086 euros por mil páginas y una imagen con análisis de layout a 4,2933, casi quinientas veces más. Como el sistema procesa también ficheros de Office, que van siempre por el medidor barato, meterlos todos en el mismo saco inflaría su coste en ese factor.
 
-**Limitación conocida, y posible ahorro:** los dos analizadores llevan activada la detección de fórmulas, que extrae ecuaciones matemáticas en LaTeX y factura un añadido de 2,576 euros por mil páginas. Su respuesta no declara ese añadido por separado, así que no se puede imputar desde el consumo y queda fuera del coste calculado.
-
-Merece la pena revisarlo por dos motivos. Primero, la configuración de ambos analizadores es idéntica a la del analizador base del que heredan, así que la detección de fórmulas está activa por venir así de fábrica, no por una decisión. Segundo, y más importante: el servicio solo devuelve las fórmulas cuando la detección **y** el detalle extendido están activos, y el detalle extendido está desactivado. El resultado ni siquiera llega a la respuesta.
-
-Microsoft recomienda desactivarla en documentos de negocio y reservarla para artículos científicos y documentación técnica. Los documentos que procesa el sistema son registrales, tasaciones y facturas.
-
-Para desactivarla hay que publicar una versión nueva del analizador con `enableFormula` en falso, que es el flujo que el equipo ya sigue al versionar. Antes de hacerlo conviene confirmar en Cost Management que el medidor de fórmulas aparece facturado, porque no está documentado si se cobra cuando el detalle extendido está desactivado.
+**Sobre la detección de fórmulas:** los analizadores la llevan activada, heredada del analizador base, y factura un añadido por página. Se comprobó en la facturación real y **ese medidor no aparece**, así que no se está pagando y no hay nada que desactivar. Se deja anotado para que nadie vuelva a plantearlo.
 
 ## Campos de precio
 
