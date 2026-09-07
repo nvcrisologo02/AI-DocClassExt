@@ -214,6 +214,14 @@ public class DetalleEjecucion
     public string? ModeloLLMUsado { get; set; }
     /// <summary>Motivo de error en la resolución de tipología (si aplica).</summary>
     public string? MotivoErrorTipologia { get; set; }
+
+    /// <summary>
+    /// Consumo y coste de servicios de IA de la ejecucion. Se calcula y persiste siempre;
+    /// solo se devuelve al llamador cuando Instrucciones.IncluirCostes es true, en cuyo
+    /// caso el orquestador lo deja informado. Null se omite del JSON.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostesIA? Costes { get; set; }
 }
 
 public class ResultadoPromptEjecucion
