@@ -83,33 +83,33 @@ namespace DocumentIA.Data.Repositories
                     .GroupBy(e => 1)
                     .Select(g => new
                     {
-                        Ok        = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
-                        Revision  = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
-                        Error     = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                        Ok = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                        Revision = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                        Error = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
                         Fallbacks = g.Count(e => e.UseFallbackLLM),
                         ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
-                        DuracionMedia  = g.Average(e => (double)e.DuracionTotalMs)
+                        DuracionMedia = g.Average(e => (double)e.DuracionTotalMs)
                     })
                     .FirstAsync();
 
-                ok             = globales.Ok;
-                revision       = globales.Revision;
-                error          = globales.Error;
-                fallbacks      = globales.Fallbacks;
+                ok = globales.Ok;
+                revision = globales.Revision;
+                error = globales.Error;
+                fallbacks = globales.Fallbacks;
                 confianzaMedia = globales.ConfianzaMedia;
-                duracionMedia  = globales.DuracionMedia;
+                duracionMedia = globales.DuracionMedia;
             }
 
             var byTipologia = await q
                 .GroupBy(e => e.Tipologia == null ? "(sin tipología)" : e.Tipologia)
                 .Select(g => new AgregadoGrupo
                 {
-                    Grupo          = g.Key,
-                    Total          = g.Count(),
-                    Ok             = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
-                    Revision       = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
-                    Error          = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
-                    Fallbacks      = g.Count(e => e.UseFallbackLLM),
+                    Grupo = g.Key,
+                    Total = g.Count(),
+                    Ok = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                    Fallbacks = g.Count(e => e.UseFallbackLLM),
                     ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
                 })
@@ -120,12 +120,12 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(e => e.ModeloClasificacion == null ? "(sin modelo)" : e.ModeloClasificacion)
                 .Select(g => new AgregadoGrupo
                 {
-                    Grupo          = g.Key,
-                    Total          = g.Count(),
-                    Ok             = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
-                    Revision       = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
-                    Error          = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
-                    Fallbacks      = g.Count(e => e.UseFallbackLLM),
+                    Grupo = g.Key,
+                    Total = g.Count(),
+                    Ok = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                    Fallbacks = g.Count(e => e.UseFallbackLLM),
                     ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
                 })
@@ -136,11 +136,11 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(e => e.FechaEjecucion.Date)
                 .Select(g => new SeriePunto
                 {
-                    Fecha     = g.Key,
-                    Total     = g.Count(),
-                    Ok        = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
-                    Revision  = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
-                    Error     = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                    Fecha = g.Key,
+                    Total = g.Count(),
+                    Ok = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
                     Fallbacks = g.Count(e => e.UseFallbackLLM)
                 })
                 .ToListAsync();
@@ -177,14 +177,14 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(e => e.EstadoFinal)
                 .Select(g => new AgregadoGrupo
                 {
-                    Grupo           = g.Key,
-                    Total           = g.Count(),
-                    Ok              = g.Count(e => e.ConfianzaGlobal >= CalidadEjecucion.UmbralOk),
-                    Revision        = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralOk
+                    Grupo = g.Key,
+                    Total = g.Count(),
+                    Ok = g.Count(e => e.ConfianzaGlobal >= CalidadEjecucion.UmbralOk),
+                    Revision = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralOk
                                                 && e.ConfianzaGlobal >= CalidadEjecucion.UmbralRevision),
-                    Error           = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralRevision),
-                    Fallbacks       = g.Count(e => e.UseFallbackLLM),
-                    ConfianzaMedia  = g.Average(e => e.ConfianzaGlobal),
+                    Error = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralRevision),
+                    Fallbacks = g.Count(e => e.UseFallbackLLM),
+                    ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
                 })
                 .OrderByDescending(g => g.Total)
@@ -203,8 +203,8 @@ namespace DocumentIA.Data.Repositories
                 .Select(g => new MatrizCelda
                 {
                     EstadoProceso = g.Key.EstadoFinal,
-                    Calidad       = g.Key.Calidad,
-                    Total         = g.Count()
+                    Calidad = g.Key.Calidad,
+                    Total = g.Count()
                 })
                 .ToListAsync();
 
@@ -212,24 +212,24 @@ namespace DocumentIA.Data.Repositories
 
             return new EjecucionAgregadosResult
             {
-                CalidadOk        = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Ok)?.Total ?? 0,
-                CalidadRevision  = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Revision)?.Total ?? 0,
-                CalidadError     = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Error)?.Total ?? 0,
+                CalidadOk = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Ok)?.Total ?? 0,
+                CalidadRevision = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Revision)?.Total ?? 0,
+                CalidadError = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Error)?.Total ?? 0,
                 PorEstadoProceso = porEstadoProceso,
-                Matriz           = matriz,
-                Histograma       = histograma,
+                Matriz = matriz,
+                Histograma = histograma,
 
-                TotalEjecuciones  = total,
-                PeriodoDias       = (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays),
-                Ok                = ok,
-                Revision          = revision,
-                Error             = error,
-                FallbacksTotal    = fallbacks,
+                TotalEjecuciones = total,
+                PeriodoDias = (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays),
+                Ok = ok,
+                Revision = revision,
+                Error = error,
+                FallbacksTotal = fallbacks,
                 ConfianzaGlobalMedia = confianzaMedia,
-                DuracionMediaMs   = duracionMedia,
-                PorTipologia      = byTipologia,
-                PorModelo         = byModelo,
-                Serie             = serie
+                DuracionMediaMs = duracionMedia,
+                PorTipologia = byTipologia,
+                PorModelo = byModelo,
+                Serie = serie
             };
         }
 
@@ -461,9 +461,9 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(e => 1)
                 .Select(g => new
                 {
-                    Real      = g.Count(e => e.CosteIAEur != null && !e.CosteEstimado),
-                    Estimado  = g.Count(e => e.CosteIAEur != null && e.CosteEstimado),
-                    SinCoste  = g.Count(e => e.CosteIAEur == null)
+                    Real = g.Count(e => e.CosteIAEur != null && !e.CosteEstimado),
+                    Estimado = g.Count(e => e.CosteIAEur != null && e.CosteEstimado),
+                    SinCoste = g.Count(e => e.CosteIAEur == null)
                 })
                 .FirstAsync();
             resultado.ConCosteReal = origen.Real;
@@ -484,22 +484,22 @@ namespace DocumentIA.Data.Repositories
                     .GroupBy(e => 1)
                     .Select(g => new
                     {
-                        Coste   = g.Sum(e => e.CosteIAEur) ?? 0m,
-                        Tokens  = g.Sum(e => (long?)e.TokensIA) ?? 0L,
-                        Layout  = g.Sum(e => e.CosteLayoutEur) ?? 0m,
-                        Clasif  = g.Sum(e => e.CosteClasificacionEur) ?? 0m,
-                        Extrac  = g.Sum(e => e.CosteExtraccionEur) ?? 0m,
-                        Prompt  = g.Sum(e => e.CostePromptEur) ?? 0m
+                        Coste = g.Sum(e => e.CosteIAEur) ?? 0m,
+                        Tokens = g.Sum(e => (long?)e.TokensIA) ?? 0L,
+                        Layout = g.Sum(e => e.CosteLayoutEur) ?? 0m,
+                        Clasif = g.Sum(e => e.CosteClasificacionEur) ?? 0m,
+                        Extrac = g.Sum(e => e.CosteExtraccionEur) ?? 0m,
+                        Prompt = g.Sum(e => e.CostePromptEur) ?? 0m
                     })
                     .FirstAsync();
 
-                resultado.CosteTotalEur   = sumas.Coste;
-                resultado.CosteMedioEur   = Math.Round(sumas.Coste / resultado.EjecucionesConImporte, 6, MidpointRounding.AwayFromZero);
-                resultado.TokensTotales   = sumas.Tokens;
-                resultado.LayoutEur       = sumas.Layout;
+                resultado.CosteTotalEur = sumas.Coste;
+                resultado.CosteMedioEur = Math.Round(sumas.Coste / resultado.EjecucionesConImporte, 6, MidpointRounding.AwayFromZero);
+                resultado.TokensTotales = sumas.Tokens;
+                resultado.LayoutEur = sumas.Layout;
                 resultado.ClasificacionEur = sumas.Clasif;
-                resultado.ExtraccionEur   = sumas.Extrac;
-                resultado.PromptEur       = sumas.Prompt;
+                resultado.ExtraccionEur = sumas.Extrac;
+                resultado.PromptEur = sumas.Prompt;
             }
 
             // Por tipologia y por modelo: el total cuenta todas las del filtro, el
@@ -513,8 +513,8 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(e => e.FechaEjecucion.Date)
                 .Select(g => new CosteSeriePunto
                 {
-                    Fecha    = g.Key,
-                    Total    = g.Count(),
+                    Fecha = g.Key,
+                    Total = g.Count(),
                     CosteEur = g.Sum(e => e.CosteIAEur) ?? 0m
                 })
                 .ToListAsync();
@@ -540,13 +540,13 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(clave)
                 .Select(g => new
                 {
-                    Grupo      = g.Key,
+                    Grupo = g.Key,
                     ConImporte = g.Count(),
-                    Coste      = g.Sum(e => e.CosteIAEur) ?? 0m,
-                    Layout     = g.Sum(e => e.CosteLayoutEur) ?? 0m,
-                    Clasif     = g.Sum(e => e.CosteClasificacionEur) ?? 0m,
-                    Extrac     = g.Sum(e => e.CosteExtraccionEur) ?? 0m,
-                    Prompt     = g.Sum(e => e.CostePromptEur) ?? 0m
+                    Coste = g.Sum(e => e.CosteIAEur) ?? 0m,
+                    Layout = g.Sum(e => e.CosteLayoutEur) ?? 0m,
+                    Clasif = g.Sum(e => e.CosteClasificacionEur) ?? 0m,
+                    Extrac = g.Sum(e => e.CosteExtraccionEur) ?? 0m,
+                    Prompt = g.Sum(e => e.CostePromptEur) ?? 0m
                 })
                 .ToDictionaryAsync(x => x.Grupo);
 
@@ -557,17 +557,17 @@ namespace DocumentIA.Data.Repositories
                     var conImp = i?.ConImporte ?? 0;
                     return new CosteGrupo
                     {
-                        Grupo           = t.Grupo,
-                        Total           = t.Total,
-                        ConImporte      = conImp,
-                        CosteEur        = i?.Coste ?? 0m,
-                        CosteMedioEur   = conImp > 0
+                        Grupo = t.Grupo,
+                        Total = t.Total,
+                        ConImporte = conImp,
+                        CosteEur = i?.Coste ?? 0m,
+                        CosteMedioEur = conImp > 0
                             ? Math.Round((i?.Coste ?? 0m) / conImp, 6, MidpointRounding.AwayFromZero)
                             : 0m,
-                        LayoutEur       = i?.Layout ?? 0m,
+                        LayoutEur = i?.Layout ?? 0m,
                         ClasificacionEur = i?.Clasif ?? 0m,
-                        ExtraccionEur   = i?.Extrac ?? 0m,
-                        PromptEur       = i?.Prompt ?? 0m
+                        ExtraccionEur = i?.Extrac ?? 0m,
+                        PromptEur = i?.Prompt ?? 0m
                     };
                 })
                 .OrderByDescending(g => g.CosteEur)

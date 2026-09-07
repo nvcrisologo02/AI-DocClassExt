@@ -172,13 +172,13 @@ public class DocumentoEjecucionRepositoryCostesTests
 
         context.DocumentoEjecuciones.AddRange(
             // Medidas
-            Ejecucion(1, Base,             "NOTS", "gpt-4o-mini", coste: 0.25m, layout: 0.20m, clasif: 0.05m, tokens: 2000, estimado: false),
-            Ejecucion(2, Base.AddDays(2),  "ESCR", "gpt-4o-mini", coste: 0.05m, layout: null,  clasif: 0.05m, tokens: 1000, estimado: false),
+            Ejecucion(1, Base, "NOTS", "gpt-4o-mini", coste: 0.25m, layout: 0.20m, clasif: 0.05m, tokens: 2000, estimado: false),
+            Ejecucion(2, Base.AddDays(2), "ESCR", "gpt-4o-mini", coste: 0.05m, layout: null, clasif: 0.05m, tokens: 1000, estimado: false),
             // Estimadas por el relleno retroactivo
-            Ejecucion(3, Base.AddDays(2),  "NOTS", "gpt-4o-mini", coste: 0.30m, layout: 0.30m, clasif: null,  tokens: null, estimado: true),
-            Ejecucion(4, Base.AddDays(4),  "ESCR", "gpt-5-mini",  coste: 0.20m, layout: 0.20m, clasif: null,  tokens: null, estimado: true),
+            Ejecucion(3, Base.AddDays(2), "NOTS", "gpt-4o-mini", coste: 0.30m, layout: 0.30m, clasif: null, tokens: null, estimado: true),
+            Ejecucion(4, Base.AddDays(4), "ESCR", "gpt-5-mini", coste: 0.20m, layout: 0.20m, clasif: null, tokens: null, estimado: true),
             // Sin coste
-            Ejecucion(5, Base.AddDays(6),  "NOTS", null,          coste: null,  layout: null,  clasif: null,  tokens: null, estimado: false));
+            Ejecucion(5, Base.AddDays(6), "NOTS", null, coste: null, layout: null, clasif: null, tokens: null, estimado: false));
 
         context.SaveChanges();
     }
