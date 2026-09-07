@@ -76,7 +76,13 @@ Content Understanding factura por su cuenta las páginas y la contextualización
 
 **Las páginas se tarifan por medidor, no por analizador.** El precio depende del procesamiento que el servicio haya aplicado, y la diferencia es enorme: un documento digital sale a 0,0086 euros por mil páginas y una imagen con análisis de layout a 4,2933, casi quinientas veces más. Como el sistema procesa también ficheros de Office, que van siempre por el medidor barato, meterlos todos en el mismo saco inflaría su coste en ese factor.
 
-**Limitación conocida:** los analizadores actuales llevan activada la detección de fórmulas, que factura un añadido por página. La respuesta del servicio no lo declara por separado, así que ese importe no se puede imputar y queda fuera del coste calculado.
+**Limitación conocida, y posible ahorro:** los dos analizadores llevan activada la detección de fórmulas, que extrae ecuaciones matemáticas en LaTeX y factura un añadido de 2,576 euros por mil páginas. Su respuesta no declara ese añadido por separado, así que no se puede imputar desde el consumo y queda fuera del coste calculado.
+
+Merece la pena revisarlo por dos motivos. Primero, la configuración de ambos analizadores es idéntica a la del analizador base del que heredan, así que la detección de fórmulas está activa por venir así de fábrica, no por una decisión. Segundo, y más importante: el servicio solo devuelve las fórmulas cuando la detección **y** el detalle extendido están activos, y el detalle extendido está desactivado. El resultado ni siquiera llega a la respuesta.
+
+Microsoft recomienda desactivarla en documentos de negocio y reservarla para artículos científicos y documentación técnica. Los documentos que procesa el sistema son registrales, tasaciones y facturas.
+
+Para desactivarla hay que publicar una versión nueva del analizador con `enableFormula` en falso, que es el flujo que el equipo ya sigue al versionar. Antes de hacerlo conviene confirmar en Cost Management que el medidor de fórmulas aparece facturado, porque no está documentado si se cobra cuando el detalle extendido está desactivado.
 
 ## Campos de precio
 
