@@ -25,12 +25,13 @@ Una única política, en un único sitio, expresada en los términos del negocio
 3. Si la cobertura de base de datos es insuficiente, se extrae con Layout. Si el layout falla, el de base de datos sirve de fallback aunque no cubra. Si el layout va bien y su cobertura es mayor, se persiste.
 4. **`ForceReprocess` reinicia el documento.** Ignora base de datos al leer y sobrescribe siempre al escribir, como si fuera la primera vez que se procesa. Consecuencia asumida: un `ForceReprocess` en un flujo que solo necesita tres páginas deja en base de datos un markdown de tres páginas aunque antes hubiera uno completo.
 5. El markdown que llega en `Instrucciones.Classification.Markdown` gana durante toda la ejecución y **no se persiste**. Su validez es la de esa petición; el sistema no conoce su cobertura ni su calidad.
-6. Prompt libre, resumen dedicado y extracción GPT exigen el **documento completo**. Clasificación y resumen combinado exigen el **mínimo de páginas configurado** (o el indicado en la petición).
-7. **Retención indefinida.** El markdown es derivado del binario y el SHA256 no cambia. El tamaño se gobierna con la política general de AB#100165, no aquí.
+6. **Prompt y extracción GPT exigen el documento completo. Clasificación y resumen exigen el mínimo de páginas configurado** (o el indicado en la petición). "Resumen" incluye tanto el combinado de la Fase 1 como el dedicado o forzado (`ForzarResumenPorDefecto`): ambos van con recorte, como la clasificación. "Prompt" es el prompt libre ad hoc de la petición y el `PromptConfig` de la tipología, es decir, lo que en `OpenAIPromptDataProvider` activa `necesitaPrompt`.
+7. **Si la petición ya declara algo que necesita el documento completo, se extrae el completo una sola vez al principio** y todas las actividades lo aprovechan: las que necesitan N páginas reciben una **vista de las N primeras** (cortando por `<!-- PageBreak -->`), no el documento entero. Así clasificación y resumen no cambian de coste ni de comportamiento por el hecho de que el completo esté disponible.
+8. **Retención indefinida.** El markdown es derivado del binario y el SHA256 no cambia. El tamaño se gobierna con la política general de AB#100165, no aquí.
 
 ### El peaje que se asume
 
-Cuando la tipología no se conoce de antemano, la primera petición clasifica sobre el recorte y después, si el flujo sigue, hace falta el documento completo: dos llamadas a Layout. Es inevitable sin saber aún si habrá que clasificar. Solo se optimiza el caso en que la tipología viene dada por `ExpectedType` y ya se sabe que alguna actividad posterior necesitará el completo: entonces se pide completo de una sola vez.
+Cuando ni la petición ni la tipología anticipan que hará falta el completo, la primera llamada clasifica sobre el recorte y después, si el flujo sigue hasta una actividad que lo exige, se paga la segunda llamada a Layout. Es inevitable sin saber aún si habrá que clasificar ni adónde llevará. Cuando sí se sabe de antemano (regla 7), se pide completo una sola vez.
 
 ## Alcance
 
@@ -71,10 +72,26 @@ Cuando la tipología no se conoce de antemano, la primera petición clasifica so
 | 3 | Atajo por `ExpectedType` | *ninguna* | No se clasifica |
 | — | Resumen combinado de clasificación | *implícita en la anterior* | Sale de la Fase 1 sobre las mismas N páginas; conserva el sufijo "basado en las primeras N páginas" |
 | 3.5 / 4 | Extracción GPT-directo y fallback GPT | `Completo` | La extracción CU y DI a medida **no** declaran necesidad: analizan el binario |
-| 4.5 | Prompt libre y resumen dedicado | `Completo` | Incluye el resumen forzado en `ClassificationOnly` (hoy usa el recorte: cambio de comportamiento deliberado, regla 6) |
-| — | Salidas tempranas con prompt (NO_CLASIFICADO) | `Completo` | Misma vía que 4.5 |
+| 4.5 | `PromptActivity` con `necesitaPrompt` (prompt ad hoc o `PromptConfig` de tipología) | `Completo` | Si además hay resumen forzado, el resumen sale de la misma llamada sobre el completo: es la única excepción a "resumen va con recorte", y es porque el prompt ya pagó el completo |
+| 4.5 | `PromptActivity` solo con `necesitaResumen` (resumen forzado sin prompt) | `Páginas(N)` | Incluye el resumen forzado en `ClassificationOnly`. Mismo comportamiento que hoy (usa el recorte) y mismo sufijo "basado en las primeras N páginas" |
+| — | Salidas tempranas con prompt o resumen (NO_CLASIFICADO) | La que corresponda de las dos filas anteriores | Misma vía que 4.5 |
 
-**Optimización de tipología conocida.** Tras el paso 2.75, si `ExpectedType` sigue informado y la tipología resuelta tiene prompt habilitado, extracción GPT-directo, o la petición trae prompt ad hoc o `ForzarResumenPorDefecto`, la primera necesidad del flujo ya es `Completo`. No hay recorte previo porque no hay clasificación.
+N es siempre el máximo de páginas de clasificación resuelto en el paso 2.7 (`ResolveMaxPaginasClasificacion`), para que clasificación y resumen compartan recorte.
+
+### Extracción anticipada del completo
+
+Justo después del paso 2.75, el orquestador calcula si **la petición** va a necesitar el documento completo en algún punto. Lo necesita si se cumple cualquiera de estas condiciones, todas conocibles antes de clasificar:
+
+- `Instrucciones.Prompt` viene informado (prompt ad hoc), con o sin `ExpectedType`.
+- `ExpectedType` está informado y la tipología resuelta tiene `PromptEnabled` con definición, o su proveedor de extracción es GPT-directo.
+
+Si es así, la primera resolución del flujo es `Completo` y se hace una sola vez, con origen de traza `LayoutDocumentoCompletoAnticipado`. La clasificación (si la hay) y el resumen consumen después su vista de N páginas de ese completo: **no se hace el recorte de layout**. Si no se cumple ninguna condición, el flujo empieza con `Páginas(N)` y, si más tarde una actividad pide `Completo`, se paga la segunda llamada: es el peaje asumido.
+
+### Vista de N páginas
+
+Un markdown completo **cubre** cualquier necesidad de N páginas, pero la actividad no recibe el documento entero: recibe `VistaPaginas(markdown, N)`, un helper puro en `DocumentIA.Core` que devuelve el contenido hasta el N-ésimo `<!-- PageBreak -->` inclusive (los marcadores `PageNumber`/`PageHeader`/`PageFooter` se conservan; son comentarios HTML y no molestan al LLM). Si el markdown no tiene marcadores de página (Office, markdown del caller, histórico anterior a la versión de API que los emite), la vista es el markdown entero: no se puede cortar con garantías y se acepta.
+
+Esto mantiene invariantes que hoy ya existen: el coste de tokens de clasificación no depende de si el completo estaba disponible, y el sufijo "Resumen basado en las primeras N páginas" sigue siendo verdad.
 
 ## Contrato
 
@@ -101,7 +118,7 @@ public sealed class ResultadoMarkdown
 }
 ```
 
-`ResultadoMarkdown.Cubre(NecesidadMarkdown)` es la única función que decide si un markdown sirve: `Completo`, o bien `!necesidad.DocumentoCompleto && Paginas >= necesidad.PaginasMinimas`.
+`ResultadoMarkdown.Cubre(NecesidadMarkdown)` es la única función que decide si un markdown sirve: `Completo`, o bien `!necesidad.DocumentoCompleto && Paginas >= necesidad.PaginasMinimas`. Cubrir no significa entregar entero: `VistaPaginas` (ver *Vista de N páginas*) recorta lo que recibe cada actividad.
 
 `ExtraerMarkdownLayoutInput` gana `int? PaginasSolicitadas`. `null` = documento entero. Se conserva `DocumentoBase64` para el caso en que no hay blob (flujo legado); en blob-first el resolutor siempre pasa `BlobPath`.
 
@@ -224,19 +241,19 @@ que (a) devuelve la caché si cubre, (b) si no, llama a `ObtenerMarkdownActivity
 | --- | --- |
 | Paso 2.8 (L890–L940) + 2.8b (L944–L973) | `AsegurarMarkdownAsync(Paginas(maxPaginasClasificacion), "LayoutPreClasificacion")` bajo la misma guarda (sin `ExpectedType`, provider no DI/CU). El 2.8b desaparece: la base de datos ya se consultó primero |
 | Propagación de `ContentExtraido` (L1161) | Igual, pero además alimenta `markdownEjecucion` con `Fuente=Clasificador`, `Paginas=PagesProcessed` (o `PaginasIncluidas`), y **se persiste** con la regla de escritura vía una llamada ligera a la actividad |
-| Layout de resumen en `ClassificationOnly` (L1630–L1668) | `AsegurarMarkdownAsync(Completo(), "LayoutResumenClassificationOnly")`. Cambio de comportamiento deliberado (regla 6) |
+| Layout de resumen en `ClassificationOnly` (L1630–L1668) | `AsegurarMarkdownAsync(Paginas(N), "LayoutResumenClassificationOnly")` si solo hay resumen forzado; `Completo()` si además hay prompt. Sin cambio de comportamiento respecto a hoy |
 | Regeneración a documento completo (L1919–L1966) | **Desaparece.** Quien necesite completo lo declara |
 | Paso 3.5 (L2004–L2041) | `AsegurarMarkdownAsync(Completo(), "LayoutPrevioExtraccion")` bajo la misma guarda (provider GPT-directo) |
 | Fallback tras extraer (L2113–L2164) | `AsegurarMarkdownAsync(Completo(), "FallbackLayout")` cuando la extracción no dejó markdown y el flujo necesita prompt; si no lo necesita, no se pide |
-| Obtención bajo demanda del prompt (L365–L414) | `AsegurarMarkdownAsync(Completo(), "LayoutBajoDemandaPrompt")` |
+| Obtención bajo demanda del prompt (L365–L414) | `AsegurarMarkdownAsync(necesitaPrompt ? Completo() : Paginas(N), "LayoutBajoDemandaPrompt")`. La actividad recibe la vista correspondiente |
 | `layoutDocumentoCompletoIntentado` | **Desaparece.** La caché sabe si ya se intentó completo |
 | `RecuperarMarkdownPersistidoActivity` | **Se retira** del orquestador y del proyecto |
 
 Los nombres de `OrigenMarkdown` se conservan para no romper el monitor ni el backfill; ahora indican el **punto del flujo** que pidió el markdown, y la fuente real va en el campo nuevo.
 
-### Optimización de tipología conocida
+### Extracción anticipada
 
-Justo después del paso 2.75, si `ExpectedType` sigue informado, el orquestador resuelve la tipología (ya lo hace) y calcula si el flujo necesitará completo. Si sí, llama a `AsegurarMarkdownAsync(Completo(), "LayoutDocumentoCompletoAnticipado")` antes de nada. El resto de puntos encontrarán la caché cubierta.
+Implementa la sección *Extracción anticipada del completo*: justo después del paso 2.75, si la petición declara completo, `AsegurarMarkdownAsync(Completo(), "LayoutDocumentoCompletoAnticipado")` antes de nada. El resto de puntos encontrarán la caché cubierta y recibirán su vista. `datosNormalizados["Markdown"]` se rellena con la **vista** que corresponde a la actividad que se va a llamar, no con el completo, justo antes de cada `CallActivityAsync`; la caché conserva el completo.
 
 ### `PersistirActivity`
 
@@ -286,7 +303,9 @@ Dos orquestaciones del mismo SHA256 pueden ejecutarse a la vez (`ForceReprocess`
 | Unitario | URL con y sin `pages`; PDF/TIFF frente a Office | `AzureDocumentIntelligenceLayoutMarkdownProviderTests` |
 | Unitario | Orquestador: los 27 asserts que cuentan `ExtraerMarkdownLayoutActivity` pasan a contar `ObtenerMarkdownActivity`; el `FakeTaskOrchestrationContext` devuelve un `ResultadoMarkdown` por defecto | `DocumentProcessOrchestratorTests` |
 | Unitario | Regresión del borrado: ejecución OK seguida de `SIN_CONTENIDO_DOCUMENTO` sobre el mismo SHA256; el markdown sobrevive | `PersistirActivityTests` |
-| Unitario | Optimización de tipología conocida: `ExpectedType` con prompt habilitado hace **una** llamada a `ObtenerMarkdownActivity` con `Completo` | `DocumentProcessOrchestratorTests` |
+| Unitario | `VistaPaginas`: N menor, igual y mayor que el número de páginas; sin marcadores devuelve todo; conserva `PageNumber`/`PageHeader` | `VistaPaginasTests` (nuevo, Core) |
+| Unitario | Extracción anticipada: prompt ad hoc sin `ExpectedType` hace **una** llamada a `ObtenerMarkdownActivity` con `Completo` y `ClasificarActivity` recibe la vista de N páginas, no el completo | `DocumentProcessOrchestratorTests` |
+| Unitario | Resumen forzado en `ClassificationOnly` sin prompt pide `Paginas(N)`, no `Completo` | `DocumentProcessOrchestratorTests` |
 | E2E (bug 100256) | `S-S4` con `expectedStatus: ["OK"]`, `expectOutputPathEquals` sobre `DetalleEjecucion.Clasificacion.Modelo = expectedtype-input` e `Identificacion.Tipologia = resumen.documental`, `expectOutputPathsNotEmpty: ["DatosExtraidos.ResultadoPrompt"]`. Revisión del resto de casos que solo usan `expectNoTechnicalError` | `smoke-cases.json`, `full-cases.json` |
 | E2E | Caso nuevo en `full`: mismo documento dos veces con `SkipDuplicateCheck` y sin `ForceReprocess`; la segunda debe tener `MarkdownFuente = BaseDatos` y cero consumos de layout | `full-cases.json` |
 
@@ -303,7 +322,8 @@ Dos orquestaciones del mismo SHA256 pueden ejecutarse a la vez (`ForceReprocess`
 | Riesgo | Mitigación |
 | --- | --- |
 | El markdown de `pages=1-N` difiere del recorte local | Verificación explícita en DEV en la tarea 100249, antes de cambiar el orquestador |
-| Prompt y extracción con documento completo suben el coste en flujos que hoy usan el recorte (`ClassificationOnly` con resumen forzado) | Es la regla 6, decidida a propósito; se mide en el monitor con `MarkdownPaginas` |
+| Un markdown completo sin `<!-- PageBreak -->` (Office, caller, histórico antiguo) llega entero a clasificación y resumen | Aceptado: hoy Office ya llega entero (el recorte solo entiende PDF); se registra en traza cuando la vista no pudo cortar |
+| La extracción anticipada pide completo y luego el flujo no lo usa (por ejemplo, salida temprana antes del prompt) | El completo queda persistido y sirve a la siguiente ejecución del documento; el sobrecoste es una llamada, la misma que hoy se hace más tarde |
 | Crecimiento de `Documentos` por persistir más completos | Retención indefinida decidida; se gobierna con AB#100165 |
 | Dos escritores del markdown (resolutor en la actualización, `PersistirActivity` en el alta) | Responsabilidades disjuntas por rama; test de regresión del borrado cubre ambas |
 | 27 asserts de tests que cambian a la vez | Tarea propia (100252); el `FakeTaskOrchestrationContext` devuelve un resultado por defecto para que los tests que no montan la actividad sigan pasando |
