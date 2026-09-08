@@ -131,6 +131,12 @@ public class ExtraerMarkdownLayoutInput
     public string DocumentoBase64 { get; set; } = string.Empty;
     public string NombreDocumento { get; set; } = string.Empty;
     public string? BlobPath { get; set; }
+
+    /// <summary>
+    /// Primeras N paginas a analizar. null = documento entero. Solo tiene efecto en PDF y TIFF;
+    /// en el resto de formatos se analiza el documento entero (AB#100249).
+    /// </summary>
+    public int? PaginasSolicitadas { get; set; }
 }
 
 public class ExtraerMarkdownLayoutResultado
