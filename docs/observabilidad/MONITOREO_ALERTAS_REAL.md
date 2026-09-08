@@ -297,6 +297,19 @@ Severidad 3 a propósito: son señales de calidad para revisar, no caídas de se
 **Aplicación en PRO:** requiere ejecutar el script con permisos de Monitoring Contributor
 (`./scripts/observability/create-monitor-alerts.ps1 -ActionGroupId <id>`), no se despliega con el código.
 
+> **Tildes en los predicados de texto (corregido 2026-09-08, AB#100242).** `contains` de KQL ignora
+> mayúsculas pero **no** ignora tildes, y el script se mantiene en ASCII porque PowerShell 5.1
+> corrompe los caracteres no ASCII de los argumentos que pasa a `az`. Dos predicados escritos sin
+> tilde no casaban nunca con el mensaje real: `'no resuelve contra el catalogo'` (0 coincidencias en
+> 30 días frente a 24 del texto real) y `'ejecucion con contrato serializado'`. Ninguna de las dos
+> reglas estaba muerta del todo porque su segunda condición sí casaba (`'no resoluble'` y
+> `'ejecuciones con salida serializada'`), lo que ocultó el fallo. Ambos pasan a `matches regex` con
+> un comodín en la vocal acentuada (`'no resuelve contra el cat.logo'`). Al escribir un predicado
+> nuevo sobre un mensaje con tildes, usar `matches regex` con comodín y comprobar que devuelve
+> coincidencias antes de dar la regla por buena. Ojo: `matches regex` sí distingue mayúsculas.
+>
+> **Las reglas ya desplegadas conservan la query anterior** hasta que se vuelva a ejecutar el script.
+
 ### Alerta de capacidad de la base de datos (AB#100171, 2026-09-02)
 
 | Regla | Condición | Ventana / Frecuencia | Sev |
