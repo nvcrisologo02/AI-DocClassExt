@@ -45,9 +45,7 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
         }
 
         var apiVersion = string.IsNullOrWhiteSpace(model.ApiVersion) ? "2024-11-30" : model.ApiVersion;
-        var baseEndpoint = model.Endpoint.TrimEnd('/');
-        var analyzeUrl =
-            $"{baseEndpoint}/documentintelligence/documentModels/prebuilt-layout:analyze?outputContentFormat=markdown&api-version={Uri.EscapeDataString(apiVersion)}";
+        var analyzeUrl = BuildAnalyzeUrl(model.Endpoint, apiVersion, input.NombreDocumento, input.PaginasSolicitadas);
 
         var source = await _sourceResolver.ResolveAsync(
             input.BlobPath,
@@ -187,10 +185,11 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
             }
 
             _logger.LogInformation(
-                "DI layout markdown completado para tipología {Tipologia}. Longitud={Length}, Páginas={Paginas}",
+                "DI layout markdown completado para tipología {Tipologia}. Longitud={Length}, Páginas={Paginas}, Solicitadas={Solicitadas}",
                 input.Tipologia,
                 markdown?.Length ?? 0,
-                paginas);
+                paginas,
+                input.PaginasSolicitadas?.ToString() ?? "todas");
 
             return new ExtraerMarkdownLayoutResultado
             {
@@ -212,5 +211,32 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
                 }
             };
         }
+    }
+
+    /// <summary>
+    /// URL de analyze. Con PaginasSolicitadas pide a DI solo las N primeras paginas del documento
+    /// completo (pages=1-N), en lugar de depender de un base64 ya recortado en local. Solo para
+    /// PDF y TIFF: es lo que documenta Document Intelligence; en Office las paginas son unidades
+    /// sinteticas (3.000 caracteres, hoja, diapositiva) y se analiza el documento entero (AB#100249).
+    /// </summary>
+    internal static string BuildAnalyzeUrl(string endpoint, string apiVersion, string? nombreDocumento, int? paginasSolicitadas)
+    {
+        var url =
+            $"{endpoint.TrimEnd('/')}/documentintelligence/documentModels/prebuilt-layout:analyze?outputContentFormat=markdown&api-version={Uri.EscapeDataString(apiVersion)}";
+
+        if (paginasSolicitadas is > 0 && AdmiteRangoDePaginas(nombreDocumento))
+        {
+            url += $"&pages=1-{paginasSolicitadas.Value}";
+        }
+
+        return url;
+    }
+
+    internal static bool AdmiteRangoDePaginas(string? nombreDocumento)
+    {
+        var extension = Path.GetExtension(nombreDocumento ?? string.Empty);
+        return extension.Equals(".pdf", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".tif", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".tiff", StringComparison.OrdinalIgnoreCase);
     }
 }
