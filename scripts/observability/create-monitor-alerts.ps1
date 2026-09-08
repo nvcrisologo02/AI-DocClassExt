@@ -149,9 +149,15 @@ requests
         Severity    = 3
         WindowSize  = "1h"
         Frequency   = "30m"
+        # 'contains' de KQL ignora mayusculas pero NO ignora tildes, y este script se mantiene en
+        # ASCII (PowerShell 5.1 corrompe los caracteres no ASCII de los argumentos nativos). El
+        # mensaje real es "No hay ninguna ejecucion con contrato serializado" con tilde en la 'o',
+        # asi que el literal sin tilde no casaba nunca: se usa 'matches regex' con un comodin en
+        # esa posicion. Verificado contra App Insights (30 dias): 0 coincidencias con el literal
+        # sin tilde. La regla seguia disparando solo por la segunda condicion.
         Query       = @"
 traces
-| where message contains 'ejecucion con contrato serializado' or message contains 'ejecuciones con salida serializada'
+| where message matches regex 'ejecuci.n con contrato serializado' or message contains 'ejecuciones con salida serializada'
 | summarize n = dcount(operation_Id)
 | where n > 0
 "@
@@ -163,9 +169,13 @@ traces
         Severity    = 3
         WindowSize  = "1h"
         Frequency   = "30m"
+        # Mismo caso que la regla anterior: el mensaje real dice "no resuelve contra el catalogo de
+        # tipologias" con tilde en la 'a', y el literal sin tilde no casaba (verificado contra App
+        # Insights, 30 dias: 0 coincidencias con el literal, 24 con el comodin). La regla disparaba
+        # solo por 'no resoluble', que sale de otra traza distinta (ResolverTipologiaActivity).
         Query       = @"
 traces
-| where message contains 'no resuelve contra el catalogo' or message contains 'no resoluble'
+| where message matches regex 'no resuelve contra el cat.logo' or message contains 'no resoluble'
 | summarize n = dcount(operation_Id)
 | where n > 0
 "@

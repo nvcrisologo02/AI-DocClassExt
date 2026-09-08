@@ -373,6 +373,19 @@ flowchart LR
 > saltarse la clasificación con una etiqueta inválida. El valor `"Desconocido"` está exento de
 > esta validación (es intencional en flujos de monitorización y pruebas). El canal de origen
 > debería enviar códigos de tipología reales o dejar el campo vacío.
+>
+> **Qué cuenta como "no resuelve" (desde AB#100242):** únicamente que la resolución degrade a la
+> tipología centinela `Desconocido`. Que la tipología sea la **versión por defecto de su familia**
+> no tiene nada que ver: es un código perfectamente válido y su `expectedType` se respeta. Antes se
+> usaba esa marca como señal de "no resuelve" y descartaba peticiones correctas —
+> `resumen.documental`, el código de las peticiones de solo resumen, era la única tipología del
+> catálogo marcada así y sus peticiones acababan sin resumen ni clasificación.
+>
+> **Cuándo se valida (desde AB#100217):** antes de decidir si se extrae el markdown previo a la
+> clasificación. Un `expectedType` inválido queda descartado a tiempo, de modo que el documento
+> recorre exactamente el mismo flujo que si se hubiera enviado sin `expectedType` (incluido el OCR
+> del recorte). Antes se validaba después y el clasificador se quedaba sin texto, lo que terminaba
+> en `SIN_CONTENIDO_DOCUMENTO` para documentos escaneados.
 
 ---
 

@@ -870,6 +870,52 @@ public class DocumentProcessOrchestrator
                 }
             }
 
+            // AB#100179: ExpectedType debe ser un código de tipología del catálogo. El canal GDC
+            // envía etiquetas de negocio en texto libre ("Otros", "Ficha técnica", ...) que no
+            // resuelven y, con el atajo, acababan en NO_CLASIFICADO con Confianza=1.0 sin haber
+            // clasificado. "Desconocido" se respeta: es un valor intencional (monitor / e2e).
+            //
+            // AB#100217: la validación va ANTES del Paso 2.8. Su guarda mira ExpectedType para
+            // decidir si extrae markdown, así que validando después una etiqueta descartada dejaba
+            // al clasificador sin texto: el mismo documento enviado sin ExpectedType sí se habría
+            // OCR-eado. Anulándolo aquí, el Paso 2.8 lo ve ya vacío y el flujo es idéntico al de
+            // una petición sin etiqueta.
+            if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
+                && !string.Equals(entrada.Instrucciones.ExpectedType, "Desconocido", StringComparison.OrdinalIgnoreCase))
+            {
+                ResolvedTipologia? expectedTypeResuelto = null;
+                try
+                {
+                    expectedTypeResuelto = await context.CallActivityAsync<ResolvedTipologia>(
+                        "ResolverTipologiaActivity",
+                        entrada.Instrucciones.ExpectedType);
+                }
+                catch (Exception exExpectedType)
+                {
+                    // Si la resolución falla no se decide aquí: se conserva ExpectedType y la
+                    // resolución posterior (que ya trata KeyNotFoundException) marca NO_CLASIFICADO.
+                    logger.LogWarning(
+                        exExpectedType,
+                        "Paso 2.75: no se pudo validar ExpectedType '{ExpectedType}'. Se conserva y decide la resolución posterior.",
+                        entrada.Instrucciones.ExpectedType);
+                }
+
+                // AB#100242: no se puede usar IsDefault como señal de "no resuelve". Solo el fallback
+                // por KeyNotFoundException de ResolverTipologiaActivity lo emplea con ese sentido; en
+                // una tipología que sí resuelve significa "es la versión por defecto de su familia",
+                // y descartaba ExpectedType válidos ("resumen.documental" era el único del catálogo
+                // con isDefault=true, y sus peticiones de solo resumen acababan sin resumen). La
+                // marca real de ese fallback es la tipología centinela "Desconocido", el mismo
+                // criterio que aplica la resolución posterior a la clasificación.
+                if (EsTipologiaCentinelaDesconocido(expectedTypeResuelto))
+                {
+                    logger.LogWarning(
+                        "Paso 2.75: ExpectedType '{ExpectedType}' no resuelve contra el catálogo de tipologías. Se ignora y se clasifica normalmente.",
+                        entrada.Instrucciones.ExpectedType);
+                    entrada.Instrucciones.ExpectedType = null;
+                }
+            }
+
             // D4: si el caller aporta markdown pre-procesado en las instrucciones, inyectarlo directamente.
             // La condición del paso 2.8 comprueba !datosNormalizados.ContainsKey("Markdown"),
             // por lo que la inyección aquí evita la llamada innecesaria a ExtraerMarkdownLayoutActivity.
@@ -970,39 +1016,6 @@ public class DocumentProcessOrchestrator
                             exBd,
                             "Paso 2.8b: No se pudo recuperar markdown persistido en BD. Se continúa sin markdown.");
                     }
-                }
-            }
-
-            // AB#100179: ExpectedType debe ser un código de tipología del catálogo. El canal GDC
-            // envía etiquetas de negocio en texto libre ("Otros", "Ficha técnica", ...) que no
-            // resuelven y, con el atajo, acababan en NO_CLASIFICADO con Confianza=1.0 sin haber
-            // clasificado. "Desconocido" se respeta: es un valor intencional (monitor / e2e).
-            if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
-                && !string.Equals(entrada.Instrucciones.ExpectedType, "Desconocido", StringComparison.OrdinalIgnoreCase))
-            {
-                ResolvedTipologia? expectedTypeResuelto = null;
-                try
-                {
-                    expectedTypeResuelto = await context.CallActivityAsync<ResolvedTipologia>(
-                        "ResolverTipologiaActivity",
-                        entrada.Instrucciones.ExpectedType);
-                }
-                catch (Exception exExpectedType)
-                {
-                    // Si la resolución falla no se decide aquí: se conserva ExpectedType y la
-                    // resolución posterior (que ya trata KeyNotFoundException) marca NO_CLASIFICADO.
-                    logger.LogWarning(
-                        exExpectedType,
-                        "Paso 3: no se pudo validar ExpectedType '{ExpectedType}'. Se conserva y decide la resolución posterior.",
-                        entrada.Instrucciones.ExpectedType);
-                }
-
-                if (expectedTypeResuelto is { IsDefault: true })
-                {
-                    logger.LogWarning(
-                        "Paso 3: ExpectedType '{ExpectedType}' no resuelve contra el catálogo de tipologías. Se ignora y se clasifica normalmente.",
-                        entrada.Instrucciones.ExpectedType);
-                    entrada.Instrucciones.ExpectedType = null;
                 }
             }
 
@@ -2544,6 +2557,19 @@ public class DocumentProcessOrchestrator
 
         return defaultPages;
     }
+
+    /// <summary>
+    /// Indica si una tipología resuelta es en realidad el centinela "Desconocido" que
+    /// <see cref="Activities.ResolverTipologiaActivity"/> devuelve cuando la entrada no existe en el
+    /// catálogo (degradación de KeyNotFoundException). Es la única señal fiable de "no resuelve":
+    /// IsDefault no lo es, porque en una tipología que sí resuelve significa "versión por defecto de
+    /// la familia" (AB#100242). No se mira RequestedValue: conserva el valor pedido por el caller,
+    /// que en este caso es precisamente la etiqueta que no resolvió.
+    /// </summary>
+    private static bool EsTipologiaCentinelaDesconocido(ResolvedTipologia? tipologia)
+        => tipologia is not null
+           && (string.Equals(tipologia.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(tipologia.TipologiaId, "Desconocido", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsGptDirectProvider(string? provider) =>
         !string.IsNullOrWhiteSpace(provider) &&
