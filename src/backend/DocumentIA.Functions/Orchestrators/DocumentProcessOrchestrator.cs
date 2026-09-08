@@ -319,11 +319,31 @@ public class DocumentProcessOrchestrator
             }
         }
 
+        // AB#100245: cache de markdown de la ejecucion. Unica portadora de la cobertura. Se deriva
+        // de resultados de actividad, asi que es replay-safe. datosNormalizados["Markdown"] se
+        // sigue rellenando porque las actividades lo leen de ahi.
+        ResultadoMarkdown? markdownEjecucion = null;
+
+        // Necesidades que el resolutor ya no pudo cubrir en esta ejecucion: no se le vuelve a
+        // pedir lo mismo (pagaria Layout dos veces para fallar dos, AB#100029). Un fallo con
+        // documento completo invalida cualquier peticion posterior.
+        var necesidadesSinResultado = new HashSet<NecesidadMarkdown>();
+
         // Evita reintentar el layout bajo demanda cuando el Paso 4 ya lo intento (y fallo) para el
         // documento completo: con el mismo input, un segundo intento solo pagaria DI Layout dos
-        // veces para fallar dos veces. Declarada aqui porque las funciones locales solo capturan
-        // variables ya declaradas en su punto de definicion.
+        // veces para fallar dos veces. Solo la usan ya los puntos posteriores a la clasificacion,
+        // que pasan al resolutor en la siguiente tarea del refactor (AB#100253).
         var layoutDocumentoCompletoIntentado = false;
+
+        // Declarado aqui y asignado en el Paso 1 para que las funciones locales anteriores al
+        // Paso 1 (prompt libre, resumen combinado) puedan capturarlo.
+        var datosNormalizados = new Dictionary<string, object>();
+
+        // Paginas del recorte de clasificacion: es la necesidad de clasificacion y resumen.
+        var maxPaginasClasificacion = entrada.Instrucciones.ClassificationOnly &&
+            entrada.Instrucciones.MaxPagesForClassificationOnly > 0
+            ? entrada.Instrucciones.MaxPagesForClassificationOnly
+            : ResolveMaxPaginasClasificacion(entrada.Instrucciones.ExpectedType);
 
         // Consumo de servicios de IA de toda la ejecucion. Se acumula segun llegan los
         // resultados de actividad, incluidos los de proveedores evaluados y descartados:
@@ -350,6 +370,117 @@ public class DocumentProcessOrchestrator
         // gasto persiste un cero explicito, distinguible de las ejecuciones anteriores a
         // esta funcionalidad, que quedan a nulo.
         salida.DetalleEjecucion.Costes = CalculadoraCosteIA.Agregar(consumosIA);
+
+        void RegistrarMarkdownResuelto(ResultadoMarkdown resultado, string origen)
+        {
+            if (!resultado.TieneContenido)
+            {
+                return;
+            }
+
+            salida.DetalleEjecucion.MarkdownGenerado = true;
+            salida.DetalleEjecucion.OrigenMarkdown = origen;
+            salida.DetalleEjecucion.MarkdownPaginas = resultado.Paginas;
+            salida.DetalleEjecucion.MarkdownCompleto = resultado.Completo;
+            salida.DetalleEjecucion.MarkdownFuente = resultado.Fuente.ToString();
+        }
+
+        ContextoMarkdown BuildContextoMarkdown() => new()
+        {
+            Sha256 = salida.Integridad.SHA256,
+            Md5 = salida.Integridad.MD5,
+            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
+                ? salida.Integridad.RutaBlobStorage
+                : entrada.Documento.BlobPath,
+            DocumentoBase64 = entrada.Documento.Content?.Base64,
+            NombreDocumento = entrada.Documento.Name,
+            Tipologia = salida.Identificacion.Tipologia,
+            // Paginas del DOCUMENTO, nunca las del recorte: el resolutor infiere de aqui si un
+            // markdown parcial cubre el documento entero. Si se colase PaginasIncluidas se
+            // declararia completo un texto truncado (AB#100245).
+            TotalPaginas = salida.Identificacion.Paginas,
+            ForceReprocess = entrada.Instrucciones.ForceReprocess,
+            MarkdownCaller = entrada.Instrucciones.Classification.Markdown,
+            CacheEjecucion = markdownEjecucion
+        };
+
+        // Unica puerta al markdown desde el orquestador (AB#100252). Si la cache cubre la
+        // necesidad se usa tal cual, sin recortar (regla 7); si no, se pide al resolutor.
+        async Task<ResultadoMarkdown> AsegurarMarkdownAsync(NecesidadMarkdown necesidad, string origenTraza)
+        {
+            if (markdownEjecucion is not null && markdownEjecucion.Cubre(necesidad))
+            {
+                return markdownEjecucion;
+            }
+
+            if (necesidadesSinResultado.Contains(necesidad)
+                || necesidadesSinResultado.Any(n => n.DocumentoCompleto))
+            {
+                return markdownEjecucion ?? new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna };
+            }
+
+            ResultadoMarkdown? resultado = null;
+            try
+            {
+                resultado = await context.CallActivityAsync<ResultadoMarkdown>(
+                    "ObtenerMarkdownActivity",
+                    new ObtenerMarkdownInput { Necesidad = necesidad, Contexto = BuildContextoMarkdown() });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "No se pudo resolver markdown ({Origen}). Se continua con lo que haya.", origenTraza);
+            }
+
+            resultado ??= new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna };
+            AcumularConsumos(resultado.Consumos);
+
+            if (!resultado.TieneContenido)
+            {
+                necesidadesSinResultado.Add(necesidad);
+                return markdownEjecucion ?? resultado;
+            }
+
+            markdownEjecucion = resultado;
+            datosNormalizados["Markdown"] = resultado.Markdown!;
+            RegistrarMarkdownResuelto(resultado, origenTraza);
+
+            // Solo se rellenan las paginas del documento cuando el markdown cubre el documento
+            // entero: con un recorte pages=1-N, N son las paginas leidas, no las del documento.
+            if (salida.Identificacion.Paginas <= 0 && resultado.Completo && resultado.Paginas > 0)
+            {
+                salida.Identificacion.Paginas = resultado.Paginas;
+            }
+
+            return resultado;
+        }
+
+        // Markdown que trajo otra actividad (clasificador DI/CU, extraccion CU): entra en la cache
+        // y se persiste con la misma regla de cobertura.
+        async Task PersistirMarkdownAportadoAsync(ResultadoMarkdown aportado)
+        {
+            if (!aportado.TieneContenido || string.IsNullOrWhiteSpace(salida.Integridad.SHA256))
+            {
+                return;
+            }
+
+            try
+            {
+                aportado.Persistido = await context.CallActivityAsync<bool>(
+                    "PersistirMarkdownActivity",
+                    new PersistirMarkdownInput
+                    {
+                        Sha256 = salida.Integridad.SHA256,
+                        Markdown = aportado.Markdown,
+                        Paginas = aportado.Paginas,
+                        Completo = aportado.Completo,
+                        Forzar = entrada.Instrucciones.ForceReprocess
+                    });
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "No se pudo persistir el markdown aportado por {Fuente}.", aportado.Fuente);
+            }
+        }
 
         async Task EjecutarPromptLibreAsync(
             string? markdownParaPrompt,
@@ -717,7 +848,7 @@ public class DocumentProcessOrchestrator
 
             // 1. Normalizacion y calculo de hashes
             logger.LogInformation("Paso 1: Normalizando documento");
-            var datosNormalizados = await context.CallActivityAsync<Dictionary<string, object>>(
+            datosNormalizados = await context.CallActivityAsync<Dictionary<string, object>>(
                 "NormalizarActivity",
                 entrada);
 
@@ -731,6 +862,22 @@ public class DocumentProcessOrchestrator
             }
             salida.Integridad.RutaBlobStorage = null;
             salida.Identificacion.Paginas = ObtenerEntero(datosNormalizados, "Paginas");
+
+            // La normalizacion puede traer markdown (flujo legado y tests): entra en la cache
+            // como completo para conservar el comportamiento actual, que lo daba por suficiente.
+            if (datosNormalizados.TryGetValue("Markdown", out var markdownNormalizadoObj)
+                && markdownNormalizadoObj is string markdownNormalizadoTexto
+                && !string.IsNullOrWhiteSpace(markdownNormalizadoTexto))
+            {
+                markdownEjecucion = new ResultadoMarkdown
+                {
+                    Markdown = markdownNormalizadoTexto,
+                    Paginas = salida.Identificacion.Paginas,
+                    Completo = true,
+                    Fuente = FuenteMarkdown.Normalizacion
+                };
+                RegistrarMarkdownResuelto(markdownEjecucion, "Normalizacion");
+            }
 
             // 2. Verificar duplicados (si esta habilitado)
             if (!entrada.Instrucciones.SkipDuplicateCheck)
@@ -823,10 +970,6 @@ public class DocumentProcessOrchestrator
             {
                 try
                 {
-                    var maxPaginasClasificacion = entrada.Instrucciones.ClassificationOnly &&
-                        entrada.Instrucciones.MaxPagesForClassificationOnly > 0
-                        ? entrada.Instrucciones.MaxPagesForClassificationOnly
-                        : ResolveMaxPaginasClasificacion(entrada.Instrucciones.ExpectedType);
                     logger.LogInformation(
                         "Paso 2.7: Preparando documento para clasificación. MaxPaginas={MaxPaginas}",
                         maxPaginasClasificacion);
@@ -880,10 +1023,12 @@ public class DocumentProcessOrchestrator
             // al clasificador sin texto: el mismo documento enviado sin ExpectedType sí se habría
             // OCR-eado. Anulándolo aquí, el Paso 2.8 lo ve ya vacío y el flujo es idéntico al de
             // una petición sin etiqueta.
+            // Declarada fuera del bloque: la decision de anticipar el documento completo la
+            // necesita despues, ya con el ExpectedType validado.
+            ResolvedTipologia? expectedTypeResuelto = null;
             if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
                 && !string.Equals(entrada.Instrucciones.ExpectedType, "Desconocido", StringComparison.OrdinalIgnoreCase))
             {
-                ResolvedTipologia? expectedTypeResuelto = null;
                 try
                 {
                     expectedTypeResuelto = await context.CallActivityAsync<ResolvedTipologia>(
@@ -916,107 +1061,52 @@ public class DocumentProcessOrchestrator
                 }
             }
 
-            // D4: si el caller aporta markdown pre-procesado en las instrucciones, inyectarlo directamente.
-            // La condición del paso 2.8 comprueba !datosNormalizados.ContainsKey("Markdown"),
-            // por lo que la inyección aquí evita la llamada innecesaria a ExtraerMarkdownLayoutActivity.
+            // Regla 7 (AB#100245): si la peticion ya declara que necesitara el documento completo,
+            // se extrae una sola vez y todas las actividades lo usan tal cual. Se decide aqui,
+            // con el ExpectedType ya validado, y se ejecuta despues de D4 para que el markdown
+            // del caller siga ganando.
+            var tipologiaAnticipada = string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
+                ? null
+                : expectedTypeResuelto;
+            var necesitaCompletoAnticipado = entrada.Instrucciones.Prompt is not null
+                || (tipologiaAnticipada is not null
+                    && ((tipologiaAnticipada.PromptEnabled && tipologiaAnticipada.PromptHasDefinition)
+                        || IsGptDirectProvider(tipologiaAnticipada.ExtractionProvider)));
+
+            // D4: markdown del caller. Gana durante toda la ejecucion y no se persiste (regla 5).
             if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.Classification.Markdown))
             {
+                markdownEjecucion = new ResultadoMarkdown
+                {
+                    Markdown = entrada.Instrucciones.Classification.Markdown,
+                    Paginas = salida.Identificacion.Paginas,
+                    Completo = true,
+                    Fuente = FuenteMarkdown.Caller
+                };
                 datosNormalizados["Markdown"] = entrada.Instrucciones.Classification.Markdown;
-                RegistrarMarkdown(entrada.Instrucciones.Classification.Markdown, "InstruccionesCallerPreClasificacion");
+                RegistrarMarkdownResuelto(markdownEjecucion, "InstruccionesCallerPreClasificacion");
                 logger.LogInformation(
                     "Paso 2.8 omitido: markdown inyectado desde instrucciones del caller ({Len} chars)",
                     entrada.Instrucciones.Classification.Markdown.Length);
             }
 
-            // 2.8: Asegurar contexto textual para clasificación.
-            // DI y CU generan su propio markdown durante la ejecución de clasificación y lo propagan
-            // a datosNormalizados en el paso post-clasificación.
-            // Todos los demás providers (gpt, hybrid, rules, auto) necesitan markdown previo;
-            // si no está disponible, lo extraemos aquí vía DI Layout con el documento recortado.
-            if (!datosNormalizados.ContainsKey("Markdown")
-                && string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
+            if (necesitaCompletoAnticipado && markdownEjecucion is null)
+            {
+                logger.LogInformation("Paso 2.76: la peticion necesitara el documento completo; se extrae una sola vez.");
+                await AsegurarMarkdownAsync(NecesidadMarkdown.Completo(), "LayoutDocumentoCompletoAnticipado");
+            }
+
+            // 2.8: Asegurar contexto textual para clasificacion. DI y CU generan su propio texto;
+            // el resto necesita markdown previo y se lo pide al resolutor (cache > BD > Layout
+            // del recorte). Si ya hay uno mayor (anticipado, caller), se usa tal cual (AB#100245).
+            if (string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
                 && !ClasificacionProviderGeneraMarkdownPropio(entrada.Instrucciones.Classification.Provider))
             {
                 logger.LogInformation(
-                    "Paso 2.8: Extrayendo markdown DI Layout previo a clasificación (provider={Provider}, doc={Doc})",
-                    entrada.Instrucciones.Classification.Provider ?? "auto",
-                    entrada.Documento.Name);
-                try
-                {
-                    var markdownPreClasif = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                        "ExtraerMarkdownLayoutActivity",
-                        new ExtraerMarkdownLayoutInput
-                        {
-                            Tipologia = string.Empty,
-                            DocumentoBase64 = docClasif.DocumentoBase64Clasif,
-                            NombreDocumento = entrada.Documento.Name,
-                            // Blob-first: si el recorte fallo (documento no-PDF), DocumentoBase64Clasif
-                            // hereda el Content.Base64 que el trigger vacio al subir el blob. Sin
-                            // BlobPath, DI recibia un base64Source vacio y devolvia 400 InvalidContent
-                            // en cada documento Office (AB#100045). Solo se informa cuando no hay
-                            // base64: el resolutor prioriza BlobPath y pisaria el recorte de los PDF.
-                            BlobPath = string.IsNullOrWhiteSpace(docClasif.DocumentoBase64Clasif)
-                                ? (!string.IsNullOrWhiteSpace(blobPath) ? blobPath : entrada.Documento.BlobPath)
-                                : null
-                        });
-                    AcumularConsumos(markdownPreClasif.Consumos);
-
-                    if (!string.IsNullOrWhiteSpace(markdownPreClasif.Markdown))
-                    {
-                        datosNormalizados["Markdown"] = markdownPreClasif.Markdown;
-                        RegistrarMarkdown(markdownPreClasif.Markdown, "LayoutPreClasificacion");
-                        logger.LogInformation(
-                            "Paso 2.8: Markdown DI Layout listo para clasificación ({Len} chars)",
-                            markdownPreClasif.Markdown.Length);
-                        if (salida.Identificacion.Paginas <= 0 && markdownPreClasif.Paginas > 0)
-                            salida.Identificacion.Paginas = markdownPreClasif.Paginas;
-                    }
-                    else
-                    {
-                        logger.LogWarning(
-                            "Paso 2.8: DI Layout no devolvió markdown útil para {Doc}. Se continúa sin markdown.",
-                            entrada.Documento.Name);
-                    }
-                }
-                catch (Exception exMd)
-                {
-                    logger.LogWarning(
-                        exMd,
-                        "Paso 2.8: No se pudo extraer markdown DI Layout previo. Se continúa sin markdown.");
-                }
-
-                // 2.8b: Respaldo - si el layout falló o no devolvió markdown útil, se reutiliza el
-                // markdown ya persistido en BD para este mismo documento (por SHA256/MD5), si existe.
-                if (!datosNormalizados.ContainsKey("Markdown")
-                    && (!string.IsNullOrWhiteSpace(salida.Integridad.SHA256) || !string.IsNullOrWhiteSpace(salida.Integridad.MD5)))
-                {
-                    try
-                    {
-                        var markdownPersistido = await context.CallActivityAsync<RecuperarMarkdownPersistidoResultado>(
-                            "RecuperarMarkdownPersistidoActivity",
-                            new RecuperarMarkdownPersistidoInput
-                            {
-                                Sha256 = salida.Integridad.SHA256,
-                                Md5 = salida.Integridad.MD5,
-                                NombreDocumento = entrada.Documento.Name
-                            });
-
-                        if (markdownPersistido.Encontrado && !string.IsNullOrWhiteSpace(markdownPersistido.Markdown))
-                        {
-                            datosNormalizados["Markdown"] = markdownPersistido.Markdown;
-                            RegistrarMarkdown(markdownPersistido.Markdown, "MarkdownPersistidoBD");
-                            logger.LogInformation(
-                                "Paso 2.8b: markdown recuperado de BD ({Len} chars)",
-                                markdownPersistido.Markdown.Length);
-                        }
-                    }
-                    catch (Exception exBd)
-                    {
-                        logger.LogWarning(
-                            exBd,
-                            "Paso 2.8b: No se pudo recuperar markdown persistido en BD. Se continúa sin markdown.");
-                    }
-                }
+                    "Paso 2.8: Asegurando markdown para clasificacion ({Paginas} paginas, provider={Provider})",
+                    maxPaginasClasificacion,
+                    entrada.Instrucciones.Classification.Provider ?? "auto");
+                await AsegurarMarkdownAsync(NecesidadMarkdown.Paginas(maxPaginasClasificacion), "LayoutPreClasificacion");
             }
 
             // 3. Clasificacion
@@ -1170,15 +1260,30 @@ public class DocumentProcessOrchestrator
                 }
             }
 
-            // Propagar markdown extraído por DI clasificador a DatosNormalizados
-            if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ContentExtraido)
-                && !datosNormalizados.ContainsKey("Markdown"))
+            // El clasificador DI/CU trae su propio texto: entra en la cache con su cobertura y se
+            // persiste con la misma regla que el de Layout (AB#100253).
+            if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ContentExtraido) && markdownEjecucion is null)
             {
+                var paginasClasificador = resultadoClasificacion.PagesProcessed > 0
+                    ? resultadoClasificacion.PagesProcessed
+                    : salida.DetalleEjecucion.PaginasIncluidas;
+
+                markdownEjecucion = new ResultadoMarkdown
+                {
+                    Markdown = resultadoClasificacion.ContentExtraido,
+                    Paginas = paginasClasificador,
+                    Completo = paginasClasificador > 0
+                        && salida.Identificacion.Paginas > 0
+                        && paginasClasificador >= salida.Identificacion.Paginas,
+                    Fuente = FuenteMarkdown.Clasificador
+                };
                 datosNormalizados["Markdown"] = resultadoClasificacion.ContentExtraido;
-                RegistrarMarkdown(resultadoClasificacion.ContentExtraido, "Clasificacion");
+                RegistrarMarkdownResuelto(markdownEjecucion, "Clasificacion");
+                await PersistirMarkdownAportadoAsync(markdownEjecucion);
                 logger.LogInformation(
-                    "Markdown de clasificación DI propagado a datosNormalizados ({Len} chars)",
-                    resultadoClasificacion.ContentExtraido.Length);
+                    "Markdown del clasificador propagado ({Len} chars, {Paginas} paginas)",
+                    resultadoClasificacion.ContentExtraido.Length,
+                    paginasClasificador);
             }
             if (resultadoClasificacion.FallbackLLM)
             {
@@ -2096,14 +2201,12 @@ public class DocumentProcessOrchestrator
             }
 
             var markdownNormalizacion = resultadoExtraccion.MarkdownExtraido;
-            var origenMarkdownNormalizacion = "Extraccion";
             if (string.IsNullOrWhiteSpace(markdownNormalizacion)
                 && datosNormalizados.TryGetValue("Markdown", out var markdownPreexistente)
                 && markdownPreexistente is string markdownExistente
                 && !string.IsNullOrWhiteSpace(markdownExistente))
             {
                 markdownNormalizacion = markdownExistente;
-                origenMarkdownNormalizacion = "MarkdownPrevio";
             }
 
             if (string.IsNullOrWhiteSpace(markdownNormalizacion)
@@ -2112,13 +2215,15 @@ public class DocumentProcessOrchestrator
                 && !string.IsNullOrWhiteSpace(markdownDetectado))
             {
                 markdownNormalizacion = markdownDetectado;
-                origenMarkdownNormalizacion = "Extraccion";
             }
 
             if (!string.IsNullOrWhiteSpace(markdownNormalizacion))
             {
                 datosNormalizados["Markdown"] = markdownNormalizacion;
-                RegistrarMarkdown(markdownNormalizacion, origenMarkdownNormalizacion);
+                // No se vuelve a registrar el origen aqui: ya quedo registrado en el momento de
+                // obtener el markdown. Registrarlo de nuevo lo pisaba con "MarkdownPrevio", un
+                // valor que solo decia "ya estaba" y que dejaria la traza incoherente con
+                // MarkdownFuente (AB#100252).
                 logger.LogInformation(
                     "Markdown de extracción preparado para normalización y fallbacks ({Length} caracteres)",
                     markdownNormalizacion.Length);

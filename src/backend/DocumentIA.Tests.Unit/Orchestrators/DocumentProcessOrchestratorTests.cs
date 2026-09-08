@@ -1065,7 +1065,7 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
-    public async Task RunOrchestrator_Paso28_SinMarkdown_LlamaExtraerMarkdownLayoutYPropagaAlClasificar()
+    public async Task RunOrchestrator_Paso28_SinMarkdown_PideMarkdownAlResolutorYPropagaAlClasificar()
     {
         var orchestrator = CreateOrchestrator();
         var context = new FakeTaskOrchestrationContext(BuildEntrada());
@@ -1073,11 +1073,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
-        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
-        {
-            Markdown = "# Documento de prueba generado por Layout",
-            Paginas = 2
-        });
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# Documento de prueba generado por Layout", 3, completo: false));
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
         {
             Modelo = "gpt-4o-mini",
@@ -1090,9 +1086,9 @@ public class DocumentProcessOrchestratorTests
 
         await orchestrator.RunOrchestrator(context);
 
-        var markdownInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
+        var markdownInput = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity");
         markdownInput.Should().NotBeNull();
-        markdownInput!.DocumentoBase64.Should().NotBeNullOrWhiteSpace();
+        markdownInput!.Necesidad.PaginasMinimas.Should().Be(3);
 
         var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
         clasifInput.Should().NotBeNull();
@@ -1101,21 +1097,19 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
-    public async Task RunOrchestrator_Paso28b_LayoutFalla_RecuperaMarkdownPersistidoDeBD()
+    public async Task RunOrchestrator_Paso28_ResolutorDevuelveMarkdownDeBD_LoUsaParaClasificar()
     {
+        // Ya no hay Paso 2.8b: el fallback a BD vive dentro del resolutor. Desde el orquestador
+        // solo se ve una resolucion con Fuente=BaseDatos, y la traza debe reflejarla.
         var orchestrator = CreateOrchestrator();
         var context = new FakeTaskOrchestrationContext(BuildEntrada());
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
-        context.SetupActivityThrow("ExtraerMarkdownLayoutActivity", new InvalidOperationException("DI Layout no disponible"));
-        context.SetupActivity("RecuperarMarkdownPersistidoActivity", new RecuperarMarkdownPersistidoResultado
-        {
-            Encontrado = true,
-            Markdown = "# Markdown recuperado de BD",
-            DocumentoId = 42
-        });
+        context.SetupActivity(
+            "ObtenerMarkdownActivity",
+            MarkdownResuelto("# Markdown recuperado de BD", 0, completo: false, FuenteMarkdown.BaseDatos));
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
         {
             Modelo = "gpt-4o-mini",
@@ -1129,13 +1123,9 @@ public class DocumentProcessOrchestratorTests
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
-        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("MarkdownPersistidoBD");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("LayoutPreClasificacion");
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("BaseDatos");
         salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
-
-        var recuperarInput = context.GetLastActivityInput<RecuperarMarkdownPersistidoInput>("RecuperarMarkdownPersistidoActivity");
-        recuperarInput.Should().NotBeNull();
-        recuperarInput!.Sha256.Should().Be("sha256abc");
-        recuperarInput.Md5.Should().Be("md5abc");
 
         var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
         clasifInput.Should().NotBeNull();
@@ -1144,7 +1134,7 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
-    public async Task RunOrchestrator_Paso28b_LayoutFallaYSinMarkdownPersistido_ContinuaSinMarkdownComoHoy()
+    public async Task RunOrchestrator_Paso28_ResolutorSinMarkdown_ContinuaSinMarkdownComoHoy()
     {
         var orchestrator = CreateOrchestrator();
         var context = new FakeTaskOrchestrationContext(BuildEntrada());
@@ -1152,11 +1142,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
-        context.SetupActivityThrow("ExtraerMarkdownLayoutActivity", new InvalidOperationException("DI Layout no disponible"));
-        context.SetupActivity("RecuperarMarkdownPersistidoActivity", new RecuperarMarkdownPersistidoResultado
-        {
-            Encontrado = false
-        });
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna });
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
         {
             Modelo = "gpt-4o-mini",
@@ -2317,12 +2303,9 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivityThrow(
             "PrepararDocumentoClasificacionActivity",
             new InvalidOperationException("PdfPig: Could not find the version header comment at the start of the document."));
-        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
-        {
-            Modelo = "prebuilt-layout",
-            Markdown = "# Diapositiva 1",
-            Paginas = 5
-        });
+        // Office: el resolutor no puede recortar y analiza el documento entero, asi que la
+        // resolucion vuelve completa y sus paginas si son las del documento.
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# Diapositiva 1", 5, completo: true));
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
         {
             Modelo = "gpt-4o-mini",
@@ -2342,20 +2325,20 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
-        var layoutInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
-        layoutInput.Should().NotBeNull();
-        layoutInput!.BlobPath.Should().Be("documents/2026/08/hash-nuevo.pptx");
+        var markdownInput = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity");
+        markdownInput.Should().NotBeNull();
+        markdownInput!.Contexto.BlobPath.Should().Be("documents/2026/08/hash-nuevo.pptx");
         salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
         salida.DetalleEjecucion.OrigenMarkdown.Should().Be("LayoutPreClasificacion");
         salida.Identificacion.Paginas.Should().Be(5);
     }
 
     [Fact]
-    public async Task RunOrchestrator_RecorteValido_Paso28NoInformaBlobPath()
+    public async Task RunOrchestrator_RecorteValido_Paso28PideElRangoSobreElBlob()
     {
-        // El resolutor de origen DI prioriza BlobPath sobre el base64 de entrada: si el Paso 2.8
-        // lo informara siempre, el recorte de los PDF dejaria de usarse y DI recibiria el documento
-        // completo. Con recorte valido, BlobPath debe ir a null.
+        // Antes el orquestador anulaba BlobPath para no pisar el recorte del Paso 2.7. Con el
+        // resolutor (AB#100245) el rango viaja en la necesidad y el blob viaja siempre en el
+        // contexto: es el resolutor quien pide a Layout el rango pages=1-N sobre el documento.
         var orchestrator = CreateOrchestrator();
         var context = new FakeTaskOrchestrationContext(BuildEntrada());
 
@@ -2370,12 +2353,7 @@ public class DocumentProcessOrchestratorTests
             CharsTextoNativo = 1200,
             RecorteAplicado = true
         });
-        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
-        {
-            Modelo = "prebuilt-layout",
-            Markdown = "# Contenido PDF",
-            Paginas = 10
-        });
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# Contenido PDF", 3, completo: false));
         context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
         context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
             RequestedValue: "nota.simple",
@@ -2389,10 +2367,11 @@ public class DocumentProcessOrchestratorTests
 
         await orchestrator.RunOrchestrator(context);
 
-        var layoutInput = context.GetLastActivityInput<ExtraerMarkdownLayoutInput>("ExtraerMarkdownLayoutActivity");
-        layoutInput.Should().NotBeNull();
-        layoutInput!.DocumentoBase64.Should().Be("cmVjb3J0ZS1wZGY=");
-        layoutInput.BlobPath.Should().BeNull();
+        var markdownInput = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity");
+        markdownInput.Should().NotBeNull();
+        markdownInput!.Contexto.BlobPath.Should().Be("container/test.pdf");
+        markdownInput.Necesidad.DocumentoCompleto.Should().BeFalse();
+        markdownInput.Necesidad.PaginasMinimas.Should().Be(3);
     }
 
     [Fact]
@@ -3007,12 +2986,7 @@ public class DocumentProcessOrchestratorTests
             PaginasIncluidas = 3,
             RecorteAplicado = true
         });
-        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
-        {
-            Modelo = "prebuilt-layout",
-            Markdown = "# Contenido real del documento escaneado",
-            Paginas = 5
-        });
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# Contenido real del documento escaneado", 5, completo: false));
         context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
         context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
             RequestedValue: "Ficha técnica",
@@ -3031,10 +3005,167 @@ public class DocumentProcessOrchestratorTests
         // diccionario DatosNormalizados es el mismo objeto y el Paso posterior a clasificar (L1161)
         // también escribe en él, así que comprobar solo su contenido final no probaría nada.
         salida.DetalleEjecucion.OrigenMarkdown.Should().Be("LayoutPreClasificacion");
-        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(1);
 
         var clasificarInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
         clasificarInput.Should().NotBeNull();
         clasificarInput!.DatosNormalizados["Markdown"].Should().Be("# Contenido real del documento escaneado");
+    }
+
+    private static ResultadoMarkdown MarkdownResuelto(string markdown, int paginas, bool completo, FuenteMarkdown fuente = FuenteMarkdown.Layout)
+        => new() { Markdown = markdown, Paginas = paginas, Completo = completo, Fuente = fuente };
+
+    [Fact]
+    public async Task RunOrchestrator_SinExpectedType_PideAlResolutorElRecorteParaClasificar()
+    {
+        // Paso 2.8 nuevo: la necesidad de clasificacion es Paginas(N) con N = maximo de paginas
+        // de clasificacion (3 por defecto). El resolutor decide si viene de cache, BD o Layout.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/2026/09/abc.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# recorte", 3, completo: false));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        var input = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity");
+        input.Should().NotBeNull();
+        input!.Necesidad.DocumentoCompleto.Should().BeFalse();
+        input.Necesidad.PaginasMinimas.Should().Be(3);
+        input.Contexto.BlobPath.Should().Be("documents/2026/09/abc.pdf");
+        input.Contexto.Sha256.Should().Be("sha256abc");
+        var clasificarInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasificarInput!.DatosNormalizados["Markdown"].Should().Be("# recorte");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("LayoutPreClasificacion");
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("Layout");
+        salida.DetalleEjecucion.MarkdownPaginas.Should().Be(3);
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptAdHocSinExpectedType_ExtraeElCompletoUnaVezYClasificaConEl()
+    {
+        // Regla 7: la peticion ya declara que necesitara el completo (prompt ad hoc), asi que se
+        // pide una sola vez al principio y la clasificacion lo usa tal cual, sin recorte.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones { UserPromptTemplate = "Resume:\n\n{contenido}" };
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# documento entero", 14, completo: true));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-5-mini", Resultado = "ok" });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(1);
+        var input = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity");
+        input!.Necesidad.DocumentoCompleto.Should().BeTrue();
+        var clasificarInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasificarInput!.DatosNormalizados["Markdown"].Should().Be("# documento entero");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("LayoutDocumentoCompletoAnticipado");
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeConPromptDeTipologia_AnticipaElCompleto()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(promptEnabled: true, promptHasDefinition: true));
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# entero", 5, completo: true));
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-5-mini", Resultado = "ok" });
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(1);
+        context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity")!.Necesidad.DocumentoCompleto.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_MarkdownDelCaller_NoLlamaAlResolutor()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Classification.Markdown = "# lo trae el caller";
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(0);
+        context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity")!.DatosNormalizados["Markdown"].Should().Be("# lo trae el caller");
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("Caller");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("InstruccionesCallerPreClasificacion");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificadorConTextoPropio_LoPersisteConSuCobertura()
+    {
+        // DI y CU generan su propio texto: no se pide al resolutor antes de clasificar, pero lo que
+        // devuelven entra en la cache y se persiste con la misma regla.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Classification.Provider = "di";
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.PagesProcessed = 3;
+        context.SetupActivity("ClasificarActivity", clasificacion);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(0);
+        context.GetActivityCallCount("PersistirMarkdownActivity").Should().Be(1);
+        var persistir = context.GetLastActivityInput<PersistirMarkdownInput>("PersistirMarkdownActivity");
+        persistir!.Markdown.Should().Be("# markdown clasificacion");
+        persistir.Paginas.Should().Be(3);
+        persistir.Sha256.Should().Be("sha256abc");
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("Clasificador");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("Clasificacion");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ResolutorSinContenido_NoSeReintentaLaMismaNecesidad()
+    {
+        // Regresion AB#100029: si el resolutor no pudo dar markdown para una necesidad, no se le
+        // vuelve a pedir lo mismo en la misma ejecucion (pagaria Layout dos veces para fallar dos).
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(forzarResumenPorDefecto: true);
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini", Confianza = 0, TipologiaDetectada = "Desconocido", SinContenido = true
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(1);
     }
 }
