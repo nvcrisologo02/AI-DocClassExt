@@ -193,5 +193,25 @@ public class DocumentIADbContext : DbContext
 
         modelBuilder.Entity<CatalogoTdn1Entity>().HasData(CatalogoTdn1Seed.GetData());
         modelBuilder.Entity<CatalogoTdn2Entity>().HasData(CatalogoTdn2Seed.GetData());
+
+        // Los [Column(TypeName = "nvarchar(max)")] / "varbinary(max)" son sintaxis de SQL
+        // Server: SQLite no admite "(max)" en el tipo de columna y EnsureCreated falla al
+        // crear la tabla ('near "max": syntax error'). Solo afecta a los tests que usan
+        // SQLite en memoria (DocumentoRepositoryMarkdownTests, AB#100250); en SqlServer el
+        // tipo explicito se mantiene tal cual.
+        if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
+        {
+            foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+            {
+                foreach (var property in entityType.GetProperties())
+                {
+                    var columnType = property.GetColumnType();
+                    if (columnType != null && columnType.Contains("(max)", StringComparison.OrdinalIgnoreCase))
+                    {
+                        property.SetColumnType(null);
+                    }
+                }
+            }
+        }
     }
 }

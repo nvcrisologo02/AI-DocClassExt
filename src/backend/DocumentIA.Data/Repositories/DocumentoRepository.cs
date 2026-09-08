@@ -109,4 +109,27 @@ public class DocumentoRepository : IDocumentoRepository
     {
         return await _context.Documentos.AnyAsync(d => d.SHA256 == sha256);
     }
+
+    public async Task<int> ActualizarMarkdownSiMejoraAsync(
+        string sha256, byte[] gzip, string base64, int paginas, bool completo, bool forzar)
+    {
+        var ahora = DateTime.UtcNow;
+
+        return await _context.Documentos
+            .Where(d => d.SHA256 == sha256)
+            .Where(d =>
+                forzar
+                // no habia nada: ni binario ni el Base64 historico anterior a AB#100169
+                || (d.NormalizacionMarkdownGzip == null && d.NormalizacionMarkdownCompressed == null)
+                // pasamos a completo
+                || (completo && !d.MarkdownCompleto)
+                // mas paginas que un parcial de cobertura conocida
+                || (!completo && !d.MarkdownCompleto && d.MarkdownPaginas != null && d.MarkdownPaginas < paginas))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.NormalizacionMarkdownGzip, gzip)
+                .SetProperty(d => d.NormalizacionMarkdownCompressed, base64)
+                .SetProperty(d => d.MarkdownPaginas, paginas)
+                .SetProperty(d => d.MarkdownCompleto, completo)
+                .SetProperty(d => d.FechaActualizacion, ahora));
+    }
 }
