@@ -249,9 +249,9 @@ public class DocumentProcessOrchestratorTests
         bool promptHasDefinition = false,
         string tdn1 = "",
         string tdn2 = "",
-        // "nota.simple" es una tipología real del catálogo: resuelve y NO es el fallback por
-        // defecto. Relevante desde AB#100179, donde IsDefault distingue "resuelve" de
-        // "no resuelve" para validar ExpectedType.
+        // "nota.simple" es una tipología real del catálogo que resuelve. Desde AB#100242 el valor de
+        // isDefault ya no decide si ExpectedType se conserva (lo decide el centinela "Desconocido"),
+        // así que aquí solo modela si la tipología es la versión por defecto de su familia.
         bool isDefault = false)
         => new(
             RequestedValue: "nota.simple",
@@ -2952,5 +2952,89 @@ public class DocumentProcessOrchestratorTests
         context.GetActivityCallCount("PersistirActivity").Should().Be(1);
         var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
         persistirInput!.Salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeValidoQueEsVersionPorDefecto_MantieneElAtajo()
+    {
+        // AB#100242: IsDefault tiene dos significados. El fallback de ResolverTipologiaActivity lo
+        // pone a true para marcar "no resoluble", pero en una tipología que SÍ resuelve significa
+        // "es la versión por defecto de su familia". Tomarlo por lo primero descartaba ExpectedType
+        // válidos: "resumen.documental" (petición de solo resumen) acababa clasificando sin markdown
+        // y cerrando en SIN_CONTENIDO_DOCUMENTO.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "resumen.documental");
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        // Tipología real del catálogo, publicada, y marcada como versión por defecto de su familia.
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().Be("expectedtype-input");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeNoResoluble_ExtraeMarkdownAntesDeClasificar()
+    {
+        // AB#100217: al descartar un ExpectedType inválido la clasificación procede "normalmente",
+        // pero el Paso 2.8 ya había quedado atrás (su guarda mira ExpectedType antes de que la
+        // validación lo anule), así que el clasificador llegaba sin texto. Un documento enviado sin
+        // ExpectedType sí se habría OCR-eado: el flujo debe ser idéntico en ambos casos.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "Ficha técnica");
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 5,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
+        });
+        context.SetupActivity("ExtraerMarkdownLayoutActivity", new ExtraerMarkdownLayoutResultado
+        {
+            Modelo = "prebuilt-layout",
+            Markdown = "# Contenido real del documento escaneado",
+            Paginas = 5
+        });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Ficha técnica",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // El origen registra el momento en que se obtuvo el markdown. Es la aserción que distingue
+        // "se extrajo antes de clasificar" de "lo aportó la propia clasificación después": el
+        // diccionario DatosNormalizados es el mismo objeto y el Paso posterior a clasificar (L1161)
+        // también escribe en él, así que comprobar solo su contenido final no probaría nada.
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("LayoutPreClasificacion");
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(1);
+
+        var clasificarInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasificarInput.Should().NotBeNull();
+        clasificarInput!.DatosNormalizados["Markdown"].Should().Be("# Contenido real del documento escaneado");
     }
 }
