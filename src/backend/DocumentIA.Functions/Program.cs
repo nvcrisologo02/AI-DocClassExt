@@ -179,6 +179,8 @@ var host = new HostBuilder()
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
         services.AddSingleton<DocumentIntelligenceSourceResolver>();
         services.AddSingleton<ILayoutMarkdownProvider, AzureDocumentIntelligenceLayoutMarkdownProvider>();
+        // AB#100245: politica unica de markdown. Singleton con scope propio para la BD.
+        services.AddSingleton<IMarkdownResolver, MarkdownResolver>();
         services.AddSingleton<PdfRecorteService>();
         services.AddSingleton<ClassificationTipologiaPromptBuilder>();
         services.AddSingleton<IClassificationPromptProvider, ClassificationPromptProvider>();
