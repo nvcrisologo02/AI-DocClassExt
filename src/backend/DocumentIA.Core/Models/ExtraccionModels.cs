@@ -146,6 +146,13 @@ public class ExtraerMarkdownLayoutResultado
     public int Paginas { get; set; }
 
     /// <summary>
+    /// El analisis se restringio de verdad a las primeras N paginas. False cuando no se
+    /// pidio recorte o cuando el formato no lo admite y se analizo el documento entero
+    /// (AB#100249).
+    /// </summary>
+    public bool RangoAplicado { get; set; }
+
+    /// <summary>
     /// Consumo de servicios de IA de esta llamada. El proveedor lo rellena y el
     /// orquestador lo acumula en DetalleEjecucion.Costes. Vacia cuando el paso no
     /// consumio IA.

@@ -45,6 +45,11 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
         }
 
         var apiVersion = string.IsNullOrWhiteSpace(model.ApiVersion) ? "2024-11-30" : model.ApiVersion;
+
+        // Unica fuente de verdad de si el recorte de paginas aplica de verdad: se usa tanto
+        // para construir la URL (pages=1-N) como para RangoAplicado en el resultado, para que
+        // ambos no puedan divergir nunca (AB#100249, AB#100250).
+        var rangoAplicado = CalcularRangoAplicado(input.NombreDocumento, input.PaginasSolicitadas);
         var analyzeUrl = BuildAnalyzeUrl(model.Endpoint, apiVersion, input.NombreDocumento, input.PaginasSolicitadas);
 
         var source = await _sourceResolver.ResolveAsync(
@@ -196,6 +201,7 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
                 Modelo = "prebuilt-layout",
                 Markdown = markdown,
                 Paginas = paginas,
+                RangoAplicado = rangoAplicado,
                 // El layout se invoca desde cuatro puntos del orquestador y cada
                 // llamada factura sus paginas por separado (AB#100229).
                 Consumos =
@@ -224,9 +230,9 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
         var url =
             $"{endpoint.TrimEnd('/')}/documentintelligence/documentModels/prebuilt-layout:analyze?outputContentFormat=markdown&api-version={Uri.EscapeDataString(apiVersion)}";
 
-        if (paginasSolicitadas is > 0 && AdmiteRangoDePaginas(nombreDocumento))
+        if (CalcularRangoAplicado(nombreDocumento, paginasSolicitadas))
         {
-            url += $"&pages=1-{paginasSolicitadas.Value}";
+            url += $"&pages=1-{paginasSolicitadas!.Value}";
         }
 
         return url;
@@ -239,4 +245,13 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
             || extension.Equals(".tif", StringComparison.OrdinalIgnoreCase)
             || extension.Equals(".tiff", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Unica fuente de verdad de si el recorte de paginas aplica de verdad: hay paginas
+    /// pedidas y el formato lo admite. La usan tanto BuildAnalyzeUrl (para pages=1-N) como
+    /// ExtraerMarkdownAsync (para RangoAplicado en el resultado), de forma que no puedan
+    /// divergir nunca (AB#100249, AB#100250).
+    /// </summary>
+    internal static bool CalcularRangoAplicado(string? nombreDocumento, int? paginasSolicitadas)
+        => paginasSolicitadas is > 0 && AdmiteRangoDePaginas(nombreDocumento);
 }

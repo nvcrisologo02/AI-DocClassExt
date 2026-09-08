@@ -42,14 +42,19 @@ public class MarkdownResolverTests
         ForceReprocess = force
     };
 
+    // Calcula RangoAplicado a partir del input recibido, con el mismo criterio que el proveedor
+    // real (AzureDocumentIntelligenceLayoutMarkdownProvider.CalcularRangoAplicado), en lugar de
+    // fijarlo a ojo: asi los tests distinguen de verdad un formato que honra pages=1-N (PDF/TIFF)
+    // de uno que no (Office, imagenes), igual que haria DI.
     private void LayoutDevuelve(string markdown, int paginas)
         => _layout.Setup(l => l.ExtraerMarkdownAsync(It.IsAny<ExtraerMarkdownLayoutInput>(), It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ExtraerMarkdownLayoutResultado
+            .Returns((ExtraerMarkdownLayoutInput input, CancellationToken _) => Task.FromResult(new ExtraerMarkdownLayoutResultado
             {
                 Markdown = markdown,
                 Paginas = paginas,
+                RangoAplicado = AzureDocumentIntelligenceLayoutMarkdownProvider.CalcularRangoAplicado(input.NombreDocumento, input.PaginasSolicitadas),
                 Consumos = { new ConsumoIA { Actividad = ActividadesIA.Layout, Operacion = "layout.prebuilt-layout", Modelo = "prebuilt-layout", Paginas = paginas } }
-            });
+            }));
 
     private void BdTiene(string markdown, int? paginas, bool completo)
         => _repo.Setup(r => r.GetBySHA256Async("sha-1")).ReturnsAsync(new DocumentoEntity
@@ -183,6 +188,36 @@ public class MarkdownResolverTests
         r.Paginas.Should().Be(2);
     }
 
+    [Fact] // .docx: DI ignora pages=1-N (RangoAplicado=false) y devuelve el documento entero
+    public async Task Layout_FormatoSinRango_SeDeclaraCompleto()
+    {
+        BdVacia();
+        LayoutDevuelve("# docx entero", 4);
+        var ctx = Contexto(totalPaginas: 0);
+        ctx.NombreDocumento = "doc.docx";
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), ctx);
+
+        r.Completo.Should().BeTrue();
+        _repo.Verify(x => x.ActualizarMarkdownSiMejoraAsync("sha-1", It.IsAny<byte[]>(), It.IsAny<string>(), 4, true, false), Times.Once);
+    }
+
+    [Fact] // .pdf con recorte: DI aplica pages=1-N (RangoAplicado=true) y el resultado es parcial;
+           // par simetrico de Layout_FormatoSinRango_SeDeclaraCompleto para cerrar el caso.
+    public async Task Layout_FormatoConRango_SeDeclaraParcial()
+    {
+        BdVacia();
+        LayoutDevuelve("# tres paginas", 3);
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto(totalPaginas: 14));
+
+        _layout.Verify(l => l.ExtraerMarkdownAsync(
+            It.Is<ExtraerMarkdownLayoutInput>(i => i.PaginasSolicitadas == 3 && i.NombreDocumento == "doc.pdf"),
+            It.IsAny<CancellationToken>()), Times.Once);
+        r.Completo.Should().BeFalse();
+        r.Paginas.Should().Be(3);
+    }
+
     [Fact]
     public async Task LayoutFalla_ConAlgoEnBd_SeUsaComoFallbackAunqueNoCubra()
     {
@@ -196,6 +231,7 @@ public class MarkdownResolverTests
         r.Fuente.Should().Be(FuenteMarkdown.BaseDatos);
         r.Completo.Should().BeFalse();
         r.Paginas.Should().Be(3);
+        r.Consumos.Should().BeEmpty("un layout que lanzo excepcion no dejo ningun consumo pagado que propagar");
     }
 
     [Fact]
@@ -271,6 +307,22 @@ public class MarkdownResolverTests
         _repo.Setup(r => r.ActualizarMarkdownSiMejoraAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>()))
             .ThrowsAsync(new TimeoutException("sql"));
         LayoutDevuelve("# de layout", 3);
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto());
+
+        r.Markdown.Should().Be("# de layout");
+        r.Persistido.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Persistir_ConCeroFilasAfectadas_UsaElMarkdownPeroNoQuedaPersistido()
+    {
+        // 0 filas es un resultado legitimo del UPDATE condicional (no procedia escribir porque
+        // no mejoraba la cobertura), no un error: el markdown resuelto se usa igual.
+        BdVacia();
+        LayoutDevuelve("# de layout", 3);
+        _repo.Setup(r => r.ActualizarMarkdownSiMejoraAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>()))
+            .ReturnsAsync(0);
 
         var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto());
 

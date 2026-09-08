@@ -61,7 +61,7 @@ public sealed class MarkdownResolver : IMarkdownResolver
 
         // 3. Base de datos. Se lee siempre (tambien con ForceReprocess) porque hace de fallback
         //    en el paso 5; con ForceReprocess simplemente no se acepta como respuesta aqui.
-        var fila = await BuscarFilaAsync(contexto);
+        var fila = await BuscarFilaAsync(contexto, cancellationToken);
         var persistido = DesdeFila(fila);
         if (!contexto.ForceReprocess && persistido is not null && persistido.Cubre(necesidad))
         {
@@ -78,6 +78,12 @@ public sealed class MarkdownResolver : IMarkdownResolver
             try
             {
                 layout = await ExtraerConLayoutAsync(necesidad, contexto, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Cancelacion real (p.ej. reciclado del worker): no es un fallo de Layout que
+                // deba enmascararse con el fallback, se propaga tal cual.
+                throw;
             }
             catch (Exception ex)
             {
@@ -154,9 +160,10 @@ public sealed class MarkdownResolver : IMarkdownResolver
             },
             cancellationToken);
 
-        // Completo por definicion si no se pidio rango; o si el documento tenia menos paginas
-        // que las pedidas (DI devolvio todas las que hay).
-        var completo = paginasSolicitadas is null
+        // Completo si el proveedor no aplico de verdad el recorte (no se pidio, o el formato no
+        // lo admite y analizo el documento entero: AB#100249); o si el documento tenia menos
+        // paginas que las pedidas (DI devolvio todas las que hay).
+        var completo = !resultado.RangoAplicado
             || (contexto.TotalPaginas > 0 && resultado.Paginas >= contexto.TotalPaginas);
 
         var paginas = resultado.Paginas > 0
@@ -173,7 +180,7 @@ public sealed class MarkdownResolver : IMarkdownResolver
         };
     }
 
-    private async Task<DocumentoEntity?> BuscarFilaAsync(ContextoMarkdown contexto)
+    private async Task<DocumentoEntity?> BuscarFilaAsync(ContextoMarkdown contexto, CancellationToken cancellationToken)
     {
         try
         {
@@ -195,6 +202,11 @@ public sealed class MarkdownResolver : IMarkdownResolver
             }
 
             return null;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cancelacion real: se propaga tal cual, no se enmascara como "sin BD".
+            throw;
         }
         catch (Exception ex)
         {
@@ -249,6 +261,11 @@ public sealed class MarkdownResolver : IMarkdownResolver
             var repo = scope.ServiceProvider.GetRequiredService<IDocumentoRepository>();
             var filas = await repo.ActualizarMarkdownSiMejoraAsync(sha256, gzip, base64, paginas, completo, forzar);
             return filas > 0;
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Cancelacion real: se propaga tal cual, no se enmascara como "no se pudo persistir".
+            throw;
         }
         catch (Exception ex)
         {
