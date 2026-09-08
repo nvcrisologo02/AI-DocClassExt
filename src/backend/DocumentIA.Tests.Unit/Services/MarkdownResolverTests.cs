@@ -231,7 +231,8 @@ public class MarkdownResolverTests
         r.Fuente.Should().Be(FuenteMarkdown.BaseDatos);
         r.Completo.Should().BeFalse();
         r.Paginas.Should().Be(3);
-        r.Consumos.Should().BeEmpty("un layout que lanzo excepcion no dejo ningun consumo pagado que propagar");
+        // Sin asercion sobre Consumos: aqui Layout lanza excepcion y nunca llega a construirse
+        // (layout queda null), asi que no hay consumo pagado que propagar por esta rama.
     }
 
     [Fact]
@@ -246,6 +247,28 @@ public class MarkdownResolverTests
         r.Fuente.Should().Be(FuenteMarkdown.Ninguna);
         r.Consumos.Should().HaveCount(1, "el layout se pago aunque no devolviera texto");
         r.Persistido.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task LayoutVacio_ConAlgoEnBd_UsaLaBdYConservaLosConsumosDelLayout()
+    {
+        // Layout se pago (Consumos no vacio) pero no sirvio (markdown vacio, sin excepcion); hay
+        // un parcial en BD que no cubre la necesidad. El resultado debe salir de BD (paso 5), pero
+        // sin perder el consumo ya pagado en esa llamada a Layout.
+        BdTiene("# viejo de 2", 2, false);
+        _layout.Setup(l => l.ExtraerMarkdownAsync(It.IsAny<ExtraerMarkdownLayoutInput>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraerMarkdownLayoutResultado
+            {
+                Markdown = "",
+                Paginas = 0,
+                Consumos = { new ConsumoIA { Actividad = ActividadesIA.Layout, Operacion = "layout.prebuilt-layout-vacio", Modelo = "prebuilt-layout" } }
+            });
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto());
+
+        r.Fuente.Should().Be(FuenteMarkdown.BaseDatos);
+        r.Markdown.Should().Be("# viejo de 2");
+        r.Consumos.Should().ContainSingle(c => c.Operacion == "layout.prebuilt-layout-vacio");
     }
 
     [Fact]
