@@ -12,6 +12,7 @@
 3. [Flujos de Clasificación](#3-flujos-de-clasificación)
    - 3.1 [Flujo Completo (Ingest + Classify + Extract + Validate)](#31-flujo-completo)
    - 3.2 [Flujo Solo Clasificación (Classification Only)](#32-flujo-solo-clasificación)
+   - 3.3 [Obtención del markdown del documento](#33-obtención-del-markdown-del-documento)
 4. [Modos de Clasificación](#4-modos-de-clasificación)
    - 4.1 [Clasificación Automática (Azure DI)](#41-clasificación-automática-azure-di)
    - 4.2 [Clasificación Forzada (ExpectedType)](#42-clasificación-forzada-expectedtype)
