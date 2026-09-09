@@ -129,6 +129,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
       "expectOutputJsonContains": ["ResultadoPrompt"]
     }
   },
@@ -143,6 +144,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
       "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
     }
   },
@@ -157,6 +159,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
       "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
     }
   },
@@ -171,6 +174,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
       "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
     }
   },
@@ -185,6 +189,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
       "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
     }
   },
@@ -199,6 +204,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
       "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
     }
   },
@@ -213,6 +219,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
       "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
     }
   },
@@ -265,7 +272,8 @@
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
     "assertions": {
       "expectedRuntimeStatus": "Completed",
-      "expectNoTechnicalError": true
+      "expectNoTechnicalError": true,
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"]
     }
   },
   {
@@ -277,7 +285,8 @@
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
     "assertions": {
       "expectedRuntimeStatus": "Completed",
-      "expectNoTechnicalError": true
+      "expectNoTechnicalError": true,
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"]
     }
   },
   {
@@ -332,6 +341,50 @@
       "expectedRuntimeStatus": "Completed",
       "expectedStatus": ["SIN_CONTENIDO_DOCUMENTO", "NO_CLASIFICADO", "OK"],
       "expectOutputJsonNotContains": ["\"Tdn2\":\"", "\"tdn2\":\""]
+    }
+  },
+  {
+    "group": "FM", "id": "FM1", "caseKey": "FM-FM1", "domain": "postdeploy",
+    "name": "Markdown: primera ejecucion extrae con Layout y persiste el completo",
+    "profiles": ["full"],
+    "covers": ["SUM-01"],
+    "serial": true,
+    "documentPath": "tests/e2e-postdeploy/corpus/resumen/informe-activo-sintetico.pdf",
+    "classificationProvider": "auto",
+    "classificationOnly": false,
+    "expectedType": "resumen.documental",
+    "skipDuplicateCheck": true,
+    "forceReprocess": true,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK"],
+      "expectOutputPathEquals": [
+        { "path": "DetalleEjecucion.MarkdownFuente", "value": "Layout" },
+        { "path": "DetalleEjecucion.MarkdownCompleto", "value": "True" }
+      ]
+    }
+  },
+  {
+    "group": "FM", "id": "FM2", "caseKey": "FM-FM2", "domain": "postdeploy",
+    "name": "Markdown: segunda ejecucion del mismo documento lo recupera de base de datos",
+    "profiles": ["full"],
+    "covers": ["SUM-01"],
+    "serial": true,
+    "documentPath": "tests/e2e-postdeploy/corpus/resumen/informe-activo-sintetico.pdf",
+    "classificationProvider": "auto",
+    "classificationOnly": false,
+    "expectedType": "resumen.documental",
+    "skipDuplicateCheck": true,
+    "forceReprocess": false,
+    "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["OK"],
+      "expectOutputPathEquals": [
+        { "path": "DetalleEjecucion.MarkdownFuente", "value": "BaseDatos" }
+      ],
+      "expectOutputPathsNotEmpty": ["DatosExtraidos.ResultadoPrompt"]
     }
   }
 ]
