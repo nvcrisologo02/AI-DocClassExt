@@ -5,11 +5,23 @@
 .DESCRIPTION
     La migracion MarkdownCobertura (AB#100246) anade MarkdownPaginas y MarkdownCompleto y deja el
     historico en NULL / 0: cobertura desconocida, solo valida como fallback. Este script marca
-    MarkdownCompleto = 1 unicamente cuando la ULTIMA ejecucion del documento termino en OK y su
+    MarkdownCompleto = 1 unicamente cuando la ULTIMA ejecucion del documento termino en OK, su
     OrigenMarkdown es uno de los que solo se producen con el documento entero
     (LayoutDocumentoCompletoPostClasificacion, FallbackLayout, LayoutBajoDemandaPrompt,
-    Extraccion, MarkdownPrevio). No se infieren paginas de recortes: un error ahi haria reutilizar
-    3 paginas como si fueran el documento entero.
+    Extraccion) y Documentos.Paginas es mayor que cero. No se infieren paginas de recortes: un
+    error ahi haria reutilizar 3 paginas como si fueran el documento entero.
+
+    MarkdownPrevio queda deliberadamente FUERA de la lista de origenes seguros, aunque
+    tambien puede darse con el documento entero. En codigo, "MarkdownPrevio" significa
+    "se reutilizo lo que ya hubiera en datosNormalizados['Markdown']", sin registrar de donde
+    vino ese contenido. Ese valor puede ser el recorte de paginas para clasificacion del Paso
+    2.8 (a partir de DocumentoBase64Clasif), reetiquetado como MarkdownPrevio cuando la
+    extraccion posterior no aporto markdown propio. El origen "LayoutPreClasificacion", que si
+    identifica ese recorte de forma explicita, esta correctamente excluido. Pero una vez
+    reetiquetado a MarkdownPrevio se pierde la distincion, y las filas historicas no tienen
+    forma fiable de recuperarla. Marcar esas filas como completas escribiria cobertura falsa y,
+    ademas, las dejaria fuera de alcance para siempre de ActualizarMarkdownSiMejoraAsync (que ya
+    no las veria como pendientes de mejorar). Dejarlas en NULL es el resultado correcto.
 
     Va por lotes y NO forma parte de la migracion EF: recorrer JSON_VALUE sobre el contrato de la
     ultima ejecucion de cada documento dentro de la transaccion de una migracion mantendria
@@ -74,16 +86,24 @@ if (-not (Invoke-Scalar "SELECT COL_LENGTH('dbo.Documentos','MarkdownCompleto');
 }
 
 # Caso seguro: la fila esta sin cobertura (MarkdownPaginas NULL, MarkdownCompleto 0), tiene
-# markdown persistido, y la ULTIMA ejecucion del documento termino OK con un OrigenMarkdown que
-# solo se produce procesando el documento entero. Ese conjunto de condiciones se reutiliza tanto
-# para contar (WhatIf) como para escribir, asi que el recuento y la escritura nunca divergen.
+# markdown persistido, Documentos.Paginas es mayor que cero (para no dejar la incoherencia
+# "completo pero de longitud desconocida"), y la ULTIMA ejecucion del documento termino OK con
+# un OrigenMarkdown que solo se produce procesando el documento entero. MarkdownPrevio se deja
+# fuera a proposito: en codigo significa "se reutilizo lo que hubiera en
+# datosNormalizados['Markdown']" sin registrar su procedencia, y ese contenido puede ser el
+# recorte de paginas para clasificacion del Paso 2.8 reetiquetado tras perder el origen
+# LayoutPreClasificacion; no hay forma fiable de distinguir ambos casos en las filas historicas,
+# asi que se prefiere dejarlas en NULL antes que escribir cobertura falsa. Este WHERE se
+# reutiliza tanto para contar (WhatIf) como para escribir, asi que el recuento y la escritura
+# nunca divergen.
 $casoSeguroWhere = @"
 d.MarkdownCompleto = 0
   AND d.MarkdownPaginas IS NULL
+  AND d.Paginas > 0
   AND (d.NormalizacionMarkdownGzip IS NOT NULL OR d.NormalizacionMarkdownCompressed IS NOT NULL)
   AND u.EstadoFinal = 'OK'
   AND JSON_VALUE(u.ContratoSalidaCompletoJson, '`$.DetalleEjecucion.OrigenMarkdown')
-      IN ('LayoutDocumentoCompletoPostClasificacion', 'FallbackLayout', 'LayoutBajoDemandaPrompt', 'Extraccion', 'MarkdownPrevio')
+      IN ('LayoutDocumentoCompletoPostClasificacion', 'FallbackLayout', 'LayoutBajoDemandaPrompt', 'Extraccion')
 "@
 
 $pendientes = [int](Invoke-Scalar @"
