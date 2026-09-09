@@ -1,7 +1,7 @@
 # Política única de obtención y persistencia de markdown por cobertura de páginas
 
 **Fecha:** 2026-09-08
-**Estado:** Diseño aprobado, pendiente de plan de implementación
+**Estado:** Implementado en la rama feature/100245-markdown-cobertura-paginas; pendiente de despliegue y backfill
 **Work items:** elemento padre [100245](https://sareb.visualstudio.com/AI%20DocClassExt/_workitems/edit/100245), tareas 100246 a 100255; se incorpora al mismo esfuerzo el bug [100256](https://sareb.visualstudio.com/AI%20DocClassExt/_workitems/edit/100256) (aserciones de la batería E2E).
 
 ## Problema

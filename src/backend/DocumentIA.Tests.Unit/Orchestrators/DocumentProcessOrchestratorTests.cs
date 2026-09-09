@@ -3440,11 +3440,10 @@ public class DocumentProcessOrchestratorTests
 
         await orchestrator.RunOrchestrator(context);
 
+        // Con el completo ya en la cache, el Paso 3.5 no vuelve a pedir markdown: una sola llamada.
         context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(1);
         context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity")!
             .Necesidad.DocumentoCompleto.Should().BeTrue();
-        // Con el completo ya en la cache, el Paso 3.5 no vuelve a pagar Layout.
-        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(0);
     }
 
     [Fact]
@@ -3609,12 +3608,12 @@ public class DocumentProcessOrchestratorTests
 
         var salida = await orchestrator.RunOrchestrator(context);
 
+        // El orquestador no tiene ninguna via directa a DI Layout: todo el markdown pasa por el
+        // resolutor via ObtenerMarkdownActivity, asi que una sola llamada basta para cubrir ambas
+        // garantias (no se repite la anticipacion y no hay bypass del resolutor).
         context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(
             1,
             "la anticipacion ya pidio el documento completo y no lo consiguio: repetirlo pagaria Layout dos veces para fallar dos");
-        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(
-            0,
-            "el orquestador no vuelve a invocar DI Layout por su cuenta: todo el markdown pasa por el resolutor");
         context.GetLastActivityInput<PromptActivityInput>("PromptActivity")!.MarkdownExtraido.Should().BeNull();
         salida.DetalleEjecucion.MarkdownGenerado.Should().BeFalse();
     }

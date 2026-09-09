@@ -308,9 +308,9 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
    - Si la clasificacion GPT retorna una **tipologia no mapeada al catalogo** (`tipologia = "Desconocido"`):
      el pipeline **se detiene**, extraccion y validacion se omiten, `resultado.estado = "OK"`, y
      `identificacion.propuestaTipologia` contiene la propuesta libre del modelo.
-3. **D4 — Markdown pre-procesado**: si se informa `instrucciones.classification.markdown`, el paso
-   `ExtraerMarkdownLayoutActivity` se omite y se usa ese texto directamente. Util en integraciones batch que
-   ya tienen el markdown extraido.
+3. **D4 — Markdown pre-procesado**: si se informa `instrucciones.classification.markdown`, ese texto gana
+   siempre en `MarkdownResolver` (fuente `Caller`) y no se llama a Document Intelligence Layout. Util en
+   integraciones batch que ya tienen el markdown extraido. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3.
 4. **D7 — Clave de deduplicacion extendida**: el campo `nivelClasificacion` forma parte de la clave de deduplicacion
    junto con `SHA256` y `classificationOnly`. Ver RN1.
 5. **Confianza dinamica self-reported**: GPT reporta su propia certeza sobre cada clasificacion mediante un campo

@@ -66,6 +66,50 @@ public class ObtenerMarkdownActivityTests
     }
 
     [Fact]
+    public async Task Run_SinCatalogoDeTarifas_NoFalla()
+    {
+        // Una tarifa que falta nunca puede tumbar un procesamiento.
+        var resolver = new Mock<IMarkdownResolver>();
+        resolver.Setup(r => r.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResultadoMarkdown
+            {
+                Markdown = "# x", Paginas = 10, Fuente = FuenteMarkdown.Layout,
+                Consumos = { new ConsumoIA { Actividad = ActividadesIA.Layout, Operacion = "layout.prebuilt-layout", Proveedor = ProveedoresIA.DocumentIntelligence, Modelo = "prebuilt-layout", Paginas = 10 } }
+            });
+        var actividad = new ObtenerMarkdownActivity(new Mock<ILogger<ObtenerMarkdownActivity>>().Object, resolver.Object, CargadorCon());
+
+        var r = await actividad.Run(new ObtenerMarkdownInput());
+
+        r.Consumos[0].CosteEur.Should().BeNull();
+        r.Consumos[0].TarifaAplicada.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Run_SiElCatalogoRevienta_ElDocumentoSigueProcesandose()
+    {
+        // Migrado desde TarificacionEnActividadesTests (AB#100255): la resiliencia frente a un
+        // catalogo de tarifas caido ya no depende de ExtraerMarkdownLayoutActivity, sino de
+        // ObtenerMarkdownActivity, que es quien ahora invoca a TarificadorDeConsumos.
+        var resolver = new Mock<IMarkdownResolver>();
+        resolver.Setup(r => r.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResultadoMarkdown
+            {
+                Markdown = "# x", Paginas = 10, Fuente = FuenteMarkdown.Layout,
+                Consumos = { new ConsumoIA { Actividad = ActividadesIA.Layout, Operacion = "layout.prebuilt-layout", Proveedor = ProveedoresIA.DocumentIntelligence, Modelo = "prebuilt-layout", Paginas = 10 } }
+            });
+
+        var cargadorRoto = new Mock<TarifaRegistryLoader>();
+        cargadorRoto.Setup(c => c.Load()).Throws(new InvalidOperationException("base de datos caida"));
+
+        var actividad = new ObtenerMarkdownActivity(new Mock<ILogger<ObtenerMarkdownActivity>>().Object, resolver.Object, cargadorRoto.Object);
+
+        var r = await actividad.Run(new ObtenerMarkdownInput());
+
+        r.Paginas.Should().Be(10);
+        r.Consumos[0].CosteEur.Should().BeNull();
+    }
+
+    [Fact]
     public async Task PersistirMarkdownActivity_DelegaEnElResolutor()
     {
         var resolver = new Mock<IMarkdownResolver>();

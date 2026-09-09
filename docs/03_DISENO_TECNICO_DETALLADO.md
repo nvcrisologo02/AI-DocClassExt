@@ -42,7 +42,7 @@ flowchart TD
     CHK_TIP -->|"Si"| EXTRACT
 
     EXTRACT["ExtraerActivity<br/>CU / DI / GPT fallback"] --> CHK_LAYOUT{"Markdown layout<br/>habilitado?"}
-    CHK_LAYOUT -->|"Si"| LAYOUT["ExtraerMarkdownLayoutActivity"]
+    CHK_LAYOUT -->|"Si"| LAYOUT["ObtenerMarkdownActivity"]
     CHK_LAYOUT -->|"No"| CHK_PROMPT
     LAYOUT --> CHK_PROMPT
 
@@ -86,7 +86,7 @@ flowchart TD
 | 5 | Clasificar | `ClasificarActivity` | byte[] PDF | TipologiaDetectada, Confianza | Pipeline configurable por flujo (resuelto desde `Classification.Flows` + `Classification.DefaultFlow`), secuencial hasta satisfactorio y fallback global final. PostConfigure en Program.cs carga diccionario Flows desde configuracion. |
 | 6 | ResolverTipologia | `ResolverTipologiaActivity` | codigo tipologia | TipologiaConfig completa | Resuelve familia@version → config |
 | 7 | Extraer | `ExtraerActivity` | byte[] + tipologia config | DatosExtraidos (Dictionary) | CU/DI/GPT segun config |
-| 8 | ExtraerMarkdownLayout | `ExtraerMarkdownLayoutActivity` | byte[] PDF | Markdown texto | Layout extraction con DI. **Se omite** si `instrucciones.classification.markdown` viene informado (D4): en ese caso el markdown aportado se inyecta directamente en `datosNormalizados["Markdown"]`. |
+| 8 | ObtenerMarkdown | `ObtenerMarkdownActivity` | `NecesidadMarkdown` + `ContextoMarkdown` | `ResultadoMarkdown` (markdown, paginas, cobertura, consumos) | Delega en `MarkdownResolver`, que decide la fuente (cache, BD, Layout) segun lo que declare el paso llamante. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3. **Se omite** si `instrucciones.classification.markdown` viene informado (D4): en ese caso el markdown aportado se inyecta directamente en `datosNormalizados["Markdown"]` y se persiste via `PersistirMarkdownActivity`. |
 | 9 | Prompt | `PromptActivity` | datos + markdown + prompt config | Datos prompt enriquecidos | GPT-4o-mini con prompt libre (opcional) |
 | 10 | Validar | `ValidarActivity` | DatosExtraidos + reglas JSON | ValidationReport | 11 tipos de validador |
 | 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
@@ -251,7 +251,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
 
 **D4 — Markdown pre-procesado** (`DocumentProcessOrchestrator.cs`, antes del paso 2.8):
 - Si `entrada.Instrucciones.Classification.Markdown` no es null ni vacío, se inyecta en `datosNormalizados["Markdown"]`
-  y se omite la llamada a `ExtraerMarkdownLayoutActivity`.
+  y gana siempre en `MarkdownResolver` (fuente `Caller`, no se persiste). Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3.
 
 **Paso 2.8 — Layout pre-clasificación y transporte del documento**:
 - Se ejecuta cuando no hay markdown previo, `expectedType` viene vacío y el proveedor de clasificación
@@ -267,10 +267,10 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
   contexto textual y el conteo de páginas del layout nunca se informaba.
 
 **Contenido bajo demanda para prompt y resumen** (`EjecutarPromptLibreAsync`):
-- Si al ejecutar un prompt o un resumen no hay markdown disponible, se invoca `ExtraerMarkdownLayoutActivity`
+- Si al ejecutar un prompt o un resumen no hay markdown disponible, se invoca `ObtenerMarkdownActivity`
   en ese momento (origen `LayoutBajoDemandaPrompt`) y se propaga `identificacion.paginas` si nadie la
   informó antes. Cubre el caso de `expectedType` sobre tipologías sin extracción ni layout, donde el
-  paso 2.8 no llega a ejecutarse.
+  paso 2.8 no llega a ejecutarse. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3.
 - La llamada se paga solo cuando hay un prompt o un resumen que la necesita, no en todas las
   ejecuciones con tipología esperada.
 

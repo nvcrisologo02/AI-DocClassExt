@@ -159,13 +159,15 @@ Actividad (`ResolverTipologiaActivity`) que traduce un código de tipología det
 
 Extracción de estructura y layout de documento en formato Markdown, preservando jerarquía visual (encabezados, listas, tablas).
 
-**Actividad:** `ExtraerMarkdownLayoutActivity` (opcional, configurable por tipología).
+**Actividad:** `ObtenerMarkdownActivity`, que delega en `MarkdownResolver` (este decide si hace falta
+llamar a Layout o si la caché/BD ya cubren la necesidad declarada por el paso llamante).
 
 **Provider:** Document Intelligence (Layout model).
 
 **Uso:** Enriquecimiento de datos extraídos, comprensión de estructura documental.
 
-**Nota:** Si `instrucciones.classification.markdown` se proporciona en input (D4), se inyecta directamente sin ejecutar activity.
+**Nota:** Si `instrucciones.classification.markdown` se proporciona en input (D4), gana siempre en
+`MarkdownResolver` y no se llama a Layout.
 
 ---
 

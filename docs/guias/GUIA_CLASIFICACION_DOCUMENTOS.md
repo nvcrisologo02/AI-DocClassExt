@@ -268,6 +268,45 @@ Se activa mediante el parámetro `instrucciones.classification.classificationOnl
 
 ---
 
+### 3.3 Obtención del markdown del documento
+
+Desde AB#100245 el markdown se obtiene en un único sitio, `MarkdownResolver`, al que cada paso
+declara lo que necesita: **documento completo** (prompt libre, `PromptConfig` de tipología y
+extracción GPT) o **un mínimo de N páginas** (clasificación y resumen, con N el recorte de
+clasificación: 3 por defecto, configurable por tipología y familia).
+
+Orden de resolución: markdown de la petición (`instrucciones.classification.markdown`, gana
+siempre y no se persiste) → caché de la ejecución → base de datos si cubre la necesidad →
+Document Intelligence Layout (para PDF/TIFF pide solo las N primeras páginas con `pages=1-N`)
+→ base de datos como respaldo aunque no cubra → nada (deciden las guardas de contenido).
+
+Reglas que conviene conocer:
+
+- **Se usa el mayor, sin recortar.** Si ya hay un markdown que cubre el documento entero, o más
+  páginas de las necesarias, se usa tal cual. Nunca se llama a Layout para menos de lo que ya se
+  tiene.
+- **Si la petición ya declara que necesitará el completo** (prompt ad hoc; `expectedType` cuya
+  tipología tiene prompt habilitado o extracción GPT-directo), se extrae una sola vez al principio.
+- **`forceReprocess` reinicia el documento**: ignora la base de datos al leer y sobrescribe al
+  escribir.
+- **La persistencia nunca degrada**: `Documentos.MarkdownPaginas` / `MarkdownCompleto` registran
+  la cobertura; un markdown parcial no pisa uno completo, y uno de cobertura desconocida
+  (histórico) solo lo sustituye uno completo.
+
+Trazabilidad en el contrato de salida: `DetalleEjecucion.MarkdownFuente` (`Caller`,
+`CacheEjecucion`, `BaseDatos`, `Layout`, `Clasificador`, `Extraccion`, `Normalizacion`),
+`MarkdownPaginas`, `MarkdownCompleto`; `OrigenMarkdown` indica el punto del flujo que lo pidió.
+Para medir el ahorro:
+
+```sql
+SELECT JSON_VALUE(ContratoSalidaCompletoJson, '$.DetalleEjecucion.MarkdownFuente') AS fuente, COUNT(*) AS n
+FROM dbo.DocumentoEjecuciones
+WHERE FechaEjecucion > DATEADD(day, -7, GETUTCDATE())
+GROUP BY JSON_VALUE(ContratoSalidaCompletoJson, '$.DetalleEjecucion.MarkdownFuente');
+```
+
+---
+
 ## 4. Modos de Clasificación
 
 ### 4.1 Clasificación Automática (Azure DI)

@@ -52,7 +52,7 @@ flowchart TB
         HEALTH["HTTP Trigger<br/>POST /api/healthcheck"]
         ORCH["Durable Orchestrator<br/>DocumentProcessOrchestrator"]
         ACT_NORM["NormalizarActivity"]
-        ACT_LAY["ExtraerMarkdownLayoutActivity"]
+        ACT_LAY["ObtenerMarkdownActivity"]
         ACT_DUP["VerificarDuplicadoActivity"]
         ACT_DUP_MD5["VerificarDuplicadoPorMD5Activity"]
         ACT_LAST["ObtenerUltimaEjecucionDuplicadoActivity"]

@@ -132,6 +132,49 @@ public class MarkdownResolverTests
     }
 
     [Fact]
+    public async Task BdSoloConMarkdownBase64Historico_CaeAlRespaldo()
+    {
+        // Migrado desde RecuperarMarkdownPersistidoActivityTests (AB#100255): cubre el historico
+        // sin migrar y cualquier fila escrita por una version anterior tras una vuelta atras, en
+        // las que solo existe la columna Base64 y no la binaria (Gzip).
+        const string markdown = "# markdown historico";
+        _repo.Setup(r => r.GetBySHA256Async("sha-1")).ReturnsAsync(new DocumentoEntity
+        {
+            SHA256 = "sha-1",
+            NormalizacionMarkdownGzip = null,
+            NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(markdown),
+            MarkdownPaginas = 14,
+            MarkdownCompleto = true
+        });
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Completo(), Contexto());
+
+        r.Markdown.Should().Be(markdown);
+        r.Fuente.Should().Be(FuenteMarkdown.BaseDatos);
+        _layout.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task BdEncontradaSinMarkdownPersistido_SeTrataComoSinBdYVaALayout()
+    {
+        // Migrado desde RecuperarMarkdownPersistidoActivityTests (AB#100255): la fila existe (el
+        // documento ya se conoce por SHA256) pero no tiene ninguna de las dos columnas de markdown
+        // pobladas. Debe tratarse igual que si no hubiera fila.
+        _repo.Setup(r => r.GetBySHA256Async("sha-1")).ReturnsAsync(new DocumentoEntity
+        {
+            SHA256 = "sha-1",
+            NormalizacionMarkdownGzip = null,
+            NormalizacionMarkdownCompressed = null
+        });
+        LayoutDevuelve("# recorte nuevo", 3);
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto());
+
+        r.Fuente.Should().Be(FuenteMarkdown.Layout);
+        r.Markdown.Should().Be("# recorte nuevo");
+    }
+
+    [Fact]
     public async Task BdConCoberturaDesconocida_NoCubre_YSeVaALayout()
     {
         BdTiene("# historico", null, false);
