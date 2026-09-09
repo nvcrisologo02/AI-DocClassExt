@@ -179,4 +179,37 @@ public sealed class DocumentoRepositoryMarkdownTests : IDisposable
         d.MarkdownPaginas.Should().Be(3);
         d.NormalizacionMarkdownGzip.Should().Equal(GzipNuevo);
     }
+
+    [Fact]
+    public async Task UpdateAsync_NoRevierteLaCoberturaQueEscribioOtraEjecucionConcurrente()
+    {
+        // AB#100254: escenario de dos ejecuciones concurrentes del mismo SHA256 (ForceReprocess o
+        // SkipDuplicateCheck). A entra en PersistirActivity y lee la fila sin markdown; B, mientras
+        // tanto, escribe el documento completo; el SaveChanges de A revertia esas cuatro columnas
+        // porque Update() marca TODA la entidad como modificada.
+        await SembrarAsync("s10", null, null, null, false);
+
+        // A lee la fila: su copia en memoria no tiene markdown.
+        var deLaEjecucionA = await _repo.GetBySHA256Async("s10");
+        deLaEjecucionA!.NormalizacionMarkdownGzip.Should().BeNull();
+
+        // B persiste el documento completo por la via atomica.
+        (await _repo.ActualizarMarkdownSiMejoraAsync("s10", GzipNuevo, "completo", 14, true, false))
+            .Should().Be(1);
+
+        // A cierra su persistencia con los campos que si le tocan.
+        deLaEjecucionA.Estado = "OK";
+        deLaEjecucionA.ConfianzaGlobal = 0.93;
+        await _repo.UpdateAsync(deLaEjecucionA);
+
+        var d = await LeerAsync("s10");
+        d.NormalizacionMarkdownGzip.Should().Equal(GzipNuevo, "la actualizacion no puede pisar la cobertura ajena");
+        d.NormalizacionMarkdownCompressed.Should().Be("completo");
+        d.MarkdownPaginas.Should().Be(14);
+        d.MarkdownCompleto.Should().BeTrue();
+
+        // Y los campos que la actualizacion si debe escribir siguen escribiendose.
+        d.Estado.Should().Be("OK");
+        d.ConfianzaGlobal.Should().Be(0.93);
+    }
 }

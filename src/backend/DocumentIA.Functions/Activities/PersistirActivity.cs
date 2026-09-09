@@ -164,10 +164,13 @@ namespace DocumentIA.Functions.Activities
                     if (salida.DetalleEjecucion.Clasificacion.PagesProcessed > 0)
                         documento.PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed;
                     
-                    // AB#100254: en la actualizacion no se tocan las columnas de markdown. La escritura
-                    // la hace MarkdownResolver en el momento de obtenerlo, con la regla de cobertura;
-                    // aqui se sobrescribia sin condicion y una reejecucion sin contenido borraba el
-                    // markdown bueno con null.
+                    // AB#100254: en la actualizacion no se asigna ninguna columna de markdown, y
+                    // ademas DocumentoRepository.UpdateAsync las marca como no modificadas para que
+                    // no viajen en el UPDATE: sin eso, Update() marca toda la entidad y el SaveChanges
+                    // reescribia esas cuatro columnas con lo que se leyo al entrar en la actividad,
+                    // revirtiendo la cobertura que otra ejecucion concurrente del mismo SHA256
+                    // hubiera mejorado entretanto. Su unico escritor es MarkdownResolver, en el
+                    // momento de obtener el markdown y con la regla de cobertura.
                     documento.FechaExpiracionBlob = fechaExpiracionBlob;
                     documento.FechaActualizacion = DateTime.UtcNow;
                     await _documentoRepo.UpdateAsync(documento);

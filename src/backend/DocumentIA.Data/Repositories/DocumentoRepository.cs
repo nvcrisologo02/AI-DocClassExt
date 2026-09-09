@@ -88,10 +88,20 @@ public class DocumentoRepository : IDocumentoRepository
         return documento;
     }
 
+    // Las cuatro columnas de markdown no se escriben nunca desde aqui (AB#100254): sus unicos
+    // escritores son el alta del documento y ActualizarMarkdownSiMejoraAsync, que compara cobertura
+    // en el propio UPDATE y por tanto es atomico. Update() marca TODA la entidad como modificada,
+    // asi que el UPDATE generado incluia esas columnas con los valores que se leyeron al abrir la
+    // actividad; si entretanto otra ejecucion del mismo SHA256 mejoraba la cobertura, este
+    // SaveChanges la revertia a la anterior.
     public async Task UpdateAsync(DocumentoEntity documento)
     {
         documento.FechaActualizacion = DateTime.UtcNow;
-        _context.Documentos.Update(documento);
+        var entrada = _context.Documentos.Update(documento);
+        entrada.Property(d => d.NormalizacionMarkdownGzip).IsModified = false;
+        entrada.Property(d => d.NormalizacionMarkdownCompressed).IsModified = false;
+        entrada.Property(d => d.MarkdownPaginas).IsModified = false;
+        entrada.Property(d => d.MarkdownCompleto).IsModified = false;
         await _context.SaveChangesAsync();
     }
 
