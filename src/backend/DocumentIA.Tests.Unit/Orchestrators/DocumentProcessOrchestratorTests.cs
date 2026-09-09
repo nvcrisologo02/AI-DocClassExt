@@ -252,7 +252,8 @@ public class DocumentProcessOrchestratorTests
         // "nota.simple" es una tipología real del catálogo que resuelve. Desde AB#100242 el valor de
         // isDefault ya no decide si ExpectedType se conserva (lo decide el centinela "Desconocido"),
         // así que aquí solo modela si la tipología es la versión por defecto de su familia.
-        bool isDefault = false)
+        bool isDefault = false,
+        string extractionProvider = "")
         => new(
             RequestedValue: "nota.simple",
             TipologiaId: "nota.simple",
@@ -264,6 +265,7 @@ public class DocumentProcessOrchestratorTests
             PromptEnabled: promptEnabled,
             AssetResolverEnabled: assetResolverEnabled,
             PromptHasDefinition: promptHasDefinition,
+            ExtractionProvider: extractionProvider,
             Tdn1: tdn1,
             Tdn2: tdn2);
 
@@ -3151,21 +3153,101 @@ public class DocumentProcessOrchestratorTests
     {
         // Regresion AB#100029: si el resolutor no pudo dar markdown para una necesidad, no se le
         // vuelve a pedir lo mismo en la misma ejecucion (pagaria Layout dos veces para fallar dos).
+        // El escenario necesita dos peticiones reales al resolutor: prompt ad hoc sin ExpectedType
+        // hace que el Paso 2.76 pida Completo() y que el Paso 2.8 pida despues Paginas(N). Como el
+        // fallo fue con documento completo, la segunda peticion no debe llegar a la actividad.
         var orchestrator = CreateOrchestrator();
-        var entrada = BuildEntrada(forzarResumenPorDefecto: true);
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones { UserPromptTemplate = "Resume:\n\n{contenido}" };
         var context = new FakeTaskOrchestrationContext(entrada);
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", false);
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna });
-        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
-        {
-            Modelo = "gpt-4o-mini", Confianza = 0, TipologiaDetectada = "Desconocido", SinContenido = true
-        });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-5-mini", Resultado = "ok" });
 
-        var salida = await orchestrator.RunOrchestrator(context);
+        await orchestrator.RunOrchestrator(context);
 
-        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        // Sin necesidadesSinResultado serian 2: Completo() en el 2.76 y Paginas(3) en el 2.8.
         context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(1);
+        context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity")!
+            .Necesidad.DocumentoCompleto.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExtraccionGptForzadaPorInstrucciones_AnticipaElCompleto()
+    {
+        // La peticion fuerza extraccion GPT-directa sobre una tipologia cuyo proveedor es CU. La
+        // guarda real del Paso 3.5 usa el proveedor efectivo (instrucciones > tipologia), asi que
+        // la anticipacion tiene que mirar lo mismo: si solo mirase el de la tipologia no
+        // anticiparia y el Paso 3.5 acabaria pagando su propio Layout.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(expectedType: "nota.simple");
+        entrada.Instrucciones.Extraction.Provider = "gpt";
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, extractionProvider: "cu"));
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# documento entero", 7, completo: true));
+        context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(1);
+        context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity")!
+            .Necesidad.DocumentoCompleto.Should().BeTrue();
+        // Con el completo ya en la cache, el Paso 3.5 no vuelve a pagar Layout.
+        context.GetActivityCallCount("ExtraerMarkdownLayoutActivity").Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExtraccionDeshabilitadaConProveedorGpt_NoAnticipaElCompleto()
+    {
+        // ExtractionProvider GPT en el JSON pero ExtractionEnabled=false: el Paso 3.5 no llega a
+        // ejecutarse nunca, asi que anticipar el documento completo seria pagar un Layout que
+        // nadie consume. La anticipacion debe mirar tambien ExtractionEnabled.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: false, extractionProvider: "gpt"));
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# documento entero", 7, completo: true));
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        await orchestrator.RunOrchestrator(context);
+
+        // Con ExpectedType informado el Paso 2.8 tampoco corre: la unica peticion posible era la
+        // anticipada, y no debe producirse.
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeSinPromptNiExtraccionGpt_NoPideMarkdownAntesDeClasificar()
+    {
+        // Escenario (c): ExpectedType valido, sin prompt de tipologia y con extraccion CU. Ni el
+        // Paso 2.76 ni el Paso 2.8 tienen motivo para pedir markdown antes de clasificar.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, extractionProvider: "cu"));
+        context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(0);
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
     }
 }

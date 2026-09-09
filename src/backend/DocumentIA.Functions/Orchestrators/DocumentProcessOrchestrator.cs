@@ -1068,10 +1068,18 @@ public class DocumentProcessOrchestrator
             var tipologiaAnticipada = string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType)
                 ? null
                 : expectedTypeResuelto;
+            // La parte de prompt espeja promptActivoEnPeticion; la de extraccion espeja la guarda
+            // del Paso 3.5 (ExtractionEnabled + proveedor efectivo), no solo el proveedor de la
+            // tipologia: sin ExtractionEnabled se pagaba un Layout completo que nadie consumia, y
+            // sin el override de instrucciones no se anticipaba una extraccion GPT forzada por la
+            // peticion sobre una tipologia CU, que acababa pagando Layout dos veces.
             var necesitaCompletoAnticipado = entrada.Instrucciones.Prompt is not null
                 || (tipologiaAnticipada is not null
                     && ((tipologiaAnticipada.PromptEnabled && tipologiaAnticipada.PromptHasDefinition)
-                        || IsGptDirectProvider(tipologiaAnticipada.ExtractionProvider)));
+                        || (tipologiaAnticipada.ExtractionEnabled
+                            && IsGptDirectProvider(ResolveExtractionProviderEfectivo(
+                                entrada.Instrucciones.Extraction.Provider,
+                                tipologiaAnticipada.ExtractionProvider)))));
 
             // D4: markdown del caller. Gana durante toda la ejecucion y no se persiste (regla 5).
             if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.Classification.Markdown))
@@ -2117,8 +2125,12 @@ public class DocumentProcessOrchestrator
                     ? null
                     : entrada.Instrucciones.Extraction.Model;
 
-                // Paso 3.5: si el proveedor es GPT-directo y no hay markdown previo de clasificación, extraerlo con DI Layout
-                var providerParaMarkdown = providerEfectivo ?? tipologiaResuelta.ExtractionProvider;
+                // Paso 3.5: si el proveedor es GPT-directo y no hay markdown previo de clasificación, extraerlo con DI Layout.
+                // Misma precedencia que la anticipacion del Paso 2.76 (AB#100252): ambos puntos
+                // comparten ResolveExtractionProviderEfectivo para no poder divergir.
+                var providerParaMarkdown = ResolveExtractionProviderEfectivo(
+                    entrada.Instrucciones.Extraction.Provider,
+                    tipologiaResuelta.ExtractionProvider);
                 if (IsGptDirectProvider(providerParaMarkdown) && !datosNormalizados.ContainsKey("Markdown"))
                 {
                     logger.LogInformation(
@@ -2675,6 +2687,20 @@ public class DocumentProcessOrchestrator
         => tipologia is not null
            && (string.Equals(tipologia.TechnicalKey, "Desconocido", StringComparison.OrdinalIgnoreCase)
                || string.Equals(tipologia.TipologiaId, "Desconocido", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Proveedor de extraccion efectivo: el override de <c>Instrucciones.Extraction.Provider</c>
+    /// gana salvo que venga vacio o como "auto", en cuyo caso manda el de la tipologia. Es la
+    /// precedencia del Paso 4 y la unica que puede decidir si la extraccion necesitara markdown.
+    /// Vive aqui, en un solo sitio, porque la usan dos puntos que no pueden divergir: la
+    /// anticipacion del documento completo (Paso 2.76) y el Layout previo a extraccion
+    /// (Paso 3.5). Es una funcion pura: no toca servicios ni estado (AB#100252).
+    /// </summary>
+    private static string? ResolveExtractionProviderEfectivo(string? providerInstrucciones, string? providerTipologia)
+        => string.IsNullOrWhiteSpace(providerInstrucciones)
+           || providerInstrucciones.Equals("auto", StringComparison.OrdinalIgnoreCase)
+            ? providerTipologia
+            : providerInstrucciones;
 
     private static bool IsGptDirectProvider(string? provider) =>
         !string.IsNullOrWhiteSpace(provider) &&
