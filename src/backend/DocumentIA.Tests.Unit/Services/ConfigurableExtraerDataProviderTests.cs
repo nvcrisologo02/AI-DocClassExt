@@ -497,11 +497,12 @@ public class ConfigurableExtraerDataProviderTests
             .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new CuExtraccionException("default.cu", "TimeoutException", "hard timeout"));
 
-        fixture.LayoutProvider
-            .Setup(p => p.ExtraerMarkdownAsync(
-                It.IsAny<ExtraerMarkdownLayoutInput>(),
+        fixture.MarkdownResolver
+            .Setup(r => r.ResolverAsync(
+                It.IsAny<NecesidadMarkdown>(),
+                It.IsAny<ContextoMarkdown>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new ExtraerMarkdownLayoutResultado { Markdown = "## markdown layout", Paginas = 24 });
+            .ReturnsAsync(new ResultadoMarkdown { Markdown = "## markdown layout", Paginas = 24, Completo = true, Fuente = FuenteMarkdown.Layout });
 
         string? markdownRecibido = null;
         fixture.GptProvider
@@ -529,19 +530,23 @@ public class ConfigurableExtraerDataProviderTests
     }
 
     [Fact]
-    public async Task ObtenerDatosAsync_LayoutFalla_ContinuaFallbackSinContexto()
+    public async Task ObtenerDatosAsync_ResolutorSinMarkdown_ContinuaFallbackSinContexto()
     {
+        // El resolutor absorbe internamente el fallo de Layout (MarkdownResolver.ResolverAsync
+        // nunca lo propaga) y devuelve un resultado sin contenido; ConfigurableExtraerDataProvider
+        // ya no envuelve la llamada en try/catch propio (AB#100253).
         using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true);
 
         fixture.AzureProvider
             .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new CuExtraccionException("default.cu", "TimeoutException", "hard timeout"));
 
-        fixture.LayoutProvider
-            .Setup(p => p.ExtraerMarkdownAsync(
-                It.IsAny<ExtraerMarkdownLayoutInput>(),
+        fixture.MarkdownResolver
+            .Setup(r => r.ResolverAsync(
+                It.IsAny<NecesidadMarkdown>(),
+                It.IsAny<ContextoMarkdown>(),
                 It.IsAny<CancellationToken>()))
-            .ThrowsAsync(new InvalidOperationException("layout caido"));
+            .ReturnsAsync(new ResultadoMarkdown { Markdown = null, Paginas = 0, Completo = false, Fuente = FuenteMarkdown.Ninguna });
 
         fixture.GptProvider
             .Setup(p => p.ObtenerDatosConFallbackAsync(
@@ -564,6 +569,57 @@ public class ConfigurableExtraerDataProviderTests
         fixture.GptProvider.VerifyAll();
     }
 
+    [Fact]
+    public async Task FallbackGpt_SinMarkdownDeCu_PideElDocumentoCompletoAlResolutor()
+    {
+        // AB#100253: el fallback GPT lee el documento entero, asi que la necesidad declarada
+        // al resolutor unico debe ser Completo(), no un numero de paginas.
+        using var fixture = TestFixture.Create(minFieldsRatio: 0.5, fallbackEnabled: true);
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CuExtraccionException("default.cu", "TimeoutException", "hard timeout"));
+
+        fixture.MarkdownResolver
+            .Setup(r => r.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ResultadoMarkdown
+            {
+                Markdown = "# entero",
+                Paginas = 12,
+                Completo = true,
+                Fuente = FuenteMarkdown.Layout,
+                Consumos = new List<ConsumoIA>
+                {
+                    new() { Actividad = "Extraer", Operacion = "layout.contexto", Proveedor = "DocumentIntelligence", Modelo = "prebuilt-layout" }
+                }
+            });
+
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object>()
+            });
+
+        var sut = fixture.BuildSut();
+
+        var result = await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        fixture.MarkdownResolver.Verify(r => r.ResolverAsync(
+            It.Is<NecesidadMarkdown>(n => n.DocumentoCompleto),
+            It.IsAny<ContextoMarkdown>(),
+            It.IsAny<CancellationToken>()), Times.Once);
+        // El consumo del layout de contexto no debe perderse: se paga aunque el resultado
+        // final lo produzca el fallback GPT (AB#100253).
+        result.Consumos.Should().Contain(c => c.Operacion == "layout.contexto");
+    }
+
     private sealed class TestFixture : IDisposable
     {
         private readonly string _tempDir;
@@ -572,7 +628,7 @@ public class ConfigurableExtraerDataProviderTests
         public Mock<AzureContentUnderstandingProvider> AzureProvider { get; }
         public Mock<GptDirectExtraerDataProvider> DirectGptProvider { get; }
         public Mock<GptFallbackExtraerDataProvider> GptProvider { get; }
-        public Mock<ILayoutMarkdownProvider> LayoutProvider { get; }
+        public Mock<IMarkdownResolver> MarkdownResolver { get; }
         public Mock<ILogger<ConfigurableExtraerDataProvider>> Logger { get; }
 
         private readonly TipologiaConfigLoader _tipologiaConfigLoader;
@@ -706,12 +762,13 @@ public class ConfigurableExtraerDataProviderTests
             _routingSettings = new ExtractionRoutingSettings { DefaultProvider = "azure-content-understanding" };
             Logger = new Mock<ILogger<ConfigurableExtraerDataProvider>>();
 
-            LayoutProvider = new Mock<ILayoutMarkdownProvider>();
-            LayoutProvider
-                .Setup(p => p.ExtraerMarkdownAsync(
-                    It.IsAny<ExtraerMarkdownLayoutInput>(),
+            MarkdownResolver = new Mock<IMarkdownResolver>();
+            MarkdownResolver
+                .Setup(r => r.ResolverAsync(
+                    It.IsAny<NecesidadMarkdown>(),
+                    It.IsAny<ContextoMarkdown>(),
                     It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ExtraerMarkdownLayoutResultado { Markdown = null, Paginas = 0 });
+                .ReturnsAsync(new ResultadoMarkdown { Markdown = null, Paginas = 0, Completo = false, Fuente = FuenteMarkdown.Ninguna });
         }
 
         private static TipologiaConfigLoader CreateLoaderFromTempDirectory(string tempDir)
@@ -810,7 +867,7 @@ public class ConfigurableExtraerDataProviderTests
                 null!,  // diExtraerProvider — no usado en estos tests (ruta CU/GPT)
                 DirectGptProvider.Object,
                 GptProvider.Object,
-                LayoutProvider.Object,
+                MarkdownResolver.Object,
                 _extractionModelRegistryLoader,
                 _promptModelRegistryLoader,
                 Options.Create(_routingSettings),

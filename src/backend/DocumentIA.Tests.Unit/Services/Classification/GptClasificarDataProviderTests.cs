@@ -652,7 +652,7 @@ Contenido del documento:
             var hybridProvider = new HybridTdnClasificarProvider(
                 new Mock<ILogger<HybridTdnClasificarProvider>>().Object,
                 new Mock<IClasificarDataProvider>().Object,
-                new Mock<ILayoutMarkdownProvider>().Object,
+                new Mock<IMarkdownResolver>().Object,
                 windowExtractor,
                 ruleClassifier,
                 new FoundryTdnRescueClassifier(

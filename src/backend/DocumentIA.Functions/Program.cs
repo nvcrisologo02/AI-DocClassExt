@@ -200,7 +200,7 @@ var host = new HostBuilder()
             new HybridTdnClasificarProvider(
                 sp.GetRequiredService<ILogger<HybridTdnClasificarProvider>>(),
                 sp.GetRequiredService<AzureDocumentIntelligenceClasificarProvider>(),
-                sp.GetRequiredService<ILayoutMarkdownProvider>(),
+                sp.GetRequiredService<IMarkdownResolver>(),
                 sp.GetRequiredService<DocumentWindowExtractor>(),
                 sp.GetRequiredService<RuleBasedTdnClassifier>(),
                 sp.GetRequiredService<FoundryTdnRescueClassifier>(),
