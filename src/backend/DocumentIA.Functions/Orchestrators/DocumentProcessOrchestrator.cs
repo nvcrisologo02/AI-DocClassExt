@@ -505,12 +505,57 @@ public class DocumentProcessOrchestrator
             return markdownEjecucion ?? resultado;
         }
 
-        // Markdown que trajo otra actividad (clasificador DI/CU, extraccion CU): entra en la cache
-        // y se persiste con la misma regla de cobertura.
+        // El texto aportado es en realidad el markdown del llamante, entero o recortado por la
+        // ventana de clasificacion (DocumentWindowExtractor corta con Substring, asi que el
+        // recorte es un prefijo exacto). Funcion pura sobre las instrucciones de entrada.
+        bool EsRebotoDelMarkdownDelCaller(string? texto)
+        {
+            var markdownCaller = entrada.Instrucciones.Classification.Markdown;
+            if (string.IsNullOrWhiteSpace(markdownCaller) || string.IsNullOrWhiteSpace(texto))
+            {
+                return false;
+            }
+
+            return markdownCaller.StartsWith(texto, StringComparison.Ordinal);
+        }
+
+        // Markdown que trajo otra actividad (clasificador DI/CU, extraccion CU): se escribe en la
+        // fila del documento. La cache de la ejecucion la gobierna AdoptarMarkdown y la fila se
+        // gobierna aqui; son decisiones distintas y no deben encadenarse. Lo que decide si merece
+        // la pena escribir es la cobertura de la FILA, y esa comparacion la hace
+        // ActualizarMarkdownSiMejoraAsync en el WHERE del propio UPDATE: por eso se persiste
+        // aunque el aportado no mejore la cache -si tampoco mejora la fila, el UPDATE afecta a 0
+        // filas y no cambia nada. Encadenarlo a la cache dejaba sin markdown la fila del SHA256
+        // cuando la peticion traia markdown del llamante (AB#100252).
         async Task PersistirMarkdownAportadoAsync(ResultadoMarkdown aportado)
         {
             if (!aportado.TieneContenido || string.IsNullOrWhiteSpace(salida.Integridad.SHA256))
             {
+                return;
+            }
+
+            // Misma regla que el resolutor: solo se escribe lo que tiene cobertura afirmable. De
+            // un texto del que no se sabe cuantas paginas cubre se puede tirar en esta ejecucion,
+            // pero persistirlo escribiria una cifra que nadie ha comprobado, y con ForceReprocess
+            // pisaria ademas la cobertura buena que ya hubiera en la fila (AB#100250).
+            if (!aportado.Completo && aportado.Paginas <= 0)
+            {
+                logger.LogWarning(
+                    "Markdown aportado por {Fuente} sin cobertura afirmable: se usa en la ejecucion pero no se persiste.",
+                    aportado.Fuente);
+                return;
+            }
+
+            // Regla 5: el markdown del llamante no se persiste NUNCA, tampoco cuando vuelve
+            // rebotado por otra actividad. El clasificador por reglas devuelve en ContentExtraido
+            // la ventana que leyo de datosNormalizados, que es el texto del llamante recortado; su
+            // cobertura seria la que declara el llamante, no una que este servicio haya
+            // comprobado.
+            if (EsRebotoDelMarkdownDelCaller(aportado.Markdown))
+            {
+                logger.LogInformation(
+                    "Markdown aportado por {Fuente} no se persiste: es el markdown del llamante (regla 5).",
+                    aportado.Fuente);
                 return;
             }
 
@@ -1290,9 +1335,12 @@ public class DocumentProcessOrchestrator
                 }
             }
 
-            // El clasificador DI/CU trae su propio texto: entra en la cache con su cobertura y se
-            // persiste con la misma regla que el de Layout (AB#100253).
-            if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ContentExtraido) && markdownEjecucion is null)
+            // El clasificador DI/CU trae su propio texto: entra en la cache solo si no habia nada
+            // -la cache la sigue gobernando AdoptarMarkdown- y se persiste con la misma regla que
+            // el de Layout AUNQUE no llegue a entrar en la cache (AB#100253, AB#100252). Con
+            // markdown del llamante la cache ya esta ocupada y ese texto no se persiste (regla 5),
+            // asi que encadenar la escritura a la adopcion dejaba la fila del SHA256 sin markdown.
+            if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ContentExtraido))
             {
                 var paginasClasificador = resultadoClasificacion.PagesProcessed > 0
                     ? resultadoClasificacion.PagesProcessed
@@ -1308,14 +1356,15 @@ public class DocumentProcessOrchestrator
                     Fuente = FuenteMarkdown.Clasificador
                 };
 
-                if (AdoptarMarkdown(markdownClasificador, "Clasificacion"))
+                if (markdownEjecucion is null && AdoptarMarkdown(markdownClasificador, "Clasificacion"))
                 {
-                    await PersistirMarkdownAportadoAsync(markdownClasificador);
                     logger.LogInformation(
                         "Markdown del clasificador propagado ({Len} chars, {Paginas} paginas)",
                         resultadoClasificacion.ContentExtraido.Length,
                         paginasClasificador);
                 }
+
+                await PersistirMarkdownAportadoAsync(markdownClasificador);
             }
             if (resultadoClasificacion.FallbackLLM)
             {
@@ -1416,31 +1465,25 @@ public class DocumentProcessOrchestrator
                         ? $"Tipología parcial TDN1: GlobalFallback identificó familia '{tipologiaParcial}' con confianza baja. Pipeline detenido."
                         : "Tipología virtual TDN1: GPT no resolvió código de catálogo. Pipeline detenido con PropuestaTipologia.";
                     
-                    // Conservar el markdown ya extraído (paso 2.8 / normalización) para que
-                    // PersistirActivity lo comprima en Documentos.NormalizacionMarkdownCompressed,
-                    // igual que en la ruta normal de ClassificationOnly.
-                    var markdownVirtual = datosNormalizados.TryGetValue("Markdown", out var markdownVirtualObj) &&
-                        markdownVirtualObj is string markdownVirtualTexto &&
-                        !string.IsNullOrWhiteSpace(markdownVirtualTexto)
-                        ? markdownVirtualTexto
-                        : null;
-
                     salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                     {
                         Normalizaciones = new List<string>
                         {
                             mensajeNormalizacion
                         },
-                        Markdown = markdownVirtual,
                         Validaciones = new List<string>(),
                         Inconsistencias = new List<string>(),
                         ConfianzaValidacion = 1.0
                     };
 
-                    if (!string.IsNullOrWhiteSpace(markdownVirtual))
-                    {
-                        salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
-                    }
+                    // Conservar el markdown ya extraido (paso 2.8 / normalizacion) para que
+                    // PersistirActivity lo comprima en Documentos.NormalizacionMarkdownCompressed,
+                    // igual que en la ruta normal de ClassificationOnly. Sale por PublicarMarkdown
+                    // como el resto: la cache de la ejecucion es el unico portador del texto y de
+                    // su cobertura, asi que ese par no se puede desacoplar editando este punto
+                    // (AB#100252). Aqui el prompt y la extraccion estan omitidos y la cobertura ya
+                    // no puede avanzar: publica exactamente lo mismo que la asignacion directa.
+                    PublicarMarkdown(salida.DetalleEjecucion.Postproceso);
 
                     var motivoOmision = esFase2SinTdn2Parseable
                         ? $"Tipología parcial TDN1 sin TDN2 parseable: {tipologiaParcial}"
@@ -2129,7 +2172,7 @@ public class DocumentProcessOrchestrator
                 var extraccionAportaTextoNuevo = !string.IsNullOrWhiteSpace(markdownExtraccion)
                     && !string.Equals(markdownExtraccion, markdownEjecucion?.Markdown, StringComparison.Ordinal);
 
-                if (extraccionAportaTextoNuevo && (markdownEjecucion is null || !markdownEjecucion.Completo))
+                if (extraccionAportaTextoNuevo)
                 {
                     var paginasExtraccion = resultadoExtraccion.Paginas;
 
@@ -2143,15 +2186,19 @@ public class DocumentProcessOrchestrator
                         Fuente = FuenteMarkdown.Extraccion
                     };
 
-                    if (AdoptarMarkdown(markdownDeLaExtraccion, "Extraccion"))
+                    // La cache solo se sustituye si el aportado la mejora y no la habia ya
+                    // completa; la escritura en la fila va aparte, por su propia cobertura.
+                    if ((markdownEjecucion is null || !markdownEjecucion.Completo)
+                        && AdoptarMarkdown(markdownDeLaExtraccion, "Extraccion"))
                     {
-                        await PersistirMarkdownAportadoAsync(markdownDeLaExtraccion);
                         logger.LogInformation(
                             "Markdown de la extraccion propagado ({Len} chars, {Paginas} paginas, completo={Completo})",
                             markdownExtraccion!.Length,
                             paginasExtraccion,
                             markdownDeLaExtraccion.Completo);
                     }
+
+                    await PersistirMarkdownAportadoAsync(markdownDeLaExtraccion);
                 }
 
                 if (resultadoExtraccion.FallbackUsado)

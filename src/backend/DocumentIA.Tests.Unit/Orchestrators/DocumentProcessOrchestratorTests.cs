@@ -3404,6 +3404,143 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_MarkdownDelCallerYClasificadorConTextoPropio_PersisteElDelClasificador()
+    {
+        // Regresion AB#100252: la escritura en BD no puede depender de que el aportado mejore la
+        // CACHE. Con markdown del llamante la cache queda completa y ese texto no se persiste
+        // (regla 5), asi que el texto propio del clasificador -que si tiene cobertura afirmable-
+        // se quedaba sin escribir en la fila del SHA256, perdiendo markdown ya pagado. Lo que
+        // decide si merece la pena escribir es la cobertura de la FILA, y eso lo resuelve
+        // ActualizarMarkdownSiMejoraAsync en el WHERE del propio UPDATE.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Classification.Markdown = "# lo trae el caller";
+        entrada.Instrucciones.Classification.Provider = "di";
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.PagesProcessed = 3;
+        context.SetupActivity("ClasificarActivity", clasificacion);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("PersistirMarkdownActivity").Should().Be(1);
+        var persistir = context.GetLastActivityInput<PersistirMarkdownInput>("PersistirMarkdownActivity");
+        persistir!.Markdown.Should().Be("# markdown clasificacion");
+        persistir.Paginas.Should().Be(3);
+        persistir.Sha256.Should().Be("sha256abc");
+
+        // La cache no se toca: el markdown del llamante manda toda la ejecucion (regla 1) y es el
+        // que se publica, con su fuente y su origen.
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# lo trae el caller");
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("Caller");
+        salida.DetalleEjecucion.OrigenMarkdown.Should().Be("InstruccionesCallerPreClasificacion");
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificadorDevuelveElMarkdownDelCaller_NoLoPersiste()
+    {
+        // Regla 5: el markdown del llamante no se persiste NUNCA, tampoco cuando vuelve rebotado
+        // por otra actividad. El clasificador por reglas devuelve en ContentExtraido la ventana
+        // que leyo de datosNormalizados, que es el texto del llamante recortado a
+        // MaxCharactersPerWindow: por eso el descarte tiene que reconocer tambien el prefijo.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Classification.Markdown = "# lo trae el caller, entero y largo";
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.ContentExtraido = "# lo trae el caller";
+        clasificacion.PagesProcessed = 3;
+        context.SetupActivity("ClasificarActivity", clasificacion);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("PersistirMarkdownActivity").Should().Be(0);
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# lo trae el caller, entero y largo");
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("Caller");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificadorSinCoberturaAfirmable_NoPersisteMarkdown()
+    {
+        // AB#100250: el clasificador no informa paginas y del recorte tampoco se sabe cuantas
+        // cubre. El texto se usa en la ejecucion, pero no se escribe en BD: persistirlo guardaria
+        // una cobertura que nadie ha comprobado y con ForceReprocess pisaria la buena.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        // Sin "Paginas" el documento no sabe cuantas tiene, asi que del texto del clasificador no
+        // se puede afirmar ninguna cobertura.
+        context.SetupActivity("NormalizarActivity", new Dictionary<string, object>
+        {
+            ["SHA256"] = "sha256abc",
+            ["MD5"] = "md5abc",
+            ["CRC32"] = "crc32abc"
+        });
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.PagesProcessed = 0;
+        context.SetupActivity("ClasificarActivity", clasificacion);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("PersistirMarkdownActivity").Should().Be(0);
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# markdown clasificacion");
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("Clasificador");
+        salida.DetalleEjecucion.MarkdownPaginas.Should().Be(0);
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualParcial_PublicaElMarkdownDeLaCacheConSuCobertura()
+    {
+        // AB#100252: la salida temprana por tipologia virtual/parcial TDN1 publica tambien por
+        // PublicarMarkdown, de modo que el texto devuelto y su cobertura salen siempre del mismo
+        // ResultadoMarkdown y nadie los puede desacoplar editando ese punto.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.1,
+            ConfianzaGPT = 0.1,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido",
+            ClasificacionParcial = true,
+            FallbackRazon = "tdn1_virtual_propuesta",
+            PropuestaTipologia = "Solicitud de cambio de titularidad"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# markdown normalizado");
+        salida.DetalleEjecucion.Postproceso.Normalizaciones.Should().Contain("Markdown");
+        salida.DetalleEjecucion.MarkdownGenerado.Should().BeTrue();
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("Normalizacion");
+        salida.DetalleEjecucion.MarkdownPaginas.Should().Be(1);
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ResolutorSinContenido_NoSeReintentaLaMismaNecesidad()
     {
         // Regresion AB#100029: si el resolutor no pudo dar markdown para una necesidad, no se le
