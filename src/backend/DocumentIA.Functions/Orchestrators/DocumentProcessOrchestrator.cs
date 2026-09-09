@@ -387,6 +387,63 @@ public class DocumentProcessOrchestrator
             CacheEjecucion = markdownEjecucion
         };
 
+        // Unico punto que sustituye la cache de markdown de la ejecucion. Mantiene atados el texto,
+        // datosNormalizados["Markdown"] y la cobertura publicada: no se puede mover uno sin mover
+        // los otros. Ademas la cobertura nunca se degrada dentro de la ejecucion (regla 7): solo se
+        // adopta lo que mejora lo que ya habia, porque con Layout caido el respaldo de base de
+        // datos puede traer una pagina donde la cache ya tenia tres (AB#100252).
+        // ganaSiempre es solo para el markdown del llamante, que manda por la regla 1.
+        bool AdoptarMarkdown(ResultadoMarkdown candidato, string origenTraza, bool ganaSiempre = false)
+        {
+            if (!candidato.TieneContenido)
+            {
+                return false;
+            }
+
+            if (!ganaSiempre && !candidato.MejoraA(markdownEjecucion))
+            {
+                logger.LogInformation(
+                    "Markdown de {Origen} descartado ({Paginas} paginas, completo={Completo}): la cache ya cubre mas.",
+                    origenTraza,
+                    candidato.Paginas,
+                    candidato.Completo);
+                return false;
+            }
+
+            markdownEjecucion = candidato;
+            datosNormalizados["Markdown"] = candidato.Markdown!;
+            RegistrarMarkdownResuelto(candidato, origenTraza);
+            return true;
+        }
+
+        // Unico punto que publica el markdown en el contrato (AB#100252). El texto y su cobertura
+        // salen del MISMO ResultadoMarkdown -la cache de la ejecucion, unica portadora de la
+        // cobertura-, de modo que es imposible devolver al llamante, o persistir en la fila del
+        // documento, un texto con una cobertura que no es la suya. Antes el texto se congelaba
+        // antes del Paso 4.5 y la cobertura se publicaba despues: un recorte de tres paginas
+        // salia declarado completo y envenenaba la fila del SHA256 de forma permanente.
+        void PublicarMarkdown(InformacionPostproceso postproceso)
+        {
+            if (markdownEjecucion is not { TieneContenido: true })
+            {
+                postproceso.Markdown = null;
+                return;
+            }
+
+            postproceso.Markdown = markdownEjecucion.Markdown;
+
+            // Se reafirma la cobertura del texto que se publica sin reescribir el origen: quien lo
+            // obtuvo ya lo registro y pisarlo aqui dejaria la traza incoherente.
+            RegistrarMarkdownResuelto(
+                markdownEjecucion,
+                salida.DetalleEjecucion.OrigenMarkdown ?? markdownEjecucion.Fuente.ToString());
+
+            if (!postproceso.Normalizaciones.Contains("Markdown"))
+            {
+                postproceso.Normalizaciones.Add("Markdown");
+            }
+        }
+
         // Unica puerta al markdown desde el orquestador (AB#100252). Si la cache cubre la
         // necesidad se usa tal cual, sin recortar (regla 7); si no, se pide al resolutor.
         async Task<ResultadoMarkdown> AsegurarMarkdownAsync(NecesidadMarkdown necesidad, string origenTraza)
@@ -433,9 +490,7 @@ public class DocumentProcessOrchestrator
                 return markdownEjecucion ?? resultado;
             }
 
-            markdownEjecucion = resultado;
-            datosNormalizados["Markdown"] = resultado.Markdown!;
-            RegistrarMarkdownResuelto(resultado, origenTraza);
+            AdoptarMarkdown(resultado, origenTraza);
 
             // Solo se rellenan las paginas del documento cuando el markdown cubre el documento
             // entero: con un recorte pages=1-N, N son las paginas leidas, no las del documento.
@@ -444,7 +499,10 @@ public class DocumentProcessOrchestrator
                 salida.Identificacion.Paginas = resultado.Paginas;
             }
 
-            return resultado;
+            // Se devuelve la mayor cobertura disponible, no necesariamente lo que acaba de llegar:
+            // si el resolutor cayo al respaldo de base de datos y trajo menos de lo que ya habia,
+            // el paso sigue con lo bueno (regla 7).
+            return markdownEjecucion ?? resultado;
         }
 
         // Markdown que trajo otra actividad (clasificador DI/CU, extraccion CU): entra en la cache
@@ -827,14 +885,19 @@ public class DocumentProcessOrchestrator
                 && markdownNormalizadoObj is string markdownNormalizadoTexto
                 && !string.IsNullOrWhiteSpace(markdownNormalizadoTexto))
             {
-                markdownEjecucion = new ResultadoMarkdown
-                {
-                    Markdown = markdownNormalizadoTexto,
-                    Paginas = salida.Identificacion.Paginas,
-                    Completo = true,
-                    Fuente = FuenteMarkdown.Normalizacion
-                };
-                RegistrarMarkdownResuelto(markdownEjecucion, "Normalizacion");
+                AdoptarMarkdown(
+                    new ResultadoMarkdown
+                    {
+                        Markdown = markdownNormalizadoTexto,
+                        Paginas = salida.Identificacion.Paginas,
+                        // La normalizacion convierte el documento entero, pero sin saber cuantas
+                        // paginas tiene no se puede afirmar esa cobertura. Declararla igualmente
+                        // la escribiria en BD como completa por el alta de PersistirActivity y
+                        // dejaria la fila bloqueada para siempre (AB#100252).
+                        Completo = salida.Identificacion.Paginas > 0,
+                        Fuente = FuenteMarkdown.Normalizacion
+                    },
+                    "Normalizacion");
             }
 
             // 2. Verificar duplicados (si esta habilitado)
@@ -1042,15 +1105,16 @@ public class DocumentProcessOrchestrator
             // D4: markdown del caller. Gana durante toda la ejecucion y no se persiste (regla 5).
             if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.Classification.Markdown))
             {
-                markdownEjecucion = new ResultadoMarkdown
-                {
-                    Markdown = entrada.Instrucciones.Classification.Markdown,
-                    Paginas = salida.Identificacion.Paginas,
-                    Completo = true,
-                    Fuente = FuenteMarkdown.Caller
-                };
-                datosNormalizados["Markdown"] = entrada.Instrucciones.Classification.Markdown;
-                RegistrarMarkdownResuelto(markdownEjecucion, "InstruccionesCallerPreClasificacion");
+                AdoptarMarkdown(
+                    new ResultadoMarkdown
+                    {
+                        Markdown = entrada.Instrucciones.Classification.Markdown,
+                        Paginas = salida.Identificacion.Paginas,
+                        Completo = true,
+                        Fuente = FuenteMarkdown.Caller
+                    },
+                    "InstruccionesCallerPreClasificacion",
+                    ganaSiempre: true);
                 logger.LogInformation(
                     "Paso 2.8 omitido: markdown inyectado desde instrucciones del caller ({Len} chars)",
                     entrada.Instrucciones.Classification.Markdown.Length);
@@ -1234,7 +1298,7 @@ public class DocumentProcessOrchestrator
                     ? resultadoClasificacion.PagesProcessed
                     : salida.DetalleEjecucion.PaginasIncluidas;
 
-                markdownEjecucion = new ResultadoMarkdown
+                var markdownClasificador = new ResultadoMarkdown
                 {
                     Markdown = resultadoClasificacion.ContentExtraido,
                     Paginas = paginasClasificador,
@@ -1243,13 +1307,15 @@ public class DocumentProcessOrchestrator
                         && paginasClasificador >= salida.Identificacion.Paginas,
                     Fuente = FuenteMarkdown.Clasificador
                 };
-                datosNormalizados["Markdown"] = resultadoClasificacion.ContentExtraido;
-                RegistrarMarkdownResuelto(markdownEjecucion, "Clasificacion");
-                await PersistirMarkdownAportadoAsync(markdownEjecucion);
-                logger.LogInformation(
-                    "Markdown del clasificador propagado ({Len} chars, {Paginas} paginas)",
-                    resultadoClasificacion.ContentExtraido.Length,
-                    paginasClasificador);
+
+                if (AdoptarMarkdown(markdownClasificador, "Clasificacion"))
+                {
+                    await PersistirMarkdownAportadoAsync(markdownClasificador);
+                    logger.LogInformation(
+                        "Markdown del clasificador propagado ({Len} chars, {Paginas} paginas)",
+                        resultadoClasificacion.ContentExtraido.Length,
+                        paginasClasificador);
+                }
             }
             if (resultadoClasificacion.FallbackLLM)
             {
@@ -1686,12 +1752,6 @@ public class DocumentProcessOrchestrator
                     TiemposMs = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
                 };
 
-                var markdownClasificacion = datosNormalizados.TryGetValue("Markdown", out var markdownObj) &&
-                    markdownObj is string markdownTexto &&
-                    !string.IsNullOrWhiteSpace(markdownTexto)
-                    ? markdownTexto
-                    : null;
-
                 salida.DatosExtraidos = new Dictionary<string, object>();
                 AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcial: true);
                 salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
@@ -1700,20 +1760,14 @@ public class DocumentProcessOrchestrator
                     {
                         "ClassificationOnly activo: extracción, prompt, validación y asset resolver omitidos"
                     },
-                    Markdown = markdownClasificacion,
                     Validaciones = new List<string>(),
                     Inconsistencias = new List<string>(),
                     ConfianzaValidacion = 1.0
                 };
 
-                if (!string.IsNullOrWhiteSpace(markdownClasificacion))
-                {
-                    salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
-                    if (markdownEjecucion is not null)
-                    {
-                        RegistrarMarkdownResuelto(markdownEjecucion, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
-                    }
-                }
+                // El texto publicado y la cobertura publicada salen del mismo sitio (AB#100252).
+                PublicarMarkdown(salida.DetalleEjecucion.Postproceso);
+                var markdownClasificacion = salida.DetalleEjecucion.Postproceso.Markdown;
 
                 var forzarResumenDedicadoClassificationOnly =
                     (entrada.Instrucciones.ForzarResumenPorDefecto || classificationOnlyTdn1SoloFamilia) &&
@@ -1728,17 +1782,9 @@ public class DocumentProcessOrchestrator
                     var necesidadResumen = promptActivoEnPeticion
                         ? NecesidadMarkdown.Completo()
                         : NecesidadMarkdown.Paginas(maxPaginasClasificacion);
-                    var resuelto = await AsegurarMarkdownAsync(necesidadResumen, "LayoutResumenClassificationOnly");
-
-                    if (resuelto.TieneContenido)
-                    {
-                        markdownClasificacion = resuelto.Markdown;
-                        salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacion;
-                        if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown"))
-                        {
-                            salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
-                        }
-                    }
+                    await AsegurarMarkdownAsync(necesidadResumen, "LayoutResumenClassificationOnly");
+                    PublicarMarkdown(salida.DetalleEjecucion.Postproceso);
+                    markdownClasificacion = salida.DetalleEjecucion.Postproceso.Markdown;
                 }
 
                 if (promptActivoEnPeticion || forzarResumenDedicadoClassificationOnly)
@@ -1755,6 +1801,11 @@ public class DocumentProcessOrchestrator
                         resultadoPromptCombinadoClasificacion,
                         resumenCombinadoClasificacion,
                         forzarResumenDedicadoClassificationOnly);
+
+                    // El prompt puede haber subido la cobertura (recorte -> documento entero): se
+                    // vuelve a publicar para que el texto devuelto y su cobertura sigan siendo los
+                    // mismos que se persisten (AB#100252).
+                    PublicarMarkdown(salida.DetalleEjecucion.Postproceso);
                 }
 
                 MarcarActividadOmitida("Extraer", "ClassificationOnly activo");
@@ -2082,7 +2133,7 @@ public class DocumentProcessOrchestrator
                 {
                     var paginasExtraccion = resultadoExtraccion.Paginas;
 
-                    markdownEjecucion = new ResultadoMarkdown
+                    var markdownDeLaExtraccion = new ResultadoMarkdown
                     {
                         Markdown = markdownExtraccion,
                         Paginas = paginasExtraccion,
@@ -2091,14 +2142,16 @@ public class DocumentProcessOrchestrator
                             && paginasExtraccion >= salida.Identificacion.Paginas,
                         Fuente = FuenteMarkdown.Extraccion
                     };
-                    datosNormalizados["Markdown"] = markdownExtraccion!;
-                    RegistrarMarkdownResuelto(markdownEjecucion, "Extraccion");
-                    await PersistirMarkdownAportadoAsync(markdownEjecucion);
-                    logger.LogInformation(
-                        "Markdown de la extraccion propagado ({Len} chars, {Paginas} paginas, completo={Completo})",
-                        markdownExtraccion!.Length,
-                        paginasExtraccion,
-                        markdownEjecucion.Completo);
+
+                    if (AdoptarMarkdown(markdownDeLaExtraccion, "Extraccion"))
+                    {
+                        await PersistirMarkdownAportadoAsync(markdownDeLaExtraccion);
+                        logger.LogInformation(
+                            "Markdown de la extraccion propagado ({Len} chars, {Paginas} paginas, completo={Completo})",
+                            markdownExtraccion!.Length,
+                            paginasExtraccion,
+                            markdownDeLaExtraccion.Completo);
+                    }
                 }
 
                 if (resultadoExtraccion.FallbackUsado)
@@ -2125,33 +2178,35 @@ public class DocumentProcessOrchestrator
                 };
             }
 
-            var markdownNormalizacion = resultadoExtraccion.MarkdownExtraido;
-            if (string.IsNullOrWhiteSpace(markdownNormalizacion)
-                && datosNormalizados.TryGetValue("Markdown", out var markdownPreexistente)
-                && markdownPreexistente is string markdownExistente
-                && !string.IsNullOrWhiteSpace(markdownExistente))
-            {
-                markdownNormalizacion = markdownExistente;
-            }
-
-            if (string.IsNullOrWhiteSpace(markdownNormalizacion)
+            // Ultimo sitio donde puede aparecer markdown fuera del resolutor: flujos legados que lo
+            // dejan en DatosExtraidos. Entra en la cache por AdoptarMarkdown -sin cobertura, que es
+            // lo unico que se puede afirmar de el- en lugar de publicarse por su cuenta: el texto
+            // que se devuelve y se persiste sale siempre de la cache (AB#100252).
+            if (markdownEjecucion is not { TieneContenido: true }
                 && resultadoExtraccion.DatosExtraidos.TryGetValue("Markdown", out var markdownExtraido)
                 && markdownExtraido is string markdownDetectado
                 && !string.IsNullOrWhiteSpace(markdownDetectado))
             {
-                markdownNormalizacion = markdownDetectado;
+                AdoptarMarkdown(
+                    new ResultadoMarkdown
+                    {
+                        Markdown = markdownDetectado,
+                        Paginas = 0,
+                        Completo = false,
+                        Fuente = FuenteMarkdown.Extraccion
+                    },
+                    "MarkdownEnDatosExtraidos");
             }
 
-            if (!string.IsNullOrWhiteSpace(markdownNormalizacion))
+            if (markdownEjecucion is { TieneContenido: true })
             {
-                datosNormalizados["Markdown"] = markdownNormalizacion;
                 // No se vuelve a registrar el origen aqui: ya quedo registrado en el momento de
                 // obtener el markdown. Registrarlo de nuevo lo pisaba con "MarkdownPrevio", un
                 // valor que solo decia "ya estaba" y que dejaria la traza incoherente con
                 // MarkdownFuente (AB#100252).
                 logger.LogInformation(
                     "Markdown de extracción preparado para normalización y fallbacks ({Length} caracteres)",
-                    markdownNormalizacion.Length);
+                    markdownEjecucion.Markdown!.Length);
             }
             else if (promptActivoEnPeticion
                 || (entrada.Instrucciones.ForzarResumenPorDefecto && !salida.DatosExtraidos.ContainsKey("Resumen")))
@@ -2167,10 +2222,13 @@ public class DocumentProcessOrchestrator
 
                 if (resuelto.TieneContenido)
                 {
-                    markdownNormalizacion = resuelto.Markdown;
                     resultadoExtraccion.MarkdownExtraido = resuelto.Markdown;
                 }
             }
+
+            // Texto de trabajo de los pasos que siguen. Es siempre el de la cache, es decir el de
+            // mayor cobertura disponible; nunca se publica por su cuenta.
+            var markdownNormalizacion = markdownEjecucion?.Markdown;
 
             // El markdown no debe formar parte de DatosExtraidos de salida.
             resultadoExtraccion.DatosExtraidos.Remove("Markdown");
@@ -2279,7 +2337,6 @@ public class DocumentProcessOrchestrator
                 { 
                     $"Aplicadas {resultadoValidacion.ReglasAplicadas} reglas de validacion"
                 },
-                Markdown = string.IsNullOrWhiteSpace(markdownNormalizacion) ? null : markdownNormalizacion,
                 Validaciones = resultadoValidacion.Validaciones
                     .Where(v => v.Severidad == "Warning" || v.Severidad == "Info")
                     .Select(v => $"[{v.Severidad}] {v.Campo}: {v.Mensaje}")
@@ -2297,10 +2354,10 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.Postproceso.Normalizaciones.Add(
                 $"Confianza de validacion: {confianzaValidacionRedondeada:P0}");
 
-            if (!string.IsNullOrWhiteSpace(salida.DetalleEjecucion.Postproceso.Markdown))
-            {
-                salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
-            }
+            // Se publica aqui, despues del Paso 4.5: si el prompt subio la cobertura del recorte al
+            // documento entero, lo que sale al contrato y a la fila es ese texto con esa cobertura,
+            // no el que hubiera antes del prompt (AB#100252).
+            PublicarMarkdown(salida.DetalleEjecucion.Postproceso);
             
             if (resultadoValidacion.Errores > 0)
             {

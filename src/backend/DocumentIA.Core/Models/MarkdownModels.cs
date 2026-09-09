@@ -1,4 +1,4 @@
-namespace DocumentIA.Core.Models;
+﻿namespace DocumentIA.Core.Models;
 
 /// <summary>
 /// Que necesita una actividad del markdown del documento: el documento entero o un
@@ -61,6 +61,33 @@ public sealed class ResultadoMarkdown
         }
 
         return !necesidad.DocumentoCompleto && Paginas >= necesidad.PaginasMinimas;
+    }
+
+    /// <summary>
+    /// Cobertura estrictamente mayor que la de <paramref name="otro"/>. Es la regla 7 aplicada
+    /// dentro de una misma ejecucion: la cobertura nunca se degrada, asi que un resultado solo
+    /// sustituye al que ya habia si lo mejora. Sin contenido no mejora nada; frente a un completo
+    /// no mejora nadie; un completo mejora a cualquier parcial; y entre parciales gana el que
+    /// cubre mas paginas (AB#100252).
+    /// </summary>
+    public bool MejoraA(ResultadoMarkdown? otro)
+    {
+        if (!TieneContenido)
+        {
+            return false;
+        }
+
+        if (otro is not { TieneContenido: true })
+        {
+            return true;
+        }
+
+        if (otro.Completo)
+        {
+            return false;
+        }
+
+        return Completo || Paginas > otro.Paginas;
     }
 }
 

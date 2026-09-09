@@ -20,6 +20,7 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
     private readonly Dictionary<string, object?> _activityResults = new(StringComparer.Ordinal);
     private readonly Dictionary<string, Exception> _activityThrows = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<object?>> _activityInputs = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, Queue<object?>> _activitySequences = new(StringComparer.Ordinal);
 
     public FakeTaskOrchestrationContext(ContratoEntrada? input = null)
     {
@@ -28,6 +29,15 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
 
     public void SetupActivity<T>(string activityName, T result)
         => _activityResults[activityName] = result;
+
+    /// <summary>
+    /// Resultados distintos para llamadas sucesivas a la misma actividad. Necesario para los
+    /// escenarios en los que el resolutor devuelve primero el recorte de clasificacion y despues
+    /// el documento entero: con un unico resultado fijo no se puede observar que la cobertura
+    /// publicada y el texto publicado se muevan juntos.
+    /// </summary>
+    public void SetupActivitySequence<T>(string activityName, params T[] results)
+        => _activitySequences[activityName] = new Queue<object?>(results.Cast<object?>());
 
     public void SetupActivityThrow(string activityName, Exception ex)
         => _activityThrows[activityName] = ex;
@@ -65,6 +75,11 @@ internal sealed class FakeTaskOrchestrationContext : TaskOrchestrationContext
         if (_activityThrows.TryGetValue(name.Name, out var ex))
         {
             throw ex;
+        }
+        if (_activitySequences.TryGetValue(name.Name, out var cola) && cola.Count > 0)
+        {
+            var siguiente = cola.Count == 1 ? cola.Peek() : cola.Dequeue();
+            return Task.FromResult((TResult)siguiente!);
         }
         if (_activityResults.TryGetValue(name.Name, out var result))
             return Task.FromResult((TResult)result!);
@@ -3617,4 +3632,161 @@ public class DocumentProcessOrchestratorTests
         context.GetLastActivityInput<PromptActivityInput>("PromptActivity")!.MarkdownExtraido.Should().BeNull();
         salida.DetalleEjecucion.MarkdownGenerado.Should().BeFalse();
     }
+
+    [Fact]
+    public async Task RunOrchestrator_ElPromptSubeLaCobertura_ElMarkdownPublicadoEsElMismoQueSeDeclara()
+    {
+        // Regresion del Critical (AB#100252): el texto de Postproceso.Markdown se congelaba antes
+        // del Paso 4.5 y la cobertura se publicaba despues. Resultado: un recorte de 3 paginas
+        // devuelto al llamante y escrito en el alta de Documentos con MarkdownCompleto = 1 y
+        // MarkdownPaginas = 10, lo que dejaba la fila del SHA256 envenenada para siempre porque
+        // ActualizarMarkdownSiMejoraAsync no sustituye una fila ya marcada como completa.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        var normalizado = BuildNormalizarResult();
+        normalizado["Paginas"] = 10;
+        context.SetupActivity("NormalizarActivity", normalizado);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+        });
+        // Paso 2.8 trae el recorte; el Paso 4.5 (prompt de tipologia) consigue el documento entero.
+        context.SetupActivitySequence(
+            "ObtenerMarkdownActivity",
+            MarkdownResuelto("# recorte de 3 paginas", 3, completo: false),
+            MarkdownResuelto("# documento entero", 10, completo: true));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(promptEnabled: true, promptHasDefinition: true));
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-5-mini", Resultado = "ok" });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(2);
+
+        // Lo que se devuelve al llamante y lo que PersistirActivity escribe en el alta salen del
+        // mismo sitio: el texto publicado es el completo, no el recorte anterior al prompt.
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be(
+            "# documento entero",
+            "es el texto cuya cobertura se publica y se persiste");
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeTrue();
+        salida.DetalleEjecucion.MarkdownPaginas.Should().Be(10);
+        salida.DetalleEjecucion.Postproceso.Normalizaciones.Should().Contain("Markdown");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClassificationOnlyConPrompt_ElMarkdownPublicadoEsElMismoQueSeDeclara()
+    {
+        // Misma raiz que el test anterior, por el camino ClassificationOnly: alli el texto se
+        // publicaba antes de ejecutar el prompt y la cobertura despues (AB#100252).
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: true);
+        entrada.Instrucciones.Prompt = new PromptInstrucciones { UserPromptTemplate = "Resume:\n\n{contenido}" };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var normalizado = BuildNormalizarResult();
+        normalizado["Paginas"] = 10;
+        context.SetupActivity("NormalizarActivity", normalizado);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+        });
+        // La anticipacion del Paso 2.76 solo consigue el recorte; el prompt si logra el completo.
+        context.SetupActivitySequence(
+            "ObtenerMarkdownActivity",
+            MarkdownResuelto("# recorte de 3 paginas", 3, completo: false),
+            MarkdownResuelto("# documento entero", 10, completo: true));
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.95,
+            ConfianzaGPT = 0.95,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-5-mini", Resultado = "ok" });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(2);
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be(
+            "# documento entero",
+            "en ClassificationOnly el texto publicado tambien tiene que ser el de la cobertura publicada");
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeTrue();
+        salida.DetalleEjecucion.MarkdownPaginas.Should().Be(10);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ElRespaldoDeBdCubreMenosQueLaCache_NoDegradaLaCobertura()
+    {
+        // Regla 7 dentro de la propia ejecucion (AB#100252): con Layout caido el resolutor cae al
+        // respaldo de base de datos, que puede traer menos paginas de las que ya habia en cache.
+        // Sustituir la cache ahi seria recortar por la puerta de atras, y ese texto corto es el
+        // que acabaria en el prompt, en el contrato y en el alta de Documentos.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        var normalizado = BuildNormalizarResult();
+        normalizado["Paginas"] = 10;
+        context.SetupActivity("NormalizarActivity", normalizado);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+        });
+        context.SetupActivitySequence(
+            "ObtenerMarkdownActivity",
+            MarkdownResuelto("# recorte de 3 paginas", 3, completo: false),
+            MarkdownResuelto("# solo una pagina de bd", 1, completo: false, FuenteMarkdown.BaseDatos));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(promptEnabled: true, promptHasDefinition: true));
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-5-mini", Resultado = "ok" });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetLastActivityInput<PromptActivityInput>("PromptActivity")!.MarkdownExtraido.Should().Be(
+            "# recorte de 3 paginas",
+            "el prompt trabaja con la mayor cobertura disponible, no con el respaldo mas corto");
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# recorte de 3 paginas");
+        salida.DetalleEjecucion.MarkdownPaginas.Should().Be(3);
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be("Layout");
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_NormalizacionSinPaginasConocidas_NoDeclaraElMarkdownCompleto()
+    {
+        // El markdown de la normalizacion cubre el documento entero, pero sin saber cuantas paginas
+        // tiene no se puede afirmar esa cobertura, y el alta de PersistirActivity la escribiria en
+        // BD como completa dejando la fila bloqueada (AB#100252).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
+
+        var normalizado = BuildNormalizarResultConMarkdown();
+        normalizado.Remove("Paginas");
+        context.SetupActivity("NormalizarActivity", normalizado);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# markdown normalizado");
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeFalse(
+            "sin numero de paginas la cobertura del markdown de normalizacion no se puede afirmar");
+        salida.DetalleEjecucion.MarkdownPaginas.Should().Be(0);
+    }
 }
+
