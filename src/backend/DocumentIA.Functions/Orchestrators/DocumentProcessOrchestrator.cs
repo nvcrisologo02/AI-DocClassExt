@@ -267,17 +267,6 @@ public class DocumentProcessOrchestrator
             MarcarFinActividad(nombre, "Skipped", mensaje);
         }
 
-        void RegistrarMarkdown(string? markdown, string origen)
-        {
-            if (string.IsNullOrWhiteSpace(markdown))
-            {
-                return;
-            }
-
-            salida.DetalleEjecucion.MarkdownGenerado = true;
-            salida.DetalleEjecucion.OrigenMarkdown = origen;
-        }
-
         void RegistrarModeloLlm(string? modelo)
         {
             if (!string.IsNullOrWhiteSpace(modelo))
@@ -328,12 +317,6 @@ public class DocumentProcessOrchestrator
         // pedir lo mismo (pagaria Layout dos veces para fallar dos, AB#100029). Un fallo con
         // documento completo invalida cualquier peticion posterior.
         var necesidadesSinResultado = new HashSet<NecesidadMarkdown>();
-
-        // Evita reintentar el layout bajo demanda cuando el Paso 4 ya lo intento (y fallo) para el
-        // documento completo: con el mismo input, un segundo intento solo pagaria DI Layout dos
-        // veces para fallar dos veces. Solo la usan ya los puntos posteriores a la clasificacion,
-        // que pasan al resolutor en la siguiente tarea del refactor (AB#100253).
-        var layoutDocumentoCompletoIntentado = false;
 
         // Declarado aqui y asignado en el Paso 1 para que las funciones locales anteriores al
         // Paso 1 (prompt libre, resumen combinado) puedan capturarlo.
@@ -483,64 +466,24 @@ public class DocumentProcessOrchestrator
         }
 
         async Task EjecutarPromptLibreAsync(
+            NecesidadMarkdown necesidadMarkdown,
             string? markdownParaPrompt,
             Dictionary<string, object> datosExtraidos,
             string? resultadoPromptCombinado = null,
             string? resumenCombinado = null,
             bool forzarResumenPorDefecto = false)
         {
-            // Si no hay contenido textual, se intenta obtenerlo aqui y no en el Paso 2.8: de este
-            // modo la llamada a layout se paga solo cuando hay un prompt o un resumen que la necesita.
-            // El markdown obtenido no se propaga a datosNormalizados: esa variable se declara despues
-            // de esta funcion local y C# no permite capturarla.
-            if (string.IsNullOrWhiteSpace(markdownParaPrompt) && !layoutDocumentoCompletoIntentado)
+            // Si no hay contenido textual, se le pide al resolutor la necesidad de este paso y no
+            // en el Paso 2.8: asi la llamada a Layout se paga solo cuando hay un prompt o un
+            // resumen que la necesita. El resolutor propaga el markdown a datosNormalizados y a la
+            // cache de la ejecucion, y su guarda de necesidades sin resultado evita reintentar una
+            // peticion que ya fallo con el mismo input (AB#100029, AB#100252).
+            if (string.IsNullOrWhiteSpace(markdownParaPrompt))
             {
-                try
+                var resuelto = await AsegurarMarkdownAsync(necesidadMarkdown, "LayoutBajoDemandaPrompt");
+                if (resuelto.TieneContenido)
                 {
-                    var markdownBajoDemanda = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                        "ExtraerMarkdownLayoutActivity",
-                        new ExtraerMarkdownLayoutInput
-                        {
-                            Tipologia = salida.Identificacion.Tipologia,
-                            DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name,
-                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
-                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
-                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
-                                ? salida.Integridad.RutaBlobStorage
-                                : entrada.Documento.BlobPath
-                        });
-                    AcumularConsumos(markdownBajoDemanda?.Consumos);
-
-                    if (!string.IsNullOrWhiteSpace(markdownBajoDemanda?.Markdown))
-                    {
-                        markdownParaPrompt = markdownBajoDemanda.Markdown;
-                        RegistrarMarkdown(markdownBajoDemanda.Markdown, "LayoutBajoDemandaPrompt");
-                        logger.LogInformation(
-                            "Prompt: markdown obtenido bajo demanda vía DI Layout ({Len} chars)",
-                            markdownBajoDemanda.Markdown!.Length);
-
-                        // Por esta vía (ExpectedType informado) no se ejecuta el Paso 2.8, que es
-                        // quien normalmente informa las páginas, y el recorte del Paso 2.7 solo sabe
-                        // de PDF: sin esto un documento Office queda con Paginas=0. Solo se rellena
-                        // si nadie lo hizo antes, igual que en el Paso 2.8.
-                        if (salida.Identificacion.Paginas <= 0 && markdownBajoDemanda.Paginas > 0)
-                        {
-                            salida.Identificacion.Paginas = markdownBajoDemanda.Paginas;
-                        }
-                    }
-                    else
-                    {
-                        logger.LogWarning(
-                            "Prompt: DI Layout no devolvió markdown útil bajo demanda para {Doc}.",
-                            entrada.Documento.Name);
-                    }
-                }
-                catch (Exception exMarkdownPrompt)
-                {
-                    logger.LogWarning(
-                        exMarkdownPrompt,
-                        "Prompt: no se pudo obtener markdown bajo demanda. Se continúa sin contenido.");
+                    markdownParaPrompt = resuelto.Markdown;
                 }
             }
 
@@ -633,15 +576,18 @@ public class DocumentProcessOrchestrator
             var resumenAjustado = resumen;
             if (marcarResumenParcialClasificacion)
             {
-                var paginasIncluidas = salida.DetalleEjecucion.PaginasIncluidas;
+                // El sufijo depende de la cobertura del markdown realmente usado, no del recorte
+                // del paso 2.7: con el completo disponible no seria verdad (AB#100245).
+                var paginasMarkdown = markdownEjecucion?.Paginas ?? salida.DetalleEjecucion.PaginasIncluidas;
+                var markdownCubreTodo = markdownEjecucion?.Completo ?? false;
                 var paginasDocumento = salida.Identificacion.Paginas;
 
-                if (salida.DetalleEjecucion.RecorteAplicado &&
-                    paginasIncluidas > 0 &&
+                if (!markdownCubreTodo &&
+                    paginasMarkdown > 0 &&
                     paginasDocumento > 0 &&
-                    paginasIncluidas < paginasDocumento)
+                    paginasMarkdown < paginasDocumento)
                 {
-                    var sufijoResumenParcial = $"* Resumen basado en las primeras {paginasIncluidas} paginas del documento";
+                    var sufijoResumenParcial = $"* Resumen basado en las primeras {paginasMarkdown} paginas del documento";
                     if (!resumenAjustado.Contains(sufijoResumenParcial, StringComparison.OrdinalIgnoreCase))
                     {
                         resumenAjustado = resumenAjustado.TrimEnd() + Environment.NewLine + sufijoResumenParcial;
@@ -1505,6 +1451,11 @@ public class DocumentProcessOrchestrator
                 try
                 {
                     await EjecutarPromptLibreAsync(
+                        // Un prompt ad hoc lee el documento entero; un resumen por defecto se
+                        // conforma con el recorte de clasificacion (regla 6, AB#100245).
+                        entrada.Instrucciones.Prompt is not null
+                            ? NecesidadMarkdown.Completo()
+                            : NecesidadMarkdown.Paginas(maxPaginasClasificacion),
                         markdownDisponible,
                         new Dictionary<string, object>(),
                         resultadoClasificacion.ResultadoPromptCombinado,
@@ -1746,7 +1697,10 @@ public class DocumentProcessOrchestrator
                 if (!string.IsNullOrWhiteSpace(markdownClasificacion))
                 {
                     salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
-                    RegistrarMarkdown(markdownClasificacion, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
+                    if (markdownEjecucion is not null)
+                    {
+                        RegistrarMarkdownResuelto(markdownEjecucion, salida.DetalleEjecucion.OrigenMarkdown ?? "Clasificacion");
+                    }
                 }
 
                 var forzarResumenDedicadoClassificationOnly =
@@ -1755,41 +1709,23 @@ public class DocumentProcessOrchestrator
 
                 if (forzarResumenDedicadoClassificationOnly && string.IsNullOrWhiteSpace(markdownClasificacion))
                 {
-                    // Marca el intento de layout de documento completo antes de invocarlo (exito o fallo):
-                    // asi el prompt libre bajo demanda no reintenta con el mismo input si este falla.
-                    layoutDocumentoCompletoIntentado = true;
+                    // Regla 6 (AB#100245): el resumen forzado va con el recorte, igual que la
+                    // clasificacion. Solo sube a documento completo si la propia peticion trae un
+                    // prompt, que si lo necesita entero. Si ya hay un completo en cache, Cubre lo
+                    // devuelve tal cual, sin recortarlo y sin pagar otra llamada.
+                    var necesidadResumen = promptActivoEnPeticion
+                        ? NecesidadMarkdown.Completo()
+                        : NecesidadMarkdown.Paginas(maxPaginasClasificacion);
+                    var resuelto = await AsegurarMarkdownAsync(necesidadResumen, "LayoutResumenClassificationOnly");
 
-                    try
+                    if (resuelto.TieneContenido)
                     {
-                        logger.LogInformation(
-                            "ClassificationOnly con resumen forzado y sin markdown. Ejecutando DI Layout para contexto de resumen.");
-
-                        var markdownParaResumen = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                            "ExtraerMarkdownLayoutActivity",
-                            new ExtraerMarkdownLayoutInput
-                            {
-                                Tipologia = salida.Identificacion.Tipologia,
-                                DocumentoBase64 = docClasif.DocumentoBase64Clasif,
-                                NombreDocumento = entrada.Documento.Name
-                            });
-                        AcumularConsumos(markdownParaResumen.Consumos);
-
-                        if (!string.IsNullOrWhiteSpace(markdownParaResumen.Markdown))
+                        markdownClasificacion = resuelto.Markdown;
+                        salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacion;
+                        if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown"))
                         {
-                            markdownClasificacion = markdownParaResumen.Markdown;
-                            salida.DetalleEjecucion.Postproceso.Markdown = markdownClasificacion;
-                            if (!salida.DetalleEjecucion.Postproceso.Normalizaciones.Contains("Markdown"))
-                            {
-                                salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
-                            }
-                            RegistrarMarkdown(markdownClasificacion, "LayoutResumenClassificationOnly");
+                            salida.DetalleEjecucion.Postproceso.Normalizaciones.Add("Markdown");
                         }
-                    }
-                    catch (Exception exResumenLayout)
-                    {
-                        logger.LogWarning(
-                            exResumenLayout,
-                            "No se pudo extraer markdown DI Layout para resumen en classificationOnly. Se continuará con fallback de prompt.");
                     }
                 }
 
@@ -1797,6 +1733,11 @@ public class DocumentProcessOrchestrator
                 {
                     logger.LogInformation("ClassificationOnly activo con prompt habilitado. Ejecutando PromptActivity.");
                     await EjecutarPromptLibreAsync(
+                        // Con prompt activo se necesita el documento entero; el resumen forzado
+                        // sigue con el recorte de clasificacion (regla 6, AB#100245).
+                        promptActivoEnPeticion
+                            ? NecesidadMarkdown.Completo()
+                            : NecesidadMarkdown.Paginas(maxPaginasClasificacion),
                         markdownClasificacion,
                         salida.DatosExtraidos,
                         resultadoPromptCombinadoClasificacion,
@@ -2042,54 +1983,11 @@ public class DocumentProcessOrchestrator
                     entrada.Documento.Name, paginasDocumento, maxPaginasEfectivo);
             }
 
-            var markdownPreclasificacionRecortado = salida.DetalleEjecucion.RecorteAplicado &&
-                salida.DetalleEjecucion.PaginasIncluidas > 0 &&
-                salida.Identificacion.Paginas > 0 &&
-                salida.DetalleEjecucion.PaginasIncluidas < salida.Identificacion.Paginas &&
-                datosNormalizados.TryGetValue("Markdown", out var markdownPreClasifObj) &&
-                markdownPreClasifObj is string markdownPreClasifTexto &&
-                !string.IsNullOrWhiteSpace(markdownPreClasifTexto);
-
-            if (markdownPreclasificacionRecortado)
-            {
-                try
-                {
-                    logger.LogInformation(
-                        "Markdown actual proviene de recorte de clasificación ({PaginasIncluidas}/{PaginasDocumento}). Regenerando markdown de documento completo para extracción/prompt.",
-                        salida.DetalleEjecucion.PaginasIncluidas,
-                        salida.Identificacion.Paginas);
-
-                    var markdownCompleto = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                        "ExtraerMarkdownLayoutActivity",
-                        new ExtraerMarkdownLayoutInput
-                        {
-                            Tipologia = salida.Identificacion.Tipologia,
-                            DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name,
-                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
-                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
-                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
-                                ? salida.Integridad.RutaBlobStorage
-                                : entrada.Documento.BlobPath
-                        });
-                    AcumularConsumos(markdownCompleto.Consumos);
-
-                    if (!string.IsNullOrWhiteSpace(markdownCompleto.Markdown))
-                    {
-                        datosNormalizados["Markdown"] = markdownCompleto.Markdown;
-                        RegistrarMarkdown(markdownCompleto.Markdown, "LayoutDocumentoCompletoPostClasificacion");
-                        logger.LogInformation(
-                            "Markdown de documento completo preparado para extracción/prompt ({Len} chars).",
-                            markdownCompleto.Markdown.Length);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(
-                        ex,
-                        "No se pudo regenerar markdown de documento completo. Se mantiene markdown de preclasificación recortado para pasos posteriores.");
-                }
-            }
+            // Aqui vivia la regeneracion incondicional a documento completo cuando el markdown de
+            // preclasificacion venia recortado: pagaba un Layout entero aunque ningun paso
+            // posterior necesitase mas que el recorte. Se retira (AB#100245): quien necesita el
+            // documento completo lo declara por su cuenta (Paso 3.5 para extraccion GPT-directo,
+            // prompt libre en el Paso 4.5) y el resolutor decide si hace falta llamar a Layout.
 
             resultadoClasificacion.Confianza = RedondearSalida(resultadoClasificacion.Confianza);
             resultadoClasificacion.ConfianzaDI = RedondearSalida(resultadoClasificacion.ConfianzaDI);
@@ -2131,43 +2029,13 @@ public class DocumentProcessOrchestrator
                 var providerParaMarkdown = ResolveExtractionProviderEfectivo(
                     entrada.Instrucciones.Extraction.Provider,
                     tipologiaResuelta.ExtractionProvider);
-                if (IsGptDirectProvider(providerParaMarkdown) && !datosNormalizados.ContainsKey("Markdown"))
+                // Paso 3.5: la extraccion GPT-directo lee el documento entero. Ya no se comprueba
+                // si datosNormalizados trae markdown: lo que habia podia ser el recorte de
+                // clasificacion, y el resolutor es quien sabe si lo que hay cubre la necesidad
+                // (AB#100245). Si la anticipacion del Paso 2.76 ya lo saco, esto no llama a nada.
+                if (IsGptDirectProvider(providerParaMarkdown))
                 {
-                    logger.LogInformation(
-                        "Paso 3.5: Extrayendo markdown DI Layout previo para provider GPT-directo. Tipología={Tipologia}",
-                        salida.Identificacion.Tipologia);
-
-                    try
-                    {
-                        var markdownLayout = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                            "ExtraerMarkdownLayoutActivity",
-                            new ExtraerMarkdownLayoutInput
-                            {
-                                Tipologia = salida.Identificacion.Tipologia,
-                                DocumentoBase64 = docClasif.DocumentoBase64Clasif,
-                                NombreDocumento = entrada.Documento.Name
-                            });
-                        AcumularConsumos(markdownLayout.Consumos);
-
-                        if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
-                        {
-                            datosNormalizados["Markdown"] = markdownLayout.Markdown;
-                            RegistrarMarkdown(markdownLayout.Markdown, "LayoutPrevioExtraccion");
-                            logger.LogInformation(
-                                "Markdown DI Layout listo para extraccion GPT-directo ({Len} chars)",
-                                markdownLayout.Markdown.Length);
-                        }
-
-                        if (salida.Identificacion.Paginas <= 0 && markdownLayout.Paginas > 0)
-                            salida.Identificacion.Paginas = markdownLayout.Paginas;
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(
-                            ex,
-                            "No se pudo extraer markdown DI Layout previo. Tipología={Tipologia}. Se continua sin markdown.",
-                            salida.Identificacion.Tipologia);
-                    }
+                    await AsegurarMarkdownAsync(NecesidadMarkdown.Completo(), "LayoutPrevioExtraccion");
                 }
 
                 resultadoExtraccion = await EjecutarPasoNegocio(
@@ -2187,6 +2055,23 @@ public class DocumentProcessOrchestrator
                             GenerarResumenPorDefecto = !salida.DatosExtraidos.ContainsKey("Resumen")
                         }));
                 AcumularConsumos(resultadoExtraccion.Consumos);
+
+                // El markdown que devuelve la extraccion (Content Understanding) cubre el documento
+                // entero: entra en la cache si mejora lo que hay y se persiste.
+                if (!string.IsNullOrWhiteSpace(resultadoExtraccion.MarkdownExtraido)
+                    && (markdownEjecucion is null || !markdownEjecucion.Completo))
+                {
+                    markdownEjecucion = new ResultadoMarkdown
+                    {
+                        Markdown = resultadoExtraccion.MarkdownExtraido,
+                        Paginas = resultadoExtraccion.Paginas > 0 ? resultadoExtraccion.Paginas : salida.Identificacion.Paginas,
+                        Completo = true,
+                        Fuente = FuenteMarkdown.Extraccion
+                    };
+                    datosNormalizados["Markdown"] = resultadoExtraccion.MarkdownExtraido;
+                    RegistrarMarkdownResuelto(markdownEjecucion, "Extraccion");
+                    await PersistirMarkdownAportadoAsync(markdownEjecucion);
+                }
 
                 if (resultadoExtraccion.FallbackUsado)
                 {
@@ -2240,56 +2125,19 @@ public class DocumentProcessOrchestrator
                     "Markdown de extracción preparado para normalización y fallbacks ({Length} caracteres)",
                     markdownNormalizacion.Length);
             }
-            else
+            else if (promptActivoEnPeticion || entrada.Instrucciones.ForzarResumenPorDefecto)
             {
-                // Marca el intento de layout de documento completo antes de invocarlo (exito o fallo):
-                // asi el prompt libre sabe que no debe reintentarlo con el mismo input.
-                layoutDocumentoCompletoIntentado = true;
+                // Sin markdown de ninguna fuente y con prompt o resumen por delante: se pide lo que
+                // ese paso necesite. Si nada lo necesita, no se paga Layout (AB#100245).
+                var necesidadFallback = promptActivoEnPeticion
+                    ? NecesidadMarkdown.Completo()
+                    : NecesidadMarkdown.Paginas(maxPaginasClasificacion);
+                var resuelto = await AsegurarMarkdownAsync(necesidadFallback, "FallbackLayout");
 
-                try
+                if (resuelto.TieneContenido)
                 {
-                    logger.LogInformation(
-                        "No se recibió markdown del provider de extracción. Intentando fallback DI layout para tipología {Tipologia}.",
-                        salida.Identificacion.Tipologia);
-
-                    var markdownLayout = await context.CallActivityAsync<ExtraerMarkdownLayoutResultado>(
-                        "ExtraerMarkdownLayoutActivity",
-                        new ExtraerMarkdownLayoutInput
-                        {
-                            Tipologia = salida.Identificacion.Tipologia,
-                            DocumentoBase64 = entrada.Documento.Content.Base64,
-                            NombreDocumento = entrada.Documento.Name,
-                            // Blob-first: en este modo Content.Base64 va vacío; propagar BlobPath del documento
-                            // completo para que el provider use urlSource (SAS) en lugar de un base64 vacío.
-                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
-                                ? salida.Integridad.RutaBlobStorage
-                                : entrada.Documento.BlobPath
-                        });
-                    AcumularConsumos(markdownLayout.Consumos);
-
-                    if (!string.IsNullOrWhiteSpace(markdownLayout.Markdown))
-                    {
-                        markdownNormalizacion = markdownLayout.Markdown;
-                        resultadoExtraccion.MarkdownExtraido = markdownLayout.Markdown;
-                        datosNormalizados["Markdown"] = markdownLayout.Markdown;
-                        RegistrarMarkdown(markdownLayout.Markdown, "FallbackLayout");
-
-                        logger.LogInformation(
-                            "Markdown obtenido vía fallback DI layout ({Length} caracteres)",
-                            markdownLayout.Markdown.Length);
-                    }
-
-                    if (salida.Identificacion.Paginas <= 0 && markdownLayout.Paginas > 0)
-                    {
-                        salida.Identificacion.Paginas = markdownLayout.Paginas;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    logger.LogWarning(
-                        ex,
-                        "No se pudo obtener markdown vía DI layout para tipología {Tipologia}. Se continúa sin markdown.",
-                        salida.Identificacion.Tipologia);
+                    markdownNormalizacion = resuelto.Markdown;
+                    resultadoExtraccion.MarkdownExtraido = resuelto.Markdown;
                 }
             }
 
@@ -2365,6 +2213,11 @@ public class DocumentProcessOrchestrator
 
                 logger.LogInformation("Paso 4.5: Ejecutando prompt libre de tipología");
                 await EjecutarPromptLibreAsync(
+                    // Con prompt activo se necesita el documento entero; el resumen forzado sigue
+                    // con el recorte de clasificacion (regla 6, AB#100245).
+                    promptActivoEnPeticion
+                        ? NecesidadMarkdown.Completo()
+                        : NecesidadMarkdown.Paginas(maxPaginasClasificacion),
                     markdownParaPrompt,
                     resultadoExtraccion.DatosExtraidos,
                     resultadoExtraccion.ResultadoPromptCombinado ?? resultadoPromptCombinadoClasificacion,
