@@ -982,7 +982,7 @@ public class DocumentProcessOrchestratorTests
         // markdown hacia PromptActivity. Ahora el corte lo da la guarda de necesidades sin
         // resultado del resolutor (AB#100252).
         var orchestrator = CreateOrchestrator();
-        // ExpectedType omite la Clasificación real y el Paso 2.8 (obtención de markdown previa a
+        // ExpectedType omite la Clasificacion real y el Paso 2.8 (obtencion de markdown previa a
         // clasificar), que es una llamada a ObtenerMarkdownActivity independiente del bloque
         // dedicado de ClassificationOnly: así el conteo de la aserción aísla exclusivamente el
         // camino bajo prueba (bloque dedicado + reintento bajo demanda).
@@ -2027,22 +2027,21 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
-    public async Task RunOrchestrator_BlobFirstSinMarkdown_FallbackLayoutDocumentoCompletoPropagaBlobPath()
+    public async Task RunOrchestrator_BlobFirstSinMarkdown_FallbackTrasExtraerPropagaBlobPath()
     {
-        // Regresión: en modo blob-first el orquestador vacía Content.Base64 (ahorro de memoria) y
-        // trabaja solo con BlobPath. El fallback DI Layout de "documento completo" construía el
-        // input sin propagar BlobPath, por lo que el provider enviaba base64Source vacío y Azure DI
-        // respondía 400 InvalidContent ("The file is corrupted or format is unsupported"). Desde
-        // AB#100252 el contexto lo construye el orquestador para el resolutor, y la petición de
-        // documento completo debe seguir llevando el BlobPath.
+        // Regresion: en modo blob-first el orquestador vacia Content.Base64 (ahorro de memoria) y
+        // trabaja solo con BlobPath. El fallback posterior a extraer construia su input sin
+        // propagar BlobPath, por lo que el provider enviaba base64Source vacio y Azure DI respondia
+        // 400 InvalidContent ("The file is corrupted or format is unsupported"). Desde AB#100252 el
+        // contexto lo construye el orquestador para el resolutor y esa peticion debe seguir
+        // llevando el BlobPath.
+        //
+        // El escenario se monta para que la UNICA peticion de markdown de la ejecucion sea la del
+        // fallback: ExpectedType salta el Paso 2.8, el proveedor CU salta el Paso 3.5, la tipologia
+        // no tiene prompt (asi no hay anticipacion en el Paso 2.76) y el resumen forzado es lo que
+        // da motivo al fallback. Si el fallback no se ejecutase, no habria ninguna llamada.
         var orchestrator = CreateOrchestrator();
-        var entrada = BuildEntrada();
-        // Prompt ad hoc: es lo que hace que algún paso declare la necesidad de documento completo.
-        // Sin prompt ni resumen forzado ya no se pide markdown entero que nadie va a consumir.
-        entrada.Instrucciones.Prompt = new PromptInstrucciones
-        {
-            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
-        };
+        var entrada = BuildEntrada(expectedType: "nota.simple", forzarResumenPorDefecto: true);
         entrada.Documento.Content.Base64 = string.Empty;
         entrada.Documento.BlobPath = "documents/blob-first.pdf";
         var context = new FakeTaskOrchestrationContext(entrada);
@@ -2057,35 +2056,34 @@ public class DocumentProcessOrchestratorTests
             PaginasIncluidas = 2,
             RecorteAplicado = false
         });
-        // El resolutor no devuelve markdown en ninguna llamada → la petición de documento completo
-        // se produce igualmente y es la que debe llevar el BlobPath.
-        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna });
-        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
-        {
-            Modelo = "gpt-4o-mini",
-            Confianza = 0.95,
-            ConfianzaGPT = 0.95,
-            ProveedorClasif = "GPT4oMini",
-            TipologiaDetectada = "nota.simple",
-            ContentExtraido = null
-        });
-        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
-        // Extracción sin markdown → markdownNormalizacion vacío → dispara el fallback DI Layout.
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, extractionProvider: "cu"));
+        // Extraccion sin markdown -> markdownNormalizacion vacio -> dispara el fallback.
         context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
         {
-            Modelo = "gpt",
+            Modelo = "cu",
             DatosExtraidos = new Dictionary<string, object>()
         });
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# markdown del blob", 3, completo: false));
         context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-5-mini", Resumen = "Resumen." });
 
-        await orchestrator.RunOrchestrator(context);
+        var salida = await orchestrator.RunOrchestrator(context);
 
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(
+            1,
+            "la unica peticion de markdown posible en este escenario es la del fallback tras extraer");
         var markdownInput = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity");
         markdownInput.Should().NotBeNull();
-        markdownInput!.Necesidad.DocumentoCompleto.Should().BeTrue();
-        markdownInput.Contexto.BlobPath.Should().NotBeNullOrWhiteSpace(
-            "en blob-first la petición de documento completo debe usar BlobPath (urlSource) y no un base64 vacío");
+        markdownInput!.Contexto.BlobPath.Should().NotBeNullOrWhiteSpace(
+            "en blob-first la peticion del fallback debe usar BlobPath (urlSource) y no un base64 vacio");
         markdownInput.Contexto.BlobPath.Should().Be("documents/blob-first.pdf");
+        markdownInput.Contexto.DocumentoBase64.Should().BeNullOrWhiteSpace();
+
+        // Y el markdown del fallback llega a los pasos que lo esperaban.
+        salida.DetalleEjecucion.Postproceso.Markdown.Should().Be("# markdown del blob");
+        context.GetLastActivityInput<PromptActivityInput>("PromptActivity")!
+            .MarkdownExtraido.Should().Be("# markdown del blob");
     }
 
     [Fact]
@@ -2407,8 +2405,8 @@ public class DocumentProcessOrchestratorTests
             SkipGDCUpload: true,
             PromptEnabled: false,
             ExtractionEnabled: false));
-        // Las páginas solo se propagan a Identificacion cuando el markdown cubre el documento
-        // entero: con un recorte, sus páginas son las leídas, no las del documento (AB#100245).
+        // Las paginas solo se propagan a Identificacion cuando el markdown cubre el documento
+        // entero: con un recorte, sus paginas son las leidas, no las del documento (AB#100245).
         context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# Diapositivas", 5, completo: true));
         context.SetupActivity("PromptActivity", new PromptResultado
         {
@@ -3000,6 +2998,260 @@ public class DocumentProcessOrchestratorTests
         var clasificarInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
         clasificarInput.Should().NotBeNull();
         clasificarInput!.DatosNormalizados["Markdown"].Should().Be("# Contenido real del documento escaneado");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExtraccionDevuelveElMismoMarkdownRecortado_NoLoPersisteComoCompleto()
+    {
+        // AB#100245: GptDirectExtraerDataProvider y ConfigurableExtraerDataProvider devuelven en
+        // MarkdownExtraido el MISMO texto que se les paso. Con Layout caido, lo que se les paso es
+        // el recorte del clasificador: si la extraccion lo reclasificase como documento completo,
+        // se escribiria en BD con Completo=true y envenenaria la fila del SHA256 para todas las
+        // ejecuciones futuras.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var normalizadoSinPaginas = BuildNormalizarResult();
+        normalizadoSinPaginas.Remove("Paginas");
+        context.SetupActivity("NormalizarActivity", normalizadoSinPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+        });
+        // Layout caido: el resolutor no devuelve nada, ni para el recorte ni para el completo.
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna });
+        // El unico markdown de la ejecucion lo aporta el clasificador, y solo cubre 3 de 10 paginas.
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.ContentExtraido = "# recorte de 3 paginas";
+        clasificacion.PagesProcessed = 3;
+        context.SetupActivity("ClasificarActivity", clasificacion);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, extractionProvider: "gpt"));
+        // La extraccion GPT-directo devuelve tal cual lo que recibio.
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt",
+            MarkdownExtraido = "# recorte de 3 paginas",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // Solo persiste el markdown del clasificador, y con su cobertura real.
+        context.GetActivityCallCount("PersistirMarkdownActivity").Should().Be(
+            1,
+            "la extraccion no aporta texto nuevo: devolvio el mismo recorte que ya estaba en cache");
+        var persistido = context.GetLastActivityInput<PersistirMarkdownInput>("PersistirMarkdownActivity");
+        persistido!.Completo.Should().BeFalse("3 de 10 paginas no es el documento entero");
+        persistido.Paginas.Should().Be(3);
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeFalse();
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be(nameof(FuenteMarkdown.Clasificador));
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExtraccionAportaMarkdownParcial_SePersisteConSuCoberturaReal()
+    {
+        // La cobertura del markdown de la extraccion se calcula (paginas devueltas frente a
+        // paginas del documento), no se asume completa (AB#100245).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        var normalizadoSinPaginas = BuildNormalizarResult();
+        normalizadoSinPaginas.Remove("Paginas");
+        context.SetupActivity("NormalizarActivity", normalizadoSinPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+        });
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna });
+        var clasificacion = BuildClasificacionOk();
+        clasificacion.ContentExtraido = "# recorte de 3 paginas";
+        clasificacion.PagesProcessed = 3;
+        context.SetupActivity("ClasificarActivity", clasificacion);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, extractionProvider: "cu"));
+        // Texto distinto del que hay en cache, pero solo cubre 4 de las 10 paginas.
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "cu",
+            MarkdownExtraido = "# texto de la extraccion",
+            Paginas = 4,
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // Dos persistencias: la del clasificador y la de la extraccion, ambas parciales.
+        context.GetActivityCallCount("PersistirMarkdownActivity").Should().Be(2);
+        var persistido = context.GetLastActivityInput<PersistirMarkdownInput>("PersistirMarkdownActivity");
+        persistido!.Markdown.Should().Be("# texto de la extraccion");
+        persistido.Paginas.Should().Be(4);
+        persistido.Completo.Should().BeFalse("4 de 10 paginas no es el documento entero");
+        salida.DetalleEjecucion.MarkdownFuente.Should().Be(nameof(FuenteMarkdown.Extraccion));
+        salida.DetalleEjecucion.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Paso35ConRecorteEnDatosNormalizados_PideIgualmenteElCompleto()
+    {
+        // La extraccion GPT-directo lee el documento entero. Que datosNormalizados ya traiga
+        // markdown no basta: lo que hay puede ser el recorte del Paso 2.8, y quien decide si
+        // cubre la necesidad es el resolutor (AB#100245).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        var normalizadoSinPaginas = BuildNormalizarResult();
+        normalizadoSinPaginas.Remove("Paginas");
+        context.SetupActivity("NormalizarActivity", normalizadoSinPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+        });
+        // El resolutor solo sabe devolver el recorte: el Paso 2.8 lo deja en datosNormalizados.
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# recorte de 3 paginas", 3, completo: false));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, extractionProvider: "gpt"));
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        await orchestrator.RunOrchestrator(context);
+
+        // Paso 2.8 (recorte) + Paso 3.5 (documento completo).
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(2);
+        var ultimo = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity");
+        ultimo!.Necesidad.DocumentoCompleto.Should().BeTrue(
+            "la extraccion GPT-directo lee el documento entero, no el recorte de clasificacion");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SinPromptNiResumen_NoPagaLayoutEnElFallbackTrasExtraer()
+    {
+        // El ahorro del refactor: sin prompt ni resumen por delante, quedarse sin markdown tras
+        // extraer no justifica pagar un Layout que nadie va a consumir (AB#100245).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        // CU, no GPT-directo: el Paso 3.5 no pide nada. ExpectedType salta el Paso 2.8.
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, extractionProvider: "cu"));
+        // La extraccion no devuelve markdown: es justo el caso que antes disparaba el fallback.
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "cu",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# no deberia pedirse", 10, completo: true));
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(0);
+        context.GetActivityCallCount("PromptActivity").Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_MarkdownParcialConPaginas_NoRellenaLasPaginasDelDocumento()
+    {
+        // Con un recorte pages=1-N, N son las paginas leidas, no las del documento: rellenar
+        // Identificacion.Paginas desde ahi escribiria 5 como total de un documento mas largo
+        // (AB#100245).
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(nombre: "presentacion.pptx", expectedType: "resumen.documental");
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var normalizadoSinPaginas = BuildNormalizarResult();
+        normalizadoSinPaginas.Remove("Paginas");
+
+        context.SetupActivity("NormalizarActivity", normalizadoSinPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/presentacion.pptx");
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "resumen.documental",
+            TipologiaId: "resumen.documental",
+            Version: "1.0",
+            TechnicalKey: "resumen.documental",
+            IsDefault: false,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# Diapositivas", 5, completo: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Resumen de la presentacion.",
+            TiempoMs = 900
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Identificacion.Paginas.Should().Be(
+            0,
+            "un markdown parcial no informa el total de paginas del documento");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptDeTipologiaConMarkdownRecortado_PideElCompletoAlResolutor()
+    {
+        // El prompt libre necesita el documento entero. Que el Paso 2.8 haya dejado el recorte en
+        // datosNormalizados no exime de declarar la necesidad: quien decide si lo que hay sirve es
+        // Cubre, no el hecho de que la variable venga rellena (AB#100245).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        var normalizadoSinPaginas = BuildNormalizarResult();
+        normalizadoSinPaginas.Remove("Paginas");
+        context.SetupActivity("NormalizarActivity", normalizadoSinPaginas);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+        });
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# recorte de 3 paginas", 3, completo: false));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(promptEnabled: true, promptHasDefinition: true));
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion { Estado = "OK", DatosFinales = new Dictionary<string, object>() });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-5-mini",
+            Resultado = "Analisis del documento.",
+            Resumen = "Resumen del documento."
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        // Paso 2.8 (recorte) + Paso 4.5 (documento completo para el prompt).
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(2);
+        var ultimo = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity");
+        ultimo!.Necesidad.DocumentoCompleto.Should().BeTrue(
+            "el prompt libre lee el documento entero: no puede conformarse con el recorte que dejo el Paso 2.8");
+
+        // Y como el markdown realmente usado sigue siendo parcial, el resumen lleva su aviso.
+        salida.DatosExtraidos["Resumen"].Should().Be(
+            "Resumen del documento." + Environment.NewLine + "* Resumen basado en las primeras 3 paginas del documento",
+            "un resumen hecho sobre 3 de 10 paginas tiene que decirlo");
     }
 
     private static ResultadoMarkdown MarkdownResuelto(string markdown, int paginas, bool completo, FuenteMarkdown fuente = FuenteMarkdown.Layout)

@@ -419,6 +419,16 @@ public class DocumentProcessOrchestrator
 
             if (!resultado.TieneContenido)
             {
+                // Observabilidad: que un paso siga adelante sin el markdown que declaro necesitar
+                // (o con uno mas corto) tiene que verse en el log; es la diferencia entre "el
+                // prompt corrio sobre el documento" y "corrio sobre el recorte" (AB#100245).
+                logger.LogWarning(
+                    "El resolutor no devolvio markdown para {Origen} (completo={Completo}, paginasMinimas={Paginas}). "
+                    + "El paso continua con lo que haya en cache y la necesidad no se reintenta.",
+                    origenTraza,
+                    necesidad.DocumentoCompleto,
+                    necesidad.PaginasMinimas);
+
                 necesidadesSinResultado.Add(necesidad);
                 return markdownEjecucion ?? resultado;
             }
@@ -473,18 +483,16 @@ public class DocumentProcessOrchestrator
             string? resumenCombinado = null,
             bool forzarResumenPorDefecto = false)
         {
-            // Si no hay contenido textual, se le pide al resolutor la necesidad de este paso y no
-            // en el Paso 2.8: asi la llamada a Layout se paga solo cuando hay un prompt o un
-            // resumen que la necesita. El resolutor propaga el markdown a datosNormalizados y a la
-            // cache de la ejecucion, y su guarda de necesidades sin resultado evita reintentar una
-            // peticion que ya fallo con el mismo input (AB#100029, AB#100252).
-            if (string.IsNullOrWhiteSpace(markdownParaPrompt))
+            // Siempre se le pide al resolutor la necesidad de este paso, tambien cuando el llamador
+            // ya trae texto: ese texto puede ser el recorte de clasificacion y el prompt libre
+            // necesita el documento entero. Quien decide si hace falta llamar a Layout es Cubre; si
+            // la cache ya sirve, no hay actividad. El resolutor propaga el markdown a
+            // datosNormalizados y a la cache, y su guarda de necesidades sin resultado evita
+            // reintentar una peticion que ya fallo con el mismo input (AB#100029, AB#100252).
+            var resuelto = await AsegurarMarkdownAsync(necesidadMarkdown, "LayoutBajoDemandaPrompt");
+            if (resuelto.TieneContenido)
             {
-                var resuelto = await AsegurarMarkdownAsync(necesidadMarkdown, "LayoutBajoDemandaPrompt");
-                if (resuelto.TieneContenido)
-                {
-                    markdownParaPrompt = resuelto.Markdown;
-                }
+                markdownParaPrompt = resuelto.Markdown;
             }
 
             var promptInput = new PromptActivityInput
@@ -544,10 +552,10 @@ public class DocumentProcessOrchestrator
                 salida.DatosExtraidos["ResultadoPrompt"] = resultadoPrompt.Resultado;
             }
 
-            if (!string.IsNullOrWhiteSpace(resultadoPrompt.Resumen))
-            {
-                salida.DatosExtraidos["Resumen"] = resultadoPrompt.Resumen;
-            }
+            // El resumen del prompt pasa por el mismo helper que el del clasificador: desde
+            // AB#100245 el resumen forzado se hace sobre el recorte por diseno, asi que es
+            // justamente este el que mas necesita el aviso de "primeras N paginas".
+            AplicarResumenCombinado(resultadoPrompt.Resumen, marcarResumenParcial: true);
 
             salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
             {
@@ -566,7 +574,7 @@ public class DocumentProcessOrchestrator
             }
         }
 
-        void AplicarResumenCombinado(string? resumen, bool marcarResumenParcialClasificacion = false)
+        void AplicarResumenCombinado(string? resumen, bool marcarResumenParcial = false)
         {
             if (string.IsNullOrWhiteSpace(resumen))
             {
@@ -574,11 +582,15 @@ public class DocumentProcessOrchestrator
             }
 
             var resumenAjustado = resumen;
-            if (marcarResumenParcialClasificacion)
+            if (marcarResumenParcial)
             {
                 // El sufijo depende de la cobertura del markdown realmente usado, no del recorte
                 // del paso 2.7: con el completo disponible no seria verdad (AB#100245).
-                var paginasMarkdown = markdownEjecucion?.Paginas ?? salida.DetalleEjecucion.PaginasIncluidas;
+                // Si el resolutor devolvio un parcial sin numero de paginas (Paginas = 0), se cae de
+                // vuelta a las del recorte: es mejor aproximacion que perder el aviso.
+                var paginasMarkdown = markdownEjecucion is { Paginas: > 0 }
+                    ? markdownEjecucion.Paginas
+                    : salida.DetalleEjecucion.PaginasIncluidas;
                 var markdownCubreTodo = markdownEjecucion?.Completo ?? false;
                 var paginasDocumento = salida.Identificacion.Paginas;
 
@@ -1625,7 +1637,7 @@ public class DocumentProcessOrchestrator
             var resumenCombinadoClasificacion = resultadoClasificacion.ResumenCombinado;
             if (!string.IsNullOrWhiteSpace(resumenCombinadoClasificacion))
             {
-                AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcialClasificacion: true);
+                AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcial: true);
             }
 
             var forzarResumenDedicado = (entrada.Instrucciones.ForzarResumenPorDefecto || esNivelTdn1) &&
@@ -1681,7 +1693,7 @@ public class DocumentProcessOrchestrator
                     : null;
 
                 salida.DatosExtraidos = new Dictionary<string, object>();
-                AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcialClasificacion: true);
+                AplicarResumenCombinado(resumenCombinadoClasificacion, marcarResumenParcial: true);
                 salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                 {
                     Normalizaciones = new List<string>
@@ -2056,21 +2068,37 @@ public class DocumentProcessOrchestrator
                         }));
                 AcumularConsumos(resultadoExtraccion.Consumos);
 
-                // El markdown que devuelve la extraccion (Content Understanding) cubre el documento
-                // entero: entra en la cache si mejora lo que hay y se persiste.
-                if (!string.IsNullOrWhiteSpace(resultadoExtraccion.MarkdownExtraido)
-                    && (markdownEjecucion is null || !markdownEjecucion.Completo))
+                // El markdown que devuelve la extraccion entra en la cache y se persiste, pero su
+                // cobertura se calcula, no se asume: los proveedores GPT-directo y el configurable
+                // devuelven en MarkdownExtraido el mismo texto que se les paso, asi que si el Paso
+                // 3.5 no consiguio el completo, lo que vuelve es el recorte. Declararlo completo lo
+                // escribiria en BD como documento entero y envenenaria el SHA256 para todas las
+                // ejecuciones futuras (AB#100245). Misma regla que el bloque del clasificador.
+                var markdownExtraccion = resultadoExtraccion.MarkdownExtraido;
+                var extraccionAportaTextoNuevo = !string.IsNullOrWhiteSpace(markdownExtraccion)
+                    && !string.Equals(markdownExtraccion, markdownEjecucion?.Markdown, StringComparison.Ordinal);
+
+                if (extraccionAportaTextoNuevo && (markdownEjecucion is null || !markdownEjecucion.Completo))
                 {
+                    var paginasExtraccion = resultadoExtraccion.Paginas;
+
                     markdownEjecucion = new ResultadoMarkdown
                     {
-                        Markdown = resultadoExtraccion.MarkdownExtraido,
-                        Paginas = resultadoExtraccion.Paginas > 0 ? resultadoExtraccion.Paginas : salida.Identificacion.Paginas,
-                        Completo = true,
+                        Markdown = markdownExtraccion,
+                        Paginas = paginasExtraccion,
+                        Completo = paginasExtraccion > 0
+                            && salida.Identificacion.Paginas > 0
+                            && paginasExtraccion >= salida.Identificacion.Paginas,
                         Fuente = FuenteMarkdown.Extraccion
                     };
-                    datosNormalizados["Markdown"] = resultadoExtraccion.MarkdownExtraido;
+                    datosNormalizados["Markdown"] = markdownExtraccion!;
                     RegistrarMarkdownResuelto(markdownEjecucion, "Extraccion");
                     await PersistirMarkdownAportadoAsync(markdownEjecucion);
+                    logger.LogInformation(
+                        "Markdown de la extraccion propagado ({Len} chars, {Paginas} paginas, completo={Completo})",
+                        markdownExtraccion!.Length,
+                        paginasExtraccion,
+                        markdownEjecucion.Completo);
                 }
 
                 if (resultadoExtraccion.FallbackUsado)
@@ -2125,10 +2153,13 @@ public class DocumentProcessOrchestrator
                     "Markdown de extracción preparado para normalización y fallbacks ({Length} caracteres)",
                     markdownNormalizacion.Length);
             }
-            else if (promptActivoEnPeticion || entrada.Instrucciones.ForzarResumenPorDefecto)
+            else if (promptActivoEnPeticion
+                || (entrada.Instrucciones.ForzarResumenPorDefecto && !salida.DatosExtraidos.ContainsKey("Resumen")))
             {
                 // Sin markdown de ninguna fuente y con prompt o resumen por delante: se pide lo que
-                // ese paso necesite. Si nada lo necesita, no se paga Layout (AB#100245).
+                // ese paso necesite. Si nada lo necesita, no se paga Layout (AB#100245). La guarda
+                // del resumen espeja la del Paso 4.5 (forzarResumenDedicado): si ya hay resumen, ese
+                // paso no se ejecutara y pagar Layout por el seria tirar el dinero.
                 var necesidadFallback = promptActivoEnPeticion
                     ? NecesidadMarkdown.Completo()
                     : NecesidadMarkdown.Paginas(maxPaginasClasificacion);
