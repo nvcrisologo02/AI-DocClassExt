@@ -88,14 +88,28 @@ if (-not (Invoke-Scalar "SELECT COL_LENGTH('dbo.Documentos','MarkdownCompleto');
 # Caso seguro: la fila esta sin cobertura (MarkdownPaginas NULL, MarkdownCompleto 0), tiene
 # markdown persistido, Documentos.Paginas es mayor que cero (para no dejar la incoherencia
 # "completo pero de longitud desconocida"), y la ULTIMA ejecucion del documento termino OK con
-# un OrigenMarkdown que solo se produce procesando el documento entero. MarkdownPrevio se deja
-# fuera a proposito: en codigo significa "se reutilizo lo que hubiera en
+# un OrigenMarkdown que solo se produce procesando el documento entero.
+#
+# MarkdownPrevio se deja fuera a proposito: en codigo significa "se reutilizo lo que hubiera en
 # datosNormalizados['Markdown']" sin registrar su procedencia, y ese contenido puede ser el
 # recorte de paginas para clasificacion del Paso 2.8 reetiquetado tras perder el origen
 # LayoutPreClasificacion; no hay forma fiable de distinguir ambos casos en las filas historicas,
-# asi que se prefiere dejarlas en NULL antes que escribir cobertura falsa. Este WHERE se
-# reutiliza tanto para contar (WhatIf) como para escribir, asi que el recuento y la escritura
-# nunca divergen.
+# asi que se prefiere dejarlas en NULL antes que escribir cobertura falsa.
+#
+# Extraccion queda fuera por el mismo motivo, y no por uno menor: GptDirectExtraerDataProvider
+# asigna MarkdownExtraido = el mismo markdown que se le paso, de modo que "Extraccion" no aporta
+# ninguna evidencia sobre la cobertura, solo dice por donde paso el texto. En el codigo historico,
+# si la regeneracion a documento completo posterior a la clasificacion fallaba -Layout caido, un
+# modo de fallo documentado en este proyecto-, lo que llegaba a la extraccion era el recorte de
+# clasificacion y el origen se reescribia igualmente a "Extraccion". Marcar esas filas como
+# completas escribiria cobertura falsa y ademas las bloquearia: ActualizarMarkdownSiMejoraAsync
+# no sustituye una fila ya marcada como completa.
+#
+# Dejar una fila en NULL porque su cobertura no se puede afirmar es el resultado correcto: la
+# siguiente ejecucion del documento la rellenara con cobertura real.
+#
+# Este WHERE se reutiliza tanto para contar (WhatIf) como para escribir, asi que el recuento y la
+# escritura nunca divergen.
 $casoSeguroWhere = @"
 d.MarkdownCompleto = 0
   AND d.MarkdownPaginas IS NULL
@@ -103,7 +117,7 @@ d.MarkdownCompleto = 0
   AND (d.NormalizacionMarkdownGzip IS NOT NULL OR d.NormalizacionMarkdownCompressed IS NOT NULL)
   AND u.EstadoFinal = 'OK'
   AND JSON_VALUE(u.ContratoSalidaCompletoJson, '`$.DetalleEjecucion.OrigenMarkdown')
-      IN ('LayoutDocumentoCompletoPostClasificacion', 'FallbackLayout', 'LayoutBajoDemandaPrompt', 'Extraccion')
+      IN ('LayoutDocumentoCompletoPostClasificacion', 'FallbackLayout', 'LayoutBajoDemandaPrompt')
 "@
 
 $pendientes = [int](Invoke-Scalar @"
