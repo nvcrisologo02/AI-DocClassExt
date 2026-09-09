@@ -423,6 +423,28 @@ public class MarkdownResolverTests
     }
 
     [Fact]
+    public async Task LayoutDevuelveContenidoSinNumeroDePaginas_NoSeDeclaraCoberturaNiSePersiste()
+    {
+        // Unica direccion de sobre-declaracion que quedaba (AB#100250): con contenido pero
+        // Paginas = 0 se daban por cubiertas las PEDIDAS y esa cifra se escribia en la columna
+        // MarkdownPaginas. La cobertura persistida es lo que no se puede deshacer, asi que sin
+        // evidencia se deja en 0 (desconocida) y no se escribe nada.
+        var ctx = Contexto(totalPaginas: 10);
+        BdVacia();
+        LayoutDevuelve("# algo, pero DI no dice cuantas paginas", 0);
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), ctx);
+
+        r.Markdown.Should().Be("# algo, pero DI no dice cuantas paginas");
+        r.Paginas.Should().Be(0, "no hay evidencia de cuantas paginas cubre");
+        r.Completo.Should().BeFalse();
+        r.Persistido.Should().BeFalse();
+        _repo.Verify(
+            x => x.ActualizarMarkdownSiMejoraAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>()),
+            Times.Never);
+    }
+
+    [Fact]
     public async Task PersistirAportado_SinShaOSinTexto_NoEscribe()
     {
         (await _sut.PersistirAportadoAsync(new PersistirMarkdownInput { Sha256 = null, Markdown = "# x", Paginas = 1 })).Should().BeFalse();

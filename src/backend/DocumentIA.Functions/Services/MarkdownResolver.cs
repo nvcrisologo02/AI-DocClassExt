@@ -104,8 +104,23 @@ public sealed class MarkdownResolver : IMarkdownResolver
 
         if (layout is { TieneContenido: true })
         {
-            layout.Persistido = await PersistirAsync(
-                contexto.Sha256, layout.Markdown!, layout.Paginas, layout.Completo, contexto.ForceReprocess, cancellationToken);
+            // Solo se escribe en base de datos lo que tiene cobertura afirmable. Un parcial del
+            // que no se sabe cuantas paginas cubre se usa en esta ejecucion, pero persistirlo
+            // significaria escribir una cifra que nadie ha comprobado, y la cobertura persistida
+            // es justo lo que no se puede deshacer (AB#100250).
+            if (layout.Completo || layout.Paginas > 0)
+            {
+                layout.Persistido = await PersistirAsync(
+                    contexto.Sha256, layout.Markdown!, layout.Paginas, layout.Completo, contexto.ForceReprocess, cancellationToken);
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "Layout devolvio contenido para {Documento} sin numero de paginas y sin cubrir el documento: "
+                    + "se usa en esta ejecucion pero no se persiste, porque su cobertura no se puede afirmar.",
+                    contexto.NombreDocumento);
+            }
+
             return layout;
         }
 
@@ -166,9 +181,13 @@ public sealed class MarkdownResolver : IMarkdownResolver
         var completo = !resultado.RangoAplicado
             || (contexto.TotalPaginas > 0 && resultado.Paginas >= contexto.TotalPaginas);
 
+        // Paginas realmente cubiertas. Cuando el proveedor no las informa solo se pueden deducir
+        // si el markdown es completo (son las del documento); dar por buenas las PEDIDAS seria la
+        // unica sobre-declaracion del resolutor, y esa cifra acaba en la columna MarkdownPaginas.
+        // Sin evidencia se deja en 0, que significa "cobertura desconocida" (AB#100250).
         var paginas = resultado.Paginas > 0
             ? resultado.Paginas
-            : (completo ? contexto.TotalPaginas : necesidad.PaginasMinimas);
+            : (completo ? contexto.TotalPaginas : 0);
 
         return new ResultadoMarkdown
         {

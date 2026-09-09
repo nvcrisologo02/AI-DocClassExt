@@ -27,10 +27,16 @@ public class ObtenerMarkdownActivity
         _tarifas = tarifas;
     }
 
+    // El CancellationToken lo inyecta el host de Functions (modelo aislado) y se propaga al
+    // resolutor: sin el llegaba default y los filtros de cancelacion del resolutor no se cumplian
+    // nunca, asi que el reciclado del worker se registraba como "Layout fallo" y se enmascaraba
+    // con el respaldo de base de datos (AB#100251).
     [Function("ObtenerMarkdownActivity")]
-    public async Task<ResultadoMarkdown> Run([ActivityTrigger] ObtenerMarkdownInput input)
+    public async Task<ResultadoMarkdown> Run(
+        [ActivityTrigger] ObtenerMarkdownInput input,
+        CancellationToken cancellationToken)
     {
-        var resultado = await _resolver.ResolverAsync(input.Necesidad, input.Contexto);
+        var resultado = await _resolver.ResolverAsync(input.Necesidad, input.Contexto, cancellationToken);
 
         TarificadorDeConsumos.Aplicar(resultado.Consumos, _tarifas, _logger);
 

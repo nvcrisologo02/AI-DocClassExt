@@ -20,10 +20,14 @@ public class PersistirMarkdownActivity
         _resolver = resolver;
     }
 
+    // Igual que en ObtenerMarkdownActivity: el token del host se propaga al resolutor para que
+    // una cancelacion real no acabe registrada como "no se pudo persistir" (AB#100251).
     [Function("PersistirMarkdownActivity")]
-    public async Task<bool> Run([ActivityTrigger] PersistirMarkdownInput input)
+    public async Task<bool> Run(
+        [ActivityTrigger] PersistirMarkdownInput input,
+        CancellationToken cancellationToken)
     {
-        var persistido = await _resolver.PersistirAportadoAsync(input);
+        var persistido = await _resolver.PersistirAportadoAsync(input, cancellationToken);
         _logger.LogInformation(
             "Markdown aportado para {Sha256}: paginas={Paginas}, completo={Completo}, persistido={Persistido}",
             input.Sha256, input.Paginas, input.Completo, persistido);
