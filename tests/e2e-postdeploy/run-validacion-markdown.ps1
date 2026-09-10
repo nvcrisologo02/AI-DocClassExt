@@ -28,6 +28,10 @@ param(
     [string[]]$CaseKey = @()
 )
 
+# Desde pwsh -File (p. ej. Git Bash), "a,b,c" llega como un unico elemento; desde una sesion
+# PowerShell llega ya partido. Se aceptan las dos formas.
+$CaseKey = @($CaseKey | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 

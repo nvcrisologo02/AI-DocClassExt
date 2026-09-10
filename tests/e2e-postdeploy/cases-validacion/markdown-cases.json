@@ -289,7 +289,7 @@
     "pasadas": [],
     "dbAssertions": [
       { "columna": "MarkdownCompleto", "esperado": true },
-      { "columna": "MarkdownPaginas", "esperado": null }
+      { "columna": "MarkdownPaginas", "esperado": 12 }
     ]
   },
   {

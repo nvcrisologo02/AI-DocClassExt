@@ -117,6 +117,8 @@ Tres modos de invocación:
 
 `-CaseKey` combinado con `-SoloLimpieza` limita también la limpieza a los casos filtrados, no borra el resto.
 
+`-CaseKey` acepta tanto una lista separada por comas en un solo argumento (`-CaseKey MDW-MDW1,MDW-MDW6`, la forma que llega al invocar `pwsh ./script.ps1 ...` directamente desde Git Bash) como varios valores ya separados por PowerShell (al invocar con `pwsh -Command "& './script.ps1' -CaseKey MDW-MDW1,MDW-MDW6"`): el script normaliza ambas formas nada más entrar.
+
 `-Environment` solo admite `dev` (`ValidateSet` de un único valor): este juego
 emite `DELETE`/`UPDATE` directos contra `Documentos` y nunca debe poder
 apuntar a PRO. `Assert-DbServidorEsDev` (en `lib/postdeploy-db.ps1`) es una
