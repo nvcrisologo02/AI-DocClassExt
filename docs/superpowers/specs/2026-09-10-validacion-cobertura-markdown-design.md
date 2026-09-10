@@ -224,7 +224,9 @@ No es una suite de integración continua. Es la que se pasa antes de dar por bue
 
 ## Condición de aceptación
 
-**Cada caso `MDW` debe demostrarse por mutación antes de considerarse hecho:** romper a propósito la invariante en el código de producción y confirmar que el caso se pone rojo.
+> **Estado (2026-09-10):** la demostración por mutación **no se ejecuta**, por decisión del usuario. Exigía desplegar a DEV código modificado una vez por mutación, y el objetivo de este juego es validar el código que se va a desplegar a PRO, no medir la calidad de la suite. En su lugar, la prueba de que los casos discriminan es el **rastreo contrafáctico** que hizo el revisor de cada tarea (para cada caso, qué aserción se pondría roja si la invariante fallara), registrado en el ledger de ejecución y en los informes de revisión de las Tareas 5, 7a y 7b. La tabla de mutaciones queda en el plan como referencia si algún día se quiere ejecutar en una sesión con despliegues.
+
+**Cada caso `MDW` debía demostrarse por mutación antes de considerarse hecho:** romper a propósito la invariante en el código de producción y confirmar que el caso se pone rojo.
 
 Sin esa demostración no sabemos si el caso prueba algo. En la implementación de AB#100245 apareció exactamente esa trampa: una aserción que se cumplía siempre y un test que parecía verde por razones ajenas a lo que decía verificar.
 
