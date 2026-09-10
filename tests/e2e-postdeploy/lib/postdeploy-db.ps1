@@ -50,7 +50,8 @@ SELECT TOP 1
     MarkdownPaginas,
     CAST(MarkdownCompleto AS int)                          AS MarkdownCompleto,
     ISNULL(DATALENGTH(NormalizacionMarkdownGzip), 0)       AS LongitudGzip,
-    ISNULL(DATALENGTH(NormalizacionMarkdownCompressed), 0) AS LongitudCompressed
+    ISNULL(DATALENGTH(NormalizacionMarkdownCompressed), 0) AS LongitudCompressed,
+    Paginas
 FROM Documentos
 WHERE SHA256 = @sha
 "@
@@ -63,7 +64,7 @@ WHERE SHA256 = @sha
         if (-not $lector.Read()) {
             return [pscustomobject]@{
                 Existe = $false; MarkdownPaginas = $null; MarkdownCompleto = $false
-                LongitudGzip = 0; LongitudCompressed = 0
+                LongitudGzip = 0; LongitudCompressed = 0; Paginas = 0
             }
         }
         $paginas = if ($lector["MarkdownPaginas"] -is [System.DBNull]) { $null } else { [int]$lector["MarkdownPaginas"] }
@@ -73,6 +74,7 @@ WHERE SHA256 = @sha
             MarkdownCompleto   = ([int]$lector["MarkdownCompleto"] -eq 1)
             LongitudGzip       = [int]$lector["LongitudGzip"]
             LongitudCompressed = [int]$lector["LongitudCompressed"]
+            Paginas            = [int]$lector["Paginas"]
         }
     }
     finally { $lector.Close() }
@@ -174,11 +176,17 @@ function New-MutacionEjecucionSql {
 
     $expresion = "e.ContratoSalidaCompletoJson"
     foreach ($ruta in $Mutacion.Keys) {
-        if (-not $script:RutasJsonMutables.ContainsKey($ruta)) {
-            throw "Ruta JSON '$ruta' no admitida en mutacionEjecucion. Admitidas: $($script:RutasJsonMutables.Keys -join ', ')"
+        # La ruta JSON de SQL Server distingue mayusculas: una hashtable de PowerShell
+        # comparada con ContainsKey es case-insensitive por defecto y dejaria pasar una
+        # ruta con otra capitalizacion, que JSON_MODIFY interpretaria como una clave
+        # nueva sin tocar la real. -ceq fuerza coincidencia exacta contra la clave
+        # canonica de la lista blanca.
+        $canonica = @($script:RutasJsonMutables.Keys | Where-Object { $_ -ceq $ruta })
+        if ($canonica.Count -ne 1) {
+            throw "Ruta JSON '$ruta' no admitida en mutacionEjecucion (la comparacion distingue mayusculas). Admitidas: $($script:RutasJsonMutables.Keys -join ', ')"
         }
-        $parametro = $script:RutasJsonMutables[$ruta]
-        $expresion = "JSON_MODIFY($expresion, '`$.$ruta', @$parametro)"
+        $parametro = $script:RutasJsonMutables[$canonica[0]]
+        $expresion = "JSON_MODIFY($expresion, '`$.$($canonica[0])', @$parametro)"
     }
 
     # Misma definicion de "ultima ejecucion" que el backfill: TOP 1 por FechaEjecucion DESC.
@@ -213,7 +221,10 @@ function Invoke-EjecucionMutacion {
     foreach ($ruta in $Mutacion.Keys) {
         $valor = $Mutacion[$ruta]
         if ($null -eq $valor) { $valor = [System.DBNull]::Value }
-        [void]$cmd.Parameters.AddWithValue("@$($script:RutasJsonMutables[$ruta])", $valor)
+        # Mismo criterio -ceq que New-MutacionEjecucionSql, para que ambas funciones
+        # resuelvan la misma clave canonica de la lista blanca.
+        $canonica = @($script:RutasJsonMutables.Keys | Where-Object { $_ -ceq $ruta })
+        [void]$cmd.Parameters.AddWithValue("@$($script:RutasJsonMutables[$canonica[0]])", $valor)
     }
     return $cmd.ExecuteNonQuery()
 }
@@ -272,11 +283,13 @@ function Test-DbAssertions {
         $tieneNoDisminuye = Test-ReglaTieneClave -Regla $regla -Nombre "noDisminuye"
         $tieneNoEncoge    = Test-ReglaTieneClave -Regla $regla -Nombre "noEncoge"
         $tieneNoEsNulo    = Test-ReglaTieneClave -Regla $regla -Nombre "noEsNulo"
+        $tieneMayorQue    = Test-ReglaTieneClave -Regla $regla -Nombre "mayorQue"
 
         $esperado    = Get-ValorRegla -Regla $regla -Nombre "esperado"
         $noDisminuye = Get-ValorRegla -Regla $regla -Nombre "noDisminuye"
         $noEncoge    = Get-ValorRegla -Regla $regla -Nombre "noEncoge"
         $noEsNulo    = Get-ValorRegla -Regla $regla -Nombre "noEsNulo"
+        $mayorQue    = Get-ValorRegla -Regla $regla -Nombre "mayorQue"
 
         if ($tieneNoEsNulo -and [bool]$noEsNulo -and $null -eq $valorDespues) {
             $errores += "$columna es nulo y no deberia serlo"
@@ -310,6 +323,15 @@ function Test-DbAssertions {
             }
             elseif ([int]$valorDespues -lt [int]$valorAntes) {
                 $errores += "$columna encogio de $valorAntes a $valorDespues"
+            }
+        }
+
+        if ($tieneMayorQue) {
+            if ($null -eq $valorDespues) {
+                $errores += "$columna es nulo, esperado mayor que $mayorQue"
+            }
+            elseif ([int]$valorDespues -le [int]$mayorQue) {
+                $errores += "$columna=$valorDespues no es mayor que $mayorQue"
             }
         }
     }

@@ -158,6 +158,17 @@ function ConvertTo-ReglasDeInstantanea {
     })
 }
 
+function Get-ColaDeSalida {
+    param([string]$Salida, [int]$Lineas = 10)
+
+    # La salida real del backfill puede ser larga (un lote por linea sobre toda la
+    # tabla). Para un Reason de ERROR basta la cola: las ultimas lineas son las que
+    # explican donde se corto.
+    $todas = @($Salida -split "`r?`n")
+    $cola = $todas | Select-Object -Last $Lineas
+    return ($cola -join "`n").Trim()
+}
+
 function Invoke-CasoValidacion {
     param([pscustomobject]$Caso, [string]$Endpoint, [string]$RunDir)
 
@@ -221,17 +232,24 @@ function Invoke-CasoValidacion {
     }
 
     # 5. Pasadas en orden, o el backfill si el caso es de ese tipo.
+    $reasonPass = "OK"
     if ($Caso.tipo -eq "backfill") {
         $backfill = Join-Path $repoRoot "scripts" "database" "backfill-markdown-cobertura.ps1"
         $fqdn = if ($envConfig.SqlServer -like "*.database.windows.net") { $envConfig.SqlServer } else { "$($envConfig.SqlServer).database.windows.net" }
 
         $salidaWhatIf = (& pwsh -NoProfile -File $backfill -Server $fqdn -Database $envConfig.SqlDatabase -WhatIf 2>&1) | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "el backfill (-WhatIf) termino con codigo $LASTEXITCODE. Cola de la salida: $(Get-ColaDeSalida -Salida $salidaWhatIf)" })
+        }
         if ($salidaWhatIf -notmatch 'serian marcados como completo: (\d+)') {
             return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "no se pudo leer el recuento del -WhatIf del backfill. Salida: $($salidaWhatIf.Trim())" })
         }
         $previstas = [int]$Matches[1]
 
         $salidaReal = (& pwsh -NoProfile -File $backfill -Server $fqdn -Database $envConfig.SqlDatabase 2>&1) | Out-String
+        if ($LASTEXITCODE -ne 0) {
+            return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "el backfill (real) termino con codigo $LASTEXITCODE. Cola de la salida: $(Get-ColaDeSalida -Salida $salidaReal)" })
+        }
         $acumulados = [regex]::Matches($salidaReal, 'acumulado (\d+)\)')
         if ($acumulados.Count -eq 0) {
             return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "no se pudo leer el recuento real del backfill. Salida: $($salidaReal.Trim())" })
@@ -239,6 +257,9 @@ function Invoke-CasoValidacion {
         $escritas = [int]$acumulados[$acumulados.Count - 1].Groups[1].Value
         if ($escritas -ne $previstas) {
             return [pscustomobject]($resultadoBase + @{ Status = "FAIL"; Reason = "el backfill preveia $previstas filas en -WhatIf y escribio $escritas" })
+        }
+        if ($previstas -gt 1) {
+            $reasonPass = "OK (previstas=${previstas}: otras filas de DEV cumplian el caso seguro)"
         }
     }
     else {
@@ -276,7 +297,7 @@ function Invoke-CasoValidacion {
         return [pscustomobject]($resultadoBase + @{ Status = "FAIL"; Reason = "fila: $($db.Errors -join ' | ')" })
     }
 
-    return [pscustomobject]($resultadoBase + @{ Status = "PASS"; Reason = "OK" })
+    return [pscustomobject]($resultadoBase + @{ Status = "PASS"; Reason = $reasonPass })
 }
 
 # Todo lo que sigue usa $conexion. Se envuelve en un try/finally cuyo finally

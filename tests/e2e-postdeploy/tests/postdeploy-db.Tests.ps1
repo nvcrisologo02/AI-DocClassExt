@@ -90,6 +90,32 @@ Describe "Test-DbAssertions" {
         $r.Success | Should -BeFalse
     }
 
+    It "mayorQue acepta un valor mayor que el umbral" {
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 12; MarkdownCompleto = $true; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $script:antes -Despues $despues -Assertions @(
+            @{ columna = "MarkdownPaginas"; mayorQue = 0 }
+        )
+        $r.Success | Should -BeTrue
+    }
+
+    It "mayorQue rechaza un valor igual al umbral" {
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 0; MarkdownCompleto = $true; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $script:antes -Despues $despues -Assertions @(
+            @{ columna = "MarkdownPaginas"; mayorQue = 0 }
+        )
+        $r.Success | Should -BeFalse
+        $r.Errors[0] | Should -BeLike "*MarkdownPaginas*"
+    }
+
+    It "mayorQue rechaza un valor nulo" {
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = $null; MarkdownCompleto = $true; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $script:antes -Despues $despues -Assertions @(
+            @{ columna = "MarkdownPaginas"; mayorQue = 0 }
+        )
+        $r.Success | Should -BeFalse
+        $r.Errors[0] | Should -BeLike "*MarkdownPaginas*"
+    }
+
     It "acumula varios errores en la misma evaluacion" {
         $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 3; MarkdownCompleto = $false; LongitudGzip = 100; LongitudCompressed = 6800 }
         $r = Test-DbAssertions -Antes $script:antes -Despues $despues -Assertions @(
@@ -229,10 +255,16 @@ Describe "New-MutacionEjecucionSql" {
         $sql | Should -BeLike '*ORDER BY e2.FechaEjecucion DESC*'
     }
     It "rechaza una ruta que no esta en la lista blanca" {
-        { New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.MarkdownFuente" = "Layout" } } | Should -Throw
+        { New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.MarkdownFuente" = "Layout" } } | Should -Throw -ExpectedMessage "*no admitida*"
     }
     It "rechaza intento de inyeccion en la ruta" {
-        { New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.OrigenMarkdown'), '$.x', (SELECT 1" = "x" } } | Should -Throw
+        { New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.OrigenMarkdown'), '$.x', (SELECT 1" = "x" } } | Should -Throw -ExpectedMessage "*no admitida*"
+    }
+    It "rechaza la ruta con otra capitalizacion" {
+        # La ruta JSON de SQL Server distingue mayusculas; la lista blanca debe
+        # exigir coincidencia exacta, no solo case-insensitive como el ContainsKey
+        # por defecto de una hashtable de PowerShell.
+        { New-MutacionEjecucionSql -Mutacion @{ "detalleejecucion.origenmarkdown" = "x" } } | Should -Throw -ExpectedMessage "*no admitida*"
     }
 }
 
