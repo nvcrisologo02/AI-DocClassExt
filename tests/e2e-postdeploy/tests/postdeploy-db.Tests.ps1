@@ -217,6 +217,25 @@ Describe "Guarda de Sha256 vacio o en blanco" {
     }
 }
 
+Describe "New-MutacionEjecucionSql" {
+    It "devuelve null cuando no hay mutacion" {
+        New-MutacionEjecucionSql -Mutacion $null | Should -BeNullOrEmpty
+    }
+    It "genera un UPDATE con JSON_MODIFY sobre la ultima ejecucion del documento" {
+        $sql = New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.OrigenMarkdown" = "Extraccion" }
+        $sql | Should -BeLike 'UPDATE e*JSON_MODIFY(e.ContratoSalidaCompletoJson, ''$.DetalleEjecucion.OrigenMarkdown'', @OrigenMarkdown)*'
+        $sql | Should -BeLike '*FROM dbo.DocumentoEjecuciones e2*'
+        $sql | Should -BeLike '*WHERE d.SHA256 = @sha*'
+        $sql | Should -BeLike '*ORDER BY e2.FechaEjecucion DESC*'
+    }
+    It "rechaza una ruta que no esta en la lista blanca" {
+        { New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.MarkdownFuente" = "Layout" } } | Should -Throw
+    }
+    It "rechaza intento de inyeccion en la ruta" {
+        { New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.OrigenMarkdown'), '$.x', (SELECT 1" = "x" } } | Should -Throw
+    }
+}
+
 Describe "Test-DbAssertions con reglas pscustomobject (ruta de produccion)" {
     # Los tests de arriba prueban Test-ReglaTieneClave/Get-ValorRegla (internas a
     # Test-DbAssertions) solo por la rama de hashtable (@{...} escrito a mano). Pero

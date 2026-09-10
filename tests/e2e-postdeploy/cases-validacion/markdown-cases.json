@@ -269,5 +269,71 @@
       { "columna": "NormalizacionMarkdownGzip", "noEncoge": true },
       { "columna": "NormalizacionMarkdownCompressed", "noEncoge": true }
     ]
+  },
+  {
+    "caseKey": "MDW-MDW8A", "group": "MDW", "id": "MDW8A", "domain": "validacion", "tipo": "backfill",
+    "name": "Backfill: fila historica con origen LayoutDocumentoCompletoPostClasificacion se marca completa",
+    "covers": ["MDW-08"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "expectedType": "resumen.documental", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": { "expectedRuntimeStatus": "Completed", "expectedStatus": ["OK"] },
+      "mutacion": { "MarkdownPaginas": null, "MarkdownCompleto": false },
+      "mutacionEjecucion": { "DetalleEjecucion.OrigenMarkdown": "LayoutDocumentoCompletoPostClasificacion" },
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": false },
+        { "columna": "MarkdownPaginas", "esperado": null }
+      ]
+    },
+    "pasadas": [],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": true },
+      { "columna": "MarkdownPaginas", "esperado": null }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW8B", "group": "MDW", "id": "MDW8B", "domain": "validacion", "tipo": "backfill",
+    "name": "Backfill: fila historica con origen MarkdownPrevio no se marca",
+    "covers": ["MDW-08"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "expectedType": "resumen.documental", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": { "expectedRuntimeStatus": "Completed", "expectedStatus": ["OK"] },
+      "mutacion": { "MarkdownPaginas": null, "MarkdownCompleto": false },
+      "mutacionEjecucion": { "DetalleEjecucion.OrigenMarkdown": "MarkdownPrevio" },
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": false },
+        { "columna": "MarkdownPaginas", "esperado": null }
+      ]
+    },
+    "pasadas": [],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": false },
+      { "columna": "MarkdownPaginas", "esperado": null }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW8C", "group": "MDW", "id": "MDW8C", "domain": "validacion", "tipo": "backfill",
+    "name": "Backfill: fila historica con origen Extraccion no se marca",
+    "covers": ["MDW-08"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "expectedType": "resumen.documental", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": { "expectedRuntimeStatus": "Completed", "expectedStatus": ["OK"] },
+      "mutacion": { "MarkdownPaginas": null, "MarkdownCompleto": false },
+      "mutacionEjecucion": { "DetalleEjecucion.OrigenMarkdown": "Extraccion" },
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": false },
+        { "columna": "MarkdownPaginas", "esperado": null }
+      ]
+    },
+    "pasadas": [],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": false },
+      { "columna": "MarkdownPaginas", "esperado": null }
+    ]
   }
 ]

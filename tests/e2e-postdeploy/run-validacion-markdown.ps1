@@ -165,8 +165,9 @@ function Invoke-CasoValidacion {
     [void](Remove-DocumentoPorSha256 -Connection $conexion -Sha256 $sha)
 
     # 2. Sembrar con el pipeline.
-    $casoSiembra = ConvertTo-CasoDePasada -Caso $Caso -Request $Caso.seed.request `
-        -Assertions ([pscustomobject]@{ expectedRuntimeStatus = "Completed" }) -Sufijo "seed"
+    $asercionesSiembra = [pscustomobject]@{ expectedRuntimeStatus = "Completed" }
+    if ($null -ne $Caso.seed.assertions) { $asercionesSiembra = $Caso.seed.assertions }
+    $casoSiembra = ConvertTo-CasoDePasada -Caso $Caso -Request $Caso.seed.request -Assertions $asercionesSiembra -Sufijo "seed"
     $rSiembra = Invoke-DocumentIAE2ECase -Case $casoSiembra -Endpoint $Endpoint -ArtifactsDir $RunDir `
         -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds -FunctionKey $envConfig.FunctionKey
     if ($rSiembra.Status -ne "PASS") {
@@ -180,6 +181,17 @@ function Invoke-CasoValidacion {
         $filas = Invoke-DocumentoMutacion -Connection $conexion -Sha256 $sha -Mutacion $mut
         if ($filas -ne 1) {
             return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "la mutacion afecto a $filas filas, esperada 1" })
+        }
+    }
+
+    # 3b. Mutar el JSON de la ultima ejecucion si el caso lo pide (por ejemplo OrigenMarkdown
+    # para fabricar filas historicas con un origen concreto de cara al backfill).
+    if ($null -ne $Caso.seed.mutacionEjecucion) {
+        $mutEj = @{}
+        foreach ($p in $Caso.seed.mutacionEjecucion.PSObject.Properties) { $mutEj[$p.Name] = $p.Value }
+        $filasEj = Invoke-EjecucionMutacion -Connection $conexion -Sha256 $sha -Mutacion $mutEj
+        if ($filasEj -ne 1) {
+            return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "la mutacion de ejecucion afecto a $filasEj filas, esperada 1" })
         }
     }
 
@@ -204,29 +216,51 @@ function Invoke-CasoValidacion {
         }
     }
 
-    # 5. Pasadas en orden.
-    $pasadas = @($Caso.pasadas)
-    for ($i = 0; $i -lt $pasadas.Count; $i++) {
-        $pasada = $pasadas[$i]
-        $sufijoPasada = ConvertTo-SufijoPasadaSaneado -Indice ($i + 1) -Nombre $pasada.nombre
-        $casoPasada = ConvertTo-CasoDePasada -Caso $Caso -Request $pasada.request -Assertions $pasada.assertions -Sufijo $sufijoPasada
-        $rPasada = Invoke-DocumentIAE2ECase -Case $casoPasada -Endpoint $Endpoint -ArtifactsDir $RunDir `
-            -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds -FunctionKey $envConfig.FunctionKey
-        if ($rPasada.Status -eq "SKIP") {
-            return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "pasada '$($pasada.nombre)' omitida: $($rPasada.Reason)" })
+    # 5. Pasadas en orden, o el backfill si el caso es de ese tipo.
+    if ($Caso.tipo -eq "backfill") {
+        $backfill = Join-Path $repoRoot "scripts" "database" "backfill-markdown-cobertura.ps1"
+        $fqdn = if ($envConfig.SqlServer -like "*.database.windows.net") { $envConfig.SqlServer } else { "$($envConfig.SqlServer).database.windows.net" }
+
+        $salidaWhatIf = (& pwsh -NoProfile -File $backfill -Server $fqdn -Database $envConfig.SqlDatabase -WhatIf 2>&1) | Out-String
+        if ($salidaWhatIf -notmatch 'serian marcados como completo: (\d+)') {
+            return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "no se pudo leer el recuento del -WhatIf del backfill. Salida: $($salidaWhatIf.Trim())" })
         }
-        # Invoke-DocumentIAE2ECase solo devuelve PASS/FAIL/SKIP: bajo su FAIL hay
-        # tanto una asercion incumplida (invariante violada de verdad) como un
-        # fallo de infraestructura (timeout con la orquestacion aun en
-        # Running/Pending, o una excepcion HTTP/red). Get-EstadoDePasada separa
-        # ambos leyendo el prefijo del Reason que la libreria ya produce, sin
-        # tocar esa libreria (es compartida con run-e2e-postdeploy.ps1).
-        $estadoPasada = Get-EstadoDePasada -Resultado $rPasada
-        if ($estadoPasada -eq "ERROR") {
-            return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "pasada '$($pasada.nombre)' fallo de infraestructura: $($rPasada.Reason)" })
+        $previstas = [int]$Matches[1]
+
+        $salidaReal = (& pwsh -NoProfile -File $backfill -Server $fqdn -Database $envConfig.SqlDatabase 2>&1) | Out-String
+        $acumulados = [regex]::Matches($salidaReal, 'acumulado (\d+)\)')
+        if ($acumulados.Count -eq 0) {
+            return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "no se pudo leer el recuento real del backfill. Salida: $($salidaReal.Trim())" })
         }
-        if ($estadoPasada -ne "PASS") {
-            return [pscustomobject]($resultadoBase + @{ Status = "FAIL"; Reason = "pasada '$($pasada.nombre)': $($rPasada.Reason)" })
+        $escritas = [int]$acumulados[$acumulados.Count - 1].Groups[1].Value
+        if ($escritas -ne $previstas) {
+            return [pscustomobject]($resultadoBase + @{ Status = "FAIL"; Reason = "el backfill preveia $previstas filas en -WhatIf y escribio $escritas" })
+        }
+    }
+    else {
+        $pasadas = @($Caso.pasadas)
+        for ($i = 0; $i -lt $pasadas.Count; $i++) {
+            $pasada = $pasadas[$i]
+            $sufijoPasada = ConvertTo-SufijoPasadaSaneado -Indice ($i + 1) -Nombre $pasada.nombre
+            $casoPasada = ConvertTo-CasoDePasada -Caso $Caso -Request $pasada.request -Assertions $pasada.assertions -Sufijo $sufijoPasada
+            $rPasada = Invoke-DocumentIAE2ECase -Case $casoPasada -Endpoint $Endpoint -ArtifactsDir $RunDir `
+                -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds -FunctionKey $envConfig.FunctionKey
+            if ($rPasada.Status -eq "SKIP") {
+                return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "pasada '$($pasada.nombre)' omitida: $($rPasada.Reason)" })
+            }
+            # Invoke-DocumentIAE2ECase solo devuelve PASS/FAIL/SKIP: bajo su FAIL hay
+            # tanto una asercion incumplida (invariante violada de verdad) como un
+            # fallo de infraestructura (timeout con la orquestacion aun en
+            # Running/Pending, o una excepcion HTTP/red). Get-EstadoDePasada separa
+            # ambos leyendo el prefijo del Reason que la libreria ya produce, sin
+            # tocar esa libreria (es compartida con run-e2e-postdeploy.ps1).
+            $estadoPasada = Get-EstadoDePasada -Resultado $rPasada
+            if ($estadoPasada -eq "ERROR") {
+                return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "pasada '$($pasada.nombre)' fallo de infraestructura: $($rPasada.Reason)" })
+            }
+            if ($estadoPasada -ne "PASS") {
+                return [pscustomobject]($resultadoBase + @{ Status = "FAIL"; Reason = "pasada '$($pasada.nombre)': $($rPasada.Reason)" })
+            }
         }
     }
 

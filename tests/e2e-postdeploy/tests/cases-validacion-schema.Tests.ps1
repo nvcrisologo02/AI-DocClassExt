@@ -35,11 +35,14 @@ Describe "Esquema de casos de validacion de markdown" {
             $c.submittedBy | Should -Be "e2e-validacion-markdown" -Because $c.caseKey
         }
     }
-    It "todos tienen seed con request y al menos una pasada" {
+    It "todos tienen seed con request; los que no son backfill tienen al menos una pasada" {
         foreach ($c in $script:cases) {
             $c.seed | Should -Not -BeNullOrEmpty -Because $c.caseKey
             $c.seed.request | Should -Not -BeNullOrEmpty -Because $c.caseKey
-            @($c.pasadas).Count | Should -BeGreaterThan 0 -Because $c.caseKey
+            $tipo = if ($c.PSObject.Properties['tipo']) { $c.tipo } else { $null }
+            if ($tipo -ne "backfill") {
+                @($c.pasadas).Count | Should -BeGreaterThan 0 -Because $c.caseKey
+            }
         }
     }
     It "toda pasada tiene nombre, request y assertions" {
@@ -60,14 +63,33 @@ Describe "Esquema de casos de validacion de markdown" {
             }
         }
     }
-    # Skip temporal: quedan 8 de los 9 ids MDW sin caso a proposito hasta la
-    # Tarea 7 (solo se escribe el caso piloto MDW-03 en esta tarea). La Tarea 7
-    # anade los ocho casos restantes y quita este -Skip.
-    It "todo id MDW de la matriz tiene al menos un caso" -Skip {
+    It "todo id MDW de la matriz tiene al menos un caso" {
         $idsMdw   = @($script:matrix | Where-Object { $_.area -eq "Markdown" } | ForEach-Object { $_.id })
         $cubiertos = @($script:cases | ForEach-Object { @($_.covers) } | Sort-Object -Unique)
         foreach ($id in $idsMdw) {
             $cubiertos | Should -Contain $id -Because "MDW sin caso: $id"
+        }
+    }
+    It "toda mutacionEjecucion usa solo rutas de la lista blanca" {
+        $permitidas = @("DetalleEjecucion.OrigenMarkdown")
+        foreach ($c in $script:cases) {
+            if (-not $c.seed.PSObject.Properties['mutacionEjecucion'] -or $null -eq $c.seed.mutacionEjecucion) { continue }
+            foreach ($prop in $c.seed.mutacionEjecucion.PSObject.Properties) {
+                $permitidas | Should -Contain $prop.Name -Because "$($c.caseKey) muta $($prop.Name)"
+            }
+        }
+    }
+    It "todo caso backfill exige estado OK en la siembra" {
+        foreach ($c in ($script:cases | Where-Object { $_.PSObject.Properties['tipo'] -and $_.tipo -eq "backfill" })) {
+            $c.seed.assertions | Should -Not -BeNullOrEmpty -Because $c.caseKey
+            @($c.seed.assertions.expectedStatus) | Should -Contain "OK" -Because "$($c.caseKey): el caso seguro del backfill exige EstadoFinal = OK"
+            $c.seed.mutacionEjecucion | Should -Not -BeNullOrEmpty -Because "$($c.caseKey): un caso backfill sin origen fijado no prueba discriminacion"
+        }
+    }
+    It "seed.assertions, si existe, incluye expectedRuntimeStatus" {
+        foreach ($c in $script:cases) {
+            if (-not $c.seed.PSObject.Properties['assertions'] -or $null -eq $c.seed.assertions) { continue }
+            $c.seed.assertions.expectedRuntimeStatus | Should -Be "Completed" -Because $c.caseKey
         }
     }
 }

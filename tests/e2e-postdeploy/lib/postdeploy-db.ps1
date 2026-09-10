@@ -162,6 +162,62 @@ function Remove-DocumentoPorSha256 {
     return $cmd.ExecuteNonQuery()
 }
 
+# Rutas del JSON del contrato de la ultima ejecucion que un caso puede mutar. Una sola:
+# el backfill decide por OrigenMarkdown y no hay otro motivo para tocar ese JSON.
+# Clave = ruta sin el prefijo "$.", valor = nombre del parametro SQL.
+$script:RutasJsonMutables = @{ "DetalleEjecucion.OrigenMarkdown" = "OrigenMarkdown" }
+
+function New-MutacionEjecucionSql {
+    param([hashtable]$Mutacion)
+
+    if ($null -eq $Mutacion -or $Mutacion.Keys.Count -eq 0) { return $null }
+
+    $expresion = "e.ContratoSalidaCompletoJson"
+    foreach ($ruta in $Mutacion.Keys) {
+        if (-not $script:RutasJsonMutables.ContainsKey($ruta)) {
+            throw "Ruta JSON '$ruta' no admitida en mutacionEjecucion. Admitidas: $($script:RutasJsonMutables.Keys -join ', ')"
+        }
+        $parametro = $script:RutasJsonMutables[$ruta]
+        $expresion = "JSON_MODIFY($expresion, '`$.$ruta', @$parametro)"
+    }
+
+    # Misma definicion de "ultima ejecucion" que el backfill: TOP 1 por FechaEjecucion DESC.
+    return @"
+UPDATE e
+SET e.ContratoSalidaCompletoJson = $expresion
+FROM dbo.DocumentoEjecuciones e
+WHERE e.Id = (
+    SELECT TOP 1 e2.Id
+    FROM dbo.DocumentoEjecuciones e2
+    INNER JOIN dbo.Documentos d ON d.Id = e2.DocumentoId
+    WHERE d.SHA256 = @sha
+    ORDER BY e2.FechaEjecucion DESC
+)
+"@
+}
+
+function Invoke-EjecucionMutacion {
+    param(
+        [Parameter(Mandatory = $true)][AllowNull()][System.Data.SqlClient.SqlConnection]$Connection,
+        [Parameter(Mandatory = $true)][string]$Sha256,
+        [hashtable]$Mutacion
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Sha256)) { throw "Invoke-EjecucionMutacion: Sha256 vacio o en blanco no admitido" }
+    $sql = New-MutacionEjecucionSql -Mutacion $Mutacion
+    if ($null -eq $sql) { return 0 }
+
+    $cmd = $Connection.CreateCommand()
+    $cmd.CommandText = $sql
+    [void]$cmd.Parameters.AddWithValue("@sha", $Sha256)
+    foreach ($ruta in $Mutacion.Keys) {
+        $valor = $Mutacion[$ruta]
+        if ($null -eq $valor) { $valor = [System.DBNull]::Value }
+        [void]$cmd.Parameters.AddWithValue("@$($script:RutasJsonMutables[$ruta])", $valor)
+    }
+    return $cmd.ExecuteNonQuery()
+}
+
 function Test-DbAssertions {
     param(
         [Parameter(Mandatory = $true)][pscustomobject]$Antes,
