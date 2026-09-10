@@ -352,7 +352,7 @@ $body = @{
   trazabilidad = @{ submittedBy = "batch-presort" }
 } | ConvertTo-Json -Depth 5
 
-# Clasificacion con markdown pre-procesado (omite ExtraerMarkdownLayoutActivity)
+# Clasificacion con markdown pre-procesado (gana siempre en MarkdownResolver, sin llamar a Layout)
 $markdownTexto = "## Nota Simple\nFinca: 12345\n..."
 $body = @{
   instrucciones = @{
@@ -395,7 +395,7 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.classification.model` | string | No | Model key del registro de clasificación para la ruta GPT. `"auto"` = usar modelo fallback marcado con `useAsFallback=true`. Si se informa un model key válido de provider GPT/Azure OpenAI, se utiliza en esa petición. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
 | `instrucciones.classification.nivelClasificacion` | string? | No | Nivel de clasificacion jerarquica. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases). Si se informa, fuerza automaticamente `provider="gpt"` (D2). Forma parte de la clave de deduplicacion. `null` = clasificacion completa por defecto. |
-| `instrucciones.classification.markdown` | string? | No | Markdown pre-procesado del documento. Si se informa, omite el paso `ExtraerMarkdownLayoutActivity` (paso 2.8) y usa este texto directamente. Util en integraciones batch que ya han extraido el markdown. |
+| `instrucciones.classification.markdown` | string? | No | Markdown pre-procesado del documento. Si se informa, gana siempre en `MarkdownResolver` (fuente `Caller`) y no se llama a Document Intelligence Layout. Util en integraciones batch que ya han extraido el markdown. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3. |
 | `instrucciones.extraction` | object | No | Config extraccion para esta peticion. |
 | `instrucciones.extraction.provider` | string | No | `"auto"` / `"azure-content-understanding"` / `"azure-cu"` / `"azure-document-intelligence"` / `"azure-di"` / `"azure-openai"` / `"gpt"` / `"mock"`. Con `"azure-openai"` se activa el modo GPT directo (sin CU). |
 | `instrucciones.extraction.model` | string | No | Model key del registro. `"auto"` = usar config tipologia. |

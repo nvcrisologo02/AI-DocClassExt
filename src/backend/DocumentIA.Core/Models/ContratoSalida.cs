@@ -210,6 +210,12 @@ public class DetalleEjecucion
     public bool MarkdownGenerado { get; set; }
     /// <summary>Origen del markdown generado ("Clasificacion", "Extraccion", "Fallback", etc.).</summary>
     public string? OrigenMarkdown { get; set; }
+    /// <summary>Paginas que cubre el markdown usado en la ejecucion. 0 si no se conoce.</summary>
+    public int MarkdownPaginas { get; set; }
+    /// <summary>El markdown usado cubre el documento entero.</summary>
+    public bool MarkdownCompleto { get; set; }
+    /// <summary>De donde salio: Caller, CacheEjecucion, BaseDatos, Layout, Clasificador, Extraccion, Normalizacion.</summary>
+    public string? MarkdownFuente { get; set; }
     /// <summary>Modelo LLM usado en clasificación o prompt (si aplica).</summary>
     public string? ModeloLLMUsado { get; set; }
     /// <summary>Motivo de error en la resolución de tipología (si aplica).</summary>

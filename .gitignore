@@ -135,3 +135,6 @@ graphify-out/
 # E2E post-despliegue: config con claves y artefactos de ejecucion
 tests/e2e-postdeploy/config/environments.json
 tests/e2e-postdeploy/artifacts/
+
+# Workspace de ejecucion de planes (subagent-driven-development)
+.superpowers/

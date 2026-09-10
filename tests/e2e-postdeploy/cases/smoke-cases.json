@@ -45,6 +45,7 @@
     "assertions": {
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
       "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
     }
   },
@@ -59,7 +60,13 @@
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
     "assertions": {
       "expectedRuntimeStatus": "Completed",
-      "expectNoTechnicalError": true
+      "expectNoTechnicalError": true,
+      "expectedStatus": ["OK"],
+      "expectOutputPathEquals": [
+        { "path": "DetalleEjecucion.Clasificacion.Modelo", "value": "expectedtype-input" },
+        { "path": "Identificacion.Tipologia", "value": "resumen.documental" }
+      ],
+      "expectOutputPathsNotEmpty": ["DatosExtraidos.ResultadoPrompt"]
     }
   },
   {

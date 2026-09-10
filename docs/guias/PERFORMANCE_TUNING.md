@@ -140,7 +140,7 @@ El orquestador ejecuta 14+ actividades en secuencia/paralelo. Cada una tiene car
 | **ObtenerUltimaEjecucionActivity** | DB Query | 30s | Última clasificación | Index, típicamente < 100ms |
 | **ClasificarActivity** | API Call | 60s | CU hybrid + rules + GPT fallback | Aumentar timeout si fallback activo |
 | **ExtraerActivity** | API Call | 90s | CU/DI + GPT fallback | Circuit breaker habilitado (CU) |
-| **ExtraerMarkdownLayoutActivity** | API Call | 60s | DI layout extraction | Timeout típico: 2-5 sec |
+| **ObtenerMarkdownActivity** | API Call | 60s | DI layout extraction (via `MarkdownResolver`, cuando la BD/caché no cubren la necesidad) | Timeout típico: 2-5 sec |
 | **PromptActivity** | API Call | 60s | GPT prompt libre | Típico: 3-10 sec |
 | **ValidarActivity** | CPU | 30s | Validación reglas + regex | CPU-bound, típico: 100-500ms |
 | **IntegrarActivity** | API Call | 120s | Plugin manager (REST, SOAP, DLL) | Depende de plugins, típico: 2-5 sec |

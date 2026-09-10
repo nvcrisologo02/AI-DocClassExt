@@ -24,7 +24,7 @@ namespace DocumentIA.Functions.Services.Classification
     {
         private readonly ILogger<HybridTdnClasificarProvider> _logger;
         private readonly IClasificarDataProvider _diProvider;
-        private readonly ILayoutMarkdownProvider _layoutMarkdownProvider;
+        private readonly IMarkdownResolver _markdownResolver;
         private readonly DocumentWindowExtractor _windowExtractor;
         private readonly RuleBasedTdnClassifier _ruleClassifier;
         private readonly FoundryTdnRescueClassifier _rescueClassifier;
@@ -34,7 +34,7 @@ namespace DocumentIA.Functions.Services.Classification
         public HybridTdnClasificarProvider(
             ILogger<HybridTdnClasificarProvider> logger,
             IClasificarDataProvider diProvider,
-            ILayoutMarkdownProvider layoutMarkdownProvider,
+            IMarkdownResolver markdownResolver,
             DocumentWindowExtractor windowExtractor,
             RuleBasedTdnClassifier ruleClassifier,
             FoundryTdnRescueClassifier rescueClassifier,
@@ -43,7 +43,7 @@ namespace DocumentIA.Functions.Services.Classification
         {
             _logger = logger;
             _diProvider = diProvider;
-            _layoutMarkdownProvider = layoutMarkdownProvider;
+            _markdownResolver = markdownResolver;
             _windowExtractor = windowExtractor;
             _ruleClassifier = ruleClassifier;
             _rescueClassifier = rescueClassifier;
@@ -266,58 +266,64 @@ namespace DocumentIA.Functions.Services.Classification
                 return;
             }
 
-            var documentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
-                ? input.DocumentoBase64Override
-                : input.Entrada.Documento.Content.Base64;
-
-            if (string.IsNullOrWhiteSpace(documentoBase64))
+            // Salvavidas: con el orquestador resolviendo antes de ClasificarActivity, en la practica
+            // no se ejecuta. Si se ejecuta, pasa por la misma politica (cache > BD > Layout) y lo que
+            // obtiene se persiste con la regla de cobertura (AB#100253).
+            var documento = input.Entrada.Documento;
+            var contexto = new ContextoMarkdown
             {
-                _logger.LogWarning(
-                    "HybridTDN sin contexto textual y sin documento base64 disponible para extraer markdown previo en {Documento}",
-                    input.Entrada.Documento.Name);
-                return;
-            }
+                Sha256 = documento.PreComputedSHA256 ?? LeerCadena(input.DatosNormalizados, "SHA256"),
+                Md5 = documento.PreComputedMD5 ?? LeerCadena(input.DatosNormalizados, "MD5"),
+                BlobPath = documento.BlobPath,
+                DocumentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
+                    ? input.DocumentoBase64Override
+                    : documento.Content?.Base64,
+                NombreDocumento = documento.Name,
+                Tipologia = input.Entrada.Instrucciones.ExpectedType ?? string.Empty,
+                TotalPaginas = input.TotalPaginas,
+                ForceReprocess = input.Entrada.Instrucciones.ForceReprocess,
+                MarkdownCaller = input.Entrada.Instrucciones.Classification.Markdown
+            };
 
             _logger.LogInformation(
-                "HybridTDN sin contexto textual útil. Extrayendo markdown DI Layout previo para {Documento}",
-                input.Entrada.Documento.Name);
+                "HybridTDN sin contexto textual util. Pidiendo {Paginas} paginas al resolutor para {Documento}",
+                _options.PagesToInspect,
+                documento.Name);
 
-            try
+            var resultado = await _markdownResolver.ResolverAsync(
+                NecesidadMarkdown.Paginas(_options.PagesToInspect), contexto, cancellationToken);
+
+            // El layout previo factura sus paginas aunque no aporte markdown util.
+            ConsumosIA.Fusionar(consumos, resultado.Consumos);
+
+            if (resultado.TieneContenido)
             {
-                var markdownResult = await _layoutMarkdownProvider.ExtraerMarkdownAsync(
-                    new ExtraerMarkdownLayoutInput
-                    {
-                        Tipologia = input.Entrada.Instrucciones.ExpectedType ?? string.Empty,
-                        DocumentoBase64 = documentoBase64,
-                        NombreDocumento = input.Entrada.Documento.Name
-                    },
-                    cancellationToken);
-
-                // El layout previo factura sus paginas aunque no aporte markdown util.
-                ConsumosIA.Fusionar(consumos, markdownResult.Consumos);
-
-                if (!string.IsNullOrWhiteSpace(markdownResult.Markdown))
-                {
-                    input.DatosNormalizados["Markdown"] = markdownResult.Markdown;
-                    _logger.LogInformation(
-                        "Markdown DI Layout inyectado para HybridTDN ({Length} chars) en {Documento}",
-                        markdownResult.Markdown.Length,
-                        input.Entrada.Documento.Name);
-                }
-                else
-                {
-                    _logger.LogWarning(
-                        "DI Layout no devolvió markdown útil para HybridTDN en {Documento}",
-                        input.Entrada.Documento.Name);
-                }
+                input.DatosNormalizados["Markdown"] = resultado.Markdown!;
+                _logger.LogInformation(
+                    "Markdown inyectado para HybridTDN ({Length} chars, fuente={Fuente}) en {Documento}",
+                    resultado.Markdown!.Length,
+                    resultado.Fuente,
+                    documento.Name);
             }
-            catch (Exception ex)
+            else
             {
-                _logger.LogWarning(
-                    ex,
-                    "No se pudo extraer markdown DI Layout previo para HybridTDN en {Documento}. Se continúa con el contexto disponible.",
-                    input.Entrada.Documento.Name);
+                _logger.LogWarning("El resolutor no devolvio markdown para HybridTDN en {Documento}", documento.Name);
             }
+        }
+
+        private static string? LeerCadena(IDictionary<string, object> datos, string clave)
+        {
+            if (!datos.TryGetValue(clave, out var raw) || raw is null)
+            {
+                return null;
+            }
+
+            return raw switch
+            {
+                string s => s,
+                System.Text.Json.JsonElement j when j.ValueKind == System.Text.Json.JsonValueKind.String => j.GetString(),
+                _ => raw.ToString()
+            };
         }
 
         private static bool HasUsefulTextContext(IDictionary<string, object> datosNormalizados)

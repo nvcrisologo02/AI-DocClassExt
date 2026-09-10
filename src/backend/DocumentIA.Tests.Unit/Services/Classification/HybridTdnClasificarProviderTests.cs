@@ -558,7 +558,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
     {
         private readonly Mock<ILogger<HybridTdnClasificarProvider>> _loggerMock;
         private readonly Mock<IClasificarDataProvider> _diProviderMock;
-        private readonly Mock<ILayoutMarkdownProvider> _layoutMarkdownProviderMock;
+        private readonly Mock<IMarkdownResolver> _markdownResolverMock;
         private readonly Mock<ILogger<DocumentWindowExtractor>> _windowExtractorLoggerMock;
         private readonly Mock<ILogger<RuleBasedTdnClassifier>> _ruleClassifierLoggerMock;
         private readonly Mock<ILogger<FoundryTdnRescueClassifier>> _rescueClassifierLoggerMock;
@@ -569,7 +569,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
         {
             _loggerMock = new Mock<ILogger<HybridTdnClasificarProvider>>();
             _diProviderMock = new Mock<IClasificarDataProvider>();
-            _layoutMarkdownProviderMock = new Mock<ILayoutMarkdownProvider>();
+            _markdownResolverMock = new Mock<IMarkdownResolver>();
             _windowExtractorLoggerMock = new Mock<ILogger<DocumentWindowExtractor>>();
             _ruleClassifierLoggerMock = new Mock<ILogger<RuleBasedTdnClassifier>>();
             _rescueClassifierLoggerMock = new Mock<ILogger<FoundryTdnRescueClassifier>>();
@@ -714,19 +714,22 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 DatosNormalizados = new Dictionary<string, object>()
             };
 
-            _layoutMarkdownProviderMock
-                .Setup(p => p.ExtraerMarkdownAsync(It.IsAny<ExtraerMarkdownLayoutInput>(), It.IsAny<CancellationToken>()))
-                .ReturnsAsync(new ExtraerMarkdownLayoutResultado
+            _markdownResolverMock
+                .Setup(p => p.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoMarkdown
                 {
-                    Markdown = "ESCRITURA DE COMPRAVENTA dacion en pago decreto de adjudicacion transmite dominio"
+                    Markdown = "ESCRITURA DE COMPRAVENTA dacion en pago decreto de adjudicacion transmite dominio",
+                    Paginas = 2,
+                    Completo = false,
+                    Fuente = FuenteMarkdown.Layout
                 });
 
             var result = await provider.ClasificarAsync(input);
 
             result.Clasificador.Should().Be("RuleBasedTDN");
             input.DatosNormalizados.Should().ContainKey("Markdown");
-            _layoutMarkdownProviderMock.Verify(
-                p => p.ExtraerMarkdownAsync(It.IsAny<ExtraerMarkdownLayoutInput>(), It.IsAny<CancellationToken>()),
+            _markdownResolverMock.Verify(
+                p => p.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()),
                 Times.Once);
             _diProviderMock.Verify(d => d.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()), Times.Never);
         }
@@ -740,8 +743,8 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             var result = await provider.ClasificarAsync(input);
 
             result.Clasificador.Should().Be("RuleBasedTDN");
-            _layoutMarkdownProviderMock.Verify(
-                p => p.ExtraerMarkdownAsync(It.IsAny<ExtraerMarkdownLayoutInput>(), It.IsAny<CancellationToken>()),
+            _markdownResolverMock.Verify(
+                p => p.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()),
                 Times.Never);
         }
 
@@ -766,11 +769,76 @@ namespace DocumentIA.Tests.Unit.Services.Classification
                 DatosNormalizados = new Dictionary<string, object>()
             };
 
+            // El resolutor real nunca devuelve null: sin nada que aportar, entrega un
+            // ResultadoMarkdown vacio (Fuente=Ninguna). Se refleja igual en el mock para que
+            // el fallback a texto nativo PDF se ejercite tal como ocurre en produccion.
+            _markdownResolverMock
+                .Setup(p => p.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoMarkdown());
+
             var result = await provider.ClasificarAsync(input);
 
             result.Clasificador.Should().Be("RuleBasedTDN");
             result.ContentExtraido.Should().Contain("COMPRAVENTA");
             _diProviderMock.Verify(d => d.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()), Times.Never);
+        }
+
+        [Fact]
+        public async Task SinContextoTextual_PideAlResolutorLasPaginasDeInspeccionConElBlob()
+        {
+            // AB#100253: sin markdown ni texto util, HybridTDN ya no llama a Layout
+            // directamente: declara la necesidad de PagesToInspect paginas al resolutor unico.
+            var pagesToInspect = new HybridTdnOptions().PagesToInspect;
+            var provider = CreateProviderWithLowRuleConfidence();
+            var input = new ClasificacionInput
+            {
+                Entrada = new ContratoEntrada
+                {
+                    Documento = new Documento
+                    {
+                        Name = "x.pdf",
+                        BlobPath = "documents/2026/09/x.pdf",
+                        PreComputedSHA256 = "sha-x",
+                        Content = new ContenidoDocumento { Base64 = "dGVzdA==" }
+                    },
+                    Instrucciones = new Instrucciones()
+                },
+                DatosNormalizados = new Dictionary<string, object>(),
+                TotalPaginas = 9
+            };
+
+            _markdownResolverMock
+                .Setup(p => p.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoMarkdown
+                {
+                    Markdown = "# texto",
+                    Paginas = 3,
+                    Fuente = FuenteMarkdown.Layout,
+                    Consumos = new List<ConsumoIA>
+                    {
+                        new() { Actividad = "Clasificar", Operacion = "layout.previo", Proveedor = "DocumentIntelligence", Modelo = "prebuilt-layout" }
+                    }
+                });
+
+            _diProviderMock
+                .Setup(d => d.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoClasificacion
+                {
+                    TipologiaDetectada = "escr.compraventa",
+                    Confianza = 0.90,
+                    ProveedorClasif = "DocumentIntelligence"
+                });
+
+            var result = await provider.ClasificarAsync(input);
+
+            _markdownResolverMock.Verify(p => p.ResolverAsync(
+                It.Is<NecesidadMarkdown>(n => !n.DocumentoCompleto && n.PaginasMinimas == pagesToInspect),
+                It.Is<ContextoMarkdown>(c => c.BlobPath == "documents/2026/09/x.pdf" && c.Sha256 == "sha-x" && c.TotalPaginas == 9),
+                It.IsAny<CancellationToken>()), Times.Once);
+            input.DatosNormalizados["Markdown"].Should().Be("# texto");
+            // El consumo del layout previo del resolutor no debe perderse: se paga aunque
+            // no sea el proveedor que produce la clasificacion final (AB#100253).
+            result.Consumos.Should().Contain(c => c.Operacion == "layout.previo");
         }
 
         private HybridTdnClasificarProvider CreateProviderWithHighRuleConfidence()
@@ -785,7 +853,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             return new HybridTdnClasificarProvider(
                 _loggerMock.Object,
                 _diProviderMock.Object,
-                _layoutMarkdownProviderMock.Object,
+                _markdownResolverMock.Object,
                 windowExtractor,
                 ruleClassifier,
                 rescueClassifier,
@@ -805,7 +873,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             return new HybridTdnClasificarProvider(
                 _loggerMock.Object,
                 _diProviderMock.Object,
-                _layoutMarkdownProviderMock.Object,
+                _markdownResolverMock.Object,
                 windowExtractor,
                 ruleClassifier,
                 rescueClassifier,

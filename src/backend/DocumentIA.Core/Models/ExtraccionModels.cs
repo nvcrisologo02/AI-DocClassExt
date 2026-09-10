@@ -131,6 +131,12 @@ public class ExtraerMarkdownLayoutInput
     public string DocumentoBase64 { get; set; } = string.Empty;
     public string NombreDocumento { get; set; } = string.Empty;
     public string? BlobPath { get; set; }
+
+    /// <summary>
+    /// Primeras N paginas a analizar. null = documento entero. Solo tiene efecto en PDF y TIFF;
+    /// en el resto de formatos se analiza el documento entero (AB#100249).
+    /// </summary>
+    public int? PaginasSolicitadas { get; set; }
 }
 
 public class ExtraerMarkdownLayoutResultado
@@ -140,28 +146,16 @@ public class ExtraerMarkdownLayoutResultado
     public int Paginas { get; set; }
 
     /// <summary>
+    /// El analisis se restringio de verdad a las primeras N paginas. False cuando no se
+    /// pidio recorte o cuando el formato no lo admite y se analizo el documento entero
+    /// (AB#100249).
+    /// </summary>
+    public bool RangoAplicado { get; set; }
+
+    /// <summary>
     /// Consumo de servicios de IA de esta llamada. El proveedor lo rellena y el
     /// orquestador lo acumula en DetalleEjecucion.Costes. Vacia cuando el paso no
     /// consumio IA.
     /// </summary>
     public List<ConsumoIA> Consumos { get; set; } = new();
-}
-
-/// <summary>
-/// Input para recuperar markdown ya persistido en BD (Documentos.NormalizacionMarkdownCompressed)
-/// como respaldo cuando la extraccion de markdown DI Layout previa a clasificacion falla o no
-/// devuelve contenido util.
-/// </summary>
-public class RecuperarMarkdownPersistidoInput
-{
-    public string? Sha256 { get; set; }
-    public string? Md5 { get; set; }
-    public string NombreDocumento { get; set; } = string.Empty;
-}
-
-public class RecuperarMarkdownPersistidoResultado
-{
-    public bool Encontrado { get; set; }
-    public string? Markdown { get; set; }
-    public int? DocumentoId { get; set; }
 }

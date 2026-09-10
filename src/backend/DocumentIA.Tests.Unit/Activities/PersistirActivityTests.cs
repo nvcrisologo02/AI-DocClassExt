@@ -825,6 +825,139 @@ public class PersistirActivityTests : IDisposable
             .Should().Be(markdown, "la Base64 se mantiene poblada para poder revertir sin perder datos");
     }
 
+    // ========== Markdown: solo en el alta, nunca degradar (AB#100254) ==========
+
+    private DocumentoEntity[] PrepararDocumentoExistente(DocumentoEntity existente)
+    {
+        var actualizado = new DocumentoEntity[1];
+        _documentoRepoMock.Setup(r => r.GetBySHA256Async(existente.SHA256)).ReturnsAsync(existente);
+        _documentoRepoMock.Setup(r => r.UpdateAsync(It.IsAny<DocumentoEntity>()))
+            .Callback<DocumentoEntity>(d => actualizado[0] = d)
+            .Returns(Task.CompletedTask);
+        _ejecucionRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock.Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>())).Returns(Task.CompletedTask);
+        return actualizado;
+    }
+
+    [Fact]
+    public async Task Run_Alta_PersisteMarkdownYCobertura()
+    {
+        const string sha = "sha256_alta_markdown";
+        DocumentoEntity? creado = null;
+        _documentoRepoMock.Setup(r => r.GetBySHA256Async(sha)).ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { creado = d; d.Id = 1; return d; });
+        _ejecucionRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>())).ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock.Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>())).Returns(Task.CompletedTask);
+
+        var salida = BuildSalidaMinima(sha);
+        salida.DetalleEjecucion.Postproceso = new InformacionPostproceso { Markdown = "# tres paginas" };
+        salida.DetalleEjecucion.MarkdownPaginas = 3;
+        salida.DetalleEjecucion.MarkdownCompleto = false;
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        creado.Should().NotBeNull();
+        MarkdownCompression.Decompress(creado!.NormalizacionMarkdownGzip).Should().Be("# tres paginas");
+        creado.NormalizacionMarkdownCompressed.Should().NotBeNullOrEmpty();
+        creado.MarkdownPaginas.Should().Be(3);
+        creado.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_AltaSinMarkdown_DejaCoberturaDesconocida()
+    {
+        const string sha = "sha256_alta_sin_markdown";
+        DocumentoEntity? creado = null;
+        _documentoRepoMock.Setup(r => r.GetBySHA256Async(sha)).ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { creado = d; d.Id = 1; return d; });
+        _ejecucionRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>())).ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock.Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>())).Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = BuildSalidaMinima(sha) });
+
+        creado!.NormalizacionMarkdownGzip.Should().BeNull();
+        creado.MarkdownPaginas.Should().BeNull();
+        creado.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_Alta_ConMarkdownDelCaller_NoLoPersiste()
+    {
+        // Regla 1 de la spec: Instrucciones.Classification.Markdown gana para esa peticion y
+        // no toca BD. Si PersistirActivity escribiera el markdown de salida sin mirar la
+        // fuente, la primera ejecucion de un documento cuya peticion trajera markdown del
+        // llamante lo colaria en el alta, saltandose la regla por la puerta de atras.
+        const string sha = "sha256_alta_markdown_caller";
+        DocumentoEntity? creado = null;
+        _documentoRepoMock.Setup(r => r.GetBySHA256Async(sha)).ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { creado = d; d.Id = 1; return d; });
+        _ejecucionRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>())).ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock.Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>())).Returns(Task.CompletedTask);
+
+        var salida = BuildSalidaMinima(sha);
+        salida.DetalleEjecucion.Postproceso = new InformacionPostproceso { Markdown = "# markdown del llamante" };
+        salida.DetalleEjecucion.MarkdownPaginas = 5;
+        salida.DetalleEjecucion.MarkdownCompleto = true;
+        salida.DetalleEjecucion.MarkdownFuente = nameof(FuenteMarkdown.Caller);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        creado.Should().NotBeNull();
+        creado!.NormalizacionMarkdownGzip.Should().BeNull();
+        creado.NormalizacionMarkdownCompressed.Should().BeNullOrEmpty();
+        creado.MarkdownPaginas.Should().BeNull();
+        creado.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_Actualizacion_NoTocaElMarkdownAunqueLaEjecucionNoTraiga()
+    {
+        // Regresion: una reejecucion en SIN_CONTENIDO_DOCUMENTO borraba el markdown bueno con null.
+        var existente = new DocumentoEntity
+        {
+            Id = 7, SHA256 = "sha256_upd", MD5 = "m", CRC32 = "c", Guid = "g", NombreArchivo = "d.pdf",
+            NormalizacionMarkdownGzip = MarkdownCompression.Compress("# el bueno"),
+            NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64("# el bueno"),
+            MarkdownPaginas = 14, MarkdownCompleto = true
+        };
+        var actualizado = PrepararDocumentoExistente(existente);
+        var salida = BuildSalidaMinima("sha256_upd");
+        salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+        salida.DetalleEjecucion.Postproceso = new InformacionPostproceso { Markdown = null };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        actualizado[0].Should().NotBeNull();
+        MarkdownCompression.Decompress(actualizado[0].NormalizacionMarkdownGzip).Should().Be("# el bueno");
+        actualizado[0].MarkdownPaginas.Should().Be(14);
+        actualizado[0].MarkdownCompleto.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Run_Actualizacion_NoTocaElMarkdownAunqueLaEjecucionTraigaOtro()
+    {
+        // La escritura en la actualizacion la hace el resolutor con la regla de cobertura.
+        var existente = new DocumentoEntity
+        {
+            Id = 8, SHA256 = "sha256_upd2", MD5 = "m", CRC32 = "c", Guid = "g", NombreArchivo = "d.pdf",
+            NormalizacionMarkdownGzip = MarkdownCompression.Compress("# completo"),
+            MarkdownPaginas = 14, MarkdownCompleto = true
+        };
+        var actualizado = PrepararDocumentoExistente(existente);
+        var salida = BuildSalidaMinima("sha256_upd2");
+        salida.DetalleEjecucion.Postproceso = new InformacionPostproceso { Markdown = "# recorte de tres" };
+        salida.DetalleEjecucion.MarkdownPaginas = 3;
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        MarkdownCompression.Decompress(actualizado[0].NormalizacionMarkdownGzip).Should().Be("# completo");
+        actualizado[0].MarkdownPaginas.Should().Be(14);
+    }
+
     public void Dispose()
     {
         _context.Dispose();

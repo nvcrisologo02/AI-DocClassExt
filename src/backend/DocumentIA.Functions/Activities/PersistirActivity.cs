@@ -67,6 +67,12 @@ namespace DocumentIA.Functions.Activities
                 
                 if (documento == null)
                 {
+                    // AB#100254: el markdown del llamante (Instrucciones.Classification.Markdown)
+                    // no se persiste nunca: es la regla 1 de la spec y gana solo para esa peticion.
+                    // Si la fuente es "Caller" el alta nace sin markdown propio del documento.
+                    var esMarkdownDelCaller = EsMarkdownDelCaller(salida);
+                    var markdownParaPersistir = esMarkdownDelCaller ? null : salida.DetalleEjecucion.Postproceso?.Markdown;
+
                     documento = new DocumentoEntity
                     {
                         Guid = salida.Identificacion.Guid,
@@ -88,8 +94,17 @@ namespace DocumentIA.Functions.Activities
                         // AB#100169: escritura dual mientras la vuelta atras deba ser posible.
                         // La columna binaria es la forma nueva; la Base64 se mantiene poblada
                         // para que revertir el codigo o la migracion no pierda ningun markdown.
-                        NormalizacionMarkdownGzip = MarkdownCompression.Compress(salida.DetalleEjecucion.Postproceso?.Markdown),
-                        NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown),
+                        NormalizacionMarkdownGzip = MarkdownCompression.Compress(markdownParaPersistir),
+                        NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(markdownParaPersistir),
+                        // AB#100254: cobertura del markdown de la ejecucion. NULL si no hay markdown
+                        // (o si el unico markdown disponible es el del llamante, que no se persiste):
+                        // asi la fila nace "sin markdown" y el resolutor la rellenara la proxima vez.
+                        MarkdownPaginas = !string.IsNullOrWhiteSpace(markdownParaPersistir)
+                            && salida.DetalleEjecucion.MarkdownPaginas > 0
+                            ? (int?)salida.DetalleEjecucion.MarkdownPaginas
+                            : null,
+                        MarkdownCompleto = !string.IsNullOrWhiteSpace(markdownParaPersistir)
+                            && salida.DetalleEjecucion.MarkdownCompleto,
                         // Registrar IdGDC e IdActivo si están disponibles
                         IdGDC = salida.Integridad.GestorDocumental,
                         IdActivo = salida.Integridad.IdActivo,
@@ -149,9 +164,13 @@ namespace DocumentIA.Functions.Activities
                     if (salida.DetalleEjecucion.Clasificacion.PagesProcessed > 0)
                         documento.PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed;
                     
-                    // AB#100169: escritura dual (ver comentario en el alta del documento).
-                    documento.NormalizacionMarkdownGzip = MarkdownCompression.Compress(salida.DetalleEjecucion.Postproceso?.Markdown);
-                    documento.NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64(salida.DetalleEjecucion.Postproceso?.Markdown);
+                    // AB#100254: en la actualizacion no se asigna ninguna columna de markdown, y
+                    // ademas DocumentoRepository.UpdateAsync las marca como no modificadas para que
+                    // no viajen en el UPDATE: sin eso, Update() marca toda la entidad y el SaveChanges
+                    // reescribia esas cuatro columnas con lo que se leyo al entrar en la actividad,
+                    // revirtiendo la cobertura que otra ejecucion concurrente del mismo SHA256
+                    // hubiera mejorado entretanto. Su unico escritor es MarkdownResolver, en el
+                    // momento de obtener el markdown y con la regla de cobertura.
                     documento.FechaExpiracionBlob = fechaExpiracionBlob;
                     documento.FechaActualizacion = DateTime.UtcNow;
                     await _documentoRepo.UpdateAsync(documento);
@@ -388,6 +407,19 @@ namespace DocumentIA.Functions.Activities
                 return null;
             
             return tiempos[clave];
+        }
+
+        /// <summary>
+        /// AB#100254: el markdown del llamante (Instrucciones.Classification.Markdown) no se
+        /// persiste nunca. Se compara contra el nombre del propio enum, no una constante suelta,
+        /// para que renombrar FuenteMarkdown.Caller no deje la comparacion silenciosamente rota.
+        /// Insensible a mayusculas y tolerante a null/vacio (sin fuente informada no hay nada que escribir).
+        /// </summary>
+        private static bool EsMarkdownDelCaller(ContratoSalida salida)
+        {
+            var fuente = salida.DetalleEjecucion.MarkdownFuente;
+            return !string.IsNullOrWhiteSpace(fuente)
+                && string.Equals(fuente, nameof(FuenteMarkdown.Caller), StringComparison.OrdinalIgnoreCase);
         }
 
         private static string ResolveNombreArchivoPersistible(string? nombreArchivo, string? guid)

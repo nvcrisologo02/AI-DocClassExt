@@ -18,7 +18,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private readonly AzureDocumentIntelligenceExtraerDataProvider _diExtraerProvider;
     private readonly GptDirectExtraerDataProvider _gptDirectProvider;
     private readonly GptFallbackExtraerDataProvider _gptFallbackProvider;
-    private readonly ILayoutMarkdownProvider _layoutMarkdownProvider;
+    private readonly IMarkdownResolver _markdownResolver;
     private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
     private readonly ExtractionRoutingSettings _routingSettings;
@@ -31,7 +31,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         AzureDocumentIntelligenceExtraerDataProvider diExtraerProvider,
         GptDirectExtraerDataProvider gptDirectProvider,
         GptFallbackExtraerDataProvider gptFallbackProvider,
-        ILayoutMarkdownProvider layoutMarkdownProvider,
+        IMarkdownResolver markdownResolver,
         ExtractionModelRegistryLoader extractionModelRegistryLoader,
         PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<ExtractionRoutingSettings> routingSettings,
@@ -43,7 +43,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         _diExtraerProvider = diExtraerProvider;
         _gptDirectProvider = gptDirectProvider;
         _gptFallbackProvider = gptFallbackProvider;
-        _layoutMarkdownProvider = layoutMarkdownProvider;
+        _markdownResolver = markdownResolver;
         _extractionModelRegistryLoader = extractionModelRegistryLoader;
         _promptModelRegistryLoader = promptModelRegistryLoader;
         _routingSettings = routingSettings.Value;
@@ -199,38 +199,35 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         // con DI prebuilt-layout: sin él, el LLM de fallback no tiene documento que leer.
         if (string.IsNullOrWhiteSpace(markdownContexto) && !TieneContextoTextual(input.DatosNormalizados))
         {
-            try
-            {
-                var layout = await _layoutMarkdownProvider.ExtraerMarkdownAsync(
-                    new ExtraerMarkdownLayoutInput
-                    {
-                        Tipologia = input.Tipologia,
-                        DocumentoBase64 = input.Entrada.Documento.Content?.Base64 ?? string.Empty,
-                        NombreDocumento = input.Entrada.Documento.Name,
-                        BlobPath = input.Entrada.Documento.BlobPath
-                    },
-                    cancellationToken);
+            // El fallback GPT lee el documento entero. Misma politica que el resto (AB#100253).
+            var documento = input.Entrada.Documento;
+            var resultado = await _markdownResolver.ResolverAsync(
+                NecesidadMarkdown.Completo(),
+                new ContextoMarkdown
+                {
+                    Sha256 = documento.PreComputedSHA256,
+                    Md5 = documento.PreComputedMD5,
+                    BlobPath = documento.BlobPath,
+                    DocumentoBase64 = documento.Content?.Base64,
+                    NombreDocumento = documento.Name,
+                    Tipologia = input.Tipologia,
+                    ForceReprocess = input.Entrada.Instrucciones.ForceReprocess,
+                    MarkdownCaller = input.Entrada.Instrucciones.Classification.Markdown
+                },
+                cancellationToken);
 
-                markdownContexto = layout.Markdown;
-                paginasLayout = layout.Paginas;
-                // Quinto punto de llamada a layout, fuera de los del orquestador:
-                // factura sus paginas igual (AB#100229). No es un descarte: su
-                // markdown es el contexto con el que trabaja el fallback.
-                consumosLayoutContexto.AddRange(layout.Consumos);
+            markdownContexto = resultado.Markdown;
+            paginasLayout = resultado.Paginas;
+            // Quinto punto de llamada a layout, fuera de los del orquestador: factura sus paginas
+            // igual (AB#100229). No es un descarte: su markdown es el contexto del fallback.
+            consumosLayoutContexto.AddRange(resultado.Consumos);
 
-                _logger.LogInformation(
-                    "Contexto de fallback generado con DI layout para {Tipologia}. Longitud={Length}, Paginas={Paginas}",
-                    input.Tipologia,
-                    markdownContexto?.Length ?? 0,
-                    paginasLayout);
-            }
-            catch (Exception layoutEx)
-            {
-                _logger.LogWarning(
-                    layoutEx,
-                    "No se pudo generar markdown de layout para el fallback de {Tipologia}. Se continúa sin contexto.",
-                    input.Tipologia);
-            }
+            _logger.LogInformation(
+                "Contexto de fallback para {Tipologia}: fuente={Fuente}, longitud={Length}, paginas={Paginas}",
+                input.Tipologia,
+                resultado.Fuente,
+                markdownContexto?.Length ?? 0,
+                paginasLayout);
         }
 
         ExtraccionResultado resultadoGpt;

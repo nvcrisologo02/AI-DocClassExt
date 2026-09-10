@@ -110,8 +110,8 @@
   {
     "group": "C",
     "id": "C1",
-    "name": "Sin markdown - ExtraerMarkdownLayoutActivity se ejecuta",
-    "description": "Sin classification.markdown el orquestador llama ExtraerMarkdownLayoutActivity para obtener texto.",
+    "name": "Sin markdown - ObtenerMarkdownActivity resuelve via Layout",
+    "description": "Sin classification.markdown el orquestador llama a ObtenerMarkdownActivity (MarkdownResolver) para obtener texto.",
     "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
     "classificationProvider": "gpt",
     "classificationOnly": true,
@@ -128,8 +128,8 @@
   {
     "group": "C",
     "id": "C2",
-    "name": "Con markdown inyectado - skip ExtraerMarkdownLayout (D4)",
-    "description": "Con classification.markdown informado el orquestador omite ExtraerMarkdownLayoutActivity.",
+    "name": "Con markdown inyectado - skip Layout (D4)",
+    "description": "Con classification.markdown informado, MarkdownResolver lo usa como fuente Caller y no llama a Layout.",
     "documentPath": "C:\\temp\\Para_IA\\Otros\\11901439_TITULO.PDF",
     "classificationProvider": "gpt",
     "classificationOnly": true,
