@@ -1,7 +1,7 @@
 # Juego de pruebas de validación de la cobertura de markdown
 
 **Fecha:** 2026-09-10
-**Estado:** Diseño aprobado; pendiente de plan de implementación
+**Estado:** Implementado en la rama `test/validacion-cobertura-markdown`; 12 casos en PASS contra DEV el 2026-09-10
 **Depende de:** [Política única de obtención y persistencia de markdown por cobertura de páginas](2026-09-08-markdown-cobertura-paginas-design.md) (AB#100245), integrada en `develop` en el commit de merge `07910a8`
 **Work items:** elemento padre [100262](https://sareb.visualstudio.com/AI%20DocClassExt/_workitems/edit/100262), tareas 100263 a 100270. Relacionado con [100245](https://sareb.visualstudio.com/AI%20DocClassExt/_workitems/edit/100245).
 
@@ -153,12 +153,29 @@ Lista ordenada. Cada pasada tiene `nombre`, `request` y `assertions`, y estas ú
 
 ### `dbAssertions`
 
-Se evalúan tras la última pasada. Además de valores exactos por columna, se admiten dos comparaciones contra la instantánea tomada antes de las pasadas:
+Se evalúan tras la última pasada. Además de valores exactos por columna (`esperado`, que también admite `null` para aseverar que la columna quedó en `NULL`), se admiten estas comparaciones contra la instantánea tomada antes de las pasadas:
 
 - `noEncoge`: el valor binario o textual no puede reducir su longitud.
 - `noDisminuye`: el valor numérico no puede bajar.
+- `mayorQue`: el valor numérico debe ser estrictamente mayor que el umbral dado (la usan los casos de backfill para exigir `Paginas > 0` y `NormalizacionMarkdownGzip > 0` antes de mutar el origen).
 
 Degradar el texto siempre lo encoge, así que `noEncoge` detecta la degradación sin descomprimir nada.
+
+`precondicion` y `dbAssertions` solo admiten columnas de una lista blanca (`MarkdownPaginas`, `MarkdownCompleto`, `Paginas`, `NormalizacionMarkdownGzip`, `NormalizacionMarkdownCompressed`), verificada por un test de esquema: una `columna` mal escrita no debe pasar en silencio bajo el runner (que corre con `Set-StrictMode -Off`).
+
+### Casos de tipo `backfill`
+
+Los tres casos de MDW-08 (`MDW-08A/8B/8C`) no ejecutan pasadas contra el endpoint: ejecutan el script `backfill-markdown-cobertura.ps1` (primero con `-WhatIf`, luego real) y comparan su efecto con `dbAssertions`. Se distinguen por:
+
+- `"tipo": "backfill"` en el caso: el runner salta el bucle de `pasadas` y llama al backfill en su lugar.
+- `seed.assertions`: a diferencia de una pasada, exige el estado de negocio de la siembra (`expectedStatus: ["OK"]`), porque el caso seguro del backfill exige `EstadoFinal = OK`.
+- `seed.mutacionEjecucion`: mutación del JSON de la última ejecución (`ContratoSalidaCompletoJson` de `DocumentoEjecuciones`, la misma fila `TOP 1 ... ORDER BY FechaEjecucion DESC` que lee el backfill) para fijar `DetalleEjecucion.OrigenMarkdown` a un origen concreto. Lista blanca de una sola ruta, mismo patrón de lista blanca más parámetro SQL que la mutación de `Documentos`.
+
+Cada uno de los tres casos siembra con `expectedType: "resumen.documental"` (produce `EstadoFinal = OK` sobre cualquier texto) y un documento distinto del corpus, para tener tres `SHA256` independientes y no competir por la misma fila.
+
+### Filtrar por caso (`-CaseKey`)
+
+`run-validacion-markdown.ps1 -CaseKey <lista>` restringe la ejecución (y, combinado con `-SoloLimpieza`, también la limpieza) a los `caseKey` indicados, para relanzar solo los casos afectados por una corrección sin repetir el juego completo. Acepta tanto un array nativo de PowerShell como una lista separada por comas en un único argumento (la forma que llega al invocar `pwsh ./script.ps1 -CaseKey A,B` desde Git Bash).
 
 ### Limpieza
 
@@ -177,7 +194,7 @@ El borrado *previo* no es redundante: los casos de reutilización necesitan que 
 | MDW-05 | Los formatos que no admiten rango de páginas se declaran completos | DOCX y XLSX del corpus; asevera `MarkdownCompleto = true` |
 | MDW-06 | El recorte declara cobertura parcial, no completa | `maxPagesForClassificationOnly = 3`; contiene `MARCA-PAGINA-03`, no contiene `MARCA-PAGINA-04`, `MarkdownCompleto = false` |
 | MDW-07 | Fila histórica con `MarkdownPaginas` NULL se trata como cobertura desconocida | `mutacion` que pone la columna a NULL; la pasada siguiente no debe servirla como completa |
-| MDW-08 | El backfill en `-WhatIf` cuenta exactamente las filas que después escribe, y no toca orígenes que no garantizan documento completo | Siembra de filas con distintos `OrigenMarkdown`; se compara el recuento del `-WhatIf` con el efecto real |
+| MDW-08 | El backfill marca completo solo los orígenes que garantizan documento entero, y no toca `MarkdownPrevio` ni `Extraccion` | Tres casos (`MDW-08A/8B/8C`), cada uno con documento y SHA256 propios: fila histórica mutada a un `OrigenMarkdown` distinto (uno seguro, dos que no lo son) vía `seed.mutacionEjecucion`; se compara el efecto real del backfill contra `dbAssertions` por caso, no solo el recuento de `-WhatIf` |
 | MDW-09 | Actualizar un documento existente no reescribe las columnas de markdown | Segunda ingesta sin `forceReprocess`; `dbAssertions` sobre las cuatro columnas de markdown |
 
 MDW-01 a MDW-07 cubren la funcionalidad; MDW-08 valida el script de backfill y MDW-09 el camino de `UPDATE` que no se detectó hasta la revisión final de rama.
@@ -231,6 +248,22 @@ No es una suite de integración continua. Es la que se pasa antes de dar por bue
 Sin esa demostración no sabemos si el caso prueba algo. En la implementación de AB#100245 apareció exactamente esa trampa: una aserción que se cumplía siempre y un test que parecía verde por razones ajenas a lo que decía verificar.
 
 Las funciones puras de la capa SQL —construcción de sentencias, comparación de esperado contra real, resolución de qué limpiar— se desarrollan con TDD y Pester sin base de datos real. Lo que toca la red no se prueba unitariamente.
+
+## Desviaciones en la implementación
+
+Decisiones tomadas durante la implementación que se apartan de este diseño o lo completan donde quedaba abierto. Registradas primero en el ledger de ejecución (`.superpowers/sdd/2026-09-10-validacion-cobertura-markdown/progress.md`, no versionado); esta sección es su versión permanente.
+
+- **`OrigenMarkdown` no es columna de `Documentos`** (ruling 12): vive en `DocumentoEjecuciones.ContratoSalidaCompletoJson`, bajo `$.DetalleEjecucion.OrigenMarkdown`, que es de donde lo lee el backfill. La lista blanca de columnas mutables de `Documentos` nunca debió incluirlo; MDW-08 pasó de un único caso a tres (`MDW-08A/8B/8C`), con un mecanismo de mutación de JSON aparte (ver «Casos de tipo `backfill`» arriba).
+- **MDW-06 se rediseñó** (ruling 13): con `forceReprocess: true` el recorte se aplica aunque exista fila completa, pero forzar también persiste y degradaría la fila sembrada. La siembra pasó a ser la propia pasada de recorte (`forceReprocess: true`), y la pasada de verificación pide el mismo recorte con `forceReprocess: false`, para que el caso demuestre solo lo que dice: que el recorte declara cobertura parcial coherente con el texto.
+- **Nombres de artefacto saneados y `-CaseKey`** (ruling 15): un nombre de pasada con `:` truncaba el artefacto en Windows sin avisar (`Out-File` fallaba en silencio bajo el nombre). El sufijo de artefacto pasó a `p<índice>-<nombre saneado>` (solo `[A-Za-z0-9_-]`). El parámetro `-CaseKey`, previsto para MDW-08, se adelantó a la primera mitad de la implementación porque corregir un caso sin poder relanzarlo solo habría obligado a repetir el juego completo (15-30 min) para verificar un cambio de una línea.
+- **Umbral 0.01 en toda siembra o pasada `classificationOnly`** (ruling 17, ampliado dos veces): estos casos prueban cobertura de markdown, no calidad de clasificación, y no deben depender de la confianza que el clasificador le dé a un documento sintético. Sin el umbral, una siembra por debajo de 0.5 de confianza corta antes de persistir (comportamiento real de la aplicación) y el caso sale `ERROR` en vez de sembrar el estado que necesita.
+- **MDW-08A: `MarkdownPaginas` esperado pasa de `NULL` a 12** (ruling 19): el backfill hace `SET MarkdownPaginas = NULLIF(d.Paginas, 0)` al marcar completo un origen seguro, que es lo correcto (documento analizado entero ⇒ páginas del markdown = páginas del documento). La aserción original pedía `NULL` con `MarkdownCompleto = true`, un estado incoherente; era un defecto de la aserción, no del backfill.
+- **`-CaseKey` acepta lista separada por comas en un único argumento** (ruling 20), además del array nativo de PowerShell, porque `pwsh -File` desde Git Bash entrega `"a,b,c"` como un solo elemento.
+- **Los tres casos de backfill exigen `Paginas > 0` y `NormalizacionMarkdownGzip > 0`** (ruling 22): sin esas precondiciones, MDW-08B/8C pasarían en vacío si la fila sembrada no fuera elegible por un motivo distinto al que el caso quiere probar. Añadida la regla `mayorQue` a `Test-DbAssertions` y `Paginas` a la instantánea y a la lista blanca de columnas.
+- **`runtimeStatus=Failed` se reclasifica de `FAIL` a `ERROR`** (ruling 24, revisión final de rama): la Tarea 6 lo había dejado como `FAIL` («la orquestación corrió y produjo un resultado»), pero la tabla de Estados de esta spec define `ERROR` como «la orquestación no llegó a `Completed`», sin distinguir por qué estado terminal. Una orquestación `Failed` no evaluó ninguna invariante, igual que una que quedó en `Running`. Corregido en la revisión final para que el código cumpla la definición ya escrita aquí.
+- **`ForceReprocess` y la regla «nunca se degrada»** (decisión del usuario 1): que `ForceReprocess` descarte la comparación de cobertura del `WHERE` y sobrescriba siempre es el comportamiento correcto («es un force»); ningún caso `MDW` depende de lo contrario (MDW-03 y MDW-06 se diseñaron para no hacerlo). La spec de AB#100245 ya recogía esta excepción en su regla 4; la única corrección fue una aclaración de una línea en la fila MDW-03 de la tabla de invariantes de arriba.
+- **Demostración por mutación no ejecutada** (decisión del usuario 4): ver «Condición de aceptación» arriba. El objetivo de este juego es validar el código que se va a desplegar, no medir la calidad de la propia suite mutando y redesplegando código de producción.
+- **Relanzamientos contra DEV autorizados puntualmente** (decisión del usuario 3): cuando el clasificador de permisos del entorno bloqueó una verificación que ya se había ejecutado y aprobado antes (relanzar el backfill de MDW-08A), el usuario autorizó explícitamente la ejecución en vez de forzar el permiso por otra vía.
 
 ## Fuera de alcance
 

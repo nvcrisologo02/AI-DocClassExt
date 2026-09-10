@@ -40,6 +40,6 @@
   { "id": "MDW-05", "area": "Markdown", "descripcion": "Los formatos que no admiten rango de paginas se declaran completos" },
   { "id": "MDW-06", "area": "Markdown", "descripcion": "El recorte por maxPagesForClassificationOnly declara cobertura parcial, no completa" },
   { "id": "MDW-07", "area": "Markdown", "descripcion": "Fila historica con MarkdownPaginas NULL se trata como cobertura desconocida" },
-  { "id": "MDW-08", "area": "Markdown", "descripcion": "El backfill en -WhatIf cuenta exactamente las filas que despues escribe" },
+  { "id": "MDW-08", "area": "Markdown", "descripcion": "El backfill marca completo solo los origenes que garantizan documento entero y no toca MarkdownPrevio ni Extraccion" },
   { "id": "MDW-09", "area": "Markdown", "descripcion": "Actualizar un documento existente no reescribe las columnas de markdown" }
 ]
