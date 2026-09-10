@@ -34,6 +34,7 @@ $repoRoot   = (Resolve-Path (Join-Path $scriptRoot ".." "..")).Path
 . (Join-Path $scriptRoot "lib" "postdeploy-coverage.ps1")
 . (Join-Path $scriptRoot "lib" "postdeploy-report.ps1")
 . (Join-Path $scriptRoot "lib" "postdeploy-db.ps1")
+. (Join-Path $scriptRoot "lib" "postdeploy-estado.ps1")
 
 # documentia-e2e-common.ps1 usa acceso dinamico a propiedades opcionales
 # asumiendo modo no estricto, igual que en run-e2e-postdeploy.ps1.
@@ -91,14 +92,6 @@ function Clear-CasoEnBd {
     param([pscustomobject]$Caso)
     $sha = Get-Sha256DeFichero -Ruta $Caso.documentPath
     return Remove-DocumentoPorSha256 -Connection $conexion -Sha256 $sha
-}
-
-if ($SoloLimpieza) {
-    $borradas = 0
-    foreach ($case in $cases) { $borradas += Clear-CasoEnBd -Caso $case }
-    Write-Host "Limpieza: $borradas filas borradas en Documentos (cascada incluida)." -ForegroundColor Yellow
-    $conexion.Close()
-    exit 0
 }
 
 # Las reglas del JSON nombran columnas de negocio; la instantanea guarda
@@ -169,6 +162,16 @@ function Invoke-CasoValidacion {
     # 4. Precondicion. Si no se cumple, no hubo estado de partida y el resultado
     #    de las pasadas no significaria nada: ERROR, no FAIL.
     $antes = Get-DocumentoSnapshot -Connection $conexion -Sha256 $sha
+
+    # La siembra puede llegar a Completed sin dejar fila (dedup, ExpectedType no
+    # resoluble, u otro corte temprano). Sin esta guarda, un caso sin
+    # "precondicion" seguiria hasta el paso 6 y saldria FAIL "la fila no existe",
+    # que en realidad es ERROR: no hubo estado de partida sobre el que demostrar
+    # nada.
+    if (-not $antes.Existe) {
+        return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "la siembra completo pero no dejo fila en Documentos (dedup, ExpectedType no resoluble u otro corte temprano)" })
+    }
+
     if ($null -ne $Caso.seed.precondicion) {
         $reglasPre = ConvertTo-ReglasDeInstantanea -Reglas @($Caso.seed.precondicion)
         $pre = Test-DbAssertions -Antes $antes -Despues $antes -Assertions $reglasPre
@@ -185,7 +188,17 @@ function Invoke-CasoValidacion {
         if ($rPasada.Status -eq "SKIP") {
             return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "pasada '$($pasada.nombre)' omitida: $($rPasada.Reason)" })
         }
-        if ($rPasada.Status -ne "PASS") {
+        # Invoke-DocumentIAE2ECase solo devuelve PASS/FAIL/SKIP: bajo su FAIL hay
+        # tanto una asercion incumplida (invariante violada de verdad) como un
+        # fallo de infraestructura (timeout con la orquestacion aun en
+        # Running/Pending, o una excepcion HTTP/red). Get-EstadoDePasada separa
+        # ambos leyendo el prefijo del Reason que la libreria ya produce, sin
+        # tocar esa libreria (es compartida con run-e2e-postdeploy.ps1).
+        $estadoPasada = Get-EstadoDePasada -Resultado $rPasada
+        if ($estadoPasada -eq "ERROR") {
+            return [pscustomobject]($resultadoBase + @{ Status = "ERROR"; Reason = "pasada '$($pasada.nombre)' fallo de infraestructura: $($rPasada.Reason)" })
+        }
+        if ($estadoPasada -ne "PASS") {
             return [pscustomobject]($resultadoBase + @{ Status = "FAIL"; Reason = "pasada '$($pasada.nombre)': $($rPasada.Reason)" })
         }
     }
@@ -201,46 +214,79 @@ function Invoke-CasoValidacion {
     return [pscustomobject]($resultadoBase + @{ Status = "PASS"; Reason = "OK" })
 }
 
-$startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
-$runDir = Join-Path $scriptRoot "artifacts" ("{0}-{1}-validacion" -f (Get-Date -Format "yyyyMMdd-HHmmss"), $Environment)
-New-Item -ItemType Directory -Path $runDir -Force | Out-Null
+# Todo lo que sigue usa $conexion. Se envuelve en un try/finally cuyo finally
+# cierra la conexion pase lo que pase (SoloLimpieza, error de configuracion
+# tardio, o el camino normal hasta el informe): sin esto, una excepcion aqui
+# dejaria la conexion abierta y, mas grave, el resto de casos sin ejecutar ni
+# limpiar en el camino normal.
+try {
+    if ($SoloLimpieza) {
+        $borradas = 0
+        foreach ($case in $cases) { $borradas += Clear-CasoEnBd -Caso $case }
+        Write-Host "Limpieza: $borradas filas borradas en Documentos (cascada incluida)." -ForegroundColor Yellow
+        exit 0
+    }
 
-$endpoint = "$($envConfig.BaseUrl)/api/IngestDocument"
-Write-Host ""
-Write-Host "  Validacion de cobertura de markdown | Entorno: $Environment | Casos: $($cases.Count)" -ForegroundColor Cyan
-Write-Host "  Endpoint: $endpoint" -ForegroundColor Cyan
-Write-Host "  Artifacts: $runDir" -ForegroundColor Cyan
+    $startedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    $runDir = Join-Path $scriptRoot "artifacts" ("{0}-{1}-validacion" -f (Get-Date -Format "yyyyMMdd-HHmmss"), $Environment)
+    New-Item -ItemType Directory -Path $runDir -Force | Out-Null
 
-$results = @()
-foreach ($case in $cases) {
+    $endpoint = "$($envConfig.BaseUrl)/api/IngestDocument"
     Write-Host ""
-    Write-Host "  [$($case.caseKey)] $($case.name)" -ForegroundColor Cyan
-    $r = Invoke-CasoValidacion -Caso $case -Endpoint $endpoint -RunDir $runDir
-    $color = switch ($r.Status) { "PASS" { "Green" } "FAIL" { "Red" } "ERROR" { "Magenta" } default { "Yellow" } }
-    Write-Host "  --> $($r.Status) : $($r.Reason)" -ForegroundColor $color
-    $results += $r
-    # Limpiar despues, pase lo que pase.
-    [void](Clear-CasoEnBd -Caso $case)
+    Write-Host "  Validacion de cobertura de markdown | Entorno: $Environment | Casos: $($cases.Count)" -ForegroundColor Cyan
+    Write-Host "  Endpoint: $endpoint" -ForegroundColor Cyan
+    Write-Host "  Artifacts: $runDir" -ForegroundColor Cyan
+
+    $results = @()
+    foreach ($case in $cases) {
+        Write-Host ""
+        Write-Host "  [$($case.caseKey)] $($case.name)" -ForegroundColor Cyan
+        $r = $null
+        try {
+            $r = Invoke-CasoValidacion -Caso $case -Endpoint $endpoint -RunDir $runDir
+        }
+        catch {
+            # Un fallo transitorio de BD (Invoke-DocumentoMutacion,
+            # Get-DocumentoSnapshot, Remove-DocumentoPorSha256, Get-Sha256DeFichero
+            # lanzan con $ErrorActionPreference = "Stop") no debe abortar el script
+            # ni saltarse la limpieza de este caso ni los casos restantes.
+            $r = [pscustomobject]@{ CaseKey = $case.caseKey; Name = $case.name; Status = "ERROR"; Reason = "Excepcion: $($_.Exception.Message)" }
+        }
+        finally {
+            # Limpiar despues, pase lo que pase. Si la limpieza tambien falla (por
+            # ejemplo la conexion se cayo), no debe enmascarar el resultado del
+            # caso ni tirar el bucle: solo se avisa.
+            try { [void](Clear-CasoEnBd -Caso $case) }
+            catch { Write-Host "  [LIMPIEZA] no se pudo limpiar $($case.caseKey): $($_.Exception.Message)" -ForegroundColor Yellow }
+        }
+        $color = switch ($r.Status) { "PASS" { "Green" } "FAIL" { "Red" } "ERROR" { "Magenta" } default { "Yellow" } }
+        Write-Host "  --> $($r.Status) : $($r.Reason)" -ForegroundColor $color
+        $results += $r
+    }
+
+    $matrix    = Get-E2ECoverageMatrix -MatrixPath (Join-Path $scriptRoot "coverage" "functional-matrix.json")
+    $matrixMdw = @($matrix | Where-Object { $_.area -eq "Markdown" })
+    $coverage  = Get-E2ECoverage -Matrix $matrixMdw -Cases $cases -Results $results -ActiveConditions @()
+    $runInfo   = [pscustomobject]@{
+        Environment = $Environment; Profile = "validacion"; IncludeGdc = $false
+        StartedAtUtc = $startedAtUtc; FinishedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+    }
+    $out = New-E2EReport -RunInfo $runInfo -Results $results -Coverage $coverage -OutDir $runDir
+
+    $pass  = @($results | Where-Object Status -eq "PASS").Count
+    $fail  = @($results | Where-Object Status -eq "FAIL").Count
+    # Ojo: $Error es variable automatica de PowerShell. No usarla como contador.
+    $errores = @($results | Where-Object Status -eq "ERROR").Count
+    Write-Host ""
+    Write-Host "  RESUMEN: Total=$($results.Count) PASS=$pass FAIL=$fail ERROR=$errores" -ForegroundColor Cyan
+    Write-Host "  Reporte: $($out.ReportPath)" -ForegroundColor Gray
+
+    if ($fail -gt 0 -or $errores -gt 0) { exit 1 }
+    exit 0
 }
-
-$conexion.Close()
-
-$matrix    = Get-E2ECoverageMatrix -MatrixPath (Join-Path $scriptRoot "coverage" "functional-matrix.json")
-$matrixMdw = @($matrix | Where-Object { $_.area -eq "Markdown" })
-$coverage  = Get-E2ECoverage -Matrix $matrixMdw -Cases $cases -Results $results -ActiveConditions @()
-$runInfo   = [pscustomobject]@{
-    Environment = $Environment; Profile = "validacion"; IncludeGdc = $false
-    StartedAtUtc = $startedAtUtc; FinishedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+finally {
+    # Cierra la conexion en cualquier salida de este bloque: SoloLimpieza, el
+    # camino normal, o una excepcion no atrapada mas arriba (p.ej. al cargar la
+    # matriz de cobertura o generar el informe).
+    if ($null -ne $conexion -and $conexion.State -eq 'Open') { $conexion.Close() }
 }
-$out = New-E2EReport -RunInfo $runInfo -Results $results -Coverage $coverage -OutDir $runDir
-
-$pass  = @($results | Where-Object Status -eq "PASS").Count
-$fail  = @($results | Where-Object Status -eq "FAIL").Count
-# Ojo: $Error es variable automatica de PowerShell. No usarla como contador.
-$errores = @($results | Where-Object Status -eq "ERROR").Count
-Write-Host ""
-Write-Host "  RESUMEN: Total=$($results.Count) PASS=$pass FAIL=$fail ERROR=$errores" -ForegroundColor Cyan
-Write-Host "  Reporte: $($out.ReportPath)" -ForegroundColor Gray
-
-if ($fail -gt 0 -or $errores -gt 0) { exit 1 }
-exit 0
