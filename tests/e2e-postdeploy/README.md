@@ -112,6 +112,9 @@ Tres modos de invocación:
     # ejecución real: siembra, ejecuta pasadas, asevera y limpia
     pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev
 
+    # solo algunos casos: filtra por caseKey en vez de relanzar el juego completo
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -CaseKey MDW-MDW1,MDW-MDW6
+
 `-Environment` solo admite `dev` (`ValidateSet` de un único valor): este juego
 emite `DELETE`/`UPDATE` directos contra `Documentos` y nunca debe poder
 apuntar a PRO. `Assert-DbServidorEsDev` (en `lib/postdeploy-db.ps1`) es una

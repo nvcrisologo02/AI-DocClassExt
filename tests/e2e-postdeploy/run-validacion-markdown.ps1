@@ -14,13 +14,18 @@
     pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev
     pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -WhatIf
     pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -SoloLimpieza
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -CaseKey MDW-MDW1,MDW-MDW6
 #>
 param(
     [Parameter(Mandatory = $true)][ValidateSet("dev")][string]$Environment,
     [switch]$WhatIf,
     [switch]$SoloLimpieza,
     [int]$MaxRetries = 60,
-    [int]$DelaySeconds = 10
+    [int]$DelaySeconds = 10,
+    # Filtra el run a los caseKey indicados (por ejemplo, para relanzar solo
+    # los casos afectados por una correccion sin repetir el juego completo).
+    # Vacio por defecto: sin filtro, se ejecutan todos los casos.
+    [string[]]$CaseKey = @()
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -59,6 +64,11 @@ $cases = @(Get-ChildItem -Path $casesDir -Filter "*-cases.json" | ForEach-Object
 
 foreach ($case in $cases) {
     $case.documentPath = Join-Path $repoRoot $case.documentPath
+}
+
+if ($CaseKey.Count -gt 0) {
+    $cases = @($cases | Where-Object { $CaseKey -contains $_.caseKey })
+    if ($cases.Count -eq 0) { Write-Host "[CONFIG] ningun caso coincide con -CaseKey $($CaseKey -join ', ')" -ForegroundColor Red; exit 2 }
 }
 
 if ($WhatIf) {
@@ -116,6 +126,20 @@ function ConvertTo-CasoDePasada {
         $sintetico | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value -Force
     }
     return $sintetico
+}
+
+function ConvertTo-SufijoPasadaSaneado {
+    param([int]$Indice, [string]$Nombre)
+
+    # El nombre de pasada es texto libre del fichero de casos (puede llevar
+    # ":", espacios, etc.), pero el sufijo termina en un nombre de fichero de
+    # artefacto (result-<caseKey>.json). Un caracter invalido en una ruta de
+    # Windows trunca el nombre silenciosamente y el artefacto se pierde. Solo
+    # se admite [A-Za-z0-9_-]; el resto se sustituye por "-". El indice de
+    # posicion (1, 2, ...) va delante para que dos pasadas con el mismo nombre
+    # saneado no colisionen en el mismo fichero.
+    $saneado = ($Nombre -replace '[^A-Za-z0-9_-]', '-')
+    return "p$Indice-$saneado"
 }
 
 function ConvertTo-ReglasDeInstantanea {
@@ -181,8 +205,11 @@ function Invoke-CasoValidacion {
     }
 
     # 5. Pasadas en orden.
-    foreach ($pasada in @($Caso.pasadas)) {
-        $casoPasada = ConvertTo-CasoDePasada -Caso $Caso -Request $pasada.request -Assertions $pasada.assertions -Sufijo $pasada.nombre
+    $pasadas = @($Caso.pasadas)
+    for ($i = 0; $i -lt $pasadas.Count; $i++) {
+        $pasada = $pasadas[$i]
+        $sufijoPasada = ConvertTo-SufijoPasadaSaneado -Indice ($i + 1) -Nombre $pasada.nombre
+        $casoPasada = ConvertTo-CasoDePasada -Caso $Caso -Request $pasada.request -Assertions $pasada.assertions -Sufijo $sufijoPasada
         $rPasada = Invoke-DocumentIAE2ECase -Case $casoPasada -Endpoint $Endpoint -ArtifactsDir $RunDir `
             -MaxRetries $MaxRetries -DelaySeconds $DelaySeconds -FunctionKey $envConfig.FunctionKey
         if ($rPasada.Status -eq "SKIP") {
