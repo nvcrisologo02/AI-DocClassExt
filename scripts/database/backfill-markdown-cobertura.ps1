@@ -7,8 +7,8 @@
     historico en NULL / 0: cobertura desconocida, solo valida como fallback. Este script marca
     MarkdownCompleto = 1 unicamente cuando la ULTIMA ejecucion del documento termino en OK, su
     OrigenMarkdown es uno de los que solo se producen con el documento entero
-    (LayoutDocumentoCompletoPostClasificacion, FallbackLayout, LayoutBajoDemandaPrompt,
-    Extraccion) y Documentos.Paginas es mayor que cero. No se infieren paginas de recortes: un
+    (LayoutDocumentoCompletoPostClasificacion, FallbackLayout, LayoutBajoDemandaPrompt) y
+    Documentos.Paginas es mayor que cero. No se infieren paginas de recortes: un
     error ahi haria reutilizar 3 paginas como si fueran el documento entero.
 
     MarkdownPrevio queda deliberadamente FUERA de la lista de origenes seguros, aunque
