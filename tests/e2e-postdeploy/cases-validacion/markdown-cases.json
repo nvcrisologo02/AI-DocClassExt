@@ -98,7 +98,6 @@
     "caseKey": "MDW-MDW6", "group": "MDW", "id": "MDW6", "domain": "validacion",
     "name": "El recorte a 3 paginas declara cobertura parcial coherente con el texto servido",
     "covers": ["MDW-06"],
-    "nota": "En classificationOnly la respuesta no trae DetalleEjecucion.Postproceso.Markdown (llega vacio): no se puede aseverar el marcador de pagina en la salida HTTP. La coherencia texto/cobertura del recorte parcial se asevera por la cobertura persistida (MarkdownCompleto=false, MarkdownPaginas=3), no por el contenido de la respuesta.",
     "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
     "submittedBy": "e2e-validacion-markdown",
     "seed": {
@@ -123,7 +122,11 @@
         "expectOutputPathEquals": [
           { "path": "DetalleEjecucion.MarkdownFuente", "value": "BaseDatos" },
           { "path": "DetalleEjecucion.MarkdownCompleto", "value": "False" }
-        ]
+        ],
+        "expectOutputPathContains": [
+          { "path": "DetalleEjecucion.Postproceso.Markdown", "value": "MARCA-PAGINA-03" }
+        ],
+        "expectOutputJsonNotContains": ["MARCA-PAGINA-04"]
       }
     }],
     "dbAssertions": [
@@ -255,7 +258,7 @@
       "nombre": "segunda ingesta con markdown aportado",
       "request": {
         "classificationProvider": "gpt", "classificationOnly": true,
-        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01,
         "markdown": "MARCADOR-ACTUALIZACION Contenido corto aportado en la segunda ingesta."
       },
       "assertions": { "expectedRuntimeStatus": "Completed" }
