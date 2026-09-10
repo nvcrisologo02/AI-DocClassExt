@@ -213,3 +213,55 @@ Describe "Guarda de Sha256 vacio o en blanco" {
         { Invoke-DocumentoMutacion -Connection $null -Sha256 "   " -Mutacion @{ MarkdownPaginas = 3 } } | Should -Throw -ExpectedMessage "*Sha256*"
     }
 }
+
+Describe "Test-DbAssertions con reglas pscustomobject (ruta de produccion)" {
+    # Los tests de arriba prueban Test-ReglaTieneClave/Get-ValorRegla (internas a
+    # Test-DbAssertions) solo por la rama de hashtable (@{...} escrito a mano). Pero
+    # en produccion las reglas llegan de markdown-cases.json via ConvertFrom-Json,
+    # que produce pscustomobject, no hashtable. Si la deteccion de presencia fallara
+    # por esa rama, las aserciones se saltarian en silencio y el runner marcaria PASS
+    # sin haber comprobado nada. Estos tests construyen las reglas con
+    # ConvertFrom-Json de una cadena JSON real, no a mano con @{...}, para ejercitar
+    # exactamente esa ruta.
+    BeforeAll {
+        $script:antesJson = [pscustomobject]@{
+            Existe = $true; MarkdownPaginas = 12; MarkdownCompleto = $true
+            LongitudGzip = 5000; LongitudCompressed = 6800
+        }
+    }
+
+    It "una regla de ConvertFrom-Json es pscustomobject, no hashtable" {
+        $reglas = ConvertFrom-Json -InputObject '[{ "columna": "MarkdownPaginas", "esperado": 12 }]'
+        $reglas[0] | Should -BeOfType ([System.Management.Automation.PSCustomObject])
+    }
+
+    It "acepta un valor exacto que coincide, con la regla venida de JSON" {
+        $reglas = @(ConvertFrom-Json -InputObject '[{ "columna": "MarkdownPaginas", "esperado": 12 }]')
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 12; MarkdownCompleto = $true; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $script:antesJson -Despues $despues -Assertions $reglas
+        $r.Success | Should -BeTrue
+    }
+
+    It "distingue esperado=null (aseveracion real) de la clave ausente, ambas via JSON" {
+        $reglasConNulo   = @(ConvertFrom-Json -InputObject '[{ "columna": "MarkdownPaginas", "esperado": null }]')
+        $reglasSinClave  = @(ConvertFrom-Json -InputObject '[{ "columna": "MarkdownPaginas" }]')
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 12; MarkdownCompleto = $true; LongitudGzip = 5000; LongitudCompressed = 6800 }
+
+        # esperado=null SI es una aseveracion (la columna deberia ser nula): con un
+        # valor no nulo en Despues, debe fallar.
+        $rConNulo = Test-DbAssertions -Antes $script:antesJson -Despues $despues -Assertions $reglasConNulo
+        $rConNulo.Success | Should -BeFalse
+
+        # sin la clave "esperado": no asevera nada sobre el valor, pasa siempre.
+        $rSinClave = Test-DbAssertions -Antes $script:antesJson -Despues $despues -Assertions $reglasSinClave
+        $rSinClave.Success | Should -BeTrue
+    }
+
+    It "noDisminuye y noEncoge como booleanos de JSON siguen detectandose por pscustomobject" {
+        $reglas = @(ConvertFrom-Json -InputObject '[{ "columna": "LongitudGzip", "noEncoge": true }, { "columna": "MarkdownPaginas", "noDisminuye": true }]')
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 3; MarkdownCompleto = $true; LongitudGzip = 1000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $script:antesJson -Despues $despues -Assertions $reglas
+        $r.Success | Should -BeFalse
+        $r.Errors.Count | Should -Be 2
+    }
+}

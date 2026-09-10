@@ -85,6 +85,69 @@ caso pasa desde entonces. Al promocionar a PRO hay que aplicar el mismo ajuste
 (PRO sigue en 60). El fix de código asociado convierte cualquier timeout futuro
 en `EXTRACCION_INCOMPLETA` (estado de negocio) en lugar de error técnico.
 
+## Validación de cobertura de markdown (run-validacion-markdown.ps1)
+
+Juego de pruebas aparte, centrado en las invariantes MDW-01..MDW-09 (columna
+`Area: Markdown` de `coverage/functional-matrix.json`) de la cobertura de
+markdown persistida por documento (`MarkdownCompleto`, `MarkdownPaginas`,
+`NormalizacionMarkdownGzip`, `NormalizacionMarkdownCompressed`). A diferencia
+de `run-e2e-postdeploy.ps1`, no solo llama al endpoint: cada caso siembra su
+fila de partida con el pipeline, opcionalmente la muta a mano en BD, comprueba
+una precondición, ejecuta una o más pasadas en orden y asevera sobre el estado
+final de la fila en `Documentos` (no solo sobre la respuesta HTTP). Limpia la
+fila antes y después de cada caso por SHA256.
+
+Casos en `cases-validacion/*-cases.json` (formato propio, distinto del de
+`cases/`: bloques `seed`/`pasadas`/`dbAssertions`, no `profiles`/`assertions`
+planos).
+
+Tres modos de invocación:
+
+    # plan: imprime qué haría cada caso, sin conectar a BD ni lanzar nada
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -WhatIf
+
+    # limpieza: conecta, borra cualquier fila residual de los casos y sale
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -SoloLimpieza
+
+    # ejecución real: siembra, ejecuta pasadas, asevera y limpia
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev
+
+`-Environment` solo admite `dev` (`ValidateSet` de un único valor): este juego
+emite `DELETE`/`UPDATE` directos contra `Documentos` y nunca debe poder
+apuntar a PRO. `Assert-DbServidorEsDev` (en `lib/postdeploy-db.ps1`) es una
+segunda barrera independiente del `ValidateSet`: si `sqlServer` en
+`environments.json` no es el de DEV, aborta con exit 2 antes de tocar nada.
+
+Requiere además de lo ya listado en Prerrequisitos: red corporativa (o VPN) y
+sesión `az login` activa con acceso al servidor SQL de DEV —
+`Connect-DocumentIADb` obtiene un token con `az account get-access-token
+--resource https://database.windows.net/`, sin usuario/contraseña.
+
+Estados: `PASS` (invariante verificada), `FAIL` (invariante violada de
+verdad: una fila persistida no cumple lo esperado), `ERROR` (el caso no pudo
+ejecutarse — siembra, precondición o mutación fallidas; problema del runner o
+del entorno, no de la invariante), `SKIP` (una pasada se omitió, se traduce a
+`ERROR` porque sin esa pasada el resultado no significa nada). Exit codes: 0
+sin FAIL ni ERROR, 1 si hay alguno, 2 error de configuración.
+
+Coste y tiempo: cada caso ejecuta como mínimo dos pasadas por el pipeline real
+(una siembra más una o más pasadas), cada una de 30 a 90 segundos y con
+consumo real de Document Intelligence y GPT. No lanzar en bucle ni de forma
+automatizada; es un juego para ejecutar puntualmente, no en cada despliegue.
+
+Solo opera contra DEV y borra filas de `Documentos` (con cascada a
+`Ejecuciones` y sus postprocesos/validaciones) por SHA256 antes y después de
+cada caso, incluso en `-SoloLimpieza`. No apuntarlo nunca a una base de datos
+compartida con datos que interese conservar.
+
+Trampa conocida (compartida con el corpus de `run-e2e-postdeploy.ps1`):
+`tools/generate_corpus.py` regenera **todo** el corpus sintético de golpe,
+con timestamps nuevos en cada fichero que toca — incluidos los que no tienen
+relación con el cambio que se está haciendo. Ejecutarlo sin querer ensucia el
+diff con ficheros binarios no relacionados. No ejecutarlo salvo que el cambio
+realmente requiera regenerar el corpus, y revisar `git status` después para
+no commitear de más.
+
 ## Test Plan espejo en ADO
 
 - `ado/bootstrap-testplan.ps1` crea (idempotente) el Test Plan "E2E
