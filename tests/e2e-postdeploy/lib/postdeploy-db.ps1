@@ -87,11 +87,14 @@ function Get-Sha256DeFichero {
 
     if (-not (Test-Path -Path $Ruta)) { throw "No existe el fichero: $Ruta" }
     $sha = [System.Security.Cryptography.SHA256]::Create()
+    $stream = [System.IO.File]::OpenRead((Resolve-Path -Path $Ruta).Path)
     try {
-        $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path -Path $Ruta).Path)
-        return ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToUpperInvariant()
+        return ([System.BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToUpperInvariant()
     }
-    finally { $sha.Dispose() }
+    finally {
+        $stream.Dispose()
+        $sha.Dispose()
+    }
 }
 
 function New-MutacionSql {
@@ -111,10 +114,18 @@ function New-MutacionSql {
 
 function Invoke-DocumentoMutacion {
     param(
-        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlConnection]$Connection,
+        # [object] con AllowNull en vez del tipo fuerte SqlConnection: la guarda de
+        # Sha256 de abajo debe poder probarse sin abrir conexion real, y un parametro
+        # Mandatory tipado como SqlConnection rechaza $null en el enlazado, antes de
+        # que el cuerpo de la funcion llegue a ejecutarse.
+        [Parameter(Mandatory = $true)][AllowNull()][object]$Connection,
         [Parameter(Mandatory = $true)][string]$Sha256,
         [hashtable]$Mutacion
     )
+
+    if ([string]::IsNullOrWhiteSpace($Sha256)) {
+        throw "Invoke-DocumentoMutacion: Sha256 vacio o en blanco no admitido"
+    }
 
     $sql = New-MutacionSql -Mutacion $Mutacion
     if ($null -eq $sql) { return 0 }
@@ -132,9 +143,14 @@ function Invoke-DocumentoMutacion {
 
 function Remove-DocumentoPorSha256 {
     param(
-        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlConnection]$Connection,
+        # [object] con AllowNull, mismo motivo que en Invoke-DocumentoMutacion.
+        [Parameter(Mandatory = $true)][AllowNull()][object]$Connection,
         [Parameter(Mandatory = $true)][string]$Sha256
     )
+
+    if ([string]::IsNullOrWhiteSpace($Sha256)) {
+        throw "Remove-DocumentoPorSha256: Sha256 vacio o en blanco no admitido"
+    }
 
     # El borrado en cascada configurado en DocumentIADbContext arrastra
     # Ejecuciones y sus postprocesos y validaciones.

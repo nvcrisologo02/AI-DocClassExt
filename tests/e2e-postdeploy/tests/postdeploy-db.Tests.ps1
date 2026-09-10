@@ -152,6 +152,17 @@ Describe "Get-Sha256DeFichero" {
     It "lanza si el fichero no existe" {
         { Get-Sha256DeFichero -Ruta (Join-Path $TestDrive "no-existe.bin") } | Should -Throw
     }
+    It "el hash coincide con un valor calculado por un camino independiente" {
+        # Valor obtenido fuera de este modulo (sha256sum / hashlib.sha256) sobre el
+        # contenido literal "documentia". Ata el resultado a un valor conocido: si el
+        # refactor a streaming de ComputeHash cambiara el resultado, este es el test
+        # que lo detecta; los otros tres pasarian igual con un hash distinto siempre
+        # que fuera estable y tuviera el formato correcto.
+        $tmp = Join-Path $TestDrive "muestra-conocida.txt"
+        [System.IO.File]::WriteAllText($tmp, "documentia")
+        $hash = Get-Sha256DeFichero -Ruta $tmp
+        $hash | Should -Be "87F6F83AF6B7D51A2FB35AC46D37226E5813B2FF2074553887BEA96768D90057"
+    }
 }
 
 Describe "New-MutacionSql" {
@@ -172,5 +183,33 @@ Describe "New-MutacionSql" {
     }
     It "rechaza intento de inyeccion en el nombre de columna" {
         { New-MutacionSql -Mutacion @{ "MarkdownPaginas = 1; DROP TABLE Documentos --" = 1 } } | Should -Throw
+    }
+}
+
+Describe "Guarda de Sha256 vacio o en blanco" {
+    # Connection = $null: la guarda debe lanzar antes de tocar la conexion, asi que
+    # estos tres casos no necesitan base de datos.
+    #
+    # "" ya queda bloqueado por el propio enlazado de parametros de PowerShell (Sha256
+    # es [string] Mandatory sin AllowEmptyString), con o sin la guarda anadida: ambos
+    # casos lanzan igual, por lo que aqui Should -Throw no distingue la guarda nueva de
+    # la validacion de tipo preexistente. Se deja como red de seguridad de todas formas:
+    # si alguien relajase el tipo del parametro (p.ej. a [object] o con
+    # [AllowEmptyString()]), este test si se pondria en rojo.
+    It "Remove-DocumentoPorSha256 rechaza un sha256 vacio" {
+        { Remove-DocumentoPorSha256 -Connection $null -Sha256 "" } | Should -Throw
+    }
+    # "   " (solo espacios) si pasa el enlazado de parametros: aqui es la guarda la
+    # unica linea de defensa. Se comprueba el mensaje, no solo que lance, porque sin
+    # la guarda tambien lanza (al llamar CreateCommand sobre una conexion nula) y un
+    # Should -Throw a secas no distinguiria las dos causas.
+    It "Remove-DocumentoPorSha256 rechaza un sha256 en blanco" {
+        { Remove-DocumentoPorSha256 -Connection $null -Sha256 "   " } | Should -Throw -ExpectedMessage "*Sha256*"
+    }
+    It "Invoke-DocumentoMutacion rechaza un sha256 vacio" {
+        { Invoke-DocumentoMutacion -Connection $null -Sha256 "" -Mutacion @{ MarkdownPaginas = 3 } } | Should -Throw
+    }
+    It "Invoke-DocumentoMutacion rechaza un sha256 en blanco" {
+        { Invoke-DocumentoMutacion -Connection $null -Sha256 "   " -Mutacion @{ MarkdownPaginas = 3 } } | Should -Throw -ExpectedMessage "*Sha256*"
     }
 }
