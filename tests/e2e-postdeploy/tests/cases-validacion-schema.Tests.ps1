@@ -54,6 +54,15 @@ Describe "Esquema de casos de validacion de markdown" {
             }
         }
     }
+    It "toda pasada exige expectedRuntimeStatus" {
+        # "assertions": {} pasa el test anterior (un PSCustomObject vacio no es
+        # BeNullOrEmpty en Pester); esto exige ademas que traiga la clave minima.
+        foreach ($c in $script:cases) {
+            foreach ($p in @($c.pasadas)) {
+                $p.assertions.expectedRuntimeStatus | Should -Be "Completed" -Because "$($c.caseKey)/$($p.nombre)"
+            }
+        }
+    }
     It "toda mutacion usa solo columnas de la lista blanca" {
         $permitidas = @("MarkdownPaginas", "MarkdownCompleto", "Paginas")
         foreach ($c in $script:cases) {
@@ -90,6 +99,22 @@ Describe "Esquema de casos de validacion de markdown" {
         foreach ($c in $script:cases) {
             if (-not $c.seed.PSObject.Properties['assertions'] -or $null -eq $c.seed.assertions) { continue }
             $c.seed.assertions.expectedRuntimeStatus | Should -Be "Completed" -Because $c.caseKey
+        }
+    }
+    It "precondicion y dbAssertions usan solo columnas de la lista blanca" {
+        # Simetrico al test de mutacion: una "columna" mal escrita en precondicion o
+        # dbAssertions no reventaria en el runner (StrictMode -Off), pasaria en
+        # silencio. La lista blanca es la de columnas que expone Get-DocumentoSnapshot.
+        $permitidas = @("MarkdownPaginas", "MarkdownCompleto", "Paginas", "NormalizacionMarkdownGzip", "NormalizacionMarkdownCompressed")
+        foreach ($c in $script:cases) {
+            foreach ($regla in @($c.seed.precondicion)) {
+                if ($null -eq $regla) { continue }
+                $permitidas | Should -Contain $regla.columna -Because "$($c.caseKey) precondicion referencia $($regla.columna)"
+            }
+            foreach ($regla in @($c.dbAssertions)) {
+                if ($null -eq $regla) { continue }
+                $permitidas | Should -Contain $regla.columna -Because "$($c.caseKey) dbAssertions referencia $($regla.columna)"
+            }
         }
     }
 }

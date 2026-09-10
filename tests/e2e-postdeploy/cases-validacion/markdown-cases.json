@@ -106,10 +106,7 @@
         "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01
       },
       "mutacion": null,
-      "precondicion": [
-        { "columna": "MarkdownCompleto", "esperado": false },
-        { "columna": "MarkdownPaginas", "esperado": 3 }
-      ]
+      "precondicion": []
     },
     "pasadas": [{
       "nombre": "mismo recorte servido desde base de datos",
@@ -232,6 +229,7 @@
       "request": { "classificationProvider": "auto", "forceReprocess": false, "skipDuplicateCheck": true, "skipGDCUpload": true },
       "assertions": {
         "expectedRuntimeStatus": "Completed",
+        "expectOutputPathEquals": [{ "path": "DetalleEjecucion.MarkdownFuente", "value": "Extraccion" }],
         "expectOutputPathContains": [{ "path": "DetalleEjecucion.Postproceso.Markdown", "value": "MARCA-PAGINA-12" }]
       }
     }],

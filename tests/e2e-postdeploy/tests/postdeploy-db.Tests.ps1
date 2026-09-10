@@ -32,6 +32,37 @@ Describe "Assert-DbServidorEsDev" {
     }
 }
 
+Describe "New-DocumentIAConnectionString" {
+    It "construye Data Source e Initial Catalog a partir del servidor y la base" {
+        $cs = New-DocumentIAConnectionString -SqlServer "srbsqldevdocai" -SqlDatabase "DocumentIA"
+        $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder($cs)
+        $builder.DataSource | Should -Be "tcp:srbsqldevdocai.database.windows.net,1433"
+        $builder.InitialCatalog | Should -Be "DocumentIA"
+        $builder.Encrypt | Should -BeTrue
+        $builder.TrustServerCertificate | Should -BeFalse
+    }
+
+    It "un SqlDatabase con ';' no inyecta una clave nueva en la cadena resultante" {
+        # En una cadena ADO.NET construida por concatenacion, un SqlDatabase con
+        # ";Server=..." embebido redirigiria la conexion real a otro servidor sin
+        # que Assert-DbServidorEsDev (que solo mira sqlServer en environments.json)
+        # lo detectase. SqlConnectionStringBuilder debe escapar el valor: al volver
+        # a parsear la cadena resultante, InitialCatalog debe conservar el ';'
+        # como parte literal del nombre, no como separador de clave.
+        $malicioso = "DocumentIA;Server=tcp:srbsqlprodocai.database.windows.net"
+        $cs = New-DocumentIAConnectionString -SqlServer "srbsqldevdocai" -SqlDatabase $malicioso
+        $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder($cs)
+        $builder.InitialCatalog | Should -Be $malicioso
+        $builder.DataSource | Should -Be "tcp:srbsqldevdocai.database.windows.net,1433"
+    }
+
+    It "acepta el servidor ya con sufijo de dominio sin duplicarlo" {
+        $cs = New-DocumentIAConnectionString -SqlServer "srbsqldevdocai.database.windows.net" -SqlDatabase "DocumentIA"
+        $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder($cs)
+        $builder.DataSource | Should -Be "tcp:srbsqldevdocai.database.windows.net,1433"
+    }
+}
+
 Describe "Test-DbAssertions" {
     BeforeAll {
         $script:antes = [pscustomobject]@{
@@ -160,6 +191,19 @@ Describe "Test-DbAssertions" {
         )
         $r.Success | Should -BeFalse
         $r.Errors[0] | Should -BeLike "*base de comparacion*"
+    }
+
+    It "una columna que no existe en la instantanea no pasa en silencio" {
+        # Bajo el runner (Set-StrictMode -Off) $Despues.MarkdownPagina devuelve $null
+        # para una columna mal escrita, y sin esta guarda la regla pasaria como si
+        # hubiera comprobado algo. Una regla con un nombre de columna erroneo debe
+        # fallar de forma explicita, no pasar en vacio.
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 12; MarkdownCompleto = $true; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $script:antes -Despues $despues -Assertions @(
+            @{ columna = "MarkdownPagina"; esperado = 12 }
+        )
+        $r.Success | Should -BeFalse
+        $r.Errors[0] | Should -BeLike "*columna desconocida*MarkdownPagina*"
     }
 }
 

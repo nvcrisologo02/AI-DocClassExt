@@ -363,8 +363,19 @@ try {
     $fail  = @($results | Where-Object Status -eq "FAIL").Count
     # Ojo: $Error es variable automatica de PowerShell. No usarla como contador.
     $errores = @($results | Where-Object Status -eq "ERROR").Count
+    $lineaResumen = "RESUMEN: Total=$($results.Count) PASS=$pass FAIL=$fail ERROR=$errores"
+
+    # New-E2EReport (lib/postdeploy-report.ps1, compartido con run-e2e-postdeploy.ps1)
+    # no distingue ERROR de FAIL en su cabecera ni en su tabla: el "Resultado" que
+    # escribe cuenta PASS/FAIL/SKIP/N-A, no ERROR, y la tabla de Casos solo muestra
+    # el Status por fila. Un report.md con "Total=9 PASS=7 FAIL=0 SKIP=0 N/A=0" y dos
+    # ERROR escondidos entre las filas es el verde enganoso que esta suite existe
+    # para combatir, en el artefacto que perdura. Se anade esta linea aparte, sin
+    # tocar la libreria compartida.
+    Add-Content -Path $out.ReportPath -Value "`n$lineaResumen`n" -Encoding UTF8
+
     Write-Host ""
-    Write-Host "  RESUMEN: Total=$($results.Count) PASS=$pass FAIL=$fail ERROR=$errores" -ForegroundColor Cyan
+    Write-Host "  $lineaResumen" -ForegroundColor Cyan
     Write-Host "  Reporte: $($out.ReportPath)" -ForegroundColor Gray
 
     if ($fail -gt 0 -or $errores -gt 0) { exit 1 }

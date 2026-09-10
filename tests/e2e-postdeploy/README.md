@@ -155,6 +155,17 @@ diff con ficheros binarios no relacionados. No ejecutarlo salvo que el cambio
 realmente requiera regenerar el corpus, y revisar `git status` después para
 no commitear de más.
 
+Dos trampas propias de los casos `MDW-08A/8B/8C` (backfill): (a) cada uno
+ejecuta el backfill real (`scripts/database/backfill-markdown-cobertura.ps1`)
+**dos veces** sobre **toda** la tabla `Documentos` de DEV (una con `-WhatIf`
+para contar, otra real para escribir), unos 4 minutos por caso, y marca
+cualquier fila histórica que cumpla el caso seguro — efecto fuera de la huella
+propia del juego, pero idempotente: relanzar no cambia el resultado sobre
+filas ya marcadas. (b) No ejecutar este juego en paralelo con
+`run-e2e-postdeploy.ps1`: los casos `MDW-04`, `MDW-05A`, `MDW-05B`, `MDW-08B` y
+`MDW-08C` usan documentos del corpus compartido, y la limpieza por SHA256 de
+uno de los dos runners borraría filas que el otro está usando.
+
 ## Test Plan espejo en ADO
 
 - `ado/bootstrap-testplan.ps1` crea (idempotente) el Test Plan "E2E

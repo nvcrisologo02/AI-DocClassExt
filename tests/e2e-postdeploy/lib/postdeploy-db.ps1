@@ -18,12 +18,36 @@ function Assert-DbServidorEsDev {
     }
 }
 
+# Construye la cadena de conexion con SqlConnectionStringBuilder en vez de
+# concatenar texto. La concatenacion dejaba una via de fuga: en una cadena
+# ADO.NET, si una clave se repite gana la ultima, asi que un SqlDatabase con
+# ";Server=..." embebido (via un environments.json con una errata o manipulado)
+# redirigiria la conexion real a otro servidor. El builder escapa el valor
+# (lo entrecomilla si contiene ';' o '"'), asi que ese contenido llega siempre
+# como Initial Catalog literal, nunca como una clave nueva.
+function New-DocumentIAConnectionString {
+    param(
+        [Parameter(Mandatory = $true)][string]$SqlServer,
+        [Parameter(Mandatory = $true)][string]$SqlDatabase
+    )
+
+    $fqdn = if ($SqlServer -like "*.database.windows.net") { $SqlServer } else { "$SqlServer.database.windows.net" }
+    $builder = New-Object System.Data.SqlClient.SqlConnectionStringBuilder
+    $builder["Data Source"] = "tcp:$fqdn,1433"
+    $builder["Initial Catalog"] = $SqlDatabase
+    $builder["Encrypt"] = $true
+    $builder["TrustServerCertificate"] = $false
+    $builder["Connect Timeout"] = 30
+    return $builder.ConnectionString
+}
+
 function Connect-DocumentIADb {
     param(
         [Parameter(Mandatory = $true)][string]$SqlServer,
         [Parameter(Mandatory = $true)][string]$SqlDatabase
     )
 
+    # Primera barrera: verifica la CONFIGURACION (sqlServer en environments.json).
     Assert-DbServidorEsDev -SqlServer $SqlServer
 
     $token = (az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv)
@@ -31,11 +55,29 @@ function Connect-DocumentIADb {
         throw "No se obtuvo token de az. Ejecuta 'az login' desde red corporativa."
     }
 
-    $fqdn = if ($SqlServer -like "*.database.windows.net") { $SqlServer } else { "$SqlServer.database.windows.net" }
     $cn = New-Object System.Data.SqlClient.SqlConnection
-    $cn.ConnectionString = "Server=tcp:$fqdn,1433;Database=$SqlDatabase;Encrypt=True;TrustServerCertificate=False;Connect Timeout=30;"
+    $cn.ConnectionString = New-DocumentIAConnectionString -SqlServer $SqlServer -SqlDatabase $SqlDatabase
     $cn.AccessToken = $token
     $cn.Open()
+
+    # Segunda barrera, independiente de la primera: verifica el SERVIDOR
+    # REALMENTE CONECTADO, no el texto de configuracion. SERVERPROPERTY('ServerName')
+    # en Azure SQL devuelve el nombre logico del servidor (verificado contra DEV:
+    # "srbsqldevdocai", sin sufijo). Si algo (una redireccion via Initial Catalog
+    # que burlase el escapado del builder, un environments.json manipulado en
+    # tiempo de ejecucion, etc.) hiciera que la conexion real fuese a otro
+    # servidor, esta comprobacion lo detiene antes de la primera sentencia DELETE.
+    $cmdServidor = $cn.CreateCommand()
+    $cmdServidor.CommandText = "SELECT CAST(SERVERPROPERTY('ServerName') AS nvarchar(256))"
+    $servidorConectado = [string]$cmdServidor.ExecuteScalar()
+    try {
+        Assert-DbServidorEsDev -SqlServer $servidorConectado
+    }
+    catch {
+        $cn.Close()
+        throw
+    }
+
     return $cn
 }
 
@@ -275,6 +317,16 @@ function Test-DbAssertions {
         if ($null -eq $regla) { continue }
         $columna = [string](Get-ValorRegla -Regla $regla -Nombre "columna")
         if ([string]::IsNullOrWhiteSpace($columna)) { continue }
+
+        # Bajo el runner (Set-StrictMode -Off tras el dot-sourcing), una columna que
+        # no existe en la instantanea devolveria $null en vez de lanzar, y la regla
+        # pasaria como si hubiera comprobado algo. Se rechaza explicitamente en vez
+        # de confiar en StrictMode, que aqui (en el modulo) esta activo pero en
+        # produccion no lo esta.
+        if (@($Despues.PSObject.Properties.Name) -notcontains $columna) {
+            $errores += "columna desconocida '$columna'"
+            continue
+        }
 
         $valorDespues = $Despues.$columna
         $valorAntes   = $Antes.$columna

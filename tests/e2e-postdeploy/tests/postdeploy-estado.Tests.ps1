@@ -28,13 +28,18 @@ Describe "Get-EstadoDePasada" {
         Get-EstadoDePasada -Resultado $r | Should -Be "ERROR"
     }
 
-    It "runtimeStatus=Failed tras N intentos es FAIL (la orquestacion corrio y fallo de verdad)" {
+    It "runtimeStatus=Failed tras N intentos es ERROR (la orquestacion no llego a Completed; la spec no distingue por estado terminal)" {
         $r = [pscustomobject]@{ Status = "FAIL"; Reason = "runtimeStatus=Failed tras 60 intentos" }
-        Get-EstadoDePasada -Resultado $r | Should -Be "FAIL"
+        Get-EstadoDePasada -Resultado $r | Should -Be "ERROR"
     }
 
     It "una asercion de contenido incumplida es FAIL" {
         $r = [pscustomobject]@{ Status = "FAIL"; Reason = "output.DetalleEjecucion.MarkdownFuente='Layout' esperado='BaseDatos'" }
+        Get-EstadoDePasada -Resultado $r | Should -Be "FAIL"
+    }
+
+    It "runtimeStatus 'X' no observado en polling es FAIL (la orquestacion si completo; es una asercion sobre el historial)" {
+        $r = [pscustomobject]@{ Status = "FAIL"; Reason = "runtimeStatus 'Completed' no observado en polling" }
         Get-EstadoDePasada -Resultado $r | Should -Be "FAIL"
     }
 }
