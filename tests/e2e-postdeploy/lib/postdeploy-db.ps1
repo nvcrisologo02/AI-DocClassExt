@@ -86,13 +86,14 @@ function Get-Sha256DeFichero {
     param([Parameter(Mandatory = $true)][string]$Ruta)
 
     if (-not (Test-Path -Path $Ruta)) { throw "No existe el fichero: $Ruta" }
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $stream = [System.IO.File]::OpenRead((Resolve-Path -Path $Ruta).Path)
+    $sha    = [System.Security.Cryptography.SHA256]::Create()
+    $stream = $null
     try {
+        $stream = [System.IO.File]::OpenRead((Resolve-Path -Path $Ruta).Path)
         return ([System.BitConverter]::ToString($sha.ComputeHash($stream)) -replace '-', '').ToUpperInvariant()
     }
     finally {
-        $stream.Dispose()
+        if ($null -ne $stream) { $stream.Dispose() }
         $sha.Dispose()
     }
 }
@@ -114,11 +115,12 @@ function New-MutacionSql {
 
 function Invoke-DocumentoMutacion {
     param(
-        # [object] con AllowNull en vez del tipo fuerte SqlConnection: la guarda de
-        # Sha256 de abajo debe poder probarse sin abrir conexion real, y un parametro
-        # Mandatory tipado como SqlConnection rechaza $null en el enlazado, antes de
-        # que el cuerpo de la funcion llegue a ejecutarse.
-        [Parameter(Mandatory = $true)][AllowNull()][object]$Connection,
+        # AllowNull sobre el tipo fuerte: la guarda de Sha256 de abajo debe poder
+        # probarse sin abrir conexion real, y un parametro Mandatory sin AllowNull
+        # rechaza $null en el enlazado antes de que el cuerpo de la funcion se
+        # ejecute. AllowNull permite pasar $null en el test sin renunciar a que
+        # cualquier otro tipo distinto de SqlConnection siga rechazandose ahi mismo.
+        [Parameter(Mandatory = $true)][AllowNull()][System.Data.SqlClient.SqlConnection]$Connection,
         [Parameter(Mandatory = $true)][string]$Sha256,
         [hashtable]$Mutacion
     )
@@ -143,8 +145,8 @@ function Invoke-DocumentoMutacion {
 
 function Remove-DocumentoPorSha256 {
     param(
-        # [object] con AllowNull, mismo motivo que en Invoke-DocumentoMutacion.
-        [Parameter(Mandatory = $true)][AllowNull()][object]$Connection,
+        # AllowNull sobre el tipo fuerte, mismo motivo que en Invoke-DocumentoMutacion.
+        [Parameter(Mandatory = $true)][AllowNull()][System.Data.SqlClient.SqlConnection]$Connection,
         [Parameter(Mandatory = $true)][string]$Sha256
     )
 
