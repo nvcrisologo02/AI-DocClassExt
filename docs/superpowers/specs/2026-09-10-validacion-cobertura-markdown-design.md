@@ -3,7 +3,7 @@
 **Fecha:** 2026-09-10
 **Estado:** Diseño aprobado; pendiente de plan de implementación
 **Depende de:** [Política única de obtención y persistencia de markdown por cobertura de páginas](2026-09-08-markdown-cobertura-paginas-design.md) (AB#100245), integrada en `develop` en el commit de merge `07910a8`
-**Work items:** pendientes de crear. El MCP de Azure DevOps no conectó durante esta sesión (timeout de 30 s), así que los identificadores `AB#` se añaden a esta cabecera antes de empezar la implementación.
+**Work items:** elemento padre [100262](https://sareb.visualstudio.com/AI%20DocClassExt/_workitems/edit/100262), tareas 100263 a 100270. Relacionado con [100245](https://sareb.visualstudio.com/AI%20DocClassExt/_workitems/edit/100245).
 
 ## Problema
 
@@ -67,13 +67,19 @@ El acceso SQL queda así reducido a lo que de verdad lo necesita: el estado fina
 |---|---|
 | `tests/e2e-postdeploy/coverage/functional-matrix.json` | Área `MDW-*` nueva (nueve entradas). |
 | `tests/e2e-postdeploy/config/environments.sample.json` | Bloque de conexión SQL: servidor y base de datos, **sin contraseña**. |
+| `tests/e2e-postdeploy/lib/postdeploy-config.ps1` | `Get-E2EEnvironment` devuelve hoy solo `Name`, `BaseUrl`, `FunctionKey` y `HealthCheck`. Se amplía para exponer el bloque SQL. Cambio aditivo: el runner e2e no se entera. |
 | `tests/e2e-postdeploy/tools/generate_corpus.py` | Generación del documento control marcado. |
 
 ### Piezas reutilizadas sin tocar
 
 - [`tests/api-tests/documentia-e2e-common.ps1`](../../../tests/api-tests/documentia-e2e-common.ps1): construcción de la petición, espera de la orquestación y `Test-CaseAssertions`. **El vocabulario de aserciones sobre el JSON se reutiliza tal cual**; no se inventa lenguaje de aserción nuevo.
-- `lib/postdeploy-config.ps1`: lectura de `environments.json`.
 - `lib/postdeploy-report.ps1`: generación del informe y los artefactos.
+
+### Dos detalles del contrato que condicionan la implementación
+
+1. **El markdown servido está en `DetalleEjecucion.Postproceso.Markdown`**, no en la raíz de la salida: `InformacionPostproceso` cuelga de `DetalleEjecucion` ([`ContratoSalida.cs:179`](../../../src/backend/DocumentIA.Core/Models/ContratoSalida.cs#L179)). Las aserciones de marcador usan esa ruta.
+2. **`New-DocumentIARequestBody` lee las opciones del objeto de caso plano** (`$Case.classificationProvider`, `$Case.forceReprocess`, `$Case.markdown`…), no de un bloque anidado. El runner debe construir, por cada pasada, un objeto de caso sintético que combine los campos de nivel superior del caso con el `request` y las `assertions` de esa pasada. El markdown aportado por el llamante viaja en `$Case.markdown`, que acaba en `classification.markdown`.
+3. **`Invoke-DocumentIAE2ECase` solo devuelve `PASS`, `FAIL` o `SKIP`.** El estado `ERROR` lo produce el runner nuevo; no hay que esperarlo de la librería compartida.
 
 ### Frontera
 
