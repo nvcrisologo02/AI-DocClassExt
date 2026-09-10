@@ -30,10 +30,16 @@ function Get-E2EEnvironment {
     if ($null -ne ($value.PSObject.Properties['healthCheck'])) { $healthCheck = [bool]$value.healthCheck }
     $functionKey = ""
     if ($null -ne ($value.PSObject.Properties['functionKey'])) { $functionKey = [string]$value.functionKey }
+    $sqlServer = ""
+    if ($null -ne ($value.PSObject.Properties['sqlServer'])) { $sqlServer = [string]$value.sqlServer }
+    $sqlDatabase = ""
+    if ($null -ne ($value.PSObject.Properties['sqlDatabase'])) { $sqlDatabase = [string]$value.sqlDatabase }
     return [pscustomobject]@{
         Name        = $Environment
         BaseUrl     = ([string]$value.baseUrl).TrimEnd('/')
         FunctionKey = $functionKey
         HealthCheck = $healthCheck
+        SqlServer   = $sqlServer
+        SqlDatabase = $sqlDatabase
     }
 }

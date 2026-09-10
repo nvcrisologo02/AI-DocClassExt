@@ -1,5 +1,5 @@
 {
-  "dev":   { "baseUrl": "https://srbappdevdocai.azurewebsites.net", "functionKey": "", "healthCheck": true },
+  "dev":   { "baseUrl": "https://srbappdevdocai.azurewebsites.net", "functionKey": "", "healthCheck": true, "sqlServer": "srbsqldevdocai", "sqlDatabase": "DocumentIA" },
   "pro":   { "baseUrl": "https://srbappprodocai.azurewebsites.net", "functionKey": "", "healthCheck": true },
   "local": { "baseUrl": "http://localhost:7071", "functionKey": "", "healthCheck": false },
   "adoPat": ""
