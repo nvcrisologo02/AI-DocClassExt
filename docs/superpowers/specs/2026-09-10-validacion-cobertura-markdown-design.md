@@ -172,7 +172,7 @@ El borrado *previo* no es redundante: los casos de reutilización necesitan que 
 |---|---|---|
 | MDW-01 | Texto y cobertura declarada viajan juntos; la fila nunca queda con el texto de una cobertura y las columnas de otra | Escenario del defecto crítico (PDF largo con prompt libre). Una pasada de verificación pide el documento completo y su markdown debe contener `MARCA-PAGINA-12` |
 | MDW-02 | La segunda ejecución reutiliza el markdown persistido sin volver a llamar a Layout | Dos pasadas; la segunda asevera `MarkdownFuente = "BaseDatos"` |
-| MDW-03 | La cobertura nunca se degrada: pedir menos páginas no rebaja la fila | Siembra completa, pasada de tres páginas, `dbAssertions` con `noDisminuye` y `noEncoge` |
+| MDW-03 | La cobertura nunca se degrada: pedir menos páginas no rebaja la fila. Aplica con `forceReprocess: false`; con `true`, AB#100245 sobrescribe siempre por diseño (regla 4 de su spec y regla de escritura del `UPDATE`) | Siembra completa, pasada de tres páginas, `dbAssertions` con `noDisminuye` y `noEncoge` |
 | MDW-04 | El markdown aportado por el llamante no se persiste | Primera pasada con markdown aportado asevera `Fuente = "Caller"`; la segunda que no es `"BaseDatos"` |
 | MDW-05 | Los formatos que no admiten rango de páginas se declaran completos | DOCX y XLSX del corpus; asevera `MarkdownCompleto = true` |
 | MDW-06 | El recorte declara cobertura parcial, no completa | `maxPagesForClassificationOnly = 3`; contiene `MARCA-PAGINA-03`, no contiene `MARCA-PAGINA-04`, `MarkdownCompleto = false` |
