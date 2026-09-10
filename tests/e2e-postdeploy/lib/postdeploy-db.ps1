@@ -78,6 +78,72 @@ WHERE SHA256 = @sha
     finally { $lector.Close() }
 }
 
+# Lista blanca de columnas mutables. Cualquier otra se rechaza: el bloque
+# "mutacion" viene de un fichero JSON y no debe poder construir SQL arbitrario.
+$script:ColumnasMutables = @("MarkdownPaginas", "MarkdownCompleto", "OrigenMarkdown", "Paginas")
+
+function Get-Sha256DeFichero {
+    param([Parameter(Mandatory = $true)][string]$Ruta)
+
+    if (-not (Test-Path -Path $Ruta)) { throw "No existe el fichero: $Ruta" }
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.IO.File]::ReadAllBytes((Resolve-Path -Path $Ruta).Path)
+        return ([System.BitConverter]::ToString($sha.ComputeHash($bytes)) -replace '-', '').ToUpperInvariant()
+    }
+    finally { $sha.Dispose() }
+}
+
+function New-MutacionSql {
+    param([hashtable]$Mutacion)
+
+    if ($null -eq $Mutacion -or $Mutacion.Keys.Count -eq 0) { return $null }
+
+    $asignaciones = @()
+    foreach ($columna in $Mutacion.Keys) {
+        if ($script:ColumnasMutables -notcontains $columna) {
+            throw "Columna '$columna' no admitida en mutacion. Admitidas: $($script:ColumnasMutables -join ', ')"
+        }
+        $asignaciones += "$columna = @$columna"
+    }
+    return "UPDATE Documentos SET $($asignaciones -join ', ') WHERE SHA256 = @sha"
+}
+
+function Invoke-DocumentoMutacion {
+    param(
+        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlConnection]$Connection,
+        [Parameter(Mandatory = $true)][string]$Sha256,
+        [hashtable]$Mutacion
+    )
+
+    $sql = New-MutacionSql -Mutacion $Mutacion
+    if ($null -eq $sql) { return 0 }
+
+    $cmd = $Connection.CreateCommand()
+    $cmd.CommandText = $sql
+    [void]$cmd.Parameters.AddWithValue("@sha", $Sha256)
+    foreach ($columna in $Mutacion.Keys) {
+        $valor = $Mutacion[$columna]
+        if ($null -eq $valor) { $valor = [System.DBNull]::Value }
+        [void]$cmd.Parameters.AddWithValue("@$columna", $valor)
+    }
+    return $cmd.ExecuteNonQuery()
+}
+
+function Remove-DocumentoPorSha256 {
+    param(
+        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlConnection]$Connection,
+        [Parameter(Mandatory = $true)][string]$Sha256
+    )
+
+    # El borrado en cascada configurado en DocumentIADbContext arrastra
+    # Ejecuciones y sus postprocesos y validaciones.
+    $cmd = $Connection.CreateCommand()
+    $cmd.CommandText = "DELETE FROM Documentos WHERE SHA256 = @sha"
+    [void]$cmd.Parameters.AddWithValue("@sha", $Sha256)
+    return $cmd.ExecuteNonQuery()
+}
+
 function Test-DbAssertions {
     param(
         [Parameter(Mandatory = $true)][pscustomobject]$Antes,

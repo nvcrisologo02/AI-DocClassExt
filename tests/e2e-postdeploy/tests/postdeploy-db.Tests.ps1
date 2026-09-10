@@ -136,3 +136,41 @@ Describe "Test-DbAssertions" {
         $r.Errors[0] | Should -BeLike "*base de comparacion*"
     }
 }
+
+Describe "Get-Sha256DeFichero" {
+    It "calcula el hash de un fichero conocido" {
+        $tmp = Join-Path $TestDrive "muestra.txt"
+        [System.IO.File]::WriteAllText($tmp, "documentia")
+        $hash = Get-Sha256DeFichero -Ruta $tmp
+        $hash | Should -Match "^[0-9A-F]{64}$"
+    }
+    It "es estable entre llamadas" {
+        $tmp = Join-Path $TestDrive "muestra2.txt"
+        [System.IO.File]::WriteAllText($tmp, "documentia")
+        (Get-Sha256DeFichero -Ruta $tmp) | Should -Be (Get-Sha256DeFichero -Ruta $tmp)
+    }
+    It "lanza si el fichero no existe" {
+        { Get-Sha256DeFichero -Ruta (Join-Path $TestDrive "no-existe.bin") } | Should -Throw
+    }
+}
+
+Describe "New-MutacionSql" {
+    It "devuelve null cuando no hay mutacion" {
+        New-MutacionSql -Mutacion $null | Should -BeNullOrEmpty
+    }
+    It "genera un UPDATE con una columna" {
+        $sql = New-MutacionSql -Mutacion @{ MarkdownPaginas = $null }
+        $sql | Should -BeLike "UPDATE Documentos SET*MarkdownPaginas = @MarkdownPaginas*WHERE SHA256 = @sha*"
+    }
+    It "genera un UPDATE con varias columnas" {
+        $sql = New-MutacionSql -Mutacion @{ MarkdownPaginas = 3; MarkdownCompleto = $true }
+        $sql | Should -BeLike "*MarkdownPaginas = @MarkdownPaginas*"
+        $sql | Should -BeLike "*MarkdownCompleto = @MarkdownCompleto*"
+    }
+    It "rechaza una columna que no esta en la lista blanca" {
+        { New-MutacionSql -Mutacion @{ SHA256 = "x" } } | Should -Throw
+    }
+    It "rechaza intento de inyeccion en el nombre de columna" {
+        { New-MutacionSql -Mutacion @{ "MarkdownPaginas = 1; DROP TABLE Documentos --" = 1 } } | Should -Throw
+    }
+}
