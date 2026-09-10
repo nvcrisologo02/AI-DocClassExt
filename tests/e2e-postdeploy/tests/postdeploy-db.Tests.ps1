@@ -109,4 +109,30 @@ Describe "Test-DbAssertions" {
         $r.Success | Should -BeFalse
         $r.Errors[0] | Should -BeLike "*no existe*"
     }
+
+    It "esperado con valor nulo asevera que la columna quedo en nulo" {
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 12; MarkdownCompleto = $true; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $script:antes -Despues $despues -Assertions @(
+            @{ columna = "MarkdownPaginas"; esperado = $null }
+        )
+        $r.Success | Should -BeFalse
+    }
+
+    It "esperado con valor nulo pasa cuando la columna si quedo en nulo" {
+        $despues = [pscustomobject]@{ Existe = $true; MarkdownPaginas = $null; MarkdownCompleto = $true; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $script:antes -Despues $despues -Assertions @(
+            @{ columna = "MarkdownPaginas"; esperado = $null }
+        )
+        $r.Success | Should -BeTrue
+    }
+
+    It "noDisminuye sin base de comparacion no pasa en silencio" {
+        $antesNulo = [pscustomobject]@{ Existe = $true; MarkdownPaginas = $null; MarkdownCompleto = $false; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $despues   = [pscustomobject]@{ Existe = $true; MarkdownPaginas = 0; MarkdownCompleto = $false; LongitudGzip = 5000; LongitudCompressed = 6800 }
+        $r = Test-DbAssertions -Antes $antesNulo -Despues $despues -Assertions @(
+            @{ columna = "MarkdownPaginas"; noDisminuye = $true }
+        )
+        $r.Success | Should -BeFalse
+        $r.Errors[0] | Should -BeLike "*base de comparacion*"
+    }
 }

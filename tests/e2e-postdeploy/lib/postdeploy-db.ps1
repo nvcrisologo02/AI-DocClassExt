@@ -87,8 +87,20 @@ function Test-DbAssertions {
 
     # Acceso a claves opcionales sin dot-notation directa: con Set-StrictMode -Version
     # Latest (activo en este fichero desde la Tarea 1), $regla.claveQueNoExiste lanza
-    # PropertyNotFoundException en vez de devolver null. Esta funcion evita ese lanzamiento
-    # tanto para hashtables (@{...}) como para pscustomobject.
+    # PropertyNotFoundException en vez de devolver null. Estas funciones evitan ese
+    # lanzamiento tanto para hashtables (@{...}) como para pscustomobject.
+    #
+    # Se exponen presencia y valor por separado: una clave presente con valor $null
+    # (por ejemplo "esperado = $null", que asevera que la columna quedo en NULL) no es
+    # lo mismo que la clave ausente (que no asevera nada sobre esa columna).
+    function Test-ReglaTieneClave {
+        param($Regla, [string]$Nombre)
+        if ($Regla -is [System.Collections.IDictionary]) {
+            return $Regla.ContainsKey($Nombre)
+        }
+        return (@($Regla.PSObject.Properties.Name) -contains $Nombre)
+    }
+
     function Get-ValorRegla {
         param($Regla, [string]$Nombre)
         if ($Regla -is [System.Collections.IDictionary]) {
@@ -116,36 +128,47 @@ function Test-DbAssertions {
         $valorDespues = $Despues.$columna
         $valorAntes   = $Antes.$columna
 
+        $tieneEsperado    = Test-ReglaTieneClave -Regla $regla -Nombre "esperado"
+        $tieneNoDisminuye = Test-ReglaTieneClave -Regla $regla -Nombre "noDisminuye"
+        $tieneNoEncoge    = Test-ReglaTieneClave -Regla $regla -Nombre "noEncoge"
+        $tieneNoEsNulo    = Test-ReglaTieneClave -Regla $regla -Nombre "noEsNulo"
+
         $esperado    = Get-ValorRegla -Regla $regla -Nombre "esperado"
         $noDisminuye = Get-ValorRegla -Regla $regla -Nombre "noDisminuye"
         $noEncoge    = Get-ValorRegla -Regla $regla -Nombre "noEncoge"
         $noEsNulo    = Get-ValorRegla -Regla $regla -Nombre "noEsNulo"
 
-        if ($null -ne $noEsNulo -and [bool]$noEsNulo -and $null -eq $valorDespues) {
+        if ($tieneNoEsNulo -and [bool]$noEsNulo -and $null -eq $valorDespues) {
             $errores += "$columna es nulo y no deberia serlo"
             continue
         }
 
-        if ($null -ne $esperado) {
+        if ($tieneEsperado) {
             if ([string]$valorDespues -ne [string]$esperado) {
                 $errores += "$columna='$valorDespues' esperado='$esperado'"
             }
         }
 
-        if ($null -ne $noDisminuye -and [bool]$noDisminuye) {
+        if ($tieneNoDisminuye -and [bool]$noDisminuye) {
             if ($null -eq $valorDespues) {
                 $errores += "$columna paso a nulo y la regla es noDisminuye"
             }
-            elseif ($null -ne $valorAntes -and [int]$valorDespues -lt [int]$valorAntes) {
+            elseif ($null -eq $valorAntes) {
+                $errores += "no hay base de comparacion para ${columna}: el valor previo era nulo"
+            }
+            elseif ([int]$valorDespues -lt [int]$valorAntes) {
                 $errores += "$columna bajo de $valorAntes a $valorDespues"
             }
         }
 
-        if ($null -ne $noEncoge -and [bool]$noEncoge) {
+        if ($tieneNoEncoge -and [bool]$noEncoge) {
             if ($null -eq $valorDespues) {
                 $errores += "$columna paso a nulo y la regla es noEncoge"
             }
-            elseif ($null -ne $valorAntes -and [int]$valorDespues -lt [int]$valorAntes) {
+            elseif ($null -eq $valorAntes) {
+                $errores += "no hay base de comparacion para ${columna}: el valor previo era nulo"
+            }
+            elseif ([int]$valorDespues -lt [int]$valorAntes) {
                 $errores += "$columna encogio de $valorAntes a $valorDespues"
             }
         }
