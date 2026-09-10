@@ -1,0 +1,43 @@
+[
+  {
+    "caseKey": "MDW-MDW3", "group": "MDW", "id": "MDW3", "domain": "validacion",
+    "name": "Una ejecucion de 3 paginas no degrada una fila con cobertura completa",
+    "covers": ["MDW-03"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": {
+        "classificationProvider": "auto", "classificationOnly": false,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true
+      },
+      "mutacion": null,
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": true },
+        { "columna": "MarkdownPaginas", "esperado": 12 }
+      ]
+    },
+    "pasadas": [
+      {
+        "nombre": "pide solo 3 paginas",
+        "request": {
+          "classificationProvider": "gpt", "classificationOnly": true,
+          "maxPagesForClassificationOnly": 3,
+          "forceReprocess": false, "skipDuplicateCheck": true, "skipGDCUpload": true
+        },
+        "assertions": {
+          "expectedRuntimeStatus": "Completed",
+          "expectOutputPathEquals": [
+            { "path": "DetalleEjecucion.MarkdownFuente", "value": "BaseDatos" },
+            { "path": "DetalleEjecucion.MarkdownCompleto", "value": "True" }
+          ]
+        }
+      }
+    ],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": true },
+      { "columna": "MarkdownPaginas", "esperado": 12, "noDisminuye": true },
+      { "columna": "NormalizacionMarkdownGzip", "noEncoge": true },
+      { "columna": "NormalizacionMarkdownCompressed", "noEncoge": true }
+    ]
+  }
+]

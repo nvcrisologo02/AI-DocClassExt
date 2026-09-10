@@ -32,5 +32,14 @@
   { "id": "HTTP-04", "area": "Contrato HTTP", "descripcion": "400 por tipo de flag invalido (classificationOnly no booleano)" },
   { "id": "HTTP-05", "area": "Contrato HTTP", "descripcion": "400 por combinacion invalida classificationOnly + expectedType" },
   { "id": "HTTP-06", "area": "Contrato HTTP", "descripcion": "Rechazo de documento corrupto/no procesable" },
-  { "id": "GDC-01",  "area": "GDC",           "descripcion": "Subida a GDC (skipGDCUpload=false) sin error", "conditional": "gdc" }
+  { "id": "GDC-01",  "area": "GDC",           "descripcion": "Subida a GDC (skipGDCUpload=false) sin error", "conditional": "gdc" },
+  { "id": "MDW-01", "area": "Markdown", "descripcion": "Texto y cobertura declarada viajan juntos: la fila nunca queda con el texto de una cobertura y las columnas de otra" },
+  { "id": "MDW-02", "area": "Markdown", "descripcion": "La segunda ejecucion reutiliza el markdown persistido sin volver a llamar a Layout" },
+  { "id": "MDW-03", "area": "Markdown", "descripcion": "La cobertura nunca se degrada: pedir menos paginas no rebaja la fila" },
+  { "id": "MDW-04", "area": "Markdown", "descripcion": "El markdown aportado por el llamante no se persiste" },
+  { "id": "MDW-05", "area": "Markdown", "descripcion": "Los formatos que no admiten rango de paginas se declaran completos" },
+  { "id": "MDW-06", "area": "Markdown", "descripcion": "El recorte por maxPagesForClassificationOnly declara cobertura parcial, no completa" },
+  { "id": "MDW-07", "area": "Markdown", "descripcion": "Fila historica con MarkdownPaginas NULL se trata como cobertura desconocida" },
+  { "id": "MDW-08", "area": "Markdown", "descripcion": "El backfill en -WhatIf cuenta exactamente las filas que despues escribe" },
+  { "id": "MDW-09", "area": "Markdown", "descripcion": "Actualizar un documento existente no reescribe las columnas de markdown" }
 ]
