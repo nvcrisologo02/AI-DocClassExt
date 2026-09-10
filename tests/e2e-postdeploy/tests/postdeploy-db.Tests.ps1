@@ -18,4 +18,16 @@ Describe "Assert-DbServidorEsDev" {
     It "rechaza vacio" {
         { Assert-DbServidorEsDev -SqlServer "" } | Should -Throw
     }
+    It "rechaza un subdominio que suplanta el nombre de DEV" {
+        { Assert-DbServidorEsDev -SqlServer "srbsqldevdocai.attacker.com" } | Should -Throw
+    }
+    It "rechaza un sufijo anadido tras el FQDN legitimo" {
+        { Assert-DbServidorEsDev -SqlServer "srbsqldevdocai.database.windows.net.attacker.com" } | Should -Throw
+    }
+    It "acepta el nombre de DEV en mayusculas" {
+        { Assert-DbServidorEsDev -SqlServer "SRBSQLDEVDOCAI" } | Should -Not -Throw
+    }
+    It "tolera espacios alrededor del nombre" {
+        { Assert-DbServidorEsDev -SqlServer "  srbsqldevdocai  " } | Should -Not -Throw
+    }
 }

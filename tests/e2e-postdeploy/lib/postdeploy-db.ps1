@@ -11,8 +11,9 @@ function Assert-DbServidorEsDev {
     if ([string]::IsNullOrWhiteSpace($SqlServer)) {
         throw "sqlServer vacio en environments.json. Este juego de pruebas solo opera contra DEV."
     }
-    $nombre = ($SqlServer -split '\.')[0]
-    if ($nombre -ne $script:ServidorDevEsperado) {
+    $valor = $SqlServer.Trim()
+    $fqdnEsperado = "$script:ServidorDevEsperado.database.windows.net"
+    if ($valor -ne $script:ServidorDevEsperado -and $valor -ne $fqdnEsperado) {
         throw "Servidor '$SqlServer' no es el de DEV ($script:ServidorDevEsperado). Abortado: este script emite DELETE."
     }
 }
