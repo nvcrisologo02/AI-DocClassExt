@@ -158,6 +158,28 @@ def write_corrupt_pdf(path: Path) -> None:
     print(f"OK  {path}")
 
 
+def write_control_marcado(path: Path, pages: int = 12) -> None:
+    """Documento control para el juego de validacion de cobertura de markdown.
+
+    Cada pagina lleva un marcador unico y buscable (MARCA-PAGINA-NN, dos
+    digitos). Eso hace que la cobertura del markdown sea observable
+    directamente en la respuesta de la orquestacion, sin descomprimir el
+    blob ni comparar tamanos.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    c = canvas.Canvas(str(path), pagesize=A4)
+    _, height = A4
+    for page in range(1, pages + 1):
+        c.setFont("Helvetica-Bold", 24)
+        c.drawString(2 * cm, height - 3 * cm, f"MARCA-PAGINA-{page:02d}")
+        c.setFont("Helvetica", 11)
+        c.drawString(2 * cm, height - 4 * cm, f"Pagina {page} de {pages} del documento control de validacion.")
+        c.drawString(2 * cm, height - 4.6 * cm, "Contenido sintetico sin datos reales.")
+        c.showPage()
+    c.save()
+    print(f"OK  {path}")
+
+
 if __name__ == "__main__":
     write_pdf(ROOT / "nota-simple" / "nota-simple-sintetica.pdf", NOTA_SIMPLE, pages=2)
     write_pdf(ROOT / "tasacion" / "tasacion-sintetica.pdf", TASACION, pages=2)
@@ -168,4 +190,5 @@ if __name__ == "__main__":
     write_docx(ROOT / "formatos" / "comunicacion-sintetica.docx")
     write_xlsx(ROOT / "formatos" / "listado-activos-sintetico.xlsx")
     write_corrupt_pdf(ROOT / "invalidos" / "corrupto.pdf")
+    write_control_marcado(ROOT / "control" / "documento-12-paginas-marcado.pdf")
     print("Corpus generado.")
