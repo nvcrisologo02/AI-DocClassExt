@@ -73,7 +73,7 @@
     "seed": {
       "request": {
         "classificationProvider": "gpt", "classificationOnly": true, "maxPagesForClassificationOnly": 3,
-        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01,
         "prompt": { "userPromptTemplate": "Resume en una linea el contenido del documento." }
       },
       "mutacion": null,
