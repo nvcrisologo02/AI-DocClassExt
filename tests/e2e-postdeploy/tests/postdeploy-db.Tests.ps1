@@ -184,6 +184,9 @@ Describe "New-MutacionSql" {
     It "rechaza intento de inyeccion en el nombre de columna" {
         { New-MutacionSql -Mutacion @{ "MarkdownPaginas = 1; DROP TABLE Documentos --" = 1 } } | Should -Throw
     }
+    It "rechaza OrigenMarkdown porque no es columna de Documentos" {
+        { New-MutacionSql -Mutacion @{ OrigenMarkdown = "Extraccion" } } | Should -Throw
+    }
 }
 
 Describe "Guarda de Sha256 vacio o en blanco" {

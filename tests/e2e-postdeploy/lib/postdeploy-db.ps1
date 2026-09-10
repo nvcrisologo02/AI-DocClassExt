@@ -80,7 +80,7 @@ WHERE SHA256 = @sha
 
 # Lista blanca de columnas mutables. Cualquier otra se rechaza: el bloque
 # "mutacion" viene de un fichero JSON y no debe poder construir SQL arbitrario.
-$script:ColumnasMutables = @("MarkdownPaginas", "MarkdownCompleto", "OrigenMarkdown", "Paginas")
+$script:ColumnasMutables = @("MarkdownPaginas", "MarkdownCompleto", "Paginas")
 
 function Get-Sha256DeFichero {
     param([Parameter(Mandatory = $true)][string]$Ruta)

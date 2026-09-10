@@ -52,7 +52,7 @@ Describe "Esquema de casos de validacion de markdown" {
         }
     }
     It "toda mutacion usa solo columnas de la lista blanca" {
-        $permitidas = @("MarkdownPaginas", "MarkdownCompleto", "OrigenMarkdown", "Paginas")
+        $permitidas = @("MarkdownPaginas", "MarkdownCompleto", "Paginas")
         foreach ($c in $script:cases) {
             if ($null -eq $c.seed.mutacion) { continue }
             foreach ($prop in $c.seed.mutacion.PSObject.Properties) {
