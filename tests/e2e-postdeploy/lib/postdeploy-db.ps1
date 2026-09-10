@@ -38,3 +38,118 @@ function Connect-DocumentIADb {
     $cn.Open()
     return $cn
 }
+
+function Get-DocumentoSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlConnection]$Connection,
+        [Parameter(Mandatory = $true)][string]$Sha256
+    )
+
+    $sql = @"
+SELECT TOP 1
+    MarkdownPaginas,
+    CAST(MarkdownCompleto AS int)                          AS MarkdownCompleto,
+    ISNULL(DATALENGTH(NormalizacionMarkdownGzip), 0)       AS LongitudGzip,
+    ISNULL(DATALENGTH(NormalizacionMarkdownCompressed), 0) AS LongitudCompressed
+FROM Documentos
+WHERE SHA256 = @sha
+"@
+
+    $cmd = $Connection.CreateCommand()
+    $cmd.CommandText = $sql
+    [void]$cmd.Parameters.AddWithValue("@sha", $Sha256)
+    $lector = $cmd.ExecuteReader()
+    try {
+        if (-not $lector.Read()) {
+            return [pscustomobject]@{
+                Existe = $false; MarkdownPaginas = $null; MarkdownCompleto = $false
+                LongitudGzip = 0; LongitudCompressed = 0
+            }
+        }
+        $paginas = if ($lector["MarkdownPaginas"] -is [System.DBNull]) { $null } else { [int]$lector["MarkdownPaginas"] }
+        return [pscustomobject]@{
+            Existe             = $true
+            MarkdownPaginas    = $paginas
+            MarkdownCompleto   = ([int]$lector["MarkdownCompleto"] -eq 1)
+            LongitudGzip       = [int]$lector["LongitudGzip"]
+            LongitudCompressed = [int]$lector["LongitudCompressed"]
+        }
+    }
+    finally { $lector.Close() }
+}
+
+function Test-DbAssertions {
+    param(
+        [Parameter(Mandatory = $true)][pscustomobject]$Antes,
+        [Parameter(Mandatory = $true)][pscustomobject]$Despues,
+        [array]$Assertions = @()
+    )
+
+    # Acceso a claves opcionales sin dot-notation directa: con Set-StrictMode -Version
+    # Latest (activo en este fichero desde la Tarea 1), $regla.claveQueNoExiste lanza
+    # PropertyNotFoundException en vez de devolver null. Esta funcion evita ese lanzamiento
+    # tanto para hashtables (@{...}) como para pscustomobject.
+    function Get-ValorRegla {
+        param($Regla, [string]$Nombre)
+        if ($Regla -is [System.Collections.IDictionary]) {
+            if ($Regla.ContainsKey($Nombre)) { return $Regla[$Nombre] }
+            return $null
+        }
+        if (@($Regla.PSObject.Properties.Name) -contains $Nombre) { return $Regla.$Nombre }
+        return $null
+    }
+
+    $errores = @()
+
+    if (-not $Despues.Existe) {
+        return [pscustomobject]@{
+            Success = $false
+            Errors  = @("la fila no existe en Documentos al terminar las pasadas")
+        }
+    }
+
+    foreach ($regla in @($Assertions)) {
+        if ($null -eq $regla) { continue }
+        $columna = [string](Get-ValorRegla -Regla $regla -Nombre "columna")
+        if ([string]::IsNullOrWhiteSpace($columna)) { continue }
+
+        $valorDespues = $Despues.$columna
+        $valorAntes   = $Antes.$columna
+
+        $esperado    = Get-ValorRegla -Regla $regla -Nombre "esperado"
+        $noDisminuye = Get-ValorRegla -Regla $regla -Nombre "noDisminuye"
+        $noEncoge    = Get-ValorRegla -Regla $regla -Nombre "noEncoge"
+        $noEsNulo    = Get-ValorRegla -Regla $regla -Nombre "noEsNulo"
+
+        if ($null -ne $noEsNulo -and [bool]$noEsNulo -and $null -eq $valorDespues) {
+            $errores += "$columna es nulo y no deberia serlo"
+            continue
+        }
+
+        if ($null -ne $esperado) {
+            if ([string]$valorDespues -ne [string]$esperado) {
+                $errores += "$columna='$valorDespues' esperado='$esperado'"
+            }
+        }
+
+        if ($null -ne $noDisminuye -and [bool]$noDisminuye) {
+            if ($null -eq $valorDespues) {
+                $errores += "$columna paso a nulo y la regla es noDisminuye"
+            }
+            elseif ($null -ne $valorAntes -and [int]$valorDespues -lt [int]$valorAntes) {
+                $errores += "$columna bajo de $valorAntes a $valorDespues"
+            }
+        }
+
+        if ($null -ne $noEncoge -and [bool]$noEncoge) {
+            if ($null -eq $valorDespues) {
+                $errores += "$columna paso a nulo y la regla es noEncoge"
+            }
+            elseif ($null -ne $valorAntes -and [int]$valorDespues -lt [int]$valorAntes) {
+                $errores += "$columna encogio de $valorAntes a $valorDespues"
+            }
+        }
+    }
+
+    return [pscustomobject]@{ Success = ($errores.Count -eq 0); Errors = $errores }
+}
