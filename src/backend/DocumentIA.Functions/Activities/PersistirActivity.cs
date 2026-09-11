@@ -60,6 +60,15 @@ namespace DocumentIA.Functions.Activities
 
             try
             {
+                // AB#100258: una peticion servida con el contrato de otra ejecucion se
+                // registra por su propia via: no reprocesa nada, asi que no puede tocar el
+                // documento ni reescribir resultados, contrato o coste.
+                if (input.Reutilizacion is { } reutilizacion)
+                {
+                    await PersistirReutilizacionAsync(salida, submittedBy, reutilizacion);
+                    return;
+                }
+
                 var fechaExpiracionBlob = await ResolveFechaExpiracionBlobAsync(salida);
 
                 // 1. Obtener o crear documento base
@@ -399,6 +408,122 @@ namespace DocumentIA.Functions.Activities
                 _logger.LogError(ex, "Error durante la persistencia");
                 throw;
             }
+        }
+
+        /// <summary>
+        /// AB#100258: registro de una peticion servida con el contrato de otra ejecucion.
+        /// No toca Documentos (existe por definicion, y su markdown y su caducidad de blob
+        /// son del original), no escribe ResultadosProcesamiento (nadie la lee y duplicaria
+        /// los datos del original) y no escribe plugins ni validaciones (no se ejecutaron).
+        /// El contrato no se reserializa: es el del original y se consulta alli.
+        /// </summary>
+        private async Task PersistirReutilizacionAsync(
+            ContratoSalida salida, string? submittedBy, ReutilizacionInput reutilizacion)
+        {
+            var sha = !string.IsNullOrWhiteSpace(reutilizacion.Sha256)
+                ? reutilizacion.Sha256
+                : salida.Integridad.SHA256;
+
+            var documento = await _documentoRepo.GetBySHA256Async(sha);
+            if (documento is null)
+            {
+                _logger.LogError(
+                    "Reutilizacion por duplicado sin documento para SHA256 {Sha256}: no se registra la traza",
+                    sha);
+                return;
+            }
+
+            var instanceId = salida.DetalleEjecucion.InstanceId;
+            if (!string.IsNullOrWhiteSpace(instanceId))
+            {
+                // Durable no reejecuta la actividad en un replay, pero si la reintentara
+                // tras un fallo posterior al commit habria dos filas. El InstanceId es la
+                // clave natural de esta llamada.
+                var yaRegistrada = await _context.DocumentoEjecuciones
+                    .AsNoTracking()
+                    .AnyAsync(e => e.InstanceId == instanceId && e.ReutilizadaPorDuplicado);
+
+                if (yaRegistrada)
+                {
+                    _logger.LogInformation(
+                        "Reutilizacion ya registrada para InstanceId {InstanceId}: no se duplica la fila",
+                        instanceId);
+                    return;
+                }
+            }
+            else
+            {
+                // Sin InstanceId no hay clave natural para la guarda. Se inserta igual:
+                // perder la traza es peor que arriesgar un duplicado que hoy no se produce.
+                _logger.LogWarning(
+                    "Reutilizacion por duplicado sin InstanceId: se registra sin guarda de idempotencia");
+            }
+
+            var original = await _ejecucionRepo.GetByGuidAsync(reutilizacion.EjecucionOriginalGuid);
+            if (original is null)
+            {
+                _logger.LogWarning(
+                    "No se localizo la ejecucion original {GuidOriginal}: la traza se registra sin vinculo",
+                    reutilizacion.EjecucionOriginalGuid);
+            }
+
+            var ejecucion = new DocumentoEjecucionEntity
+            {
+                DocumentoId = documento.Id,
+                EjecucionGuid = Guid.NewGuid().ToString(),
+                FechaEjecucion = DateTime.UtcNow,
+                ReutilizadaPorDuplicado = true,
+                EjecucionOriginalId = original?.Id,
+
+                // Identidad de ESTA llamada.
+                InstanceId = salida.DetalleEjecucion.InstanceId,
+                OperationId = salida.DetalleEjecucion.OperationId,
+                SubmittedBy = submittedBy,
+                ClassificationOnly = salida.DetalleEjecucion.ClassificationOnly,
+                NivelClasificacion = salida.DetalleEjecucion.NivelClasificacion,
+                DuracionTotalMs = salida.DetalleEjecucion.Seguimiento?.DuracionTotalMs ?? 0,
+                ActivityTimelineJson = salida.DetalleEjecucion.Seguimiento?.Actividades is { Count: > 0 } actividades
+                    ? JsonSerializer.Serialize(actividades)
+                    : null,
+
+                // Copiado del contrato reutilizado, para que la fila sea legible sin join.
+                // El EstadoFinal es el del original a proposito: la reutilizacion de un
+                // ERROR tiene que seguir contando como error.
+                Tipologia = salida.Identificacion.Tipologia,
+                EstadoFinal = salida.Resultado.Estado,
+                ConfianzaGlobal = salida.Resultado.ConfianzaGlobal,
+                ConfianzaClasificacion = salida.DetalleEjecucion.Clasificacion.Confianza,
+                ModeloClasificacion = salida.DetalleEjecucion.Clasificacion.Modelo,
+                UseFallbackLLM = salida.DetalleEjecucion.Clasificacion.FallbackLLM,
+                IdActivo = string.IsNullOrWhiteSpace(salida.Integridad.IdActivo)
+                    ? null
+                    : salida.Integridad.IdActivo.Trim().ToUpperInvariant(),
+
+                ContratoSalidaCompletoJson = null,
+                CosteEstimado = false
+            };
+
+            await _ejecucionRepo.AddAsync(ejecucion);
+
+            await _auditoriaRepo.AddAsync(new AuditoriaEntity
+            {
+                DocumentoId = documento.Id,
+                Accion = "REUTILIZACION_DUPLICADO",
+                Nivel = "Info",
+                Mensaje = "Peticion servida reutilizando una ejecucion anterior",
+                DetallesJson = JsonSerializer.Serialize(new
+                {
+                    EjecucionGuid = ejecucion.EjecucionGuid,
+                    EjecucionOriginalGuid = reutilizacion.EjecucionOriginalGuid,
+                    InstanceId = salida.DetalleEjecucion.InstanceId
+                }),
+                FechaHora = DateTime.UtcNow
+            });
+
+            _logger.LogInformation(
+                "Reutilizacion registrada: documento {DocumentoId}, original {GuidOriginal}",
+                documento.Id,
+                reutilizacion.EjecucionOriginalGuid);
         }
 
         private int? GetTiempoMs(Dictionary<string, int> tiempos, string clave)
