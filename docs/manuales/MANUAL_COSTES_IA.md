@@ -98,6 +98,8 @@ Usa los mismos filtros que el Monitor: rango de fechas, tipología, estado, fluj
 
 Un interruptor decide si los importes incluyen las ejecuciones estimadas. Por defecto no las incluye.
 
+Las **reutilizaciones por duplicado** (AB#100258) no entran en ninguno de los importes: no gastaron IA. Se muestran aparte, como **coste evitado**: la suma del coste medido de las ejecuciones originales que se reutilizaron en el periodo. El filtro "Reutilizadas" del Monitor (*Excluir* / *Incluir* / *Solo*) permite verlas en el listado; en la cabecera de costes su importe propio es siempre cero.
+
 ---
 
 ## 4. Cómo se calcula
@@ -133,6 +135,8 @@ Del mismo modo, un consumo sin ninguna magnitud (el proveedor no devolvió uso, 
 ### 4.6 Reutilización por duplicado
 
 Una petición resuelta reutilizando una ejecución anterior no gasta IA. Su bloque llega a cero, marcado con `reutilizadaPorDuplicado`, y el coste de la ejecución original va aparte en `costeEjecucionOriginalEur`, a título informativo. Así, sumar costes sobre el histórico no cuenta dos veces el mismo gasto.
+
+Desde AB#100258 esa petición deja además su propia fila en `DocumentoEjecuciones`, con `ReutilizadaPorDuplicado = 1`, `CosteIAEur` a NULL y `EjecucionOriginalId` apuntando a la ejecución reutilizada. Los agregados de coste la excluyen por defecto, y el **coste evitado** que muestra Admin se calcula por join con la original: si aquella no tenía coste medido, o la fila de reutilización no tiene vínculo (las grabadas antes de la corrección `36dbd24`), no suma. Ver [MANUAL_DEDUPLICACION.md](MANUAL_DEDUPLICACION.md) §3.4 y §8.
 
 ---
 

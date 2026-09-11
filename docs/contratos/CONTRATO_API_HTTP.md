@@ -401,7 +401,7 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 | `PENDIENTE_REINTENTO` | La clasificación GPT se pospuso porque la cuota de Azure OpenAI quedó agotada (`429 Too Many Requests`) tras agotar los reintentos y/o con el circuito abierto. Es un estado **retriable**: el documento debe reencolarse/reprocesarse más tarde, no representa un fallo definitivo. Va acompañado de `estadoCalidad = "ERROR"`, confianzas a `0` y `mensajeError` con el detalle (p. ej. `"Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`). No debe confundirse con `NO_CLASIFICADO` (documento genuinamente no clasificable). |
 | `VALIDACION_CON_ERRORES` | Extracción completada pero alguna regla de validación no se cumplió. Los datos se devuelven. |
 | `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. Se devuelven datos con advertencia. |
-| `DUPLICADO` | El documento ya existe en la base de datos (mismo SHA256 + `classificationOnly` + `nivelClasificacion`). Se devuelve la ejecución anterior reutilizada. Ver `reutilizadaPorDuplicado = true`. |
+| `DUPLICADO` | El documento ya existe en la base de datos (mismo SHA256) y **no hay ninguna ejecución anterior reutilizable**. Cuando sí la hay, `resultado.estado` es el de aquella ejecución (normalmente `OK`), `resultado.reutilizadaPorDuplicado = true`, `resultado.mensajeReutilizacion` lo indica y `detalleEjecucion.ejecucionOriginalGuid` apunta a la ejecución cuyo contrato se devuelve (§6). Se prefiere la ejecución que coincide en `classificationOnly` + `nivelClasificacion`; sin coincidencia exacta, la última con contrato. |
 | `ERROR` | Error irrecuperable durante el procesamiento (clasificación fallida, excepción no controlada). Consultar `mensajeError`. |
 
 > **Ejemplo — `PENDIENTE_REINTENTO`** (extracto de `resultado`):
@@ -447,8 +447,9 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 
 | Campo | Descripción |
 |---|---|
-| `detalleEjecucion.instanceId` | ID de la instancia de orquestación Durable Functions. Permite hacer polling de estado y localizar la ejecución en Azure Portal. |
-| `detalleEjecucion.operationId` | `operation_Id` de Application Insights (W3C TraceId). Usar en KQL: `union traces,requests,exceptions \| where operation_Id == "<operationId>"` para obtener la traza completa. |
+| `detalleEjecucion.instanceId` | ID de la instancia de orquestación Durable Functions. Permite hacer polling de estado y localizar la ejecución en Azure Portal. Desde AB#100258 es siempre el de **esta** llamada, también cuando la respuesta se sirve reutilizando otra ejecución (antes llegaba el de la orquestación histórica y no coincidía con el `instanceId` devuelto al arrancar). |
+| `detalleEjecucion.operationId` | `operation_Id` de Application Insights (W3C TraceId). Usar en KQL: `union traces,requests,exceptions \| where operation_Id == "<operationId>"` para obtener la traza completa. Ídem: el de esta llamada, también en respuestas reutilizadas. |
+| `detalleEjecucion.ejecucionOriginalGuid` | **Solo en respuestas reutilizadas** (`resultado.reutilizadaPorDuplicado = true`): `EjecucionGuid` de la ejecución cuyo contrato se devuelve. En una ejecución normal es `null` y **se omite del JSON**. Es el identificador con el que localizar la ejecución original en el Monitor de Admin (AB#100258). |
 | `detalleEjecucion.classificationOnly` | Refleja el valor de `instrucciones.classificationOnly` de la petición original. |
 | `detalleEjecucion.nivelClasificacion` | Nivel de clasificación usado en la petición (`"TDN1"`, `"TDN1/TDN2"` o `null`). Forma parte de la clave de deduplicación cuando se informa. |
 | `detalleEjecucion.runTipologia` | Clave de tipología usada en la ejecución. |
@@ -615,7 +616,8 @@ $status.output.resultado
 - El documento puede enviarse en Base64 (RFC 4648, sin saltos de línea) o por referencia `objectIdGDC`.
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
-- Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización exige compatibilidad por `hash + classificationOnly`.
+- Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización prefiere la ejecución compatible por `hash + classificationOnly + nivelClasificacion` y, si no la hay, la última con contrato.
+- **Toda petición servida por reutilización queda registrada** (AB#100258) como una ejecución propia en la base de datos, sin contrato ni coste, vinculada a la original y visible en el Monitor de Admin. Para el llamador el cambio es **aditivo**: el único campo nuevo (`detalleEjecucion.ejecucionOriginalGuid`) solo aparece en respuestas reutilizadas, y lo único que cambia de valor es `detalleEjecucion.instanceId` / `operationId` en esas respuestas, que pasan a ser los de la llamada actual. `statusQueryUri`, los estados y el resto del contrato no cambian. Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
 - Si `skipGDCUpload=true` (o se fuerza automáticamente por entrada `objectIdGDC`), el paso GDC finaliza como `Skipped` y se reporta como exitoso (`detalleEjecucion.gdc.exitoso=true`).
 - Si se envía `instrucciones.prompt`, la validación ocurre en el trigger HTTP (respuesta `400` inmediata si inválido). No es necesario esperar al resultado de la orquestación para detectar errores de prompt.
 - En `classificationOnly=true`, `Integrar` solo se ejecuta con `executeIntegrarWhenClassificationOnly=true` y `trazabilidad.idActivo` informado.

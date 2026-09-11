@@ -86,7 +86,8 @@ Estados habituales y accion recomendada:
 | `OK` | Documento procesado correctamente | Continuar flujo normal |
 | `VALIDACION_CON_ERRORES` | Se extrajeron datos pero hay inconsistencias | Revisar campos marcados y corregir/confirmar |
 | `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
-| `DUPLICADO` | El documento ya habia sido procesado | Usar resultado existente o seguir criterio de negocio |
+| `DUPLICADO` | El documento ya habia sido procesado y no hay ningun resultado anterior reutilizable | Usar resultado existente o seguir criterio de negocio |
+| _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
 | `SIN_CONTENIDO_DOCUMENTO` | Se pidio un resumen o un prompt pero no se pudo leer el documento | Comprobar que el documento no esta corrupto ni es un escaneado sin texto. Si es legible, escalar: puede ser una incidencia del servicio de extraccion |
 | `ERROR` | El procesamiento no pudo completarse | Reintentar y, si persiste, escalar a soporte |
 
@@ -116,8 +117,8 @@ Regla simple para usuario:
 - Accion: solicitar documento mas legible o revisar manualmente.
 
 #### Caso 3: Documento repetido
-- Resultado: `DUPLICADO`.
-- Accion: usar resultado previo segun norma interna.
+- Resultado: el de la primera vez que se proceso (normalmente `OK`), marcado con `reutilizadaPorDuplicado = true`. Solo llega `DUPLICADO` si no habia ningun resultado anterior que devolver.
+- Accion: usar resultado previo segun norma interna. La peticion repetida queda registrada en el Monitor como "Reutilizada", asi que operacion puede ver cuantas veces se ha reenviado un mismo documento.
 
 #### Caso 4: Falla de proceso
 - Resultado: `ERROR`.
@@ -504,6 +505,9 @@ En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el 
 | `.reutilizadaPorDuplicado` | bool | `true` si se reutilizo resultado anterior |
 | `.mensajeReutilizacion` | string? | Mensaje si fue reutilizado |
 | **detalleEjecucion** | | |
+| `.instanceId` | string | Identificador de la orquestacion de **esta** llamada, tambien cuando la respuesta se sirve reutilizando otra ejecucion (desde AB#100258; antes llegaba el de la orquestacion historica) |
+| `.operationId` | string | `operation_Id` de Application Insights de esta llamada |
+| `.ejecucionOriginalGuid` | string? | Solo en respuestas reutilizadas: `EjecucionGuid` de la ejecucion cuyo contrato se devuelve. En una ejecucion normal se omite del JSON. Ver [MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md) |
 | `.clasificacion` | object | Detalles de clasificacion (modelo, confianzas, fallback) |
 | `.extraccion` | object | Detalles de extraccion (modelo, confianza por campo, fallback) |
 | `.postproceso` | object | Normalizaciones, validaciones, inconsistencias, confianza validacion |
@@ -699,7 +703,7 @@ Detalles del backfill:
 | `OK` | Procesamiento completo, datos fiables | Consumir datos normalmente |
 | `VALIDACION_CON_ERRORES` | Extraccion OK pero validacion detecto errores | Revisar `postproceso.inconsistencias`. Datos pueden requerir correccion manual. |
 | `BAJA_CONFIANZA_CLASIFICACION` | IA no pudo clasificar con confianza suficiente | Verificar documento manualmente. Posible documento no soportado. |
-| `DUPLICADO` | Documento ya procesado (SHA256 identico) | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
+| `DUPLICADO` | Documento ya procesado (SHA256 identico) **sin ninguna ejecucion anterior reutilizable**. Cuando si la hay, el estado es el de aquella ejecucion con `resultado.reutilizadaPorDuplicado = true` y `detalleEjecucion.ejecucionOriginalGuid` informado | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
 | `NO_CLASIFICADO` | No se identifico la tipologia del documento | Revisar el documento; si el tipo es conocido, reenviar con `expectedType`. Si la peticion pedia prompt o resumen, estos si vienen informados en `datosExtraidos`. |
 | `SIN_CONTENIDO_DOCUMENTO` | Se pidio prompt o resumen y no se obtuvo texto del documento por ninguna via | El modelo no se invoca a proposito: es preferible un fallo explicito a un resumen inventado. Ver `docs/guias/TROUBLESHOOTING_DIAGNOSTICO.md`. |
 | `PENDIENTE_REINTENTO` | Cuota de Azure OpenAI agotada durante la clasificacion | Estado retriable: reencolar el documento mas tarde. No es un fallo del documento. |
@@ -1659,6 +1663,18 @@ Pagina `/costes`. **No aparece en el menu de navegacion**: se accede por URL dir
 
 Aviso de lectura: cada entorno usa la cuenta de IA de produccion, asi que la suma de un entorno no es comparable con la factura de su grupo de recursos.
 
+### 5.9.8 Reutilizaciones por duplicado en el Monitor
+
+Desde AB#100258, cada peticion que el sistema resuelve devolviendo el resultado de una ejecucion anterior (deduplicacion por SHA256) queda registrada como una fila propia, y el Monitor (`/monitor`) la distingue:
+
+- **Por defecto no se muestran** ni cuentan: quedan fuera del listado, de los KPIs, del histograma, de la matriz y de la seccion de costes, porque no son ejecuciones de IA. Las cifras que el Monitor mostraba antes no cambian.
+- **Filtro "Reutilizadas"** con tres valores: *Excluir* (por defecto), *Incluir* y *Solo reutilizadas*.
+- En el listado llevan el **badge "Reutilizada"**, y el boton del contrato JSON esta deshabilitado en esas filas con el texto "el contrato es el de la ejecucion #X", con enlace a la original.
+- En el **detalle** de una reutilizacion aparece el banner "Servida reutilizando la ejecucion #X del <fecha>", ademas de sus datos propios (fecha, solicitante, `InstanceId`, `OperationId`, duracion real). En el detalle de la original, el bloque "Reutilizada N veces" lista las peticiones que la aprovecharon.
+- Dos **KPIs** nuevos sobre la misma ventana: *peticiones servidas por reutilizacion* y *coste evitado* (suma del coste medido de las ejecuciones originales reutilizadas).
+
+Detalle completo del mecanismo en [MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md).
+
 ---
 
 ## 5.10 Referencias
@@ -1670,3 +1686,4 @@ Aviso de lectura: cada entorno usa la cuenta de IA de produccion, asi que la sum
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API original detallado |
 | [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de calculo de confianza |
 | [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecucion: que se mide, tarifas, consulta y relleno retroactivo |
+| [MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md) | Deduplicacion por SHA256: flags, reutilizacion de ejecuciones, traza de las reutilizaciones y su visibilidad en el Monitor |
