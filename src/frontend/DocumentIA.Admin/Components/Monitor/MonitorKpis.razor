@@ -39,6 +39,15 @@
             <div class="h3 mb-0">@Duracion()</div>
         </div></div>
     </div>
+    @* AB#100258: en valor absoluto y no en porcentaje. No son parte de
+       TotalEjecuciones, asi que un porcentaje sobre el no significaria nada. *@
+    <div class="col-6 col-lg-2">
+        <div class="card h-100"><div class="card-body text-center">
+            <div class="text-muted small">Reutilizadas</div>
+            <div class="h3 mb-0">@(Agregados?.Reutilizadas ?? 0)</div>
+            <div class="text-muted small">@CosteEvitado()</div>
+        </div></div>
+    </div>
 </div>
 
 @code {
@@ -57,5 +66,16 @@
         var ms = Agregados?.DuracionMediaMs ?? 0;
         if (ms <= 0) return "—";
         return ms >= 1000 ? $"{Math.Round(ms / 1000.0, 1)} s" : $"{Math.Round(ms)} ms";
+    }
+
+    // Solo se muestra si hay algo que mostrar: si las originales no tenian coste
+    // medido, el ahorro calculado es cero y un "0,00 €" induciria a pensar que la
+    // deduplicacion no ahorra nada.
+    private string CosteEvitado()
+    {
+        var evitado = Agregados?.CosteEvitadoEur ?? 0m;
+        return evitado > 0m
+            ? $"{evitado.ToString("N2", System.Globalization.CultureInfo.GetCultureInfo("es-ES"))} € evitados"
+            : "sin reprocesar";
     }
 }
