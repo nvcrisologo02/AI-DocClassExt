@@ -117,6 +117,15 @@ public class DocumentIADbContext : DbContext
             .HasForeignKey(v => v.EjecucionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // AB#100258: auto-referencia de la reutilizacion por duplicado a la ejecucion cuyo
+        // contrato devolvio. NO ACTION porque SQL Server no admite cascada ciclica sobre la
+        // misma tabla, y porque borrar una original no debe borrar la traza de que se sirvio.
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasOne(e => e.EjecucionOriginal)
+            .WithMany()
+            .HasForeignKey(e => e.EjecucionOriginalId)
+            .OnDelete(DeleteBehavior.NoAction);
+
         // Indices para rendimiento
         modelBuilder.Entity<DocumentoEjecucionEntity>()
             .HasIndex(e => e.EjecucionGuid)
@@ -155,7 +164,12 @@ public class DocumentIADbContext : DbContext
                 e.DuracionGDCMs,
                 e.DuracionValidacionMs,
                 e.DuracionIntegracionMs,
-                e.DuracionPersistenciaMs
+                e.DuracionPersistenciaMs,
+                // AB#100258: el Monitor filtra por defecto ReutilizadaPorDuplicado = 0 y el
+                // KPI de coste evitado hace join por EjecucionOriginalId. Sin las dos aqui,
+                // ese filtro dejaria de resolverse con el indice.
+                e.ReutilizadaPorDuplicado,
+                e.EjecucionOriginalId
             });
 
         modelBuilder.Entity<PluginEjecucionEntity>()

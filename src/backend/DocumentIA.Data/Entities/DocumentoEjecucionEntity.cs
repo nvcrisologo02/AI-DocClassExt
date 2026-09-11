@@ -127,7 +127,23 @@ namespace DocumentIA.Data.Entities
 
         [Column(TypeName = "nvarchar(max)")]
         public string? AssetResolverResultJson { get; set; }
-        
+
+        /// <summary>
+        /// True cuando la fila registra una peticion servida con el contrato de otra
+        /// ejecucion (deduplicacion). No es una ejecucion de IA: no tiene contrato ni
+        /// coste propios y se excluye por defecto de los agregados (AB#100258).
+        /// </summary>
+        public bool ReutilizadaPorDuplicado { get; set; }
+
+        /// <summary>
+        /// Ejecucion cuyo contrato se devolvio. Solo informada cuando
+        /// <see cref="ReutilizadaPorDuplicado"/> es true.
+        /// </summary>
+        public int? EjecucionOriginalId { get; set; }
+
+        /// <summary>Navegacion a la ejecucion reutilizada.</summary>
+        public virtual DocumentoEjecucionEntity? EjecucionOriginal { get; set; }
+
         [ForeignKey(nameof(DocumentoId))]
         public virtual DocumentoEntity Documento { get; set; } = null!;
         
