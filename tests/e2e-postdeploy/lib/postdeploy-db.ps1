@@ -122,6 +122,101 @@ WHERE SHA256 = @sha
     finally { $lector.Close() }
 }
 
+# AB#100258: instantanea de las EJECUCIONES de un documento, no de su fila en
+# Documentos. La deduplicacion no toca Documentos (ese es justo su punto): lo que
+# hay que observar es cuantas filas de ejecucion existen, cual es la ultima y si
+# esa ultima es una reutilizacion con su vinculo al original.
+#
+# InstanceId e IdSiembra son opcionales porque no todos los casos los tienen: las
+# columnas que dependen de ellos salen a 0 / $false en vez de omitirse, para que
+# Test-DbAssertions siga rechazando por "columna desconocida" solo lo que de
+# verdad esta mal escrito en el fichero de casos.
+function Get-EjecucionesSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][System.Data.SqlClient.SqlConnection]$Connection,
+        [Parameter(Mandatory = $true)][string]$Sha256,
+        [string]$InstanceId = "",
+        [AllowNull()][object]$IdSiembra = $null
+    )
+
+    $sql = @"
+WITH Ej AS (
+    SELECT e.Id, e.InstanceId, e.EstadoFinal, e.FechaEjecucion,
+           e.ReutilizadaPorDuplicado, e.EjecucionOriginalId,
+           e.ContratoSalidaCompletoJson, e.CosteIAEur
+    FROM dbo.DocumentoEjecuciones e
+    INNER JOIN dbo.Documentos d ON d.Id = e.DocumentoId
+    WHERE d.SHA256 = @sha
+)
+SELECT
+    (SELECT COUNT(*) FROM Ej)                                   AS Total,
+    (SELECT COUNT(*) FROM Ej WHERE ReutilizadaPorDuplicado = 1)  AS Reutilizadas,
+    (SELECT COUNT(*) FROM Ej WHERE ReutilizadaPorDuplicado = 0)  AS Propias,
+    (SELECT COUNT(*) FROM Ej
+      WHERE @instanceId IS NOT NULL AND InstanceId = @instanceId) AS FilasConInstanceIdPasada,
+    (SELECT COUNT(*) FROM Ej
+      WHERE @instanceId IS NOT NULL AND InstanceId = @instanceId
+        AND ReutilizadaPorDuplicado = 1)                         AS ReutilizadasConInstanceIdPasada,
+    u.Id                                                         AS UltimaId,
+    u.InstanceId                                                 AS UltimaInstanceId,
+    u.EstadoFinal                                                AS UltimaEstadoFinal,
+    CAST(u.ReutilizadaPorDuplicado AS int)                       AS UltimaReutilizadaInt,
+    u.EjecucionOriginalId                                        AS UltimaEjecucionOriginalId,
+    CASE WHEN u.ContratoSalidaCompletoJson IS NULL THEN 0 ELSE 1 END AS UltimaTieneContratoInt,
+    CASE WHEN u.CosteIAEur IS NULL THEN 1 ELSE 0 END             AS UltimaCosteEsNuloInt
+FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
+"@
+
+    $vacia = [pscustomobject]@{
+        Existe = $false; Total = 0; Reutilizadas = 0; Propias = 0
+        FilasConInstanceIdPasada = 0; ReutilizadasConInstanceIdPasada = 0
+        UltimaId = $null; UltimaInstanceId = $null; UltimaEstadoFinal = $null
+        UltimaReutilizada = $false; UltimaEjecucionOriginalId = $null
+        UltimaTieneContrato = $false; UltimaCosteEsNulo = $false
+        UltimaApuntaASiembra = $false
+    }
+
+    $cmd = $Connection.CreateCommand()
+    $cmd.CommandText = $sql
+    [void]$cmd.Parameters.AddWithValue("@sha", $Sha256)
+    $valorInstancia = if ([string]::IsNullOrWhiteSpace($InstanceId)) { [System.DBNull]::Value } else { $InstanceId }
+    [void]$cmd.Parameters.AddWithValue("@instanceId", $valorInstancia)
+
+    $lector = $cmd.ExecuteReader()
+    try {
+        if (-not $lector.Read()) { return $vacia }
+
+        $originalId = if ($lector["UltimaEjecucionOriginalId"] -is [System.DBNull]) { $null } else { [int]$lector["UltimaEjecucionOriginalId"] }
+        $instanciaUltima = if ($lector["UltimaInstanceId"] -is [System.DBNull]) { $null } else { [string]$lector["UltimaInstanceId"] }
+
+        # El vinculo se compara aqui y no en SQL: IdSiembra lo conoce el runner (es
+        # el Id que dejo la siembra), no la base de datos. Sin siembra conocida la
+        # columna vale $false, que es lo unico honesto que se puede afirmar.
+        $apuntaASiembra = $false
+        if ($null -ne $IdSiembra -and $null -ne $originalId) {
+            $apuntaASiembra = ([int]$IdSiembra -eq $originalId)
+        }
+
+        return [pscustomobject]@{
+            Existe                          = $true
+            Total                           = [int]$lector["Total"]
+            Reutilizadas                    = [int]$lector["Reutilizadas"]
+            Propias                         = [int]$lector["Propias"]
+            FilasConInstanceIdPasada        = [int]$lector["FilasConInstanceIdPasada"]
+            ReutilizadasConInstanceIdPasada = [int]$lector["ReutilizadasConInstanceIdPasada"]
+            UltimaId                        = [int]$lector["UltimaId"]
+            UltimaInstanceId                = $instanciaUltima
+            UltimaEstadoFinal               = [string]$lector["UltimaEstadoFinal"]
+            UltimaReutilizada               = ([int]$lector["UltimaReutilizadaInt"] -eq 1)
+            UltimaEjecucionOriginalId       = $originalId
+            UltimaTieneContrato             = ([int]$lector["UltimaTieneContratoInt"] -eq 1)
+            UltimaCosteEsNulo               = ([int]$lector["UltimaCosteEsNuloInt"] -eq 1)
+            UltimaApuntaASiembra            = $apuntaASiembra
+        }
+    }
+    finally { $lector.Close() }
+}
+
 # Lista blanca de columnas mutables. Cualquier otra se rechaza: el bloque
 # "mutacion" viene de un fichero JSON y no debe poder construir SQL arbitrario.
 $script:ColumnasMutables = @("MarkdownPaginas", "MarkdownCompleto", "Paginas")

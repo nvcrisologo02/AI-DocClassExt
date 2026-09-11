@@ -42,9 +42,11 @@ Describe "Esquema de casos e2e-postdeploy" {
     }
     It "los items de matriz sin caso son solo los documentados" {
         $covered = @($script:allCases | ForEach-Object { @($_.covers) } | Sort-Object -Unique)
-        # El area Markdown se excluye aqui: sus casos viven en cases-validacion/,
-        # no en cases/, y los valida un runner propio (ver cases-validacion-schema.Tests.ps1).
-        $sinCaso = @($script:matrix | Where-Object { $covered -notcontains $_.id -and $_.area -ne "Markdown" } | ForEach-Object { $_.id })
+        # Las areas Markdown y Dedup se excluyen aqui: sus casos viven en
+        # cases-validacion/, no en cases/, y los valida un runner propio
+        # (ver cases-validacion-schema.Tests.ps1 y cases-validacion-dedup-schema.Tests.ps1).
+        $areasDeValidacion = @("Markdown", "Dedup")
+        $sinCaso = @($script:matrix | Where-Object { $covered -notcontains $_.id -and $areasDeValidacion -notcontains $_.area } | ForEach-Object { $_.id })
         # PIP-06 sin caso por diseno (requiere tipologia limitada); OPS-01 lo
         # cubre el pseudo-caso de health del runner. EXT-04 (modelo de
         # extraccion alternativo por request) se retiro de la matriz: la

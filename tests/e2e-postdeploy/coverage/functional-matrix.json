@@ -41,5 +41,10 @@
   { "id": "MDW-06", "area": "Markdown", "descripcion": "El recorte por maxPagesForClassificationOnly declara cobertura parcial, no completa" },
   { "id": "MDW-07", "area": "Markdown", "descripcion": "Fila historica con MarkdownPaginas NULL se trata como cobertura desconocida" },
   { "id": "MDW-08", "area": "Markdown", "descripcion": "El backfill marca completo solo los origenes que garantizan documento entero y no toca MarkdownPrevio ni Extraccion" },
-  { "id": "MDW-09", "area": "Markdown", "descripcion": "Actualizar un documento existente no reescribe las columnas de markdown" }
+  { "id": "MDW-09", "area": "Markdown", "descripcion": "Actualizar un documento existente no reescribe las columnas de markdown" },
+  { "id": "DUP-01", "area": "Dedup", "descripcion": "Una ejecucion real deja una fila propia, con contrato y sin vinculo a ninguna otra" },
+  { "id": "DUP-02", "area": "Dedup", "descripcion": "La peticion repetida se sirve por duplicado y deja su propia fila, sin contrato ni coste, vinculada a la ejecucion original" },
+  { "id": "DUP-03", "area": "Dedup", "descripcion": "forceReprocess vuelve a ejecutar de verdad: la fila nueva no se marca como reutilizacion" },
+  { "id": "DUP-04", "area": "Dedup", "descripcion": "Una reutilizacion no mueve el total de ejecuciones, ni la calidad, ni el coste del periodo: solo el contador de reutilizadas" },
+  { "id": "DUP-05", "area": "Dedup", "descripcion": "La fila de reutilizacion lleva el InstanceId de la peticion que la provoco y se registra una sola vez" }
 ]

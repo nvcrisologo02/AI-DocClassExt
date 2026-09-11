@@ -61,10 +61,11 @@ if ([string]::IsNullOrWhiteSpace($envConfig.SqlServer) -or [string]::IsNullOrWhi
     Write-Host "[CONFIG] falta sqlServer o sqlDatabase para '$Environment' en environments.json" -ForegroundColor Red; exit 2
 }
 
-$casesDir = Join-Path $scriptRoot "cases-validacion"
-$cases = @(Get-ChildItem -Path $casesDir -Filter "*-cases.json" | ForEach-Object {
-    Get-Content -Raw -Path $_.FullName | ConvertFrom-Json
-} | ForEach-Object { $_ })
+# Solo el fichero de markdown. Antes se cargaba "*-cases.json" del directorio, y al
+# aparecer un segundo juego de validacion (dedup, AB#100258) ese glob habria metido
+# sus casos en este run: otro dominio, otras columnas y otra matriz de cobertura.
+$casesPath = Join-Path $scriptRoot "cases-validacion" "markdown-cases.json"
+$cases = @(Get-Content -Raw -Path $casesPath | ConvertFrom-Json)
 
 foreach ($case in $cases) {
     $case.documentPath = Join-Path $repoRoot $case.documentPath

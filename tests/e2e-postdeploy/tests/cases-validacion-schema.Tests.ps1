@@ -3,9 +3,10 @@
     $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".." ".." "..")).Path
     $script:casesDir = Join-Path $PSScriptRoot ".." "cases-validacion"
     $script:matrix   = Get-E2ECoverageMatrix -MatrixPath (Join-Path $PSScriptRoot ".." "coverage" "functional-matrix.json")
-    $script:cases    = @(Get-ChildItem $script:casesDir -Filter "*-cases.json" | ForEach-Object {
-        Get-Content -Raw $_.FullName | ConvertFrom-Json
-    } | ForEach-Object { $_ })
+    # Solo markdown-cases.json: este fichero describe el esquema del juego de markdown
+    # (submittedBy propio, covers contra MDW, columnas de Get-DocumentoSnapshot). El
+    # juego de dedup tiene su propio esquema y su propio fichero de tests.
+    $script:cases    = @(Get-Content -Raw (Join-Path $script:casesDir "markdown-cases.json") | ConvertFrom-Json)
 }
 
 Describe "Esquema de casos de validacion de markdown" {

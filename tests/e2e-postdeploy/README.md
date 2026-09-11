@@ -97,9 +97,11 @@ una precondición, ejecuta una o más pasadas en orden y asevera sobre el estado
 final de la fila en `Documentos` (no solo sobre la respuesta HTTP). Limpia la
 fila antes y después de cada caso por SHA256.
 
-Casos en `cases-validacion/*-cases.json` (formato propio, distinto del de
-`cases/`: bloques `seed`/`pasadas`/`dbAssertions`, no `profiles`/`assertions`
-planos).
+Casos en `cases-validacion/markdown-cases.json` (formato propio, distinto del
+de `cases/`: bloques `seed`/`pasadas`/`dbAssertions`, no `profiles`/`assertions`
+planos). Cada runner de validación carga **solo su fichero**, no un glob del
+directorio: `dedup-cases.json` (sección siguiente) convive ahí con otro
+esquema, otras columnas y otra área de la matriz.
 
 Tres modos de invocación:
 
@@ -165,6 +167,54 @@ filas ya marcadas. (b) No ejecutar este juego en paralelo con
 `run-e2e-postdeploy.ps1`: los casos `MDW-04`, `MDW-05A`, `MDW-05B`, `MDW-08B` y
 `MDW-08C` usan documentos del corpus compartido, y la limpieza por SHA256 de
 uno de los dos runners borraría filas que el otro está usando.
+
+## Validación de la reutilización por duplicado (run-validacion-dedup.ps1)
+
+Juego de pruebas aparte para las invariantes DUP-01..DUP-05 (`Area: Dedup` de
+`coverage/functional-matrix.json`), introducidas en AB#100258: una petición
+repetida de un documento ya procesado se sirve con el contrato de otra
+ejecución **y deja su propia fila** en `DocumentoEjecuciones`, marcada con
+`ReutilizadaPorDuplicado = 1`, sin contrato ni coste propios y vinculada a la
+original por `EjecucionOriginalId`.
+
+Misma mecánica que el juego de markdown (siembra → pasadas → aserciones →
+limpieza por SHA256, mismos parámetros `-Environment`, `-WhatIf`,
+`-SoloLimpieza`, `-CaseKey`, mismas barreras de solo-DEV) con dos diferencias:
+
+- Asevera sobre las **filas de ejecución** del documento, no sobre `Documentos`:
+  la deduplicación no toca esa fila, así que no hay nada que observar en ella.
+  La instantánea (`Get-EjecucionesSnapshot` en `lib/postdeploy-db.ps1`) expone
+  totales (`Total`, `Propias`, `Reutilizadas`), la última fila (`UltimaReutilizada`,
+  `UltimaTieneContrato`, `UltimaCosteEsNulo`, `UltimaEjecucionOriginalId`,
+  `UltimaApuntaASiembra`, que compara con el Id que dejó la siembra) y el
+  recuento por `InstanceId` de la última pasada (`FilasConInstanceIdPasada`,
+  `ReutilizadasConInstanceIdPasada`).
+- El caso de tipo `agregados` (DUP-04) lee además `management/ejecuciones/agregados`
+  y `management/ejecuciones/costes` antes y después de la pasada, sobre la
+  misma ventana temporal, y asevera **deltas** (`apiAssertions`: `totalEjecuciones`,
+  `ok` y `costeTotalEur` en 0; `reutilizadas` en +1). Es la prueba de que una
+  reutilización no infla los KPIs del Monitor.
+
+Casos en `cases-validacion/dedup-cases.json`; su esquema lo valida
+`tests/cases-validacion-dedup-schema.Tests.ps1`, que además impide que ningún
+request lleve `skipDuplicateCheck = true` (desactivaría justo lo que se
+demuestra) y exige `forceReprocess = true` en toda siembra (sin ejecución
+original no hay nada que reutilizar).
+
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -WhatIf
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -SoloLimpieza
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -CaseKey DUP-02,DUP-05
+
+Coste y tiempo: nueve pasadas reales por el pipeline en el juego completo (una
+siembra por caso más una pasada en DUP-02..05), todas `classificationOnly` a 3
+páginas sobre el documento de control; las pasadas de duplicado no consumen IA.
+`ERROR` en la precondición significa que la siembra no dejó exactamente una
+ejecución propia con contrato: sin original, el resultado de la pasada no
+probaría nada. No ejecutar en paralelo con `run-validacion-markdown.ps1`: ambos
+usan `documento-12-paginas-marcado.pdf` y la limpieza por SHA256 de uno borraría
+las filas del otro. DUP-04 compara agregados de una ventana de unos minutos:
+cualquier otra ejecución en DEV durante el caso lo desvía a `FAIL`.
 
 ## Test Plan espejo en ADO
 
