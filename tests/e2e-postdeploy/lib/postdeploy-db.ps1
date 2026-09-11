@@ -232,6 +232,9 @@ function New-MutacionEjecucionSql {
     }
 
     # Misma definicion de "ultima ejecucion" que el backfill: TOP 1 por FechaEjecucion DESC.
+    # AB#100258: "ultima ejecucion" significa "ultima CON CONTRATO". Una reutilizacion por
+    # duplicado es la fila mas reciente del documento pero no tiene contrato que mutar:
+    # sin este filtro la mutacion caeria sobre ella y las aserciones leerian NULL.
     return @"
 UPDATE e
 SET e.ContratoSalidaCompletoJson = $expresion
@@ -241,6 +244,7 @@ WHERE e.Id = (
     FROM dbo.DocumentoEjecuciones e2
     INNER JOIN dbo.Documentos d ON d.Id = e2.DocumentoId
     WHERE d.SHA256 = @sha
+      AND e2.ReutilizadaPorDuplicado = 0
     ORDER BY e2.FechaEjecucion DESC
 )
 "@

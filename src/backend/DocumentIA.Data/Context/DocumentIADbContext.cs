@@ -117,6 +117,25 @@ public class DocumentIADbContext : DbContext
             .HasForeignKey(v => v.EjecucionId)
             .OnDelete(DeleteBehavior.Cascade);
 
+        // AB#100258: auto-referencia de la reutilizacion por duplicado a la ejecucion cuyo
+        // contrato devolvio. NO ACTION porque SQL Server no admite cascada ciclica sobre la
+        // misma tabla, y porque borrar una original no debe borrar la traza de que se sirvio.
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasOne(e => e.EjecucionOriginal)
+            .WithMany()
+            .HasForeignKey(e => e.EjecucionOriginalId)
+            .OnDelete(DeleteBehavior.NoAction);
+
+        // AB#100258: la guarda de idempotencia del registro de reutilizaciones busca por
+        // InstanceId en cada peticion servida por duplicado. Sin indice seria un scan de la
+        // tabla entera (mas de 60k filas en PRO, con el contrato nvarchar(max) dentro) en el
+        // unico flujo cuya virtud es responder en milisegundos. Filtrado: solo cubre las
+        // filas de reutilizacion, que son las unicas que consulta.
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasIndex(e => e.InstanceId)
+            .HasDatabaseName("IX_DocumentoEjecuciones_InstanceId_Reutilizadas")
+            .HasFilter("[ReutilizadaPorDuplicado] = 1");
+
         // Indices para rendimiento
         modelBuilder.Entity<DocumentoEjecucionEntity>()
             .HasIndex(e => e.EjecucionGuid)
@@ -155,7 +174,12 @@ public class DocumentIADbContext : DbContext
                 e.DuracionGDCMs,
                 e.DuracionValidacionMs,
                 e.DuracionIntegracionMs,
-                e.DuracionPersistenciaMs
+                e.DuracionPersistenciaMs,
+                // AB#100258: el Monitor filtra por defecto ReutilizadaPorDuplicado = 0 y el
+                // KPI de coste evitado hace join por EjecucionOriginalId. Sin las dos aqui,
+                // ese filtro dejaria de resolverse con el indice.
+                e.ReutilizadaPorDuplicado,
+                e.EjecucionOriginalId
             });
 
         modelBuilder.Entity<PluginEjecucionEntity>()

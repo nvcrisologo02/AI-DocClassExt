@@ -3,6 +3,18 @@ using System;
 namespace DocumentIA.Data.Repositories
 {
     /// <summary>
+    /// Tratamiento de las filas de reutilizacion por duplicado en una consulta.
+    /// El valor por defecto (0) las excluye: una reutilizacion no es una ejecucion de IA
+    /// y contarla falsearia calidad, volumen y coste (AB#100258).
+    /// </summary>
+    public enum FiltroReutilizadas
+    {
+        Excluir = 0,
+        Incluir = 1,
+        Solo = 2
+    }
+
+    /// <summary>
     /// Recorte compartido por el listado y por los agregados. Que ambos usen el
     /// mismo tipo es lo que impide que la cabecera de KPIs y la tabla describan
     /// conjuntos distintos.
@@ -41,5 +53,24 @@ namespace DocumentIA.Data.Repositories
         /// true entran tambien. Los recuentos por origen no dependen de este flag.
         /// </summary>
         public bool IncluirEstimados { get; set; }
+
+        /// <summary>
+        /// Que hacer con las peticiones servidas por reutilizacion de duplicado. Por
+        /// defecto se excluyen, de modo que toda consulta existente conserva sus numeros
+        /// sin tener que tocarla (AB#100258).
+        /// </summary>
+        public FiltroReutilizadas Reutilizadas { get; set; } = FiltroReutilizadas.Excluir;
+
+        /// <summary>
+        /// Copia del filtro cambiando solo el tratamiento de las reutilizaciones. La usan
+        /// los KPIs que las miden aparte: sin copiar el resto de recortes describirian un
+        /// conjunto distinto del que muestra la tabla.
+        /// </summary>
+        public EjecucionFiltro ConReutilizadas(FiltroReutilizadas valor)
+        {
+            var copia = (EjecucionFiltro)MemberwiseClone();
+            copia.Reutilizadas = valor;
+            return copia;
+        }
     }
 }

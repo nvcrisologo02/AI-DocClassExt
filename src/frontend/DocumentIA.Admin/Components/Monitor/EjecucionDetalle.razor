@@ -31,6 +31,65 @@
 }
 else
 {
+    @* AB#100258: trazabilidad en los dos sentidos. En una reutilizacion, todo lo que
+       se ve debajo (tipologia, confianzas, datos) procede de la ejecucion original y
+       hay que decirlo antes de que nadie lo lea como un reproceso. En la original, las
+       veces que su contrato se volvio a servir. *@
+    @if (Detalle.Reutilizacion is { EsReutilizacion: true } reutilizacion)
+    {
+        <div class="alert alert-secondary py-2 small">
+            <div>
+                Esta petición se sirvió <strong>reutilizando</strong> una ejecución anterior: el documento
+                no se volvió a procesar, así que <strong>esta fila no tiene contrato, datos extraídos ni
+                coste propios</strong>.
+                @if (reutilizacion.OriginalGuid is not null)
+                {
+                    <text>Todo eso se consulta en la ejecución original </text>
+                    <code style="font-size:0.75rem;user-select:all">@reutilizacion.OriginalGuid</code>
+                    @if (reutilizacion.OriginalFecha is { } fechaOriginal)
+                    {
+                        <text> (@HoraEspana.Formatear(fechaOriginal, "dd/MM/yyyy HH:mm"))</text>
+                    }
+                    <text>.</text>
+                }
+                else
+                {
+                    <text>La ejecución original ya no está disponible.</text>
+                }
+            </div>
+            <dl class="row mb-0 mt-2">
+                <dt class="col-sm-2">Documento</dt>
+                <dd class="col-sm-4">@(reutilizacion.NombreDocumento ?? "—")</dd>
+                <dt class="col-sm-2">Servida</dt>
+                <dd class="col-sm-4">@HoraEspana.Formatear(reutilizacion.FechaEjecucion, "dd/MM/yyyy HH:mm:ss")</dd>
+                <dt class="col-sm-2">Solicitado por</dt>
+                <dd class="col-sm-4">@(reutilizacion.SubmittedBy ?? "—")</dd>
+                <dt class="col-sm-2">Duración</dt>
+                <dd class="col-sm-4">@reutilizacion.DuracionTotalMs ms</dd>
+                <dt class="col-sm-2">InstanceId</dt>
+                <dd class="col-sm-4"><code style="font-size:0.75rem;user-select:all">@(reutilizacion.InstanceId ?? "—")</code></dd>
+                <dt class="col-sm-2">OperationId</dt>
+                <dd class="col-sm-4"><code style="font-size:0.75rem;user-select:all">@(reutilizacion.OperationId ?? "—")</code></dd>
+            </dl>
+        </div>
+    }
+    else if (Detalle.Reutilizaciones.Count > 0)
+    {
+        <div class="alert alert-info py-2 small">
+            Su contrato se ha servido <strong>@Detalle.Reutilizaciones.Count</strong>
+            @(Detalle.Reutilizaciones.Count == 1 ? "vez más" : "veces más") sin reprocesar el documento:
+            <ul class="mb-0 mt-1">
+                @foreach (var uso in Detalle.Reutilizaciones)
+                {
+                    <li>
+                        @HoraEspana.Formatear(uso.FechaEjecucion, "dd/MM/yyyy HH:mm")
+                        — @(string.IsNullOrWhiteSpace(uso.SubmittedBy) ? "sin solicitante" : uso.SubmittedBy)
+                    </li>
+                }
+            </ul>
+        </div>
+    }
+
     <!-- Identificacion -->
     <div class="row g-3 mb-3">
         <div class="col-12">

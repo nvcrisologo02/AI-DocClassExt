@@ -33,7 +33,14 @@
                         var expandida = Expandidos.Contains(e.EjecucionGuid);
                         <tr class="@(expandida ? "table-active" : "")">
                             <td class="text-nowrap">@HoraEspana.Formatear(e.FechaEjecucion, "dd/MM/yyyy HH:mm")</td>
-                            <td class="text-truncate" style="max-width: 22rem;">@(e.NombreDocumento ?? "—")</td>
+                            <td class="text-truncate" style="max-width: 22rem;">
+                                @(e.NombreDocumento ?? "—")
+                                @if (e.ReutilizadaPorDuplicado)
+                                {
+                                    <span class="badge bg-secondary ms-2"
+                                          title="Servida reutilizando una ejecución anterior: el documento no se volvió a procesar">Reutilizada</span>
+                                }
+                            </td>
                             <td>@(e.Tipologia ?? "—")</td>
                             <td>@e.TipoFlujo</td>
                             <td><span class="badge @ClaseEstado(e.EstadoFinal)">@e.EstadoFinal</span></td>

@@ -36,6 +36,15 @@ public class EjecucionResumenDto
 
     /// <summary>True si el coste procede del relleno retroactivo.</summary>
     public bool CosteEstimado { get; set; }
+
+    /// <summary>
+    /// True si la peticion se sirvio reutilizando otra ejecucion: no se reproceso el
+    /// documento y las confianzas mostradas son las del original (AB#100258).
+    /// </summary>
+    public bool ReutilizadaPorDuplicado { get; set; }
+
+    /// <summary>Id de la ejecucion cuyo contrato se devolvio.</summary>
+    public int? EjecucionOriginalId { get; set; }
 }
 
 public class ActividadResumenDto
@@ -179,6 +188,42 @@ public class EjecucionDetalleDto
     /// <summary>Bloque de costes del contrato; nulo en ejecuciones sin el (AB#100239).</summary>
     public CostesDetalleDto? Costes { get; set; }
     public bool CosteEstimado { get; set; }
+
+    /// <summary>True si esta fila registra una peticion servida por reutilizacion (AB#100258).</summary>
+    public bool ReutilizadaPorDuplicado { get; set; }
+
+    /// <summary>Hacia la ejecucion que produjo el contenido; nulo si esta no es una reutilizacion.</summary>
+    public ReutilizacionDetalleDto? Reutilizacion { get; set; }
+
+    /// <summary>Desde la ejecucion original: las veces que se sirvio su contrato.</summary>
+    public List<ReutilizacionUsoDto> Reutilizaciones { get; set; } = [];
+}
+
+/// <summary>
+/// Enlace de una reutilizacion con la ejecucion cuyo contrato devolvio, mas lo unico
+/// que es suyo: la fila no tiene contrato, asi que el resto del detalle viene vacio.
+/// </summary>
+public class ReutilizacionDetalleDto
+{
+    public bool EsReutilizacion { get; set; }
+    public int? OriginalId { get; set; }
+    public string? OriginalGuid { get; set; }
+    public DateTime? OriginalFecha { get; set; }
+
+    public DateTime FechaEjecucion { get; set; }
+    public string? InstanceId { get; set; }
+    public string? OperationId { get; set; }
+    public int DuracionTotalMs { get; set; }
+    public string? SubmittedBy { get; set; }
+    public string? NombreDocumento { get; set; }
+}
+
+/// <summary>Una de las veces que se sirvio el contrato de una ejecucion.</summary>
+public class ReutilizacionUsoDto
+{
+    public string EjecucionGuid { get; set; } = string.Empty;
+    public DateTime FechaEjecucion { get; set; }
+    public string? SubmittedBy { get; set; }
 }
 
 public class CostesDetalleDto
@@ -301,6 +346,11 @@ public class DashboardAgregadosDto
     public List<AgregadoGrupoDto> PorEstadoProceso { get; set; } = [];
     public List<MatrizCeldaDto> Matriz { get; set; } = [];
     public List<HistogramaBinDto> Histograma { get; set; } = [];
+
+    // Reutilizaciones por duplicado (AB#100258). Van aparte de TotalEjecuciones: no
+    // son ejecuciones de IA, asi que ni cuentan ni pagan.
+    public int Reutilizadas { get; set; }
+    public decimal CosteEvitadoEur { get; set; }
 }
 
 public class SeriePuntoDto
@@ -352,6 +402,13 @@ public class MonitorFiltroDto
     /// <summary>Solo lo lee la seccion de costes: suma tambien lo estimado por el relleno.</summary>
     public bool IncluirEstimados { get; set; }
 
+    /// <summary>
+    /// Que hacer con las peticiones servidas por reutilizacion: null o vacio las excluye
+    /// (lo que ha visto siempre el Monitor), "incluir" las mezcla y "solo" deja unicamente
+    /// esas (AB#100258).
+    /// </summary>
+    public string? Reutilizadas { get; set; }
+
     public string ToQueryString()
     {
         var hasta = DateTime.UtcNow;
@@ -373,6 +430,7 @@ public class MonitorFiltroDto
         if (ConfianzaMin is { } min) partes.Add($"confmin={min.ToString(CultureInfo.InvariantCulture)}");
         if (ConfianzaMax is { } max) partes.Add($"confmax={max.ToString(CultureInfo.InvariantCulture)}");
         if (IncluirEstimados) partes.Add("incluirestimados=true");
+        if (!string.IsNullOrWhiteSpace(Reutilizadas)) partes.Add($"reutilizadas={Uri.EscapeDataString(Reutilizadas)}");
         return string.Join("&", partes);
     }
 

@@ -501,6 +501,132 @@ public class DocumentProcessOrchestratorTests
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
     }
 
+    // AB#100258: la reutilizacion deja traza propia. Sin esto la peticion no existe para
+    // el Monitor, que solo lee lo que escribe PersistirActivity.
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoReutilizado_PersistLaTrazaConElGuidDelOriginal()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        {
+            Identificacion = new Identificacion { Guid = "guid-contrato-original", Tipologia = "inli.13" },
+            Resultado = new ResultadoFinal { Estado = "OK" },
+            DetalleEjecucion = new DetalleEjecucion { InstanceId = "instancia-vieja", OperationId = "operacion-vieja" }
+        });
+
+        await orchestrator.RunOrchestrator(context);
+
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistido.Should().NotBeNull();
+        persistido!.Reutilizacion.Should().NotBeNull();
+        persistido.Reutilizacion!.EjecucionOriginalGuid.Should().Be("guid-contrato-original");
+        persistido.Reutilizacion.Sha256.Should().NotBeNullOrWhiteSpace();
+    }
+
+    // Lo que se persiste tiene que describir ESTA llamada, no la ejecucion historica: el
+    // contrato reutilizado llega con el seguimiento y el flujo de aquella, y persistirlos
+    // tal cual grabaria duraciones y timelines ajenos sin forma de reconstruirlos despues.
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoReutilizado_PersisteElSeguimientoDeLaLlamadaNoElDelOriginal()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: true);
+        entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        {
+            Identificacion = new Identificacion { Guid = "guid-contrato-original" },
+            Resultado = new ResultadoFinal { Estado = "OK" },
+            DetalleEjecucion = new DetalleEjecucion
+            {
+                InstanceId = "instancia-vieja",
+                // Flujo y seguimiento de la ejecucion historica: extraccion completa,
+                // 18 segundos y actividades que esta llamada no ha ejecutado.
+                ClassificationOnly = false,
+                NivelClasificacion = "TDN1",
+                Seguimiento = new SeguimientoOrquestacion
+                {
+                    DuracionTotalMs = 18400,
+                    Actividades =
+                    [
+                        new TrazaActividad { Nombre = "Clasificar", Estado = "Completed", DuracionMs = 9000 },
+                        new TrazaActividad { Nombre = "Extraer", Estado = "Completed", DuracionMs = 9400 }
+                    ]
+                }
+            }
+        });
+
+        await orchestrator.RunOrchestrator(context);
+
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        var seguimientoPersistido = persistido!.Salida.DetalleEjecucion.Seguimiento;
+
+        // El timeline de esta llamada si contiene las actividades planificadas (en Pending);
+        // lo que no puede contener son las de la original ya ejecutadas, con sus tiempos.
+        seguimientoPersistido.Actividades.Should().Contain(a => a.Nombre == "Persistir");
+        seguimientoPersistido.Actividades.Should().NotContain(
+            a => a.Nombre == "Extraer" && a.Estado == "Completed",
+            "esta llamada no ha extraido nada: solo ha recuperado un contrato ya calculado");
+        seguimientoPersistido.Actividades.Should().NotContain(a => a.DuracionMs == 9400,
+            "9400 ms es el tiempo de extraccion de la ejecucion original");
+        seguimientoPersistido.DuracionTotalMs.Should().NotBe(18400,
+            "18400 ms es lo que tardo la ejecucion original, no servir esta respuesta");
+
+        persistido.Salida.DetalleEjecucion.ClassificationOnly.Should().BeTrue(
+            "es lo que pidio el cliente, aunque la ejecucion reutilizada fuese de flujo completo");
+        persistido.Salida.DetalleEjecucion.NivelClasificacion.Should().Be("TDN1_TDN2");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoReutilizado_DevuelveElInstanceIdDeLaLlamadaActual()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        {
+            Identificacion = new Identificacion { Guid = "guid-contrato-original" },
+            Resultado = new ResultadoFinal { Estado = "OK" },
+            DetalleEjecucion = new DetalleEjecucion { InstanceId = "instancia-vieja" }
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.InstanceId.Should().Be("fake-instance-001");
+        salida.DetalleEjecucion.EjecucionOriginalGuid.Should().Be("guid-contrato-original");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoReutilizado_ConservaLaRespuestaAunqueFallePersistir()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        {
+            Resultado = new ResultadoFinal { Estado = "OK" }
+        });
+        context.SetupActivityThrow("PersistirActivity", new Exception("BD caida"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        salida.DetalleEjecucion.Seguimiento.Actividades
+            .Should().Contain(a => a.Nombre == "Persistir" && a.Estado == "Failed");
+    }
+
     [Fact]
     public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoNoClasificado()
     {

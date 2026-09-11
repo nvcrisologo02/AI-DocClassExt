@@ -65,6 +65,19 @@ namespace DocumentIA.Data.Repositories
         public int CalidadRevision { get; set; }
         public int CalidadError { get; set; }
 
+        // ── Reutilizaciones por duplicado (AB#100258) ─────────────────────────
+        // Se cuentan aparte: no entran en TotalEjecuciones ni en las categorias,
+        // que excluyen reutilizaciones porque no son ejecuciones de IA.
+
+        /// <summary>Peticiones del periodo servidas reutilizando una ejecucion anterior.</summary>
+        public int Reutilizadas { get; set; }
+
+        /// <summary>
+        /// Coste de IA que esas reutilizaciones evitaron, sumando el coste medido de las
+        /// ejecuciones originales. Si la original no tenia coste medido, no suma.
+        /// </summary>
+        public decimal CosteEvitadoEur { get; set; }
+
         /// <summary>
         /// Reparto por EstadoFinal sin agrupar en categorias fijas, de modo que
         /// ningun estado quede sin contar (el recuento por las tres listas de

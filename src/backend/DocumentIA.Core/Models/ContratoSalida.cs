@@ -153,6 +153,14 @@ public class DetalleEjecucion
     /// <summary>operation_Id de Application Insights (W3C TraceId). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
     public string? OperationId { get; set; }
     /// <summary>
+    /// Cuando la respuesta se sirvio reutilizando otra ejecucion (deduplicacion), GUID del
+    /// contrato de aquella. InstanceId y OperationId son los de la llamada que responde, de
+    /// modo que este campo es el unico puente hacia la ejecucion que produjo el contenido.
+    /// Null en una ejecucion normal, y entonces se omite del JSON (AB#100258).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EjecucionOriginalGuid { get; set; }
+    /// <summary>
     /// Indica si la petición se ejecutó en modo solo clasificación.
     /// </summary>
     public bool ClassificationOnly { get; set; }

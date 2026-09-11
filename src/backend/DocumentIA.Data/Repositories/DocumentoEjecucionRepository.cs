@@ -210,8 +210,35 @@ namespace DocumentIA.Data.Repositories
 
             var histograma = await ConstruirHistogramaAsync(q, total);
 
+            // AB#100258: las reutilizaciones se miden aparte y sobre EL MISMO recorte, no
+            // solo la misma ventana: la cabecera de KPIs tiene que describir un unico
+            // conjunto. El filtro comun ya las ha dejado fuera de todo lo anterior, que es
+            // justo lo que se quiere: no son ejecuciones de IA y contarlas falsearia
+            // calidad y coste.
+            var qReutilizadas = AplicarFiltro(
+                _context.DocumentoEjecuciones.AsNoTracking(),
+                filtro.ConReutilizadas(FiltroReutilizadas.Solo));
+
+            var reutilizadas = await qReutilizadas.CountAsync();
+
+            // El coste evitado no se guarda en columna: se lee del original por join. Si
+            // aquella ejecucion no tenia coste medido, esta reutilizacion no suma nada.
+            var costeEvitado = reutilizadas == 0
+                ? 0m
+                : await qReutilizadas
+                    .Where(r => r.EjecucionOriginalId != null)
+                    .Join(
+                        _context.DocumentoEjecuciones.AsNoTracking(),
+                        r => r.EjecucionOriginalId,
+                        o => o.Id,
+                        (r, o) => o.CosteIAEur)
+                    .SumAsync(c => c ?? 0m);
+
             return new EjecucionAgregadosResult
             {
+                Reutilizadas = reutilizadas,
+                CosteEvitadoEur = costeEvitado,
+
                 CalidadOk = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Ok)?.Total ?? 0,
                 CalidadRevision = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Revision)?.Total ?? 0,
                 CalidadError = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Error)?.Total ?? 0,
@@ -290,6 +317,16 @@ namespace DocumentIA.Data.Repositories
             IQueryable<DocumentoEjecucionEntity> q, EjecucionFiltro filtro)
         {
             q = q.Where(e => e.FechaEjecucion >= filtro.Desde && e.FechaEjecucion < filtro.Hasta);
+
+            // Punto unico: el listado, los agregados, el histograma, la matriz y los costes
+            // pasan por aqui, asi que la exclusion por defecto mantiene los numeros
+            // historicos sin tocar ninguna de esas consultas (AB#100258).
+            q = filtro.Reutilizadas switch
+            {
+                FiltroReutilizadas.Solo => q.Where(e => e.ReutilizadaPorDuplicado),
+                FiltroReutilizadas.Incluir => q,
+                _ => q.Where(e => !e.ReutilizadaPorDuplicado)
+            };
 
             if (!string.IsNullOrWhiteSpace(filtro.Tipologia))
             {
@@ -424,12 +461,46 @@ namespace DocumentIA.Data.Repositories
                         ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
                     ActivityTimelineJson = e.ActivityTimelineJson,
                     CosteIAEur = e.CosteIAEur,
-                    CosteEstimado = e.CosteEstimado
+                    CosteEstimado = e.CosteEstimado,
+                    ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
+                    EjecucionOriginalId = e.EjecucionOriginalId
                 })
                 .ToListAsync();
 
             return (items, total);
         }
+
+        /// <summary>
+        /// AB#100258. Acotado: un documento reenviado en bucle puede acumular miles de
+        /// reutilizaciones y el detalle del Admin no necesita mas que las ultimas.
+        /// </summary>
+        public async Task<IReadOnlyList<EjecucionListadoItem>> GetReutilizacionesAsync(int ejecucionOriginalId)
+        {
+            return await _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .Where(e => e.EjecucionOriginalId == ejecucionOriginalId)
+                .OrderByDescending(e => e.FechaEjecucion)
+                .Take(MaxReutilizacionesEnDetalle)
+                .Select(e => new EjecucionListadoItem
+                {
+                    Id = e.Id,
+                    EjecucionGuid = e.EjecucionGuid,
+                    FechaEjecucion = e.FechaEjecucion,
+                    Tipologia = e.Tipologia,
+                    EstadoFinal = e.EstadoFinal,
+                    ClassificationOnly = e.ClassificationOnly,
+                    DuracionTotalMs = e.DuracionTotalMs,
+                    SubmittedBy = e.SubmittedBy
+                        ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
+                    NombreDocumento = e.Documento != null ? e.Documento.NombreArchivo : null,
+                    ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
+                    EjecucionOriginalId = e.EjecucionOriginalId
+                })
+                .ToListAsync();
+        }
+
+        /// <summary>Tope de reutilizaciones que se listan en el detalle de una ejecucion.</summary>
+        private const int MaxReutilizacionesEnDetalle = 20;
 
         /// <summary>
         /// Agregados de coste de IA (AB#100237). Todo sobre columnas escalares: el

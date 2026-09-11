@@ -127,6 +127,9 @@ CROSS APPLY (
     SELECT TOP 1 e.EstadoFinal, e.ContratoSalidaCompletoJson
     FROM dbo.DocumentoEjecuciones e
     WHERE e.DocumentoId = d.Id
+      -- AB#100258: "ultima ejecucion" es la ultima CON CONTRATO. Una reutilizacion por
+      -- duplicado es mas reciente pero no tiene contrato del que leer la cobertura.
+      AND e.ReutilizadaPorDuplicado = 0
     ORDER BY e.FechaEjecucion DESC
 ) u
 WHERE $casoSeguroWhere;
@@ -165,6 +168,9 @@ CROSS APPLY (
     SELECT TOP 1 e.EstadoFinal, e.ContratoSalidaCompletoJson
     FROM dbo.DocumentoEjecuciones e
     WHERE e.DocumentoId = d.Id
+      -- AB#100258: "ultima ejecucion" es la ultima CON CONTRATO. Una reutilizacion por
+      -- duplicado es mas reciente pero no tiene contrato del que leer la cobertura.
+      AND e.ReutilizadaPorDuplicado = 0
     ORDER BY e.FechaEjecucion DESC
 ) u
 WHERE d.Id > $desde AND d.Id <= $hasta

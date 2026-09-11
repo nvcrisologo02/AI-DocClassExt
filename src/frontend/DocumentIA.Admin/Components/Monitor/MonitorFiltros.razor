@@ -38,6 +38,19 @@
                 <option value="Completo">Completo</option>
             </select>
         </div>
+        @* AB#100258: por defecto se excluyen, que es el conjunto que ha descrito
+           siempre el Monitor. Una reutilizacion no reprocesa nada. *@
+        @if (MostrarReutilizaciones)
+        {
+        <div class="col-6 col-lg-2">
+            <label class="form-label small text-muted mb-1">Reutilizaciones</label>
+            <select class="form-select" value="@Filtro.Reutilizadas" @onchange="OnReutilizadasCambiado">
+                <option value="">Excluir</option>
+                <option value="incluir">Incluir</option>
+                <option value="solo">Solo reutilizaciones</option>
+            </select>
+        </div>
+        }
         <div class="col-12 col-lg-3">
             <label class="form-label small text-muted mb-1">Buscar</label>
             <input class="form-control" placeholder="GUID exacto o nombre de documento"
@@ -56,6 +69,12 @@
     [Parameter] public IReadOnlyList<string> Tipologias { get; set; } = [];
     [Parameter] public EventCallback<MonitorFiltroDto> FiltroCambiado { get; set; }
 
+    /// <summary>
+    /// La pagina de costes no sabe calcular el ahorro de las reutilizaciones, asi que
+    /// alli "Solo reutilizaciones" solo produciria un panel a cero sin explicacion.
+    /// </summary>
+    [Parameter] public bool MostrarReutilizaciones { get; set; } = true;
+
     // Cada campo con retardo tiene su propio Timer: compartir uno solo entre
     // busqueda y solicitante haria que escribir en uno cancelara el retardo
     // pendiente del otro.
@@ -71,6 +90,7 @@
     private async Task OnTipologiaCambiada(ChangeEventArgs e) => await Emitir(f => f.Tipologia = Texto(e));
     private async Task OnEstadoCambiado(ChangeEventArgs e) => await Emitir(f => f.Estado = Texto(e));
     private async Task OnFlujoCambiado(ChangeEventArgs e) => await Emitir(f => f.Flujo = Texto(e));
+    private async Task OnReutilizadasCambiado(ChangeEventArgs e) => await Emitir(f => f.Reutilizadas = Texto(e));
 
     // La busqueda se retrasa para no lanzar una consulta por pulsacion. El
     // callback del Timer corre en un hilo del pool, fuera del contexto de
