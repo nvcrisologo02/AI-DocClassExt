@@ -76,11 +76,37 @@ public class DocumentoEjecucionRepositoryReutilizadasTests
     {
         await using var context = CreateContext();
         Seed(context);
+        // Una reutilizacion con coste propio no deberia existir, pero si un dia se
+        // colara no puede inflar el importe del periodo: el filtro la deja fuera antes
+        // de sumar nada.
+        var colada = await context.DocumentoEjecuciones.SingleAsync(e => e.Id == 3);
+        colada.CosteIAEur = 99m;
+        await context.SaveChangesAsync();
+
         var repo = new DocumentoEjecucionRepository(context);
 
         var costes = await repo.GetCostesAsync(Filtro());
 
         costes.TotalEjecuciones.Should().Be(2);
+        costes.CosteTotalEur.Should().Be(0.12m, "0,05 + 0,07 de las dos ejecuciones reales");
+    }
+
+    [Fact]
+    public async Task GetAgregadosAsync_Should_MedirLasReutilizadasConElMismoRecorteQueElResto()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        // Con un filtro que la reutilizacion no cumple, el KPI tiene que quedarse a cero:
+        // la cabecera describe un unico conjunto, no uno por tarjeta.
+        var filtro = Filtro();
+        filtro.Tipologia = "OTRA";
+
+        var agregados = await repo.GetAgregadosAsync(filtro);
+
+        agregados.Reutilizadas.Should().Be(0);
+        agregados.CosteEvitadoEur.Should().Be(0m);
     }
 
     [Fact]

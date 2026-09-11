@@ -323,6 +323,22 @@ public class DocumentProcessOrchestrator
             reutilizada.DetalleEjecucion.InstanceId = context.InstanceId;
             reutilizada.DetalleEjecucion.OperationId = entrada.Trazabilidad.OperationId;
 
+            // El contrato reutilizado llega con el seguimiento de la ejecucion historica
+            // (ObtenerUltimaEjecucionDuplicadoActivity lo rehidrata desde su
+            // ActivityTimelineJson). Si se persistiera asi, la fila guardaria la duracion y
+            // el timeline de aquella ejecucion, que es justo lo contrario de lo que se
+            // quiere medir: cuanto tarda servir una respuesta reutilizada. Se sustituye por
+            // el seguimiento de esta llamada antes de persistir.
+            reutilizada.DetalleEjecucion.Seguimiento = seguimiento;
+
+            // Lo mismo con el flujo pedido: el fallback de AB#100177 puede reutilizar una
+            // ejecucion con otro ClassificationOnly o NivelClasificacion, y la fila debe
+            // describir lo que pidio el cliente, no lo que hizo la original.
+            reutilizada.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
+            reutilizada.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
+
+            // MarcarInicioActividad publica estado y, de paso, recalcula
+            // seguimiento.DuracionTotalMs, que es lo que la actividad persiste.
             MarcarInicioActividad("Persistir");
             try
             {

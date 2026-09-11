@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DocumentIA.Data.Migrations
 {
     [DbContext(typeof(DocumentIADbContext))]
-    [Migration("20260911084516_ReutilizacionPorDuplicado")]
+    [Migration("20260911093509_ReutilizacionPorDuplicado")]
     partial class ReutilizacionPorDuplicado
     {
         /// <inheritdoc />
@@ -11344,6 +11344,10 @@ namespace DocumentIA.Data.Migrations
 
                     SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("FechaEjecucion"), new[] { "EstadoFinal", "ConfianzaGlobal", "UseFallbackLLM", "Tipologia", "ModeloClasificacion", "ClassificationOnly", "DuracionTotalMs", "DocumentoId", "EjecucionGuid", "SubmittedBy", "ConfianzaClasificacion", "DuracionClasificacionMs", "DuracionExtraccionMs", "DuracionGDCMs", "DuracionValidacionMs", "DuracionIntegracionMs", "DuracionPersistenciaMs", "ReutilizadaPorDuplicado", "EjecucionOriginalId" });
 
+                    b.HasIndex("InstanceId")
+                        .HasDatabaseName("IX_DocumentoEjecuciones_InstanceId_Reutilizadas")
+                        .HasFilter("[ReutilizadaPorDuplicado] = 1");
+
                     b.HasIndex("IdActivo", "DocumentoId")
                         .HasDatabaseName("IX_DocumentoEjecuciones_IdActivo_DocumentoId");
 
@@ -11884,9 +11888,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 9, 11, 8, 45, 15, 627, DateTimeKind.Utc).AddTicks(8198),
+                            FechaCreacion = new DateTime(2026, 9, 11, 9, 35, 8, 62, DateTimeKind.Utc).AddTicks(5703),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 9, 11, 8, 45, 15, 627, DateTimeKind.Utc).AddTicks(8195),
+                            PublicadaEn = new DateTime(2026, 9, 11, 9, 35, 8, 62, DateTimeKind.Utc).AddTicks(5699),
                             PublicadaPor = "seed",
                             Version = "1.0",
                             VersionPublicada = "1.0"

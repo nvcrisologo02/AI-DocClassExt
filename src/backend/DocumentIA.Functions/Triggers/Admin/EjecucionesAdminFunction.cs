@@ -362,12 +362,22 @@ public class EjecucionesAdminFunction
                 ? await _ejecucionRepository.GetByIdAsync(originalId)
                 : null;
 
+            // La fila no tiene contrato, asi que los bloques de arriba (identificacion,
+            // integridad, resultado...) van todos a null. Lo que si es suyo son las
+            // columnas escalares de la llamada: sin ellas el detalle se quedaria en blanco
+            // y no habria forma de saber cuando se sirvio, a quien ni en cuanto tiempo.
             reutilizacion = new
             {
                 EsReutilizacion = true,
                 OriginalId = original?.Id,
                 OriginalGuid = original?.EjecucionGuid,
-                OriginalFecha = original?.FechaEjecucion
+                OriginalFecha = original?.FechaEjecucion,
+                ejecucion.FechaEjecucion,
+                ejecucion.InstanceId,
+                ejecucion.OperationId,
+                ejecucion.DuracionTotalMs,
+                SubmittedBy = ejecucion.SubmittedBy ?? ejecucion.Documento?.SubmittedBy,
+                NombreDocumento = ejecucion.Documento?.NombreArchivo
             };
         }
 

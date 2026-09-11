@@ -48,6 +48,52 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             Times.Never);
     }
 
+    // AB#100258: las filas de reutilizacion nacen sin contrato, de modo que el filtro de
+    // "candidatas con contrato" las descarta y nunca se reutiliza una reutilizacion. Sin
+    // esta invariante se podrian encadenar y acabar sirviendo una fila vacia.
+    [Fact]
+    public async Task Run_WhenLatestExecutionIsAReuse_SkipsItAndReusesTheRealOne()
+    {
+        var documento = new DocumentoEntity { Id = 77, SHA256 = "sha-reuse" };
+
+        var salidaHistorica = new ContratoSalida
+        {
+            Identificacion = new Identificacion { Documento = "doc.pdf" },
+            Resultado = new ResultadoFinal { Estado = "OK" }
+        };
+
+        // Devueltas como lo hace el repositorio: de mas reciente a mas antigua.
+        var reutilizacion = new DocumentoEjecucionEntity
+        {
+            Id = 2,
+            DocumentoId = documento.Id,
+            FechaEjecucion = new DateTime(2026, 9, 10, 0, 0, 0, DateTimeKind.Utc),
+            EstadoFinal = "OK",
+            ReutilizadaPorDuplicado = true,
+            EjecucionOriginalId = 1,
+            ContratoSalidaCompletoJson = null
+        };
+        var real = new DocumentoEjecucionEntity
+        {
+            Id = 1,
+            DocumentoId = documento.Id,
+            FechaEjecucion = new DateTime(2026, 9, 9, 0, 0, 0, DateTimeKind.Utc),
+            EstadoFinal = "OK",
+            ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaHistorica)
+        };
+
+        _documentoRepository.Setup(r => r.GetBySHA256Async("sha-reuse")).ReturnsAsync(documento);
+        _documentoEjecucionRepository
+            .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
+            .ReturnsAsync(new[] { reutilizacion, real });
+
+        var result = await _sut.Run("sha-reuse");
+
+        result.Should().NotBeNull();
+        result!.Identificacion.Documento.Should().Be("doc.pdf");
+        result.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+    }
+
     [Fact]
     public async Task Run_WhenLastExecutionHasSerializedOutput_ReturnsOutputMarkedAsDuplicateReuse()
     {

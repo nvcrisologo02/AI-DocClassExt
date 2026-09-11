@@ -3,37 +3,37 @@
    un conjunto distinto del que dice el selector de rango. *@
 
 <div class="row g-3 mb-4 @(Cargando ? "opacity-50" : "")">
-    <div class="col-6 col-lg-2">
+    <div class="col-6 col-lg">
         <div class="card h-100"><div class="card-body text-center">
             <div class="text-muted small">Ejecuciones</div>
             <div class="h3 mb-0">@(Agregados?.TotalEjecuciones ?? 0)</div>
         </div></div>
     </div>
-    <div class="col-6 col-lg-2">
+    <div class="col-6 col-lg">
         <div class="card h-100"><div class="card-body text-center">
             <div class="text-muted small">Correctas</div>
             <div class="h3 mb-0 text-success">@Porcentaje(Agregados?.Ok)</div>
         </div></div>
     </div>
-    <div class="col-6 col-lg-2">
+    <div class="col-6 col-lg">
         <div class="card h-100"><div class="card-body text-center">
             <div class="text-muted small">En revisión</div>
             <div class="h3 mb-0 text-warning">@Porcentaje(Agregados?.Revision)</div>
         </div></div>
     </div>
-    <div class="col-6 col-lg-2">
+    <div class="col-6 col-lg">
         <div class="card h-100"><div class="card-body text-center">
             <div class="text-muted small">Con error</div>
             <div class="h3 mb-0 text-danger">@Porcentaje(Agregados?.Error)</div>
         </div></div>
     </div>
-    <div class="col-6 col-lg-2">
+    <div class="col-6 col-lg">
         <div class="card h-100"><div class="card-body text-center">
             <div class="text-muted small">Fallback LLM</div>
             <div class="h3 mb-0">@Porcentaje(Agregados?.FallbacksTotal)</div>
         </div></div>
     </div>
-    <div class="col-6 col-lg-2">
+    <div class="col-6 col-lg">
         <div class="card h-100"><div class="card-body text-center">
             <div class="text-muted small">Duración media</div>
             <div class="h3 mb-0">@Duracion()</div>
@@ -41,7 +41,7 @@
     </div>
     @* AB#100258: en valor absoluto y no en porcentaje. No son parte de
        TotalEjecuciones, asi que un porcentaje sobre el no significaria nada. *@
-    <div class="col-6 col-lg-2">
+    <div class="col-6 col-lg">
         <div class="card h-100"><div class="card-body text-center">
             <div class="text-muted small">Reutilizadas</div>
             <div class="h3 mb-0">@(Agregados?.Reutilizadas ?? 0)</div>

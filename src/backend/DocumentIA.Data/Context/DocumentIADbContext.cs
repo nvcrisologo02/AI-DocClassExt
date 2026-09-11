@@ -126,6 +126,16 @@ public class DocumentIADbContext : DbContext
             .HasForeignKey(e => e.EjecucionOriginalId)
             .OnDelete(DeleteBehavior.NoAction);
 
+        // AB#100258: la guarda de idempotencia del registro de reutilizaciones busca por
+        // InstanceId en cada peticion servida por duplicado. Sin indice seria un scan de la
+        // tabla entera (mas de 60k filas en PRO, con el contrato nvarchar(max) dentro) en el
+        // unico flujo cuya virtud es responder en milisegundos. Filtrado: solo cubre las
+        // filas de reutilizacion, que son las unicas que consulta.
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasIndex(e => e.InstanceId)
+            .HasDatabaseName("IX_DocumentoEjecuciones_InstanceId_Reutilizadas")
+            .HasFilter("[ReutilizadaPorDuplicado] = 1");
+
         // Indices para rendimiento
         modelBuilder.Entity<DocumentoEjecucionEntity>()
             .HasIndex(e => e.EjecucionGuid)

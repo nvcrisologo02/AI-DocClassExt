@@ -60,5 +60,17 @@ namespace DocumentIA.Data.Repositories
         /// sin tener que tocarla (AB#100258).
         /// </summary>
         public FiltroReutilizadas Reutilizadas { get; set; } = FiltroReutilizadas.Excluir;
+
+        /// <summary>
+        /// Copia del filtro cambiando solo el tratamiento de las reutilizaciones. La usan
+        /// los KPIs que las miden aparte: sin copiar el resto de recortes describirian un
+        /// conjunto distinto del que muestra la tabla.
+        /// </summary>
+        public EjecucionFiltro ConReutilizadas(FiltroReutilizadas valor)
+        {
+            var copia = (EjecucionFiltro)MemberwiseClone();
+            copia.Reutilizadas = valor;
+            return copia;
+        }
     }
 }

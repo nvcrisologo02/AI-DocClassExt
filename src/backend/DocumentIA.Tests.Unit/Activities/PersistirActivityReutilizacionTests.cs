@@ -147,6 +147,49 @@ public class PersistirActivityReutilizacionTests : IDisposable
         _ejecucionRepoMock.Verify(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()), Times.Never);
     }
 
+    [Fact]
+    public async Task Run_Reutilizacion_Should_RegistrarSinVinculoSiLaOriginalYaNoExiste()
+    {
+        // La original puede haberse purgado. Perder el vinculo es aceptable; perder la
+        // traza de que la peticion existio, no.
+        _ejecucionRepoMock
+            .Setup(r => r.GetByGuidAsync(GuidOriginal))
+            .ReturnsAsync((DocumentoEjecucionEntity?)null);
+
+        await _sut.Run(BuildInput());
+
+        _insertada.Should().NotBeNull();
+        _insertada!.ReutilizadaPorDuplicado.Should().BeTrue();
+        _insertada.EjecucionOriginalId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Run_Reutilizacion_Should_InsertarSinGuardaCuandoNoHayInstanceId()
+    {
+        // Sin InstanceId no hay clave natural para deduplicar el registro, pero la
+        // alternativa seria no registrar nada.
+        var input = BuildInput();
+        input.Salida.DetalleEjecucion.InstanceId = null;
+
+        await _sut.Run(input);
+
+        _insertada.Should().NotBeNull();
+        _insertada!.InstanceId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Run_Reutilizacion_Should_ConservarElEstadoDeErrorDelOriginal()
+    {
+        // Reutilizar una ejecucion que fallo no convierte la peticion en correcta: el
+        // Monitor tiene que seguir contandola como error.
+        var input = BuildInput();
+        input.Salida.Resultado.Estado = "ERROR";
+
+        await _sut.Run(input);
+
+        _insertada!.EstadoFinal.Should().Be("ERROR");
+    }
+
     private static PersistirInput BuildInput() => new()
     {
         SubmittedBy = "portal-colabora",

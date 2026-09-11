@@ -199,13 +199,23 @@ public class EjecucionDetalleDto
     public List<ReutilizacionUsoDto> Reutilizaciones { get; set; } = [];
 }
 
-/// <summary>Enlace de una reutilizacion con la ejecucion cuyo contrato devolvio.</summary>
+/// <summary>
+/// Enlace de una reutilizacion con la ejecucion cuyo contrato devolvio, mas lo unico
+/// que es suyo: la fila no tiene contrato, asi que el resto del detalle viene vacio.
+/// </summary>
 public class ReutilizacionDetalleDto
 {
     public bool EsReutilizacion { get; set; }
     public int? OriginalId { get; set; }
     public string? OriginalGuid { get; set; }
     public DateTime? OriginalFecha { get; set; }
+
+    public DateTime FechaEjecucion { get; set; }
+    public string? InstanceId { get; set; }
+    public string? OperationId { get; set; }
+    public int DuracionTotalMs { get; set; }
+    public string? SubmittedBy { get; set; }
+    public string? NombreDocumento { get; set; }
 }
 
 /// <summary>Una de las veces que se sirvio el contrato de una ejecucion.</summary>

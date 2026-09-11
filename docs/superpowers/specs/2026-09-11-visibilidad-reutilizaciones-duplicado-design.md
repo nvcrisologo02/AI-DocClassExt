@@ -68,6 +68,12 @@ Migración aditiva sobre `DocumentoEjecuciones`:
 | `ReutilizadaPorDuplicado` | `bit NOT NULL DEFAULT 0` | 1 = la fila registra una petición servida con el contrato de otra ejecución. |
 | `EjecucionOriginalId` | `int NULL`, FK self-reference a `DocumentoEjecuciones.Id`, `ON DELETE NO ACTION` | Ejecución cuyo contrato se devolvió. Solo informada cuando el flag es 1. EF crea índice por convención sobre la FK. |
 
+Además, índice filtrado `IX_DocumentoEjecuciones_InstanceId_Reutilizadas` sobre `InstanceId`
+con `WHERE ReutilizadaPorDuplicado = 1`: la guarda de idempotencia de §2.4 consulta por
+`InstanceId` en cada petición servida por duplicado, y sin índice sería un scan de la tabla
+entera en el único flujo cuya virtud es responder en milisegundos. Filtrado porque solo
+consulta filas de reutilización.
+
 Reparto de campos en una fila de reutilización:
 
 - **De la llamada actual**: `FechaEjecucion`, `EjecucionGuid` (uno nuevo, generado por la
@@ -264,9 +270,14 @@ Nota operativa: antes de validar hay que borrar la fila 8061 de DEV, insertada a
 ## 6. Despliegue y riesgos
 
 **Orden**: migración primero (aditiva; el código anterior la ignora), código después.
-Rollback por `Down`. En PRO, aplicación manual con script idempotente —el pipeline Apply no
-alcanza PRO— y recreación del índice cubriente con `ONLINE = ON` sobre las más de 60k filas
-actuales, midiendo antes en DEV y ejecutando fuera de hora punta.
+Rollback por `Down`.
+
+En DEV y PRE basta el script idempotente de EF. En **PRO no**: la migración recrea el índice
+cubriente sin `ONLINE = ON` y bloquearía la tabla durante el build. Para PRO se usa
+`scripts/database/indice-monitor-reutilizacion-pro.sql`, que hace lo mismo con
+`DROP_EXISTING = ON, ONLINE = ON`, sin transacción global, idempotente por bloque, y que
+registra la migración en `__EFMigrationsHistory` para que EF no la repita. Mismo patrón que
+el `indice-monitor-pro.sql` de AB#100185.
 
 **Riesgos asumidos**: el número de filas crece con cada reenvío duplicado, aunque son filas
 ligeras sin JSON y el crecimiento está acotado por el tráfico real; hoy no se puede

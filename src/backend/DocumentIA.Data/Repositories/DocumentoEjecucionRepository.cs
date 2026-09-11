@@ -210,17 +210,14 @@ namespace DocumentIA.Data.Repositories
 
             var histograma = await ConstruirHistogramaAsync(q, total);
 
-            // AB#100258: las reutilizaciones se miden aparte y sobre la misma ventana. El
-            // filtro comun ya las ha dejado fuera de todo lo anterior, que es justo lo que
-            // se quiere: no son ejecuciones de IA y contarlas falsearia calidad y coste.
-            var filtroReutilizadas = new EjecucionFiltro
-            {
-                Desde = filtro.Desde,
-                Hasta = filtro.Hasta,
-                Tipologia = filtro.Tipologia,
-                Reutilizadas = FiltroReutilizadas.Solo
-            };
-            var qReutilizadas = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtroReutilizadas);
+            // AB#100258: las reutilizaciones se miden aparte y sobre EL MISMO recorte, no
+            // solo la misma ventana: la cabecera de KPIs tiene que describir un unico
+            // conjunto. El filtro comun ya las ha dejado fuera de todo lo anterior, que es
+            // justo lo que se quiere: no son ejecuciones de IA y contarlas falsearia
+            // calidad y coste.
+            var qReutilizadas = AplicarFiltro(
+                _context.DocumentoEjecuciones.AsNoTracking(),
+                filtro.ConReutilizadas(FiltroReutilizadas.Solo));
 
             var reutilizadas = await qReutilizadas.CountAsync();
 
@@ -474,10 +471,8 @@ namespace DocumentIA.Data.Repositories
         }
 
         /// <summary>
-        /// Agregados de coste de IA (AB#100237). Todo sobre columnas escalares: el
-        /// desglose por llamada vive en el contrato JSON y agregarlo por OPENJSON
-        /// sobre una ventana de 90 dias seria el problema de rendimiento que el
-        /// Monitor ya arrastra.
+        /// AB#100258. Acotado: un documento reenviado en bucle puede acumular miles de
+        /// reutilizaciones y el detalle del Admin no necesita mas que las ultimas.
         /// </summary>
         public async Task<IReadOnlyList<EjecucionListadoItem>> GetReutilizacionesAsync(int ejecucionOriginalId)
         {
@@ -485,6 +480,7 @@ namespace DocumentIA.Data.Repositories
                 .AsNoTracking()
                 .Where(e => e.EjecucionOriginalId == ejecucionOriginalId)
                 .OrderByDescending(e => e.FechaEjecucion)
+                .Take(MaxReutilizacionesEnDetalle)
                 .Select(e => new EjecucionListadoItem
                 {
                     Id = e.Id,
@@ -503,6 +499,15 @@ namespace DocumentIA.Data.Repositories
                 .ToListAsync();
         }
 
+        /// <summary>Tope de reutilizaciones que se listan en el detalle de una ejecucion.</summary>
+        private const int MaxReutilizacionesEnDetalle = 20;
+
+        /// <summary>
+        /// Agregados de coste de IA (AB#100237). Todo sobre columnas escalares: el
+        /// desglose por llamada vive en el contrato JSON y agregarlo por OPENJSON
+        /// sobre una ventana de 90 dias seria el problema de rendimiento que el
+        /// Monitor ya arrastra.
+        /// </summary>
         public async Task<EjecucionCostesResult> GetCostesAsync(EjecucionFiltro filtro)
         {
             var q = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtro);

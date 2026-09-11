@@ -40,6 +40,8 @@
         </div>
         @* AB#100258: por defecto se excluyen, que es el conjunto que ha descrito
            siempre el Monitor. Una reutilizacion no reprocesa nada. *@
+        @if (MostrarReutilizaciones)
+        {
         <div class="col-6 col-lg-2">
             <label class="form-label small text-muted mb-1">Reutilizaciones</label>
             <select class="form-select" value="@Filtro.Reutilizadas" @onchange="OnReutilizadasCambiado">
@@ -48,6 +50,7 @@
                 <option value="solo">Solo reutilizaciones</option>
             </select>
         </div>
+        }
         <div class="col-12 col-lg-3">
             <label class="form-label small text-muted mb-1">Buscar</label>
             <input class="form-control" placeholder="GUID exacto o nombre de documento"
@@ -65,6 +68,12 @@
     [Parameter, EditorRequired] public MonitorFiltroDto Filtro { get; set; } = new();
     [Parameter] public IReadOnlyList<string> Tipologias { get; set; } = [];
     [Parameter] public EventCallback<MonitorFiltroDto> FiltroCambiado { get; set; }
+
+    /// <summary>
+    /// La pagina de costes no sabe calcular el ahorro de las reutilizaciones, asi que
+    /// alli "Solo reutilizaciones" solo produciria un panel a cero sin explicacion.
+    /// </summary>
+    [Parameter] public bool MostrarReutilizaciones { get; set; } = true;
 
     // Cada campo con retardo tiene su propio Timer: compartir uno solo entre
     // busqueda y solicitante haria que escribir en uno cancelara el retardo

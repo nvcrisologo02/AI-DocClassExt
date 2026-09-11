@@ -38,21 +38,39 @@ else
     @if (Detalle.Reutilizacion is { EsReutilizacion: true } reutilizacion)
     {
         <div class="alert alert-secondary py-2 small">
-            Esta petición se sirvió <strong>reutilizando</strong> una ejecución anterior: el documento
-            no se volvió a procesar y los datos de abajo son los de aquella.
-            @if (reutilizacion.OriginalGuid is not null)
-            {
-                <text>Original: </text>
-                <code style="font-size:0.75rem;user-select:all">@reutilizacion.OriginalGuid</code>
-                @if (reutilizacion.OriginalFecha is { } fechaOriginal)
+            <div>
+                Esta petición se sirvió <strong>reutilizando</strong> una ejecución anterior: el documento
+                no se volvió a procesar, así que <strong>esta fila no tiene contrato, datos extraídos ni
+                coste propios</strong>.
+                @if (reutilizacion.OriginalGuid is not null)
                 {
-                    <text> (@HoraEspana.Formatear(fechaOriginal, "dd/MM/yyyy HH:mm"))</text>
+                    <text>Todo eso se consulta en la ejecución original </text>
+                    <code style="font-size:0.75rem;user-select:all">@reutilizacion.OriginalGuid</code>
+                    @if (reutilizacion.OriginalFecha is { } fechaOriginal)
+                    {
+                        <text> (@HoraEspana.Formatear(fechaOriginal, "dd/MM/yyyy HH:mm"))</text>
+                    }
+                    <text>.</text>
                 }
-            }
-            else
-            {
-                <text>La ejecución original ya no está disponible.</text>
-            }
+                else
+                {
+                    <text>La ejecución original ya no está disponible.</text>
+                }
+            </div>
+            <dl class="row mb-0 mt-2">
+                <dt class="col-sm-2">Documento</dt>
+                <dd class="col-sm-4">@(reutilizacion.NombreDocumento ?? "—")</dd>
+                <dt class="col-sm-2">Servida</dt>
+                <dd class="col-sm-4">@HoraEspana.Formatear(reutilizacion.FechaEjecucion, "dd/MM/yyyy HH:mm:ss")</dd>
+                <dt class="col-sm-2">Solicitado por</dt>
+                <dd class="col-sm-4">@(reutilizacion.SubmittedBy ?? "—")</dd>
+                <dt class="col-sm-2">Duración</dt>
+                <dd class="col-sm-4">@reutilizacion.DuracionTotalMs ms</dd>
+                <dt class="col-sm-2">InstanceId</dt>
+                <dd class="col-sm-4"><code style="font-size:0.75rem;user-select:all">@(reutilizacion.InstanceId ?? "—")</code></dd>
+                <dt class="col-sm-2">OperationId</dt>
+                <dd class="col-sm-4"><code style="font-size:0.75rem;user-select:all">@(reutilizacion.OperationId ?? "—")</code></dd>
+            </dl>
         </div>
     }
     else if (Detalle.Reutilizaciones.Count > 0)

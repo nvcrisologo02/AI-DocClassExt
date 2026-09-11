@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
@@ -15,8 +15,11 @@ namespace DocumentIA.Data.Migrations
         // AB#100258: el indice cubriente del Monitor se recrea con ReutilizadaPorDuplicado y
         // EjecucionOriginalId en el INCLUDE. Sin ellas, el filtro por defecto del Monitor
         // (ReutilizadaPorDuplicado = 0) dejaria de resolverse sobre el indice y se perderia
-        // la cobertura ganada en AB#100182 / AB#100185. En PRO va con ONLINE = ON.
-
+        // la cobertura ganada en AB#100182 / AB#100185.
+        //
+        // En PRO esta migracion NO se aplica tal cual: la recreacion del cubriente sobre mas
+        // de 60k filas bloquea la tabla. Usar scripts/database/indice-monitor-reutilizacion-pro.sql,
+        // que hace lo mismo con ONLINE = ON.
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -37,6 +40,7 @@ namespace DocumentIA.Data.Migrations
                 nullable: false,
                 defaultValue: false);
 
+
             migrationBuilder.CreateIndex(
                 name: "IX_DocumentoEjecuciones_EjecucionOriginalId",
                 table: "DocumentoEjecuciones",
@@ -47,6 +51,12 @@ namespace DocumentIA.Data.Migrations
                 table: "DocumentoEjecuciones",
                 column: "FechaEjecucion")
                 .Annotation("SqlServer:Include", new[] { "EstadoFinal", "ConfianzaGlobal", "UseFallbackLLM", "Tipologia", "ModeloClasificacion", "ClassificationOnly", "DuracionTotalMs", "DocumentoId", "EjecucionGuid", "SubmittedBy", "ConfianzaClasificacion", "DuracionClasificacionMs", "DuracionExtraccionMs", "DuracionGDCMs", "DuracionValidacionMs", "DuracionIntegracionMs", "DuracionPersistenciaMs", "ReutilizadaPorDuplicado", "EjecucionOriginalId" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_DocumentoEjecuciones_InstanceId_Reutilizadas",
+                table: "DocumentoEjecuciones",
+                column: "InstanceId",
+                filter: "[ReutilizadaPorDuplicado] = 1");
 
             migrationBuilder.AddForeignKey(
                 name: "FK_DocumentoEjecuciones_DocumentoEjecuciones_EjecucionOriginalId",
@@ -71,6 +81,10 @@ namespace DocumentIA.Data.Migrations
                 name: "IX_DocumentoEjecuciones_FechaEjecucion_Monitor",
                 table: "DocumentoEjecuciones");
 
+            migrationBuilder.DropIndex(
+                name: "IX_DocumentoEjecuciones_InstanceId_Reutilizadas",
+                table: "DocumentoEjecuciones");
+
             migrationBuilder.DropColumn(
                 name: "EjecucionOriginalId",
                 table: "DocumentoEjecuciones");
@@ -78,6 +92,7 @@ namespace DocumentIA.Data.Migrations
             migrationBuilder.DropColumn(
                 name: "ReutilizadaPorDuplicado",
                 table: "DocumentoEjecuciones");
+
 
             migrationBuilder.CreateIndex(
                 name: "IX_DocumentoEjecuciones_FechaEjecucion_Monitor",
