@@ -83,6 +83,60 @@ public class DocumentoEjecucionRepositoryReutilizadasTests
         costes.TotalEjecuciones.Should().Be(2);
     }
 
+    [Fact]
+    public async Task GetPagedAsync_Should_ProyectarLaMarcaYElOriginal()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro();
+        filtro.Reutilizadas = FiltroReutilizadas.Solo;
+
+        var (items, _) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        items.Single().ReutilizadaPorDuplicado.Should().BeTrue();
+        items.Single().EjecucionOriginalId.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task GetAgregadosAsync_Should_ContarLasReutilizadasYElCosteEvitado()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var agregados = await repo.GetAgregadosAsync(Filtro());
+
+        agregados.Reutilizadas.Should().Be(1);
+        agregados.CosteEvitadoEur.Should().Be(0.07m);
+    }
+
+    [Fact]
+    public async Task GetReutilizacionesAsync_Should_DevolverLasQueApuntanAEsaEjecucion()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var reutilizaciones = await repo.GetReutilizacionesAsync(2);
+
+        reutilizaciones.Should().ContainSingle()
+            .Which.EjecucionGuid.Should().Be("33333333-3333-3333-3333-333333333333");
+    }
+
+    [Fact]
+    public async Task GetReutilizacionesAsync_Should_DevolverVacioSiNadieLaReutilizo()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var reutilizaciones = await repo.GetReutilizacionesAsync(1);
+
+        reutilizaciones.Should().BeEmpty();
+    }
+
     private static EjecucionFiltro Filtro() =>
         new() { Desde = Base, Hasta = Base.AddDays(10) };
 

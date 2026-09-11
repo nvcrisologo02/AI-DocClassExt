@@ -210,8 +210,38 @@ namespace DocumentIA.Data.Repositories
 
             var histograma = await ConstruirHistogramaAsync(q, total);
 
+            // AB#100258: las reutilizaciones se miden aparte y sobre la misma ventana. El
+            // filtro comun ya las ha dejado fuera de todo lo anterior, que es justo lo que
+            // se quiere: no son ejecuciones de IA y contarlas falsearia calidad y coste.
+            var filtroReutilizadas = new EjecucionFiltro
+            {
+                Desde = filtro.Desde,
+                Hasta = filtro.Hasta,
+                Tipologia = filtro.Tipologia,
+                Reutilizadas = FiltroReutilizadas.Solo
+            };
+            var qReutilizadas = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtroReutilizadas);
+
+            var reutilizadas = await qReutilizadas.CountAsync();
+
+            // El coste evitado no se guarda en columna: se lee del original por join. Si
+            // aquella ejecucion no tenia coste medido, esta reutilizacion no suma nada.
+            var costeEvitado = reutilizadas == 0
+                ? 0m
+                : await qReutilizadas
+                    .Where(r => r.EjecucionOriginalId != null)
+                    .Join(
+                        _context.DocumentoEjecuciones.AsNoTracking(),
+                        r => r.EjecucionOriginalId,
+                        o => o.Id,
+                        (r, o) => o.CosteIAEur)
+                    .SumAsync(c => c ?? 0m);
+
             return new EjecucionAgregadosResult
             {
+                Reutilizadas = reutilizadas,
+                CosteEvitadoEur = costeEvitado,
+
                 CalidadOk = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Ok)?.Total ?? 0,
                 CalidadRevision = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Revision)?.Total ?? 0,
                 CalidadError = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Error)?.Total ?? 0,
@@ -449,6 +479,30 @@ namespace DocumentIA.Data.Repositories
         /// sobre una ventana de 90 dias seria el problema de rendimiento que el
         /// Monitor ya arrastra.
         /// </summary>
+        public async Task<IReadOnlyList<EjecucionListadoItem>> GetReutilizacionesAsync(int ejecucionOriginalId)
+        {
+            return await _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .Where(e => e.EjecucionOriginalId == ejecucionOriginalId)
+                .OrderByDescending(e => e.FechaEjecucion)
+                .Select(e => new EjecucionListadoItem
+                {
+                    Id = e.Id,
+                    EjecucionGuid = e.EjecucionGuid,
+                    FechaEjecucion = e.FechaEjecucion,
+                    Tipologia = e.Tipologia,
+                    EstadoFinal = e.EstadoFinal,
+                    ClassificationOnly = e.ClassificationOnly,
+                    DuracionTotalMs = e.DuracionTotalMs,
+                    SubmittedBy = e.SubmittedBy
+                        ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
+                    NombreDocumento = e.Documento != null ? e.Documento.NombreArchivo : null,
+                    ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
+                    EjecucionOriginalId = e.EjecucionOriginalId
+                })
+                .ToListAsync();
+        }
+
         public async Task<EjecucionCostesResult> GetCostesAsync(EjecucionFiltro filtro)
         {
             var q = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtro);

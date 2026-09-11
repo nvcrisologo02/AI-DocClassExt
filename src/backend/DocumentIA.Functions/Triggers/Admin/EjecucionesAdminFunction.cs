@@ -79,7 +79,17 @@ public class EjecucionesAdminFunction
             Calidad = Valor("calidad"),
             ConfianzaMin = Numero("confmin"),
             ConfianzaMax = Numero("confmax"),
-            IncluirEstimados = string.Equals(Valor("incluirestimados"), "true", StringComparison.OrdinalIgnoreCase)
+            IncluirEstimados = string.Equals(Valor("incluirestimados"), "true", StringComparison.OrdinalIgnoreCase),
+
+            // AB#100258: sin parametro se excluyen, que es lo que ha visto siempre el
+            // Monitor. Un valor desconocido tambien excluye: mejor la cifra historica
+            // que una mezcla silenciosa.
+            Reutilizadas = Valor("reutilizadas")?.ToLowerInvariant() switch
+            {
+                "incluir" => FiltroReutilizadas.Incluir,
+                "solo" => FiltroReutilizadas.Solo,
+                _ => FiltroReutilizadas.Excluir
+            }
         };
     }
 
@@ -151,7 +161,9 @@ public class EjecucionesAdminFunction
             SubmittedBy = e.SubmittedBy,
             Actividades = ParseActivitySummaries(e.ActivityTimelineJson),
             e.CosteIAEur,
-            e.CosteEstimado
+            e.CosteEstimado,
+            e.ReutilizadaPorDuplicado,
+            e.EjecucionOriginalId
         }).ToList();
 
         var response = req.CreateResponse(HttpStatusCode.OK);
@@ -339,6 +351,37 @@ public class EjecucionesAdminFunction
         var (tipologiaNombreCatalogo, tipologiaFamiliaNombreCatalogo) =
             await ResolverNombresCatalogoAsync(ejecucion.Tipologia);
 
+        // AB#100258: trazabilidad en los dos sentidos. Una reutilizacion no tiene contrato
+        // propio y apunta a la original; una original enseña cuantas veces se sirvio. Sin
+        // la vuelta, quien llega a la ejecucion que produjo el contenido no ve las
+        // peticiones posteriores que se resolvieron con el.
+        object? reutilizacion = null;
+        if (ejecucion.ReutilizadaPorDuplicado)
+        {
+            var original = ejecucion.EjecucionOriginalId is { } originalId
+                ? await _ejecucionRepository.GetByIdAsync(originalId)
+                : null;
+
+            reutilizacion = new
+            {
+                EsReutilizacion = true,
+                OriginalId = original?.Id,
+                OriginalGuid = original?.EjecucionGuid,
+                OriginalFecha = original?.FechaEjecucion
+            };
+        }
+
+        var reutilizaciones = ejecucion.ReutilizadaPorDuplicado
+            ? new List<object>()
+            : (await _ejecucionRepository.GetReutilizacionesAsync(ejecucion.Id))
+                .Select(r => (object)new
+                {
+                    r.EjecucionGuid,
+                    r.FechaEjecucion,
+                    r.SubmittedBy
+                })
+                .ToList();
+
         var result = new
         {
             ejecucion.Id,
@@ -361,7 +404,10 @@ public class EjecucionesAdminFunction
             Timeline = timeline,
             DatosExtraidos = datosExtraidos,
             Validaciones = validaciones,
-            Plugins = plugins
+            Plugins = plugins,
+            ejecucion.ReutilizadaPorDuplicado,
+            Reutilizacion = reutilizacion,
+            Reutilizaciones = reutilizaciones
         };
 
         var response = req.CreateResponse(HttpStatusCode.OK);
