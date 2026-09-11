@@ -291,6 +291,16 @@ namespace DocumentIA.Data.Repositories
         {
             q = q.Where(e => e.FechaEjecucion >= filtro.Desde && e.FechaEjecucion < filtro.Hasta);
 
+            // Punto unico: el listado, los agregados, el histograma, la matriz y los costes
+            // pasan por aqui, asi que la exclusion por defecto mantiene los numeros
+            // historicos sin tocar ninguna de esas consultas (AB#100258).
+            q = filtro.Reutilizadas switch
+            {
+                FiltroReutilizadas.Solo => q.Where(e => e.ReutilizadaPorDuplicado),
+                FiltroReutilizadas.Incluir => q,
+                _ => q.Where(e => !e.ReutilizadaPorDuplicado)
+            };
+
             if (!string.IsNullOrWhiteSpace(filtro.Tipologia))
             {
                 q = q.Where(e => e.Tipologia == filtro.Tipologia);
@@ -424,7 +434,9 @@ namespace DocumentIA.Data.Repositories
                         ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
                     ActivityTimelineJson = e.ActivityTimelineJson,
                     CosteIAEur = e.CosteIAEur,
-                    CosteEstimado = e.CosteEstimado
+                    CosteEstimado = e.CosteEstimado,
+                    ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
+                    EjecucionOriginalId = e.EjecucionOriginalId
                 })
                 .ToListAsync();
 
