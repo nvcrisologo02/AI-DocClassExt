@@ -304,6 +304,13 @@ Describe "New-MutacionEjecucionSql" {
     It "rechaza intento de inyeccion en la ruta" {
         { New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.OrigenMarkdown'), '$.x', (SELECT 1" = "x" } } | Should -Throw -ExpectedMessage "*no admitida*"
     }
+    It "la ultima ejecucion excluye las filas de reutilizacion por duplicado" {
+        # AB#100258: una reutilizacion es la fila mas reciente del documento pero no
+        # tiene contrato que mutar ni aseverar. Sin este filtro, la mutacion caeria
+        # sobre ella y las aserciones leerian NULL.
+        $sql = New-MutacionEjecucionSql -Mutacion @{ "DetalleEjecucion.OrigenMarkdown" = "Extraccion" }
+        $sql | Should -BeLike '*e2.ReutilizadaPorDuplicado = 0*'
+    }
     It "rechaza la ruta con otra capitalizacion" {
         # La ruta JSON de SQL Server distingue mayusculas; la lista blanca debe
         # exigir coincidencia exacta, no solo case-insensitive como el ContainsKey
