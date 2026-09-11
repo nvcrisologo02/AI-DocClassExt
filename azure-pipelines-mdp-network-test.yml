@@ -1,0 +1,29 @@
+trigger: none
+
+pool:
+  name: docia-mdp-private
+
+steps:
+- powershell: |
+    Write-Host "=== AGENT INFO ==="
+    hostname
+    ipconfig /all
+
+    Write-Host "`n=== DEV DNS ==="
+    nslookup srbsqldevdocai.database.windows.net
+
+    Write-Host "`n=== DEV SQL 1433 ==="
+    Test-NetConnection srbsqldevdocai.database.windows.net -Port 1433
+
+    Write-Host "`n=== PRE DNS ==="
+    nslookup srbsqlpredocai.database.windows.net
+
+    Write-Host "`n=== PRE SQL 1433 ==="
+    Test-NetConnection srbsqlpredocai.database.windows.net -Port 1433
+
+    Write-Host "`n=== PRO DNS ==="
+    nslookup srbsqlprodocai.database.windows.net
+
+    Write-Host "`n=== PRO SQL 1433 ==="
+    Test-NetConnection srbsqlprodocai.database.windows.net -Port 1433
+  displayName: 'Validar DNS y conectividad SQL'
