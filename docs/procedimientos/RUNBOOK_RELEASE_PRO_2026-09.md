@@ -32,14 +32,18 @@ reescrito mantiene el mismo resultset.
       (`git fetch && git log origin/develop -1`).
 - [ ] Pasar el **Smoke pre-release PRO** (Test Plan **100069**, casos SMK-1..8) — norma previa a
       toda release a PRO.
-- [ ] Elegir ventana de **baja actividad**. Motivo doble: AB#100176 añade llamadas a actividades
-      en el orquestador y las orquestaciones en vuelo de la versión anterior pueden fallar por
-      no determinismo al reproducirse; y los índices se crean con `ONLINE=ON` pero menos carga
+- [ ] Elegir ventana de **baja actividad**. Motivo doble: AB#100176 y AB#100258 añaden llamadas
+      a actividades en el orquestador —esta última una `PersistirActivity` en la rama de
+      duplicado— y las orquestaciones en vuelo de la versión anterior pueden fallar por no
+      determinismo al reproducirse; y los índices se crean con `ONLINE=ON` pero menos carga
       es menos riesgo en un S0 de 10 DTU.
-- [ ] Tener a mano los tres scripts de BD (carpeta local `docs/auxiliares/temps/`, gitignored):
-      `2026-09-02/markdown-binario-pro.sql`, `2026-09-02/idactivo-sp-pro.sql`,
-      `2026-09-01/indice-monitor-pro.sql`. Los tres son idempotentes (guiados por
-      `__EFMigrationsHistory`) y re-ejecutables.
+- [ ] Tener a mano los scripts de BD. Los tres primeros están en la carpeta local
+      `docs/auxiliares/temps/` (gitignored): `2026-09-02/markdown-binario-pro.sql`,
+      `2026-09-02/idactivo-sp-pro.sql`, `2026-09-01/indice-monitor-pro.sql`. Los de AB#100258
+      sí están versionados: `scripts/database/indice-monitor-reutilizacion-pro.sql` y
+      `scripts/database/sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql`. Todos son
+      idempotentes (guiados por `__EFMigrationsHistory` o por guardas de existencia) y
+      re-ejecutables.
 - [x] **Backup pre-release** — HECHO el 03/09/2026: copia `DocumentIA-prerel-202609` creada a
       las **09:11:33 UTC** (`T0` de referencia; el PITR de 7 días cubre cualquier otro instante)
       y **verificada contra el origen**: 66.233 documentos, 70.166 ejecuciones (máx. Id 70202),
@@ -106,6 +110,23 @@ completa lo que falte.
       sistema no falla, pero toda ejecución posterior al despliegue queda con coste nulo y
       `tarifasCompletas=false`, y eso solo se recupera con relleno retroactivo. Verificar:
       `SELECT ModelKey, LEN(ConfiguracionJson) FROM ModeloConfigs WHERE Tipo = 4` devuelve una fila.
+
+- [ ] 1.7 **Visibilidad de las reutilizaciones (AB#100258)** — ejecutar
+      `scripts/database/indice-monitor-reutilizacion-pro.sql`. **No aplicar la migración
+      `20260911093509_ReutilizacionPorDuplicado` con el script idempotente de EF**: recrea el
+      índice cubriente sin `ONLINE = ON` y bloquearía `DocumentoEjecuciones` durante el build.
+      El script hace lo mismo con `DROP_EXISTING = ON, ONLINE = ON`, sin transacción global,
+      idempotente por bloque, y registra la migración en `__EFMigrationsHistory` para que EF no
+      la repita. Añade las columnas `ReutilizadaPorDuplicado` y `EjecucionOriginalId`, dos
+      índices pequeños y la FK autorreferenciada (`WITH NOCHECK`: todas las filas existentes
+      tienen la columna a NULL). Verificar con la consulta de su cabecera:
+      `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` pasa a 1 clave + **19** INCLUDE.
+- [ ] 1.8 **SP por IdActivo (AB#100258)** — ejecutar
+      `scripts/database/sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql` **después** de 1.7
+      (necesita la columna). Añade `@IncluirReutilizadas BIT = 0`, de modo que el consumidor
+      externo sigue recibiendo las mismas filas. Verificar:
+      `EXEC sp_ObtenerDocumentoEjecucionesPorIdActivo @IdActivo='<uno real>'` responde sin error y
+      sin filas con `ContratoSalidaCompletoJson` NULL.
 
 > Desde este punto PRO funciona con normalidad con el código antiguo. No hay prisa entre la
 > Fase 1 y la Fase 2, pero conviene encadenarlas en la misma ventana.
