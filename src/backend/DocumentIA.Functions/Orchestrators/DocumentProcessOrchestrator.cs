@@ -308,6 +308,47 @@ public class DocumentProcessOrchestrator
             }
         }
 
+        // AB#100258: registra la peticion servida con el contrato de otra ejecucion. Antes
+        // de persistir corrige la identidad del contrato: hasta ahora devolvia el InstanceId
+        // y el OperationId de la orquestacion historica junto al seguimiento de la llamada
+        // actual, y ese desajuste impedia ir de la respuesta del cliente a la llamada que la
+        // produjo. El puente hacia la original pasa a ser EjecucionOriginalGuid.
+        //
+        // No usa EjecutarPasoNegocioSinResultado a proposito: aquel relanza, y un fallo
+        // escribiendo la traza no puede convertir en error una peticion ya resuelta.
+        async Task RegistrarReutilizacionAsync(ContratoSalida reutilizada, string sha256)
+        {
+            var guidOriginal = reutilizada.Identificacion.Guid;
+            reutilizada.DetalleEjecucion.EjecucionOriginalGuid = guidOriginal;
+            reutilizada.DetalleEjecucion.InstanceId = context.InstanceId;
+            reutilizada.DetalleEjecucion.OperationId = entrada.Trazabilidad.OperationId;
+
+            MarcarInicioActividad("Persistir");
+            try
+            {
+                await context.CallActivityAsync(
+                    "PersistirActivity",
+                    new PersistirInput
+                    {
+                        Salida = reutilizada,
+                        SubmittedBy = submittedByEjecucion,
+                        Reutilizacion = new ReutilizacionInput
+                        {
+                            EjecucionOriginalGuid = guidOriginal,
+                            Sha256 = sha256
+                        }
+                    });
+                MarcarFinActividad("Persistir", "Completed", "Reutilizacion registrada");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(
+                    ex,
+                    "No se pudo registrar la reutilizacion por duplicado. Se devuelve la respuesta igualmente.");
+                MarcarFinActividad("Persistir", "Failed", ex.Message);
+            }
+        }
+
         // AB#100245: cache de markdown de la ejecucion. Unica portadora de la cobertura. Se deriva
         // de resultados de actividad, asi que es replay-safe. datosNormalizados["Markdown"] se
         // sigue rellenando porque las actividades lo leen de ahi.
@@ -859,6 +900,8 @@ public class DocumentProcessOrchestrator
                                 CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion?.Costes?.CosteTotalEur
                             };
 
+                            await RegistrarReutilizacionAsync(salidaDuplicado, duplicadoPorMd5.SHA256);
+
                             FinalizarSeguimiento("Completed", "Documento duplicado detectado por checksum GDC. Devolviendo última ejecución");
                             salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
                             return salidaDuplicado;
@@ -981,6 +1024,8 @@ public class DocumentProcessOrchestrator
                             ReutilizadaPorDuplicado = true,
                             CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion?.Costes?.CosteTotalEur
                         };
+
+                        await RegistrarReutilizacionAsync(salidaDuplicado, salida.Integridad.SHA256);
 
                         FinalizarSeguimiento("Completed", "Documento duplicado detectado. Devolviendo última ejecución");
                         salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;

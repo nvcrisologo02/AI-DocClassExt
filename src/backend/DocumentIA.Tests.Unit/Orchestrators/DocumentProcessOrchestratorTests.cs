@@ -501,6 +501,75 @@ public class DocumentProcessOrchestratorTests
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
     }
 
+    // AB#100258: la reutilizacion deja traza propia. Sin esto la peticion no existe para
+    // el Monitor, que solo lee lo que escribe PersistirActivity.
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoReutilizado_PersistLaTrazaConElGuidDelOriginal()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        {
+            Identificacion = new Identificacion { Guid = "guid-contrato-original", Tipologia = "inli.13" },
+            Resultado = new ResultadoFinal { Estado = "OK" },
+            DetalleEjecucion = new DetalleEjecucion { InstanceId = "instancia-vieja", OperationId = "operacion-vieja" }
+        });
+
+        await orchestrator.RunOrchestrator(context);
+
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistido.Should().NotBeNull();
+        persistido!.Reutilizacion.Should().NotBeNull();
+        persistido.Reutilizacion!.EjecucionOriginalGuid.Should().Be("guid-contrato-original");
+        persistido.Reutilizacion.Sha256.Should().NotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoReutilizado_DevuelveElInstanceIdDeLaLlamadaActual()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        {
+            Identificacion = new Identificacion { Guid = "guid-contrato-original" },
+            Resultado = new ResultadoFinal { Estado = "OK" },
+            DetalleEjecucion = new DetalleEjecucion { InstanceId = "instancia-vieja" }
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.InstanceId.Should().Be("fake-instance-001");
+        salida.DetalleEjecucion.EjecucionOriginalGuid.Should().Be("guid-contrato-original");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoReutilizado_ConservaLaRespuestaAunqueFallePersistir()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        {
+            Resultado = new ResultadoFinal { Estado = "OK" }
+        });
+        context.SetupActivityThrow("PersistirActivity", new Exception("BD caida"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        salida.DetalleEjecucion.Seguimiento.Actividades
+            .Should().Contain(a => a.Nombre == "Persistir" && a.Estado == "Failed");
+    }
+
     [Fact]
     public async Task RunOrchestrator_ClasificarFallaConTipologiaNoIdentificada_RetornaEstadoNoClasificado()
     {
