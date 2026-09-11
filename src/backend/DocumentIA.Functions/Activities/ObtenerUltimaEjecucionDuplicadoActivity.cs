@@ -99,6 +99,12 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
             // AB#100167: el contrato persistido va sin Seguimiento.Actividades desde AB#100166.
             ContratoTimelineRehidratador.Rehidratar(salida, ultimaConSalida.ActivityTimelineJson);
 
+            // AB#100258: el puente hacia esta fila es su EjecucionGuid, que se genera al
+            // persistir y no viaja dentro del contrato (Identificacion.Guid es el guid del
+            // Documento). PersistirActivity localiza la original por este valor para grabar
+            // EjecucionOriginalId; sin el, la traza de reutilizacion queda sin vinculo.
+            salida.DetalleEjecucion.EjecucionOriginalGuid = ultimaConSalida.EjecucionGuid;
+
             RehidratarResultadoSiIncompleto(salida, ultimaConSalida);
             await RehidratarTdnSiIncompletoAsync(salida, documento);
 

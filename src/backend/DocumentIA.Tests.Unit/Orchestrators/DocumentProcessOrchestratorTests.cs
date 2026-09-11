@@ -512,11 +512,19 @@ public class DocumentProcessOrchestratorTests
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", true);
+        // Identificacion.Guid es el guid del DOCUMENTO; el de la ejecucion reutilizada lo
+        // trae la actividad en DetalleEjecucion.EjecucionOriginalGuid. Son distintos a
+        // proposito: el orquestador tiene que propagar el segundo, no el primero.
         context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
         {
-            Identificacion = new Identificacion { Guid = "guid-contrato-original", Tipologia = "inli.13" },
+            Identificacion = new Identificacion { Guid = "guid-del-documento", Tipologia = "inli.13" },
             Resultado = new ResultadoFinal { Estado = "OK" },
-            DetalleEjecucion = new DetalleEjecucion { InstanceId = "instancia-vieja", OperationId = "operacion-vieja" }
+            DetalleEjecucion = new DetalleEjecucion
+            {
+                InstanceId = "instancia-vieja",
+                OperationId = "operacion-vieja",
+                EjecucionOriginalGuid = "guid-ejecucion-original"
+            }
         });
 
         await orchestrator.RunOrchestrator(context);
@@ -524,7 +532,7 @@ public class DocumentProcessOrchestratorTests
         var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
         persistido.Should().NotBeNull();
         persistido!.Reutilizacion.Should().NotBeNull();
-        persistido.Reutilizacion!.EjecucionOriginalGuid.Should().Be("guid-contrato-original");
+        persistido.Reutilizacion!.EjecucionOriginalGuid.Should().Be("guid-ejecucion-original");
         persistido.Reutilizacion.Sha256.Should().NotBeNullOrWhiteSpace();
     }
 
@@ -595,15 +603,20 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("VerificarDuplicadoActivity", true);
         context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
         {
-            Identificacion = new Identificacion { Guid = "guid-contrato-original" },
+            Identificacion = new Identificacion { Guid = "guid-del-documento" },
             Resultado = new ResultadoFinal { Estado = "OK" },
-            DetalleEjecucion = new DetalleEjecucion { InstanceId = "instancia-vieja" }
+            DetalleEjecucion = new DetalleEjecucion
+            {
+                InstanceId = "instancia-vieja",
+                EjecucionOriginalGuid = "guid-ejecucion-original"
+            }
         });
 
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.DetalleEjecucion.InstanceId.Should().Be("fake-instance-001");
-        salida.DetalleEjecucion.EjecucionOriginalGuid.Should().Be("guid-contrato-original");
+        salida.DetalleEjecucion.EjecucionOriginalGuid.Should().Be("guid-ejecucion-original",
+            "el puente hacia la original es su EjecucionGuid, no el guid del documento");
     }
 
     [Fact]

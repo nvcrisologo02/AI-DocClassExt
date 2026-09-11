@@ -318,8 +318,17 @@ public class DocumentProcessOrchestrator
         // escribiendo la traza no puede convertir en error una peticion ya resuelta.
         async Task RegistrarReutilizacionAsync(ContratoSalida reutilizada, string sha256)
         {
-            var guidOriginal = reutilizada.Identificacion.Guid;
-            reutilizada.DetalleEjecucion.EjecucionOriginalGuid = guidOriginal;
+            // El guid de la fila reutilizada lo trae ObtenerUltimaEjecucionDuplicadoActivity
+            // en DetalleEjecucion.EjecucionOriginalGuid. No sirve Identificacion.Guid: ese es
+            // el guid del Documento, y PersistirActivity busca por EjecucionGuid, asi que con
+            // el la original no se localizaba nunca y la traza quedaba sin EjecucionOriginalId.
+            var guidOriginal = reutilizada.DetalleEjecucion.EjecucionOriginalGuid ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(guidOriginal))
+            {
+                logger.LogWarning(
+                    "La ejecucion reutilizada no trae EjecucionOriginalGuid: la traza se registrara sin vinculo a la original");
+            }
+
             reutilizada.DetalleEjecucion.InstanceId = context.InstanceId;
             reutilizada.DetalleEjecucion.OperationId = entrada.Trazabilidad.OperationId;
 
