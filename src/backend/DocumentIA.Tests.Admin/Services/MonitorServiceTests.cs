@@ -292,4 +292,21 @@ public class MonitorServiceTests
         clon.Desde.Should().Be(new DateOnly(2026, 8, 1));
         clon.Hasta.Should().Be(new DateOnly(2026, 8, 31));
     }
+
+    // El input nativo no impide teclear 9999-12-31 o 0001-01-01. Sumar un dia al
+    // maximo lanza ArgumentOutOfRangeException, que no es la excepcion que las
+    // paginas capturan: escapaba y terminaba el circuito de Blazor Server.
+    [Theory]
+    [InlineData(9999, 12, 31)]
+    [InlineData(1, 1, 1)]
+    public void ToQueryString_ConFechasExtremas_NoLanza(int anio, int mes, int dia)
+    {
+        var extremo = new DateOnly(anio, mes, dia);
+        var filtro = new MonitorFiltroDto { Desde = extremo, Hasta = extremo };
+
+        var accion = () => filtro.ToQueryString();
+
+        accion.Should().NotThrow();
+        ExtraerInstante(filtro.ToQueryString(), "hasta").Should().BeAfter(ExtraerInstante(filtro.ToQueryString(), "desde"));
+    }
 }

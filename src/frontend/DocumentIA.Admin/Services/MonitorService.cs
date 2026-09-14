@@ -395,6 +395,12 @@ public class MonitorFiltroDto
 
     public bool EsRangoFijo => Desde is not null && Hasta is not null;
 
+    // El input nativo de fecha no impide teclear un año de cuatro nueves. Fuera de
+    // este tramo no hay datos que consultar y sumar un dia al maximo de DateOnly
+    // lanza una excepcion que las paginas no capturan.
+    public static readonly DateOnly FechaMinima = new(2000, 1, 1);
+    public static readonly DateOnly FechaMaxima = new(2100, 12, 31);
+
     public string? Tipologia { get; set; }
     public string? Estado { get; set; }
     public string? Flujo { get; set; }
@@ -451,12 +457,17 @@ public class MonitorFiltroDto
         if (Desde is { } d1 && Hasta is { } d2)
         {
             var (primero, ultimo) = d1 <= d2 ? (d1, d2) : (d2, d1);
+            primero = Acotar(primero);
+            ultimo = Acotar(ultimo);
             return (HoraEspana.InicioDelDiaUtc(primero), HoraEspana.InicioDelDiaUtc(ultimo.AddDays(1)));
         }
 
         var ahora = DateTime.UtcNow;
         return (ahora.AddDays(-RangoDias), ahora);
     }
+
+    private static DateOnly Acotar(DateOnly dia) =>
+        dia < FechaMinima ? FechaMinima : dia > FechaMaxima ? FechaMaxima : dia;
 
     public MonitorFiltroDto Clonar() => (MonitorFiltroDto)MemberwiseClone();
 }

@@ -122,4 +122,27 @@ public class MonitorFiltrosTests : TestContext
         emitidos[0].Hasta.Should().BeNull();
         emitidos[0].RangoDias.Should().Be(30);
     }
+
+    // Con una sola fecha la ventana relativa sigue mandando y los datos no
+    // corresponden a lo que muestran los inputs: hay que decirlo.
+    [Fact]
+    public void ConUnaSolaFecha_AvisaDeQueFaltaCompletarElPeriodo()
+    {
+        var emitidos = new List<MonitorFiltroDto>();
+        var cut = Render(new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }, emitidos);
+
+        cut.FindAll("input[type=date]")[1].Change("");
+        // La pagina que aloja el componente le devuelve el filtro emitido como parametro.
+        cut.SetParametersAndRender(p => p.Add(c => c.Filtro, emitidos.Single()));
+
+        cut.Markup.Should().Contain("Completa las dos fechas");
+    }
+
+    [Fact]
+    public void ConLasDosFechas_NoMuestraElAvisoDePeriodoIncompleto()
+    {
+        var cut = Render(new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }, []);
+
+        cut.Markup.Should().NotContain("Completa las dos fechas");
+    }
 }

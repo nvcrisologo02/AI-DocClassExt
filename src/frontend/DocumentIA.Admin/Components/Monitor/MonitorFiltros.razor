@@ -19,12 +19,20 @@
         {
         <div class="col-6 col-lg-2">
             <label class="form-label small text-muted mb-1">Desde</label>
-            <input type="date" class="form-control" value="@Fecha(Filtro.Desde)" @onchange="OnDesdeCambiado" />
+            <input type="date" class="form-control" value="@Fecha(Filtro.Desde)" @onchange="OnDesdeCambiado"
+                   min="@Fecha(MonitorFiltroDto.FechaMinima)" max="@Fecha(MonitorFiltroDto.FechaMaxima)" />
         </div>
         <div class="col-6 col-lg-2">
             <label class="form-label small text-muted mb-1">Hasta</label>
-            <input type="date" class="form-control" value="@Fecha(Filtro.Hasta)" @onchange="OnHastaCambiado" />
+            <input type="date" class="form-control" value="@Fecha(Filtro.Hasta)" @onchange="OnHastaCambiado"
+                   min="@Fecha(MonitorFiltroDto.FechaMinima)" max="@Fecha(MonitorFiltroDto.FechaMaxima)" />
         </div>
+        @if (!Filtro.EsRangoFijo)
+        {
+        <div class="col-12">
+            <small class="text-warning">Completa las dos fechas para aplicar el periodo; mientras tanto se muestra la ventana relativa anterior.</small>
+        </div>
+        }
         }
         <div class="col-6 col-lg-2">
             <label class="form-label small text-muted mb-1">Tipología</label>
