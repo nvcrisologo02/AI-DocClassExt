@@ -530,7 +530,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
 
             var loader = new ClassificationModelRegistryLoader(memoryCache, scopeFactory);
             var promptBuilder = new ClassificationTipologiaPromptBuilder(
-                memoryCache, 
+                memoryCache,
                 scopeFactory,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<ClassificationTipologiaPromptBuilder>.Instance);
             var tipologiaConfigLoader = new TipologiaConfigLoader(memoryCache, scopeFactory);
@@ -614,7 +614,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
 
             // Assert
             result.Clasificador.Should().Be("DocumentIntelligence");
-            _diProviderMock.Verify(d => d.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()), 
+            _diProviderMock.Verify(d => d.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()),
                 Times.Once);
         }
 
@@ -943,7 +943,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
 
             var loader = new ClassificationModelRegistryLoader(memoryCache, scopeFactory);
             var promptBuilder = new ClassificationTipologiaPromptBuilder(
-                memoryCache, 
+                memoryCache,
                 scopeFactory,
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<ClassificationTipologiaPromptBuilder>.Instance);
             var tipologiaConfigLoader = new TipologiaConfigLoader(memoryCache, scopeFactory);

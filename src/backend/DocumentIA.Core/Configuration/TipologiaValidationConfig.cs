@@ -77,7 +77,7 @@ namespace DocumentIA.Core.Configuration
         public int MaxPaginasDocumento { get; set; } = 0;
         public List<FieldValidationConfig> Fields { get; set; } = new List<FieldValidationConfig>();
 
-        #pragma warning disable CS0618
+#pragma warning disable CS0618
         [System.Text.Json.Serialization.JsonIgnore]
         public bool ResolvedSkipGDCUpload => Gdc?.SkipUpload ?? SkipGDCUpload;
         [System.Text.Json.Serialization.JsonIgnore]
@@ -96,7 +96,7 @@ namespace DocumentIA.Core.Configuration
         public string ResolvedGptDescripcion => Classification?.GptDescripcion ?? GptDescripcion;
         [System.Text.Json.Serialization.JsonIgnore]
         public bool ResolvedEnableRules => Classification?.EnableRules ?? true;
-        #pragma warning restore CS0618
+#pragma warning restore CS0618
 
         public TipologiaValidationConfig()
         {
@@ -200,7 +200,7 @@ namespace DocumentIA.Core.Configuration
         public bool AvoidConfidence { get; set; } = false;
         public string Description { get; set; } = string.Empty;
         public List<ValidationRuleConfig> Rules { get; set; } = new List<ValidationRuleConfig>();
-        
+
         // Para soportar arrays y objetos anidados
         public ItemsConfig? Items { get; set; }
 

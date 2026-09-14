@@ -11,8 +11,8 @@ public class SystemConfigService
     private readonly ILogger<SystemConfigService> _logger;
 
     public SystemConfigService(
-        IConfiguration configuration, 
-        TipologiaAdminService tipologiaService, 
+        IConfiguration configuration,
+        TipologiaAdminService tipologiaService,
         IHttpClientFactory httpClientFactory,
         ILogger<SystemConfigService> logger)
     {
@@ -29,7 +29,7 @@ public class SystemConfigService
     {
         var tipologias = await _tipologiaService.GetTipologiasAsync();
         var plugins = await _tipologiaService.GetPluginConfigsAsync();
-        
+
         var modelos = new List<ModeloConfigEntity>();
         // El enum entero, para que un tipo nuevo entre en el resumen sin tocar esto.
         foreach (var tipo in Enum.GetValues<TipoModelo>())
@@ -57,7 +57,7 @@ public class SystemConfigService
             // Configuración de APIs
             FunctionsBaseUrl = _configuration["FunctionsAdminApi:BaseUrl"] ?? string.Empty,
             FunctionsConfiguration = functionsConfig,
-            
+
             // Resumen de datos
             TipologiasTotal = tipologias.Count,
             TipologiasActivas = tipologias.Count(t => t.Activa),
@@ -80,7 +80,7 @@ public class SystemConfigService
 
             // Providers únicos
             ProvidersUsados = modelos.Select(m => m.Provider).Distinct().OrderBy(p => p).ToList(),
-            
+
             // Tipologías con más plugins
             TipologiasConPlugins = plugins.Select(p => p.TipologiaCodigo).Distinct().Count()
         };
@@ -95,7 +95,7 @@ public class SystemConfigService
         {
             // Obtener HttpClient de la factory - tiene BaseAddress configurado
             var httpClient = _httpClientFactory.CreateClient(nameof(SystemConfigService));
-            
+
             // La URL relativa se resolverá contra BaseAddress del HttpClient
             // BaseAddress ya es http://localhost:7071/api/
             var configUrl = "management/configuration";
@@ -136,7 +136,7 @@ public class SystemConfigService
             using (JsonDocument doc = JsonDocument.Parse(jsonContent))
             {
                 var root = doc.RootElement;
-                
+
                 var config = new FunctionsConfiguration
                 {
                     // Obtener environment de Functions (no del Admin)
@@ -154,11 +154,11 @@ public class SystemConfigService
                         {
                             var keyStr = key.GetString() ?? "";
                             var valueStr = value.GetString() ?? "";
-                            
+
                             // Filtrar solo configuración relevante (no secrets ni valores vacíos/masked)
-                            if (!keyStr.Contains("Password") && !keyStr.Contains("Key") && 
-                                !valueStr.Equals("***", StringComparison.OrdinalIgnoreCase) && 
-                                !string.IsNullOrWhiteSpace(valueStr) && 
+                            if (!keyStr.Contains("Password") && !keyStr.Contains("Key") &&
+                                !valueStr.Equals("***", StringComparison.OrdinalIgnoreCase) &&
+                                !string.IsNullOrWhiteSpace(valueStr) &&
                                 !valueStr.Equals("(empty)", StringComparison.OrdinalIgnoreCase))
                             {
                                 settingsList.Add($"{keyStr}: {valueStr}");

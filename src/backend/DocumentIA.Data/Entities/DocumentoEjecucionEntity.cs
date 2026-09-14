@@ -10,14 +10,14 @@ namespace DocumentIA.Data.Entities
     {
         [Key]
         public int Id { get; set; }
-        
+
         [Required]
         public int DocumentoId { get; set; }
-        
+
         [Required]
         [MaxLength(36)]
         public string EjecucionGuid { get; set; } = Guid.NewGuid().ToString();
-        
+
         public DateTime FechaEjecucion { get; set; } = DateTime.UtcNow;
 
         /// <summary>ID de instancia Durable Functions. Correlaciona con el estado en el portal de Azure.</summary>
@@ -27,7 +27,7 @@ namespace DocumentIA.Data.Entities
         /// <summary>W3C TraceId de App Insights (operation_Id). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
         [MaxLength(100)]
         public string? OperationId { get; set; }
-        
+
         [MaxLength(100)]
         public string? Tipologia { get; set; }
 
@@ -38,14 +38,14 @@ namespace DocumentIA.Data.Entities
         [Required]
         [MaxLength(50)]
         public string EstadoFinal { get; set; } = string.Empty;
-        
+
         public double ConfianzaGlobal { get; set; }
-        
+
         [MaxLength(200)]
         public string? ModeloClasificacion { get; set; }
-        
+
         public double ConfianzaClasificacion { get; set; }
-        
+
         public bool UseFallbackLLM { get; set; }
         public bool ClassificationOnly { get; set; }
 
@@ -60,14 +60,14 @@ namespace DocumentIA.Data.Entities
         /// </summary>
         [MaxLength(100)]
         public string? IdActivo { get; set; }
-        
+
         [Column(TypeName = "nvarchar(max)")]
         public string? DatosOriginalesJson { get; set; }
-        
+
         [Column(TypeName = "nvarchar(max)")]
         public string? DatosFinalesJson { get; set; }
-        
-         [Column(TypeName = "nvarchar(max)")]
+
+        [Column(TypeName = "nvarchar(max)")]
         public string? ContratoSalidaCompletoJson { get; set; }
 
         [Column(TypeName = "nvarchar(max)")]
@@ -146,11 +146,11 @@ namespace DocumentIA.Data.Entities
 
         [ForeignKey(nameof(DocumentoId))]
         public virtual DocumentoEntity Documento { get; set; } = null!;
-        
-        public virtual ICollection<PluginEjecucionEntity> PluginsEjecutados { get; set; } 
+
+        public virtual ICollection<PluginEjecucionEntity> PluginsEjecutados { get; set; }
             = new List<PluginEjecucionEntity>();
-        
-        public virtual ICollection<ValidacionResultadoEntity> Validaciones { get; set; } 
+
+        public virtual ICollection<ValidacionResultadoEntity> Validaciones { get; set; }
             = new List<ValidacionResultadoEntity>();
     }
 }

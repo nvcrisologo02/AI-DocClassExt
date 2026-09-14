@@ -182,7 +182,7 @@ namespace DocumentIA.Core.Configuration
                     var parsed = JsonSerializer.Deserialize<T>(jsonElement.GetRawText());
                     return parsed is null ? defaultValue : parsed;
                 }
-                
+
                 return (T)Convert.ChangeType(value, typeof(T));
             }
 

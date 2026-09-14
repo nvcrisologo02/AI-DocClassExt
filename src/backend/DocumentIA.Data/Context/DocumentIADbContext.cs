@@ -77,7 +77,7 @@ public class DocumentIADbContext : DbContext
             .IsUnique();
 
         // Seed data inicial
-        #pragma warning disable CS0618
+#pragma warning disable CS0618
         modelBuilder.Entity<TipologiaEntity>().HasData(
             new TipologiaEntity
             {
@@ -95,7 +95,7 @@ public class DocumentIADbContext : DbContext
                 FechaCreacion = DateTime.UtcNow
             }
         );
-        #pragma warning restore CS0618
+#pragma warning restore CS0618
         // Relacion Documento -> Ejecuciones (1:N)
         modelBuilder.Entity<DocumentoEntity>()
             .HasMany(d => d.Ejecuciones)

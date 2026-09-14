@@ -65,7 +65,7 @@ namespace DocumentIA.Functions.Services.Classification
 
             try
             {
-                _logger.LogInformation("Iniciando clasificación HybridTDN para {Documento}", 
+                _logger.LogInformation("Iniciando clasificación HybridTDN para {Documento}",
                     input.Entrada.Documento.Name);
 
                 _logger.LogInformation(
@@ -138,7 +138,7 @@ namespace DocumentIA.Functions.Services.Classification
                     StringComparison.OrdinalIgnoreCase);
 
                 // Revisar si DI superó umbral y no es RESTO
-                if (diResult.Confianza >= _options.DiConfidenceThreshold && 
+                if (diResult.Confianza >= _options.DiConfidenceThreshold &&
                     !isDiResto)
                 {
                     result.TipologiaDetectada = diResult.TipologiaDetectada;

@@ -12,7 +12,7 @@ namespace DocumentIA.Core.Validation.Rules
 
         public override ValidationResult Validate(string fieldName, object? value, Dictionary<string, object?>? context = null)
         {
-            if (value == null || 
+            if (value == null ||
                 (value is string str && string.IsNullOrWhiteSpace(str)))
             {
                 return CreateFailureResult(fieldName,

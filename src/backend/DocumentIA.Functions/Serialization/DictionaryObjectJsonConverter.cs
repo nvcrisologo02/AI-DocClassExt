@@ -50,7 +50,7 @@ public class DictionaryObjectJsonConverter : JsonConverter<Dictionary<string, ob
                     ? longVal
                     : reader.GetDouble(),
                 JsonTokenType.String => reader.GetString(),
-                JsonTokenType.StartObject or JsonTokenType.StartArray => 
+                JsonTokenType.StartObject or JsonTokenType.StartArray =>
                     JsonSerializer.Deserialize<object>(ref reader, options),
                 _ => throw new JsonException($"Token JSON no soportado: {reader.TokenType}")
             };

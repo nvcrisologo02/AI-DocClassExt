@@ -1,0 +1,23 @@
+# Convenciones de formato del repositorio. Las aplica dotnet format y las respetan
+# VS Code, Visual Studio y Rider. Fin de linea y BOM se dejan a Git (core.autocrlf)
+# y a cada fichero: fijarlos aqui generaria cambios masivos sin valor.
+root = true
+
+[*]
+indent_style = space
+indent_size = 4
+trim_trailing_whitespace = true
+insert_final_newline = true
+
+[*.{cs,razor}]
+indent_size = 4
+
+[*.{csproj,props,targets,sln,xml,json,yml,yaml}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{ps1,psm1}]
+# Los scripts PowerShell se guardan con BOM UTF-8 (PS 5.1 los lee mal sin el).
+charset = utf-8-bom

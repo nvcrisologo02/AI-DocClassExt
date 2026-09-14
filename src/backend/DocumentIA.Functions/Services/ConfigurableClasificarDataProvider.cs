@@ -179,7 +179,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                     @"^[A-Z]{4}$",
                     System.Text.RegularExpressions.RegexOptions.None,
                     TimeSpan.FromMilliseconds(100));
-                
+
                 if (tdn1Match.Success)
                 {
                     // TDN1 válido pero confianza baja: marcar como parcial

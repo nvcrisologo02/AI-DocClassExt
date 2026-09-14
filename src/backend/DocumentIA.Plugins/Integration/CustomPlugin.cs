@@ -33,7 +33,7 @@ namespace DocumentIA.Plugins.Integration
             assemblyPath = GetConfigValue(configuration, "assemblyPath") ?? string.Empty;
             className = GetConfigValue(configuration, "className") ?? string.Empty;
 
-            if (configuration.TryGetValue("customConfig", out var config) && 
+            if (configuration.TryGetValue("customConfig", out var config) &&
                 config is Dictionary<string, object> dict)
             {
                 customConfig = dict;
@@ -51,7 +51,7 @@ namespace DocumentIA.Plugins.Integration
                     }
 
                     logger.LogInformation(
-                        "Cargando enriquecedor custom: {Assembly} - {Class}", 
+                        "Cargando enriquecedor custom: {Assembly} - {Class}",
                         assemblyPath, className);
 
                     // Verificar que el archivo existe
@@ -62,7 +62,7 @@ namespace DocumentIA.Plugins.Integration
 
                     // Cargar assembly
                     var assembly = Assembly.LoadFrom(assemblyPath);
-                    
+
                     // Crear instancia
                     var type = assembly.GetType(className);
                     if (type == null)
@@ -82,7 +82,7 @@ namespace DocumentIA.Plugins.Integration
                     await enricherInstance.InitializeAsync(customConfig);
 
                     logger.LogInformation(
-                        "Enriquecedor custom cargado: {Name} v{Version}", 
+                        "Enriquecedor custom cargado: {Name} v{Version}",
                         enricherInstance.Name, enricherInstance.Version);
                 }
                 catch (Exception ex)
@@ -106,7 +106,7 @@ namespace DocumentIA.Plugins.Integration
                 }
 
                 // Obtener datos
-                var payload = data.ContainsKey("datosExtraidos") 
+                var payload = data.ContainsKey("datosExtraidos")
                     ? data["datosExtraidos"] as Dictionary<string, object> ?? data
                     : data;
 
@@ -124,7 +124,7 @@ namespace DocumentIA.Plugins.Integration
                 result.Duration = stopwatch.Elapsed;
 
                 logger.LogInformation(
-                    "Enriquecimiento custom exitoso. Campos devueltos: {Count}", 
+                    "Enriquecimiento custom exitoso. Campos devueltos: {Count}",
                     enrichedData.Count);
                 // Si el payload original contenía idActivo y el enriquecedor no lo devolvió,
                 // mantenerlo para asegurar trazabilidad en el pipeline
@@ -145,7 +145,7 @@ namespace DocumentIA.Plugins.Integration
                 result.Message = $"Error en enriquecedor custom: {ex.Message}";
                 result.Errors.Add(ex.ToString());
                 result.Duration = stopwatch.Elapsed;
-                
+
                 logger.LogError(ex, "Error ejecutando enriquecedor custom");
             }
 

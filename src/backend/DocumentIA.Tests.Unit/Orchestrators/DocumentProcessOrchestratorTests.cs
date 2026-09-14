@@ -3173,7 +3173,10 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
         });
         // Layout caido: el resolutor no devuelve nada, ni para el recorte ni para el completo.
         context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna });
@@ -3221,7 +3224,10 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
         });
         context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna });
         var clasificacion = BuildClasificacionOk();
@@ -3268,7 +3274,10 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
         });
         // El resolutor solo sabe devolver el recorte: el Paso 2.8 lo deja en datosNormalizados.
         context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# recorte de 3 paginas", 3, completo: false));
@@ -3380,7 +3389,10 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
         });
         context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# recorte de 3 paginas", 3, completo: false));
         context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
@@ -3846,7 +3858,10 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
         });
         // El resolutor devuelve el documento completo (por ejemplo, ya estaba en BD).
         context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# entero", 10, completo: true, FuenteMarkdown.BaseDatos));
@@ -3927,7 +3942,10 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
         });
         // Paso 2.8 trae el recorte; el Paso 4.5 (prompt de tipologia) consigue el documento entero.
         context.SetupActivitySequence(
@@ -3971,7 +3989,10 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
         });
         // La anticipacion del Paso 2.76 solo consigue el recorte; el prompt si logra el completo.
         context.SetupActivitySequence(
@@ -4016,7 +4037,10 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv", TotalPaginas = 10, PaginasIncluidas = 3, RecorteAplicado = true
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 10,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
         });
         context.SetupActivitySequence(
             "ObtenerMarkdownActivity",

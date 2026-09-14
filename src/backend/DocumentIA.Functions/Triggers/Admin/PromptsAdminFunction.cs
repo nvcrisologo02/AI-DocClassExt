@@ -250,9 +250,9 @@ public class PromptsAdminFunction
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al actualizar PromptTemplate {PromptKey} (Id: {Id}). Mensaje: {ErrorMessage}", 
+            _logger.LogError(ex, "Error al actualizar PromptTemplate {PromptKey} (Id: {Id}). Mensaje: {ErrorMessage}",
                 entity.PromptKey, entity.Id, ex.InnerException?.Message ?? ex.Message);
-            return await CreateError(req, HttpStatusCode.InternalServerError, 
+            return await CreateError(req, HttpStatusCode.InternalServerError,
                 $"Error al actualizar prompt ID {id}: {ex.InnerException?.Message ?? ex.Message}");
         }
 

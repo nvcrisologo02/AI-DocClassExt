@@ -554,9 +554,9 @@ public class AssetResolverService
             .Select(c =>
             {
                 var cand = new DireccionCandidate(
-                    NombreVia:    DireccionNormalizer.NormalizeNombreVia(c.DesNombreVia),
-                    Numero:       DireccionNormalizer.NormalizeNumero(c.NumVia),
-                    Municipio:    DireccionNormalizer.NormalizeMunicipio(c.DesMunicp),
+                    NombreVia: DireccionNormalizer.NormalizeNombreVia(c.DesNombreVia),
+                    Numero: DireccionNormalizer.NormalizeNumero(c.NumVia),
+                    Municipio: DireccionNormalizer.NormalizeMunicipio(c.DesMunicp),
                     CodigoPostal: DireccionNormalizer.NormalizeCodigoPostal(c.NumCodPostal));
                 var score = DireccionNormalizer.ScoreDireccion(query, cand);
                 return (Entidad: c, Score: score);

@@ -346,7 +346,10 @@ public class MarkdownResolverTests
         _repo.Setup(r => r.GetBySHA256Async("sha-1")).ReturnsAsync((DocumentoEntity?)null);
         _repo.Setup(r => r.GetByMD5Async("md5-1")).ReturnsAsync(new DocumentoEntity
         {
-            SHA256 = "otro", NormalizacionMarkdownGzip = MarkdownCompression.Compress("# por md5"), MarkdownPaginas = 14, MarkdownCompleto = true
+            SHA256 = "otro",
+            NormalizacionMarkdownGzip = MarkdownCompression.Compress("# por md5"),
+            MarkdownPaginas = 14,
+            MarkdownCompleto = true
         });
 
         var r = await _sut.ResolverAsync(NecesidadMarkdown.Completo(), Contexto());
@@ -415,7 +418,10 @@ public class MarkdownResolverTests
     {
         var ok = await _sut.PersistirAportadoAsync(new PersistirMarkdownInput
         {
-            Sha256 = "sha-1", Markdown = "# del clasificador", Paginas = 3, Completo = false
+            Sha256 = "sha-1",
+            Markdown = "# del clasificador",
+            Paginas = 3,
+            Completo = false
         });
 
         ok.Should().BeTrue();

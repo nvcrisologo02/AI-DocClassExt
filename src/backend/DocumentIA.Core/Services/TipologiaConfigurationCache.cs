@@ -25,12 +25,12 @@ public class TipologiaConfigurationCache
     private readonly IMemoryCache _cache;
     private readonly DocumentIADbContext _db;
     private readonly ILogger<TipologiaConfigurationCache> _logger;
-    
+
     // Cache keys
     private const string CacheKeyPattern = "tipologia:config:{0}";
     private const string CacheKeyAll = "tipologia:configs:all";
     private const string CacheKeyByCode = "tipologia:config:code:{0}";
-    
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -53,7 +53,7 @@ public class TipologiaConfigurationCache
     public async Task<TipologiaValidationConfig?> GetConfigAsync(int tipologiaId)
     {
         var cacheKey = string.Format(CacheKeyPattern, tipologiaId);
-        
+
         if (_cache.TryGetValue(cacheKey, out TipologiaValidationConfig? cached))
         {
             _logger.LogDebug("TipologiaConfigCache HIT (ID={Id})", tipologiaId);
@@ -69,7 +69,7 @@ public class TipologiaConfigurationCache
         }
 
         var config = ParseConfiguracionJson(tipologia.ConfiguracionJson);
-        
+
         // Cache con TTL adaptativo
         var ttl = GetAdaptiveTtl(tipologia.Estado);
         var cacheEntry = _cache.CreateEntry(cacheKey);
@@ -104,14 +104,14 @@ public class TipologiaConfigurationCache
 
         var tipologia = await _db.Tipologias
             .FirstOrDefaultAsync(t => t.Codigo.ToLower() == normalizedCode);
-        
+
         if (tipologia is null)
         {
             return null;
         }
 
         var config = ParseConfiguracionJson(tipologia.ConfiguracionJson);
-        
+
         var ttl = GetAdaptiveTtl(tipologia.Estado);
         var cacheEntry = _cache.CreateEntry(cacheKey);
         cacheEntry.Value = config;

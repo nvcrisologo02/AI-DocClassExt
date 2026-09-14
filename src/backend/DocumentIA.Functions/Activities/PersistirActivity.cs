@@ -55,7 +55,7 @@ namespace DocumentIA.Functions.Activities
 
             var nombreArchivoPersistible = ResolveNombreArchivoPersistible(salida.Identificacion.Documento, salida.Identificacion.Guid);
 
-            _logger.LogInformation("Persistiendo resultado para documento {Documento}", 
+            _logger.LogInformation("Persistiendo resultado para documento {Documento}",
                 nombreArchivoPersistible);
 
             try
@@ -73,7 +73,7 @@ namespace DocumentIA.Functions.Activities
 
                 // 1. Obtener o crear documento base
                 var documento = await _documentoRepo.GetBySHA256Async(salida.Integridad.SHA256);
-                
+
                 if (documento == null)
                 {
                     // AB#100254: el markdown del llamante (Instrucciones.Classification.Markdown)
@@ -128,7 +128,7 @@ namespace DocumentIA.Functions.Activities
                         FechaProceso = salida.Identificacion.FechaProceso,
                         FechaExpiracionBlob = fechaExpiracionBlob
                     };
-                    
+
                     documento = await _documentoRepo.AddAsync(documento);
                     _logger.LogInformation("Nuevo documento creado ID={Id}", documento.Id);
                 }
@@ -158,7 +158,7 @@ namespace DocumentIA.Functions.Activities
                     {
                         documento.IdActivo = salida.Integridad.IdActivo;
                     }
-                    
+
                     // === Actualizar campos TDN ===
                     if (!string.IsNullOrWhiteSpace(salida.Identificacion.Tdn1))
                         documento.Tdn1 = salida.Identificacion.Tdn1;
@@ -172,7 +172,7 @@ namespace DocumentIA.Functions.Activities
                         documento.ClassifierVersion = salida.DetalleEjecucion.Clasificacion.ClassifierVersion;
                     if (salida.DetalleEjecucion.Clasificacion.PagesProcessed > 0)
                         documento.PagesProcessed = salida.DetalleEjecucion.Clasificacion.PagesProcessed;
-                    
+
                     // AB#100254: en la actualizacion no se asigna ninguna columna de markdown, y
                     // ademas DocumentoRepository.UpdateAsync las marca como no modificadas para que
                     // no viajen en el UPDATE: sin eso, Update() marca toda la entidad y el SaveChanges
@@ -190,41 +190,41 @@ namespace DocumentIA.Functions.Activities
                 var resultado = new ResultadoProcesamientoEntity
                 {
                     DocumentoId = documento.Id,
-                    
+
                     // Clasificación
                     ModeloClasificacion = salida.DetalleEjecucion.Clasificacion.Modelo,
                     ConfianzaClasificacion = salida.DetalleEjecucion.Clasificacion.Confianza,
                     FallbackLLM = salida.DetalleEjecucion.Clasificacion.FallbackLLM,
-                    
+
                     // Extracción
                     ModeloExtraccion = salida.DetalleEjecucion.Extraccion.Modelo,
                     LayoutEnabled = salida.DetalleEjecucion.Extraccion.LayoutEnabled,
                     DatosExtraidosJson = JsonSerializer.Serialize(salida.DatosExtraidos),
-                    
+
                     // Postproceso
-                    NormalizacionesJson = salida.DetalleEjecucion.Postproceso?.Normalizaciones != null 
-                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Normalizaciones) 
+                    NormalizacionesJson = salida.DetalleEjecucion.Postproceso?.Normalizaciones != null
+                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Normalizaciones)
                         : null,
-                    ValidacionesJson = salida.DetalleEjecucion.Postproceso?.Validaciones != null 
-                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Validaciones) 
+                    ValidacionesJson = salida.DetalleEjecucion.Postproceso?.Validaciones != null
+                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Validaciones)
                         : null,
-                    InconsistenciasJson = salida.DetalleEjecucion.Postproceso?.Inconsistencias != null 
-                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Inconsistencias) 
+                    InconsistenciasJson = salida.DetalleEjecucion.Postproceso?.Inconsistencias != null
+                        ? JsonSerializer.Serialize(salida.DetalleEjecucion.Postproceso.Inconsistencias)
                         : null,
-                    
+
                     // Integración
-                    ModuloIntegracion = string.Join(",", 
+                    ModuloIntegracion = string.Join(",",
                         salida.DetalleEjecucion.Integracion?.Plugins?.Select(p => p.PluginKey) ?? Enumerable.Empty<string>()),
                     ResultadoIntegracion = salida.DetalleEjecucion.Integracion?.Estado ?? "DESCONOCIDO",
-                    
+
                     // Tiempos
                     TiempoNormalizacionMs = GetTiempoMs(salida.DetalleEjecucion.Extraccion.TiemposMs, "Normalize"),
                     TiempoClasificacionMs = GetTiempoMs(salida.DetalleEjecucion.Extraccion.TiemposMs, "Classify"),
                     TiempoExtraccionMs = GetTiempoMs(salida.DetalleEjecucion.Extraccion.TiemposMs, "Extract"),
-                    
+
                     FechaCreacion = DateTime.UtcNow
                 };
-                
+
                 // Guardar ResultadosProcesamiento
                 _context.ResultadosProcesamiento.Add(resultado);
                 await _context.SaveChangesAsync();
@@ -270,11 +270,11 @@ namespace DocumentIA.Functions.Activities
                     IdActivo = string.IsNullOrWhiteSpace(salida.Integridad.IdActivo)
                         ? null
                         : salida.Integridad.IdActivo.Trim().ToUpperInvariant(),
-                    
+
                     // NUEVO: Guardar respuesta completa para auditoria
-                    ContratoSalidaCompletoJson = JsonSerializer.Serialize(salida, new JsonSerializerOptions 
-                    { 
-                        WriteIndented = false 
+                    ContratoSalidaCompletoJson = JsonSerializer.Serialize(salida, new JsonSerializerOptions
+                    {
+                        WriteIndented = false
                     }),
 
                     // Se serializa desde la variable capturada: en este punto la lista del
@@ -340,12 +340,12 @@ namespace DocumentIA.Functions.Activities
                             StatusCode = plugin.StatusCode,
                             DurationMs = plugin.DurationMs,
                             Error = plugin.Error,
-                            DatosEnriquecidosJson = plugin.DatosEnriquecidos != null 
-                                ? JsonSerializer.Serialize(plugin.DatosEnriquecidos) 
+                            DatosEnriquecidosJson = plugin.DatosEnriquecidos != null
+                                ? JsonSerializer.Serialize(plugin.DatosEnriquecidos)
                                 : null,
                             FechaEjecucion = DateTime.UtcNow
                         });
-                        
+
                         if (ejecucion.DuracionTotalMs <= 0)
                         {
                             ejecucion.DuracionTotalMs += plugin.DurationMs;
@@ -393,10 +393,10 @@ namespace DocumentIA.Functions.Activities
                     Accion = "Procesamiento Completo",
                     Nivel = salida.Resultado.Estado == "OK" ? "Info" : "Warning",
                     Mensaje = $"Documento procesado con estado {salida.Resultado.Estado}",
-                    DetallesJson = JsonSerializer.Serialize(new 
-                    { 
+                    DetallesJson = JsonSerializer.Serialize(new
+                    {
                         EjecucionGuid = ejecucion.EjecucionGuid,
-                        Confianza = salida.Resultado.ConfianzaGlobal 
+                        Confianza = salida.Resultado.ConfianzaGlobal
                     }),
                     FechaHora = DateTime.UtcNow
                 });
@@ -530,7 +530,7 @@ namespace DocumentIA.Functions.Activities
         {
             if (tiempos == null || !tiempos.ContainsKey(clave))
                 return null;
-            
+
             return tiempos[clave];
         }
 
@@ -586,21 +586,21 @@ namespace DocumentIA.Functions.Activities
                 // T1 – TrackEvent "DocumentProcessed" con dimensiones clave
                 var properties = new Dictionary<string, string>
                 {
-                    ["Tipologia"]      = ejecucion.Tipologia ?? string.Empty,
-                    ["EstadoFinal"]    = ejecucion.EstadoFinal ?? string.Empty,
+                    ["Tipologia"] = ejecucion.Tipologia ?? string.Empty,
+                    ["EstadoFinal"] = ejecucion.EstadoFinal ?? string.Empty,
                     ["UseFallbackLLM"] = ejecucion.UseFallbackLLM.ToString(),
                     ["NombreDocumento"] = salida.Identificacion.Documento ?? string.Empty,
-                    ["EjecucionGuid"]  = ejecucion.EjecucionGuid
+                    ["EjecucionGuid"] = ejecucion.EjecucionGuid
                 };
                 _telemetryService.TrackEvent("DocumentProcessed", properties);
 
                 // T2 – TrackMetric duraciones por actividad
-                TrackDuracion("Total",        ejecucion.DuracionTotalMs,        ejecucion.Tipologia);
+                TrackDuracion("Total", ejecucion.DuracionTotalMs, ejecucion.Tipologia);
                 TrackDuracion("Clasificacion", ejecucion.DuracionClasificacionMs, ejecucion.Tipologia);
-                TrackDuracion("Extraccion",   ejecucion.DuracionExtraccionMs,   ejecucion.Tipologia);
-                TrackDuracion("Validacion",   ejecucion.DuracionValidacionMs,   ejecucion.Tipologia);
-                TrackDuracion("GDC",          ejecucion.DuracionGDCMs,          ejecucion.Tipologia);
-                TrackDuracion("Integracion",  ejecucion.DuracionIntegracionMs,  ejecucion.Tipologia);
+                TrackDuracion("Extraccion", ejecucion.DuracionExtraccionMs, ejecucion.Tipologia);
+                TrackDuracion("Validacion", ejecucion.DuracionValidacionMs, ejecucion.Tipologia);
+                TrackDuracion("GDC", ejecucion.DuracionGDCMs, ejecucion.Tipologia);
+                TrackDuracion("Integracion", ejecucion.DuracionIntegracionMs, ejecucion.Tipologia);
                 TrackDuracion("Persistencia", ejecucion.DuracionPersistenciaMs, ejecucion.Tipologia);
             }
             catch (Exception ex)

@@ -18,7 +18,10 @@ public class DocumentoEjecucionRepositoryListadoTests
         await using var ctx = CreateContext();
         ctx.Documentos.Add(new DocumentoEntity
         {
-            Id = 1, NombreArchivo = "nota-simple.pdf", SHA256 = "a", SubmittedBy = "srv_batch"
+            Id = 1,
+            NombreArchivo = "nota-simple.pdf",
+            SHA256 = "a",
+            SubmittedBy = "srv_batch"
         });
         ctx.DocumentoEjecuciones.Add(new DocumentoEjecucionEntity
         {
@@ -56,12 +59,19 @@ public class DocumentoEjecucionRepositoryListadoTests
         await using var ctx = CreateContext();
         ctx.Documentos.Add(new DocumentoEntity
         {
-            Id = 1, NombreArchivo = "nota-simple.pdf", SHA256 = "a", SubmittedBy = "srv_batch"
+            Id = 1,
+            NombreArchivo = "nota-simple.pdf",
+            SHA256 = "a",
+            SubmittedBy = "srv_batch"
         });
         ctx.DocumentoEjecuciones.Add(new DocumentoEjecucionEntity
         {
-            Id = 1, DocumentoId = 1, FechaEjecucion = Base.AddHours(1),
-            EstadoFinal = "OK", ConfianzaGlobal = 0.9, DuracionTotalMs = 100,
+            Id = 1,
+            DocumentoId = 1,
+            FechaEjecucion = Base.AddHours(1),
+            EstadoFinal = "OK",
+            ConfianzaGlobal = 0.9,
+            DuracionTotalMs = 100,
             SubmittedBy = "reproceso-manual"
         });
         ctx.SaveChanges();

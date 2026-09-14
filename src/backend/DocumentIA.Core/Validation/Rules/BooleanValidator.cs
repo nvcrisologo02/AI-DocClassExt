@@ -38,7 +38,7 @@ namespace DocumentIA.Core.Validation.Rules
 
             // Aceptar variantes comunes
             var lowerValue = valueString.ToLowerInvariant().Trim();
-            if (lowerValue == "1" || lowerValue == "0" || 
+            if (lowerValue == "1" || lowerValue == "0" ||
                 lowerValue == "si" || lowerValue == "sí" || lowerValue == "yes" ||
                 lowerValue == "no" || lowerValue == "verdadero" || lowerValue == "falso")
             {

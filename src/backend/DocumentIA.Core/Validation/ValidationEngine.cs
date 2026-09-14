@@ -40,12 +40,12 @@ namespace DocumentIA.Core.Validation
                 {
                     report.TotalChecked++;
                     var result = rule.Validate(fieldName, fieldValue, context);
-                    
+
                     // IMPORTANTE: Solo agregar resultados INVALIDOS al reporte
                     if (!result.IsValid)
                     {
                         report.AddResult(result);
-                        
+
                         // Si es error critico, parar validacion de este campo
                         if (result.Severity == ValidationSeverity.Error)
                         {

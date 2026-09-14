@@ -52,7 +52,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             _memoryCache = new MemoryCache(new MemoryCacheOptions());
             _scopeFactoryMock = new Mock<IServiceScopeFactory>();
             _loggerMock = new Mock<ILogger<GptClasificarDataProvider>>();
-            
+
             // Create real PromptTraceTelemetryService instead of mocking
             var telemetryClient = new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true });
             var promptTracingSettings = Options.Create(new PromptTracingSettings { Enabled = false });
@@ -69,8 +69,8 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             _promptDefaults = Options.Create(new PromptDefaultsSettings
             {
                 ModelKey = "default.gpt4o-mini",
-                     SystemPrompt = "Eres un analista documental experto. Responde en espanol de Espana, sin inventar informacion y siguiendo estrictamente el formato solicitado.",
-                     UserPromptTemplate = @"Genera un resumen ejecutivo del documento procesado siguiendo estrictamente estas instrucciones:
+                SystemPrompt = "Eres un analista documental experto. Responde en espanol de Espana, sin inventar informacion y siguiendo estrictamente el formato solicitado.",
+                UserPromptTemplate = @"Genera un resumen ejecutivo del documento procesado siguiendo estrictamente estas instrucciones:
 
 - Idioma: Espanol (Espana)
 - Longitud maxima: 500 caracteres

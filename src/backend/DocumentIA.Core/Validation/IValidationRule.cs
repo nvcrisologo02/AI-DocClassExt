@@ -10,7 +10,7 @@ namespace DocumentIA.Core.Validation
     {
         string RuleName { get; }
         ValidationSeverity Severity { get; }
-        
+
         /// <summary>
         /// Ejecuta la validacion sobre el valor proporcionado
         /// </summary>

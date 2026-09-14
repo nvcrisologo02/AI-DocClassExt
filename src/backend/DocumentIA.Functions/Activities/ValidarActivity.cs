@@ -31,7 +31,7 @@ namespace DocumentIA.Functions.Activities
             try
             {
                 ValidationEngine engine;
-                
+
                 try
                 {
                     engine = _tipologiaConfigLoader.BuildValidationEngine(input.Tipologia);
@@ -40,7 +40,7 @@ namespace DocumentIA.Functions.Activities
                 catch (System.IO.FileNotFoundException ex)
                 {
                     _logger.LogWarning(ex, $"No se encontro configuracion de validacion para {input.Tipologia}");
-                    
+
                     return Task.FromResult(new DetalleValidacion
                     {
                         TotalReglas = 0,

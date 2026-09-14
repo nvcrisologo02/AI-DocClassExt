@@ -112,7 +112,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                     {
                         CancellationToken = linkedCts.Token
                     };
-                    #pragma warning disable CS8625
+#pragma warning disable CS8625
                     operation = contentRange is { } range
                         ? await client.AnalyzeBinaryAsync(
                             WaitUntil.Completed,
@@ -134,7 +134,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                             contentRange: null,
                             clientRequestId: null,
                             context: requestContext);
-                            #pragma warning restore CS8625
+#pragma warning restore CS8625
                     analysisStopwatch.Stop();
                     analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
                     break;

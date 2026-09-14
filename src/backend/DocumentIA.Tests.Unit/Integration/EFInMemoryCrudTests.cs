@@ -172,17 +172,25 @@ public class EFInMemoryCrudTests : IDisposable
     {
         _context.Documentos.Add(new DocumentoEntity
         {
-            Guid = Guid.NewGuid().ToString(), NombreArchivo = "a.pdf",
-            SHA256 = "sha1", MD5 = "md1", CRC32 = "cr1"
+            Guid = Guid.NewGuid().ToString(),
+            NombreArchivo = "a.pdf",
+            SHA256 = "sha1",
+            MD5 = "md1",
+            CRC32 = "cr1"
         });
         _context.Documentos.Add(new DocumentoEntity
         {
-            Guid = Guid.NewGuid().ToString(), NombreArchivo = "b.pdf",
-            SHA256 = "sha2", MD5 = "md2", CRC32 = "cr2"
+            Guid = Guid.NewGuid().ToString(),
+            NombreArchivo = "b.pdf",
+            SHA256 = "sha2",
+            MD5 = "md2",
+            CRC32 = "cr2"
         });
         _context.Tipologias.Add(new TipologiaEntity
         {
-            Codigo = "tipo1", Nombre = "Tipo 1", FechaCreacion = DateTime.UtcNow
+            Codigo = "tipo1",
+            Nombre = "Tipo 1",
+            FechaCreacion = DateTime.UtcNow
         });
 
         await _context.SaveChangesAsync();

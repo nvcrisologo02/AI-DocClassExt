@@ -37,7 +37,7 @@ public class CatalogoTdnRepositoryIntegrationTests
         using (var context = new DocumentIADbContext(options))
         {
             var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
-            
+
             var result = await repository.GetTdn2PromptByFamiliaAsync("SERE");
 
             // Assert
@@ -70,7 +70,7 @@ public class CatalogoTdnRepositoryIntegrationTests
         using (var context = new DocumentIADbContext(options))
         {
             var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
-            
+
             var result = await repository.GetTdn2PromptByFamiliaAsync("sere");
 
             // Assert
@@ -103,7 +103,7 @@ public class CatalogoTdnRepositoryIntegrationTests
         using (var context = new DocumentIADbContext(options))
         {
             var repository = new CatalogoTdnRepository(context, Microsoft.Extensions.Logging.Abstractions.NullLogger<CatalogoTdnRepository>.Instance);
-            
+
             var result = await repository.GetTdn2PromptByFamiliaAsync("ESCR");
 
             // Assert

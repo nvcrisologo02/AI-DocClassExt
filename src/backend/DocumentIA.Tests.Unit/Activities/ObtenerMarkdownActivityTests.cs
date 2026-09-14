@@ -79,7 +79,9 @@ public class ObtenerMarkdownActivityTests
         resolver.Setup(r => r.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResultadoMarkdown
             {
-                Markdown = "# x", Paginas = 10, Fuente = FuenteMarkdown.Layout,
+                Markdown = "# x",
+                Paginas = 10,
+                Fuente = FuenteMarkdown.Layout,
                 Consumos = { new ConsumoIA { Actividad = ActividadesIA.Layout, Operacion = "layout.prebuilt-layout", Proveedor = ProveedoresIA.DocumentIntelligence, Modelo = "prebuilt-layout", Paginas = 10 } }
             });
         var actividad = new ObtenerMarkdownActivity(new Mock<ILogger<ObtenerMarkdownActivity>>().Object, resolver.Object, CargadorCon());
@@ -100,7 +102,9 @@ public class ObtenerMarkdownActivityTests
         resolver.Setup(r => r.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ResultadoMarkdown
             {
-                Markdown = "# x", Paginas = 10, Fuente = FuenteMarkdown.Layout,
+                Markdown = "# x",
+                Paginas = 10,
+                Fuente = FuenteMarkdown.Layout,
                 Consumos = { new ConsumoIA { Actividad = ActividadesIA.Layout, Operacion = "layout.prebuilt-layout", Proveedor = ProveedoresIA.DocumentIntelligence, Modelo = "prebuilt-layout", Paginas = 10 } }
             });
 
