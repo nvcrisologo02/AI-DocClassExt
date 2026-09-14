@@ -175,7 +175,7 @@ public class PromptsAdminFunction
             IsActive = false, // Siempre se crea como borrador
             Description = string.IsNullOrWhiteSpace(payload.Description) ? null : payload.Description!.Trim(),
             CreatedAtUtc = DateTime.UtcNow,
-            CreatedBy = string.IsNullOrWhiteSpace(payload.CreatedBy) ? null : payload.CreatedBy!.Trim()
+            CreatedBy = string.IsNullOrWhiteSpace(payload.CreatedBy) ? string.Empty : payload.CreatedBy.Trim()
         };
 
         _dbContext.PromptTemplates.Add(entity);
@@ -250,9 +250,9 @@ public class PromptsAdminFunction
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error al actualizar PromptTemplate {PromptKey} (Id: {Id}). Mensaje: {ErrorMessage}", 
+            _logger.LogError(ex, "Error al actualizar PromptTemplate {PromptKey} (Id: {Id}). Mensaje: {ErrorMessage}",
                 entity.PromptKey, entity.Id, ex.InnerException?.Message ?? ex.Message);
-            return await CreateError(req, HttpStatusCode.InternalServerError, 
+            return await CreateError(req, HttpStatusCode.InternalServerError,
                 $"Error al actualizar prompt ID {id}: {ex.InnerException?.Message ?? ex.Message}");
         }
 

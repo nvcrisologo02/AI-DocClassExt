@@ -35,7 +35,8 @@ public record PromptTemplateDto(
 public record CreatePromptTemplateRequest(
     [property: JsonPropertyName("promptKey")] string PromptKey,
     [property: JsonPropertyName("content")] string Content,
-    [property: JsonPropertyName("description")] string? Description
+    [property: JsonPropertyName("description")] string? Description,
+    [property: JsonPropertyName("createdBy")] string CreatedBy
 );
 
 /// <summary>Request para actualizar contenido de un template en draft.</summary>

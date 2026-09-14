@@ -24,7 +24,7 @@ public class HealthcheckFunctionTests
         json.RootElement.GetProperty("ok").GetBoolean().Should().BeTrue();
         DateTimeOffset.Parse(json.RootElement.GetProperty("timestamp").GetString()!).UtcDateTime.Should().NotBe(default);
     }
-    
+
     // ------------------------------------------------------------------
     // Con SystemHealthService mockeado
     // ------------------------------------------------------------------

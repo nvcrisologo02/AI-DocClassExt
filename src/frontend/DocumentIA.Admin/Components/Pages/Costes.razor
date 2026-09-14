@@ -3,7 +3,6 @@
 @inject MonitorService MonitorService
 @inject NavigationManager Navigation
 @rendermode InteractiveServer
-@implements IDisposable
 
 @* Seccion de costes de IA (AB#100239). Evolucion del Monitor v2: mismos filtros,
    mismo listado, mismo detalle y mismo modal, con la cabecera y el desglose
@@ -99,7 +98,6 @@
     private int _tamanoPagina = 25;
     private bool _cargando;
     private string? _error;
-    private bool _disposed;
 
     private string? _modalGuid;
     private bool _modalCargando;
@@ -258,10 +256,5 @@
         {
             _cargandoDetalle.Remove(guid);
         }
-    }
-
-    public void Dispose()
-    {
-        _disposed = true;
     }
 }

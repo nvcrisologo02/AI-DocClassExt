@@ -35,7 +35,7 @@ namespace DocumentIA.Core.Validation.Rules
                 {
                     return CreateSuccessResult(fieldName);
                 }
-                return CreateFailureResult(fieldName, 
+                return CreateFailureResult(fieldName,
                     string.Format("NIF '{0}' tiene letra de control incorrecta", nifValue),
                     "Verificar el numero y letra del NIF");
             }
@@ -108,7 +108,7 @@ namespace DocumentIA.Core.Validation.Rules
             for (int i = 0; i < 7; i++)
             {
                 int digit = int.Parse(digits[i].ToString());
-                
+
                 if (i % 2 == 0)
                 {
                     int doubled = digit * 2;

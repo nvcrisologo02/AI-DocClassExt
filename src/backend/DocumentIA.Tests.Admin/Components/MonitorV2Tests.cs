@@ -33,7 +33,7 @@ public class MonitorMatrizTests : TestContext
         (string Proceso, string Calidad)? emitido = null;
         var cut = RenderComponent<MonitorMatriz>(p => p
             .Add(c => c.Celdas, Matriz())
-            .Add(c => c.CeldaSeleccionada, (( string, string) v) => emitido = v));
+            .Add(c => c.CeldaSeleccionada, ((string, string) v) => emitido = v));
 
         // La celda del cuadrante que antes era invisible: completado + revision.
         cut.FindAll("button").First(b => b.TextContent.Trim() == "2980").Click();
@@ -157,7 +157,7 @@ public class MonitorLecturasTests : TestContext
             .Select(m => m.Groups[1].Value).ToList();
 
         anchos.Should().NotBeEmpty();
-        anchos.Should().OnlyContain(a => !a.Contains(".") || a.Split(new[]{'.'})[1].Length <= 2);
+        anchos.Should().OnlyContain(a => !a.Contains(".") || a.Split(new[] { '.' })[1].Length <= 2);
     }
 
     [Fact]

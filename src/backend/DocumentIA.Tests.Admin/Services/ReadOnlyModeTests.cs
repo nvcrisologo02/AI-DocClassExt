@@ -63,7 +63,7 @@ public class ReadOnlyModeTests
 
     public static TheoryData<string, Func<PromptManagementService, Task>> EscriturasDePrompts() => new()
     {
-        { "CreatePromptTemplateAsync", s => s.CreatePromptTemplateAsync(new CreatePromptTemplateRequest("k", "contenido largo", null)) },
+        { "CreatePromptTemplateAsync", s => s.CreatePromptTemplateAsync(new CreatePromptTemplateRequest("k", "contenido largo", null, "tester")) },
         { "UpdatePromptTemplateAsync", s => s.UpdatePromptTemplateAsync(1, new UpdatePromptTemplateRequest("contenido largo", null, "u")) },
         { "ActivatePromptVersionAsync", s => s.ActivatePromptVersionAsync(1, "u") },
         { "RollbackPromptVersionAsync", s => s.RollbackPromptVersionAsync("k", 1, "u") },

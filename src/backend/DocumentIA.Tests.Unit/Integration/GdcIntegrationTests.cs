@@ -20,7 +20,7 @@ namespace DocumentIA.Tests.Unit.Integration
             {
                 var content = request.Content?.ReadAsStringAsync().Result ?? string.Empty;
 
-                if (content.Contains("searchEntities") || content.Contains("entityTypeId") )
+                if (content.Contains("searchEntities") || content.Contains("entityTypeId"))
                 {
                     if (content.Contains("md5-exists") || content.Contains("this-exists") || content.Contains("some-exists-id"))
                     {

@@ -34,7 +34,7 @@ public class BlobCleanupTimerTrigger
     }
 
     [Function(nameof(BlobCleanupTimerTrigger))]
-    public async Task Run([TimerTrigger("%BlobRetentionCleanupCron%") ] TimerInfo? timerInfo)
+    public async Task Run([TimerTrigger("%BlobRetentionCleanupCron%")] TimerInfo? timerInfo)
     {
         var batchSize = _configuration.GetValue<int?>("BlobRetention:BatchSize") ?? 200;
         if (batchSize <= 0)

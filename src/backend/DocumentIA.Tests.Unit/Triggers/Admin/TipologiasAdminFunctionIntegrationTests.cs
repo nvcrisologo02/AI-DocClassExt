@@ -266,9 +266,7 @@ public class TipologiasAdminFunctionIntegrationTests
     {
         var method = GetValidateBusinessRulesMethod();
         var config = MakeMinimalConfig("mi-tipo", "1.0.0");
-        config.SkipGDCUpload = false;
-        config.GdcTipoDocumento = "NOTS";
-        config.GdcSerie = "AI09";
+        config.Gdc = new GdcConfig { SkipUpload = false, TipoDocumento = "NOTS", Serie = "AI09" };
 
         var result = method.Invoke(null, new object?[] { config }) as string;
 
@@ -284,7 +282,7 @@ public class TipologiasAdminFunctionIntegrationTests
             TipologiaId = tipologiaId,
             TipologiaNombre = "Test tipologia",
             Version = version,
-            SkipGDCUpload = true,
+            Gdc = new GdcConfig { SkipUpload = true },
             Extraction = new TipologiaExtractionConfig { Enabled = false }
         };
     }

@@ -43,7 +43,8 @@ public class PrepararDocumentoClasificacionActivity
         }
         else
         {
-            documentoBase64 = input.DocumentoBase64;
+            documentoBase64 = input.DocumentoBase64
+                ?? throw new InvalidOperationException("La entrada no trae BlobPath ni DocumentoBase64.");
         }
 
         var recorte = _pdfRecorteService.RecortarParaClasificacion(documentoBase64, maxPaginas);

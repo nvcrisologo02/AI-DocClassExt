@@ -919,10 +919,16 @@ public class PersistirActivityTests : IDisposable
         // Regresion: una reejecucion en SIN_CONTENIDO_DOCUMENTO borraba el markdown bueno con null.
         var existente = new DocumentoEntity
         {
-            Id = 7, SHA256 = "sha256_upd", MD5 = "m", CRC32 = "c", Guid = "g", NombreArchivo = "d.pdf",
+            Id = 7,
+            SHA256 = "sha256_upd",
+            MD5 = "m",
+            CRC32 = "c",
+            Guid = "g",
+            NombreArchivo = "d.pdf",
             NormalizacionMarkdownGzip = MarkdownCompression.Compress("# el bueno"),
             NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64("# el bueno"),
-            MarkdownPaginas = 14, MarkdownCompleto = true
+            MarkdownPaginas = 14,
+            MarkdownCompleto = true
         };
         var actualizado = PrepararDocumentoExistente(existente);
         var salida = BuildSalidaMinima("sha256_upd");
@@ -943,9 +949,15 @@ public class PersistirActivityTests : IDisposable
         // La escritura en la actualizacion la hace el resolutor con la regla de cobertura.
         var existente = new DocumentoEntity
         {
-            Id = 8, SHA256 = "sha256_upd2", MD5 = "m", CRC32 = "c", Guid = "g", NombreArchivo = "d.pdf",
+            Id = 8,
+            SHA256 = "sha256_upd2",
+            MD5 = "m",
+            CRC32 = "c",
+            Guid = "g",
+            NombreArchivo = "d.pdf",
             NormalizacionMarkdownGzip = MarkdownCompression.Compress("# completo"),
-            MarkdownPaginas = 14, MarkdownCompleto = true
+            MarkdownPaginas = 14,
+            MarkdownCompleto = true
         };
         var actualizado = PrepararDocumentoExistente(existente);
         var salida = BuildSalidaMinima("sha256_upd2");

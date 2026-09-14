@@ -50,7 +50,7 @@ namespace DocumentIA.Tests.Plugins
             // Arrange
             var mockLogger = new Mock<ILogger<PluginManager>>();
             var manager = new PluginManager(mockLogger.Object);
-            
+
             var mockPlugin = new Mock<IIntegrationPlugin>();
             mockPlugin.Setup(p => p.PluginName).Returns("FailingPlugin");
             mockPlugin.Setup(p => p.Version).Returns("1.0.0");

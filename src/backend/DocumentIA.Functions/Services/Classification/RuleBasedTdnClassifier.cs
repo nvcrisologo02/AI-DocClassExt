@@ -303,8 +303,8 @@ namespace DocumentIA.Functions.Services.Classification
             var score = new HeuristicScore();
 
             // Strong signals (3.0 points cada uno)
-            var strongSignals = new[] 
-            { 
+            var strongSignals = new[]
+            {
                 "escritura de compraventa", "dacion en pago", "cancelacion de hipoteca",
                 "prestamo hipotecario", "decreto de adjudicacion", "mandamiento de cancelacion"
             };
@@ -318,8 +318,8 @@ namespace DocumentIA.Functions.Services.Classification
             }
 
             // Positive signals (1.0 point cada uno)
-            var positiveSignals = new[] 
-            { 
+            var positiveSignals = new[]
+            {
                 "escritura", "compra", "vende", "hipoteca", "transmite", "adquisicion",
                 "titulo de propiedad", "dominio"
             };
@@ -333,8 +333,8 @@ namespace DocumentIA.Functions.Services.Classification
             }
 
             // Negative signals (-2.0 points cada uno)
-            var negativeSignals = new[] 
-            { 
+            var negativeSignals = new[]
+            {
                 "nota simple", "ibi", "tasacion", "desconocido"
             };
             foreach (var signal in negativeSignals)

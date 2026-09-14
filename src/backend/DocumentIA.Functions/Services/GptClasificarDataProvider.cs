@@ -263,7 +263,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         // Guardar resumen de Phase 1 para reutilizar (no se regenera en Phase 2)
         var resumenPhase1 = phase1Parsed.Value.Resumen;
-        
+
         var propuesta = phase1Parsed.Value.Propuesta;
         var tdn1Code = phase1Parsed.Value.Tdn1;
 
@@ -314,7 +314,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 _logger.LogInformation(
                     "GPT devolvió propuesta sin TDN1 extraíble: '{Propuesta}'. Marcando como tipología virtual.",
                     propuesta);
-                
+
                 // Confianza autoreportada por el modelo (antes se forzaba a 0.1).
                 var confianzaVirtualPropuesta = phase1Parsed.Value.Confianza ?? 0.9;
                 return new ResultadoClasificacion
@@ -333,7 +333,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return BuildUnclassifiedResult(model, "tdn1_no_resuelto", propuesta);
         }
 
-        tdn1Code = tdn1Code!;
         var confianzaPhase1 = phase1Parsed.Value.Confianza ?? 0.9;
 
         if (string.Equals(nivelClasificacion, ClassificationLevelResolver.LevelTdn1, StringComparison.OrdinalIgnoreCase))

@@ -110,13 +110,13 @@ public sealed class ClassificationPromptProvider : IClassificationPromptProvider
             fallbackSet.Version,
             stopwatch.ElapsedMilliseconds,
             CacheTtl.TotalSeconds);
-        
+
         // Cachear también el fallback para evitar reconstrucción en cada llamada
         _cache.Set(cacheKey, fallbackSet, CacheTtl);
-        
+
         // Log completo si está habilitado
         LogFullPromptsIfEnabled(fallbackSet);
-        
+
         return fallbackSet;
     }
 

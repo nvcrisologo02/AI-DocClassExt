@@ -42,7 +42,7 @@ namespace DocumentIA.Core.Validation.Models
         public void AddResult(ValidationResult result)
         {
             Results.Add(result);
-            
+
             switch (result.Severity)
             {
                 case ValidationSeverity.Error:

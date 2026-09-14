@@ -4,7 +4,7 @@ public interface ICatalogoTdnRepository
 {
     Task<IReadOnlyCollection<TdnCatalogItem>> GetFamiliasTdnActivasAsync(CancellationToken cancellationToken = default);
     Task<IReadOnlyCollection<TdnCatalogItem>> GetSubtiposByFamiliaAsync(string tdn1Codigo, CancellationToken cancellationToken = default);
-    
+
     /// <summary>
     /// Obtiene el prompt personalizado para clasificación TDN2 de una familia específica.
     /// </summary>

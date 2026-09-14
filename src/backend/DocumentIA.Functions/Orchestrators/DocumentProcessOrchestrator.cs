@@ -134,7 +134,7 @@ public class DocumentProcessOrchestrator
         var logger = context.CreateReplaySafeLogger<DocumentProcessOrchestrator>();
 
         logger.LogInformation($"Iniciando procesamiento para documento: {entrada.Documento.Name}");
-        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento?.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento?.BlobPath ?? "(null)"}' | Base64Length: {entrada.Documento?.Content?.Base64?.Length ?? 0}");
+        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento.BlobPath ?? "(null)"}' | Base64Length: {entrada.Documento.Content.Base64?.Length ?? 0}");
 
         var salida = new ContratoSalida
         {
@@ -441,7 +441,7 @@ public class DocumentProcessOrchestrator
             BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
                 ? salida.Integridad.RutaBlobStorage
                 : entrada.Documento.BlobPath,
-            DocumentoBase64 = entrada.Documento.Content?.Base64,
+            DocumentoBase64 = entrada.Documento.Content.Base64,
             NombreDocumento = entrada.Documento.Name,
             Tipologia = salida.Identificacion.Tipologia,
             // Paginas del DOCUMENTO, nunca las del recorte: el resolutor infiere de aqui si un
@@ -864,7 +864,7 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
             salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
-            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{entrada.Documento.Content?.Base64?.Substring(0, Math.Min(20, entrada.Documento.Content?.Base64?.Length ?? 0)) ?? "(null)"}'");
+            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{entrada.Documento.Content.Base64?[..Math.Min(20, entrada.Documento.Content.Base64.Length)] ?? "(null)"}'");
 
             if (entradaPorObjectIdGdc)
             {
@@ -922,7 +922,7 @@ public class DocumentProcessOrchestrator
                             salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
                             {
                                 ReutilizadaPorDuplicado = true,
-                                CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion?.Costes?.CosteTotalEur
+                                CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
                             };
 
                             await RegistrarReutilizacionAsync(salidaDuplicado, duplicadoPorMd5.SHA256);
@@ -1047,7 +1047,7 @@ public class DocumentProcessOrchestrator
                         salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
                         {
                             ReutilizadaPorDuplicado = true,
-                            CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion?.Costes?.CosteTotalEur
+                            CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
                         };
 
                         await RegistrarReutilizacionAsync(salidaDuplicado, salida.Integridad.SHA256);
@@ -1193,7 +1193,7 @@ public class DocumentProcessOrchestrator
                     logger.LogWarning(
                         "Paso 2.75: ExpectedType '{ExpectedType}' no resuelve contra el catálogo de tipologías. Se ignora y se clasifica normalmente.",
                         entrada.Instrucciones.ExpectedType);
-                    entrada.Instrucciones.ExpectedType = null;
+                    entrada.Instrucciones.ExpectedType = string.Empty;
                 }
             }
 
@@ -1346,12 +1346,12 @@ public class DocumentProcessOrchestrator
                         return salida;
                     }
 
-                        var mensajeClasificacion = resultadoClasificacion.FallbackLLM
-                            ? $"Fallback Azure OpenAI activado ({resultadoClasificacion.FallbackRazon ?? "sin razon informada"})"
-                            : (!string.IsNullOrWhiteSpace(resultadoClasificacion.FallbackRazon)
-                                && resultadoClasificacion.FallbackRazon.StartsWith("fallback_attempt_failed:", StringComparison.OrdinalIgnoreCase)
-                                ? $"Fallback Azure OpenAI intentado pero no aplicado ({resultadoClasificacion.FallbackRazon})"
-                                : null);
+                    var mensajeClasificacion = resultadoClasificacion.FallbackLLM
+                        ? $"Fallback Azure OpenAI activado ({resultadoClasificacion.FallbackRazon ?? "sin razon informada"})"
+                        : (!string.IsNullOrWhiteSpace(resultadoClasificacion.FallbackRazon)
+                            && resultadoClasificacion.FallbackRazon.StartsWith("fallback_attempt_failed:", StringComparison.OrdinalIgnoreCase)
+                            ? $"Fallback Azure OpenAI intentado pero no aplicado ({resultadoClasificacion.FallbackRazon})"
+                            : null);
 
                     MarcarFinActividad(
                         "Clasificar",
@@ -1363,7 +1363,7 @@ public class DocumentProcessOrchestrator
                 catch (Exception ex)
                 {
                     MarcarFinActividad("Clasificar", "Failed", ex.Message);
-                    
+
                     // Si la clasificación falló porque no se pudo identificar la tipología,
                     // terminar el proceso ahí sin intentar extraer ni validar
                     if (ex.Message.Contains("No se ha podido identificar la tipologia"))
@@ -1386,7 +1386,7 @@ public class DocumentProcessOrchestrator
                         };
                         salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
                         RegistrarModeloLlm(salida.DetalleEjecucion.Clasificacion.Modelo);
-                        
+
                         salida.Resultado.Estado = "NO_CLASIFICADO";
                         salida.Resultado.MensajeError = mensajeTipologiaNoIdentificada;
                         salida.Resultado.ConfianzaGlobal = 0;
@@ -1396,11 +1396,11 @@ public class DocumentProcessOrchestrator
                         salida.Resultado.ConfianzaValidacion = 0;
                         salida.DetalleEjecucion.Postproceso.Inconsistencias.Add(
                             $"Error: {mensajeTipologiaNoIdentificada}");
-                        
+
                         FinalizarSeguimiento("Failed", mensajeTipologiaNoIdentificada);
                         return salida;
                     }
-                    
+
                     throw;
                 }
             }
@@ -1489,14 +1489,14 @@ public class DocumentProcessOrchestrator
                     // El pipeline se detiene aquí con Estado=OK y PropuestaTipologia accesible en la salida.
                     salida.Identificacion.Tipologia = tipologiaParcial;
                     salida.Identificacion.TipologiaFamilia = tipologiaParcial;
-                    
+
                     // Asignar Tdn1 si hay código válido (para todos los casos virtuales)
-                    if (!string.IsNullOrWhiteSpace(tipologiaParcial) 
+                    if (!string.IsNullOrWhiteSpace(tipologiaParcial)
                         && !string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase))
                     {
                         salida.Identificacion.Tdn1 = tipologiaParcial;
                     }
-                    
+
                     salida.Identificacion.TipologiaVersion = string.Empty;
                     salida.Identificacion.TipologiaNombre = resultadoClasificacion.PropuestaTipologia ?? string.Empty;
                     salida.Identificacion.PropuestaTipologia = resultadoClasificacion.PropuestaTipologia;
@@ -1516,7 +1516,7 @@ public class DocumentProcessOrchestrator
                     };
 
                     salida.DatosExtraidos = new Dictionary<string, object>();
-                    
+
                     // Propagar ResumenCombinado de clasificación a DatosExtraidos si existe
                     if (!string.IsNullOrWhiteSpace(resultadoClasificacion.ResumenCombinado))
                     {
@@ -1524,7 +1524,7 @@ public class DocumentProcessOrchestrator
                         logger.LogInformation(
                             "ResumenCombinado de clasificación propagado a DatosExtraidos para tipología virtual");
                     }
-                    
+
                     var mensajeNormalizacion = esFase2SinTdn2Parseable
                         ? $"Tipología parcial TDN1: Phase 2 no devolvió TDN2 parseable para familia '{tipologiaParcial}'. Pipeline detenido."
                         : esTdn1ExtraidoDePropuesta
@@ -1534,7 +1534,7 @@ public class DocumentProcessOrchestrator
                         : esGlobalFallbackBajaConfianza
                         ? $"Tipología parcial TDN1: GlobalFallback identificó familia '{tipologiaParcial}' con confianza baja. Pipeline detenido."
                         : "Tipología virtual TDN1: GPT no resolvió código de catálogo. Pipeline detenido con PropuestaTipologia.";
-                    
+
                     salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
                     {
                         Normalizaciones = new List<string>
@@ -1564,7 +1564,7 @@ public class DocumentProcessOrchestrator
                         : esGlobalFallbackBajaConfianza
                         ? $"GlobalFallback TDN1 baja confianza: {tipologiaParcial}"
                         : "Tipología virtual: sin código de catálogo";
-                    
+
                     MarcarActividadOmitida("ResolverTipologia", motivoOmision);
                     MarcarActividadOmitida("Extraer", motivoOmision);
                     MarcarActividadOmitida("Prompt", motivoOmision);
@@ -1599,7 +1599,7 @@ public class DocumentProcessOrchestrator
                         : esGlobalFallbackBajaConfianza
                         ? $"Tipología parcial TDN1: GlobalFallback identificó '{tipologiaParcial}' con confianza baja"
                         : "Tipología virtual TDN1: propuesta sin código de catálogo";
-                    
+
                     FinalizarSeguimiento("Completed", mensajeFinal);
                     return salida;
                 }
@@ -2450,8 +2450,8 @@ public class DocumentProcessOrchestrator
             // Convertir DetalleValidacion a InformacionPostproceso
             salida.DetalleEjecucion.Postproceso = new InformacionPostproceso
             {
-                Normalizaciones = new List<string> 
-                { 
+                Normalizaciones = new List<string>
+                {
                     $"Aplicadas {resultadoValidacion.ReglasAplicadas} reglas de validacion"
                 },
                 Validaciones = resultadoValidacion.Validaciones
@@ -2475,7 +2475,7 @@ public class DocumentProcessOrchestrator
             // documento entero, lo que sale al contrato y a la fila es ese texto con esa cobertura,
             // no el que hubiera antes del prompt (AB#100252).
             PublicarMarkdown(salida.DetalleEjecucion.Postproceso);
-            
+
             if (resultadoValidacion.Errores > 0)
             {
                 // Resumen agregado para facilitar consulta rápida en auditoría/persistencia

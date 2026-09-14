@@ -7,7 +7,10 @@ public class MarkdownModelsTests
 {
     private static ResultadoMarkdown Con(string? md, int paginas, bool completo) => new()
     {
-        Markdown = md, Paginas = paginas, Completo = completo, Fuente = FuenteMarkdown.Layout
+        Markdown = md,
+        Paginas = paginas,
+        Completo = completo,
+        Fuente = FuenteMarkdown.Layout
     };
 
     [Fact]

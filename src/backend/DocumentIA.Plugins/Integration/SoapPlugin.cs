@@ -19,7 +19,7 @@ namespace DocumentIA.Plugins.Integration
     {
         private readonly HttpClient httpClient;
         private readonly ILogger<SoapPlugin> logger;
-        
+
         private string endpoint = string.Empty;
         private string soapVersion = "1.1";
         private string soapAction = string.Empty;
@@ -56,7 +56,7 @@ namespace DocumentIA.Plugins.Integration
 
             httpClient.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
 
-            logger.LogInformation("SoapPlugin inicializado. Endpoint: {Endpoint}, Version: {Version}", 
+            logger.LogInformation("SoapPlugin inicializado. Endpoint: {Endpoint}, Version: {Version}",
                 endpoint, soapVersion);
 
             return Task.CompletedTask;
@@ -81,7 +81,7 @@ namespace DocumentIA.Plugins.Integration
 
                 // Construir SOAP Envelope
                 var soapEnvelope = BuildSoapEnvelope(payload);
-                
+
                 logger.LogDebug("Enviando SOAP Request a {Endpoint}", endpoint);
 
                 // Crear request
@@ -142,7 +142,7 @@ namespace DocumentIA.Plugins.Integration
                     result.Status = "ERROR";
                     result.Message = $"Error SOAP: {response.StatusCode}";
                     result.Errors.Add(responseContent);
-                    
+
                     logger.LogWarning("SOAP fallo con status {Status}", response.StatusCode);
                 }
             }
@@ -155,7 +155,7 @@ namespace DocumentIA.Plugins.Integration
                 result.Errors.Add(ex.Message);
                 result.Duration = stopwatch.Elapsed;
                 result.Metadata["isTransient"] = true;
-                
+
                 logger.LogError(ex, "Error de conexion SOAP");
             }
             catch (Exception ex)
@@ -166,7 +166,7 @@ namespace DocumentIA.Plugins.Integration
                 result.Message = "Error inesperado en SOAP";
                 result.Errors.Add(ex.Message);
                 result.Duration = stopwatch.Elapsed;
-                
+
                 logger.LogError(ex, "Error ejecutando SOAP");
             }
 
@@ -180,8 +180,8 @@ namespace DocumentIA.Plugins.Integration
 
         private string BuildSoapEnvelope(Dictionary<string, object> payload)
         {
-            var soapNs = soapVersion == "1.2" 
-                ? "http://www.w3.org/2003/05/soap-envelope" 
+            var soapNs = soapVersion == "1.2"
+                ? "http://www.w3.org/2003/05/soap-envelope"
                 : "http://schemas.xmlsoap.org/soap/envelope/";
 
             var envelope = new XDocument(
@@ -190,7 +190,7 @@ namespace DocumentIA.Plugins.Integration
                     new XAttribute(XNamespace.Xmlns + "soap", soapNs),
                     new XElement(XName.Get("Body", soapNs),
                         new XElement(XName.Get("Request", targetNamespace),
-                            payload.Select(kvp => 
+                            payload.Select(kvp =>
                                 new XElement(kvp.Key, ConvertValueToString(kvp.Value)))
                         )
                     )
@@ -207,7 +207,7 @@ namespace DocumentIA.Plugins.Integration
             try
             {
                 var doc = XDocument.Parse(soapResponse);
-                
+
                 var body = doc.Descendants()
                     .FirstOrDefault(e => e.Name.LocalName == "Body");
 
@@ -238,8 +238,8 @@ namespace DocumentIA.Plugins.Integration
 
         private string GetContentType()
         {
-            return soapVersion == "1.2" 
-                ? "application/soap+xml" 
+            return soapVersion == "1.2"
+                ? "application/soap+xml"
                 : "text/xml";
         }
 

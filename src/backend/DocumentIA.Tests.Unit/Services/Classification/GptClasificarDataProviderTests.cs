@@ -52,9 +52,9 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             _memoryCache = new MemoryCache(new MemoryCacheOptions());
             _scopeFactoryMock = new Mock<IServiceScopeFactory>();
             _loggerMock = new Mock<ILogger<GptClasificarDataProvider>>();
-            
+
             // Create real PromptTraceTelemetryService instead of mocking
-            var telemetryClient = new TelemetryClient();
+            var telemetryClient = new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true });
             var promptTracingSettings = Options.Create(new PromptTracingSettings { Enabled = false });
             var promptTraceTelemetryLogger = new Mock<ILogger<PromptTraceTelemetryService>>();
             _promptTraceTelemetryMock = new PromptTraceTelemetryService(
@@ -69,8 +69,8 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             _promptDefaults = Options.Create(new PromptDefaultsSettings
             {
                 ModelKey = "default.gpt4o-mini",
-                     SystemPrompt = "Eres un analista documental experto. Responde en espanol de Espana, sin inventar informacion y siguiendo estrictamente el formato solicitado.",
-                     UserPromptTemplate = @"Genera un resumen ejecutivo del documento procesado siguiendo estrictamente estas instrucciones:
+                SystemPrompt = "Eres un analista documental experto. Responde en espanol de Espana, sin inventar informacion y siguiendo estrictamente el formato solicitado.",
+                UserPromptTemplate = @"Genera un resumen ejecutivo del documento procesado siguiendo estrictamente estas instrucciones:
 
 - Idioma: Espanol (Espana)
 - Longitud maxima: 500 caracteres
@@ -659,7 +659,7 @@ Contenido del documento:
                     new Mock<ILogger<FoundryTdnRescueClassifier>>().Object,
                     gptProvider),
                 hybridOptions,
-                new TelemetryClient());
+                new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }));
 
             var sourceResolver = new DocumentIntelligenceSourceResolver(
                 new Mock<DocumentIA.Core.Services.IBlobStorageService>().Object,

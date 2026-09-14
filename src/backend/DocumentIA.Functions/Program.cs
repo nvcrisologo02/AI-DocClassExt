@@ -80,9 +80,9 @@ var host = new HostBuilder()
         });
 
 
-         // Capa 2: serializacion interna entre actividades Durable
+        // Capa 2: serializacion interna entre actividades Durable
         services.AddSingleton(jsonOpts);
-        
+
         // Application Insights
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
@@ -91,7 +91,7 @@ var host = new HostBuilder()
         // Database Context
         services.AddDbContext<DocumentIADbContext>(options =>
         {
-            var connectionString = context.Configuration["ConnectionStrings:DocumentIA"] 
+            var connectionString = context.Configuration["ConnectionStrings:DocumentIA"]
                 ?? context.Configuration["SqlConnectionString"];
 
             if (!string.IsNullOrWhiteSpace(connectionString))
@@ -132,7 +132,7 @@ var host = new HostBuilder()
         services.Configure<AzureOpenAIResilienceOptions>(
             context.Configuration.GetSection("AzureOpenAIResilience"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
-        
+
         // Manual binding for Flows dictionary (complex type not supported by default configuration binding)
         services.PostConfigure<ClassificationRoutingSettings>(settings =>
         {
@@ -148,7 +148,7 @@ var host = new HostBuilder()
                 }
             }
         });
-        
+
         services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
         services.Configure<PromptDefaultsSettings>(context.Configuration.GetSection("PromptDefaults"));
         services.Configure<ClassificationPromptsSettings>(context.Configuration.GetSection("ClassificationPrompts"));
@@ -163,12 +163,12 @@ var host = new HostBuilder()
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
         services.AddSingleton<AzureDocumentIntelligenceExtraerDataProvider>();
-        
+
         // Extracción GPT services
         services.AddScoped<IGptPromptBuilder, GptPromptBuilder>();
         services.AddScoped<IGptJsonResponseParser, GptJsonResponseParser>();
         services.AddScoped<IOpenAiClientFactory, OpenAiClientFactory>();
-        
+
         services.AddScoped<GptFallbackExtraerDataProvider>();
         services.AddScoped<GptDirectExtraerDataProvider>();
         services.AddSingleton<IPromptDataProvider, OpenAIPromptDataProvider>();

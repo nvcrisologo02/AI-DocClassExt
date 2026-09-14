@@ -166,7 +166,7 @@ public class GptFallbackExtraerDataProvider
         if (customPromptConfig is not null)
         {
             userPromptText = $"**Parte 1 — Extracción de campos** ('campos_extraidos'):\n{userPromptBase}\n\n";
-            
+
             if (resumenPrompt is not null)
             {
                 userPromptText += $"**Parte 2 — Resumen por defecto** ('resumen'):\n{resumenPrompt.UserPromptTemplate}\n\n";

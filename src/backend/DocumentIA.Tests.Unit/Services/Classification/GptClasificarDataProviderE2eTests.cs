@@ -43,7 +43,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             _memoryCache = new MemoryCache(new MemoryCacheOptions());
             _scopeFactoryMock = new Mock<IServiceScopeFactory>();
             _loggerMock = new Mock<ILogger<GptClasificarDataProvider>>();
-            
+
             var telemetryClient = new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true });
             var promptTracingSettings = Options.Create(new PromptTracingSettings { Enabled = false });
             var promptTraceTelemetryLogger = new Mock<ILogger<PromptTraceTelemetryService>>();
@@ -54,7 +54,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
 
             _tipologiaConfigLoader = new TipologiaConfigLoader(_memoryCache, _scopeFactoryMock.Object);
             _routingSettings = Options.Create(new ClassificationRoutingSettings());
-            
+
             _promptDefaults = Options.Create(new PromptDefaultsSettings
             {
                 ModelKey = "default.gpt4o-mini",
@@ -93,7 +93,7 @@ Documento: {contenido}",
             resumenPrompt.UserPromptTemplate.Should().Contain("3. Alertas");
             resumenPrompt.UserPromptTemplate.Should().Contain("4. Acciones recomendadas");
             resumenPrompt.UserPromptTemplate.Should().Contain("5. Contenido");
-            
+
             // And: AB#100006 — {contenido} se interpola con la referencia al bloque CONTENIDO
             // DEL DOCUMENTO del prompt de Fase 1, no con el documento duplicado
             resumenPrompt.UserPromptTemplate.Should().NotContain(contextoTexto);
@@ -119,16 +119,16 @@ Documento: {contenido}",
             // Contract: When resumen instruction is added to Phase1UserText (via ResolveResumenPrompt),
             // the Phase1ResponseFormatInstruction should be updated to include 'resumen' field in response.
             // The parser should then extract 'resumen' from the JSON and populate ResultadoClasificacion.ResumenCombinado.
-            
+
             // Verify that the response format instruction from ClassificationTipologiaPromptBuilder includes resumen when applicable
             var classificationBuilder = new ClassificationTipologiaPromptBuilder(
                 _memoryCache,
                 _scopeFactoryMock.Object,
                 new Mock<ILogger<ClassificationTipologiaPromptBuilder>>().Object);
-            
+
             // Note: This validates the contract, not that we've modified the builder yet.
             // In real E2E, this would be verified after GptHierarchicalClassificationParser processes the response.
-            
+
             // When deserialized, the response should have resumen field
             var jsonDocument = System.Text.Json.JsonDocument.Parse(expectedJsonResponse);
             jsonDocument.RootElement.TryGetProperty("resumen", out var resumenElement).Should().BeTrue("JSON response debe incluir campo 'resumen'");
@@ -194,7 +194,7 @@ Documento: {contenido}",
             resumenPrompt.UserPromptTemplate.Should().Contain("[TIPOLOGIA-SPECIFIC]");
             resumenPrompt.MaxTokens.Should().Be(999);
             resumenPrompt.Temperature.Should().Be(0.1);
-            
+
             // And: AB#100006 — también en el override por tipología, {contenido} se resuelve
             // con la referencia al bloque ya enviado, no con el documento duplicado
             resumenPrompt.UserPromptTemplate.Should().NotContain(contextoTexto);
@@ -257,7 +257,7 @@ Documento: {contenido}",
             var method = typeof(GptClasificarDataProvider)
                 .GetMethod("ResolveResumenPrompt",
                     System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            
+
             return (PromptConfig?)method?.Invoke(provider, new object[] { input });
         }
     }

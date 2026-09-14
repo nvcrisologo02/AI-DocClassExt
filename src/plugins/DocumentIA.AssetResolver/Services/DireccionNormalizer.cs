@@ -12,40 +12,40 @@ public static class DireccionNormalizer
 {
     private static readonly Dictionary<string, string> ViaAbreviaciones = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["CL"]   = "CALLE",
-        ["C/"]   = "CALLE",
-        ["AV"]   = "AVENIDA",
-        ["AVD"]  = "AVENIDA",
+        ["CL"] = "CALLE",
+        ["C/"] = "CALLE",
+        ["AV"] = "AVENIDA",
+        ["AVD"] = "AVENIDA",
         ["AVDA"] = "AVENIDA",
-        ["PZ"]   = "PLAZA",
-        ["PL"]   = "PLAZA",
-        ["PLZ"]  = "PLAZA",
-        ["PS"]   = "PASEO",
-        ["PO"]   = "PASEO",
-        ["PJ"]   = "PASAJE",
-        ["BV"]   = "BULEVAR",
+        ["PZ"] = "PLAZA",
+        ["PL"] = "PLAZA",
+        ["PLZ"] = "PLAZA",
+        ["PS"] = "PASEO",
+        ["PO"] = "PASEO",
+        ["PJ"] = "PASAJE",
+        ["BV"] = "BULEVAR",
         ["BLVD"] = "BULEVAR",
-        ["CR"]   = "CARRETERA",
+        ["CR"] = "CARRETERA",
         ["CTRA"] = "CARRETERA",
-        ["CRA"]  = "CARRETERA",
-        ["UR"]   = "URBANIZACION",
-        ["URB"]  = "URBANIZACION",
-        ["RB"]   = "RAMBLA",
+        ["CRA"] = "CARRETERA",
+        ["UR"] = "URBANIZACION",
+        ["URB"] = "URBANIZACION",
+        ["RB"] = "RAMBLA",
         ["RBLA"] = "RAMBLA",
-        ["GL"]   = "GLORIETA",
-        ["PG"]   = "POLIGONO",
-        ["CM"]   = "CAMINO",
-        ["TR"]   = "TRAVESIA",
+        ["GL"] = "GLORIETA",
+        ["PG"] = "POLIGONO",
+        ["CM"] = "CAMINO",
+        ["TR"] = "TRAVESIA",
         ["TRAV"] = "TRAVESIA",
-        ["RD"]   = "RONDA",
-        ["PQ"]   = "PARQUE",
-        ["AC"]   = "ACCESO",
+        ["RD"] = "RONDA",
+        ["PQ"] = "PARQUE",
+        ["AC"] = "ACCESO",
     };
 
-    private static readonly Regex WhitespaceRegex  = new(@"\s+",        RegexOptions.Compiled);
-    private static readonly Regex PunctuationRegex = new(@"[^\w\s]",    RegexOptions.Compiled);
-    private static readonly Regex NumeroRegex      = new(@"^(\d+)",     RegexOptions.Compiled);
-    private static readonly Regex ArticuloRegex    = new(@"^(el|la|los|las|l'|els|les|lo)\s+", RegexOptions.Compiled);
+    private static readonly Regex WhitespaceRegex = new(@"\s+", RegexOptions.Compiled);
+    private static readonly Regex PunctuationRegex = new(@"[^\w\s]", RegexOptions.Compiled);
+    private static readonly Regex NumeroRegex = new(@"^(\d+)", RegexOptions.Compiled);
+    private static readonly Regex ArticuloRegex = new(@"^(el|la|los|las|l'|els|les|lo)\s+", RegexOptions.Compiled);
 
     /// <summary>
     /// Normaliza un nombre de vía: minúsculas, sin diacríticos, sin puntuación,
@@ -147,9 +147,9 @@ public static class DireccionNormalizer
             scoreAcumulado += sim * peso;
         }
 
-        AgregarComponente(query.NombreVia,    candidate.NombreVia,    0.40);
-        AgregarComponente(query.Numero,       candidate.Numero,       0.30);
-        AgregarComponente(query.Municipio,    candidate.Municipio,    0.20);
+        AgregarComponente(query.NombreVia, candidate.NombreVia, 0.40);
+        AgregarComponente(query.Numero, candidate.Numero, 0.30);
+        AgregarComponente(query.Municipio, candidate.Municipio, 0.20);
         AgregarComponente(query.CodigoPostal, candidate.CodigoPostal, 0.10);
 
         return totalPeso > 0.0 ? scoreAcumulado / totalPeso : 0.0;

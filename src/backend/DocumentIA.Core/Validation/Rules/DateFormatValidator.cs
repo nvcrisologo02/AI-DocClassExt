@@ -34,14 +34,14 @@ namespace DocumentIA.Core.Validation.Rules
         public override string RuleName => "DateFormatValidator";
 
         public DateFormatValidator(
-            string[]? acceptedFormats = null, 
-            bool allowFutureDates = true, 
+            string[]? acceptedFormats = null,
+            bool allowFutureDates = true,
             bool allowPastDates = true)
         {
-            var baseFormats = acceptedFormats ?? new[] 
-            { 
-                "dd/MM/yyyy", 
-                "yyyy-MM-dd", 
+            var baseFormats = acceptedFormats ?? new[]
+            {
+                "dd/MM/yyyy",
+                "yyyy-MM-dd",
                 "dd-MM-yyyy",
                 "yyyy/MM/dd"
             };

@@ -9,11 +9,11 @@ public class MonitorTablaTests : TestContext
 {
     private static PagedResultDto<EjecucionResumenDto> UnaPagina(
         int total = 120, int pageSize = 25, DateTime? fecha = null) => new()
-    {
-        Page = 1,
-        PageSize = pageSize,
-        Total = total,
-        Items =
+        {
+            Page = 1,
+            PageSize = pageSize,
+            Total = total,
+            Items =
         [
             new EjecucionResumenDto
             {
@@ -29,7 +29,7 @@ public class MonitorTablaTests : TestContext
                 DuracionTotalMs = 18400
             }
         ]
-    };
+        };
 
     // El render ocurre en el servidor (App Service en UTC), asi que la hora debe
     // convertirse explicitamente a la peninsular en vez de confiar en la zona

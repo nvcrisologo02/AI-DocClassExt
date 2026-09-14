@@ -440,11 +440,11 @@ public class DocumentoEjecucionRepositoryFiltroTests
         context.Documentos.AddRange(doc1, doc2);
 
         context.DocumentoEjecuciones.AddRange(
-            Ejecucion(1, "11111111-1111-1111-1111-111111111111", Base,             "NOTS", "OK",        docId: 1, soloClasificacion: true),
-            Ejecucion(2, "22222222-2222-2222-2222-222222222222", Base.AddHours(5), "NOTS", "Error",     docId: 1, soloClasificacion: true),
-            Ejecucion(3, "33333333-3333-3333-3333-333333333333", Base.AddDays(2),  "ESCR", "Fallido",   docId: 2, soloClasificacion: false),
-            Ejecucion(4, "44444444-4444-4444-4444-444444444444", Base.AddDays(4),  "ESCR", "Completado", docId: 1, soloClasificacion: false),
-            Ejecucion(5, "55555555-5555-5555-5555-555555555555", Base.AddDays(6),  "CERA", "REVISION",  docId: 1, soloClasificacion: false));
+            Ejecucion(1, "11111111-1111-1111-1111-111111111111", Base, "NOTS", "OK", docId: 1, soloClasificacion: true),
+            Ejecucion(2, "22222222-2222-2222-2222-222222222222", Base.AddHours(5), "NOTS", "Error", docId: 1, soloClasificacion: true),
+            Ejecucion(3, "33333333-3333-3333-3333-333333333333", Base.AddDays(2), "ESCR", "Fallido", docId: 2, soloClasificacion: false),
+            Ejecucion(4, "44444444-4444-4444-4444-444444444444", Base.AddDays(4), "ESCR", "Completado", docId: 1, soloClasificacion: false),
+            Ejecucion(5, "55555555-5555-5555-5555-555555555555", Base.AddDays(6), "CERA", "REVISION", docId: 1, soloClasificacion: false));
 
         context.SaveChanges();
     }

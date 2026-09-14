@@ -41,6 +41,13 @@
 - Runtime: **.NET 8 / .NET 9**, Azure Functions v4, WPF (Windows).
 - Comandos dotnet: `dotnet build`, `dotnet run`, `dotnet test`, `dotnet publish`.
 - Gestor de paquetes: `dotnet add package` (NuGet). Para Python: `pip` o `uv` dentro del entorno `.venv`.
+- Formato: `dotnet format src/backend/DocumentIA.sln --verify-no-changes` (sin el flag para aplicar). Las convenciones viven en el `.editorconfig` raíz. El rebuild de la solución está a cero warnings (AB#100288): no dejar warnings nuevos.
+
+## Convenciones de código
+
+- Las propiedades de raíz de `TipologiaValidationConfig` (`SkipGDCUpload`, `GdcTipoDocumento`, `GdcSerie`, `Tdn1`, `GptDescripcion`, …) están `[Obsolete]`: usar `Gdc.*` y `Classification.*`. `DocumentIA.Functions` silencia CS0618 a propósito para leer configuraciones antiguas; en tests y código nuevo no se usan.
+- `Documento.Content.Base64` es `string?`: el trigger lo pone a `null` tras volcar el contenido a blob. Comprobar `BlobPath` primero y tratar el base64 como fallback legado.
+- Un `?.` sobre una propiedad que el modelo inicializa siempre hace que el analizador la considere nullable el resto del método; no usarlo por costumbre.
 
 ## Uso obligatorio de Microsoft Learn MCP
 

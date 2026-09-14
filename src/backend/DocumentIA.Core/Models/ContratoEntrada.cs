@@ -322,7 +322,7 @@ public class ContenidoDocumento
     /// Documento codificado en Base64.
     /// Vacío cuando el flujo usa rutas externas (por ejemplo BlobPath u ObjectIdGDC).
     /// </summary>
-    public string Base64 { get; set; } = string.Empty;
+    public string? Base64 { get; set; }
 }
 
 public class Trazabilidad
