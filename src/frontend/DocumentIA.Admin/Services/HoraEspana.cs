@@ -70,6 +70,18 @@ public static class HoraEspana
     public static DateTime Desde(DateTimeOffset instante) =>
         TimeZoneInfo.ConvertTime(instante, Zona).DateTime;
 
+    /// <summary>
+    /// Instante UTC en el que empieza un dia de calendario peninsular. Es la inversa
+    /// de <see cref="Desde(DateTime)"/> para los filtros con rango de fechas fijo:
+    /// el usuario piensa en dias locales y el backend compara instantes UTC. El
+    /// cambio de hora lo resuelve la zona; no hay que sumar offsets a mano.
+    /// </summary>
+    public static DateTime InicioDelDiaUtc(DateOnly dia)
+    {
+        var medianocheLocal = DateTime.SpecifyKind(dia.ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(medianocheLocal, Zona);
+    }
+
     /// <summary>Convierte y formatea; devuelve un guion si no hay valor.</summary>
     public static string Formatear(DateTime? instante, string formato) =>
         instante is null ? "—" : Desde(instante.Value).ToString(formato);
