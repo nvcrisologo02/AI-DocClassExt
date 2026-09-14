@@ -54,7 +54,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             _loggerMock = new Mock<ILogger<GptClasificarDataProvider>>();
             
             // Create real PromptTraceTelemetryService instead of mocking
-            var telemetryClient = new TelemetryClient();
+            var telemetryClient = new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true });
             var promptTracingSettings = Options.Create(new PromptTracingSettings { Enabled = false });
             var promptTraceTelemetryLogger = new Mock<ILogger<PromptTraceTelemetryService>>();
             _promptTraceTelemetryMock = new PromptTraceTelemetryService(
@@ -659,7 +659,7 @@ Contenido del documento:
                     new Mock<ILogger<FoundryTdnRescueClassifier>>().Object,
                     gptProvider),
                 hybridOptions,
-                new TelemetryClient());
+                new TelemetryClient(new TelemetryConfiguration { DisableTelemetry = true }));
 
             var sourceResolver = new DocumentIntelligenceSourceResolver(
                 new Mock<DocumentIA.Core.Services.IBlobStorageService>().Object,
