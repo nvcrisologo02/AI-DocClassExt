@@ -1,6 +1,6 @@
 ﻿# 3. Diseno Tecnico Detallado — DocumentIA
 
-> Ultima actualizacion: 2026-06-05  
+> Ultima actualizacion: 2026-09-14  
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. 
 > - Campo `Tipologias.PromptGPT` deprecated (see [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md)).
@@ -259,7 +259,8 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
   no genera su propio markdown. Garantiza contexto textual a los proveedores `gpt`, `hybrid-tdn` y `rules`.
 - El documento se envía **por recorte cuando es PDF** (`docClasif.DocumentoBase64Clasif`) y **por
   `BlobPath` cuando ese base64 viene vacío**, que es lo que ocurre en modo blob-first con cualquier
-  formato no-PDF: el trigger vacía `Documento.Content.Base64` al subir el blob y el recorte no puede
+  formato no-PDF: el trigger pone `Documento.Content.Base64` a `null` al subir el blob (la propiedad es `string?`; los
+  fallbacks legados que decodifican base64 sin `BlobPath` lanzan `InvalidOperationException`) y el recorte no puede
   producir un base64 alternativo. `BlobPath` **solo** se informa en ese caso: el resolutor de origen
   de Document Intelligence lo prioriza sobre el base64, de modo que informarlo siempre anularía el
   recorte de los PDF y encarecería cada clasificación.
@@ -559,7 +560,7 @@ Estructura canónica:
 
 Compatibilidad backward:
 
-- El backend mantiene fallback por propiedades resueltas (`Resolved*`) para leer tanto el formato v1.2 como el legacy de raíz (`gdcTipoDocumento`, `tdn1`, `gptDescripcion`, etc.).
+- El backend mantiene fallback por propiedades resueltas (`Resolved*`) para leer tanto el formato v1.2 como el legacy de raíz (`gdcTipoDocumento`, `tdn1`, `gptDescripcion`, etc.). Esas propiedades de raíz están marcadas `[Obsolete]` en `TipologiaValidationConfig`: el código nuevo y los tests usan `gdc.*` y `classification.*`. `DocumentIA.Functions` silencia CS0618 a propósito para seguir leyendo configuraciones antiguas (AB#100288).
 - En edición/creación se persiste formato v1.2 y, temporalmente, también campos legacy redundantes para no romper consumidores previos.
 
 Fuente de configuración:
@@ -1265,7 +1266,7 @@ Los archivos JSON en `config/tipologias/` son únicamente **fuente de seed**: al
 
 **Modo solo lectura (AB#99999):** cuando `IsAuthenticated = false`, cualquier operación de escritura (crear/editar/publicar/retirar/activar/eliminar tipologías, modelos, prompts o configuración de plugins) se rechaza antes de llamar a la Admin API. La comprobación (`EnsureWritesAllowed()`) vive en la **capa de servicios** (`TipologiaAdminService`, `PromptManagementService`), no en las páginas Blazor, para que ninguna vista pueda saltársela por omisión. El rechazo lanza `InvalidOperationException` con el mensaje "Modo solo lectura: no hay un usuario autenticado, así que no es posible registrar quién realiza el cambio...". Las consultas (GET) no están sujetas a esta restricción.
 
-**Auditoría:** el valor resuelto por `ICurrentUserService.UserName` es el que viaja como `usuario`/`CreatedBy`/`UpdatedBy`/`PublishedBy` en las peticiones a la Admin API. Los literales legacy `"ADMIN-UI"` y `"admin"` ya no se usan.
+**Auditoría:** el valor resuelto por `ICurrentUserService.UserName` es el que viaja como `usuario`/`CreatedBy`/`UpdatedBy`/`PublishedBy` en las peticiones a la Admin API. Los literales legacy `"ADMIN-UI"` y `"admin"` ya no se usan. Desde AB#100288 el alta de versiones de prompt también envía `createdBy`; si un cliente lo omite, la API persiste cadena vacía porque la columna es NOT NULL.
 
 ---
 

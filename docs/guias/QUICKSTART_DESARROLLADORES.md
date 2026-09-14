@@ -330,6 +330,18 @@ func start --csharp --port 7072
 | `SqlConnectionString error` | Verifica SQL Server está corriendo; o deja vacío para usar InMemory DB |
 | `Base64 decoding fails` | Usa `[Convert]::ToBase64String([System.IO.File]::ReadAllBytes("tu.pdf"))` |
 
+### Formato y warnings antes de subir
+
+El repositorio tiene un `.editorconfig` raíz (4 espacios en C#, 2 en csproj/json/yml, sin espacios finales, salto de línea final) y el rebuild de la solución está a cero warnings. Antes de un commit:
+
+```powershell
+dotnet build src/backend/DocumentIA.sln          # sin warnings nuevos
+dotnet format src/backend/DocumentIA.sln         # aplica el formato; con --verify-no-changes solo comprueba
+dotnet test src/backend/DocumentIA.Tests.Unit
+```
+
+Dos reglas que el analizador no perdona: las propiedades de raíz de `TipologiaValidationConfig` (`skipGDCUpload`, `gdcSerie`, `tdn1`…) están `[Obsolete]` y se sustituyen por `gdc.*` y `classification.*`; y `Documento.Content.Base64` es `string?` porque el trigger lo pone a `null` al subir el blob, así que se comprueba `BlobPath` primero.
+
 ---
 
 ## 6. Próximos Pasos
