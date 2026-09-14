@@ -333,7 +333,6 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return BuildUnclassifiedResult(model, "tdn1_no_resuelto", propuesta);
         }
 
-        tdn1Code = tdn1Code!;
         var confianzaPhase1 = phase1Parsed.Value.Confianza ?? 0.9;
 
         if (string.Equals(nivelClasificacion, ClassificationLevelResolver.LevelTdn1, StringComparison.OrdinalIgnoreCase))

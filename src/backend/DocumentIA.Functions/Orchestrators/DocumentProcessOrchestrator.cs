@@ -134,7 +134,10 @@ public class DocumentProcessOrchestrator
         var logger = context.CreateReplaySafeLogger<DocumentProcessOrchestrator>();
 
         logger.LogInformation($"Iniciando procesamiento para documento: {entrada.Documento.Name}");
-        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento?.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento?.BlobPath ?? "(null)"}' | Base64Length: {entrada.Documento?.Content?.Base64?.Length ?? 0}");
+        // Base64 puede llegar a null aunque el modelo lo declare no nullable: el trigger lo vacia
+        // con null! tras volcar el contenido a blob (ver IngestAPITrigger).
+        string? base64Recibido = entrada.Documento.Content.Base64;
+        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento.BlobPath ?? "(null)"}' | Base64Length: {base64Recibido?.Length ?? 0}");
 
         var salida = new ContratoSalida
         {
@@ -441,7 +444,7 @@ public class DocumentProcessOrchestrator
             BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
                 ? salida.Integridad.RutaBlobStorage
                 : entrada.Documento.BlobPath,
-            DocumentoBase64 = entrada.Documento.Content?.Base64,
+            DocumentoBase64 = entrada.Documento.Content.Base64,
             NombreDocumento = entrada.Documento.Name,
             Tipologia = salida.Identificacion.Tipologia,
             // Paginas del DOCUMENTO, nunca las del recorte: el resolutor infiere de aqui si un
@@ -864,7 +867,8 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
             salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
-            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{entrada.Documento.Content?.Base64?.Substring(0, Math.Min(20, entrada.Documento.Content?.Base64?.Length ?? 0)) ?? "(null)"}'");
+            string? base64Gdc = entrada.Documento.Content.Base64;
+            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{base64Gdc?.Substring(0, Math.Min(20, base64Gdc.Length)) ?? "(null)"}'");
 
             if (entradaPorObjectIdGdc)
             {
@@ -922,7 +926,7 @@ public class DocumentProcessOrchestrator
                             salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
                             {
                                 ReutilizadaPorDuplicado = true,
-                                CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion?.Costes?.CosteTotalEur
+                                CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
                             };
 
                             await RegistrarReutilizacionAsync(salidaDuplicado, duplicadoPorMd5.SHA256);
@@ -1047,7 +1051,7 @@ public class DocumentProcessOrchestrator
                         salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
                         {
                             ReutilizadaPorDuplicado = true,
-                            CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion?.Costes?.CosteTotalEur
+                            CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
                         };
 
                         await RegistrarReutilizacionAsync(salidaDuplicado, salida.Integridad.SHA256);
@@ -1193,7 +1197,7 @@ public class DocumentProcessOrchestrator
                     logger.LogWarning(
                         "Paso 2.75: ExpectedType '{ExpectedType}' no resuelve contra el catálogo de tipologías. Se ignora y se clasifica normalmente.",
                         entrada.Instrucciones.ExpectedType);
-                    entrada.Instrucciones.ExpectedType = null;
+                    entrada.Instrucciones.ExpectedType = string.Empty;
                 }
             }
 
