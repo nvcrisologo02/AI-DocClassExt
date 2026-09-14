@@ -800,6 +800,9 @@ public class DocumentProcessOrchestrator
                         {
                             IdActivo = idActivo,
                             ContenidoBase64 = entrada.Documento.Content.Base64,
+                            BlobPath = !string.IsNullOrWhiteSpace(salida.Integridad.RutaBlobStorage)
+                                ? salida.Integridad.RutaBlobStorage
+                                : entrada.Documento.BlobPath,
                             NombreArchivo = entrada.Documento.Name,
                             SHA256 = salida.Integridad.SHA256,
                             MD5 = salida.Integridad.MD5,

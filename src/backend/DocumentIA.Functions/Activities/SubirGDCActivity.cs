@@ -94,6 +94,14 @@ namespace DocumentIA.Functions.Activities
                     input.ContenidoBase64 = Convert.ToBase64String(bytes);
                 }
 
+                if (string.IsNullOrWhiteSpace(input.ContenidoBase64))
+                {
+                    resultado.Exitoso = false;
+                    resultado.Mensaje = "Documento sin contenido: ni ContenidoBase64 ni BlobPath disponibles, no se puede subir a GDC";
+                    logger.LogWarning("SubirGDCActivity: documento sin contenido para archivo {Nombre} (BlobPath={BlobPath})", input.NombreArchivo, input.BlobPath);
+                    return resultado;
+                }
+
                 // Validate IdActivo
                 if (string.IsNullOrWhiteSpace(input.IdActivo))
                 {
