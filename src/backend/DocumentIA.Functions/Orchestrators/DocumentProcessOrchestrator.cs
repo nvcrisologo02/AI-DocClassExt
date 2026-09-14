@@ -134,10 +134,7 @@ public class DocumentProcessOrchestrator
         var logger = context.CreateReplaySafeLogger<DocumentProcessOrchestrator>();
 
         logger.LogInformation($"Iniciando procesamiento para documento: {entrada.Documento.Name}");
-        // Base64 puede llegar a null aunque el modelo lo declare no nullable: el trigger lo vacia
-        // con null! tras volcar el contenido a blob (ver IngestAPITrigger).
-        string? base64Recibido = entrada.Documento.Content.Base64;
-        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento.BlobPath ?? "(null)"}' | Base64Length: {base64Recibido?.Length ?? 0}");
+        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento.BlobPath ?? "(null)"}' | Base64Length: {entrada.Documento.Content.Base64?.Length ?? 0}");
 
         var salida = new ContratoSalida
         {
@@ -867,8 +864,7 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
             salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
-            string? base64Gdc = entrada.Documento.Content.Base64;
-            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{base64Gdc?.Substring(0, Math.Min(20, base64Gdc.Length)) ?? "(null)"}'");
+            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{entrada.Documento.Content.Base64?[..Math.Min(20, entrada.Documento.Content.Base64.Length)] ?? "(null)"}'");
 
             if (entradaPorObjectIdGdc)
             {

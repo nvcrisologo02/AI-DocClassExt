@@ -695,7 +695,7 @@ public class SubirGDCInput
     /// <summary>
     /// Contenido del documento en Base64 (modo inline).
     /// </summary>
-    public string ContenidoBase64 { get; set; } = string.Empty;
+    public string? ContenidoBase64 { get; set; }
 
     /// <summary>
     /// Ruta container/path en blob para escenarios blob-first (alternativa a ContenidoBase64).

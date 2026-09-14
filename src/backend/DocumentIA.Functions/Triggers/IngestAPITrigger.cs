@@ -403,7 +403,7 @@ public class IngestAPITrigger
         entrada.Documento.PreComputedMD5 = md5;
         entrada.Documento.PreComputedCRC32 = crc32;
         entrada.Documento.PreComputedTamañoBytes = fileBytes.Length;
-        entrada.Documento.Content.Base64 = null!;
+        entrada.Documento.Content.Base64 = null;
 
         _logger.LogInformation(
             "Fichero subido a blob antes de orquestación. BlobPath={BlobPath}, SHA256={SHA256}, Bytes={Bytes}",

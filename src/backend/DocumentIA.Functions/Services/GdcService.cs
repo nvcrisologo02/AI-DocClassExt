@@ -153,7 +153,7 @@ namespace DocumentIA.Functions.Services
                 BuildStringField("matricula_doc", input.Matricula) +
                 BuildStringField("checksum", input.MD5) +
                 expedienteXml +
-                BuildFileContentField(settings.ContentFieldName, input.ContenidoBase64) +
+                BuildFileContentField(settings.ContentFieldName, input.ContenidoBase64 ?? string.Empty) +
                 "</ns2:fields>" +
                 "</ns1:arg1>" +
                 "</ns1:create>";

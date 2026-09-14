@@ -79,7 +79,8 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         }
         else
         {
-            documentBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64);
+            documentBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64
+                ?? throw new InvalidOperationException("El documento no trae BlobPath ni Content.Base64."));
         }
         var binaryData = BinaryData.FromBytes(documentBytes);
         var contentType = ResolveContentType(model, fileName, binaryData);
