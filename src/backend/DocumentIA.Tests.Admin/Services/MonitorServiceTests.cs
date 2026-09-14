@@ -206,4 +206,107 @@ public class MonitorServiceTests
 
         await accion.Should().ThrowAsync<InvalidOperationException>();
     }
+
+    // Rango fijo (AB#100284): dos dias de calendario peninsular, ambos inclusive. El
+    // backend filtra con ">= desde" y "< hasta", asi que el extremo superior es la
+    // medianoche del dia siguiente al ultimo pedido.
+    [Fact]
+    public void ToQueryString_ConRangoFijo_MandaLaMedianochePeninsularDeAmbosExtremos()
+    {
+        var filtro = new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) };
+
+        var query = filtro.ToQueryString();
+
+        ExtraerInstante(query, "desde").Should().Be(new DateTime(2026, 7, 31, 22, 0, 0, DateTimeKind.Utc),
+            "el 1 de agosto a las 00:00 CEST");
+        ExtraerInstante(query, "hasta").Should().Be(new DateTime(2026, 8, 31, 22, 0, 0, DateTimeKind.Utc),
+            "el 1 de septiembre a las 00:00 CEST, exclusivo, para que el 31 entre completo");
+    }
+
+    [Fact]
+    public void ToQueryString_ConRangoFijo_IgnoraRangoDias()
+    {
+        var filtro = new MonitorFiltroDto
+        {
+            RangoDias = 7,
+            Desde = new DateOnly(2026, 1, 1),
+            Hasta = new DateOnly(2026, 1, 31)
+        };
+
+        var query = filtro.ToQueryString();
+
+        var desde = ExtraerInstante(query, "desde");
+        var hasta = ExtraerInstante(query, "hasta");
+        (hasta - desde).TotalDays.Should().BeApproximately(31, 0.01);
+    }
+
+    [Fact]
+    public void ToQueryString_ConUnSoloExtremo_SigueUsandoRangoDias()
+    {
+        var filtro = new MonitorFiltroDto { RangoDias = 30, Desde = new DateOnly(2026, 1, 1) };
+
+        var query = filtro.ToQueryString();
+
+        ExtraerInstante(query, "hasta").Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5),
+            "hasta que el usuario complete las dos fechas la ventana relativa sigue mandando");
+        (ExtraerInstante(query, "hasta") - ExtraerInstante(query, "desde")).TotalDays.Should().BeApproximately(30, 0.01);
+    }
+
+    [Fact]
+    public void ToQueryString_ConExtremosInvertidos_LosIntercambia()
+    {
+        var filtro = new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 31), Hasta = new DateOnly(2026, 8, 1) };
+
+        var query = filtro.ToQueryString();
+
+        ExtraerInstante(query, "desde").Should().Be(new DateTime(2026, 7, 31, 22, 0, 0, DateTimeKind.Utc));
+        ExtraerInstante(query, "hasta").Should().Be(new DateTime(2026, 8, 31, 22, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void ToQueryString_ConRangoFijo_DosConsultasDanLaMismaVentana()
+    {
+        var filtro = new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) };
+
+        var primera = filtro.ToQueryString();
+        var segunda = filtro.ToQueryString();
+
+        segunda.Should().Be(primera, "un periodo cerrado no depende del reloj");
+    }
+
+    [Fact]
+    public void EsRangoFijo_SoloConLasDosFechas()
+    {
+        new MonitorFiltroDto().EsRangoFijo.Should().BeFalse();
+        new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1) }.EsRangoFijo.Should().BeFalse();
+        new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }.EsRangoFijo.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Clonar_CopiaLasFechasDelRangoFijo()
+    {
+        var filtro = new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) };
+
+        var clon = filtro.Clonar();
+
+        clon.Desde.Should().Be(new DateOnly(2026, 8, 1));
+        clon.Hasta.Should().Be(new DateOnly(2026, 8, 31));
+    }
+
+    // El input nativo no impide teclear 9999-12-31 o 0001-01-01. Sumar un dia al
+    // maximo lanza ArgumentOutOfRangeException, que no es la excepcion que las
+    // paginas capturan: escapaba y terminaba el circuito de Blazor Server.
+    [Theory]
+    [InlineData(9999, 12, 31)]
+    [InlineData(1, 1, 1)]
+    public void ToQueryString_ConFechasExtremas_NoLanza(int anio, int mes, int dia)
+    {
+        var extremo = new DateOnly(anio, mes, dia);
+        var filtro = new MonitorFiltroDto { Desde = extremo, Hasta = extremo };
+
+        var accion = () => filtro.ToQueryString();
+
+        accion.Should().NotThrow();
+        ExtraerInstante(filtro.ToQueryString(), "hasta").Should().BeAfter(ExtraerInstante(filtro.ToQueryString(), "desde"));
+    }
 }

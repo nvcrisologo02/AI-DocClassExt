@@ -385,6 +385,22 @@ public class MonitorFiltroDto
     // un extremo en el año 2000 producia miles de puntos inutiles por consulta.
     public const int RangoDiasHistorico = 3650;
 
+    // Rango fijo (AB#100284): dos dias de calendario en hora peninsular, ambos
+    // inclusive. Solo manda cuando estan los dos; con uno solo la ventana relativa
+    // sigue vigente para que el usuario no vea la pagina vaciarse a medio rellenar.
+    // Es la excepcion deliberada a la nota de arriba: un periodo cerrado (un mes
+    // natural, por ejemplo) no debe moverse con el reloj.
+    public DateOnly? Desde { get; set; }
+    public DateOnly? Hasta { get; set; }
+
+    public bool EsRangoFijo => Desde is not null && Hasta is not null;
+
+    // El input nativo de fecha no impide teclear un año de cuatro nueves. Fuera de
+    // este tramo no hay datos que consultar y sumar un dia al maximo de DateOnly
+    // lanza una excepcion que las paginas no capturan.
+    public static readonly DateOnly FechaMinima = new(2000, 1, 1);
+    public static readonly DateOnly FechaMaxima = new(2100, 12, 31);
+
     public string? Tipologia { get; set; }
     public string? Estado { get; set; }
     public string? Flujo { get; set; }
@@ -411,8 +427,7 @@ public class MonitorFiltroDto
 
     public string ToQueryString()
     {
-        var hasta = DateTime.UtcNow;
-        var desde = hasta.AddDays(-RangoDias);
+        var (desde, hasta) = VentanaUtc();
         var partes = new List<string>
         {
             $"desde={Uri.EscapeDataString(desde.ToString("o"))}",
@@ -433,6 +448,26 @@ public class MonitorFiltroDto
         if (!string.IsNullOrWhiteSpace(Reutilizadas)) partes.Add($"reutilizadas={Uri.EscapeDataString(Reutilizadas)}");
         return string.Join("&", partes);
     }
+
+    // El backend filtra con ">= desde" y "< hasta": el extremo superior de un rango
+    // fijo es la medianoche del dia siguiente al ultimo pedido, para que ese dia
+    // entre completo. Extremos invertidos se intercambian en vez de fallar.
+    private (DateTime Desde, DateTime Hasta) VentanaUtc()
+    {
+        if (Desde is { } d1 && Hasta is { } d2)
+        {
+            var (primero, ultimo) = d1 <= d2 ? (d1, d2) : (d2, d1);
+            primero = Acotar(primero);
+            ultimo = Acotar(ultimo);
+            return (HoraEspana.InicioDelDiaUtc(primero), HoraEspana.InicioDelDiaUtc(ultimo.AddDays(1)));
+        }
+
+        var ahora = DateTime.UtcNow;
+        return (ahora.AddDays(-RangoDias), ahora);
+    }
+
+    private static DateOnly Acotar(DateOnly dia) =>
+        dia < FechaMinima ? FechaMinima : dia > FechaMaxima ? FechaMaxima : dia;
 
     public MonitorFiltroDto Clonar() => (MonitorFiltroDto)MemberwiseClone();
 }

@@ -210,4 +210,32 @@ public class MonitorV2PaginaTests : TestContext
 
         render.Should().NotThrow();
     }
+
+    // AB#100284: mismo aviso de pausa que en la pagina original.
+    [Fact]
+    public async Task ConRangoFijo_AvisaDeQueElAutoRefrescoEstaPausado()
+    {
+        RegistrarBackend(_ => DocumentIA.Tests.Admin.Helpers.StubHttpMessageHandler.Json("[]"));
+        var cut = RenderComponent<DocumentIA.Admin.Components.Pages.MonitorV2>();
+        var filtros = cut.FindComponent<DocumentIA.Admin.Components.Monitor.MonitorFiltros>();
+
+        await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(
+            new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }));
+
+        cut.Markup.Should().Contain("Auto-refresco pausado");
+    }
+
+    [Fact]
+    public async Task AlVolverAUnRangoRelativo_RetiraElAvisoDePausa()
+    {
+        RegistrarBackend(_ => DocumentIA.Tests.Admin.Helpers.StubHttpMessageHandler.Json("[]"));
+        var cut = RenderComponent<DocumentIA.Admin.Components.Pages.MonitorV2>();
+        var filtros = cut.FindComponent<DocumentIA.Admin.Components.Monitor.MonitorFiltros>();
+        await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(
+            new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }));
+
+        await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(new MonitorFiltroDto { RangoDias = 7 }));
+
+        cut.Markup.Should().NotContain("Auto-refresco pausado");
+    }
 }

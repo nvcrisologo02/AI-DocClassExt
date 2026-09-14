@@ -91,4 +91,25 @@ public class HoraEspanaTests
         HoraEspana.Desde(antes).Hour.Should().Be(2, "todavia en CEST (UTC+2)");
         HoraEspana.Desde(despues).Hour.Should().Be(2, "ya en CET (UTC+1): la hora 02 se repite");
     }
+
+    // La inversa: un dia de calendario peninsular empieza a medianoche local, que en
+    // UTC es la tarde anterior. Alimenta los filtros con rango de fechas fijo (AB#100284).
+    [Fact]
+    public void InicioDelDiaUtc_EnVerano_EsLasVeintidosDelDiaAnterior()
+    {
+        var inicio = HoraEspana.InicioDelDiaUtc(new DateOnly(2026, 8, 1));
+
+        inicio.Should().Be(new DateTime(2026, 7, 31, 22, 0, 0, DateTimeKind.Utc),
+            "el 1 de agosto a las 00:00 CEST es el 31 de julio a las 22:00 UTC");
+        inicio.Kind.Should().Be(DateTimeKind.Utc);
+    }
+
+    [Fact]
+    public void InicioDelDiaUtc_EnInvierno_EsLasVeintitresDelDiaAnterior()
+    {
+        var inicio = HoraEspana.InicioDelDiaUtc(new DateOnly(2026, 1, 1));
+
+        inicio.Should().Be(new DateTime(2025, 12, 31, 23, 0, 0, DateTimeKind.Utc),
+            "el 1 de enero a las 00:00 CET es el 31 de diciembre a las 23:00 UTC");
+    }
 }
