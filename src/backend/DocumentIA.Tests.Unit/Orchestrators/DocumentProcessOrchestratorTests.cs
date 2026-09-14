@@ -1,5 +1,6 @@
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Functions.Activities;
 using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Orchestrators;
 using FluentAssertions;
@@ -2056,6 +2057,46 @@ public class DocumentProcessOrchestratorTests
 
         salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
         context.GetActivityCallCount("SubirGDCActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_BlobFirstSinBase64_SubirGdcRecibeBlobPath()
+    {
+        const string rutaBlob = "documents/2026/09/abc.pdf";
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Documento.Content.Base64 = null;
+        entrada.Documento.BlobPath = rutaBlob;
+        entrada.Instrucciones.SkipGDCUpload = false;
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", rutaBlob);
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true, skipGdc: false));
+        context.SetupActivity("ExtraerActivity", BuildExtraccionOk());
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            IdActivoResuelto = "ACT-GDC-001",
+            DatosFinales = new Dictionary<string, object>()
+        });
+        context.SetupActivity("SubirGDCActivity", new global::DocumentIA.Core.Models.ResultadoGDC
+        {
+            Exitoso = true,
+            ObjectId = "GDC-RESULT-001",
+            Mensaje = "OK"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK", $"error real: {salida.Resultado.MensajeError}");
+        var subirGdc = context.GetLastActivityInput<SubirGDCActivity.SubirGDCActivityInput>("SubirGDCActivity");
+        subirGdc.Should().NotBeNull();
+        subirGdc!.Input.BlobPath.Should().Be(rutaBlob);
+        subirGdc.Input.ContenidoBase64.Should().BeNullOrEmpty();
     }
 
     [Fact]
