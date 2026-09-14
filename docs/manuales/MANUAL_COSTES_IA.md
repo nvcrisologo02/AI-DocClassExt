@@ -98,6 +98,14 @@ Usa los mismos filtros que el Monitor: rango de fechas, tipología, estado, fluj
 
 Un interruptor decide si los importes incluyen las ejecuciones estimadas. Por defecto no las incluye.
 
+#### Coste de un mes natural o de un periodo cerrado
+
+El desplegable **Rango** ofrece ventanas relativas (24 horas, 7, 30 o 90 días hacia atrás desde ahora) y la opción **Personalizado**. Al elegirla aparecen dos fechas, *Desde* y *Hasta*, precargadas con el día 1 del mes en curso y hoy: para un mes natural basta con ajustar el mes. Las dos fechas son inclusivas y se interpretan en hora peninsular, así que "del 1 al 31 de agosto" cubre desde las 00:00 del día 1 hasta las 23:59:59 del día 31. Cabecera, desglose, gráfico y listado responden al mismo periodo.
+
+Mientras falte una de las dos fechas sigue vigente la ventana relativa anterior. Volver a cualquier ventana relativa borra las fechas.
+
+Una salvedad: los puntos de la evolución diaria se agrupan por día UTC, no peninsular. Los totales del periodo son exactos; un documento procesado a las 23:30 hora española de un día puede aparecer en la barra del día siguiente.
+
 Las **reutilizaciones por duplicado** (AB#100258) no entran en ninguno de los importes: no gastaron IA. Se muestran aparte, como **coste evitado**: la suma del coste medido de las ejecuciones originales que se reutilizaron en el periodo. El filtro "Reutilizadas" del Monitor (*Excluir* / *Incluir* / *Solo*) permite verlas en el listado; en la cabecera de costes su importe propio es siempre cero.
 
 ---
