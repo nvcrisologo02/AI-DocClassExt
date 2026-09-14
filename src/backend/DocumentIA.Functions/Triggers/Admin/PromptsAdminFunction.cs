@@ -175,7 +175,7 @@ public class PromptsAdminFunction
             IsActive = false, // Siempre se crea como borrador
             Description = string.IsNullOrWhiteSpace(payload.Description) ? null : payload.Description!.Trim(),
             CreatedAtUtc = DateTime.UtcNow,
-            CreatedBy = string.IsNullOrWhiteSpace(payload.CreatedBy) ? null : payload.CreatedBy!.Trim()
+            CreatedBy = string.IsNullOrWhiteSpace(payload.CreatedBy) ? string.Empty : payload.CreatedBy.Trim()
         };
 
         _dbContext.PromptTemplates.Add(entity);
