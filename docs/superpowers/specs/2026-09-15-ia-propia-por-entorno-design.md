@@ -1,8 +1,8 @@
 # IA propia por entorno y promoción de artefactos de IA (DEV, PRE, PRO)
 
-- **Work item**: pendiente de crear (Feature con PBIs por fase)
+- **Work item**: Epic AB#100298; Features AB#100299 (fase 0), AB#100300 (fase 1), AB#100301 (fase 2), AB#100302 (fase 3); PBIs AB#100303 a AB#100321, uno por tarea del plan
 - **Fecha**: 2026-09-15
-- **Rama**: `docs/ia-propia-por-entorno` (diseño); la implementación irá en `feature/<id>-ia-propia-por-entorno` desde `develop` posterior al tag `release-2026-09-15`
+- **Rama**: `docs/ia-propia-por-entorno` (diseño); la implementación irá en `feature/100298-ia-propia-por-entorno` desde `develop` posterior al tag `release-2026-09-15`
 - **Estado**: diseño aprobado por secciones, pendiente de plan de implementación
 - **Origen**: análisis del documento *DocumentIA: estrategia multientorno para Azure AI Foundry* contrastado con el estado real de la plataforma
 
@@ -78,18 +78,18 @@ promocionan:
 ### 1. Definición común y resolución por entorno
 
 **Alias de recurso en la fila.** Cada fila de `ModeloConfigs` declara en
-`ConfiguracionJson` un `ResourceAlias` con uno de estos valores: `openai-primary`,
-`cu-primary`, `cu-secondary`, `di`. Las filas quedan idénticas en los tres entornos,
+`ConfiguracionJson` un `ResourceAlias` con uno de estos valores: `openai_primary`,
+`cu_primary`, `cu_secondary`, `di`. Las filas quedan idénticas en los tres entornos,
 incluidos los nombres de deployment, que ya coinciden en los tres Foundry.
 
-**Mapa por entorno en App Settings.** `AI__Resources__<alias>__Endpoint`, cargado por el
+**Mapa por entorno en App Settings.** `AI__Resources__<alias>__Endpoint` (los alias usan guion bajo porque los nombres de App Setting no admiten guion), cargado por el
 pipeline desde variables por entorno, sin literales en el YAML. Correspondencia:
 
 | Alias | DEV | PRE | PRO |
 |---|---|---|---|
-| `openai-primary` | `srbaisrv01devdocai` | `srbaisrv01predocai` | `upe48-mm2avmdm-swedencentral` |
-| `cu-primary` | `srbaisrv01devdocai` | `srbaisrv01predocai` | `upe48-mm2avmdm-swedencentral` |
-| `cu-secondary` | `srbaisrv02devdocai` | `srbaisrv02predocai` | `srbaisrv-westeurope` |
+| `openai_primary` | `srbaisrv01devdocai` | `srbaisrv01predocai` | `upe48-mm2avmdm-swedencentral` |
+| `cu_primary` | `srbaisrv01devdocai` | `srbaisrv01predocai` | `upe48-mm2avmdm-swedencentral` |
+| `cu_secondary` | `srbaisrv02devdocai` | `srbaisrv02predocai` | `srbaisrv-westeurope` |
 | `di` | `srbdidevdocai` | `srbdipredocai` | `srbdiprodocai` |
 
 **Resolución en los loaders.** Los cuatro loaders de registro de modelos (clasificación,
