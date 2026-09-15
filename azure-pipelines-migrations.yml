@@ -11,11 +11,14 @@ parameters:
       - dev
       - pre
       - prod
+  # Solo para fallback a agente hosted. Con docia-mdp-private no hace falta (acceso por privado).
   - name: addTransientFirewallRule
-    displayName: Add transient firewall rule for agent IP
+    displayName: Add transient firewall rule for agent IP (fallback hosted)
     type: boolean
-    default: true
+    default: false
 
+# Generate: agente hosted (no necesita red privada).
+# Apply: Managed DevOps Pool en VNet (acceso a Azure SQL por private endpoint).
 pool:
   vmImage: windows-latest
 
@@ -86,7 +89,7 @@ stages:
     displayName: Apply migrations to Azure SQL
     environment: ${{ parameters.targetEnvironment }}
     pool:
-      vmImage: windows-latest
+      name: docia-mdp-private
     strategy:
       runOnce:
         deploy:
