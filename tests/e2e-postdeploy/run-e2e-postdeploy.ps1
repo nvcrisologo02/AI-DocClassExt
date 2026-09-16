@@ -14,7 +14,7 @@
     explicito (>=1) siempre prevalece sobre este default por perfil.
 #>
 param(
-    [Parameter(Mandatory = $true)][ValidateSet("dev", "pro", "local")][string]$Environment,
+    [Parameter(Mandatory = $true)][ValidateSet("dev", "pre", "pro", "local")][string]$Environment,
     [ValidateSet("smoke", "full")][string]$Profile = "smoke",
     [switch]$IncludeGdc,
     [int]$Parallel = 0,
@@ -47,7 +47,7 @@ try {
 }
 catch { Write-Host "[CONFIG] $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
 
-if ($Environment -in @("dev", "pro") -and [string]::IsNullOrWhiteSpace($envConfig.FunctionKey)) {
+if ($Environment -in @("dev", "pre", "pro") -and [string]::IsNullOrWhiteSpace($envConfig.FunctionKey)) {
     Write-Host "[CONFIG] functionKey vacia para '$Environment' en environments.json" -ForegroundColor Red; exit 2
 }
 
