@@ -28,6 +28,10 @@ public class DocumentIADbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        modelBuilder.HasDbFunction(typeof(SqlJsonFunctions).GetMethod(nameof(SqlJsonFunctions.JsonValue))!)
+            .HasName("JSON_VALUE")
+            .IsBuiltIn();
+
         // Configurar relaciones
         modelBuilder.Entity<DocumentoEntity>()
             .HasOne(d => d.Resultado)

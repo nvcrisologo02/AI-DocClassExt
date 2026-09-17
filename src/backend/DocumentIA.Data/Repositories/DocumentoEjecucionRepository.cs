@@ -456,7 +456,12 @@ namespace DocumentIA.Data.Repositories
                     DuracionValidacionMs = e.DuracionValidacionMs,
                     DuracionIntegracionMs = e.DuracionIntegracionMs,
                     DuracionPersistenciaMs = e.DuracionPersistenciaMs,
-                    NombreDocumento = e.Documento != null ? e.Documento.NombreArchivo : null,
+                    // Documentos se deduplica por SHA-256 y conserva el primer nombre con el
+                    // que llego el contenido; la fila muestra el de esta peticion. Sin ISJSON: el
+                    // contrato solo lo escribe JsonSerializer y la guarda multiplica el coste.
+                    NombreDocumento = (SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato) ?? "") == ""
+                        ? (e.Documento != null ? e.Documento.NombreArchivo : null)
+                        : SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato),
                     SubmittedBy = e.SubmittedBy
                         ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
                     ActivityTimelineJson = e.ActivityTimelineJson,
@@ -492,12 +497,17 @@ namespace DocumentIA.Data.Repositories
                     DuracionTotalMs = e.DuracionTotalMs,
                     SubmittedBy = e.SubmittedBy
                         ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
-                    NombreDocumento = e.Documento != null ? e.Documento.NombreArchivo : null,
+                    NombreDocumento = (SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato) ?? "") == ""
+                        ? (e.Documento != null ? e.Documento.NombreArchivo : null)
+                        : SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato),
                     ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
                     EjecucionOriginalId = e.EjecucionOriginalId
                 })
                 .ToListAsync();
         }
+
+        /// <summary>Nombre con el que llego el documento en la peticion de la ejecucion.</summary>
+        private const string RutaNombreEnContrato = "$.Identificacion.Documento";
 
         /// <summary>Tope de reutilizaciones que se listan en el detalle de una ejecucion.</summary>
         private const int MaxReutilizacionesEnDetalle = 20;
