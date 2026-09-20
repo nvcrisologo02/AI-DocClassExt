@@ -24,7 +24,7 @@ param(
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".." ".." ".." "..")).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot ".." "..")).Path
 $cfg = Get-Content -Raw -Encoding UTF8 (Join-Path $repoRoot "tests/e2e-postdeploy/config/environments.json") | ConvertFrom-Json
 $env0 = $cfg.$Environment
 if (-not $env0.functionKey) { throw "Sin functionKey para '$Environment'." }
