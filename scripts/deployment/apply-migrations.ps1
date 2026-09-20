@@ -14,14 +14,14 @@ $ErrorActionPreference = 'Stop'
 if (-not (Test-Path $ScriptPath)) { throw "No existe el script de migrations: $ScriptPath" }
 if (-not (Test-Path $MigrationsDir)) { throw "No existe el directorio de migrations: $MigrationsDir" }
 
-# Ultima migration del repo: los nombres empiezan por timestamp yyyyMMddHHmmss,
+# Migrations del repo: los nombres empiezan por timestamp yyyyMMddHHmmss,
 # el orden lexicografico coincide con el cronologico.
-$expected = Get-ChildItem -Path $MigrationsDir -Filter '*.Designer.cs' |
+$repoMigrations = @(Get-ChildItem -Path $MigrationsDir -Filter '*.Designer.cs' |
     ForEach-Object { $_.BaseName -replace '\.Designer$', '' } |
-    Sort-Object |
-    Select-Object -Last 1
-if (-not $expected) { throw "No se han encontrado migrations en $MigrationsDir" }
-Write-Host "Ultima migration del repo: $expected"
+    Sort-Object)
+if ($repoMigrations.Count -eq 0) { throw "No se han encontrado migrations en $MigrationsDir" }
+$expected = $repoMigrations[-1]
+Write-Host "Migrations en el repo: $($repoMigrations.Count). Ultima: $expected"
 
 $sqlServerModule = Get-Module -ListAvailable -Name SqlServer | Where-Object { $_.Version -ge [version]'21.1.18256' }
 if (-not $sqlServerModule) {
@@ -33,23 +33,28 @@ Import-Module SqlServer
 $token = az account get-access-token --resource "https://database.windows.net/" --query accessToken -o tsv
 if (-not $token) { throw "No se pudo obtener token Entra para Azure SQL (az account get-access-token)" }
 
-function Get-LastAppliedMigration {
+# Devuelve el conjunto de migrations registradas en la BD (vacio si no hay tabla).
+# Se compara el CONJUNTO y no solo la ultima: una migration registrada a mano fuera de
+# EF (caso del indice del Monitor en PRO, que se aplica con ONLINE = ON por script propio)
+# puede ser la ultima del repo mientras siguen faltando otras anteriores.
+function Get-AppliedMigrations {
     $exists = @(Invoke-Sqlcmd -ServerInstance $SqlServerFqdn -Database $Database -AccessToken $token `
         -Query "SELECT 1 AS T FROM sys.tables t JOIN sys.schemas s ON t.schema_id = s.schema_id WHERE s.name = 'dbo' AND t.name = '__EFMigrationsHistory'")
     if ($exists.Count -eq 0) {
         Write-Host "La tabla __EFMigrationsHistory no existe (BD sin migrar): todo pendiente."
-        return $null
+        return @()
     }
     $rows = @(Invoke-Sqlcmd -ServerInstance $SqlServerFqdn -Database $Database -AccessToken $token `
-        -Query "SELECT TOP 1 MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC")
-    if ($rows.Count -eq 0) { return $null }
-    return $rows[0].MigrationId
+        -Query "SELECT MigrationId FROM __EFMigrationsHistory")
+    return @($rows | ForEach-Object { $_.MigrationId })
 }
 
-$before = Get-LastAppliedMigration
-Write-Host "Ultima migration aplicada en ${Database}@${SqlServerFqdn}: $before"
+$applied = Get-AppliedMigrations
+$pending = @($repoMigrations | Where-Object { $applied -notcontains $_ })
+Write-Host "Migrations aplicadas en ${Database}@${SqlServerFqdn}: $($applied.Count). Pendientes: $($pending.Count)"
+$pending | ForEach-Object { Write-Host "  - $_" }
 
-if ($before -eq $expected) {
+if ($pending.Count -eq 0) {
     Write-Host "La BD ya esta al dia. No hay nada que aplicar."
     exit 0
 }
@@ -63,10 +68,10 @@ Write-Host "Aplicando script idempotente: $ScriptPath"
 Invoke-Sqlcmd -ServerInstance $SqlServerFqdn -Database $Database -AccessToken $token `
     -InputFile $ScriptPath -QueryTimeout 3600 -AbortOnError
 
-$after = Get-LastAppliedMigration
-Write-Host "Ultima migration tras aplicar: $after"
-if ($after -ne $expected) {
-    Write-Error "Verificacion fallida: la BD quedo en '$after' pero el repo espera '$expected'"
+$applied = Get-AppliedMigrations
+$stillPending = @($repoMigrations | Where-Object { $applied -notcontains $_ })
+if ($stillPending.Count -gt 0) {
+    Write-Error "Verificacion fallida: siguen sin registrarse en la BD: $($stillPending -join ', ')"
     exit 1
 }
-Write-Host "Migrations aplicadas y verificadas correctamente."
+Write-Host "Migrations aplicadas y verificadas correctamente. Ultima: $expected"
