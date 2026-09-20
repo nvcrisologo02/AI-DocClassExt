@@ -47,8 +47,13 @@
 .PARAMETER MaxBatches
     Numero maximo de lotes por ejecucion (0 = sin limite).
 
+.PARAMETER DesdeId
+    Id de documento a partir del cual reanudar (exclusivo). Es el valor que imprime una pasada
+    parcial al terminar. Por defecto 0 (toda la tabla).
+
 .PARAMETER WhatIf
-    Solo cuenta cuantas filas cumplen el caso seguro y se marcarian, sin escribir nada.
+    Solo cuenta cuantas filas cumplen el caso seguro y se marcarian, sin escribir nada. Es un
+    escaneo completo de los contratos: en PRO tarda mas de 10 minutos.
 
 .EXAMPLE
     ./backfill-markdown-cobertura.ps1 -WhatIf
@@ -61,6 +66,7 @@ param(
     [string]$Database = "DocumentIA",
     [int]$BatchSize   = 2000,
     [int]$MaxBatches  = 0,
+    [int]$DesdeId     = 0,
     [switch]$WhatIf
 )
 
@@ -120,6 +126,16 @@ d.MarkdownCompleto = 0
       IN ('LayoutDocumentoCompletoPostClasificacion', 'FallbackLayout', 'LayoutBajoDemandaPrompt')
 "@
 
+$maxId = [int](Invoke-Scalar "SELECT ISNULL(MAX(Id), 0) FROM dbo.Documentos;")
+Write-Host "Documentos a recorrer: desde Id $DesdeId hasta Id $maxId"
+
+if (-not $WhatIf) {
+    # El recuento global es un escaneo completo con JSON_VALUE sobre todos los contratos: en PRO
+    # (S0, ~70k documentos) supera los 600 s de timeout. Solo se calcula en WhatIf; el modo de
+    # escritura avanza por lotes acotados por Id, que si son rapidos.
+    Write-Host "Recuento global omitido (solo en WhatIf); se escribe por lotes."
+}
+else {
 $pendientes = [int](Invoke-Scalar @"
 SELECT COUNT(*)
 FROM dbo.Documentos d
@@ -134,12 +150,7 @@ CROSS APPLY (
 ) u
 WHERE $casoSeguroWhere;
 "@)
-
-$maxId = [int](Invoke-Scalar "SELECT ISNULL(MAX(Id), 0) FROM dbo.Documentos;")
-Write-Host "Documentos a recorrer: hasta Id $maxId"
-Write-Host "Documentos que cumplen el caso seguro y serian marcados como completo: $pendientes"
-
-if ($WhatIf) {
+    Write-Host "Documentos que cumplen el caso seguro y serian marcados como completo: $pendientes"
     Write-Host "WhatIf: no se escribe nada."
     $conn.Close()
     return
@@ -147,8 +158,9 @@ if ($WhatIf) {
 
 # Marca de agua sobre Id: cada lote avanza siempre. Un filtro por 'MarkdownPaginas IS NULL' no
 # convergeria, porque las filas que no cumplen el caso seguro se quedan en NULL de forma legitima.
+# -DesdeId permite reanudar donde se quedo una pasada con -MaxBatches (o interrumpida).
 $lote = 0
-$desde = 0
+$desde = $DesdeId
 $totalEscritas = 0
 while ($desde -lt $maxId) {
     if ($MaxBatches -gt 0 -and $lote -ge $MaxBatches) {
@@ -193,7 +205,7 @@ Write-Host "Documentos con markdown de cobertura desconocida (solo fallback): $d
 if ($desde -ge $maxId) {
     Write-Host "Backfill completado: recorrida toda la tabla."
 } else {
-    Write-Host "Backfill parcial: reanudar desde Id $desde en la proxima ejecucion."
+    Write-Host "Backfill parcial: reanudar con -DesdeId $desde en la proxima ejecucion."
 }
 
 $conn.Close()

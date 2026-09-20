@@ -51,6 +51,10 @@
 .PARAMETER MaxBatches
     Numero maximo de lotes por ejecucion (0 = sin limite). Permite ir por tandas.
 
+.PARAMETER DesdeId
+    Id de ejecucion a partir del cual reanudar (exclusivo). Es el valor que imprime una pasada
+    parcial al terminar. Por defecto 0 (toda la tabla).
+
 .PARAMETER WhatIf
     Solo cuenta cuantas filas se rellenarian, sin escribir.
 
@@ -66,6 +70,7 @@ param(
     [decimal]$CosteMedioClasificacionGptEur = 0.0065,
     [int]$BatchSize   = 2000,
     [int]$MaxBatches  = 0,
+    [int]$DesdeId     = 0,
     [switch]$WhatIf
 )
 
@@ -122,8 +127,9 @@ CASE WHEN ModeloClasificacion IN ('gpt-4o-mini', 'gpt-5-mini', 'gpt-4.1-mini')
 END
 "@
 
+# -DesdeId permite reanudar donde se quedo una pasada con -MaxBatches (o interrumpida).
 $lote = 0
-$desde = 0
+$desde = $DesdeId
 $totalEscritas = 0
 while ($desde -lt $maxId) {
     if ($MaxBatches -gt 0 -and $lote -ge $MaxBatches) {
@@ -163,4 +169,8 @@ if ($r.Read()) {
 }
 $r.Close()
 $conn.Close()
-Write-Host "Terminado."
+if ($desde -ge $maxId) {
+    Write-Host "Backfill completado: recorrida toda la tabla."
+} else {
+    Write-Host "Backfill parcial: reanudar con -DesdeId $desde en la proxima ejecucion."
+}
