@@ -155,4 +155,27 @@ public class CostesPaginaTests : TestContext
             cut.FindAll(".alert-danger").Should().BeEmpty();
         });
     }
+
+    [Fact]
+    public void SinAgregados_MuestraUnAvisoEnLugarDeCeros()
+    {
+        // AB#100662: en PRO el agregado de 90 dias agotaba el timeout SQL y la pagina
+        // pintaba 0,00 EUR como si no hubiera coste. Un fallo de la API de costes
+        // tiene que verse como aviso, no como importe.
+        RegistrarBackend(req =>
+        {
+            var ruta = req.RequestUri!.AbsolutePath;
+            if (ruta.EndsWith("/costes")) return StubHttpMessageHandler.Json("", HttpStatusCode.InternalServerError);
+            return Responder(req);
+        });
+
+        var cut = RenderComponent<CostesPagina>();
+
+        cut.WaitForAssertion(() =>
+        {
+            cut.Find(".alert-warning").TextContent.Should().Contain("no están disponibles");
+            cut.FindComponents<CostesKpis>().Should().BeEmpty("no se muestran ceros que parezcan un importe real");
+            cut.FindComponents<CostesDesglose>().Should().BeEmpty();
+        });
+    }
 }
