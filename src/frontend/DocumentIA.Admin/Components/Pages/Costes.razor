@@ -59,11 +59,24 @@
 
 <MonitorFiltros Filtro="_filtro" Tipologias="_tipologias" FiltroCambiado="OnFiltroCambiado" MostrarReutilizaciones="false" />
 
-<CostesKpis Costes="_costes" Cargando="_cargando" />
+@if (_costes is null && !_cargando)
+{
+    @* AB#100662: si la API de costes falla (timeout SQL, 500), MonitorService devuelve
+       null. Antes se pintaban ceros como si el periodo no tuviera coste; ahora se avisa
+       y se dejan los agregados fuera. El listado de abajo sigue siendo util. *@
+    <div class="alert alert-warning" role="alert">
+        Los agregados de coste no están disponibles ahora mismo: la consulta ha fallado o ha superado el tiempo máximo.
+        El listado sigue operativo. Prueba con un rango de fechas más corto o vuelve a intentarlo con «Actualizar».
+    </div>
+}
+else
+{
+    <CostesKpis Costes="_costes" Cargando="_cargando" />
 
-<CostesDesglose Costes="_costes" />
+    <CostesDesglose Costes="_costes" />
 
-<CostesGrafico Serie="_costes?.Serie ?? []" />
+    <CostesGrafico Serie="_costes?.Serie ?? []" />
+}
 
 <MonitorTabla Pagina="_pagina" Cargando="_cargando"
               MostrarCoste="true"
