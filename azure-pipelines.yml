@@ -50,7 +50,7 @@ variables:
     - name: KEY_VAULT_NAME
       value: srbkvpredocai
     - name: GDC_ENDPOINT
-      value: https://srbwidi03.sareb.srb:8090/sintws-162/IDocService
+      value: https://srbwidi03.sareb.srb:8090/sintws-162/IDocService  # GDC PRE confirmado en documentación operativa
     - name: DI_USE_INLINE_CONTENT
       value: 'true'
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
@@ -258,7 +258,7 @@ stages:
     condition: succeeded()
     jobs:
       - deployment: DeployFunctionsJob
-        displayName: Deploy to srbappprodocai
+        displayName: Deploy to ${{ variables.AZURE_FUNCTIONS_APP_NAME }}
         environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
@@ -405,7 +405,7 @@ stages:
                         $appliedSettings | ForEach-Object { Write-Host "  ✓ $($_.name) = $($_.value)" }
                       }
       - deployment: DeployAdminJob
-        displayName: Deploy to $(AZURE_ADMIN_WEB_APP_NAME)
+        displayName: Deploy to ${{ variables.AZURE_ADMIN_WEB_APP_NAME }}
         environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
@@ -494,7 +494,7 @@ stages:
     condition: succeeded()
     jobs:
       - deployment: DeployAssetResolverJob
-        displayName: Deploy to $(AZURE_ASSET_RESOLVER_WEB_APP_NAME)
+        displayName: Deploy to ${{ variables.AZURE_ASSET_RESOLVER_WEB_APP_NAME }}
         environment: ${{ parameters.targetEnvironment }}
         strategy:
           runOnce:
