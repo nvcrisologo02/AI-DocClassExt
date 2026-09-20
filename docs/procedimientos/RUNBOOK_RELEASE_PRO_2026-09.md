@@ -1,5 +1,40 @@
 # Runbook — Release a PRO de fiabilidad, rendimiento y almacenamiento (septiembre 2026)
 
+> ## Estado: dos releases ejecutadas
+>
+> **03/09/2026** — Fases 1-2 de este runbook (AB#100165, AB#100176, AB#100182, AB#100192);
+> `master` sincronizado en `5b16b18`.
+>
+> **20/09/2026** — Segunda release sobre el mismo runbook, commit `fe1533f` de `develop`
+> (tag `deploy-pro-2026-09-20`): costes de IA (AB#100224/100235), resolutor y cobertura de
+> markdown (AB#100245-100256), visibilidad de reutilizaciones (AB#100258), rango de fechas y
+> nombre de documento en el Monitor (AB#100284, AB#100333), fix de GDC blob-first (AB#100293),
+> ExpectedType (AB#100242) y calidad de build (AB#100288). Registro de lo hecho, en orden:
+>
+> 1. Backup `DocumentIA-prerel-20260920` (23:10 UTC del 19/09), verificado contra el origen:
+>    68.951 documentos, 72.911 ejecuciones, última migración `20260902103313_MarkdownBinario`.
+> 2. `indice-monitor-reutilizacion-pro.sql` a mano con token de Entra (`sqlcmd -G` no pasa el
+>    MFA): **3,6 min en total**; el primer escaneo de la tabla (índice `EjecucionOriginalId`)
+>    187 s con la caché fría, el cubriente con 19 INCLUDE solo 30 s. Luego el SP.
+> 3. **Trampa del pipeline Migrations-BD**: su pre-check comparaba solo la *última* migración
+>    aplicada con la última del repo. Como el script del paso 2 registra `20260911…`, que es la
+>    última, el pipeline dijo "al día" y no aplicó las tres de costes y markdown. Se aplicaron
+>    con `dotnet ef migrations script 20260902103313_MarkdownBinario 20260908135330_MarkdownCobertura --idempotent`
+>    ejecutado a mano (9 `ADD COLUMN`, instantáneo). El pre-check ya compara el conjunto
+>    (`scripts/deployment/apply-migrations.ps1`), así que la próxima vez el pipeline vale.
+> 4. Seed del catálogo de tarifas (23:34 UTC): `tarifas.ia` activo, backup
+>    `ModeloConfigs__bak_20260919_233435`.
+> 5. Pipelines de Functions y Admin en paralelo desde `develop` (`fe1533f`, build 79482).
+> 6. Smoke E2E en PRO 6/6 PASS; `test-costes-ia.ps1 -Environment pro` VERIFICACION SUPERADA;
+>    `create-monitor-alerts.ps1` → 8 reglas activas con `srbagoperprodocai` (el ID del action
+>    group se obtuvo desde Cloud Shell: `az monitor action-group show` no pasa el proxy local).
+> 7. Backfills `backfill-markdown-cobertura.ps1` y `backfill-costes-estimados.ps1` lanzados
+>    tras la validación (reanudables; ver Fase 3).
+>
+> **Pendiente de limpieza**: borrar las copias `DocumentIA-prerel-202609` (del 03/09) y
+> `DocumentIA-prerel-20260920` tras el periodo de validación, y las tablas
+> `ModeloConfigs__bak_20260903_112330` y `ModeloConfigs__bak_20260919_233435`.
+
 Acciones para desplegar en PRO y dejar operativo el contenido de la release:
 **AB#100176** (fiabilidad de resumen y persistencia, INC1338832), **AB#100182** (rendimiento del
 Monitor), **AB#100165** (almacenamiento) y **AB#100192** (extracción sin modelKey).
@@ -10,8 +45,8 @@ Monitor), **AB#100165** (almacenamiento) y **AB#100192** (extracción sin modelK
 > migraciones. Los pasos están intercalados abajo (1.5, 1.6, 3.3 y 5.5). Ver
 > [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md).
 
-- **Commit a desplegar**: `origin/develop` (`091bb5a` o posterior). PRO despliega commits de
-  `develop` (el actual en PRO es `16e51bc`, del 14/08); `master` se sincroniza después.
+- **Commit a desplegar**: `origin/develop`. PRO despliega commits de `develop` (el actual en
+  PRO es `fe1533f`, del 20/09, tag `deploy-pro-2026-09-20`); `master` se sincroniza después.
 - **Validado en DEV** el 02/09: suite unitaria 999/999, Admin 113/113, E2E smoke 6/6 y full
   31 PASS / 0 FAIL / 1 N/A.
 - Todos los pasos manuales usan sesión Entra (`az login`); ninguno necesita credenciales en claro.
