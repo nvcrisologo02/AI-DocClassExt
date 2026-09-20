@@ -183,7 +183,17 @@ public class DocumentIADbContext : DbContext
                 // KPI de coste evitado hace join por EjecucionOriginalId. Sin las dos aqui,
                 // ese filtro dejaria de resolverse con el indice.
                 e.ReutilizadaPorDuplicado,
-                e.EjecucionOriginalId
+                e.EjecucionOriginalId,
+                // AB#100662: la seccion de costes agrega estas columnas sobre el mismo rango
+                // de fechas. Sin ellas en el INCLUDE cada consulta hacia key lookup por fila
+                // y el agregado de 90 dias en PRO superaba el timeout de 30 s.
+                e.CosteIAEur,
+                e.CosteEstimado,
+                e.CosteLayoutEur,
+                e.CosteClasificacionEur,
+                e.CosteExtraccionEur,
+                e.CostePromptEur,
+                e.TokensIA
             });
 
         modelBuilder.Entity<PluginEjecucionEntity>()

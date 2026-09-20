@@ -4,6 +4,7 @@ using DocumentIA.Data.Context;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -11,9 +12,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DocumentIA.Data.Migrations
 {
     [DbContext(typeof(DocumentIADbContext))]
-    partial class DocumentIADbContextModelSnapshot : ModelSnapshot
+    [Migration("20260920063449_IndiceMonitorCostes")]
+    partial class IndiceMonitorCostes
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -60,7 +63,7 @@ namespace DocumentIA.Data.Migrations
 
                     b.HasIndex("DocumentoId");
 
-                    b.ToTable("Auditoria", (string)null);
+                    b.ToTable("Auditoria");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.CatalogoTdn1Entity", b =>
@@ -93,7 +96,7 @@ namespace DocumentIA.Data.Migrations
                     b.HasIndex("Codigo")
                         .IsUnique();
 
-                    b.ToTable("CatalogoTdn1", (string)null);
+                    b.ToTable("CatalogoTdn1");
 
                     b.HasData(
                         new
@@ -555,7 +558,7 @@ namespace DocumentIA.Data.Migrations
 
                     b.HasIndex("Tdn1Id");
 
-                    b.ToTable("CatalogoTdn2", (string)null);
+                    b.ToTable("CatalogoTdn2");
 
                     b.HasData(
                         new
@@ -11348,7 +11351,7 @@ namespace DocumentIA.Data.Migrations
                     b.HasIndex("IdActivo", "DocumentoId")
                         .HasDatabaseName("IX_DocumentoEjecuciones_IdActivo_DocumentoId");
 
-                    b.ToTable("DocumentoEjecuciones", (string)null);
+                    b.ToTable("DocumentoEjecuciones");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.DocumentoEntity", b =>
@@ -11487,7 +11490,7 @@ namespace DocumentIA.Data.Migrations
 
                     b.HasIndex("FechaExpiracionBlob", "RutaBlobStorage");
 
-                    b.ToTable("Documentos", (string)null);
+                    b.ToTable("Documentos");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.ModeloConfigEntity", b =>
@@ -11533,7 +11536,7 @@ namespace DocumentIA.Data.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("ModeloConfigs", (string)null);
+                    b.ToTable("ModeloConfigs");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.PluginEjecucionEntity", b =>
@@ -11581,7 +11584,7 @@ namespace DocumentIA.Data.Migrations
 
                     b.HasIndex("EjecucionId", "PluginKey");
 
-                    b.ToTable("PluginEjecuciones", (string)null);
+                    b.ToTable("PluginEjecuciones");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.PluginTipologiaConfigEntity", b =>
@@ -11622,7 +11625,7 @@ namespace DocumentIA.Data.Migrations
                     b.HasIndex("TipologiaCodigo")
                         .IsUnique();
 
-                    b.ToTable("PluginTipologiaConfigs", (string)null);
+                    b.ToTable("PluginTipologiaConfigs");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.PromptTemplateEntity", b =>
@@ -11685,7 +11688,7 @@ namespace DocumentIA.Data.Migrations
                         .IsUnique()
                         .HasDatabaseName("UQ_PromptTemplate_Key_Version");
 
-                    b.ToTable("PromptTemplates", (string)null);
+                    b.ToTable("PromptTemplates");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.ResultadoProcesamientoEntity", b =>
@@ -11780,7 +11783,7 @@ namespace DocumentIA.Data.Migrations
                     b.HasIndex("DocumentoId")
                         .IsUnique();
 
-                    b.ToTable("ResultadosProcesamiento", (string)null);
+                    b.ToTable("ResultadosProcesamiento");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.TipologiaConfigAuditEntity", b =>
@@ -11815,7 +11818,7 @@ namespace DocumentIA.Data.Migrations
 
                     b.HasIndex("TipologiaId");
 
-                    b.ToTable("TipologiaConfigAudit", (string)null);
+                    b.ToTable("TipologiaConfigAudit");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.TipologiaEntity", b =>
@@ -11876,7 +11879,7 @@ namespace DocumentIA.Data.Migrations
                     b.HasIndex("Codigo")
                         .IsUnique();
 
-                    b.ToTable("Tipologias", (string)null);
+                    b.ToTable("Tipologias");
 
                     b.HasData(
                         new
@@ -11936,7 +11939,7 @@ namespace DocumentIA.Data.Migrations
 
                     b.HasIndex("EjecucionId", "Campo");
 
-                    b.ToTable("ValidacionResultados", (string)null);
+                    b.ToTable("ValidacionResultados");
                 });
 
             modelBuilder.Entity("DocumentIA.Data.Entities.AuditoriaEntity", b =>

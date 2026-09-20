@@ -440,9 +440,13 @@ erDiagram
 - `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` - Cubriente del Monitor Admin (AB#100185):
   clave `FechaEjecucion` + INCLUDE de las columnas escalares que usan los filtros, agregados
   y listado (17 en origen; 19 desde AB#100258, al incluir `ReutilizadaPorDuplicado` y
-  `EjecucionOriginalId`); sustituye al índice simple sobre `FechaEjecucion`. En PRO se recrea
-  con `DROP_EXISTING = ON, ONLINE = ON` mediante `scripts/database/indice-monitor-reutilizacion-pro.sql`,
-  no con el script idempotente de EF (que lo reconstruiría sin `ONLINE`)
+  `EjecucionOriginalId`; 26 desde AB#100662, al incluir las siete columnas de coste
+  `CosteIAEur`, `CosteEstimado`, `CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`,
+  `CostePromptEur` y `TokensIA`, que agrega la sección /costes del Admin); sustituye al índice
+  simple sobre `FechaEjecucion`. En PRO se recrea con `DROP_EXISTING = ON, ONLINE = ON` mediante
+  un script propio por cambio (`scripts/database/indice-monitor-reutilizacion-pro.sql`,
+  `scripts/database/indice-monitor-costes-pro.sql`), no con el script idempotente de EF (que lo
+  reconstruiría sin `ONLINE`)
 - `IX_DocumentoEjecuciones_EjecucionOriginalId` - Detalle "reutilizada N veces" y coste evitado (AB#100258)
 - `IX_DocumentoEjecuciones_InstanceId_Reutilizadas` - Filtrado `WHERE ReutilizadaPorDuplicado = 1`;
   guarda de idempotencia de la traza de reutilización (AB#100258)
@@ -770,7 +774,8 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
 | **1.18** | 2026-09-07 | Agregó `CosteIAEur` y `TokensIA` a DocumentoEjecuciones (`20260907075128_AddCostesIAToEjecuciones`, AB#100232). Migración puramente aditiva, sin relleno retroactivo. Aplicada en DEV (07/09, script idempotente con token de Entra) y en PRO (20/09, script idempotente de EF acotado a las tres pendientes, ejecutado a mano con token de Entra) |
 | **1.19** | 2026-09-07 | Agregó el desglose de coste por actividad (`CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`, `CostePromptEur`) y `CosteEstimado` a DocumentoEjecuciones (`20260907103326_AddCostesPorActividadYEstimado`, AB#100236). Migración aditiva; el relleno retroactivo es un script aparte, por marca de agua, que se lanza a mano. Aplicada en DEV (07/09) junto con el catálogo de tarifas (`ModeloConfigs__bak_20260907_110931`) y en PRO (20/09, con el catálogo: `ModeloConfigs__bak_20260919_233435`) |
 | **1.20** | 2026-09-08 | Cobertura del markdown persistido (`20260908135330_MarkdownCobertura`, AB#100246): `Documentos.MarkdownPaginas` (int, nulable) y `Documentos.MarkdownCompleto` (bit, default 0). Migración aditiva; el histórico nace con NULL/0 y lo corrige `scripts/database/backfill-markdown-cobertura.ps1` (caso seguro, por lotes). Aplicada en DEV (08/09) y en PRO (20/09) |
-| **1.21** | 2026-09-11 | [ACTUAL] Traza de las reutilizaciones por duplicado (`20260911093509_ReutilizacionPorDuplicado`, AB#100258): `ReutilizadaPorDuplicado` y `EjecucionOriginalId` en DocumentoEjecuciones, FK autorreferenciada, índices `EjecucionOriginalId` e `InstanceId_Reutilizadas` (filtrado) y el índice cubriente del Monitor con 19 INCLUDE. Migración aditiva. Aplicada en DEV (11/09) con el script idempotente de EF; en PRO va por `scripts/database/indice-monitor-reutilizacion-pro.sql` (recrea el índice cubriente con `ONLINE = ON` y registra la migración) más `sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql` (SP, fuera de EF). Aplicada en PRO el 20/09 por esa vía (índice cubriente reconstruido en 30 s; 3,6 min el script completo) |
+| **1.21** | 2026-09-11 | Traza de las reutilizaciones por duplicado (`20260911093509_ReutilizacionPorDuplicado`, AB#100258): `ReutilizadaPorDuplicado` y `EjecucionOriginalId` en DocumentoEjecuciones, FK autorreferenciada, índices `EjecucionOriginalId` e `InstanceId_Reutilizadas` (filtrado) y el índice cubriente del Monitor con 19 INCLUDE. Migración aditiva. Aplicada en DEV (11/09) con el script idempotente de EF; en PRO va por `scripts/database/indice-monitor-reutilizacion-pro.sql` (recrea el índice cubriente con `ONLINE = ON` y registra la migración) más `sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql` (SP, fuera de EF). Aplicada en PRO el 20/09 por esa vía (índice cubriente reconstruido en 30 s; 3,6 min el script completo) |
+| **1.22** | 2026-09-20 | [ACTUAL] Índice cubriente del Monitor con las columnas de coste (`20260920063449_IndiceMonitorCostes`, AB#100662): recrea `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` con 26 INCLUDE (19 previas + `CosteIAEur`, `CosteEstimado`, `CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`, `CostePromptEur`, `TokensIA`). Solo índice, sin cambios de columnas ni datos. Motivo: los agregados de /costes hacían key lookup por fila y el de 90 días en PRO (67.928 filas, 19,5 s en frío) agotaba el timeout de 30 s de `Admin_GetCostes`. Aplicada el 20/09 en DEV (5,3 s; agregados de 90 días de 1,1 s a 40 ms), PRE (0,7 s) y PRO (34,1 s de rebuild ONLINE; los 5 agregados de 90 días de 7,3 s a 2,0 s en caliente, ninguno por encima de 0,7 s) con `scripts/database/indice-monitor-costes-pro.sql` (`ONLINE = ON`, registra la migración) |
 | **v2.0** | 2026-07-31 | [PLANIFICADO] Elimina PromptGPT, ModeloClasificacionDI, UmbralClasificacion |
 
 ### 5.2 Cambios Recientes (Últimos 30 días)
