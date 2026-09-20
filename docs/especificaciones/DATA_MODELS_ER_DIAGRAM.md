@@ -150,6 +150,13 @@ erDiagram
         int DuracionGDCMs
         int DuracionPersistenciaMs
         int DuracionAssetResolverMs
+        decimal CosteIAEur "Coste EUR de servicios de IA (AB#100232)"
+        int TokensIA "Tokens de IA consumidos (AB#100232)"
+        decimal CosteLayoutEur "Desglose por actividad (AB#100236)"
+        decimal CosteClasificacionEur "Desglose por actividad (AB#100236)"
+        decimal CosteExtraccionEur "Desglose por actividad (AB#100236)"
+        decimal CostePromptEur "Desglose por actividad (AB#100236)"
+        bool CosteEstimado "True si procede del relleno retroactivo (AB#100236)"
     }
 
     PLUGIN_EJECUCIONES {
@@ -427,12 +434,18 @@ erDiagram
 **Propósito**: Registra cada ejecución del pipeline con orquestación, duraciones por actividad, y estado detallado.
 
 **PK**: `Id`  
-**FK**: `DocumentoId` → Documentos (Cascade Delete)  
+**FK**: `DocumentoId` → Documentos (Cascade Delete); `EjecucionOriginalId` → DocumentoEjecuciones (autorreferencia, `ON DELETE NO ACTION`, creada `WITH NOCHECK` en PRO porque todas las filas previas tienen la columna a NULL; AB#100258)  
 **Índices**:
 - `IX_DocumentoEjecuciones_EjecucionGuid` (UNIQUE) - Deduplicación
 - `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` - Cubriente del Monitor Admin (AB#100185):
-  clave `FechaEjecucion` + INCLUDE de las 17 columnas escalares que usan los filtros, agregados
-  y listado; sustituye al índice simple sobre `FechaEjecucion`
+  clave `FechaEjecucion` + INCLUDE de las columnas escalares que usan los filtros, agregados
+  y listado (17 en origen; 19 desde AB#100258, al incluir `ReutilizadaPorDuplicado` y
+  `EjecucionOriginalId`); sustituye al índice simple sobre `FechaEjecucion`. En PRO se recrea
+  con `DROP_EXISTING = ON, ONLINE = ON` mediante `scripts/database/indice-monitor-reutilizacion-pro.sql`,
+  no con el script idempotente de EF (que lo reconstruiría sin `ONLINE`)
+- `IX_DocumentoEjecuciones_EjecucionOriginalId` - Detalle "reutilizada N veces" y coste evitado (AB#100258)
+- `IX_DocumentoEjecuciones_InstanceId_Reutilizadas` - Filtrado `WHERE ReutilizadaPorDuplicado = 1`;
+  guarda de idempotencia de la traza de reutilización (AB#100258)
 - `IX_DocumentoEjecuciones_IdActivo_DocumentoId` - Consulta por activo (AB#100168); sustituye a
   `IX_DocumentoEjecuciones_IdActivoNormalizado_DocumentoId`, que colgaba de una columna
   calculada sobre `DatosFinalesJson` (columna que dejó de grabarse)
@@ -455,6 +468,8 @@ erDiagram
 | **ClassificationOnly** | BIT | Solo clasificación (sin extracción) |
 | **NivelClasificacion** | NVARCHAR(20) | Level (ej: "Full") |
 | **IdActivo** | NVARCHAR(100) | Activo resuelto en esta ejecución, normalizado en escritura (trim + mayúsculas). Sustituye a la columna calculada `IdActivoNormalizado` (AB#100168); el histórico se rellenó con `scripts/database/backfill-idactivo.ps1` |
+| **ReutilizadaPorDuplicado** | BIT NOT NULL DEFAULT 0 | 1 = la fila registra una petición servida con el contrato de otra ejecución (deduplicación). No es una ejecución de IA: no tiene contrato ni coste propios y el Monitor, los agregados y el SP por IdActivo la excluyen por defecto (AB#100258) |
+| **EjecucionOriginalId** | INT NULL | Ejecución cuyo contrato se devolvió. Solo informada cuando `ReutilizadaPorDuplicado = 1`. NULL en las reutilizaciones grabadas antes de la corrección `36dbd24` (AB#100258) |
 | **DatosOriginalesJson** | NVARCHAR(MAX) | **Ya no se graba** (AB#100166): su contenido vive en el contrato (`$.DetalleEjecucion.Integracion.DatosOriginales`). NULL en filas nuevas; el histórico conserva sus valores |
 | **DatosFinalesJson** | NVARCHAR(MAX) | **Ya no se graba** (AB#100166): su contenido vive en el contrato (`$.DatosExtraidos`). NULL en filas nuevas; el histórico conserva sus valores |
 | **ContratoSalidaCompletoJson** | NVARCHAR(MAX) | Contrato de salida completo (v1.3+). Desde AB#100166 se persiste **sin** `$.DetalleEjecucion.Seguimiento.Actividades` (el timeline vive solo en su columna); los lectores que reconstruyen el contrato (detalle de Admin, flujo de duplicados) lo recomponen vía `ContratoTimelineRehidratador` |
@@ -468,6 +483,13 @@ erDiagram
 | **DuracionGDCMs** | INT | Envío a GDC |
 | **DuracionPersistenciaMs** | INT | Persistencia en BD |
 | **DuracionAssetResolverMs** | INT | Asset Resolver |
+| **CosteIAEur** | DECIMAL(18,6) | Coste en euros de los servicios de IA de la ejecución (AB#100232). Solo servicios de IA: no incluye almacenamiento, cómputo ni red. NULL en ejecuciones anteriores a la funcionalidad; 0 cuando la ejecución no consumió IA. El desglose por llamada vive en el contrato, en `$.DetalleEjecucion.Costes` |
+| **TokensIA** | INT | Tokens de IA consumidos: entrada + salida + contextualización (AB#100232). No suma cacheados ni razonamiento, que ya van dentro de entrada y salida |
+| **CosteLayoutEur** | DECIMAL(18,6) | Coste de las llamadas a DI Layout (AB#100236). Las cuatro columnas de actividad suman `CosteIAEur`. NULL si la actividad no consumió |
+| **CosteClasificacionEur** | DECIMAL(18,6) | Coste de la clasificación, incluidos los proveedores evaluados y descartados (AB#100236) |
+| **CosteExtraccionEur** | DECIMAL(18,6) | Coste de la extracción, incluido el modelo generativo interno de Content Understanding (AB#100236) |
+| **CostePromptEur** | DECIMAL(18,6) | Coste del prompt libre o resumen (AB#100236) |
+| **CosteEstimado** | BIT | True cuando el importe procede del relleno retroactivo `scripts/database/backfill-costes-estimados.ps1` y no de consumo medido. La sección de costes de Admin lo presenta aparte y lo excluye de los importes salvo que se pida (AB#100236) |
 
 **Navegación**:
 - → `PluginEjecuciones` (1:N)
@@ -744,10 +766,32 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
 | **1.15** | 2026-06-02 | Agregó TDN2_Prompt a CatalogoTdn1 |
 | **v1.5** | 2026-06-05 | Marca PromptGPT, ModeloClasificacionDI, UmbralClasificacion como [Obsolete] |
 | **1.16** | 2026-08-05 | Agregó SubmittedBy a DocumentoEjecuciones (`20260805100351_AgregarSubmittedByEjecucion`). Aplicada en DEV y PRO |
-| **1.17** | 2026-09-02 | [ACTUAL] Release de rendimiento/almacenamiento: índice cubriente del Monitor (`20260902080254_IndiceCubrienteMonitorEjecuciones`, AB#100185); columna escalar `IdActivo` + SP por activo reescrito y retirada de `IdActivoNormalizado` (`20260902093812_IdActivoEscalarYSpPorIdActivo`, AB#100168); `Documentos.NormalizacionMarkdownGzip` con escritura dual (`20260902103313_MarkdownBinario`, AB#100169); `DatosFinalesJson`/`DatosOriginalesJson` dejan de grabarse y el contrato se persiste sin timeline (AB#100166/100167). Aplicadas en DEV (02/09) y en PRO (03/09, ventana manual única + backfills por lotes verificados: IdActivo tabla completa, markdown 64.466 filas con 0 discrepancias byte a byte) |
+| **1.17** | 2026-09-02 | Release de rendimiento/almacenamiento: índice cubriente del Monitor (`20260902080254_IndiceCubrienteMonitorEjecuciones`, AB#100185); columna escalar `IdActivo` + SP por activo reescrito y retirada de `IdActivoNormalizado` (`20260902093812_IdActivoEscalarYSpPorIdActivo`, AB#100168); `Documentos.NormalizacionMarkdownGzip` con escritura dual (`20260902103313_MarkdownBinario`, AB#100169); `DatosFinalesJson`/`DatosOriginalesJson` dejan de grabarse y el contrato se persiste sin timeline (AB#100166/100167). Aplicadas en DEV (02/09) y en PRO (03/09, ventana manual única + backfills por lotes verificados: IdActivo tabla completa, markdown 64.466 filas con 0 discrepancias byte a byte) |
+| **1.18** | 2026-09-07 | Agregó `CosteIAEur` y `TokensIA` a DocumentoEjecuciones (`20260907075128_AddCostesIAToEjecuciones`, AB#100232). Migración puramente aditiva, sin relleno retroactivo. Aplicada en DEV (07/09, script idempotente con token de Entra) y en PRO (20/09, script idempotente de EF acotado a las tres pendientes, ejecutado a mano con token de Entra) |
+| **1.19** | 2026-09-07 | Agregó el desglose de coste por actividad (`CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`, `CostePromptEur`) y `CosteEstimado` a DocumentoEjecuciones (`20260907103326_AddCostesPorActividadYEstimado`, AB#100236). Migración aditiva; el relleno retroactivo es un script aparte, por marca de agua, que se lanza a mano. Aplicada en DEV (07/09) junto con el catálogo de tarifas (`ModeloConfigs__bak_20260907_110931`) y en PRO (20/09, con el catálogo: `ModeloConfigs__bak_20260919_233435`) |
+| **1.20** | 2026-09-08 | Cobertura del markdown persistido (`20260908135330_MarkdownCobertura`, AB#100246): `Documentos.MarkdownPaginas` (int, nulable) y `Documentos.MarkdownCompleto` (bit, default 0). Migración aditiva; el histórico nace con NULL/0 y lo corrige `scripts/database/backfill-markdown-cobertura.ps1` (caso seguro, por lotes). Aplicada en DEV (08/09) y en PRO (20/09) |
+| **1.21** | 2026-09-11 | [ACTUAL] Traza de las reutilizaciones por duplicado (`20260911093509_ReutilizacionPorDuplicado`, AB#100258): `ReutilizadaPorDuplicado` y `EjecucionOriginalId` en DocumentoEjecuciones, FK autorreferenciada, índices `EjecucionOriginalId` e `InstanceId_Reutilizadas` (filtrado) y el índice cubriente del Monitor con 19 INCLUDE. Migración aditiva. Aplicada en DEV (11/09) con el script idempotente de EF; en PRO va por `scripts/database/indice-monitor-reutilizacion-pro.sql` (recrea el índice cubriente con `ONLINE = ON` y registra la migración) más `sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql` (SP, fuera de EF). Aplicada en PRO el 20/09 por esa vía (índice cubriente reconstruido en 30 s; 3,6 min el script completo) |
 | **v2.0** | 2026-07-31 | [PLANIFICADO] Elimina PromptGPT, ModeloClasificacionDI, UmbralClasificacion |
 
 ### 5.2 Cambios Recientes (Últimos 30 días)
+
+-3. **Traza de las reutilizaciones por duplicado** (2026-09-11, AB#100258)
+   - Cada petición servida por deduplicación deja su propia fila en `DocumentoEjecuciones` (`ReutilizadaPorDuplicado = 1`, `EjecucionOriginalId`), sin `ContratoSalidaCompletoJson` ni coste, con el `InstanceId`/`OperationId`/`SubmittedBy` de la llamada actual
+   - Lectores directos de la tabla deben filtrar `ReutilizadaPorDuplicado = 0` si esperan contrato: `ObtenerUltimaEjecucionDuplicadoActivity` (solo candidatas con contrato), el Monitor (`EjecucionFiltro.Reutilizadas`, excluir por defecto), `postdeploy-db.ps1` y `backfill-markdown-cobertura.ps1` ya lo hacen
+   - `sp_ObtenerDocumentoEjecucionesPorIdActivo` gana `@IncluirReutilizadas BIT = 0`: por defecto devuelve las mismas filas de siempre; con 1 entran las reutilizaciones y las dos columnas nuevas van al final del resultset
+   - Índice cubriente del Monitor recreado con las dos columnas en INCLUDE; en PRO con `ONLINE = ON` por script, no por EF
+
+-2. **Sección de costes en Admin y desglose por actividad** (2026-09-07, AB#100235)
+   - Cuatro columnas de coste por actividad y `CosteEstimado` en `DocumentoEjecuciones`, para agregar desde Admin sin abrir el contrato JSON
+   - Página `/costes`, sin entrada de menú, con los filtros del Monitor: totales, desglose por actividad, tipología y modelo, serie diaria y listado con coste
+   - Relleno retroactivo estimado con `backfill-costes-estimados.ps1`, marcado y separado de lo medido. La factura del grupo de recursos mezcla desarrollo y preproducción, así que no es comparable con la suma de producción
+
+-1. **Coste de IA por ejecución** (2026-09-07, AB#100224)
+   - `CosteIAEur` y `TokensIA` en `DocumentoEjecuciones`, ambas nullable y aditivas
+   - El desglose por llamada a servicio de IA viaja dentro del contrato ya persistido, en `$.DetalleEjecucion.Costes`; no necesita columna propia
+   - El bloque se calcula y persiste siempre; solo se devuelve al llamador si la entrada trae `instrucciones.incluirCostes`
+   - Las tarifas viven en `ModeloConfigs` con `Tipo=4` (Tarifas), clave `tarifas.ia`, y se resuelven por modelo físico y fecha de vigencia
+   - Solo servicios de IA: no contabiliza almacenamiento, cómputo ni red
 
 0. **SubmittedBy en DocumentoEjecuciones** (2026-08-05)
    - Asocia el solicitante (`trazabilidad.submittedBy`) a cada ejecución, no solo al documento

@@ -1,6 +1,6 @@
 ﻿# 3. Diseno Tecnico Detallado — DocumentIA
 
-> Ultima actualizacion: 2026-06-05  
+> Ultima actualizacion: 2026-09-14  
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. 
 > - Campo `Tipologias.PromptGPT` deprecated (see [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md)).
@@ -17,7 +17,8 @@ flowchart TD
     START([Inicio]) --> NORM["NormalizarActivity<br/>SHA256 + MD5 + CRC32<br/>+ paginas PDF"]
 
     NORM --> DUP{"VerificarDuplicadoActivity<br/>SHA256 en BD?"}
-    DUP -->|"Duplicado +<br/>!forceReprocess"| CACHE["Retorna resultado<br/>cacheado<br/>(ReutilizadaPorDuplicado=true)"]
+    DUP -->|"Duplicado +<br/>!forceReprocess"| REUSE["PersistirActivity<br/>(rama reutilizacion)<br/>fila propia vinculada<br/>a la ejecucion original"]
+    REUSE --> CACHE["Retorna resultado<br/>cacheado<br/>(ReutilizadaPorDuplicado=true,<br/>InstanceId real,<br/>EjecucionOriginalGuid)"]
     CACHE --> FIN_OK([Completed])
 
     DUP -->|"No duplicado /<br/>forceReprocess"| LAST{"skipDuplicateCheck?"}
@@ -42,7 +43,7 @@ flowchart TD
     CHK_TIP -->|"Si"| EXTRACT
 
     EXTRACT["ExtraerActivity<br/>CU / DI / GPT fallback"] --> CHK_LAYOUT{"Markdown layout<br/>habilitado?"}
-    CHK_LAYOUT -->|"Si"| LAYOUT["ExtraerMarkdownLayoutActivity"]
+    CHK_LAYOUT -->|"Si"| LAYOUT["ObtenerMarkdownActivity"]
     CHK_LAYOUT -->|"No"| CHK_PROMPT
     LAYOUT --> CHK_PROMPT
 
@@ -86,13 +87,13 @@ flowchart TD
 | 5 | Clasificar | `ClasificarActivity` | byte[] PDF | TipologiaDetectada, Confianza | Pipeline configurable por flujo (resuelto desde `Classification.Flows` + `Classification.DefaultFlow`), secuencial hasta satisfactorio y fallback global final. PostConfigure en Program.cs carga diccionario Flows desde configuracion. |
 | 6 | ResolverTipologia | `ResolverTipologiaActivity` | codigo tipologia | TipologiaConfig completa | Resuelve familia@version → config |
 | 7 | Extraer | `ExtraerActivity` | byte[] + tipologia config | DatosExtraidos (Dictionary) | CU/DI/GPT segun config |
-| 8 | ExtraerMarkdownLayout | `ExtraerMarkdownLayoutActivity` | byte[] PDF | Markdown texto | Layout extraction con DI. **Se omite** si `instrucciones.classification.markdown` viene informado (D4): en ese caso el markdown aportado se inyecta directamente en `datosNormalizados["Markdown"]`. |
+| 8 | ObtenerMarkdown | `ObtenerMarkdownActivity` | `NecesidadMarkdown` + `ContextoMarkdown` | `ResultadoMarkdown` (markdown, paginas, cobertura, consumos) | Delega en `MarkdownResolver`, que decide la fuente (cache, BD, Layout) segun lo que declare el paso llamante. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3. **Se omite** si `instrucciones.classification.markdown` viene informado (D4): en ese caso el markdown aportado se inyecta directamente en `datosNormalizados["Markdown"]` y se persiste via `PersistirMarkdownActivity`. |
 | 9 | Prompt | `PromptActivity` | datos + markdown + prompt config | Datos prompt enriquecidos | GPT-4o-mini con prompt libre (opcional) |
 | 10 | Validar | `ValidarActivity` | DatosExtraidos + reglas JSON | ValidationReport | 11 tipos de validador |
 | 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 | 12 | Integrar | `IntegrarActivity` | datos + tipologia + plugins config | DatosFinales + plugins results | Ejecucion por prioridad |
 | 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP (`searchEntities` + `create`) con timeout 120s |
-| 14 | Persistir | `PersistirActivity` | `PersistirInput` (ContratoSalida completo + `SubmittedBy` de `trazabilidad`) | void | BD + auditoria. `PersistirInput` es un envoltorio interno del orquestador (no altera los contratos de entrada/salida): permite guardar el solicitante en `DocumentoEjecucionEntity.SubmittedBy`. |
+| 14 | Persistir | `PersistirActivity` | `PersistirInput` (ContratoSalida completo + `SubmittedBy` de `trazabilidad`; opcionalmente `Reutilizacion` = `{ EjecucionOriginalGuid, Sha256 }`) | void | BD + auditoria. `PersistirInput` es un envoltorio interno del orquestador (no altera los contratos de entrada/salida): permite guardar el solicitante en `DocumentoEjecucionEntity.SubmittedBy`. Con `Reutilizacion` informado toma la **rama de reutilizacion** (AB#100258): inserta solo una fila de `DocumentoEjecuciones` marcada y vinculada a la original, mas auditoria; no toca `Documentos`, resultados, plugins ni validaciones. |
 
 ### 3.1.1 Comportamiento del orquestador segun entrada y configuracion
 
@@ -110,7 +111,7 @@ flowchart TD
     DOC --> NORM
 
     NORM --> DUP{"VerificarDuplicadoActivity<br/>SHA256 en BD?"}
-    DUP -->|duplicado + !forceReprocess| CACHE["Retorno cacheado<br/>ReutilizadaPorDuplicado=true"]
+    DUP -->|duplicado + !forceReprocess| CACHE["Retorno cacheado<br/>ReutilizadaPorDuplicado=true<br/>+ traza de reutilizacion en BD"]
     CACHE --> FIN([Completed])
 
     DUP -->|no duplicado / forceReprocess| SKIP{"skipDuplicateCheck?"}
@@ -251,14 +252,15 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
 
 **D4 — Markdown pre-procesado** (`DocumentProcessOrchestrator.cs`, antes del paso 2.8):
 - Si `entrada.Instrucciones.Classification.Markdown` no es null ni vacío, se inyecta en `datosNormalizados["Markdown"]`
-  y se omite la llamada a `ExtraerMarkdownLayoutActivity`.
+  y gana siempre en `MarkdownResolver` (fuente `Caller`, no se persiste). Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3.
 
 **Paso 2.8 — Layout pre-clasificación y transporte del documento**:
 - Se ejecuta cuando no hay markdown previo, `expectedType` viene vacío y el proveedor de clasificación
   no genera su propio markdown. Garantiza contexto textual a los proveedores `gpt`, `hybrid-tdn` y `rules`.
 - El documento se envía **por recorte cuando es PDF** (`docClasif.DocumentoBase64Clasif`) y **por
   `BlobPath` cuando ese base64 viene vacío**, que es lo que ocurre en modo blob-first con cualquier
-  formato no-PDF: el trigger vacía `Documento.Content.Base64` al subir el blob y el recorte no puede
+  formato no-PDF: el trigger pone `Documento.Content.Base64` a `null` al subir el blob (la propiedad es `string?`; los
+  fallbacks legados que decodifican base64 sin `BlobPath` lanzan `InvalidOperationException`) y el recorte no puede
   producir un base64 alternativo. `BlobPath` **solo** se informa en ese caso: el resolutor de origen
   de Document Intelligence lo prioriza sobre el base64, de modo que informarlo siempre anularía el
   recorte de los PDF y encarecería cada clasificación.
@@ -267,10 +269,10 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
   contexto textual y el conteo de páginas del layout nunca se informaba.
 
 **Contenido bajo demanda para prompt y resumen** (`EjecutarPromptLibreAsync`):
-- Si al ejecutar un prompt o un resumen no hay markdown disponible, se invoca `ExtraerMarkdownLayoutActivity`
+- Si al ejecutar un prompt o un resumen no hay markdown disponible, se invoca `ObtenerMarkdownActivity`
   en ese momento (origen `LayoutBajoDemandaPrompt`) y se propaga `identificacion.paginas` si nadie la
   informó antes. Cubre el caso de `expectedType` sobre tipologías sin extracción ni layout, donde el
-  paso 2.8 no llega a ejecutarse.
+  paso 2.8 no llega a ejecutarse. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3.
 - La llamada se paga solo cuando hay un prompt o un resumen que la necesita, no en todas las
   ejecuciones con tipología esperada.
 
@@ -294,6 +296,14 @@ Deduplicación:
 
 - La reutilización de ejecuciones previas se confronta por `SHA256 + ClassificationOnly + NivelClasificacion` para evitar mezclar procesos completos con procesos de solo clasificación, y para distinguir ejecuciones con distinto nivel jerárquico GPT.
 
+Traza de la reutilización (AB#100258):
+
+- `ObtenerUltimaEjecucionDuplicadoActivity` rellena `DetalleEjecucion.EjecucionOriginalGuid` con el `EjecucionGuid` de la fila cuyo contrato devuelve. Es el único puente hacia la original: ese GUID se genera al persistir y no viaja en el contrato (`Identificacion.Guid` es el del documento; usarlo dejaba la traza sin vínculo, corrección `36dbd24`). Solo son candidatas las filas con `ContratoSalidaCompletoJson`, así que una reutilización nunca se reutiliza.
+- `RegistrarReutilizacionAsync` (orquestador) sustituye en el contrato reutilizado `InstanceId`, `OperationId`, `Seguimiento`, `ClassificationOnly` y `NivelClasificacion` por los de la llamada actual y llama a `PersistirActivity` con `ReutilizacionInput { EjecucionOriginalGuid, Sha256 }`. Va en su propio `try/catch` y no usa `EjecutarPasoNegocioSinResultado`: un fallo escribiendo la traza se loguea y no convierte en error una petición ya resuelta.
+- `PersistirActivity.PersistirReutilizacionAsync` inserta una fila en `DocumentoEjecuciones` con `ReutilizadaPorDuplicado = 1`, `EjecucionOriginalId` (por `GetByGuidAsync`), `ContratoSalidaCompletoJson = NULL`, sin coste, con identidad y duración de esta llamada y `Tipologia`/`EstadoFinal`/confianzas copiados de la original; más una fila de `Auditoria` (`REUTILIZACION_DUPLICADO`). Idempotente por `InstanceId` (índice filtrado `IX_DocumentoEjecuciones_InstanceId_Reutilizadas`). No toca `Documentos`, `ResultadosProcesamiento`, plugins ni validaciones.
+- Lectura: `EjecucionFiltro.Reutilizadas` (`FiltroReutilizadas.Excluir` por defecto, `Incluir`, `Solo`) se aplica en `AplicarFiltro`, embudo común de listado, agregados, histograma, matriz y costes, de modo que las cifras históricas no cambian. `EjecucionAgregadosResult` añade `Reutilizadas` y `CosteEvitadoEur`, calculados aparte con `Solo` y por join con la original. El SP `sp_ObtenerDocumentoEjecucionesPorIdActivo` excluye salvo `@IncluirReutilizadas = 1` (script `scripts/database/sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql`, fuera de EF).
+- La rama `DUPLICADO` sin histórico reutilizable no cambia: persiste desde AB#100178 con el flag a 0.
+
 Limit pages en ClassificationOnly:
 
 - Si `instrucciones.maxPagesForClassificationOnly > 0`, la orquestación aplica recorte defensivo del PDF a las primeras N páginas justo antes de `Clasificar`.
@@ -312,6 +322,7 @@ Resumen de comportamiento por activity:
 
 - `NormalizarActivity`: hidrata/decodifica documento y calcula integridad (`SHA256`, `MD5`, `CRC32`) y metadatos de páginas.
 - `VerificarDuplicadoActivity`: consulta duplicidad por `SHA256`; con `forceReprocess=false` permite retorno temprano de ejecución previa.
+- `ObtenerUltimaEjecucionDuplicadoActivity`: recupera y rehidrata el contrato de la última ejecución con contrato compatible, y lo devuelve con `EjecucionOriginalGuid` informado (AB#100258).
 - `SubirBlobActivity`: persiste binario en blob (`documents/`) para trazabilidad operativa.
 - `ClasificarActivity`: resuelve un flujo configurable de providers y los ejecuta en orden hasta resultado satisfactorio; si no hay resultado, aplica fallback global final si está activo. Fallback chain: RuleBasedTdnClassifier → DocumentIntelligenceProvider → FoundryTdnRescueClassifier → GptClasificarDataProvider (two-phase).
 - `GptClasificarDataProvider`: implementa clasificación jerárquica de dos fases:
@@ -328,7 +339,7 @@ Resumen de comportamiento por activity:
 - `ObtenerActivoActivity`: resuelve activo vía AssetResolver según criterios configurados.
 - `IntegrarActivity`: aplica plugins por prioridad y consolida `DatosFinales`.
 - `SubirGDCActivity`: gestiona deduplicación previa (`searchEntities`) y subida (`create`) con timeout de 120s en orquestación.
-- `PersistirActivity`: persiste resultado integral y auditoría.
+- `PersistirActivity`: persiste resultado integral y auditoría. Con `PersistirInput.Reutilizacion` informado toma la rama de reutilización: una única fila marcada y vinculada a la original, sin contrato ni coste (AB#100258).
 
 Estados funcionales de cierre del pipeline:
 
@@ -337,7 +348,7 @@ Estados funcionales de cierre del pipeline:
 - `NO_CLASIFICADO`: clasificación parcial con código TDN1 conocido pero tipología TDN1/TDN2 no resuelta. Pipeline continúa con tipología parcial. Cuando el estado viene de una salida temprana (tipología no resoluble o `Desconocido`), el prompt y el resumen se ejecutan igualmente si la petición los pidió.
 - `SIN_CONTENIDO_DOCUMENTO`: se pidió prompt o resumen y no se pudo obtener texto del documento por ninguna vía. No se invoca al LLM; la actividad `Prompt` queda en `Failed` y no se persiste ni `Resumen` ni `ResultadoPrompt`. **Cuenta y se filtra como error** (`EstadoEjecucion.Error` en `DocumentIA.Data/Repositories/EstadoEjecucion.cs`), de modo que los agregados del Monitor y el badge lo tratan como fallo, no como estado desconocido. Al desplegarlo, parte del volumen que antes cerraba en `OK` —con un resumen inventado sobre un documento que el sistema nunca leyó— pasa a contarse aquí: es un cambio esperado en las métricas de operación.
 - `VALIDACION_CON_ERRORES`
-- `DUPLICADO`
+- `DUPLICADO`: solo cuando el documento existe y **no hay ninguna ejecución reutilizable**. Si la hay, el estado devuelto es el de aquella ejecución con `Resultado.ReutilizadaPorDuplicado = true`, y la petición queda registrada como fila de reutilización (AB#100258).
 - `BAJA_CONFIANZA_CLASIFICACION`
 - `ERROR`
 
@@ -549,7 +560,7 @@ Estructura canónica:
 
 Compatibilidad backward:
 
-- El backend mantiene fallback por propiedades resueltas (`Resolved*`) para leer tanto el formato v1.2 como el legacy de raíz (`gdcTipoDocumento`, `tdn1`, `gptDescripcion`, etc.).
+- El backend mantiene fallback por propiedades resueltas (`Resolved*`) para leer tanto el formato v1.2 como el legacy de raíz (`gdcTipoDocumento`, `tdn1`, `gptDescripcion`, etc.). Esas propiedades de raíz están marcadas `[Obsolete]` en `TipologiaValidationConfig`: el código nuevo y los tests usan `gdc.*` y `classification.*`. `DocumentIA.Functions` silencia CS0618 a propósito para seguir leyendo configuraciones antiguas (AB#100288).
 - En edición/creación se persiste formato v1.2 y, temporalmente, también campos legacy redundantes para no romper consumidores previos.
 
 Fuente de configuración:
@@ -1255,7 +1266,7 @@ Los archivos JSON en `config/tipologias/` son únicamente **fuente de seed**: al
 
 **Modo solo lectura (AB#99999):** cuando `IsAuthenticated = false`, cualquier operación de escritura (crear/editar/publicar/retirar/activar/eliminar tipologías, modelos, prompts o configuración de plugins) se rechaza antes de llamar a la Admin API. La comprobación (`EnsureWritesAllowed()`) vive en la **capa de servicios** (`TipologiaAdminService`, `PromptManagementService`), no en las páginas Blazor, para que ninguna vista pueda saltársela por omisión. El rechazo lanza `InvalidOperationException` con el mensaje "Modo solo lectura: no hay un usuario autenticado, así que no es posible registrar quién realiza el cambio...". Las consultas (GET) no están sujetas a esta restricción.
 
-**Auditoría:** el valor resuelto por `ICurrentUserService.UserName` es el que viaja como `usuario`/`CreatedBy`/`UpdatedBy`/`PublishedBy` en las peticiones a la Admin API. Los literales legacy `"ADMIN-UI"` y `"admin"` ya no se usan.
+**Auditoría:** el valor resuelto por `ICurrentUserService.UserName` es el que viaja como `usuario`/`CreatedBy`/`UpdatedBy`/`PublishedBy` en las peticiones a la Admin API. Los literales legacy `"ADMIN-UI"` y `"admin"` ya no se usan. Desde AB#100288 el alta de versiones de prompt también envía `createdBy`; si un cliente lo omite, la API persiste cadena vacía porque la columna es NOT NULL.
 
 ---
 
@@ -1297,7 +1308,8 @@ async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
 
 | Condicion | Actividad | Estado final | Se persiste? |
 |-----------|-----------|-------------|-------------|
-| Documento duplicado, !forceReprocess | VerificarDuplicado | `DUPLICADO` (reutilizado) | No (ya existe) |
+| Documento duplicado, !forceReprocess, con ejecución reutilizable | VerificarDuplicado | El de la ejecución original (`ReutilizadaPorDuplicado=true`) | Si: fila de reutilización sin contrato, vinculada a la original (AB#100258) |
+| Documento duplicado, !forceReprocess, sin ejecución reutilizable | VerificarDuplicado | `DUPLICADO` | Si (parcial, AB#100178) |
 | Confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (parcial) |
 | Tipologia no resuelta | ResolverTipologia | `ERROR` | Si (parcial) |
 | Cuota Azure OpenAI agotada (429 sostenido tras reintentos/cooldown) | Clasificar | `PENDIENTE_REINTENTO` (ver 3.9.5) | Si (parcial) |
@@ -1433,7 +1445,8 @@ stateDiagram-v2
     Persistido --> ValidacionConErrores : Validacion con errores
     Persistido --> ErrorEstado : ConfianzaGlobal < 0.70
 
-    Duplicado --> [*]
+    Duplicado --> ReutilizacionRegistrada : PersistirActivity<br/>(rama reutilizacion, AB#100258)
+    ReutilizacionRegistrada --> [*]
     BajaConfianza --> Persistido
     ErrorTipologia --> Persistido
     RateLimitAgotado --> Persistido
@@ -1448,11 +1461,79 @@ stateDiagram-v2
         ValidacionConErrores : Estado = VALIDACION_CON_ERRORES
         BajaConfianza : Estado = BAJA_CONFIANZA_CLASIFICACION
         ErrorEstado : Estado = ERROR
-        Duplicado : Estado = DUPLICADO (reutilizado)
+        Duplicado : Estado = el de la ejecucion original<br/>(DUPLICADO solo sin historico reutilizable)
+        ReutilizacionRegistrada : Fila ReutilizadaPorDuplicado=1<br/>vinculada a la original
         ErrorTipologia : Estado = ERROR (tipologia)
         RateLimitAgotado : Estado = PENDIENTE_REINTENTO (3.9.5)
     }
 ```
+
+---
+
+## 3.11b Subsistema de Costes de IA
+
+Registra el consumo economico de cada llamada a un servicio de IA. Solo servicios
+de IA: no contabiliza almacenamiento, computo ni red.
+
+### 3.11b.1 Recorrido del dato
+
+```
+Proveedor de IA          Actividad                Orquestador            Persistencia
+─────────────────       ──────────────           ─────────────          ─────────────
+registra ConsumoIA  ->  aplica la tarifa    ->   acumula y agrega   ->  columnas + contrato
+(tokens o paginas)      (CalculadoraCosteIA)     (AcumularConsumos)     (PersistirActivity)
+```
+
+**El calculo vive en la actividad, no en el orquestador.** El catalogo de tarifas
+esta en base de datos y el orquestador de Durable Functions debe seguir siendo
+determinista, asi que no puede consultarla. Lo que si puede hacer el orquestador es
+sumar los importes ya calculados, porque sumar decimales es determinista.
+
+### 3.11b.2 Piezas
+
+| Componente | Proyecto | Responsabilidad |
+|---|---|---|
+| `ConsumoIA`, `CostesIA` | Core.Models | Modelo del contrato: una entrada por llamada y el agregado |
+| `ProveedoresIA`, `ActividadesIA` | Core.Models | Nombres canonicos, sin dependencias de SDK |
+| `TarifaRegistryLoader` | Core.Configuration | Carga el catalogo con cache de 5 min; tolerante a JSON invalido y a fila ausente |
+| `CalculadoraCosteIA` | Core.Services | Resuelve la linea vigente por modelo y fecha, calcula y agrega |
+| `ConsumosIA` | Core.Services | Fusiona consumos entre proveedores encadenados |
+| `UsoOpenAiMapper` | Functions.Services | Traduce el bloque de uso del SDK de OpenAI |
+| `UsoContentUnderstandingMapper` | Core.Services | Traduce el bloque `usage` de Content Understanding |
+| `TarificadorDeConsumos` | Functions.Services | Aplica el catalogo en la actividad; un fallo no tumba el procesamiento |
+
+### 3.11b.3 Canal de transporte
+
+Los consumos viajan en los cuatro resultados que ya cruzan la frontera de actividad:
+`ResultadoClasificacion`, `ExtraccionResultado`, `ExtraerMarkdownLayoutResultado` y
+`PromptResultado`. No hace falta ningun canal nuevo.
+
+**Los proveedores compuestos deben fusionar.** Los routers de clasificacion y
+extraccion, el clasificador hibrido y el rescate devuelven el resultado de un solo
+proveedor y descartan el resto: sin `ConsumosIA.Fusionar`, el gasto desaparece justo
+en fallback, descarte y restriccion de tipologias, que es donde mas se paga.
+
+### 3.11b.4 Visibilidad en la salida
+
+`ResultadoClasificacion` forma parte del contrato de salida, asi que su lista de
+consumos llega tarificada. Se vacia en el envoltorio de `RunOrchestrator`, no en el
+cuerpo: hay quince puntos de retorno, incluidas salidas tempranas por rate limit y
+por documento sin contenido, y la regla no puede depender de acordarse en cada uno.
+
+El bloque `DetalleEjecucion.Costes` se anula en ese mismo punto cuando la entrada no
+trae `incluirCostes`. Al ser anulable, se omite del JSON.
+
+### 3.11b.5 Invariantes
+
+1. Los tokens cacheados vienen **incluidos** en los de entrada: se restan, no se suman.
+2. Un fallo capturando o tarificando **nunca** hace fallar una ejecucion.
+3. El bloque se calcula y persiste siempre; el parametro solo decide si se devuelve.
+4. Los consumos descartados cuentan en el total, marcados con `Descartado`.
+5. Una llamada combinada (extraccion + resumen) genera **un solo** consumo.
+6. Un consumo sin ninguna magnitud no se tarifa a cero: se deja sin coste.
+7. El importe es `decimal`, nunca `double`.
+
+Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) para el detalle funcional y de uso.
 
 ---
 
@@ -1784,4 +1865,5 @@ El campo `environment` de `/management/configuration` se resuelve con prioridad 
 | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Arquitectura, ADRs, patrones |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API detallado (original) |
 | [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de confianza |
+| [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA: medicion, tarifas, consulta y relleno retroactivo |
 | [TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Catalogo de tipologias |

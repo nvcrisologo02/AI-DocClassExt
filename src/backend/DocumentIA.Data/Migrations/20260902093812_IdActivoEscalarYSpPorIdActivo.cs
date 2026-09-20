@@ -51,7 +51,13 @@ END;
             // 8.000 filas, y dentro de la transaccion de la migracion mantendria bloqueos sobre
             // una tabla de 1,7 GB en PRO. Se hace por lotes con
             // scripts/database/backfill-idactivo.ps1, que es idempotente y reanudable.
+            // CREATE PROCEDURE debe ser la primera sentencia de su lote. El script idempotente
+            // (dotnet ef migrations script --idempotent) envuelve cada operacion en un
+            // IF NOT EXISTS ... BEGIN/END, por lo que el CREATE en crudo no parsea (Msg 156).
+            // Se emite dentro de EXEC(N'...') para que sea su propio lote; las comillas simples
+            // del cuerpo van duplicadas por ser literal de cadena.
             migrationBuilder.Sql(@"
+EXEC(N'
 CREATE OR ALTER PROCEDURE dbo.sp_ObtenerDocumentoEjecucionesPorIdActivo
     @IdActivo NVARCHAR(100)
 AS
@@ -87,9 +93,9 @@ BEGIN
         -- Se mantienen los mismos nombres de columna en el resultset, extrayendo del contrato
         -- cuando la columna historica no existe.
         COALESCE(de.DatosOriginalesJson,
-                 JSON_QUERY(de.ContratoSalidaCompletoJson, '$.DetalleEjecucion.Integracion.DatosOriginales')) AS DatosOriginalesJson,
+                 JSON_QUERY(de.ContratoSalidaCompletoJson, ''$.DetalleEjecucion.Integracion.DatosOriginales'')) AS DatosOriginalesJson,
         COALESCE(de.DatosFinalesJson,
-                 JSON_QUERY(de.ContratoSalidaCompletoJson, '$.DatosExtraidos'))                               AS DatosFinalesJson,
+                 JSON_QUERY(de.ContratoSalidaCompletoJson, ''$.DatosExtraidos''))                               AS DatosFinalesJson,
         de.ContratoSalidaCompletoJson
     FROM DocsObjetivo x
     JOIN dbo.Documentos d
@@ -98,6 +104,7 @@ BEGIN
         ON de.DocumentoId = d.Id
     ORDER BY d.Id, de.FechaEjecucion DESC, de.Id DESC;
 END;
+');
 ");
         }
 

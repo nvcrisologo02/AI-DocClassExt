@@ -10,14 +10,14 @@ namespace DocumentIA.Data.Entities
     {
         [Key]
         public int Id { get; set; }
-        
+
         [Required]
         public int DocumentoId { get; set; }
-        
+
         [Required]
         [MaxLength(36)]
         public string EjecucionGuid { get; set; } = Guid.NewGuid().ToString();
-        
+
         public DateTime FechaEjecucion { get; set; } = DateTime.UtcNow;
 
         /// <summary>ID de instancia Durable Functions. Correlaciona con el estado en el portal de Azure.</summary>
@@ -27,7 +27,7 @@ namespace DocumentIA.Data.Entities
         /// <summary>W3C TraceId de App Insights (operation_Id). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
         [MaxLength(100)]
         public string? OperationId { get; set; }
-        
+
         [MaxLength(100)]
         public string? Tipologia { get; set; }
 
@@ -38,14 +38,14 @@ namespace DocumentIA.Data.Entities
         [Required]
         [MaxLength(50)]
         public string EstadoFinal { get; set; } = string.Empty;
-        
+
         public double ConfianzaGlobal { get; set; }
-        
+
         [MaxLength(200)]
         public string? ModeloClasificacion { get; set; }
-        
+
         public double ConfianzaClasificacion { get; set; }
-        
+
         public bool UseFallbackLLM { get; set; }
         public bool ClassificationOnly { get; set; }
 
@@ -60,14 +60,14 @@ namespace DocumentIA.Data.Entities
         /// </summary>
         [MaxLength(100)]
         public string? IdActivo { get; set; }
-        
+
         [Column(TypeName = "nvarchar(max)")]
         public string? DatosOriginalesJson { get; set; }
-        
+
         [Column(TypeName = "nvarchar(max)")]
         public string? DatosFinalesJson { get; set; }
-        
-         [Column(TypeName = "nvarchar(max)")]
+
+        [Column(TypeName = "nvarchar(max)")]
         public string? ContratoSalidaCompletoJson { get; set; }
 
         [Column(TypeName = "nvarchar(max)")]
@@ -89,16 +89,68 @@ namespace DocumentIA.Data.Entities
 
         public int? DuracionAssetResolverMs { get; set; }
 
+        /// <summary>
+        /// Coste en euros de los servicios de IA de esta ejecucion. Solo servicios de
+        /// IA: no incluye almacenamiento, computo ni red. Null en ejecuciones anteriores
+        /// a la funcionalidad; cero cuando la ejecucion no consumio IA. El desglose por
+        /// llamada vive en ContratoSalidaCompletoJson, en $.DetalleEjecucion.Costes.
+        /// </summary>
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CosteIAEur { get; set; }
+
+        /// <summary>
+        /// Tokens de IA consumidos: entrada mas salida mas contextualizacion. No suma
+        /// cacheados ni razonamiento, que ya van dentro de entrada y salida.
+        /// </summary>
+        public int? TokensIA { get; set; }
+
+        // AB#100236: desglose del coste por actividad, para agregar desde Admin sin
+        // abrir el contrato JSON. Las cuatro suman CosteIAEur. Nullable como el total.
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CosteLayoutEur { get; set; }
+
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CosteClasificacionEur { get; set; }
+
+        /// <summary>Incluye el modelo generativo interno de Content Understanding.</summary>
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CosteExtraccionEur { get; set; }
+
+        [Column(TypeName = "decimal(18,6)")]
+        public decimal? CostePromptEur { get; set; }
+
+        /// <summary>
+        /// True cuando el importe procede del relleno retroactivo y no de consumo
+        /// medido: se presenta aparte y se excluye de los agregados salvo que se pida.
+        /// </summary>
+        public bool CosteEstimado { get; set; }
+
         [Column(TypeName = "nvarchar(max)")]
         public string? AssetResolverResultJson { get; set; }
-        
+
+        /// <summary>
+        /// True cuando la fila registra una peticion servida con el contrato de otra
+        /// ejecucion (deduplicacion). No es una ejecucion de IA: no tiene contrato ni
+        /// coste propios y se excluye por defecto de los agregados (AB#100258).
+        /// </summary>
+        public bool ReutilizadaPorDuplicado { get; set; }
+
+        /// <summary>
+        /// Ejecucion cuyo contrato se devolvio. Solo informada cuando
+        /// <see cref="ReutilizadaPorDuplicado"/> es true.
+        /// </summary>
+        public int? EjecucionOriginalId { get; set; }
+
+        /// <summary>Navegacion a la ejecucion reutilizada.</summary>
+        public virtual DocumentoEjecucionEntity? EjecucionOriginal { get; set; }
+
         [ForeignKey(nameof(DocumentoId))]
         public virtual DocumentoEntity Documento { get; set; } = null!;
-        
-        public virtual ICollection<PluginEjecucionEntity> PluginsEjecutados { get; set; } 
+
+        public virtual ICollection<PluginEjecucionEntity> PluginsEjecutados { get; set; }
             = new List<PluginEjecucionEntity>();
-        
-        public virtual ICollection<ValidacionResultadoEntity> Validaciones { get; set; } 
+
+        public virtual ICollection<ValidacionResultadoEntity> Validaciones { get; set; }
             = new List<ValidacionResultadoEntity>();
     }
 }

@@ -88,10 +88,20 @@ public class DocumentoRepository : IDocumentoRepository
         return documento;
     }
 
+    // Las cuatro columnas de markdown no se escriben nunca desde aqui (AB#100254): sus unicos
+    // escritores son el alta del documento y ActualizarMarkdownSiMejoraAsync, que compara cobertura
+    // en el propio UPDATE y por tanto es atomico. Update() marca TODA la entidad como modificada,
+    // asi que el UPDATE generado incluia esas columnas con los valores que se leyeron al abrir la
+    // actividad; si entretanto otra ejecucion del mismo SHA256 mejoraba la cobertura, este
+    // SaveChanges la revertia a la anterior.
     public async Task UpdateAsync(DocumentoEntity documento)
     {
         documento.FechaActualizacion = DateTime.UtcNow;
-        _context.Documentos.Update(documento);
+        var entrada = _context.Documentos.Update(documento);
+        entrada.Property(d => d.NormalizacionMarkdownGzip).IsModified = false;
+        entrada.Property(d => d.NormalizacionMarkdownCompressed).IsModified = false;
+        entrada.Property(d => d.MarkdownPaginas).IsModified = false;
+        entrada.Property(d => d.MarkdownCompleto).IsModified = false;
         await _context.SaveChangesAsync();
     }
 
@@ -108,5 +118,28 @@ public class DocumentoRepository : IDocumentoRepository
     public async Task<bool> ExistsBySHA256Async(string sha256)
     {
         return await _context.Documentos.AnyAsync(d => d.SHA256 == sha256);
+    }
+
+    public async Task<int> ActualizarMarkdownSiMejoraAsync(
+        string sha256, byte[] gzip, string base64, int paginas, bool completo, bool forzar)
+    {
+        var ahora = DateTime.UtcNow;
+
+        return await _context.Documentos
+            .Where(d => d.SHA256 == sha256)
+            .Where(d =>
+                forzar
+                // no habia nada: ni binario ni el Base64 historico anterior a AB#100169
+                || (d.NormalizacionMarkdownGzip == null && d.NormalizacionMarkdownCompressed == null)
+                // pasamos a completo
+                || (completo && !d.MarkdownCompleto)
+                // mas paginas que un parcial de cobertura conocida
+                || (!completo && !d.MarkdownCompleto && d.MarkdownPaginas != null && d.MarkdownPaginas < paginas))
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(d => d.NormalizacionMarkdownGzip, gzip)
+                .SetProperty(d => d.NormalizacionMarkdownCompressed, base64)
+                .SetProperty(d => d.MarkdownPaginas, paginas)
+                .SetProperty(d => d.MarkdownCompleto, completo)
+                .SetProperty(d => d.FechaActualizacion, ahora));
     }
 }

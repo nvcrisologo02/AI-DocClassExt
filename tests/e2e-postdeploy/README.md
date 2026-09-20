@@ -85,6 +85,137 @@ caso pasa desde entonces. Al promocionar a PRO hay que aplicar el mismo ajuste
 (PRO sigue en 60). El fix de código asociado convierte cualquier timeout futuro
 en `EXTRACCION_INCOMPLETA` (estado de negocio) en lugar de error técnico.
 
+## Validación de cobertura de markdown (run-validacion-markdown.ps1)
+
+Juego de pruebas aparte, centrado en las invariantes MDW-01..MDW-09 (columna
+`Area: Markdown` de `coverage/functional-matrix.json`) de la cobertura de
+markdown persistida por documento (`MarkdownCompleto`, `MarkdownPaginas`,
+`NormalizacionMarkdownGzip`, `NormalizacionMarkdownCompressed`). A diferencia
+de `run-e2e-postdeploy.ps1`, no solo llama al endpoint: cada caso siembra su
+fila de partida con el pipeline, opcionalmente la muta a mano en BD, comprueba
+una precondición, ejecuta una o más pasadas en orden y asevera sobre el estado
+final de la fila en `Documentos` (no solo sobre la respuesta HTTP). Limpia la
+fila antes y después de cada caso por SHA256.
+
+Casos en `cases-validacion/markdown-cases.json` (formato propio, distinto del
+de `cases/`: bloques `seed`/`pasadas`/`dbAssertions`, no `profiles`/`assertions`
+planos). Cada runner de validación carga **solo su fichero**, no un glob del
+directorio: `dedup-cases.json` (sección siguiente) convive ahí con otro
+esquema, otras columnas y otra área de la matriz.
+
+Tres modos de invocación:
+
+    # plan: imprime qué haría cada caso, sin conectar a BD ni lanzar nada
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -WhatIf
+
+    # limpieza: conecta, borra cualquier fila residual de los casos y sale
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -SoloLimpieza
+
+    # ejecución real: siembra, ejecuta pasadas, asevera y limpia
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev
+
+    # solo algunos casos: filtra por caseKey en vez de relanzar el juego completo
+    pwsh ./tests/e2e-postdeploy/run-validacion-markdown.ps1 -Environment dev -CaseKey MDW-MDW1,MDW-MDW6
+
+`-CaseKey` combinado con `-SoloLimpieza` limita también la limpieza a los casos filtrados, no borra el resto.
+
+`-CaseKey` acepta tanto una lista separada por comas en un solo argumento (`-CaseKey MDW-MDW1,MDW-MDW6`, la forma que llega al invocar `pwsh ./script.ps1 ...` directamente desde Git Bash) como varios valores ya separados por PowerShell (al invocar con `pwsh -Command "& './script.ps1' -CaseKey MDW-MDW1,MDW-MDW6"`): el script normaliza ambas formas nada más entrar.
+
+`-Environment` solo admite `dev` (`ValidateSet` de un único valor): este juego
+emite `DELETE`/`UPDATE` directos contra `Documentos` y nunca debe poder
+apuntar a PRO. `Assert-DbServidorEsDev` (en `lib/postdeploy-db.ps1`) es una
+segunda barrera independiente del `ValidateSet`: si `sqlServer` en
+`environments.json` no es el de DEV, aborta con exit 2 antes de tocar nada.
+
+Requiere además de lo ya listado en Prerrequisitos: red corporativa (o VPN) y
+sesión `az login` activa con acceso al servidor SQL de DEV —
+`Connect-DocumentIADb` obtiene un token con `az account get-access-token
+--resource https://database.windows.net/`, sin usuario/contraseña.
+
+Estados: `PASS` (invariante verificada), `FAIL` (invariante violada de
+verdad: una fila persistida no cumple lo esperado), `ERROR` (el caso no pudo
+ejecutarse — siembra, precondición o mutación fallidas; problema del runner o
+del entorno, no de la invariante), `SKIP` (una pasada se omitió, se traduce a
+`ERROR` porque sin esa pasada el resultado no significa nada). Exit codes: 0
+sin FAIL ni ERROR, 1 si hay alguno, 2 error de configuración.
+
+Coste y tiempo: cada caso ejecuta como mínimo dos pasadas por el pipeline real
+(una siembra más una o más pasadas), cada una de 30 a 90 segundos y con
+consumo real de Document Intelligence y GPT. No lanzar en bucle ni de forma
+automatizada; es un juego para ejecutar puntualmente, no en cada despliegue.
+
+Solo opera contra DEV y borra filas de `Documentos` (con cascada a
+`Ejecuciones` y sus postprocesos/validaciones) por SHA256 antes y después de
+cada caso, incluso en `-SoloLimpieza`. No apuntarlo nunca a una base de datos
+compartida con datos que interese conservar.
+
+Trampa conocida (compartida con el corpus de `run-e2e-postdeploy.ps1`):
+`tools/generate_corpus.py` regenera **todo** el corpus sintético de golpe,
+con timestamps nuevos en cada fichero que toca — incluidos los que no tienen
+relación con el cambio que se está haciendo. Ejecutarlo sin querer ensucia el
+diff con ficheros binarios no relacionados. No ejecutarlo salvo que el cambio
+realmente requiera regenerar el corpus, y revisar `git status` después para
+no commitear de más.
+
+Dos trampas propias de los casos `MDW-08A/8B/8C` (backfill): (a) cada uno
+ejecuta el backfill real (`scripts/database/backfill-markdown-cobertura.ps1`)
+**dos veces** sobre **toda** la tabla `Documentos` de DEV (una con `-WhatIf`
+para contar, otra real para escribir), unos 4 minutos por caso, y marca
+cualquier fila histórica que cumpla el caso seguro — efecto fuera de la huella
+propia del juego, pero idempotente: relanzar no cambia el resultado sobre
+filas ya marcadas. (b) No ejecutar este juego en paralelo con
+`run-e2e-postdeploy.ps1`: los casos `MDW-04`, `MDW-05A`, `MDW-05B`, `MDW-08B` y
+`MDW-08C` usan documentos del corpus compartido, y la limpieza por SHA256 de
+uno de los dos runners borraría filas que el otro está usando.
+
+## Validación de la reutilización por duplicado (run-validacion-dedup.ps1)
+
+Juego de pruebas aparte para las invariantes DUP-01..DUP-05 (`Area: Dedup` de
+`coverage/functional-matrix.json`), introducidas en AB#100258: una petición
+repetida de un documento ya procesado se sirve con el contrato de otra
+ejecución **y deja su propia fila** en `DocumentoEjecuciones`, marcada con
+`ReutilizadaPorDuplicado = 1`, sin contrato ni coste propios y vinculada a la
+original por `EjecucionOriginalId`.
+
+Misma mecánica que el juego de markdown (siembra → pasadas → aserciones →
+limpieza por SHA256, mismos parámetros `-Environment`, `-WhatIf`,
+`-SoloLimpieza`, `-CaseKey`, mismas barreras de solo-DEV) con dos diferencias:
+
+- Asevera sobre las **filas de ejecución** del documento, no sobre `Documentos`:
+  la deduplicación no toca esa fila, así que no hay nada que observar en ella.
+  La instantánea (`Get-EjecucionesSnapshot` en `lib/postdeploy-db.ps1`) expone
+  totales (`Total`, `Propias`, `Reutilizadas`), la última fila (`UltimaReutilizada`,
+  `UltimaTieneContrato`, `UltimaCosteEsNulo`, `UltimaEjecucionOriginalId`,
+  `UltimaApuntaASiembra`, que compara con el Id que dejó la siembra) y el
+  recuento por `InstanceId` de la última pasada (`FilasConInstanceIdPasada`,
+  `ReutilizadasConInstanceIdPasada`).
+- El caso de tipo `agregados` (DUP-04) lee además `management/ejecuciones/agregados`
+  y `management/ejecuciones/costes` antes y después de la pasada, sobre la
+  misma ventana temporal, y asevera **deltas** (`apiAssertions`: `totalEjecuciones`,
+  `ok` y `costeTotalEur` en 0; `reutilizadas` en +1). Es la prueba de que una
+  reutilización no infla los KPIs del Monitor.
+
+Casos en `cases-validacion/dedup-cases.json`; su esquema lo valida
+`tests/cases-validacion-dedup-schema.Tests.ps1`, que además impide que ningún
+request lleve `skipDuplicateCheck = true` (desactivaría justo lo que se
+demuestra) y exige `forceReprocess = true` en toda siembra (sin ejecución
+original no hay nada que reutilizar).
+
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -WhatIf
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -SoloLimpieza
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -CaseKey DUP-02,DUP-05
+
+Coste y tiempo: nueve pasadas reales por el pipeline en el juego completo (una
+siembra por caso más una pasada en DUP-02..05), todas `classificationOnly` a 3
+páginas sobre el documento de control; las pasadas de duplicado no consumen IA.
+`ERROR` en la precondición significa que la siembra no dejó exactamente una
+ejecución propia con contrato: sin original, el resultado de la pasada no
+probaría nada. No ejecutar en paralelo con `run-validacion-markdown.ps1`: ambos
+usan `documento-12-paginas-marcado.pdf` y la limpieza por SHA256 de uno borraría
+las filas del otro. DUP-04 compara agregados de una ventana de unos minutos:
+cualquier otra ejecución en DEV durante el caso lo desvía a `FAIL`.
+
 ## Test Plan espejo en ADO
 
 - `ado/bootstrap-testplan.ps1` crea (idempotente) el Test Plan "E2E

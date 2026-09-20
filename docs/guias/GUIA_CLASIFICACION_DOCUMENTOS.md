@@ -12,6 +12,7 @@
 3. [Flujos de Clasificación](#3-flujos-de-clasificación)
    - 3.1 [Flujo Completo (Ingest + Classify + Extract + Validate)](#31-flujo-completo)
    - 3.2 [Flujo Solo Clasificación (Classification Only)](#32-flujo-solo-clasificación)
+   - 3.3 [Obtención del markdown del documento](#33-obtención-del-markdown-del-documento)
 4. [Modos de Clasificación](#4-modos-de-clasificación)
    - 4.1 [Clasificación Automática (Azure DI)](#41-clasificación-automática-azure-di)
    - 4.2 [Clasificación Forzada (ExpectedType)](#42-clasificación-forzada-expectedtype)
@@ -268,6 +269,45 @@ Se activa mediante el parámetro `instrucciones.classification.classificationOnl
 
 ---
 
+### 3.3 Obtención del markdown del documento
+
+Desde AB#100245 el markdown se obtiene en un único sitio, `MarkdownResolver`, al que cada paso
+declara lo que necesita: **documento completo** (prompt libre, `PromptConfig` de tipología y
+extracción GPT) o **un mínimo de N páginas** (clasificación y resumen, con N el recorte de
+clasificación: 3 por defecto, configurable por tipología y familia).
+
+Orden de resolución: markdown de la petición (`instrucciones.classification.markdown`, gana
+siempre y no se persiste) → caché de la ejecución → base de datos si cubre la necesidad →
+Document Intelligence Layout (para PDF/TIFF pide solo las N primeras páginas con `pages=1-N`)
+→ base de datos como respaldo aunque no cubra → nada (deciden las guardas de contenido).
+
+Reglas que conviene conocer:
+
+- **Se usa el mayor, sin recortar.** Si ya hay un markdown que cubre el documento entero, o más
+  páginas de las necesarias, se usa tal cual. Nunca se llama a Layout para menos de lo que ya se
+  tiene.
+- **Si la petición ya declara que necesitará el completo** (prompt ad hoc; `expectedType` cuya
+  tipología tiene prompt habilitado o extracción GPT-directo), se extrae una sola vez al principio.
+- **`forceReprocess` reinicia el documento**: ignora la base de datos al leer y sobrescribe al
+  escribir.
+- **La persistencia nunca degrada**: `Documentos.MarkdownPaginas` / `MarkdownCompleto` registran
+  la cobertura; un markdown parcial no pisa uno completo, y uno de cobertura desconocida
+  (histórico) solo lo sustituye uno completo.
+
+Trazabilidad en el contrato de salida: `DetalleEjecucion.MarkdownFuente` (`Caller`,
+`CacheEjecucion`, `BaseDatos`, `Layout`, `Clasificador`, `Extraccion`, `Normalizacion`),
+`MarkdownPaginas`, `MarkdownCompleto`; `OrigenMarkdown` indica el punto del flujo que lo pidió.
+Para medir el ahorro:
+
+```sql
+SELECT JSON_VALUE(ContratoSalidaCompletoJson, '$.DetalleEjecucion.MarkdownFuente') AS fuente, COUNT(*) AS n
+FROM dbo.DocumentoEjecuciones
+WHERE FechaEjecucion > DATEADD(day, -7, GETUTCDATE())
+GROUP BY JSON_VALUE(ContratoSalidaCompletoJson, '$.DetalleEjecucion.MarkdownFuente');
+```
+
+---
+
 ## 4. Modos de Clasificación
 
 ### 4.1 Clasificación Automática (Azure DI)
@@ -373,6 +413,19 @@ flowchart LR
 > saltarse la clasificación con una etiqueta inválida. El valor `"Desconocido"` está exento de
 > esta validación (es intencional en flujos de monitorización y pruebas). El canal de origen
 > debería enviar códigos de tipología reales o dejar el campo vacío.
+>
+> **Qué cuenta como "no resuelve" (desde AB#100242):** únicamente que la resolución degrade a la
+> tipología centinela `Desconocido`. Que la tipología sea la **versión por defecto de su familia**
+> no tiene nada que ver: es un código perfectamente válido y su `expectedType` se respeta. Antes se
+> usaba esa marca como señal de "no resuelve" y descartaba peticiones correctas —
+> `resumen.documental`, el código de las peticiones de solo resumen, era la única tipología del
+> catálogo marcada así y sus peticiones acababan sin resumen ni clasificación.
+>
+> **Cuándo se valida (desde AB#100217):** antes de decidir si se extrae el markdown previo a la
+> clasificación. Un `expectedType` inválido queda descartado a tiempo, de modo que el documento
+> recorre exactamente el mismo flujo que si se hubiera enviado sin `expectedType` (incluido el OCR
+> del recorte). Antes se validaba después y el clasificador se quedaba sin texto, lo que terminaba
+> en `SIN_CONTENIDO_DOCUMENTO` para documentos escaneados.
 
 ---
 

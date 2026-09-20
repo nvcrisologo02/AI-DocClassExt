@@ -68,13 +68,13 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         var defaultPromptConfig = _promptDefaults.ToPromptConfig();
         var effectivePromptConfig = ResolvePromptConfig(tipologiaPromptConfig, input.Prompt, defaultPromptConfig);
         var promptActivo = effectivePromptConfig is not null && effectivePromptConfig.Enabled && HasPromptDefinition(effectivePromptConfig);
-        
+
         // Si hay override de prompt en la petición, ignora caché y ejecuta siempre
-        var tienePromptOverride = input.Prompt != null && 
-            (!string.IsNullOrWhiteSpace(input.Prompt.SystemPrompt) || 
+        var tienePromptOverride = input.Prompt != null &&
+            (!string.IsNullOrWhiteSpace(input.Prompt.SystemPrompt) ||
              !string.IsNullOrWhiteSpace(input.Prompt.UserPromptTemplate));
-        
-        var necesitaPrompt = (promptActivo || tienePromptOverride) && 
+
+        var necesitaPrompt = (promptActivo || tienePromptOverride) &&
             (string.IsNullOrWhiteSpace(input.ResultadoPromptCombinado) || tienePromptOverride);
         var necesitaResumen = input.ForzarResumenPorDefecto && string.IsNullOrWhiteSpace(input.ResumenCombinado);
 
@@ -224,7 +224,15 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             {
                 Modelo = modelConfig.DeploymentName,
                 Resultado = response.Value.Content[0].Text,
-                TiempoMs = (int)stopwatch.ElapsedMilliseconds
+                TiempoMs = (int)stopwatch.ElapsedMilliseconds,
+                Consumos =
+                {
+                    UsoOpenAiMapper.Mapear(
+                        response.Value.Usage,
+                        actividad: ActividadesIA.Prompt,
+                        operacion: "prompt.resultado",
+                        modelo: modelConfig.DeploymentName)
+                }
             };
         }
         catch (RateLimitExhaustedException ex)
@@ -307,10 +315,10 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         }
 
         // Agregar contenido del documento SOLO si no está en ninguno de los templates
-        bool contenidoEnResumen = !string.IsNullOrWhiteSpace(resumenConfig.UserPromptTemplate) && 
+        bool contenidoEnResumen = !string.IsNullOrWhiteSpace(resumenConfig.UserPromptTemplate) &&
                                   resumenConfig.UserPromptTemplate.Contains("{contenido}", StringComparison.OrdinalIgnoreCase);
-        bool contenidoEnPrompt = incluirPromptPropio && promptConfig is not null && 
-                                 !string.IsNullOrWhiteSpace(promptConfig.UserPromptTemplate) && 
+        bool contenidoEnPrompt = incluirPromptPropio && promptConfig is not null &&
+                                 !string.IsNullOrWhiteSpace(promptConfig.UserPromptTemplate) &&
                                  promptConfig.UserPromptTemplate.Contains("{contenido}", StringComparison.OrdinalIgnoreCase);
 
         if (!string.IsNullOrWhiteSpace(contenido) && !contenidoEnResumen && !contenidoEnPrompt)
@@ -367,7 +375,16 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             Resumen = FirstNonEmpty(
                 ExtractString(root, "resumen"),
                 ExtractString(root, "summary")) ?? string.Empty,
-            Resultado = ExtractString(root, "resultado_prompt") ?? string.Empty
+            Resultado = ExtractString(root, "resultado_prompt") ?? string.Empty,
+            // Resumen y resultado salen de la misma llamada: un unico consumo.
+            Consumos =
+            {
+                UsoOpenAiMapper.Mapear(
+                    response.Value.Usage,
+                    actividad: ActividadesIA.Prompt,
+                    operacion: "prompt.json",
+                    modelo: modelConfig.DeploymentName)
+            }
         };
     }
 
@@ -411,7 +428,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
         // Si el template no incluye {contenido} pero hay contenido disponible, agregarlo automáticamente
         // Esto asegura que el markdown siempre se pase, incluso si el usuario olvida el tag
-        if (!string.IsNullOrWhiteSpace(contenido) && 
+        if (!string.IsNullOrWhiteSpace(contenido) &&
             !promptConfig.UserPromptTemplate.Contains("{contenido}", StringComparison.OrdinalIgnoreCase))
         {
             _logger.LogInformation(

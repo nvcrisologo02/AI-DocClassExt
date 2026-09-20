@@ -1,0 +1,343 @@
+[
+  {
+    "caseKey": "MDW-MDW3", "group": "MDW", "id": "MDW3", "domain": "validacion",
+    "name": "Una ejecucion de 3 paginas no degrada una fila con cobertura completa",
+    "covers": ["MDW-03"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": {
+        "classificationProvider": "auto", "classificationOnly": false,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true
+      },
+      "mutacion": null,
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": true },
+        { "columna": "MarkdownPaginas", "esperado": 12 }
+      ]
+    },
+    "pasadas": [
+      {
+        "nombre": "pide solo 3 paginas",
+        "request": {
+          "classificationProvider": "gpt", "classificationOnly": true,
+          "maxPagesForClassificationOnly": 3,
+          "forceReprocess": false, "skipDuplicateCheck": true, "skipGDCUpload": true
+        },
+        "assertions": {
+          "expectedRuntimeStatus": "Completed",
+          "expectOutputPathEquals": [
+            { "path": "DetalleEjecucion.MarkdownFuente", "value": "BaseDatos" },
+            { "path": "DetalleEjecucion.MarkdownCompleto", "value": "True" }
+          ]
+        }
+      }
+    ],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": true },
+      { "columna": "MarkdownPaginas", "esperado": 12, "noDisminuye": true },
+      { "columna": "NormalizacionMarkdownGzip", "noEncoge": true },
+      { "columna": "NormalizacionMarkdownCompressed", "noEncoge": true }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW2", "group": "MDW", "id": "MDW2", "domain": "validacion",
+    "name": "La segunda ejecucion recupera el markdown de base de datos sin llamar a Layout",
+    "covers": ["MDW-02"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "mutacion": null,
+      "precondicion": [{ "columna": "MarkdownCompleto", "esperado": true }]
+    },
+    "pasadas": [{
+      "nombre": "segunda ejecucion",
+      "request": { "classificationProvider": "auto", "forceReprocess": false, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": {
+        "expectedRuntimeStatus": "Completed",
+        "expectOutputPathEquals": [{ "path": "DetalleEjecucion.MarkdownFuente", "value": "BaseDatos" }]
+      }
+    }],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": true },
+      { "columna": "NormalizacionMarkdownGzip", "noEncoge": true }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW1", "group": "MDW", "id": "MDW1", "domain": "validacion",
+    "name": "Un PDF largo con prompt libre no deja la fila con recorte marcado como completo",
+    "covers": ["MDW-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true, "maxPagesForClassificationOnly": 3,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01,
+        "prompt": { "userPromptTemplate": "Resume en una linea el contenido del documento." }
+      },
+      "mutacion": null,
+      "precondicion": []
+    },
+    "pasadas": [{
+      "nombre": "verificacion: pide el documento completo",
+      "request": { "classificationProvider": "auto", "forceReprocess": false, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": {
+        "expectedRuntimeStatus": "Completed",
+        "expectOutputPathContains": [
+          { "path": "DetalleEjecucion.Postproceso.Markdown", "value": "MARCA-PAGINA-12" }
+        ]
+      }
+    }],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": true },
+      { "columna": "MarkdownPaginas", "esperado": 12 }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW6", "group": "MDW", "id": "MDW6", "domain": "validacion",
+    "name": "El recorte a 3 paginas declara cobertura parcial coherente con el texto servido",
+    "covers": ["MDW-06"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true, "maxPagesForClassificationOnly": 3,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01
+      },
+      "mutacion": null,
+      "precondicion": []
+    },
+    "pasadas": [{
+      "nombre": "mismo recorte servido desde base de datos",
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true, "maxPagesForClassificationOnly": 3,
+        "forceReprocess": false, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01
+      },
+      "assertions": {
+        "expectedRuntimeStatus": "Completed",
+        "expectOutputPathEquals": [
+          { "path": "DetalleEjecucion.MarkdownFuente", "value": "BaseDatos" },
+          { "path": "DetalleEjecucion.MarkdownCompleto", "value": "False" }
+        ],
+        "expectOutputPathContains": [
+          { "path": "DetalleEjecucion.Postproceso.Markdown", "value": "MARCA-PAGINA-03" }
+        ],
+        "expectOutputJsonNotContains": ["MARCA-PAGINA-04"]
+      }
+    }],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": false },
+      { "columna": "MarkdownPaginas", "esperado": 3 }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW4", "group": "MDW", "id": "MDW4", "domain": "validacion",
+    "name": "El markdown aportado por el llamante no llega a base de datos",
+    "covers": ["MDW-04"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01,
+        "markdown": "MARCADOR-CALLER-UNICO Contenido aportado por el llamante para la validacion."
+      },
+      "mutacion": null,
+      "precondicion": []
+    },
+    "pasadas": [{
+      "nombre": "segunda ejecucion sin aportar markdown",
+      "request": { "classificationProvider": "auto", "forceReprocess": false, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": {
+        "expectedRuntimeStatus": "Completed",
+        "expectOutputJsonNotContains": ["MARCADOR-CALLER-UNICO"]
+      }
+    }],
+    "dbAssertions": []
+  },
+  {
+    "caseKey": "MDW-MDW5A", "group": "MDW", "id": "MDW5A", "domain": "validacion",
+    "name": "DOCX se declara completo aunque se pida un rango de paginas",
+    "covers": ["MDW-05"],
+    "documentPath": "tests/e2e-postdeploy/corpus/formatos/comunicacion-sintetica.docx",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true, "maxPagesForClassificationOnly": 1,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01
+      },
+      "mutacion": null,
+      "precondicion": []
+    },
+    "pasadas": [{
+      "nombre": "comprobacion de cobertura declarada",
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true, "maxPagesForClassificationOnly": 1,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01
+      },
+      "assertions": {
+        "expectedRuntimeStatus": "Completed",
+        "expectOutputPathEquals": [{ "path": "DetalleEjecucion.MarkdownCompleto", "value": "True" }]
+      }
+    }],
+    "dbAssertions": [{ "columna": "MarkdownCompleto", "esperado": true }]
+  },
+  {
+    "caseKey": "MDW-MDW5B", "group": "MDW", "id": "MDW5B", "domain": "validacion",
+    "name": "XLSX se declara completo aunque se pida un rango de paginas",
+    "covers": ["MDW-05"],
+    "documentPath": "tests/e2e-postdeploy/corpus/formatos/listado-activos-sintetico.xlsx",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true, "maxPagesForClassificationOnly": 1,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01
+      },
+      "mutacion": null,
+      "precondicion": []
+    },
+    "pasadas": [{
+      "nombre": "comprobacion de cobertura declarada",
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true, "maxPagesForClassificationOnly": 1,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01
+      },
+      "assertions": {
+        "expectedRuntimeStatus": "Completed",
+        "expectOutputPathEquals": [{ "path": "DetalleEjecucion.MarkdownCompleto", "value": "True" }]
+      }
+    }],
+    "dbAssertions": [{ "columna": "MarkdownCompleto", "esperado": true }]
+  },
+  {
+    "caseKey": "MDW-MDW7", "group": "MDW", "id": "MDW7", "domain": "validacion",
+    "name": "Una fila historica con cobertura desconocida no se sirve como completa",
+    "covers": ["MDW-07"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "mutacion": { "MarkdownPaginas": null, "MarkdownCompleto": false },
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": false },
+        { "columna": "NormalizacionMarkdownGzip", "noEsNulo": true }
+      ]
+    },
+    "pasadas": [{
+      "nombre": "ejecucion sobre fila de cobertura desconocida",
+      "request": { "classificationProvider": "auto", "forceReprocess": false, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": {
+        "expectedRuntimeStatus": "Completed",
+        "expectOutputPathEquals": [{ "path": "DetalleEjecucion.MarkdownFuente", "value": "Extraccion" }],
+        "expectOutputPathContains": [{ "path": "DetalleEjecucion.Postproceso.Markdown", "value": "MARCA-PAGINA-12" }]
+      }
+    }],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": true },
+      { "columna": "MarkdownPaginas", "esperado": 12 }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW9", "group": "MDW", "id": "MDW9", "domain": "validacion",
+    "name": "Una segunda ingesta que actualiza el documento no reescribe las columnas de markdown",
+    "covers": ["MDW-09"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "mutacion": null,
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": true },
+        { "columna": "MarkdownPaginas", "esperado": 12 }
+      ]
+    },
+    "pasadas": [{
+      "nombre": "segunda ingesta con markdown aportado",
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true,
+        "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true, "umbral": 0.01,
+        "markdown": "MARCADOR-ACTUALIZACION Contenido corto aportado en la segunda ingesta."
+      },
+      "assertions": { "expectedRuntimeStatus": "Completed" }
+    }],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": true },
+      { "columna": "MarkdownPaginas", "esperado": 12, "noDisminuye": true },
+      { "columna": "NormalizacionMarkdownGzip", "noEncoge": true },
+      { "columna": "NormalizacionMarkdownCompressed", "noEncoge": true }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW8A", "group": "MDW", "id": "MDW8A", "domain": "validacion", "tipo": "backfill",
+    "name": "Backfill: fila historica con origen LayoutDocumentoCompletoPostClasificacion se marca completa",
+    "covers": ["MDW-08"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "expectedType": "resumen.documental", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": { "expectedRuntimeStatus": "Completed", "expectedStatus": ["OK"] },
+      "mutacion": { "MarkdownPaginas": null, "MarkdownCompleto": false },
+      "mutacionEjecucion": { "DetalleEjecucion.OrigenMarkdown": "LayoutDocumentoCompletoPostClasificacion" },
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": false },
+        { "columna": "MarkdownPaginas", "esperado": null },
+        { "columna": "Paginas", "mayorQue": 0 },
+        { "columna": "NormalizacionMarkdownGzip", "mayorQue": 0 }
+      ]
+    },
+    "pasadas": [],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": true },
+      { "columna": "MarkdownPaginas", "esperado": 12 }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW8B", "group": "MDW", "id": "MDW8B", "domain": "validacion", "tipo": "backfill",
+    "name": "Backfill: fila historica con origen MarkdownPrevio no se marca",
+    "covers": ["MDW-08"],
+    "documentPath": "tests/e2e-postdeploy/corpus/nota-simple/nota-simple-sintetica.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "expectedType": "resumen.documental", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": { "expectedRuntimeStatus": "Completed", "expectedStatus": ["OK"] },
+      "mutacion": { "MarkdownPaginas": null, "MarkdownCompleto": false },
+      "mutacionEjecucion": { "DetalleEjecucion.OrigenMarkdown": "MarkdownPrevio" },
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": false },
+        { "columna": "MarkdownPaginas", "esperado": null },
+        { "columna": "Paginas", "mayorQue": 0 },
+        { "columna": "NormalizacionMarkdownGzip", "mayorQue": 0 }
+      ]
+    },
+    "pasadas": [],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": false },
+      { "columna": "MarkdownPaginas", "esperado": null }
+    ]
+  },
+  {
+    "caseKey": "MDW-MDW8C", "group": "MDW", "id": "MDW8C", "domain": "validacion", "tipo": "backfill",
+    "name": "Backfill: fila historica con origen Extraccion no se marca",
+    "covers": ["MDW-08"],
+    "documentPath": "tests/e2e-postdeploy/corpus/generico/escritura-compraventa-sintetica.pdf",
+    "submittedBy": "e2e-validacion-markdown",
+    "seed": {
+      "request": { "classificationProvider": "auto", "expectedType": "resumen.documental", "forceReprocess": true, "skipDuplicateCheck": true, "skipGDCUpload": true },
+      "assertions": { "expectedRuntimeStatus": "Completed", "expectedStatus": ["OK"] },
+      "mutacion": { "MarkdownPaginas": null, "MarkdownCompleto": false },
+      "mutacionEjecucion": { "DetalleEjecucion.OrigenMarkdown": "Extraccion" },
+      "precondicion": [
+        { "columna": "MarkdownCompleto", "esperado": false },
+        { "columna": "MarkdownPaginas", "esperado": null },
+        { "columna": "Paginas", "mayorQue": 0 },
+        { "columna": "NormalizacionMarkdownGzip", "mayorQue": 0 }
+      ]
+    },
+    "pasadas": [],
+    "dbAssertions": [
+      { "columna": "MarkdownCompleto", "esperado": false },
+      { "columna": "MarkdownPaginas", "esperado": null }
+    ]
+  }
+]

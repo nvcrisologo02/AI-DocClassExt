@@ -84,6 +84,7 @@ Ver carpeta docs/ para:
 - Arquitectura detallada
 - Contratos de entrada/salida
 - Manuales de operacion
+- Manual de costes de IA: [docs/manuales/MANUAL_COSTES_IA.md](docs/manuales/MANUAL_COSTES_IA.md)
 - Manual de plugins: [docs/manuales/MANUAL_PLUGINS.md](docs/manuales/MANUAL_PLUGINS.md)
 - Manual del motor de validaciones: [docs/manuales/MANUAL_VALIDACIONES.md](docs/manuales/MANUAL_VALIDACIONES.md)
 - Plantillas de plugins: [docs/contratos/PLANTILLA_PLUGINS_JSON.md](docs/contratos/PLANTILLA_PLUGINS_JSON.md)

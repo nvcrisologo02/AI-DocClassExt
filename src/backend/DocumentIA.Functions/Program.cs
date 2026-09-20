@@ -80,9 +80,9 @@ var host = new HostBuilder()
         });
 
 
-         // Capa 2: serializacion interna entre actividades Durable
+        // Capa 2: serializacion interna entre actividades Durable
         services.AddSingleton(jsonOpts);
-        
+
         // Application Insights
         services.AddApplicationInsightsTelemetryWorkerService();
         services.ConfigureFunctionsApplicationInsights();
@@ -91,7 +91,7 @@ var host = new HostBuilder()
         // Database Context
         services.AddDbContext<DocumentIADbContext>(options =>
         {
-            var connectionString = context.Configuration["ConnectionStrings:DocumentIA"] 
+            var connectionString = context.Configuration["ConnectionStrings:DocumentIA"]
                 ?? context.Configuration["SqlConnectionString"];
 
             if (!string.IsNullOrWhiteSpace(connectionString))
@@ -132,7 +132,7 @@ var host = new HostBuilder()
         services.Configure<AzureOpenAIResilienceOptions>(
             context.Configuration.GetSection("AzureOpenAIResilience"));
         services.Configure<ClassificationRoutingSettings>(context.Configuration.GetSection("Classification"));
-        
+
         // Manual binding for Flows dictionary (complex type not supported by default configuration binding)
         services.PostConfigure<ClassificationRoutingSettings>(settings =>
         {
@@ -148,7 +148,7 @@ var host = new HostBuilder()
                 }
             }
         });
-        
+
         services.Configure<ClassificationPreparationSettings>(context.Configuration.GetSection("ClassificationPreparation"));
         services.Configure<PromptDefaultsSettings>(context.Configuration.GetSection("PromptDefaults"));
         services.Configure<ClassificationPromptsSettings>(context.Configuration.GetSection("ClassificationPrompts"));
@@ -163,12 +163,12 @@ var host = new HostBuilder()
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
         services.AddSingleton<AzureDocumentIntelligenceExtraerDataProvider>();
-        
+
         // Extracción GPT services
         services.AddScoped<IGptPromptBuilder, GptPromptBuilder>();
         services.AddScoped<IGptJsonResponseParser, GptJsonResponseParser>();
         services.AddScoped<IOpenAiClientFactory, OpenAiClientFactory>();
-        
+
         services.AddScoped<GptFallbackExtraerDataProvider>();
         services.AddScoped<GptDirectExtraerDataProvider>();
         services.AddSingleton<IPromptDataProvider, OpenAIPromptDataProvider>();
@@ -179,6 +179,8 @@ var host = new HostBuilder()
         services.AddSingleton<AzureDocumentIntelligenceClasificarProvider>();
         services.AddSingleton<DocumentIntelligenceSourceResolver>();
         services.AddSingleton<ILayoutMarkdownProvider, AzureDocumentIntelligenceLayoutMarkdownProvider>();
+        // AB#100245: politica unica de markdown. Singleton con scope propio para la BD.
+        services.AddSingleton<IMarkdownResolver, MarkdownResolver>();
         services.AddSingleton<PdfRecorteService>();
         services.AddSingleton<ClassificationTipologiaPromptBuilder>();
         services.AddSingleton<IClassificationPromptProvider, ClassificationPromptProvider>();
@@ -198,7 +200,7 @@ var host = new HostBuilder()
             new HybridTdnClasificarProvider(
                 sp.GetRequiredService<ILogger<HybridTdnClasificarProvider>>(),
                 sp.GetRequiredService<AzureDocumentIntelligenceClasificarProvider>(),
-                sp.GetRequiredService<ILayoutMarkdownProvider>(),
+                sp.GetRequiredService<IMarkdownResolver>(),
                 sp.GetRequiredService<DocumentWindowExtractor>(),
                 sp.GetRequiredService<RuleBasedTdnClassifier>(),
                 sp.GetRequiredService<FoundryTdnRescueClassifier>(),
@@ -341,6 +343,12 @@ var host = new HostBuilder()
 
         services.AddSingleton<LayoutModelRegistryLoader>(provider =>
             new LayoutModelRegistryLoader(
+                provider.GetRequiredService<IMemoryCache>(),
+                provider.GetRequiredService<IServiceScopeFactory>()));
+
+        // Catalogo de tarifas de servicios de IA (AB#100226)
+        services.AddSingleton<TarifaRegistryLoader>(provider =>
+            new TarifaRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),
                 provider.GetRequiredService<IServiceScopeFactory>()));
         services.AddScoped<ISystemHealthService, SystemHealthService>();

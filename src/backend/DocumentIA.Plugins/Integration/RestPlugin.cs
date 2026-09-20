@@ -190,21 +190,21 @@ namespace DocumentIA.Plugins.Integration
             try
             {
                 // Determinar endpoint y metodo
-                string executionEndpoint = data.ContainsKey("endpoint") 
-                    ? GetStringValue(data["endpoint"]) ?? endpoint 
+                string executionEndpoint = data.ContainsKey("endpoint")
+                    ? GetStringValue(data["endpoint"]) ?? endpoint
                     : endpoint;
-                
-                string method = data.ContainsKey("method") 
-                    ? GetStringValue(data["method"]) ?? "POST" 
+
+                string method = data.ContainsKey("method")
+                    ? GetStringValue(data["method"]) ?? "POST"
                     : "POST";
-                    
+
                 string fullUrl = baseUrl.TrimEnd('/') + "/" + executionEndpoint.TrimStart('/');
 
                 // Preparar payload limpio (sin campos de control)
                 var payload = new Dictionary<string, object>(data);
                 payload.Remove("endpoint");
                 payload.Remove("method");
-                
+
                 // Si hay un campo "payload" especifico, usarlo
                 if (data.ContainsKey("payload"))
                 {
@@ -224,8 +224,8 @@ namespace DocumentIA.Plugins.Integration
                 {
                     case "POST":
                         var postContent = new StringContent(
-                            jsonPayload, 
-                            Encoding.UTF8, 
+                            jsonPayload,
+                            Encoding.UTF8,
                             "application/json");
                         response = await httpClient.PostAsync(fullUrl, postContent);
                         break;
@@ -233,8 +233,8 @@ namespace DocumentIA.Plugins.Integration
 
                     case "PUT":
                         var putContent = new StringContent(
-                            jsonPayload, 
-                            Encoding.UTF8, 
+                            jsonPayload,
+                            Encoding.UTF8,
                             "application/json");
                         response = await httpClient.PutAsync(fullUrl, putContent);
                         break;

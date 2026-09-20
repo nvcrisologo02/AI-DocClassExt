@@ -26,51 +26,51 @@ namespace DocumentIA.Plugins.Integration
         /// Crea y configura un plugin basado en la configuracion
         /// </summary>
         public async Task<IIntegrationPlugin> CreatePluginAsync(PluginConfig config)
-{
-    logger.LogInformation("Creando plugin: {Key} - Tipo: {Type}", config.PluginKey, config.PluginType);
+        {
+            logger.LogInformation("Creando plugin: {Key} - Tipo: {Type}", config.PluginKey, config.PluginType);
 
-    IIntegrationPlugin plugin;
+            IIntegrationPlugin plugin;
 
-    switch (config.PluginType.ToLower())
-    {
-        case "rest":
-            var httpClient = httpClientFactory.CreateClient();
-            plugin = new RestPlugin(httpClient);
-            logger.LogDebug("RestPlugin creado para {Key}", config.PluginKey);
-            break;
+            switch (config.PluginType.ToLower())
+            {
+                case "rest":
+                    var httpClient = httpClientFactory.CreateClient();
+                    plugin = new RestPlugin(httpClient);
+                    logger.LogDebug("RestPlugin creado para {Key}", config.PluginKey);
+                    break;
 
-        case "soap":
-            var soapHttpClient = httpClientFactory.CreateClient();
-            var soapLogger = loggerFactory.CreateLogger<SoapPlugin>();
-            plugin = new SoapPlugin(soapHttpClient, soapLogger);
-            logger.LogDebug("SoapPlugin creado para {Key}", config.PluginKey);
-            break;
+                case "soap":
+                    var soapHttpClient = httpClientFactory.CreateClient();
+                    var soapLogger = loggerFactory.CreateLogger<SoapPlugin>();
+                    plugin = new SoapPlugin(soapHttpClient, soapLogger);
+                    logger.LogDebug("SoapPlugin creado para {Key}", config.PluginKey);
+                    break;
 
-        case "custom":
-            var customLogger = loggerFactory.CreateLogger<CustomPlugin>();
-            plugin = new CustomPlugin(customLogger);
-            logger.LogDebug("CustomPlugin creado para {Key}", config.PluginKey);
-            break;
+                case "custom":
+                    var customLogger = loggerFactory.CreateLogger<CustomPlugin>();
+                    plugin = new CustomPlugin(customLogger);
+                    logger.LogDebug("CustomPlugin creado para {Key}", config.PluginKey);
+                    break;
 
-        default:
-            throw new InvalidOperationException($"Tipo de plugin no soportado: {config.PluginType}");
-    }
+                default:
+                    throw new InvalidOperationException($"Tipo de plugin no soportado: {config.PluginType}");
+            }
 
-    // Inicializar plugin
-    await plugin.InitializeAsync(config.Configuration);
+            // Inicializar plugin
+            await plugin.InitializeAsync(config.Configuration);
 
-    // Envolver con ResilientPlugin si hay retry policy
-    if (config.RetryPolicy != null)
-    {
-        var resilientLogger = loggerFactory.CreateLogger<ResilientPlugin>();
-        plugin = new ResilientPlugin(plugin, config.RetryPolicy, resilientLogger);
-        logger.LogInformation(
-            "Plugin {Key} envuelto con ResilientPlugin. Retries: {Retries}", 
-            config.PluginKey, config.RetryPolicy.MaxRetries);
-    }
+            // Envolver con ResilientPlugin si hay retry policy
+            if (config.RetryPolicy != null)
+            {
+                var resilientLogger = loggerFactory.CreateLogger<ResilientPlugin>();
+                plugin = new ResilientPlugin(plugin, config.RetryPolicy, resilientLogger);
+                logger.LogInformation(
+                    "Plugin {Key} envuelto con ResilientPlugin. Retries: {Retries}",
+                    config.PluginKey, config.RetryPolicy.MaxRetries);
+            }
 
-    return plugin;
-}
+            return plugin;
+        }
 
         /// <summary>
         /// Crea multiples plugins desde una configuracion de tipologia
@@ -91,7 +91,7 @@ namespace DocumentIA.Plugins.Integration
                 {
                     var plugin = await CreatePluginAsync(config);
                     plugins[config.PluginKey] = plugin;
-                    logger.LogInformation("Plugin creado: {PluginKey} ({PluginType})", 
+                    logger.LogInformation("Plugin creado: {PluginKey} ({PluginType})",
                         config.PluginKey, config.PluginType);
                 }
                 catch (Exception ex)

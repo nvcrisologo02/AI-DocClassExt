@@ -1,0 +1,153 @@
+[
+  {
+    "caseKey": "DUP-01", "group": "DUP", "id": "01", "domain": "validacion",
+    "name": "Una ejecucion real deja fila propia con contrato",
+    "covers": ["DUP-01"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-dedup",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true,
+        "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+        "forceReprocess": true, "skipDuplicateCheck": false, "skipGDCUpload": true
+      }
+    },
+    "pasadas": [],
+    "dbAssertions": [
+      { "columna": "Total", "esperado": 1 },
+      { "columna": "Reutilizadas", "esperado": 0 },
+      { "columna": "UltimaReutilizada", "esperado": false },
+      { "columna": "UltimaTieneContrato", "esperado": true },
+      { "columna": "UltimaEjecucionOriginalId", "esperado": null }
+    ]
+  },
+  {
+    "caseKey": "DUP-02", "group": "DUP", "id": "02", "domain": "validacion",
+    "name": "La peticion repetida se sirve por duplicado y deja traza vinculada al original",
+    "covers": ["DUP-02"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-dedup",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true,
+        "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+        "forceReprocess": true, "skipDuplicateCheck": false, "skipGDCUpload": true
+      }
+    },
+    "pasadas": [
+      {
+        "nombre": "misma peticion sin forzar reproceso",
+        "request": {
+          "classificationProvider": "gpt", "classificationOnly": true,
+          "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+          "forceReprocess": false, "skipDuplicateCheck": false, "skipGDCUpload": true
+        },
+        "assertions": { "expectedRuntimeStatus": "Completed" }
+      }
+    ],
+    "dbAssertions": [
+      { "columna": "Total", "esperado": 2 },
+      { "columna": "Reutilizadas", "esperado": 1 },
+      { "columna": "UltimaReutilizada", "esperado": true },
+      { "columna": "UltimaApuntaASiembra", "esperado": true },
+      { "columna": "UltimaTieneContrato", "esperado": false },
+      { "columna": "UltimaCosteEsNulo", "esperado": true }
+    ]
+  },
+  {
+    "caseKey": "DUP-03", "group": "DUP", "id": "03", "domain": "validacion",
+    "name": "forceReprocess vuelve a ejecutar de verdad y no marca reutilizacion",
+    "covers": ["DUP-03"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-dedup",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true,
+        "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+        "forceReprocess": true, "skipDuplicateCheck": false, "skipGDCUpload": true
+      }
+    },
+    "pasadas": [
+      {
+        "nombre": "segunda peticion forzando reproceso",
+        "request": {
+          "classificationProvider": "gpt", "classificationOnly": true,
+          "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+          "forceReprocess": true, "skipDuplicateCheck": false, "skipGDCUpload": true
+        },
+        "assertions": { "expectedRuntimeStatus": "Completed" }
+      }
+    ],
+    "dbAssertions": [
+      { "columna": "Total", "esperado": 2 },
+      { "columna": "Reutilizadas", "esperado": 0 },
+      { "columna": "UltimaReutilizada", "esperado": false },
+      { "columna": "UltimaTieneContrato", "esperado": true }
+    ]
+  },
+  {
+    "caseKey": "DUP-04", "group": "DUP", "id": "04", "domain": "validacion", "tipo": "agregados",
+    "name": "Una reutilizacion no mueve los agregados de operacion ni el coste del periodo",
+    "covers": ["DUP-04"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-dedup",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true,
+        "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+        "forceReprocess": true, "skipDuplicateCheck": false, "skipGDCUpload": true
+      }
+    },
+    "pasadas": [
+      {
+        "nombre": "misma peticion sin forzar reproceso",
+        "request": {
+          "classificationProvider": "gpt", "classificationOnly": true,
+          "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+          "forceReprocess": false, "skipDuplicateCheck": false, "skipGDCUpload": true
+        },
+        "assertions": { "expectedRuntimeStatus": "Completed" }
+      }
+    ],
+    "apiAssertions": [
+      { "metrica": "totalEjecuciones", "delta": 0 },
+      { "metrica": "ok", "delta": 0 },
+      { "metrica": "costeTotalEur", "delta": 0 },
+      { "metrica": "reutilizadas", "delta": 1 }
+    ],
+    "dbAssertions": [
+      { "columna": "Reutilizadas", "esperado": 1 },
+      { "columna": "UltimaReutilizada", "esperado": true }
+    ]
+  },
+  {
+    "caseKey": "DUP-05", "group": "DUP", "id": "05", "domain": "validacion",
+    "name": "La fila de reutilizacion lleva el InstanceId de la peticion que la provoco, una sola vez",
+    "covers": ["DUP-05"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-dedup",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt", "classificationOnly": true,
+        "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+        "forceReprocess": true, "skipDuplicateCheck": false, "skipGDCUpload": true
+      }
+    },
+    "pasadas": [
+      {
+        "nombre": "misma peticion sin forzar reproceso",
+        "request": {
+          "classificationProvider": "gpt", "classificationOnly": true,
+          "maxPagesForClassificationOnly": 3, "umbral": 0.01,
+          "forceReprocess": false, "skipDuplicateCheck": false, "skipGDCUpload": true
+        },
+        "assertions": { "expectedRuntimeStatus": "Completed" }
+      }
+    ],
+    "dbAssertions": [
+      { "columna": "FilasConInstanceIdPasada", "esperado": 1 },
+      { "columna": "ReutilizadasConInstanceIdPasada", "esperado": 1 },
+      { "columna": "UltimaReutilizada", "esperado": true }
+    ]
+  }
+]

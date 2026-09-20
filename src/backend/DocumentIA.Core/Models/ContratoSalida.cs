@@ -153,6 +153,14 @@ public class DetalleEjecucion
     /// <summary>operation_Id de Application Insights (W3C TraceId). Usar en KQL: union traces,requests | where operation_Id == OperationId.</summary>
     public string? OperationId { get; set; }
     /// <summary>
+    /// Cuando la respuesta se sirvio reutilizando otra ejecucion (deduplicacion), GUID del
+    /// contrato de aquella. InstanceId y OperationId son los de la llamada que responde, de
+    /// modo que este campo es el unico puente hacia la ejecucion que produjo el contenido.
+    /// Null en una ejecucion normal, y entonces se omite del JSON (AB#100258).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? EjecucionOriginalGuid { get; set; }
+    /// <summary>
     /// Indica si la petición se ejecutó en modo solo clasificación.
     /// </summary>
     public bool ClassificationOnly { get; set; }
@@ -210,10 +218,24 @@ public class DetalleEjecucion
     public bool MarkdownGenerado { get; set; }
     /// <summary>Origen del markdown generado ("Clasificacion", "Extraccion", "Fallback", etc.).</summary>
     public string? OrigenMarkdown { get; set; }
+    /// <summary>Paginas que cubre el markdown usado en la ejecucion. 0 si no se conoce.</summary>
+    public int MarkdownPaginas { get; set; }
+    /// <summary>El markdown usado cubre el documento entero.</summary>
+    public bool MarkdownCompleto { get; set; }
+    /// <summary>De donde salio: Caller, CacheEjecucion, BaseDatos, Layout, Clasificador, Extraccion, Normalizacion.</summary>
+    public string? MarkdownFuente { get; set; }
     /// <summary>Modelo LLM usado en clasificación o prompt (si aplica).</summary>
     public string? ModeloLLMUsado { get; set; }
     /// <summary>Motivo de error en la resolución de tipología (si aplica).</summary>
     public string? MotivoErrorTipologia { get; set; }
+
+    /// <summary>
+    /// Consumo y coste de servicios de IA de la ejecucion. Se calcula y persiste siempre;
+    /// solo se devuelve al llamador cuando Instrucciones.IncluirCostes es true, en cuyo
+    /// caso el orquestador lo deja informado. Null se omite del JSON.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CostesIA? Costes { get; set; }
 }
 
 public class ResultadoPromptEjecucion
@@ -397,6 +419,14 @@ public class ResultadoClasificacion
     /// Detalle de candidatos/proveedores evaluados y descartes.
     /// </summary>
     public List<PropuestaProveedor> DetalleProveedores { get; set; } = new();
+
+    /// <summary>
+    /// Consumo de servicios de IA de esta llamada. El proveedor lo rellena y el
+    /// orquestador lo acumula en DetalleEjecucion.Costes. Incluye los consumos de
+    /// proveedores evaluados y descartados: esas llamadas tambien se han pagado.
+    /// </summary>
+    public List<ConsumoIA> Consumos { get; set; } = new();
+
     /// <summary>
     /// Resultado de prompt libre en ejecución combinada con fallback.
     /// </summary>
@@ -665,7 +695,7 @@ public class SubirGDCInput
     /// <summary>
     /// Contenido del documento en Base64 (modo inline).
     /// </summary>
-    public string ContenidoBase64 { get; set; } = string.Empty;
+    public string? ContenidoBase64 { get; set; }
 
     /// <summary>
     /// Ruta container/path en blob para escenarios blob-first (alternativa a ContenidoBase64).

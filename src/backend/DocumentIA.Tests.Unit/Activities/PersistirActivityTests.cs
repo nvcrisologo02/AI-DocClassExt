@@ -77,6 +77,138 @@ public class PersistirActivityTests : IDisposable
             }
         };
 
+    // ========== Coste y tokens de IA (AB#100232) ==========
+
+    /// <summary>
+    /// Monta los repositorios y devuelve un contenedor con la entidad de ejecucion
+    /// capturada, para poder afirmar sobre las columnas grabadas.
+    /// </summary>
+    private DocumentoEjecucionEntity[] PrepararCapturaEjecucion(string sha256)
+    {
+        var capturada = new DocumentoEjecucionEntity[1];
+
+        _documentoRepoMock
+            .Setup(r => r.GetBySHA256Async(sha256))
+            .ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync(new DocumentoEntity { Id = 1, SHA256 = sha256 });
+        _ejecucionRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) =>
+            {
+                capturada[0] = e;
+                return e;
+            });
+        _auditoriaRepoMock
+            .Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>()))
+            .Returns(Task.CompletedTask);
+
+        return capturada;
+    }
+
+    [Fact]
+    public async Task Run_ConBloqueDeCostes_RellenaLasDosColumnas()
+    {
+        const string sha256 = "sha256_costes_con_bloque";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA
+        {
+            CosteTotalEur = 0.123456m,
+            TokensTotales = 4200,
+            PaginasTotales = 7
+        };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteIAEur.Should().Be(0.123456m);
+        capturada[0].TokensIA.Should().Be(4200);
+    }
+
+    [Fact]
+    public async Task Run_ConBloqueDeCostes_RellenaElDesglosePorActividad()
+    {
+        const string sha256 = "sha256_costes_desglose";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA
+        {
+            CosteTotalEur = 0.15m,
+            Consumos =
+            {
+                new ConsumoIA { Actividad = ActividadesIA.Layout, CosteEur = 0.09m },
+                new ConsumoIA { Actividad = ActividadesIA.Clasificar, CosteEur = 0.06m }
+            }
+        };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteLayoutEur.Should().Be(0.09m);
+        capturada[0].CosteClasificacionEur.Should().Be(0.06m);
+        capturada[0].CosteExtraccionEur.Should().BeNull();
+        capturada[0].CostePromptEur.Should().BeNull();
+        // Lo medido nunca se marca como estimado.
+        capturada[0].CosteEstimado.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_SinBloqueDeCostes_DejaLasColumnasANulo()
+    {
+        // Compatibilidad: un contrato sin bloque no rompe la persistencia.
+        const string sha256 = "sha256_costes_sin_bloque";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteIAEur.Should().BeNull();
+        capturada[0].TokensIA.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Run_EjecucionSinConsumoDeIA_GrabaCeroExplicito()
+    {
+        // Distinguible de las ejecuciones anteriores a la funcionalidad, que van a nulo.
+        const string sha256 = "sha256_costes_cero";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA();
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].CosteIAEur.Should().Be(0m);
+        capturada[0].TokensIA.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Run_ConservaElDesgloseDeConsumosEnElContratoGuardado()
+    {
+        // El desglose por llamada no tiene columna propia: viaja dentro del contrato
+        // serializado. Si se podara como el timeline, se perderia.
+        const string sha256 = "sha256_costes_detalle";
+        var capturada = PrepararCapturaEjecucion(sha256);
+        var salida = BuildSalidaMinima(sha256);
+        salida.DetalleEjecucion.Costes = new CostesIA
+        {
+            CosteTotalEur = 0.10m,
+            Consumos =
+            {
+                new ConsumoIA
+                {
+                    Modelo = "gpt-5-mini",
+                    Operacion = "classification.phase1",
+                    TokensEntrada = 100
+                }
+            }
+        };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        capturada[0].ContratoSalidaCompletoJson.Should().Contain("gpt-5-mini");
+        capturada[0].ContratoSalidaCompletoJson.Should().Contain("classification.phase1");
+    }
+
     [Fact]
     public async Task Run_DocumentoNuevo_LlamaAddAsync()
     {
@@ -691,6 +823,151 @@ public class PersistirActivityTests : IDisposable
             .Should().Be(markdown, "la columna binaria es la forma nueva");
         MarkdownCompression.DecompressFromBase64(documentoCapturado.NormalizacionMarkdownCompressed)
             .Should().Be(markdown, "la Base64 se mantiene poblada para poder revertir sin perder datos");
+    }
+
+    // ========== Markdown: solo en el alta, nunca degradar (AB#100254) ==========
+
+    private DocumentoEntity[] PrepararDocumentoExistente(DocumentoEntity existente)
+    {
+        var actualizado = new DocumentoEntity[1];
+        _documentoRepoMock.Setup(r => r.GetBySHA256Async(existente.SHA256)).ReturnsAsync(existente);
+        _documentoRepoMock.Setup(r => r.UpdateAsync(It.IsAny<DocumentoEntity>()))
+            .Callback<DocumentoEntity>(d => actualizado[0] = d)
+            .Returns(Task.CompletedTask);
+        _ejecucionRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>()))
+            .ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock.Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>())).Returns(Task.CompletedTask);
+        return actualizado;
+    }
+
+    [Fact]
+    public async Task Run_Alta_PersisteMarkdownYCobertura()
+    {
+        const string sha = "sha256_alta_markdown";
+        DocumentoEntity? creado = null;
+        _documentoRepoMock.Setup(r => r.GetBySHA256Async(sha)).ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { creado = d; d.Id = 1; return d; });
+        _ejecucionRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>())).ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock.Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>())).Returns(Task.CompletedTask);
+
+        var salida = BuildSalidaMinima(sha);
+        salida.DetalleEjecucion.Postproceso = new InformacionPostproceso { Markdown = "# tres paginas" };
+        salida.DetalleEjecucion.MarkdownPaginas = 3;
+        salida.DetalleEjecucion.MarkdownCompleto = false;
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        creado.Should().NotBeNull();
+        MarkdownCompression.Decompress(creado!.NormalizacionMarkdownGzip).Should().Be("# tres paginas");
+        creado.NormalizacionMarkdownCompressed.Should().NotBeNullOrEmpty();
+        creado.MarkdownPaginas.Should().Be(3);
+        creado.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_AltaSinMarkdown_DejaCoberturaDesconocida()
+    {
+        const string sha = "sha256_alta_sin_markdown";
+        DocumentoEntity? creado = null;
+        _documentoRepoMock.Setup(r => r.GetBySHA256Async(sha)).ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { creado = d; d.Id = 1; return d; });
+        _ejecucionRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>())).ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock.Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>())).Returns(Task.CompletedTask);
+
+        await _sut.Run(new PersistirInput { Salida = BuildSalidaMinima(sha) });
+
+        creado!.NormalizacionMarkdownGzip.Should().BeNull();
+        creado.MarkdownPaginas.Should().BeNull();
+        creado.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_Alta_ConMarkdownDelCaller_NoLoPersiste()
+    {
+        // Regla 1 de la spec: Instrucciones.Classification.Markdown gana para esa peticion y
+        // no toca BD. Si PersistirActivity escribiera el markdown de salida sin mirar la
+        // fuente, la primera ejecucion de un documento cuya peticion trajera markdown del
+        // llamante lo colaria en el alta, saltandose la regla por la puerta de atras.
+        const string sha = "sha256_alta_markdown_caller";
+        DocumentoEntity? creado = null;
+        _documentoRepoMock.Setup(r => r.GetBySHA256Async(sha)).ReturnsAsync((DocumentoEntity?)null);
+        _documentoRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEntity>()))
+            .ReturnsAsync((DocumentoEntity d) => { creado = d; d.Id = 1; return d; });
+        _ejecucionRepoMock.Setup(r => r.AddAsync(It.IsAny<DocumentoEjecucionEntity>())).ReturnsAsync((DocumentoEjecucionEntity e) => e);
+        _auditoriaRepoMock.Setup(r => r.AddAsync(It.IsAny<AuditoriaEntity>())).Returns(Task.CompletedTask);
+
+        var salida = BuildSalidaMinima(sha);
+        salida.DetalleEjecucion.Postproceso = new InformacionPostproceso { Markdown = "# markdown del llamante" };
+        salida.DetalleEjecucion.MarkdownPaginas = 5;
+        salida.DetalleEjecucion.MarkdownCompleto = true;
+        salida.DetalleEjecucion.MarkdownFuente = nameof(FuenteMarkdown.Caller);
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        creado.Should().NotBeNull();
+        creado!.NormalizacionMarkdownGzip.Should().BeNull();
+        creado.NormalizacionMarkdownCompressed.Should().BeNullOrEmpty();
+        creado.MarkdownPaginas.Should().BeNull();
+        creado.MarkdownCompleto.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Run_Actualizacion_NoTocaElMarkdownAunqueLaEjecucionNoTraiga()
+    {
+        // Regresion: una reejecucion en SIN_CONTENIDO_DOCUMENTO borraba el markdown bueno con null.
+        var existente = new DocumentoEntity
+        {
+            Id = 7,
+            SHA256 = "sha256_upd",
+            MD5 = "m",
+            CRC32 = "c",
+            Guid = "g",
+            NombreArchivo = "d.pdf",
+            NormalizacionMarkdownGzip = MarkdownCompression.Compress("# el bueno"),
+            NormalizacionMarkdownCompressed = MarkdownCompression.CompressToBase64("# el bueno"),
+            MarkdownPaginas = 14,
+            MarkdownCompleto = true
+        };
+        var actualizado = PrepararDocumentoExistente(existente);
+        var salida = BuildSalidaMinima("sha256_upd");
+        salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+        salida.DetalleEjecucion.Postproceso = new InformacionPostproceso { Markdown = null };
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        actualizado[0].Should().NotBeNull();
+        MarkdownCompression.Decompress(actualizado[0].NormalizacionMarkdownGzip).Should().Be("# el bueno");
+        actualizado[0].MarkdownPaginas.Should().Be(14);
+        actualizado[0].MarkdownCompleto.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Run_Actualizacion_NoTocaElMarkdownAunqueLaEjecucionTraigaOtro()
+    {
+        // La escritura en la actualizacion la hace el resolutor con la regla de cobertura.
+        var existente = new DocumentoEntity
+        {
+            Id = 8,
+            SHA256 = "sha256_upd2",
+            MD5 = "m",
+            CRC32 = "c",
+            Guid = "g",
+            NombreArchivo = "d.pdf",
+            NormalizacionMarkdownGzip = MarkdownCompression.Compress("# completo"),
+            MarkdownPaginas = 14,
+            MarkdownCompleto = true
+        };
+        var actualizado = PrepararDocumentoExistente(existente);
+        var salida = BuildSalidaMinima("sha256_upd2");
+        salida.DetalleEjecucion.Postproceso = new InformacionPostproceso { Markdown = "# recorte de tres" };
+        salida.DetalleEjecucion.MarkdownPaginas = 3;
+
+        await _sut.Run(new PersistirInput { Salida = salida });
+
+        MarkdownCompression.Decompress(actualizado[0].NormalizacionMarkdownGzip).Should().Be("# completo");
+        actualizado[0].MarkdownPaginas.Should().Be(14);
     }
 
     public void Dispose()

@@ -69,6 +69,16 @@ public class DocumentoEntity
     [Column(TypeName = "varbinary(max)")]
     public byte[]? NormalizacionMarkdownGzip { get; set; }
 
+    /// <summary>
+    /// Paginas que cubre el markdown persistido. NULL = cobertura desconocida (historico
+    /// anterior a AB#100245): solo vale como fallback, nunca satisface la regla de cobertura.
+    /// </summary>
+    public int? MarkdownPaginas { get; set; }
+
+    /// <summary>El markdown persistido cubre el documento entero. Necesario porque para
+    /// Office no se conoce el total de paginas y "completo" no siempre es un numero.</summary>
+    public bool MarkdownCompleto { get; set; }
+
     // === Auditoría y trazabilidad de clasificación ===
     [MaxLength(500)]
     public string? EvidenceUri { get; set; }

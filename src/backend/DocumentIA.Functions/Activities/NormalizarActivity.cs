@@ -56,7 +56,8 @@ public class NormalizarActivity
         else
         {
             // Fallback: flujo legado con base64 (compatibilidad hacia atrás)
-            documentBytes = Convert.FromBase64String(entrada.Documento.Content.Base64);
+            documentBytes = Convert.FromBase64String(entrada.Documento.Content.Base64
+                ?? throw new InvalidOperationException("El documento no trae BlobPath ni Content.Base64."));
         }
 
         var sha256 = CalcularSHA256(documentBytes);

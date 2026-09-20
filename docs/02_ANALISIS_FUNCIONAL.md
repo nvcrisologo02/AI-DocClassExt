@@ -104,7 +104,7 @@ flowchart TB
 |-----------|---------------|
 | Entrada por `objectIdGDC` con checksum existente en BD | Pre-dedupe por MD5 (metadata GDC) y retorno temprano con última ejecución si `forceReprocess=false`. |
 | Entrada por `objectIdGDC` sin checksum/duplicado en BD | Descarga documento desde GDC y continúa pipeline normal. |
-| Documento duplicado (SHA256 ya existe en BD) | Si `forceReprocess=false`: retorna resultado anterior cacheado con `ReutilizadaPorDuplicado=true`. |
+| Documento duplicado (SHA256 ya existe en BD) | Si `forceReprocess=false`: retorna resultado anterior cacheado con `ReutilizadaPorDuplicado=true` y **registra la peticion como ejecucion reutilizada** (fila propia sin contrato ni coste, vinculada a la original) para que sea visible en el Monitor (AB#100258). |
 | ExpectedType informado | Omite clasificacion (confianza=1.0), usa la tipologia indicada directamente. |
 | Confianza clasificacion < umbral | Estado final `BAJA_CONFIANZA_CLASIFICACION`. No extrae ni valida. |
 | Tipologia no resoluble | Estado final `ERROR` con mensaje "No se ha podido identificar la tipologia". Si la peticion pidio prompt o resumen, se ejecutan igualmente antes de cerrar: no dependen de que el documento sea clasificable. |
@@ -197,8 +197,23 @@ flowchart TB
 | **Actor principal** | Administrador |
 | **Endpoints** | `GET /management/ejecuciones` (listado paginado), `GET /management/ejecuciones/agregados` (KPIs + serie diaria), `GET /management/ejecuciones/{guid}/detalle` |
 | **UI** | Pagina `/monitor` del Admin: KPIs, grafico de serie temporal, tabla paginada con fila desplegable y modal con el JSON completo del contrato de salida (copiar URL, copiar JSON, descargar). Cada ejecucion es enlazable por `/monitor/{guid}`. |
-| **Filtros** | Rango de fechas (default: ultimos 7 dias), tipologia, estado, flujo, solicitante (`submittedby`, el `trazabilidad.submittedBy` de la peticion) y busqueda libre por nombre de documento o GUID. Un unico filtro gobierna KPIs, grafico y tabla; la consulta y los agregados se calculan en servidor. |
+| **Filtros** | Rango de fechas relativo (default: ultimos 7 dias) o personalizado con Desde/Hasta inclusivos en hora peninsular (AB#100284; con rango fijo el auto-refresco se pausa), tipologia, estado, flujo, solicitante (`submittedby`, el `trazabilidad.submittedBy` de la peticion) y busqueda libre por nombre de documento o GUID. Un unico filtro gobierna KPIs, grafico y tabla; la consulta y los agregados se calculan en servidor. |
 | **Nota** | El solicitante mostrado/filtrado usa `DocumentoEjecuciones.SubmittedBy` con fallback al `SubmittedBy` del documento (`COALESCE`), para cubrir ejecuciones anteriores a la migracion de 2026-08-05. |
+
+---
+
+### CU10: Conocer el Coste de IA de una Ejecucion
+
+| Aspecto | Detalle |
+|---------|---------|
+| **Actor** | Responsable de operacion, analista de costes |
+| **Objetivo** | Saber lo que ha costado procesar un documento y donde se va el gasto de IA |
+| **Precondicion** | Catalogo de tarifas cargado (`ModeloConfigs`, `Tipo=4`, clave `tarifas.ia`) |
+| **Flujo principal** | 1. Cada llamada a un servicio de IA registra su consumo (tokens o paginas) y el modelo fisico usado. <br/>2. La actividad correspondiente aplica la tarifa vigente en la fecha de la ejecucion. <br/>3. El orquestador acumula los consumos y calcula el agregado. <br/>4. `PersistirActivity` graba el total, los tokens y el desglose por actividad. <br/>5. Si la peticion trae `instrucciones.incluirCostes`, el bloque viaja en la respuesta. |
+| **Flujo alternativo A** | Un modelo sin tarifa en el catalogo: el consumo se registra con sus cifras, el coste queda a nulo y el agregado se marca como incompleto indicando que modelos faltan. La ejecucion no falla. |
+| **Flujo alternativo B** | Reutilizacion por duplicado: no hay consumo propio. El bloque llega a cero, marcado, con el coste de la ejecucion original aparte para no contar dos veces el mismo gasto. La fila de reutilizacion se graba con coste nulo, los agregados la excluyen y Admin muestra aparte el **coste evitado** (suma del coste medido de las originales reutilizadas). |
+| **Postcondicion** | La ejecucion queda con su coste en BD y consultable desde la seccion `/costes` del Admin |
+| **Alcance** | Solo servicios de IA. No incluye almacenamiento, computo ni red |
 
 ---
 
@@ -212,6 +227,17 @@ flowchart TB
 - `SkipDuplicateCheck=true` omite la verificacion (procesamiento incondicional).
 - La **clave de deduplicacion** es `SHA256 + classificationOnly + nivelClasificacion`. Dos peticiones con el mismo
   SHA256 pero distinto `nivelClasificacion` se tratan como ejecuciones independientes y no se reutilizan entre si.
+  Sin coincidencia exacta se reutiliza la ultima ejecucion con contrato (AB#100177), y la fila que se graba describe
+  lo que pidio el cliente, no lo que hizo la original.
+- **Toda peticion servida por reutilizacion deja traza propia** (AB#100258): una fila en `DocumentoEjecuciones` con
+  `ReutilizadaPorDuplicado = 1`, sin contrato ni coste, vinculada por `EjecucionOriginalId` a la ejecucion reutilizada
+  y con el `InstanceId`/`OperationId`/solicitante de la llamada actual. Su `EstadoFinal` es el de la original
+  (reutilizar un `ERROR` sigue contando como error). Una reutilizacion nunca se reutiliza: no hay cadenas.
+- Las reutilizaciones **no son ejecuciones de IA**: el Monitor, los KPIs y los costes las excluyen por defecto y las
+  muestran aparte (recuento y coste evitado). El consumidor externo del procedimiento por IdActivo sigue recibiendo
+  las mismas filas salvo que pida `@IncluirReutilizadas = 1`.
+- Registrar la traza nunca puede convertir en error una peticion ya resuelta: si falla, se loguea y la respuesta
+  reutilizada se devuelve igual.
 
 ### RN2: Umbrales de Confianza Configurables
 
@@ -293,9 +319,9 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
    - Si la clasificacion GPT retorna una **tipologia no mapeada al catalogo** (`tipologia = "Desconocido"`):
      el pipeline **se detiene**, extraccion y validacion se omiten, `resultado.estado = "OK"`, y
      `identificacion.propuestaTipologia` contiene la propuesta libre del modelo.
-3. **D4 — Markdown pre-procesado**: si se informa `instrucciones.classification.markdown`, el paso
-   `ExtraerMarkdownLayoutActivity` se omite y se usa ese texto directamente. Util en integraciones batch que
-   ya tienen el markdown extraido.
+3. **D4 — Markdown pre-procesado**: si se informa `instrucciones.classification.markdown`, ese texto gana
+   siempre en `MarkdownResolver` (fuente `Caller`) y no se llama a Document Intelligence Layout. Util en
+   integraciones batch que ya tienen el markdown extraido. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3.
 4. **D7 — Clave de deduplicacion extendida**: el campo `nivelClasificacion` forma parte de la clave de deduplicacion
    junto con `SHA256` y `classificationOnly`. Ver RN1.
 5. **Confianza dinamica self-reported**: GPT reporta su propia certeza sobre cada clasificacion mediante un campo
@@ -374,7 +400,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 |----|-----------|----------------------|--------|
 | RF01 | El sistema debe clasificar automaticamente el tipo documental de un PDF | Devuelve `TipologiaDetectada` con confianza >= 0.6. Soporta fallback a GPT si confianza DI baja. | DONE |
 | RF02 | El sistema debe extraer campos estructurados de documentos clasificados | Devuelve `DatosExtraidos` como diccionario clave-valor. Campos alineados con configuracion de tipologia. | DONE |
-| RF03 | El sistema debe detectar documentos duplicados por SHA256 | Si SHA256 existe en BD y `forceReprocess=false`, retorna resultado cacheado sin reprocesar. | DONE |
+| RF03 | El sistema debe detectar documentos duplicados por SHA256 | Si SHA256 existe en BD y `forceReprocess=false`, retorna resultado cacheado sin reprocesar. El contrato devuelto lleva el `instanceId`/`operationId` de la llamada actual y `detalleEjecucion.ejecucionOriginalGuid` apunta a la ejecucion reutilizada. | DONE |
 | RF04 | El sistema debe validar datos extraidos contra reglas configurables | Ejecuta ValidationEngine con reglas JSON por tipologia. Devuelve errores/warnings/info. | DONE |
 | RF05 | El sistema debe soportar multiples tipologias con configuracion independiente | Cada tipologia tiene su propia configuracion de extraccion, validacion, plugins y umbrales. | DONE |
 | RF06 | El sistema debe subir documentos al GDC via SOAP | `SubirGDCActivity` envia documento al GDC con matricula y metadata. Soporta timeout de 120s. | DONE |
@@ -390,6 +416,10 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RF16 | El sistema debe resolver el activo inmobiliario desde datos extraidos | `ObtenerActivoActivity` consulta `DM_POSICION_AAII_TB` via AssetResolver. Devuelve `IdActivo` si match unico. Habilitacion configurable por tipologia/instrucciones. | DONE |
 | RF17 | El sistema debe permitir excluir campos del score de confianza de extraccion por tipologia | `avoidConfidence: true` en un campo lo excluye del score y de `CamposBajaConfianza`, manteniendo completitud y trazabilidad en `ConfianzaPorCampo`. | DONE |
 | RF18 | El sistema debe permitir monitorizar ejecuciones desde el Admin | Monitor con consulta en servidor: KPIs, serie temporal diaria, paginacion, filtros (rango, tipologia, estado, flujo, solicitante, busqueda) y detalle enlazable por GUID con el contrato de salida completo. Ver CU9. | DONE |
+| RF19 | El sistema debe registrar el coste economico y el consumo de tokens de cada llamada a un servicio de IA | Cada ejecucion persiste `CosteIAEur`, `TokensIA` y el desglose por actividad; el detalle por llamada viaja en el contrato. Solo servicios de IA. Ver CU10. | DONE |
+| RF20 | El coste debe devolverse en la salida solo si el llamador lo pide | `instrucciones.incluirCostes` (defecto `false`). El bloque se calcula y persiste siempre; sin el parametro la salida es identica a la anterior a la funcionalidad. | DONE |
+| RF21 | El sistema debe permitir consultar los costes agregados desde el Admin | Seccion `/costes` (sin entrada de menu) con los filtros del Monitor: totales del periodo, desglose por actividad, tipologia y modelo, evolucion diaria y listado con coste por ejecucion. | DONE |
+| RF22 | Toda peticion servida por deduplicacion debe dejar traza propia y ser visible en el Monitor sin alterar las metricas de operacion | Fila en `DocumentoEjecuciones` con `ReutilizadaPorDuplicado = 1` y `EjecucionOriginalId`, sin contrato ni coste, idempotente por `InstanceId`. Monitor: excluidas por defecto, filtro tri-estado (excluir/incluir/solo), badge, detalle en ambos sentidos y KPIs de reutilizaciones y coste evitado. SP por IdActivo con `@IncluirReutilizadas` (defecto 0). Verificado en DEV con `run-validacion-dedup.ps1` (DUP-01..05). Ver RN1. | DONE |
 
 ---
 

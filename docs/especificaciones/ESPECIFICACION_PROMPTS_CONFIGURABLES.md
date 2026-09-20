@@ -152,7 +152,7 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 - Solo 1 versión activa por `PromptKey` en un momento dado
 - `PUT /api/management/prompts/{id}` y `DELETE /api/management/prompts/{id}` devuelven **`403 Forbidden`** si la versión (`IsActive=true`) está activa: no se permite editar ni eliminar el contenido de una versión activa
 - `DELETE` sobre una versión **no activa** (borrador) sí es un borrado físico de la fila (`204 No Content`); el "no se permite borrado" solo aplica a la versión activa
-- Auditoría completa: `CreatedBy`, `UpdatedBy`, `PublishedBy`, `PublishedAtUtc`
+- Auditoría completa: `CreatedBy`, `UpdatedBy`, `PublishedBy`, `PublishedAtUtc`. `createdBy` es opcional en `POST /api/management/prompts`: el Admin envía el usuario resuelto por `ICurrentUserService` y, si falta, se persiste cadena vacía (columna NOT NULL).
 
 **Alternativa descartada:** Edición in-place de versión activa
 - Pros: simplicidad UI

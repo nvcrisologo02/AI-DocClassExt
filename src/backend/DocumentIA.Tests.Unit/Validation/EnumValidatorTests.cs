@@ -316,12 +316,12 @@ namespace DocumentIA.Tests.Unit.Validation
         {
             // Arrange
             var validator = new EnumValidator(
-                new List<string> { 
-                    "BORRADOR", 
-                    "ENVIADO", 
-                    "CONFIRMADO", 
-                    "COMPLETADO", 
-                    "RECHAZADO" 
+                new List<string> {
+                    "BORRADOR",
+                    "ENVIADO",
+                    "CONFIRMADO",
+                    "COMPLETADO",
+                    "RECHAZADO"
                 },
                 caseSensitive: false);
 

@@ -129,14 +129,14 @@ namespace DocumentIA.Tests.Unit.Services.Prompt
         /// This is a direct unit test of the public static method.
         /// </summary>
         private string InvokeInterpolateTemplate(
-            string template, 
-            string contenido, 
+            string template,
+            string contenido,
             Dictionary<string, object> datos)
         {
             var method = typeof(OpenAIPromptDataProvider)
                 .GetMethod("InterpolateTemplate",
                     System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
-            
+
             var result = method?.Invoke(null, new object[] { template, contenido, datos });
             return result as string ?? throw new InvalidOperationException("InterpolateTemplate should return a string");
         }

@@ -161,6 +161,14 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
                 }
             }
 
+            // Paginas analizadas: es la unidad que factura el clasificador (AB#100229).
+            var paginasClasificadas = 0;
+            if (analyzeResult.TryGetProperty("pages", out var pagesEl)
+                && pagesEl.ValueKind == JsonValueKind.Array)
+            {
+                paginasClasificadas = pagesEl.GetArrayLength();
+            }
+
             _logger.LogInformation(
                 "Clasificación Azure DI completada. modelKey={ModelKey}, classifierId={ClassifierId}, detectedType={DetectedType}, confidence={Confidence}, contentLength={ContentLength}",
                 model.Key,
@@ -177,7 +185,19 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
                 ProveedorClasif = "DocumentIntelligence",
                 FallbackLLM = false,
                 TipologiaDetectada = detectedType,
-                ContentExtraido = contentExtraido
+                ContentExtraido = contentExtraido,
+                PagesProcessed = paginasClasificadas,
+                Consumos =
+                {
+                    new ConsumoIA
+                    {
+                        Actividad = ActividadesIA.Clasificar,
+                        Operacion = "classification.di",
+                        Proveedor = ProveedoresIA.DocumentIntelligence,
+                        Modelo = model.ClassifierId,
+                        Paginas = paginasClasificadas > 0 ? paginasClasificadas : null
+                    }
+                }
             };
         }
     }

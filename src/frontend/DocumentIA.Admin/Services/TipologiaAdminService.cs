@@ -142,7 +142,10 @@ public class TipologiaAdminService
 
     public async Task<ModeloConfigEntity?> GetModeloByIdAsync(int id)
     {
-        foreach (var tipo in new[] { TipoModelo.Clasificacion, TipoModelo.Extraccion, TipoModelo.Prompt, TipoModelo.Layout })
+        // Se recorre el enum entero, no una lista escrita a mano: con una lista fija,
+        // un tipo nuevo queda invisible para la edicion y la pagina responde "no
+        // existe" para una fila que si existe. Paso con Tarifas (AB#100233).
+        foreach (var tipo in Enum.GetValues<TipoModelo>())
         {
             var modelos = await GetModelosByTipoAsync(tipo);
             var match = modelos.FirstOrDefault(m => m.Id == id);
@@ -399,14 +402,20 @@ public class TipologiaAdminService
         return body;
     }
 
+    // Un valor del enum sin traducir aqui lanza y tumba la pagina entera, no solo
+    // su seccion: paso con Tarifas al anadirlo (AB#100233). Cualquier miembro nuevo
+    // de TipoModelo debe entrar tambien en este switch; hay test que lo comprueba
+    // recorriendo el enum completo.
     private static string ToTipoSegment(TipoModelo tipo) => tipo switch
     {
         TipoModelo.Clasificacion => "clasificacion",
         TipoModelo.Extraccion => "extraccion",
         TipoModelo.Prompt => "prompt",
         TipoModelo.Layout => "layout",
+        TipoModelo.Tarifas => "tarifas",
         _ => throw new ArgumentOutOfRangeException(nameof(tipo), tipo, null)
     };
+
 
     public static IReadOnlyCollection<string> ValidarTipologia(
         TipologiaEntity tipologia,

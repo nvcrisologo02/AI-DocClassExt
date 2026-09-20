@@ -86,7 +86,8 @@ Estados habituales y accion recomendada:
 | `OK` | Documento procesado correctamente | Continuar flujo normal |
 | `VALIDACION_CON_ERRORES` | Se extrajeron datos pero hay inconsistencias | Revisar campos marcados y corregir/confirmar |
 | `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
-| `DUPLICADO` | El documento ya habia sido procesado | Usar resultado existente o seguir criterio de negocio |
+| `DUPLICADO` | El documento ya habia sido procesado y no hay ningun resultado anterior reutilizable | Usar resultado existente o seguir criterio de negocio |
+| _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
 | `SIN_CONTENIDO_DOCUMENTO` | Se pidio un resumen o un prompt pero no se pudo leer el documento | Comprobar que el documento no esta corrupto ni es un escaneado sin texto. Si es legible, escalar: puede ser una incidencia del servicio de extraccion |
 | `ERROR` | El procesamiento no pudo completarse | Reintentar y, si persiste, escalar a soporte |
 
@@ -116,8 +117,8 @@ Regla simple para usuario:
 - Accion: solicitar documento mas legible o revisar manualmente.
 
 #### Caso 3: Documento repetido
-- Resultado: `DUPLICADO`.
-- Accion: usar resultado previo segun norma interna.
+- Resultado: el de la primera vez que se proceso (normalmente `OK`), marcado con `reutilizadaPorDuplicado = true`. Solo llega `DUPLICADO` si no habia ningun resultado anterior que devolver.
+- Accion: usar resultado previo segun norma interna. La peticion repetida queda registrada en el Monitor como "Reutilizada", asi que operacion puede ver cuantas veces se ha reenviado un mismo documento.
 
 #### Caso 4: Falla de proceso
 - Resultado: `ERROR`.
@@ -352,7 +353,7 @@ $body = @{
   trazabilidad = @{ submittedBy = "batch-presort" }
 } | ConvertTo-Json -Depth 5
 
-# Clasificacion con markdown pre-procesado (omite ExtraerMarkdownLayoutActivity)
+# Clasificacion con markdown pre-procesado (gana siempre en MarkdownResolver, sin llamar a Layout)
 $markdownTexto = "## Nota Simple\nFinca: 12345\n..."
 $body = @{
   instrucciones = @{
@@ -389,12 +390,13 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.maxPagesForClassificationOnly` | int | No | Solo aplica con `classificationOnly=true`. `0` = sin límite; `N > 0` = clasificar con las primeras N páginas. |
 | `instrucciones.forzarResumenPorDefecto` | bool | No | Default `false`. Si no hubo llamada GPT previa que produzca `Resumen`, `true` fuerza una llamada dedicada de `PromptActivity` para generar el resumen por defecto. |
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
+| `instrucciones.incluirCostes` | bool | No | Default `false`. `true` = la salida incluye `detalleEjecucion.costes` con el coste de IA de la ejecucion. El coste se calcula y se persiste siempre; este parametro solo decide si se devuelve. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md). |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
 | `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |
 | `instrucciones.classification.model` | string | No | Model key del registro de clasificación para la ruta GPT. `"auto"` = usar modelo fallback marcado con `useAsFallback=true`. Si se informa un model key válido de provider GPT/Azure OpenAI, se utiliza en esa petición. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
 | `instrucciones.classification.nivelClasificacion` | string? | No | Nivel de clasificacion jerarquica. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases). Si se informa, fuerza automaticamente `provider="gpt"` (D2). Forma parte de la clave de deduplicacion. `null` = clasificacion completa por defecto. |
-| `instrucciones.classification.markdown` | string? | No | Markdown pre-procesado del documento. Si se informa, omite el paso `ExtraerMarkdownLayoutActivity` (paso 2.8) y usa este texto directamente. Util en integraciones batch que ya han extraido el markdown. |
+| `instrucciones.classification.markdown` | string? | No | Markdown pre-procesado del documento. Si se informa, gana siempre en `MarkdownResolver` (fuente `Caller`) y no se llama a Document Intelligence Layout. Util en integraciones batch que ya han extraido el markdown. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3. |
 | `instrucciones.extraction` | object | No | Config extraccion para esta peticion. |
 | `instrucciones.extraction.provider` | string | No | `"auto"` / `"azure-content-understanding"` / `"azure-cu"` / `"azure-document-intelligence"` / `"azure-di"` / `"azure-openai"` / `"gpt"` / `"mock"`. Con `"azure-openai"` se activa el modo GPT directo (sin CU). |
 | `instrucciones.extraction.model` | string | No | Model key del registro. `"auto"` = usar config tipologia. |
@@ -503,6 +505,9 @@ En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el 
 | `.reutilizadaPorDuplicado` | bool | `true` si se reutilizo resultado anterior |
 | `.mensajeReutilizacion` | string? | Mensaje si fue reutilizado |
 | **detalleEjecucion** | | |
+| `.instanceId` | string | Identificador de la orquestacion de **esta** llamada, tambien cuando la respuesta se sirve reutilizando otra ejecucion (desde AB#100258; antes llegaba el de la orquestacion historica) |
+| `.operationId` | string | `operation_Id` de Application Insights de esta llamada |
+| `.ejecucionOriginalGuid` | string? | Solo en respuestas reutilizadas: `EjecucionGuid` de la ejecucion cuyo contrato se devuelve. En una ejecucion normal se omite del JSON. Ver [MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md) |
 | `.clasificacion` | object | Detalles de clasificacion (modelo, confianzas, fallback) |
 | `.extraccion` | object | Detalles de extraccion (modelo, confianza por campo, fallback) |
 | `.postproceso` | object | Normalizaciones, validaciones, inconsistencias, confianza validacion |
@@ -511,6 +516,80 @@ En cada capa (instrucciones/tipología), el umbral legado se usa solo cuando el 
 | `.gdc` | object | Resultado subida GDC (exitoso, objectId, intentos, duracion) |
 | `.seguimiento` | object | Timeline de actividades con estado y duracion por actividad |
 | `.prompt` | object? | Resultado del prompt libre (si habilitado en tipologia) |
+| `.costes` | object? | Coste de IA de la ejecucion. **Solo aparece si la peticion trae `instrucciones.incluirCostes=true`**; en caso contrario se omite del JSON. |
+
+### detalleEjecucion.costes
+
+Solo servicios de IA. No incluye almacenamiento, computo ni red.
+
+| Campo | Tipo | Descripcion |
+|-------|------|------------|
+| `.version` | string | Version del formato del bloque |
+| `.costeTotalEur` | decimal | Suma de los consumos tarifados, en euros |
+| `.tokensTotales` | int | Tokens de todas las llamadas generativas |
+| `.paginasTotales` | int | Paginas facturadas por los servicios documentales |
+| `.tarifasCompletas` | bool | `false` si algun modelo consumido no tiene tarifa en el catalogo. El total es entonces parcial. |
+| `.modelosSinTarifa` | string[] | Modelos consumidos sin precio, cuando `tarifasCompletas=false` |
+| `.reutilizadaPorDuplicado` | bool | `true` si la ejecucion reutilizo un resultado anterior y no consumio IA propia |
+| `.costeEjecucionOriginalEur` | decimal? | Coste de la ejecucion reutilizada. Es informativo: no se suma al total |
+| `.consumos[]` | array | Una entrada por llamada a un servicio de IA |
+
+Cada elemento de `consumos`:
+
+| Campo | Tipo | Descripcion |
+|-------|------|------------|
+| `.actividad` | string | Actividad que hizo la llamada: `Layout`, `Clasificar`, `Extraer`, `Prompt` |
+| `.operacion` | string | Operacion concreta dentro de la actividad, por ejemplo `classification.phase1`, `layout.prebuilt-layout`, `extraction.cu.modelo` |
+| `.proveedor` | string | `AzureOpenAI`, `DocumentIntelligence`, `ContentUnderstanding` |
+| `.modelo` | string | Modelo fisico consumido: nombre de deployment, analyzer, classifier o `prebuilt-layout` |
+| `.tokensEntrada` | int? | Tokens de entrada. **Incluyen los cacheados** |
+| `.tokensEntradaCache` | int? | Subconjunto de los anteriores servido desde cache, tarifado mas barato |
+| `.tokensSalida` | int? | Tokens generados |
+| `.tokensRazonamiento` | int? | Tokens de razonamiento, cuando el modelo los reporta |
+| `.paginas` | int? | Paginas facturadas por esta llamada |
+| `.costeEur` | decimal? | Coste de esta llamada. `null` si el modelo no tiene tarifa |
+| `.tarifaAplicada` | string? | Identificador de la linea de tarifa usada, para poder auditar el importe |
+| `.descartado` | bool | `true` si el resultado de esta llamada no se uso (fallback, descarte, evaluacion). **Cuenta igual en el total: se pago.** |
+
+Ejemplo:
+
+```json
+"detalleEjecucion": {
+  "costes": {
+    "version": "1.0",
+    "costeTotalEur": 0.014182,
+    "tokensTotales": 8934,
+    "paginasTotales": 3,
+    "tarifasCompletas": true,
+    "modelosSinTarifa": [],
+    "reutilizadaPorDuplicado": false,
+    "consumos": [
+      {
+        "actividad": "Layout",
+        "operacion": "layout.prebuilt-layout",
+        "proveedor": "DocumentIntelligence",
+        "modelo": "prebuilt-layout",
+        "paginas": 3,
+        "costeEur": 0.012882,
+        "tarifaAplicada": "prebuilt-layout@2026-09-01",
+        "descartado": false
+      },
+      {
+        "actividad": "Clasificar",
+        "operacion": "classification.phase1",
+        "proveedor": "AzureOpenAI",
+        "modelo": "gpt-5-mini",
+        "tokensEntrada": 7820,
+        "tokensEntradaCache": 6144,
+        "tokensSalida": 1114,
+        "costeEur": 0.001300,
+        "tarifaAplicada": "gpt-5-mini@2026-09-01",
+        "descartado": false
+      }
+    ]
+  }
+}
+```
 
 ---
 
@@ -624,7 +703,7 @@ Detalles del backfill:
 | `OK` | Procesamiento completo, datos fiables | Consumir datos normalmente |
 | `VALIDACION_CON_ERRORES` | Extraccion OK pero validacion detecto errores | Revisar `postproceso.inconsistencias`. Datos pueden requerir correccion manual. |
 | `BAJA_CONFIANZA_CLASIFICACION` | IA no pudo clasificar con confianza suficiente | Verificar documento manualmente. Posible documento no soportado. |
-| `DUPLICADO` | Documento ya procesado (SHA256 identico) | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
+| `DUPLICADO` | Documento ya procesado (SHA256 identico) **sin ninguna ejecucion anterior reutilizable**. Cuando si la hay, el estado es el de aquella ejecucion con `resultado.reutilizadaPorDuplicado = true` y `detalleEjecucion.ejecucionOriginalGuid` informado | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
 | `NO_CLASIFICADO` | No se identifico la tipologia del documento | Revisar el documento; si el tipo es conocido, reenviar con `expectedType`. Si la peticion pedia prompt o resumen, estos si vienen informados en `datosExtraidos`. |
 | `SIN_CONTENIDO_DOCUMENTO` | Se pidio prompt o resumen y no se obtuvo texto del documento por ninguna via | El modelo no se invoca a proposito: es preferible un fallo explicito a un resumen inventado. Ver `docs/guias/TROUBLESHOOTING_DIAGNOSTICO.md`. |
 | `PENDIENTE_REINTENTO` | Cuota de Azure OpenAI agotada durante la clasificacion | Estado retriable: reencolar el documento mas tarde. No es un fallo del documento. |
@@ -1543,11 +1622,12 @@ El boton se encuentra alineado a la derecha de la barra de modos (Arbol / Codigo
 
 ### 5.9.3 Seccion Modelos
 
-Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI) de los cuatro tipos: Clasificacion, Extraccion, Prompt y Layout. Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
+Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI) de los cinco tipos: Clasificacion, Extraccion, Prompt, Layout y Tarifas. Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
 
 - **Editar** funciona igual para los cuatro tipos, incluidos los modelos de tipo Layout (antes de esta correccion, editar un modelo Layout creaba un duplicado en vez de actualizar el existente).
 - **Borrar** es un desactivado logico (soft-delete: `Activo=false`), no un borrado fisico. El dialogo de confirmacion lo indica explicitamente: "Desactivar modelo".
 - El **JSON de configuracion** que se ve y edita en el Admin trae los campos sensibles (claves cuyo nombre contiene `apikey`, `password`, `secret` o `accountkey`, de forma recursiva) enmascarados como `"***"`. Al guardar sin tocar esos campos, el valor enmascarado se conserva tal cual estaba en BD (round-trip seguro): no hace falta reintroducir la clave para guardar otros cambios. Si se sustituye `"***"` por un valor nuevo, ese valor pasa a ser el almacenado.
+- El tipo **Tarifas** no es un modelo invocable: es el catalogo de precios de IA. Hay una unica fila, con clave `tarifas.ia`, cuyo JSON contiene una linea por modelo fisico y fecha de vigencia. Se edita como cualquier otro modelo, pero afecta al importe que se calcula en todas las ejecuciones posteriores. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) antes de tocarlo.
 
 ### 5.9.4 Seccion Configuracion Consulta
 
@@ -1571,6 +1651,31 @@ Ademas de las secciones anteriores, el Admin incluye:
 - **Plugins por tipologia** (`/plugins-tipologias`): editar la configuracion de plugins de una tipologia y **Publicar**/**Retirar** requieren confirmacion previa con el impacto de la accion.
 - **Catalogo TDN1** (`/catalogotdn1`) y **Catalogo TDN2**: alta, edicion y borrado de los codigos de primer y segundo nivel usados por la clasificacion jerarquica GPT (ver 5.1.3 y RN7 en el analisis funcional). Borrar un codigo pide confirmacion ("Esta accion no se puede deshacer").
 
+### 5.9.7 Seccion Costes
+
+Pagina `/costes`. **No aparece en el menu de navegacion**: se accede por URL directa o desde el detalle de una ejecucion. Es la vista de coste de IA agregado y por ejecucion, con los mismos filtros del Monitor (rango de fechas, tipologia, estado, flujo, solicitante y busqueda libre).
+
+- **Totales del periodo**: coste, tokens, paginas y numero de ejecuciones con coste.
+- **Desglose** por actividad, por tipologia y por modelo, para ver donde se concentra el gasto.
+- **Evolucion diaria** del coste en el rango seleccionado.
+- **Listado de ejecuciones** con su coste, paginado, con enlace al detalle. El detalle muestra el desglose por llamada de esa ejecucion.
+- **Ejecuciones estimadas**: las anteriores a la puesta en marcha de la medicion se rellenaron de forma retroactiva a partir de la volumetria persistida. Van marcadas y se pueden excluir con el conmutador de estimados. Son una estimacion, no facturacion.
+- **Rango personalizado** (AB#100284): ademas de las ventanas relativas, el desplegable Rango ofrece *Personalizado* con dos fechas Desde/Hasta, inclusivas y en hora peninsular, precargadas con el mes en curso. Sirve para sacar el coste de un mes natural o de cualquier periodo cerrado. La misma opcion existe en el Monitor, donde ademas pausa el auto-refresco mientras el rango sea fijo.
+
+Aviso de lectura: cada entorno usa la cuenta de IA de produccion, asi que la suma de un entorno no es comparable con la factura de su grupo de recursos.
+
+### 5.9.8 Reutilizaciones por duplicado en el Monitor
+
+Desde AB#100258, cada peticion que el sistema resuelve devolviendo el resultado de una ejecucion anterior (deduplicacion por SHA256) queda registrada como una fila propia, y el Monitor (`/monitor`) la distingue:
+
+- **Por defecto no se muestran** ni cuentan: quedan fuera del listado, de los KPIs, del histograma, de la matriz y de la seccion de costes, porque no son ejecuciones de IA. Las cifras que el Monitor mostraba antes no cambian.
+- **Filtro "Reutilizadas"** con tres valores: *Excluir* (por defecto), *Incluir* y *Solo reutilizadas*.
+- En el listado llevan el **badge "Reutilizada"**, y el boton del contrato JSON esta deshabilitado en esas filas con el texto "el contrato es el de la ejecucion #X", con enlace a la original.
+- En el **detalle** de una reutilizacion aparece el banner "Servida reutilizando la ejecucion #X del <fecha>", ademas de sus datos propios (fecha, solicitante, `InstanceId`, `OperationId`, duracion real). En el detalle de la original, el bloque "Reutilizada N veces" lista las peticiones que la aprovecharon.
+- Dos **KPIs** nuevos sobre la misma ventana: *peticiones servidas por reutilizacion* y *coste evitado* (suma del coste medido de las ejecuciones originales reutilizadas).
+
+Detalle completo del mecanismo en [MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md).
+
 ---
 
 ## 5.10 Referencias
@@ -1581,3 +1686,5 @@ Ademas de las secciones anteriores, el Admin incluye:
 | [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Instalacion, despliegue, variables de entorno |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API original detallado |
 | [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de calculo de confianza |
+| [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecucion: que se mide, tarifas, consulta y relleno retroactivo |
+| [MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md) | Deduplicacion por SHA256: flags, reutilizacion de ejecuciones, traza de las reutilizaciones y su visibilidad en el Monitor |

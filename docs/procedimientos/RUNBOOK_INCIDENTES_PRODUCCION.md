@@ -371,10 +371,10 @@ customMetrics
 ---
 
 ### 5️⃣ Document File Corruption en Azure Document Intelligence (DI)
-**Patrón:** Documento procesa N veces OK, pero falla en ExtraerMarkdownLayoutActivity con error "file is corrupted"
+**Patrón:** Documento procesa N veces OK, pero falla en ObtenerMarkdownActivity (Document Intelligence Layout) con error "file is corrupted"
 
 **Síntomas:**
-- ❌ `ExtraerMarkdownLayoutActivity` falla con HTTP 400
+- ❌ `ObtenerMarkdownActivity` falla con HTTP 400 al resolver markdown vía Layout
 - 📊 Error: `"The file is corrupted or format is unsupported. Refer to documentation for the list of supported formats."`
 - ⏱️ En `AzureDocumentIntelligenceLayoutMarkdownProvider.cs:82`
 - 🔴 Mensaje: "Error iniciando DI layout. Status=400"
@@ -402,7 +402,7 @@ traces
 // Documentos específicos con este error
 customEvents
 | where timestamp > ago(2h)
-| where name == "ExtraerMarkdownLayoutActivity_Failed"
+| where name == "ObtenerMarkdownActivity_Failed"
 | where customDimensions["error"] contains "file is corrupted"
 | project timestamp, correlationId=customDimensions["correlationId"], documento=customDimensions["nombre_documento"], tipologia=customDimensions["tipologia"]
 | order by timestamp desc

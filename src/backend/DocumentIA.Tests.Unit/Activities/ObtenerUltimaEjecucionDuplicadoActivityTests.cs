@@ -48,6 +48,85 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             Times.Never);
     }
 
+    // AB#100258: las filas de reutilizacion nacen sin contrato, de modo que el filtro de
+    // "candidatas con contrato" las descarta y nunca se reutiliza una reutilizacion. Sin
+    // esta invariante se podrian encadenar y acabar sirviendo una fila vacia.
+    [Fact]
+    public async Task Run_WhenLatestExecutionIsAReuse_SkipsItAndReusesTheRealOne()
+    {
+        var documento = new DocumentoEntity { Id = 77, SHA256 = "sha-reuse" };
+
+        var salidaHistorica = new ContratoSalida
+        {
+            Identificacion = new Identificacion { Documento = "doc.pdf" },
+            Resultado = new ResultadoFinal { Estado = "OK" }
+        };
+
+        // Devueltas como lo hace el repositorio: de mas reciente a mas antigua.
+        var reutilizacion = new DocumentoEjecucionEntity
+        {
+            Id = 2,
+            DocumentoId = documento.Id,
+            FechaEjecucion = new DateTime(2026, 9, 10, 0, 0, 0, DateTimeKind.Utc),
+            EstadoFinal = "OK",
+            ReutilizadaPorDuplicado = true,
+            EjecucionOriginalId = 1,
+            ContratoSalidaCompletoJson = null
+        };
+        var real = new DocumentoEjecucionEntity
+        {
+            Id = 1,
+            DocumentoId = documento.Id,
+            FechaEjecucion = new DateTime(2026, 9, 9, 0, 0, 0, DateTimeKind.Utc),
+            EstadoFinal = "OK",
+            ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaHistorica)
+        };
+
+        _documentoRepository.Setup(r => r.GetBySHA256Async("sha-reuse")).ReturnsAsync(documento);
+        _documentoEjecucionRepository
+            .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
+            .ReturnsAsync(new[] { reutilizacion, real });
+
+        var result = await _sut.Run("sha-reuse");
+
+        result.Should().NotBeNull();
+        result!.Identificacion.Documento.Should().Be("doc.pdf");
+        result.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+    }
+
+    // AB#100258: el puente hacia la fila reutilizada es su EjecucionGuid, que se genera al
+    // persistir y NO viaja dentro del contrato (Identificacion.Guid es el guid del
+    // Documento). Si la actividad no lo rellena, PersistirActivity no localiza la original
+    // y la traza de reutilizacion queda sin EjecucionOriginalId (visto en DEV, DUP-02).
+    [Fact]
+    public async Task Run_RellenaEjecucionOriginalGuidConElEjecucionGuidDeLaFila()
+    {
+        var documento = new DocumentoEntity { Id = 60, SHA256 = "sha-guid" };
+        var salidaHistorica = new ContratoSalida
+        {
+            Identificacion = new Identificacion { Guid = "guid-del-documento", Documento = "doc.pdf" },
+            Resultado = new ResultadoFinal { Estado = "OK" }
+        };
+        var ejecucion = new DocumentoEjecucionEntity
+        {
+            Id = 4242,
+            DocumentoId = documento.Id,
+            EjecucionGuid = "guid-de-la-ejecucion",
+            ContratoSalidaCompletoJson = JsonSerializer.Serialize(salidaHistorica)
+        };
+
+        _documentoRepository.Setup(r => r.GetBySHA256Async("sha-guid")).ReturnsAsync(documento);
+        _documentoEjecucionRepository
+            .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
+            .ReturnsAsync(new[] { ejecucion });
+
+        var result = await _sut.Run("sha-guid");
+
+        result.Should().NotBeNull();
+        result!.DetalleEjecucion.EjecucionOriginalGuid.Should().Be("guid-de-la-ejecucion");
+        result.Identificacion.Guid.Should().Be("guid-del-documento", "el guid del documento no se toca");
+    }
+
     [Fact]
     public async Task Run_WhenLastExecutionHasSerializedOutput_ReturnsOutputMarkedAsDuplicateReuse()
     {

@@ -4,13 +4,36 @@
     <div class="row g-2 align-items-end">
         <div class="col-12 col-lg-3">
             <label class="form-label small text-muted mb-1">Rango</label>
-            <select class="form-select" value="@Filtro.RangoDias" @onchange="OnRangoCambiado">
+            <select class="form-select" value="@ValorRango" @onchange="OnRangoCambiado">
                 <option value="1">Últimas 24 horas</option>
                 <option value="7">Últimos 7 días</option>
                 <option value="30">Últimos 30 días</option>
                 <option value="90">Últimos 90 días</option>
+                <option value="@RangoPersonalizado">Personalizado</option>
             </select>
         </div>
+        @* AB#100284: periodo cerrado en dias de calendario peninsular, ambos inclusive.
+           Las fechas solo se muestran en modo Personalizado; mientras falte una de
+           las dos el filtro sigue usando la ventana relativa. *@
+        @if (_personalizado)
+        {
+        <div class="col-6 col-lg-2">
+            <label class="form-label small text-muted mb-1">Desde</label>
+            <input type="date" class="form-control" value="@Fecha(Filtro.Desde)" @onchange="OnDesdeCambiado"
+                   min="@Fecha(MonitorFiltroDto.FechaMinima)" max="@Fecha(MonitorFiltroDto.FechaMaxima)" />
+        </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small text-muted mb-1">Hasta</label>
+            <input type="date" class="form-control" value="@Fecha(Filtro.Hasta)" @onchange="OnHastaCambiado"
+                   min="@Fecha(MonitorFiltroDto.FechaMinima)" max="@Fecha(MonitorFiltroDto.FechaMaxima)" />
+        </div>
+        @if (!Filtro.EsRangoFijo)
+        {
+        <div class="col-12">
+            <small class="text-warning">Completa las dos fechas para aplicar el periodo; mientras tanto se muestra la ventana relativa anterior.</small>
+        </div>
+        }
+        }
         <div class="col-6 col-lg-2">
             <label class="form-label small text-muted mb-1">Tipología</label>
             <select class="form-select" value="@Filtro.Tipologia" @onchange="OnTipologiaCambiada">
@@ -38,6 +61,19 @@
                 <option value="Completo">Completo</option>
             </select>
         </div>
+        @* AB#100258: por defecto se excluyen, que es el conjunto que ha descrito
+           siempre el Monitor. Una reutilizacion no reprocesa nada. *@
+        @if (MostrarReutilizaciones)
+        {
+        <div class="col-6 col-lg-2">
+            <label class="form-label small text-muted mb-1">Reutilizaciones</label>
+            <select class="form-select" value="@Filtro.Reutilizadas" @onchange="OnReutilizadasCambiado">
+                <option value="">Excluir</option>
+                <option value="incluir">Incluir</option>
+                <option value="solo">Solo reutilizaciones</option>
+            </select>
+        </div>
+        }
         <div class="col-12 col-lg-3">
             <label class="form-label small text-muted mb-1">Buscar</label>
             <input class="form-control" placeholder="GUID exacto o nombre de documento"
@@ -56,6 +92,12 @@
     [Parameter] public IReadOnlyList<string> Tipologias { get; set; } = [];
     [Parameter] public EventCallback<MonitorFiltroDto> FiltroCambiado { get; set; }
 
+    /// <summary>
+    /// La pagina de costes no sabe calcular el ahorro de las reutilizaciones, asi que
+    /// alli "Solo reutilizaciones" solo produciria un panel a cero sin explicacion.
+    /// </summary>
+    [Parameter] public bool MostrarReutilizaciones { get; set; } = true;
+
     // Cada campo con retardo tiene su propio Timer: compartir uno solo entre
     // busqueda y solicitante haria que escribir en uno cancelara el retardo
     // pendiente del otro.
@@ -63,14 +105,60 @@
     private Timer? _debounceSolicitante;
     private bool _disposed;
 
-    // El rango es la anchura de la ventana, no sus extremos: los calcula el propio
-    // filtro en cada consulta para que el auto-refresco siga viendo lo mas reciente.
-    private async Task OnRangoCambiado(ChangeEventArgs e) =>
-        await Emitir(f => f.RangoDias = int.TryParse(e.Value?.ToString(), out var d) ? d : 7);
+    private const string RangoPersonalizado = "custom";
+
+    // El modo se recuerda aparte del filtro: al borrar una fecha el filtro deja de
+    // ser fijo, pero los inputs deben seguir a la vista para poder completarla.
+    private bool _personalizado;
+
+    protected override void OnParametersSet()
+    {
+        if (Filtro.EsRangoFijo) _personalizado = true;
+    }
+
+    private string ValorRango => _personalizado ? RangoPersonalizado : Filtro.RangoDias.ToString();
+
+    private static string? Fecha(DateOnly? dia) => dia?.ToString("yyyy-MM-dd");
+
+    // El rango relativo es la anchura de la ventana, no sus extremos: los calcula el
+    // propio filtro en cada consulta para que el auto-refresco siga viendo lo mas
+    // reciente. El personalizado es lo contrario: un periodo cerrado, precargado con
+    // el mes en curso porque el caso tipico es sacar el coste de un mes natural.
+    private async Task OnRangoCambiado(ChangeEventArgs e)
+    {
+        var valor = e.Value?.ToString();
+        if (valor == RangoPersonalizado)
+        {
+            _personalizado = true;
+            var hoy = DateOnly.FromDateTime(HoraEspana.Desde(DateTime.UtcNow));
+            await Emitir(f =>
+            {
+                f.Desde = new DateOnly(hoy.Year, hoy.Month, 1);
+                f.Hasta = hoy;
+            });
+            return;
+        }
+
+        _personalizado = false;
+        await Emitir(f =>
+        {
+            f.RangoDias = int.TryParse(valor, out var d) ? d : 7;
+            f.Desde = null;
+            f.Hasta = null;
+        });
+    }
+
+    private async Task OnDesdeCambiado(ChangeEventArgs e) => await Emitir(f => f.Desde = FechaDe(e));
+    private async Task OnHastaCambiado(ChangeEventArgs e) => await Emitir(f => f.Hasta = FechaDe(e));
+
+    // El input nativo entrega yyyy-MM-dd o cadena vacia si el usuario borra la fecha.
+    private static DateOnly? FechaDe(ChangeEventArgs e) =>
+        DateOnly.TryParseExact(e.Value?.ToString(), "yyyy-MM-dd", out var dia) ? dia : null;
 
     private async Task OnTipologiaCambiada(ChangeEventArgs e) => await Emitir(f => f.Tipologia = Texto(e));
     private async Task OnEstadoCambiado(ChangeEventArgs e) => await Emitir(f => f.Estado = Texto(e));
     private async Task OnFlujoCambiado(ChangeEventArgs e) => await Emitir(f => f.Flujo = Texto(e));
+    private async Task OnReutilizadasCambiado(ChangeEventArgs e) => await Emitir(f => f.Reutilizadas = Texto(e));
 
     // La busqueda se retrasa para no lanzar una consulta por pulsacion. El
     // callback del Timer corre en un hilo del pool, fuera del contexto de

@@ -101,6 +101,14 @@ public class Instrucciones
     public bool ForzarProcesadoSinLimitePaginas { get; set; }
 
     /// <summary>
+    /// Cuando es true, la salida incluye el bloque DetalleEjecucion.Costes con el
+    /// consumo y el coste de los servicios de IA. Por defecto false: el bloque se
+    /// calcula y persiste igualmente, pero no se devuelve.
+    /// </summary>
+    [JsonConverter(typeof(NullToFalseBooleanConverter))]
+    public bool IncluirCostes { get; set; }
+
+    /// <summary>
     /// Restricción opcional del catálogo de clasificación a un subconjunto de tipologías.
     /// null = clasificar contra el catálogo completo (comportamiento por defecto).
     /// </summary>
@@ -314,7 +322,7 @@ public class ContenidoDocumento
     /// Documento codificado en Base64.
     /// Vacío cuando el flujo usa rutas externas (por ejemplo BlobPath u ObjectIdGDC).
     /// </summary>
-    public string Base64 { get; set; } = string.Empty;
+    public string? Base64 { get; set; }
 }
 
 public class Trazabilidad

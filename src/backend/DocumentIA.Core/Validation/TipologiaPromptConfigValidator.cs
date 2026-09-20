@@ -46,9 +46,9 @@ public class TipologiaPromptConfigValidator
             Codigo = tipologia.Codigo,
             IsConsistent = true,
             Warnings = new List<string>(),
-            #pragma warning disable CS0618 // Type or member is obsolete
+#pragma warning disable CS0618 // Type or member is obsolete
             HasPromptGPT = !string.IsNullOrWhiteSpace(tipologia.PromptGPT),
-            #pragma warning restore CS0618
+#pragma warning restore CS0618
             HasConfigPrompt = false
         };
 
@@ -91,9 +91,9 @@ public class TipologiaPromptConfigValidator
         }
 
         // Verificar inconsistencias
-        #pragma warning disable CS0618 // Type or member is obsolete
+#pragma warning disable CS0618 // Type or member is obsolete
         var promptGPTNorm = NormalizePrompt(tipologia.PromptGPT ?? string.Empty);
-        #pragma warning restore CS0618
+#pragma warning restore CS0618
         var configPromptNorm = NormalizePrompt(config?.PromptConfig?.SystemPrompt ?? string.Empty);
 
         if (result.HasPromptGPT && result.HasConfigPrompt && promptGPTNorm != configPromptNorm)

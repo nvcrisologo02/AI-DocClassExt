@@ -28,7 +28,7 @@ public class GptDirectExtraerDataProvider
     {
         var modelKey = ResolveDirectModelKey(input, tipologiaConfig);
         var model = _gptExecutor.ResolveModel(modelKey);
-        
+
         _logger.LogInformation(
             "Iniciando extracción GPT directa. Tipología={Tipologia}, ModelKey={ModelKey}, Provider={Provider}",
             input.Tipologia,

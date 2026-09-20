@@ -65,8 +65,8 @@ namespace DocumentIA.Functions.Activities
                 foreach (var pluginConf in pluginsOrdenados)
                 {
                     var pluginResult = await ExecutePluginWithEnrichmentAsync(
-                        pluginConf, 
-                        input, 
+                        pluginConf,
+                        input,
                         resultado.DatosFinales); // Pasar datos acumulados
 
                     resultado.Plugins.Add(pluginResult);
@@ -75,10 +75,10 @@ namespace DocumentIA.Functions.Activities
                     if (pluginResult.Success && pluginResult.DatosEnriquecidos != null)
                     {
                         MergeDatos(resultado.DatosFinales, pluginResult.DatosEnriquecidos);
-                        
+
                         logger.LogInformation(
-                            "Plugin {PluginKey} enriqueció datos. Total campos ahora: {Count}", 
-                            pluginConf.PluginKey, 
+                            "Plugin {PluginKey} enriqueció datos. Total campos ahora: {Count}",
+                            pluginConf.PluginKey,
                             resultado.DatosFinales.Count);
                     }
 
@@ -200,8 +200,8 @@ namespace DocumentIA.Functions.Activities
                 {
                     result.DatosEnriquecidos = integrationResult.ResponseData;
                     logger.LogInformation(
-                        "Plugin {PluginKey} devolvió {Count} campos enriquecidos", 
-                        pluginConfig.PluginKey, 
+                        "Plugin {PluginKey} devolvió {Count} campos enriquecidos",
+                        pluginConfig.PluginKey,
                         integrationResult.ResponseData.Count);
                 }
 
@@ -236,7 +236,7 @@ namespace DocumentIA.Functions.Activities
                 {
                     logger.LogDebug("Agregando nuevo campo: {Key}", kvp.Key);
                 }
-                
+
                 destino[kvp.Key] = kvp.Value; // Sobrescribir o agregar
             }
         }

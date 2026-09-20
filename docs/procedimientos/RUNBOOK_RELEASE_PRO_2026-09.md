@@ -1,11 +1,52 @@
 # Runbook — Release a PRO de fiabilidad, rendimiento y almacenamiento (septiembre 2026)
 
+> ## Estado: dos releases ejecutadas
+>
+> **03/09/2026** — Fases 1-2 de este runbook (AB#100165, AB#100176, AB#100182, AB#100192);
+> `master` sincronizado en `5b16b18`.
+>
+> **20/09/2026** — Segunda release sobre el mismo runbook, commit `fe1533f` de `develop`
+> (tag `deploy-pro-2026-09-20`): costes de IA (AB#100224/100235), resolutor y cobertura de
+> markdown (AB#100245-100256), visibilidad de reutilizaciones (AB#100258), rango de fechas y
+> nombre de documento en el Monitor (AB#100284, AB#100333), fix de GDC blob-first (AB#100293),
+> ExpectedType (AB#100242) y calidad de build (AB#100288). Registro de lo hecho, en orden:
+>
+> 1. Backup `DocumentIA-prerel-20260920` (23:10 UTC del 19/09), verificado contra el origen:
+>    68.951 documentos, 72.911 ejecuciones, última migración `20260902103313_MarkdownBinario`.
+> 2. `indice-monitor-reutilizacion-pro.sql` a mano con token de Entra (`sqlcmd -G` no pasa el
+>    MFA): **3,6 min en total**; el primer escaneo de la tabla (índice `EjecucionOriginalId`)
+>    187 s con la caché fría, el cubriente con 19 INCLUDE solo 30 s. Luego el SP.
+> 3. **Trampa del pipeline Migrations-BD**: su pre-check comparaba solo la *última* migración
+>    aplicada con la última del repo. Como el script del paso 2 registra `20260911…`, que es la
+>    última, el pipeline dijo "al día" y no aplicó las tres de costes y markdown. Se aplicaron
+>    con `dotnet ef migrations script 20260902103313_MarkdownBinario 20260908135330_MarkdownCobertura --idempotent`
+>    ejecutado a mano (9 `ADD COLUMN`, instantáneo). El pre-check ya compara el conjunto
+>    (`scripts/deployment/apply-migrations.ps1`), así que la próxima vez el pipeline vale.
+> 4. Seed del catálogo de tarifas (23:34 UTC): `tarifas.ia` activo, backup
+>    `ModeloConfigs__bak_20260919_233435`.
+> 5. Pipelines de Functions y Admin en paralelo desde `develop` (`fe1533f`, build 79482).
+> 6. Smoke E2E en PRO 6/6 PASS; `test-costes-ia.ps1 -Environment pro` VERIFICACION SUPERADA;
+>    `create-monitor-alerts.ps1` → 8 reglas activas con `srbagoperprodocai` (el ID del action
+>    group se obtuvo desde Cloud Shell: `az monitor action-group show` no pasa el proxy local).
+> 7. Backfills `backfill-markdown-cobertura.ps1` y `backfill-costes-estimados.ps1` lanzados
+>    tras la validación (reanudables; ver Fase 3).
+>
+> **Pendiente de limpieza**: borrar las copias `DocumentIA-prerel-202609` (del 03/09) y
+> `DocumentIA-prerel-20260920` tras el periodo de validación, y las tablas
+> `ModeloConfigs__bak_20260903_112330` y `ModeloConfigs__bak_20260919_233435`.
+
 Acciones para desplegar en PRO y dejar operativo el contenido de la release:
 **AB#100176** (fiabilidad de resumen y persistencia, INC1338832), **AB#100182** (rendimiento del
 Monitor), **AB#100165** (almacenamiento) y **AB#100192** (extracción sin modelKey).
 
-- **Commit a desplegar**: `origin/develop` (`091bb5a` o posterior). PRO despliega commits de
-  `develop` (el actual en PRO es `16e51bc`, del 14/08); `master` se sincroniza después.
+> **Añadido el 07/09:** `develop` incorpora también el **control de costes de IA**
+> (**AB#100224** y **AB#100235**). Si se despliega `develop` a PRO, ese código viaja con él y
+> necesita **dos migraciones más** y **el catálogo de tarifas**, que no viaja en las
+> migraciones. Los pasos están intercalados abajo (1.5, 1.6, 3.3 y 5.5). Ver
+> [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md).
+
+- **Commit a desplegar**: `origin/develop`. PRO despliega commits de `develop` (el actual en
+  PRO es `fe1533f`, del 20/09, tag `deploy-pro-2026-09-20`); `master` se sincroniza después.
 - **Validado en DEV** el 02/09: suite unitaria 999/999, Admin 113/113, E2E smoke 6/6 y full
   31 PASS / 0 FAIL / 1 N/A.
 - Todos los pasos manuales usan sesión Entra (`az login`); ninguno necesita credenciales en claro.
@@ -26,14 +67,18 @@ reescrito mantiene el mismo resultset.
       (`git fetch && git log origin/develop -1`).
 - [ ] Pasar el **Smoke pre-release PRO** (Test Plan **100069**, casos SMK-1..8) — norma previa a
       toda release a PRO.
-- [ ] Elegir ventana de **baja actividad**. Motivo doble: AB#100176 añade llamadas a actividades
-      en el orquestador y las orquestaciones en vuelo de la versión anterior pueden fallar por
-      no determinismo al reproducirse; y los índices se crean con `ONLINE=ON` pero menos carga
+- [ ] Elegir ventana de **baja actividad**. Motivo doble: AB#100176 y AB#100258 añaden llamadas
+      a actividades en el orquestador —esta última una `PersistirActivity` en la rama de
+      duplicado— y las orquestaciones en vuelo de la versión anterior pueden fallar por no
+      determinismo al reproducirse; y los índices se crean con `ONLINE=ON` pero menos carga
       es menos riesgo en un S0 de 10 DTU.
-- [ ] Tener a mano los tres scripts de BD (carpeta local `docs/auxiliares/temps/`, gitignored):
-      `2026-09-02/markdown-binario-pro.sql`, `2026-09-02/idactivo-sp-pro.sql`,
-      `2026-09-01/indice-monitor-pro.sql`. Los tres son idempotentes (guiados por
-      `__EFMigrationsHistory`) y re-ejecutables.
+- [ ] Tener a mano los scripts de BD. Los tres primeros están en la carpeta local
+      `docs/auxiliares/temps/` (gitignored): `2026-09-02/markdown-binario-pro.sql`,
+      `2026-09-02/idactivo-sp-pro.sql`, `2026-09-01/indice-monitor-pro.sql`. Los de AB#100258
+      sí están versionados: `scripts/database/indice-monitor-reutilizacion-pro.sql` y
+      `scripts/database/sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql`. Todos son
+      idempotentes (guiados por `__EFMigrationsHistory` o por guardas de existencia) y
+      re-ejecutables.
 - [x] **Backup pre-release** — HECHO el 03/09/2026: copia `DocumentIA-prerel-202609` creada a
       las **09:11:33 UTC** (`T0` de referencia; el PITR de 7 días cubre cualquier otro instante)
       y **verificada contra el origen**: 66.233 documentos, 70.166 ejecuciones (máx. Id 70202),
@@ -86,6 +131,37 @@ completa lo que falte.
       índices `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` (1 clave + 17 INCLUDE) e
       `IX_DocumentoEjecuciones_IdActivo_DocumentoId` presentes, y
       `EXEC sp_ObtenerDocumentoEjecucionesPorIdActivo @IdActivo='X'` responde sin error.
+- [ ] 1.5 **Costes de IA (AB#100224)** — aplicar las dos migraciones
+      `20260907075128_AddCostesIAToEjecuciones` y `20260907103326_AddCostesPorActividadYEstimado`:
+      siete columnas anulables en `DocumentoEjecuciones` (`CosteIAEur`, `TokensIA`, las cuatro de
+      actividad y `CosteEstimado`). Solo metadatos, instantáneas, sin bloqueo relevante. Generar el
+      script idempotente con `dotnet ef migrations script --idempotent`, igual que el resto.
+      Verificar: `SELECT name FROM sys.columns WHERE object_id = OBJECT_ID('DocumentoEjecuciones')
+      AND (name LIKE 'Coste%' OR name = 'TokensIA')` devuelve las siete.
+- [ ] 1.6 **Catálogo de tarifas (AB#100224)** — ejecutar
+      `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql`. No es esquema: inserta la fila
+      `tarifas.ia` en `ModeloConfigs` (`Tipo=4`). El script copia la tabla a
+      `ModeloConfigs__bak_<fecha>` antes de tocarla. **Debe ir antes de la Fase 2**: sin catálogo el
+      sistema no falla, pero toda ejecución posterior al despliegue queda con coste nulo y
+      `tarifasCompletas=false`, y eso solo se recupera con relleno retroactivo. Verificar:
+      `SELECT ModelKey, LEN(ConfiguracionJson) FROM ModeloConfigs WHERE Tipo = 4` devuelve una fila.
+
+- [ ] 1.7 **Visibilidad de las reutilizaciones (AB#100258)** — ejecutar
+      `scripts/database/indice-monitor-reutilizacion-pro.sql`. **No aplicar la migración
+      `20260911093509_ReutilizacionPorDuplicado` con el script idempotente de EF**: recrea el
+      índice cubriente sin `ONLINE = ON` y bloquearía `DocumentoEjecuciones` durante el build.
+      El script hace lo mismo con `DROP_EXISTING = ON, ONLINE = ON`, sin transacción global,
+      idempotente por bloque, y registra la migración en `__EFMigrationsHistory` para que EF no
+      la repita. Añade las columnas `ReutilizadaPorDuplicado` y `EjecucionOriginalId`, dos
+      índices pequeños y la FK autorreferenciada (`WITH NOCHECK`: todas las filas existentes
+      tienen la columna a NULL). Verificar con la consulta de su cabecera:
+      `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` pasa a 1 clave + **19** INCLUDE.
+- [ ] 1.8 **SP por IdActivo (AB#100258)** — ejecutar
+      `scripts/database/sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql` **después** de 1.7
+      (necesita la columna). Añade `@IncluirReutilizadas BIT = 0`, de modo que el consumidor
+      externo sigue recibiendo las mismas filas. Verificar:
+      `EXEC sp_ObtenerDocumentoEjecucionesPorIdActivo @IdActivo='<uno real>'` responde sin error y
+      sin filas con `ContratoSalidaCompletoJson` NULL.
 
 > Desde este punto PRO funciona con normalidad con el código antiguo. No hay prisa entre la
 > Fase 1 y la Fase 2, pero conviene encadenarlas en la misma ventana.
@@ -114,6 +190,13 @@ por tandas.
       cualquier discrepancia. Al terminar: pendientes 0, discrepancias 0.
       *Nota*: la BD crece temporalmente ~240 MB (la copia binaria); es lo esperado — el ahorro
       llega en la fase de *contract*, fuera de esta release.
+- [ ] 3.3 **Opcional** — `pwsh ./scripts/database/backfill-costes-estimados.ps1 -Server srbsqlprodocai.database.windows.net`
+      (AB#100235). Estima el coste de las ejecuciones anteriores a la medición a partir de la
+      volumetría ya persistida y las marca con `CosteEstimado=1`. Solo llega hasta donde llega el
+      dato: en el histórico hay páginas de layout en casi todas las ejecuciones, pero **nunca
+      tokens**, así que la clasificación generativa se estima y la extracción no se cubre. Escribe
+      solo columnas escalares, nunca el contrato, y **no pisa ningún coste medido**. Ejecutar
+      **después** del paso 1.6: sin catálogo no estima nada. Se puede posponer sin riesgo.
 
 ## Fase 4 — Alertas (suscripción Producción Central, permisos Monitoring Contributor)
 
@@ -141,6 +224,11 @@ por tandas.
       (App Insights, KQL de `docs/auxiliares/temps/2026-09-01/medicion-monitor-rendimiento.md`)
       y compararlo con la línea base: agregados p50 9.166 ms / p95 30.035 ms. Registrar la tabla
       en AB#100186 y cerrarlo.
+- [ ] 5.5 Costes de IA: `pwsh ./scripts/testing/test-costes-ia.ps1 -Environment pro`. Comprueba de
+      una pasada que el bloque llega con importes y `tarifasCompletas=true` al pedir
+      `incluirCostes`, que **no** aparece sin el parámetro, y que el desglose por llamada cuadra
+      con el total. Después, abrir `/costes` en el Admin de PRO (no está en el menú: por URL).
+      Esperar cinco minutos tras el paso 1.6 antes de lanzarlo, por la caché del catálogo.
 
 ## Fase 6 — Cierres post-release
 
@@ -151,8 +239,8 @@ por tandas.
 - [ ] 6.3 Publicar la rama `fix/100170-markdown-binario` del repo **DocumentIA.Batch** y
       mezclarla (afecta solo al script de auditoría `eval/audit_notext_db.py`; los ejecutables
       no cambian).
-- [ ] 6.4 Actualizar la entrada 1.17 del historial de `DATA_MODELS_ER_DIAGRAM.md`: quitar el
-      "PRO pendiente".
+- [ ] 6.4 Actualizar las entradas 1.17, 1.18 y 1.19 del historial de
+      `DATA_MODELS_ER_DIAGRAM.md`: quitar el "PRO pendiente".
 - [ ] 6.5 A los 2-3 días: revisar que las 3 alertas de fiabilidad (AB#100181) están **en
       silencio** — su objetivo es no saltar; si alguna salta, hay una vía no cubierta por los
       fixes. Vigilar también el ratio de `EXTRACCION_INCOMPLETA` (debe bajar: las 13 tipologías

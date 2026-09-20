@@ -139,9 +139,17 @@ Primera actividad del pipeline (`NormalizarActivity`). Calcula propiedades canó
 
 ### Duplicado
 
-Documento que ya ha sido procesado anteriormente (identificado por SHA256). Si `forceReprocess=false`, se retorna resultado cacheado con flag `ReutilizadaPorDuplicado=true`.
+Documento que ya ha sido procesado anteriormente (identificado por SHA256). Si `forceReprocess=false`, se retorna resultado cacheado con flag `ReutilizadaPorDuplicado=true`. El estado `DUPLICADO` solo aparece cuando no hay ninguna ejecución anterior reutilizable; si la hay, se devuelve su estado (normalmente `OK`).
 
 **Verificación:** Realizada por `VerificarDuplicadoActivity` consultando BD por SHA256 (índice único).
+
+---
+
+### Reutilización por duplicado
+
+Petición resuelta devolviendo el contrato de una ejecución anterior del mismo documento, sin volver a llamar a ningún servicio de IA. Desde AB#100258 deja **traza propia**: una fila en `DocumentoEjecuciones` con `ReutilizadaPorDuplicado = 1` y `EjecucionOriginalId` apuntando a la ejecución reutilizada, sin contrato ni coste, con el `InstanceId` y el solicitante de la llamada actual. En la respuesta, `detalleEjecucion.ejecucionOriginalGuid` identifica la original.
+
+**Dónde se ve:** Monitor de Admin (badge "Reutilizada", filtro tri-estado, detalle en ambos sentidos, KPIs de reutilizaciones y coste evitado). Por defecto queda fuera de listados, agregados y costes: no es una ejecución de IA. Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
 
 ---
 
@@ -159,13 +167,15 @@ Actividad (`ResolverTipologiaActivity`) que traduce un código de tipología det
 
 Extracción de estructura y layout de documento en formato Markdown, preservando jerarquía visual (encabezados, listas, tablas).
 
-**Actividad:** `ExtraerMarkdownLayoutActivity` (opcional, configurable por tipología).
+**Actividad:** `ObtenerMarkdownActivity`, que delega en `MarkdownResolver` (este decide si hace falta
+llamar a Layout o si la caché/BD ya cubren la necesidad declarada por el paso llamante).
 
 **Provider:** Document Intelligence (Layout model).
 
 **Uso:** Enriquecimiento de datos extraídos, comprensión de estructura documental.
 
-**Nota:** Si `instrucciones.classification.markdown` se proporciona en input (D4), se inyecta directamente sin ejecutar activity.
+**Nota:** Si `instrucciones.classification.markdown` se proporciona en input (D4), gana siempre en
+`MarkdownResolver` y no se llama a Layout.
 
 ---
 

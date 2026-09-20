@@ -1,4 +1,5 @@
 #nullable enable
+using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Activities;
@@ -10,12 +11,23 @@ namespace DocumentIA.Tests.Unit.Services;
 
 public class ClasificarActivityTests
 {
+    /// <summary>
+    /// Cargador de tarifas vacio: estos tests no verifican coste, solo necesitan
+    /// satisfacer la dependencia de la actividad (AB#100230).
+    /// </summary>
+    private static TarifaRegistryLoader CargadorDeTarifasVacio()
+    {
+        var mock = new Mock<TarifaRegistryLoader>();
+        mock.Setup(c => c.Load()).Returns(new TarifaRegistry());
+        return mock.Object;
+    }
+
     [Fact]
     public async Task Run_WithExpectedType_ReturnsForcedResult_AndSkipsProvider()
     {
         var provider = new Mock<IClasificarDataProvider>(MockBehavior.Strict);
         var logger = new Mock<ILogger<ClasificarActivity>>();
-        var sut = new ClasificarActivity(logger.Object, provider.Object);
+        var sut = new ClasificarActivity(logger.Object, provider.Object, CargadorDeTarifasVacio());
 
         var input = new ClasificacionInput
         {
@@ -52,7 +64,7 @@ public class ClasificarActivityTests
             .ReturnsAsync(providerResult);
 
         var logger = new Mock<ILogger<ClasificarActivity>>();
-        var sut = new ClasificarActivity(logger.Object, provider.Object);
+        var sut = new ClasificarActivity(logger.Object, provider.Object, CargadorDeTarifasVacio());
 
         var input = new ClasificacionInput
         {
@@ -87,7 +99,7 @@ public class ClasificarActivityTests
             });
 
         var logger = new Mock<ILogger<ClasificarActivity>>();
-        var sut = new ClasificarActivity(logger.Object, provider.Object);
+        var sut = new ClasificarActivity(logger.Object, provider.Object, CargadorDeTarifasVacio());
 
         var input = new ClasificacionInput
         {

@@ -9,7 +9,7 @@ namespace DocumentIA.Data.Migrations
     public partial class AddSummaryPrompts : Migration
     {
         /// <inheritdoc />
-    protected override void Up(MigrationBuilder migrationBuilder)
+        protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.UpdateData(
                 table: "Tipologias",

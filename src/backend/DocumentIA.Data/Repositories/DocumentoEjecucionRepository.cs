@@ -83,33 +83,33 @@ namespace DocumentIA.Data.Repositories
                     .GroupBy(e => 1)
                     .Select(g => new
                     {
-                        Ok        = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
-                        Revision  = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
-                        Error     = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                        Ok = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                        Revision = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                        Error = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
                         Fallbacks = g.Count(e => e.UseFallbackLLM),
                         ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
-                        DuracionMedia  = g.Average(e => (double)e.DuracionTotalMs)
+                        DuracionMedia = g.Average(e => (double)e.DuracionTotalMs)
                     })
                     .FirstAsync();
 
-                ok             = globales.Ok;
-                revision       = globales.Revision;
-                error          = globales.Error;
-                fallbacks      = globales.Fallbacks;
+                ok = globales.Ok;
+                revision = globales.Revision;
+                error = globales.Error;
+                fallbacks = globales.Fallbacks;
                 confianzaMedia = globales.ConfianzaMedia;
-                duracionMedia  = globales.DuracionMedia;
+                duracionMedia = globales.DuracionMedia;
             }
 
             var byTipologia = await q
                 .GroupBy(e => e.Tipologia == null ? "(sin tipología)" : e.Tipologia)
                 .Select(g => new AgregadoGrupo
                 {
-                    Grupo          = g.Key,
-                    Total          = g.Count(),
-                    Ok             = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
-                    Revision       = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
-                    Error          = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
-                    Fallbacks      = g.Count(e => e.UseFallbackLLM),
+                    Grupo = g.Key,
+                    Total = g.Count(),
+                    Ok = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                    Fallbacks = g.Count(e => e.UseFallbackLLM),
                     ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
                 })
@@ -120,12 +120,12 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(e => e.ModeloClasificacion == null ? "(sin modelo)" : e.ModeloClasificacion)
                 .Select(g => new AgregadoGrupo
                 {
-                    Grupo          = g.Key,
-                    Total          = g.Count(),
-                    Ok             = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
-                    Revision       = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
-                    Error          = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
-                    Fallbacks      = g.Count(e => e.UseFallbackLLM),
+                    Grupo = g.Key,
+                    Total = g.Count(),
+                    Ok = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                    Fallbacks = g.Count(e => e.UseFallbackLLM),
                     ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
                 })
@@ -136,11 +136,11 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(e => e.FechaEjecucion.Date)
                 .Select(g => new SeriePunto
                 {
-                    Fecha     = g.Key,
-                    Total     = g.Count(),
-                    Ok        = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
-                    Revision  = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
-                    Error     = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
+                    Fecha = g.Key,
+                    Total = g.Count(),
+                    Ok = g.Count(e => EstadoEjecucion.Ok.Contains(e.EstadoFinal)),
+                    Revision = g.Count(e => EstadoEjecucion.Revision.Contains(e.EstadoFinal)),
+                    Error = g.Count(e => EstadoEjecucion.Error.Contains(e.EstadoFinal)),
                     Fallbacks = g.Count(e => e.UseFallbackLLM)
                 })
                 .ToListAsync();
@@ -177,14 +177,14 @@ namespace DocumentIA.Data.Repositories
                 .GroupBy(e => e.EstadoFinal)
                 .Select(g => new AgregadoGrupo
                 {
-                    Grupo           = g.Key,
-                    Total           = g.Count(),
-                    Ok              = g.Count(e => e.ConfianzaGlobal >= CalidadEjecucion.UmbralOk),
-                    Revision        = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralOk
+                    Grupo = g.Key,
+                    Total = g.Count(),
+                    Ok = g.Count(e => e.ConfianzaGlobal >= CalidadEjecucion.UmbralOk),
+                    Revision = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralOk
                                                 && e.ConfianzaGlobal >= CalidadEjecucion.UmbralRevision),
-                    Error           = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralRevision),
-                    Fallbacks       = g.Count(e => e.UseFallbackLLM),
-                    ConfianzaMedia  = g.Average(e => e.ConfianzaGlobal),
+                    Error = g.Count(e => e.ConfianzaGlobal < CalidadEjecucion.UmbralRevision),
+                    Fallbacks = g.Count(e => e.UseFallbackLLM),
+                    ConfianzaMedia = g.Average(e => e.ConfianzaGlobal),
                     DuracionMediaMs = g.Average(e => (double)e.DuracionTotalMs)
                 })
                 .OrderByDescending(g => g.Total)
@@ -203,33 +203,60 @@ namespace DocumentIA.Data.Repositories
                 .Select(g => new MatrizCelda
                 {
                     EstadoProceso = g.Key.EstadoFinal,
-                    Calidad       = g.Key.Calidad,
-                    Total         = g.Count()
+                    Calidad = g.Key.Calidad,
+                    Total = g.Count()
                 })
                 .ToListAsync();
 
             var histograma = await ConstruirHistogramaAsync(q, total);
 
+            // AB#100258: las reutilizaciones se miden aparte y sobre EL MISMO recorte, no
+            // solo la misma ventana: la cabecera de KPIs tiene que describir un unico
+            // conjunto. El filtro comun ya las ha dejado fuera de todo lo anterior, que es
+            // justo lo que se quiere: no son ejecuciones de IA y contarlas falsearia
+            // calidad y coste.
+            var qReutilizadas = AplicarFiltro(
+                _context.DocumentoEjecuciones.AsNoTracking(),
+                filtro.ConReutilizadas(FiltroReutilizadas.Solo));
+
+            var reutilizadas = await qReutilizadas.CountAsync();
+
+            // El coste evitado no se guarda en columna: se lee del original por join. Si
+            // aquella ejecucion no tenia coste medido, esta reutilizacion no suma nada.
+            var costeEvitado = reutilizadas == 0
+                ? 0m
+                : await qReutilizadas
+                    .Where(r => r.EjecucionOriginalId != null)
+                    .Join(
+                        _context.DocumentoEjecuciones.AsNoTracking(),
+                        r => r.EjecucionOriginalId,
+                        o => o.Id,
+                        (r, o) => o.CosteIAEur)
+                    .SumAsync(c => c ?? 0m);
+
             return new EjecucionAgregadosResult
             {
-                CalidadOk        = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Ok)?.Total ?? 0,
-                CalidadRevision  = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Revision)?.Total ?? 0,
-                CalidadError     = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Error)?.Total ?? 0,
-                PorEstadoProceso = porEstadoProceso,
-                Matriz           = matriz,
-                Histograma       = histograma,
+                Reutilizadas = reutilizadas,
+                CosteEvitadoEur = costeEvitado,
 
-                TotalEjecuciones  = total,
-                PeriodoDias       = (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays),
-                Ok                = ok,
-                Revision          = revision,
-                Error             = error,
-                FallbacksTotal    = fallbacks,
+                CalidadOk = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Ok)?.Total ?? 0,
+                CalidadRevision = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Revision)?.Total ?? 0,
+                CalidadError = porCalidad.FirstOrDefault(c => c.Calidad == CalidadEjecucion.Error)?.Total ?? 0,
+                PorEstadoProceso = porEstadoProceso,
+                Matriz = matriz,
+                Histograma = histograma,
+
+                TotalEjecuciones = total,
+                PeriodoDias = (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays),
+                Ok = ok,
+                Revision = revision,
+                Error = error,
+                FallbacksTotal = fallbacks,
                 ConfianzaGlobalMedia = confianzaMedia,
-                DuracionMediaMs   = duracionMedia,
-                PorTipologia      = byTipologia,
-                PorModelo         = byModelo,
-                Serie             = serie
+                DuracionMediaMs = duracionMedia,
+                PorTipologia = byTipologia,
+                PorModelo = byModelo,
+                Serie = serie
             };
         }
 
@@ -290,6 +317,16 @@ namespace DocumentIA.Data.Repositories
             IQueryable<DocumentoEjecucionEntity> q, EjecucionFiltro filtro)
         {
             q = q.Where(e => e.FechaEjecucion >= filtro.Desde && e.FechaEjecucion < filtro.Hasta);
+
+            // Punto unico: el listado, los agregados, el histograma, la matriz y los costes
+            // pasan por aqui, asi que la exclusion por defecto mantiene los numeros
+            // historicos sin tocar ninguna de esas consultas (AB#100258).
+            q = filtro.Reutilizadas switch
+            {
+                FiltroReutilizadas.Solo => q.Where(e => e.ReutilizadaPorDuplicado),
+                FiltroReutilizadas.Incluir => q,
+                _ => q.Where(e => !e.ReutilizadaPorDuplicado)
+            };
 
             if (!string.IsNullOrWhiteSpace(filtro.Tipologia))
             {
@@ -419,14 +456,217 @@ namespace DocumentIA.Data.Repositories
                     DuracionValidacionMs = e.DuracionValidacionMs,
                     DuracionIntegracionMs = e.DuracionIntegracionMs,
                     DuracionPersistenciaMs = e.DuracionPersistenciaMs,
-                    NombreDocumento = e.Documento != null ? e.Documento.NombreArchivo : null,
+                    // Documentos se deduplica por SHA-256 y conserva el primer nombre con el
+                    // que llego el contenido; la fila muestra el de esta peticion. Sin ISJSON: el
+                    // contrato solo lo escribe JsonSerializer y la guarda multiplica el coste.
+                    NombreDocumento = (SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato) ?? "") == ""
+                        ? (e.Documento != null ? e.Documento.NombreArchivo : null)
+                        : SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato),
                     SubmittedBy = e.SubmittedBy
                         ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
-                    ActivityTimelineJson = e.ActivityTimelineJson
+                    ActivityTimelineJson = e.ActivityTimelineJson,
+                    CosteIAEur = e.CosteIAEur,
+                    CosteEstimado = e.CosteEstimado,
+                    ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
+                    EjecucionOriginalId = e.EjecucionOriginalId
                 })
                 .ToListAsync();
 
             return (items, total);
+        }
+
+        /// <summary>
+        /// AB#100258. Acotado: un documento reenviado en bucle puede acumular miles de
+        /// reutilizaciones y el detalle del Admin no necesita mas que las ultimas.
+        /// </summary>
+        public async Task<IReadOnlyList<EjecucionListadoItem>> GetReutilizacionesAsync(int ejecucionOriginalId)
+        {
+            return await _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .Where(e => e.EjecucionOriginalId == ejecucionOriginalId)
+                .OrderByDescending(e => e.FechaEjecucion)
+                .Take(MaxReutilizacionesEnDetalle)
+                .Select(e => new EjecucionListadoItem
+                {
+                    Id = e.Id,
+                    EjecucionGuid = e.EjecucionGuid,
+                    FechaEjecucion = e.FechaEjecucion,
+                    Tipologia = e.Tipologia,
+                    EstadoFinal = e.EstadoFinal,
+                    ClassificationOnly = e.ClassificationOnly,
+                    DuracionTotalMs = e.DuracionTotalMs,
+                    SubmittedBy = e.SubmittedBy
+                        ?? (e.Documento != null ? e.Documento.SubmittedBy : null),
+                    NombreDocumento = (SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato) ?? "") == ""
+                        ? (e.Documento != null ? e.Documento.NombreArchivo : null)
+                        : SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato),
+                    ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
+                    EjecucionOriginalId = e.EjecucionOriginalId
+                })
+                .ToListAsync();
+        }
+
+        /// <summary>Nombre con el que llego el documento en la peticion de la ejecucion.</summary>
+        private const string RutaNombreEnContrato = "$.Identificacion.Documento";
+
+        /// <summary>Tope de reutilizaciones que se listan en el detalle de una ejecucion.</summary>
+        private const int MaxReutilizacionesEnDetalle = 20;
+
+        /// <summary>
+        /// Agregados de coste de IA (AB#100237). Todo sobre columnas escalares: el
+        /// desglose por llamada vive en el contrato JSON y agregarlo por OPENJSON
+        /// sobre una ventana de 90 dias seria el problema de rendimiento que el
+        /// Monitor ya arrastra.
+        /// </summary>
+        public async Task<EjecucionCostesResult> GetCostesAsync(EjecucionFiltro filtro)
+        {
+            var q = AplicarFiltro(_context.DocumentoEjecuciones.AsNoTracking(), filtro);
+
+            var resultado = new EjecucionCostesResult
+            {
+                PeriodoDias = Math.Max(1, (int)Math.Ceiling((filtro.Hasta - filtro.Desde).TotalDays)),
+                IncluyeEstimados = filtro.IncluirEstimados
+            };
+
+            resultado.TotalEjecuciones = await q.CountAsync();
+            if (resultado.TotalEjecuciones == 0)
+            {
+                resultado.Serie = SerieVacia(filtro);
+                return resultado;
+            }
+
+            // Los recuentos por origen se calculan sobre el conjunto filtrado completo:
+            // el usuario debe ver cuanto hay medido, cuanto estimado y cuanto sin coste
+            // aunque los importes de abajo excluyan lo estimado.
+            var origen = await q
+                .GroupBy(e => 1)
+                .Select(g => new
+                {
+                    Real = g.Count(e => e.CosteIAEur != null && !e.CosteEstimado),
+                    Estimado = g.Count(e => e.CosteIAEur != null && e.CosteEstimado),
+                    SinCoste = g.Count(e => e.CosteIAEur == null)
+                })
+                .FirstAsync();
+            resultado.ConCosteReal = origen.Real;
+            resultado.ConCosteEstimado = origen.Estimado;
+            resultado.SinCoste = origen.SinCoste;
+
+            // Los importes: solo ejecuciones con coste, y las estimadas solo si se pide.
+            var qImporte = q.Where(e => e.CosteIAEur != null);
+            if (!filtro.IncluirEstimados)
+            {
+                qImporte = qImporte.Where(e => !e.CosteEstimado);
+            }
+
+            resultado.EjecucionesConImporte = await qImporte.CountAsync();
+            if (resultado.EjecucionesConImporte > 0)
+            {
+                var sumas = await qImporte
+                    .GroupBy(e => 1)
+                    .Select(g => new
+                    {
+                        Coste = g.Sum(e => e.CosteIAEur) ?? 0m,
+                        Tokens = g.Sum(e => (long?)e.TokensIA) ?? 0L,
+                        Layout = g.Sum(e => e.CosteLayoutEur) ?? 0m,
+                        Clasif = g.Sum(e => e.CosteClasificacionEur) ?? 0m,
+                        Extrac = g.Sum(e => e.CosteExtraccionEur) ?? 0m,
+                        Prompt = g.Sum(e => e.CostePromptEur) ?? 0m
+                    })
+                    .FirstAsync();
+
+                resultado.CosteTotalEur = sumas.Coste;
+                resultado.CosteMedioEur = Math.Round(sumas.Coste / resultado.EjecucionesConImporte, 6, MidpointRounding.AwayFromZero);
+                resultado.TokensTotales = sumas.Tokens;
+                resultado.LayoutEur = sumas.Layout;
+                resultado.ClasificacionEur = sumas.Clasif;
+                resultado.ExtraccionEur = sumas.Extrac;
+                resultado.PromptEur = sumas.Prompt;
+            }
+
+            // Por tipologia y por modelo: el total cuenta todas las del filtro, el
+            // importe solo las que entran. Asi se ve tambien la cobertura.
+            resultado.PorTipologia = await AgruparCostesAsync(
+                q, qImporte, e => e.Tipologia == null ? "(sin tipología)" : e.Tipologia);
+            resultado.PorModelo = await AgruparCostesAsync(
+                q, qImporte, e => e.ModeloClasificacion == null ? "(sin modelo)" : e.ModeloClasificacion);
+
+            var porDia = await qImporte
+                .GroupBy(e => e.FechaEjecucion.Date)
+                .Select(g => new CosteSeriePunto
+                {
+                    Fecha = g.Key,
+                    Total = g.Count(),
+                    CosteEur = g.Sum(e => e.CosteIAEur) ?? 0m
+                })
+                .ToListAsync();
+            var porDiaIndexado = porDia.ToDictionary(p => p.Fecha.Date);
+            resultado.Serie = SerieVacia(filtro)
+                .Select(p => porDiaIndexado.TryGetValue(p.Fecha, out var punto) ? punto : p)
+                .ToList();
+
+            return resultado;
+        }
+
+        private static async Task<List<CosteGrupo>> AgruparCostesAsync(
+            IQueryable<DocumentoEjecucionEntity> todas,
+            IQueryable<DocumentoEjecucionEntity> conImporte,
+            System.Linq.Expressions.Expression<Func<DocumentoEjecucionEntity, string>> clave)
+        {
+            var totales = await todas
+                .GroupBy(clave)
+                .Select(g => new { Grupo = g.Key, Total = g.Count() })
+                .ToListAsync();
+
+            var importes = await conImporte
+                .GroupBy(clave)
+                .Select(g => new
+                {
+                    Grupo = g.Key,
+                    ConImporte = g.Count(),
+                    Coste = g.Sum(e => e.CosteIAEur) ?? 0m,
+                    Layout = g.Sum(e => e.CosteLayoutEur) ?? 0m,
+                    Clasif = g.Sum(e => e.CosteClasificacionEur) ?? 0m,
+                    Extrac = g.Sum(e => e.CosteExtraccionEur) ?? 0m,
+                    Prompt = g.Sum(e => e.CostePromptEur) ?? 0m
+                })
+                .ToDictionaryAsync(x => x.Grupo);
+
+            return totales
+                .Select(t =>
+                {
+                    importes.TryGetValue(t.Grupo, out var i);
+                    var conImp = i?.ConImporte ?? 0;
+                    return new CosteGrupo
+                    {
+                        Grupo = t.Grupo,
+                        Total = t.Total,
+                        ConImporte = conImp,
+                        CosteEur = i?.Coste ?? 0m,
+                        CosteMedioEur = conImp > 0
+                            ? Math.Round((i?.Coste ?? 0m) / conImp, 6, MidpointRounding.AwayFromZero)
+                            : 0m,
+                        LayoutEur = i?.Layout ?? 0m,
+                        ClasificacionEur = i?.Clasif ?? 0m,
+                        ExtraccionEur = i?.Extrac ?? 0m,
+                        PromptEur = i?.Prompt ?? 0m
+                    };
+                })
+                .OrderByDescending(g => g.CosteEur)
+                .ThenByDescending(g => g.Total)
+                .ToList();
+        }
+
+        /// <summary>Un punto a cero por cada dia del rango: los huecos deben verse como huecos.</summary>
+        private static List<CosteSeriePunto> SerieVacia(EjecucionFiltro filtro)
+        {
+            var serie = new List<CosteSeriePunto>();
+            var ultimoDia = filtro.Hasta.AddTicks(-1).Date;
+            for (var dia = filtro.Desde.Date; dia <= ultimoDia; dia = dia.AddDays(1))
+            {
+                serie.Add(new CosteSeriePunto { Fecha = dia });
+            }
+
+            return serie;
         }
     }
 }

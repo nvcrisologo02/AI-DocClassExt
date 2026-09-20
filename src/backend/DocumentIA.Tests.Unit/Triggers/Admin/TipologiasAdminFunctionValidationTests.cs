@@ -23,7 +23,7 @@ public class TipologiasAdminFunctionValidationTests
         {
             TipologiaId = "nota.simple",
             Version = "1.4",
-            SkipGDCUpload = true,
+            Gdc = new GdcConfig { SkipUpload = true },
             Extraction = new TipologiaExtractionConfig { Enabled = false },
             ConfidenceConfig = new ConfidenceConfig
             {
@@ -44,7 +44,7 @@ public class TipologiasAdminFunctionValidationTests
         {
             TipologiaId = "nota_simple",
             Version = "1.4",
-            SkipGDCUpload = true,
+            Gdc = new GdcConfig { SkipUpload = true },
             Extraction = new TipologiaExtractionConfig
             {
                 Enabled = true,
@@ -74,10 +74,8 @@ public class TipologiasAdminFunctionValidationTests
         {
             TipologiaId = "nota.simple",
             Version = "1.4",
-            SkipGDCUpload = false,
+            Gdc = new GdcConfig { SkipUpload = false, TipoDocumento = string.Empty, Serie = string.Empty },
             Extraction = new TipologiaExtractionConfig { Enabled = false },
-            GdcTipoDocumento = string.Empty,
-            GdcSerie = string.Empty
         };
 
         var result = method.Invoke(null, new object?[] { config }) as string;
@@ -98,7 +96,7 @@ public class TipologiasAdminFunctionValidationTests
             TipologiaId = "codigo-nuevo",
             TipologiaNombre = "Nombre",
             Version = "1.4",
-            SkipGDCUpload = true,
+            Gdc = new GdcConfig { SkipUpload = true },
             Extraction = new TipologiaExtractionConfig { Enabled = false }
         };
         var existing = new TipologiaEntity
@@ -140,7 +138,7 @@ public class TipologiasAdminFunctionValidationTests
             TipologiaId = "nota_simple",
             TipologiaNombre = "Nota simple",
             Version = version,
-            SkipGDCUpload = true,
+            Gdc = new GdcConfig { SkipUpload = true },
             Extraction = new TipologiaExtractionConfig
             {
                 Enabled = true,

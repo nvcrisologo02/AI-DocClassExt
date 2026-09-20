@@ -30,6 +30,21 @@ public class EjecucionResumenDto
     public string? NombreDocumento { get; set; }
     public string? SubmittedBy { get; set; }
     public List<ActividadResumenDto> Actividades { get; set; } = [];
+
+    /// <summary>Coste de IA; nulo si no se registro (AB#100238).</summary>
+    public decimal? CosteIAEur { get; set; }
+
+    /// <summary>True si el coste procede del relleno retroactivo.</summary>
+    public bool CosteEstimado { get; set; }
+
+    /// <summary>
+    /// True si la peticion se sirvio reutilizando otra ejecucion: no se reproceso el
+    /// documento y las confianzas mostradas son las del original (AB#100258).
+    /// </summary>
+    public bool ReutilizadaPorDuplicado { get; set; }
+
+    /// <summary>Id de la ejecucion cuyo contrato se devolvio.</summary>
+    public int? EjecucionOriginalId { get; set; }
 }
 
 public class ActividadResumenDto
@@ -169,6 +184,116 @@ public class EjecucionDetalleDto
     public List<CampoExtraidoDto> DatosExtraidos { get; set; } = [];
     public List<ValidacionItemDto> Validaciones { get; set; } = [];
     public List<PluginItemDto> Plugins { get; set; } = [];
+
+    /// <summary>Bloque de costes del contrato; nulo en ejecuciones sin el (AB#100239).</summary>
+    public CostesDetalleDto? Costes { get; set; }
+    public bool CosteEstimado { get; set; }
+
+    /// <summary>True si esta fila registra una peticion servida por reutilizacion (AB#100258).</summary>
+    public bool ReutilizadaPorDuplicado { get; set; }
+
+    /// <summary>Hacia la ejecucion que produjo el contenido; nulo si esta no es una reutilizacion.</summary>
+    public ReutilizacionDetalleDto? Reutilizacion { get; set; }
+
+    /// <summary>Desde la ejecucion original: las veces que se sirvio su contrato.</summary>
+    public List<ReutilizacionUsoDto> Reutilizaciones { get; set; } = [];
+}
+
+/// <summary>
+/// Enlace de una reutilizacion con la ejecucion cuyo contrato devolvio, mas lo unico
+/// que es suyo: la fila no tiene contrato, asi que el resto del detalle viene vacio.
+/// </summary>
+public class ReutilizacionDetalleDto
+{
+    public bool EsReutilizacion { get; set; }
+    public int? OriginalId { get; set; }
+    public string? OriginalGuid { get; set; }
+    public DateTime? OriginalFecha { get; set; }
+
+    public DateTime FechaEjecucion { get; set; }
+    public string? InstanceId { get; set; }
+    public string? OperationId { get; set; }
+    public int DuracionTotalMs { get; set; }
+    public string? SubmittedBy { get; set; }
+    public string? NombreDocumento { get; set; }
+}
+
+/// <summary>Una de las veces que se sirvio el contrato de una ejecucion.</summary>
+public class ReutilizacionUsoDto
+{
+    public string EjecucionGuid { get; set; } = string.Empty;
+    public DateTime FechaEjecucion { get; set; }
+    public string? SubmittedBy { get; set; }
+}
+
+public class CostesDetalleDto
+{
+    public decimal CosteTotalEur { get; set; }
+    public int TokensTotales { get; set; }
+    public int PaginasTotales { get; set; }
+    public bool TarifasCompletas { get; set; } = true;
+    public List<string> ModelosSinTarifa { get; set; } = [];
+    public bool ReutilizadaPorDuplicado { get; set; }
+    public decimal? CosteEjecucionOriginalEur { get; set; }
+    public List<ConsumoIADto> Consumos { get; set; } = [];
+}
+
+public class ConsumoIADto
+{
+    public string Actividad { get; set; } = string.Empty;
+    public string Operacion { get; set; } = string.Empty;
+    public string Proveedor { get; set; } = string.Empty;
+    public string Modelo { get; set; } = string.Empty;
+    public int? TokensEntrada { get; set; }
+    public int? TokensEntradaCache { get; set; }
+    public int? TokensSalida { get; set; }
+    public int? TokensContextualizacion { get; set; }
+    public int? Paginas { get; set; }
+    public decimal? CosteEur { get; set; }
+    public string? TarifaAplicada { get; set; }
+    public bool Descartado { get; set; }
+}
+
+/// <summary>Agregados de coste del periodo (AB#100237). Espejo de EjecucionCostesResult.</summary>
+public class CostesResumenDto
+{
+    public int TotalEjecuciones { get; set; }
+    public int PeriodoDias { get; set; }
+    public int ConCosteReal { get; set; }
+    public int ConCosteEstimado { get; set; }
+    public int SinCoste { get; set; }
+    public bool IncluyeEstimados { get; set; }
+    public int EjecucionesConImporte { get; set; }
+    public decimal CosteTotalEur { get; set; }
+    public decimal CosteMedioEur { get; set; }
+    public long TokensTotales { get; set; }
+    public decimal LayoutEur { get; set; }
+    public decimal ClasificacionEur { get; set; }
+    public decimal ExtraccionEur { get; set; }
+    public decimal PromptEur { get; set; }
+    public List<CosteGrupoDto> PorTipologia { get; set; } = [];
+    public List<CosteGrupoDto> PorModelo { get; set; } = [];
+    public List<CosteSeriePuntoDto> Serie { get; set; } = [];
+}
+
+public class CosteGrupoDto
+{
+    public string Grupo { get; set; } = string.Empty;
+    public int Total { get; set; }
+    public int ConImporte { get; set; }
+    public decimal CosteEur { get; set; }
+    public decimal CosteMedioEur { get; set; }
+    public decimal LayoutEur { get; set; }
+    public decimal ClasificacionEur { get; set; }
+    public decimal ExtraccionEur { get; set; }
+    public decimal PromptEur { get; set; }
+}
+
+public class CosteSeriePuntoDto
+{
+    public DateTime Fecha { get; set; }
+    public int Total { get; set; }
+    public decimal CosteEur { get; set; }
 }
 
 // ─── DTOs de agregados (cuadro de mando) ─────────────────────────────────────
@@ -221,6 +346,11 @@ public class DashboardAgregadosDto
     public List<AgregadoGrupoDto> PorEstadoProceso { get; set; } = [];
     public List<MatrizCeldaDto> Matriz { get; set; } = [];
     public List<HistogramaBinDto> Histograma { get; set; } = [];
+
+    // Reutilizaciones por duplicado (AB#100258). Van aparte de TotalEjecuciones: no
+    // son ejecuciones de IA, asi que ni cuentan ni pagan.
+    public int Reutilizadas { get; set; }
+    public decimal CosteEvitadoEur { get; set; }
 }
 
 public class SeriePuntoDto
@@ -255,6 +385,22 @@ public class MonitorFiltroDto
     // un extremo en el año 2000 producia miles de puntos inutiles por consulta.
     public const int RangoDiasHistorico = 3650;
 
+    // Rango fijo (AB#100284): dos dias de calendario en hora peninsular, ambos
+    // inclusive. Solo manda cuando estan los dos; con uno solo la ventana relativa
+    // sigue vigente para que el usuario no vea la pagina vaciarse a medio rellenar.
+    // Es la excepcion deliberada a la nota de arriba: un periodo cerrado (un mes
+    // natural, por ejemplo) no debe moverse con el reloj.
+    public DateOnly? Desde { get; set; }
+    public DateOnly? Hasta { get; set; }
+
+    public bool EsRangoFijo => Desde is not null && Hasta is not null;
+
+    // El input nativo de fecha no impide teclear un año de cuatro nueves. Fuera de
+    // este tramo no hay datos que consultar y sumar un dia al maximo de DateOnly
+    // lanza una excepcion que las paginas no capturan.
+    public static readonly DateOnly FechaMinima = new(2000, 1, 1);
+    public static readonly DateOnly FechaMaxima = new(2100, 12, 31);
+
     public string? Tipologia { get; set; }
     public string? Estado { get; set; }
     public string? Flujo { get; set; }
@@ -269,10 +415,19 @@ public class MonitorFiltroDto
     public double? ConfianzaMin { get; set; }
     public double? ConfianzaMax { get; set; }
 
+    /// <summary>Solo lo lee la seccion de costes: suma tambien lo estimado por el relleno.</summary>
+    public bool IncluirEstimados { get; set; }
+
+    /// <summary>
+    /// Que hacer con las peticiones servidas por reutilizacion: null o vacio las excluye
+    /// (lo que ha visto siempre el Monitor), "incluir" las mezcla y "solo" deja unicamente
+    /// esas (AB#100258).
+    /// </summary>
+    public string? Reutilizadas { get; set; }
+
     public string ToQueryString()
     {
-        var hasta = DateTime.UtcNow;
-        var desde = hasta.AddDays(-RangoDias);
+        var (desde, hasta) = VentanaUtc();
         var partes = new List<string>
         {
             $"desde={Uri.EscapeDataString(desde.ToString("o"))}",
@@ -289,8 +444,30 @@ public class MonitorFiltroDto
         // coma y el backend leeria el numero mal.
         if (ConfianzaMin is { } min) partes.Add($"confmin={min.ToString(CultureInfo.InvariantCulture)}");
         if (ConfianzaMax is { } max) partes.Add($"confmax={max.ToString(CultureInfo.InvariantCulture)}");
+        if (IncluirEstimados) partes.Add("incluirestimados=true");
+        if (!string.IsNullOrWhiteSpace(Reutilizadas)) partes.Add($"reutilizadas={Uri.EscapeDataString(Reutilizadas)}");
         return string.Join("&", partes);
     }
+
+    // El backend filtra con ">= desde" y "< hasta": el extremo superior de un rango
+    // fijo es la medianoche del dia siguiente al ultimo pedido, para que ese dia
+    // entre completo. Extremos invertidos se intercambian en vez de fallar.
+    private (DateTime Desde, DateTime Hasta) VentanaUtc()
+    {
+        if (Desde is { } d1 && Hasta is { } d2)
+        {
+            var (primero, ultimo) = d1 <= d2 ? (d1, d2) : (d2, d1);
+            primero = Acotar(primero);
+            ultimo = Acotar(ultimo);
+            return (HoraEspana.InicioDelDiaUtc(primero), HoraEspana.InicioDelDiaUtc(ultimo.AddDays(1)));
+        }
+
+        var ahora = DateTime.UtcNow;
+        return (ahora.AddDays(-RangoDias), ahora);
+    }
+
+    private static DateOnly Acotar(DateOnly dia) =>
+        dia < FechaMinima ? FechaMinima : dia > FechaMaxima ? FechaMaxima : dia;
 
     public MonitorFiltroDto Clonar() => (MonitorFiltroDto)MemberwiseClone();
 }
@@ -425,6 +602,29 @@ public class MonitorService
         {
             return await _httpClient.GetFromJsonAsync<DashboardAgregadosDto>(
                 $"management/ejecuciones/agregados?{filtro.ToQueryString()}", JsonOptions);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (OperationCanceledException)
+        {
+            return null;
+        }
+    }
+
+    // Mismo criterio que los agregados: alimenta la cabecera y el desglose de la
+    // seccion de costes, no el listado, asi que un fallo no impide ver la tabla.
+    public async Task<CostesResumenDto?> GetCostesAsync(MonitorFiltroDto filtro)
+    {
+        try
+        {
+            return await _httpClient.GetFromJsonAsync<CostesResumenDto>(
+                $"management/ejecuciones/costes?{filtro.ToQueryString()}", JsonOptions);
         }
         catch (HttpRequestException)
         {

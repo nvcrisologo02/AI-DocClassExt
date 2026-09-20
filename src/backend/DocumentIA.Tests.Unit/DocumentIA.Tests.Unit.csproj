@@ -8,10 +8,23 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Copia del catalogo que inserta scripts/migrations/costes-ia/01-seed-tarifas-ia.sql,
+         para verificar que ese JSON es valido: el cargador es tolerante y un error de
+         sintaxis dejaria el catalogo vacio en silencio (AB#100234). -->
+    <None Include="catalogo-tarifas-produccion.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.2" />
     <PackageReference Include="FluentAssertions" Version="6.12.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="Moq" Version="4.20.70" />
+    <!-- Solo para DocumentoRepositoryMarkdownTests: ExecuteUpdateAsync no funciona con el
+         proveedor InMemory que usa el resto de tests de repositorio (AB#100250). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="8.0.1" />
+    <!-- Referencia directa para adelantar el nativo de SQLite que arrastra EF Sqlite 8.0.1 (2.1.6,
+         GHSA-2m69-gcr7-jv3q). Solo la usan los tests de repositorio sobre SQLite en memoria. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.5" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
   </ItemGroup>

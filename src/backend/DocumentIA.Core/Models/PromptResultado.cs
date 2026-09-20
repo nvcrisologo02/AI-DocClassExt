@@ -31,4 +31,11 @@ public class PromptResultado
     /// es decir, una única llamada LLM que produjo tanto los campos extraídos como este resultado.
     /// </summary>
     public bool CombinedWithFallback { get; set; }
+
+    /// <summary>
+    /// Consumo de servicios de IA de esta llamada. El proveedor lo rellena y el
+    /// orquestador lo acumula en DetalleEjecucion.Costes. Vacia cuando el paso no
+    /// consumio IA.
+    /// </summary>
+    public List<ConsumoIA> Consumos { get; set; } = new();
 }

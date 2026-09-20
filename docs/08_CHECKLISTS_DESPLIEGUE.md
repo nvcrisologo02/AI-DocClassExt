@@ -164,7 +164,7 @@ Settings clave a confirmar (ver detalle completo en `docs/auxiliares/migracion-d
 |---|-------|---------|-----|
 | 8.1 | Si `RunDatabaseMigrationsOnStartup=true`: verificar que el primer arranque aplica migraciones automaticamente | Logs de Function App en AppInsights o Kudu | ☐ |
 | 8.2 | Si se aplican de forma manual (recomendado en prod): generar script SQL idempotente | `dotnet ef migrations script --idempotent -p src/backend/DocumentIA.Data -s src/backend/DocumentIA.Functions -o migrations.sql` | ☐ |
-| 8.3 | Aplicar `migrations.sql` contra Azure SQL via sqlcmd o Azure Portal Query Editor | `sqlcmd -S srbsqlprodocai.database.windows.net -d DocumentIA -i migrations.sql` | ☐ |
+| 8.3 | Aplicar migrations con el pipeline **Migrations-BD** (`azure-pipelines-migrations.yml`), parámetro `targetEnvironment=prod`; revisar el artefacto `MigrationsScript` y aprobar el stage `Apply` | Run del pipeline en ADO | ☐ |
 | 8.4 | Una vez aplicadas las migraciones, cambiar `RunDatabaseMigrationsOnStartup=false` | `az functionapp config appsettings set --settings RunDatabaseMigrationsOnStartup=false ...` | ☐ |
 | 8.5 | Verificar conectividad y tablas creadas | `sqlcmd ... -Q "SELECT name FROM sys.tables"` o `.\scripts\database\Query-Tipologias.ps1` | ☐ |
 
@@ -200,6 +200,8 @@ dotnet ef database update `
     -o .\artifacts\db-config\schema-migrations.sql
   sqlcmd -S srbsqldevdocai.database.windows.net -d DocumentIA -G -C -i .\artifacts\db-config\schema-migrations.sql
   ```
+
+  > Vía estándar: pipeline **Migrations-BD**. El comando sqlcmd anterior queda solo como contingencia manual documentada.
 
 #### Paso 2 — Cargar/replicar los datos de configuración entre entornos
 
@@ -308,12 +310,14 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 |---|-------|---------|-----|
 | B5.1 | Generar script idempotente | `dotnet ef migrations script --idempotent -p src/backend/DocumentIA.Data -s src/backend/DocumentIA.Functions -o migrations.sql` | ☐ |
 | B5.2 | Revisar `migrations.sql` antes de aplicar | Especialmente: columnas ADD, tablas CREATE, indices | ☐ |
-| B5.3 | Aplicar en Azure SQL (o Docker si es local) | `sqlcmd -S srbsqlprodocai.database.windows.net -d DocumentIA -i migrations.sql` | ☐ |
+| B5.3 | Aplicar en Azure SQL con el pipeline **Migrations-BD** (`targetEnvironment` según entorno); en local usar `dotnet ef database update` | Run del pipeline en ADO / CLI local | ☐ |
 | B5.4 | Verificar tablas y columnas nuevas | `sqlcmd ... -Q "SELECT name FROM sys.tables"` o `.\scripts\database\Query-Tipologias.ps1` | ☐ |
 
 > Para **entorno limpio** (BD vacía) o para **promocionar datos de configuración** entre entornos (dev→pre→prod), ver el procedimiento completo paso a paso en **BLOQUE 7b** (migraciones de esquema + carga de datos con `replicate-config-data.ps1`).
 
 > ⚠️ **Pendiente en PRO (2026-08-05):** la migración `20260805100351_AgregarSubmittedByEjecucion` (columna `SubmittedBy` en `DocumentoEjecuciones`) está aplicada en **dev** pero **no en PRO**. Aplicarla con este procedimiento en el próximo despliegue, **antes** de desplegar las Functions que la usan.
+
+> ⚠️ **Costes de IA (2026-09-07):** la funcionalidad necesita **dos migraciones** (`20260907075128_AddCostesIAToEjecuciones` y `20260907103326_AddCostesPorActividadYEstimado`, siete columnas anulables en `DocumentoEjecuciones`) **más el catálogo de tarifas**, que no viaja en las migraciones: es una fila de `ModeloConfigs` que se carga con `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql`. Sin el catálogo el sistema no falla, pero toda ejecución sale con coste nulo y `tarifasCompletas=false`. Aplicar el catálogo **después** de las migraciones y **antes** de dar por buena la verificación. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md).
 
 > ⚠️ **Orden de despliegue Functions → Admin (2026-08-05):** los endpoints `/management/ejecuciones*` cambiaron de contrato (listado paginado `{items,total,page,pageSize}`, detalle por `{guid}/detalle`, agregados con filtro). El Admin actual depende de ellos: desplegar **primero la Function App y después el Admin**; en orden inverso, el Monitor quedará roto durante la ventana de despliegue.
 
@@ -327,6 +331,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | B6.2 | Revisar Application Insights durante 5-10 min post-deploy | Failures, exceptions, duraciones normales | ☐ |
 | B6.3 | Verificar estado de secretos y referencias KV | `verify-prod-prereqs.ps1` sin errores y settings `Resolved` | ☐ |
 | B6.4 | Verificar estado de recursos criticos Azure | Function App, Storage, SQL y DI en estado saludable | ☐ |
+| B6.5 | Costes de IA: el bloque llega con importes al pedirlo y no aparece si no se pide | `pwsh .\scripts\testing\test-costes-ia.ps1 -Environment <env>` | ☐ |
 
 ---
 
@@ -341,6 +346,9 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | `scripts\configuration\set-app-settings.ps1` | Aplicar todos los App Settings no-secretos | Primer deploy o cambio de configuracion no-secreta |
 | `scripts\deployment\deploy-manual.ps1` | Build + zip + deploy via Kudu | Deploy manual sin pipeline |
 | `scripts\testing\smoke-test-functions.ps1 -HostName <host>` | Verificar endpoint `/api/tipologias` (requiere PowerShell 7 / `pwsh`) | Post cada deploy |
+| `scripts\testing\test-costes-ia.ps1 -Environment <env>` | Verificar el coste de IA por ejecucion: calculo, tarifas completas, desglose que cuadra y visibilidad condicionada a `incluirCostes` | Tras desplegar o tras tocar el catalogo de tarifas |
+| `scripts\migrations\costes-ia\01-seed-tarifas-ia.sql` | Cargar o actualizar el catalogo de tarifas de IA (fila `tarifas.ia` de `ModeloConfigs`) | Tras las migraciones de costes y al cambiar precios |
+| `scripts\database\backfill-costes-estimados.ps1` | Estimar el coste de ejecuciones anteriores a la medicion, marcandolas como estimadas | Una vez por entorno, tras cargar el catalogo |
 | `tests/e2e-postdeploy/run-e2e-postdeploy.ps1` | Smoke E2E funcional post-deploy (perfiles smoke/full, cobertura funcional) | Manual, tras 9.2 |
 | `scripts\database\Query-Tipologias.ps1` / `sqlcmd` | Verificar conectividad BD y estado tablas | Post migraciones |
 | `scripts\database\replicate-config-data.ps1` | Replicar datos de **configuracion** (modelos/providers, tipologias, catalogos TDN1/TDN2, plugins, prompts) entre entornos. Modos `Export`/`Apply`/`Copy`, idempotente (MERGE+IDENTITY_INSERT) | Al promocionar configuracion dev→pre→prod |

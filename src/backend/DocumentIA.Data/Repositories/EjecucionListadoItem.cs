@@ -29,5 +29,20 @@ namespace DocumentIA.Data.Repositories
         public string? NombreDocumento { get; set; }
         public string? SubmittedBy { get; set; }
         public string? ActivityTimelineJson { get; set; }
+
+        /// <summary>Coste de IA de la ejecucion; nulo si no se registro (AB#100238).</summary>
+        public decimal? CosteIAEur { get; set; }
+
+        /// <summary>True si el coste procede del relleno retroactivo.</summary>
+        public bool CosteEstimado { get; set; }
+
+        /// <summary>
+        /// True si la fila registra una peticion servida reutilizando otra ejecucion:
+        /// no se reproceso el documento y no tiene contrato ni coste propios (AB#100258).
+        /// </summary>
+        public bool ReutilizadaPorDuplicado { get; set; }
+
+        /// <summary>Id de la ejecucion cuyo contrato se devolvio; null si no es una reutilizacion.</summary>
+        public int? EjecucionOriginalId { get; set; }
     }
 }

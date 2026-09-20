@@ -6,7 +6,7 @@ Using: **Entity Framework Core 8** with SQL Server
 
 Migrations are stored in: `src/backend/DocumentIA.Data/Migrations/`
 
-Current schema version: 27 migrations total; latest `20260805100351_AgregarSubmittedByEjecucion` (applied in dev, **pending in PRO**)
+Current schema version: ver `__EFMigrationsHistory` por entorno; el pipeline **Migrations-BD** publica en cada run la última migration del repo y la aplicada.
 
 ---
 
@@ -59,6 +59,8 @@ public partial class AddNewColumn_YourFeature : Migration
 3. **Add indexes for frequently queried columns**
 4. **Use NOT NULL only if you have default value for existing rows**
 5. **Test locally before committing**
+
+> **Aplicación en entornos Azure:** las migrations NO se aplican desde local ni desde los pipelines de aplicación. Usar el pipeline dedicado **Migrations-BD** (`azure-pipelines-migrations.yml`). Prerequisito one-time por entorno: `scripts/database/grant-pipeline-sql-user.sql` (alta del SPN del service connection en la BD).
 
 ---
 
@@ -125,13 +127,11 @@ dotnet ef database update <new-migration-name>  # Apply again
    New-AzSqlDatabaseBackup -Database $db -BackupName "pre-migration-backup-$(Get-Date -Format 'yyyyMMdd-HHmm')"
    ```
 
-2. **Deploy Application with Migration:**
-   ```powershell
-   # Push code to staging branch
-   git push origin develop
-   # Trigger pipeline: azure-pipelines-functions.yml stage=staging
-   # Pipeline auto-runs: dotnet ef database update
-   ```
+2. **Aplicar migrations con el pipeline dedicado:**
+   - Pipeline: **Migrations-BD** (`azure-pipelines-migrations.yml`), run manual.
+   - Parámetro `targetEnvironment`: `dev` o `pre`.
+   - El stage `Generate` publica `migrations.sql` (idempotente) como artefacto `MigrationsScript`; revisarlo antes de aprobar el stage `Apply` si el environment tiene aprobación configurada.
+   - El stage `Apply` hace pre-check de `__EFMigrationsHistory`, aplica el script con el token Entra del service connection y verifica que la última migration de BD coincide con la del repo.
 
 3. **Verify Migration Applied:**
    ```sql
@@ -225,9 +225,10 @@ ON dbo.Documentos(NewColumn) WITH (ONLINE=ON)
 $db = Get-AzSqlDatabase -ResourceGroupName "RG-Prod" -ServerName "doc-ia-sql" -DatabaseName "DocumentIA"
 New-AzSqlDatabaseBackup -Database $db -BackupName "pre-migration-backup-$(Get-Date -Format 'yyyyMMddHHmm')"
 
-# 2. Deploy new code to production
-# Trigger: azure-pipelines-functions.yml stage=production
-# Note: Set APPLY_MIGRATIONS=true environment variable
+# 2. Aplicar migrations en PRO con el pipeline dedicado
+#    Pipeline: Migrations-BD (azure-pipelines-migrations.yml)
+#    Parámetro targetEnvironment=prod (el stage Apply pasa por la aprobación del environment "prod")
+#    Artefacto MigrationsScript = SQL exacto aplicado (auditable en el run)
 
 # 3. Monitor migration progress
 # (Check SQL Server logs, migration can take minutes)

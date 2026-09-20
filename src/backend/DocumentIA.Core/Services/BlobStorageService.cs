@@ -169,7 +169,7 @@ public class BlobStorageService : IBlobStorageService
         var extension = Path.GetExtension(fileName);
         var year = DateTime.UtcNow.Year;
         var month = DateTime.UtcNow.Month.ToString("D2");
-        
+
         return $"{year}/{month}/{sha256}{extension}";
     }
 

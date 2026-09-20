@@ -123,10 +123,10 @@ public class TipologiaVersionResolverTests
         result.Should().Equal("1.0", "1.4");
     }
 
-        [Fact]
-        public void Resolve_WithPromptOnlyTypology_SetsPromptAndExtractionFlags()
-        {
-                var content = """
+    [Fact]
+    public void Resolve_WithPromptOnlyTypology_SetsPromptAndExtractionFlags()
+    {
+        var content = """
                 {
                     "tipologiaId": "resumen-documental",
                     "tipologiaNombre": "Resumen Documental",
@@ -150,15 +150,15 @@ public class TipologiaVersionResolverTests
                 }
                 """;
 
-                AddEntity("resumen.documental", content);
+        AddEntity("resumen.documental", content);
 
-                var sut = CreateSut();
+        var sut = CreateSut();
 
-                var result = sut.Resolve("resumen-documental");
+        var result = sut.Resolve("resumen-documental");
 
-                result.PromptEnabled.Should().BeTrue();
-                result.ExtractionEnabled.Should().BeFalse();
-        }
+        result.PromptEnabled.Should().BeTrue();
+        result.ExtractionEnabled.Should().BeFalse();
+    }
 
     private TipologiaVersionResolver CreateSut()
     {

@@ -63,4 +63,33 @@ public class MonitorPaginaTests : TestContext
 
         render.Should().NotThrow();
     }
+
+    // AB#100284: un periodo cerrado no cambia con el reloj, asi que refrescarlo cada
+    // 30 s solo gasta consultas. El usuario debe ver por que el selector no actua.
+    [Fact]
+    public async Task ConRangoFijo_AvisaDeQueElAutoRefrescoEstaPausado()
+    {
+        RegistrarBackend(_ => StubHttpMessageHandler.Json("[]"));
+        var cut = RenderComponent<MonitorPagina>();
+        var filtros = cut.FindComponent<DocumentIA.Admin.Components.Monitor.MonitorFiltros>();
+
+        await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(
+            new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }));
+
+        cut.Markup.Should().Contain("Auto-refresco pausado");
+    }
+
+    [Fact]
+    public async Task AlVolverAUnRangoRelativo_RetiraElAvisoDePausa()
+    {
+        RegistrarBackend(_ => StubHttpMessageHandler.Json("[]"));
+        var cut = RenderComponent<MonitorPagina>();
+        var filtros = cut.FindComponent<DocumentIA.Admin.Components.Monitor.MonitorFiltros>();
+        await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(
+            new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }));
+
+        await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(new MonitorFiltroDto { RangoDias = 7 }));
+
+        cut.Markup.Should().NotContain("Auto-refresco pausado");
+    }
 }

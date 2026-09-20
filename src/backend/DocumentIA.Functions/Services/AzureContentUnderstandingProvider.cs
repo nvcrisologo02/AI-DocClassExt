@@ -79,7 +79,8 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
         }
         else
         {
-            documentBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64);
+            documentBytes = Convert.FromBase64String(input.Entrada.Documento.Content.Base64
+                ?? throw new InvalidOperationException("El documento no trae BlobPath ni Content.Base64."));
         }
         var binaryData = BinaryData.FromBytes(documentBytes);
         var contentType = ResolveContentType(model, fileName, binaryData);
@@ -111,7 +112,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                     {
                         CancellationToken = linkedCts.Token
                     };
-                    #pragma warning disable CS8625
+#pragma warning disable CS8625
                     operation = contentRange is { } range
                         ? await client.AnalyzeBinaryAsync(
                             WaitUntil.Completed,
@@ -133,7 +134,7 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
                             contentRange: null,
                             clientRequestId: null,
                             context: requestContext);
-                            #pragma warning restore CS8625
+#pragma warning restore CS8625
                     analysisStopwatch.Stop();
                     analysisElapsedMs += analysisStopwatch.ElapsedMilliseconds;
                     break;
@@ -328,6 +329,10 @@ public class AzureContentUnderstandingProvider : IExtraerDataProvider
             MarkdownExtraido = markdownExtraido,
             ConfianzaExtraccion = confianzaExtraccion,
             ProveedorExtrac = "AzureContentUnderstanding",
+            // El bloque usage trae paginas, contextualizacion y los tokens del modelo
+            // generativo que el servicio consume de su deployment de Foundry: cada
+            // parte se tarifica a su precio (AB#100228).
+            Consumos = UsoContentUnderstandingMapper.Mapear(analysisDocument.RootElement, model.AnalyzerId),
             MetricasDebug = metricasDebug,
             TiemposMs = new Dictionary<string, int>
             {

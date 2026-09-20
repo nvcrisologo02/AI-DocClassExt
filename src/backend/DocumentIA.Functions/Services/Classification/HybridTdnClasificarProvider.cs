@@ -4,6 +4,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Abstractions;
 using DocumentIA.Functions.Services;
 using Microsoft.ApplicationInsights;
@@ -23,7 +24,7 @@ namespace DocumentIA.Functions.Services.Classification
     {
         private readonly ILogger<HybridTdnClasificarProvider> _logger;
         private readonly IClasificarDataProvider _diProvider;
-        private readonly ILayoutMarkdownProvider _layoutMarkdownProvider;
+        private readonly IMarkdownResolver _markdownResolver;
         private readonly DocumentWindowExtractor _windowExtractor;
         private readonly RuleBasedTdnClassifier _ruleClassifier;
         private readonly FoundryTdnRescueClassifier _rescueClassifier;
@@ -33,7 +34,7 @@ namespace DocumentIA.Functions.Services.Classification
         public HybridTdnClasificarProvider(
             ILogger<HybridTdnClasificarProvider> logger,
             IClasificarDataProvider diProvider,
-            ILayoutMarkdownProvider layoutMarkdownProvider,
+            IMarkdownResolver markdownResolver,
             DocumentWindowExtractor windowExtractor,
             RuleBasedTdnClassifier ruleClassifier,
             FoundryTdnRescueClassifier rescueClassifier,
@@ -42,7 +43,7 @@ namespace DocumentIA.Functions.Services.Classification
         {
             _logger = logger;
             _diProvider = diProvider;
-            _layoutMarkdownProvider = layoutMarkdownProvider;
+            _markdownResolver = markdownResolver;
             _windowExtractor = windowExtractor;
             _ruleClassifier = ruleClassifier;
             _rescueClassifier = rescueClassifier;
@@ -64,7 +65,7 @@ namespace DocumentIA.Functions.Services.Classification
 
             try
             {
-                _logger.LogInformation("Iniciando clasificación HybridTDN para {Documento}", 
+                _logger.LogInformation("Iniciando clasificación HybridTDN para {Documento}",
                     input.Entrada.Documento.Name);
 
                 _logger.LogInformation(
@@ -75,7 +76,7 @@ namespace DocumentIA.Functions.Services.Classification
                     _options.PagesToInspect,
                     _options.MaxCharactersPerWindow);
 
-                await EnsureMarkdownContextAsync(input, cancellationToken);
+                await EnsureMarkdownContextAsync(input, result.Consumos, cancellationToken);
 
                 // Paso 1: Extraer ventana de contexto
                 var window = _windowExtractor.ExtractWindow(
@@ -124,6 +125,9 @@ namespace DocumentIA.Functions.Services.Classification
 
                 // Paso 3: DI con umbral de confianza
                 var diResult = await _diProvider.ClasificarAsync(input, cancellationToken);
+                // El clasificador DI factura sus paginas tanto si su resultado se
+                // acepta como si se descarta en favor del rescate (AB#100227).
+                ConsumosIA.Fusionar(result.Consumos, diResult.Consumos);
                 _logger.LogInformation(
                     "Resultado DI: tipologia={Tipologia}, confianza={Confianza}",
                     diResult.TipologiaDetectada, diResult.Confianza);
@@ -134,7 +138,7 @@ namespace DocumentIA.Functions.Services.Classification
                     StringComparison.OrdinalIgnoreCase);
 
                 // Revisar si DI superó umbral y no es RESTO
-                if (diResult.Confianza >= _options.DiConfidenceThreshold && 
+                if (diResult.Confianza >= _options.DiConfidenceThreshold &&
                     !isDiResto)
                 {
                     result.TipologiaDetectada = diResult.TipologiaDetectada;
@@ -167,10 +171,16 @@ namespace DocumentIA.Functions.Services.Classification
                 result.DetalleProveedores.Add(new() { Proveedor = "DI", Tipologia = diResult.TipologiaDetectada, Confianza = diResult.Confianza, MotivoDescarte = diDescarte });
 
                 // Paso 4: Rescate con Foundry LLM
+                // El resultado de DI queda descartado en favor del rescate. El layout
+                // previo no: genera la ventana con la que el rescate trabaja.
+                MarcarConsumosDescartados(diResult.Consumos);
+
                 var rescueResult = await _rescueClassifier.ClassifyAsync(
                     window,
                     _options.RescueTimeoutMs,
                     _options.MaxRetries);
+
+                ConsumosIA.Fusionar(result.Consumos, rescueResult.Consumos);
 
                 result.TipologiaDetectada = rescueResult.TipologiaDetectada;
                 result.Confianza = rescueResult.Confianza;
@@ -234,62 +244,86 @@ namespace DocumentIA.Functions.Services.Classification
             }
         }
 
-        private async Task EnsureMarkdownContextAsync(ClasificacionInput input, CancellationToken cancellationToken)
+        /// <summary>
+        /// Marca el consumo ya acumulado como descartado: su resultado no es el que
+        /// se va a devolver, pero esas llamadas se han pagado igual.
+        /// </summary>
+        private static void MarcarConsumosDescartados(List<ConsumoIA> consumos)
+        {
+            foreach (var consumo in consumos)
+            {
+                consumo.Descartado = true;
+            }
+        }
+
+        private async Task EnsureMarkdownContextAsync(
+            ClasificacionInput input,
+            List<ConsumoIA> consumos,
+            CancellationToken cancellationToken)
         {
             if (HasUsefulTextContext(input.DatosNormalizados))
             {
                 return;
             }
 
-            var documentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
-                ? input.DocumentoBase64Override
-                : input.Entrada.Documento.Content.Base64;
-
-            if (string.IsNullOrWhiteSpace(documentoBase64))
+            // Salvavidas: con el orquestador resolviendo antes de ClasificarActivity, en la practica
+            // no se ejecuta. Si se ejecuta, pasa por la misma politica (cache > BD > Layout) y lo que
+            // obtiene se persiste con la regla de cobertura (AB#100253).
+            var documento = input.Entrada.Documento;
+            var contexto = new ContextoMarkdown
             {
-                _logger.LogWarning(
-                    "HybridTDN sin contexto textual y sin documento base64 disponible para extraer markdown previo en {Documento}",
-                    input.Entrada.Documento.Name);
-                return;
-            }
+                Sha256 = documento.PreComputedSHA256 ?? LeerCadena(input.DatosNormalizados, "SHA256"),
+                Md5 = documento.PreComputedMD5 ?? LeerCadena(input.DatosNormalizados, "MD5"),
+                BlobPath = documento.BlobPath,
+                DocumentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
+                    ? input.DocumentoBase64Override
+                    : documento.Content?.Base64,
+                NombreDocumento = documento.Name,
+                Tipologia = input.Entrada.Instrucciones.ExpectedType ?? string.Empty,
+                TotalPaginas = input.TotalPaginas,
+                ForceReprocess = input.Entrada.Instrucciones.ForceReprocess,
+                MarkdownCaller = input.Entrada.Instrucciones.Classification.Markdown
+            };
 
             _logger.LogInformation(
-                "HybridTDN sin contexto textual útil. Extrayendo markdown DI Layout previo para {Documento}",
-                input.Entrada.Documento.Name);
+                "HybridTDN sin contexto textual util. Pidiendo {Paginas} paginas al resolutor para {Documento}",
+                _options.PagesToInspect,
+                documento.Name);
 
-            try
-            {
-                var markdownResult = await _layoutMarkdownProvider.ExtraerMarkdownAsync(
-                    new ExtraerMarkdownLayoutInput
-                    {
-                        Tipologia = input.Entrada.Instrucciones.ExpectedType ?? string.Empty,
-                        DocumentoBase64 = documentoBase64,
-                        NombreDocumento = input.Entrada.Documento.Name
-                    },
-                    cancellationToken);
+            var resultado = await _markdownResolver.ResolverAsync(
+                NecesidadMarkdown.Paginas(_options.PagesToInspect), contexto, cancellationToken);
 
-                if (!string.IsNullOrWhiteSpace(markdownResult.Markdown))
-                {
-                    input.DatosNormalizados["Markdown"] = markdownResult.Markdown;
-                    _logger.LogInformation(
-                        "Markdown DI Layout inyectado para HybridTDN ({Length} chars) en {Documento}",
-                        markdownResult.Markdown.Length,
-                        input.Entrada.Documento.Name);
-                }
-                else
-                {
-                    _logger.LogWarning(
-                        "DI Layout no devolvió markdown útil para HybridTDN en {Documento}",
-                        input.Entrada.Documento.Name);
-                }
-            }
-            catch (Exception ex)
+            // El layout previo factura sus paginas aunque no aporte markdown util.
+            ConsumosIA.Fusionar(consumos, resultado.Consumos);
+
+            if (resultado.TieneContenido)
             {
-                _logger.LogWarning(
-                    ex,
-                    "No se pudo extraer markdown DI Layout previo para HybridTDN en {Documento}. Se continúa con el contexto disponible.",
-                    input.Entrada.Documento.Name);
+                input.DatosNormalizados["Markdown"] = resultado.Markdown!;
+                _logger.LogInformation(
+                    "Markdown inyectado para HybridTDN ({Length} chars, fuente={Fuente}) en {Documento}",
+                    resultado.Markdown!.Length,
+                    resultado.Fuente,
+                    documento.Name);
             }
+            else
+            {
+                _logger.LogWarning("El resolutor no devolvio markdown para HybridTDN en {Documento}", documento.Name);
+            }
+        }
+
+        private static string? LeerCadena(IDictionary<string, object> datos, string clave)
+        {
+            if (!datos.TryGetValue(clave, out var raw) || raw is null)
+            {
+                return null;
+            }
+
+            return raw switch
+            {
+                string s => s,
+                System.Text.Json.JsonElement j when j.ValueKind == System.Text.Json.JsonValueKind.String => j.GetString(),
+                _ => raw.ToString()
+            };
         }
 
         private static bool HasUsefulTextContext(IDictionary<string, object> datosNormalizados)

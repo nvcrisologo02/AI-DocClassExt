@@ -30,7 +30,7 @@ namespace DocumentIA.Tests.Unit.Validation
 
             result.IsValid.Should().Be(expectedValid);
             result.FieldName.Should().Be("NIF");
-            
+
             if (!expectedValid)
             {
                 result.Message.Should().NotBeNullOrEmpty();

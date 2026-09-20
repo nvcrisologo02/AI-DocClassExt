@@ -278,7 +278,7 @@
 
             if (EditingPrompt.Id == 0)
             {
-                var request = new CreatePromptTemplateRequest(EditingPrompt.PromptKey, EditingPrompt.Content, EditingPrompt.Description);
+                var request = new CreatePromptTemplateRequest(EditingPrompt.PromptKey, EditingPrompt.Content, EditingPrompt.Description, CurrentUser.UserName);
                 await PromptService.CreatePromptTemplateAsync(request);
             }
             else

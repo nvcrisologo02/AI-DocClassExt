@@ -207,7 +207,10 @@ public class DocumentoEjecucionRepositoryCalidadTests
         {
             ctx.Documentos.Add(new DocumentoEntity
             {
-                Id = 1, NombreArchivo = "nota-simple.pdf", SHA256 = "a", SubmittedBy = "srv_batch"
+                Id = 1,
+                NombreArchivo = "nota-simple.pdf",
+                SHA256 = "a",
+                SubmittedBy = "srv_batch"
             });
         }
     }

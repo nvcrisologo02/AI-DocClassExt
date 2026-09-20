@@ -44,7 +44,12 @@ BEGIN
 END;
 ");
 
+            // CREATE PROCEDURE debe ser la primera sentencia de su lote. El script idempotente
+            // (dotnet ef migrations script --idempotent) envuelve cada operacion en un
+            // IF NOT EXISTS ... BEGIN/END, por lo que el CREATE en crudo no parsea (Msg 156).
+            // Se emite dentro de EXEC(N'...') para que sea su propio lote.
             migrationBuilder.Sql(@"
+EXEC(N'
 CREATE OR ALTER PROCEDURE dbo.sp_ObtenerDocumentoEjecucionesPorIdActivo
     @IdActivo NVARCHAR(100)
 AS
@@ -86,6 +91,7 @@ BEGIN
         ON de.DocumentoId = d.Id
     ORDER BY d.Id, de.FechaEjecucion DESC, de.Id DESC;
 END;
+');
 ");
         }
 

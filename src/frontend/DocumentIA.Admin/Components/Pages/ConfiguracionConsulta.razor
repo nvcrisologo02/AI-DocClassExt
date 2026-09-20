@@ -323,16 +323,14 @@
             // Cargar datos de tipologías
             _tipologias = await AdminService.GetTipologiasAsync();
             
-            // Obtener modelos de todos los tipos
-            var modelosClasificacion = await AdminService.GetModelosByTipoAsync(TipoModelo.Clasificacion);
-            var modelosExtraccion = await AdminService.GetModelosByTipoAsync(TipoModelo.Extraccion);
-            var modelosPrompt = await AdminService.GetModelosByTipoAsync(TipoModelo.Prompt);
-            var modelosLayout = await AdminService.GetModelosByTipoAsync(TipoModelo.Layout);
-            _modelos = modelosClasificacion
-                .Concat(modelosExtraccion)
-                .Concat(modelosPrompt)
-                .Concat(modelosLayout)
-                .ToList();
+            // Todos los tipos, recorriendo el enum: con la lista escrita a mano, un
+            // tipo nuevo quedaba fuera de la consulta sin que nada lo delatara.
+            var modelos = new List<ModeloConfigEntity>();
+            foreach (var tipo in Enum.GetValues<TipoModelo>())
+            {
+                modelos.AddRange(await AdminService.GetModelosByTipoAsync(tipo));
+            }
+            _modelos = modelos;
             
             _plugins = await AdminService.GetPluginConfigsAsync();
             

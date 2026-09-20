@@ -129,7 +129,7 @@ Recordatorios operativos de DEV:
   forma individual (alta previa a la creación del grupo). Si no es deliberado,
   retirarlo para que todo el acceso se gobierne por el grupo.
 
-### PRO (app registration verificada 2026-08-06; activación pendiente)
+### PRO (activada; configuración verificada en el App Service 2026-09-04)
 
 | Elemento | Valor |
 |---|---|
@@ -180,7 +180,7 @@ Consideraciones específicas de producción:
   independiente de la autenticación.
 - **Caducidad del client secret**: registrar la fecha igual que en DEV.
 
-### PRE (app registration verificada 2026-08-07; activación pendiente)
+### PRE (activada 2026-09-04)
 
 | Elemento | Valor |
 |---|---|
@@ -216,6 +216,22 @@ az webapp auth update --subscription a4f6b357-8f13-4488-9ee8-b9f635426f91   --re
 az webapp restart --subscription a4f6b357-8f13-4488-9ee8-b9f635426f91   --resource-group SRBRGPREDOCSAI --name srbwebadminpredocai
 ```
 
+Resultado de la activación (2026-09-04):
+
+- El App Service estaba en esquema de auth **v1**; se hizo el upgrade a v2 (paso 3).
+- La referencia a Key Vault de `MICROSOFT_PROVIDER_AUTHENTICATION_SECRET` resuelve
+  correctamente (`configreferences/appsettings` → `status=Resolved`); la identidad
+  administrada del Admin ya tenía `Key Vault Secrets User` sobre `srbkvpredocai`.
+- `authsettingsV2` de PRE queda idéntica a la de PRO salvo el `clientId`.
+- Comprobación de comportamiento, igual en los tres entornos: petición sin cabeceras
+  de navegador → `401`; petición con `Accept: text/html` → `302` a
+  `login.microsoftonline.com`. El `401` de una llamada plana (curl, sondas) es el
+  comportamiento normal de EasyAuth, no un fallo de configuración.
+- Login real verificado el 2026-09-04: el acceso al Admin de PRE redirige al login
+  corporativo y la aplicación queda operativa tras autenticarse.
+
 Nota: en la enterprise application de PRE hay, además del grupo, un usuario
 asignado de forma individual (mismo patrón que se observó en DEV). Si no es
 deliberado, retirarlo para que todo el acceso se gobierne por el grupo.
+Comprobado el 2026-09-04: siguen asignados `GSEC-DocumentIA-Admin-PRE` y ese
+usuario individual, con *assignment required* activo.

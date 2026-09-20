@@ -1,0 +1,76 @@
+@using System.Globalization
+@* Cabecera de la seccion de costes (AB#100239). El total del periodo encabeza la
+   pagina; los indicadores separan cuanto cuesta cada ejecucion, cuanto consumo
+   hay detras y, sobre todo, de donde sale el importe: medido por la propia
+   ejecucion, estimado por el relleno retroactivo o sin coste. Lo estimado nunca
+   entra en el total salvo que se pida, y cuando entra se dice. *@
+
+<div class="mv2-card p-3 mb-3 @(Cargando ? "opacity-50" : "")">
+    <div class="d-flex flex-wrap align-items-start gap-4">
+
+        <div style="min-width:170px">
+            <div class="mv2-kpi-label">Coste de IA</div>
+            <div class="mv2-hero">@Euros(Costes?.CosteTotalEur ?? 0m)</div>
+            <div class="mv2-kpi-foot">
+                @if (Costes?.IncluyeEstimados == true)
+                {
+                    <span>medido y estimado, en el período</span>
+                }
+                else
+                {
+                    <span>solo medido, en el período</span>
+                }
+            </div>
+        </div>
+
+        <div class="mv2-kpis flex-fill">
+            <div>
+                <div class="mv2-kpi-label">Por ejecución</div>
+                <div class="mv2-kpi-value">@Euros(Costes?.CosteMedioEur ?? 0m, 4)</div>
+                <div class="mv2-kpi-foot">@Formato(Costes?.EjecucionesConImporte ?? 0) con importe</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Tokens</div>
+                <div class="mv2-kpi-value">@Compacto(Costes?.TokensTotales ?? 0)</div>
+                <div class="mv2-kpi-foot">entrada, salida y contextualización</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Coste medido</div>
+                <div class="mv2-kpi-value" style="color:#0ca30c">@Formato(Costes?.ConCosteReal ?? 0)</div>
+                <div class="mv2-kpi-foot">ejecuciones con consumo registrado</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Coste estimado</div>
+                <div class="mv2-kpi-value" style="color:#9a6700">@Formato(Costes?.ConCosteEstimado ?? 0)</div>
+                <div class="mv2-kpi-foot">relleno retroactivo</div>
+            </div>
+            <div>
+                <div class="mv2-kpi-label">Sin coste</div>
+                <div class="mv2-kpi-value text-muted">@Formato(Costes?.SinCoste ?? 0)</div>
+                <div class="mv2-kpi-foot">de @Formato(Costes?.TotalEjecuciones ?? 0) ejecuciones</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public CostesResumenDto? Costes { get; set; }
+    [Parameter] public bool Cargando { get; set; }
+
+    private static readonly CultureInfo Es = CultureInfo.GetCultureInfo("es-ES");
+
+    private static string Formato(int n) => n.ToString("N0", Es);
+
+    // Importes con coma decimal y separador de miles espanol. Los agregados van
+    // con dos decimales; el coste por ejecucion, que es de centimos, con cuatro.
+    private static string Euros(decimal v, int decimales = 2) =>
+        v.ToString($"N{decimales}", Es) + " €";
+
+    private static string Compacto(long n) => n switch
+    {
+        >= 1_000_000_000 => (n / 1_000_000_000d).ToString("0.#", Es) + " G",
+        >= 1_000_000 => (n / 1_000_000d).ToString("0.#", Es) + " M",
+        >= 1_000 => (n / 1_000d).ToString("0.#", Es) + " k",
+        _ => n.ToString("N0", Es)
+    };
+}

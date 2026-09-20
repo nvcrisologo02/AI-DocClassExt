@@ -20,7 +20,7 @@ public class ClassificationTipologiaPromptBuilder
     private readonly ILogger<ClassificationTipologiaPromptBuilder> _logger;
 
     public ClassificationTipologiaPromptBuilder(
-        IMemoryCache cache, 
+        IMemoryCache cache,
         IServiceScopeFactory scopeFactory,
         ILogger<ClassificationTipologiaPromptBuilder> logger)
     {
@@ -229,7 +229,7 @@ public class ClassificationTipologiaPromptBuilder
                     PropertyNameCaseInsensitive = true
                 });
 
-                if (config is null 
+                if (config is null
                 // || !config.IsDefault Comento el isdefault para que gestione en gpt todas las tipologias publicadas.
                 || string.IsNullOrWhiteSpace(config.TipologiaId))
                 {

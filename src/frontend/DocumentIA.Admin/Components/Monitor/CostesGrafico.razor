@@ -1,0 +1,101 @@
+@using System.Globalization
+@inject IJSRuntime JS
+@implements IAsyncDisposable
+
+@* Evolucion diaria del coste (AB#100239). Mismo interop y mismas defensas que
+   MonitorGraficos: dibujar es lo unico que depende de JS y ocurre fuera de
+   cualquier accion del usuario, asi que un fallo se degrada a "sin grafico"
+   en vez de terminar el circuito de Blazor Server. *@
+
+<div class="card mb-3"><div class="card-body">
+    <h6 class="text-muted mb-3">Coste diario</h6>
+    <div id="@_elementId" style="min-height: 240px;"></div>
+</div></div>
+
+@code {
+    [Parameter] public List<CosteSeriePuntoDto> Serie { get; set; } = [];
+
+    private readonly string _elementId = $"gc-{Guid.NewGuid():N}";
+    private bool _creado;
+    private string? _huellaRenderizada;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        var huella = CalcularHuella();
+        if (huella == _huellaRenderizada)
+        {
+            return;
+        }
+        _huellaRenderizada = huella;
+
+        if (Serie.Count == 0)
+        {
+            if (_creado)
+            {
+                await Destruir();
+            }
+            return;
+        }
+
+        var categorias = Serie.Select(p => p.Fecha.ToString("dd/MM")).ToArray();
+        // La libreria espera numeros JS: el decimal se serializa como numero,
+        // redondeado a centimos para no arrastrar seis decimales al tooltip.
+        var series = new object[]
+        {
+            new { name = "Coste (€)", data = Serie.Select(p => Math.Round(p.CosteEur, 2)).ToArray() }
+        };
+
+        try
+        {
+            if (!_creado)
+            {
+                var opciones = new
+                {
+                    chart = new { type = "bar", height = 240, toolbar = new { show = false }, animations = new { enabled = false } },
+                    plotOptions = new { bar = new { columnWidth = "60%", borderRadius = 3 } },
+                    dataLabels = new { enabled = false },
+                    colors = new[] { "#0d6efd" },
+                    xaxis = new { categories = categorias },
+                    yaxis = new { decimalsInFloat = 2 },
+                    legend = new { show = false },
+                    series
+                };
+                _creado = await JS.InvokeAsync<bool>("documentIaCharts.crear", _elementId, opciones);
+            }
+            else
+            {
+                await JS.InvokeVoidAsync("documentIaCharts.actualizar", _elementId, series, categorias);
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            _huellaRenderizada = null;
+        }
+        catch (JSException)
+        {
+            _huellaRenderizada = null;
+        }
+    }
+
+    private string CalcularHuella() =>
+        string.Join("|", Serie.Select(p => $"{p.Fecha:yyyyMMdd}:{p.CosteEur.ToString(CultureInfo.InvariantCulture)}"));
+
+    private async Task Destruir()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("documentIaCharts.destruir", _elementId);
+        }
+        catch (JSDisconnectedException) { }
+        catch (JSException) { }
+        _creado = false;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_creado)
+        {
+            await Destruir();
+        }
+    }
+}

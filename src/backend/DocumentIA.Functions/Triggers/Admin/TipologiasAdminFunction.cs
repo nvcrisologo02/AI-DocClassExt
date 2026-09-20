@@ -168,7 +168,7 @@ public class TipologiasAdminFunction
 
         if (entity.Estado == EstadoTipologia.Published)
         {
-              return await CreateError(req, HttpStatusCode.Conflict, "Solo se pueden editar tipologias en estado Draft o Retired.");
+            return await CreateError(req, HttpStatusCode.Conflict, "Solo se pueden editar tipologias en estado Draft o Retired.");
         }
 
         var payload = await ReadBody<TipologiaUpsertRequest>(req);
@@ -237,7 +237,7 @@ public class TipologiasAdminFunction
         _cache.Remove("tipologias:snapshot");
 
         var updated = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
-        
+
         // Convert to clean DTO (AB#99735: omit deprecated fields)
         var dto = _mapper.ToResponseDto(updated!);
 
@@ -423,7 +423,7 @@ public class TipologiasAdminFunction
         var changes = new List<DiffChange>();
         AddJsonSectionDiff(changes, "validation", left.ConfiguracionJson, right.ConfiguracionJson);
         AddJsonSectionDiff(changes, "plugins", leftPlugins?.ConfiguracionJson, rightPlugins?.ConfiguracionJson);
-        
+
         var leftPrompt = left.GetSystemPrompt();
         var rightPrompt = right.GetSystemPrompt();
         AddJsonSectionDiff(changes, "prompt", ToPromptJson(leftPrompt), ToPromptJson(rightPrompt));
@@ -449,7 +449,7 @@ public class TipologiasAdminFunction
         int id)
     {
         _logger.LogWarning("Deprecated endpoint: Admin_ExportTipologia called. Use GET /management/tipologias/<id> instead.");
-        
+
         var tipologia = await _dbContext.Tipologias.FirstOrDefaultAsync(t => t.Id == id);
         if (tipologia is null)
         {
@@ -503,7 +503,7 @@ public class TipologiasAdminFunction
         [HttpTrigger(AuthorizationLevel.Function, "post", Route = "management/tipologias/import")] HttpRequestData req)
     {
         _logger.LogWarning("Deprecated endpoint: Admin_ImportTipologia called. Use POST /management/tipologias instead.");
-        
+
         var payload = await ReadBody<TipologiaImportRequest>(req);
         if (payload is null || string.IsNullOrWhiteSpace(payload.ZipBase64))
         {

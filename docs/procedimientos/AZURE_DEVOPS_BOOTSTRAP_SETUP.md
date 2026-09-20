@@ -187,4 +187,12 @@ Salida esperada:
 
 - Key Vault Secrets Officer
 
+Ejemplo real PRE (validado 2026-08-31):
+
+- Service connection: AI DocClassExt PRE
+- AppId (cliente): 1d2b166d-e608-487e-9711-5c5fba9b157a | ObjectId: 3fc220ce-15f0-4818-b64f-c2cbcba3d7b7
+- Key Vault scope: /subscriptions/a4f6b357-8f13-4488-9ee8-b9f635426f91/resourceGroups/SRBRGPREDOCSAI/providers/Microsoft.KeyVault/vaults/srbkvpredocai
+- Sintoma observado: `ForbiddenByRbac` en `Microsoft.KeyVault/vaults/secrets/setSecret/action` (Colaborador heredado no cubre plano de datos)
+- Nota: usar `--assignee-object-id <ObjectId> --assignee-principal-type ServicePrincipal` en lugar de `--assignee <AppId>` evita el lookup en Graph, que puede fallar con identidades WIF recientes.
+
 Tras asignar rol, esperar 2-5 minutos por propagacion RBAC y relanzar bootstrap.
