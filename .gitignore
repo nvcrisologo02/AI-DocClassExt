@@ -138,3 +138,5 @@ tests/e2e-postdeploy/artifacts/
 
 # Workspace de ejecucion de planes (subagent-driven-development)
 .superpowers/
+local.settings.*.json
+!local.settings.template.json
