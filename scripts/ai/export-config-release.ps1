@@ -38,7 +38,20 @@ if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
     throw "Se requiere Azure CLI (az) autenticado ('az login')."
 }
 
+# Rutas resueltas desde la ubicacion del propio script, no desde el cwd del proceso:
+# el pipeline config-seed puede invocar este script desde otro directorio de trabajo.
+$replicateScript = Join-Path $PSScriptRoot "../database/replicate-config-data.ps1"
+$hashSqlFile = Join-Path $PSScriptRoot "config-hash.sql"
+
+# -OutDir mantiene su comportamiento actual (relativo al cwd si se pasa una ruta
+# relativa) pero se resuelve a ruta absoluta antes de usarlo, para no depender del
+# cwd en el resto del script.
+if (-not [System.IO.Path]::IsPathRooted($OutDir)) {
+    $OutDir = Join-Path (Get-Location).Path $OutDir
+}
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+$OutDir = (Resolve-Path -LiteralPath $OutDir).ProviderPath
+
 $cs = "Server=tcp:$SourceServer,1433;Database=DocumentIA;Encrypt=True;"
 $sqlOut = Join-Path $OutDir "config-$ReleaseTag.sql"
 
@@ -51,7 +64,7 @@ if ([string]::IsNullOrWhiteSpace($token)) {
 Write-Host "[STEP] Generando export idempotente desde $SourceServer ..."
 # Se pasa el token ya obtenido via -SourceAccessToken para que replicate-config-data.ps1
 # no repita la llamada a az ni dependa de ningun flujo interactivo.
-pwsh ./scripts/database/replicate-config-data.ps1 -Mode Export -EntraAuth -SourceAccessToken $token -SourceConnectionString $cs -OutputFile $sqlOut
+pwsh $replicateScript -Mode Export -EntraAuth -SourceAccessToken $token -SourceConnectionString $cs -OutputFile $sqlOut
 if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) {
     throw "replicate-config-data.ps1 (Export) fallo con codigo $LASTEXITCODE."
 }
@@ -70,7 +83,7 @@ $hashes = @{}
 try {
     $cmd = $conn.CreateCommand()
     $cmd.CommandTimeout = 0
-    $cmd.CommandText = Get-Content -Raw scripts/ai/config-hash.sql
+    $cmd.CommandText = Get-Content -Raw $hashSqlFile
     $r = $cmd.ExecuteReader()
     try {
         do { while ($r.Read()) { $hashes[[string]$r["Tabla"]] = [string]$r["Hash"] } } while ($r.NextResult())
