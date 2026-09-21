@@ -67,6 +67,13 @@ de referencia para una limpieza futura de los recursos origen.
   decidir nada por sí sola — la decisión está en `promote`/`pendingDataFix`;
   no se ha tocado nada en base de datos desde aquí.
 
+- **`di-artifacts.<env>.manifest.json`**: resultado de la última pasada de
+  `scripts/ai/copy-di-artifacts.ps1` contra ese entorno: cuenta origen y
+  destino, y por artefacto su estado (`copied`, `present`, `not-promoted`,
+  `conflict`), fecha de copia, id de la operación y `docTypes` en origen y
+  destino. Lo escribe el script (no editar a mano); se fusiona por
+  `(kind, id)` con la pasada anterior. `-DryRun` no lo toca.
+
 - **`datasets/<clasificador>@<version>.manifest.json`**: dataset de
   entrenamiento/referencia (contenedor, prefijo, fecha de corte y ficheros)
   usado por Document Intelligence Studio o Content Understanding Studio para
@@ -146,8 +153,9 @@ de referencia para una limpieza futura de los recursos origen.
 ## Flujo de promoción (Tareas 10 a 14)
 
 El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
-`scripts/ai/copy-labeling-dataset.ps1` y el paso 3
-`scripts/ai/build-analyzers.ps1`; los demás siguen pendientes):
+`scripts/ai/copy-labeling-dataset.ps1`, el paso 3
+`scripts/ai/build-analyzers.ps1` y el paso 4
+`scripts/ai/copy-di-artifacts.ps1`; los demás siguen pendientes):
 
 1. **Datasets** — preparar los datos de entrenamiento/referencia que
    necesiten los analyzers y clasificadores antes de recrearlos.
@@ -165,7 +173,8 @@ El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
    artefactos de `di-artifacts.json` con `promote: true` desde el recurso
    origen al recurso destino usando la Copy API de Document Intelligence
    (esta sí soporta copia entre recursos; es una API distinta de la de
-   Content Understanding del paso anterior).
+   Content Understanding del paso anterior). Ver "Copiar los clasificadores
+   de Document Intelligence a un entorno" más abajo.
 5. **Validación** — comprobar que DEV/PRE clasifican con los recursos propios
    y no con los de PRO, y que los resultados son equivalentes.
 
@@ -210,6 +219,44 @@ Cada build reentrena desde el dataset (del orden de 20 EUR y varios minutos
 por analyzer, según el plan). Como el resto de scripts de `scripts/ai/`, usa
 token de `az account get-access-token` con `Invoke-WebRequest` y UTF-8
 explícito en cuerpo y respuesta, nunca `az rest`.
+
+## Copiar los clasificadores de Document Intelligence a un entorno
+
+`scripts/ai/copy-di-artifacts.ps1` es el paso 4 del flujo. Para cada
+entrada de `di-artifacts.json` con `promote: true` (hoy solo el clasificador
+`DocumentAICC_v1`; `DI_NS1.4_v0` queda anotado como `not-promoted`) resuelve
+el origen en `resources.prod.json` y el destino en `resources.<env>.json`
+(alias `di`), comprueba que el artefacto existe en origen y aplica la Copy
+API oficial de Document Intelligence (`api-version 2024-11-30`):
+`POST {destino}/documentintelligence/documentClassifiers:authorizeCopy` con
+el mismo id y una descripción de procedencia, `POST
+{origen}/documentintelligence/documentClassifiers/{id}:copyTo` con la
+autorización como cuerpo, y sondeo de `Operation-Location` hasta
+`succeeded`. El origen no cambia: `copyTo` solo lee el clasificador de PRO.
+Al terminar verifica en destino que los `docTypes` coinciden con el origen y
+escribe `di-artifacts.<env>.manifest.json`.
+
+Es idempotente: si el artefacto ya existe en destino con la misma firma
+(`docTypes`; en modelos de extracción, además los nombres de campo por
+`docType`) se salta (`present`); si existe con otra firma se marca
+`conflict` y el script termina con error sin tocarlo, salvo `-Force`, que lo
+borra en destino y lo vuelve a copiar. Los ids no se renombran porque son lo
+que referencia `ModeloConfigs` en cada entorno.
+
+Límites verificados en la documentación oficial: la copia de clasificadores
+v4.0 solo se soporta entre recursos de East US, West US 2 y West Europe (las
+tres cuentas de DI del proyecto están en West Europe) y exige que el origen
+se haya entrenado con `2024-11-30`. El accessToken de la autorización no se
+imprime ni se vuelca.
+
+```powershell
+pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev -DryRun -DumpDir docs/auxiliares/temps/2026-09-21/copy-di-dev
+pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev
+pwsh scripts/ai/copy-di-artifacts.ps1 -Environment pre
+```
+
+Como el resto de scripts de `scripts/ai/`, usa token de `az account
+get-access-token` con `Invoke-WebRequest` y UTF-8 explícito, nunca `az rest`.
 
 ## Estado inicial de DEV y PRE
 
