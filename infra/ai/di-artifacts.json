@@ -1,0 +1,6 @@
+{
+  "sourceAccount": "srbdiprodocai",
+  "sourceResourceGroup": "SRBRGDOCSAIPROD",
+  "classifiers": [ { "id": "DocumentAICC_v1", "docTypes": 15, "referencedBy": "default.azure-di" } ],
+  "models": [ { "id": "DI_NS_1.4_v1", "referencedBy": "nota.simple.1_4.azure-di", "note": "el recurso lista DI_NS1.4_v0; resolver en Task 8 antes de copiar" } ]
+}

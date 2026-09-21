@@ -1,0 +1,19 @@
+{
+  "environment": "prod",
+  "accounts": {
+    "upe48-mm2avmdm-swedencentral": [
+      { "name": "gpt-4o-mini", "model": "gpt-4.1-mini", "version": "2025-04-14", "sku": "Standard", "capacity": 150 },
+      { "name": "gpt-4.1-715420", "model": "gpt-4.1", "version": "2025-04-14", "sku": "GlobalStandard", "capacity": 150 },
+      { "name": "gpt-4.1-mini-622960", "model": "gpt-4.1-mini", "version": "2025-04-14", "sku": "GlobalStandard", "capacity": 250 },
+      { "name": "text-embedding-3-large-030358", "model": "text-embedding-3-large", "version": "1", "sku": "GlobalStandard", "capacity": 150 },
+      { "name": "gpt-4o", "model": "gpt-4o", "version": "2024-11-20", "sku": "GlobalStandard", "capacity": 250 },
+      { "name": "gpt-5-mini", "model": "gpt-5-mini", "version": "2025-08-07", "sku": "DataZoneStandard", "capacity": 50 }
+    ],
+    "srbaisrv-westeurope": [
+      { "name": "gpt-4.1-892749", "model": "gpt-4.1", "version": "2025-04-14", "sku": "GlobalStandard", "capacity": 250 },
+      { "name": "gpt-4.1-mini-590191", "model": "gpt-4.1-mini", "version": "2025-04-14", "sku": "GlobalStandard", "capacity": 250 },
+      { "name": "text-embedding-3-large-010650", "model": "text-embedding-3-large", "version": "1", "sku": "GlobalStandard", "capacity": 250 },
+      { "name": "gpt-5-mini", "model": "gpt-5-mini", "version": "2025-08-07", "sku": "DataZoneStandard", "capacity": 50 }
+    ]
+  }
+}

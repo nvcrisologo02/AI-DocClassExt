@@ -1,0 +1,471 @@
+{
+  "analyzerId": "CERA16_v1",
+  "description": "Analyzer CERA16 IBIs v1",
+  "tags": {
+    "projectId": "30189708-d5c2-48ab-8ecf-beb626f8fabb",
+    "templateId": "prebuilt-documentAnalyzer"
+  },
+  "baseAnalyzerId": "prebuilt-document",
+  "config": {
+    "returnDetails": false,
+    "enableOcr": true,
+    "enableLayout": true,
+    "enableFormula": true,
+    "enableFigureDescription": false,
+    "enableFigureAnalysis": false,
+    "chartFormat": "chartjs",
+    "tableFormat": "html",
+    "enableSegment": false,
+    "omitContent": false,
+    "segmentPerPage": false,
+    "annotationFormat": "markdown"
+  },
+  "fieldSchema": {
+    "fields": {
+      "Titular": {
+        "type": "string",
+        "method": "extract",
+        "description": "Nombre completo del titular del recibo IBI. Extraer el nombre tal como aparece."
+      },
+      "NIF": {
+        "type": "string",
+        "method": "extract",
+        "description": "NIF, DNI o NIE del titular del recibo IBI. Extraer solo el identificador."
+      },
+      "ImportePagado": {
+        "type": "number",
+        "method": "extract",
+        "description": "Importe realmente pagado del recibo IBI. Extraer el importe numérico."
+      },
+      "FechaPago": {
+        "type": "string",
+        "method": "extract",
+        "description": "Fecha en que se realizó o realizará el pago del recibo IBI. "
+      },
+      "FechaEmision": {
+        "type": "string",
+        "method": "extract",
+        "description": "Fecha de emisión del recibo IBI. "
+      },
+      "Direccion": {
+        "type": "string",
+        "method": "extract",
+        "description": "Dirección, bien inmueble, hecho imponible u objeto tributario sujeto al IBI. Extraer únicamente el texto que aparezca junto a etiquetas como 'OBJ. TRIB', 'Objeto tributario', 'OBXECTO TRIBUTARIO', 'DIRECCION TRIBUTARIA', 'BIEN INMUEBLE', 'HECHO IMPONIBLE' u otras equivalentes. No completar ni normalizar."
+      },
+      "TipoDocumento": {
+        "type": "string",
+        "method": "extract",
+        "description": "Tipo de documento si aparece expresamente, por ejemplo 'CARTA DE PAGO', 'AVISO DE PAGO', 'RECIBO' o equivalente. Extraer exactamente como aparece. No inferir.",
+        "estimateSourceAndConfidence": true
+      },
+      "ConceptoTributario": {
+        "type": "string",
+        "method": "extract",
+        "description": "Concepto del tributo. Extraer el texto asociado a etiquetas como 'CONCEPTO', 'Concepto' o equivalentes, por ejemplo 'IMPUESTO BIENES INMUEBLES - URBANA', 'IBI-UR' o similar. No normalizar ni completar.",
+        "estimateSourceAndConfidence": true
+      },
+      "Observaciones": {
+        "type": "string",
+        "method": "extract",
+        "description": "Observaciones relevantes que aparezcan expresamente en el documento asociadas al pago, validez del recibo, periodo voluntario, vía ejecutiva o instrucciones tributarias. Extraer texto literal. No resumir ni interpretar.",
+        "estimateSourceAndConfidence": true
+      },
+      "DireccionPropiedades": {
+        "type": "array",
+        "method": "generate",
+        "description": "Dirección, bien inmueble, hecho imponible u objeto tributario sujeto a la TASA DE BASURA.  IBI,  PLUSVALIA, VADO Extraer únicamente el texto que aparezca junto a etiquetas como 'OBJ. TRIB', 'Objeto tributario', 'OBXECTO TRIBUTARIO', 'DIRECCION TRIBUTARIA', 'BIEN INMUEBLE', 'HECHO IMPONIBLE' u otras equivalentes.  Incluye la referencia Catastral y su valor.",
+        "items": {
+          "type": "object",
+          "method": "generate",
+          "properties": {
+            "Direccion": {
+              "type": "string",
+              "method": "extract",
+              "description": "Dirección, bien inmueble, hecho imponible u objeto tributario sujeto a la TASA DE BASURA. Extraer únicamente el texto que aparezca junto a etiquetas como 'OBJ. TRIB', 'Objeto tributario', 'OBXECTO TRIBUTARIO', 'DIRECCION TRIBUTARIA', 'BIEN INMUEBLE', 'HECHO IMPONIBLE' u otras equivalentes. No completar ni normalizar.",
+              "estimateSourceAndConfidence": true
+            },
+            "ReferenciaCastatral": {
+              "type": "string",
+              "method": "extract",
+              "description": "Referencia catastral del inmueble sujeto a la TASA DE BASURA o GESTION DE RESIDUOS, IBI, PLUSVALIA Extraer todos los códigos completos sin espacios ni separadores adicionales. No siempre se aporta la referencia catastral, en caso de duda no poner",
+              "estimateSourceAndConfidence": true
+            },
+            "ValorCatastral": {
+              "type": "string",
+              "method": "extract",
+              "description": "Valor catastral total del inmueble. Extraer el importe numérico o calcularlo como suelo + construcción si procede.",
+              "estimateSourceAndConfidence": true
+            }
+          }
+        }
+      },
+      "Emisor": {
+        "type": "object",
+        "method": "generate",
+        "description": "Entidad que emite el escrito, a veces requerimiento de pago. Incluye el Nombre, Organo emisor y dirección. ",
+        "properties": {
+          "Nombre": {
+            "type": "string",
+            "method": "extract",
+            "description": "Es el nombre del organismo emisor, puede ser un Ayuntamiento, Diputación, Ministerio o similar",
+            "estimateSourceAndConfidence": true
+          },
+          "Dirección": {
+            "type": "string",
+            "method": "extract",
+            "description": "Dirección postal del organismo emisor",
+            "estimateSourceAndConfidence": true
+          },
+          "Organoemisor": {
+            "type": "string",
+            "method": "extract",
+            "description": "Nombre completo del organo emisor o Unidad Gestora. Es la que emite el documento.",
+            "estimateSourceAndConfidence": true
+          }
+        }
+      },
+      "FechaRecepcion": {
+        "type": "string",
+        "method": "extract",
+        "description": "Fecha en la que se recibe el documento en Sareb. Aparece en el Sello Sareb, debajo del CIF",
+        "estimateSourceAndConfidence": true
+      },
+      "ReciboVoluntario": {
+        "type": "array",
+        "method": "generate",
+        "description": "Valores que se incluyen en el recibo para hacer posible su pago",
+        "items": {
+          "type": "object",
+          "method": "generate",
+          "properties": {
+            "PeriodoPagoVoluntario": {
+              "type": "string",
+              "method": "extract",
+              "description": "El periodo de pago, voluntario. Es un intervalo de entre dos fechas.",
+              "estimateSourceAndConfidence": true
+            },
+            "Emisora": {
+              "type": "string",
+              "method": "extract",
+              "description": "Codigo que corresponde al organo que emite el recibo",
+              "estimateSourceAndConfidence": true
+            },
+            "Referencia": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero incluido y permite el pago",
+              "estimateSourceAndConfidence": true
+            },
+            "Identificador": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero incluido en el recibo que permite el pago del recibo",
+              "estimateSourceAndConfidence": true
+            },
+            "Periodo": {
+              "type": "string",
+              "method": "extract",
+              "description": "Año y o mes al que corresponde el hecho imponible.",
+              "estimateSourceAndConfidence": true
+            },
+            "ModeloMod": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero de modelo si hay",
+              "estimateSourceAndConfidence": true
+            },
+            "Importe": {
+              "type": "string",
+              "method": "extract",
+              "description": "Importe a pagar en el periodo voluntario",
+              "estimateSourceAndConfidence": true
+            },
+            "Recargo": {
+              "type": "string",
+              "method": "extract",
+              "description": "Importe si lo hay",
+              "estimateSourceAndConfidence": true
+            },
+            "Bonificacion": {
+              "type": "string",
+              "method": "extract",
+              "description": "Importe que reduce el total",
+              "estimateSourceAndConfidence": true
+            },
+            "NifEmisora": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero de identificacion del emisor",
+              "estimateSourceAndConfidence": true
+            },
+            "CPR": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero incluido en alguno recibos",
+              "estimateSourceAndConfidence": true
+            },
+            "NumeroRecibo": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero del recibo",
+              "estimateSourceAndConfidence": true
+            }
+          }
+        }
+      },
+      "ReciboRecargo": {
+        "type": "array",
+        "method": "generate",
+        "description": "Valores que se incluyen en el recibo para hacer posible su pago. En periodo con recargo",
+        "items": {
+          "type": "object",
+          "method": "generate",
+          "properties": {
+            "PeriodoDePagoRecargo": {
+              "type": "string",
+              "method": "extract",
+              "description": "El periodo de pago, con recargo. Es un intervalo de entre dos fechas.",
+              "estimateSourceAndConfidence": true
+            },
+            "Emisora": {
+              "type": "string",
+              "method": "extract",
+              "description": "Codigo que corresponde al organo que emite el recibo",
+              "estimateSourceAndConfidence": true
+            },
+            "Referencia": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero incluido y permite el pago",
+              "estimateSourceAndConfidence": true
+            },
+            "Identificacion": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero incluido en el recibo que permite el pago del recibo",
+              "estimateSourceAndConfidence": true
+            },
+            "Periodo": {
+              "type": "string",
+              "method": "extract",
+              "description": "Año y o mes al que corresponde el hecho imponible.",
+              "estimateSourceAndConfidence": true
+            },
+            "ModeloMod": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero de modelo si tiene",
+              "estimateSourceAndConfidence": true
+            },
+            "Importe": {
+              "type": "string",
+              "method": "extract",
+              "description": "Importe a pagar en el periodo con recago",
+              "estimateSourceAndConfidence": true
+            },
+            "Recargo": {
+              "type": "string",
+              "method": "extract",
+              "description": "Importe de recargo",
+              "estimateSourceAndConfidence": true
+            },
+            "Bonificacion": {
+              "type": "string",
+              "method": "extract",
+              "description": "Importe de bonificacion",
+              "estimateSourceAndConfidence": true
+            },
+            "NifEmisora": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero de identificación fiscal que emite el recibo",
+              "estimateSourceAndConfidence": true
+            },
+            "CPR": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero de identifacion del recibo",
+              "estimateSourceAndConfidence": true
+            },
+            "NumeroRecibo": {
+              "type": "string",
+              "method": "extract",
+              "description": "Numero del recibo",
+              "estimateSourceAndConfidence": true
+            }
+          }
+        }
+      },
+      "Calcula": {
+        "type": "array",
+        "method": "generate",
+        "description": "Son todos los valores que llevan a calcular el pago del IBI",
+        "items": {
+          "type": "object",
+          "method": "generate",
+          "properties": {
+            "BienInmueble": {
+              "type": "string",
+              "method": "extract",
+              "description": "Direccion del inmueble",
+              "estimateSourceAndConfidence": true
+            },
+            "ReferenciaCatastral": {
+              "type": "string",
+              "method": "extract",
+              "description": "Referencia catastral del inmueble",
+              "estimateSourceAndConfidence": true
+            },
+            "ValorSuelo": {
+              "type": "string",
+              "method": "extract",
+              "description": "Valor del Suelo",
+              "estimateSourceAndConfidence": true
+            },
+            "ValorCatastral": {
+              "type": "string",
+              "method": "extract",
+              "description": "Importe del valor catastral del activo, suele se la suma del Valor del suelo con el Valor de Construccion",
+              "estimateSourceAndConfidence": true
+            },
+            "TipoImpositivo": {
+              "type": "string",
+              "method": "extract",
+              "description": "Se trata de un procentaje",
+              "estimateSourceAndConfidence": true
+            },
+            "Bonificación": {
+              "type": "string",
+              "method": "extract",
+              "description": "Puede o no aplicarse",
+              "estimateSourceAndConfidence": true
+            },
+            "ValorConstruccion": {
+              "type": "string",
+              "method": "extract",
+              "description": "Importe que corresponde al valor de la construccion",
+              "estimateSourceAndConfidence": true
+            },
+            "BaseLiquidable": {
+              "type": "string",
+              "method": "extract",
+              "description": "Valor que suele coincidir con el valor catastral y se utiliza para aplicar los tipos",
+              "estimateSourceAndConfidence": true
+            },
+            "CuotaMunicipal": {
+              "type": "string",
+              "method": "extract",
+              "description": "Cuota a pagar",
+              "estimateSourceAndConfidence": true
+            },
+            "SuperficieSuelo": {
+              "type": "string",
+              "method": "extract",
+              "description": "La superficie en m2 del suelo",
+              "estimateSourceAndConfidence": true
+            },
+            "SuperficieElementos": {
+              "type": "string",
+              "method": "extract",
+              "description": "Superficie en M2 que no son de suelo",
+              "estimateSourceAndConfidence": true
+            }
+          }
+        }
+      },
+      "Resumen": {
+        "type": "array",
+        "method": "generate",
+        "description": "Resume todos los campos necesarios para la elaboración. Se encuentran ya indicados en el recibo",
+        "items": {
+          "type": "object",
+          "method": "generate",
+          "properties": {
+            "FechaEntrada": {
+              "type": "string",
+              "method": "extract",
+              "description": "Fecha de recepción del documento, electrónicamente o en estafeta. Si es electrónico será la fecha de gestión de entrada",
+              "estimateSourceAndConfidence": true
+            },
+            "CanalEntrada": {
+              "type": "string",
+              "method": "extract",
+              "description": "Será digital o estafeta. Si es estafeta siempre lleva sello",
+              "estimateSourceAndConfidence": true
+            },
+            "OrganismoEmisor": {
+              "type": "string",
+              "method": "extract",
+              "description": "Organismo que emite el tributo",
+              "estimateSourceAndConfidence": true
+            },
+            "Municipio": {
+              "type": "string",
+              "method": "extract",
+              "description": "Municipio donde se encuentra el activo",
+              "estimateSourceAndConfidence": true
+            },
+            "ReferenciaCatastral": {
+              "type": "array",
+              "method": "generate",
+              "description": "Referencia Catastral",
+              "items": {
+                "type": "string",
+                "method": "extract",
+                "estimateSourceAndConfidence": true
+              }
+            },
+            "Dirección": {
+              "type": "array",
+              "method": "generate",
+              "description": "Dirección, bien inmueble, hecho imponible u objeto tributario sujeto a la TASA DE BASURA.  IBI,  PLUSVALIA, VADO Extraer únicamente el texto que aparezca junto a etiquetas como 'OBJ. TRIB', 'Objeto tributario', 'OBXECTO TRIBUTARIO', 'DIRECCION TRIBUTARIA', 'BIEN INMUEBLE', 'HECHO IMPONIBLE' u otras equivalentes.  ",
+              "items": {
+                "type": "string",
+                "method": "extract",
+                "estimateSourceAndConfidence": true
+              },
+              "estimateSourceAndConfidence": true
+            },
+            "Naturaleza": {
+              "type": "string",
+              "method": "extract",
+              "description": "Concepto del tributo. Extraer el texto asociado a etiquetas como 'CONCEPTO', 'Concepto' o equivalentes, por ejemplo 'IMPUESTO BIENES INMUEBLES - URBANA', 'IBI-UR' o similar. No normalizar ni completar.",
+              "estimateSourceAndConfidence": true
+            },
+            "Año": {
+              "type": "string",
+              "method": "extract",
+              "description": "Año en el que se liquida el tributo",
+              "estimateSourceAndConfidence": true
+            },
+            "Identificador": {
+              "type": "string",
+              "method": "extract",
+              "description": "Identificador del Documento",
+              "estimateSourceAndConfidence": true
+            },
+            "FechaVencimiento": {
+              "type": "string",
+              "method": "extract",
+              "description": "Ultima fecha de pago del tributo",
+              "estimateSourceAndConfidence": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "processingLocation": "geography",
+  "knowledgeSources": [
+    {
+      "kind": "labeledData",
+      "containerUrl": "https://srbstgproapppdocai.blob.core.windows.net/documentai",
+      "prefix": "labelingProjects/30189708-d5c2-48ab-8ecf-beb626f8fabb/train",
+      "fileListPath": ""
+    }
+  ],
+  "models": {
+    "completion": "gpt-4.1",
+    "embedding": "text-embedding-3-large"
+  }
+}

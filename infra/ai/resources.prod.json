@@ -1,0 +1,9 @@
+{
+  "environment": "prod",
+  "resources": {
+    "openai_primary": { "account": "upe48-mm2avmdm-swedencentral", "resourceGroup": "SRBRGDOCSAIPROD", "endpoint": "https://upe48-mm2avmdm-swedencentral.openai.azure.com" },
+    "cu_primary":     { "account": "upe48-mm2avmdm-swedencentral", "resourceGroup": "SRBRGDOCSAIPROD", "endpoint": "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/" },
+    "cu_secondary":   { "account": "srbaisrv-westeurope",          "resourceGroup": "SRBRGDOCSAIPROD", "endpoint": "https://srbaisrv-westeurope.services.ai.azure.com/" },
+    "di":             { "account": "srbdiprodocai",                "resourceGroup": "SRBRGDOCSAIPROD", "endpoint": "https://srbdiprodocai.cognitiveservices.azure.com/" }
+  }
+}

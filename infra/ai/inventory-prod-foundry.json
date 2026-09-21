@@ -1,0 +1,272 @@
+[
+  {
+    "analyzerId": "CERA15",
+    "status": "ready",
+    "createdAt": "2026-06-30T08:46:20Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "CERA15_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:11:47Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "CERA16",
+    "status": "ready",
+    "createdAt": "2026-06-15T10:12:45Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "CERA16_v1",
+    "status": "ready",
+    "createdAt": "2026-06-25T11:11:10Z",
+    "referenced": true
+  },
+  {
+    "analyzerId": "CERA16_v2",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:14:35Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "CERA44_basura",
+    "status": "ready",
+    "createdAt": "2026-06-30T08:47:05Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "CERA44_basura_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:13:48Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "CERA44_vado",
+    "status": "ready",
+    "createdAt": "2026-06-25T11:09:15Z",
+    "referenced": true
+  },
+  {
+    "analyzerId": "CERA44_vado_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:03:56Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "CERA46",
+    "status": "ready",
+    "createdAt": "2026-06-25T11:12:49Z",
+    "referenced": true
+  },
+  {
+    "analyzerId": "CERA46_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:11:07Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "COMU04",
+    "status": "ready",
+    "createdAt": "2026-06-30T08:45:36Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "COMU04_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:10:09Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "COMU07",
+    "status": "ready",
+    "createdAt": "2026-06-30T08:42:47Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "COMU07_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:05:03Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "CU_NS_1.4_3",
+    "status": "ready",
+    "createdAt": "2026-04-15T11:31:57Z",
+    "referenced": true
+  },
+  {
+    "analyzerId": "CU_NS_1.5_0",
+    "status": "ready",
+    "createdAt": "2026-05-05T05:22:45Z",
+    "referenced": true
+  },
+  {
+    "analyzerId": "CU_NS_1.6_0_GGAA",
+    "status": "ready",
+    "createdAt": "2026-07-17T08:20:35Z",
+    "referenced": true
+  },
+  {
+    "analyzerId": "DEAC07",
+    "status": "ready",
+    "createdAt": "2026-06-30T08:44:49Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "DEAC07_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:09:25Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "DOCJ10",
+    "status": "ready",
+    "createdAt": "2026-06-30T08:43:57Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "DOCJ10_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:07:36Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "DOCJ19",
+    "status": "ready",
+    "createdAt": "2026-06-30T08:43:20Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "DOCJ19_v1",
+    "status": "ready",
+    "createdAt": "2026-07-17T10:12:45Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1777468115204_956",
+    "status": "ready",
+    "createdAt": "2026-04-29T13:08:35Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1777476568664_833",
+    "status": "ready",
+    "createdAt": "2026-04-29T15:29:28Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1777478627642_519",
+    "status": "ready",
+    "createdAt": "2026-04-29T16:03:47Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781081575724_70",
+    "status": "creating",
+    "createdAt": "2026-06-10T08:52:56Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781084862022_605",
+    "status": "creating",
+    "createdAt": "2026-06-10T09:47:42Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781086308732_524",
+    "status": "creating",
+    "createdAt": "2026-06-10T10:11:49Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781086345639_412",
+    "status": "creating",
+    "createdAt": "2026-06-10T10:12:25Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781086428651_616",
+    "status": "creating",
+    "createdAt": "2026-06-10T10:13:48Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781087794177_111",
+    "status": "creating",
+    "createdAt": "2026-06-10T10:36:34Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781087898971_978",
+    "status": "failed",
+    "createdAt": "2026-06-10T10:38:19Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781087986452_863",
+    "status": "creating",
+    "createdAt": "2026-06-10T10:39:46Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781088214666_612",
+    "status": "creating",
+    "createdAt": "2026-06-10T10:43:34Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781089187585_173",
+    "status": "creating",
+    "createdAt": "2026-06-10T10:59:47Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781089758809_120",
+    "status": "creating",
+    "createdAt": "2026-06-10T11:09:18Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781089816197_661",
+    "status": "creating",
+    "createdAt": "2026-06-10T11:10:16Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781090115190_400",
+    "status": "creating",
+    "createdAt": "2026-06-10T11:15:21Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781090515785_196",
+    "status": "creating",
+    "createdAt": "2026-06-10T11:21:56Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1781517505416_199",
+    "status": "failed",
+    "createdAt": "2026-06-15T09:58:25Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1782209780784_13",
+    "status": "ready",
+    "createdAt": "2026-06-23T10:16:24Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1784194056576_400",
+    "status": "ready",
+    "createdAt": "2026-07-16T09:27:36Z",
+    "referenced": false
+  },
+  {
+    "analyzerId": "projectAnalyzer_1784203831107_335",
+    "status": "ready",
+    "createdAt": "2026-07-16T12:10:35Z",
+    "referenced": false
+  }
+]

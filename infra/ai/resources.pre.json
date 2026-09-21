@@ -1,0 +1,9 @@
+{
+  "environment": "pre",
+  "resources": {
+    "openai_primary": { "account": "srbaisrv01predocai", "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbaisrv01predocai.openai.azure.com" },
+    "cu_primary":     { "account": "srbaisrv01predocai", "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbaisrv01predocai.services.ai.azure.com/" },
+    "cu_secondary":   { "account": "srbaisrv02predocai", "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbaisrv02predocai.services.ai.azure.com/" },
+    "di":             { "account": "srbdipredocai",      "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbdipredocai.cognitiveservices.azure.com/" }
+  }
+}
