@@ -2,8 +2,8 @@
   "environment": "dev",
   "resources": {
     "openai_primary": { "account": "srbaisrv01devdocai", "resourceGroup": "SRBRGDEVDOCSAI", "endpoint": "https://srbaisrv01devdocai.openai.azure.com" },
-    "cu_primary":     { "account": "srbaisrv01devdocai", "resourceGroup": "SRBRGDEVDOCSAI", "endpoint": "https://srbaisrv01devdocai.services.ai.azure.com/" },
-    "cu_secondary":   { "account": "srbaisrv02devdocai", "resourceGroup": "SRBRGDEVDOCSAI", "endpoint": "https://srbaisrv02devdocai.services.ai.azure.com/" },
+    "cu_primary":     { "account": "srbaisrv01devdocai", "resourceGroup": "SRBRGDEVDOCSAI", "endpoint": "https://srbaisrv01devdocai.services.ai.azure.com/", "subscriptionId": "8764f9ff-fe37-4c03-bde9-6294622bef6d", "location": "westeurope" },
+    "cu_secondary":   { "account": "srbaisrv02devdocai", "resourceGroup": "SRBRGDEVDOCSAI", "endpoint": "https://srbaisrv02devdocai.services.ai.azure.com/", "subscriptionId": "8764f9ff-fe37-4c03-bde9-6294622bef6d", "location": "westeurope" },
     "di":             { "account": "srbdidevdocai",      "resourceGroup": "SRBRGDEVDOCSAI", "endpoint": "https://srbdidevdocai.cognitiveservices.azure.com/" }
   }
 }

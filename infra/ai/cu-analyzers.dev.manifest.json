@@ -1,0 +1,20 @@
+{
+  "environment": "dev",
+  "sourceAccount": "upe48-mm2avmdm-swedencentral",
+  "targetAccount": "srbaisrv01devdocai",
+  "apiVersion": "2025-11-01",
+  "updatedAtUtc": "2026-09-21T15:23:39.8245351Z",
+  "analyzers": [
+    {
+      "analyzerId": "CERA46",
+      "targetAnalyzerId": "CERA46_copytest",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01devdocai",
+      "status": "copied",
+      "sourceCreatedAt": "2026-06-25T11:12:49Z",
+      "definitionMatches": true,
+      "copiedAtUtc": "2026-09-21T15:23:39.7892166Z",
+      "operation": "https://srbaisrv01devdocai.services.ai.azure.com/contentunderstanding/analyzers/CERA46_copytest/operations/ff40e87d-ca53-4822-81d2-fb7f92cc4047?api-version=2025-11-01"
+    }
+  ]
+}

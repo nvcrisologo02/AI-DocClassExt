@@ -144,6 +144,30 @@ o superior al `MinFieldsRatio` de la fila. La Copy API por token (`getCopyAuthor
 en origen, `:copy` en destino) se prueba como spike aparte; si funciona será un atajo
 operativo, no el mecanismo de promoción.
 
+> **Enmienda 2026-09-21 (Tarea 13, AB#100315).** La validación post-build demostró que
+> la reconstrucción no reproduce PRO: el dataset actual de los `labelingProjects` de PRO
+> no es el que entrenó los analyzers de PRO (etiquetas de `CERA44_vado` y `CERA46`
+> vaciadas el 2026-07-17, las de `CERA16_v1` reescritas el 2026-08-20, las de `CU_NS`
+> modificadas el 2026-07-16; los analyzers de PRO son anteriores salvo
+> `CU_NS_1.6_0_GGAA`). Acuerdo de campos PRO/DEV reconstruido 47-85 % frente a una línea
+> base PRO/PRO de 86-91 %. El storage `srbstgproapppdocai` no tiene versionado, así que
+> el estado de etiquetas que entrenó PRO no es recuperable en general.
+>
+> **Decisión:** el mecanismo de promoción de analyzers de CU pasa a ser la **Copy API
+> oficial** (`:grantCopyAuthorization` en origen con `targetAzureResourceId` +
+> `targetRegion`, `:copy` en destino con `sourceAzureResourceId` + `sourceAnalyzerId` +
+> `sourceRegion`, `api-version 2025-11-01`; admite distinta suscripción y región; exige
+> Cognitive Services User a la identidad que ejecuta en ambos recursos, sin roles
+> cruzados entre recursos). Probada en DEV con `CERA46` → `CERA46_copytest`: copia en 9 s,
+> definición idéntica, acuerdo con PRO 90,0 % global y 95,6 % en `extract`.
+> `scripts/ai/copy-cu-analyzers.ps1` la implementa; `infra/ai/cu-analyzers.json` fija el
+> alcance: los **24 analyzers con nombre de negocio** de PRO (incluidas versiones
+> `_v1`/`_v2`), no solo los 6 referenciados por `ModeloConfigs`; los `projectAnalyzer_*`
+> internos de Studio quedan fuera. La reconstrucción (`build-analyzers.ps1`) y los
+> datasets versionados se conservan para reentrenar con identificador nuevo, no para
+> promocionar. La validación de la Tarea 13 (`validate-analyzer.ps1`) sigue siendo la
+> puerta, con la línea base `-SelfCheck` como referencia del umbral.
+
 **Document Intelligence: copia exacta.** Copy API oficial para `DocumentAICC_v1` y
 `DI_NS_1.4_v1`: `authorizeCopy` en el recurso destino, `copyTo` desde el origen, sondeo
 de la operación. Regiones soportadas incluyen West Europe. El resultado es idéntico al

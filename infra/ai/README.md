@@ -22,7 +22,9 @@ de referencia para una limpieza futura de los recursos origen.
 
 - **`resources.<env>.json`** (`dev` / `pre` / `prod`): inventario de cuentas
   de Azure AI por entorno — `openai_primary`, `cu_primary`, `cu_secondary` y
-  `di` — con su grupo de recursos y endpoint. Es el mapa que resuelve los
+  `di` — con su grupo de recursos y endpoint. Las cuentas CU llevan además
+  `subscriptionId` y `location`, que la Copy API necesita para formar el id
+  ARM y la región (pendiente en `resources.pre.json`). Es el mapa que resuelve los
   alias de recurso (`ResourceAlias`) introducidos en las Tareas 1-4 del plan.
 
 - **`deployments.<env>.json`**: los deployments de modelo (nombre de
@@ -96,6 +98,19 @@ de referencia para una limpieza futura de los recursos origen.
   entorno en el momento de validar. Se regenera con `-WriteSelection`. Los
   tres `CU_NS_*` comparten dataset y por tanto la misma muestra.
 
+- **`cu-analyzers.json`**: los analyzers de Content Understanding de PRO que se
+  promocionan a DEV/PRE por Copy API (`scripts/ai/copy-cu-analyzers.ps1`):
+  los 24 con nombre de negocio (incluidas versiones `_v1`/`_v2`), con
+  `promote`, si los referencia `ModeloConfigs`, y estado y fecha en origen.
+  Los `projectAnalyzer_*` internos de Studio quedan fuera. Generado desde
+  `inventory-prod-foundry.json` el 2026-09-21.
+
+- **`cu-analyzers.<env>.manifest.json`**: resultado de la última pasada de
+  `copy-cu-analyzers.ps1` contra ese entorno: por analyzer, id en destino,
+  estado (`copied`, `present`, `conflict`), fecha, operación y si la
+  definición coincide con el origen. Lo escribe el script; se fusiona por id
+  de destino. `-DryRun` no lo toca.
+
 - **`analyzers/*.json`**: definición de cada analyzer de Content
   Understanding referenciado por `ModeloConfigs`, exportada desde el recurso
   origen de PRO sin los campos de solo lectura (`status`, `createdAt`,
@@ -163,7 +178,8 @@ de referencia para una limpieza futura de los recursos origen.
 
 El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
 `scripts/ai/copy-labeling-dataset.ps1`, el paso 3
-`scripts/ai/build-analyzers.ps1`, el paso 4
+`scripts/ai/copy-cu-analyzers.ps1` (y `build-analyzers.ps1` solo para
+reentrenar), el paso 4
 `scripts/ai/copy-di-artifacts.ps1` y el paso 5
 `scripts/ai/validate-analyzer.ps1`; el paso 2 sigue pendiente):
 
@@ -172,13 +188,14 @@ El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
 2. **Deployments** — crear en cada cuenta OpenAI de DEV/PRE los deployments
    de `deployments.<env>.json` (asegura que el modelo/versión/SKU exista
    antes de que algo dependa de él).
-3. **Analyzers de Content Understanding, por reconstrucción** — crear cada
-   analyzer de `analyzers/*.json` en el recurso Foundry del entorno destino a
-   partir de la definición exportada. La reconstrucción es el mecanismo de
-   promoción elegido (spec §2); la Copy API existe (`:grantCopyAuthorization`
-   + `:copy`) pero exige el rol **Cognitive Services User** de la misma
-   identidad en origen y destino y no se ha probado end-to-end — ver el
-   spike más abajo.
+3. **Analyzers de Content Understanding, por Copy API** — copiar cada
+   analyzer de `cu-analyzers.json` desde el Foundry de PRO al del entorno con
+   `:grantCopyAuthorization` + `:copy` (`scripts/ai/copy-cu-analyzers.ps1`).
+   Es el mecanismo de promoción desde la enmienda de la spec §2 del
+   2026-09-21: la reconstrucción desde dataset (`build-analyzers.ps1`) no
+   reproduce PRO porque el dataset actual no es el que entrenó PRO; queda
+   para reentrenar con identificador nuevo. Ver "Copiar los analyzers de
+   Content Understanding a un entorno" más abajo.
 4. **Clasificadores de Document Intelligence, por Copy API** — copiar los
    artefactos de `di-artifacts.json` con `promote: true` desde el recurso
    origen al recurso destino usando la Copy API de Document Intelligence
@@ -232,6 +249,46 @@ Cada build reentrena desde el dataset (del orden de 20 EUR y varios minutos
 por analyzer, según el plan). Como el resto de scripts de `scripts/ai/`, usa
 token de `az account get-access-token` con `Invoke-WebRequest` y UTF-8
 explícito en cuerpo y respuesta, nunca `az rest`.
+
+## Copiar los analyzers de Content Understanding a un entorno
+
+`scripts/ai/copy-cu-analyzers.ps1` es el paso 3 del flujo desde el
+2026-09-21. Para cada analyzer de `cu-analyzers.json` con `promote: true` (o
+`-Only`) resuelve origen (`cu_primary` de `resources.prod.json`) y destino
+(`cu_primary` de `resources.<env>.json`, o `cu_secondary` con `-Target`),
+exige que el origen esté `ready`, y aplica la Copy API oficial
+(`api-version 2025-11-01`): `POST {origen}/analyzers/{id}:grantCopyAuthorization`
+con `targetAzureResourceId` + `targetRegion` (autorización con caducidad de
+24 h; en esta versión no hay token portable), `POST
+{destino}/analyzers/{id}:copy` con `sourceAzureResourceId` +
+`sourceAnalyzerId` + `sourceRegion`, sondeo de `Operation-Location` y GET de
+verificación con comparación canónica de la definición (`fieldSchema`,
+`config`, `models`, `baseAnalyzerId`, `description`, `tags`). Admite distinta
+suscripción y región (PRO en Sweden Central, DEV en West Europe). El origen no
+cambia. Escribe `cu-analyzers.<env>.manifest.json`.
+
+Es idempotente: si el id ya existe en destino con la misma definición se
+salta (`present`); si existe con otra definición se marca `conflict` y el
+script termina con error, salvo `-Force` (`allowReplace=true`).
+`-TargetSuffix` crea el clon con otro id (pruebas). El clon conserva el
+`knowledgeSources` apuntando al storage de PRO: es informativo, el analyzer
+copiado no necesita leerlo para analizar (verificado: DEV no tiene rol sobre
+ese storage y los resultados coinciden con PRO).
+
+Permisos: la identidad que ejecuta necesita **Cognitive Services User** en
+origen y destino. No hacen falta roles cruzados entre los recursos.
+
+Prueba del 2026-09-21: `CERA46` → `CERA46_copytest` en `srbaisrv01devdocai`,
+copia en 9 s, definición idéntica; `validate-analyzer.ps1 -Only CERA46
+-TargetSuffix _copytest` dio 90,0 % global y 95,6 % en `extract` con markdown
+idéntico 5/5, por encima de la línea base PRO/PRO (85,7 %).
+
+```powershell
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffix _copytest -DryRun
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffix _copytest -DumpDir docs/auxiliares/temps/2026-09-21/copy-cu-dev
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Force      # los 24, sobrescribiendo los reconstruidos
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev            # puerta: los 6 con dataset en DEV
+```
 
 ## Copiar los clasificadores de Document Intelligence a un entorno
 
@@ -337,11 +394,10 @@ dataset actual no es el que entrenó los analyzers de PRO**:
   cuyo dataset actual coincide con el que entrenó PRO.
 
 Conclusión: la reconstrucción es fiel al dataset versionado, pero ese dataset
-ya no reproduce PRO para cinco de los seis analyzers. Antes de promocionar a
-PRE hay que decidir si el baseline es "PRO tal cual" (recuperar el estado de
-las etiquetas en la fecha del build de PRO, o clonar con la Copy API de CU) o
-"el dataset actual" (y entonces reconstruir también PRO para que los tres
-entornos coincidan).
+ya no reproduce PRO para cinco de los seis analyzers. Decisión del 2026-09-21:
+el baseline es PRO tal cual y la promoción pasa a la Copy API (sección
+anterior); el clon `CERA46_copytest` dio 90,0 % frente al 47,1 % del
+reconstruido.
 
 El acuerdo origen/destino solo se interpreta frente a una línea base:
 `-SelfCheck` analiza cada PDF dos veces contra el propio recurso de PRO y

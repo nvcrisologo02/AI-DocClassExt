@@ -69,6 +69,10 @@
     defecto) o cu_secondary.
 .PARAMETER SourceTarget
     Alias del recurso origen en resources.prod.json. Por defecto cu_primary.
+.PARAMETER TargetSuffix
+    Sufijo que se anade al id del analyzer en el DESTINO (por ejemplo
+    "_copytest" para comparar CERA46 de PRO con CERA46_copytest del entorno).
+    En origen se usa siempre el id sin sufijo. Vacio por defecto.
 .PARAMETER SelfCheck
     Control de varianza: analiza cada PDF dos veces contra el recurso ORIGEN
     (PRO) y compara las dos respuestas entre si, sin tocar el destino. Mide
@@ -114,6 +118,7 @@ param(
     [ValidateSet('cu_primary', 'cu_secondary')][string]$Target = 'cu_primary',
     [ValidateSet('cu_primary', 'cu_secondary')][string]$SourceTarget = 'cu_primary',
     [switch]$SelfCheck,
+    [string]$TargetSuffix = '',
     [int]$DatasetVersion,
     [ValidateRange(1, 50)][int]$SampleSize = 5,
     [switch]$WriteSelection,
@@ -528,15 +533,17 @@ $tokenIssuedAt = Get-Date
 # Comprobar que el analyzer existe (y esta ready) en origen y destino.
 Out-Line "== analyzers en origen y destino ==" Cyan
 $sides = if ($SelfCheck) { @($source) } else { @($source, $dest) }
+if ($TargetSuffix) { Out-Line "  sufijo     : en destino se valida <id>$TargetSuffix" }
 foreach ($item in $items) {
     foreach ($side in $sides) {
-        $g = Invoke-Cu -Method Get -Url "$($side.Endpoint)/contentunderstanding/analyzers/$($item.Id)?api-version=$ApiVersion" -Token $cuToken
+        $sideId = if ($side.Label -eq 'destino') { "$($item.Id)$TargetSuffix" } else { $item.Id }
+        $g = Invoke-Cu -Method Get -Url "$($side.Endpoint)/contentunderstanding/analyzers/$sideId`?api-version=$ApiVersion" -Token $cuToken
         if ($g.Status -in 401, 403) { throw "sin acceso al data plane de $($side.Account) (HTTP $($g.Status)): falta el rol Cognitive Services User" }
         if ($g.Status -eq 404) { throw "$($item.Id) no existe en $($side.Label) $($side.Account); en destino, lanza build-analyzers.ps1 -Environment $Environment" }
         if ($g.Status -ne 200) { throw "GET $($item.Id) en $($side.Account) -> HTTP $($g.Status): $($g.Error)" }
         $st = [string]$g.Content.status
         $color = if ($st -eq 'ready') { 'Green' } else { 'Yellow' }
-        Out-Line ("  {0,-18} {1,-8} {2,-32} status {3}" -f $item.Id, $side.Label, $side.Account, $st) $color
+        Out-Line ("  {0,-18} {1,-8} {2,-32} status {3}" -f $sideId, $side.Label, $side.Account, $st) $color
         if ($st -ne 'ready') { throw "$($item.Id) en $($side.Label) $($side.Account) esta en status '$st', no 'ready'" }
     }
 }
@@ -580,9 +587,10 @@ foreach ($item in $items) {
 
         # Lanzar en los dos recursos y sondear despues: ahorra la mitad del tiempo de espera.
         $opSrc = Start-Analysis -Endpoint $source.Endpoint -AnalyzerId $id -Bytes $bytes -Token $cuToken -Label "$id/$($doc.name) en $($source.Account)"
-        $opDst = Start-Analysis -Endpoint $dest.Endpoint -AnalyzerId $id -Bytes $bytes -Token $cuToken -Label "$id/$($doc.name) en $($dest.Account)"
+        $dstId = if ($dest.Label -eq 'destino') { "$id$TargetSuffix" } else { $id }
+        $opDst = Start-Analysis -Endpoint $dest.Endpoint -AnalyzerId $dstId -Bytes $bytes -Token $cuToken -Label "$dstId/$($doc.name) en $($dest.Account)"
         $resSrc = Wait-Analysis -OperationUrl $opSrc -Token $cuToken -Label "$id/$($doc.name) en $($source.Account)"
-        $resDst = Wait-Analysis -OperationUrl $opDst -Token $cuToken -Label "$id/$($doc.name) en $($dest.Account)"
+        $resDst = Wait-Analysis -OperationUrl $opDst -Token $cuToken -Label "$dstId/$($doc.name) en $($dest.Account)"
         if ($DumpDir) {
             Write-JsonFile -Path (Join-Path $DumpDir $id "$($doc.name).origen.json") -Object $resSrc
             Write-JsonFile -Path (Join-Path $DumpDir $id "$($doc.name).$($dest.Label).json") -Object $resDst
