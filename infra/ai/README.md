@@ -87,6 +87,15 @@ de referencia para una limpieza futura de los recursos origen.
   abajo); la petición a plataforma para este manifiesto y para
   "Estado inicial de DEV y PRE" cubre las dos, no solo `srbstgproapppdocai`.
 
+- **`validation/<analyzerId>.json`**: muestra de validación por analyzer
+  para `scripts/ai/validate-analyzer.ps1` (paso 5): referencias a 5 blobs PDF
+  del dataset copiado al entorno (`name`, `size`, `md5` tal como figuran en
+  `datasets/<id>@<version>.manifest.json`), elegidos de forma determinista
+  (índices equiespaciados sobre los PDF del manifiesto ordenados por nombre).
+  No se versiona ningún PDF; el script descarga cada blob del storage del
+  entorno en el momento de validar. Se regenera con `-WriteSelection`. Los
+  tres `CU_NS_*` comparten dataset y por tanto la misma muestra.
+
 - **`analyzers/*.json`**: definición de cada analyzer de Content
   Understanding referenciado por `ModeloConfigs`, exportada desde el recurso
   origen de PRO sin los campos de solo lectura (`status`, `createdAt`,
@@ -154,8 +163,9 @@ de referencia para una limpieza futura de los recursos origen.
 
 El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
 `scripts/ai/copy-labeling-dataset.ps1`, el paso 3
-`scripts/ai/build-analyzers.ps1` y el paso 4
-`scripts/ai/copy-di-artifacts.ps1`; los demás siguen pendientes):
+`scripts/ai/build-analyzers.ps1`, el paso 4
+`scripts/ai/copy-di-artifacts.ps1` y el paso 5
+`scripts/ai/validate-analyzer.ps1`; el paso 2 sigue pendiente):
 
 1. **Datasets** — preparar los datos de entrenamiento/referencia que
    necesiten los analyzers y clasificadores antes de recrearlos.
@@ -175,8 +185,11 @@ El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
    (esta sí soporta copia entre recursos; es una API distinta de la de
    Content Understanding del paso anterior). Ver "Copiar los clasificadores
    de Document Intelligence a un entorno" más abajo.
-5. **Validación** — comprobar que DEV/PRE clasifican con los recursos propios
-   y no con los de PRO, y que los resultados son equivalentes.
+5. **Validación** — comprobar que los analyzers reconstruidos en DEV/PRE
+   devuelven los mismos campos que el original de PRO sobre una muestra fija
+   de PDF del dataset del entorno. Ver "Validar los analyzers de un entorno"
+   más abajo. Que las Functions de DEV/PRE usen los recursos propios y no los
+   de PRO es el cutover (Tarea 15), no este paso.
 
 Estos pasos corresponden a las Tareas 10-14 del plan; esta carpeta es su
 entrada de datos.
@@ -257,6 +270,69 @@ pwsh scripts/ai/copy-di-artifacts.ps1 -Environment pre
 
 Como el resto de scripts de `scripts/ai/`, usa token de `az account
 get-access-token` con `Invoke-WebRequest` y UTF-8 explícito, nunca `az rest`.
+
+## Validar los analyzers de un entorno
+
+`scripts/ai/validate-analyzer.ps1` es el paso 5 del flujo (Tarea 13,
+AB#100315). Para cada `analyzers/<id>.json` resuelve el recurso origen
+(`cu_primary` de `resources.prod.json`) y el destino (`cu_primary` de
+`resources.<env>.json`, o `cu_secondary` con `-Target`), comprueba con `GET`
+que el analyzer está `ready` en los dos, toma la muestra de
+`validation/<id>.json`, descarga cada PDF del storage del entorno (token de
+`https://storage.azure.com/`, MD5 verificado contra el manifiesto) y lo envía
+en bytes a `POST /contentunderstanding/analyzers/<id>:analyzeBinary`
+(`api-version 2025-11-01`) en origen y destino. Se envía en binario porque en
+esa versión `:analyze` solo acepta `inputs[].url` y la identidad del recurso
+de PRO no puede leer el storage de DEV/PRE (los roles cruzados van en el otro
+sentido). Sondea `Operation-Location` hasta `Succeeded`. Primero compara el
+`markdown` de `result.contents[0]` (salida de OCR + layout) de los dos lados:
+si es idéntico, la etapa de extracción de contenido es la misma y cualquier
+diferencia de campos viene de la etapa LLM. Después compara
+`result.contents[0].fields` campo a campo según el `fieldSchema` de la
+definición, en forma canónica: cadenas sin espacios sobrantes e ignorando
+mayúsculas, números redondeados a 6 decimales, arrays y objetos por JSON
+canónico recursivo; un campo vacío en los dos lados cuenta como igual.
+
+Por analyzer informa el acuerdo global (campos iguales / comparados) y el
+acuerdo restringido a campos `extract`, que es el que mide la fidelidad de la
+copia: los campos `generate` llevan varianza propia del modelo incluso contra
+el mismo recurso. El umbral (`-MinFieldsRatio`, 0,9 por defecto) se aplica al
+acuerdo global y, si algún analyzer queda por debajo, el script termina con
+error después de procesar todos. Mide "la copia reproduce el original" sobre
+documentos ya vistos en el entrenamiento, no generalización.
+
+El informe completo va a `docs/auxiliares/temps/<fecha>/validacion-analyzers-<env>.txt`
+(gitignored; `-OutFile` lo cambia) y `-DumpDir` guarda el resultado crudo de
+cada análisis. Cada `:analyzeBinary` cuesta dinero en los dos recursos
+(páginas + tokens): con 6 analyzers y 5 PDF son 60 llamadas por pasada.
+`-DryRun` solo hace los `GET` de comprobación.
+
+```powershell
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -WriteSelection -DryRun   # (re)genera validation/*.json y ensaya
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -DryRun
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -Only CERA44_vado -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev
+```
+
+Resultado de la primera pasada en DEV (2026-09-21, 5 PDF por analyzer, 60
+llamadas): markdown idéntico en los 30 pares; acuerdo global 47-58 % en los
+tres `CERA*` (campos de texto largo, `generate` y fechas con formato libre),
+82-85 % en `CU_NS_1.4_3` y `CU_NS_1.5_0`, 93 % en `CU_NS_1.6_0_GGAA`. Los
+defaults de modelo de PRO y DEV son idénticos (`gpt-4.1-715420`,
+`text-embedding-3-large-030358`), así que la discrepancia es varianza del
+modelo sobre el mismo texto, no un defecto de la copia.
+
+El acuerdo origen/destino solo se interpreta frente a una línea base:
+`-SelfCheck` analiza cada PDF dos veces contra el propio recurso de PRO y
+compara las dos respuestas entre sí (informe
+`validacion-analyzers-<env>-selfcheck.txt`). Si el acuerdo origen/destino es
+del mismo orden que el acuerdo PRO/PRO, la diferencia es varianza del modelo
+y la copia es fiel; si queda claramente por debajo, revisar el manifiesto del
+dataset copiado y reconstruir con `build-analyzers.ps1 -Force`.
+
+```powershell
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SelfCheck -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers-selfcheck
+```
 
 ## Estado inicial de DEV y PRE
 
