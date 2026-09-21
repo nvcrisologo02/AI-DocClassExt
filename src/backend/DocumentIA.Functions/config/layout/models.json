@@ -5,6 +5,7 @@
       "Provider": "azure-document-intelligence-layout",
       "IsDefault": true,
       "Endpoint": "https://srbdiprodocai.cognitiveservices.azure.com/",
+      "ResourceAlias": "di",
       "ApiKey": "",
       "AuthMode": "DefaultAzureCredential",
       "ApiVersion": "2024-11-30",

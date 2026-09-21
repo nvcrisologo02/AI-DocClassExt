@@ -942,7 +942,7 @@ Invoke-RestMethod \
 
 ### 5.6.1 Schema de ConfiguracionJson por Tipo de Proveedor
 
-> Todos los parametros de conexion AI se almacenan **exclusivamente en BD** (tabla `ModeloConfigs`). No hay claves en `appsettings` para estos valores.
+> Los parametros de conexion AI (apiKey, authMode, deploymentName, etc.) se almacenan **exclusivamente en BD** (tabla `ModeloConfigs`); no hay claves en `appsettings` para esos secretos. El `endpoint` puede venir explicito en la fila de BD (como hasta ahora) o, alternativamente, resolverse desde el mapa de alias de recurso en App Settings (ver 5.6.1b).
 > La columna `ConfiguracionJson` del modelo contiene un objeto JSON cuya estructura depende del `provider`.
 
 #### Proveedor `azure-document-intelligence` (Clasificacion)
@@ -1049,6 +1049,21 @@ Invoke-RestMethod \
 ```
 
 > **Nota sobre `authMode`:** Con `"ManagedIdentity"` el campo `apiKey` se ignora y la autenticacion se realiza via Managed Identity de la Function App (sin credenciales en BD).
+
+### 5.6.1b Alias de recurso de IA (ResourceAlias)
+
+Cada fila de `ModeloConfigs` puede indicar, ademas del `endpoint` explicito, un `resourceAlias` que identifica el recurso fisico de IA al que pertenece el modelo. El alias no sustituye al `endpoint`: es una via alternativa de resolucion, pensada para entornos donde el endpoint aun no se conoce en el momento de dar de alta el modelo o donde se quiere centralizar el recurso por entorno sin tocar BD.
+
+| Alias | Servicio | App Setting |
+|-------|----------|-------------|
+| `openai_primary` | Azure OpenAI (extraccion GPT, prompts, clasificacion GPT) | `AI__Resources__openai_primary__Endpoint` |
+| `cu_primary` | Azure Content Understanding (region principal) | `AI__Resources__cu_primary__Endpoint` |
+| `cu_secondary` | Azure Content Understanding (region secundaria, claves de modelo terminadas en `-we`) | `AI__Resources__cu_secondary__Endpoint` |
+| `di` | Azure Document Intelligence (clasificacion y layout) | `AI__Resources__di__Endpoint` |
+
+Regla de resolucion: el `endpoint` explicito de la fila en BD siempre gana. Si la fila no trae `endpoint` y trae `resourceAlias`, el registro resuelve el endpoint desde `AI:Resources:<alias>:Endpoint`. Si el alias no tiene App Setting configurado en ese entorno, la carga del registro lanza `InvalidOperationException`.
+
+El alta y la modificacion de modelos (incluido el `resourceAlias`) siguen siendo una operacion de datos via Admin API o directamente en BD, sin necesidad de despliegue.
 
 ### 5.6.2 Resiliencia ante 429 (rate limit) en Azure OpenAI
 
