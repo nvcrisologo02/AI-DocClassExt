@@ -72,20 +72,30 @@ de referencia para una limpieza futura de los recursos origen.
 - **`analyzers/*.json`**: definición de cada analyzer de Content
   Understanding referenciado por `ModeloConfigs`, exportada desde el recurso
   origen de PRO sin los campos de solo lectura (`status`, `createdAt`,
-  `lastModifiedAt`, `warnings`, `supportedModels`), más `sourceAccount`/
-  `sourceEndpoint`/`exportedAtUtc` (o `sourceAccounts`/`sourceEndpoints` en
-  plural, ver abajo) para saber de qué cuenta salió cada copia. Son la
-  entrada para reconstruir el analyzer en DEV y PRE (ver "Flujo de
-  promoción" y el spike de la Copy API más abajo sobre por qué se
-  reconstruye en vez de copiar). Generados por
+  `lastModifiedAt`, `warnings`, `supportedModels`), más un objeto `_origin`
+  (`sourceAccount`/`sourceEndpoint`/`exportedAtUtc`, o `sourceAccounts`/
+  `sourceEndpoints` en plural, ver abajo) como última clave del fichero, para
+  saber de qué cuenta salió cada copia. `_origin` y `analyzerId` **no forman
+  parte del cuerpo de un `PUT /contentunderstanding/analyzers/{id}`**; la
+  Tarea 12 debe eliminarlos antes de enviar la definición al recurso destino.
+  `processingLocation`, `tags` y `description` sí son del cuerpo del `PUT` y
+  se mantienen tal cual. Son la entrada para reconstruir el analyzer en DEV y
+  PRE (ver "Flujo de promoción" y el spike de la Copy API más abajo sobre por
+  qué se reconstruye en vez de copiar). Generados por
   `scripts/ai/export-analyzer-definitions.ps1`.
 
   PRO tiene dos cuentas Foundry (`upe48-mm2avmdm-swedencentral` y
   `srbaisrv-westeurope`) y dos de los seis analyzers referenciados existen en
-  ambas. Se exportaron y compararon (ignorando los campos de origen):
+  ambas. Se exportaron y compararon (ignorando los campos de `_origin`):
   - `CU_NS_1.6_0_GGAA`: **idéntico** en las dos cuentas → un solo fichero
     `analyzers/CU_NS_1.6_0_GGAA.json` con `sourceAccounts` y
-    `sourceEndpoints` en plural (array con las dos cuentas).
+    `sourceEndpoints` en plural (array con las dos cuentas) dentro de
+    `_origin`. Esto es una decisión manual (copias idénticas en las dos
+    cuentas): una reejecución del script no la reproduce, porque siempre
+    exporta una sola cuenta por vez y escribe
+    `CU_NS_1.6_0_GGAA@<cuenta>.json` cuando la cuenta no es la primaria; tras
+    reexportar, comparar y fusionar a mano si el resultado sigue siendo
+    idéntico en las dos cuentas.
   - `CU_NS_1.5_0`: **difiere** (`tags` trae `projectId`/`templateId` en
     Sweden Central y viene `null` en West Europe) → dos ficheros:
     `analyzers/CU_NS_1.5_0.json` (Sweden Central, `sourceAccount` singular) y
@@ -213,7 +223,8 @@ listo para lanzar en `docs/auxiliares/temps/2026-09-21/spike-cu-copy-token.ps1`.
 
 ## Regenerar los analyzers
 
-Cuenta primaria (Sweden Central), los 6 analyzers y el inventario:
+Cuenta primaria (Sweden Central, también el valor por defecto de
+`-PrimaryEndpoint`), los 6 analyzers y el inventario:
 
 ```powershell
 pwsh scripts/ai/export-analyzer-definitions.ps1 -Ids CU_NS_1.4_3,CU_NS_1.5_0,CU_NS_1.6_0_GGAA,CERA16_v1,CERA44_vado,CERA46
@@ -228,20 +239,33 @@ pwsh scripts/ai/export-analyzer-definitions.ps1 -Ids CU_NS_1.5_0,CU_NS_1.6_0_GGA
     -InventoryFile infra/ai/inventory-prod-foundry-westeurope.json
 ```
 
+Como `-SourceEndpoint` no coincide con `-PrimaryEndpoint` (comparación sin
+barra final ni distinción de mayúsculas/minúsculas), el script escribe
+automáticamente `analyzers/CU_NS_1.5_0@srbaisrv-westeurope.json` y
+`analyzers/CU_NS_1.6_0_GGAA@srbaisrv-westeurope.json` en vez de
+`<id>.json`, aunque se use el mismo `-OutDir` por defecto: una reejecución de
+la cuenta secundaria nunca pisa los ficheros ya exportados de la cuenta
+primaria. Si se omite `-InventoryFile`, el nombre por defecto también
+incorpora la cuenta (`infra/ai/inventory-prod-foundry-<cuenta>.json`); aquí
+se pasa explícito para mantener el nombre corto `westeurope` ya usado en el
+repositorio. El plural `sourceAccounts`/`sourceEndpoints` de
+`analyzers/CU_NS_1.6_0_GGAA.json` es una decisión manual (copias idénticas
+en las dos cuentas) que una reejecución no reproduce: tras reexportar,
+comparar y fusionar a mano.
+
 Añade `-SkipInventory` si solo quieres reexportar uno o dos analyzers de una
-cuenta sin volver a listar (ni pisar el inventario) de esa cuenta — por
-ejemplo, para comparar una cuenta contra otra en un directorio aparte antes
-de decidir si el resultado va a `analyzers/<id>.json` o a
-`analyzers/<id>@<cuenta>.json` (ver la sección de analyzers más arriba).
+cuenta sin volver a listar (ni pisar el inventario) de esa cuenta.
 
 El script hace únicamente operaciones de lectura (GET) contra la cuenta
 Foundry indicada; no crea, modifica ni borra ningún analyzer. Pagina la
 lista completa (sigue `nextLink` hasta que no hay más páginas) y ordena el
 inventario por `analyzerId`. Cada JSON generado (analyzers e inventario) se
 escribe en UTF-8 sin BOM, con salto de línea LF y una línea final, igual que
-el resto de `infra/ai/`. Un GET que falla lanza `GET <url> -> <status>:
-<body>` con el cuerpo de error de la API, en vez de fallar silenciosamente
-más adelante al parsear `$null` como JSON.
+el resto de `infra/ai/`. Los campos de origen de cada analyzer van agrupados
+bajo `_origin`, como última clave del objeto (ver la sección de analyzers
+más arriba sobre por qué no van sueltos en la raíz). Un GET que falla lanza
+`GET <url> -> <status>: <body>` con el cuerpo de error de la API, en vez de
+fallar silenciosamente más adelante al parsear `$null` como JSON.
 
 Nota de implementación: el script obtiene el cuerpo de cada analyzer con
 `Invoke-WebRequest` y un token de `az account get-access-token`, decodificando

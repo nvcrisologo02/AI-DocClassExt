@@ -246,7 +246,9 @@
     "completion": "gpt-4.1",
     "embedding": "text-embedding-3-large"
   },
-  "sourceAccount": "srbaisrv-westeurope",
-  "sourceEndpoint": "https://srbaisrv-westeurope.services.ai.azure.com",
-  "exportedAtUtc": "2026-09-21T08:57:50.5177700Z"
+  "_origin": {
+    "sourceAccount": "srbaisrv-westeurope",
+    "sourceEndpoint": "https://srbaisrv-westeurope.services.ai.azure.com",
+    "exportedAtUtc": "2026-09-21T08:57:50.5177700Z"
+  }
 }
