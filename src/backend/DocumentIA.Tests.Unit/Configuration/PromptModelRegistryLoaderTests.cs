@@ -78,6 +78,72 @@ public class PromptModelRegistryLoaderTests : IDisposable
         action.Should().Throw<KeyNotFoundException>();
     }
 
+    private static AiEndpointResolver ResolverDePrueba() => new(new Dictionary<string, AiResourceEntry>
+    {
+        ["openai_primary"] = new() { Endpoint = "https://openai-dev.example/" },
+    });
+
+    [Fact]
+    public void Load_ModeloConAliasSinEndpoint_ResuelveEndpointDesdeElAlias()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""prompt.gpt5-mini"", ""provider"": ""azure-openai"",
+                  ""deploymentName"": ""gpt-5-mini"", ""resourceAlias"": ""openai_primary"" }
+            ]
+        }");
+
+        var loader = new PromptModelRegistryLoader(_registryPath, ResolverDePrueba());
+
+        loader.GetModel("prompt.gpt5-mini").Endpoint.Should().Be("https://openai-dev.example/");
+    }
+
+    [Fact]
+    public void Load_ModeloConEndpointExplicitoYAlias_ConservaElExplicito()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""prompt.gpt5-mini"", ""provider"": ""azure-openai"",
+                  ""endpoint"": ""https://explicito.example/"", ""resourceAlias"": ""openai_primary"" }
+            ]
+        }");
+
+        var loader = new PromptModelRegistryLoader(_registryPath, ResolverDePrueba());
+
+        loader.GetModel("prompt.gpt5-mini").Endpoint.Should().Be("https://explicito.example/");
+    }
+
+    [Fact]
+    public void Load_ModeloConAliasNoMapeado_LanzaAlCargarElRegistro()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""x"", ""provider"": ""azure-document-intelligence"", ""resourceAlias"": ""di"" }
+            ]
+        }");
+
+        var loader = new PromptModelRegistryLoader(_registryPath, ResolverDePrueba());
+
+        var act = () => loader.Load();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*di*");
+    }
+
+    [Fact]
+    public void Load_SinResolvedor_ConservaComportamientoActual()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""prompt.gpt5-mini"", ""provider"": ""azure-openai"",
+                  ""endpoint"": ""https://pro.example/"" }
+            ]
+        }");
+
+        var loader = new PromptModelRegistryLoader(_registryPath);
+
+        loader.GetModel("prompt.gpt5-mini").Endpoint.Should().Be("https://pro.example/");
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

@@ -11,17 +11,20 @@ public class PromptModelRegistryLoader
     private readonly string? _registryFilePath;
     private readonly IMemoryCache? _cache;
     private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly IAiEndpointResolver _endpointResolver;
     private PromptModelRegistry? _cachedRegistry;
 
-    public PromptModelRegistryLoader(string registryFilePath)
+    public PromptModelRegistryLoader(string registryFilePath, IAiEndpointResolver? endpointResolver = null)
     {
         _registryFilePath = registryFilePath;
+        _endpointResolver = endpointResolver ?? AiEndpointResolver.Empty;
     }
 
-    public PromptModelRegistryLoader(IMemoryCache cache, IServiceScopeFactory scopeFactory)
+    public PromptModelRegistryLoader(IMemoryCache cache, IServiceScopeFactory scopeFactory, IAiEndpointResolver? endpointResolver = null)
     {
         _cache = cache;
         _scopeFactory = scopeFactory;
+        _endpointResolver = endpointResolver ?? AiEndpointResolver.Empty;
     }
 
     public PromptModelRegistry Load()
@@ -55,6 +58,8 @@ public class PromptModelRegistryLoader
         {
             PropertyNameCaseInsensitive = true
         }) ?? throw new InvalidDataException($"Registro de modelos de prompt invalido en {_registryFilePath}");
+
+        ResolverEndpoints(_cachedRegistry);
 
         return _cachedRegistry;
     }
@@ -90,7 +95,17 @@ public class PromptModelRegistryLoader
             registry.Models.Add(model);
         }
 
+        ResolverEndpoints(registry);
+
         return registry;
+    }
+
+    private void ResolverEndpoints(PromptModelRegistry registry)
+    {
+        foreach (var model in registry.Models)
+        {
+            model.Endpoint = _endpointResolver.Resolve(model.Endpoint, model.ResourceAlias, model.Key);
+        }
     }
 }
 
@@ -104,6 +119,8 @@ public class PromptModelConfig
     public string Key { get; set; } = string.Empty;
     public string Provider { get; set; } = string.Empty;
     public string Endpoint { get; set; } = string.Empty;
+    /// <summary>Alias lógico del recurso (openai_primary, cu_primary, cu_secondary, di). Se resuelve a Endpoint al cargar.</summary>
+    public string ResourceAlias { get; set; } = string.Empty;
     public string ApiKey { get; set; } = string.Empty;
     public string AuthMode { get; set; } = "ApiKey";
     public string DeploymentName { get; set; } = string.Empty;

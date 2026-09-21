@@ -129,6 +129,72 @@ public class ClassificationModelRegistryLoaderTests : IDisposable
         model.FallbackThreshold.Should().Be(0.6);
     }
 
+    private static AiEndpointResolver ResolverDePrueba() => new(new Dictionary<string, AiResourceEntry>
+    {
+        ["di"] = new() { Endpoint = "https://di-dev.example/" },
+    });
+
+    [Fact]
+    public void Load_ModeloConAliasSinEndpoint_ResuelveEndpointDesdeElAlias()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""default.azure-di"", ""provider"": ""azure-document-intelligence"",
+                  ""classifierId"": ""classifier-demo"", ""resourceAlias"": ""di"" }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath, ResolverDePrueba());
+
+        loader.GetModel("default.azure-di").Endpoint.Should().Be("https://di-dev.example/");
+    }
+
+    [Fact]
+    public void Load_ModeloConEndpointExplicitoYAlias_ConservaElExplicito()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""default.azure-di"", ""provider"": ""azure-document-intelligence"",
+                  ""endpoint"": ""https://explicito.example/"", ""resourceAlias"": ""di"" }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath, ResolverDePrueba());
+
+        loader.GetModel("default.azure-di").Endpoint.Should().Be("https://explicito.example/");
+    }
+
+    [Fact]
+    public void Load_ModeloConAliasNoMapeado_LanzaAlCargarElRegistro()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""x"", ""provider"": ""azure-openai"", ""resourceAlias"": ""openai_primary"" }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath, ResolverDePrueba());
+
+        var act = () => loader.Load();
+
+        act.Should().Throw<InvalidOperationException>().WithMessage("*openai_primary*");
+    }
+
+    [Fact]
+    public void Load_SinResolvedor_ConservaComportamientoActual()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""default.azure-di"", ""provider"": ""azure-document-intelligence"",
+                  ""endpoint"": ""https://pro.example/"" }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath);
+
+        loader.GetModel("default.azure-di").Endpoint.Should().Be("https://pro.example/");
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))

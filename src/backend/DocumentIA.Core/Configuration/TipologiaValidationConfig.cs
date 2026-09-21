@@ -304,6 +304,8 @@ namespace DocumentIA.Core.Configuration
         public bool IsDefault { get; set; }
         public bool UseAsFallback { get; set; }
         public string Endpoint { get; set; } = string.Empty;
+        /// <summary>Alias lógico del recurso (openai_primary, cu_primary, cu_secondary, di). Se resuelve a Endpoint al cargar.</summary>
+        public string ResourceAlias { get; set; } = string.Empty;
         public string ApiKey { get; set; } = string.Empty;
         public string AuthMode { get; set; } = "ApiKey";
         public string AnalyzerId { get; set; } = string.Empty;
