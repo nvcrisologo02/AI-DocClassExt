@@ -42,8 +42,8 @@
          acuerdo restringido a campos con method "extract" (los "generate"
          tienen varianza propia del modelo incluso contra el mismo recurso).
          Si el acuerdo global de algun analyzer queda por debajo de
-         -MinFieldsRatio (0,9 por defecto), el script termina con error tras
-         procesar todos.
+         -MinFieldsRatio (0,85 por defecto: linea base PRO/PRO menos margen),
+         el script termina con error tras procesar todos.
 
     Cada :analyzeBinary cuesta dinero en los dos recursos (paginas de
     documento + tokens del modelo). Ensaya siempre con -DryRun, que solo
@@ -88,7 +88,9 @@
     (Re)genera infra/ai/validation/<id>.json a partir del manifiesto del
     dataset y sigue. Sin este switch el fichero debe existir ya.
 .PARAMETER MinFieldsRatio
-    Umbral minimo de acuerdo global por analyzer. Por defecto 0.9.
+    Umbral minimo de acuerdo global por analyzer. Por defecto 0.85: la linea
+    base PRO/PRO (-SelfCheck) del 2026-09-21 dio 0,86-0,91, y el criterio de
+    aceptacion es "acuerdo >= linea base menos margen" con markdown identico.
 .PARAMETER DryRun
     No descarga ni analiza nada: solo GET de los analyzers en origen y destino,
     resolucion de la muestra y del manifiesto, y el informe de lo que haria.
@@ -122,7 +124,7 @@ param(
     [int]$DatasetVersion,
     [ValidateRange(1, 50)][int]$SampleSize = 5,
     [switch]$WriteSelection,
-    [ValidateRange(0.0, 1.0)][double]$MinFieldsRatio = 0.9,
+    [ValidateRange(0.0, 1.0)][double]$MinFieldsRatio = 0.85,
     [switch]$DryRun,
     [switch]$WhatIf,
     [string]$OutFile,

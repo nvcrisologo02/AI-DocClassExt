@@ -2,8 +2,8 @@
   "environment": "pre",
   "resources": {
     "openai_primary": { "account": "srbaisrv01predocai", "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbaisrv01predocai.openai.azure.com" },
-    "cu_primary":     { "account": "srbaisrv01predocai", "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbaisrv01predocai.services.ai.azure.com/" },
-    "cu_secondary":   { "account": "srbaisrv02predocai", "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbaisrv02predocai.services.ai.azure.com/" },
+    "cu_primary":     { "account": "srbaisrv01predocai", "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbaisrv01predocai.services.ai.azure.com/", "subscriptionId": "a4f6b357-8f13-4488-9ee8-b9f635426f91", "location": "westeurope" },
+    "cu_secondary":   { "account": "srbaisrv02predocai", "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbaisrv02predocai.services.ai.azure.com/", "subscriptionId": "a4f6b357-8f13-4488-9ee8-b9f635426f91", "location": "westeurope" },
     "di":             { "account": "srbdipredocai",      "resourceGroup": "SRBRGPREDOCSAI", "endpoint": "https://srbdipredocai.cognitiveservices.azure.com/" }
   }
 }

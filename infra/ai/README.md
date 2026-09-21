@@ -24,7 +24,7 @@ de referencia para una limpieza futura de los recursos origen.
   de Azure AI por entorno — `openai_primary`, `cu_primary`, `cu_secondary` y
   `di` — con su grupo de recursos y endpoint. Las cuentas CU llevan además
   `subscriptionId` y `location`, que la Copy API necesita para formar el id
-  ARM y la región (pendiente en `resources.pre.json`). Es el mapa que resuelve los
+  ARM y la región. Es el mapa que resuelve los
   alias de recurso (`ResourceAlias`) introducidos en las Tareas 1-4 del plan.
 
 - **`deployments.<env>.json`**: los deployments de modelo (nombre de
@@ -202,7 +202,7 @@ reentrenar), el paso 4
    (esta sí soporta copia entre recursos; es una API distinta de la de
    Content Understanding del paso anterior). Ver "Copiar los clasificadores
    de Document Intelligence a un entorno" más abajo.
-5. **Validación** — comprobar que los analyzers reconstruidos en DEV/PRE
+5. **Validación** — comprobar que los analyzers copiados a DEV/PRE
    devuelven los mismos campos que el original de PRO sobre una muestra fija
    de PDF del dataset del entorno. Ver "Validar los analyzers de un entorno"
    más abajo. Que las Functions de DEV/PRE usen los recursos propios y no los
@@ -353,10 +353,19 @@ canónico recursivo; un campo vacío en los dos lados cuenta como igual.
 Por analyzer informa el acuerdo global (campos iguales / comparados) y el
 acuerdo restringido a campos `extract`, que es el que mide la fidelidad de la
 copia: los campos `generate` llevan varianza propia del modelo incluso contra
-el mismo recurso. El umbral (`-MinFieldsRatio`, 0,9 por defecto) se aplica al
+el mismo recurso. El umbral (`-MinFieldsRatio`, 0,85 por defecto) se aplica al
 acuerdo global y, si algún analyzer queda por debajo, el script termina con
 error después de procesar todos. Mide "la copia reproduce el original" sobre
 documentos ya vistos en el entrenamiento, no generalización.
+
+**Criterio de aceptación de una copia.** Un analyzer copiado se da por bueno
+cuando (a) la definición en destino es idéntica a la de origen (lo comprueba
+`copy-cu-analyzers.ps1`), (b) el `markdown` es idéntico en todos los pares y
+(c) el acuerdo global es igual o superior a la línea base PRO/PRO menos un
+margen. La línea base medida el 2026-09-21 con `-SelfCheck` fue 0,86-0,91, de
+ahí el umbral 0,85: por encima de él la diferencia es varianza del modelo,
+no una copia infiel. Un umbral fijo más alto (el 0,9 original del plan) haría
+fallar copias correctas por ruido de los campos `generate`.
 
 El informe completo va a `docs/auxiliares/temps/<fecha>/validacion-analyzers-<env>.txt`
 (gitignored; `-OutFile` lo cambia) y `-DumpDir` guarda el resultado crudo de
@@ -371,8 +380,17 @@ pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -Only CERA44_vado -DumpDi
 pwsh scripts/ai/validate-analyzer.ps1 -Environment dev
 ```
 
-Resultado de la primera pasada en DEV (2026-09-21, 5 PDF por analyzer, 60
-llamadas): markdown idéntico en los 30 pares; acuerdo global 47-58 % en los
+Resultado de la pasada contra los 24 analyzers copiados por Copy API (DEV,
+2026-09-21, 60 llamadas): markdown idéntico en los 30 pares y acuerdo global
+86,3 % (`CERA16_v1`), 95,0 % (`CERA44_vado`), 97,1 % (`CERA46`), 91,4 %
+(`CU_NS_1.4_3`), 93,6 % (`CU_NS_1.5_0`) y 90,8 % (`CU_NS_1.6_0_GGAA`): los
+seis pasan el criterio de aceptación (umbral 0,85). Las diferencias restantes
+se concentran en campos `generate` y en extracciones largas truncadas a distinta
+longitud, es decir, varianza del modelo.
+
+Resultado de la primera pasada contra los analyzers **reconstruidos** (DEV,
+2026-09-21, 60 llamadas), que motivó el cambio a la Copy API: markdown
+idéntico en los 30 pares; acuerdo global 47-58 % en los
 tres `CERA*`, 82-85 % en `CU_NS_1.4_3` y `CU_NS_1.5_0`, 93 % en
 `CU_NS_1.6_0_GGAA`. La línea base PRO/PRO (`-SelfCheck`, 20 llamadas) dio
 85,7 % en `CERA46` y 91,4 % en `CU_NS_1.4_3`, así que la brecha no es
