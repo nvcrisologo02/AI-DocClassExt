@@ -1065,6 +1065,10 @@ Regla de resolucion: el `endpoint` explicito de la fila en BD siempre gana. Si l
 
 El alta y la modificacion de modelos (incluido el `resourceAlias`) siguen siendo una operacion de datos via Admin API o directamente en BD, sin necesidad de despliegue.
 
+El host de Functions no lee la seccion `AI` de `appsettings.json` (ese fichero solo documenta la forma del mapa); los valores tienen que llegar como App Settings en Azure y, en ejecucion local, como entradas `Values` de `local.settings.json` con la clave `AI__Resources__<alias>__Endpoint`.
+
+Un App Setting presente pero con valor vacio cuenta como no mapeado: produce la misma `InvalidOperationException` que si el App Setting no existiera.
+
 ### 5.6.2 Resiliencia ante 429 (rate limit) en Azure OpenAI
 
 Ante errores `429 Too Many Requests` (cuota agotada) devueltos por Azure OpenAI, las llamadas de **clasificacion GPT** y de **prompts** pasan por un componente de resiliencia que reintenta la llamada de forma controlada y, si la cuota sigue agotada, corta el circuito para no seguir golpeando el servicio.

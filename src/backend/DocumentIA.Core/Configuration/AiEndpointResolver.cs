@@ -45,6 +45,7 @@ public sealed class AiEndpointResolver : IAiEndpointResolver
 
         throw new InvalidOperationException(
             $"El modelo '{modelKey}' referencia el alias de recurso '{resourceAlias}' y no existe el App Setting " +
-            $"AI__Resources__{resourceAlias}__Endpoint en este entorno.");
+            $"AI__Resources__{resourceAlias}__Endpoint en este entorno. Un App Setting presente pero con valor " +
+            "vacio cuenta como no mapeado.");
     }
 }
