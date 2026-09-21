@@ -36,9 +36,23 @@ inventario de referencia para una limpieza futura del recurso origen.
 - **`di-artifacts.json`**: clasificadores y modelos personalizados de
   Document Intelligence en el recurso origen (`srbdiprodocai`, PRO) que hay
   que copiar a DEV y PRE, con el nombre de configuración que los referencia.
-  Incluye una nota conocida: el recurso origen expone hoy `DI_NS1.4_v0`, no
-  `DI_NS_1.4_v1` — la resolución de esa discrepancia queda para la Tarea 8,
-  antes de ejecutar cualquier copia.
+  Resuelto en la Tarea 8 (AB#100310): el id real del modelo es `DI_NS1.4_v0`
+  (`DI_NS_1.4_v1` no existe en el recurso origen). La fila de `ModeloConfigs`
+  que aún referencia el id inexistente (`nota.simple.1_4.azure-di`, activa en
+  DEV y en PRO) queda anotada como pendiente de corregir por datos; no se ha
+  tocado en base de datos desde aquí. Verificado además que esa fila está hoy
+  huérfana: ninguna tipología activa usa esa clave para su extracción (la
+  tipología `nota.simple.1_4` extrae con Content Understanding, no con DI).
+
+- **`datasets/<clasificador>@<version>.manifest.json`**: dataset de
+  entrenamiento/referencia (contenedor, prefijo, fecha de corte y ficheros)
+  usado por Document Intelligence Studio o Content Understanding Studio para
+  un analyzer/clasificador. `DocumentAICC_v1@1.manifest.json` quedó con
+  `"status": "pendiente de acceso al storage"` (Tarea 8, Step 3): el
+  contenedor `documentai` de `srbstgproapppdocai` existe y no tiene
+  restricciones de red, pero mi identidad no tiene el rol de datos
+  (Storage Blob Data Reader) necesario para listar su contenido y localizar
+  el prefijo exacto del proyecto del clasificador.
 
 - **`analyzers/*.json`**: definición de cada analyzer de Content
   Understanding referenciado por `ModeloConfigs`, exportada desde el recurso
@@ -78,7 +92,55 @@ implementados; esta carpeta es su entrada de datos.
 
 ## Estado inicial de DEV y PRE
 
-pendiente (Tarea 8)
+**Content Understanding (Tarea 8, Step 1, AB#100310) -- pendiente de plataforma.**
+`GET /contentunderstanding/analyzers?api-version=2025-11-01` contra
+`srbaisrv01devdocai` y `srbaisrv01predocai` devuelve **401** con cuerpo
+`{"error":{"code":"PermissionDenied","message":"Principal does not have access to
+API/Operation."}}` para el usuario del proyecto (`ignacio.varas@sareb.es`) en ambos
+recursos. Verificado con `az role definition list --name "Cognitive Services User"
+--query "[].permissions[].dataActions"`, que devuelve `["Microsoft.CognitiveServices/*"]`
+-- ese comodin cubre la data action de lectura de analyzers, por lo que el rol
+**Cognitive Services User** es suficiente. Peticion a plataforma: conceder el rol
+**Cognitive Services User** al usuario del proyecto sobre `srbaisrv01devdocai`
+(`SRBRGDEVDOCSAI`) y `srbaisrv01predocai` (`SRBRGPREDOCSAI`), o como alternativa
+entregar el listado `GET /contentunderstanding/analyzers` de ambas cuentas.
+
+## Roles cruzados sobre PRO (Tarea 8, Step 4, AB#100310)
+
+Las identidades administradas de las Functions de DEV (`srbappdevdocai`,
+`71380c7e-fbb5-4333-8b35-0126e9e87720`) y PRE (`srbapppredocai`,
+`0383f8d8-7f82-46b0-a3d4-28ad9ae472ca`) tienen, cada una, **3 asignaciones de rol
+Cognitive Services User** sobre recursos de `SRBRGDOCSAIPROD` (verificado con la REST
+API de ARM `roleAssignments?$filter=assignedTo(...)`, a nivel de resource group y
+tambien a nivel de suscripcion completa para descartar asignaciones fuera de ese RG):
+
+- `srbdiprodocai` (recurso de Document Intelligence origen)
+- `upe48-mm2avmdm-swedencentral` (recurso Foundry primario de PRO)
+- `srbaisrv-westeurope` (recurso Foundry secundario de PRO)
+
+Son 6 asignaciones en total (3 por identidad), todas con el mismo rol. Detalle completo
+en `docs/auxiliares/temps/2026-09-21/roles-cross-env.json` (gitignored). Es la lista
+que la Tarea de la fase 3 debe retirar una vez que DEV y PRE tengan sus propios
+recursos de IA y dejen de apuntar a los de PRO. Nota tecnica: `az role assignment
+list --scope ... --assignee ...` devolvio `(MissingSubscription)` en este entorno con
+el proxy TLS activo; se resolvio llamando directamente a la REST API de ARM
+(`az rest`) con el filtro `assignedTo('<principalId>')`, que si funciono.
+
+## Spike Copy API de Content Understanding (Tarea 7, AB#100309)
+
+Se probo el Step 1 (autorizacion) del flujo `grantCopyAuthorization` + `:copy` entre
+`upe48-mm2avmdm-swedencentral` (origen) y `srbaisrv-westeurope` (destino, ambos en
+PRO). Resultado: **200 OK**, pero la respuesta real de `api-version=2025-11-01` no
+incluye un token portable como describe la guia "disaster recovery" -- solo
+`targetAzureResourceId`, `targetRegion` y `expiresAt` (24h). La documentacion oficial
+vigente exige el rol **Cognitive Services User** en origen y destino para la MISMA
+identidad que ejecuta el `:copy`, no un secreto transportable a una identidad
+distinta. Veredicto provisional: la copia parece viable si la promocion la ejecuta
+una identidad con ese rol concedido temporalmente en ambos recursos, pero no se ha
+confirmado el `:copy` real (no ejecutado, por decision expresa de no crear recursos
+en este spike). Detalle completo, comandos y respuestas en
+`docs/auxiliares/temps/2026-09-21/spike-cu-copy-token.md` (gitignored) y el script
+listo para lanzar en `docs/auxiliares/temps/2026-09-21/spike-cu-copy-token.ps1`.
 
 ## Regenerar los analyzers
 

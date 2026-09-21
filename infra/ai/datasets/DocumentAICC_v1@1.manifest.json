@@ -1,0 +1,12 @@
+{
+  "classifierId": "DocumentAICC_v1",
+  "status": "pendiente de acceso al storage",
+  "storageAccount": "srbstgproapppdocai",
+  "resourceGroup": "SRBRGDOCSAIPROD",
+  "containerUrl": "https://srbstgproapppdocai.blob.core.windows.net/documentai",
+  "prefix": null,
+  "cutoffDate": null,
+  "fileCount": null,
+  "files": [],
+  "note": "El contenedor 'documentai' existe (List Containers a nivel de cuenta funciono, 200 OK) y es el mismo contenedor donde ya se conoce el dataset de Content Understanding (labelingProjects/01ecc742-3215-4bf8-bdc2-ea7a7ef00fd1/train). No se pudo listar su contenido (List Blobs) para localizar el prefijo del proyecto de Document Intelligence Studio del clasificador DocumentAICC_v1: la llamada devolvio 403 AuthorizationPermissionMismatch ('This request is not authorized to perform this operation using this permission'). No es un problema de red: el recurso tiene publicNetworkAccess=Enabled y networkRuleSet.defaultAction=Allow (verificado con 'az storage account show'), por lo que no hay private endpoint bloqueando la peticion. Es una carencia de RBAC de datos: mi identidad tiene Contributor, User Access Administrator y Reader and Data Access sobre el resource group SRBRGDOCSAIPROD (verificado con la REST API de roleAssignments), pero ninguno de esos roles concede las data actions de blobs (Storage Blob Data Reader/Contributor). Pendiente pedir a plataforma el rol Storage Blob Data Reader sobre 'srbstgproapppdocai' (idealmente acotado al contenedor 'documentai') para completar este manifiesto con prefix, cutoffDate, fileCount y la lista de ficheros."
+}
