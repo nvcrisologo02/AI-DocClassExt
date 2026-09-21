@@ -39,6 +39,17 @@ de referencia para una limpieza futura de los recursos origen.
     escritura, el 2026-09-21). Incluye `gpt-4o` y un segundo `gpt-5-mini` en
     la cuenta secundaria (`srbaisrv-westeurope`) que no estaban en la
     hipótesis inicial del plan.
+  - `contentUnderstandingDefaults` (solo en los ficheros `desired`): mapeo
+    alias de modelo → nombre de deployment que Content Understanding debe
+    tener como *defaults* en cada cuenta Foundry del entorno
+    (`PATCH /contentunderstanding/defaults`). Sin defaults el servicio
+    rechaza cualquier build de analyzer con `DefaultsNotSet` (verificado en
+    `srbaisrv01devdocai` y `srbaisrv02devdocai` el 2026-09-21), así que
+    `scripts/ai/build-analyzers.ps1` los comprueba y fija antes del primer
+    PUT. Replica el mapeo observado en PRO (`gpt-4.1`, `gpt-4.1-mini`,
+    `text-embedding-3-large` y los tres alias `prebuilt-analyzer-*`) con los
+    deployments de cada cuenta; cada nombre debe existir en `accounts` del
+    mismo fichero.
 
 - **`di-artifacts.json`**: clasificadores y modelos personalizados de
   Document Intelligence en el recurso origen (`srbdiprodocai`, PRO) que hay
@@ -132,9 +143,11 @@ de referencia para una limpieza futura de los recursos origen.
   Sirve para identificar en el futuro qué analyzers de cada cuenta ya no se
   usan y se pueden retirar.
 
-## Flujo de promoción (Tareas 10 a 14 — aún no existen)
+## Flujo de promoción (Tareas 10 a 14)
 
-El orden previsto para aplicar esta definición a DEV y PRE es:
+El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
+`scripts/ai/copy-labeling-dataset.ps1` y el paso 3
+`scripts/ai/build-analyzers.ps1`; los demás siguen pendientes):
 
 1. **Datasets** — preparar los datos de entrenamiento/referencia que
    necesiten los analyzers y clasificadores antes de recrearlos.
@@ -156,8 +169,47 @@ El orden previsto para aplicar esta definición a DEV y PRE es:
 5. **Validación** — comprobar que DEV/PRE clasifican con los recursos propios
    y no con los de PRO, y que los resultados son equivalentes.
 
-Estos pasos corresponden a las Tareas 10-14 del plan y todavía no están
-implementados; esta carpeta es su entrada de datos.
+Estos pasos corresponden a las Tareas 10-14 del plan; esta carpeta es su
+entrada de datos.
+
+## Reconstruir los analyzers en un entorno
+
+`scripts/ai/build-analyzers.ps1` es el paso 3 del flujo. Para cada
+`analyzers/<id>.json` (ignora las copias `<id>@<cuenta>.json`; para
+`CU_NS_1.5_0` se reconstruye la de la cuenta primaria, que solo difiere de
+la de West Europe en `tags`) resuelve el recurso destino en
+`resources.<env>.json` (`cu_primary` por defecto; `cu_secondary` solo con
+`-Target cu_secondary` y tras dar a su identidad Storage Blob Data Reader
+sobre el storage del entorno), el dataset en
+`datasets/<id>@<versión>.manifest.json` (la versión más alta, que debe ser
+del mismo entorno y tener `status: copied`) y construye el cuerpo del PUT:
+quita `analyzerId`, los campos de solo lectura y `_origin`, y reescribe
+`knowledgeSources[].containerUrl`/`prefix` al dataset del entorno. Todo lo
+demás (`description`, `tags`, `baseAnalyzerId`, `config`, `fieldSchema`,
+`processingLocation`, `models`) viaja tal cual, así que el analyzer
+resultante es la misma definición reentrenada con la copia del dataset.
+
+Antes del primer PUT en cada cuenta comprueba los defaults de Content
+Understanding (`contentUnderstandingDefaults` de `deployments.<env>.json`,
+ver arriba) y hace PATCH si falta algún alias. Si el analyzer ya existe con
+la misma definición (comparación con claves ordenadas de lo que se envía) y
+está en `ready`, lo salta; si difiere, PUT con `allowReplace=true`; con
+`-Force` reconstruye siempre. Sondea `Operation-Location` hasta
+`succeeded`/`ready` (o `failed`, o `-TimeoutMinutes`, 40 por defecto).
+
+Ensayar siempre primero: `-DryRun` no escribe nada en Azure y `-DumpDir`
+vuelca el cuerpo exacto de cada PUT para revisarlo.
+
+```powershell
+pwsh scripts/ai/build-analyzers.ps1 -Environment dev -Only CERA44_vado -DryRun -DumpDir docs/auxiliares/temps/2026-09-21/build-analyzers-dev
+pwsh scripts/ai/build-analyzers.ps1 -Environment dev -Only CERA44_vado
+pwsh scripts/ai/build-analyzers.ps1 -Environment dev
+```
+
+Cada build reentrena desde el dataset (del orden de 20 EUR y varios minutos
+por analyzer, según el plan). Como el resto de scripts de `scripts/ai/`, usa
+token de `az account get-access-token` con `Invoke-WebRequest` y UTF-8
+explícito en cuerpo y respuesta, nunca `az rest`.
 
 ## Estado inicial de DEV y PRE
 

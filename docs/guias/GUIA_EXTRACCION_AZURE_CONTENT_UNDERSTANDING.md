@@ -692,6 +692,10 @@ Script: **`scripts/deployment/recreate-cu-analyzer.ps1`** (GET definición del o
 - **`-FromExport <ruta>`**: usa una definición local (p. ej. un export de `scripts/arm/`) en vez de hacer GET al origen.
 - Al versionar, este método encaja con la política de "**construir desde el proyecto**" ([12.7](#127-añadir-o-quitar-campos-de-un-analizador-existente)): la versión nueva ya se construye reentrenando, así que replicarla al secundario reentrenando es coherente.
 
+### 12.2c Promoción entre entornos (DEV / PRE) desde `infra/ai`
+
+Para llevar los analizadores a los recursos Foundry propios de DEV y PRE, el mecanismo de promoción es la **reconstrucción** desde la definición versionada, no la Copy API: `scripts/ai/build-analyzers.ps1 -Environment dev|pre` lee `infra/ai/analyzers/<id>.json` (export de PRO), reescribe `knowledgeSources` al dataset copiado al storage del entorno (`infra/ai/datasets/<id>@<versión>.manifest.json`, generado por `scripts/ai/copy-labeling-dataset.ps1`), comprueba y fija los defaults de modelo de la cuenta destino (`contentUnderstandingDefaults` en `infra/ai/deployments.<env>.json`; sin ellos el servicio responde `DefaultsNotSet`) y hace el `PUT` con sondeo hasta `ready`. Es idempotente (salta los que ya existen con la misma definición) y admite `-DryRun` y `-DumpDir` para revisar el cuerpo exacto antes de gastar. Detalle en `infra/ai/README.md`, sección "Reconstruir los analyzers en un entorno". La Copy API de Content Understanding queda como atajo no probado end-to-end (exige Cognitive Services User de la misma identidad en origen y destino; ver el spike documentado en ese README).
+
 ### 12.3 Pasos REST manuales (equivalentes al script)
 
 **Paso 1 — Grant Copy Authorization (sobre el ORIGEN, Sweden):**

@@ -14,5 +14,23 @@
       { "name": "gpt-4.1-mini-590191", "model": "gpt-4.1-mini", "version": "2025-04-14", "sku": "GlobalStandard", "capacity": 250 },
       { "name": "text-embedding-3-large-010650", "model": "text-embedding-3-large", "version": "1", "sku": "GlobalStandard", "capacity": 250 }
     ]
+  },
+  "contentUnderstandingDefaults": {
+    "srbaisrv01predocai": {
+      "gpt-4.1": "gpt-4.1-715420",
+      "gpt-4.1-mini": "gpt-4.1-mini-622960",
+      "text-embedding-3-large": "text-embedding-3-large-030358",
+      "prebuilt-analyzer-completion": "gpt-4.1-715420",
+      "prebuilt-analyzer-embedding": "text-embedding-3-large-030358",
+      "prebuilt-analyzer-completion-mini": "gpt-4.1-mini-622960"
+    },
+    "srbaisrv02predocai": {
+      "gpt-4.1": "gpt-4.1-892749",
+      "gpt-4.1-mini": "gpt-4.1-mini-590191",
+      "text-embedding-3-large": "text-embedding-3-large-010650",
+      "prebuilt-analyzer-embedding": "text-embedding-3-large-010650",
+      "prebuilt-analyzer-completion": "gpt-4.1-892749",
+      "prebuilt-analyzer-completion-mini": "gpt-4.1-mini-590191"
+    }
   }
 }
