@@ -484,6 +484,8 @@ if ($SelfCheck) {
 }
 
 $files = @(Get-ChildItem -Path $analyzersDir -Filter '*.json' -File | Where-Object { $_.BaseName -notlike '*@*' } | Sort-Object Name)
+# Con "pwsh -File", -Only A,B llega como una sola cadena "A,B": se admiten las dos formas.
+if ($Only) { $Only = @($Only | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
 if ($Only) {
     $unknown = @($Only | Where-Object { $_ -notin $files.BaseName })
     if ($unknown.Count -gt 0) { throw "no existe infra/ai/analyzers/<id>.json para: $($unknown -join ', ')" }

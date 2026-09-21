@@ -316,19 +316,42 @@ pwsh scripts/ai/validate-analyzer.ps1 -Environment dev
 
 Resultado de la primera pasada en DEV (2026-09-21, 5 PDF por analyzer, 60
 llamadas): markdown idéntico en los 30 pares; acuerdo global 47-58 % en los
-tres `CERA*` (campos de texto largo, `generate` y fechas con formato libre),
-82-85 % en `CU_NS_1.4_3` y `CU_NS_1.5_0`, 93 % en `CU_NS_1.6_0_GGAA`. Los
-defaults de modelo de PRO y DEV son idénticos (`gpt-4.1-715420`,
-`text-embedding-3-large-030358`), así que la discrepancia es varianza del
-modelo sobre el mismo texto, no un defecto de la copia.
+tres `CERA*`, 82-85 % en `CU_NS_1.4_3` y `CU_NS_1.5_0`, 93 % en
+`CU_NS_1.6_0_GGAA`. La línea base PRO/PRO (`-SelfCheck`, 20 llamadas) dio
+85,7 % en `CERA46` y 91,4 % en `CU_NS_1.4_3`, así que la brecha no es
+varianza del modelo. Los defaults de modelo de PRO y DEV son idénticos
+(`gpt-4.1-715420`, `text-embedding-3-large-030358`). La causa es que **el
+dataset actual no es el que entrenó los analyzers de PRO**:
+
+- `CERA44_vado` y `CERA46` (PRO construidos el 2026-06-25): los 37 y 45
+  `.labels.json` del proyecto de etiquetado se vaciaron el 2026-07-17
+  (145-156 bytes, `fieldLabels: {}`). `CERA16_v1` (PRO del 2026-06-25): los
+  99 `.labels.json` se reescribieron el 2026-08-20 y los de la muestra tampoco
+  tienen `fieldLabels`. DEV los reconstruyó sin ejemplos etiquetados.
+- `CU_NS_1.4_3` (PRO del 2026-04-15) y `CU_NS_1.5_0` (2026-05-05): los 50
+  `.labels.json` del proyecto se modificaron el 2026-07-16. En la muestra, DEV
+  coincide con las etiquetas actuales en 77/97 y 76/97 campos escalares, PRO
+  en 65/97 y 69/97: DEV reproduce el dataset de hoy, PRO uno anterior.
+- `CU_NS_1.6_0_GGAA` (PRO del 2026-07-17, un día después de las etiquetas):
+  PRO 78/87 y DEV 77/87 frente a las etiquetas, y 93 % entre sí. Es el único
+  cuyo dataset actual coincide con el que entrenó PRO.
+
+Conclusión: la reconstrucción es fiel al dataset versionado, pero ese dataset
+ya no reproduce PRO para cinco de los seis analyzers. Antes de promocionar a
+PRE hay que decidir si el baseline es "PRO tal cual" (recuperar el estado de
+las etiquetas en la fecha del build de PRO, o clonar con la Copy API de CU) o
+"el dataset actual" (y entonces reconstruir también PRO para que los tres
+entornos coincidan).
 
 El acuerdo origen/destino solo se interpreta frente a una línea base:
 `-SelfCheck` analiza cada PDF dos veces contra el propio recurso de PRO y
 compara las dos respuestas entre sí (informe
 `validacion-analyzers-<env>-selfcheck.txt`). Si el acuerdo origen/destino es
 del mismo orden que el acuerdo PRO/PRO, la diferencia es varianza del modelo
-y la copia es fiel; si queda claramente por debajo, revisar el manifiesto del
-dataset copiado y reconstruir con `build-analyzers.ps1 -Force`.
+y la copia es fiel; si queda claramente por debajo, comparar la fecha
+`createdAt` del analyzer en PRO con la `Last-Modified` de los `.labels.json`
+del prefijo origen: si las etiquetas cambiaron después del build, el dataset
+copiado no es el que entrenó PRO.
 
 ```powershell
 pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SelfCheck -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers-selfcheck
