@@ -1,5 +1,8 @@
 {
   "environment": "prod",
+  "intent": "observed",
+  "source": "arm",
+  "observedAtUtc": "2026-09-21T09:01:06Z",
   "accounts": {
     "upe48-mm2avmdm-swedencentral": [
       { "name": "gpt-4o-mini", "model": "gpt-4.1-mini", "version": "2025-04-14", "sku": "Standard", "capacity": 150 },

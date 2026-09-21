@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 <#
 .SYNOPSIS
     Exporta definiciones de analyzers de Content Understanding (sin campos de solo lectura)
@@ -15,6 +16,14 @@
     llegaba corrupto via az rest y correcto via Invoke-WebRequest). Leyendo los
     bytes de la respuesta y decodificandolos explicitamente como UTF-8 se evita
     ese problema.
+
+    PRO tiene dos cuentas Foundry (upe48-mm2avmdm-swedencentral y
+    srbaisrv-westeurope) y algunos analyzers existen en ambas. Cada JSON
+    exportado lleva "sourceAccount"/"sourceEndpoint"/"exportedAtUtc" (derivados
+    de -SourceEndpoint) para poder distinguir de que cuenta salio cada copia y
+    compararlas. Usa -SourceEndpoint apuntando a la cuenta secundaria y
+    -SkipInventory para exportar/comparar sin pisar el inventario de la cuenta
+    primaria.
 .PARAMETER Ids
     Lista de analyzerId a exportar (los referenciados por filas activas de ModeloConfigs).
 .PARAMETER SourceEndpoint
@@ -25,15 +34,24 @@
     Fichero donde se escribe el inventario completo (todos los analyzers custom del recurso).
 .PARAMETER ApiVersion
     Version de la API de Content Understanding a usar.
+.PARAMETER SkipInventory
+    No lista ni escribe el inventario completo; solo exporta los -Ids indicados.
+    Uso tipico: comparar un id concreto contra una segunda cuenta sin volver a
+    listar (ni pisar el inventario) de la cuenta primaria.
 .EXAMPLE
     pwsh scripts/ai/export-analyzer-definitions.ps1 -Ids CU_NS_1.4_3,CU_NS_1.5_0,CU_NS_1.6_0_GGAA,CERA16_v1,CERA44_vado,CERA46
+.EXAMPLE
+    pwsh scripts/ai/export-analyzer-definitions.ps1 -Ids CU_NS_1.5_0,CU_NS_1.6_0_GGAA `
+        -SourceEndpoint https://srbaisrv-westeurope.services.ai.azure.com `
+        -OutDir infra/ai/analyzers -InventoryFile infra/ai/inventory-prod-foundry-westeurope.json
 #>
 param(
     [Parameter(Mandatory)][string[]]$Ids,
     [string]$SourceEndpoint = "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com",
     [string]$OutDir = "infra/ai/analyzers",
     [string]$InventoryFile = "infra/ai/inventory-prod-foundry.json",
-    [string]$ApiVersion = "2025-11-01"
+    [string]$ApiVersion = "2025-11-01",
+    [switch]$SkipInventory
 )
 $ErrorActionPreference = "Stop"
 
@@ -43,13 +61,35 @@ $env:AZURE_CLI_DISABLE_CONNECTION_VERIFICATION = "1"
 
 function Get-CuJson {
     param([string]$Url, [string]$Token)
-    $resp = Invoke-WebRequest -Uri $Url -Headers @{ Authorization = "Bearer $Token" } `
-        -UseBasicParsing -SkipCertificateCheck
+    try {
+        $resp = Invoke-WebRequest -Uri $Url -Headers @{ Authorization = "Bearer $Token" } `
+            -UseBasicParsing -SkipCertificateCheck
+    } catch {
+        $status = "sin respuesta"
+        $body = ""
+        if ($_.Exception.Response) {
+            $status = [int]$_.Exception.Response.StatusCode
+        }
+        if ($_.ErrorDetails -and $_.ErrorDetails.Message) {
+            $body = $_.ErrorDetails.Message
+        } elseif ($_.Exception.Message) {
+            $body = $_.Exception.Message
+        }
+        throw "GET $Url -> $status`: $body"
+    }
     # Decodificar los bytes crudos como UTF-8 explicitamente: no confiar en que
     # PowerShell adivine la codificacion de la respuesta.
     $bytes = $resp.RawContentStream.ToArray()
     $text = [System.Text.Encoding]::UTF8.GetString($bytes)
     return $text | ConvertFrom-Json
+}
+
+function Write-JsonFile {
+    param([string]$Path, [object]$Object, [int]$Depth = 30)
+    $json = $Object | ConvertTo-Json -Depth $Depth
+    # LF sin BOM y con newline final, para que coincida con el resto de infra/ai.
+    $json = $json -replace "`r`n", "`n"
+    [IO.File]::WriteAllText($Path, ($json + "`n"), [Text.UTF8Encoding]::new($false))
 }
 
 $readOnly = @('status', 'createdAt', 'lastModifiedAt', 'warnings', 'supportedModels')
@@ -64,18 +104,36 @@ if ($LASTEXITCODE -ne 0 -or -not $tokenRaw) {
 $token = ($tokenRaw | ConvertFrom-Json).accessToken
 if (-not $token) { throw "az account get-access-token no devolvio accessToken" }
 
-$all = Get-CuJson -Url "$SourceEndpoint/contentunderstanding/analyzers?api-version=$ApiVersion" -Token $token
-if ($all.nextLink) {
-    Write-Warning "la respuesta trae nextLink; este script no pagina, el inventario quedara incompleto"
+$sourceAccount = ([Uri]$SourceEndpoint).Host.Split('.')[0]
+$exportedAtUtc = (Get-Date).ToUniversalTime().ToString("o")
+
+if (-not $SkipInventory) {
+    $allAnalyzers = @()
+    $url = "$SourceEndpoint/contentunderstanding/analyzers?api-version=$ApiVersion"
+    while ($url) {
+        $page = Get-CuJson -Url $url -Token $token
+        $allAnalyzers += $page.value
+        $url = $page.nextLink
+    }
+
+    $custom = $allAnalyzers | Where-Object { $_.analyzerId -notlike 'prebuilt-*' } | Sort-Object analyzerId
+    $inventory = [ordered]@{
+        account        = $sourceAccount
+        endpoint       = $SourceEndpoint
+        apiVersion     = $ApiVersion
+        generatedAtUtc = $exportedAtUtc
+        analyzers      = @($custom | Select-Object analyzerId, status, createdAt, @{n='referenced'; e={ $Ids -contains $_.analyzerId }})
+    }
+    Write-JsonFile -Path $InventoryFile -Object $inventory -Depth 4
+    Write-Host "inventario: $($custom.Count) analyzers custom -> $InventoryFile"
 }
-$custom = $all.value | Where-Object { $_.analyzerId -notlike 'prebuilt-*' }
-$custom | Select-Object analyzerId, status, createdAt, @{n='referenced'; e={ $Ids -contains $_.analyzerId }} |
-    ConvertTo-Json -Depth 3 | Set-Content -Encoding utf8 $InventoryFile
-Write-Host "inventario: $($custom.Count) analyzers custom -> $InventoryFile"
 
 foreach ($id in $Ids) {
     $def = Get-CuJson -Url "$SourceEndpoint/contentunderstanding/analyzers/$id`?api-version=$ApiVersion" -Token $token
     foreach ($f in $readOnly) { $def.PSObject.Properties.Remove($f) }
-    $def | ConvertTo-Json -Depth 30 | Set-Content -Encoding utf8 (Join-Path $OutDir "$id.json")
+    $def | Add-Member -NotePropertyName sourceAccount -NotePropertyValue $sourceAccount
+    $def | Add-Member -NotePropertyName sourceEndpoint -NotePropertyValue $SourceEndpoint
+    $def | Add-Member -NotePropertyName exportedAtUtc -NotePropertyValue $exportedAtUtc
+    Write-JsonFile -Path (Join-Path $OutDir "$id.json") -Object $def -Depth 30
     Write-Host "exportado $id"
 }

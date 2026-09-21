@@ -1,0 +1,20 @@
+{
+  "account": "srbaisrv-westeurope",
+  "endpoint": "https://srbaisrv-westeurope.services.ai.azure.com",
+  "apiVersion": "2025-11-01",
+  "generatedAtUtc": "2026-09-21T08:59:38.3156355Z",
+  "analyzers": [
+    {
+      "analyzerId": "CU_NS_1.5_0",
+      "status": "ready",
+      "createdAt": "2026-06-01T11:32:38Z",
+      "referenced": true
+    },
+    {
+      "analyzerId": "CU_NS_1.6_0_GGAA",
+      "status": "ready",
+      "createdAt": "2026-07-17T10:17:41Z",
+      "referenced": true
+    }
+  ]
+}

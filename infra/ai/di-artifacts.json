@@ -1,13 +1,24 @@
 {
   "sourceAccount": "srbdiprodocai",
   "sourceResourceGroup": "SRBRGDOCSAIPROD",
-  "classifiers": [ { "id": "DocumentAICC_v1", "docTypes": 15, "createdDateTime": "2026-05-13T14:29:40Z", "referencedBy": "default.azure-di" } ],
+  "classifiers": [
+    {
+      "id": "DocumentAICC_v1",
+      "docTypes": 15,
+      "createdDateTime": "2026-05-13T14:29:40Z",
+      "referencedBy": "default.azure-di",
+      "promote": true
+    }
+  ],
   "models": [
     {
       "id": "DI_NS1.4_v0",
       "createdDateTime": "2026-03-26T18:43:43Z",
       "referencedBy": "nota.simple.1_4.azure-di",
-      "note": "Resuelto en Task 8 (AB#100310): el recurso origen srbdiprodocai NO tiene ningun modelo 'DI_NS_1.4_v1' (confirmado listando documentModels completo, 68 modelos, sin paginacion pendiente). El unico modelo custom con nombre similar es 'DI_NS1.4_v0' (docType unico 'DI_NS1.4_v0', campos Registrador/dni registrador). La fila de ModeloConfigs Key='nota.simple.1_4.azure-di' (Id=3, Tipo=1, Activo=true tanto en DEV como en PRO) referencia el id inexistente 'DI_NS_1.4_v1' en su AnalyzerId -- hay que corregir esa fila por datos (no se corrige aqui). Verificado ademas que esta discrepancia es hoy inofensiva en la practica: ninguna Tipologia activa (ni en DEV ni en PRO) usa la clave 'nota.simple.1_4.azure-di' como modelKey/secondaryModelKey de extraccion -- la tipologia nota.simple.1_4 (Activa, Estado=1 en ambos entornos) tiene su extraccion configurada con provider azure-content-understanding y modelKey 'nota.simple.1_4.azure-cu', no con este ModeloConfig de DI. Es decir, la extraccion DI de nota.simple.1_4 esta definida en el catalogo pero no esta activa/en uso."
+      "referencedByModelId": "DI_NS_1.4_v1",
+      "promote": false,
+      "pendingDataFix": true,
+      "note": "El recurso origen srbdiprodocai no tiene ningun modelo 'DI_NS_1.4_v1' (confirmado listando documentModels completo, 68 modelos, sin paginacion pendiente); el unico modelo custom con nombre similar es 'DI_NS1.4_v0' (docType unico 'DI_NS1.4_v0', campos Registrador/dni registrador). La fila de ModeloConfigs Key='nota.simple.1_4.azure-di' (Id=3, Tipo=1, Activo=true tanto en DEV como en PRO) referencia el id inexistente 'DI_NS_1.4_v1' en su AnalyzerId, de ahi 'referencedByModelId'. Esa fila esta hoy huerfana: ninguna Tipologia activa (ni en DEV ni en PRO) usa la clave 'nota.simple.1_4.azure-di' como modelKey/secondaryModelKey de extraccion -- la tipologia nota.simple.1_4 (Activa, Estado=1 en ambos entornos) extrae con provider azure-content-understanding y modelKey 'nota.simple.1_4.azure-cu', no con este ModeloConfig de DI."
     }
   ]
 }

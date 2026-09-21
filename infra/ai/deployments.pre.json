@@ -1,5 +1,6 @@
 {
   "environment": "pre",
+  "intent": "desired",
   "accounts": {
     "srbaisrv01predocai": [
       { "name": "gpt-4o-mini", "model": "gpt-4.1-mini", "version": "2025-04-14", "sku": "Standard", "capacity": 150 },

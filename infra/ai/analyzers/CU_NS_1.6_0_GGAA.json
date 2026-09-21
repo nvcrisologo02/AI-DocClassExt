@@ -273,5 +273,14 @@
   "models": {
     "completion": "gpt-4.1",
     "embedding": "text-embedding-3-large"
-  }
+  },
+  "sourceAccounts": [
+    "upe48-mm2avmdm-swedencentral",
+    "srbaisrv-westeurope"
+  ],
+  "sourceEndpoints": [
+    "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com",
+    "https://srbaisrv-westeurope.services.ai.azure.com"
+  ],
+  "exportedAtUtc": "2026-09-21T08:57:17.1047552Z"
 }

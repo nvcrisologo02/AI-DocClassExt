@@ -1,10 +1,6 @@
 {
   "analyzerId": "CU_NS_1.5_0",
   "description": "Nota Simple 1.5.0",
-  "tags": {
-    "projectId": "01ecc742-3215-4bf8-bdc2-ea7a7ef00fd1",
-    "templateId": "prebuilt-documentAnalyzer"
-  },
   "baseAnalyzerId": "prebuilt-document",
   "config": {
     "returnDetails": false,
@@ -250,7 +246,7 @@
     "completion": "gpt-4.1",
     "embedding": "text-embedding-3-large"
   },
-  "sourceAccount": "upe48-mm2avmdm-swedencentral",
-  "sourceEndpoint": "https://upe48-mm2avmdm-swedencentral.services.ai.azure.com",
-  "exportedAtUtc": "2026-09-21T08:57:17.1047552Z"
+  "sourceAccount": "srbaisrv-westeurope",
+  "sourceEndpoint": "https://srbaisrv-westeurope.services.ai.azure.com",
+  "exportedAtUtc": "2026-09-21T08:57:50.5177700Z"
 }
