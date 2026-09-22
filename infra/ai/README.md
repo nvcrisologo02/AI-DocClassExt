@@ -494,7 +494,36 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    (`AI_OPENAI_PRIMARY_ENDPOINT`, `AI_CU_PRIMARY_ENDPOINT`,
    `AI_CU_SECONDARY_ENDPOINT`, `AI_DI_ENDPOINT`) apuntando a
    `resources.<env>.json`, y despliegue. El bloque `dev` ya apunta a DEV
-   desde el 2026-09-22; `pre` y `prod` siguen en PRO.
+   desde el 2026-09-22; `pre` y `prod` siguen en PRO. El despliegue crea
+   las cuatro `AI__Resources__*__Endpoint` (no existían) pero **no** cambia
+   las cuatro claves de las opciones directas que ya existen con PRO (ver
+   paso 2b).
+2b. **Forzar a mano los cuatro endpoints de las opciones directas**
+   (`Extraction__AzureContentUnderstanding__Endpoint`,
+   `Extraction__GptFallback__Endpoint`,
+   `Classification__AzureDocumentIntelligence__Endpoint`,
+   `Classification__GptFallback__Endpoint`). `ensure-app-settings.ps1`
+   conserva a propósito las claves existentes, y se ha decidido no cambiarlo
+   (el cutover es un paso puntual por entorno). Con los valores de
+   `resources.<env>.json`, para DEV:
+
+   ```powershell
+   az functionapp config appsettings set --resource-group SRBRGDEVDOCSAI --name srbappdevdocai --output none --settings `
+     "Extraction__AzureContentUnderstanding__Endpoint=https://srbaisrv01devdocai.services.ai.azure.com/" `
+     "Extraction__GptFallback__Endpoint=https://srbaisrv01devdocai.openai.azure.com" `
+     "Classification__AzureDocumentIntelligence__Endpoint=https://srbdidevdocai.cognitiveservices.azure.com/" `
+     "Classification__GptFallback__Endpoint=https://srbaisrv01devdocai.openai.azure.com"
+   ```
+
+   Después, comprobar que las ocho claves de IA llevan hosts del entorno:
+
+   ```powershell
+   az functionapp config appsettings list --resource-group SRBRGDEVDOCSAI --name srbappdevdocai `
+     --query "[?ends_with(name, '__Endpoint') && name != 'GDC__Endpoint'].[name, value]" -o table
+   ```
+
+   Sin este paso, `AuthMode=ApiKey` con la key del entorno contra el host de
+   PRO devuelve 401 en CU, DI y fallback GPT.
 3. **`scripts/ai/set-resource-aliases.sql`** contra la BD del entorno:
    asigna `ResourceAlias` (`openai_primary`, `cu_primary`, `cu_secondary`
    para las claves `-we`, `di`) a cada fila activa de `ModeloConfigs` y
@@ -511,26 +540,28 @@ Vuelta atrás: restaurar `ConfiguracionJson` desde la tabla `__bak`, devolver
 las variables `AI_*` a los valores de PRO y redesplegar; los roles de la
 identidad sobre PRO siguen vigentes hasta la fase 3.
 
-Dos trampas conocidas que hay que resolver **antes** del paso 3:
+Dos trampas conocidas y cómo quedan resueltas:
 
 - `scripts/configuration/ensure-app-settings.ps1` (el que usa el pipeline)
-  no sobrescribe claves existentes. Las cuatro `AI__Resources__*__Endpoint`
-  no existen aún en DEV y se crearán con el valor del bloque `dev` en el
-  primer despliegue de esta rama; pero
-  `Extraction__AzureContentUnderstanding__Endpoint`,
-  `Extraction__GptFallback__Endpoint`,
-  `Classification__AzureDocumentIntelligence__Endpoint` y
-  `Classification__GptFallback__Endpoint` ya existen con los valores de PRO
-  y **seguirán en PRO** tras redesplegar. Hay que forzarlas (opción de
-  forzado en el script o `az functionapp config appsettings set` a mano) y
-  validarlas después del despliegue.
+  no sobrescribe claves existentes, y no se cambia. Las cuatro
+  `AI__Resources__*__Endpoint` las crea el despliegue; las cuatro claves de
+  las opciones directas que ya existen con PRO se fuerzan a mano en cada
+  entorno (paso 2b) y se comprueban con la consulta de ese paso.
 - `ConfigurationSeedService.MergeMissingJsonProperties` reinyecta en cada
-  arranque cualquier propiedad vacía desde los seeds
-  `config/*/models.json`, que hoy llevan el `Endpoint` de PRO: el `NULL` que
-  deja el SQL volvería a ser el endpoint de PRO en el siguiente arranque.
-  Antes del cutover hay que quitar `Endpoint` de los cuatro seeds (los
-  alias ya están en ellos y los App Settings `AI__Resources__*` resuelven
-  el endpoint en cada entorno) o excluirlo del merge.
+  arranque cualquier propiedad ausente o vacía desde los seeds
+  `config/*/models.json`. Desde el 2026-09-22 los seeds **no llevan
+  `Endpoint`** (solo `ResourceAlias`), así que lo único que reinyectan es
+  `"Endpoint": ""`, que `AiEndpointResolver` trata como ausente y el SQL
+  también (`NULLIF`). Un test unitario (`ConfigurationSeedModelosTests`)
+  falla si algún seed vuelve a llevar un `Endpoint` con valor. Las filas que
+  ya tienen `Endpoint` explícito (PRE y PRO hasta su cutover) no se tocan:
+  el merge nunca pisa un valor no vacío.
+
+Efecto colateral en local: `appsettings.json` declara los cuatro alias con
+`Endpoint` vacío, y un alias presente pero vacío cuenta como no mapeado. Para
+arrancar las Functions en local contra una BD sembrada sin `Endpoint`, hay
+que rellenar `AI__Resources__*__Endpoint` en `local.settings.json` (están en
+`local.settings.template.json`).
 
 ## Estado inicial de DEV y PRE
 
