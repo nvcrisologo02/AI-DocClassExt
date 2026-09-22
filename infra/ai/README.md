@@ -109,7 +109,11 @@ de referencia para una limpieza futura de los recursos origen.
   `copy-cu-analyzers.ps1` contra ese entorno: por analyzer, id en destino,
   estado (`copied`, `present`, `conflict`), fecha, operación y si la
   definición coincide con el origen. Lo escribe el script; se fusiona por id
-  de destino. `-DryRun` no lo toca.
+  de destino. `-DryRun` no lo toca. La cabecera (`sourceAccount`,
+  `targetAccount`) es la de la última pasada, así que una pasada con
+  `-Target cu_secondary` la pisa: las copias a la cuenta secundaria se
+  guardan aparte en **`cu-analyzers.<env>.cu_secondary.manifest.json`**
+  (moviendo la entrada a mano y restaurando el primario con `git checkout`).
 
 - **`analyzers/*.json`**: definición de cada analyzer de Content
   Understanding referenciado por `ModeloConfigs`, exportada desde el recurso
@@ -334,7 +338,16 @@ pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffi
 pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffix _copytest -DumpDir docs/auxiliares/temps/2026-09-21/copy-cu-dev
 pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Force      # los 24, sobrescribiendo los reconstruidos
 pwsh scripts/ai/validate-analyzer.ps1 -Environment dev            # puerta: los 6 con dataset en DEV
+# cuenta secundaria (cu_secondary): solo los analyzers de las filas "-we" de ModeloConfigs,
+# desde la secundaria de PRO; antes, fijar sus defaults de CU (PATCH /contentunderstanding/defaults)
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CU_NS_1.5_0,CU_NS_1.6_0_GGAA -Target cu_secondary -SourceTarget cu_secondary
 ```
+
+El 2026-09-22 la cuenta secundaria de DEV (`srbaisrv02devdocai`) recibió
+`CU_NS_1.5_0` y `CU_NS_1.6_0_GGAA` desde `srbaisrv-westeurope`, tras fijar
+sus defaults con el mapeo de `deployments.dev.json` (estaba en
+`DefaultsNotSet`). Sin ese paso, las filas `-we` daban 404 `ModelNotFound`
+tras el cutover y el smoke no lo detectaba.
 
 ## Copiar los clasificadores de Document Intelligence a un entorno
 
