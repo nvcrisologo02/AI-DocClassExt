@@ -1,0 +1,31 @@
+{
+  "environment": "pre",
+  "sourceAccount": "srbaisrv-westeurope",
+  "targetAccount": "srbaisrv02predocai",
+  "apiVersion": "2025-11-01",
+  "updatedAtUtc": "2026-09-22T15:35:19.4628485Z",
+  "analyzers": [
+    {
+      "analyzerId": "CU_NS_1.5_0",
+      "targetAnalyzerId": "CU_NS_1.5_0",
+      "sourceAccount": "srbaisrv-westeurope",
+      "targetAccount": "srbaisrv02predocai",
+      "status": "copied",
+      "sourceCreatedAt": "2026-06-01T11:32:38Z",
+      "definitionMatches": true,
+      "copiedAtUtc": "2026-09-22T15:35:11.9364203Z",
+      "operation": "https://srbaisrv02predocai.services.ai.azure.com/contentunderstanding/analyzers/CU_NS_1.5_0/operations/4aac3a14-ba0e-47e3-9d33-eb9dae8876a3?api-version=2025-11-01"
+    },
+    {
+      "analyzerId": "CU_NS_1.6_0_GGAA",
+      "targetAnalyzerId": "CU_NS_1.6_0_GGAA",
+      "sourceAccount": "srbaisrv-westeurope",
+      "targetAccount": "srbaisrv02predocai",
+      "status": "copied",
+      "sourceCreatedAt": "2026-07-17T10:17:41Z",
+      "definitionMatches": true,
+      "copiedAtUtc": "2026-09-22T15:35:19.4259748Z",
+      "operation": "https://srbaisrv02predocai.services.ai.azure.com/contentunderstanding/analyzers/CU_NS_1.6_0_GGAA/operations/9ce79830-1419-4739-acaf-30469a87a1f3?api-version=2025-11-01"
+    }
+  ]
+}
