@@ -252,9 +252,9 @@ pwsh scripts/ai/apply-deployments.ps1 -Environment dev
 pwsh scripts/ai/apply-deployments.ps1 -Environment pre -Account srbaisrv01predocai -DryRun
 ```
 
-Estado en DEV (2026-09-22, `-DryRun`): las dos cuentas tienen todos los
-deployments declarados salvo `gpt-5-mini` (DataZoneStandard x50) en
-`srbaisrv01devdocai`, que es el único `create`; `gpt-4o` (GlobalStandard
+Estado en DEV (2026-09-22): aplicado. `gpt-5-mini` (DataZoneStandard x50)
+se creó en `srbaisrv01devdocai` en 5 s (`Succeeded`); el resto ya existía y
+una segunda pasada en `-DryRun` deja todo en `ok`. `gpt-4o` (GlobalStandard
 x250) existe en esa cuenta sin estar en el fichero y queda como `unmanaged`.
 
 ## Reconstruir los analyzers en un entorno
