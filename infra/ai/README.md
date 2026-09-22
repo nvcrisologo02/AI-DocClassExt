@@ -508,7 +508,10 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    `resources.<env>.json`, para DEV:
 
    ```powershell
-   az functionapp config appsettings set --resource-group SRBRGDEVDOCSAI --name srbappdevdocai --output none --settings `
+   # El RG de DEV está en la suscripción Core Desarrollo (8764f9ff…), no en la
+   # de PRO que az usa por defecto: sin --subscription da AuthorizationFailed.
+   az functionapp config appsettings set --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d `
+     --resource-group SRBRGDEVDOCSAI --name srbappdevdocai --output none --settings `
      "Extraction__AzureContentUnderstanding__Endpoint=https://srbaisrv01devdocai.services.ai.azure.com/" `
      "Extraction__GptFallback__Endpoint=https://srbaisrv01devdocai.openai.azure.com" `
      "Classification__AzureDocumentIntelligence__Endpoint=https://srbdidevdocai.cognitiveservices.azure.com/" `
@@ -518,7 +521,8 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    Después, comprobar que las ocho claves de IA llevan hosts del entorno:
 
    ```powershell
-   az functionapp config appsettings list --resource-group SRBRGDEVDOCSAI --name srbappdevdocai `
+   az functionapp config appsettings list --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d `
+     --resource-group SRBRGDEVDOCSAI --name srbappdevdocai `
      --query "[?ends_with(name, '__Endpoint') && name != 'GDC__Endpoint'].[name, value]" -o table
    ```
 
