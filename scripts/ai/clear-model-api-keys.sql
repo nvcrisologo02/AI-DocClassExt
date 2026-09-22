@@ -19,6 +19,10 @@
 -- ModeloConfigs__bak_<yyyyMMdd_HHmmss>; para volver atras:
 --   UPDATE m SET m.ConfiguracionJson = b.ConfiguracionJson
 --   FROM ModeloConfigs m JOIN ModeloConfigs__bak_<...> b ON b.Id = m.Id;
+-- Atencion: esa copia, y cualquier ModeloConfigs__bak_* anterior, conserva las keys en
+-- claro. Una vez verificado el entorno, purgarlas tambien alli (misma expresion
+-- JSON_MODIFY sobre cada tabla __bak) o eliminar las tablas de copia que ya no hagan
+-- falta. Este script no lo hace por si mismo para no tocar copias de otras operaciones.
 -- Ejecutar con lotes GO, p. ej. docs/auxiliares/temps/2026-09-07/aplicar-sql-dev.ps1.
 -- No aplica a PRO mientras sus filas autentiquen con su propia key (AuthMode = ApiKey).
 SET NOCOUNT ON;
