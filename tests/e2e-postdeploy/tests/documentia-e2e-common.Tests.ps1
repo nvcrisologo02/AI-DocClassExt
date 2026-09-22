@@ -71,6 +71,44 @@ Describe "Test-CaseAssertions nuevas aserciones" {
     }
 }
 
+Describe "Test-CaseAssertions expectExtractionProviderReached" {
+    BeforeAll {
+        $script:caseReached = [pscustomobject]@{ assertions = [pscustomobject]@{ expectExtractionProviderReached = $true } }
+        function script:New-StatusExtraccion([hashtable]$Extraccion) {
+            return [pscustomobject]@{ runtimeStatus = "Completed"; output = [pscustomobject]@{ DetalleEjecucion = [pscustomobject]@{ Extraccion = [pscustomobject]$Extraccion } } }
+        }
+    }
+    It "pasa si no hubo fallback" {
+        $status = New-StatusExtraccion @{ ProveedorExtrac = "AzureContentUnderstanding"; FallbackUsado = $false; FallbackRazon = $null }
+        (Test-CaseAssertions -Case $script:caseReached -Status $status -History @()).Success | Should -BeTrue
+    }
+    It "pasa si el fallback fue por calidad (el proveedor primario respondio)" {
+        $status = New-StatusExtraccion @{ ProveedorExtrac = "GPT4oMini"; FallbackUsado = $true; FallbackRazon = "insufficient_extraction:ratio=1.000<0.800;conf=0.767<0.800;fields=28/28" }
+        (Test-CaseAssertions -Case $script:caseReached -Status $status -History @()).Success | Should -BeTrue
+    }
+    It "falla si el fallback fue por excepcion del proveedor primario" {
+        $status = New-StatusExtraccion @{ ProveedorExtrac = "GPT4oMini"; FallbackUsado = $true; FallbackRazon = "exception:NotFound:cuModelKey=nota.simple.1_5.azure-cu" }
+        $result = Test-CaseAssertions -Case $script:caseReached -Status $status -History @()
+        $result.Success | Should -BeFalse
+        $result.Errors | Should -Contain "extraccion: el proveedor primario no respondio; ProveedorExtrac='GPT4oMini' FallbackRazon='exception:NotFound:cuModelKey=nota.simple.1_5.azure-cu'"
+    }
+    It "falla si hubo fallback sin razon" {
+        $status = New-StatusExtraccion @{ ProveedorExtrac = "GPT4oMini"; FallbackUsado = $true; FallbackRazon = "" }
+        (Test-CaseAssertions -Case $script:caseReached -Status $status -History @()).Success | Should -BeFalse
+    }
+    It "falla si no hay detalle de extraccion" {
+        $status = [pscustomobject]@{ runtimeStatus = "Completed"; output = [pscustomobject]@{ DetalleEjecucion = [pscustomobject]@{ Extraccion = $null } } }
+        $result = Test-CaseAssertions -Case $script:caseReached -Status $status -History @()
+        $result.Success | Should -BeFalse
+        $result.Errors | Should -Contain "extraccion: DetalleEjecucion.Extraccion ausente"
+    }
+    It "no aplica si la clave no esta en el caso" {
+        $case = [pscustomobject]@{ assertions = [pscustomobject]@{ expectedRuntimeStatus = "Completed" } }
+        $status = New-StatusExtraccion @{ ProveedorExtrac = "GPT4oMini"; FallbackUsado = $true; FallbackRazon = "exception:NotFound:cuModelKey=x" }
+        (Test-CaseAssertions -Case $case -Status $status -History @()).Success | Should -BeTrue
+    }
+}
+
 Describe "Wait-ForDocumentIAOrchestration header de polling" {
     BeforeEach {
         Mock Invoke-RestMethod {

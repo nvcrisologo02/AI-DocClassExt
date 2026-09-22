@@ -210,6 +210,24 @@ function Test-CaseAssertions {
         }
     }
 
+    # El proveedor primario de extraccion (CU/DI) debe haber respondido: sin fallback, o fallback
+    # por calidad ("insufficient_extraction:..."). Un fallback por excepcion (404, 401, DNS) deja
+    # la ejecucion en OK via GPT y sin esta aseveracion pasaria desapercibido.
+    if ($assertions.expectExtractionProviderReached -eq $true) {
+        $extraccion = Get-FieldValue -Object $detalle -Names @("Extraccion", "extraccion")
+        if ($null -eq $extraccion) {
+            $errors += "extraccion: DetalleEjecucion.Extraccion ausente"
+        }
+        else {
+            $fallbackUsado = Get-FieldValue -Object $extraccion -Names @("FallbackUsado", "fallbackUsado")
+            $fallbackRazon = [string](Get-FieldValue -Object $extraccion -Names @("FallbackRazon", "fallbackRazon"))
+            $proveedor = [string](Get-FieldValue -Object $extraccion -Names @("ProveedorExtrac", "proveedorExtrac"))
+            if ($fallbackUsado -eq $true -and -not $fallbackRazon.StartsWith("insufficient_extraction:")) {
+                $errors += "extraccion: el proveedor primario no respondio; ProveedorExtrac='$proveedor' FallbackRazon='$fallbackRazon'"
+            }
+        }
+    }
+
     $outputJson = $output | ConvertTo-Json -Depth 30 -Compress
     if ($null -ne $assertions.expectOutputJsonContains) {
         foreach ($needle in @($assertions.expectOutputJsonContains)) {

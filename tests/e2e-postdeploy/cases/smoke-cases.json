@@ -46,7 +46,8 @@
       "expectedRuntimeStatus": "Completed",
       "expectNoTechnicalError": true,
       "expectedStatus": ["OK"],
-      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"]
+      "expectOutputPathsNotEmpty": ["DetalleEjecucion.Extraccion"],
+      "expectExtractionProviderReached": true
     }
   },
   {
