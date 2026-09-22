@@ -177,17 +177,19 @@ de referencia para una limpieza futura de los recursos origen.
 ## Flujo de promoción (Tareas 10 a 14)
 
 El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
-`scripts/ai/copy-labeling-dataset.ps1`, el paso 3
+`scripts/ai/copy-labeling-dataset.ps1`, el paso 2
+`scripts/ai/apply-deployments.ps1`, el paso 3
 `scripts/ai/copy-cu-analyzers.ps1` (y `build-analyzers.ps1` solo para
 reentrenar), el paso 4
 `scripts/ai/copy-di-artifacts.ps1` y el paso 5
-`scripts/ai/validate-analyzer.ps1`; el paso 2 sigue pendiente):
+`scripts/ai/validate-analyzer.ps1`):
 
 1. **Datasets** — preparar los datos de entrenamiento/referencia que
    necesiten los analyzers y clasificadores antes de recrearlos.
 2. **Deployments** — crear en cada cuenta OpenAI de DEV/PRE los deployments
    de `deployments.<env>.json` (asegura que el modelo/versión/SKU exista
-   antes de que algo dependa de él).
+   antes de que algo dependa de él). Ver "Aplicar los deployments de un
+   entorno" más abajo.
 3. **Analyzers de Content Understanding, por Copy API** — copiar cada
    analyzer de `cu-analyzers.json` desde el Foundry de PRO al del entorno con
    `:grantCopyAuthorization` + `:copy` (`scripts/ai/copy-cu-analyzers.ps1`).
@@ -210,6 +212,50 @@ reentrenar), el paso 4
 
 Estos pasos corresponden a las Tareas 10-14 del plan; esta carpeta es su
 entrada de datos.
+
+## Aplicar los deployments de un entorno
+
+`scripts/ai/apply-deployments.ps1` es el paso 2 del flujo. Lee
+`deployments.<env>.json` (solo con `intent: "desired"`; el de PRO es
+`observed` y el script lo rechaza) y, para cada cuenta de `accounts`,
+resuelve `subscriptionId` y `resourceGroup` en `resources.<env>.json`
+(cualquier alias con ese `account` que lleve `subscriptionId`; el RG de DEV
+no está en la suscripción por defecto de `az`), lista los deployments por
+ARM y compara uno a uno:
+
+- no existe → `create`: PUT de
+  `Microsoft.CognitiveServices/accounts/<cuenta>/deployments/<nombre>` con
+  `sku.name`/`sku.capacity` y `properties.model` (`format: OpenAI`), y sondeo
+  del `provisioningState` hasta `Succeeded` (o `-TimeoutMinutes`, 10 por
+  defecto);
+- existe con el mismo modelo, versión, SKU y capacidad → `ok`;
+- existe y difiere → `differs`: se informa y **no se modifica** (alinear a
+  mano o cambiar el fichero; el script nunca hace PUT sobre uno existente);
+- existe en la cuenta y no está en el fichero → `unmanaged`: se lista y
+  **nunca se borra**.
+
+Antes de tocar Azure comprueba la coherencia del fichero (campos
+obligatorios, nombres repetidos y que cada entrada de
+`contentUnderstandingDefaults` apunte a un deployment declarado). Los
+defaults de Content Understanding en sí los fija `build-analyzers.ps1`, no
+este script. Todas las llamadas van por ARM con token e `Invoke-WebRequest`,
+no con `az.cmd`. Sale con código 1 si algún deployment queda `failed` o
+`timeout`; el error de ARM (por ejemplo `InsufficientQuota` si la cuota del
+SKU no está concedida en la suscripción, petición P1 de AB#100311) se
+muestra en la columna `Detail`.
+
+Ensayar siempre primero con `-DryRun` (solo lecturas):
+
+```powershell
+pwsh scripts/ai/apply-deployments.ps1 -Environment dev -DryRun
+pwsh scripts/ai/apply-deployments.ps1 -Environment dev
+pwsh scripts/ai/apply-deployments.ps1 -Environment pre -Account srbaisrv01predocai -DryRun
+```
+
+Estado en DEV (2026-09-22, `-DryRun`): las dos cuentas tienen todos los
+deployments declarados salvo `gpt-5-mini` (DataZoneStandard x50) en
+`srbaisrv01devdocai`, que es el único `create`; `gpt-4o` (GlobalStandard
+x250) existe en esa cuenta sin estar en el fichero y queda como `unmanaged`.
 
 ## Reconstruir los analyzers en un entorno
 
