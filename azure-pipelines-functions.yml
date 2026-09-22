@@ -45,6 +45,10 @@ variables:
       value: SRBRGDOCSAIPROD
     - name: diUseInlineContent
       value: 'false'
+  # Endpoints de IA por entorno (AI_*): fuente unica compartida con azure-pipelines.yml.
+  - template: infra/ai/pipeline-variables.yml
+    parameters:
+      targetEnvironment: ${{ parameters.targetEnvironment }}
   - name: cuMaxConcurrentCalls
     value: '4'
   - name: cuHardTimeoutSeconds
@@ -138,7 +142,13 @@ stages:
                   "PromptTracing__Enabled=$(promptTracingEnabled)",
                   "PromptTracing__IncludePromptText=$(promptTracingIncludePromptText)",
                   "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)",
-                  "DocumentIntelligence__UseInlineContent=$(diUseInlineContent)"
+                  "DocumentIntelligence__UseInlineContent=$(diUseInlineContent)",
+                  # Mapa de alias de recursos de IA (AB#100317): el registro de modelos resuelve
+                  # ModeloConfigs.ResourceAlias contra estos settings. Solo se crean si faltan.
+                  "AI__Resources__openai_primary__Endpoint=$(AI_OPENAI_PRIMARY_ENDPOINT)",
+                  "AI__Resources__cu_primary__Endpoint=$(AI_CU_PRIMARY_ENDPOINT)",
+                  "AI__Resources__cu_secondary__Endpoint=$(AI_CU_SECONDARY_ENDPOINT)",
+                  "AI__Resources__di__Endpoint=$(AI_DI_ENDPOINT)"
                 )
 
                 # Convertir a JSON para evitar problemas con expansion de arrays en pwsh.exe
@@ -162,13 +172,17 @@ stages:
                   "PromptTracing__Enabled",
                   "PromptTracing__IncludePromptText",
                   "PromptTracing__MaxPromptTextChars",
-                  "DocumentIntelligence__UseInlineContent"
+                  "DocumentIntelligence__UseInlineContent",
+                  "AI__Resources__openai_primary__Endpoint",
+                  "AI__Resources__cu_primary__Endpoint",
+                  "AI__Resources__cu_secondary__Endpoint",
+                  "AI__Resources__di__Endpoint"
                 )
-                
+
                 $appliedSettings = az functionapp config appsettings list `
                   --resource-group "$(azureResourceGroup)" `
                   --name "$(functionAppName)" `
-                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'DocumentIntelligence__')].{name: name, value: value}" `
+                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'DocumentIntelligence__') || starts_with(name, 'AI__Resources__')].{name: name, value: value}" `
                   -o json | ConvertFrom-Json
                 
                 $appliedNames = $appliedSettings | Select-Object -ExpandProperty name
@@ -180,6 +194,20 @@ stages:
                   }
                 }
                 
+                # ensure-app-settings.ps1 no pisa claves existentes: si un AI__Resources__* ya existe con
+                # otro valor, avisar (el cambio de endpoint se hace a mano, infra/ai/README.md paso 2b).
+                $expectedAi = @{
+                  "AI__Resources__openai_primary__Endpoint" = "$(AI_OPENAI_PRIMARY_ENDPOINT)"
+                  "AI__Resources__cu_primary__Endpoint"     = "$(AI_CU_PRIMARY_ENDPOINT)"
+                  "AI__Resources__cu_secondary__Endpoint"   = "$(AI_CU_SECONDARY_ENDPOINT)"
+                  "AI__Resources__di__Endpoint"             = "$(AI_DI_ENDPOINT)"
+                }
+                foreach ($applied in @($appliedSettings | Where-Object { $expectedAi.ContainsKey($_.name) })) {
+                  if ($applied.value -ne $expectedAi[$applied.name]) {
+                    Write-Host "##vso[task.logissue type=warning]$($applied.name) = $($applied.value) no coincide con el esperado $($expectedAi[$applied.name]); ensure-app-settings no lo cambia."
+                  }
+                }
+
                 if ($missingKeys.Count -gt 0) {
                   Write-Host "##vso[task.logissue type=error]Faltan variables requeridas: $($missingKeys -join ', ')"
                   exit 1

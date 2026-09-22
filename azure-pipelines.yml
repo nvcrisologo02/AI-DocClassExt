@@ -32,14 +32,6 @@ variables:
       value: https://srbwidd03.sareb.srb:8090/sintws/IDocService
     - name: DI_USE_INLINE_CONTENT
       value: 'true'
-    - name: AI_OPENAI_PRIMARY_ENDPOINT
-      value: https://srbaisrv01devdocai.openai.azure.com
-    - name: AI_CU_PRIMARY_ENDPOINT
-      value: https://srbaisrv01devdocai.services.ai.azure.com/
-    - name: AI_CU_SECONDARY_ENDPOINT
-      value: https://srbaisrv02devdocai.services.ai.azure.com/
-    - name: AI_DI_ENDPOINT
-      value: https://srbdidevdocai.cognitiveservices.azure.com/
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRE
@@ -61,14 +53,6 @@ variables:
       value: https://srbwidi03.sareb.srb:8090/sintws-162/IDocService  # GDC PRE confirmado en documentación operativa
     - name: DI_USE_INLINE_CONTENT
       value: 'true'
-    - name: AI_OPENAI_PRIMARY_ENDPOINT
-      value: https://upe48-mm2avmdm-swedencentral.openai.azure.com
-    - name: AI_CU_PRIMARY_ENDPOINT
-      value: https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/
-    - name: AI_CU_SECONDARY_ENDPOINT
-      value: https://srbaisrv-westeurope.services.ai.azure.com/
-    - name: AI_DI_ENDPOINT
-      value: https://srbdiprodocai.cognitiveservices.azure.com/
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRO
@@ -90,14 +74,10 @@ variables:
       value: https://srbwidp05.sareb.srb:8090/sintws/IDocService
     - name: DI_USE_INLINE_CONTENT
       value: 'false'
-    - name: AI_OPENAI_PRIMARY_ENDPOINT
-      value: https://upe48-mm2avmdm-swedencentral.openai.azure.com
-    - name: AI_CU_PRIMARY_ENDPOINT
-      value: https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/
-    - name: AI_CU_SECONDARY_ENDPOINT
-      value: https://srbaisrv-westeurope.services.ai.azure.com/
-    - name: AI_DI_ENDPOINT
-      value: https://srbdiprodocai.cognitiveservices.azure.com/
+  # Endpoints de IA por entorno (AI_*): fuente unica compartida con azure-pipelines-functions.yml.
+  - template: infra/ai/pipeline-variables.yml
+    parameters:
+      targetEnvironment: ${{ parameters.targetEnvironment }}
   - name: buildConfiguration
     value: Release
   - name: solutionPath

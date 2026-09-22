@@ -1,0 +1,50 @@
+# Endpoints de los recursos de IA por entorno, compartidos por los pipelines que
+# aplican App Settings a la Function App (azure-pipelines.yml y
+# azure-pipelines-functions.yml). Unica fuente para las variables AI_*: al
+# pasar un entorno a sus recursos propios (Epic AB#100298) se cambia aqui y
+# en infra/ai/resources.<env>.json, nunca en los YAML de pipeline.
+#
+# Cada pipeline convierte estas variables en los App Settings
+# AI__Resources__<alias>__Endpoint que resuelve AiEndpointResolver.
+# ensure-app-settings.ps1 solo crea las claves que faltan: cambiar un valor
+# aqui NO modifica un App Setting ya existente (ver infra/ai/README.md,
+# "Cutover de un entorno", paso 2b).
+#
+# Estado: dev en sus recursos propios desde el 2026-09-22; pre y prod siguen
+# apuntando a la IA de PRO hasta sus fases (AB#100301, AB#100302).
+parameters:
+  - name: targetEnvironment
+    type: string
+    values:
+      - dev
+      - pre
+      - prod
+
+variables:
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: AI_OPENAI_PRIMARY_ENDPOINT
+      value: https://srbaisrv01devdocai.openai.azure.com
+    - name: AI_CU_PRIMARY_ENDPOINT
+      value: https://srbaisrv01devdocai.services.ai.azure.com/
+    - name: AI_CU_SECONDARY_ENDPOINT
+      value: https://srbaisrv02devdocai.services.ai.azure.com/
+    - name: AI_DI_ENDPOINT
+      value: https://srbdidevdocai.cognitiveservices.azure.com/
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: AI_OPENAI_PRIMARY_ENDPOINT
+      value: https://upe48-mm2avmdm-swedencentral.openai.azure.com
+    - name: AI_CU_PRIMARY_ENDPOINT
+      value: https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/
+    - name: AI_CU_SECONDARY_ENDPOINT
+      value: https://srbaisrv-westeurope.services.ai.azure.com/
+    - name: AI_DI_ENDPOINT
+      value: https://srbdiprodocai.cognitiveservices.azure.com/
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: AI_OPENAI_PRIMARY_ENDPOINT
+      value: https://upe48-mm2avmdm-swedencentral.openai.azure.com
+    - name: AI_CU_PRIMARY_ENDPOINT
+      value: https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/
+    - name: AI_CU_SECONDARY_ENDPOINT
+      value: https://srbaisrv-westeurope.services.ai.azure.com/
+    - name: AI_DI_ENDPOINT
+      value: https://srbdiprodocai.cognitiveservices.azure.com/

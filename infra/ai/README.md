@@ -490,14 +490,18 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    `Classification--AzureDocumentIntelligence--ApiKey` con la de DI). Solo
    cubren el modo `ApiKey` de los App Settings; las filas de `ModeloConfigs`
    usan `DefaultAzureCredential`.
-2. **Variables `AI_*` del bloque del entorno en `azure-pipelines.yml`**
+2. **Variables `AI_*` del entorno en `infra/ai/pipeline-variables.yml`**
    (`AI_OPENAI_PRIMARY_ENDPOINT`, `AI_CU_PRIMARY_ENDPOINT`,
    `AI_CU_SECONDARY_ENDPOINT`, `AI_DI_ENDPOINT`) apuntando a
-   `resources.<env>.json`, y despliegue. El bloque `dev` ya apunta a DEV
-   desde el 2026-09-22; `pre` y `prod` siguen en PRO. El despliegue crea
-   las cuatro `AI__Resources__*__Endpoint` (no existían) pero **no** cambia
-   las cuatro claves de las opciones directas que ya existen con PRO (ver
-   paso 2b).
+   `resources.<env>.json`, y despliegue. Es una plantilla de variables que
+   incluyen los dos pipelines que aplican App Settings a la Function App:
+   el principal (`azure-pipelines.yml`) y el de Functions
+   (`azure-pipelines-functions.yml`). Cualquiera de los dos crea las cuatro
+   `AI__Resources__*__Endpoint` si no existen; el de Functions avisa con un
+   warning si ya existen con otro valor. El bloque `dev` apunta a DEV desde
+   el 2026-09-22; `pre` y `prod` siguen en PRO. Ningún pipeline cambia las
+   cuatro claves de las opciones directas que ya existen con PRO (ver paso
+   2b).
 2b. **Forzar a mano los cuatro endpoints de las opciones directas**
    (`Extraction__AzureContentUnderstanding__Endpoint`,
    `Extraction__GptFallback__Endpoint`,
