@@ -556,6 +556,11 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    clasificación; en App Insights `EndpointEfectivo` debe ser del entorno y
    ninguna traza debe contener `upe48-mm2avmdm-swedencentral`,
    `srbaisrv-westeurope` ni `srbdiprodocai`.
+6. **`scripts/ai/clear-model-api-keys.sql`** contra la BD del entorno si sus
+   filas autentican por identidad (`AuthMode = DefaultAzureCredential`): las
+   copias DEV←PRO dejaron en `ConfiguracionJson.ApiKey` las keys de PRO en
+   claro. No se usan con identidad, pero no deben quedarse. Idempotente, con
+   copia previa `ModeloConfigs__bak_<fecha>`; solo toca filas con identidad.
 
 Vuelta atrás: restaurar `ConfiguracionJson` desde la tabla `__bak`, devolver
 las variables `AI_*` a los valores de PRO y redesplegar; los roles de la
