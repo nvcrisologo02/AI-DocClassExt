@@ -14,7 +14,7 @@
          destino (cu_primary de resources.<env>.json, o cu_secondary con
          -Target) y comprueba con GET que el analyzer existe en los dos.
       2. Resuelve el dataset copiado al entorno
-         (infra/ai/datasets/<id>@<version>.manifest.json, status "copied") y
+         (infra/ai/datasets/<id>@<version>.<env>.manifest.json, status "copied") y
          la muestra de validacion en infra/ai/validation/<id>.json: una lista
          de blobs PDF del dataset elegida de forma determinista (indices
          equiespaciados sobre los PDF del manifiesto ordenados por nombre).
@@ -273,15 +273,16 @@ function Write-JsonFile {
 # -----------------------------------------------------------------------------
 function Resolve-Manifest {
     param([string]$AnalyzerId)
-    $candidates = @(Get-ChildItem -Path $datasetsDir -Filter "$AnalyzerId@*.manifest.json" -File | ForEach-Object {
-            if ($_.Name -match '^(?<id>.+)@(?<v>\d+)\.manifest\.json$' -and $Matches.id -eq $AnalyzerId) {
+    # Un manifiesto por entorno: <id>@<version>.<env>.manifest.json.
+    $candidates = @(Get-ChildItem -Path $datasetsDir -Filter "$AnalyzerId@*.$Environment.manifest.json" -File | ForEach-Object {
+            if ($_.Name -match '^(?<id>.+)@(?<v>\d+)\.(?<env>[a-z]+)\.manifest\.json$' -and $Matches.id -eq $AnalyzerId -and $Matches.env -eq $Environment) {
                 [pscustomobject]@{ File = $_; Version = [int]$Matches.v }
             }
         })
     if ($DatasetVersion) { $candidates = @($candidates | Where-Object { $_.Version -eq $DatasetVersion }) }
     if ($candidates.Count -eq 0) {
         $wanted = if ($DatasetVersion) { "$AnalyzerId@$DatasetVersion" } else { "$AnalyzerId@<version>" }
-        throw "falta el manifiesto de dataset $wanted.manifest.json en $datasetsDir (Tarea 10 pendiente para este analyzer en $Environment)"
+        throw "falta el manifiesto de dataset $wanted.$Environment.manifest.json en $datasetsDir (Tarea 10 pendiente para este analyzer en $Environment)"
     }
     $pick = $candidates | Sort-Object Version -Descending | Select-Object -First 1
     $m = Get-Content -Raw -Path $pick.File.FullName -Encoding UTF8 | ConvertFrom-Json

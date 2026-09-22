@@ -76,10 +76,13 @@ de referencia para una limpieza futura de los recursos origen.
   destino. Lo escribe el script (no editar a mano); se fusiona por
   `(kind, id)` con la pasada anterior. `-DryRun` no lo toca.
 
-- **`datasets/<clasificador>@<version>.manifest.json`**: dataset de
+- **`datasets/<clasificador>@<version>.<env>.manifest.json`**: dataset de
   entrenamiento/referencia (contenedor, prefijo, fecha de corte y ficheros)
   usado por Document Intelligence Studio o Content Understanding Studio para
-  un analyzer/clasificador. `DocumentAICC_v1@1.manifest.json` quedó con
+  un analyzer/clasificador, **uno por entorno destino** (`.dev.`, `.pre.`):
+  el mismo dataset copiado a DEV y a PRE deja dos manifiestos que no se
+  pisan. `copy-labeling-dataset.ps1` lo escribe; con `-DryRun` no escribe
+  nada. `DocumentAICC_v1@1.dev.manifest.json` quedó con
   `"status": "pendiente de acceso al storage"` (Tarea 8, Step 3): el
   contenedor `documentai` de `srbstgproapppdocai` existe y no tiene
   restricciones de red, pero mi identidad no tiene el rol de datos
@@ -92,7 +95,8 @@ de referencia para una limpieza futura de los recursos origen.
 - **`validation/<analyzerId>.json`**: muestra de validación por analyzer
   para `scripts/ai/validate-analyzer.ps1` (paso 5): referencias a 5 blobs PDF
   del dataset copiado al entorno (`name`, `size`, `md5` tal como figuran en
-  `datasets/<id>@<version>.manifest.json`), elegidos de forma determinista
+  `datasets/<id>@<version>.<env>.manifest.json`; la muestra es la misma en
+  todos los entornos porque el dataset lo es), elegidos de forma determinista
   (índices equiespaciados sobre los PDF del manifiesto ordenados por nombre).
   No se versiona ningún PDF; el script descarga cada blob del storage del
   entorno en el momento de validar. Se regenera con `-WriteSelection`. Los
@@ -270,8 +274,8 @@ la de West Europe en `tags`) resuelve el recurso destino en
 `resources.<env>.json` (`cu_primary` por defecto; `cu_secondary` solo con
 `-Target cu_secondary` y tras dar a su identidad Storage Blob Data Reader
 sobre el storage del entorno), el dataset en
-`datasets/<id>@<versión>.manifest.json` (la versión más alta, que debe ser
-del mismo entorno y tener `status: copied`) y construye el cuerpo del PUT:
+`datasets/<id>@<versión>.<env>.manifest.json` (la versión más alta del
+entorno destino, que debe tener `status: copied`) y construye el cuerpo del PUT:
 quita `analyzerId`, los campos de solo lectura y `_origin`, y reescribe
 `knowledgeSources[].containerUrl`/`prefix` al dataset del entorno. Todo lo
 demás (`description`, `tags`, `baseAnalyzerId`, `config`, `fieldSchema`,

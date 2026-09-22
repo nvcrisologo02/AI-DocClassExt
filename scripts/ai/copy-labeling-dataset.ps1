@@ -51,14 +51,14 @@
     labelingProjects/<guid>/train). Si se omite junto con -SourceContainerUrl,
     se lee de infra/ai/analyzers/<AnalyzerId>.json -> knowledgeSources[0].prefix.
 .PARAMETER ManifestDir
-    Carpeta donde se escribe <AnalyzerId>@<Version>.manifest.json. Por defecto
-    infra/ai/datasets (relativo al directorio desde el que se invoca el script,
-    igual que -OutDir en export-analyzer-definitions.ps1).
+    Carpeta donde se escribe <AnalyzerId>@<Version>.<Environment>.manifest.json
+    (un manifiesto por entorno). Por defecto infra/ai/datasets (relativo al
+    directorio desde el que se invoca el script, igual que -OutDir en
+    export-analyzer-definitions.ps1).
 .PARAMETER DryRun
-    No descarga ni sube nada: solo lista el origen, calcula fileCount y
-    totalBytes a partir del listado, y escribe el manifiesto con
-    "status": "dry-run" (los ficheros quedan sin md5, porque calcularlo exige
-    descargar). Alias funcional: -WhatIf hace lo mismo.
+    No descarga ni sube nada: solo lista el origen y calcula fileCount y
+    totalBytes a partir del listado. No escribe el manifiesto (asi no pisa
+    el de una copia real anterior). Alias funcional: -WhatIf hace lo mismo.
 .PARAMETER WhatIf
     Alias de -DryRun.
 .PARAMETER Force
@@ -321,14 +321,20 @@ $manifest = [ordered]@{
     cutoffDateUtc = (Get-Date).ToUniversalTime().ToString("o")
     fileCount     = $files.Count
     totalBytes    = $totalBytes
-    status        = if ($isDryRun) { "dry-run" } else { "copied" }
+    status        = "copied"
     files         = $files
 }
 
-New-Item -ItemType Directory -Force -Path $ManifestDir | Out-Null
-$manifestPath = Join-Path $ManifestDir "$AnalyzerId@$Version.manifest.json"
-Write-JsonFile -Path $manifestPath -Object $manifest -Depth 10
+# Un manifiesto por entorno: el mismo dataset@version copiado a dev y a pre
+# convive en infra/ai/datasets sin pisarse.
+$manifestPath = Join-Path $ManifestDir "$AnalyzerId@$Version.$Environment.manifest.json"
 
 Write-Host ""
 Write-Host "resumen: $($sourceBlobs.Count) blobs listados, $copiedCount copiados, $skippedCount saltados, $totalBytes bytes"
-Write-Host "manifiesto: $manifestPath"
+if ($isDryRun) {
+    Write-Host "[dry-run] no se escribe $manifestPath"
+} else {
+    New-Item -ItemType Directory -Force -Path $ManifestDir | Out-Null
+    Write-JsonFile -Path $manifestPath -Object $manifest -Depth 10
+    Write-Host "manifiesto: $manifestPath"
+}

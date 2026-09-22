@@ -119,8 +119,9 @@ siguiente promoción. No bloquea ni impide cambios por Admin en PRO.
 - `analyzers/<analyzerId>.json`: export del analyzer sin campos de solo lectura
   (`createdAt`, `lastModifiedAt`, `status`, `warnings`). Incluye `baseAnalyzerId`,
   `config`, `fieldSchema`, `knowledgeSources` y `models`.
-- `datasets/<analyzerId>@<version>.manifest.json`: contenedor, prefijo, fecha de corte,
-  número de ficheros y hash de cada uno. Uno por versión de analyzer y otro por proyecto
+- `datasets/<analyzerId>@<version>.<env>.manifest.json`: contenedor, prefijo, fecha de corte,
+  número de ficheros y hash de cada uno. Uno por versión de analyzer y entorno destino
+  (el mismo dataset copiado a DEV y a PRE deja dos manifiestos), y otro por proyecto
   de etiquetado de DI.
 - `di-artifacts.json`: clasificadores y modelos custom de DI a promocionar, con
   identificador, recurso origen y tipos de documento.

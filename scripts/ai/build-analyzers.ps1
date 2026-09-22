@@ -11,7 +11,7 @@
       1. Resuelve el recurso destino en infra/ai/resources.<env>.json
          (cu_primary por defecto; cu_secondary solo si se pide con -Target).
       2. Resuelve el dataset del entorno en
-         infra/ai/datasets/<id>@<version>.manifest.json (la version mas alta,
+         infra/ai/datasets/<id>@<version>.<env>.manifest.json (la version mas alta,
          salvo -DatasetVersion) y exige que el manifiesto sea del mismo entorno
          y tenga "status": "copied".
       3. Construye el cuerpo del PUT a partir del export: quita analyzerId y
@@ -207,15 +207,16 @@ function Write-JsonFile {
 
 function Resolve-Manifest {
     param([string]$AnalyzerId)
-    $candidates = @(Get-ChildItem -Path $datasetsDir -Filter "$AnalyzerId@*.manifest.json" -File | ForEach-Object {
-            if ($_.Name -match '^(?<id>.+)@(?<v>\d+)\.manifest\.json$' -and $Matches.id -eq $AnalyzerId) {
+    # Un manifiesto por entorno: <id>@<version>.<env>.manifest.json.
+    $candidates = @(Get-ChildItem -Path $datasetsDir -Filter "$AnalyzerId@*.$Environment.manifest.json" -File | ForEach-Object {
+            if ($_.Name -match '^(?<id>.+)@(?<v>\d+)\.(?<env>[a-z]+)\.manifest\.json$' -and $Matches.id -eq $AnalyzerId -and $Matches.env -eq $Environment) {
                 [pscustomobject]@{ File = $_; Version = [int]$Matches.v }
             }
         })
     if ($DatasetVersion) { $candidates = @($candidates | Where-Object { $_.Version -eq $DatasetVersion }) }
     if ($candidates.Count -eq 0) {
         $wanted = if ($DatasetVersion) { "$AnalyzerId@$DatasetVersion" } else { "$AnalyzerId@<version>" }
-        throw "falta el manifiesto de dataset $wanted.manifest.json en $datasetsDir (Tarea 10 pendiente para este analyzer en $Environment)"
+        throw "falta el manifiesto de dataset $wanted.$Environment.manifest.json en $datasetsDir (Tarea 10 pendiente para este analyzer en $Environment)"
     }
     $pick = $candidates | Sort-Object Version -Descending | Select-Object -First 1
     $m = Get-Content -Raw -Path $pick.File.FullName -Encoding UTF8 | ConvertFrom-Json
