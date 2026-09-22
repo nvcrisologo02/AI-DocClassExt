@@ -33,13 +33,13 @@ variables:
     - name: DI_USE_INLINE_CONTENT
       value: 'true'
     - name: AI_OPENAI_PRIMARY_ENDPOINT
-      value: https://upe48-mm2avmdm-swedencentral.openai.azure.com
+      value: https://srbaisrv01devdocai.openai.azure.com
     - name: AI_CU_PRIMARY_ENDPOINT
-      value: https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/
+      value: https://srbaisrv01devdocai.services.ai.azure.com/
     - name: AI_CU_SECONDARY_ENDPOINT
-      value: https://srbaisrv-westeurope.services.ai.azure.com/
+      value: https://srbaisrv02devdocai.services.ai.azure.com/
     - name: AI_DI_ENDPOINT
-      value: https://srbdiprodocai.cognitiveservices.azure.com/
+      value: https://srbdidevdocai.cognitiveservices.azure.com/
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRE

@@ -477,6 +477,61 @@ copiado no es el que entrenó PRO.
 pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SelfCheck -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers-selfcheck
 ```
 
+## Cutover de un entorno (Tarea 15)
+
+Que las Functions de un entorno usen sus recursos propios en lugar de los de
+PRO es un cambio de configuración, no de artefactos, y se hace en este orden
+(ventana sin tráfico de evaluación en curso):
+
+1. **Keys en el Key Vault del entorno** con los nombres de secreto actuales
+   (`Extraction--AzureContentUnderstanding--ApiKey`,
+   `Extraction--GptFallback--ApiKey`, `Classification--GptFallback--ApiKey`
+   con la key de la cuenta Foundry primaria;
+   `Classification--AzureDocumentIntelligence--ApiKey` con la de DI). Solo
+   cubren el modo `ApiKey` de los App Settings; las filas de `ModeloConfigs`
+   usan `DefaultAzureCredential`.
+2. **Variables `AI_*` del bloque del entorno en `azure-pipelines.yml`**
+   (`AI_OPENAI_PRIMARY_ENDPOINT`, `AI_CU_PRIMARY_ENDPOINT`,
+   `AI_CU_SECONDARY_ENDPOINT`, `AI_DI_ENDPOINT`) apuntando a
+   `resources.<env>.json`, y despliegue. El bloque `dev` ya apunta a DEV
+   desde el 2026-09-22; `pre` y `prod` siguen en PRO.
+3. **`scripts/ai/set-resource-aliases.sql`** contra la BD del entorno:
+   asigna `ResourceAlias` (`openai_primary`, `cu_primary`, `cu_secondary`
+   para las claves `-we`, `di`) a cada fila activa de `ModeloConfigs` y
+   elimina el `Endpoint` explícito, con copia previa en
+   `ModeloConfigs__bak_<fecha>`. Idempotente; ejecutar con lotes `GO` (patrón
+   `aplicar-sql-dev.ps1`).
+4. **Reinicio de la Function App** para vaciar la caché de registros.
+5. **Comprobación**: una petición de ingest con extracción CU y otra de
+   clasificación; en App Insights `EndpointEfectivo` debe ser del entorno y
+   ninguna traza debe contener `upe48-mm2avmdm-swedencentral`,
+   `srbaisrv-westeurope` ni `srbdiprodocai`.
+
+Vuelta atrás: restaurar `ConfiguracionJson` desde la tabla `__bak`, devolver
+las variables `AI_*` a los valores de PRO y redesplegar; los roles de la
+identidad sobre PRO siguen vigentes hasta la fase 3.
+
+Dos trampas conocidas que hay que resolver **antes** del paso 3:
+
+- `scripts/configuration/ensure-app-settings.ps1` (el que usa el pipeline)
+  no sobrescribe claves existentes. Las cuatro `AI__Resources__*__Endpoint`
+  no existen aún en DEV y se crearán con el valor del bloque `dev` en el
+  primer despliegue de esta rama; pero
+  `Extraction__AzureContentUnderstanding__Endpoint`,
+  `Extraction__GptFallback__Endpoint`,
+  `Classification__AzureDocumentIntelligence__Endpoint` y
+  `Classification__GptFallback__Endpoint` ya existen con los valores de PRO
+  y **seguirán en PRO** tras redesplegar. Hay que forzarlas (opción de
+  forzado en el script o `az functionapp config appsettings set` a mano) y
+  validarlas después del despliegue.
+- `ConfigurationSeedService.MergeMissingJsonProperties` reinyecta en cada
+  arranque cualquier propiedad vacía desde los seeds
+  `config/*/models.json`, que hoy llevan el `Endpoint` de PRO: el `NULL` que
+  deja el SQL volvería a ser el endpoint de PRO en el siguiente arranque.
+  Antes del cutover hay que quitar `Endpoint` de los cuatro seeds (los
+  alias ya están en ellos y los App Settings `AI__Resources__*` resuelven
+  el endpoint en cada entorno) o excluirlo del merge.
+
 ## Estado inicial de DEV y PRE
 
 **Content Understanding (Tarea 8, Step 1, AB#100310) -- pendiente de plataforma.**
