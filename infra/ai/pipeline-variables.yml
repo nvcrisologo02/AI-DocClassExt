@@ -10,8 +10,9 @@
 # aqui NO modifica un App Setting ya existente (ver infra/ai/README.md,
 # "Cutover de un entorno", paso 2b).
 #
-# Estado: dev en sus recursos propios desde el 2026-09-22; pre y prod siguen
-# apuntando a la IA de PRO hasta sus fases (AB#100301, AB#100302).
+# Estado: dev en sus recursos propios desde el 2026-09-22 y pre desde el
+# 2026-09-23 (AB#100320); prod sigue apuntando a la IA de PRO hasta su fase
+# (AB#100302).
 parameters:
   - name: targetEnvironment
     type: string
@@ -32,13 +33,13 @@ variables:
       value: https://srbdidevdocai.cognitiveservices.azure.com/
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: AI_OPENAI_PRIMARY_ENDPOINT
-      value: https://upe48-mm2avmdm-swedencentral.openai.azure.com
+      value: https://srbaisrv01predocai.openai.azure.com
     - name: AI_CU_PRIMARY_ENDPOINT
-      value: https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/
+      value: https://srbaisrv01predocai.services.ai.azure.com/
     - name: AI_CU_SECONDARY_ENDPOINT
-      value: https://srbaisrv-westeurope.services.ai.azure.com/
+      value: https://srbaisrv02predocai.services.ai.azure.com/
     - name: AI_DI_ENDPOINT
-      value: https://srbdiprodocai.cognitiveservices.azure.com/
+      value: https://srbdipredocai.cognitiveservices.azure.com/
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: AI_OPENAI_PRIMARY_ENDPOINT
       value: https://upe48-mm2avmdm-swedencentral.openai.azure.com

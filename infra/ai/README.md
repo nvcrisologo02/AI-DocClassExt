@@ -532,7 +532,8 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    (`azure-pipelines-functions.yml`). Cualquiera de los dos crea las cuatro
    `AI__Resources__*__Endpoint` si no existen; el de Functions avisa con un
    warning si ya existen con otro valor. El bloque `dev` apunta a DEV desde
-   el 2026-09-22; `pre` y `prod` siguen en PRO. Ningún pipeline cambia las
+   el 2026-09-22 y `pre` a PRE desde el 2026-09-23; `prod` sigue en PRO
+   hasta la fase 3. Ningún pipeline cambia las
    cuatro claves de las opciones directas que ya existen con PRO (ver paso
    2b).
 2b. **Forzar a mano los cuatro endpoints de las opciones directas**
