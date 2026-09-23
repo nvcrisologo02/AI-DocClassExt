@@ -33,6 +33,17 @@
          Operation-Location hasta succeeded/ready.
       5. GET de verificacion en destino y comparacion canonica con el origen.
 
+    Antes del primer analyzer comprueba los defaults de Content Understanding
+    de la cuenta destino (GET /contentunderstanding/defaults) contra
+    contentUnderstandingDefaults.<cuenta> de infra/ai/deployments.<env>.json y
+    hace PATCH si falta o difiere algun alias (Ensure-Defaults, compartida con
+    build-analyzers.ps1 en scripts/ai/lib/cu-defaults.ps1). La Copy API no
+    los exige, pero sin ellos el analyzer copiado falla en el primer analisis
+    ("needs a 'completion' model deployment ... but none was resolved", PRE
+    2026-09-22). Ademas, por analyzer, exige que los alias de "models" del
+    origen esten mapeados en destino; si no, se para antes de copiar.
+    -SkipDefaults omite las dos comprobaciones.
+
     Escribe infra/ai/cu-analyzers.<env>.manifest.json (fusionado por id) con
     el resultado por analyzer: copied / present / skipped / failed, fecha,
     operacion y si la definicion coincide con el origen.
@@ -64,6 +75,9 @@
     Alias funcional: -WhatIf.
 .PARAMETER WhatIf
     Alias de -DryRun.
+.PARAMETER SkipDefaults
+    No comprueba ni corrige los defaults de Content Understanding del destino
+    ni los alias de "models" de cada analyzer.
 .PARAMETER DumpDir
     Carpeta donde volcar el GET de origen y destino y las respuestas de
     grant/copy por analyzer. No se escribe nada si se omite.
@@ -87,6 +101,7 @@ param(
     [switch]$Force,
     [switch]$DryRun,
     [switch]$WhatIf,
+    [switch]$SkipDefaults,
     [string]$DumpDir,
     [int]$TimeoutMinutes = 20,
     [int]$PollSeconds = 5,
@@ -104,6 +119,7 @@ $listFile = Join-Path $repoRoot 'infra/ai/cu-analyzers.json'
 $sourceResourcesFile = Join-Path $repoRoot 'infra/ai/resources.prod.json'
 $targetResourcesFile = Join-Path $repoRoot "infra/ai/resources.$Environment.json"
 $manifestFile = Join-Path $repoRoot "infra/ai/cu-analyzers.$Environment.manifest.json"
+$deploymentsFile = Join-Path $repoRoot "infra/ai/deployments.$Environment.json"
 $runningStates = @('running', 'notstarted', 'creating', 'inprogress')
 $successStates = @('succeeded', 'ready')
 # Claves de la definicion que se comparan entre origen y destino.
@@ -242,12 +258,29 @@ function Wait-Operation {
     return $op.Content
 }
 
+# Ensure-Defaults (comprueba y fija los defaults de CU de una cuenta) es compartida
+# con build-analyzers.ps1; usa el Invoke-Cu de este script.
+. (Join-Path $PSScriptRoot 'lib' 'cu-defaults.ps1')
+
+function Get-ModelAliases {
+    # Alias de modelo que referencia un analyzer (valores de "models": completion, embedding...).
+    param($Analyzer)
+    if (-not $Analyzer.models) { return @() }
+    return @($Analyzer.models.PSObject.Properties.Value | Where-Object { $_ } | Select-Object -Unique)
+}
+
 # -----------------------------------------------------------------------------
 # Carga
 # -----------------------------------------------------------------------------
 $source = Resolve-Resource -File $sourceResourcesFile -Alias $SourceTarget -Label 'origen'
 $dest = Resolve-Resource -File $targetResourcesFile -Alias $Target -Label 'destino'
 if ($source.ResourceId -eq $dest.ResourceId) { throw "origen y destino son el mismo recurso ($($source.ResourceId))" }
+
+$deployments = $null
+if (-not $SkipDefaults) {
+    if (-not (Test-Path $deploymentsFile)) { throw "no existe $deploymentsFile (necesario para comprobar los defaults de CU; -SkipDefaults para omitirlo)" }
+    $deployments = Get-Content -Raw -Path $deploymentsFile -Encoding UTF8 | ConvertFrom-Json
+}
 
 if (-not (Test-Path $listFile)) { throw "no existe $listFile" }
 $list = Get-Content -Raw -Path $listFile -Encoding UTF8 | ConvertFrom-Json
@@ -276,6 +309,15 @@ $tokenIssuedAt = Get-Date
 $results = [System.Collections.Generic.List[object]]::new()
 $entries = @{}
 
+# Defaults de CU del destino antes de copiar nada: sin ellos la copia "funciona"
+# pero el analyzer falla en el primer analisis.
+$defaultsMap = $null
+if (-not $SkipDefaults) {
+    Write-Host "  defaults de CU en $($dest.Account):" -ForegroundColor White
+    $defaultsMap = Ensure-Defaults -Endpoint $dest.Endpoint -Account $dest.Account -Token $token -Deployments $deployments -DeploymentsFile $deploymentsFile -ApiVersion $ApiVersion -DryRun:$isDryRun
+    Write-Host ""
+}
+
 foreach ($id in $ids) {
     $dstId = "$id$TargetSuffix"
     $started = Get-Date
@@ -290,6 +332,12 @@ foreach ($id in $ids) {
     if ($s.Status -ne 200) { throw "GET $id en origen -> HTTP $($s.Status): $($s.Error)" }
     if ($s.Content.status -ne 'ready') { throw "$id en origen esta en status '$($s.Content.status)', no 'ready'; no se copia" }
     if ($DumpDir) { Write-JsonFile -Path (Join-Path $DumpDir "$id.origen.json") -Object $s.Content }
+    if ($null -ne $defaultsMap) {
+        $missingAliases = @(Get-ModelAliases $s.Content | Where-Object { -not $defaultsMap.ContainsKey($_) })
+        if ($missingAliases.Count -gt 0) {
+            throw "$id usa los alias de modelo [$($missingAliases -join ', ')] y los defaults de CU de $($dest.Account) no los mapean (contentUnderstandingDefaults.$($dest.Account) en $deploymentsFile); el analyzer copiado fallaria al analizar"
+        }
+    }
 
     $d = Invoke-Cu -Method Get -Url $dstUrl -Token $token
     if ($d.Status -in 401, 403) { throw "sin acceso al data plane de $($dest.Account) (HTTP $($d.Status)): falta el rol Cognitive Services User" }

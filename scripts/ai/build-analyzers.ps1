@@ -27,6 +27,8 @@
          infra/ai/deployments.<env>.json, clave contentUnderstandingDefaults
          por cuenta; si falta algun alias, se hace PATCH con el mapeo
          (fusionando con lo que ya hubiera). -SkipDefaults omite este paso.
+         La funcion (Ensure-Defaults) vive en scripts/ai/lib/cu-defaults.ps1 y
+         la comparte copy-cu-analyzers.ps1.
       5. Si el analyzer ya existe con la misma definicion (comparacion
          canonica de las claves que se envian) y esta en "ready", se salta;
          con -Force se reconstruye igualmente. Si existe pero difiere, el PUT
@@ -251,64 +253,9 @@ function Get-RequiredAliases {
     return @($Body['models'].PSObject.Properties.Value | Where-Object { $_ } | Select-Object -Unique)
 }
 
-function Ensure-Defaults {
-    # Comprueba (y corrige si hace falta) los defaults de CU de la cuenta.
-    # Devuelve el mapeo alias -> deployment que quedara vigente.
-    param([string]$Endpoint, [string]$Account, [string]$Token, [string[]]$RequiredAliases)
-    $url = "$Endpoint/contentunderstanding/defaults?api-version=$ApiVersion"
-    $r = Invoke-Cu -Method Get -Url $url -Token $Token
-    $current = @{}
-    if ($r.Status -eq 200 -and $r.Content.modelDeployments) {
-        foreach ($p in $r.Content.modelDeployments.PSObject.Properties) { $current[$p.Name] = $p.Value }
-    } elseif ($r.Status -in 400, 404 -and $r.Content.error.innererror.code -eq 'DefaultsNotSet') {
-        Write-Host "      defaults: no fijados todavia (DefaultsNotSet)" -ForegroundColor DarkYellow
-    } elseif ($r.Status -in 401, 403) {
-        throw "sin acceso al data plane de $Account (HTTP $($r.Status)): falta el rol Cognitive Services User"
-    } else {
-        throw "GET defaults de $Account -> HTTP $($r.Status): $($r.Error)"
-    }
-
-    $desired = @{}
-    $decl = $deployments.contentUnderstandingDefaults
-    if ($decl -and $decl.PSObject.Properties.Name -contains $Account) {
-        foreach ($p in $decl.$Account.PSObject.Properties) { $desired[$p.Name] = $p.Value }
-    }
-    # Consistencia declarativa: cada deployment del mapeo debe existir en la lista de la cuenta.
-    $declaredDeployments = @()
-    if ($deployments.accounts.PSObject.Properties.Name -contains $Account) { $declaredDeployments = @($deployments.accounts.$Account | ForEach-Object { $_.name }) }
-    foreach ($alias in $desired.Keys) {
-        if ($declaredDeployments -notcontains $desired[$alias]) {
-            throw "contentUnderstandingDefaults.$Account.$alias apunta al deployment '$($desired[$alias])', que no figura en accounts.$Account de $deploymentsFile"
-        }
-    }
-
-    $merged = @{} + $current
-    $changes = @()
-    foreach ($alias in ($desired.Keys | Sort-Object)) {
-        if ($current[$alias] -ne $desired[$alias]) {
-            $changes += "$alias : '$($current[$alias])' -> '$($desired[$alias])'"
-            $merged[$alias] = $desired[$alias]
-        }
-    }
-    $missing = @($RequiredAliases | Where-Object { -not $merged.ContainsKey($_) })
-    if ($missing.Count -gt 0) {
-        throw "los analyzers necesitan los alias [$($missing -join ', ')] y ni los defaults actuales de $Account ni contentUnderstandingDefaults.$Account en $deploymentsFile los mapean"
-    }
-    if ($changes.Count -eq 0) {
-        Write-Host "      defaults: OK ($($merged.Count) alias)" -ForegroundColor Green
-        return $merged
-    }
-    Write-Host "      defaults: PATCH necesario" -ForegroundColor Yellow
-    foreach ($c in $changes) { Write-Host "        $c" }
-    if ($isDryRun) {
-        Write-Host "      [dry-run] no se hace PATCH /contentunderstanding/defaults" -ForegroundColor DarkGray
-        return $merged
-    }
-    $patch = Invoke-Cu -Method Patch -Url $url -Token $Token -Body @{ modelDeployments = $merged }
-    if ($patch.Status -notin 200, 201, 204) { throw "PATCH defaults de $Account -> HTTP $($patch.Status): $($patch.Error)" }
-    Write-Host "      defaults: actualizados" -ForegroundColor Green
-    return $merged
-}
+# Ensure-Defaults (comprueba y fija los defaults de CU de una cuenta) es compartida
+# con copy-cu-analyzers.ps1; usa el Invoke-Cu de este script.
+. (Join-Path $PSScriptRoot 'lib' 'cu-defaults.ps1')
 
 function Wait-Build {
     param([string]$OperationUrl, [string]$Token, [string]$Label)
@@ -388,7 +335,7 @@ $results = [System.Collections.Generic.List[object]]::new()
 foreach ($t in $targets) {
     Write-Host "== destino $($t.Alias): $($t.Account) ($($t.Endpoint)) ==" -ForegroundColor Cyan
     if (-not $SkipDefaults) {
-        [void](Ensure-Defaults -Endpoint $t.Endpoint -Account $t.Account -Token $token -RequiredAliases $requiredAliases)
+        [void](Ensure-Defaults -Endpoint $t.Endpoint -Account $t.Account -Token $token -Deployments $deployments -DeploymentsFile $deploymentsFile -RequiredAliases $requiredAliases -ApiVersion $ApiVersion -DryRun:$isDryRun)
     }
 
     foreach ($item in $items) {

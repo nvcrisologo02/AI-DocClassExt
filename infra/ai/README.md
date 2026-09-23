@@ -46,9 +46,12 @@ de referencia para una limpieza futura de los recursos origen.
     tener como *defaults* en cada cuenta Foundry del entorno
     (`PATCH /contentunderstanding/defaults`). Sin defaults el servicio
     rechaza cualquier build de analyzer con `DefaultsNotSet` (verificado en
-    `srbaisrv01devdocai` y `srbaisrv02devdocai` el 2026-09-21), así que
-    `scripts/ai/build-analyzers.ps1` los comprueba y fija antes del primer
-    PUT. Replica el mapeo observado en PRO (`gpt-4.1`, `gpt-4.1-mini`,
+    `srbaisrv01devdocai` y `srbaisrv02devdocai` el 2026-09-21), y un analyzer
+    copiado sin ellos falla en el primer análisis (PRE, 2026-09-22), así que
+    `scripts/ai/build-analyzers.ps1` y `scripts/ai/copy-cu-analyzers.ps1` los
+    comprueban y fijan antes de tocar la cuenta (función `Ensure-Defaults`
+    compartida en `scripts/ai/lib/cu-defaults.ps1`, con tests Pester en
+    `scripts/ai/tests/cu-defaults.Tests.ps1`). Replica el mapeo observado en PRO (`gpt-4.1`, `gpt-4.1-mini`,
     `text-embedding-3-large` y los tres alias `prebuilt-analyzer-*`) con los
     deployments de cada cuenta; cada nombre debe existir en `accounts` del
     mismo fichero.
@@ -245,8 +248,8 @@ ARM y compara uno a uno:
 Antes de tocar Azure comprueba la coherencia del fichero (campos
 obligatorios, nombres repetidos y que cada entrada de
 `contentUnderstandingDefaults` apunte a un deployment declarado). Los
-defaults de Content Understanding en sí los fija `build-analyzers.ps1`, no
-este script. Todas las llamadas van por ARM con token e `Invoke-WebRequest`,
+defaults de Content Understanding en sí los fijan `build-analyzers.ps1` y
+`copy-cu-analyzers.ps1`, no este script. Todas las llamadas van por ARM con token e `Invoke-WebRequest`,
 no con `az.cmd`. Sale con código 1 si algún deployment queda `failed` o
 `timeout`; el error de ARM (por ejemplo `InsufficientQuota` si la cuota del
 SKU no está concedida en la suscripción, petición P1 de AB#100311) se
@@ -332,6 +335,18 @@ ese storage y los resultados coinciden con PRO).
 Permisos: la identidad que ejecuta necesita **Cognitive Services User** en
 origen y destino. No hacen falta roles cruzados entre los recursos.
 
+Defaults de Content Understanding: antes del primer analyzer comprueba los de
+la cuenta destino contra `contentUnderstandingDefaults` de
+`deployments.<env>.json` y hace PATCH si falta o difiere algún alias (misma
+`Ensure-Defaults` que `build-analyzers.ps1`, en `scripts/ai/lib/cu-defaults.ps1`;
+en `-DryRun` solo muestra el plan). Después, por analyzer, exige que los alias
+de `models` del origen (`gpt-4.1`, `text-embedding-3-large`…) estén mapeados
+en destino y se para antes de copiar si no lo están. La Copy API no exige los
+defaults, pero sin ellos el analyzer copiado falla en el primer análisis con
+`needs a 'completion' model deployment ... but none was resolved` (visto en
+PRE el 2026-09-22, cuando las dos cuentas seguían en `DefaultsNotSet` tras la
+copia). `-SkipDefaults` omite las dos comprobaciones.
+
 Prueba del 2026-09-21: `CERA46` → `CERA46_copytest` en `srbaisrv01devdocai`,
 copia en 9 s, definición idéntica; `validate-analyzer.ps1 -Only CERA46
 -TargetSuffix _copytest` dio 90,0 % global y 95,6 % en `extract` con markdown
@@ -343,15 +358,16 @@ pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffi
 pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Force      # los 24, sobrescribiendo los reconstruidos
 pwsh scripts/ai/validate-analyzer.ps1 -Environment dev            # puerta: los 6 con dataset en DEV
 # cuenta secundaria (cu_secondary): solo los analyzers de las filas "-we" de ModeloConfigs,
-# desde la secundaria de PRO; antes, fijar sus defaults de CU (PATCH /contentunderstanding/defaults)
+# desde la secundaria de PRO (el script fija antes los defaults de CU de esa cuenta)
 pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CU_NS_1.5_0,CU_NS_1.6_0_GGAA -Target cu_secondary -SourceTarget cu_secondary
 ```
 
 El 2026-09-22 la cuenta secundaria de DEV (`srbaisrv02devdocai`) recibió
 `CU_NS_1.5_0` y `CU_NS_1.6_0_GGAA` desde `srbaisrv-westeurope`, tras fijar
-sus defaults con el mapeo de `deployments.dev.json` (estaba en
+sus defaults a mano con el mapeo de `deployments.dev.json` (estaba en
 `DefaultsNotSet`). Sin ese paso, las filas `-we` daban 404 `ModelNotFound`
-tras el cutover y el smoke no lo detectaba.
+tras el cutover y el smoke no lo detectaba. Desde el 2026-09-23 el propio
+`copy-cu-analyzers.ps1` hace esa comprobación (ver arriba).
 
 ## Copiar los clasificadores de Document Intelligence a un entorno
 
