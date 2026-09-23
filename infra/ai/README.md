@@ -571,6 +571,14 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    elimina el `Endpoint` explícito, con copia previa en
    `ModeloConfigs__bak_<fecha>`. Idempotente; ejecutar con lotes `GO` (patrón
    `aplicar-sql-dev.ps1`).
+3b. **`scripts/ai/set-auth-mode-identity.sql`** contra la BD del entorno si
+   sus filas siguen en `AuthMode = ApiKey` (las copias desde PRO las dejan
+   así): pone `DefaultAzureCredential` en cada fila activa de los proveedores
+   de IA, con copia previa `ModeloConfigs__bak_<fecha>`. Idempotente; el
+   seed no lo revierte porque solo reinyecta propiedades ausentes o vacías.
+   Requiere que la identidad de la Function App tenga ya los roles sobre las
+   cuentas del entorno; DEV quedó así el 2026-09-22 y PRE lo aplica en su
+   cutover (AB#100320). No aplica a PRO hasta la fase 3.
 4. **Reinicio de la Function App** para vaciar la caché de registros.
 5. **Comprobación**: una petición de ingest con extracción CU y otra de
    clasificación; en App Insights `EndpointEfectivo` debe ser del entorno y
