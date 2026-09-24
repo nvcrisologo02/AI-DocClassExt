@@ -322,3 +322,9 @@ proceso tomada en S16, no de arquitectura).
   `docs/auxiliares/temps/2026-09-24/factura-puerta3-pre-2026-09-23.md`.
 - Traspasos: `docs/auxiliares/temps/2026-09-24/traspaso-ia-propia-por-entorno-s16.md`.
 - Plantilla de release de gobernanza: `~/.claude/gobernanza/plantillas/release.md`.
+
+## Correcciones tras la revisión final (2026-09-24)
+
+- Configuración: la sección 2.3 ("nunca por Id; solo por clave natural") chocaba con la Fase 4 paso 3 (aplicar en PRO el mismo `config-<RELEASE_TAG>.sql`) y con la puerta 4 (hash de PRE frente al export de DEV, que solo coincide aplicando por Id). Prevalece la decisión del cutover de PRE de S12 (los `Id` de `Tipologias` 2224-2231 son códigos distintos en DEV y PRE). El runbook manda ahora: el export de DEV es referencia y evidencia, nunca se aplica; en PRE (2.3) y PRO (4.3) se aplican solo los seeds propios de la release, con diff previo por clave natural (`scripts/database/diff-config-exports.py`, versionado en esta corrección).
+- Puerta 4 y paso 4.7: comparan cada entorno con su propio export tomado tras 2.3 (o 2.4) y 4.3, no con DEV. `ModeloConfigs` de PRO queda fuera hasta el cutover de IA de PRO (Fase 3 de AB#100298).
+- Anexo B, capa 2 ("relanzar `ensure-app-settings.ps1` con las variables del run anterior") no restaura nada: ese script nunca sobrescribe claves existentes. El runbook manda capturar endpoints de IA y nombres de app settings antes de desplegar (2.2.4 y 4.11) y restaurar con `az functionapp config appsettings set`, cotejado con la consulta del paso 2b de `infra/ai/README.md`; la capa 3 fuerza igual los ocho endpoints de IA.
