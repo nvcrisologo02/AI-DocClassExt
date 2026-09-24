@@ -52,7 +52,7 @@ Instancia de docs/procedimientos/RELEASE_MANAGEMENT.md. Marcar cada paso con fec
 - [ ] **4.7** Deriva en PRO: export tras 4.6 (`-ReleaseTag vX.Y.Z-pro-despues`) frente al `config-vX.Y.Z-pro.hashes.json` de 4.3; hash idéntico salvo `ModeloConfigs`, que queda fuera. Toda diferencia se anota en `runbook.md` como cambio en caliente a retroportar a DEV. — <fecha> · <resultado>
 - [ ] **4.8** Backfills reanudables, solo si la release los trae y solo después de 4.6 (ejemplos: `scripts/database/backfill-costes-estimados.ps1`, `scripts/database/backfill-markdown-cobertura.ps1`). — <fecha> · <resultado>
 - [ ] **4.9** Observación de una hora con las KQL del Anexo D: sin subida de fallos ni de `CU.CircuitOpen`. — <fecha> · <resultado>
-- [ ] **4.10** Scripts SQL de la release fuera de EF listados en 0.5 (los de 2.1.3), aplicados en PRO con token de Entra; antes de 4.2 si sustituyen a una migración EF. Anotar la duración por lote. — <fecha> · <resultado>
+- [ ] **4.10** Scripts SQL de la release fuera de EF listados en 0.5 (los de 2.1.3), aplicados en PRO con token de Entra; siempre antes de 4.4 (esquema antes que código) y antes de 4.2 si sustituyen a una migración EF. Anotar la duración por lote. — <fecha> · <resultado>
 - [ ] **4.11** Antes de 4.4: guardar en `evidencias/` los endpoints de IA y los nombres de los app settings de `srbappprodocai`, como en 2.2.4 (comandos abajo). — <fecha> · <resultado>
 ## Fase 5 — Cierre y registro
 - [ ] **5.1** Tag anotado sobre el commit desplegado: `git tag -a vX.Y.Z <commit> -m "Release vX.Y.Z a PRO el <fecha>"` y `git push origin vX.Y.Z`. — <fecha> · <resultado>

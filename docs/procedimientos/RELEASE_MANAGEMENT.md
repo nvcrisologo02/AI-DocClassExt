@@ -164,9 +164,11 @@ de la release listados en 0.5 (scripts SQL o PowerShell versionados, cada uno co
 - [ ] **2.3.2** Export de PRE antes de tocar nada y diff por clave natural frente al de DEV (comandos abajo); toda diferencia que no resuelvan los seeds de la release se explica en `runbook.md` antes de seguir.
 
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlpredocai.database.windows.net -ReleaseTag vX.Y.Z-pre-antes
-      python scripts/database/diff-config-exports.py artifacts/db-config/config-vX.Y.Z-pre-antes.sql artifacts/db-config/config-vX.Y.Z.sql ModeloConfigs=Key PromptTemplates=PromptKey Tipologias=Codigo CatalogoTdn1=Codigo CatalogoTdn2=Codigo PluginTipologiaConfigs=TipologiaCodigo
+      python scripts/database/diff-config-exports.py artifacts/db-config/config-vX.Y.Z-pre-antes.sql artifacts/db-config/config-vX.Y.Z.sql ModeloConfigs=Key PromptTemplates=PromptKey+Version Tipologias=Codigo CatalogoTdn1=Codigo CatalogoTdn2=Codigo PluginTipologiaConfigs=TipologiaCodigo
 
-  El diff compara cada tabla por su índice único (no por `Id`) e ignora `Id` y auditoría; saca
+  El diff compara cada tabla por su índice único (no por `Id`; `PromptTemplates` por la clave
+  compuesta `PromptKey+Version`) e ignora `Id` y auditoría. Termina con error si una columna
+  de clave no existe o se repite en un fichero; saca
   por tabla las filas solo en PRE, solo en DEV y distintas, con las columnas que cambian.
 
 - [ ] **2.3.3** Aplicar en PRE los seeds propios de la release listados en 0.5, con token de Entra (ver "Acceso a SQL") y su copia `__bak`; nunca el export completo. Sin seeds en la release, tachar con motivo.
@@ -287,7 +289,7 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
 - [ ] **4.3** Configuración en PRO, igual que 2.3.2 a 2.3.4: export previo y diff por clave natural sin `ModeloConfigs`, seeds propios de la release con su copia `__bak` (nunca `config-vX.Y.Z.sql`) y export de referencia `vX.Y.Z-pro` (comandos abajo).
 
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlprodocai.database.windows.net -ReleaseTag vX.Y.Z-pro-antes
-      python scripts/database/diff-config-exports.py artifacts/db-config/config-vX.Y.Z-pro-antes.sql artifacts/db-config/config-vX.Y.Z.sql PromptTemplates=PromptKey Tipologias=Codigo CatalogoTdn1=Codigo CatalogoTdn2=Codigo PluginTipologiaConfigs=TipologiaCodigo
+      python scripts/database/diff-config-exports.py artifacts/db-config/config-vX.Y.Z-pro-antes.sql artifacts/db-config/config-vX.Y.Z.sql PromptTemplates=PromptKey+Version Tipologias=Codigo CatalogoTdn1=Codigo CatalogoTdn2=Codigo PluginTipologiaConfigs=TipologiaCodigo
       # seeds de la release listados en 0.5, con token de Entra
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlprodocai.database.windows.net -ReleaseTag vX.Y.Z-pro
 
@@ -300,7 +302,7 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
 
 - [ ] **4.8** Backfills reanudables, solo si la release los trae y solo después de 4.6 (ejemplos: `scripts/database/backfill-costes-estimados.ps1`, `scripts/database/backfill-markdown-cobertura.ps1`).
 - [ ] **4.9** Observación de una hora con las KQL del Anexo D: sin subida de fallos ni de `CU.CircuitOpen`.
-- [ ] **4.10** Scripts SQL de la release fuera de EF listados en 0.5 (los de 2.1.3), aplicados en PRO con token de Entra; antes de 4.2 si sustituyen a una migración EF. Anotar la duración por lote.
+- [ ] **4.10** Scripts SQL de la release fuera de EF listados en 0.5 (los de 2.1.3), aplicados en PRO con token de Entra; siempre antes de 4.4 (esquema antes que código) y antes de 4.2 si sustituyen a una migración EF. Anotar la duración por lote.
 - [ ] **4.11** Antes de 4.4: guardar en `evidencias/` los endpoints de IA y los nombres de los app settings de `srbappprodocai`, como en 2.2.4 (comandos abajo).
 
       az functionapp config appsettings list --subscription 647c7246-54bc-4d31-b909-431cacf03272 --resource-group SRBRGDOCSAIPROD --name srbappprodocai --query "[?ends_with(name, '__Endpoint') && name != 'GDC__Endpoint'].[name, value]" -o table > docs/releases/vX.Y.Z/evidencias/appsettings-ia-pro-antes.txt

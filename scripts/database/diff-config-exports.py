@@ -5,15 +5,18 @@ scripts/database/replicate-config-data.ps1 -Mode Export). Solo lectura: parsea l
 bloques MERGE INTO [dbo].[T] ... USING (VALUES ...) y no toca ninguna BD.
 
 Uso:
-  python scripts/database/diff-config-exports.py <a.sql> <b.sql> [Tabla[=ColumnaClave] ...]
+  python scripts/database/diff-config-exports.py <a.sql> <b.sql> [Tabla[=Col1[+Col2...]] ...]
 
 Sin argumentos de tabla compara todas las tablas por clave primaria (primer valor de
 cada fila, normalmente Id). Con "Tabla=Columna" compara solo esas tablas y por esa
-columna (clave natural), ignorando Id y las columnas de auditoria. Ejemplo de diff por
-clave natural entre el export de un entorno y el de DEV (indices unicos del modelo):
+columna (clave natural), ignorando Id y las columnas de auditoria. Una clave compuesta
+se escribe con "+" (PromptTemplates=PromptKey+Version, indice unico del modelo). Si una
+columna de clave no existe en el export, o la clave no es unica en un fichero, el
+script termina con error en vez de comparar mal. Ejemplo de diff por clave natural
+entre el export de un entorno y el de DEV (indices unicos del modelo):
 
   python scripts/database/diff-config-exports.py config-<entorno>.sql config-vX.Y.Z.sql \
-    ModeloConfigs=Key PromptTemplates=PromptKey Tipologias=Codigo CatalogoTdn1=Codigo \
+    ModeloConfigs=Key PromptTemplates=PromptKey+Version Tipologias=Codigo CatalogoTdn1=Codigo \
     CatalogoTdn2=Codigo PluginTipologiaConfigs=TipologiaCodigo
 
 Salida por tabla: filas en A y en B, solo en A, solo en B y distintas, con las
@@ -135,15 +138,29 @@ def main():
         ra, rb = A.get(t, {}).get("rows", []), B.get(t, {}).get("rows", [])
         cols = A.get(t, {}).get("cols") or B.get(t, {}).get("cols") or []
         kcol = keys.get(t)
-        ki = cols.index(kcol) if kcol and kcol in cols else 0
+        kcols = kcol.split("+") if kcol else []
+        missing = [c for c in kcols if c not in cols]
+        if missing:
+            sys.exit(f"ERROR: la tabla {t} no tiene la columna de clave {', '.join(missing)} (columnas: {', '.join(cols)})")
+        kis = [cols.index(c) for c in kcols] if kcols else [0]
         if kcol:
+            # La clave se lee antes de anular Id y auditoria (una clave compuesta puede incluir alguna).
             print(f"   (clave {kcol}; columnas: {', '.join(cols)}; se ignoran {', '.join(sorted(IGNORE & set(cols)))})")
-            ra = [[None if (i < len(cols) and cols[i] in IGNORE) else v for i, v in enumerate(r)] for r in ra]
-            rb = [[None if (i < len(cols) and cols[i] in IGNORE) else v for i, v in enumerate(r)] for r in rb]
-        ka = {r[ki]: r for r in ra}
-        kb = {r[ki]: r for r in rb}
-        only_a = sorted(set(ka) - set(kb), key=lambda k: (len(k), k))
-        only_b = sorted(set(kb) - set(ka), key=lambda k: (len(k), k))
+
+        def keyed(rows, name):
+            out = {}
+            for r in rows:
+                k = r[kis[0]] if len(kis) == 1 else tuple(r[i] for i in kis)
+                if k in out:
+                    sys.exit(f"ERROR: clave {kcol or 'PK'}={k} repetida en {name}, tabla {t}; use una clave unica (por ejemplo Col1+Col2)")
+                out[k] = [None if (kcol and i < len(cols) and cols[i] in IGNORE) else v for i, v in enumerate(r)]
+            return out
+
+        ka = keyed(ra, a_path)
+        kb = keyed(rb, b_path)
+        order = lambda k: (len(str(k)), str(k))
+        only_a = sorted(set(ka) - set(kb), key=order)
+        only_b = sorted(set(kb) - set(ka), key=order)
         changed = []
         for k in ka:
             if k in kb and ka[k] != kb[k]:
@@ -155,7 +172,7 @@ def main():
             print(f"   solo en A  PK={k}: {label(ka[k])}")
         for k in only_b:
             print(f"   solo en B  PK={k}: {label(kb[k])}")
-        for k, diffs in sorted(changed, key=lambda x: (len(x[0]), x[0])):
+        for k, diffs in sorted(changed, key=lambda x: order(x[0])):
             cols_changed = ", ".join(d[0] for d in diffs)
             print(f"   distinta   PK={k} [{label(ka[k])}] -> {cols_changed}")
             for c, va, vb in diffs:
