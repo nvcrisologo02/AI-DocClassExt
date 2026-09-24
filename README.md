@@ -64,10 +64,13 @@ Pipelines disponibles (todos de ejecución manual y parametrizados por `targetEn
 - `azure-pipelines-admin.yml` — solo Admin (Blazor).
 - `azure-pipelines-assetresolver.yml` — solo plugin AssetResolver.
 - `azure-pipelines-bootstrap.yml` — preparacion inicial de entorno (permisos, secretos KV, app settings, validacion de contrato).
+- `azure-pipelines-migrations.yml` — migraciones de esquema (Generate en agente hosted, Apply en pool privado); único mecanismo para aplicar migraciones en DEV/PRE/PRO.
 
 > Los pipelines por componente (`-functions`, `-admin`, `-assetresolver`) asumen que el entorno ya fue inicializado con `azure-pipelines-bootstrap.yml` o un run previo del pipeline completo; sirven para redespliegues incrementales de un unico componente sin tocar el resto.
 
 Detalle completo en [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md).
+
+Procedimiento de release (DEV → PRE → PRO, puertas de PRE, vuelta atrás): [docs/procedimientos/RELEASE_MANAGEMENT.md](docs/procedimientos/RELEASE_MANAGEMENT.md). Registro por versión en [docs/releases/](docs/releases/README.md).
 
 Despliegue manual (Functions) sobre la Function App existente:
 
