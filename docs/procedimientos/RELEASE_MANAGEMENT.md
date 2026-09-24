@@ -1,691 +1,175 @@
-# Release Management — DocumentIA Production
-
-**Versión:** 1.0  
-**Última actualización:** 2026-06-10  
-**Aplicable a:** SRBRGDOCSAIPROD (Production Only)  
-**Fuente:** Verificado contra pipelines reales + EF Core migrations
-
----
-
-## 📋 Tabla de Contenidos
-
-1. [Versioning Strategy](#versioning-strategy)
-2. [Release Cycle](#release-cycle)
-3. [Pre-Release Checklist](#pre-release-checklist)
-4. [Release Process](#release-process)
-5. [Database Migrations](#database-migrations)
-6. [Rollback Procedures](#rollback-procedures)
-7. [Hotfix Process](#hotfix-process)
-8. [Communication Plan](#communication-plan)
-9. [Post-Release Validation](#post-release-validation)
-
----
-
-## Versioning Strategy
-
-### Semantic Versioning (SemVer)
-
-**Format:** `MAJOR.MINOR.PATCH-PRERELEASE+BUILD`
-
-**Example:** `1.4.2-rc.1+2026-06-10.15`
-
-### Versioning Rules
-
-| Component | Increment When | Example |
-|-----------|---|---|
-| **MAJOR** | Breaking API change, major feature, critical vulnerability | 1.0.0 → 2.0.0 |
-| **MINOR** | New feature, non-breaking enhancement, provider upgrade | 1.4.5 → 1.5.0 |
-| **PATCH** | Bug fix, performance improvement, configuration change | 1.4.5 → 1.4.6 |
-| **PRERELEASE** | RC/Beta/Alpha (before production release) | 1.5.0-rc.1 |
-| **BUILD** | Build metadata (date + run number) | +2026-06-10.15 |
-
-### Version Placement
-
-**Functions App** (`src/backend/DocumentIA.Functions/`)
-```xml
-<!-- DocumentIA.Functions.csproj -->
-<PropertyGroup>
-  <AssemblyVersion>1.4.2.0</AssemblyVersion>
-  <FileVersion>1.4.2.0</FileVersion>
-  <InformationalVersion>1.4.2-rc.1+2026-06-10.15</InformationalVersion>
-</PropertyGroup>
-```
-
-**Admin Web App** (`src/frontend/DocumentIA.Admin/`)
-```xml
-<!-- DocumentIA.Admin.csproj -->
-<PropertyGroup>
-  <AssemblyVersion>1.4.2.0</AssemblyVersion>
-  <FileVersion>1.4.2.0</FileVersion>
-  <InformationalVersion>1.4.2-rc.1+2026-06-10.15</InformationalVersion>
-</PropertyGroup>
-```
-
-**AssetResolver Plugin** (`src/plugins/DocumentIA.AssetResolver/`)
-```xml
-<!-- DocumentIA.AssetResolver.csproj -->
-<PropertyGroup>
-  <AssemblyVersion>1.4.2.0</AssemblyVersion>
-  <FileVersion>1.4.2.0</FileVersion>
-  <InformationalVersion>1.4.2-rc.1+2026-06-10.15</InformationalVersion>
-</PropertyGroup>
-```
-
-### Version Tracking
-
-**GitHub/Azure DevOps Tags:**
-```bash
-# Tag format
-v1.4.2-rc.1+2026-06-10.15
-
-# Create tag
-git tag -a v1.4.2-rc.1 -m "Release 1.4.2-rc.1: Add CU resilience monitoring"
-git push origin v1.4.2-rc.1
-
-# List tags
-git tag -l "v1.*" | sort -V
-```
-
-**Application Insights Annotation:**
-- Event created automatically when deployment completes
-- Properties: version, environment, release_notes_link
-- Used for correlation with performance metrics
-
----
-
-## Release Cycle
-
-### Timeline (Typical 2-Week Sprint)
-
-```
-Week 1: Development
-├─ T0: Sprint planning → features identified
-├─ T1-T5: Development + code review + testing
-├─ T6: Feature freeze → only bugfixes & docs
-└─ T9: Code complete → branch for RC
-
-Week 2: Release Candidate & Production
-├─ T10: RC created → automated tests run
-├─ T11-T12: Staging validation (if exists)
-├─ T13: Release approval meeting
-├─ T14: Deploy to production
-└─ T15: Post-release monitoring (24h)
-```
-
-### Release Types
-
-#### 1. **Standard Release (MINOR.PATCH bump)**
-- Timeline: 2 weeks (sprint cycle)
-- Approval: Tech Lead + Product Owner
-- Rollback risk: Low
-- Communication: 3 days advance notice
-
-#### 2. **Hotfix Release (PATCH bump)**
-- Timeline: 4-24 hours
-- Approval: CTO + Tech Lead
-- Rollback risk: Medium
-- Communication: Immediate notification
-
-#### 3. **Major Release (MAJOR bump)**
-- Timeline: 4 weeks (planning + dev + validation)
-- Approval: CTO + Architecture board
-- Rollback risk: High
-- Communication: 2 weeks advance notice + migration guide
-
----
-
-## Pre-Release Checklist
-
-### Code Quality (Before RC)
-
-- [ ] **Automated Tests Pass**
-  ```powershell
-  # Run test suite locally
-  dotnet test --configuration Release --verbosity minimal
-  ```
-  - Unit tests: 100% pass
-  - Integration tests: 100% pass
-  - E2E smoke tests: 100% pass
-
-- [ ] **Code Review Complete**
-  - All PRs approved (≥2 reviewers for MAJOR/hotfix, ≥1 for MINOR)
-  - All comments resolved
-  - Merge commits squashed
-
-- [ ] **Linting & Analysis**
-  ```powershell
-  # Run code analysis
-  dotnet build /p:EnforceCodeStyleInBuild=true
-  # No warnings > Error level
-  ```
-
-- [ ] **Documentation Updated**
-  - README.md reflects changes
-  - Release notes prepared
-  - API docs updated (if applicable)
-
-### Dependency Updates (Before RC)
-
-- [ ] **NuGet Packages**
-  ```powershell
-  # Check for security updates
-  dotnet list package --vulnerable
-  # No critical vulnerabilities
-  ```
-
-- [ ] **Runtime Versions**
-  - .NET version compatible (8 or 9)
-  - Azure Functions runtime check
-  - Durable Functions version validated
-
-### Infrastructure Readiness (Before RC)
-
-- [ ] **Capacity Planning**
-  - Current CPU/Memory usage < 70%
-  - Storage capacity adequate
-  - Database connections available
-  - See `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md`
-
-- [ ] **Monitoring Setup**
-  - Application Insights alerts configured
-  - Custom metrics ready
-  - Baseline metrics captured
-
-- [ ] **Key Vault Secrets Current**
-  ```powershell
-  # Check secret expiration
-  az keyvault secret list --vault-name srbkvprodocai --query "[?attributes.expires < now_add('30d')].id" -o table
-  # Should be empty (no expiring secrets)
-  ```
-
-### Security Review (Before RC)
-
-- [ ] **No Hardcoded Credentials**
-  ```powershell
-  # Scan for secrets (last 20 commits)
-  git log -p -20 | Select-String -Pattern "password|secret|apikey" | Select-Object -Unique
-  # Should return nothing
-  ```
-
-- [ ] **RBAC Validated**
-  - Managed identity permissions correct
-  - No over-provisioned roles
-
-- [ ] **Data Protection**
-  - Encryption at rest enabled
-  - Encryption in transit enforced
-  - No PII logged unencrypted
-
-### Database Readiness (Before RC)
-
-- [ ] **Migration Script Tested**
-  ```powershell
-  # Test migration on local/test DB
-  dotnet ef database update --project src/backend/DocumentIA.Functions --startup-project src/backend/DocumentIA.Functions
-  # No errors
-  # Rollback tested via revert-migration script
-  ```
-
-- [ ] **Backup Created**
-  ```powershell
-  # SQL Server backup
-  az sql db backup create --server YOUR_SERVER --database DocumentIA --resource-group SRBRGDOCSAIPROD
-  # Backup verified by size > 0
-  ```
-
----
-
-## Release Process
-
-### Phase 1: RC Creation (Day -1)
-
-**1. Create Release Branch**
-```bash
-# Branch naming: release/v1.4.2
-git checkout main
-git pull origin main
-git checkout -b release/v1.4.2
-```
-
-**2. Update Version Numbers**
-```xml
-<!-- All three apps (.csproj files): -->
-<InformationalVersion>1.4.2-rc.1+2026-06-10.15</InformationalVersion>
-```
-
-**3. Create Release Notes**
-```markdown
-# Release 1.4.2-rc.1
-## Features
-- [AB#1234] Feature 1 description
-- [AB#5678] Feature 2 description
-
-## Bug Fixes
-- [AB#9012] Fix 1 description
-
-## Performance Improvements
-- CU extraction latency -15% via caching
-
-## Database Changes
-- Added `DocumentMetadata.ExtractionTime` column
-
-## Upgrade Path
-1. Review breaking changes (none for v1.4.2)
-2. Deploy new version
-3. Run database migrations
-4. Validate monitoring
-
-## Known Issues
-- None
-```
-
-**4. Commit & Tag**
-```bash
-git add .
-git commit -m "Release 1.4.2-rc.1: [release notes summary]"
-git tag -a v1.4.2-rc.1 -m "Release candidate 1.4.2-rc.1"
-git push origin release/v1.4.2
-git push origin v1.4.2-rc.1
-```
-
-### Phase 2: RC Validation (Day 0)
-
-**1. Run Automated Test Suite**
-- Pipeline runs automatically:
-  - Unit tests (100% pass required)
-  - Integration tests (100% pass required)
-  - E2E smoke tests (100% pass required)
-  - Security scanning (0 critical vulns)
-
-**2. Performance Comparison**
-```kusto
-// Run in AppInsights
-customMetrics
-| where timestamp between ((now(-1d)) .. (now()))
-| where name == "DocumentIA.Duracion.Total"
-| summarize p50_ms=percentile(value, 50), p95_ms=percentile(value, 95) by bin(timestamp, 1h)
-| render timechart
-```
-
-**3. Database Migration Test**
-```powershell
-# Test on backup restored to test environment
-# 1. Restore backup
-# 2. Run EF migrations
-# 3. Verify data integrity (row counts, referential integrity)
-# 4. Test rollback procedure
-```
-
-### Phase 3: Release Approval (Day 1)
-
-**Approval Meeting (1 hour)**
-
-**Attendees:**
-- Tech Lead (approval authority)
-- Product Owner (business approval)
-- On-Call Engineer (deployment lead)
-
-**Checklist:**
-- [ ] All automated tests passed
-- [ ] Performance metrics acceptable
-- [ ] Database migrations validated
-- [ ] No regressions found
-- [ ] Release notes complete
-- [ ] Rollback plan reviewed
-
-**Approval Decision:**
-1. ✅ **Approve for Production** → Go to Phase 4
-2. ⚠️ **Conditional Approval** → Fix issues → Re-test
-3. ❌ **Reject** → Document reasons → Plan next release
-
-### Phase 4: Production Deployment (Day 2)
-
-**1. Pre-Deployment Communication (24h before)**
-```markdown
-🚀 **Deployment Notice**
-**Release:** v1.4.2
-**Start:** Tomorrow 03:00 UTC
-**Duration:** 30-45 minutes
-**Impact:** Potential brief latency spikes (< 2 min)
-**Rollback:** Auto-enabled if errors
-**Lead:** Jane Smith (on-call)
-```
-
-**2. Pre-Deployment Validation (30 min before)**
-```powershell
-# 1. Verify Key Vault accessible
-az keyvault secret show --vault-name srbkvprodocai --name "AzureWebJobsStorage" --query "value" -o tsv | Measure-Object -Character
-
-# 2. Verify database backup completed
-az sql db backup list --server YOUR_SERVER --database DocumentIA --resource-group SRBRGDOCSAIPROD | Select-Object -First 1 BackupTime
-
-# 3. Verify monitoring online
-az monitor app-insights app show --resource-group SRBRGDOCSAIPROD --app-insights-name srbappiprodocai --query "appId"
-
-# 4. Check resource capacity
-az functionapp plan show --resource-group SRBRGDOCSAIPROD --name YOUR_PLAN --query "Sku, NumberOfWorkers"
-
-Write-Output "✅ All pre-deployment checks passed"
-```
-
-**3. Execute Deployment Pipeline**
-```bash
-# Via Azure DevOps UI:
-# 1. Navigate to Pipelines → azure-pipelines.yml
-# 2. Click "Run"
-# 3. Set variables:
-#    - ReleaseVersion: 1.4.2
-#    - Environment: production
-#    - SkipDeploy: false
-#    - CreateBackup: true
-#    - RunMigrations: true
-# 4. Click "Run"
-
-# Expected pipeline stages (total: 40-50 min):
-# Stage 1: Build & Test (10-15 min)
-# Stage 2: Database Backup (5 min)
-# Stage 3: Database Migrations (5-10 min)
-# Stage 4: Deploy Functions (5 min)
-# Stage 5: Deploy Admin Web (5 min)
-# Stage 6: Deploy AssetResolver (5 min)
-# Stage 7: Validate Configuration (5 min)
-```
-
-**4. Monitor Deployment**
-```powershell
-# Watch pipeline progress
-$pipelineId = "YOUR_PIPELINE_RUN_ID"
-while ($true) {
-  $status = az pipelines runs show --id $pipelineId --query "status"
-  $result = az pipelines runs show --id $pipelineId --query "result"
-  Write-Output "Pipeline: $status | Result: $result"
-  
-  if ($status -in ("completed", "failed")) { break }
-  Start-Sleep -Seconds 30
-}
-```
-
-**5. Post-Deployment Validation (15 min after)**
-```powershell
-# 1. Verify all apps running
-az functionapp show --resource-group SRBRGDOCSAIPROD --name srbappprodocai --query "state"
-# Expected: "Running"
-
-# 2. Run smoke tests
-./tests/smoke_e2e.ps1 -Environment Production
-
-# 3. Check metrics (P95 latency)
-# Query in AppInsights (latency check below)
-
-Write-Output "✅ Deployment successful. Monitoring enabled."
-```
-
-**6. Metrics Check (AppInsights)**
-```kusto
-// Run immediately after deployment
-customMetrics
-| where timestamp > ago(10m)
-| where name == "DocumentIA.Duracion.Total"
-| summarize 
-    p50_ms=percentile(value, 50), 
-    p95_ms=percentile(value, 95), 
-    error_pct=sum(iff(value > 180000, 1, 0))/count()*100 
-    by bin(timestamp, 1m)
-| render timechart
-// Check: P95 < 60s, Error < 2%
-```
-
----
-
-## Database Migrations
-
-### Strategy: EF Core
-
-**Production Migration Process:**
-1. **Pre-deployment Backup** (automatic in pipeline)
-2. **Migration Execution** (automatic, stage 3 of pipeline)
-3. **Data Validation** (post-migration SQL checks)
-4. **Rollback Ready** (backup preserved for 30 days)
-
-### Creating New Migration
-
-```bash
-cd src/backend/DocumentIA.Functions
-
-# 1. Add model changes (DocumentIA.Core/Data/*.cs)
-# 2. Generate migration
-dotnet ef migrations add AddExtractionTimeColumn \
-  --project ../DocumentIA.Core \
-  --startup-project .
-
-# 3. Review generated migration
-# File: src/backend/DocumentIA.Core/Data/Migrations/[timestamp]_AddExtractionTimeColumn.cs
-
-# 4. Test locally
-dotnet ef database update
-
-# 5. Commit
-git add src/backend/DocumentIA.Core/Data/Migrations/
-git commit -m "Migration: Add ExtractionTime column"
-```
-
-### Rollback Procedure
-
-```powershell
-# If migration fails mid-deploy:
-# 1. Stop Functions app
-az functionapp stop --resource-group SRBRGDOCSAIPROD --name srbappprodocai
-
-# 2. Restore database from backup
-az sql db restore --server YOUR_SERVER --database DocumentIA \
-  --backup-name BACKUP_NAME \
-  --resource-group SRBRGDOCSAIPROD
-
-# 3. Revert code to previous version
-git checkout v1.4.1
-
-# 4. Re-run pipeline (without migrations this time)
-
-# 5. Restart Functions
-az functionapp start --resource-group SRBRGDOCSAIPROD --name srbappprodocai
-```
-
----
-
-## Rollback Procedures
-
-### Automatic Rollback (if enabled)
-
-**Trigger Conditions:**
-- Pipeline fails (build, test, deployment)
-- Smoke tests fail (errors > 5%)
-- P95 latency > 100% vs baseline
-- Application Insights errors > 10%
-
-**Process:** Pipeline executes rollback stage automatically (see RUNBOOK_INCIDENTES_PRODUCCION.md for details)
-
-### Manual Rollback (Operator-initiated)
-
-**When to use:** Undiscovered critical bug, data corruption, unacceptable performance
-
-**Steps (15-20 minutes):**
-
-**1. Stop Current Deployment**
-```powershell
-az functionapp stop --resource-group SRBRGDOCSAIPROD --name srbappprodocai
-az appservice web stop --resource-group SRBRGDOCSAIPROD --name srbwebadminprodocai
-```
-
-**2. Restore Database (if needed)**
-```powershell
-# Identify backup
-az sql db backup list --server YOUR_SERVER --database DocumentIA --resource-group SRBRGDOCSAIPROD
-
-# Restore
-az sql db restore --server YOUR_SERVER --database DocumentIA-Restored \
-  --backup-name ... \
-  --resource-group SRBRGDOCSAIPROD
-
-# Swap: Archive failed DB, promote restored
-```
-
-**3. Rollback Code**
-```bash
-git checkout v1.4.1
-# Re-deploy via pipeline
-```
-
-**4. Validation**
-```powershell
-./tests/smoke_e2e.ps1 -Environment Production
-# Verify metrics normalized
-```
-
----
-
-## Hotfix Process
-
-### When to Use Hotfix
-
-- Critical bug affecting production (P1)
-- Bug not caught in RC (test gap)
-- Urgent security fix
-- Data integrity issue
-
-### Hotfix Workflow (4-6 hours)
-
-**1. Create Hotfix Branch**
-```bash
-git checkout main
-git checkout -b hotfix/v1.4.2.1
-
-# Minimal fix only (3-5 lines)
-# No refactoring, no improvements
-```
-
-**2. Expedited Code Review (30 min)**
-- 1 senior reviewer OK (vs 2 for normal release)
-- Security review if applicable
-
-**3. Build & Deploy (30-45 min)**
-```bash
-# Build only
-# Run critical tests only
-# Deploy to production
-# Version: v1.4.2.1 (PATCH bump)
-```
-
-**4. Intensive Monitoring (2-4 hours)**
-- If fails immediately: automatic rollback to v1.4.2
-- If succeeds: Declare complete, close ticket
-
----
-
-## Communication Plan
-
-### Pre-Release (3 Days Before)
-```markdown
-📢 **Release Announcement: v1.4.2**
-**When:** Friday 2026-06-11, 03:00 UTC
-**What's new:**
-- Improved CU extraction performance
-- Enhanced GDC integration error handling
-**Questions?** Contact Tech Lead
-```
-
-### Pre-Deployment (24 Hours Before)
-```markdown
-🚀 **Deployment Window**
-**Release:** v1.4.2
-**Start:** Tomorrow 03:00 UTC
-**Duration:** 30-45 minutes
-**Expected Impact:** Latency spikes < 2 min
-**Rollback:** Auto-enabled
-```
-
-### During Deployment (Every 15 min)
-```
-12:03 UTC: 🟡 Deployment started
-12:05 UTC: ✅ Build complete
-12:20 UTC: ✅ DB migrations done
-12:30 UTC: ✅ Functions deployed
-12:40 UTC: ✅ v1.4.2 live
-```
-
-### Post-Deployment (24 Hours After)
-```markdown
-✅ **Release v1.4.2 Successful**
-**Status:** Production, 24+ hours stable
-**Metrics:** P95 latency 42.5s (was 50.1s) ✅
-**Issues:** None
-```
-
----
-
-## Post-Release Validation
-
-### 24-Hour Monitoring
-
-**KQL Query (run hourly):**
-```kusto
-customMetrics
-| where timestamp > ago(1h)
-| where name startswith "DocumentIA"
-| summarize
-    p95_total_ms=percentile(iff(name == "DocumentIA.Duracion.Total", value, real(null)), 95),
-    error_count=sum(iff(name == "DocumentProcessed" and customDimensions["EstadoFinal"] == "ERROR", 1, 0))
-by bin(timestamp, 15m)
-```
-
-**Thresholds:**
-| Metric | Threshold | Action |
-|--------|-----------|--------|
-| P95 Total Duration | > 60s | Investigate |
-| Error Rate | > 5% | Page on-call |
-| CU Circuit Open | > 0 | Monitor escalation |
-
-### 24-Hour Sign-Off
-```markdown
-✅ Release v1.4.2 approved for sustained production
-
-Metrics: P95 42.5s, Error 1.2%, No incidents
-Signed: Tech Lead | Date: 2026-06-12 04:00 UTC
-```
-
----
-
-## Version Timeline
-
-Current Production: **v1.4.2**
-
-| Version | Release Date | Status | Notes |
-|---------|---|---|---|
-| v1.4.2 | 2026-06-11 | Current | CU resilience improvements |
-| v1.4.1 | 2026-05-28 | Previous | Hotfix: GDC auth timeout |
-| v1.4.0 | 2026-05-14 | Archived | Plugin system v2 |
-
----
-
-## Appendix: Commands Reference
-
-```powershell
-# Version management
-git tag -l "v1.*" | sort -V
-git tag -a v1.4.2 -m "Release 1.4.2"
-
-# Deployment control
-az pipelines run --id azure-pipelines.yml --variables ReleaseVersion=1.4.2
-
-# Validation
-./tests/smoke_e2e.ps1 -Environment Production
-```
-
----
-
-**Validación:**
-✅ Release strategy verificado contra configuración real  
-✅ Procedimientos basados en Azure DevOps + EF Core migraciones  
-✅ Rollback procedures incluyen restauración de backups  
-✅ Hotfix process acelerated para P1 issues  
-✅ Communication plan incluye timeline clara  
-✅ Post-release validation con métricas específicas
+# Runbook de release — DEV → PRE → PRO
+
+Procedimiento permanente para llevar una versión de DocumentIA desde `develop` hasta PRO con
+PRE como puerta técnica obligatoria. Sustituye a la versión anterior de este documento (agosto
+de 2026) y absorbe `CI_CD_DEPLOYMENT_DETAILS.md`. Cada release crea su instancia en
+`docs/releases/vX.Y.Z/` (ver [docs/releases/README.md](../releases/README.md)).
+
+Lectores: quien ejecuta la release (proyecto) y quien la apoya en cuota, roles, red y service
+connections (plataforma). Cada paso indica su ejecutor.
+
+## Reglas fijas
+
+1. **El esquema de BD va siempre antes que el código.** El código nuevo asume las columnas
+   nuevas; el código anterior ignora las columnas que no conoce.
+2. **PRE es puerta obligatoria.** Nada se despliega en PRO sin haber pasado por PRE con la
+   misma versión de código, esquema, configuración y artefactos de IA.
+3. **Nada llega a PRO sin las cuatro puertas en PASS y el Smoke pre-release (Test Plan 100069).**
+   Azure DevOps no tiene hoy ningún check de aprobación en los environments `pre` y `prod`
+   (verificado el 2026-09-24): el pipeline puede desplegar a PRO sin aprobación, así que la
+   puerta humana es el "go" escrito en `release.md` (Fase 3).
+
+## Entornos
+
+| Dato | DEV | PRE | PRO |
+|---|---|---|---|
+| Parámetro `targetEnvironment` | `dev` | `pre` | `prod` |
+| Service connection | AI DocClassExt DEV | AI DocClassExt PRE | AI DocClassExt PRO |
+| Grupo de recursos | SRBRGDEVDOCSAI | SRBRGPREDOCSAI | SRBRGDOCSAIPROD |
+| Function App | srbappdevdocai | srbapppredocai | srbappprodocai |
+| Admin (App Service) | srbwebadmindevdocai | srbwebadminpredocai | srbwebadminprodocai |
+| AssetResolver | srbwebpluginassetresolverdev | srbwebpluginassetresolverpre | srbwebpluginassetresolver |
+| Key Vault | srbkvdevdocai | srbkvpredocai | srbkvprodocai |
+| SQL Server (BD `DocumentIA`) | srbsqldevdocai | srbsqlpredocai | srbsqlprodocai |
+| `ENVIRONMENT_NAME` | Development | Preproduction | Production |
+| Azure OpenAI | srbaisrv01devdocai | srbaisrv01predocai | upe48-mm2avmdm-swedencentral |
+| Content Understanding primario / secundario | srbaisrv01devdocai / srbaisrv02devdocai | srbaisrv01predocai / srbaisrv02predocai | upe48-mm2avmdm-swedencentral / srbaisrv-westeurope |
+| Document Intelligence | srbdidevdocai | srbdipredocai | srbdiprodocai |
+| Environment de ADO (ID) | dev (38) | pre (39) | prod (34) |
+
+## Cómo leer las fases
+
+Cada fase tiene objetivo, prerrequisitos, pasos con casilla, verificación, vuelta atrás y
+ejecutor. Los pasos numerados `N.M` se copian a `docs/releases/vX.Y.Z/runbook.md` y se marcan
+con fecha y resultado. Comandos en Git Bash salvo los `.ps1`, que van con `pwsh`. Toda sesión
+manual usa `az login` (sin credenciales en claro).
+
+## Fase 0 — Preparación y versión
+
+Objetivo: fijar qué se despliega y abrir el registro de la release. Ejecutor: proyecto.
+
+Prerrequisitos: `develop` contiene todo lo que va en la release y `origin/develop` está al día.
+
+- [ ] **0.1** Fijar el commit candidato: `git fetch origin && git log --oneline -1 origin/develop`. Anotar el hash.
+- [ ] **0.2** Decidir la versión SemVer (regla en `docs/releases/README.md`) y el tag anterior (`git describe --tags --abbrev=0 origin/master` o el último `vX.Y.Z`; para la primera release, `deploy-pro-2026-09-20`).
+- [ ] **0.3** Crear `docs/releases/vX.Y.Z/` copiando `docs/releases/_plantilla/` y rellenar la cabecera de `release.md`.
+- [ ] **0.4** Listar los cambios: `git log <tag-anterior>..<commit> --oneline` y clasificar por PBIs, features, fixes, infraestructura y configuración en `release.md` (los `AB#` salen de los mensajes).
+- [ ] **0.5** Identificar las migraciones nuevas: `ls src/backend/DocumentIA.Data/Migrations | tail` frente a la última aplicada en PRO (`SELECT TOP 1 MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC`). Anotar en `release.md`.
+- [ ] **0.6** Identificar cambios de configuración (ModeloConfigs, PromptTemplates, Tipologias, CatalogoTdn1, CatalogoTdn2, PluginTipologiaConfigs) y de artefactos de IA (`infra/ai/deployments.<env>.json`, `infra/ai/cu-analyzers.json`, `infra/ai/di-artifacts.json`). Anotar en `release.md`.
+
+Verificación: `release.md` tiene commit, versión, tag anterior y las tres listas (migraciones, configuración, IA), aunque estén vacías.
+
+## Fase 1 — DEV
+
+Objetivo: demostrar que el commit candidato funciona en DEV con su IA propia. Ejecutor: proyecto.
+
+Prerrequisitos: DEV desplegado con el commit candidato (pipeline 799 `targetEnvironment=dev` o los pipelines por componente).
+
+- [ ] **1.1** Build y tests en local sobre el commit candidato:
+      `dotnet build src/backend/DocumentIA.sln` (sin warnings nuevos),
+      `dotnet test src/backend/DocumentIA.Tests.Unit`, `dotnet test src/backend/DocumentIA.Tests.Admin`,
+      `dotnet test src/plugins/DocumentIA.AssetResolver.Tests`, `dotnet format src/backend/DocumentIA.sln --verify-no-changes`.
+      Copiar los n/n a `release.md`.
+- [ ] **1.2** E2E en DEV: `pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment dev -Profile smoke` y después `-Profile full -Parallel 2`. Requiere `tests/e2e-postdeploy/config/environments.json` (gitignored). FAIL esperados y vigentes están en `tests/e2e-postdeploy/README.md`.
+- [ ] **1.3** Export de configuración de referencia desde DEV:
+      `pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqldevdocai.database.windows.net -ReleaseTag vX.Y.Z`
+      Genera `artifacts/db-config/config-vX.Y.Z.sql` y `config-vX.Y.Z.hashes.json` (gitignored). Copiar el `.hashes.json` a `docs/releases/vX.Y.Z/evidencias/`.
+
+Verificación: smoke 6/6, full sin FAIL no esperados, `.hashes.json` guardado.
+Vuelta atrás: no aplica (DEV no es destino de la release).
+
+## Fase 2 — PRE, puerta técnica
+
+Objetivo: reproducir en PRE exactamente lo que irá a PRO y pasar las cuatro puertas. Ejecutor:
+proyecto; plataforma solo si falta cuota, rol o red.
+
+Prerrequisitos: Fase 1 completa. El SPN de la service connection de PRE está dado de alta en la
+BD (`scripts/database/grant-pipeline-sql-user.sql`, one-time por entorno).
+
+### 2.1 Esquema
+
+- [ ] **2.1.1** Pipeline 807 Migrations-BD con `targetEnvironment=pre` desde el commit candidato. El stage Generate publica `migrations.sql`; el stage Apply corre en el pool privado `docia-mdp-private` y su pre-check compara el conjunto de migraciones aplicadas con el del repo (no solo la última).
+- [ ] **2.1.2** Comprobar en el run que el artefacto `MigrationsScript` contiene exactamente las migraciones de 0.5 y que `__EFMigrationsHistory` de PRE las registra.
+
+Vuelta atrás: ver Anexo B, capa 4. El código anterior tolera columnas nuevas, así que un esquema adelantado no obliga a retroceder.
+
+### 2.2 Código
+
+- [ ] **2.2.1** Pipeline 799 con `targetEnvironment=pre` desde el commit candidato. Stages esperados: Build → DeployFunctions (jobs Functions y Admin) → DeployAssetResolver → ValidateConfiguration. `RunMigrations` aparece como omitido: está deshabilitado a propósito.
+- [ ] **2.2.2** `ValidateConfiguration` en verde (contrato de app settings de `scripts/config/azure-appsettings-contract.json` verificado por `scripts/testing/validate-azure-appsettings-contract.ps1`).
+- [ ] **2.2.3** Anotar el ID del run y el hash desplegado en `runbook.md`.
+
+Vuelta atrás: Anexo B, capa 1.
+
+### 2.3 Configuración del release
+
+El origen de la configuración es siempre DEV. Nunca se aplica un export por `Id` sobre un
+entorno con datos propios sin revisarlo: el `.sql` usa MERGE por clave primaria con
+`IDENTITY_INSERT` y conserva los `Id` del origen.
+
+- [ ] **2.3.1** Revisar `artifacts/db-config/config-vX.Y.Z.sql` (generado en 1.3): solo tablas de configuración, sin keys en claro (`grep -i 'apikey' config-vX.Y.Z.sql` debe devolver vacío).
+- [ ] **2.3.2** Aplicar en PRE con token de Entra:
+      `pwsh ./scripts/database/replicate-config-data.ps1 -Mode Apply -EntraAuth -TargetConnectionString "Server=tcp:srbsqlpredocai.database.windows.net,1433;Database=DocumentIA;Encrypt=True;" -InputFile artifacts/db-config/config-vX.Y.Z.sql`
+      (parámetros verificados en la cabecera del script el 2026-09-24: `-Mode`, `-EntraAuth`, `-TargetConnectionString`, `-InputFile`).
+- [ ] **2.3.3** Segunda pasada del mismo comando: debe informar 0 filas cambiadas (idempotencia).
+
+Fleco conocido: `CatalogoTdn1.Descripcion` difiere por CRLF entre DEV y PRE (CERA, COMU, CORR,
+CUAD, NOTS). El hash de esa tabla no coincidirá hasta que se alinee PRE a DEV; documentar la
+diferencia en la puerta 4 mientras siga abierta.
+
+Vuelta atrás: Anexo B, capa 2.
+
+### 2.4 Artefactos de IA
+
+#### Flujo objetivo (pendiente de AB#100675)
+
+Pipeline `azure-pipelines-ai-artifacts.yml` con `targetEnvironment=pre`: Export (1.3 hecho por
+el pipeline, artefacto `db-config`) → AiArtifacts (`scripts/ai/apply-deployments.ps1` desde
+`infra/ai/deployments.pre.json`, `scripts/ai/copy-cu-analyzers.ps1`, `scripts/ai/copy-di-artifacts.ps1`,
+`scripts/ai/copy-labeling-dataset.ps1`, `scripts/ai/validate-analyzer.ps1`) → ConfigSeed
+(`replicate-config-data.ps1 -Mode Apply` desde el pool privado). `prod` queda excluido de
+AiArtifacts por condición. Criterio de aceptación del pipeline: su primera ejecución sobre un
+PRE ya promocionado a mano debe ser idempotente (todo "ok"). Hasta que AB#100675 esté Done se
+usa el procedimiento manual siguiente.
+
+#### Procedimiento manual vigente (secuencia validada en PRE el 2026-09-23)
+
+Solo cuando la release cambia deployments, analyzers, clasificadores o el modo de acceso a la IA.
+Cada script SQL crea una copia `ModeloConfigs__bak_<yyyyMMdd_HHmmss>` antes de tocar nada.
+
+- [ ] **2.4.1** Deployments: `pwsh ./scripts/ai/apply-deployments.ps1 -Environment pre` (crea los que faltan; los existentes que difieren se informan como `differs` y no se tocan).
+- [ ] **2.4.2** Analyzers CU: `pwsh ./scripts/ai/copy-cu-analyzers.ps1 -Environment pre` (Copy API desde PRO; salta los idénticos).
+- [ ] **2.4.3** Clasificadores DI: `pwsh ./scripts/ai/copy-di-artifacts.ps1 -Environment pre`.
+- [ ] **2.4.4** Validación: `pwsh ./scripts/ai/validate-analyzer.ps1 -Environment pre` (markdown idéntico y acuerdo de campos ≥ 0,85 frente a PRO).
+- [ ] **2.4.5** Alias y modo de acceso, solo si cambian: `scripts/ai/set-resource-aliases.sql` y `scripts/ai/set-auth-mode-identity.sql` contra `srbsqlpredocai` con token de Entra; segunda pasada 0 filas. Después `scripts/ai/clear-model-api-keys.sql` (0 filas con key al terminar).
+- [ ] **2.4.6** Reiniciar `srbapppredocai` si 2.4.5 cambió filas: `az functionapp restart -n srbapppredocai -g SRBRGPREDOCSAI`.
+- [ ] **2.4.7** Purgar keys de las copias `ModeloConfigs__bak_*` creadas en 2.4.5 (mismo patrón que en DEV el 2026-09-22).
+
+Los parámetros exactos de cada `.ps1` están en su cabecera (`Get-Help <script> -Full`); este
+runbook no los duplica.
+
+Vuelta atrás: Anexo B, capa 3.
+
+### 2.5 Las cuatro puertas
+
+Las puertas 1, 2 y 4 se pasan en la misma sesión. La 3 se cierra al día siguiente porque Cost
+Management ingiere con un día de retraso. Las cuatro son condición para el "go" de la Fase 3;
+la Fase 3 puede empezar con la 3 pendiente. Evidencias en `docs/releases/vX.Y.Z/evidencias/`
+(texto corto, sin secretos).
+
+| Puerta | Comando | PASS |
+|---|---|---|
+| 1 Smoke E2E | `pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pre -Profile smoke` | 6/6 PASS y, en App Insights de PRE en la ventana del smoke, cero dependencias a hosts de IA de PRO y cero 401/403 (KQL "hosts de IA" del Anexo D) |
+| 2 Golden | Repo DocumentIA.Batch: `dotnet run --project src/DocumentIA.Batch.Evaluation -c Debug --no-build -- run --set golden --env PRE --parallel 2 --label vX.Y.Z-pre --corpus-root <corpus> --config <eval-config-pre.json>` y `-- compare --a eval/runs/<linea-base-DEV> --b eval/runs/<run-PRE>` | p ≥ 0,05 en TDN1 y TDN2 frente a la línea base de DEV con el mismo modelo. Si la release cambia el modelo, regenerar la línea base en DEV antes |
+| 3 Coste | Cost Management por grupo de recursos (SRBRGPREDOCSAI y SRBRGDOCSAIPROD) con agrupación ResourceId + Meter para el día del smoke y la golden; para PRO usar `az rest` (con `curl` y token de az CLI devuelve 401). Métricas de Azure Monitor de los recursos de IA como confirmación el mismo día | Meters de IA (`gpt … Tokens`, `S0 Pre-built Pages`) facturados en SRBRGPREDOCSAI; PRO sin rampa de tokens ni páginas atribuible a la release |
+| 4 Deriva | `scripts/ai/config-hash.sql` contra `srbsqlpredocai` (solo lectura) frente a `config-vX.Y.Z.hashes.json` de 1.3 | Hash idéntico en ModeloConfigs, PromptTemplates, Tipologias, CatalogoTdn1 y CatalogoTdn2. Toda diferencia se explica por escrito en `runbook.md` o se corrige antes de la Fase 3 |
+
+- [ ] **2.5.1** Puerta 1 (smoke) pasada; resumen del run y salida de la KQL en `evidencias/`.
+- [ ] **2.5.2** Puerta 2 (golden) pasada; `compare.md` en `evidencias/`.
+- [ ] **2.5.3** Puerta 4 (deriva) pasada; salida de `config-hash.sql` en `evidencias/`.
+- [ ] **2.5.4** Puerta 3 (coste) pasada al día siguiente; cuadre en `evidencias/`.
+
+Vuelta atrás: si una puerta falla, se corrige en `develop`, se vuelve a 0.1 con un commit nuevo
+y se repite la Fase 2 entera. No se parchea PRE a mano.
+
+> Fases 3 a 5 y anexos: en elaboración (AB#100676).
