@@ -172,4 +172,56 @@ la Fase 3 puede empezar con la 3 pendiente. Evidencias en `docs/releases/vX.Y.Z/
 Vuelta atrás: si una puerta falla, se corrige en `develop`, se vuelve a 0.1 con un commit nuevo
 y se repite la Fase 2 entera. No se parchea PRE a mano.
 
+## Fase 3 — Aprobación
+
+Objetivo: dejar constancia escrita de que la release puede ir a PRO. Ejecutor: proyecto.
+
+Prerrequisitos: puertas 1, 2 y 4 en PASS (la 3 puede estar pendiente al empezar, no al firmar).
+
+- [ ] **3.1** Smoke pre-release PRO: ejecutar el Test Plan 100069 (casos SMK-1 a SMK-8) contra PRE con el commit candidato y registrar el ID del run de Test Plans y el resultado en `release.md`. El MCP de Azure DevOps no expone Test Plans; usar la REST API (skill `azure-devops-testplans`).
+- [ ] **3.2** Revisión del diff de 0.4 por quien aprueba: cada `AB#` listado está en estado To Validate o superior en Azure DevOps.
+- [ ] **3.3** Puerta 3 (coste) cerrada (2.5.4).
+- [ ] **3.4** "Go" escrito en el bloque de aprobación de `release.md`: fecha, nombre y las cuatro puertas con fecha de PASS.
+
+Nota: los environments `pre` y `prod` de Azure DevOps no tienen approval check (verificado el
+2026-09-24 con `GET _apis/pipelines/checks/configurations`). Mejora propuesta, fuera de este
+runbook: un check de aprobación en el environment `prod` con su propio work item.
+
+Vuelta atrás: sin "go" no hay Fase 4. La release vuelve a 0.1.
+
+## Fase 4 — PRO
+
+Objetivo: desplegar en PRO lo mismo que se validó en PRE, en el mismo orden. Ejecutor: proyecto;
+plataforma solo si hay cuota, roles o red.
+
+Prerrequisitos: "go" de 3.4. Ventana acordada con negocio si la release lleva migraciones que
+bloquean tablas grandes.
+
+- [ ] **4.1** Copia de seguridad: `az sql db copy --name DocumentIA --dest-name DocumentIA-prerel-<yyyyMMdd> --server srbsqlprodocai --resource-group SRBRGDOCSAIPROD` y verificación contra el origen: número de filas de `Documentos` y `DocumentoEjecuciones` y última fila de `__EFMigrationsHistory` iguales en las dos BD. Anotar en `runbook.md`.
+- [ ] **4.2** Pipeline 807 Migrations-BD con `targetEnvironment=prod` desde el commit candidato. Comprobar en `MigrationsScript` que el conjunto aplicado es el de 0.5.
+- [ ] **4.3** Configuración: aplicar en PRO el mismo `config-vX.Y.Z.sql` de 2.3 (`replicate-config-data.ps1 -Mode Apply` contra `srbsqlprodocai.database.windows.net`); segunda pasada 0 filas. Si la release trae seeds propios (catálogos, tarifas), van aquí, con su copia `__bak`.
+- [ ] **4.4** Pipeline 799 con `targetEnvironment=prod` desde el commit candidato; `ValidateConfiguration` en verde. Anotar ID del run.
+- [ ] **4.5** Reiniciar `srbappprodocai` solo si la release cambió alias o app settings de IA: `az functionapp restart -n srbappprodocai -g SRBRGDOCSAIPROD`.
+- [ ] **4.6** Smoke en PRO: `pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pro -Profile smoke` → 6/6.
+- [ ] **4.7** Deriva en PRO: `config-hash.sql` contra `srbsqlprodocai` frente a `config-vX.Y.Z.hashes.json`. Toda diferencia se anota en `runbook.md` como cambio en caliente a retroportar a DEV.
+- [ ] **4.8** Backfills reanudables, solo si la release los trae y solo después de 4.6 (ejemplos: `scripts/database/backfill-costes-estimados.ps1`, `scripts/database/backfill-markdown-cobertura.ps1`).
+- [ ] **4.9** Observación de una hora con las KQL del Anexo D: sin subida de fallos ni de `CU.CircuitOpen`.
+
+Verificación: 4.6 en 6/6, 4.7 sin diferencias no explicadas, 4.9 sin anomalías.
+Vuelta atrás: Anexo B, en orden de capas.
+
+## Fase 5 — Cierre y registro
+
+Objetivo: dejar la release trazable. Ejecutor: proyecto.
+
+- [ ] **5.1** Tag anotado sobre el commit desplegado: `git tag -a vX.Y.Z <commit> -m "Release vX.Y.Z a PRO el <fecha>"` y `git push origin vX.Y.Z`.
+- [ ] **5.2** `release.md` completo: validación (build, tests), diff, aprobación, runs de pipeline. `runbook.md` con todas las casillas marcadas con fecha y resultado, y las no aplicables tachadas con motivo.
+- [ ] **5.3** Sincronizar `master` con el commit desplegado (merge fast-forward desde `develop`; confirmar antes con el usuario del repo) y `git push origin master`.
+- [ ] **5.4** Work items de la release a Done en Azure DevOps con un comentario que enlaza `docs/releases/vX.Y.Z/release.md`.
+- [ ] **5.5** Fila nueva en la tabla de `docs/releases/README.md`.
+- [ ] **5.6** Limpiezas diferidas, con fecha prevista escrita en `runbook.md`: borrar `DocumentIA-prerel-<fecha>` tras el periodo de validación (7 días salvo indicación), borrar las tablas `ModeloConfigs__bak_*` de 2.4.5 y 4.3 una vez purgadas sus keys.
+- [ ] **5.7** Commit de `docs/releases/vX.Y.Z/` en `develop`: `docs(release): registro de la release vX.Y.Z (AB#<PBI principal>)`.
+
+Verificación: `git tag -l vX.Y.Z` devuelve el tag; `git log origin/master -1` es el commit desplegado.
+
 > Fases 3 a 5 y anexos: en elaboración (AB#100676).
