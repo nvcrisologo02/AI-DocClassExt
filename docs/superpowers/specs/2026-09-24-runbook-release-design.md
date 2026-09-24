@@ -195,7 +195,7 @@ pipeline y parámetros, verificación, vuelta atrás, ejecutor. Los pasos son ca
 | Anexo A | Catálogo de pipelines: fichero, parámetros, stages, environment, scripts que invoca | |
 | Anexo B | Vuelta atrás por capas (sección 5) | |
 | Anexo C | Secretos y app settings: bootstrap, `ensure-app-settings.ps1`, contrato de settings, secreto huérfano `GDC--Endpoint` | |
-| Anexo D | Observabilidad durante el despliegue: KQL sobre `customEvents` (`CU.CircuitOpen`, `CU.CircuitClosed`, `CU.Failover`, `DocumentProcessed`), errores y latencia en App Insights | |
+| Anexo D | Observabilidad durante el despliegue: KQL sobre `customEvents` (`CU.CircuitOpen`, `CU.CircuitClosed`, `CU.CircuitFailover`, `CU.RetryFailover`, `DocumentProcessed`), errores y latencia en App Insights | |
 
 El runbook no repite: bootstrap de un entorno (enlace a `08_CHECKLISTS_DESPLIEGUE.md`),
 creación de migraciones (enlace a `DATABASE_MIGRATION_STRATEGY.md`), operación de costes
