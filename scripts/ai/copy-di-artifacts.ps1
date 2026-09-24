@@ -3,18 +3,21 @@
 .SYNOPSIS
     Copia los clasificadores y modelos personalizados de Azure Document
     Intelligence declarados en infra/ai/di-artifacts.json (promote: true)
-    desde el recurso origen de PRO al recurso DI de un entorno (DEV o PRE)
-    con la Copy API oficial, y deja un manifiesto por entorno.
+    del recurso DI de un entorno al del siguiente (DEV -> PRE -> PRO,
+    ADR-001) con la Copy API oficial, y deja un manifiesto por entorno.
 
 .DESCRIPTION
     Es el paso 4 del flujo de promocion de infra/ai/README.md (Tarea 14 del
     plan "IA propia por entorno", AB#100316). Para cada artefacto con
     promote: true:
 
-      1. Resuelve origen y destino en infra/ai/resources.prod.json y
-         infra/ai/resources.<env>.json (alias "di"). Exige que la cuenta
-         origen coincida con sourceAccount de di-artifacts.json y que el
-         destino sea una cuenta distinta.
+      1. Resuelve el salto (scripts/ai/lib/promotion-route.ps1): dev -> pre
+         y pre -> prod; prod -> dev|pre solo con -SourceEnvironment prod
+         -FromProd (recuperar la carga inicial). Origen y destino salen de
+         infra/ai/resources.<origen>.json y resources.<env>.json (alias
+         "di"). Con origen prod exige que la cuenta coincida con
+         sourceAccount de di-artifacts.json (el inventario de la carga
+         inicial). El destino debe ser una cuenta distinta.
       2. GET del artefacto en origen (debe existir) y en destino.
       3. Si ya existe en destino con la misma firma (docTypes y, en modelos,
          nombres de campo por docType) se salta. Si existe con otra firma se
@@ -31,7 +34,7 @@
       5. POST {origen}/documentintelligence/<kind>/<id>:copyTo con esa
          autorizacion como cuerpo. El origen responde 202 con
          Operation-Location; se sondea hasta succeeded (o failed/canceled o
-         -TimeoutMinutes). Es una lectura sobre el origen: PRO no cambia.
+         -TimeoutMinutes). Es una lectura sobre el origen: el origen no cambia.
       6. GET de verificacion en destino y comparacion de firma con el origen.
       7. Manifiesto infra/ai/di-artifacts.<env>.manifest.json: una entrada por
          artefacto (copied / present / not-promoted / conflict) con fechas,
@@ -54,7 +57,13 @@
     se vuelca en -DumpDir.
 
 .PARAMETER Environment
-    Entorno destino: dev o pre. Determina resources.<env>.json y el manifiesto.
+    Entorno destino: dev, pre o prod. Determina resources.<env>.json y el manifiesto.
+.PARAMETER SourceEnvironment
+    Entorno origen. Por defecto el salto anterior (pre <- dev, prod <- pre);
+    dev no tiene salto anterior y exige -SourceEnvironment prod -FromProd.
+.PARAMETER FromProd
+    Admite prod como origen (prod -> dev|pre). Solo para recuperar el estado
+    de la carga inicial.
 .PARAMETER Only
     Ids de artefacto a procesar (por defecto todos los que tengan promote: true).
 .PARAMETER Kind
@@ -76,14 +85,16 @@
 .PARAMETER PollSeconds
     Intervalo de sondeo. Por defecto 5.
 .EXAMPLE
-    pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev -DryRun -DumpDir docs/auxiliares/temps/2026-09-21/copy-di-dev
+    pwsh scripts/ai/copy-di-artifacts.ps1 -Environment pre -DryRun -DumpDir docs/auxiliares/temps/2026-09-24/copy-di-pre
 .EXAMPLE
-    pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev -Only DocumentAICC_v1
+    pwsh scripts/ai/copy-di-artifacts.ps1 -Environment prod -Only DocumentAICC_v1 -DryRun
 .EXAMPLE
-    pwsh scripts/ai/copy-di-artifacts.ps1 -Environment pre
+    pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev -SourceEnvironment prod -FromProd
 #>
 param(
-    [Parameter(Mandatory)][ValidateSet('dev', 'pre')][string]$Environment,
+    [Parameter(Mandatory)][ValidateSet('dev', 'pre', 'prod')][string]$Environment,
+    [ValidateSet('dev', 'pre', 'prod')][string]$SourceEnvironment,
+    [switch]$FromProd,
     [string[]]$Only,
     [ValidateSet('classifiers', 'models')][string[]]$Kind = @('classifiers', 'models'),
     [switch]$Force,
@@ -101,9 +112,11 @@ $ErrorActionPreference = "Stop"
 $env:AZURE_CLI_DISABLE_CONNECTION_VERIFICATION = "1"
 
 $isDryRun = [bool]($DryRun -or $WhatIf)
+. (Join-Path $PSScriptRoot 'lib' 'promotion-route.ps1')
+$route = Resolve-PromotionRoute -Environment $Environment -SourceEnvironment $SourceEnvironment -FromProd:$FromProd
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $artifactsFile = Join-Path $repoRoot 'infra/ai/di-artifacts.json'
-$sourceResourcesFile = Join-Path $repoRoot 'infra/ai/resources.prod.json'
+$sourceResourcesFile = Join-Path $repoRoot "infra/ai/resources.$($route.Source).json"
 $targetResourcesFile = Join-Path $repoRoot "infra/ai/resources.$Environment.json"
 $manifestFile = Join-Path $repoRoot "infra/ai/di-artifacts.$Environment.manifest.json"
 
@@ -255,9 +268,11 @@ foreach ($f in $artifactsFile, $sourceResourcesFile, $targetResourcesFile) { if 
 $artifacts = Get-Content -Raw -Path $artifactsFile -Encoding UTF8 | ConvertFrom-Json
 $sourceDi = (Get-Content -Raw -Path $sourceResourcesFile -Encoding UTF8 | ConvertFrom-Json).resources.di
 $targetDi = (Get-Content -Raw -Path $targetResourcesFile -Encoding UTF8 | ConvertFrom-Json).resources.di
-if (-not $sourceDi) { throw "resources.prod.json no define el alias 'di'" }
+if (-not $sourceDi) { throw "resources.$($route.Source).json no define el alias 'di'" }
 if (-not $targetDi) { throw "resources.$Environment.json no define el alias 'di'" }
-if ($sourceDi.account -ne $artifacts.sourceAccount) {
+# sourceAccount de di-artifacts.json es la cuenta de PRO inventariada en la carga
+# inicial: solo se contrasta cuando el origen es prod.
+if ($route.Source -eq 'prod' -and $sourceDi.account -ne $artifacts.sourceAccount) {
     throw "di-artifacts.json declara sourceAccount '$($artifacts.sourceAccount)' pero resources.prod.json tiene di.account '$($sourceDi.account)'"
 }
 if ($targetDi.account -eq $sourceDi.account) { throw "el destino ($($targetDi.account)) es la misma cuenta que el origen" }
@@ -282,7 +297,7 @@ if ($Only) {
 if ($items.Count -eq 0) { throw "no hay artefactos que procesar en $artifactsFile" }
 
 $modeLabel = if ($isDryRun) { 'DRY-RUN (sin escrituras)' } else { 'REAL (authorizeCopy en destino + copyTo desde origen)' }
-Write-Host "== copy-di-artifacts: $Environment  [$modeLabel] ==" -ForegroundColor Cyan
+Write-Host "== copy-di-artifacts: $($route.Source) -> $Environment  [$modeLabel] ==" -ForegroundColor Cyan
 Write-Host "  origen     : $($src.Account) ($($src.Endpoint))"
 Write-Host "  destino    : $($dst.Account) ($($dst.Endpoint))"
 Write-Host "  artefactos : $(($items | ForEach-Object { "$($_.Kind)/$($_.Id)$(if (-not $_.Promote) { ' (promote:false)' })" }) -join ', ')"
@@ -432,6 +447,7 @@ if ($previous -and $previous.artifacts) {
 foreach ($e in $manifestEntries) { $merged.Add($e) }
 $manifest = [ordered]@{
     environment    = $Environment
+    sourceEnvironment = $route.Source
     sourceAccount  = $src.Account
     sourceEndpoint = $src.Endpoint
     targetAccount  = $dst.Account

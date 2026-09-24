@@ -1,9 +1,9 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Copia un prefijo de dataset de etiquetado de Content Understanding desde el
-    storage de PRO al storage del entorno destino, y genera un manifiesto por
-    analyzer en infra/ai/datasets.
+    Copia un prefijo de dataset de etiquetado de Content Understanding del
+    storage de un entorno al del siguiente (DEV -> PRE -> PRO, ADR-001), y
+    genera un manifiesto por analyzer en infra/ai/datasets.
 .DESCRIPTION
     Copia por cliente (descarga cada blob a un temporal y lo sube al destino),
     no servidor a servidor: az CLI de data-plane (az storage) y az rest con
@@ -24,6 +24,10 @@
     creciente. Es idempotente: si el blob destino ya existe con el mismo MD5,
     se salta (usa -Force para sobrescribir de todas formas).
 
+    El salto se resuelve con scripts/ai/lib/promotion-route.ps1: dev -> pre y
+    pre -> prod; prod -> dev|pre solo con -SourceEnvironment prod -FromProd
+    (recuperar la carga inicial).
+
     El prefijo destino es siempre "labeling/<AnalyzerId>@<Version>/" mas la
     ruta relativa del blob origen respecto a su prefijo. Varios analyzers
     pueden compartir el mismo prefijo origen (por ejemplo CU_NS_1.4_3,
@@ -34,8 +38,14 @@
     Id del analyzer de Content Understanding (infra/ai/analyzers/<AnalyzerId>.json).
     Fija tambien el nombre del prefijo destino y del fichero de manifiesto.
 .PARAMETER Environment
-    Entorno destino: "dev" o "pre". Fija la cuenta de storage destino
-    (dev -> srbstgdevdocai, pre -> srbstgpredocai).
+    Entorno destino: "dev", "pre" o "prod". Fija la cuenta de storage destino
+    (dev -> srbstgdevdocai, pre -> srbstgpredocai, prod -> srbstgprodocai).
+.PARAMETER SourceEnvironment
+    Entorno origen. Por defecto el salto anterior (pre <- dev, prod <- pre);
+    dev no tiene salto anterior y exige -SourceEnvironment prod -FromProd.
+.PARAMETER FromProd
+    Admite prod como origen (prod -> dev|pre). Solo para recuperar el estado
+    de la carga inicial.
 .PARAMETER TargetContainer
     Contenedor destino en la cuenta de storage del entorno. Por defecto "documentai".
 .PARAMETER Version
@@ -43,13 +53,15 @@
     "labeling/<AnalyzerId>@<Version>/" y el nombre del manifiesto.
 .PARAMETER SourceContainerUrl
     URL del contenedor origen (https://<cuenta>.blob.core.windows.net/<contenedor>).
-    Si se omite junto con -SourcePrefix, se lee de
-    infra/ai/analyzers/<AnalyzerId>.json -> knowledgeSources[0].containerUrl,
-    resuelto desde $PSScriptRoot/../../infra/ai.
+    Si se omite: con origen dev o pre, el contenedor "documentai" de la cuenta
+    de storage del origen (donde este mismo script deja el dataset); con
+    origen prod, infra/ai/analyzers/<AnalyzerId>.json ->
+    knowledgeSources[0].containerUrl, resuelto desde $PSScriptRoot/../../infra/ai.
 .PARAMETER SourcePrefix
-    Prefijo origen dentro del contenedor (por ejemplo
-    labelingProjects/<guid>/train). Si se omite junto con -SourceContainerUrl,
-    se lee de infra/ai/analyzers/<AnalyzerId>.json -> knowledgeSources[0].prefix.
+    Prefijo origen dentro del contenedor. Si se omite: con origen dev o pre,
+    "labeling/<AnalyzerId>@<Version>"; con origen prod,
+    infra/ai/analyzers/<AnalyzerId>.json -> knowledgeSources[0].prefix (por
+    ejemplo labelingProjects/<guid>/train).
 .PARAMETER ManifestDir
     Carpeta donde se escribe <AnalyzerId>@<Version>.<Environment>.manifest.json
     (un manifiesto por entorno). Por defecto infra/ai/datasets (relativo al
@@ -65,13 +77,17 @@
     Sobrescribe un blob destino aunque ya exista con el mismo MD5 (por defecto
     se salta).
 .EXAMPLE
-    pwsh scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId CERA16_v1 -Environment dev -DryRun
+    pwsh scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId CERA16_v1 -Environment pre -DryRun
 .EXAMPLE
-    pwsh scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId CU_NS_1.4_3 -Environment dev
+    pwsh scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId CU_NS_1.4_3 -Environment prod -DryRun
+.EXAMPLE
+    pwsh scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId CU_NS_1.4_3 -Environment dev -SourceEnvironment prod -FromProd
 #>
 param(
     [Parameter(Mandatory)][string]$AnalyzerId,
-    [Parameter(Mandatory)][ValidateSet('dev', 'pre')][string]$Environment,
+    [Parameter(Mandatory)][ValidateSet('dev', 'pre', 'prod')][string]$Environment,
+    [ValidateSet('dev', 'pre', 'prod')][string]$SourceEnvironment,
+    [switch]$FromProd,
     [string]$TargetContainer = "documentai",
     [int]$Version = 1,
     [string]$SourceContainerUrl,
@@ -90,8 +106,9 @@ $env:AZURE_CLI_DISABLE_CONNECTION_VERIFICATION = "1"
 $isDryRun = [bool]($DryRun -or $WhatIf)
 $apiVersion = "2021-08-06"
 
-$targetAccounts = @{ dev = "srbstgdevdocai"; pre = "srbstgpredocai" }
-$TargetAccount = $targetAccounts[$Environment]
+. (Join-Path $PSScriptRoot 'lib' 'promotion-route.ps1')
+$route = Resolve-PromotionRoute -Environment $Environment -SourceEnvironment $SourceEnvironment -FromProd:$FromProd
+$TargetAccount = Get-LabelingStorageAccount -Environment $Environment
 
 function Write-JsonFile {
     param([string]$Path, [object]$Object, [int]$Depth = 10)
@@ -228,7 +245,11 @@ function Copy-OneBlob {
 }
 
 # --- Resolver origen ---
-if (-not $SourceContainerUrl -or -not $SourcePrefix) {
+if ($route.Source -ne 'prod') {
+    # Promocion DEV -> PRE -> PRO: el dataset esta donde lo dejo el salto anterior.
+    if (-not $SourceContainerUrl) { $SourceContainerUrl = "https://$(Get-LabelingStorageAccount -Environment $route.Source).blob.core.windows.net/documentai" }
+    if (-not $SourcePrefix) { $SourcePrefix = "labeling/$AnalyzerId@$Version" }
+} elseif (-not $SourceContainerUrl -or -not $SourcePrefix) {
     $analyzerJsonPath = Join-Path $PSScriptRoot "../../infra/ai/analyzers/$AnalyzerId.json"
     $analyzerJsonPath = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($analyzerJsonPath)
     if (-not (Test-Path $analyzerJsonPath)) {
@@ -247,7 +268,7 @@ $SourcePrefix = $SourcePrefix.Trim('/')
 $targetContainerUrl = "https://$TargetAccount.blob.core.windows.net/$TargetContainer"
 $targetPrefix = "labeling/$AnalyzerId@$Version"
 
-Write-Host "origen: $SourceContainerUrl/$SourcePrefix"
+Write-Host "origen: $SourceContainerUrl/$SourcePrefix ($($route.Source))"
 Write-Host "destino: $targetContainerUrl/$targetPrefix ($Environment)"
 if ($isDryRun) { Write-Host "modo: dry-run (solo lectura, no copia nada)" }
 
@@ -312,6 +333,7 @@ $manifest = [ordered]@{
     analyzerId    = $AnalyzerId
     version       = $Version
     environment   = $Environment
+    sourceEnvironment = $route.Source
     containerUrl  = $targetContainerUrl
     prefix        = $targetPrefix
     source        = [ordered]@{
