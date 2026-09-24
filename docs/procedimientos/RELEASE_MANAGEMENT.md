@@ -224,4 +224,113 @@ Objetivo: dejar la release trazable. Ejecutor: proyecto.
 
 Verificación: `git tag -l vX.Y.Z` devuelve el tag; `git log origin/master -1` es el commit desplegado.
 
-> Fases 3 a 5 y anexos: en elaboración (AB#100676).
+## Anexo A — Catálogo de pipelines
+
+Todos con `trigger: none` y `pr: none`: se lanzan a mano desde Azure DevOps ("Run pipeline")
+eligiendo rama `develop` y el parámetro `targetEnvironment`. Los pipelines por componente (800,
+801, 802) sirven para redespliegues incrementales y asumen un entorno ya inicializado con 803 o
+con un run previo de 799. Fuente única de los endpoints de IA por entorno:
+`infra/ai/pipeline-variables.yml`, consumido por 799 y 802.
+
+| ID ADO | Nombre en ADO | Fichero | Parámetros | Stages | Scripts que invoca |
+|---|---|---|---|---|---|
+| 799 | AI DocClassExt | `azure-pipelines.yml` | `targetEnvironment` (dev/pre/prod, default prod) | Build → RunMigrations (deshabilitado, `condition: false`) → DeployFunctions (jobs Functions y Admin) → DeployAssetResolver → ValidateConfiguration | `scripts/configuration/ensure-app-settings.ps1`, `scripts/configuration/assign-keyvault-rbac.ps1`, `scripts/configuration/verify-keyvault-rbac.ps1`, `scripts/testing/validate-azure-appsettings-contract.ps1` |
+| 802 | AI DocClassExt (Functions) | `azure-pipelines-functions.yml` | `targetEnvironment` (default dev) | Build → Deploy | `ensure-app-settings.ps1` |
+| 800 | AI DocClassExt (Admin) | `azure-pipelines-admin.yml` | `targetEnvironment` (default dev) | BuildAdmin → DeployAdmin (zipDeploy, RBAC KV, settings, "Ensure Functions environment name", contrato) | `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
+| 801 | AI DocClassExt (AssetResolver) | `azure-pipelines-assetresolver.yml` | `targetEnvironment` (default dev) | Build → Deploy | ninguno |
+| 803 | AI DocClassExt azure-pipelines-bootstrap. | `azure-pipelines-bootstrap.yml` | `targetEnvironment` (default dev) | Bootstrap | `check-azure-permissions.ps1`, `set-keyvault-secrets.ps1`, `verify-prod-prereqs.ps1`, `set-functionapp-keyvault-references.ps1`, `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
+| 807 | Migrations-BD | `azure-pipelines-migrations.yml` | `targetEnvironment` (default dev), `addTransientFirewallRule` (bool, default false) | Generate (agente hosted, `dotnet ef migrations script --idempotent`) → Apply (pool `docia-mdp-private`) | `scripts/deployment/apply-migrations.ps1` |
+| 828 | AI DocClassExt (828) | no identificado en el repo | — | — | anotar en el runbook como "definición sin fichero identificado; comprobar en ADO antes de usarla" |
+| — | pendiente (AB#100675) | `azure-pipelines-ai-artifacts.yml` | `targetEnvironment` | Export → AiArtifacts → ConfigSeed | `scripts/ai/export-config-release.ps1`, `apply-deployments.ps1`, `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1`, `copy-labeling-dataset.ps1`, `validate-analyzer.ps1`, `scripts/database/replicate-config-data.ps1` |
+
+## Anexo B — Vuelta atrás por capas
+
+De menos a más invasiva. Se retrocede solo la capa que falló; nunca se empieza por la BD.
+
+1. **Código.** En Azure DevOps, abrir el último run correcto del pipeline 799 en `prod` y usar
+   "Rerun" → "Rerun from stage" → `DeployFunctions`. Después `ValidateConfiguration` y smoke
+   (4.6). No existen deployment slots en ningún recurso: no hay swap.
+2. **Configuración.** Restaurar `ConfiguracionJson` desde la copia `ModeloConfigs__bak_<fecha>`
+   que creó el script SQL (una `UPDATE ... FROM ModeloConfigs m JOIN ModeloConfigs__bak_<fecha> b ON b.Id = m.Id`
+   sobre la columna cambiada) y relanzar 799 en `prod` desde el commit anterior para que
+   `ensure-app-settings.ps1` deje los app settings del run anterior. Reiniciar la Function App.
+3. **Alias de IA.** Mientras el acceso compartido a los recursos de PRO siga abierto: devolver el
+   bloque del entorno en `infra/ai/pipeline-variables.yml` a los hosts de PRO, redesplegar con
+   799, restaurar las versiones anteriores de los cuatro secretos de IA en el Key Vault del
+   entorno (`az keyvault secret set-attributes` sobre la versión previa o `az keyvault secret
+   set` con el valor anterior), reiniciar la Function App y repetir el smoke. Es la secuencia
+   inversa del cutover de PRE del 2026-09-23.
+4. **Esquema.** Solo si una migración corrompió datos. Restaurar la copia `DocumentIA-prerel-<fecha>`
+   con un nombre nuevo (`az sql db copy`), parar la Function App, renombrar la BD actual a
+   `DocumentIA-failed-<fecha>` y la copia a `DocumentIA`, desplegar el commit anterior (capa 1) y
+   arrancar. Las ejecuciones entre la copia y el fallo se pierden: anotarlas en `runbook.md`.
+
+## Anexo C — Secretos y app settings
+
+- Los secretos viven en el Key Vault del entorno (nombres con `--` como separador). Los carga
+  el pipeline 803 desde el variable group `docia-bootstrap-<env>-secrets` (variables
+  `DOCIA_SECRET_*`) con `scripts/configuration/set-keyvault-secrets.ps1`; las referencias
+  `@Microsoft.KeyVault(...)` las fija `scripts/configuration/set-functionapp-keyvault-references.ps1`.
+- Los app settings los aplica `scripts/configuration/ensure-app-settings.ps1` (idempotente, no
+  sobrescribe valores existentes salvo que se le pida) y los verifica
+  `scripts/testing/validate-azure-appsettings-contract.ps1` contra
+  `scripts/config/azure-appsettings-contract.json`. No se corrigen app settings a mano con
+  `az functionapp config appsettings set`; se corrige la variable del pipeline y se relanza.
+- El RBAC de Key Vault no lo gestiona el pipeline (`manageKeyVaultRbac=false`): se asigna una
+  vez con `scripts/configuration/assign-keyvault-rbac.ps1` y se comprueba con
+  `verify-keyvault-rbac.ps1`. Detalle en `docs/08_CHECKLISTS_DESPLIEGUE.md`, bloque 3.
+- `ENVIRONMENT_NAME` lo fijan 799 y 800; el Admin depende de que la Function App lo tenga (paso
+  "Ensure Functions environment name" de 800).
+- `GDC_ENDPOINT` es un app setting no secreto y distinto por entorno. En el Key Vault de PRO
+  existe un secreto huérfano `GDC--Endpoint` que tiene precedencia sobre el app setting; debe
+  eliminarse (pendiente, ver `docs/procedimientos/RUNBOOK_RELEASE_PRO_2026-09.md`).
+- Rotación de un secreto: nuevo valor en el Key Vault; las apps lo leen en minutos sin reinicio.
+  La rotación de la contraseña del usuario SQL de aplicación (`docaisql`) está pendiente desde la
+  release del 20/09 y aún no tiene script versionado.
+
+## Anexo D — Observabilidad durante el despliegue
+
+App Insights del entorno (PRE `srbappipredocai`; PRO: ver `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md`).
+Los eventos de dominio se emiten con `TrackEvent` y están en `customEvents`, no en `customMetrics`.
+
+Hosts de IA usados en una ventana (puerta 1; en PRE no debe aparecer ningún host de PRO):
+
+```kusto
+dependencies
+| where timestamp between (datetime(2026-09-23T07:56:30Z) .. datetime(2026-09-23T08:00:30Z))
+| where type == "Http"
+| extend host = tostring(parse_url(data).Host)
+| where host has_any ("openai.azure.com", "services.ai.azure.com", "cognitiveservices.azure.com")
+| summarize llamadas = count(), no_ok = countif(resultCode !in ("200", "201", "202")) by host, resultCode
+| order by host asc
+```
+
+Estado del circuito de Content Understanding y failovers:
+
+```kusto
+customEvents
+| where timestamp > ago(1h)
+| where name in ("CU.CircuitOpen", "CU.CircuitClosed", "CU.CircuitFailover", "CU.CircuitRejected", "CU.RetryFailover", "CU.TransientError", "CU.HardTimeout")
+| summarize count() by name, bin(timestamp, 5m)
+| order by timestamp desc
+```
+
+Documentos procesados:
+
+```kusto
+customEvents
+| where timestamp > ago(1h) and name == "DocumentProcessed"
+| summarize documentos = count() by bin(timestamp, 15m)
+```
+
+Tasa de fallo de las funciones HTTP:
+
+```kusto
+requests
+| where timestamp > ago(1h)
+| summarize total = count(), fallos = countif(success == false) by name
+| extend tasa_fallo = round(100.0 * fallos / total, 2)
+| order by tasa_fallo desc
+```
+
+Cuándo mirar: durante 4.4 (errores de arranque), tras 4.6 (hosts y circuito) y en 4.9 (una hora).
