@@ -1,30 +1,31 @@
-# Database Migration Strategy — DocumentIA
+# Migraciones de base de datos — DocumentIA
 
-## 1. OVERVIEW
+Guía de desarrollo para crear y probar migraciones de EF Core en local. La aplicación en DEV,
+PRE y PRO no se hace desde local ni desde los pipelines de aplicación: la hace el pipeline
+Migrations-BD (`azure-pipelines-migrations.yml`) siguiendo la Fase 2.1 y la Fase 4.2 de
+[RELEASE_MANAGEMENT.md](RELEASE_MANAGEMENT.md).
 
-Using: **Entity Framework Core 8** with SQL Server
+## 1. Contexto
 
-Migrations are stored in: `src/backend/DocumentIA.Data/Migrations/`
+- Entity Framework Core 8 sobre SQL Server. Herramienta `dotnet-ef` 8.0.x.
+- Migraciones en `src/backend/DocumentIA.Data/Migrations/`; proyecto y proyecto de arranque:
+  `src/backend/DocumentIA.Data/DocumentIA.Data.csproj` (es lo que usa el pipeline).
+- Versión de esquema por entorno: tabla `__EFMigrationsHistory`. El pipeline Migrations-BD
+  publica en cada run el conjunto aplicado y el del repo.
+- Prerrequisito one-time por entorno: `scripts/database/grant-pipeline-sql-user.sql` (alta del
+  SPN de la service connection en la BD).
 
-Current schema version: ver `__EFMigrationsHistory` por entorno; el pipeline **Migrations-BD** publica en cada run la última migration del repo y la aplicada.
-
----
-
-## 2. LOCAL DEVELOPMENT MIGRATIONS
-
-### Creating a New Migration
+## 2. Crear una migración
 
 ```powershell
-# In DocumentIA.Functions directory
-cd src/backend/DocumentIA.Functions
-dotnet ef migrations add "AddNewColumn_YourFeature" --context DocumentIADbContext
+dotnet ef migrations add "AddNewColumn_YourFeature" `
+  --project src/backend/DocumentIA.Data/DocumentIA.Data.csproj `
+  --startup-project src/backend/DocumentIA.Data/DocumentIA.Data.csproj `
+  --context DocumentIADbContext
 ```
 
-Generated files:
-- `Migrations/YYYYMMDDHHMMSS_AddNewColumn_YourFeature.cs` (Up/Down methods)
-- `Migrations/DocumentIADbContextModelSnapshot.cs` (Current schema state)
-
-### Migration Code Structure
+Genera `Migrations/YYYYMMDDHHMMSS_AddNewColumn_YourFeature.cs` (métodos `Up` y `Down`) y
+actualiza `Migrations/DocumentIADbContextModelSnapshot.cs`.
 
 ```csharp
 public partial class AddNewColumn_YourFeature : Migration
@@ -37,7 +38,7 @@ public partial class AddNewColumn_YourFeature : Migration
             type: "nvarchar(max)",
             nullable: true);
             
-        // Add index if needed
+        // Añadir índice si es necesario
         migrationBuilder.CreateIndex(
             name: "IX_Documentos_NewColumn",
             table: "Documentos",
@@ -52,282 +53,30 @@ public partial class AddNewColumn_YourFeature : Migration
 }
 ```
 
-### Best Practices
-
-1. **One logical change per migration** (not multiple unrelated changes)
-2. **Always include Down() method** (for rollback)
-3. **Add indexes for frequently queried columns**
-4. **Use NOT NULL only if you have default value for existing rows**
-5. **Test locally before committing**
-
-> **Aplicación en entornos Azure:** las migrations NO se aplican desde local ni desde los pipelines de aplicación. Usar el pipeline dedicado **Migrations-BD** (`azure-pipelines-migrations.yml`). Prerequisito one-time por entorno: `scripts/database/grant-pipeline-sql-user.sql` (alta del SPN del service connection en la BD).
-
----
-
-## 3. TESTING MIGRATIONS LOCALLY
-
-### Step 1: Fresh Local Database
-
-```powershell
-# Delete existing local DB and logs
-rm C:\temp\MVP\documento-ia-clasificacion-mvp\data\DocumentIA.db -Force -ErrorAction SilentlyContinue
-
-# Create new DB with all migrations
-dotnet ef database update --context DocumentIADbContext
-```
-
-### Step 2: Verify New Column
-
-```sql
--- Check if column exists
-SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-WHERE TABLE_NAME = 'Documentos' AND COLUMN_NAME = 'NewColumn'
-```
-
-### Step 3: Test Queries
-
-```csharp
-// In test
-using var context = new DocumentIADbContext();
-var doc = context.Documentos.FirstOrDefault();
-Assert.NotNull(doc.NewColumn); // or nullable check
-```
-
-### Step 4: Rollback Test
-
-```powershell
-# Get list of migrations
-dotnet ef migrations list
-
-# Rollback to previous version
-dotnet ef database update <previous-migration-name>
-
-# Verify column is gone
-dotnet ef database update <new-migration-name>  # Apply again
-```
-
----
-
-## 4. STAGING DEPLOYMENT (Pre-Prod Validation)
-
-### Pre-Migration Checklist
-
-- [ ] Migration tested locally ✅
-- [ ] Data script prepared (if data changes needed)
-- [ ] Rollback procedure documented
-- [ ] Estimated time to completion (< 5 min for < 1M rows)
-- [ ] Backup captured
-- [ ] No breaking changes to application code
-
-### Migration Execution
-
-1. **Backup Staging Database:**
-   ```powershell
-   $db = Get-AzSqlDatabase -ResourceGroupName "RG-Staging" -ServerName "doc-ia-sql-staging" -DatabaseName "DocumentIA"
-   New-AzSqlDatabaseBackup -Database $db -BackupName "pre-migration-backup-$(Get-Date -Format 'yyyyMMdd-HHmm')"
-   ```
-
-2. **Aplicar migrations con el pipeline dedicado:**
-   - Pipeline: **Migrations-BD** (`azure-pipelines-migrations.yml`), run manual.
-   - Parámetro `targetEnvironment`: `dev` o `pre`.
-   - El stage `Generate` publica `migrations.sql` (idempotente) como artefacto `MigrationsScript`; revisarlo antes de aprobar el stage `Apply` si el environment tiene aprobación configurada.
-   - El stage `Apply` hace pre-check de `__EFMigrationsHistory`, aplica el script con el token Entra del service connection y verifica que la última migration de BD coincide con la del repo.
-
-3. **Verify Migration Applied:**
-   ```sql
-   -- Check migration history
-   SELECT MigrationId, ProductVersion FROM __EFMigrationsHistory 
-   ORDER BY MigrationId DESC LIMIT 1
-   ```
-
-4. **Smoke Test:**
-   ```powershell
-   # Run smoke tests against staging
-   ./scripts/testing/smoke-test-release.ps1
-   ```
-
-5. **Monitor 1 Hour:**
-   - Check error rate (should be < 1%)
-   - Check latency (should be < 30 sec P99)
-   - Monitor memory usage (no spike expected)
-
-### If Issues Found
-
-1. **Immediate Rollback:**
-   ```powershell
-   # Revert code
-   git revert <migration-commit>
-   git push origin develop
-   # Redeploy (auto-runs Down migration)
-   ```
-
-2. **Restore Database:**
-   ```powershell
-   Restore-AzSqlDatabase -ServerName "doc-ia-sql-staging" `
-     -DatabaseName "DocumentIA" -BackupName "pre-migration-backup-XXX"
-   ```
-
-3. **Post-mortem:**
-   - Document issue
-   - Fix migration code
-   - Retry
-
----
-
-## 5. PRODUCTION DEPLOYMENT (0-Downtime Strategy)
-
-### Highly Available Deployments
-
-**Goal:** Apply migration without stopping the application
-
-### Method 1: Blue-Green Deployment (Recommended)
-
-1. **Prepare** (before release):
-   - Spin up replica database (copy from prod backup)
-   - Run migration on replica
-   - Verify schema matches expected
-   - Keep replica ready
-
-2. **Execute** (during release):
-   - Failover application to replica database
-   - Application keeps running (connection string updated)
-   - Update primary database with migration
-   - Failback after verification
-
-3. **Verify**:
-   - Monitor error rate (expect brief spike during failover)
-   - Verify data consistency
-   - Keep replica for 24 hours as safety net
-
-### Method 2: Online Index Rebuild (For Large Tables)
-
-For adding indexed columns on large tables:
-
-```sql
--- Online (application keeps running)
-CREATE NONCLUSTERED INDEX IX_Documentos_NewColumn 
-ON dbo.Documentos(NewColumn) WITH (ONLINE=ON)
-```
-
-### Pre-Production Migration Checklist
-
-- [ ] Full backup captured
-- [ ] Blue-green environment ready
-- [ ] Rollback procedure tested
-- [ ] Maintenance window scheduled (window < 5 min)
-- [ ] All instances updated to new code
-- [ ] Monitoring alerts active
-
-### Production Migration Procedure
-
-```powershell
-# 1. Backup production database
-$db = Get-AzSqlDatabase -ResourceGroupName "RG-Prod" -ServerName "doc-ia-sql" -DatabaseName "DocumentIA"
-New-AzSqlDatabaseBackup -Database $db -BackupName "pre-migration-backup-$(Get-Date -Format 'yyyyMMddHHmm')"
-
-# 2. Aplicar migrations en PRO con el pipeline dedicado
-#    Pipeline: Migrations-BD (azure-pipelines-migrations.yml)
-#    Parámetro targetEnvironment=prod (el stage Apply pasa por la aprobación del environment "prod")
-#    Artefacto MigrationsScript = SQL exacto aplicado (auditable en el run)
-
-# 3. Monitor migration progress
-# (Check SQL Server logs, migration can take minutes)
-
-# 4. Verify success
-$history = @(Invoke-SqlCmd -ServerInstance "doc-ia-sql.database.windows.net" `
-  -Database "DocumentIA" -Query "SELECT TOP 1 * FROM __EFMigrationsHistory ORDER BY MigrationId DESC")
-if ($history[0].MigrationId -match "v1.5.0") { Write-Host "✅ Migration applied" }
-
-# 5. Smoke test
-./scripts/testing/smoke-test-release.ps1 -Endpoint "https://documentia-prod.azurewebsites.net"
-
-# 6. Monitor 1 hour
-# - Error rate < 1%
-# - P99 latency < 30 sec
-# - No data corruption logs
-```
-
----
-
-## 6. ROLLBACK PROCEDURES
-
-### Automatic Rollback (EF Core)
-
-```powershell
-# If migration failed during deployment:
-dotnet ef database update <previous-migration-name>
-# EF Core runs Down() method to revert schema
-```
-
-### Manual Rollback (SQL Server)
-
-If automatic rollback fails:
-
-```sql
--- Get last successful migration
-SELECT TOP 1 MigrationId FROM __EFMigrationsHistory ORDER BY MigrationId DESC
-
--- Delete problematic migration from history
-DELETE FROM __EFMigrationsHistory 
-WHERE MigrationId = '20260610123456_BadMigration'
-
--- Manually revert schema (if needed)
-ALTER TABLE Documentos DROP COLUMN BadColumn
-DROP INDEX IX_BadColumn ON Documentos
-```
-
-### Database Restore (Worst Case)
-
-```powershell
-# If data corruption or migration corrupted data:
-Restore-AzSqlDatabase -ServerName "doc-ia-sql" `
-  -DatabaseName "DocumentIA" -BackupName "pre-migration-backup-XXX"
-# Rollback code to previous version
-# Redeploy
-```
-
----
-
-## 7. MIGRATION MONITORING
-
-### During Migration
-
-```sql
--- Monitor migration progress (if long-running)
-SELECT session_id, start_time, status, command, statement_start_offset 
-FROM sys.dm_exec_requests 
-WHERE command LIKE 'ALTER%'
-
--- Estimated time (rough)
--- Rows: 1M → ~1-2 min
--- Rows: 10M → ~5-10 min
--- Rows: 100M+ → Consider maintenance window
-```
-
-### After Migration
-
-Verify integrity:
-
-```sql
--- Check all tables accessible
-SELECT COUNT(*) as total_tables FROM information_schema.tables WHERE table_schema='dbo'
-
--- Check for orphaned records (if foreign key added)
-SELECT COUNT(*) as orphaned FROM DocumentoEjecuciones d 
-LEFT JOIN Documentos doc ON d.DocumentoId = doc.DocumentoId 
-WHERE doc.DocumentoId IS NULL
-
--- Verify indexes created
-SELECT name, type_desc FROM sys.indexes WHERE object_id = OBJECT_ID('dbo.Documentos')
-```
-
----
-
-## 8. KNOWN MIGRATION ISSUES & SOLUTIONS
-
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| **Migration stuck** | Long-running operation on large table | Increase timeout, consider maintenance window |
-| **Timeout during migration** | Network lag or lock contention | Retry, or restore and try again |
-| **Data loss after migration** | Incorrect Down() method | Restore from backup, fix migration, retry |
-| **Connection pool exhausted** | Too many concurrent operations | Restart Functions, reduce concurrency |
+Buenas prácticas:
+
+1. Un cambio lógico por migración.
+2. `Down()` siempre implementado.
+3. Índices para las columnas que se filtran con frecuencia; en tablas grandes, crear el índice
+   en un script aparte y medirlo primero en una copia (ver el índice del Monitor en
+   `scripts/database/indice-monitor-costes-pro.sql` como referencia).
+4. `NOT NULL` solo con valor por defecto para las filas existentes.
+5. Compatibilidad hacia atrás: el código desplegado antes de la migración debe seguir
+   funcionando con el esquema nuevo (regla "esquema antes que código" del runbook). Añadir
+   columnas y tablas es seguro; renombrar o borrar exige dos releases.
+6. Probar en local antes de hacer commit (sección 3).
+
+## 3. Probar una migración en local
+
+1. BD local limpia: borrar la BD de desarrollo y ejecutar
+   `dotnet ef database update --project src/backend/DocumentIA.Data/DocumentIA.Data.csproj --startup-project src/backend/DocumentIA.Data/DocumentIA.Data.csproj`.
+2. Comprobar la columna o tabla nueva con una consulta directa.
+3. Ejecutar los tests que tocan la entidad: `dotnet test src/backend/DocumentIA.Tests.Unit --filter "FullyQualifiedName~<NombreTest>"`.
+4. Probar la vuelta atrás: `dotnet ef migrations list` y `dotnet ef database update <migración-anterior>` con los mismos `--project` y `--startup-project`; comprobar que la columna desaparece.
+5. Generar el script idempotente que usará el pipeline y revisarlo:
+   `dotnet ef migrations script --idempotent --context DocumentIADbContext --project src/backend/DocumentIA.Data/DocumentIA.Data.csproj --startup-project src/backend/DocumentIA.Data/DocumentIA.Data.csproj -o artifacts/migrations.sql`.
+
+## 4. Aplicación en entornos y vuelta atrás
+
+Ver [RELEASE_MANAGEMENT.md](RELEASE_MANAGEMENT.md): Fase 2.1 (PRE), Fase 4.1 y 4.2 (copia
+`prerel` y PRO) y Anexo B, capa 4 (restauración). Este documento no describe despliegues.
