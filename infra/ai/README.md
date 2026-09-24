@@ -82,7 +82,7 @@ de referencia para una limpieza futura de los recursos origen.
 - **`datasets/<clasificador>@<version>.<env>.manifest.json`**: dataset de
   entrenamiento/referencia (contenedor, prefijo, fecha de corte y ficheros)
   usado por Document Intelligence Studio o Content Understanding Studio para
-  un analyzer/clasificador, **uno por entorno destino** (`.dev.`, `.pre.`):
+  un analyzer/clasificador, **uno por entorno destino** (`.dev.`, `.pre.`, `.prod.`):
   el mismo dataset copiado a DEV y a PRE deja dos manifiestos que no se
   pisan. `copy-labeling-dataset.ps1` lo escribe; con `-DryRun` no escribe
   nada. `DocumentAICC_v1@1.dev.manifest.json` quedó con
@@ -187,7 +187,35 @@ de referencia para una limpieza futura de los recursos origen.
 
 ## Flujo de promoción (Tareas 10 a 14)
 
-El orden para aplicar esta definición a DEV y PRE es (el paso 1 lo hace
+**Ruta.** Los artefactos se crean (se etiquetan y entrenan) en DEV y se
+promocionan por saltos DEV → PRE → PRO, uno cada vez (ADR-001,
+`docs/decisiones/ADR-001-promocion-artefactos-ia-dev-pre-pro.md`). La
+resuelve `scripts/ai/lib/promotion-route.ps1` (tests en
+`scripts/ai/tests/promotion-route.Tests.ps1`), que comparten
+`copy-labeling-dataset.ps1`, `copy-cu-analyzers.ps1`,
+`copy-di-artifacts.ps1` y `validate-analyzer.ps1`:
+
+| Destino (`-Environment`) | Origen por defecto | Otros orígenes |
+|---|---|---|
+| `pre` | `dev` | `prod`, solo con `-SourceEnvironment prod -FromProd` |
+| `prod` | `pre` | ninguno |
+| `dev` | ninguno: exige `-SourceEnvironment prod -FromProd` | — |
+
+Se rechaza cualquier otro salto: el mismo entorno, `dev → prod` (se salta
+PRE), `pre → dev` y `-FromProd` sin origen `prod`. La copia desde PRO fue la
+carga inicial de DEV y PRE (septiembre de 2026, secciones siguientes) y solo
+se repite para recuperar ese estado. Los manifiestos de cada pasada llevan
+`sourceEnvironment`.
+
+`apply-deployments.ps1` no tiene origen: aplica `deployments.<env>.json` y no
+corre contra PRO, que no cambia de recursos (su fichero es `observed`).
+
+En una release, la promoción la hace el pipeline
+`azure-pipelines-ai-artifacts.yml` (ver "Pipeline de promoción" más abajo) o,
+mientras no esté registrado, los scripts a mano según
+`docs/procedimientos/RELEASE_MANAGEMENT.md` 2.4.
+
+El orden de los pasos, en cualquier salto, es (el paso 1 lo hace
 `scripts/ai/copy-labeling-dataset.ps1`, el paso 2
 `scripts/ai/apply-deployments.ps1`, el paso 3
 `scripts/ai/copy-cu-analyzers.ps1` (y `build-analyzers.ps1` solo para
@@ -202,7 +230,7 @@ reentrenar), el paso 4
    antes de que algo dependa de él). Ver "Aplicar los deployments de un
    entorno" más abajo.
 3. **Analyzers de Content Understanding, por Copy API** — copiar cada
-   analyzer de `cu-analyzers.json` desde el Foundry de PRO al del entorno con
+   analyzer de `cu-analyzers.json` desde el Foundry del origen al del destino con
    `:grantCopyAuthorization` + `:copy` (`scripts/ai/copy-cu-analyzers.ps1`).
    Es el mecanismo de promoción desde la enmienda de la spec §2 del
    2026-09-21: la reconstrucción desde dataset (`build-analyzers.ps1`) no
@@ -215,9 +243,9 @@ reentrenar), el paso 4
    (esta sí soporta copia entre recursos; es una API distinta de la de
    Content Understanding del paso anterior). Ver "Copiar los clasificadores
    de Document Intelligence a un entorno" más abajo.
-5. **Validación** — comprobar que los analyzers copiados a DEV/PRE
-   devuelven los mismos campos que el original de PRO sobre una muestra fija
-   de PDF del dataset del entorno. Ver "Validar los analyzers de un entorno"
+5. **Validación** — comprobar que los analyzers copiados al destino
+   devuelven los mismos campos que el origen del salto sobre una muestra fija
+   de PDF del dataset del destino. Ver "Validar los analyzers de un entorno"
    más abajo. Que las Functions de DEV/PRE usen los recursos propios y no los
    de PRO es el cutover (Tarea 15), no este paso.
 
@@ -311,7 +339,8 @@ explícito en cuerpo y respuesta, nunca `az rest`.
 
 `scripts/ai/copy-cu-analyzers.ps1` es el paso 3 del flujo desde el
 2026-09-21. Para cada analyzer de `cu-analyzers.json` con `promote: true` (o
-`-Only`) resuelve origen (`cu_primary` de `resources.prod.json`) y destino
+`-Only`) resuelve el salto (ver "Ruta" arriba), el origen (`cu_primary` de
+`resources.<origen>.json`, o el alias de `-SourceTarget`) y el destino
 (`cu_primary` de `resources.<env>.json`, o `cu_secondary` con `-Target`),
 exige que el origen esté `ready`, y aplica la Copy API oficial
 (`api-version 2025-11-01`): `POST {origen}/analyzers/{id}:grantCopyAuthorization`
@@ -353,13 +382,20 @@ copia en 9 s, definición idéntica; `validate-analyzer.ps1 -Only CERA46
 idéntico 5/5, por encima de la línea base PRO/PRO (85,7 %).
 
 ```powershell
-pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffix _copytest -DryRun
-pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffix _copytest -DumpDir docs/auxiliares/temps/2026-09-21/copy-cu-dev
-pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Force      # los 24, sobrescribiendo los reconstruidos
-pwsh scripts/ai/validate-analyzer.ps1 -Environment dev            # puerta: los 6 con dataset en DEV
+# promoción de una release: DEV -> PRE y, tras las puertas de PRE, PRE -> PRO
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment pre -DryRun
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment pre
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment prod -DryRun   # solo lectura; en real, por el pipeline
 # cuenta secundaria (cu_secondary): solo los analyzers de las filas "-we" de ModeloConfigs,
-# desde la secundaria de PRO (el script fija antes los defaults de CU de esa cuenta)
-pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CU_NS_1.5_0,CU_NS_1.6_0_GGAA -Target cu_secondary -SourceTarget cu_secondary
+# desde la secundaria del origen (el script fija antes los defaults de CU de esa cuenta)
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment pre -Only CU_NS_1.5_0,CU_NS_1.6_0_GGAA -Target cu_secondary -SourceTarget cu_secondary
+
+# carga inicial y su recuperación: PRO -> DEV (comandos del 2026-09-21 y 2026-09-22)
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -SourceEnvironment prod -FromProd -Only CERA46 -TargetSuffix _copytest -DryRun
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -SourceEnvironment prod -FromProd -Only CERA46 -TargetSuffix _copytest -DumpDir docs/auxiliares/temps/2026-09-21/copy-cu-dev
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -SourceEnvironment prod -FromProd -Force      # los 24, sobrescribiendo los reconstruidos
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SourceEnvironment prod -FromProd            # puerta: los 6 con dataset en DEV
+pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -SourceEnvironment prod -FromProd -Only CU_NS_1.5_0,CU_NS_1.6_0_GGAA -Target cu_secondary -SourceTarget cu_secondary
 ```
 
 El 2026-09-22 la cuenta secundaria de DEV (`srbaisrv02devdocai`) recibió
@@ -374,14 +410,16 @@ tras el cutover y el smoke no lo detectaba. Desde el 2026-09-23 el propio
 `scripts/ai/copy-di-artifacts.ps1` es el paso 4 del flujo. Para cada
 entrada de `di-artifacts.json` con `promote: true` (hoy solo el clasificador
 `DocumentAICC_v1`; `DI_NS1.4_v0` queda anotado como `not-promoted`) resuelve
-el origen en `resources.prod.json` y el destino en `resources.<env>.json`
-(alias `di`), comprueba que el artefacto existe en origen y aplica la Copy
+el salto (ver "Ruta" arriba), el origen en `resources.<origen>.json` y el
+destino en `resources.<env>.json` (alias `di`), comprueba que el artefacto
+existe en origen (la cuenta `sourceAccount` de `di-artifacts.json` solo se
+exige si el origen es PRO, porque describe la carga inicial) y aplica la Copy
 API oficial de Document Intelligence (`api-version 2024-11-30`):
 `POST {destino}/documentintelligence/documentClassifiers:authorizeCopy` con
 el mismo id y una descripción de procedencia, `POST
 {origen}/documentintelligence/documentClassifiers/{id}:copyTo` con la
 autorización como cuerpo, y sondeo de `Operation-Location` hasta
-`succeeded`. El origen no cambia: `copyTo` solo lee el clasificador de PRO.
+`succeeded`. El origen no cambia: `copyTo` solo lee el clasificador de origen.
 Al terminar verifica en destino que los `docTypes` coinciden con el origen y
 escribe `di-artifacts.<env>.manifest.json`.
 
@@ -399,9 +437,12 @@ se haya entrenado con `2024-11-30`. El accessToken de la autorización no se
 imprime ni se vuelca.
 
 ```powershell
-pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev -DryRun -DumpDir docs/auxiliares/temps/2026-09-21/copy-di-dev
-pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev
+pwsh scripts/ai/copy-di-artifacts.ps1 -Environment pre -DryRun            # DEV -> PRE
 pwsh scripts/ai/copy-di-artifacts.ps1 -Environment pre
+pwsh scripts/ai/copy-di-artifacts.ps1 -Environment prod -Only DocumentAICC_v1 -DryRun   # PRE -> PRO, solo lectura
+# carga inicial y su recuperación: PRO -> DEV
+pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev -SourceEnvironment prod -FromProd -DryRun -DumpDir docs/auxiliares/temps/2026-09-21/copy-di-dev
+pwsh scripts/ai/copy-di-artifacts.ps1 -Environment dev -SourceEnvironment prod -FromProd
 ```
 
 Como el resto de scripts de `scripts/ai/`, usa token de `az account
@@ -410,9 +451,11 @@ get-access-token` con `Invoke-WebRequest` y UTF-8 explícito, nunca `az rest`.
 ## Validar los analyzers de un entorno
 
 `scripts/ai/validate-analyzer.ps1` es el paso 5 del flujo (Tarea 13,
-AB#100315). Para cada `analyzers/<id>.json` resuelve el recurso origen
-(`cu_primary` de `resources.prod.json`) y el destino (`cu_primary` de
-`resources.<env>.json`, o `cu_secondary` con `-Target`), comprueba con `GET`
+AB#100315). Para cada `analyzers/<id>.json` resuelve el salto (ver "Ruta"
+arriba: compara el destino con el origen del salto, DEV para PRE y PRE para
+PRO), el recurso origen (`cu_primary` de `resources.<origen>.json`, o
+`-SourceTarget`) y el destino (`cu_primary` de `resources.<env>.json`, o
+`cu_secondary` con `-Target`), comprueba con `GET`
 que el analyzer está `ready` en los dos, toma la muestra de
 `validation/<id>.json`, descarga cada PDF del storage del entorno (token de
 `https://storage.azure.com/`, MD5 verificado contra el manifiesto) y lo envía
@@ -453,11 +496,19 @@ cada análisis. Cada `:analyzeBinary` cuesta dinero en los dos recursos
 `-DryRun` solo hace los `GET` de comprobación.
 
 ```powershell
-pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -WriteSelection -DryRun   # (re)genera validation/*.json y ensaya
-pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -DryRun
-pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -Only CERA44_vado -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers
-pwsh scripts/ai/validate-analyzer.ps1 -Environment dev
+# promoción: PRE frente a DEV y PRO frente a PRE
+pwsh scripts/ai/validate-analyzer.ps1 -Environment pre -DryRun
+pwsh scripts/ai/validate-analyzer.ps1 -Environment pre
+pwsh scripts/ai/validate-analyzer.ps1 -Environment prod -DryRun   # solo GET; en real, por el pipeline
+# DEV no tiene salto anterior: se compara con la carga inicial de PRO
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SourceEnvironment prod -FromProd -WriteSelection -DryRun   # (re)genera validation/*.json y ensaya
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SourceEnvironment prod -FromProd -DryRun
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SourceEnvironment prod -FromProd -Only CERA44_vado -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SourceEnvironment prod -FromProd
 ```
+
+Dry-run de lectura `pre` frente a `dev` del 2026-09-24: los 6 analyzers
+`ready` en los dos lados.
 
 Resultado de la pasada contra los 24 analyzers copiados por Copy API (DEV,
 2026-09-21, 60 llamadas): markdown idéntico en los 30 pares y acuerdo global
@@ -497,18 +548,75 @@ anterior); el clon `CERA46_copytest` dio 90,0 % frente al 47,1 % del
 reconstruido.
 
 El acuerdo origen/destino solo se interpreta frente a una línea base:
-`-SelfCheck` analiza cada PDF dos veces contra el propio recurso de PRO y
+`-SelfCheck` analiza cada PDF dos veces contra el propio recurso origen y
 compara las dos respuestas entre sí (informe
 `validacion-analyzers-<env>-selfcheck.txt`). Si el acuerdo origen/destino es
-del mismo orden que el acuerdo PRO/PRO, la diferencia es varianza del modelo
+del mismo orden que el acuerdo origen/origen, la diferencia es varianza del modelo
 y la copia es fiel; si queda claramente por debajo, comparar la fecha
 `createdAt` del analyzer en PRO con la `Last-Modified` de los `.labels.json`
 del prefijo origen: si las etiquetas cambiaron después del build, el dataset
 copiado no es el que entrenó PRO.
 
 ```powershell
-pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SelfCheck -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers-selfcheck
+pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SourceEnvironment prod -FromProd -SelfCheck -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers-selfcheck
 ```
+
+`-SelfCheck` analiza dos veces contra el origen del salto: con
+`-Environment pre` mide DEV/DEV, no PRO/PRO.
+
+## Pipeline de promoción (AB#100675)
+
+`azure-pipelines-ai-artifacts.yml` lanza los pasos 1 a 5 del flujo para un
+salto, más el export y el diff de configuración. A fecha 2026-09-24 no está
+registrado en Azure DevOps y el service connection `AI DocClassExt Promocion IA`
+no existe; su uso dentro de una release está en
+`docs/procedimientos/RELEASE_MANAGEMENT.md` 2.4 (salto DEV → PRE) y 4.12
+(PRE → PRO).
+
+| Parámetro | Valores | Efecto |
+|---|---|---|
+| `targetEnvironment` | `dev`, `pre` (por defecto), `prod` | Destino; el origen es el salto anterior |
+| `fromProd` | booleano, `false` | Origen PRO para `dev` o `pre` (recuperar la carga inicial); quita Export y ConfigSeed |
+| `preGatesPassed` | booleano, `false` | Obligatorio con `prod`: las cuatro puertas de PRE en PASS |
+| `releaseTag` | texto, vacío = `build-<id>` | Nombre de los ficheros de config exportados |
+| `runValidation` | booleano, `true` | Lanza `validate-analyzer.ps1` (cuesta dinero: `analyzeBinary` en los dos lados) |
+
+Etapas, todas en el pool privado `docia-mdp-private` (SQL y DI de PRE por
+private endpoint):
+
+1. **Guard**: rechaza `dev` sin `fromProd`, `fromProd` con `prod` y `prod`
+   sin `preGatesPassed`.
+2. **Export**: `export-config-release.ps1` contra la BD del origen, solo
+   lectura, con el SC del origen. Artefacto `db-config`.
+3. **AiArtifacts**: job de despliegue sobre el environment de ADO del
+   destino (el approval check de `prod` está pendiente). Con el SC
+   `AI DocClassExt Promocion IA`: `copy-labeling-dataset.ps1` para cada
+   `analyzers/<id>.json` (sin las copias `<id>@<cuenta>.json`),
+   `copy-cu-analyzers.ps1` en `cu_primary` y en `cu_secondary` (solo
+   `CU_NS_1.5_0` y `CU_NS_1.6_0_GGAA`), `copy-di-artifacts.ps1` y
+   `validate-analyzer.ps1`. `apply-deployments.ps1` va con el SC del destino
+   y no corre en `prod`. Publica los manifiestos y el informe de validación
+   en el artefacto `ai-artifacts-<env>-<intento>`, también si falla: los
+   manifiestos se escriben en el agente y hay que versionarlos a mano aquí.
+4. **ConfigSeed**: export de la BD del destino y `diff-config-exports.py`
+   por clave natural frente al export del origen (en `prod` sin
+   `ModeloConfigs`). Artefacto `config-diff` con el diff y el `.hashes.json`
+   del destino; su `.sql` no se publica porque puede llevar keys. **No aplica
+   nada**: la configuración no se promociona por `Id` (regla fija 4 del
+   runbook).
+
+El pipeline no pasa `-Force`: sobre un entorno ya promocionado todo sale
+`present` u `ok`, y un artefacto que existe en destino con otra definición
+para el run con `conflict`. Una versión nueva de un analyzer o clasificador
+lleva identificador nuevo; sustituir uno existente es una decisión manual
+fuera del pipeline.
+
+Pendiente de verificar antes del primer run (fase D de AB#100675): alcance de
+red del pool a los endpoints de IA de los tres entornos, `python` en el pool,
+el contenedor `documentai` en `srbstgprodocai` y las 15 asignaciones de rol
+del SC (script de la solicitud del SC del 2026-09-22, fuera de git). Ningún
+script copia todavía el dataset del
+clasificador de DI (`srbstgproapppdocai`).
 
 ## Cutover de un entorno (Tarea 15)
 

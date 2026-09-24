@@ -187,29 +187,62 @@ Vuelta atrás: Anexo B, capa 2.
 
 ### 2.4 Artefactos de IA
 
-#### Flujo objetivo (pendiente de AB#100675)
-
-Pipeline `azure-pipelines-ai-artifacts.yml` con `targetEnvironment=pre`: Export (1.3 hecho por
-el pipeline, artefacto `db-config`) → AiArtifacts (`scripts/ai/apply-deployments.ps1` desde
-`infra/ai/deployments.pre.json`, `scripts/ai/copy-cu-analyzers.ps1`, `scripts/ai/copy-di-artifacts.ps1`,
-`scripts/ai/copy-labeling-dataset.ps1`, `scripts/ai/validate-analyzer.ps1`) → ConfigSeed
-(`replicate-config-data.ps1 -Mode Apply` desde el pool privado). `prod` queda excluido de
-AiArtifacts por condición. Criterio de aceptación del pipeline: su primera ejecución sobre un
-PRE ya promocionado a mano debe ser idempotente (todo "ok"). ConfigSeed tendrá que casar por
-clave natural, no por `Id` (regla fija 4). Hasta que AB#100675 esté Done se usa el procedimiento
-manual siguiente.
-
-#### Procedimiento manual vigente (secuencia validada en PRE el 2026-09-23)
+Los artefactos de IA (datasets de etiquetado, analyzers de CU, clasificadores y modelos de DI)
+se crean en DEV y se promocionan por saltos DEV → PRE → PRO, uno cada vez (ADR-001). En esta
+fase el salto es DEV → PRE; el de PRE → PRO es el paso 4.12. La copia desde PRO fue la carga
+inicial de DEV y PRE y solo se repite para recuperarla (`fromProd` en el pipeline,
+`-SourceEnvironment prod -FromProd` en los scripts).
 
 Solo cuando la release cambia deployments, analyzers, clasificadores o el modo de acceso a la IA.
-Cada script SQL crea una copia `ModeloConfigs__bak_<yyyyMMdd_HHmmss>` antes de tocar nada.
 Ejecutor: proyecto; plataforma si falta cuota para un deployment (2.4.1) o un rol sobre las
 cuentas de IA.
 
+#### Pipeline de promoción (AB#100675)
+
+`azure-pipelines-ai-artifacts.yml` es el mecanismo de promoción. A fecha 2026-09-24 no está
+registrado en Azure DevOps y el service connection `AI DocClassExt Promocion IA` no existe:
+hasta entonces se usa el procedimiento manual de más abajo, que lanza los mismos scripts con
+la misma ruta.
+
+Parámetros: `targetEnvironment` (destino; el origen es el salto anterior: `pre` ← `dev`,
+`prod` ← `pre`), `fromProd` (solo con destino `dev` o `pre`), `preGatesPassed` (obligatorio
+para `prod`), `releaseTag` (nombre de los ficheros de config; vacío = `build-<id>`) y
+`runValidation` (por defecto sí; cuesta dinero). Corre entero en el pool privado
+`docia-mdp-private`.
+
+| Etapa | Qué hace | Identidad |
+|---|---|---|
+| Guard | Rechaza `dev` sin `fromProd`, `fromProd` con `prod` y `prod` sin `preGatesPassed` | — |
+| Export | `export-config-release.ps1` contra la BD del origen (solo lectura) → artefacto `db-config`. No corre con `fromProd` | SC del origen |
+| AiArtifacts | Job de despliegue sobre el environment de ADO del destino: `copy-labeling-dataset.ps1` por analyzer versionado, `apply-deployments.ps1` (fuera de `prod`), `copy-cu-analyzers.ps1` en las cuentas primaria y secundaria, `copy-di-artifacts.ps1` y `validate-analyzer.ps1` (destino frente al origen). Publica los manifiestos (`ai-artifacts-<env>-<intento>`) para versionarlos a mano en `infra/ai/` | SC `AI DocClassExt Promocion IA`; `apply-deployments.ps1` con el SC del destino |
+| ConfigSeed | Export de la BD del destino y diff por clave natural frente al origen (`diff-config-exports.py`, mismas claves que 2.3.2; en `prod` sin `ModeloConfigs`) → artefacto `config-diff`. **No aplica nada** (regla fija 4). No corre con `fromProd` | SC del destino |
+
+Los scripts son idempotentes y el pipeline no pasa `-Force`: sobre un entorno ya promocionado
+todo sale `present` u `ok`, y un analyzer o clasificador que existe en destino con otra
+definición para la ejecución con `conflict`. Criterio de aceptación de su primera ejecución:
+sobre PRE, ya promocionado a mano, todo idempotente.
+
+Con el pipeline, 2.4.1 a 2.4.4 son un run con `targetEnvironment=pre` desde el commit
+candidato: anotar el ID en la tabla "Runs de pipeline" de `release.md`, llevar
+`validacion-analyzers-pre.txt` (artefacto `ai-artifacts-pre-*`) y el diff de ConfigSeed a
+`evidencias/` y seguir en 2.4.5. El diff de ConfigSeed no sustituye a 2.3.2: es una
+comprobación más.
+
+#### Procedimiento manual vigente (secuencia validada en PRE el 2026-09-23)
+
+Mientras el pipeline no esté registrado. Cada script SQL crea una copia
+`ModeloConfigs__bak_<yyyyMMdd_HHmmss>` antes de tocar nada. Los scripts de copia y validación
+resuelven solos el origen (`-Environment pre` implica origen DEV) y aceptan `-DryRun`, que solo
+lee: lanzarlo antes de cada paso.
+
 - [ ] **2.4.1** Deployments: `pwsh ./scripts/ai/apply-deployments.ps1 -Environment pre` (crea los que faltan; los existentes que difieren se informan como `differs` y no se tocan).
-- [ ] **2.4.2** Analyzers CU: `pwsh ./scripts/ai/copy-cu-analyzers.ps1 -Environment pre` (Copy API desde PRO; salta los idénticos).
-- [ ] **2.4.3** Clasificadores DI: `pwsh ./scripts/ai/copy-di-artifacts.ps1 -Environment pre`.
-- [ ] **2.4.4** Validación: `pwsh ./scripts/ai/validate-analyzer.ps1 -Environment pre` (markdown idéntico y acuerdo de campos ≥ 0,85 frente a PRO).
+- [ ] **2.4.2** Analyzers CU desde DEV (Copy API; salta los idénticos y para con `conflict` si en PRE hay otra definición). Si la release trae un analyzer o una versión de dataset nuevos, antes `pwsh ./scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId <id> -Environment pre`, que la validación de 2.4.4 necesita.
+
+      pwsh ./scripts/ai/copy-cu-analyzers.ps1 -Environment pre
+      pwsh ./scripts/ai/copy-cu-analyzers.ps1 -Environment pre -Only CU_NS_1.5_0,CU_NS_1.6_0_GGAA -Target cu_secondary -SourceTarget cu_secondary
+
+- [ ] **2.4.3** Clasificadores DI desde DEV: `pwsh ./scripts/ai/copy-di-artifacts.ps1 -Environment pre`.
+- [ ] **2.4.4** Validación: `pwsh ./scripts/ai/validate-analyzer.ps1 -Environment pre` (markdown idéntico y acuerdo de campos ≥ 0,85 frente a DEV, el origen del salto). Informe en `evidencias/`.
 - [ ] **2.4.5** Alias y modo de acceso, solo si cambian: `scripts/ai/set-resource-aliases.sql` y `scripts/ai/set-auth-mode-identity.sql` contra `srbsqlpredocai` con token de Entra; segunda pasada 0 filas. Después `scripts/ai/clear-model-api-keys.sql` (0 filas con key al terminar).
 - [ ] **2.4.6** Reiniciar `srbapppredocai` si 2.4.5 cambió filas: `az functionapp restart -n srbapppredocai -g SRBRGPREDOCSAI`.
 - [ ] **2.4.7** Purgar keys de las copias `ModeloConfigs__bak_*` creadas en 2.4.5 (mismo patrón que en DEV el 2026-09-22).
@@ -308,6 +341,21 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
       az functionapp config appsettings list --subscription 647c7246-54bc-4d31-b909-431cacf03272 --resource-group SRBRGDOCSAIPROD --name srbappprodocai --query "[?ends_with(name, '__Endpoint') && name != 'GDC__Endpoint'].[name, value]" -o table > docs/releases/vX.Y.Z/evidencias/appsettings-ia-pro-antes.txt
       az functionapp config appsettings list --subscription 647c7246-54bc-4d31-b909-431cacf03272 --resource-group SRBRGDOCSAIPROD --name srbappprodocai --query "[].name" -o tsv > docs/releases/vX.Y.Z/evidencias/appsettings-nombres-pro-antes.txt
 
+- [ ] **4.12** Artefactos de IA en PRO, solo si la release cambia analyzers, clasificadores o datasets (los de 2.4.2 y 2.4.3). Después de 4.3 y antes de 4.4, en el mismo orden que en PRE. Pipeline `azure-pipelines-ai-artifacts.yml` con `targetEnvironment=prod` y `preGatesPassed=true` desde el commit candidato (salto PRE → PRO). Anotar el ID del run y llevar a `evidencias/` la validación frente a PRE y el diff de ConfigSeed.
+
+  Requisitos antes del primer run contra PRO: el service connection `AI DocClassExt Promocion IA`
+  con sus roles y un approval check en el environment `prod` de ADO (ADR-001; hoy no hay
+  ninguno, ver nota de la Fase 3). Sin pipeline no hay promoción a PRO: no se lanzan los
+  scripts de copia contra PRO a mano. Si falta alguno de los dos, la release no lleva cambios de
+  IA a PRO y se anota en `runbook.md`.
+
+  En `prod` el pipeline no toca los deployments (`apply-deployments.ps1` queda fuera; PRO no
+  cambia de recursos) ni `ModeloConfigs`, que sigue fuera del diff hasta el cutover de IA de PRO.
+  No sobrescribe un artefacto existente con otra definición: una versión nueva lleva
+  identificador nuevo, así que la vuelta atrás es por datos (la fila de `ModeloConfigs` o la
+  tipología vuelven al identificador anterior con su copia `__bak`) y el artefacto nuevo se
+  queda en PRO sin uso.
+
 Verificación: 4.6 en 6/6, 4.7 sin diferencias no explicadas, 4.9 sin anomalías.
 Vuelta atrás: Anexo B, en orden de capas.
 
@@ -359,7 +407,7 @@ la release no toca los demás componentes ni la configuración de bootstrap (803
 | 803 | AI DocClassExt azure-pipelines-bootstrap. | `azure-pipelines-bootstrap.yml` | `targetEnvironment` (default dev) | Bootstrap | `check-azure-permissions.ps1`, `set-keyvault-secrets.ps1`, `verify-prod-prereqs.ps1`, `set-functionapp-keyvault-references.ps1`, `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
 | 807 | Migrations-BD | `azure-pipelines-migrations.yml` | `targetEnvironment` (default dev), `addTransientFirewallRule` (bool, default false) | Generate (agente hosted, `dotnet ef migrations script --idempotent`) → Apply (pool `docia-mdp-private`) | `scripts/deployment/apply-migrations.ps1` |
 | 828 | AI DocClassExt (828) | no identificado en el repo | — | — | definición sin fichero identificado; comprobar en ADO antes de usarla |
-| — | pendiente (AB#100675) | `azure-pipelines-ai-artifacts.yml` | `targetEnvironment` | Export → AiArtifacts → ConfigSeed | `scripts/ai/export-config-release.ps1`, `apply-deployments.ps1`, `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1`, `copy-labeling-dataset.ps1`, `validate-analyzer.ps1`, `scripts/database/replicate-config-data.ps1` |
+| — | sin registrar (AB#100675) | `azure-pipelines-ai-artifacts.yml` | `targetEnvironment` (dev/pre/prod, default pre), `fromProd`, `preGatesPassed`, `releaseTag`, `runValidation` | Guard → Export (origen del salto; no con `fromProd`) → AiArtifacts (pool `docia-mdp-private`, environment del destino) → ConfigSeed (solo diff; no con `fromProd`). Ver 2.4 | `scripts/ai/export-config-release.ps1`, `copy-labeling-dataset.ps1`, `apply-deployments.ps1` (fuera de `prod`), `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1`, `validate-analyzer.ps1`, `scripts/database/diff-config-exports.py` |
 
 ## Anexo B — Vuelta atrás por capas
 
