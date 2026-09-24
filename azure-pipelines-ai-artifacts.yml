@@ -1,0 +1,298 @@
+name: AiArtifacts-$(Date:yyyyMMdd)$(Rev:.r)
+
+# Promocion de artefactos de IA por saltos DEV -> PRE -> PRO (ADR-001,
+# AB#100675). Cada ejecucion es un salto: el origen es el entorno anterior
+# al destino (pre <- dev, prod <- pre). prod -> dev|pre solo con fromProd,
+# para recuperar la carga inicial.
+#
+# Etapas:
+#   Export      config de BD del origen (solo lectura) -> artefacto db-config.
+#   AiArtifacts datasets, deployments (fuera de prod), analyzers CU, modelos y
+#               clasificadores DI y validacion, con el SC "AI DocClassExt
+#               Promocion IA" (roles en origen y destino).
+#   ConfigSeed  export del destino (solo lectura) y diff por clave natural
+#               frente al origen. NO aplica nada: la configuracion nunca se
+#               promociona por Id (regla fija 4 de RELEASE_MANAGEMENT.md);
+#               los seeds de la release se aplican a mano (2.3.3 y 4.3).
+#
+# Los scripts son idempotentes: sobre un entorno ya promocionado todo sale
+# "present"/"skip". Ninguno sobrescribe un analyzer o clasificador distinto
+# (conflict = error); este pipeline no pasa -Force.
+
+trigger: none
+pr: none
+
+parameters:
+  - name: targetEnvironment
+    displayName: Entorno destino
+    type: string
+    default: pre
+    values:
+      - dev
+      - pre
+      - prod
+  - name: fromProd
+    displayName: Recuperar la carga inicial desde PRO (solo dev o pre)
+    type: boolean
+    default: false
+  - name: preGatesPassed
+    displayName: Las cuatro puertas de PRE estan en PASS (obligatorio para prod)
+    type: boolean
+    default: false
+  - name: releaseTag
+    displayName: Tag de la release (nombre de los ficheros de config; vacio = build-<id>)
+    type: string
+    default: ''
+  - name: runValidation
+    displayName: Validar analyzers (analyzeBinary en origen y destino; cuesta dinero)
+    type: boolean
+    default: true
+
+# Todas las etapas tocan red privada (SQL por private endpoint, DI de PRE con
+# private endpoint): mismo pool que el Apply de azure-pipelines-migrations.yml.
+pool:
+  name: docia-mdp-private
+
+variables:
+  - name: sqlDatabaseName
+    value: DocumentIA
+  - name: promotionServiceConnection
+    value: AI DocClassExt Promocion IA
+  # Analyzers de la cuenta secundaria (filas "-we" de ModeloConfigs).
+  - name: cuSecondaryAnalyzers
+    value: CU_NS_1.5_0,CU_NS_1.6_0_GGAA
+
+  # Destino: SC de entorno (apply-deployments, export del destino) y SQL.
+  - ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    - name: targetServiceConnection
+      value: AI DocClassExt DEV
+    - name: targetSqlServer
+      value: srbsqldevdocai
+  - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
+    - name: targetServiceConnection
+      value: AI DocClassExt PRE
+    - name: targetSqlServer
+      value: srbsqlpredocai
+  - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
+    - name: targetServiceConnection
+      value: AI DocClassExt PRO
+    - name: targetSqlServer
+      value: srbsqlprodocai
+
+  # Origen del salto. Vacio = combinacion no permitida (lo para la etapa Guard).
+  - ${{ if parameters.fromProd }}:
+    - name: sourceEnvironment
+      value: prod
+    - name: sourceServiceConnection
+      value: AI DocClassExt PRO
+    - name: sourceSqlServer
+      value: srbsqlprodocai
+  - ${{ elseif eq(parameters.targetEnvironment, 'pre') }}:
+    - name: sourceEnvironment
+      value: dev
+    - name: sourceServiceConnection
+      value: AI DocClassExt DEV
+    - name: sourceSqlServer
+      value: srbsqldevdocai
+  - ${{ elseif eq(parameters.targetEnvironment, 'prod') }}:
+    - name: sourceEnvironment
+      value: pre
+    - name: sourceServiceConnection
+      value: AI DocClassExt PRE
+    - name: sourceSqlServer
+      value: srbsqlpredocai
+  - ${{ else }}:
+    - name: sourceEnvironment
+      value: ''
+
+  # Argumentos de ruta comunes a los scripts de scripts/ai.
+  - ${{ if parameters.fromProd }}:
+    - name: routeArgs
+      value: -Environment ${{ parameters.targetEnvironment }} -SourceEnvironment prod -FromProd
+  - ${{ else }}:
+    - name: routeArgs
+      value: -Environment ${{ parameters.targetEnvironment }}
+
+stages:
+- stage: Guard
+  displayName: Comprobar el salto ${{ parameters.targetEnvironment }}
+  jobs:
+  - job: Guard
+    steps:
+    - checkout: none
+    - pwsh: |
+        $target = '${{ parameters.targetEnvironment }}'
+        $source = '${{ variables.sourceEnvironment }}'
+        $fromProd = [bool]::Parse('${{ parameters.fromProd }}')
+        $gates = [bool]::Parse('${{ parameters.preGatesPassed }}')
+        if (-not $source) { throw "dev no tiene salto anterior: la promocion va DEV -> PRE -> PRO. Para recuperar dev desde PRO marca fromProd." }
+        if ($fromProd -and $target -eq 'prod') { throw "fromProd solo vale con destino dev o pre" }
+        if ($target -eq 'prod' -and -not $gates) { throw "prod exige las cuatro puertas de PRE en PASS (RELEASE_MANAGEMENT.md 2.5); marca preGatesPassed" }
+        Write-Host "Salto: $source -> $target (fromProd=$fromProd, validacion=${{ parameters.runValidation }})"
+      displayName: Validar parametros
+
+# La config de PRO no se exporta para recuperar dev/pre: sus ModeloConfigs
+# pueden llevar keys en claro y la regla 4 impide aplicarla por Id.
+- ${{ if not(parameters.fromProd) }}:
+  - stage: Export
+    displayName: Export de config del origen (${{ variables.sourceEnvironment }})
+    dependsOn: Guard
+    jobs:
+    - job: Export
+      steps:
+      - checkout: self
+      - task: AzureCLI@2
+        displayName: export-config-release.ps1 contra el origen
+        inputs:
+          azureSubscription: '$(sourceServiceConnection)'
+          scriptType: 'pscore'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            $tag = '${{ parameters.releaseTag }}'
+            if (-not $tag) { $tag = 'build-$(Build.BuildId)' }
+            pwsh -File ./scripts/ai/export-config-release.ps1 `
+              -SourceServer "$(sourceSqlServer).database.windows.net" `
+              -ReleaseTag "$tag-${{ variables.sourceEnvironment }}" `
+              -OutDir "$(Build.ArtifactStagingDirectory)/db-config"
+            if ($LASTEXITCODE -ne 0) { throw "export-config-release.ps1 termino con codigo $LASTEXITCODE" }
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: '$(Build.ArtifactStagingDirectory)/db-config'
+          artifact: 'db-config'
+
+- stage: AiArtifacts
+  displayName: Artefactos de IA ${{ variables.sourceEnvironment }} -> ${{ parameters.targetEnvironment }}
+  ${{ if parameters.fromProd }}:
+    dependsOn: Guard
+  ${{ else }}:
+    dependsOn: Export
+  jobs:
+  - deployment: Promote
+    displayName: Promocionar artefactos de IA
+    environment: ${{ parameters.targetEnvironment }}
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - checkout: self
+          - download: none
+
+          # 1. Datasets de etiquetado de los analyzers con definicion versionada.
+          - task: AzureCLI@2
+            displayName: copy-labeling-dataset.ps1
+            inputs:
+              azureSubscription: '$(promotionServiceConnection)'
+              scriptType: 'pscore'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                $ids = Get-ChildItem infra/ai/analyzers -Filter '*.json' -File |
+                  Where-Object { $_.BaseName -notlike '*@*' } | ForEach-Object BaseName
+                foreach ($id in $ids) {
+                  pwsh -File ./scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId $id ${{ variables.routeArgs }}
+                  if ($LASTEXITCODE -ne 0) { throw "copy-labeling-dataset.ps1 $id termino con codigo $LASTEXITCODE" }
+                }
+
+          # 2. Deployments de modelo: fuera de prod, porque PRO no cambia de
+          #    recursos por este pipeline (enmienda 2026-09-24). SC de entorno.
+          - ${{ if ne(parameters.targetEnvironment, 'prod') }}:
+            - task: AzureCLI@2
+              displayName: apply-deployments.ps1
+              inputs:
+                azureSubscription: '$(targetServiceConnection)'
+                scriptType: 'pscore'
+                scriptLocation: 'inlineScript'
+                inlineScript: |
+                  pwsh -File ./scripts/ai/apply-deployments.ps1 -Environment ${{ parameters.targetEnvironment }}
+                  if ($LASTEXITCODE -ne 0) { throw "apply-deployments.ps1 termino con codigo $LASTEXITCODE" }
+
+          # 3. Analyzers de CU (cuenta primaria y secundaria), 4. modelos y
+          #    clasificadores de DI.
+          - task: AzureCLI@2
+            displayName: copy-cu-analyzers.ps1 y copy-di-artifacts.ps1
+            inputs:
+              azureSubscription: '$(promotionServiceConnection)'
+              scriptType: 'pscore'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                pwsh -File ./scripts/ai/copy-cu-analyzers.ps1 ${{ variables.routeArgs }}
+                if ($LASTEXITCODE -ne 0) { throw "copy-cu-analyzers.ps1 (cu_primary) termino con codigo $LASTEXITCODE" }
+                pwsh -File ./scripts/ai/copy-cu-analyzers.ps1 ${{ variables.routeArgs }} -Only $(cuSecondaryAnalyzers) -Target cu_secondary -SourceTarget cu_secondary
+                if ($LASTEXITCODE -ne 0) { throw "copy-cu-analyzers.ps1 (cu_secondary) termino con codigo $LASTEXITCODE" }
+                pwsh -File ./scripts/ai/copy-di-artifacts.ps1 ${{ variables.routeArgs }}
+                if ($LASTEXITCODE -ne 0) { throw "copy-di-artifacts.ps1 termino con codigo $LASTEXITCODE" }
+
+          # 5. Validacion: destino frente al origen del salto (cuenta primaria).
+          - ${{ if parameters.runValidation }}:
+            - task: AzureCLI@2
+              displayName: validate-analyzer.ps1
+              inputs:
+                azureSubscription: '$(promotionServiceConnection)'
+                scriptType: 'pscore'
+                scriptLocation: 'inlineScript'
+                inlineScript: |
+                  pwsh -File ./scripts/ai/validate-analyzer.ps1 ${{ variables.routeArgs }} `
+                    -OutFile "$(Build.ArtifactStagingDirectory)/ai-artifacts/validacion-analyzers-${{ parameters.targetEnvironment }}.txt"
+                  if ($LASTEXITCODE -ne 0) { throw "validate-analyzer.ps1 termino con codigo $LASTEXITCODE" }
+
+          # Los manifiestos se escriben en el workspace del agente: se publican
+          # para versionarlos a mano en infra/ai/.
+          - pwsh: |
+              $out = "$(Build.ArtifactStagingDirectory)/ai-artifacts"
+              New-Item -ItemType Directory -Force -Path "$out/infra/ai/datasets" | Out-Null
+              Copy-Item infra/ai/*.${{ parameters.targetEnvironment }}*.manifest.json "$out/infra/ai/" -ErrorAction SilentlyContinue
+              Copy-Item infra/ai/datasets/*.${{ parameters.targetEnvironment }}.manifest.json "$out/infra/ai/datasets/" -ErrorAction SilentlyContinue
+              git status --short -- infra/ai
+            displayName: Recoger manifiestos
+            condition: succeededOrFailed()
+          - task: PublishPipelineArtifact@1
+            condition: succeededOrFailed()
+            inputs:
+              targetPath: '$(Build.ArtifactStagingDirectory)/ai-artifacts'
+              artifact: 'ai-artifacts-${{ parameters.targetEnvironment }}-$(System.JobAttempt)'
+
+- ${{ if not(parameters.fromProd) }}:
+  - stage: ConfigSeed
+    displayName: Diferencias de config ${{ variables.sourceEnvironment }} -> ${{ parameters.targetEnvironment }}
+    dependsOn: AiArtifacts
+    jobs:
+    - job: Diff
+      steps:
+      - checkout: self
+      - download: current
+        artifact: db-config
+      - task: AzureCLI@2
+        displayName: export-config-release.ps1 contra el destino
+        inputs:
+          azureSubscription: '$(targetServiceConnection)'
+          scriptType: 'pscore'
+          scriptLocation: 'inlineScript'
+          inlineScript: |
+            $tag = '${{ parameters.releaseTag }}'
+            if (-not $tag) { $tag = 'build-$(Build.BuildId)' }
+            pwsh -File ./scripts/ai/export-config-release.ps1 `
+              -SourceServer "$(targetSqlServer).database.windows.net" `
+              -ReleaseTag "$tag-${{ parameters.targetEnvironment }}-antes" `
+              -OutDir "$(Agent.TempDirectory)/db-config-destino"
+            if ($LASTEXITCODE -ne 0) { throw "export-config-release.ps1 termino con codigo $LASTEXITCODE" }
+      - pwsh: |
+          $tag = '${{ parameters.releaseTag }}'
+          if (-not $tag) { $tag = 'build-$(Build.BuildId)' }
+          $target = '${{ parameters.targetEnvironment }}'
+          $sourceSql = "$(Pipeline.Workspace)/db-config/config-$tag-${{ variables.sourceEnvironment }}.sql"
+          $targetSql = "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-antes.sql"
+          # Claves naturales de RELEASE_MANAGEMENT.md 2.3.2; en prod sin
+          # ModeloConfigs, que queda fuera hasta el cutover de IA de PRO (4.3).
+          $keys = @('PromptTemplates=PromptKey+Version', 'Tipologias=Codigo', 'CatalogoTdn1=Codigo', 'CatalogoTdn2=Codigo', 'PluginTipologiaConfigs=TipologiaCodigo')
+          if ($target -ne 'prod') { $keys = @('ModeloConfigs=Key') + $keys }
+          $out = "$(Build.ArtifactStagingDirectory)/config-diff"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          python --version
+          python scripts/database/diff-config-exports.py $targetSql $sourceSql @keys | Tee-Object -FilePath "$out/diff-config-$tag-${{ variables.sourceEnvironment }}-$target.txt"
+          if ($LASTEXITCODE -ne 0) { throw "diff-config-exports.py termino con codigo $LASTEXITCODE" }
+          # Solo el hash del destino: su .sql no se publica (puede llevar keys).
+          Copy-Item "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-antes.hashes.json" $out
+        displayName: Diff por clave natural (no aplica nada)
+      - task: PublishPipelineArtifact@1
+        inputs:
+          targetPath: '$(Build.ArtifactStagingDirectory)/config-diff'
+          artifact: 'config-diff'
