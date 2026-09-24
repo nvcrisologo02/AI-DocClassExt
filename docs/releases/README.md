@@ -20,6 +20,8 @@ anteriores se conservan como histórico y no se vuelven a crear.
    `docs/auxiliares/temps/<fecha>/` y se referencia por ruta.
 4. Al cerrar, añadir la fila en la tabla de abajo.
 
+Cómo regenerar la plantilla: `_plantilla/runbook.md` no se edita a mano; tras cambiar las casillas del runbook, `sh scripts/docs/generar-plantilla-runbook.sh`.
+
 ## Índice
 
 | Versión | Fecha | Commit | Work items | Registro |

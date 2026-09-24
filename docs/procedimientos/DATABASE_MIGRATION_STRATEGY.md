@@ -37,7 +37,7 @@ public partial class AddNewColumn_YourFeature : Migration
             table: "Documentos",
             type: "nvarchar(max)",
             nullable: true);
-            
+
         // Añadir índice si es necesario
         migrationBuilder.CreateIndex(
             name: "IX_Documentos_NewColumn",

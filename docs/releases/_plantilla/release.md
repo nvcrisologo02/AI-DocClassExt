@@ -7,6 +7,17 @@ Fecha: YYYY-MM-DD · Tag: vX.Y.Z · Commit: <hash> · Tag anterior: vA.B.C · En
 Build: `dotnet build src/backend/DocumentIA.sln` → <resultado> · Tests unitarios: <n/n> · Tests Admin: <n/n> · Tests AssetResolver: <n/n> · Formato: <ok/ko>
 E2E DEV: smoke <n/n>, full <PASS/FAIL/N/A> · E2E PRE: smoke <n/n> · E2E PRO: smoke <n/n>
 
+## Contenido de la release
+
+Las tres listas de la Fase 0 del runbook (0.5 y 0.6); se dejan con "ninguno" si están vacías.
+
+### Migraciones y scripts fuera de EF
+- <migración EF> · <script SQL o PowerShell de `scripts/` (índice `ONLINE`, procedimiento, seed de configuración)>
+### Configuración
+- <tabla> · <seed que la cambia> · <qué cambia>
+### Artefactos de IA
+- <deployments, analyzers, clasificadores o modo de acceso> · <fichero de `infra/ai/`>
+
 ## Diff frente a vA.B.C
 
 ### PBIs
