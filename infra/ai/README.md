@@ -638,10 +638,22 @@ DEV y PRE, `python` en el pool (ConfigSeed generó el diff) y el token del SC
 (ningún 401). Resultado: PRE ya idéntico a DEV en artefactos de IA; diff de
 config DEV/PRE: `CatalogoTdn1` 5 diferencias (conocidas), `ModeloConfigs` 11
 (endpoints por entorno, sin revisar campo a campo), `PromptTemplates` 2
-(solo `PublishedAtUtc`). Queda pendiente el mismo ensayo del salto
-PRE → PRO (endpoints de PRO) y el contenedor `documentai` en
-`srbstgprodocai`. Ningún script copia todavía el dataset del clasificador de
-DI (`srbstgproapppdocai`).
+(solo `PublishedAtUtc`).
+
+El ensayo en seco PRE → PRO (run 79596, 2026-09-30, `dryRun=true`,
+succeeded, con el arreglo de `validate-analyzer.ps1` en dry-run) verificó lo
+mismo contra PRO: cero 401 en las dos cuentas Foundry y el DI de PRO, plan
+`skip`/`present` sin ningún `conflict` (PRO ya tiene todos los artefactos,
+es el origen original), validación con 6/6 analyzers omitidos por no existir
+aún manifiestos `.prod.` (esperado: los escribe la pasada real de
+`copy-labeling-dataset.ps1`) y ConfigSeed contra la BD de PRO: diff
+PRE/PRO con 0 diferencias en `CatalogoTdn2`, `PluginTipologiaConfigs`,
+`PromptTemplates` y `Tipologias`, y 5 filas de `CatalogoTdn1` con
+`Descripcion` distinta (CERA, COMU, CORR, CUAD, NOTS, las conocidas de la
+grafía; `ModeloConfigs` fuera del diff en `prod` por diseño). Queda
+pendiente para el primer run real: el contenedor `documentai` en
+`srbstgprodocai` (el seco solo lista el origen). Ningún script copia
+todavía el dataset del clasificador de DI (`srbstgproapppdocai`).
 
 ## Cutover de un entorno (Tarea 15)
 

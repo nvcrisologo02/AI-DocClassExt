@@ -201,8 +201,9 @@ cuentas de IA.
 
 `azure-pipelines-ai-artifacts.yml` es el mecanismo de promoción, registrado en Azure DevOps
 como el pipeline 832 `AI DocClassExt (AiArtifacts)` con el service connection WIF
-`AI DocClassExt Promocion IA` (verificado el 2026-09-30: 15/15 roles y ensayo en seco
-DEV → PRE en el run 79587). El procedimiento manual de más abajo queda como contingencia:
+`AI DocClassExt Promocion IA` (verificado el 2026-09-30: 15/15 roles y ensayos en seco
+DEV → PRE en el run 79587 y PRE → PRO en el 79596, ambos sin 401 ni conflictos). El
+procedimiento manual de más abajo queda como contingencia:
 lanza los mismos scripts con la misma ruta.
 
 Parámetros: `targetEnvironment` (destino; el origen es el salto anterior: `pre` ← `dev`,
