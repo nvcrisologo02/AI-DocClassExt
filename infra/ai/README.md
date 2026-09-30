@@ -210,9 +210,9 @@ se repite para recuperar ese estado. Los manifiestos de cada pasada llevan
 `apply-deployments.ps1` no tiene origen: aplica `deployments.<env>.json` y no
 corre contra PRO, que no cambia de recursos (su fichero es `observed`).
 
-En una release, la promoción la hace el pipeline
+En una release, la promoción la hace el pipeline 832
 `azure-pipelines-ai-artifacts.yml` (ver "Pipeline de promoción" más abajo) o,
-mientras no esté registrado, los scripts a mano según
+como contingencia, los scripts a mano según
 `docs/procedimientos/RELEASE_MANAGEMENT.md` 2.4.
 
 El orden de los pasos, en cualquier salto, es (el paso 1 lo hace
@@ -567,9 +567,11 @@ pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SourceEnvironment prod -
 ## Pipeline de promoción (AB#100675)
 
 `azure-pipelines-ai-artifacts.yml` lanza los pasos 1 a 5 del flujo para un
-salto, más el export y el diff de configuración. A fecha 2026-09-24 no está
-registrado en Azure DevOps y el service connection `AI DocClassExt Promocion IA`
-no existe; su uso dentro de una release está en
+salto, más el export y el diff de configuración. Está registrado en Azure
+DevOps como el pipeline **832 `AI DocClassExt (AiArtifacts)`** y usa el
+service connection WIF `AI DocClassExt Promocion IA` (federado, sin
+secretos; sus 15 asignaciones de rol se comprueban con el script de la
+solicitud del 2026-09-22, fuera de git). Su uso dentro de una release está en
 `docs/procedimientos/RELEASE_MANAGEMENT.md` 2.4 (salto DEV → PRE) y 4.12
 (PRE → PRO).
 
@@ -578,8 +580,9 @@ no existe; su uso dentro de una release está en
 | `targetEnvironment` | `dev`, `pre` (por defecto), `prod` | Destino; el origen es el salto anterior |
 | `fromProd` | booleano, `false` | Origen PRO para `dev` o `pre` (recuperar la carga inicial); quita Export y ConfigSeed |
 | `preGatesPassed` | booleano, `false` | Obligatorio con `prod`: las cuatro puertas de PRE en PASS |
-| `releaseTag` | texto, vacío = `build-<id>` | Nombre de los ficheros de config exportados |
+| `releaseTag` | texto, `auto` (por defecto) = `build-<id>` | Nombre de los ficheros de config exportados; ADO trata como obligatorio un parámetro string sin default no vacío, de ahí el centinela `auto` |
 | `runValidation` | booleano, `true` | Lanza `validate-analyzer.ps1` (cuesta dinero: `analyzeBinary` en los dos lados) |
+| `dryRun` | booleano, `false` | Ensayo sin escrituras: todos los scripts de `scripts/ai/` reciben `-DryRun` (solo GET y el plan de lo que harían); Export y ConfigSeed corren igual porque solo leen. Lanzar así el primer run de cada salto |
 
 Etapas, todas en el pool privado `docia-mdp-private` (SQL y DI de PRE por
 private endpoint):
@@ -589,7 +592,7 @@ private endpoint):
 2. **Export**: `export-config-release.ps1` contra la BD del origen, solo
    lectura, con el SC del origen. Artefacto `db-config`.
 3. **AiArtifacts**: job de despliegue sobre el environment de ADO del
-   destino (el approval check de `prod` está pendiente). Con el SC
+   destino (ver "Aprobaciones y Permits" más abajo). Con el SC
    `AI DocClassExt Promocion IA`: `copy-labeling-dataset.ps1` para cada
    `analyzers/<id>.json` (sin las copias `<id>@<cuenta>.json`),
    `copy-cu-analyzers.ps1` en `cu_primary` y en `cu_secondary` (solo
@@ -611,12 +614,34 @@ para el run con `conflict`. Una versión nueva de un analyzer o clasificador
 lleva identificador nuevo; sustituir uno existente es una decisión manual
 fuera del pipeline.
 
-Pendiente de verificar antes del primer run (fase D de AB#100675): alcance de
-red del pool a los endpoints de IA de los tres entornos, `python` en el pool,
-el contenedor `documentai` en `srbstgprodocai` y las 15 asignaciones de rol
-del SC (script de la solicitud del SC del 2026-09-22, fuera de git). Ningún
-script copia todavía el dataset del
-clasificador de DI (`srbstgproapppdocai`).
+### Aprobaciones y Permits
+
+- Los environments de ADO `pre` y `prod` tienen un check de aprobación
+  (checks 64 y 65, creados el 2026-09-30) con un único aprobador y timeout de
+  30 días. Son environments **compartidos** con el resto de pipelines de
+  despliegue: la aprobación afecta a todo lo que despliega a PRE/PRO, no solo
+  a este pipeline. Riesgo asumido y documentado: esos despliegues esperan la
+  aprobación de una sola persona.
+- La primera vez que el pipeline usa un recurso protegido (cada service
+  connection, cada environment, el pool `docia-mdp-private`) ADO detiene el
+  run y pide un **Permit** para ese recurso, que se concede a mano en la UI
+  (el PATCH del endpoint REST `pipelinePermissions` está bloqueado en este
+  entorno). Los Permits del salto DEV → PRE se concedieron durante el run
+  79587; el primer run con `targetEnvironment=prod` pedirá además el Permit
+  del SC de PRO y el del environment `prod`, más la aprobación de `prod`.
+
+### Estado de verificación (fase D de AB#100675)
+
+El ensayo en seco DEV → PRE (run 79587, 2026-09-30, `dryRun=true`,
+succeeded) verificó el alcance de red del pool a los endpoints de IA y SQL de
+DEV y PRE, `python` en el pool (ConfigSeed generó el diff) y el token del SC
+(ningún 401). Resultado: PRE ya idéntico a DEV en artefactos de IA; diff de
+config DEV/PRE: `CatalogoTdn1` 5 diferencias (conocidas), `ModeloConfigs` 11
+(endpoints por entorno, sin revisar campo a campo), `PromptTemplates` 2
+(solo `PublishedAtUtc`). Queda pendiente el mismo ensayo del salto
+PRE → PRO (endpoints de PRO) y el contenedor `documentai` en
+`srbstgprodocai`. Ningún script copia todavía el dataset del clasificador de
+DI (`srbstgproapppdocai`).
 
 ## Cutover de un entorno (Tarea 15)
 

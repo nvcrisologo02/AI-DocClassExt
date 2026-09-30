@@ -199,16 +199,25 @@ cuentas de IA.
 
 #### Pipeline de promoción (AB#100675)
 
-`azure-pipelines-ai-artifacts.yml` es el mecanismo de promoción. A fecha 2026-09-24 no está
-registrado en Azure DevOps y el service connection `AI DocClassExt Promocion IA` no existe:
-hasta entonces se usa el procedimiento manual de más abajo, que lanza los mismos scripts con
-la misma ruta.
+`azure-pipelines-ai-artifacts.yml` es el mecanismo de promoción, registrado en Azure DevOps
+como el pipeline 832 `AI DocClassExt (AiArtifacts)` con el service connection WIF
+`AI DocClassExt Promocion IA` (verificado el 2026-09-30: 15/15 roles y ensayo en seco
+DEV → PRE en el run 79587). El procedimiento manual de más abajo queda como contingencia:
+lanza los mismos scripts con la misma ruta.
 
 Parámetros: `targetEnvironment` (destino; el origen es el salto anterior: `pre` ← `dev`,
 `prod` ← `pre`), `fromProd` (solo con destino `dev` o `pre`), `preGatesPassed` (obligatorio
-para `prod`), `releaseTag` (nombre de los ficheros de config; vacío = `build-<id>`) y
-`runValidation` (por defecto sí; cuesta dinero). Corre entero en el pool privado
-`docia-mdp-private`.
+para `prod`), `releaseTag` (nombre de los ficheros de config; `auto`, el valor por defecto,
+= `build-<id>`), `runValidation` (por defecto sí; cuesta dinero) y `dryRun` (por defecto no;
+con él todos los scripts de `scripts/ai/` reciben `-DryRun` y el run solo lee: lanzar así el
+primer run de cada salto). Corre entero en el pool privado `docia-mdp-private`.
+
+Aprobaciones y Permits: los environments `pre` y `prod` de ADO tienen un check de aprobación
+(checks 64 y 65, único aprobador, timeout 30 días) que afecta a **todos** los pipelines que
+despliegan a esos environments, no solo a este. La primera vez que el pipeline usa un recurso
+protegido (service connection, environment, pool) ADO pide un Permit que se concede en la UI;
+los del salto DEV → PRE se concedieron en el run 79587 y el primer run contra `prod` pedirá
+además el del SC de PRO y el del environment `prod`.
 
 | Etapa | Qué hace | Identidad |
 |---|---|---|
@@ -228,9 +237,9 @@ candidato: anotar el ID en la tabla "Runs de pipeline" de `release.md`, llevar
 `evidencias/` y seguir en 2.4.5. El diff de ConfigSeed no sustituye a 2.3.2: es una
 comprobación más.
 
-#### Procedimiento manual vigente (secuencia validada en PRE el 2026-09-23)
+#### Procedimiento manual de contingencia (secuencia validada en PRE el 2026-09-23)
 
-Mientras el pipeline no esté registrado. Cada script SQL crea una copia
+Solo si el pipeline 832 no está disponible. Cada script SQL crea una copia
 `ModeloConfigs__bak_<yyyyMMdd_HHmmss>` antes de tocar nada. Los scripts de copia y validación
 resuelven solos el origen (`-Environment pre` implica origen DEV) y aceptan `-DryRun`, que solo
 lee: lanzarlo antes de cada paso.
@@ -343,11 +352,12 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
 
 - [ ] **4.12** Artefactos de IA en PRO, solo si la release cambia analyzers, clasificadores o datasets (los de 2.4.2 y 2.4.3). Después de 4.3 y antes de 4.4, en el mismo orden que en PRE. Pipeline `azure-pipelines-ai-artifacts.yml` con `targetEnvironment=prod` y `preGatesPassed=true` desde el commit candidato (salto PRE → PRO). Anotar el ID del run y llevar a `evidencias/` la validación frente a PRE y el diff de ConfigSeed.
 
-  Requisitos antes del primer run contra PRO: el service connection `AI DocClassExt Promocion IA`
-  con sus roles y un approval check en el environment `prod` de ADO (ADR-001; hoy no hay
-  ninguno, ver nota de la Fase 3). Sin pipeline no hay promoción a PRO: no se lanzan los
-  scripts de copia contra PRO a mano. Si falta alguno de los dos, la release no lleva cambios de
-  IA a PRO y se anota en `runbook.md`.
+  Requisitos, cumplidos desde el 2026-09-30: el service connection `AI DocClassExt Promocion IA`
+  con sus 15 roles y el approval check del environment `prod` (check 65, ADR-001). El primer
+  run contra `prod` pedirá además en la UI los Permits del SC de PRO y del environment `prod`
+  (ver 2.4). Sin pipeline no hay promoción a PRO: no se lanzan los scripts de copia contra PRO
+  a mano; si el pipeline no está disponible, la release no lleva cambios de IA a PRO y se
+  anota en `runbook.md`.
 
   En `prod` el pipeline no toca los deployments (`apply-deployments.ps1` queda fuera; PRO no
   cambia de recursos) ni `ModeloConfigs`, que sigue fuera del diff hasta el cutover de IA de PRO.
@@ -407,7 +417,7 @@ la release no toca los demás componentes ni la configuración de bootstrap (803
 | 803 | AI DocClassExt azure-pipelines-bootstrap. | `azure-pipelines-bootstrap.yml` | `targetEnvironment` (default dev) | Bootstrap | `check-azure-permissions.ps1`, `set-keyvault-secrets.ps1`, `verify-prod-prereqs.ps1`, `set-functionapp-keyvault-references.ps1`, `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
 | 807 | Migrations-BD | `azure-pipelines-migrations.yml` | `targetEnvironment` (default dev), `addTransientFirewallRule` (bool, default false) | Generate (agente hosted, `dotnet ef migrations script --idempotent`) → Apply (pool `docia-mdp-private`) | `scripts/deployment/apply-migrations.ps1` |
 | 828 | AI DocClassExt (828) | no identificado en el repo | — | — | definición sin fichero identificado; comprobar en ADO antes de usarla |
-| — | sin registrar (AB#100675) | `azure-pipelines-ai-artifacts.yml` | `targetEnvironment` (dev/pre/prod, default pre), `fromProd`, `preGatesPassed`, `releaseTag`, `runValidation` | Guard → Export (origen del salto; no con `fromProd`) → AiArtifacts (pool `docia-mdp-private`, environment del destino) → ConfigSeed (solo diff; no con `fromProd`). Ver 2.4 | `scripts/ai/export-config-release.ps1`, `copy-labeling-dataset.ps1`, `apply-deployments.ps1` (fuera de `prod`), `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1`, `validate-analyzer.ps1`, `scripts/database/diff-config-exports.py` |
+| 832 | AI DocClassExt (AiArtifacts) | `azure-pipelines-ai-artifacts.yml` | `targetEnvironment` (dev/pre/prod, default pre), `fromProd`, `preGatesPassed`, `releaseTag` (default `auto` = `build-<id>`), `runValidation`, `dryRun` | Guard → Export (origen del salto; no con `fromProd`) → AiArtifacts (pool `docia-mdp-private`, environment del destino) → ConfigSeed (solo diff; no con `fromProd`). Ver 2.4 | `scripts/ai/export-config-release.ps1`, `copy-labeling-dataset.ps1`, `apply-deployments.ps1` (fuera de `prod`), `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1`, `validate-analyzer.ps1`, `scripts/database/diff-config-exports.py` |
 
 ## Anexo B — Vuelta atrás por capas
 
