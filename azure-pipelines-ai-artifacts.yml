@@ -41,9 +41,9 @@ parameters:
     type: boolean
     default: false
   - name: releaseTag
-    displayName: Tag de la release (nombre de los ficheros de config; vacio = build-<id>)
+    displayName: Tag de la release (nombre de los ficheros de config; auto = build-<id>)
     type: string
-    default: ''
+    default: auto
   - name: runValidation
     displayName: Validar analyzers (analyzeBinary en origen y destino; cuesta dinero)
     type: boolean
@@ -162,7 +162,7 @@ stages:
           scriptLocation: 'inlineScript'
           inlineScript: |
             $tag = '${{ parameters.releaseTag }}'
-            if (-not $tag) { $tag = 'build-$(Build.BuildId)' }
+            if (-not $tag -or $tag -eq 'auto') { $tag = 'build-$(Build.BuildId)' }
             pwsh -File ./scripts/ai/export-config-release.ps1 `
               -SourceServer "$(sourceSqlServer).database.windows.net" `
               -ReleaseTag "$tag-${{ variables.sourceEnvironment }}" `
@@ -281,7 +281,7 @@ stages:
           scriptLocation: 'inlineScript'
           inlineScript: |
             $tag = '${{ parameters.releaseTag }}'
-            if (-not $tag) { $tag = 'build-$(Build.BuildId)' }
+            if (-not $tag -or $tag -eq 'auto') { $tag = 'build-$(Build.BuildId)' }
             pwsh -File ./scripts/ai/export-config-release.ps1 `
               -SourceServer "$(targetSqlServer).database.windows.net" `
               -ReleaseTag "$tag-${{ parameters.targetEnvironment }}-antes" `
@@ -289,7 +289,7 @@ stages:
             if ($LASTEXITCODE -ne 0) { throw "export-config-release.ps1 termino con codigo $LASTEXITCODE" }
       - pwsh: |
           $tag = '${{ parameters.releaseTag }}'
-          if (-not $tag) { $tag = 'build-$(Build.BuildId)' }
+          if (-not $tag -or $tag -eq 'auto') { $tag = 'build-$(Build.BuildId)' }
           $target = '${{ parameters.targetEnvironment }}'
           $sourceSql = "$(Pipeline.Workspace)/db-config/config-$tag-${{ variables.sourceEnvironment }}.sql"
           $targetSql = "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-antes.sql"
