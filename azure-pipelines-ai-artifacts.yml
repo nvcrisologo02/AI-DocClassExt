@@ -17,7 +17,8 @@ name: AiArtifacts-$(Date:yyyyMMdd)$(Rev:.r)
 #
 # Los scripts son idempotentes: sobre un entorno ya promocionado todo sale
 # "present"/"skip". Ninguno sobrescribe un analyzer o clasificador distinto
-# (conflict = error); este pipeline no pasa -Force.
+# (conflict = error); este pipeline no pasa -Force. Con dryRun todos reciben
+# -DryRun: solo GET y el plan de lo que harian.
 
 trigger: none
 pr: none
@@ -47,6 +48,10 @@ parameters:
     displayName: Validar analyzers (analyzeBinary en origen y destino; cuesta dinero)
     type: boolean
     default: true
+  - name: dryRun
+    displayName: Ensayo sin escrituras (-DryRun en los scripts de scripts/ai; solo GET)
+    type: boolean
+    default: false
 
 # Todas las etapas tocan red privada (SQL por private endpoint, DI de PRE con
 # private endpoint): mismo pool que el Apply de azure-pipelines-migrations.yml.
@@ -113,6 +118,14 @@ variables:
     - name: routeArgs
       value: -Environment ${{ parameters.targetEnvironment }}
 
+  # Ensayo: los scripts de scripts/ai solo hacen GET y muestran el plan.
+  - ${{ if parameters.dryRun }}:
+    - name: dryRunArg
+      value: -DryRun
+  - ${{ else }}:
+    - name: dryRunArg
+      value: ''
+
 stages:
 - stage: Guard
   displayName: Comprobar el salto ${{ parameters.targetEnvironment }}
@@ -128,7 +141,7 @@ stages:
         if (-not $source) { throw "dev no tiene salto anterior: la promocion va DEV -> PRE -> PRO. Para recuperar dev desde PRO marca fromProd." }
         if ($fromProd -and $target -eq 'prod') { throw "fromProd solo vale con destino dev o pre" }
         if ($target -eq 'prod' -and -not $gates) { throw "prod exige las cuatro puertas de PRE en PASS (RELEASE_MANAGEMENT.md 2.5); marca preGatesPassed" }
-        Write-Host "Salto: $source -> $target (fromProd=$fromProd, validacion=${{ parameters.runValidation }})"
+        Write-Host "Salto: $source -> $target (fromProd=$fromProd, validacion=${{ parameters.runValidation }}, ensayo=${{ parameters.dryRun }})"
       displayName: Validar parametros
 
 # La config de PRO no se exporta para recuperar dev/pre: sus ModeloConfigs
@@ -188,7 +201,7 @@ stages:
                 $ids = Get-ChildItem infra/ai/analyzers -Filter '*.json' -File |
                   Where-Object { $_.BaseName -notlike '*@*' } | ForEach-Object BaseName
                 foreach ($id in $ids) {
-                  pwsh -File ./scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId $id ${{ variables.routeArgs }}
+                  pwsh -File ./scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId $id ${{ variables.routeArgs }} ${{ variables.dryRunArg }}
                   if ($LASTEXITCODE -ne 0) { throw "copy-labeling-dataset.ps1 $id termino con codigo $LASTEXITCODE" }
                 }
 
@@ -202,7 +215,7 @@ stages:
                 scriptType: 'pscore'
                 scriptLocation: 'inlineScript'
                 inlineScript: |
-                  pwsh -File ./scripts/ai/apply-deployments.ps1 -Environment ${{ parameters.targetEnvironment }}
+                  pwsh -File ./scripts/ai/apply-deployments.ps1 -Environment ${{ parameters.targetEnvironment }} ${{ variables.dryRunArg }}
                   if ($LASTEXITCODE -ne 0) { throw "apply-deployments.ps1 termino con codigo $LASTEXITCODE" }
 
           # 3. Analyzers de CU (cuenta primaria y secundaria), 4. modelos y
@@ -214,11 +227,11 @@ stages:
               scriptType: 'pscore'
               scriptLocation: 'inlineScript'
               inlineScript: |
-                pwsh -File ./scripts/ai/copy-cu-analyzers.ps1 ${{ variables.routeArgs }}
+                pwsh -File ./scripts/ai/copy-cu-analyzers.ps1 ${{ variables.routeArgs }} ${{ variables.dryRunArg }}
                 if ($LASTEXITCODE -ne 0) { throw "copy-cu-analyzers.ps1 (cu_primary) termino con codigo $LASTEXITCODE" }
-                pwsh -File ./scripts/ai/copy-cu-analyzers.ps1 ${{ variables.routeArgs }} -Only $(cuSecondaryAnalyzers) -Target cu_secondary -SourceTarget cu_secondary
+                pwsh -File ./scripts/ai/copy-cu-analyzers.ps1 ${{ variables.routeArgs }} ${{ variables.dryRunArg }} -Only $(cuSecondaryAnalyzers) -Target cu_secondary -SourceTarget cu_secondary
                 if ($LASTEXITCODE -ne 0) { throw "copy-cu-analyzers.ps1 (cu_secondary) termino con codigo $LASTEXITCODE" }
-                pwsh -File ./scripts/ai/copy-di-artifacts.ps1 ${{ variables.routeArgs }}
+                pwsh -File ./scripts/ai/copy-di-artifacts.ps1 ${{ variables.routeArgs }} ${{ variables.dryRunArg }}
                 if ($LASTEXITCODE -ne 0) { throw "copy-di-artifacts.ps1 termino con codigo $LASTEXITCODE" }
 
           # 5. Validacion: destino frente al origen del salto (cuenta primaria).
@@ -230,7 +243,7 @@ stages:
                 scriptType: 'pscore'
                 scriptLocation: 'inlineScript'
                 inlineScript: |
-                  pwsh -File ./scripts/ai/validate-analyzer.ps1 ${{ variables.routeArgs }} `
+                  pwsh -File ./scripts/ai/validate-analyzer.ps1 ${{ variables.routeArgs }} ${{ variables.dryRunArg }} `
                     -OutFile "$(Build.ArtifactStagingDirectory)/ai-artifacts/validacion-analyzers-${{ parameters.targetEnvironment }}.txt"
                   if ($LASTEXITCODE -ne 0) { throw "validate-analyzer.ps1 termino con codigo $LASTEXITCODE" }
 
