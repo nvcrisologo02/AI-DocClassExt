@@ -1,9 +1,10 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Copia analyzers de Azure AI Content Understanding desde el recurso Foundry
-    de PRO al de un entorno (DEV o PRE) con la Copy API oficial, sin
-    reentrenar: el destino recibe el analyzer entrenado tal cual esta en PRO.
+    Copia analyzers de Azure AI Content Understanding del recurso Foundry de
+    un entorno al del siguiente (DEV -> PRE -> PRO, ADR-001) con la Copy API
+    oficial, sin reentrenar: el destino recibe el analyzer entrenado tal cual
+    esta en el origen.
 
 .DESCRIPTION
     Sustituye a la reconstruccion desde dataset (build-analyzers.ps1) como
@@ -15,8 +16,11 @@
     Para cada analyzer de infra/ai/cu-analyzers.json con "promote": true (o
     los indicados en -Only):
 
-      1. Resuelve origen (cu_primary de resources.prod.json) y destino
-         (cu_primary de resources.<env>.json, o cu_secondary con -Target).
+      1. Resuelve el salto (scripts/ai/lib/promotion-route.ps1): dev -> pre
+         y pre -> prod; prod -> dev|pre solo con -SourceEnvironment prod
+         -FromProd (recuperar la carga inicial). Origen: cu_primary (o
+         -SourceTarget) de resources.<origen>.json; destino: cu_primary de
+         resources.<env>.json, o cu_secondary con -Target.
          Ambos necesitan subscriptionId y location en el fichero de recursos:
          la Copy API trabaja con ids ARM y regiones, y admite distinta
          suscripcion y distinta region.
@@ -57,14 +61,20 @@
     salida en Windows).
 
 .PARAMETER Environment
-    Entorno destino: dev o pre.
+    Entorno destino: dev, pre o prod.
+.PARAMETER SourceEnvironment
+    Entorno origen. Por defecto el salto anterior (pre <- dev, prod <- pre);
+    dev no tiene salto anterior y exige -SourceEnvironment prod -FromProd.
+.PARAMETER FromProd
+    Admite prod como origen (prod -> dev|pre). Solo para recuperar el estado
+    de la carga inicial.
 .PARAMETER Only
     Ids de analyzer a copiar (por defecto todos los "promote": true de
     infra/ai/cu-analyzers.json). Admite "-Only A,B" desde pwsh -File.
 .PARAMETER Target
     Alias del recurso destino en resources.<env>.json (cu_primary por defecto).
 .PARAMETER SourceTarget
-    Alias del recurso origen en resources.prod.json (cu_primary por defecto).
+    Alias del recurso origen en resources.<origen>.json (cu_primary por defecto).
 .PARAMETER TargetSuffix
     Sufijo para el id en destino (por ejemplo "_copytest" en una prueba). Vacio
     por defecto: mismo id que en origen, que es lo que referencia ModeloConfigs.
@@ -86,14 +96,16 @@
 .PARAMETER PollSeconds
     Intervalo de sondeo. Por defecto 5.
 .EXAMPLE
-    pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffix _copytest -DryRun
+    pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment pre -Only CERA46 -TargetSuffix _copytest -DryRun
 .EXAMPLE
-    pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Only CERA46 -TargetSuffix _copytest -DumpDir docs/auxiliares/temps/2026-09-21/copy-cu-dev
+    pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment prod -DryRun
 .EXAMPLE
-    pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -Force
+    pwsh scripts/ai/copy-cu-analyzers.ps1 -Environment dev -SourceEnvironment prod -FromProd -Only CERA46 -Force
 #>
 param(
-    [Parameter(Mandatory)][ValidateSet('dev', 'pre')][string]$Environment,
+    [Parameter(Mandatory)][ValidateSet('dev', 'pre', 'prod')][string]$Environment,
+    [ValidateSet('dev', 'pre', 'prod')][string]$SourceEnvironment,
+    [switch]$FromProd,
     [string[]]$Only,
     [ValidateSet('cu_primary', 'cu_secondary')][string]$Target = 'cu_primary',
     [ValidateSet('cu_primary', 'cu_secondary')][string]$SourceTarget = 'cu_primary',
@@ -114,9 +126,11 @@ $ErrorActionPreference = "Stop"
 $env:AZURE_CLI_DISABLE_CONNECTION_VERIFICATION = "1"
 
 $isDryRun = [bool]($DryRun -or $WhatIf)
+. (Join-Path $PSScriptRoot 'lib' 'promotion-route.ps1')
+$route = Resolve-PromotionRoute -Environment $Environment -SourceEnvironment $SourceEnvironment -FromProd:$FromProd
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $listFile = Join-Path $repoRoot 'infra/ai/cu-analyzers.json'
-$sourceResourcesFile = Join-Path $repoRoot 'infra/ai/resources.prod.json'
+$sourceResourcesFile = Join-Path $repoRoot "infra/ai/resources.$($route.Source).json"
 $targetResourcesFile = Join-Path $repoRoot "infra/ai/resources.$Environment.json"
 $manifestFile = Join-Path $repoRoot "infra/ai/cu-analyzers.$Environment.manifest.json"
 $deploymentsFile = Join-Path $repoRoot "infra/ai/deployments.$Environment.json"
@@ -296,7 +310,7 @@ if ($Only) {
 if ($ids.Count -eq 0) { throw "no hay analyzers que copiar" }
 
 $modeLabel = if ($isDryRun) { 'DRY-RUN (solo GET; sin autorizar ni copiar)' } else { 'REAL (grantCopyAuthorization en origen + :copy en destino)' }
-Write-Host "== copy-cu-analyzers: $Environment  [$modeLabel] ==" -ForegroundColor Cyan
+Write-Host "== copy-cu-analyzers: $($route.Source) -> $Environment  [$modeLabel] ==" -ForegroundColor Cyan
 Write-Host "  origen     : $($source.Alias)=$($source.Account) ($($source.Region)) $($source.ResourceId)"
 Write-Host "  destino    : $($dest.Alias)=$($dest.Account) ($($dest.Region)) $($dest.ResourceId)"
 Write-Host "  analyzers  : $($ids -join ', ')"
@@ -429,7 +443,7 @@ Write-Host "== resumen ==" -ForegroundColor Cyan
 $results | Format-Table -AutoSize | Out-String -Width 200 | Write-Host
 
 if (-not $isDryRun -and $entries.Count -gt 0) {
-    $manifest = [ordered]@{ environment = $Environment; sourceAccount = $source.Account; targetAccount = $dest.Account; apiVersion = $ApiVersion; updatedAtUtc = (Get-Date).ToUniversalTime().ToString('o'); analyzers = @() }
+    $manifest = [ordered]@{ environment = $Environment; sourceEnvironment = $route.Source; sourceAccount = $source.Account; targetAccount = $dest.Account; apiVersion = $ApiVersion; updatedAtUtc = (Get-Date).ToUniversalTime().ToString('o'); analyzers = @() }
     $existing = @{}
     if (Test-Path $manifestFile) {
         $prev = Get-Content -Raw -Path $manifestFile -Encoding UTF8 | ConvertFrom-Json

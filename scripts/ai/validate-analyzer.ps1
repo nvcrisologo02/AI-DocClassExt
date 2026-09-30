@@ -1,17 +1,21 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Valida que los analyzers de Content Understanding reconstruidos en un
-    entorno (DEV o PRE) devuelven los mismos campos que el original de PRO,
-    analizando una muestra fija de PDF en ambos recursos y comparando valores.
+    Valida que los analyzers de Content Understanding promocionados a un
+    entorno devuelven los mismos campos que en el entorno origen del salto
+    (DEV -> PRE -> PRO, ADR-001), analizando una muestra fija de PDF en ambos
+    recursos y comparando valores.
 
 .DESCRIPTION
     Es el paso 5 del flujo de promocion de infra/ai/README.md (Tarea 13 del
     plan "IA propia por entorno", AB#100315). Para cada definicion de
     infra/ai/analyzers/<id>.json:
 
-      1. Resuelve el recurso origen (cu_primary de resources.prod.json) y el
-         destino (cu_primary de resources.<env>.json, o cu_secondary con
+      1. Resuelve el salto (scripts/ai/lib/promotion-route.ps1): dev -> pre
+         y pre -> prod; prod -> dev|pre solo con -SourceEnvironment prod
+         -FromProd (comparar con la carga inicial). Resuelve el recurso
+         origen (cu_primary de resources.<origen>.json, o -SourceTarget) y
+         el destino (cu_primary de resources.<env>.json, o cu_secondary con
          -Target) y comprueba con GET que el analyzer existe en los dos.
       2. Resuelve el dataset copiado al entorno
          (infra/ai/datasets/<id>@<version>.<env>.manifest.json, status "copied") y
@@ -26,9 +30,8 @@
          verifica el MD5 contra el manifiesto, y lo envia en bytes a
          POST /contentunderstanding/analyzers/<id>:analyzeBinary en origen y
          destino (api-version 2025-11-01). Se envia en binario porque en esa
-         version :analyze solo acepta URL, y la identidad del recurso de PRO
-         no puede leer el storage de DEV/PRE (los roles cruzados van en el
-         otro sentido).
+         version :analyze solo acepta URL, y la identidad del recurso origen
+         no tiene por que poder leer el storage del destino.
       4. Sondea Operation-Location hasta Succeeded/Failed. Primero compara
          result.contents[0].markdown (salida de OCR + layout) de los dos
          lados: si es identico, la etapa de extraccion de contenido es la
@@ -60,22 +63,28 @@
     analisis en <DumpDir>/<id>/<blob>.<origen|destino>.json.
 
 .PARAMETER Environment
-    Entorno destino: dev o pre. Determina resources.<env>.json, el storage
-    del dataset y el nombre del informe.
+    Entorno destino: dev, pre o prod. Determina resources.<env>.json, el
+    storage del dataset y el nombre del informe.
+.PARAMETER SourceEnvironment
+    Entorno origen. Por defecto el salto anterior (pre <- dev, prod <- pre);
+    dev no tiene salto anterior y exige -SourceEnvironment prod -FromProd.
+.PARAMETER FromProd
+    Confirma la comparacion con PRO como origen para dev o pre (estado de la
+    carga inicial).
 .PARAMETER Only
     Ids de analyzer a procesar (por defecto todos los <id>.json de la carpeta).
 .PARAMETER Target
     Alias del recurso destino en resources.<env>.json: cu_primary (por
     defecto) o cu_secondary.
 .PARAMETER SourceTarget
-    Alias del recurso origen en resources.prod.json. Por defecto cu_primary.
+    Alias del recurso origen en resources.<origen>.json. Por defecto cu_primary.
 .PARAMETER TargetSuffix
     Sufijo que se anade al id del analyzer en el DESTINO (por ejemplo
-    "_copytest" para comparar CERA46 de PRO con CERA46_copytest del entorno).
+    "_copytest" para comparar CERA46 del origen con CERA46_copytest del entorno).
     En origen se usa siempre el id sin sufijo. Vacio por defecto.
 .PARAMETER SelfCheck
     Control de varianza: analiza cada PDF dos veces contra el recurso ORIGEN
-    (PRO) y compara las dos respuestas entre si, sin tocar el destino. Mide
+    y compara las dos respuestas entre si, sin tocar el destino. Mide
     cuanto difiere el propio analyzer original consigo mismo; el acuerdo
     origen/destino de la pasada normal solo es interpretable frente a esta
     linea base. El informe va a validacion-analyzers-<env>-selfcheck.txt.
@@ -108,14 +117,18 @@
 .PARAMETER PollSeconds
     Intervalo de sondeo. Por defecto 5.
 .EXAMPLE
-    pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -WriteSelection -DryRun
+    pwsh scripts/ai/validate-analyzer.ps1 -Environment pre -WriteSelection -DryRun
 .EXAMPLE
-    pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -Only CERA44_vado -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers
+    pwsh scripts/ai/validate-analyzer.ps1 -Environment pre -Only CERA44_vado -DumpDir docs/auxiliares/temps/2026-09-21/validate-analyzers
 .EXAMPLE
-    pwsh scripts/ai/validate-analyzer.ps1 -Environment dev
+    pwsh scripts/ai/validate-analyzer.ps1 -Environment prod
+.EXAMPLE
+    pwsh scripts/ai/validate-analyzer.ps1 -Environment dev -SourceEnvironment prod -FromProd
 #>
 param(
-    [Parameter(Mandatory)][ValidateSet('dev', 'pre')][string]$Environment,
+    [Parameter(Mandatory)][ValidateSet('dev', 'pre', 'prod')][string]$Environment,
+    [ValidateSet('dev', 'pre', 'prod')][string]$SourceEnvironment,
+    [switch]$FromProd,
     [string[]]$Only,
     [ValidateSet('cu_primary', 'cu_secondary')][string]$Target = 'cu_primary',
     [ValidateSet('cu_primary', 'cu_secondary')][string]$SourceTarget = 'cu_primary',
@@ -135,6 +148,9 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+. (Join-Path $PSScriptRoot 'lib' 'promotion-route.ps1')
+$route = Resolve-PromotionRoute -Environment $Environment -SourceEnvironment $SourceEnvironment -FromProd:$FromProd
+
 # El data-plane en este entorno pasa por un proxy TLS; sin esto tanto az CLI
 # como Invoke-WebRequest fallan la verificacion del certificado.
 $env:AZURE_CLI_DISABLE_CONNECTION_VERIFICATION = "1"
@@ -144,7 +160,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..' '..')).Path
 $analyzersDir = Join-Path $repoRoot 'infra/ai/analyzers'
 $datasetsDir = Join-Path $repoRoot 'infra/ai/datasets'
 $validationDir = Join-Path $repoRoot 'infra/ai/validation'
-$sourceResourcesFile = Join-Path $repoRoot 'infra/ai/resources.prod.json'
+$sourceResourcesFile = Join-Path $repoRoot "infra/ai/resources.$($route.Source).json"
 $targetResourcesFile = Join-Path $repoRoot "infra/ai/resources.$Environment.json"
 $storageApiVersion = "2021-08-06"
 $runningStates = @('running', 'notstarted')
@@ -281,6 +297,10 @@ function Resolve-Manifest {
         })
     if ($DatasetVersion) { $candidates = @($candidates | Where-Object { $_.Version -eq $DatasetVersion }) }
     if ($candidates.Count -eq 0) {
+        # En dry-run el manifiesto del destino puede no existir todavia: lo escribe
+        # copy-labeling-dataset.ps1 al copiar de verdad, y con -DryRun no escribe nada.
+        # El caller avisa y omite el analyzer; en la pasada real sigue siendo error.
+        if ($isDryRun) { return $null }
         $wanted = if ($DatasetVersion) { "$AnalyzerId@$DatasetVersion" } else { "$AnalyzerId@<version>" }
         throw "falta el manifiesto de dataset $wanted.$Environment.manifest.json en $datasetsDir (Tarea 10 pendiente para este analyzer en $Environment)"
     }
@@ -480,7 +500,7 @@ function Get-UsageSummary {
 foreach ($f in $sourceResourcesFile, $targetResourcesFile) { if (-not (Test-Path $f)) { throw "no existe $f" } }
 $srcRes = (Get-Content -Raw -Path $sourceResourcesFile -Encoding UTF8 | ConvertFrom-Json).resources.$SourceTarget
 $dstRes = (Get-Content -Raw -Path $targetResourcesFile -Encoding UTF8 | ConvertFrom-Json).resources.$Target
-if (-not $srcRes) { throw "resources.prod.json no define el alias '$SourceTarget'" }
+if (-not $srcRes) { throw "resources.$($route.Source).json no define el alias '$SourceTarget'" }
 if (-not $dstRes) { throw "resources.$Environment.json no define el alias '$Target'" }
 $source = [pscustomobject]@{ Label = 'origen'; Account = $srcRes.account; Endpoint = $srcRes.endpoint.TrimEnd('/') }
 $dest = [pscustomobject]@{ Label = 'destino'; Account = $dstRes.account; Endpoint = $dstRes.endpoint.TrimEnd('/') }
@@ -502,7 +522,7 @@ if ($Only) {
 if ($files.Count -eq 0) { throw "no hay definiciones que procesar en $analyzersDir" }
 
 $modeLabel = if ($isDryRun) { 'DRY-RUN (solo GET; sin descargas ni analisis)' } elseif ($SelfCheck) { 'SELF-CHECK (analyzeBinary dos veces en origen; cuesta dinero)' } else { 'REAL (analyzeBinary en origen y destino; cuesta dinero)' }
-Out-Line "== validate-analyzer: $Environment  [$modeLabel] ==" Cyan
+Out-Line "== validate-analyzer: $($route.Source) -> $Environment  [$modeLabel] ==" Cyan
 Out-Line "  fecha      : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
 Out-Line "  origen     : $SourceTarget=$($source.Account) ($($source.Endpoint))"
 if ($SelfCheck) { Out-Line "  destino    : (self-check) el mismo recurso origen, segunda pasada" } else { Out-Line "  destino    : $Target=$($dest.Account) ($($dest.Endpoint))" }
@@ -520,6 +540,10 @@ $items = foreach ($file in $files) {
     if (-not $export.fieldSchema -or -not $export.fieldSchema.fields) { throw "$($file.Name) no tiene fieldSchema.fields; no hay nada que comparar" }
     $res = Resolve-Manifest -AnalyzerId $id
     Out-Line "  $id" White
+    if (-not $res) {
+        Out-Line "      dataset  : sin manifiesto $id@<version>.$Environment.manifest.json (Tarea 10 pendiente en $Environment) -> se omite en el ensayo" Yellow
+        continue
+    }
     Out-Line "      dataset  : $($res.File.Name) -> $($res.Manifest.containerUrl) / $($res.Manifest.prefix)"
     $sel = Resolve-Selection -AnalyzerId $id -Resolved $res
     $fieldCount = @($export.fieldSchema.fields.PSObject.Properties).Count
@@ -542,7 +566,7 @@ foreach ($item in $items) {
         $sideId = if ($side.Label -eq 'destino') { "$($item.Id)$TargetSuffix" } else { $item.Id }
         $g = Invoke-Cu -Method Get -Url "$($side.Endpoint)/contentunderstanding/analyzers/$sideId`?api-version=$ApiVersion" -Token $cuToken
         if ($g.Status -in 401, 403) { throw "sin acceso al data plane de $($side.Account) (HTTP $($g.Status)): falta el rol Cognitive Services User" }
-        if ($g.Status -eq 404) { throw "$($item.Id) no existe en $($side.Label) $($side.Account); en destino, lanza build-analyzers.ps1 -Environment $Environment" }
+        if ($g.Status -eq 404) { throw "$($item.Id) no existe en $($side.Label) $($side.Account); en destino, lanza copy-cu-analyzers.ps1 -Environment $Environment" }
         if ($g.Status -ne 200) { throw "GET $($item.Id) en $($side.Account) -> HTTP $($g.Status): $($g.Error)" }
         $st = [string]$g.Content.status
         $color = if ($st -eq 'ready') { 'Green' } else { 'Yellow' }
@@ -553,8 +577,9 @@ foreach ($item in $items) {
 Out-Line ''
 
 if ($isDryRun) {
-    $calls = ($items | ForEach-Object { @($_.Selection.documents).Count } | Measure-Object -Sum).Sum * 2
+    $calls = [int](($items | ForEach-Object { @($_.Selection.documents).Count } | Measure-Object -Sum).Sum) * 2
     Out-Line "[dry-run] no se descarga ni analiza nada. La pasada real haria $calls llamadas :analyzeBinary ($($calls / 2) en $($source.Account), $($calls / 2) en $($dest.Account))." DarkGray
+    if (@($items).Count -lt $files.Count) { Out-Line "[dry-run] $($files.Count - @($items).Count) de $($files.Count) analyzers omitidos por no tener manifiesto de dataset en $Environment (los escribe la pasada real de copy-labeling-dataset.ps1)." DarkGray }
     Save-Report
     return
 }

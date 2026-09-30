@@ -50,6 +50,8 @@ Monitor), **AB#100165** (almacenamiento) y **AB#100192** (extracción sin modelK
 - **Validado en DEV** el 02/09: suite unitaria 999/999, Admin 113/113, E2E smoke 6/6 y full
   31 PASS / 0 FAIL / 1 N/A.
 - Todos los pasos manuales usan sesión Entra (`az login`); ninguno necesita credenciales en claro.
+- **Artefactos de IA**: si la release cambia deployments, analyzers, clasificadores o datasets,
+  la guía operativa de su promoción por entornos está en [DESPLIEGUE_IA.md](./DESPLIEGUE_IA.md).
 
 ## Regla de oro del orden
 

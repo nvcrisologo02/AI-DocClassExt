@@ -198,6 +198,24 @@ tipología por datos, con vuelta atrás por datos.
 
 Las variables de endpoint por entorno sustituyen a los literales de `azure-pipelines.yml`.
 
+> **Enmienda 2026-09-24 (ADR-001, AB#100675).** Los artefactos de IA se crean en DEV y se
+> promocionan por saltos DEV → PRE → PRO; la copia desde PRO fue la carga inicial de DEV y
+> PRE y solo se repite para recuperarla. PRO sigue sin cambiar de recursos ni deployments,
+> pero recibe analyzers, clasificadores y datasets por pipeline, detrás de las puertas de
+> PRE y de la aprobación del environment `prod`. El pipeline es
+> `azure-pipelines-ai-artifacts.yml`:
+>
+> - `AiArtifacts` copia (no reconstruye; ver la enmienda del 2026-09-21) datasets, analyzers
+>   de CU y clasificadores de DI desde el origen del salto y valida el destino frente a ese
+>   origen. `apply-deployments.ps1` no corre en `prod`.
+> - `config-seed` no aplica configuración: exporta origen y destino y saca el diff por clave
+>   natural. Los `Id` de las tablas de configuración no coinciden entre entornos y el `.sql`
+>   del release es un MERGE por `Id`, así que en PRE y PRO solo se aplican los seeds propios
+>   de cada release (regla fija 4 de `docs/procedimientos/RELEASE_MANAGEMENT.md`).
+>
+> En la vuelta atrás, un artefacto promocionado a PRO no se retira: una versión nueva lleva
+> identificador nuevo y se vuelve al anterior por datos.
+
 **Puertas por entorno.** Antes de dar un entorno por promocionado:
 
 1. Smoke E2E post-despliegue (`tests/e2e-postdeploy`, perfil `smoke`) en verde.
