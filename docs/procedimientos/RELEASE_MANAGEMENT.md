@@ -191,7 +191,9 @@ Los artefactos de IA (datasets de etiquetado, analyzers de CU, clasificadores y 
 se crean en DEV y se promocionan por saltos DEV → PRE → PRO, uno cada vez (ADR-001). En esta
 fase el salto es DEV → PRE; el de PRE → PRO es el paso 4.12. La copia desde PRO fue la carga
 inicial de DEV y PRE y solo se repite para recuperarla (`fromProd` en el pipeline,
-`-SourceEnvironment prod -FromProd` en los scripts).
+`-SourceEnvironment prod -FromProd` en los scripts). La guía operativa de extremo a
+extremo del despliegue de IA está en [DESPLIEGUE_IA.md](./DESPLIEGUE_IA.md); esta
+sección es su encaje dentro de la release.
 
 Solo cuando la release cambia deployments, analyzers, clasificadores o el modo de acceso a la IA.
 Ejecutor: proyecto; plataforma si falta cuota para un deployment (2.4.1) o un rol sobre las
