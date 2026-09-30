@@ -297,6 +297,10 @@ function Resolve-Manifest {
         })
     if ($DatasetVersion) { $candidates = @($candidates | Where-Object { $_.Version -eq $DatasetVersion }) }
     if ($candidates.Count -eq 0) {
+        # En dry-run el manifiesto del destino puede no existir todavia: lo escribe
+        # copy-labeling-dataset.ps1 al copiar de verdad, y con -DryRun no escribe nada.
+        # El caller avisa y omite el analyzer; en la pasada real sigue siendo error.
+        if ($isDryRun) { return $null }
         $wanted = if ($DatasetVersion) { "$AnalyzerId@$DatasetVersion" } else { "$AnalyzerId@<version>" }
         throw "falta el manifiesto de dataset $wanted.$Environment.manifest.json en $datasetsDir (Tarea 10 pendiente para este analyzer en $Environment)"
     }
@@ -536,6 +540,10 @@ $items = foreach ($file in $files) {
     if (-not $export.fieldSchema -or -not $export.fieldSchema.fields) { throw "$($file.Name) no tiene fieldSchema.fields; no hay nada que comparar" }
     $res = Resolve-Manifest -AnalyzerId $id
     Out-Line "  $id" White
+    if (-not $res) {
+        Out-Line "      dataset  : sin manifiesto $id@<version>.$Environment.manifest.json (Tarea 10 pendiente en $Environment) -> se omite en el ensayo" Yellow
+        continue
+    }
     Out-Line "      dataset  : $($res.File.Name) -> $($res.Manifest.containerUrl) / $($res.Manifest.prefix)"
     $sel = Resolve-Selection -AnalyzerId $id -Resolved $res
     $fieldCount = @($export.fieldSchema.fields.PSObject.Properties).Count
@@ -569,8 +577,9 @@ foreach ($item in $items) {
 Out-Line ''
 
 if ($isDryRun) {
-    $calls = ($items | ForEach-Object { @($_.Selection.documents).Count } | Measure-Object -Sum).Sum * 2
+    $calls = [int](($items | ForEach-Object { @($_.Selection.documents).Count } | Measure-Object -Sum).Sum) * 2
     Out-Line "[dry-run] no se descarga ni analiza nada. La pasada real haria $calls llamadas :analyzeBinary ($($calls / 2) en $($source.Account), $($calls / 2) en $($dest.Account))." DarkGray
+    if (@($items).Count -lt $files.Count) { Out-Line "[dry-run] $($files.Count - @($items).Count) de $($files.Count) analyzers omitidos por no tener manifiesto de dataset en $Environment (los escribe la pasada real de copy-labeling-dataset.ps1)." DarkGray }
     Save-Report
     return
 }
