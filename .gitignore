@@ -140,3 +140,6 @@ tests/e2e-postdeploy/artifacts/
 .superpowers/
 local.settings.*.json
 !local.settings.template.json
+
+# Rotacion de credenciales SQL (operativa local, no forma parte del codigo)
+scripts/database/rotate-sql-user-password.ps1
