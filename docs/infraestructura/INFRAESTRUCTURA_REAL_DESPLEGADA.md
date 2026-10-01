@@ -405,7 +405,7 @@ esté activo en un entorno, el Admin desplegado opera en modo solo lectura.
 - ✅ Application Insights por entorno (`srbappidevdocai` · `srbappipredocai` · `srbappiprodocai`).
 - ✅ Prompt tracing habilitado (límite 20.000 caracteres por prompt).
 - ✅ Sampling 20 eventos/seg (host.json).
-- ✅ Alertas Azure Monitor en PRO (2026-08-04, AB#99083): 5 scheduled query rules sobre `srbappiprodocai` (`srbalerterrprodocai`, `srbalertlatprodocai`, `srbalertfbkprodocai`, `srbalertexcprodocai`, `srbalertidleprodocai`) + 2 metric alerts de plataforma (`srbalertcpuprodocai`, `srbalertmemprodocai`), notificando por correo al action group `srbagoperprodocai`. Gestión: `scripts/observability/create-monitor-alerts.ps1`; detalle en `docs/observabilidad/MONITOREO_ALERTAS_REAL.md`.
+- ✅ Alertas Azure Monitor en PRO (2026-08-04, AB#99083): 5 scheduled query rules sobre `srbappiprodocai` (`srbalerterrprodocai`, `srbalertlatprodocai`, `srbalertfbkprodocai`, `srbalertexcprodocai`, `srbalertidleprodocai`) + 2 metric alerts de plataforma (`srbalertcpuprodocai`, `srbalertmemprodocai`), notificando por correo al action group `srbagoperprodocai`. Gestión: `scripts/observability/create-monitor-alerts.ps1`; detalle en `docs/observabilidad/MONITOREO_ALERTAS_REAL.md`. Corrección (2026-10-01): las dos metric alerts no tenían action group. Desde el 2026-10-01 `srbalertmemprodocai` vigila el working set por instancia (> 2,25 GiB) y notifica al action group, y se añade `srbalertoomprodocai` (OutOfMemoryException, Sev 1); `srbalertcpuprodocai` sigue sin action group (AB#100815).
 
 ---
 

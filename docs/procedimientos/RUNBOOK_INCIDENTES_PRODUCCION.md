@@ -42,6 +42,8 @@ Desde 2026-08-04 (AB#99083) existen 5 alert rules sobre `srbappiprodocai` que **
 | `srbalertfbkprodocai` (fallback > 20%) | CU degradado, GPT asumiendo extracción | Incidente CU (circuit breaker / timeout) |
 | `srbalertexcprodocai` (> 10 excepciones/5 min) | Fallo transversal (incluye GDC) | Verificación Rápida + Failures en App Insights |
 | `srbalertidleprodocai` (0 requests en horario laboral) | Function App caída o sin flujo de entrada | Verificación Rápida (disponibilidad) |
+| `srbalertmemprodocai` (working set por instancia > 2,25 GiB, desde 2026-10-01) | Instancia cerca del techo del heap .NET (~75 % de 3,5 GB en EP1); típico de lotes con PDF grandes | Revisar si hay un lote de Batch en curso y si aparecen `OutOfMemoryException` (AB#100814) |
+| `srbalertoomprodocai` (cualquier `OutOfMemoryException`, Sev 1, desde 2026-10-01) | Una orquestación falló por memoria; el documento suele terminar OK al reintentarse | Localizar el documento por la traza `Fichero subido a blob` previa en la misma instancia y comprobar su estado en `Documentos` (AB#100814) |
 
 Gestión de reglas y **alta de nuevos correos de aviso**: `docs/observabilidad/MONITOREO_ALERTAS_REAL.md` (script `scripts/observability/create-monitor-alerts.ps1`).
 
