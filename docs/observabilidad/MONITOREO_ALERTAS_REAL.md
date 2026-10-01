@@ -261,7 +261,7 @@ Más 3 reglas de fiabilidad añadidas al script en AB#100181 (ver sección más 
 | `srbalertexcprodocai` | > 10 excepciones (cubre fallos GDC mientras no exista evento específico) | 5 min / 5 min | 2 |
 | `srbalertidleprodocai` | 0 requests en horario laboral (L-V, evaluada 11:00-18:00 Europe/Madrid) | 180 min / 60 min | 2 |
 
-Además existen 2 metric alerts previas de plataforma: `srbalertcpuprodocai` (CPU) y `srbalertmemprodocai` (memoria).
+Además existen 2 metric alerts previas de plataforma: `srbalertcpuprodocai` (CPU) y `srbalertmemprodocai` (memoria). Hasta el 2026-10-01 ninguna de las dos tenía action group (solo visibles en el portal); la de memoria se reconfiguró ese día (ver «Alertas de memoria» más abajo). La de CPU sigue sin action group.
 
 **Criterios de diseño** (difieren del plan original 7.3.4 por alinearse a la telemetría real):
 - El criterio de error es `EstadoFinal in (Error, ERROR, Fallido)` — no `!= "OK"` — para no contar REVISION como fallo.
@@ -309,6 +309,23 @@ Severidad 3 a propósito: son señales de calidad para revisar, no caídas de se
 > coincidencias antes de dar la regla por buena. Ojo: `matches regex` sí distingue mayúsculas.
 >
 > **Las reglas ya desplegadas conservan la query anterior** hasta que se vuelva a ejecutar el script.
+
+### Alertas de memoria (AB#100815, 2026-10-01)
+
+| Regla | Condición | Ventana / Frecuencia | Sev | Auto-resolución |
+|-------|-----------|----------------------|-----|-----------------|
+| `srbalertmemprodocai` (metric alert) | `MemoryWorkingSet` medio **por instancia** (dimensión `Instance = *`) > 2,25 GiB (2.415.919.104 bytes) | 5 min / 5 min | 2 | Sí |
+| `srbalertoomprodocai` (scheduled query) | `exceptions \| where type == 'System.OutOfMemoryException'` con al menos una fila | 5 min / 5 min | 1 | No |
+
+Las dos notifican al action group `srbagoperprodocai`.
+
+**Por qué se cambió.** La configuración anterior de `srbalertmemprodocai` (media agregada entre instancias > 1 GiB, sin action group) era ruido: con 650-850 MB en reposo, cualquier carga moderada la disparaba (35 episodios entre el 12/09 y el 01/10) y no avisaba a nadie. Tampoco detectó los dos `OutOfMemoryException` del 30/09/2026, durante un lote de Batch con PDF de 15-60 MB (AB#100814). `srbalertexcprodocai` exige más de 10 excepciones en 5 minutos, así que un OOM aislado no la dispara.
+
+**Criterio del umbral.** En EP1 cada instancia tiene 3,5 GB y el heap de .NET en contenedor topa por defecto en el 75 %. 2,25 GiB deja margen antes de ese techo. Simulado por instancia sobre el 12/09-01/10: 5 episodios, solo el 28/09 y el 30/09, los dos días de lote pesado. Evaluar por instancia importa: con escalado a varias instancias, la media agregada diluye la que está al límite.
+
+**Gestión.** `srbalertoomprodocai` está en `scripts/observability/create-monitor-alerts.ps1` (regla 9, con `AutoMitigate = false`). `srbalertmemprodocai` es un metric alert y no lo gestiona el script: se cambió por ARM (PUT de `Microsoft.Insights/metricAlerts`) con los valores de la tabla.
+
+**Limitación.** App Insights muestrea a 20 elementos/s y solo excluye `Request`. En un pico de carga puede descartarse algún OOM, así que la alerta de memoria por instancia hace de red de seguridad.
 
 ### Alerta de capacidad de la base de datos (AB#100171, 2026-09-02)
 
