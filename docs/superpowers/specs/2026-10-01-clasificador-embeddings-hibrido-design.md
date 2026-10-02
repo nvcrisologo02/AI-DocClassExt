@@ -89,6 +89,18 @@ Los ocho criterios de aceptación del PBI se cubren en dos fases (sección "Fase
   24.000 caracteres (`embeddings.recortar`).
 - DEV, PRE y PRO tienen `text-embedding-3-large` v1 con los mismos nombres de deployment
   (`text-embedding-3-large-030358` y `-010650`), verificado por ARM el 2026-09-30.
+- Verificado por ARM el 2026-10-01 en la suscripción Core Desarrollo: la cuenta OpenAI de
+  DEV es `srbaisrv01devdocai` (alias `openai_primary` en `infra/ai/resources.dev.json` y
+  en `scripts/ai/set-resource-aliases.sql`), con el deployment
+  `text-embedding-3-large-030358` (capacidad 150). Las filas activas de `ModeloConfigs`
+  llevan la clave `ResourceAlias` (PascalCase) y `Provider = "azure-openai"`. DEV tiene
+  dos cuentas de storage: `srbstgdevappdocai` es el host de Functions (solo contenedores
+  `azure-webjobs-*` y del hub Durable) y `srbstgdevdocai` guarda los documentos
+  (`documents`) y los artefactos de IA (`documentai`, existente desde el 2026-09-21).
+  `BlobStorageService` abre un `BlobServiceClient` por cadena de conexión contra esa
+  cuenta. Los app settings de la Function App no son legibles con el usuario del
+  proyecto (`AuthorizationFailed`); que `AI__Resources__openai_primary__Endpoint` existe
+  en DEV se infiere de que las filas de clasificación ya resuelven por ese alias.
 - Las orquestaciones Durable en vuelo no toleran que se inserte una activity nueva en su
   secuencia: el despliegue de AB#100176 ya exigió drenarlas.
 
@@ -99,7 +111,7 @@ Los ocho criterios de aceptación del PBI se cubren en dos fases (sección "Fase
 | Pieza | Repo y ubicación | Responsabilidad |
 |---|---|---|
 | `exportar_modelo.py` | DocumentIA.Batch, `eval/clasificador-embeddings/` | Entrena A con la partición `train` (mismo `ClasificadorLR`, C = 10, `min_ejemplos` = 5), lee del catálogo de tipologías de DEV el mapa tipología → par TDN1/TDN2 y escribe `clasificador-embeddings-v1.json` y `paridad-v1.json` (10 vectores de train con sus probabilidades TDN1 y TDN2). |
-| Artefacto JSON | Blob, contenedor `documentai` del storage de aplicación del entorno, prefijo `modelos/clasificador-embeddings/v1/` | Manifiesto más pesos. En DEV se sube a mano en Fase A; la promoción DEV → PRE → PRO es AB#100781 por el pipeline ai-artifacts (ADR-001). |
+| Artefacto JSON | Blob, contenedor `documentai` de la cuenta de storage de documentos del entorno (la misma que el contenedor `documents`; en DEV `srbstgdevdocai`, no el host de Functions `srbstgdevappdocai`), prefijo `modelos/clasificador-embeddings/v1/` | Manifiesto más pesos. En DEV se sube a mano en Fase A; la promoción DEV → PRE → PRO es AB#100781 por el pipeline ai-artifacts (ADR-001). |
 | `ModeloEmbeddingsLoader` | `DocumentIA.Core/Configuration/` | Descarga y parsea el artefacto, lo cachea en memoria por ruta y ETag y lo revalida cada 5 minutos. Expone `ModeloEmbeddings` (manifiesto y matrices). Un artefacto inválido deja el modelo en nulo con error en log, sin excepción. |
 | `ClasificadorEmbeddings` | `DocumentIA.Core/Services/Classification/` | Dado un vector de 3072 y el modelo: probabilidades TDN1 (softmax), familia ganadora, TDN2 (constante, sigmoide si binario, softmax si multiclase). Devuelve la distribución completa, necesaria para la masa `m` del modo restringido. Sin IO. |
 | `DecisorHibrido` | mismo sitio | Aplica modo, umbrales, restricción, manifiesto y puertas sobre la distribución; devuelve `Decision` y motivo. Sin IO. Contiene toda la lógica del criterio 8. |
@@ -186,13 +198,15 @@ paralelizar sombra y GPT: obligaría a dos flujos distintos para sombra e híbri
 ### 5. Configuración sin redespliegue
 
 Fila nueva en `ModeloConfigs`: `Tipo = Embeddings` (valor 5 del enum `TipoModelo`),
-`Key = "clasificador.embeddings"`, `Provider = "AzureOpenAI"`, `ConfiguracionJson`:
+`Key = "clasificador.embeddings"`, `Provider = "azure-openai"` (mismo valor que las filas
+de clasificación), `ConfiguracionJson` (las claves `ResourceAlias`, `Endpoint` y
+`AuthMode` siguen la grafía de los demás loaders; el resto es propio de este tipo):
 
 ```json
 {
   "deploymentName": "text-embedding-3-large-030358",
-  "resourceAlias": "<alias de la cuenta Azure OpenAI del entorno, a verificar en DEV>",
-  "authMode": "ManagedIdentity",
+  "ResourceAlias": "openai_primary",
+  "AuthMode": "ManagedIdentity",
   "artefacto": {
     "container": "documentai",
     "blobPath": "modelos/clasificador-embeddings/v1/clasificador-embeddings-v1.json"
@@ -369,7 +383,8 @@ Evento `Classification.Embeddings` emitido desde el proveedor con `VersionModelo
 
 ## Pendientes que resuelve el plan
 
-- Nombre exacto del `resourceAlias` y del contenedor en DEV, verificados al crear la fila.
+- ~~Nombre exacto del `resourceAlias` y del contenedor en DEV~~: resuelto el 2026-10-01
+  (`openai_primary`; contenedor `documentai` de `srbstgdevdocai`), ver "Estado verificado".
 - Orden de las tasks en AB#100779 y relación con AB#100813 (integración de la rama del
   spike en DocumentIA.Batch, previa al exportador).
 - Query exacta de `sombra-embeddings.sql` y columnas de `Top3`.
