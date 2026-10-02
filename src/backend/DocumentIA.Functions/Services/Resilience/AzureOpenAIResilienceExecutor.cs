@@ -32,12 +32,7 @@ public class AzureOpenAIResilienceExecutor : IAzureOpenAIResilienceExecutor
         Func<CancellationToken, Task<T>> operation,
         CancellationToken cancellationToken)
     {
-        if (IsCircuitOpen(circuitKey))
-        {
-            TrackCircuit("AOAI.CircuitRejected", circuitKey);
-            throw new RateLimitExhaustedException(
-                $"Circuito abierto para '{circuitKey}'. Llamada rechazada durante cooldown.");
-        }
+        RechazarSiCircuitoAbierto(circuitKey);
 
         var maxAttempts = Math.Max(1, _options.MaxRetries + 1);
         ClientResultException? lastError = null;
@@ -69,6 +64,43 @@ public class AzureOpenAIResilienceExecutor : IAzureOpenAIResilienceExecutor
         throw new RateLimitExhaustedException(
             $"Reintentos agotados para '{circuitKey}' (status={lastError?.Status}).",
             lastError);
+    }
+
+    public async Task<T> ExecuteOnceAsync<T>(
+        string circuitKey,
+        Func<CancellationToken, Task<T>> operation,
+        CancellationToken cancellationToken)
+    {
+        RechazarSiCircuitoAbierto(circuitKey);
+
+        try
+        {
+            var result = await operation(cancellationToken);
+            RegisterCircuitSuccess(circuitKey);
+            return result;
+        }
+        catch (ClientResultException ex) when (IsRetryableStatus(ex.Status))
+        {
+            RegisterCircuitFailure(circuitKey);
+            throw;
+        }
+        catch (HttpRequestException)
+        {
+            RegisterCircuitFailure(circuitKey);
+            throw;
+        }
+    }
+
+    private void RechazarSiCircuitoAbierto(string circuitKey)
+    {
+        if (!IsCircuitOpen(circuitKey))
+        {
+            return;
+        }
+
+        TrackCircuit("AOAI.CircuitRejected", circuitKey);
+        throw new RateLimitExhaustedException(
+            $"Circuito abierto para '{circuitKey}'. Llamada rechazada durante cooldown.");
     }
 
     internal TimeSpan ComputeDelay(int attempt, ClientResultException ex)
