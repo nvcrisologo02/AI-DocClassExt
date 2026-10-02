@@ -46,7 +46,10 @@ public sealed class EmbeddingsClasificadorConfig
     public string Modo { get; set; } = ModosEmbeddings.Off;
     public double UmbralConfianza { get; set; } = 0.6;
     public RestringidoEmbeddingsConfig Restringido { get; set; } = new();
-    public int MaxChars { get; set; } = 24000;
+    /// <summary>Tope de caracteres por defecto del texto; el orquestador lo aplica antes de la activity.</summary>
+    public const int MaxCharsPorDefecto = 24_000;
+
+    public int MaxChars { get; set; } = MaxCharsPorDefecto;
     public int TimeoutSeconds { get; set; } = 20;
 
     [JsonIgnore]

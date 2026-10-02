@@ -4129,5 +4129,213 @@ public class DocumentProcessOrchestratorTests
             "sin numero de paginas la cobertura del markdown de normalizacion no se puede afirmar");
         salida.DetalleEjecucion.MarkdownPaginas.Should().Be(0);
     }
-}
 
+    private static ResultadoEmbeddings BuildEmbeddings(string decision, string motivo, string? tipologia = "nota.simple") => new()
+    {
+        VersionModelo = "v1",
+        Modo = ModosEmbeddings.Sombra,
+        Tdn1 = "NOTS",
+        Tdn2 = "nots-01",
+        Tipologia = tipologia,
+        Confianza = 0.91,
+        Decision = decision,
+        Motivo = motivo,
+        Deployment = "text-embedding-3-large-030358",
+        LatenciaMs = 230,
+        Consumos = new List<ConsumoIA>
+        {
+            new() { Actividad = ActividadesIA.Clasificar, Operacion = "classification.embeddings", Modelo = "text-embedding-3-large-030358", TokensEntrada = 1200, CosteEur = 0.0001m }
+        }
+    };
+
+    private static FakeTaskOrchestrationContext ContextoConMarkdown(ContratoEntrada? entrada = null)
+    {
+        var entradaEfectiva = entrada ?? BuildEntrada();
+        entradaEfectiva.Instrucciones.IncluirCostes = true;
+        var context = new FakeTaskOrchestrationContext(entradaEfectiva);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ValidarActivity", new DetalleValidacion());
+        context.SetupActivity("IntegrarActivity", new ResultadoIntegracion { Estado = "OK" });
+        return context;
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_EmbeddingsContesta_NoLlamaAClasificarActivity()
+    {
+        var context = ContextoConMarkdown();
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.Contesta, MotivosEmbeddings.Umbral));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        var clasif = salida.DetalleEjecucion.Clasificacion;
+        clasif.Modelo.Should().Be("embeddings:v1");
+        clasif.Clasificador.Should().Be("Embeddings");
+        clasif.ProveedorClasif.Should().Be("Embeddings");
+        clasif.TipologiaDetectada.Should().Be("nota.simple");
+        clasif.Tdn2Detectado.Should().Be("nots-01");
+        clasif.Confianza.Should().Be(0.91);
+        clasif.RamaClasificacion.Should().Be(RamasClasificacion.Embeddings);
+        clasif.Embeddings.Should().NotBeNull();
+        clasif.Embeddings!.Consumos.Should().BeNull("el orquestador los vacia tras acumularlos");
+        clasif.DetalleProveedores.Should().ContainSingle(p => p.Proveedor == "Embeddings").Which.MotivoDescarte.Should().BeNull();
+        salida.Identificacion.Tdn2.Should().Be("nots-01");
+        salida.DetalleEjecucion.Costes!.Consumos.Should().ContainSingle(c => c.Operacion == "classification.embeddings");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_EmbeddingsDerivaAlGpt_ClasificaConGptYAdjuntaElBloque()
+    {
+        var context = ContextoConMarkdown();
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.DerivarGpt, MotivosEmbeddings.Sombra));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+        var clasif = salida.DetalleEjecucion.Clasificacion;
+        clasif.Modelo.Should().Be("gpt-4o-mini");
+        clasif.RamaClasificacion.Should().Be(RamasClasificacion.Gpt);
+        clasif.Embeddings.Should().NotBeNull();
+        clasif.Embeddings!.Decision.Should().Be(DecisionesEmbeddings.DerivarGpt);
+        clasif.DetalleProveedores.Should().ContainSingle(p => p.Proveedor == "Embeddings").Which.MotivoDescarte.Should().Be(MotivosEmbeddings.Sombra);
+        salida.DetalleEjecucion.Costes!.Consumos.Should().Contain(c => c.Operacion == "classification.embeddings");
+
+        var input = context.GetLastActivityInput<ClasificarEmbeddingsInput>("ClasificarEmbeddingsActivity");
+        input.Should().NotBeNull();
+        input!.Texto.Should().Be("# markdown normalizado");
+        input.ExpectedTypeInformado.Should().BeFalse();
+        input.InstanceId.Should().Be("fake-instance-001");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_EmbeddingsOmitido_NoAdjuntaBloqueYElFlujoEsElActual()
+    {
+        var context = ContextoConMarkdown();
+        context.SetupActivity("ClasificarEmbeddingsActivity", new ResultadoEmbeddings { Decision = DecisionesEmbeddings.Omitido, Motivo = MotivosEmbeddings.Off });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+        salida.DetalleEjecucion.Clasificacion.Embeddings.Should().BeNull();
+        salida.DetalleEjecucion.Clasificacion.RamaClasificacion.Should().Be(RamasClasificacion.Gpt);
+        salida.DetalleEjecucion.Clasificacion.DetalleProveedores.Should().NotContain(p => p.Proveedor == "Embeddings");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SinTexto_NoLlamaAClasificarEmbeddings()
+    {
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarEmbeddingsActivity").Should().Be(0);
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificarEmbeddingsLanza_SigueConElGpt()
+    {
+        var context = ContextoConMarkdown();
+        context.SetupActivityThrow("ClasificarEmbeddingsActivity", new Exception("activity caida"));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+        salida.Resultado.Estado.Should().NotBe("ERROR", $"error real: {salida.Resultado.MensajeError}");
+        salida.DetalleEjecucion.Clasificacion.Embeddings.Should().BeNull();
+        salida.DetalleEjecucion.Clasificacion.RamaClasificacion.Should().Be(RamasClasificacion.Gpt);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedType_AdjuntaEmbeddingsConRamaExpectedType()
+    {
+        var context = ContextoConMarkdown(BuildEntrada(expectedType: "nota.simple"));
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.DerivarGpt, MotivosEmbeddings.ExpectedType));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().Be("expectedtype-input");
+        salida.DetalleEjecucion.Clasificacion.RamaClasificacion.Should().Be(RamasClasificacion.ExpectedType);
+        salida.DetalleEjecucion.Clasificacion.Embeddings.Should().NotBeNull();
+        context.GetLastActivityInput<ClasificarEmbeddingsInput>("ClasificarEmbeddingsActivity")!.ExpectedTypeInformado.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_EmbeddingsContestaDesconocido_PropagaLaPropuesta()
+    {
+        var context = ContextoConMarkdown();
+        var embeddings = BuildEmbeddings(DecisionesEmbeddings.Contesta, MotivosEmbeddings.MasaInsuficiente, tipologia: "Desconocido");
+        embeddings.Restringido = new RestringidoEmbeddings { Masa = 0.2, ConfianzaCondicionada = 0.5, PrediccionSinRestringir = "nota.simple" };
+        context.SetupActivity("ClasificarEmbeddingsActivity", embeddings);
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        salida.DetalleEjecucion.Clasificacion.TipologiaDetectada.Should().Be("Desconocido");
+        salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("nota.simple");
+    }
+
+    private static string ContratoComparable(ContratoSalida salida)
+    {
+        var clasif = salida.DetalleEjecucion.Clasificacion;
+        clasif.Embeddings = null;
+        clasif.RamaClasificacion = null;
+        clasif.DetalleProveedores.RemoveAll(p => p.Proveedor == "Embeddings");
+        salida.DetalleEjecucion.Costes = null;
+        salida.Identificacion.Guid = string.Empty; // el contexto fake genera un guid distinto en cada ejecucion
+        return System.Text.Json.JsonSerializer.Serialize(salida);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Sombra_ContratoIdenticoAlActualSalvoLosCamposAnadidos()
+    {
+        var sinSombra = ContextoConMarkdown();
+        sinSombra.SetupActivity("ClasificarEmbeddingsActivity", new ResultadoEmbeddings { Decision = DecisionesEmbeddings.Omitido, Motivo = MotivosEmbeddings.Off });
+        sinSombra.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var conSombra = ContextoConMarkdown();
+        conSombra.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.DerivarGpt, MotivosEmbeddings.Sombra));
+        conSombra.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salidaSin = await CreateOrchestrator().RunOrchestrator(sinSombra);
+        var salidaCon = await CreateOrchestrator().RunOrchestrator(conSombra);
+
+        ContratoComparable(salidaCon).Should().Be(ContratoComparable(salidaSin));
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TextoLargo_LlegaALaActivityColapsadoYRecortado()
+    {
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        var normalizar = BuildNormalizarResultConMarkdown();
+        normalizar["Markdown"] = "a  \n\n b " + new string('x', 30_000);
+        context.SetupActivity("NormalizarActivity", normalizar);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.DerivarGpt, MotivosEmbeddings.Sombra));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        await CreateOrchestrator().RunOrchestrator(context);
+
+        var input = context.GetLastActivityInput<ClasificarEmbeddingsInput>("ClasificarEmbeddingsActivity");
+        input.Should().NotBeNull();
+        input!.Texto.Should().StartWith("a b x");
+        input.Texto!.Length.Should().Be(EmbeddingsClasificadorConfig.MaxCharsPorDefecto);
+        input.Texto.Should().NotContain("\n");
+    }
+}

@@ -25,7 +25,7 @@ public class ClasificacionInput
 /// <summary>Entrada de ClasificarEmbeddingsActivity (AB#100779). La construye el orquestador en el Paso 3.0.</summary>
 public class ClasificarEmbeddingsInput
 {
-    /// <summary>Markdown del documento tal como lo recibira el GPT; el proveedor lo preprocesa y recorta.</summary>
+    /// <summary>Texto del documento ya con espacios colapsados y recortado a MaxCharsPorDefecto por el orquestador; el proveedor aplica ademas el MaxChars configurado.</summary>
     public string? Texto { get; set; }
     /// <summary>La peticion trae ExpectedType resoluble: el caller manda y A solo persiste.</summary>
     public bool ExpectedTypeInformado { get; set; }
