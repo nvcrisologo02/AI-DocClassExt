@@ -440,6 +440,17 @@ public class ResultadoClasificacion
     /// no traía restricción). Incluye los códigos efectivos y los ignorados por no publicados.
     /// </summary>
     public RestriccionTipologiasAplicada? RestriccionTipologias { get; set; }
+
+    /// <summary>
+    /// Prediccion del clasificador por embeddings en esta ejecucion (AB#100779). Nulo con
+    /// modo off o sin texto, y entonces se omite del JSON.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResultadoEmbeddings? Embeddings { get; set; }
+
+    /// <summary>Quien contesto: "gpt", "embeddings" o "expectedtype" (RamasClasificacion).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RamaClasificacion { get; set; }
 }
 
 /// <summary>Detalle de la restricción de tipologías aplicada a la clasificación.</summary>
