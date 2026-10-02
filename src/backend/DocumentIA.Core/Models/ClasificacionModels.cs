@@ -21,3 +21,17 @@ public class ClasificacionInput
     /// </summary>
     public bool OmitirRestriccionTipologias { get; set; }
 }
+
+/// <summary>Entrada de ClasificarEmbeddingsActivity (AB#100779). La construye el orquestador en el Paso 3.0.</summary>
+public class ClasificarEmbeddingsInput
+{
+    /// <summary>Markdown del documento tal como lo recibira el GPT; el proveedor lo preprocesa y recorta.</summary>
+    public string? Texto { get; set; }
+    /// <summary>La peticion trae ExpectedType resoluble: el caller manda y A solo persiste.</summary>
+    public bool ExpectedTypeInformado { get; set; }
+    /// <summary>Codigos de restriccionTipologias ya normalizados por el trigger. Nulo o vacio: sin restriccion.</summary>
+    public List<string>? RestriccionCodigos { get; set; }
+    public string? NivelClasificacion { get; set; }
+    /// <summary>InstanceId de la orquestacion, correlacion de la telemetria.</summary>
+    public string? InstanceId { get; set; }
+}
