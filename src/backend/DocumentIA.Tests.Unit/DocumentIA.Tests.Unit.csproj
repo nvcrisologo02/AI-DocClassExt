@@ -12,6 +12,8 @@
          para verificar que ese JSON es valido: el cargador es tolerante y un error de
          sintaxis dejaria el catalogo vacio en silencio (AB#100234). -->
     <None Include="catalogo-tarifas-produccion.json" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Modelo sintetico y paridad generados por exportar_modelo.py (opcion fixture-tests) en DocumentIA.Batch, AB#100779. -->
+    <None Include="Fixtures\clasificador-embeddings\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
