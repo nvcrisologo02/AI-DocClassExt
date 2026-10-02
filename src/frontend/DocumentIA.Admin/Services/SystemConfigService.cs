@@ -72,6 +72,7 @@ public class SystemConfigService
             ModelosPrompt = modelos.Count(m => m.Tipo == TipoModelo.Prompt),
             ModelosLayout = modelos.Count(m => m.Tipo == TipoModelo.Layout),
             ModelosTarifas = modelos.Count(m => m.Tipo == TipoModelo.Tarifas),
+            ModelosEmbeddings = modelos.Count(m => m.Tipo == TipoModelo.Embeddings),
 
             PluginsTotal = plugins.Count,
             PluginsDraft = plugins.Count(p => p.Estado == EstadoPluginConfig.Draft),
@@ -209,6 +210,9 @@ public class SystemConfiguration
 
     /// <summary>Filas del catalogo de tarifas de IA (normalmente una).</summary>
     public int ModelosTarifas { get; set; }
+
+    /// <summary>Filas del clasificador por embeddings (normalmente una).</summary>
+    public int ModelosEmbeddings { get; set; }
 
     // Plugins
     public int PluginsTotal { get; set; }

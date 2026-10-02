@@ -31,6 +31,9 @@
 <h3>Tarifas</h3>
 @RenderTable(_tarifas)
 
+<h3>Embeddings</h3>
+@RenderTable(_embeddings)
+
 <ConfirmDialog @ref="_confirm" />
 
 @code {
@@ -39,6 +42,7 @@
     private IReadOnlyCollection<ModeloConfigEntity> _prompt = Array.Empty<ModeloConfigEntity>();
     private IReadOnlyCollection<ModeloConfigEntity> _layout = Array.Empty<ModeloConfigEntity>();
     private IReadOnlyCollection<ModeloConfigEntity> _tarifas = Array.Empty<ModeloConfigEntity>();
+    private IReadOnlyCollection<ModeloConfigEntity> _embeddings = Array.Empty<ModeloConfigEntity>();
 
     protected override async Task OnInitializedAsync()
     {
@@ -52,6 +56,7 @@
         _prompt = await AdminService.GetModelosByTipoAsync(TipoModelo.Prompt);
         _layout = await AdminService.GetModelosByTipoAsync(TipoModelo.Layout);
         _tarifas = await AdminService.GetModelosByTipoAsync(TipoModelo.Tarifas);
+        _embeddings = await AdminService.GetModelosByTipoAsync(TipoModelo.Embeddings);
     }
 
     private void CreateModelo()

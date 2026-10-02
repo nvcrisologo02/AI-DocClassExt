@@ -413,6 +413,7 @@ public class TipologiaAdminService
         TipoModelo.Prompt => "prompt",
         TipoModelo.Layout => "layout",
         TipoModelo.Tarifas => "tarifas",
+        TipoModelo.Embeddings => "embeddings",
         _ => throw new ArgumentOutOfRangeException(nameof(tipo), tipo, null)
     };
 

@@ -60,7 +60,8 @@ public class TipoModeloSegmentTests
             [TipoModelo.Extraccion] = "/api/management/modelos/extraccion",
             [TipoModelo.Prompt] = "/api/management/modelos/prompt",
             [TipoModelo.Layout] = "/api/management/modelos/layout",
-            [TipoModelo.Tarifas] = "/api/management/modelos/tarifas"
+            [TipoModelo.Tarifas] = "/api/management/modelos/tarifas",
+            [TipoModelo.Embeddings] = "/api/management/modelos/embeddings"
         };
 
         foreach (var (tipo, rutaEsperada) in esperados)
@@ -87,7 +88,7 @@ public class TipoModeloSegmentTests
             // Solo la ruta del ultimo tipo devuelve el modelo; el resto van vacias.
             var esUltimo = request.RequestUri!.AbsolutePath.EndsWith($"/modelos/{segmentoDelUltimo}");
             return StubHttpMessageHandler.Json(esUltimo
-                ? """[{"id":42,"tipo":4,"key":"tarifas.ia","provider":"catalogo","activo":true,"configuracionJson":"{}"}]"""
+                ? """[{"id":42,"tipo":5,"key":"clasificador.embeddings","provider":"catalogo","activo":true,"configuracionJson":"{}"}]"""
                 : "[]");
         }))
         {
@@ -99,7 +100,7 @@ public class TipoModeloSegmentTests
 
         modelo.Should().NotBeNull(
             $"un modelo de tipo {ultimoTipo} debe poder editarse como cualquier otro");
-        modelo!.Key.Should().Be("tarifas.ia");
+        modelo!.Key.Should().Be("clasificador.embeddings");
     }
 
     [Fact]
