@@ -14,7 +14,14 @@ public enum TipoModelo
     /// Catalogo de tarifas de servicios de IA. Fila unica con clave "tarifas.ia".
     /// No es un modelo invocable: no tiene endpoint ni deployment.
     /// </summary>
-    Tarifas = 4
+    Tarifas = 4,
+
+    /// <summary>
+    /// Clasificador por embeddings (AB#100779). Fila unica con clave
+    /// "clasificador.embeddings": deployment de embeddings, artefacto del modelo,
+    /// modo (off / sombra / hibrido) y umbrales.
+    /// </summary>
+    Embeddings = 5
 }
 
 [Table("ModeloConfigs")]

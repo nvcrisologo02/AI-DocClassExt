@@ -6,6 +6,7 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Activities;
 using DocumentIA.Functions.Services;
+using DocumentIA.Functions.Services.Classification;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -1257,9 +1258,98 @@ public class DocumentProcessOrchestrator
                 await AsegurarMarkdownAsync(NecesidadMarkdown.Paginas(maxPaginasClasificacion), "LayoutPreClasificacion");
             }
 
+            // 3.0 Clasificador por embeddings (AB#100779): secuencial y previo al GPT. En modo
+            // sombra solo calcula y persiste; en hibrido contesta cuando su confianza llega al
+            // umbral. La activity nunca lanza, pero el try/catch cubre fallos de infraestructura
+            // Durable: nada de lo que haga A puede tumbar el flujo actual.
+            ResultadoEmbeddings? resultadoEmbeddings = null;
+            var textoEmbeddings = TextoClasificacionResolver.Preprocesar(
+                TextoClasificacionResolver.Obtener(datosNormalizados),
+                EmbeddingsClasificadorConfig.MaxCharsPorDefecto);
+            if (!string.IsNullOrWhiteSpace(textoEmbeddings))
+            {
+                try
+                {
+                    resultadoEmbeddings = await context.CallActivityAsync<ResultadoEmbeddings>(
+                        "ClasificarEmbeddingsActivity",
+                        new ClasificarEmbeddingsInput
+                        {
+                            Texto = textoEmbeddings,
+                            ExpectedTypeInformado = !string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType),
+                            RestriccionCodigos = entrada.Instrucciones.RestriccionTipologias?.Codigos,
+                            NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion,
+                            InstanceId = context.InstanceId
+                        });
+                }
+                catch (Exception exEmbeddings)
+                {
+                    logger.LogWarning(exEmbeddings, "Paso 3.0: ClasificarEmbeddingsActivity fallo. Se sigue con el flujo actual.");
+                }
+
+                if (resultadoEmbeddings is not null)
+                {
+                    AcumularConsumos(resultadoEmbeddings.Consumos);
+                    resultadoEmbeddings.Consumos = null;
+
+                    if (string.Equals(resultadoEmbeddings.Decision, DecisionesEmbeddings.Omitido, StringComparison.Ordinal))
+                    {
+                        // Modo off o sin texto: el bloque no se persiste (spec seccion 4).
+                        resultadoEmbeddings = null;
+                    }
+                }
+            }
+
+            // Las funciones locales solo capturan variables ya declaradas en su punto de
+            // definicion (AB#100231): esta va despues de resultadoEmbeddings.
+            void AdjuntarEmbeddings(ResultadoClasificacion destino, string rama)
+            {
+                destino.RamaClasificacion = rama;
+                if (resultadoEmbeddings is null)
+                {
+                    return;
+                }
+
+                destino.Embeddings = resultadoEmbeddings;
+                destino.DetalleProveedores.Add(new PropuestaProveedor
+                {
+                    Proveedor = ResultadoEmbeddings.Proveedor,
+                    Tipologia = resultadoEmbeddings.Tipologia,
+                    Confianza = resultadoEmbeddings.Confianza,
+                    MotivoDescarte = rama == RamasClasificacion.Embeddings ? null : resultadoEmbeddings.Motivo
+                });
+            }
+
+            var embeddingsContesta = resultadoEmbeddings is not null
+                && string.Equals(resultadoEmbeddings.Decision, DecisionesEmbeddings.Contesta, StringComparison.Ordinal);
+
             // 3. Clasificacion
             ResultadoClasificacion resultadoClasificacion;
-            if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType))
+            if (embeddingsContesta)
+            {
+                MarcarInicioActividad("Clasificar");
+                logger.LogInformation(
+                    "Paso 3: clasificado por embeddings ({Tipologia}, confianza {Confianza:F3}, motivo {Motivo})",
+                    resultadoEmbeddings!.Tipologia, resultadoEmbeddings.Confianza, resultadoEmbeddings.Motivo);
+
+                var esDesconocido = string.Equals(resultadoEmbeddings.Tipologia, "Desconocido", StringComparison.OrdinalIgnoreCase);
+                resultadoClasificacion = new ResultadoClasificacion
+                {
+                    Modelo = $"embeddings:{resultadoEmbeddings.VersionModelo}",
+                    Clasificador = ResultadoEmbeddings.Proveedor,
+                    ProveedorClasif = ResultadoEmbeddings.Proveedor,
+                    Confianza = resultadoEmbeddings.Confianza,
+                    FallbackLLM = false,
+                    TipologiaDetectada = resultadoEmbeddings.Tipologia,
+                    Tdn2Detectado = esDesconocido ? null : resultadoEmbeddings.Tdn2,
+                    PropuestaTipologia = esDesconocido ? resultadoEmbeddings.Restringido?.PrediccionSinRestringir ?? string.Empty : string.Empty,
+                    RestriccionTipologias = entrada.Instrucciones.RestriccionTipologias is { Codigos.Count: > 0 } restriccion
+                        ? new RestriccionTipologiasAplicada { Codigos = restriccion.Codigos, CodigosIgnorados = restriccion.CodigosIgnorados }
+                        : null
+                };
+                AdjuntarEmbeddings(resultadoClasificacion, RamasClasificacion.Embeddings);
+                MarcarFinActividad("Clasificar", "Completed", "Clasificacion por embeddings");
+            }
+            else if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType))
             {
                 MarcarInicioActividad("Clasificar");
                 logger.LogInformation("Paso 3: Clasificación omitida por ExpectedType={ExpectedType}", entrada.Instrucciones.ExpectedType);
@@ -1270,6 +1360,7 @@ public class DocumentProcessOrchestrator
                     FallbackLLM = false,
                     TipologiaDetectada = entrada.Instrucciones.ExpectedType
                 };
+                AdjuntarEmbeddings(resultadoClasificacion, RamasClasificacion.ExpectedType);
                 MarcarFinActividad("Clasificar", "Completed", "Clasificación por ExpectedType");
             }
             else
@@ -1296,6 +1387,7 @@ public class DocumentProcessOrchestrator
                             GenerarResumenPorDefecto = true
                         });
                     AcumularConsumos(resultadoClasificacion.Consumos);
+                    AdjuntarEmbeddings(resultadoClasificacion, RamasClasificacion.Gpt);
 
                     if (resultadoClasificacion.RateLimitExcedido)
                     {
@@ -1387,6 +1479,7 @@ public class DocumentProcessOrchestrator
                             FallbackRazon = "fallback_unclassified",
                             TipologiaDetectada = "Desconocido"
                         };
+                        AdjuntarEmbeddings(salida.DetalleEjecucion.Clasificacion, RamasClasificacion.Gpt);
                         salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
                         RegistrarModeloLlm(salida.DetalleEjecucion.Clasificacion.Modelo);
 

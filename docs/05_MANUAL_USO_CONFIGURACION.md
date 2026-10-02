@@ -1069,6 +1069,59 @@ El host de Functions no lee la seccion `AI` de `appsettings.json` (ese fichero s
 
 Un App Setting presente pero con valor vacio cuenta como no mapeado: produce la misma `InvalidOperationException` que si el App Setting no existiera.
 
+### 5.6.1c Clasificador por embeddings (`clasificador.embeddings`)
+
+Fila unica de `ModeloConfigs` con `Tipo = 5` (Embeddings), `Key = clasificador.embeddings`
+y `Provider = azure-openai` (AB#100779, ADR-002). Configura la primera etapa de
+clasificacion: el clasificador A (regresion logistica sobre `text-embedding-3-large`),
+que corre antes del GPT y, segun el modo, solo se persiste o contesta.
+
+```json
+{
+  "DeploymentName": "text-embedding-3-large-030358",
+  "ResourceAlias": "openai_primary",
+  "AuthMode": "DefaultAzureCredential",
+  "Artefacto": { "Container": "documentai", "BlobPath": "modelos/clasificador-embeddings/v1/clasificador-embeddings-v1.json" },
+  "Modo": "sombra",
+  "UmbralConfianza": 0.6,
+  "Restringido": { "Modo": "sombra", "UmbralMasa": 0.5, "UmbralConfianzaCondicionada": 0.8 },
+  "MaxChars": 24000,
+  "TimeoutSeconds": 20
+}
+```
+
+| Campo | Tipo | Obligatorio | Notas |
+|-------|------|-------------|-------|
+| `DeploymentName` | string | Si (modo distinto de off) | Deployment de embeddings del recurso Azure OpenAI del entorno |
+| `ResourceAlias` / `Endpoint` | string | Uno de los dos | Misma resolucion que 5.6.1b. `openai_primary` esta verificado para DEV; antes de activar la fila en PRE o PRO confirmar que el alias existe en el mapa `AI__Resources__*` del entorno |
+| `AuthMode` / `ApiKey` | string | `ApiKey` si `AuthMode=ApiKey` | Misma semantica que los modelos de clasificacion |
+| `Artefacto.Container`, `Artefacto.BlobPath` | string | Si (modo distinto de off) | Blob con el modelo exportado (manifiesto mas pesos) en la cuenta de storage de documentos del entorno |
+| `Modo` | string | No | `off` (defecto), `sombra` o `hibrido`, para peticiones sin restriccion |
+| `UmbralConfianza` | double | No | En `hibrido`, A contesta si su confianza TDN1 alcanza el umbral. Defecto 0,6 |
+| `Restringido.Modo` | string | No | Modo propio de las peticiones con `restriccionTipologias`. Defecto `sombra`. Una fila con `Modo = off` debe llevar tambien `Restringido.Modo = off`: el script 01 lo hace, pero una edicion manual desde el Admin que solo cambie `Modo` deja activo el modo restringido |
+| `Restringido.UmbralMasa`, `Restringido.UmbralConfianzaCondicionada` | double | No | Umbrales del hibrido restringido. Defectos 0,5 y 0,8. Solo actuan con un modelo `calibrado = true` |
+| `MaxChars` | int | No | Recorte del texto antes de la llamada. Defecto 24.000. El orquestador ya colapsa los espacios y recorta a 24.000 caracteres (`EmbeddingsClasificadorConfig.MaxCharsPorDefecto`) antes de llamar a la activity, para no duplicar el markdown completo en el historial Durable: `MaxChars` solo puede bajar ese tope, un valor mayor no tiene efecto |
+| `TimeoutSeconds` | int | No | Tiempo maximo de la llamada de embeddings. Defecto 20. Un endpoint colgado cuesta `TimeoutSeconds` en cada ejecucion y no abre el circuito de resiliencia (solo lo abren los 429 y los fallos HTTP); si ocurre, bajar `TimeoutSeconds` o poner la fila en `off` hasta que el endpoint responda |
+
+Comportamiento:
+
+- Sin fila, fila inactiva, JSON invalido, alias sin mapear o configuracion incompleta: modo
+  `off` con error en el log; nunca una excepcion. Los cambios entran en 5 minutos.
+- `off`: no se llama al deployment ni se descarga el artefacto. `sombra`: A se calcula y se
+  persiste en `DetalleEjecucion.Clasificacion.Embeddings` sin alterar el resultado. `hibrido`:
+  A contesta (`Modelo = embeddings:<version>`, `ProveedorClasif = Embeddings`) cuando llega
+  al umbral y el GPT contesta en el resto. `ExpectedType` sigue mandando.
+- `DetalleEjecucion.Clasificacion.RamaClasificacion` indica quien contesto: `gpt`,
+  `embeddings` o `expectedtype`.
+- Cualquier fallo (artefacto, 429, timeout) deriva al GPT con `Error` en el bloque. Un 429 de
+  embeddings no se reintenta ni produce `PENDIENTE_REINTENTO`.
+- El consumo se registra como `classification.embeddings` con `Modelo` = nombre del
+  deployment; el catalogo `tarifas.ia` necesita una linea por deployment
+  (`scripts/migrations/clasificador-embeddings/02-tarifas-embeddings-deployments.sql`).
+- Alta por entorno: `scripts/migrations/clasificador-embeddings/README.md`. Analisis de la
+  sombra: `scripts/analysis/sombra-embeddings.sql`. Telemetria: evento
+  `Classification.Embeddings` y metrica `Classification.Embeddings.LatenciaMs`.
+
 ### 5.6.2 Resiliencia ante 429 (rate limit) en Azure OpenAI
 
 Ante errores `429 Too Many Requests` (cuota agotada) devueltos por Azure OpenAI, las llamadas de **clasificacion GPT** y de **prompts** pasan por un componente de resiliencia que reintenta la llamada de forma controlada y, si la cuota sigue agotada, corta el circuito para no seguir golpeando el servicio.

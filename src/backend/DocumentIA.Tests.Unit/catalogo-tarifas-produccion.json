@@ -98,6 +98,16 @@
       "Modelo": "DI_NS_1.4_v1",
       "VigenteDesde": "2026-04-01",
       "EurPorPagina": 0.0257599
+    },
+    {
+      "Modelo": "text-embedding-3-large-030358",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 0.112
+    },
+    {
+      "Modelo": "text-embedding-3-large-010650",
+      "VigenteDesde": "2026-04-01",
+      "EurEntradaPor1M": 0.112
     }
   ]
 }

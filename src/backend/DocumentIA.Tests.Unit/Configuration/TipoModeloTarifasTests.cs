@@ -19,6 +19,7 @@ public class TipoModeloTarifasTests
         ((int)TipoModelo.Prompt).Should().Be(2);
         ((int)TipoModelo.Layout).Should().Be(3);
         ((int)TipoModelo.Tarifas).Should().Be(4);
+        ((int)TipoModelo.Embeddings).Should().Be(5);
     }
 
     [Fact]

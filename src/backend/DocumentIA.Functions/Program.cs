@@ -161,6 +161,13 @@ var host = new HostBuilder()
         services.AddSingleton<PromptTraceTelemetryService>();
 
         services.AddSingleton<IAzureOpenAIResilienceExecutor, AzureOpenAIResilienceExecutor>();
+        // Clasificador por embeddings (AB#100779): loaders con cache de 5 minutos, fabrica de
+        // clientes y proveedor. La activity la descubre el worker por el atributo [Function].
+        services.AddSingleton<EmbeddingsClasificadorConfigLoader>();
+        services.AddSingleton<ModeloEmbeddingsLoader>();
+        services.AddSingleton<CatalogoParesTdnLoader>();
+        services.AddSingleton<IEmbeddingsClienteFactory, AzureOpenAIEmbeddingsClienteFactory>();
+        services.AddSingleton<IEmbeddingsClasificarProvider, EmbeddingsClasificarProvider>();
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
