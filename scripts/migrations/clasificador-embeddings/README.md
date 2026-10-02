@@ -9,6 +9,12 @@ Scripts de datos de la Fase A (sombra en DEV). No hay cambios de esquema.
 
 Orden: 01 y despues 02. Ambos hacen backup `ModeloConfigs__bak_<fecha>` y son idempotentes.
 
+En PRE y PRO el 01 (con `@Modo='off'`) va **antes de desplegar el codigo** que incluye el
+paso 3.0 del orquestador (develop 2aa9f02). El orquestador llama a la activity en todas las
+ejecuciones; si la fila no existe, el proveedor deriva con `fila_ausente` en `Error` y emite
+el evento y la metrica `Classification.Embeddings` en cada ejecucion. Con la fila en `off`
+no hay llamada al endpoint ni telemetria. El 02 puede ir antes o despues del codigo.
+
 Antes del 01 en DEV, el artefacto `clasificador-embeddings-v1.json` debe estar en
 `srbstgdevdocai/documentai/modelos/clasificador-embeddings/v1/` (lo genera
 `exportar_modelo.py` en DocumentIA.Batch). En PRE y PRO la fila entra en `off` y no

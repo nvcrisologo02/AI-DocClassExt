@@ -134,6 +134,11 @@ Ejemplos de 2.1.3: `scripts/database/indice-monitor-costes-pro.sql` (AB#100662, 
 y PRO) e `indice-monitor-reutilizacion-pro.sql` (release del 20/09). Patrón recomendado en
 `docs/procedimientos/DATABASE_MIGRATION_STRATEGY.md`.
 
+La primera release que lleve el clasificador por embeddings (AB#100779, develop 2aa9f02)
+aplica aquí, antes de 2.2 y de 4.1, `scripts/migrations/clasificador-embeddings/01-modeloconfig-clasificador-embeddings.sql`
+con `@Modo='off'` y después el `02-tarifas-embeddings-deployments.sql`: sin la fila, cada
+ejecución emite el evento `Classification.Embeddings` con `fila_ausente` (ver el README de esa carpeta).
+
 Vuelta atrás: ver Anexo B, capa 4. El código anterior tolera columnas nuevas, así que un esquema adelantado no obliga a retroceder.
 
 ### 2.2 Código
