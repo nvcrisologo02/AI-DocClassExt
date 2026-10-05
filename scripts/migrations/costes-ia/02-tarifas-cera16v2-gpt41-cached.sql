@@ -26,7 +26,8 @@
 -- la entrada plena). Contrastar con la factura en la siguiente revision de
 -- costes; si hay doble cuenta, corregir el mapeador, no el catalogo.
 --
--- Idempotente: cada linea se anade solo si no existe. Backup previo.
+-- Idempotente: cada linea se anade solo si no existe. Si no hay nada que anadir
+-- no hace backup ni toca la fila (una segunda pasada deja el entorno igual).
 -- Ejecutar en DEV, PRE y PRO (el catalogo es identico en los tres). El registro
 -- se cachea en memoria: hasta cinco minutos para verse en ejecuciones nuevas.
 -- Las ejecuciones ya persistidas no se recalculan.
@@ -45,13 +46,6 @@ IF @Id IS NULL
 IF ISJSON(@json) <> 1
     THROW 50004, 'El catalogo tarifas.ia no es JSON valido.', 1;
 
-DECLARE @bak SYSNAME = CONCAT('ModeloConfigs__bak_', FORMAT(SYSUTCDATETIME(), 'yyyyMMdd_HHmmss'));
-DECLARE @sql NVARCHAR(MAX) = CONCAT('SELECT * INTO dbo.', QUOTENAME(@bak), ' FROM dbo.ModeloConfigs;');
-EXEC sp_executesql @sql;
-PRINT CONCAT('Backup creado: dbo.', @bak);
-
-BEGIN TRAN;
-
 -- Una fila por linea a anadir, con su JSON completo: cada modelo lleva un campo
 -- de precio distinto y asi el script no tiene que montarlo por partes.
 DECLARE @lineas TABLE (Modelo NVARCHAR(200), Linea NVARCHAR(400));
@@ -59,6 +53,8 @@ INSERT INTO @lineas VALUES
     (N'CERA16_v2',      N'{"Modelo":"CERA16_v2","VigenteDesde":"2026-09-22","EurContextualizacionPor1M":0.859}'),
     (N'gpt-4.1-cached', N'{"Modelo":"gpt-4.1-cached","VigenteDesde":"2026-04-01","EurEntradaPor1M":0.429}');
 
+-- 1. Calcular el catalogo resultante en memoria y contar lo que falta.
+DECLARE @anadidas INT = 0;
 DECLARE @modelo NVARCHAR(200), @linea NVARCHAR(400);
 DECLARE cur CURSOR LOCAL FAST_FORWARD FOR SELECT Modelo, Linea FROM @lineas;
 OPEN cur;
@@ -70,7 +66,8 @@ BEGIN
         WHERE Modelo = @modelo)
     BEGIN
         SET @json = JSON_MODIFY(@json, 'append $.Tarifas', JSON_QUERY(@linea));
-        PRINT CONCAT('Linea anadida: ', @modelo);
+        SET @anadidas += 1;
+        PRINT CONCAT('Linea a anadir: ', @modelo);
     END
     ELSE
         PRINT CONCAT('Linea ya presente: ', @modelo);
@@ -82,11 +79,23 @@ DEALLOCATE cur;
 IF ISJSON(@json) <> 1
     THROW 50005, 'El catalogo resultante no es JSON valido; no se guarda.', 1;
 
-UPDATE dbo.ModeloConfigs
-SET ConfiguracionJson = @json, FechaActualizacion = SYSUTCDATETIME()
-WHERE Id = @Id;
+-- 2. Solo si hay cambios: backup y actualizacion en una transaccion.
+IF @anadidas = 0
+    PRINT 'Nada que anadir: el catalogo ya tiene las dos lineas. Sin backup ni cambios.';
+ELSE
+BEGIN
+    DECLARE @bak SYSNAME = CONCAT('ModeloConfigs__bak_', FORMAT(SYSUTCDATETIME(), 'yyyyMMdd_HHmmss'));
+    DECLARE @sql NVARCHAR(MAX) = CONCAT('SELECT * INTO dbo.', QUOTENAME(@bak), ' FROM dbo.ModeloConfigs;');
+    EXEC sp_executesql @sql;
+    PRINT CONCAT('Backup creado: dbo.', @bak);
 
-COMMIT TRAN;
+    BEGIN TRAN;
+    UPDATE dbo.ModeloConfigs
+    SET ConfiguracionJson = @json, FechaActualizacion = SYSUTCDATETIME()
+    WHERE Id = @Id;
+    COMMIT TRAN;
+    PRINT CONCAT('Lineas anadidas: ', @anadidas);
+END
 
 -- Verificacion: las dos lineas nuevas junto a las que les sirven de referencia.
 SELECT Modelo, VigenteDesde, EurEntradaPor1M, EurEntradaCachePor1M, EurContextualizacionPor1M
