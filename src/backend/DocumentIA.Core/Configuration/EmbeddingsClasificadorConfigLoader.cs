@@ -55,6 +55,10 @@ public sealed class EmbeddingsClasificadorConfig
     [JsonIgnore]
     public string ModoNormalizado => ModosEmbeddings.Normalizar(Modo);
 
+    /// <summary>Cualquier AuthMode distinto de DefaultAzureCredential autentica con ApiKey (mismo criterio que el cliente).</summary>
+    [JsonIgnore]
+    public bool UsaApiKey => !string.Equals(AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Algun modo distinto de off: hay que poder llamar al deployment y cargar el artefacto.</summary>
     [JsonIgnore]
     public bool EstaActiva => ModoNormalizado != ModosEmbeddings.Off || Restringido.ModoNormalizado != ModosEmbeddings.Off;
@@ -199,6 +203,13 @@ public class EmbeddingsClasificadorConfigLoader
         if (string.IsNullOrWhiteSpace(config.DeploymentName) || string.IsNullOrWhiteSpace(config.Artefacto.BlobPath))
         {
             _logger?.LogError("La fila {Key} esta en modo {Modo} sin DeploymentName o sin Artefacto.BlobPath. Queda en off.",
+                config.Key, config.Modo);
+            return EmbeddingsClasificadorConfig.Desactivada("configuracion_incompleta");
+        }
+
+        if (config.UsaApiKey && string.IsNullOrWhiteSpace(config.ApiKey))
+        {
+            _logger?.LogError("La fila {Key} esta en modo {Modo} con AuthMode ApiKey y sin ApiKey. Queda en off.",
                 config.Key, config.Modo);
             return EmbeddingsClasificadorConfig.Desactivada("configuracion_incompleta");
         }
