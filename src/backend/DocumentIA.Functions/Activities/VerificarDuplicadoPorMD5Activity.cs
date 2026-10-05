@@ -1,4 +1,4 @@
-using DocumentIA.Core.Models;
+﻿using DocumentIA.Core.Models;
 using DocumentIA.Data.Repositories;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.Logging;
@@ -26,17 +26,17 @@ public class VerificarDuplicadoPorMD5Activity
             return new VerificarDuplicadoMd5Result { Existe = false };
         }
 
-        var documento = await _documentoRepository.GetByMD5Async(md5);
-        if (documento == null)
+        var duplicado = await _documentoRepository.GetDuplicadoByMD5Async(md5);
+        if (duplicado == null)
         {
             return new VerificarDuplicadoMd5Result { Existe = false };
         }
 
-        _logger.LogInformation("Documento duplicado por MD5 encontrado. DocumentoId={DocumentoId}", documento.Id);
+        _logger.LogInformation("Documento duplicado por MD5 encontrado. DocumentoId={DocumentoId}", duplicado.Id);
         return new VerificarDuplicadoMd5Result
         {
             Existe = true,
-            SHA256 = documento.SHA256 ?? string.Empty
+            SHA256 = duplicado.SHA256
         };
     }
 }
