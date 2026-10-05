@@ -219,6 +219,22 @@ public class EmbeddingsClasificarProviderTests
     }
 
     [Fact]
+    public async Task ElClienteLanzaConMensajeLargo_ElErrorLlegaAcotado()
+    {
+        var env = new Entorno();
+        env.Cliente.Setup(c => c.GenerarAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException(new string('x', 2_000)));
+
+        var r = await env.Crear().ClasificarAsync(Input(), CancellationToken.None);
+
+        r.Motivo.Should().Be(MotivosEmbeddings.Error);
+        r.Error.Should().HaveLength(EmbeddingsClasificarProvider.ErrorMaxChars, "el error viaja al contrato y a BD, no solo a App Insights");
+        r.Error.Should().StartWith("InvalidOperationException: xxx");
+        env.Telemetria.Verify(t => t.TrackEvent("Classification.Embeddings",
+            It.Is<IDictionary<string, string>>(p => p["Error"].Length == EmbeddingsClasificarProvider.ErrorMaxChars)), Times.Once);
+    }
+
+    [Fact]
     public async Task Timeout_DerivaConErrorTimeout()
     {
         var env = new Entorno();
