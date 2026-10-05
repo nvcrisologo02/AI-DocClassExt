@@ -1319,8 +1319,10 @@ public class DocumentProcessOrchestrator
                 });
             }
 
+            // Guarda propia frente a ExpectedType: el caller manda aunque el proveedor contestase.
             var embeddingsContesta = resultadoEmbeddings is not null
-                && string.Equals(resultadoEmbeddings.Decision, DecisionesEmbeddings.Contesta, StringComparison.Ordinal);
+                && string.Equals(resultadoEmbeddings.Decision, DecisionesEmbeddings.Contesta, StringComparison.Ordinal)
+                && string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType);
 
             // 3. Clasificacion
             ResultadoClasificacion resultadoClasificacion;

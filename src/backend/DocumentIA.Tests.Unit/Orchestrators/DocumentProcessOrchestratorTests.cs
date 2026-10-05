@@ -4259,6 +4259,25 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ExpectedTypeYEmbeddingsContesta_ElCallerManda()
+    {
+        // Guarda propia del orquestador: aunque el proveedor devolviera Contesta, con ExpectedType informado manda el caller.
+        var context = ContextoConMarkdown(BuildEntrada(expectedType: "nota.simple"));
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.Contesta, MotivosEmbeddings.Umbral, tipologia: "tasa.09"));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        var clasif = salida.DetalleEjecucion.Clasificacion;
+        clasif.Modelo.Should().Be("expectedtype-input");
+        clasif.TipologiaDetectada.Should().Be("nota.simple");
+        clasif.RamaClasificacion.Should().Be(RamasClasificacion.ExpectedType);
+        clasif.Embeddings.Should().NotBeNull("el bloque se persiste igualmente");
+        clasif.DetalleProveedores.Should().ContainSingle(p => p.Proveedor == "Embeddings").Which.MotivoDescarte.Should().Be(MotivosEmbeddings.Umbral);
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ExpectedType_AdjuntaEmbeddingsConRamaExpectedType()
     {
         var context = ContextoConMarkdown(BuildEntrada(expectedType: "nota.simple"));
