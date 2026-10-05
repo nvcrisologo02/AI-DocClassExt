@@ -264,4 +264,63 @@ public class DecisorHibridoTests
         sinRestriccion.Decision.Should().Be(DecisionesEmbeddings.DerivarGpt);
         sinRestriccion.Motivo.Should().Be(MotivosEmbeddings.SinTipologia);
     }
+
+    // Precedencia de las puertas del hibrido restringido: cuando varias aplican a la vez, gana la primera del orden fijado.
+
+    [Fact]
+    public void RestringidoHibrido_ExpectedTypeGanaACobertura()
+    {
+        var d = DecisorHibrido.Decidir(Dist(), Manifiesto(calibrado: true),
+            Params("hibrido", modoRestringido: "hibrido", restriccion: new[] { "a.01", "zz.99" }, expectedType: true), Catalogo);
+
+        d.Decision.Should().Be(DecisionesEmbeddings.DerivarGpt);
+        d.Motivo.Should().Be(MotivosEmbeddings.ExpectedType);
+        d.Restringido!.Puerta.Should().BeNull("el caller manda antes de evaluar ninguna puerta");
+    }
+
+    [Fact]
+    public void RestringidoHibrido_CoberturaGanaAParCompartido()
+    {
+        var d = DecisorHibrido.Decidir(Dist(), Manifiesto(calibrado: true),
+            Params("hibrido", modoRestringido: "hibrido", restriccion: new[] { "a.01", "d.01", "zz.99" }), Catalogo);
+
+        d.Motivo.Should().Be(MotivosEmbeddings.Cobertura);
+        d.Restringido!.Puerta.Should().Be(MotivosEmbeddings.Cobertura);
+    }
+
+    [Fact]
+    public void RestringidoHibrido_ParCompartidoGanaASinCalibracion()
+    {
+        var d = DecisorHibrido.Decidir(Dist(), Manifiesto(calibrado: false),
+            Params("hibrido", modoRestringido: "hibrido", restriccion: new[] { "a.01", "d.01" }), Catalogo);
+
+        d.Motivo.Should().Be(MotivosEmbeddings.ParCompartido);
+        d.Restringido!.Puerta.Should().Be(MotivosEmbeddings.ParCompartido);
+    }
+
+    [Fact]
+    public void RestringidoHibrido_SinCalibracionGanaAMasaInsuficiente()
+    {
+        // Permitida solo c.01 (masa 0.05): sin calibrar no se llega a mirar la masa.
+        var d = DecisorHibrido.Decidir(Dist(pA: 0.8, pB: 0.15, pC: 0.05), Manifiesto(calibrado: false),
+            Params("hibrido", modoRestringido: "hibrido", restriccion: new[] { "c.01" }), Catalogo);
+
+        d.Decision.Should().Be(DecisionesEmbeddings.DerivarGpt);
+        d.Motivo.Should().Be(MotivosEmbeddings.SinCalibracion);
+        d.Tipologia.Should().NotBe(DecisorHibrido.TipologiaDesconocido);
+    }
+
+    [Theory]
+    [InlineData("a.02,b.01", 0.1, 0.85, "umbral")]
+    [InlineData("c.01", 0.8, 0.15, "masa_insuficiente")]
+    [InlineData("a.01,a.02", 0.8, 0.15, "confianza_condicionada_baja")]
+    public void RestringidoHibrido_SinPuertaCerrada_PuertaNula(string restriccion, double pA, double pB, string motivoEsperado)
+    {
+        var d = DecisorHibrido.Decidir(Dist(pA: pA, pB: pB, pC: 0.05), Manifiesto(calibrado: true),
+            Params("hibrido", modoRestringido: "hibrido", restriccion: restriccion.Split(',')), Catalogo);
+
+        d.Motivo.Should().Be(motivoEsperado);
+        d.Restringido.Should().NotBeNull("las cifras del restringido se persisten aunque no cierre ninguna puerta");
+        d.Restringido!.Puerta.Should().BeNull();
+    }
 }

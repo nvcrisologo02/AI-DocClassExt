@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace DocumentIA.Core.Services.Classification;
 
@@ -8,7 +9,12 @@ namespace DocumentIA.Core.Services.Classification;
 /// </summary>
 public sealed class ModeloEmbeddings
 {
-    private static readonly JsonSerializerOptions Opciones = new() { PropertyNameCaseInsensitive = true };
+    // El exportador de Python escribe NaN e Infinity como literales: se leen para rechazarlos con motivo.
+    private static readonly JsonSerializerOptions Opciones = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.AllowNamedFloatingPointLiterals
+    };
 
     public ManifiestoModeloEmbeddings Manifiesto { get; set; } = new();
     public ModeloLineal Tdn1 { get; set; } = new();
@@ -33,7 +39,16 @@ public sealed class ModeloEmbeddings
         }
 
         // System.Text.Json crea el diccionario con el comparador por defecto: se rehace sin distinguir mayusculas.
-        modelo.Tdn2 = new Dictionary<string, ModeloFamiliaTdn2>(modelo.Tdn2, StringComparer.OrdinalIgnoreCase);
+        var familias = new Dictionary<string, ModeloFamiliaTdn2>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (familia, f) in modelo.Tdn2)
+        {
+            if (!familias.TryAdd(familia, f))
+            {
+                throw new InvalidDataException($"La familia '{familia}' esta repetida (no se distinguen mayusculas).");
+            }
+        }
+
+        modelo.Tdn2 = familias;
         modelo.Validar();
         return modelo;
     }
@@ -71,6 +86,11 @@ public sealed class ModeloEmbeddings
             throw new InvalidDataException($"{nombre}: hacen falta al menos dos clases.");
         }
 
+        if (clases.Distinct(StringComparer.OrdinalIgnoreCase).Count() != clases.Count)
+        {
+            throw new InvalidDataException($"{nombre}: hay alguna clase repetida (no se distinguen mayusculas).");
+        }
+
         var filasEsperadas = clases.Count == 2 ? 1 : clases.Count;
         if (coef.Length != filasEsperadas || intercept.Length != filasEsperadas)
         {
@@ -83,6 +103,11 @@ public sealed class ModeloEmbeddings
             {
                 throw new InvalidDataException($"{nombre}: fila de coef con {fila.Length} valores y el manifiesto declara {dims} dimensiones.");
             }
+        }
+
+        if (coef.Any(fila => fila.Any(v => !double.IsFinite(v))) || intercept.Any(v => !double.IsFinite(v)))
+        {
+            throw new InvalidDataException($"{nombre}: coef o intercept contienen algun valor no finito (NaN o infinito).");
         }
     }
 }

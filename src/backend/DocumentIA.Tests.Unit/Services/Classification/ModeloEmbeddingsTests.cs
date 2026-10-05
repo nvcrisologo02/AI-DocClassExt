@@ -52,4 +52,39 @@ public class ModeloEmbeddingsTests
         var act = () => ModeloEmbeddings.Parse(json);
         act.Should().Throw<InvalidDataException>().WithMessage("*familia 'A'*");
     }
+
+    [Fact]
+    public void Parse_ClaseRepetidaSinDistinguirMayusculas_LanzaInvalidData()
+    {
+        const string json = """
+        {"manifiesto":{"version":"x","dimensiones":2},
+         "tdn1":{"clases":["A","a"],"coef":[[1,2]],"intercept":[0]},
+         "tdn2":{}}
+        """;
+        var act = () => ModeloEmbeddings.Parse(json);
+        act.Should().Throw<InvalidDataException>().WithMessage("*TDN1*clase*repetida*");
+    }
+
+    [Theory]
+    [InlineData("""{"clases":["A","B"],"coef":[[1,"NaN"]],"intercept":[0]}""")]
+    [InlineData("""{"clases":["A","B"],"coef":[[1,2]],"intercept":[1e999]}""")]
+    public void Parse_CoefOInterceptNoFinito_LanzaInvalidData(string tdn1)
+    {
+        // Un NaN entrecomillado o un numero desbordado deben rechazarse con motivo, no con un error generico de JSON.
+        var json = "{\"manifiesto\":{\"version\":\"x\",\"dimensiones\":2},\"tdn1\":" + tdn1 + ",\"tdn2\":{}}";
+        var act = () => ModeloEmbeddings.Parse(json);
+        act.Should().Throw<InvalidDataException>().WithMessage("*TDN1*no finito*");
+    }
+
+    [Fact]
+    public void Parse_FamiliasQueColisionanSinDistinguirMayusculas_LanzaInvalidData()
+    {
+        const string json = """
+        {"manifiesto":{"version":"x","dimensiones":2},
+         "tdn1":{"clases":["A","B"],"coef":[[1,2]],"intercept":[0]},
+         "tdn2":{"A":{"constante":"A-01"},"a":{"constante":"A-02"}}}
+        """;
+        var act = () => ModeloEmbeddings.Parse(json);
+        act.Should().Throw<InvalidDataException>().WithMessage("*familia*repetida*");
+    }
 }

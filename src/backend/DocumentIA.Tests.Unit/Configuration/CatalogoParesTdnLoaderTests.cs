@@ -2,7 +2,11 @@
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Services.Classification;
 using DocumentIA.Data.Entities;
+using DocumentIA.Data.Repositories;
 using FluentAssertions;
+using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Moq;
 
 namespace DocumentIA.Tests.Unit.Configuration;
 
@@ -57,5 +61,43 @@ public class CatalogoParesTdnLoaderTests
         });
 
         catalogo.Should().ContainSingle().Which.Value.Codigo.Should().Be("a.01");
+    }
+
+    private static (CatalogoParesTdnLoader Loader, Mock<ITipologiaRepository> Repo) CrearLoader()
+    {
+        var repo = new Mock<ITipologiaRepository>();
+        var services = new ServiceCollection();
+        services.AddSingleton(repo.Object);
+        var scopeFactory = services.BuildServiceProvider().GetRequiredService<IServiceScopeFactory>();
+        return (new CatalogoParesTdnLoader(new MemoryCache(new MemoryCacheOptions()), scopeFactory), repo);
+    }
+
+    [Fact]
+    public void Load_FalloDeBd_DevuelveVacioYReintentaEnLaSiguienteLlamada()
+    {
+        var (loader, repo) = CrearLoader();
+        repo.SetupSequence(r => r.GetAllPublishedAsync())
+            .ThrowsAsync(new InvalidOperationException("bd caida"))
+            .ReturnsAsync(new[] { Tipologia("a.01", """{"classification":{"tdn1":"AAAA","tdn2":"AAAA-01"}}""") });
+
+        var primero = loader.Load();
+        var segundo = loader.Load();
+
+        primero.Should().BeEmpty();
+        segundo.Should().ContainSingle("el mapa vacio de un fallo no debe quedar cacheado cinco minutos");
+        repo.Verify(r => r.GetAllPublishedAsync(), Times.Exactly(2));
+    }
+
+    [Fact]
+    public void Load_CatalogoLegitimamenteVacio_SeCachea()
+    {
+        var (loader, repo) = CrearLoader();
+        repo.Setup(r => r.GetAllPublishedAsync()).ReturnsAsync(Array.Empty<TipologiaEntity>());
+
+        loader.Load();
+        var segundo = loader.Load();
+
+        segundo.Should().BeEmpty();
+        repo.Verify(r => r.GetAllPublishedAsync(), Times.Once);
     }
 }

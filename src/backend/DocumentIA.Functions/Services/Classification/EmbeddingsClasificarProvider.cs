@@ -23,6 +23,8 @@ public sealed class EmbeddingsClasificarProvider : IEmbeddingsClasificarProvider
 {
     public const string EventoTelemetria = "Classification.Embeddings";
     public const string MetricaLatencia = "Classification.Embeddings.LatenciaMs";
+    /// <summary>Tope del campo Error: viaja al contrato y a BD, no solo a la telemetria.</summary>
+    public const int ErrorMaxChars = 500;
 
     private readonly EmbeddingsClasificadorConfigLoader _config;
     private readonly ModeloEmbeddingsLoader _modelos;
@@ -158,7 +160,7 @@ public sealed class EmbeddingsClasificarProvider : IEmbeddingsClasificarProvider
     {
         r.Decision = DecisionesEmbeddings.DerivarGpt;
         r.Motivo = motivo;
-        r.Error = error;
+        r.Error = error.Length <= ErrorMaxChars ? error : error[..ErrorMaxChars];
         return r;
     }
 

@@ -160,6 +160,29 @@ public class EmbeddingsClasificadorConfigLoaderTests
     }
 
     [Fact]
+    public void Load_AuthModeApiKeySinClave_DevuelveOff()
+    {
+        // Con ApiKey en blanco el cliente lanzaria en cada ejecucion: mejor off con motivo desde el loader.
+        const string json = """{"Modo":"sombra","ResourceAlias":"openai_primary","DeploymentName":"d","AuthMode":"ApiKey","ApiKey":"  ","Artefacto":{"BlobPath":"a.json"}}""";
+
+        var c = CrearLoader(new[] { Fila(json) }).Load();
+
+        c.EstaActiva.Should().BeFalse();
+        c.MotivoDesactivacion.Should().Be("configuracion_incompleta");
+    }
+
+    [Fact]
+    public void Load_AuthModeDefaultAzureCredentialSinClave_SigueActiva()
+    {
+        const string json = """{"Modo":"sombra","ResourceAlias":"openai_primary","DeploymentName":"d","AuthMode":"DefaultAzureCredential","Artefacto":{"BlobPath":"a.json"}}""";
+
+        var c = CrearLoader(new[] { Fila(json) }).Load();
+
+        c.EstaActiva.Should().BeTrue();
+        c.MotivoDesactivacion.Should().BeNull();
+    }
+
+    [Fact]
     public void Load_ModoOffEnAmbos_NoExigeDeploymentNiResuelveAlias()
     {
         // La fila de PRE y PRO entra en off sin artefacto: no debe quejarse de nada.
