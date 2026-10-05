@@ -8,6 +8,17 @@ Alta del catálogo que traduce el consumo de IA de cada ejecución a euros.
 
 El script hace copia de seguridad de la tabla antes de tocar nada, es idempotente y no pisa un catálogo ya existente.
 
+## Scripts
+
+| Script | Qué hace | Dónde |
+| --- | --- | --- |
+| `01-seed-tarifas-ia.sql` | Da de alta la fila `tarifas.ia` con el catálogo completo validado contra la factura (AB#100234). | DEV, PRE y PRO, una vez |
+| `02-tarifas-cera16v2-gpt41-cached.sql` | Añade `CERA16_v2` (contextualización, 0,859) y `gpt-4.1-cached` (entrada, 0,429) al catálogo (AB#100860). | DEV, PRE y PRO, tras el 01 |
+
+Los huecos del catálogo se cierran siempre con un script nuevo y numerado, no editando el seed: el 01 no pisa una fila existente, así que un cambio en él no llegaría a los entornos que ya lo aplicaron. Cada script es idempotente y hace copia de seguridad `ModeloConfigs__bak_<fecha>`.
+
+Las líneas de embeddings del clasificador híbrido (`text-embedding-3-large-030358` y `-010650`) van en `scripts/migrations/clasificador-embeddings/02-tarifas-embeddings-deployments.sql`, con el resto de scripts de esa funcionalidad.
+
 ## Antes de ejecutarlo
 
 El catálogo está **completo y validado contra la factura**. Los precios no son de lista: son los efectivos, derivados de dividir el coste facturado entre la cantidad consumida, medidor a medidor, sobre el grupo de recursos de producción.
@@ -68,8 +79,8 @@ La tarifa se resuelve por el nombre del modelo físico que consta en cada consum
 | Layout a Markdown | `prebuilt-layout` |
 | Clasificador de Document Intelligence | su identificador, hoy `DocumentAICC_v0` y `DocumentAICC_v1` |
 | Páginas de Content Understanding | el medidor, no el analizador: `cu.documentPagesMinimal`, `cu.documentPagesBasic` o `cu.documentPagesStandard` |
-| Contextualización de Content Understanding | el identificador del analizador, hoy `CU_NS_1.5_0` y `CU_NS_1.6_0_GGAA` |
-| Modelo generativo interno de Content Understanding | el que declara el propio servicio, hoy `gpt-4.1` y `text-embedding-3-large` |
+| Contextualización de Content Understanding | el identificador del analizador, hoy `CU_NS_1.5_0`, `CU_NS_1.6_0_GGAA`, `CERA16_v1`, `CERA16_v2`, `CERA44_vado` y `CERA46`. Cada analyzer nuevo necesita su línea |
+| Modelo generativo interno de Content Understanding | el que declara el propio servicio, hoy `gpt-4.1`, `gpt-4.1-cached` y `text-embedding-3-large`. La clave `gpt-4.1-cached` llega sin sufijo y el mapeador la cuenta como entrada, por eso se tarifa en `EurEntradaPor1M` con el precio cacheado |
 
 Content Understanding factura por su cuenta las páginas y la contextualización, pero los tokens del modelo generativo se cargan al despliegue de Foundry conectado y el servicio los declara aparte. Por eso llevan línea propia.
 
