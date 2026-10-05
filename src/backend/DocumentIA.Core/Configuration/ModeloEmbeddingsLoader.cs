@@ -65,9 +65,9 @@ public class ModeloEmbeddingsLoader
             var etag = await _blobs.GetETagAsync(ruta);
             if (etag is null)
             {
-                _logger?.LogError("El artefacto de embeddings {Ruta} no existe en el storage.", ruta);
-                _cache[ruta] = new Entrada { Modelo = null, ETag = null, ValidadoEn = _ahora() };
-                return null;
+                // Un 404 tras una carga buena se trata como fallo transitorio: se conserva el ultimo modelo.
+                _logger?.LogError("El artefacto de embeddings {Ruta} no existe en el storage. Se mantiene la copia en memoria si existe.", ruta);
+                return Conservar(ruta, vigente);
             }
 
             if (vigente?.Modelo is not null && string.Equals(vigente.ETag, etag, StringComparison.Ordinal))
@@ -77,7 +77,7 @@ public class ModeloEmbeddingsLoader
             }
 
             var bytes = await _blobs.DownloadDocumentAsync(ruta);
-            ModeloEmbeddings? modelo = null;
+            ModeloEmbeddings modelo;
             try
             {
                 modelo = ModeloEmbeddings.Parse(Encoding.UTF8.GetString(bytes));
@@ -89,7 +89,10 @@ public class ModeloEmbeddingsLoader
             {
                 // Parse lanza InvalidDataException, pero un JSON bien formado con nulos
                 // puede lanzar ArgumentNullException o NullReferenceException: todo es artefacto invalido.
-                _logger?.LogError(ex, "El artefacto de embeddings {Ruta} no es valido. El clasificador queda sin modelo.", ruta);
+                // Se conserva el ultimo modelo bueno con su ETag: a los cinco minutos se vuelve a
+                // descargar y a avisar, hasta que el artefacto se corrija.
+                _logger?.LogError(ex, "El artefacto de embeddings {Ruta} no es valido. Se mantiene la copia en memoria si existe.", ruta);
+                return Conservar(ruta, vigente);
             }
 
             _cache[ruta] = new Entrada { Modelo = modelo, ETag = etag, ValidadoEn = _ahora() };
@@ -104,12 +107,18 @@ public class ModeloEmbeddingsLoader
             // Fallo del storage: se conserva el ultimo modelo bueno si lo hay y se cachea
             // el resultado para no reintentar la descarga hasta la siguiente revalidacion.
             _logger?.LogError(ex, "No se pudo revalidar el artefacto de embeddings {Ruta}. Se mantiene la copia en memoria si existe.", ruta);
-            _cache[ruta] = new Entrada { Modelo = vigente?.Modelo, ETag = vigente?.ETag, ValidadoEn = _ahora() };
-            return vigente?.Modelo;
+            return Conservar(ruta, vigente);
         }
         finally
         {
             _candado.Release();
         }
+    }
+
+    /// <summary>Deja en cache el ultimo modelo bueno (o nulo si no lo habia) y aplaza el siguiente intento cinco minutos.</summary>
+    private ModeloEmbeddings? Conservar(string ruta, Entrada? vigente)
+    {
+        _cache[ruta] = new Entrada { Modelo = vigente?.Modelo, ETag = vigente?.ETag, ValidadoEn = _ahora() };
+        return vigente?.Modelo;
     }
 }

@@ -43,14 +43,23 @@ public class CatalogoParesTdnLoader
             return new Dictionary<string, TipologiaPar>(StringComparer.OrdinalIgnoreCase);
         }
 
-        return _cache.GetOrCreate(ClaveCache, entry =>
+        if (_cache.TryGetValue(ClaveCache, out IReadOnlyDictionary<string, TipologiaPar>? cacheado) && cacheado is not null)
         {
-            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5);
-            return LoadFromDatabase();
-        })!;
+            return cacheado;
+        }
+
+        // El mapa vacio de un fallo de BD no se cachea: la siguiente ejecucion vuelve a intentarlo.
+        var catalogo = LoadFromDatabase();
+        if (catalogo is not null)
+        {
+            _cache.Set(ClaveCache, catalogo, TimeSpan.FromMinutes(5));
+            return catalogo;
+        }
+
+        return new Dictionary<string, TipologiaPar>(StringComparer.OrdinalIgnoreCase);
     }
 
-    private IReadOnlyDictionary<string, TipologiaPar> LoadFromDatabase()
+    private IReadOnlyDictionary<string, TipologiaPar>? LoadFromDatabase()
     {
         try
         {
@@ -62,7 +71,7 @@ public class CatalogoParesTdnLoader
         catch (Exception ex)
         {
             _logger?.LogError(ex, "No se pudo cargar el catalogo de pares TDN. El clasificador por embeddings no podra mapear tipologias.");
-            return new Dictionary<string, TipologiaPar>(StringComparer.OrdinalIgnoreCase);
+            return null;
         }
     }
 

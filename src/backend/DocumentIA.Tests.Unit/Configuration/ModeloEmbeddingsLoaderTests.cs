@@ -145,4 +145,35 @@ public class ModeloEmbeddingsLoaderTests
         segundo.Should().BeNull();
         env.Blobs.Verify(b => b.GetETagAsync(RutaCompleta), Times.Once);
     }
+
+    [Fact]
+    public async Task Obtener_BlobDesaparecidoTrasUnaCargaBuena_ConservaElUltimoModelo()
+    {
+        var env = new Entorno();
+        var primero = await env.Loader.ObtenerAsync(Container, Ruta, CancellationToken.None);
+        env.Blobs.Setup(b => b.GetETagAsync(RutaCompleta)).ReturnsAsync((string?)null);
+        env.Ahora = env.Ahora.AddMinutes(6);
+
+        var segundo = await env.Loader.ObtenerAsync(Container, Ruta, CancellationToken.None);
+
+        segundo.Should().BeSameAs(primero, "un 404 transitorio no debe dejar el clasificador sin modelo");
+    }
+
+    [Fact]
+    public async Task Obtener_ArtefactoInvalidoTrasUnaCargaBuena_ConservaElUltimoModeloYNoReintentaDentroDeLosCincoMinutos()
+    {
+        var env = new Entorno();
+        var primero = await env.Loader.ObtenerAsync(Container, Ruta, CancellationToken.None);
+        env.Blobs.Setup(b => b.GetETagAsync(RutaCompleta)).ReturnsAsync("\"0x2\"");
+        env.Blobs.Setup(b => b.DownloadDocumentAsync(RutaCompleta)).ReturnsAsync(Encoding.UTF8.GetBytes("{ esto no es json"));
+        env.Ahora = env.Ahora.AddMinutes(6);
+
+        var segundo = await env.Loader.ObtenerAsync(Container, Ruta, CancellationToken.None);
+        env.Ahora = env.Ahora.AddMinutes(4);
+        var tercero = await env.Loader.ObtenerAsync(Container, Ruta, CancellationToken.None);
+
+        segundo.Should().BeSameAs(primero, "un artefacto nuevo roto no debe sustituir al ultimo bueno");
+        tercero.Should().BeSameAs(primero);
+        env.Blobs.Verify(b => b.DownloadDocumentAsync(RutaCompleta), Times.Exactly(2));
+    }
 }
