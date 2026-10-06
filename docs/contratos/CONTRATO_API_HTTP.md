@@ -264,7 +264,7 @@ Los errores del trigger de ingesta se devuelven como **texto plano** (no JSON, s
 | `400 Bad Request` | `objectIdGDC` junto con `base64` o `blobPath`, o ninguna de las tres fuentes informada. |
 | `401 Unauthorized` | Function Key ausente o inválida (la genera el host). |
 | `500 Internal Server Error` | `NivelClasificacionDefault` mal configurado en el servidor. |
-| `500 Internal Server Error` | Excepción no controlada en el trigger; el cuerpo es `Error: <mensaje de la excepción>`. |
+| `500 Internal Server Error` | Excepción no controlada en el trigger. El cuerpo es `Error interno al procesar la solicitud. Indique este identificador al soporte: correlationId=<id>`; el detalle de la excepción queda solo en Application Insights, buscable por ese `correlationId` (el de `trazabilidad.correlationId` de la petición o uno generado si falló antes de leerla). |
 
 No existen `403`, `409`, `413`, `415`, `422`, `429` ni `503` en este endpoint. Los duplicados, los límites de IA (429 de Azure OpenAI) y los errores de negocio **no** cambian el HTTP: se informan en `Resultado.Estado` del resultado final (ver §5).
 
