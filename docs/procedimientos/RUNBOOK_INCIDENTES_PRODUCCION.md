@@ -1,7 +1,7 @@
 # Runbook de Incidentes — Producción SRBRGDOCSAIPROD
 
 **Versión:** 1.0  
-**Última actualización:** 2026-06-10  
+**Última actualización:** 2026-10-06  
 **Aplicable a:** SRBRGDOCSAIPROD (Production Only)  
 **Fuente:** Código verificado en Activities + Providers
 
@@ -626,6 +626,12 @@ customEvents
 - 🔴 AppInsights: eventos `AOAI.CircuitOpen` y `AOAI.CircuitRejected` frecuentes
 - 📊 Evento `AOAI.RateLimitRetry` en aumento (reintentos por 429/500/502/503/504)
 - 🟡 Prompts devuelven `PromptResultado.Error` con prefijo `rate_limit_exhausted:` (degradado, no escala el documento a `PENDIENTE_REINTENTO`)
+- ℹ️ `DetalleEjecucion.Seguimiento.Estado = "PendienteReintento"` acompaña a `Resultado.Estado = "PENDIENTE_REINTENTO"`; la instancia queda en `runtimeStatus = Completed`
+
+**No confundir con otros estados de `Resultado.Estado`** (cierran con `runtimeStatus = Completed`, no son 429):
+- `PAGINAS_EXCEDIDAS` → el documento supera `maxPages`, `EstadoCalidad = "REVISION"` (ver `docs/especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md`)
+- `EXTRACCION_INCOMPLETA` → falló Content Understanding, se usó el fallback y no se obtuvo ningún campo útil
+- `ERROR` → excepción capturada por el orquestador; `runtimeStatus = Failed` queda para input nulo, excepción en el preámbulo o fallo de infraestructura
 
 **Causas Raíz Posibles:**
 - Cuota/TPM (tokens-por-minuto) del deployment de Azure OpenAI agotada por volumen de documentos
@@ -684,7 +690,7 @@ Ver `docs/observabilidad/OBSERVABILIDAD_KQL.md` para más queries de circuit bre
    - Evaluar reducir concurrencia de llamadas a Azure OpenAI o distribuir el volumen en el tiempo
 
 **Rollback:**
-- Para desactivar la lógica de resiliencia 429 y volver al comportamiento previo (retry por defecto del SDK, sin estado retriable diferenciado): `AzureOpenAIResilience.MaxRetries = 0` y `AzureOpenAIResilience.EnableCircuitBreaker = false` en appsettings
+- Para desactivar la lógica de resiliencia 429 y volver al comportamiento previo (retry por defecto del SDK, sin estado retriable diferenciado: el error crudo del SDK ante 429 acaba como `Resultado.Estado = "ERROR"` con `runtimeStatus = Completed`, no como HTTP 429 ni como `Failed`): `AzureOpenAIResilience.MaxRetries = 0` y `AzureOpenAIResilience.EnableCircuitBreaker = false` en appsettings
 
 **Escalation:**
 - Si `PENDIENTE_REINTENTO` persiste > 30 min tras confirmar cuota disponible → P2 → Tech Lead

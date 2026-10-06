@@ -1,6 +1,6 @@
 # Troubleshooting & Diagnóstico — DocumentIA
 
-**Última actualización:** 2026-07-13  
+**Última actualización:** 2026-10-06  
 **Público objetivo:** Operadores, DevOps, Soporte 2º nivel
 
 ---
@@ -31,7 +31,12 @@
     │      │  └─ Normal → Esperar o revisar logs
     │      │
     │      ├─ ¿runtimeStatus = Failed?
-    │      │  └─ Revisar excepción y activity fallida (sección 3.2)
+    │      │  └─ Poco frecuente: solo input nulo, excepción en el preámbulo del orquestador o fallo de
+    │      │     infraestructura. Revisar la excepción de la instancia (sección 3.1)
+    │      │
+    │      ├─ ¿runtimeStatus = Completed pero Resultado.Estado = ERROR (u otro estado de fallo)?
+    │      │  └─ Es lo habitual en un fallo de activity: el orquestador captura la excepción y la devuelve
+    │      │     en Resultado.Estado/MensajeError. Revisar DetalleEjecucion.Seguimiento.Actividades (sección 3.2)
     │      │
     │      └─ ¿runtimeStatus = Terminated?
     │         └─ Orquestación cancelada (revisar instancia en Durable Monitor)
@@ -500,6 +505,9 @@
    - `PENDIENTE_REINTENTO` → cuota de Azure OpenAI agotada tras reintentos/cooldown; estado limpio y retriable, no es un fallo del documento
    - `NO_CLASIFICADO` → documento genuinamente no clasificable; no confundir con rate limit
    - `SIN_CONTENIDO_DOCUMENTO` → se pidió prompt o resumen y no se pudo leer el documento por ninguna vía; no es un problema de clasificación ni de cuota
+   - `PAGINAS_EXCEDIDAS` → el documento supera `maxPages`; cierra con `EstadoCalidad = "REVISION"` y no extrae (ver [ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md](../especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md)); no es un fallo ni un 429
+   - `EXTRACCION_INCOMPLETA` → falló Content Understanding, se usó el fallback y no se obtuvo ningún campo útil; `MensajeError` indica la razón del fallback
+   - `DetalleEjecucion.Seguimiento.Estado = "PendienteReintento"` → estado de seguimiento que acompaña a `Resultado.Estado = "PENDIENTE_REINTENTO"`; la instancia sigue en `runtimeStatus = Completed`
 
 3. **Revisar cuota y uso del deployment en Azure Portal:**
    - Azure OpenAI resource → deployment usado por clasificación/prompts → Metrics → comparar `Rate Limit Requests` / uso de TPM vs límite asignado
@@ -509,7 +517,7 @@
 1. **Reprocesar los documentos en `PENDIENTE_REINTENTO`** cuando la cuota se haya recuperado
 2. **Revisar y, si procede, ampliar la cuota/TPM** del deployment de Azure OpenAI en Azure Portal (o repartir carga entre deployments)
 3. **Ajustar la configuración `AzureOpenAIResilience`** (ver manual de configuración): `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`
-4. **Rollback si es necesario:** `MaxRetries: 0` + `EnableCircuitBreaker: false` desactiva el reintento/circuito y vuelve al comportamiento anterior (error crudo del SDK ante 429)
+4. **Rollback si es necesario:** `MaxRetries: 0` + `EnableCircuitBreaker: false` desactiva el reintento/circuito y vuelve al comportamiento anterior (sin estado retriable: el error del SDK ante 429 acaba como `Resultado.Estado = "ERROR"` con `runtimeStatus = Completed`, no como HTTP 429 ni como `Failed`)
 5. Los prompts con `rate_limit_exhausted:` no requieren acción sobre el documento (degradado no bloqueante); revisar solo si el volumen es alto y afecta a la calidad del enriquecimiento
 
 ---
@@ -986,3 +994,4 @@ az functionapp config appsettings set \
 | 2026-06-10 | Versión inicial con 6 casos, KQL queries, scripts PowerShell |
 | 2026-07-13 | Añadido CASO 7: rate limiting (429) de Azure OpenAI en clasificación GPT/prompts y estado `PENDIENTE_REINTENTO` |
 | 2026-09-07 | Añadido el caso de coste de IA a cero o incompleto (catálogo de tarifas, vigencia, caché) |
+| 2026-10-06 | Corregido el árbol de diagnóstico por `runtimeStatus` (los fallos de activity acaban en `Completed` + `ERROR`); añadidos `PAGINAS_EXCEDIDAS`, `EXTRACCION_INCOMPLETA` y `PendienteReintento`; aclarado el rollback de `MaxRetries: 0` |

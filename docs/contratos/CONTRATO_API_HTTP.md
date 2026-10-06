@@ -179,18 +179,18 @@ Ejemplo de resultado `"Desconocido"` con propuesta informativa (`proponerSiDesco
 
 ```json
 {
-  "identificacion": {
-    "tipologia": "Desconocido",
-    "propuestaTipologia": "escritura-compraventa"
+  "Identificacion": {
+    "Tipologia": "Desconocido",
+    "PropuestaTipologia": "escritura-compraventa"
   },
-  "detalleEjecucion": {
-    "clasificacion": {
-      "tipologiaDetectada": "Desconocido",
-      "confianza": 0.0,
-      "fallbackRazon": "fuera_de_conjunto_restringido",
-      "restriccionTipologias": {
-        "codigos": ["SERE-25", "NOTA-SIMPLE"],
-        "codigosIgnorados": null
+  "DetalleEjecucion": {
+    "Clasificacion": {
+      "TipologiaDetectada": "Desconocido",
+      "Confianza": 0.0,
+      "FallbackRazon": "fuera_de_conjunto_restringido",
+      "RestriccionTipologias": {
+        "Codigos": ["SERE-25", "NOTA-SIMPLE"],
+        "CodigosIgnorados": null
       }
     }
   }
@@ -246,11 +246,27 @@ Modo multipart/blob-first:
 
 #### Respuestas de error
 
+Los errores del trigger de ingesta se devuelven como **texto plano** (no JSON, sin código de error ni `traceId`).
+
 | Código | Causa |
 |---|---|
-| `400 Bad Request` | Body inválido, `ContratoEntrada` no deserializable, `instrucciones.prompt` fuera de rango, violación de reglas de entrada (`objectIdGDC` + `base64` simultáneos / ninguno informado, `classificationOnly` + `expectedType`), o `instrucciones.restriccionTipologias` inválida (`codigos` vacío, todos los códigos rechazados, o combinación con `nivelClasificacion = "TDN1"`). |
-| `401 Unauthorized` | Function Key ausente o inválida. |
-| `500 Internal Server Error` | Error inesperado en el trigger. |
+| `400 Bad Request` | Multipart sin parte `file` o `metadata`. |
+| `400 Bad Request` | JSON mal formado (`ContratoEntrada` no deserializable). |
+| `400 Bad Request` | Extensión de fichero no soportada. |
+| `400 Bad Request` | `content.base64` inválido. |
+| `400 Bad Request` | Contrato de entrada inválido. |
+| `400 Bad Request` | `classification.nivelClasificacion` inválido. |
+| `400 Bad Request` | `instrucciones.prompt` fuera de rango o inválido. |
+| `400 Bad Request` | `instrucciones.restriccionTipologias` inválida (`codigos` vacío, todos rechazados) o combinada con `nivelClasificacion = "TDN1"`. |
+| `400 Bad Request` | `classificationOnly = true` junto con `expectedType`. |
+| `400 Bad Request` | `maxPagesForClassificationOnly` < 0. |
+| `400 Bad Request` | `documento` / `documento.content` inválido. |
+| `400 Bad Request` | `objectIdGDC` junto con `base64` o `blobPath`, o ninguna de las tres fuentes informada. |
+| `401 Unauthorized` | Function Key ausente o inválida (la genera el host). |
+| `500 Internal Server Error` | `NivelClasificacionDefault` mal configurado en el servidor. |
+| `500 Internal Server Error` | Excepción no controlada en el trigger; el cuerpo es `Error: <mensaje de la excepción>`. |
+
+No existen `403`, `409`, `413`, `415`, `422`, `429` ni `503` en este endpoint. Los duplicados, los límites de IA (429 de Azure OpenAI) y los errores de negocio **no** cambian el HTTP: se informan en `Resultado.Estado` del resultado final (ver §5).
 
 ---
 
@@ -260,6 +276,10 @@ Modo multipart/blob-first:
 
 La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Function Key del Durable Task extension.
 
+> **Convención de nombres** (verificado en runtime el 2026-10-05): el `output` del orquestador sale en **PascalCase** (`Resultado.Estado`, `EstadoCalidad`, `DetalleEjecucion.Seguimiento.Estado`), mientras que `customStatus` sale en **camelCase** (`actividadActual`, `actividadesCompletadas`). El sobre de Durable (`runtimeStatus`, `customStatus`, `output`, `instanceId`, `createdTime`, `lastUpdatedTime`) va en camelCase. Los ejemplos JSON de `output` de este documento usan PascalCase; en el texto y en las tablas, los nombres de campo del output pueden aparecer abreviados (p. ej. `resultado.estado`) y corresponden a la clave PascalCase equivalente.
+
+`runtimeStatus` toma los valores `Pending`, `Running`, `Completed`, `Failed` y `Terminated`. Un **error de negocio termina con `runtimeStatus = Completed`** y `Resultado.Estado = ERROR`: el orquestador captura el núcleo del procesamiento. `Failed` solo aparece por input nulo, excepción en el preámbulo del orquestador o fallo de infraestructura; `Terminated` solo por intervención manual.
+
 #### Estados intermedios (Running)
 
 ```json
@@ -268,10 +288,14 @@ La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Fun
   "instanceId": "abc123...",
   "runtimeStatus": "Running",
   "customStatus": {
-    "actividad": "Extraer",
-    "completadas": ["Normalizar", "VerificarDuplicado", "SubirBlob", "Clasificar", "ResolverTipologia"],
-    "totalActividades": 9,
-    "duracionMs": 4200
+    "version": "1.0",
+    "estado": "Pending",
+    "actividadActual": "Extraer",
+    "actividadesTotales": 9,
+    "actividadesCompletadas": ["Normalizar", "VerificarDuplicado", "SubirBlob", "Clasificar", "ResolverTipologia"],
+    "duracionTotalMs": 4200,
+    "actividades": [ { "nombre": "Clasificar", "estado": "Completed", "duracionMs": 1800 } ],
+    "mensaje": null
   },
   "input": { ... },
   "output": null,
@@ -280,60 +304,67 @@ La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Fun
 }
 ```
 
+Campos de `customStatus` (camelCase): `version`, `estado`, `actividadActual`, `actividadesTotales`, `actividadesCompletadas`, `duracionTotalMs`, `actividades[]` y `mensaje`. La forma exacta de cada elemento de `actividades[]` y del valor de `estado` durante la ejecución no se ha reverificado en runtime para este documento.
+
 #### Estado final — Éxito
 
 ```json
 {
   "runtimeStatus": "Completed",
   "output": {
-    "identificacion": {
-      "documento": "nota_simple_finca_123.pdf",
-      "guid": "xxxxxxxx-...",
-      "tipologia": "nota.simple.1_4",
-      "tipologiaFamilia": "nota-simple",
-      "tipologiaVersion": "1.4",
-      "fechaProceso": "2026-03-27T10:00:10Z",
-      "paginas": 5,
-      "propuestaTipologia": null
+    "Identificacion": {
+      "Documento": "nota_simple_finca_123.pdf",
+      "Guid": "xxxxxxxx-...",
+      "Tipologia": "nota.simple.1_4",
+      "TipologiaFamilia": "nota-simple",
+      "TipologiaVersion": "1.4",
+      "FechaProceso": "2026-03-27T10:00:10Z",
+      "Paginas": 5,
+      "PropuestaTipologia": null
     },
-    "integridad": {
-      "crc32": "a1b2c3d4",
-      "sha256": "abcdef...",
-      "md5": "fedcba...",
-      "tamanoBytes": 933347,
-      "rutaBlobStorage": "documents/nota_simple_finca_123.pdf",
-      "gestorDocumental": "GDC",
-      "idActivo": "ACTIVO-001",
-      "idActivoEntrada": null,
-      "idActivoCambiado": false
+    "Integridad": {
+      "CRC32": "a1b2c3d4",
+      "SHA256": "abcdef...",
+      "MD5": "fedcba...",
+      "TamanoBytes": 933347,
+      "RutaBlobStorage": "documents/nota_simple_finca_123.pdf",
+      "GestorDocumental": "GDC",
+      "IdActivo": "ACTIVO-001",
+      "IdActivoEntrada": null,
+      "IdActivoCambiado": false
     },
-    "datosExtraidos": {
+    "DatosExtraidos": {
       "FincaRegistral": "12345",
       "IDUFIR_CRU": "...",
       "Direccion": "Calle Mayor 1",
       "ReferenciaCatastral": "...",
       "FechaDocumento": "2026-01-15"
     },
-    "resultado": {
-      "estado": "OK",
-      "mensajeError": null,
-      "confianzaGlobal": 0.92,
-      "estadoCalidad": "OK",
-      "confianzaClasificacion": 0.95,
-      "confianzaExtraccion": 0.91,
-      "confianzaValidacion": 0.9,
-      "reutilizadaPorDuplicado": false,
-      "mensajeReutilizacion": null
+    "Resultado": {
+      "Estado": "OK",
+      "MensajeError": null,
+      "ConfianzaGlobal": 0.92,
+      "EstadoCalidad": "OK",
+      "ConfianzaClasificacion": 0.95,
+      "ConfianzaExtraccion": 0.91,
+      "ConfianzaValidacion": 0.9,
+      "ReutilizadaPorDuplicado": false,
+      "MensajeReutilizacion": null
     },
-    "detalleEjecucion": { ... }
-      "detalleEjecucion": {
-        "instanceId": "abc123def456...",
-        "operationId": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
-        "..."
-      }
+    "DetalleEjecucion": {
+      "InstanceId": "abc123def456...",
+      "OperationId": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+      "...": "..."
+    }
   }
 }
 ```
+
+#### Estados de seguimiento (`DetalleEjecucion.Seguimiento`)
+
+- `DetalleEjecucion.Seguimiento.Estado`: `Pending`, `Completed`, `Failed` o `PendienteReintento`.
+- `DetalleEjecucion.Seguimiento.Actividades[].Estado`: `Pending`, `Running`, `Completed`, `Failed`, `Skipped` o `Timeout`.
+- Estos estados conviven con `runtimeStatus = Completed`: un seguimiento en `Failed` o `PendienteReintento` no implica `runtimeStatus = Failed`. Los errores parciales no vuelven a la raíz de `Resultado` (no existen `Codigo`, `Warnings` ni `Error` ahí): viven en `DetalleEjecucion.MotivoErrorTipologia`, `DetalleEjecucion.Prompt.Error`, `DetalleEjecucion.GDC`, `DetalleEjecucion.Integracion.Estado` (OK/REVISION/ERROR) e `Integracion.Plugins[].Error`.
 
 ---
 
@@ -392,42 +423,46 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 
 ## 5. Estados posibles en `resultado.estado`
 
+Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.Estado` (ver convención de nombres en §4). ¿Continúa el pipeline tras cada estado?: `OK` sí; `NO_CLASIFICADO` no; `SIN_CONTENIDO_DOCUMENTO` no; `PENDIENTE_REINTENTO` no; `VALIDACION_CON_ERRORES` sí; `BAJA_CONFIANZA_CLASIFICACION` no; `DUPLICADO` no; `PAGINAS_EXCEDIDAS` no (retorna tras clasificar); `EXTRACCION_INCOMPLETA` estado de cierre tras la extracción; `ERROR` termina el procesamiento.
+
 | Estado | Descripción |
 |---|---|
 | `OK` | Procesamiento completado correctamente. |
 | `OK` _(clasificación parcial — tipología virtual)_ | Solo cuando `nivelClasificacion` activa clasificación GPT y el modelo no puede mapear a ningún código de catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` contiene la propuesta libre del modelo. El pipeline se detiene: extracción y validación se omiten. **Si la petición incluye `instrucciones.prompt` o `forzarResumenPorDefecto`, el prompt y el resumen sí se ejecutan** antes de cerrar (ver nota más abajo). También llega a este estado cuando `instrucciones.restriccionTipologias` está activa y ningún proveedor de la cadena devuelve un código dentro del conjunto permitido; en ese caso `detalleEjecucion.clasificacion.fallbackRazon = "fuera_de_conjunto_restringido"` y, si `proponerSiDesconocido = true`, `identificacion.propuestaTipologia` lleva la clasificación libre informativa. |
-| `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. El pipeline continúa (extracción, validación) con la tipología parcial. **Cuando el estado proviene de una tipología no resoluble o `Desconocido`, el prompt y el resumen se ejecutan igualmente si la petición los pidió**; `datosExtraidos.ResultadoPrompt` y/o `datosExtraidos.Resumen` vienen informados pese al `NO_CLASIFICADO`. |
-| `SIN_CONTENIDO_DOCUMENTO` | Se solicitó un prompt o un resumen pero no se pudo obtener **ningún texto del documento**: ni markdown de extracción, ni layout previo, ni recuperación bajo demanda. El modelo **no se invoca** (antes se le llamaba con el hueco de contenido vacío y devolvía respuestas del tipo *"No has incluido el documento"* que se persistían como resumen válido). Va acompañado de la actividad `Prompt` en `Failed` y sin `Resumen` ni `ResultadoPrompt` en `datosExtraidos`. Causas habituales: documento ilegible o corrupto, o Document Intelligence no disponible. |
+| `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. **El pipeline NO continúa**: retorna sin extracción ni validación. **Cuando el estado proviene de una tipología no resoluble o `Desconocido`, el prompt y el resumen se ejecutan igualmente si la petición los pidió**; `datosExtraidos.ResultadoPrompt` y/o `datosExtraidos.Resumen` vienen informados pese al `NO_CLASIFICADO`. |
+| `SIN_CONTENIDO_DOCUMENTO` | Se solicitó un prompt o un resumen pero no se pudo obtener **ningún texto del documento**: ni markdown de extracción, ni layout previo, ni recuperación bajo demanda. El modelo **no se invoca** (antes se le llamaba con el hueco de contenido vacío y devolvía respuestas del tipo *"No has incluido el documento"* que se persistían como resumen válido). Va acompañado de la actividad `Prompt` en `Failed` y sin `Resumen` ni `ResultadoPrompt` en `datosExtraidos`. En la ruta de clasificación `MensajeError` es `"Sin contenido del documento: no se puede clasificar ni generar resumen."`; en la ruta de prompt `MensajeError` queda nulo. Causas habituales: documento ilegible o corrupto, o Document Intelligence no disponible. |
 | `PENDIENTE_REINTENTO` | La clasificación GPT se pospuso porque la cuota de Azure OpenAI quedó agotada (`429 Too Many Requests`) tras agotar los reintentos y/o con el circuito abierto. Es un estado **retriable**: el documento debe reencolarse/reprocesarse más tarde, no representa un fallo definitivo. Va acompañado de `estadoCalidad = "ERROR"`, confianzas a `0` y `mensajeError` con el detalle (p. ej. `"Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`). No debe confundirse con `NO_CLASIFICADO` (documento genuinamente no clasificable). |
 | `VALIDACION_CON_ERRORES` | Extracción completada pero alguna regla de validación no se cumplió. Los datos se devuelven. |
-| `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. Se devuelven datos con advertencia. |
+| `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. El orquestador **retorna sin extraer** (no se devuelven datos extraídos) y `EstadoCalidad` queda vacío. |
 | `DUPLICADO` | El documento ya existe en la base de datos (mismo SHA256) y **no hay ninguna ejecución anterior reutilizable**. Cuando sí la hay, `resultado.estado` es el de aquella ejecución (normalmente `OK`), `resultado.reutilizadaPorDuplicado = true`, `resultado.mensajeReutilizacion` lo indica y `detalleEjecucion.ejecucionOriginalGuid` apunta a la ejecución cuyo contrato se devuelve (§6). Se prefiere la ejecución que coincide en `classificationOnly` + `nivelClasificacion`; sin coincidencia exacta, la última con contrato. |
 | `ERROR` | Error irrecuperable durante el procesamiento (clasificación fallida, excepción no controlada). Consultar `mensajeError`. |
+| `PAGINAS_EXCEDIDAS` | El documento supera el límite de páginas configurado. Tras clasificar, el orquestador fija `EstadoCalidad = "REVISION"`, `ConfianzaExtraccion = 0`, `Integracion.Estado = OK` (mensaje "Omitido: límite de páginas excedido") y GDC `Skipped`, persiste y **retorna sin extraer ni validar**. Ver `docs/especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md`. |
+| `EXTRACCION_INCOMPLETA` | Estado de cierre: se fija cuando hubo fallback de extracción (p. ej. tras `CuExtraccionException`) o timeout propio y cero campos útiles (excluyendo `Paginas` y Markdown). `MensajeError` = "Fallback de extracción sin datos. Razón: {FallbackRazon}". |
 
-> **Ejemplo — `PENDIENTE_REINTENTO`** (extracto de `resultado`):
+> **Ejemplo — `PENDIENTE_REINTENTO`** (extracto de `Resultado`):
 > ```json
 > {
->   "resultado": {
->     "estado": "PENDIENTE_REINTENTO",
->     "mensajeError": "Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde.",
->     "estadoCalidad": "ERROR",
->     "confianzaClasificacion": 0,
->     "confianzaExtraccion": 0,
->     "confianzaValidacion": 0
+>   "Resultado": {
+>     "Estado": "PENDIENTE_REINTENTO",
+>     "MensajeError": "Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde.",
+>     "EstadoCalidad": "ERROR",
+>     "ConfianzaClasificacion": 0,
+>     "ConfianzaExtraccion": 0,
+>     "ConfianzaValidacion": 0
 >   }
 > }
 > ```
 
-> **Ejemplo — `SIN_CONTENIDO_DOCUMENTO`** (extracto de `resultado`):
+> **Ejemplo — `SIN_CONTENIDO_DOCUMENTO`** (ruta de clasificación; extracto de `Resultado`):
 > ```json
 > {
->   "resultado": {
->     "estado": "SIN_CONTENIDO_DOCUMENTO",
->     "mensajeError": "No hay contenido textual del documento para ejecutar el prompt.",
->     "estadoCalidad": "ERROR"
+>   "Resultado": {
+>     "Estado": "SIN_CONTENIDO_DOCUMENTO",
+>     "MensajeError": "Sin contenido del documento: no se puede clasificar ni generar resumen."
 >   }
 > }
 > ```
+> En la ruta de prompt el estado es el mismo pero `MensajeError` queda nulo.
 
 > **Prompt y resumen no dependen de la clasificación.** Si la petición informa `instrucciones.prompt`
 > o `instrucciones.forzarResumenPorDefecto`, el prompt y el resumen se ejecutan aunque el documento
@@ -495,39 +530,39 @@ Solo aparece cuando la petición incluye `instrucciones.incluirCostes = true`. E
 Cubre **solo servicios de IA**. No contabiliza Blob Storage, SQL, Functions ni ninguna otra infraestructura.
 
 ```json
-"costes": {
-  "version": "1.0",
-  "consumos": [
+"Costes": {
+  "Version": "1.0",
+  "Consumos": [
     {
-      "actividad": "Clasificar",
-      "operacion": "classification.phase1",
-      "proveedor": "AzureOpenAI",
-      "modelo": "gpt-5-mini",
-      "tokensEntrada": 12480,
-      "tokensEntradaCache": 7200,
-      "tokensSalida": 310,
-      "tokensRazonamiento": 128,
-      "costeEur": 0.004312,
-      "tarifaAplicada": "gpt-5-mini@2026-07-21",
-      "descartado": false
+      "Actividad": "Clasificar",
+      "Operacion": "classification.phase1",
+      "Proveedor": "AzureOpenAI",
+      "Modelo": "gpt-5-mini",
+      "TokensEntrada": 12480,
+      "TokensEntradaCache": 7200,
+      "TokensSalida": 310,
+      "TokensRazonamiento": 128,
+      "CosteEur": 0.004312,
+      "TarifaAplicada": "gpt-5-mini@2026-07-21",
+      "Descartado": false
     },
     {
-      "actividad": "Extraer",
-      "operacion": "extraction.cu.servicio",
-      "proveedor": "ContentUnderstanding",
-      "modelo": "CU_NS_1.4_2",
-      "paginas": 10,
-      "tokensContextualizacion": 10000,
-      "costeEur": 0.056,
-      "tarifaAplicada": "CU_NS_1.4_2@2026-04-01"
+      "Actividad": "Extraer",
+      "Operacion": "extraction.cu.servicio",
+      "Proveedor": "ContentUnderstanding",
+      "Modelo": "CU_NS_1.4_2",
+      "Paginas": 10,
+      "TokensContextualizacion": 10000,
+      "CosteEur": 0.056,
+      "TarifaAplicada": "CU_NS_1.4_2@2026-04-01"
     }
   ],
-  "costeTotalEur": 0.060312,
-  "tokensTotales": 22790,
-  "paginasTotales": 10,
-  "tarifasCompletas": true,
-  "modelosSinTarifa": [],
-  "reutilizadaPorDuplicado": false
+  "CosteTotalEur": 0.060312,
+  "TokensTotales": 22790,
+  "PaginasTotales": 10,
+  "TarifasCompletas": true,
+  "ModelosSinTarifa": [],
+  "ReutilizadaPorDuplicado": false
 }
 ```
 
@@ -617,6 +652,7 @@ $status.output.resultado
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
 - Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización prefiere la ejecución compatible por `hash + classificationOnly + nivelClasificacion` y, si no la hay, la última con contrato.
+- Cuando el documento llega por `objectIdGDC`, además de la deduplicación por SHA256 existe la **reutilización por checksum MD5 de GDC**: si el checksum ya fue procesado, se devuelve la última ejecución con `Resultado.MensajeReutilizacion` = "Documento ya procesado previamente (checksum GDC)...". Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
 - **Toda petición servida por reutilización queda registrada** (AB#100258) como una ejecución propia en la base de datos, sin contrato ni coste, vinculada a la original y visible en el Monitor de Admin. Para el llamador el cambio es **aditivo**: el único campo nuevo (`detalleEjecucion.ejecucionOriginalGuid`) solo aparece en respuestas reutilizadas, y lo único que cambia de valor es `detalleEjecucion.instanceId` / `operationId` en esas respuestas, que pasan a ser los de la llamada actual. `statusQueryUri`, los estados y el resto del contrato no cambian. Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
 - Si `skipGDCUpload=true` (o se fuerza automáticamente por entrada `objectIdGDC`), el paso GDC finaliza como `Skipped` y se reporta como exitoso (`detalleEjecucion.gdc.exitoso=true`).
 - Si se envía `instrucciones.prompt`, la validación ocurre en el trigger HTTP (respuesta `400` inmediata si inválido). No es necesario esperar al resultado de la orquestación para detectar errores de prompt.
@@ -634,17 +670,28 @@ El backend consume un único endpoint configurable `GDC:Endpoint` de SINTWS `IDo
 
 ## 9. Endpoints Admin de configuración dinámica
 
-Estos endpoints gestionan configuración de tipologías, modelos y plugins en base de datos. Todos son `AuthorizationLevel.Function`.
+Estos endpoints gestionan configuración de tipologías, modelos y plugins en base de datos. Todos son `AuthorizationLevel.Function`, salvo `GET /api/tipologias` (§9.5), que es anónimo.
+
+**Formato del cuerpo de error:** los endpoints admin devuelven `{ "error": "..." }`; el grupo de Prompts (§9.2.bis) devuelve `{ "message", "errors", "timestampUtc" }`. Códigos habituales de admin: `200`, `201`, `204`, `400`, `404` y `409`.
 
 ### 9.1 Tipologías
 
-| Método | Ruta | Descripción |
-|---|---|---|
-| `GET` | `/api/management/tipologias` | Lista tipologías/versiones con estado. |
-| `GET` | `/api/management/tipologias/{codigo}` | Obtiene una tipología por código. |
-| `PUT` | `/api/management/tipologias/{codigo}` | Crea/actualiza borrador (`Draft`). |
-| `POST` | `/api/management/tipologias/{codigo}/publicar` | Publica (`Published`) la tipología. |
-| `POST` | `/api/management/tipologias/{codigo}/retirar` | Retira (`Retired`) la tipología. |
+El identificador de ruta es el `Id` numérico (`{id:int}`), no el código.
+
+| Método | Ruta | Descripción | Códigos |
+|---|---|---|---|
+| `GET` | `/api/management/tipologias` | Lista tipologías/versiones con estado. | 200 |
+| `GET` | `/api/management/tipologias/{id}` | Obtiene una tipología por Id. | 200, 404 |
+| `POST` | `/api/management/tipologias` | Crea una tipología nueva. | 201, 400, 409 (código ya existente) |
+| `PUT` | `/api/management/tipologias/{id}` | Edita la tipología. | 200, 400, 404, 409 (solo editable en `Draft` o `Retired`) |
+| `POST` | `/api/management/tipologias/{id}/publicar` | Publica (`Published`) la tipología. Revalida configuración y modelos. | 200, 400, 404 |
+| `POST` | `/api/management/tipologias/{id}/retirar` | Retira (`Retired`) la tipología. | 200, 404 |
+| `POST` | `/api/management/tipologias/{id}/draft` | Devuelve la tipología a `Draft`. | 200, 404 |
+| `GET` | `/api/management/tipologias/{id}/audit` | Auditoría de la tipología. | 200, 404 |
+| `GET` | `/api/management/tipologias/{id}/versions` | Versiones de la familia. | 200, 404 |
+| `GET` | `/api/management/tipologias/{id}/diff/{otherId}` | Compara dos versiones de la misma familia. | 200, 400, 404 |
+| `GET` | `/api/management/tipologias/{id}/export` | Exporta la tipología (ZIP). | 200, 404 |
+| `POST` | `/api/management/tipologias/import` | Importa un paquete ZIP en Base64. | 201, 400, 409 |
 
 ### 9.2 Modelos
 
@@ -669,6 +716,8 @@ Estos endpoints gestionan configuración de tipologías, modelos y plugins en ba
 | `PUT` | `/api/management/prompts/{id}/activate` | Activa la versión indicada; desactiva la versión activa anterior de la misma `PromptKey`. |
 | `POST` | `/api/management/prompts/rollback` | Reactiva una versión anterior (`PromptKey` + `TargetVersion`); desactiva la versión activa actual. |
 | `DELETE` | `/api/management/prompts/{id}` | Elimina físicamente una versión en borrador. |
+
+**Formato de error:** este grupo devuelve `{ "message", "errors", "timestampUtc" }` y no `{ "error" }`. Códigos: `200`, `201`, `204`, `400`, `403`, `404`, `409` (activar una versión ya activa, rollback a una versión ya activa) y `500` (fallo al actualizar con `PUT`).
 
 **Inmutabilidad de la versión activa:** `PUT` y `DELETE` devuelven **`403 Forbidden`** si la versión (`IsActive=true`) está activa. El flujo correcto para cambiar el contenido de un prompt en producción es: crear una nueva versión borrador (`POST`) con el contenido deseado y activarla (`PUT .../activate`); la versión anterior se desactiva automáticamente y sigue disponible para rollback. `DELETE` sobre una versión en borrador (`IsActive=false`) es un borrado físico (no soft-delete) y responde `204 No Content`.
 
@@ -697,5 +746,31 @@ El campo `environment` de la respuesta se resuelve con esta precedencia: app set
 - `PUT` de tipologías y plugins valida que el JSON sea deserializable.
 - `POST publicar` vuelve a validar antes de promover a `Published`.
 - Si un recurso no existe, la API devuelve `404 Not Found`.
-- Si el JSON es inválido, la API devuelve `400 Bad Request` con detalle en `error`.
+- Si el JSON es inválido, la API devuelve `400 Bad Request` con detalle en `error` (en Prompts, en `message`/`errors`).
+- `POST publicar` de tipologías devuelve `400` (no `409`) cuando la configuración o los modelos no son válidos.
+
+### 9.5 Otros endpoints
+
+Solo se listan ruta, método, autenticación y códigos; los cuerpos no se documentan aquí.
+
+| Método | Ruta | Auth | Códigos |
+|---|---|---|---|
+| `GET` | `/api/tipologias` (listado público de tipologías) | Anónimo | 200 (500 del host ante excepción) |
+| `GET` | `/api/management/catalogotdn1` | Function | 200 |
+| `GET` | `/api/management/catalogotdn1/{id}` | Function | 200, 404 |
+| `POST` | `/api/management/catalogotdn1` | Function | 201, 400, 409 |
+| `PUT` | `/api/management/catalogotdn1/{id}` | Function | 200, 400, 404, 409 |
+| `DELETE` | `/api/management/catalogotdn1/{id}` | Function | 204, 404, 409 (tiene TDN2 asociados) |
+| `GET` | `/api/management/catalogotdn2` | Function | 200 |
+| `GET` | `/api/management/catalogotdn2/{id}` | Function | 200, 404 |
+| `GET` | `/api/management/catalogotdn2/by-tdn1/{codigoTdn1}` | Function | 200, 400 |
+| `POST` | `/api/management/catalogotdn2` | Function | 201, 400, 409 |
+| `PUT` | `/api/management/catalogotdn2/{id}` | Function | 200, 400, 404, 409 |
+| `DELETE` | `/api/management/catalogotdn2/{id}` | Function | 204, 404 |
+| `GET` | `/api/management/ejecuciones` | Function | 200 |
+| `GET` | `/api/management/ejecuciones/{guid}/detalle` | Function | 200, 404 |
+| `GET` | `/api/management/ejecuciones/costes` | Function | 200 |
+| `GET` | `/api/management/ejecuciones/agregados` | Function | 200 |
+
+Las rutas de tipologías (`draft`, `audit`, `versions`, `diff`, `export`, `import`) están en §9.1.
 

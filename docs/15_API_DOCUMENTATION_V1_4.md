@@ -1,7 +1,7 @@
 # TipologiasAdminFunction - API Documentation v1.4
 
 **Version:** 1.4 (PromptGPT Deprecation)  
-**Last Updated:** 2026-06-05  
+**Last Updated:** 2026-10-06  
 **Status:** Active  
 **Base URL:** `https://{host}/api`
 
@@ -73,15 +73,13 @@ $headers = @{
 
 ## Error Handling
 
-All endpoints return structured error responses:
+El formato del cuerpo de error depende de la función; no existe un formato común con `timestamp` ni `traceId`:
 
-```json
-{
-  "error": "Descriptive error message",
-  "timestamp": "2026-06-05T10:30:45Z",
-  "traceId": "0HMVD..."
-}
-```
+| Función | Cuerpo de error |
+|---|---|
+| Trigger de ingesta (`POST /api/IngestDocument`) | Texto plano, sin JSON |
+| Endpoints admin (`/api/management/*`, incluido este documento) | `{ "error": "Mensaje descriptivo" }` |
+| Prompts (`/api/management/prompts*`) | `{ "message": "...", "errors": [...], "timestampUtc": "..." }` |
 
 ### HTTP Status Codes
 
@@ -91,7 +89,8 @@ All endpoints return structured error responses:
 | 201 | Created | Resource created |
 | 400 | Bad Request | Invalid input, validation failure |
 | 404 | Not Found | Tipología ID doesn't exist |
-| 409 | Conflict | State transition not allowed, duplicate código |
+| 403 | Forbidden | Solo Prompts: modificar o borrar una versión activa |
+| 409 | Conflict | Código duplicado, o editar una tipología que no está en Draft/Retired |
 | 500 | Internal Server Error | Server error |
 
 ---
@@ -380,7 +379,7 @@ Transitions Tipología from **Draft** to **Published**. Validates all configurat
 #### Status Codes
 - `200 OK` — Success
 - `404 Not Found` — Tipología does not exist
-- `409 Conflict` — Invalid state or configuration
+- `400 Bad Request` — Configuración o modelos referenciados inválidos (la publicación no devuelve 409)
 
 #### Example
 
@@ -810,7 +809,7 @@ Published → Retirar → Retired → Draft → Update → Publicar → Publishe
 
 ### Q: What's the timeout for publish validation?
 
-**A:** 30 seconds. If validation of referenced models exceeds this, publish fails with `504 Gateway Timeout`. Reduce model complexity or check model availability.
+**A:** No existe `504 Gateway Timeout` en la publicación: la validación de configuración y de modelos referenciados es síncrona y, si falla, devuelve `400 Bad Request` con el motivo en `error`. Los endpoints de Prompts añaden `403 Forbidden` (modificar o borrar una versión activa) y `500 Internal Server Error` (fallo al actualizar).
 
 ### Q: How do I handle version conflicts?
 
@@ -841,5 +840,5 @@ Published → Retirar → Retired → Draft → Update → Publicar → Publishe
 - **Deprecation Timeline:** [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md#deprecation-timeline)
 
 **Document Version:** 1.4.0  
-**Last Updated:** 2026-06-05  
+**Last Updated:** 2026-10-06  
 **Next Review:** 2026-06-30 (v1.5 planning)

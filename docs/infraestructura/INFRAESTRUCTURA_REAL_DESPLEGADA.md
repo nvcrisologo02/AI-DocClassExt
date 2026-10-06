@@ -12,7 +12,7 @@ Cada entorno vive en su propia **suscripción** y **resource group**:
 | **Subscription ID** | `8764f9ff-fe37-4c03-bde9-6294622bef6d` | `a4f6b357-8f13-4488-9ee8-b9f635426f91` | `647c7246-54bc-4d31-b909-431cacf03272` |
 | **Service Connection (ADO)** | `AI DocClassExt DEV` | `AI DocClassExt PRE` | `AI DocClassExt PRO` |
 
-> **ℹ️ IA por entorno desplegada, pero apuntando a PROD por decisión funcional.** Cada entorno tiene **su propio stack de IA desplegado**: un Document Intelligence (`srbdi<env>docai`) y **dos** cuentas AIServices/Foundry (`srbaisrv01<env>docai` + `srbaisrv02<env>docai`). PROD usa naming propio: DI `srbdiprodocai` + `upe48-mm2avmdm-swedencentral` (swedencentral) + `srbaisrv-westeurope` (westeurope). **Por decisión funcional, la configuración de los tres entornos apunta a la IA de PRODUCCIÓN**: el pipeline `azure-pipelines.yml` cablea en los App Settings los endpoints de PROD de forma literal (CU/OpenAI de `upe48-mm2avmdm-swedencentral`, DI `srbdiprodocai`), idénticos en DEV/PRE/PRO. Las apps de DEV/PRE consumen así la IA de PROD usando la API key de su propio Key Vault. Los recursos de IA locales de DEV/PRE quedan **provisionados y reservados** para un eventual uso independiente por entorno en el futuro. Ver [Recursos de IA](#recursos-de-ia) y [caveats operativos](#-known-issues--workarounds).
+> **ℹ️ IA por entorno.** Cada entorno tiene su propio stack de IA: un Document Intelligence (`srbdi<env>docai`) y **dos** cuentas AIServices/Foundry (`srbaisrv01<env>docai` primaria, CU + OpenAI, y `srbaisrv02<env>docai`, CU secundaria). **DEV usa su IA propia desde 2026-09-22 y PRE desde 2026-09-23** (AB#100320). **PRO sigue apuntando a su IA actual** (`upe48-mm2avmdm-swedencentral` en swedencentral, `srbaisrv-westeurope` en westeurope, DI `srbdiprodocai`) hasta su fase (AB#100302); PRO aún no tiene settings `AI__*`. Los endpoints se resuelven por alias con los app settings `AI__Resources__<alias>__Endpoint` (`AiEndpointResolver`), calculados a partir de `infra/ai/pipeline-variables.yml`. Fuentes: `infra/ai/pipeline-variables.yml`, [ADR-001](../decisiones/ADR-001-promocion-artefactos-ia-dev-pre-pro.md) y [DESPLIEGUE_IA.md](../procedimientos/DESPLIEGUE_IA.md). Ver [Recursos de IA](#recursos-de-ia) y [caveats operativos](#-known-issues--workarounds).
 
 ---
 
@@ -36,9 +36,9 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 | **Log Analytics Workspace** | `srblawdevdocai` | `srblawpredocai` | `srblawprodocai` |
 | **Document Intelligence** (`CognitiveServices` / FormRecognizer) | `srbdidevdocai` | `srbdipredocai` | `srbdiprodocai` |
 | **AIServices / Foundry** (CU + OpenAI) | `srbaisrv01devdocai`, `srbaisrv02devdocai` | `srbaisrv01predocai`, `srbaisrv02predocai` | `upe48-mm2avmdm-swedencentral` (swedencentral), `srbaisrv-westeurope` (westeurope) |
-| **Metric alerts** | — | — | `srbalertcpuprodocai`, `srbalertmemprodocai` |
+| **Alertas Azure Monitor** | — (sin alertas) | — (sin alertas) | action group `srbagoperprodocai` y alertas descritas en [MONITOREO_ALERTAS_REAL.md](../observabilidad/MONITOREO_ALERTAS_REAL.md) |
 | **Dashboards / Workbooks** | — | — | 1 dashboard + 2 workbooks |
-| **GDC endpoint** | `https://srbwidd03.sareb.srb:8090/sintws/IDocService` | ⚠️ *pendiente de confirmar* | `https://srbwidp05.sareb.srb:8090/sintws/IDocService` |
+| **GDC endpoint** | `https://srbwidd03.sareb.srb:8090/sintws/IDocService` | `https://srbwidi03.sareb.srb:8090/sintws-162/IDocService` | `https://srbwidp05.sareb.srb:8090/sintws/IDocService` |
 
 > **Nota de naming:** DEV/PRE nombran sus cuentas AIServices como `srbaisrv0{1,2}<env>docai`; PROD usa `upe48-mm2avmdm-swedencentral` (primario) y `srbaisrv-westeurope` (secundario).
 
@@ -53,7 +53,7 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 <a id="recursos-de-ia"></a>
 ### Recursos de IA
 
-**1) Recursos desplegados por entorno** (cada RG tiene su propio stack de IA, provisionado y reservado):
+**1) Recursos de IA por entorno** (DEV y PRE los usan desde 2026-09-22 y 2026-09-23; PRO mantiene los suyos hasta AB#100302):
 
 | Entorno | Document Intelligence | AIServices / Foundry (CU + OpenAI) |
 |---------|-----------------------|-------------------------------------|
@@ -61,7 +61,7 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 | **PRE** | `srbdipredocai` | `srbaisrv01predocai`, `srbaisrv02predocai` |
 | **PRO** | `srbdiprodocai` | `upe48-mm2avmdm-swedencentral` (swedencentral), `srbaisrv-westeurope` (westeurope) |
 
-**2) Endpoints efectivamente usados por los tres entornos** (por decisión funcional, la config de DEV/PRE/PRO apunta a los recursos de PROD):
+**2) Endpoints de PRO** (DEV y PRE resuelven los suyos por alias `AI__Resources__<alias>__Endpoint`; PRO aún no tiene settings `AI__*`). Endpoints por entorno en `infra/ai/pipeline-variables.yml`:
 
 | Recurso PROD | Kind / SKU | Región | Endpoints | Rol |
 |--------------|-----------|--------|-----------|-----|
@@ -78,10 +78,14 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 | `gpt-4.1-mini-622960` | `gpt-4.1-mini` (2025-04-14) | GlobalStandard | 250 | Sweden Central |
 | `gpt-4o` | `gpt-4o` (2024-11-20) | GlobalStandard | 250 | Sweden Central |
 | `text-embedding-3-large-030358` | `text-embedding-3-large` (1) | GlobalStandard | 150 | Sweden Central |
+| `gpt-5-mini` | `gpt-5-mini` (2025-08-07) | DataZoneStandard | 50 | Sweden Central |
 | `gpt-4.1-892749` | `gpt-4.1` (2025-04-14) | GlobalStandard | 250 | West Europe |
 | `gpt-4.1-mini-590191` | `gpt-4.1-mini` (2025-04-14) | GlobalStandard | 250 | West Europe |
 | `text-embedding-3-large-010650` | `text-embedding-3-large` (1) | GlobalStandard | 250 | West Europe |
+| `gpt-5-mini` | `gpt-5-mini` (2025-08-07) | DataZoneStandard | 50 | West Europe |
 
+
+> **Deployments de DEV/PRE:** replican el juego en sus cuentas 01/02 (`infra/ai/deployments.dev.json` y `infra/ai/deployments.pre.json`), incluido `gpt-5-mini`.
 
 > **Regiones:** CU/OpenAI **primarios** (`upe48-mm2avmdm-swedencentral`) en **swedencentral**; CU/OpenAI **secundarios** (`srbaisrv-westeurope`) y **todos** los recursos de aplicación y DI en **West Europe**.
 
@@ -146,11 +150,10 @@ Cada resource group replica la misma topología. Sustituye `{app}`, `{kv}`, `{sq
 ├── Log Analytics Workspace: {law}  (dev: srblawdevdocai · pre: srblawpredocai · pro: srblawprodocai)
 ├── Networking: 5 Private Endpoints (SQL, Storage-blob, KeyVault, DI, Function App) + Private DNS Zones + VNet link
 │                (dev→SRBCoreDev · pre→SRBCorePre · pro→RedServiciosProduccion)
-└── Azure AI Services — DESPLEGADOS POR ENTORNO, pero la config apunta a PROD (decisión funcional)
-    ├── Locales del entorno (provisionados, reservados a futuro):
-    │   ├── DI:        {di}         (dev: srbdidevdocai · pre: srbdipredocai · pro: srbdiprodocai)
-    │   └── AIServices: srbaisrv01<env>docai + srbaisrv02<env>docai   (PROD: upe48-mm2avmdm-swedencentral + srbaisrv-westeurope)
-    └── Endpoints usados por los 3 entornos (App Settings → PROD):
+└── Azure AI Services — por entorno (dev desde 2026-09-22, pre desde 2026-09-23; pro aún en la IA de PRO, AB#100302)
+    ├── DI:        {di}         (dev: srbdidevdocai · pre: srbdipredocai · pro: srbdiprodocai)
+    ├── AIServices: srbaisrv01<env>docai + srbaisrv02<env>docai   (PRO: upe48-mm2avmdm-swedencentral + srbaisrv-westeurope)
+    └── Endpoints de PRO (dev/pre: alias AI__Resources__<alias>__Endpoint, ver pipeline-variables.yml):
         ├── CU/OpenAI primario:  upe48-mm2avmdm-swedencentral  (swedencentral)
         ├── CU/OpenAI secundario: srbaisrv-westeurope           (westeurope, CU failover)
         └── Document Intelligence: srbdiprodocai                (westeurope, API 2024-11-30)
@@ -201,14 +204,14 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 | Setting | Value |
 |---------|-------|
 | **DefaultProvider** | azure-content-understanding |
-| **CU Endpoint** | https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/ (compartido) |
+| **CU Endpoint** | https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/ (PRO; DEV/PRE usan sus recursos por alias `AI__Resources__*`) |
 | **CU AuthMode / ApiKey** | ApiKey · `@Microsoft.KeyVault(...Extraction--AzureContentUnderstanding--ApiKey)` (KV del entorno) |
 | **CU MaxConcurrentCalls** | 4 |
 | **CU HardTimeout** | 90 seconds |
 | **CU CircuitBreaker** | enabled (threshold=5, open=45s) |
 | **CU Max Retries / Delay** | 3 · 500ms |
 | **GPT Fallback Enabled** | true |
-| **GPT Fallback Endpoint** | https://upe48-mm2avmdm-swedencentral.openai.azure.com (compartido) |
+| **GPT Fallback Endpoint** | https://upe48-mm2avmdm-swedencentral.openai.azure.com (PRO; DEV/PRE usan sus recursos por alias `AI__Resources__*`) |
 | **GPT Fallback Model** | gpt-4o-mini |
 | **GPT Fallback MinFieldsRatio** | 0.9 |
 | **GPT Fallback Timeout** | 60 seconds |
@@ -219,11 +222,11 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 |---------|-------|
 | **DefaultProvider** | azure-document-intelligence |
 | **DefaultModelKey** | default.azure-di |
-| **DI Endpoint** | https://srbdiprodocai.cognitiveservices.azure.com/ (compartido) |
+| **DI Endpoint** | https://srbdiprodocai.cognitiveservices.azure.com/ (PRO; DEV/PRE usan sus recursos por alias `AI__Resources__*`) |
 | **DI ApiKey** | `@Microsoft.KeyVault(...Classification--AzureDocumentIntelligence--ApiKey)` (KV del entorno) |
 | **DI API Version** | 2024-11-30 |
 | **GPT Fallback Enabled** | true |
-| **GPT Fallback Endpoint** | https://upe48-mm2avmdm-swedencentral.openai.azure.com (compartido) |
+| **GPT Fallback Endpoint** | https://upe48-mm2avmdm-swedencentral.openai.azure.com (PRO; DEV/PRE usan sus recursos por alias `AI__Resources__*`) |
 | **GPT Fallback Model** | gpt-4o-mini |
 | **GPT Fallback Threshold** | 0.5 |
 | **GPT Fallback Timeout** | 30 seconds |
@@ -232,7 +235,7 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 #### **GDC (Legacy Document Management System)**
 | Setting | Value |
 |---------|-------|
-| **Endpoint** | `$(GDC_ENDPOINT)` — **varía por entorno** (dev: `srbwidd03` · pre: *pendiente* · pro: `srbwidp05`, réplica PRD; primario `srbwidp04`) |
+| **Endpoint** | `$(GDC_ENDPOINT)` — **varía por entorno** (dev: `srbwidd03` · pre: `srbwidi03` (`/sintws-162`) · pro: `srbwidp05`, réplica PRD; primario `srbwidp04`) |
 | **HTTP Basic Auth** | Username + Password (from KeyVault del entorno) |
 | **Application ID** | CKP1 |
 | **Document Type ID** | document |
@@ -367,13 +370,13 @@ required = Yes". Procedimiento y comandos: [GUIA_EASYAUTH_ADMIN.md](../guias/GUI
 | Entorno | App registration | Client ID | Grupo de acceso | Secret (Key Vault) | Estado |
 |---------|------------------|-----------|-----------------|--------------------|--------|
 | DEV | `DocumentIA Admin - DEV` | `32aba075-f88e-4012-9ed4-44655123001d` | `GSEC-DocumentIA-Admin-DEV` | `srbkvdevdocai` / `AdminEasyAuthClientSecret` | **Activada** (login corporativo operativo desde 2026-08-06) |
-| PRE | `DocumentIA Admin - PRE` | `5dbd017b-03a0-44cc-9376-f60e217aecfa` | `GSEC-DocumentIA-Admin-PRE` | `srbkvpredocai` / `AdminEasyAuthClientSecret` | App registration verificada (2026-08-07, ID tokens habilitados); activación en App Service pendiente |
-| PROD | `DocumentIA Admin - PRO` | `c216f80f-8fa4-40cf-b28a-6b7f6a640fce` | `GSEC-DocumentIA-Admin-PRO` | `srbkvprodocai` / `AdminEasyAuthClientSecret` | App registration verificada (2026-08-06, ID tokens habilitados); activación en App Service pendiente |
+| PRE | `DocumentIA Admin - PRE` | `5dbd017b-03a0-44cc-9376-f60e217aecfa` | `GSEC-DocumentIA-Admin-PRE` | `srbkvpredocai` / `AdminEasyAuthClientSecret` | **Activada** (2026-09-04; `GUIA_EASYAUTH_ADMIN.md`) |
+| PROD | `DocumentIA Admin - PRO` | `c216f80f-8fa4-40cf-b28a-6b7f6a640fce` | `GSEC-DocumentIA-Admin-PRO` | `srbkvprodocai` / `AdminEasyAuthClientSecret` | **Activada** (configuración verificada en el App Service 2026-09-04; `GUIA_EASYAUTH_ADMIN.md`) |
 
 Tenant: `1a213c5a-2e3d-4ae4-b0ba-075c42f9700e`. El secret de EasyAuth se
 almacena en el Key Vault del entorno y el App Service lo lee vía referencia en
-el app setting `MICROSOFT_PROVIDER_AUTHENTICATION_SECRET`. Mientras EasyAuth no
-esté activo en un entorno, el Admin desplegado opera en modo solo lectura.
+el app setting `MICROSOFT_PROVIDER_AUTHENTICATION_SECRET`. EasyAuth está activo en los tres
+entornos; sin usuario autenticado el Admin opera en modo solo lectura.
 
 ---
 
@@ -384,7 +387,7 @@ esté activo en un entorno, el Admin desplegado opera en modo solo lectura.
 - ✅ RBAC "Key Vault Secrets User" (sin secretos en código — todo desde Key Vault).
 - ✅ SQL con autenticación por Managed Identity (patrón PROD replicado en DEV/PRE).
 - ⚠️ GDC con SSL bypass (`BypassSslValidation=true`) — workaround del sistema legado.
-- ⚠️ **App Service del Admin (dev y prod) sin autenticación** (verificado 2026-07-31): App Service Authentication deshabilitada, restricciones de acceso "Allow all", acceso público habilitado, sin private endpoints (la integración VNet de prod es de salida, no limita el acceso entrante). Plan de remediación: EasyAuth (`docs/guias/GUIA_EASYAUTH_ADMIN.md` + `docs/guias/SOLICITUD_APP_REGISTRATION_ADMIN.md`) y, como medida transitoria, restricción de acceso de red (`docs/guias/GUIA_RESTRICCION_ACCESO_ADMIN.md`). Mientras tanto, el modo solo lectura automático del Admin (sin usuario autenticado) rechaza toda escritura.
+- ✅ Admin con EasyAuth activo en los tres entornos (DEV desde 2026-08-06, PRE y PRO desde 2026-09-04; ver [GUIA_EASYAUTH_ADMIN.md](../guias/GUIA_EASYAUTH_ADMIN.md)). Histórico: hasta el 2026-07-31 el App Service del Admin (dev y prod) estaba sin autenticación y con acceso público; el modo solo lectura automático del Admin (sin usuario autenticado) rechaza toda escritura.
 
 ### ⚡ Concurrencia y resiliencia
 - **CU MaxConcurrentCalls:** 4 (App Settings post-deploy).
@@ -405,11 +408,11 @@ esté activo en un entorno, el Admin desplegado opera en modo solo lectura.
 - ✅ Application Insights por entorno (`srbappidevdocai` · `srbappipredocai` · `srbappiprodocai`).
 - ✅ Prompt tracing habilitado (límite 20.000 caracteres por prompt).
 - ✅ Sampling 20 eventos/seg (host.json).
-- ✅ Alertas Azure Monitor en PRO (2026-08-04, AB#99083): 5 scheduled query rules sobre `srbappiprodocai` (`srbalerterrprodocai`, `srbalertlatprodocai`, `srbalertfbkprodocai`, `srbalertexcprodocai`, `srbalertidleprodocai`) + 2 metric alerts de plataforma (`srbalertcpuprodocai`, `srbalertmemprodocai`), notificando por correo al action group `srbagoperprodocai`. Gestión: `scripts/observability/create-monitor-alerts.ps1`; detalle en `docs/observabilidad/MONITOREO_ALERTAS_REAL.md`. Corrección (2026-10-01): las dos metric alerts no tenían action group. Desde el 2026-10-01 `srbalertmemprodocai` vigila el working set por instancia (> 2,25 GiB) y notifica al action group, y se añade `srbalertoomprodocai` (OutOfMemoryException, Sev 1); `srbalertcpuprodocai` sigue sin action group (AB#100815).
+- ✅ Alertas Azure Monitor en PRO (2026-08-04, AB#99083): 5 scheduled query rules sobre `srbappiprodocai` (`srbalerterrprodocai`, `srbalertlatprodocai`, `srbalertfbkprodocai`, `srbalertexcprodocai`, `srbalertidleprodocai`) + 2 metric alerts de plataforma (`srbalertcpuprodocai`, `srbalertmemprodocai`), notificando por correo al action group `srbagoperprodocai`. Gestión: `scripts/observability/create-monitor-alerts.ps1`; detalle en `docs/observabilidad/MONITOREO_ALERTAS_REAL.md`. Corrección (2026-10-01): las dos metric alerts no tenían action group. Desde el 2026-10-01 `srbalertmemprodocai` vigila el working set por instancia (> 2,25 GiB) y notifica al action group, y se añade `srbalertoomprodocai` (OutOfMemoryException, Sev 1); `srbalertcpuprodocai` sigue sin action group (AB#100815). Además existen 3 alertas de calidad (`srbalertdupprodocai`, `srbalertexpprodocai`, `srbalertsctprodocai`) y la de capacidad de BD > 80 % (`srbalertstoprodocai`); el detalle vive en MONITOREO_ALERTAS_REAL.md. DEV y PRE no tienen alertas.
 
 ---
 
 
 
-**Última actualización:** 2026-07-16
+**Última actualización:** 2026-10-06
 
