@@ -133,13 +133,18 @@ public class DocumentIntelligenceSourceResolverTests
     [InlineData(3)]
     [InlineData(4)]
     [InlineData(3000)]
+    [InlineData(1_000_000)]
+    [InlineData(5_000_000)]
     public async Task CrearContenido_ConCualquierResto_NoLanzaYDecodificaIgual(int longitud)
     {
-        var bytes = Enumerable.Range(0, longitud).Select(i => (byte)(i * 7 + 1)).ToArray();
+        var bytes = new byte[longitud];
+        new Random(12345).NextBytes(bytes);
 
         using var contenido = DiSource.DesdeBytes(bytes).CrearContenido();
 
         (await LeerBase64Source(contenido)).Should().Equal(bytes);
+        // {"base64Source":" (17) + base64 + "} (2)
+        contenido.Headers.ContentLength.Should().Be(19 + ((longitud + 2) / 3) * 4);
     }
 
     [Fact]
