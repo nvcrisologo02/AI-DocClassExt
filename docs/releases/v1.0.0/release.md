@@ -14,14 +14,16 @@ que ya estaba en `develop` como `7aca20b`).
 ## Validación
 
 Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1430/1430 · Tests Admin: 151/151 · Tests AssetResolver: 14/14 · Formato: ok
-E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke pendiente sobre el candidato · E2E PRO: smoke pendiente
+E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke 6/6 · E2E PRO: smoke pendiente
 
 Build, los tres juegos de tests y formato son del 2026-10-07 sobre el árbol de `17889bb` (ejecutados
 sobre `b083546`, cuyo árbol es idéntico al del merge). Smoke DEV del 2026-10-07 sobre `bb1e81d`
 (pipeline 802 run 79674; artefactos `tests/e2e-postdeploy/artifacts/20261007-170046-dev-smoke`):
 los tres commits que lo separan del candidato tocan solo el YAML del pipeline y el script de ciclo
-de vida, no el código de Functions. El smoke de PRE anterior (run 79670 sobre `091ccc1`, 6/6) no
-cubre AB#100814 y se repite al desplegar `17889bb` en PRE (pendiente 3c).
+de vida, no el código de Functions. Smoke PRE del 2026-10-07 sobre `417dca4` (pipeline 802 run
+79679, que solo añade este documento y el runbook sobre `17889bb`; artefactos
+`tests/e2e-postdeploy/artifacts/20261007-201229-pre-smoke`). Medición de AB#100814 en PRE tras
+ese smoke: ver la entrada del Bug.
 
 ## Contenido de la release
 
@@ -156,10 +158,16 @@ Intelligence ni datasets a PRO: el primer run real del pipeline 832 es AB#100809
   con dos seguidos (criterio: < 2 GiB). Smoke DEV 6/6 sobre ese despliegue
   (`tests/e2e-postdeploy/artifacts/20261007-170046-dev-smoke`); el run 79675 desplegó después
   `2ae103b` (solo YAML del pipeline). Informe en
-  `docs/auxiliares/temps/2026-10-07/ab100814-medicion/informe-medicion.md`. La memoria que el
-  host de Functions retiene al reenviar cuerpos HTTP grandes (~0,9 GiB por ingesta de 76 MB)
-  queda fuera: PBI AB#100899 (ClassificationLite por `blobPath`). Las instancias en vuelo en el
-  momento del despliegue reciben el base64 legado una vez y terminan sin pérdida
+  `docs/auxiliares/temps/2026-10-07/ab100814-medicion/informe-medicion.md`. Repetido en PRE el
+  2026-10-07 sobre `417dca4` (run 79679, `DOTNET_GCHeapHardLimitPercent=28` validado por el
+  pipeline): dos ingestas seguidas del mismo PDF (instancias `d86e7121b495436ca805535ab8214ca2`
+  y `a513b516750242a8881cfdd9dbc5d85a`), cero OutOfMemory, DI operativo sin salvavidas (2
+  analyze del clasificador y 2 de layout en 202, polls en 200), working set 2.043 MiB en el pico
+  (cumple el < 2 GiB por 5 MiB; el host sube a 1.066 MiB y el worker retiene 1.298 tras el
+  documento completo inline). La memoria que el host de Functions retiene al reenviar cuerpos
+  HTTP grandes (~0,9 GiB por ingesta de 76 MB) queda fuera: PBI AB#100899 (ClassificationLite
+  por `blobPath`). Las instancias en vuelo en el momento del despliegue reciben el base64
+  legado una vez y terminan sin pérdida
 - AB#100662 `Admin /costes muestra 0 con 90 días` · el índice ya está en PRO desde el 2026-09-20;
   esta release lleva el aviso del Admin cuando los agregados no llegan
 - AB#100258 `Las ejecuciones reutilizadas por duplicado no dejan rastro`
@@ -193,8 +201,8 @@ Checklist de AB#100814 (fuera del despliegue de código):
 
 | Elemento | DEV | PRE | PRO |
 |---|---|---|---|
-| Regla `documents-clasif-7d` de ciclo de vida en la cuenta de documentos (`scripts/storage/set-lifecycle-documents-clasif.ps1`; runbook 2.2.5 y 4.13) | aplicada el 2026-10-07 15:30Z en `srbstgdevdocai`, conserva `delete-temp` | pendiente (`srbstgpredocai`; exige `managementPolicies/write`) | pendiente (`srbstgprodocai`, antes de 4.4) |
-| App setting `DOTNET_GCHeapHardLimitPercent=28` (pipeline 802; runbook 4.14) | puesto a mano el 2026-10-07 14:18Z y en el pipeline desde `4ab4676` | lo pone el pipeline al desplegar | lo pone el pipeline al desplegar; comprobar en 4.14 |
+| Regla `documents-clasif-7d` de ciclo de vida en la cuenta de documentos (`scripts/storage/set-lifecycle-documents-clasif.ps1`; runbook 2.2.5 y 4.13) | aplicada el 2026-10-07 15:30Z en `srbstgdevdocai`, conserva `delete-temp` | aplicada el 2026-10-07 ~18:05Z en `srbstgpredocai` (salida: "Politica escrita. Reglas: delete-temp, documents-clasif-7d"; 2.2.5 hecho) | pendiente (`srbstgprodocai`, antes de 4.4) |
+| App setting `DOTNET_GCHeapHardLimitPercent=28` (pipeline 802; runbook 4.14) | puesto a mano el 2026-10-07 14:18Z y en el pipeline desde `4ab4676` | puesto y validado por el run 79679 del 802 el 2026-10-07 18:11Z | lo pone el pipeline al desplegar; comprobar en 4.14 |
 | Contenedor `documents-clasif` | lo crea el código al primer recorte | ídem | ídem |
 
 ## Aprobación
@@ -213,6 +221,7 @@ Go: pendiente
 
 | Pipeline | Entorno | Run | Resultado |
 |---|---|---|---|
+| 802 Functions (validación previa de AB#100814, no sustituye al 799) | pre | 79679 (`417dca4`) | succeeded, 2026-10-07 18:11Z, app settings validados |
 | 807 Migrations-BD | pre | | |
 | 799 completo | pre | | |
 | 807 Migrations-BD | prod | | |
@@ -227,10 +236,12 @@ Go: pendiente
 3b. ~~AB#100814 desarrollado y mergeado en `develop`; fijar el commit definitivo en 0.1 y repetir
    build y tests sobre él~~ · hecho el 2026-10-07 (`17889bb`; build, tests y formato sobre su
    árbol). Smoke DEV 6/6 del mismo día sobre `bb1e81d` (mismo código de Functions).
-3c. Desplegar `17889bb` en PRE (pipeline 802, `targetEnvironment=pre`), comprobar que la
-   validación de app settings pasa con `DOTNET_GCHeapHardLimitPercent`, smoke PRE 6/6, repetir
-   la medición del PDF de 57 MB contra PRE (`medir-ab100814.ps1 -Environment pre`: cero OOM, DI
-   operativo, worker < 1,4 GiB) y aplicar la regla de ciclo de vida en `srbstgpredocai` (2.2.5).
+3c. ~~Desplegar el candidato en PRE, validación de app settings con `DOTNET_GCHeapHardLimitPercent`,
+   smoke PRE 6/6, medición del PDF de 57 MB contra PRE y regla de ciclo de vida en
+   `srbstgpredocai` (2.2.5)~~ · hecho el 2026-10-07 (run 79679 sobre `417dca4`, smoke 6/6,
+   medición en la entrada de AB#100814, 2.2.5 en `runbook.md`). El working set con dos PDF
+   seguidos quedó en 2.043 MiB, a 5 MiB del criterio: vigilar en la hora de observación de PRO
+   (4.14) y no cargar lotes de PDF grandes hasta AB#100899.
 4. Bloque 1 del plan de ventana (lectura de los app settings de PRO): obligatorio, porque la
    ausencia de los `AI__Resources__*` se apoya en la comprobación del 05/10 y la cuenta de
    desarrollo dio `AuthorizationFailed` el 06/10.
