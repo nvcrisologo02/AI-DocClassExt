@@ -196,7 +196,7 @@ stages:
                 $appliedSettings = az functionapp config appsettings list `
                   --resource-group "$(azureResourceGroup)" `
                   --name "$(functionAppName)" `
-                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'DocumentIntelligence__') || starts_with(name, 'AI__Resources__')].{name: name, value: value}" `
+                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'DocumentIntelligence__') || starts_with(name, 'AI__Resources__') || starts_with(name, 'DOTNET_GC')].{name: name, value: value}" `
                   -o json | ConvertFrom-Json
                 
                 $appliedNames = $appliedSettings | Select-Object -ExpandProperty name
