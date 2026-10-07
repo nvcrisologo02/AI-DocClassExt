@@ -57,6 +57,11 @@ public class IngestAPITrigger
     {
         _logger.LogInformation("Recibiendo documento para procesamiento");
 
+        // AB#100879: identificador que viaja en el 500 generico para localizar la traza en
+        // Application Insights. Se fija en cuanto el contrato esta validado; si la excepcion
+        // salta antes, se genera uno nuevo en el catch.
+        string? correlationId = null;
+
         try
         {
             ContratoEntrada? contratoEntrada;
@@ -126,6 +131,9 @@ public class IngestAPITrigger
                 await badResponse.WriteStringAsync("Contrato de entrada inválido");
                 return badResponse;
             }
+
+            contratoEntrada.Trazabilidad ??= new Trazabilidad();
+            correlationId = contratoEntrada.Trazabilidad.CorrelationId;
 
             contratoEntrada.Instrucciones ??= new Instrucciones();
             contratoEntrada.Instrucciones.Classification ??= new ConfiguracionIA();
@@ -288,9 +296,17 @@ public class IngestAPITrigger
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error procesando solicitud");
+            // AB#100879: el detalle de la excepcion se queda en telemetria; al cliente solo le
+            // llega un mensaje generico con el identificador para abrir la incidencia.
+            if (string.IsNullOrWhiteSpace(correlationId))
+            {
+                correlationId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString();
+            }
+
+            _logger.LogError(ex, "Error procesando solicitud. CorrelationId={CorrelationId}", correlationId);
             var errorResponse = req.CreateResponse(HttpStatusCode.InternalServerError);
-            await errorResponse.WriteStringAsync($"Error: {ex.Message}");
+            await errorResponse.WriteStringAsync(
+                $"Error interno al procesar la solicitud. Indique este identificador al soporte: correlationId={correlationId}");
             return errorResponse;
         }
     }

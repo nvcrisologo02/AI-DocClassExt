@@ -109,7 +109,7 @@ public class IngestAPITriggerTests
         var responseBody = await HttpFunctionTestFactory.ReadBodyAsync(response);
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
-        responseBody.Should().Contain("provider");
+        responseBody.Should().Contain("corr-001");
         scheduledTaskName.Should().NotBeNull();
         scheduledTaskName!.Value.Name.Should().Be("DocumentProcessOrchestrator");
         scheduledInput.Should().NotBeNull();
@@ -276,7 +276,7 @@ public class IngestAPITriggerTests
         var responseBody = await HttpFunctionTestFactory.ReadBodyAsync(response);
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
-        responseBody.Should().Contain("provider");
+        responseBody.Should().Contain("corr-tdn1");
 
         scheduledInput.Should().NotBeNull();
         scheduledInput!.Instrucciones.Classification.NivelClasificacion.Should().Be(ClassificationLevelResolver.LevelTdn1);
@@ -504,5 +504,56 @@ public class IngestAPITriggerTests
         var response = await function.Run(request, durableClient.Object);
 
         response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Run_WhenUnhandledExceptionOccurs_Returns500WithCorrelationIdAndWithoutExceptionMessage()
+    {
+        // AB#100879: el 500 generico no debe exponer ex.Message al cliente; debe llevar un
+        // identificador con el que localizar la traza en Application Insights.
+        var logger = new Mock<ILogger<IngestAPITrigger>>();
+        var blobStorage = new Mock<IBlobStorageService>(MockBehavior.Strict);
+        var promptValidator = new PromptInstruccionesValidator(new PromptModelRegistryLoader("dummy.json"));
+        var settings = Options.Create(new ClassificationRoutingSettings
+        {
+            NivelClasificacionDefault = ClassificationLevelResolver.LevelTdn1Tdn2
+        });
+
+        const string mensajeInterno = "Server=srbsqlprodocai;Password=secreto-interno";
+        var durableClient = new Mock<DurableTaskClient>(MockBehavior.Strict, "test");
+        durableClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException(mensajeInterno));
+
+        var function = new IngestAPITrigger(logger.Object, promptValidator, CreateRestriccionValidatorSinCatalogo(), blobStorage.Object, settings);
+
+        var body = JsonSerializer.Serialize(new
+        {
+            documento = new
+            {
+                name = "documento.pdf",
+                blobPath = "documents/documento.pdf"
+            },
+            instrucciones = new { classification = new { } },
+            trazabilidad = new { correlationId = "corr-500", submittedBy = "tester" }
+        });
+
+        var request = HttpFunctionTestFactory.CreateRequest(
+            method: "POST",
+            url: "http://localhost/api/ingest",
+            body: body,
+            headers: new Dictionary<string, string> { ["Content-Type"] = "application/json" });
+
+        var response = await function.Run(request, durableClient.Object);
+        var responseBody = await HttpFunctionTestFactory.ReadBodyAsync(response);
+
+        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        responseBody.Should().NotContain("secreto-interno");
+        responseBody.Should().NotContain("Password");
+        responseBody.Should().Contain("corr-500");
     }
 }
