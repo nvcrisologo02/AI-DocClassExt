@@ -107,6 +107,11 @@ try {
             throw "PUT fallo: $salida"
         }
 
+        # Mismo filtrado que en el GET: az puede anteponer avisos (InsecureRequestWarning) al JSON.
+        $jsonInicioPut = $salida.IndexOf('{')
+        if ($jsonInicioPut -ge 0) {
+            $salida = $salida.Substring($jsonInicioPut)
+        }
         $resultado = $salida | ConvertFrom-Json
         $nombres = @($resultado.properties.policy.rules | ForEach-Object { $_.name })
         Write-Host "Politica escrita. Reglas: $($nombres -join ', ')"
