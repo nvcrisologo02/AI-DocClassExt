@@ -103,8 +103,9 @@ Orquestador (`DocumentProcessOrchestrator`, pasos 2.5-2.7 y llamada a Clasificar
   `DocumentoBase64Override` deja de rellenarse.
 - Las líneas `DEBUG` que vuelcan `Base64Length` y el prefijo del base64 se eliminan.
 
-Efecto: ningún mensaje de esta ruta supera los 45 KB; desaparecen los blobs de
-`largemessages` y su descompresión por replay.
+Efecto: los mensajes de esta ruta dejan de transportar el documento (el markdown en
+`DatosNormalizados` puede seguir superando los 45 KB en documentos grandes); desaparecen los
+blobs de `largemessages` con el documento y su descompresión por replay.
 
 ### 2. Preparación con bytes
 
@@ -128,8 +129,10 @@ Pico de memoria por activity: el PDF una vez más el recorte.
 
 - `AzureDocumentIntelligenceClasificarProvider`: `blobPath = input.BlobPathClasificacion ??
   input.Entrada.Documento.BlobPath`; `base64Override` solo con el campo legado.
-- `HybridTdnClasificarProvider` (salvavidas): `ContextoMarkdown.BlobPath` toma esa misma ruta;
-  `DocumentoBase64` solo con el campo legado.
+- `HybridTdnClasificarProvider` (salvavidas): el `ContextoMarkdown` sigue apuntando al documento
+  original (`documento.BlobPath`): el layout de N páginas va por SAS con rango, no ahorra memoria
+  usar el recorte, y el markdown se persiste por el SHA256 del original (regla de cobertura de
+  AB#100245/AB#100253). `DocumentoBase64` solo con el campo legado.
 - `ConfigurableClasificarDataProvider`: propaga `BlobPathClasificacion` igual que hoy propaga
   el override.
 - La ruta GPT (`GptClasificarDataProvider`, `DocumentWindowExtractor`) no cambia: trabaja con
@@ -171,6 +174,9 @@ los fallbacks legados (GDC).
 
 - Instancias en vuelo con `DocumentoBase64Clasif` o `DocumentoBase64Override` serializados:
   los campos legados siguen leyéndose, así que terminan con el comportamiento anterior.
+- Si la salida de Preparar llega sin ruta pero con `DocumentoBase64Clasif` (historia anterior al
+  fix), el orquestador reenvía ese base64 como `DocumentoBase64Override` una sola vez, así la
+  instancia termina como antes.
 - Los campos `[Obsolete]` se retiran en la release siguiente a v1.0.0 (task aparte).
 - No hay migraciones ni cambios de configuración de la Function App.
 
