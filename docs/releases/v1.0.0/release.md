@@ -13,14 +13,15 @@ tests y smoke sobre el commit definitivo.
 ## Validación
 
 Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1401/1401 · Tests Admin: 151/151 · Tests AssetResolver: 14/14 · Formato: ok
-E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke pendiente sobre el candidato · E2E PRO: smoke pendiente
+E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke 6/6 · E2E PRO: smoke pendiente
 
 Build, tests unitarios y formato son del 2026-10-07 sobre `5414335` (Admin y AssetResolver, del
-mismo día sobre `85e1b67`, el único commit que separa `291a424` de `5414335`). El smoke de DEV es
-del 2026-10-07 sobre `5414335` (pipeline 802 run 79669, artefactos
-`tests/e2e-postdeploy/artifacts/20261007-123939-dev-smoke`). El smoke de PRE sigue siendo el del
-2026-10-05 sobre `eb0614e` (runs 79645/79644): **hay que repetirlo** sobre `5414335` desplegando
-PRE con el pipeline 802.
+mismo día sobre `85e1b67`, el único commit que separa `291a424` de `5414335`). Los dos smoke son
+del 2026-10-07 sobre el código de `5414335`: DEV con el pipeline 802 run 79669 (artefactos
+`tests/e2e-postdeploy/artifacts/20261007-123939-dev-smoke`) y PRE con el run 79670, que
+despliega `091ccc1` (solo añade este documento sobre `5414335`; artefactos
+`tests/e2e-postdeploy/artifacts/20261007-130201-pre-smoke`). Si AB#100814 cambia el candidato,
+los dos smoke se repiten.
 
 ## Contenido de la release
 
@@ -199,8 +200,8 @@ Go: pendiente
 ## Pendientes antes de cerrar la Fase 0
 
 1. ~~AB#100880 desarrollado y mergeado en `develop`~~ · hecho el 2026-10-07 (`5414335`).
-2. Repetir el smoke de PRE sobre `5414335` (DEV ya repetido, 6/6). Requiere desplegar PRE con el
-   pipeline 802.
+2. ~~Repetir el smoke de DEV y PRE sobre `5414335`~~ · hechos el 2026-10-07, 6/6 y 6/6 (runs
+   79669 y 79670 del pipeline 802).
 3. ~~Fijar el commit en 0.1 y reescribir la cabecera~~ · hecho el 2026-10-07, provisional.
 3b. **AB#100814** desarrollado y mergeado en `develop`; después, fijar el commit definitivo en 0.1
    y repetir build, tests y smoke de DEV y PRE sobre él.
