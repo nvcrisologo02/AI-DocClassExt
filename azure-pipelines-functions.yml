@@ -27,6 +27,9 @@ variables:
       value: SRBRGDEVDOCSAI
     - name: diUseInlineContent
       value: 'true'
+    # gcHeapHardLimitPercent: tope del heap del GC por proceso en hexadecimal (28 = 40 %). Host y worker suman 80 % del contenedor (AB#100814).
+    - name: gcHeapHardLimitPercent
+      value: '28'
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: azureSubscription
       value: AI DocClassExt PRE
@@ -36,6 +39,8 @@ variables:
       value: SRBRGPREDOCSAI
     - name: diUseInlineContent
       value: 'true'
+    - name: gcHeapHardLimitPercent
+      value: '28'
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: azureSubscription
       value: AI DocClassExt PRO
@@ -45,6 +50,8 @@ variables:
       value: SRBRGDOCSAIPROD
     - name: diUseInlineContent
       value: 'false'
+    - name: gcHeapHardLimitPercent
+      value: '28'
   # Endpoints de IA por entorno (AI_*): fuente unica compartida con azure-pipelines.yml.
   - template: infra/ai/pipeline-variables.yml
     parameters:
@@ -148,6 +155,7 @@ stages:
                   "PromptTracing__IncludePromptText=$(promptTracingIncludePromptText)",
                   "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)",
                   "DocumentIntelligence__UseInlineContent=$(diUseInlineContent)",
+                  "DOTNET_GCHeapHardLimitPercent=$(gcHeapHardLimitPercent)",
                   # Mapa de alias de recursos de IA (AB#100317): el registro de modelos resuelve
                   # ModeloConfigs.ResourceAlias contra estos settings. Solo se crean si faltan.
                   "AI__Resources__openai_primary__Endpoint=$(AI_OPENAI_PRIMARY_ENDPOINT)",
@@ -178,6 +186,7 @@ stages:
                   "PromptTracing__IncludePromptText",
                   "PromptTracing__MaxPromptTextChars",
                   "DocumentIntelligence__UseInlineContent",
+                  "DOTNET_GCHeapHardLimitPercent",
                   "AI__Resources__openai_primary__Endpoint",
                   "AI__Resources__cu_primary__Endpoint",
                   "AI__Resources__cu_secondary__Endpoint",

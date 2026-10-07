@@ -379,6 +379,7 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
   queda en PRO sin uso.
 
 - [ ] **4.13** Política de ciclo de vida de los recortes de clasificación en la cuenta de documentos de PRO (`srbstgprodocai`): `pwsh ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment pro -WhatIf` y, revisada la salida, sin `-WhatIf`; antes de 4.4. Debe conservar las reglas existentes y añadir `documents-clasif-7d` (AB#100814). Anotar la salida en `runbook.md`.
+- [ ] **4.14** Tras 4.4, comprobar en `srbappprodocai` que `DOTNET_GCHeapHardLimitPercent` vale `28` (lo fija el pipeline 802; AB#100814) y observar Private Bytes de host y worker en la hora de 4.9: ninguno debe superar ~1,4 GiB.
 
 Verificación: 4.6 en 6/6, 4.7 sin diferencias no explicadas, 4.9 sin anomalías.
 Vuelta atrás: Anexo B, en orden de capas.
