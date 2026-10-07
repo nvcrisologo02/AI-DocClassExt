@@ -457,4 +457,121 @@ public class MarkdownResolverTests
         (await _sut.PersistirAportadoAsync(new PersistirMarkdownInput { Sha256 = "sha-1", Markdown = " ", Paginas = 1 })).Should().BeFalse();
         _repo.Verify(x => x.ActualizarMarkdownSiMejoraAsync(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>(), It.IsAny<bool>()), Times.Never);
     }
+
+    // ========== AB#100880: el resolutor dice por que no hay contenido ==========
+
+    private void LayoutLanza(Exception ex)
+        => _layout.Setup(l => l.ExtraerMarkdownAsync(It.IsAny<ExtraerMarkdownLayoutInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(ex);
+
+    [Fact]
+    public async Task LayoutTimeout_SinNadaEnBd_DevuelveNingunaConCausaLayoutTimeout()
+    {
+        BdVacia();
+        LayoutLanza(new TimeoutException("Timeout esperando resultado de DI layout"));
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Completo(), Contexto());
+
+        r.TieneContenido.Should().BeFalse();
+        r.Fuente.Should().Be(FuenteMarkdown.Ninguna);
+        r.CausaSinContenido.Should().NotBeNull();
+        r.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.LayoutTimeout);
+        r.CausaSinContenido.EsTransitoria.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task LayoutRechazaLaPeticion_SinNadaEnBd_DevuelveCausaLayoutErrorConCodigoHttp()
+    {
+        BdVacia();
+        LayoutLanza(new LayoutRequestException(
+            400, "Error iniciando DI layout. Status=400. Body={\"error\":{\"code\":\"InvalidContent\",\"message\":\"Could not download the file from the given URL.\"}}"));
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto());
+
+        r.Fuente.Should().Be(FuenteMarkdown.Ninguna);
+        r.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.LayoutError);
+        r.CausaSinContenido.CodigoHttp.Should().Be(400);
+        r.CausaSinContenido.Detalle.Should().Contain("InvalidContent");
+        r.CausaSinContenido.EsTransitoria.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task LayoutRechazaElFormato_SinNadaEnBd_DevuelveCausaFormatoNoSoportado()
+    {
+        BdVacia();
+        LayoutLanza(new LayoutRequestException(415, "Error iniciando DI layout. Status=415. Body=Unsupported media type"));
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto());
+
+        r.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.FormatoNoSoportado);
+        r.CausaSinContenido.CodigoHttp.Should().Be(415);
+    }
+
+    [Fact]
+    public async Task SinFuentesDeDocumento_DevuelveCausaSinFuente()
+    {
+        var ctx = Contexto();
+        ctx.BlobPath = null;
+        ctx.DocumentoBase64 = null;
+        BdVacia();
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), ctx);
+
+        r.Fuente.Should().Be(FuenteMarkdown.Ninguna);
+        r.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.SinFuente);
+    }
+
+    [Fact]
+    public async Task LayoutRespondeSinTexto_SinNadaEnBd_DevuelveCausaDocumentoSinTexto()
+    {
+        // El unico caso en que de verdad "el documento no tiene contenido": Layout respondio y no
+        // habia texto. Es el que el orquestador reserva para SIN_CONTENIDO_DOCUMENTO.
+        BdVacia();
+        LayoutDevuelve("   ", 0);
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto());
+
+        r.Fuente.Should().Be(FuenteMarkdown.Ninguna);
+        r.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.DocumentoSinTexto);
+        r.CausaSinContenido.EsTransitoria.Should().BeFalse();
+        r.Consumos.Should().HaveCount(1, "el layout se pago aunque no devolviera texto");
+    }
+
+    [Fact]
+    public async Task LayoutFalla_ConAlgoEnBd_ElRespaldoNoLlevaCausa()
+    {
+        BdTiene("# viejo de 3", 3, false);
+        LayoutLanza(new TimeoutException("Timeout esperando resultado de DI layout"));
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Completo(), Contexto());
+
+        r.TieneContenido.Should().BeTrue();
+        r.CausaSinContenido.Should().BeNull("hay texto: la causa solo acompana a un resultado sin contenido");
+    }
+
+    [Fact]
+    public async Task LayoutConTexto_NoLlevaCausa()
+    {
+        BdVacia();
+        LayoutDevuelve("# de layout", 3);
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Paginas(3), Contexto());
+
+        r.Fuente.Should().Be(FuenteMarkdown.Layout);
+        r.CausaSinContenido.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task LayoutFallaPorCancelacionInternaDelClienteHttp_DevuelveCausaLayoutTimeout()
+    {
+        // TaskCanceledException sin token cancelado: es el timeout del HttpClient, no un reciclado
+        // del worker; no se propaga y se registra como timeout de layout.
+        BdVacia();
+        LayoutLanza(new TaskCanceledException("The request was canceled due to the configured HttpClient.Timeout of 100 seconds elapsing."));
+
+        var r = await _sut.ResolverAsync(NecesidadMarkdown.Completo(), Contexto());
+
+        r.Fuente.Should().Be(FuenteMarkdown.Ninguna);
+        r.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.LayoutTimeout);
+    }
 }

@@ -119,6 +119,12 @@ public class PromptActivityInput
     /// Si no se informa, se usa PromptConfig de la tipología.
     /// </summary>
     public PromptInstrucciones? Prompt { get; set; }
+
+    /// <summary>
+    /// Por que no hay markdown, cuando el resolutor no lo trajo (AB#100880). La guarda de contenido
+    /// la propaga en PromptResultado.Error y en PromptResultado.CausaSinContenido.
+    /// </summary>
+    public CausaSinContenido? CausaSinMarkdown { get; set; }
 }
 
 /// <summary>

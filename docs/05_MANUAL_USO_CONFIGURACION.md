@@ -88,7 +88,7 @@ Estados habituales y accion recomendada:
 | `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
 | `DUPLICADO` | El documento ya habia sido procesado y no hay ningun resultado anterior reutilizable | Usar resultado existente o seguir criterio de negocio |
 | _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
-| `SIN_CONTENIDO_DOCUMENTO` | Se pidio un resumen o un prompt pero no se pudo leer el documento | Comprobar que el documento no esta corrupto ni es un escaneado sin texto. Si es legible, escalar: puede ser una incidencia del servicio de extraccion |
+| `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto legible: el servicio de lectura respondio sin contenido | Comprobar si es un escaneado sin OCR o una pagina en blanco y pedir un documento legible. Si lo que fallo fue la lectura, el estado es `ERROR` o `PENDIENTE_REINTENTO` con `No se pudo obtener el texto del documento: <motivo>` |
 | `ERROR` | El procesamiento no pudo completarse | Reintentar y, si persiste, escalar a soporte |
 
 #### Paso 5: Revisar confianza del resultado
@@ -705,7 +705,7 @@ Detalles del backfill:
 | `BAJA_CONFIANZA_CLASIFICACION` | IA no pudo clasificar con confianza suficiente | Verificar documento manualmente. Posible documento no soportado. |
 | `DUPLICADO` | Documento ya procesado (SHA256 identico) **sin ninguna ejecucion anterior reutilizable**. Cuando si la hay, el estado es el de aquella ejecucion con `resultado.reutilizadaPorDuplicado = true` y `detalleEjecucion.ejecucionOriginalGuid` informado | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
 | `NO_CLASIFICADO` | No se identifico la tipologia del documento | Revisar el documento; si el tipo es conocido, reenviar con `expectedType`. Si la peticion pedia prompt o resumen, estos si vienen informados en `datosExtraidos`. |
-| `SIN_CONTENIDO_DOCUMENTO` | Se pidio prompt o resumen y no se obtuvo texto del documento por ninguna via | El modelo no se invoca a proposito: es preferible un fallo explicito a un resumen inventado. Ver `docs/guias/TROUBLESHOOTING_DIAGNOSTICO.md`. |
+| `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto: Document Intelligence respondio sin contenido | El modelo no se invoca a proposito: es preferible un fallo explicito a un resumen inventado. Reservado al documento vacio de verdad; un fallo al obtener el texto cierra en `ERROR` o `PENDIENTE_REINTENTO` con el motivo en `mensajeError` (AB#100880). Ver `docs/guias/TROUBLESHOOTING_DIAGNOSTICO.md`. |
 | `PENDIENTE_REINTENTO` | Cuota de Azure OpenAI agotada durante la clasificacion | Estado retriable: reencolar el documento mas tarde. No es un fallo del documento. |
 | `ERROR` | Error en el procesamiento | Consultar `resultado.mensajeError` y `detalleEjecucion.seguimiento`. |
 

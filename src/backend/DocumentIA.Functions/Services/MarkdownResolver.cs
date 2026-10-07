@@ -68,8 +68,11 @@ public sealed class MarkdownResolver : IMarkdownResolver
             return persistido;
         }
 
-        // 4. Layout.
+        // 4. Layout. Si no trae texto, la causa viaja con el resultado: las guardas de contenido
+        //    y el orquestador la necesitan para no cerrar como "documento vacio" un fallo de
+        //    obtencion del texto (AB#100880).
         ResultadoMarkdown? layout = null;
+        CausaSinContenido? causa = null;
         var puedeLlamarALayout = !string.IsNullOrWhiteSpace(contexto.BlobPath)
             || !string.IsNullOrWhiteSpace(contexto.DocumentoBase64);
 
@@ -87,16 +90,23 @@ public sealed class MarkdownResolver : IMarkdownResolver
             }
             catch (Exception ex)
             {
+                causa = CausaSinContenido.DesdeExcepcion(ex);
                 _logger.LogWarning(
                     ex,
-                    "Layout fallo para {Documento} (necesidad completo={Completo}, paginas={Paginas}).",
+                    "Layout fallo para {Documento} (necesidad completo={Completo}, paginas={Paginas}). Causa={Causa}",
                     contexto.NombreDocumento,
                     necesidad.DocumentoCompleto,
-                    necesidad.PaginasMinimas);
+                    necesidad.PaginasMinimas,
+                    causa.Describir());
             }
         }
         else
         {
+            causa = new CausaSinContenido
+            {
+                Motivo = MotivoSinContenido.SinFuente,
+                Detalle = "Sin BlobPath ni base64: no se puede llamar a Layout."
+            };
             _logger.LogWarning(
                 "Sin BlobPath ni base64 para {Documento}: no se puede llamar a Layout.",
                 contexto.NombreDocumento);
@@ -136,11 +146,19 @@ public sealed class MarkdownResolver : IMarkdownResolver
             return persistido;
         }
 
-        // 6. Nada. Las guardas de contenido de las actividades deciden.
+        // 6. Nada. Las guardas de contenido de las actividades deciden; la causa les dice si el
+        //    documento esta vacio de verdad (Layout respondio sin texto) o si fallo la obtencion.
+        causa ??= new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.DocumentoSinTexto,
+            Detalle = "Layout respondio sin texto."
+        };
+
         return new ResultadoMarkdown
         {
             Fuente = FuenteMarkdown.Ninguna,
-            Consumos = layout?.Consumos ?? new List<ConsumoIA>()
+            Consumos = layout?.Consumos ?? new List<ConsumoIA>(),
+            CausaSinContenido = causa
         };
     }
 

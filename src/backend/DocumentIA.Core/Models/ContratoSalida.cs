@@ -371,9 +371,15 @@ public class ResultadoClasificacion
     public bool RateLimitExcedido { get; set; }
     /// <summary>
     /// True cuando la clasificación no pudo ejecutarse por falta de contenido textual del
-    /// documento. El orquestador lo traduce a Estado="SIN_CONTENIDO_DOCUMENTO".
+    /// documento. El orquestador lo traduce a Estado="SIN_CONTENIDO_DOCUMENTO" solo si el documento
+    /// está vacío de verdad (ver <see cref="CausaSinContenido"/>); si falló la obtención del texto,
+    /// cierra en ERROR o PENDIENTE_REINTENTO (AB#100880).
     /// </summary>
     public bool SinContenido { get; set; }
+    /// <summary>
+    /// Por qué no había texto cuando <see cref="SinContenido"/> es true. Nula si no se conoce.
+    /// </summary>
+    public CausaSinContenido? CausaSinContenido { get; set; }
     /// <summary>
     /// Umbral de fallback de clasificación aplicado en esta ejecución.
     /// </summary>

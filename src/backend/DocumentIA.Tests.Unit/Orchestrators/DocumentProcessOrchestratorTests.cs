@@ -3464,6 +3464,326 @@ public class DocumentProcessOrchestratorTests
     private static ResultadoMarkdown MarkdownResuelto(string markdown, int paginas, bool completo, FuenteMarkdown fuente = FuenteMarkdown.Layout)
         => new() { Markdown = markdown, Paginas = paginas, Completo = completo, Fuente = fuente };
 
+    // ========== AB#100880: SIN_CONTENIDO_DOCUMENTO solo para el documento vacio de verdad ==========
+
+    private static ResultadoMarkdown MarkdownSinTexto(CausaSinContenido causa)
+        => new() { Fuente = FuenteMarkdown.Ninguna, CausaSinContenido = causa };
+
+    private static ResultadoClasificacion ClasificacionSinContenido(CausaSinContenido? causa) => new()
+    {
+        Modelo = "gpt-4o-mini",
+        Confianza = 0,
+        TipologiaDetectada = "Desconocido",
+        SinContenido = true,
+        CausaSinContenido = causa,
+        FallbackRazon = causa is { EsDocumentoSinTexto: false }
+            ? causa.MensajeObtencionFallida()
+            : "Sin contenido textual del documento para clasificar."
+    };
+
+    private static FakeTaskOrchestrationContext ContextoClasificacionSinContenido(CausaSinContenido? causaProveedor, ResultadoMarkdown? resuelto = null)
+    {
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        if (resuelto is not null)
+        {
+            context.SetupActivity("ObtenerMarkdownActivity", resuelto);
+        }
+        context.SetupActivity("ClasificarActivity", ClasificacionSinContenido(causaProveedor));
+        return context;
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionSinContenidoPorTimeoutDeLayout_CierraEnPendienteReintentoYPersiste()
+    {
+        // Ejecucion 7885 de DEV (27/08): PDF de 123 paginas con texto, DI Layout agoto los 120 s y
+        // el cliente leyo "documento sin contenido". La causa es transitoria: el cierre es retriable.
+        var orchestrator = CreateOrchestrator();
+        var context = ContextoClasificacionSinContenido(new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutTimeout,
+            Detalle = "TimeoutException: Timeout esperando resultado de DI layout"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+        salida.Resultado.MensajeError.Should().Be(
+            "No se pudo obtener el texto del documento: LayoutTimeout: TimeoutException: Timeout esperando resultado de DI layout. Reintentar más tarde.");
+        salida.Resultado.EstadoCalidad.Should().Be("ERROR");
+        salida.Resultado.ConfianzaGlobal.Should().Be(0);
+        salida.DatosExtraidos.Should().NotContainKey("Resumen");
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("PendienteReintento");
+        // Se persiste igual que hoy: la ejecucion debe seguir visible en el Monitor.
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionSinContenidoPorErrorDeLayout_CierraEnErrorYPersiste()
+    {
+        // 401 PermissionDenied del DI (DEV, julio): el documento tenia texto; es infraestructura.
+        var orchestrator = CreateOrchestrator();
+        var context = ContextoClasificacionSinContenido(new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutError,
+            CodigoHttp = 401,
+            Detalle = "LayoutRequestException: Error iniciando DI layout. Status=401. Body=PermissionDenied"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Be(
+            "No se pudo obtener el texto del documento: LayoutError (HTTP 401): LayoutRequestException: Error iniciando DI layout. Status=401. Body=PermissionDenied");
+        salida.Resultado.EstadoCalidad.Should().Be("ERROR");
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("Failed");
+        salida.DetalleEjecucion.Seguimiento.Actividades.Single(a => a.Nombre == "Clasificar").Estado.Should().Be("Failed");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Salida.Resultado.Estado.Should().Be("ERROR");
+    }
+
+    [Theory]
+    [InlineData(MotivoSinContenido.SinFuente, null)]
+    [InlineData(MotivoSinContenido.FormatoNoSoportado, 415)]
+    [InlineData(MotivoSinContenido.LayoutError, 400)]
+    public async Task RunOrchestrator_ClasificacionSinContenidoPorCausaNoTransitoria_CierraEnError(MotivoSinContenido motivo, int? codigoHttp)
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = ContextoClasificacionSinContenido(new CausaSinContenido { Motivo = motivo, CodigoHttp = codigoHttp });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().StartWith($"No se pudo obtener el texto del documento: {motivo}");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionSinContenidoConDocumentoSinTexto_MantieneSinContenidoDocumento()
+    {
+        // Layout respondio y no habia texto: el unico caso reservado a SIN_CONTENIDO_DOCUMENTO.
+        var orchestrator = CreateOrchestrator();
+        var context = ContextoClasificacionSinContenido(new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.DocumentoSinTexto,
+            Detalle = "Layout respondio sin texto."
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        salida.Resultado.MensajeError.Should().Be("Sin contenido del documento: no se puede clasificar ni generar resumen.");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ResolutorSinTextoConCausa_PasaLaCausaAClasificarYDecideConElla()
+    {
+        // El proveedor no siempre conoce la causa (p. ej. una cadena sin HybridTDN). El orquestador
+        // guarda la del ultimo intento del resolutor, la pasa en el input y decide con ella.
+        var orchestrator = CreateOrchestrator();
+        var causaResolutor = new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutError,
+            CodigoHttp = 400,
+            Detalle = "LayoutRequestException: Error iniciando DI layout. Status=400. Body=InvalidContent"
+        };
+        var context = ContextoClasificacionSinContenido(causaProveedor: null, resuelto: MarkdownSinTexto(causaResolutor));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        var clasificarInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasificarInput!.CausaSinMarkdown.Should().NotBeNull();
+        clasificarInput.CausaSinMarkdown!.Motivo.Should().Be(MotivoSinContenido.LayoutError);
+        clasificarInput.CausaSinMarkdown.CodigoHttp.Should().Be(400);
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().StartWith("No se pudo obtener el texto del documento: LayoutError (HTTP 400)");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ResolutorConTexto_NoPasaCausaAClasificar()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# recorte", 3, completo: false));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity")!.CausaSinMarkdown.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinContenidoPorErrorDeLayout_CierraEnErrorYNoLoPisaElCierreOk()
+    {
+        // Ruta de prompt (AB#100027): el resolutor fallo con 401 al pedir el documento entero para el
+        // resumen forzado. Antes cerraba en SIN_CONTENIDO_DOCUMENTO con MensajeError nulo.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.ForzarResumenPorDefecto = true;
+        var context = new FakeTaskOrchestrationContext(entrada);
+        var causa = new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutError,
+            CodigoHttp = 401,
+            Detalle = "LayoutRequestException: Error iniciando DI layout. Status=401. Body=PermissionDenied"
+        };
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/sin-texto.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "dGVzdA==",
+            TotalPaginas = 1,
+            PaginasIncluidas = 1,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownSinTexto(causa));
+        // Sin ContentExtraido: el clasificador no aporta texto propio (con el, el prompt si tendria
+        // markdown y la guarda no saltaria).
+        var clasificacionSinTexto = BuildClasificacionOk();
+        clasificacionSinTexto.ContentExtraido = null;
+        context.SetupActivity("ClasificarActivity", clasificacionSinTexto);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>()
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            CausaSinContenido = causa,
+            Error = causa.MensajeObtencionFallida(),
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Be(causa.MensajeObtencionFallida());
+        salida.DatosExtraidos.Should().NotContainKey("Resumen");
+        salida.DetalleEjecucion.Prompt!.Error.Should().Be(causa.MensajeObtencionFallida());
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput!.CausaSinMarkdown.Should().NotBeNull();
+        promptInput.CausaSinMarkdown!.CodigoHttp.Should().Be(401);
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Salida.Resultado.Estado.Should().Be("ERROR");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaYPromptSinContenidoPorTimeout_CierraEnPendienteReintento()
+    {
+        // Cruce con la salida temprana por tipologia desconocida (AB#100028): la causa transitoria
+        // del prompt gana sobre NO_CLASIFICADO, igual que ganaba SIN_CONTENIDO_DOCUMENTO.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            SystemPrompt = "Eres un analista documental.",
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+        var causa = new CausaSinContenido { Motivo = MotivoSinContenido.LayoutTimeout, Detalle = "TimeoutException: Timeout esperando resultado de DI layout" };
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownSinTexto(causa));
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            CausaSinContenido = causa,
+            Error = causa.MensajeObtencionFallida(),
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+        salida.Resultado.MensajeError.Should().EndWith("Reintentar más tarde.");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinContenidoConDocumentoSinTexto_MantieneSinContenidoDocumentoSinMensaje()
+    {
+        // Contrato vigente de la ruta de prompt: SIN_CONTENIDO_DOCUMENTO con MensajeError nulo.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            SystemPrompt = "Eres un analista documental.",
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+        var causa = new CausaSinContenido { Motivo = MotivoSinContenido.DocumentoSinTexto };
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownSinTexto(causa));
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            CausaSinContenido = causa,
+            Error = "Sin contenido del documento: no se ejecuta el prompt ni el resumen.",
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        salida.Resultado.MensajeError.Should().Be("no clasificable: tipologia desconocida",
+            "la ruta de prompt no sobrescribe el mensaje cuando el documento esta vacio de verdad");
+    }
+
     [Fact]
     public async Task RunOrchestrator_SinExpectedType_PideAlResolutorElRecorteParaClasificar()
     {

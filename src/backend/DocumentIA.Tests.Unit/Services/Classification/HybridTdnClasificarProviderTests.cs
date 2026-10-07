@@ -841,6 +841,42 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             result.Consumos.Should().Contain(c => c.Operacion == "layout.previo");
         }
 
+        [Fact]
+        public async Task SinContextoTextualYResolutorSinTexto_DejaLaCausaEnElInput()
+        {
+            // AB#100880: el salvavidas del hibrido es el unico sitio donde el resolutor se llama fuera
+            // del orquestador; la causa debe seguir viajando hasta la guarda del proveedor GPT.
+            var provider = CreateProviderWithLowRuleConfidence();
+            var input = new ClasificacionInput
+            {
+                Entrada = new ContratoEntrada
+                {
+                    Documento = new Documento
+                    {
+                        Name = "x.pdf",
+                        BlobPath = "documents/2026/09/x.pdf",
+                        Content = new ContenidoDocumento { Base64 = "dGVzdA==" }
+                    },
+                    Instrucciones = new Instrucciones()
+                },
+                DatosNormalizados = new Dictionary<string, object>()
+            };
+            var causa = new CausaSinContenido { Motivo = MotivoSinContenido.LayoutError, CodigoHttp = 400 };
+
+            _markdownResolverMock
+                .Setup(p => p.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna, CausaSinContenido = causa });
+
+            _diProviderMock
+                .Setup(d => d.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoClasificacion { TipologiaDetectada = "Desconocido", Confianza = 0, ProveedorClasif = "DocumentIntelligence" });
+
+            await provider.ClasificarAsync(input);
+
+            input.CausaSinMarkdown.Should().BeSameAs(causa);
+            input.DatosNormalizados.Should().NotContainKey("Markdown");
+        }
+
         private HybridTdnClasificarProvider CreateProviderWithHighRuleConfidence()
         {
             var options = Microsoft.Extensions.Options.Options.Create(

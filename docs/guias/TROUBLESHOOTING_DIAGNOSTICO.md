@@ -504,7 +504,7 @@
 2. **Diferenciar el estado del documento:**
    - `PENDIENTE_REINTENTO` → cuota de Azure OpenAI agotada tras reintentos/cooldown; estado limpio y retriable, no es un fallo del documento
    - `NO_CLASIFICADO` → documento genuinamente no clasificable; no confundir con rate limit
-   - `SIN_CONTENIDO_DOCUMENTO` → se pidió prompt o resumen y no se pudo leer el documento por ninguna vía; no es un problema de clasificación ni de cuota
+   - `SIN_CONTENIDO_DOCUMENTO` → Document Intelligence respondió sin texto: el documento está vacío de verdad; no es un problema de clasificación ni de cuota. Si lo que falló fue la obtención del texto, el estado es `ERROR` o `PENDIENTE_REINTENTO` con `MensajeError` que empieza por `No se pudo obtener el texto del documento:` (ver el caso correspondiente más abajo)
    - `PAGINAS_EXCEDIDAS` → el documento supera `maxPages`; cierra con `EstadoCalidad = "REVISION"` y no extrae (ver [ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md](../especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md)); no es un fallo ni un 429
    - `EXTRACCION_INCOMPLETA` → falló Content Understanding, se usó el fallback y no se obtuvo ningún campo útil; `MensajeError` indica la razón del fallback
    - `DetalleEjecucion.Seguimiento.Estado = "PendienteReintento"` → estado de seguimiento que acompaña a `Resultado.Estado = "PENDIENTE_REINTENTO"`; la instancia sigue en `runtimeStatus = Completed`
@@ -556,22 +556,53 @@
 
 ### Caso: ejecución en `SIN_CONTENIDO_DOCUMENTO`
 
-**Síntoma:** el documento cierra en `SIN_CONTENIDO_DOCUMENTO`, sin `Resumen` ni `ResultadoPrompt`, con la actividad `Prompt` en `Failed`.
+**Síntoma:** el documento cierra en `SIN_CONTENIDO_DOCUMENTO`, sin `Resumen` ni `ResultadoPrompt`, con la actividad `Prompt` (o `Clasificar`) en `Failed`.
 
-**Qué significa:** se pidió un prompt o un resumen y el sistema no consiguió texto del documento por ninguna vía (markdown de extracción, layout pre-clasificación ni extracción bajo demanda). **Es un fallo deliberado**: antes de existir esta guarda se llamaba al modelo con el contenido vacío y respondía cosas como *"No has incluido el documento"*, que se persistían como resumen válido con confianza 1.0.
+**Qué significa:** se pidió una clasificación GPT, un prompt o un resumen y Document Intelligence Layout **respondió sin texto**: el documento no tiene contenido legible (escaneado sin OCR, página en blanco, imagen sin texto). **Es un fallo deliberado**: antes de existir esta guarda se llamaba al modelo con el contenido vacío y respondía cosas como *"No has incluido el documento"*, que se persistían como resumen válido con confianza 1.0.
 
-**Diagnóstico por orden de probabilidad:**
+Desde AB#100880 este estado **se reserva al documento vacío de verdad**. Si lo que falló fue la obtención del texto (timeout o error HTTP de Document Intelligence, formato rechazado, ejecución sin blob ni base64) la ejecución cierra en `ERROR` o `PENDIENTE_REINTENTO`: ver el caso siguiente.
 
-1. **Documento ilegible o corrupto.** Comprobar `detalleEjecucion.markdownGenerado = false` y buscar errores de Document Intelligence:
+**Diagnóstico:**
+
+1. Comprobar `detalleEjecucion.markdownGenerado = false` y que la traza del resolutor no registra ningún fallo de layout:
    ```kql
    traces
    | where operation_Id == "<operationId>"
-   | where message has "InvalidContent" or message has "no se pudo obtener markdown"
+   | where message has "Layout fallo para" or message has "Sin BlobPath ni base64"
    ```
-2. **Document Intelligence no disponible o sin permisos.** Buscar `401`, `403` o `InvalidRequest` en la misma traza. En dev/pre revisar `DocumentIntelligence__UseInlineContent` (ver `03_DISENO_TECNICO_DETALLADO.md`).
-3. **Tipología sin extracción ni layout con `expectedType` informado.** Es el caso que cubre la extracción bajo demanda; si aun así falla, el problema está en la llamada a layout, no en la configuración de la tipología.
+   Si aparece alguna de esas trazas, el estado debería haber sido `ERROR` o `PENDIENTE_REINTENTO`; revisar la versión desplegada.
+2. Abrir el documento: si es un escaneado sin capa de texto, una página en blanco o una imagen, el estado es correcto y la acción es del remitente (reenviar con OCR o un documento legible).
 
-**Qué NO es:** no es un problema de clasificación (`NO_CLASIFICADO`) ni de cuota de Azure OpenAI (`PENDIENTE_REINTENTO`). El modelo ni siquiera llegó a invocarse.
+**Qué NO es:** no es un problema de clasificación (`NO_CLASIFICADO`), ni de cuota de Azure OpenAI (`PENDIENTE_REINTENTO` por 429), ni de infraestructura de Document Intelligence (eso cierra en `ERROR` o `PENDIENTE_REINTENTO` con el motivo). El modelo ni siquiera llegó a invocarse.
+
+### Caso: ejecución en `ERROR` o `PENDIENTE_REINTENTO` con "No se pudo obtener el texto del documento"
+
+**Síntoma:** `Resultado.Estado` es `ERROR` o `PENDIENTE_REINTENTO`, `MensajeError` empieza por `No se pudo obtener el texto del documento:` y sigue con el motivo, el código HTTP si lo hubo y el tipo de excepción. `detalleEjecucion.clasificacion.fallbackRazon` (ruta de clasificación) o `detalleEjecucion.prompt.error` (ruta de prompt) llevan el mismo texto. La ejecución está persistida y visible en el Monitor.
+
+**Qué significa:** el documento probablemente **sí tiene contenido**; lo que falló es la obtención del texto vía Document Intelligence Layout. Hasta AB#100880 estos casos cerraban en `SIN_CONTENIDO_DOCUMENTO` y el operador descartaba el documento o reclamaba al remitente. Casos reales: timeout de layout a los 120 s con un PDF de 123 páginas (DEV, 27/08), `400 InvalidContent` *"Could not download the file from the given URL"* (DEV, agosto), `401 PermissionDenied` del DI (DEV, julio), reciclado del worker durante el layout.
+
+**Acción por motivo:**
+
+| Motivo en `MensajeError` | Estado | Acción |
+|---|---|---|
+| `LayoutTimeout` | `PENDIENTE_REINTENTO` | Reintentar más tarde. Si se repite con documentos grandes, subir `TimeoutSeconds` del modelo de layout en `ModeloConfigs` |
+| `LayoutError (HTTP 429)` o `(HTTP 5xx)` | `PENDIENTE_REINTENTO` | Reintentar más tarde; revisar la salud y cuota del recurso de Document Intelligence |
+| `LayoutError (HTTP 400)` con `InvalidContent` | `ERROR` | DI no pudo descargar el blob (SAS, red, Private Link) o el contenido está corrupto: ver runbook de incidentes, caso 5 |
+| `LayoutError (HTTP 401)` o `(HTTP 403)` | `ERROR` | Credenciales o rol del recurso de DI; revisar `ModeloConfigs` del entorno y el endpoint efectivo (en dev el layout apuntaba al DI de PRO) |
+| `LayoutError` sin código | `ERROR` | Excepción no HTTP (DNS, configuración del modelo de layout): el tipo de excepción va en el mensaje |
+| `FormatoNoSoportado` | `ERROR` | DI rechaza el formato (HTTP 415): convertir el documento a un formato soportado |
+| `SinFuente` | `ERROR` | La ejecución no tenía `blobPath` ni base64: revisar la subida a blob y la petición |
+
+**Traza:**
+```kql
+traces
+| where timestamp > ago(24h)
+| where message has "Layout fallo para" or message has "Clasificacion abortada sin texto" or message has "Prompt abortado por falta de contenido"
+| project timestamp, operation_Id, message
+| order by timestamp desc
+```
+
+**Reintento:** la ejecución se persistió con el estado de fallo; para reprocesar, reenviar la misma petición (el markdown ya persistido de una ejecución anterior, si lo hubiera, se reutiliza antes de volver a llamar a layout).
 
 ### Caso: el coste de IA sale a cero o incompleto
 
@@ -995,3 +1026,4 @@ az functionapp config appsettings set \
 | 2026-07-13 | Añadido CASO 7: rate limiting (429) de Azure OpenAI en clasificación GPT/prompts y estado `PENDIENTE_REINTENTO` |
 | 2026-09-07 | Añadido el caso de coste de IA a cero o incompleto (catálogo de tarifas, vigencia, caché) |
 | 2026-10-06 | Corregido el árbol de diagnóstico por `runtimeStatus` (los fallos de activity acaban en `Completed` + `ERROR`); añadidos `PAGINAS_EXCEDIDAS`, `EXTRACCION_INCOMPLETA` y `PendienteReintento`; aclarado el rollback de `MaxRetries: 0` |
+| 2026-10-07 | AB#100880: `SIN_CONTENIDO_DOCUMENTO` reservado al documento vacío de verdad; nuevo caso para `ERROR` / `PENDIENTE_REINTENTO` con "No se pudo obtener el texto del documento" y acción por motivo |

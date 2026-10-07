@@ -26,6 +26,9 @@ public class PromptResultado
     /// </summary>
     public bool SinContenido { get; set; }
 
+    /// <summary>Por qué no había contenido cuando <see cref="SinContenido"/> es true. Nula si no se conoce (AB#100880).</summary>
+    public CausaSinContenido? CausaSinContenido { get; set; }
+
     /// <summary>
     /// Indica si el resultado fue obtenido en una llamada combinada con el fallback de extracción,
     /// es decir, una única llamada LLM que produjo tanto los campos extraídos como este resultado.

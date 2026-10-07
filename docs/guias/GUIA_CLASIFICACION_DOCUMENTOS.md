@@ -86,7 +86,7 @@ Tras el procesamiento, recibirás:
 | 🟡 **REVISION** (0.70–0.85) | El sistema tiene dudas; los datos pueden ser correctos pero conviene revisar | Revisión humana recomendada |
 | 🔴 **ERROR** (< 0.70) | Alta probabilidad de que algo no sea correcto | Revisión humana obligatoria |
 | ⚪ **NO_CLASIFICADO** | El sistema no pudo identificar el tipo de documento | Intervención manual necesaria |
-| ⚫ **SIN_CONTENIDO_DOCUMENTO** | Se pidió un prompt o un resumen y no se pudo leer el documento por ninguna vía; el modelo no llegó a invocarse | Revisar si el documento es legible; si lo es, comprobar la salud de Document Intelligence |
+| ⚫ **SIN_CONTENIDO_DOCUMENTO** | Document Intelligence respondió sin texto: el documento no tiene contenido legible; el modelo no llegó a invocarse | Revisar si es un escaneado sin OCR o una página en blanco. Los fallos al obtener el texto cierran en `ERROR` o `PENDIENTE_REINTENTO` con el motivo en `mensajeError` (AB#100880) |
 
 ---
 
@@ -1602,7 +1602,8 @@ SHA256 del documento coincide con ejecución anterior
 | Error / Situación | Causa | Solución |
 |---|---|---|
 | `Estado = NO_CLASIFICADO` | GPT no pudo identificar el tipo | Revisar el documento; si es un tipo conocido, usar `expectedType` |
-| `Estado = SIN_CONTENIDO_DOCUMENTO` | Se pidió prompt/resumen y no se pudo extraer texto (documento ilegible, o Document Intelligence caído o sin permisos) | Comprobar `detalleEjecucion.markdownGenerado` y buscar `InvalidContent` en la traza; ver TROUBLESHOOTING_DIAGNOSTICO §2 |
+| `Estado = SIN_CONTENIDO_DOCUMENTO` | Document Intelligence respondió sin texto: documento ilegible o vacío | Abrir el documento (escaneado sin OCR, página en blanco); ver TROUBLESHOOTING_DIAGNOSTICO, caso `SIN_CONTENIDO_DOCUMENTO` |
+| `Estado = ERROR` o `PENDIENTE_REINTENTO` con `MensajeError` "No se pudo obtener el texto del documento: ..." | Falló la obtención del texto (timeout o error HTTP de Document Intelligence, formato rechazado, sin blob ni base64); el documento puede tener contenido | Leer el motivo del mensaje; `PENDIENTE_REINTENTO` se reintenta más tarde, `ERROR` es infraestructura o formato; ver TROUBLESHOOTING_DIAGNOSTICO, caso "No se pudo obtener el texto del documento" |
 | Se envió `expectedType` pero el documento se clasificó con IA | El `expectedType` no resuelve contra el catálogo (desde AB#100179 ya no termina en `ERROR`: se ignora con warning y se clasifica normalmente) | Enviar un código de tipología real o dejar el campo vacío; verificar la familia/versión en `TipologiaVersionResolver` |
 | `Estado = EXTRACCION_INCOMPLETA` + `fallbackRazon = "exception:..."` | La extracción CU falló (la razón incluye el mensaje de la excepción desde AB#100192) y el fallback GPT no obtuvo campos | Revisar la razón; si es un error de configuración de modelo, corregir `ModeloConfigs`/tipología |
 | `Estado = ERROR` + error en plugin `refCatExcel` | El plugin de prioridad 1 falló | Verificar disponibilidad del servicio en `localhost:8082`; desactivar plugin si no está disponible |
