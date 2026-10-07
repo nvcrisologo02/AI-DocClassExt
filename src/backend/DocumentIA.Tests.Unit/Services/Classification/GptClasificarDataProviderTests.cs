@@ -1103,6 +1103,80 @@ Contenido del documento:
             result.Consumos.Should().BeEmpty();
         }
 
+        // ========== AB#100880: la guarda de contenido propaga la causa ==========
+
+        [Fact]
+        public async Task ClasificarAsync_SinTextoYConCausaDeLayout_PropagaLaCausaEnFallbackRazon()
+        {
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+            SeedClassificationCaches();
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>(MockBehavior.Strict);
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Documento.Content.Base64 = string.Empty;
+            input.DatosNormalizados.Clear();
+            input.CausaSinMarkdown = new CausaSinContenido
+            {
+                Motivo = MotivoSinContenido.LayoutError,
+                CodigoHttp = 401,
+                Detalle = "LayoutRequestException: Error iniciando DI layout. Status=401. Body=PermissionDenied"
+            };
+
+            var result = await provider.ClasificarAsync(input);
+
+            result.SinContenido.Should().BeTrue();
+            result.CausaSinContenido.Should().BeSameAs(input.CausaSinMarkdown);
+            result.FallbackRazon.Should().StartWith("No se pudo obtener el texto del documento: LayoutError (HTTP 401)");
+            resilienceMock.VerifyNoOtherCalls();
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_SinTextoYConDocumentoSinTexto_MantieneElMensajeDeSinContenido()
+        {
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+            SeedClassificationCaches();
+
+            var provider = CreateProvider(promptProviderMock.Object, new Mock<IAzureOpenAIResilienceExecutor>(MockBehavior.Strict).Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Documento.Content.Base64 = string.Empty;
+            input.DatosNormalizados.Clear();
+            input.CausaSinMarkdown = new CausaSinContenido { Motivo = MotivoSinContenido.DocumentoSinTexto };
+
+            var result = await provider.ClasificarAsync(input);
+
+            result.SinContenido.Should().BeTrue();
+            result.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.DocumentoSinTexto);
+            result.FallbackRazon.Should().Be("Sin contenido textual del documento para clasificar.");
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_SinTextoYSinCausaConocida_NoInventaCausa()
+        {
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+            SeedClassificationCaches();
+
+            var provider = CreateProvider(promptProviderMock.Object, new Mock<IAzureOpenAIResilienceExecutor>(MockBehavior.Strict).Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Documento.Content.Base64 = string.Empty;
+            input.DatosNormalizados.Clear();
+
+            var result = await provider.ClasificarAsync(input);
+
+            result.SinContenido.Should().BeTrue();
+            result.CausaSinContenido.Should().BeNull();
+            result.FallbackRazon.Should().Be("Sin contenido textual del documento para clasificar.");
+        }
+
         private static ClientResult<ChatCompletion> CreateChatResult(string responseText)
         {
             var completion = OpenAIChatModelFactory.ChatCompletion(

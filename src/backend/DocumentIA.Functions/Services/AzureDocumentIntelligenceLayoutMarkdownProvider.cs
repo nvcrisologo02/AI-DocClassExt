@@ -102,14 +102,16 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
                 if (!startResponse.IsSuccessStatusCode)
                 {
                     body = await startResponse.Content.ReadAsStringAsync(cancellationToken);
+                    var codigoReintento = (int)startResponse.StatusCode;
                     startResponse.Dispose();
-                    throw new InvalidOperationException($"Error iniciando DI layout. Status={(int)startResponse.StatusCode}. Body={body}");
+                    throw new LayoutRequestException(codigoReintento, $"Error iniciando DI layout. Status={codigoReintento}. Body={body}");
                 }
             }
             else
             {
+                var codigo = (int)startResponse.StatusCode;
                 startResponse.Dispose();
-                throw new InvalidOperationException($"Error iniciando DI layout. Status={(int)startResponse.StatusCode}. Body={body}");
+                throw new LayoutRequestException(codigo, $"Error iniciando DI layout. Status={codigo}. Body={body}");
             }
         }
 
@@ -140,7 +142,8 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
 
             if (!pollResponse.IsSuccessStatusCode)
             {
-                throw new InvalidOperationException($"Error consultando DI layout. Status={(int)pollResponse.StatusCode}. Body={pollBody}");
+                // El codigo viaja tipado: el resolutor decide con el si el fallo es transitorio (AB#100880).
+                throw new LayoutRequestException((int)pollResponse.StatusCode, $"Error consultando DI layout. Status={(int)pollResponse.StatusCode}. Body={pollBody}");
             }
 
             var pollJson = JsonDocument.Parse(pollBody);

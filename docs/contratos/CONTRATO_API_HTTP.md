@@ -430,12 +430,12 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 | `OK` | Procesamiento completado correctamente. |
 | `OK` _(clasificación parcial — tipología virtual)_ | Solo cuando `nivelClasificacion` activa clasificación GPT y el modelo no puede mapear a ningún código de catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` contiene la propuesta libre del modelo. El pipeline se detiene: extracción y validación se omiten. **Si la petición incluye `instrucciones.prompt` o `forzarResumenPorDefecto`, el prompt y el resumen sí se ejecutan** antes de cerrar (ver nota más abajo). También llega a este estado cuando `instrucciones.restriccionTipologias` está activa y ningún proveedor de la cadena devuelve un código dentro del conjunto permitido; en ese caso `detalleEjecucion.clasificacion.fallbackRazon = "fuera_de_conjunto_restringido"` y, si `proponerSiDesconocido = true`, `identificacion.propuestaTipologia` lleva la clasificación libre informativa. |
 | `NO_CLASIFICADO` | Clasificación parcial (`clasificacionParcial = true`) con código TDN1 conocido, pero `ResolverTipologiaActivity` no encontró la tipología completa TDN1/TDN2. `identificacion.tdn1` refleja el código TDN1 detectado. **El pipeline NO continúa**: retorna sin extracción ni validación. **Cuando el estado proviene de una tipología no resoluble o `Desconocido`, el prompt y el resumen se ejecutan igualmente si la petición los pidió**; `datosExtraidos.ResultadoPrompt` y/o `datosExtraidos.Resumen` vienen informados pese al `NO_CLASIFICADO`. |
-| `SIN_CONTENIDO_DOCUMENTO` | Se solicitó un prompt o un resumen pero no se pudo obtener **ningún texto del documento**: ni markdown de extracción, ni layout previo, ni recuperación bajo demanda. El modelo **no se invoca** (antes se le llamaba con el hueco de contenido vacío y devolvía respuestas del tipo *"No has incluido el documento"* que se persistían como resumen válido). Va acompañado de la actividad `Prompt` en `Failed` y sin `Resumen` ni `ResultadoPrompt` en `datosExtraidos`. En la ruta de clasificación `MensajeError` es `"Sin contenido del documento: no se puede clasificar ni generar resumen."`; en la ruta de prompt `MensajeError` queda nulo. Causas habituales: documento ilegible o corrupto, o Document Intelligence no disponible. |
-| `PENDIENTE_REINTENTO` | La clasificación GPT se pospuso porque la cuota de Azure OpenAI quedó agotada (`429 Too Many Requests`) tras agotar los reintentos y/o con el circuito abierto. Es un estado **retriable**: el documento debe reencolarse/reprocesarse más tarde, no representa un fallo definitivo. Va acompañado de `estadoCalidad = "ERROR"`, confianzas a `0` y `mensajeError` con el detalle (p. ej. `"Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`). No debe confundirse con `NO_CLASIFICADO` (documento genuinamente no clasificable). |
+| `SIN_CONTENIDO_DOCUMENTO` | Se solicitó una clasificación GPT, un prompt o un resumen y **el documento no tiene texto**: Document Intelligence Layout respondió sin contenido (escaneado sin OCR, página en blanco, imagen sin texto). El modelo **no se invoca** (antes se le llamaba con el hueco de contenido vacío y devolvía respuestas del tipo *"No has incluido el documento"* que se persistían como resumen válido). Va acompañado de la actividad `Prompt` en `Failed` y sin `Resumen` ni `ResultadoPrompt` en `datosExtraidos`. En la ruta de clasificación `MensajeError` es `"Sin contenido del documento: no se puede clasificar ni generar resumen."`; en la ruta de prompt `MensajeError` queda nulo. **Desde AB#100880 este estado se reserva al documento vacío de verdad**: si lo que falló fue la obtención del texto (timeout o error de Document Intelligence, formato rechazado, sin origen del documento) la ejecución cierra en `ERROR` o `PENDIENTE_REINTENTO` con el motivo en `mensajeError` (ver tabla de motivos más abajo). |
+| `PENDIENTE_REINTENTO` | La clasificación GPT se pospuso porque la cuota de Azure OpenAI quedó agotada (`429 Too Many Requests`) tras agotar los reintentos y/o con el circuito abierto. Es un estado **retriable**: el documento debe reencolarse/reprocesarse más tarde, no representa un fallo definitivo. Va acompañado de `estadoCalidad = "ERROR"`, confianzas a `0` y `mensajeError` con el detalle (p. ej. `"Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`). No debe confundirse con `NO_CLASIFICADO` (documento genuinamente no clasificable). **También** cuando no se pudo obtener el texto del documento por una causa transitoria (timeout de Document Intelligence Layout, `429` o `5xx`): `mensajeError = "No se pudo obtener el texto del documento: LayoutTimeout: ... . Reintentar más tarde."`. A diferencia del caso de cuota, este sí se persiste (AB#100880). |
 | `VALIDACION_CON_ERRORES` | Extracción completada pero alguna regla de validación no se cumplió. Los datos se devuelven. |
 | `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. El orquestador **retorna sin extraer** (no se devuelven datos extraídos) y `EstadoCalidad` queda vacío. |
 | `DUPLICADO` | El documento ya existe en la base de datos (mismo SHA256) y **no hay ninguna ejecución anterior reutilizable**. Cuando sí la hay, `resultado.estado` es el de aquella ejecución (normalmente `OK`), `resultado.reutilizadaPorDuplicado = true`, `resultado.mensajeReutilizacion` lo indica y `detalleEjecucion.ejecucionOriginalGuid` apunta a la ejecución cuyo contrato se devuelve (§6). Se prefiere la ejecución que coincide en `classificationOnly` + `nivelClasificacion`; sin coincidencia exacta, la última con contrato. |
-| `ERROR` | Error irrecuperable durante el procesamiento (clasificación fallida, excepción no controlada). Consultar `mensajeError`. |
+| `ERROR` | Error irrecuperable durante el procesamiento (clasificación fallida, excepción no controlada). Consultar `mensajeError`. **También** cuando no se pudo obtener el texto del documento por una causa no transitoria (p. ej. `"No se pudo obtener el texto del documento: LayoutError (HTTP 401): LayoutRequestException: ..."`): el documento puede tener contenido; lo que falló es la infraestructura o el formato (AB#100880, ver tabla de motivos más abajo). |
 | `PAGINAS_EXCEDIDAS` | El documento supera el límite de páginas configurado. Tras clasificar, el orquestador fija `EstadoCalidad = "REVISION"`, `ConfianzaExtraccion = 0`, `Integracion.Estado = OK` (mensaje "Omitido: límite de páginas excedido") y GDC `Skipped`, persiste y **retorna sin extraer ni validar**. Ver `docs/especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md`. |
 | `EXTRACCION_INCOMPLETA` | Estado de cierre: se fija cuando hubo fallback de extracción (p. ej. tras `CuExtraccionException`) o timeout propio y cero campos útiles (excluyendo `Paginas` y Markdown). `MensajeError` = "Fallback de extracción sin datos. Razón: {FallbackRazon}". |
 
@@ -464,6 +464,28 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 > ```
 > En la ruta de prompt el estado es el mismo pero `MensajeError` queda nulo.
 
+> **Ejemplo — fallo al obtener el texto** (ruta de clasificación; extracto de `Resultado`):
+> ```json
+> {
+>   "Resultado": {
+>     "Estado": "PENDIENTE_REINTENTO",
+>     "MensajeError": "No se pudo obtener el texto del documento: LayoutTimeout: TimeoutException: Timeout esperando resultado de DI layout. Reintentar más tarde.",
+>     "EstadoCalidad": "ERROR"
+>   }
+> }
+> ```
+
+> **Motivos de fallo al obtener el texto (AB#100880).** Cuando una guarda de contenido salta, el resolutor de markdown informa del motivo y el orquestador decide el cierre con él. `SIN_CONTENIDO_DOCUMENTO` queda reservado al documento vacío de verdad; el resto cierra en `ERROR` o `PENDIENTE_REINTENTO` con `mensajeError = "No se pudo obtener el texto del documento: <motivo>[ (HTTP <código>)]: <tipo de excepción>: <mensaje>"`. En la ruta de clasificación `detalleEjecucion.clasificacion.fallbackRazon` lleva el mismo texto; en la ruta de prompt lo lleva `detalleEjecucion.prompt.error`. Todos los casos se persisten.
+>
+> | Motivo | Significado | `resultado.estado` | Acción recomendada |
+> |---|---|---|---|
+> | `DocumentoSinTexto` | Document Intelligence Layout respondió y no había texto | `SIN_CONTENIDO_DOCUMENTO` | Revisar el documento: escaneado sin OCR, página en blanco o imagen sin texto |
+> | `LayoutTimeout` | Layout no respondió en `TimeoutSeconds` (o el cliente HTTP agotó el suyo) | `PENDIENTE_REINTENTO` | Reintentar más tarde; si se repite con documentos grandes, revisar el timeout de layout |
+> | `LayoutError` con HTTP `429`, `500`, `502`, `503` o `504` | Document Intelligence saturado o caído | `PENDIENTE_REINTENTO` | Reintentar más tarde; revisar la salud del recurso |
+> | `LayoutError` con otro código (`400`, `401`, `403`...) o sin código | Petición rechazada (contenido no descargable, credenciales, red) | `ERROR` | Revisar infraestructura y configuración: el documento no es el problema |
+> | `FormatoNoSoportado` | Document Intelligence rechaza el formato (HTTP `415`) | `ERROR` | Convertir el documento a un formato soportado |
+> | `SinFuente` | La ejecución no tenía `blobPath` ni base64 con los que llamar a Layout | `ERROR` | Revisar la subida a blob y la petición de ingesta |
+
 > **Prompt y resumen no dependen de la clasificación.** Si la petición informa `instrucciones.prompt`
 > o `instrucciones.forzarResumenPorDefecto`, el prompt y el resumen se ejecutan aunque el documento
 > no llegue a clasificarse. El estado sigue reflejando el resultado de la clasificación
@@ -473,8 +495,9 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 > El contenido para el prompt se resuelve en cascada: markdown de extracción → markdown de layout
 > pre-clasificación → **extracción bajo demanda vía Document Intelligence Layout**, que cubre el caso
 > de tipologías con `expectedType` que no ejecutan ninguno de los dos pasos anteriores. Si tras esa
-> cascada sigue sin haber texto, la ejecución cierra en `SIN_CONTENIDO_DOCUMENTO` en lugar de invocar
-> al modelo a ciegas.
+> cascada sigue sin haber texto, la ejecución no invoca al modelo a ciegas: cierra en
+> `SIN_CONTENIDO_DOCUMENTO` si el documento está vacío, o en `ERROR` / `PENDIENTE_REINTENTO` si falló
+> la obtención del texto (tabla de motivos de este apartado).
 
 ---
 

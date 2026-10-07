@@ -382,6 +382,19 @@ customMetrics
 - 🔴 Mensaje: "Error iniciando DI layout. Status=400"
 - ✅ El mismo documento procesa N veces sin problema (indica corrupto en esta instancia específica)
 
+**Cómo se ve en la salida (desde AB#100880):** cualquier fallo al obtener el texto cierra la ejecución con `MensajeError = "No se pudo obtener el texto del documento: <motivo>..."`, persistida y visible en el Monitor. `SIN_CONTENIDO_DOCUMENTO` queda reservado al documento que de verdad no tiene texto (Layout respondió vacío) y **no** es un incidente de infraestructura.
+
+| Motivo | Estado | Acción del operador |
+|---|---|---|
+| `LayoutTimeout`, `LayoutError (HTTP 429/5xx)` | `PENDIENTE_REINTENTO` | Reintentar más tarde; si persiste, revisar salud y timeout del recurso de DI |
+| `LayoutError (HTTP 400)` con `InvalidContent` | `ERROR` | Este incidente: blob no descargable por DI o contenido corrupto (pasos de abajo) |
+| `LayoutError (HTTP 401/403)` | `ERROR` | Credenciales o rol del recurso de DI en `ModeloConfigs`; no reclamar al remitente |
+| `FormatoNoSoportado` (HTTP 415) | `ERROR` | Pedir el documento en un formato soportado |
+| `SinFuente` | `ERROR` | La ejecución no tenía blob ni base64: revisar subida a blob y trigger |
+| `DocumentoSinTexto` | `SIN_CONTENIDO_DOCUMENTO` | Escaneado sin OCR o página en blanco: acción del remitente, no de plataforma |
+
+Detalle de diagnóstico por motivo en [TROUBLESHOOTING_DIAGNOSTICO.md](../guias/TROUBLESHOOTING_DIAGNOSTICO.md), caso "No se pudo obtener el texto del documento".
+
 **Causas Raíz Posibles:**
 - Base64 del documento está **incompleto o corrupto** en tránsito
 - PDF tiene sectores corruptos (descarga interrumpida, transmisión fallida)

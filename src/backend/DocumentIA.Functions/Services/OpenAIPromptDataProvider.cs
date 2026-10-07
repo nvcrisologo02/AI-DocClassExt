@@ -125,17 +125,23 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
         if (!TieneContenidoUtilizable(input))
         {
-            const string mensaje = "Sin contenido del documento: no se ejecuta el prompt ni el resumen.";
+            // AB#100880: si el resolutor dijo por que no hay texto, el error lo lleva; solo el
+            // documento vacio de verdad conserva el mensaje de "sin contenido".
+            var mensaje = input.CausaSinMarkdown is { EsDocumentoSinTexto: false } causa
+                ? causa.MensajeObtencionFallida()
+                : "Sin contenido del documento: no se ejecuta el prompt ni el resumen.";
 
             _logger.LogError(
-                "Prompt para tipología {Tipologia} abortado: no hay markdown ni documento base64 disponible.",
-                input.Tipologia);
+                "Prompt para tipología {Tipologia} abortado: no hay markdown ni documento base64 disponible. Causa={Causa}",
+                input.Tipologia,
+                input.CausaSinMarkdown?.Describir() ?? "no informada");
 
             return new PromptResultado
             {
                 Modelo = modelConfig.DeploymentName,
                 Error = mensaje,
-                SinContenido = true
+                SinContenido = true,
+                CausaSinContenido = input.CausaSinMarkdown
             };
         }
 

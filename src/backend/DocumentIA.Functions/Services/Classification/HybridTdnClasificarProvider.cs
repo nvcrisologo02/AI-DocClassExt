@@ -307,7 +307,12 @@ namespace DocumentIA.Functions.Services.Classification
             }
             else
             {
-                _logger.LogWarning("El resolutor no devolvio markdown para HybridTDN en {Documento}", documento.Name);
+                // La causa sigue viajando hasta la guarda del proveedor GPT (AB#100880).
+                input.CausaSinMarkdown = resultado.CausaSinContenido ?? input.CausaSinMarkdown;
+                _logger.LogWarning(
+                    "El resolutor no devolvio markdown para HybridTDN en {Documento}. Causa={Causa}",
+                    documento.Name,
+                    input.CausaSinMarkdown?.Describir() ?? "no informada");
             }
         }
 

@@ -20,6 +20,12 @@ public class ClasificacionInput
     /// para la pasada única de "propuesta libre" cuando el resultado restringido es Desconocido.
     /// </summary>
     public bool OmitirRestriccionTipologias { get; set; }
+
+    /// <summary>
+    /// Por que no hay markdown en DatosNormalizados, cuando el resolutor no lo trajo (AB#100880).
+    /// La guarda de contenido la propaga en FallbackRazon y en ResultadoClasificacion.CausaSinContenido.
+    /// </summary>
+    public CausaSinContenido? CausaSinMarkdown { get; set; }
 }
 
 /// <summary>Entrada de ClasificarEmbeddingsActivity (AB#100779). La construye el orquestador en el Paso 3.0.</summary>

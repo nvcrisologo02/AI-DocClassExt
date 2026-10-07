@@ -225,10 +225,11 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             // AB#100180: sin texto, el LLM inventaba un resumen a partir del nombre del
             // fichero (o devolvía N/A) y la ejecución cerraba OK. No se llama al modelo.
             _logger.LogError(
-                "Clasificación sin contenido textual para {Documento}: no se llama al LLM.",
-                input.Entrada.Documento.Name);
+                "Clasificación sin contenido textual para {Documento}: no se llama al LLM. Causa={Causa}",
+                input.Entrada.Documento.Name,
+                input.CausaSinMarkdown?.Describir() ?? "no informada");
 
-            return BuildSinContenidoResult(model);
+            return BuildSinContenidoResult(model, input.CausaSinMarkdown);
         }
 
         // Log prompts finales si está habilitado
@@ -582,10 +583,11 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         {
             // AB#100180: misma guarda en la ruta restringida: sin texto no se llama al modelo.
             _logger.LogError(
-                "Clasificación restringida sin contenido textual para {Documento}: no se llama al LLM.",
-                input.Entrada.Documento.Name);
+                "Clasificación restringida sin contenido textual para {Documento}: no se llama al LLM. Causa={Causa}",
+                input.Entrada.Documento.Name,
+                input.CausaSinMarkdown?.Describir() ?? "no informada");
 
-            return BuildSinContenidoResult(model);
+            return BuildSinContenidoResult(model, input.CausaSinMarkdown);
         }
 
         // Log prompts finales si está habilitado
@@ -983,9 +985,11 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
     /// <summary>
     /// Resultado de clasificación cuando no hay contenido textual del documento: no se llama al
-    /// LLM. El orquestador lo traduce a Estado="SIN_CONTENIDO_DOCUMENTO" y persiste la ejecución.
+    /// LLM. El orquestador lo traduce a Estado="SIN_CONTENIDO_DOCUMENTO" si el documento está vacío
+    /// de verdad, o a ERROR/PENDIENTE_REINTENTO si falló la obtención del texto (AB#100880), y
+    /// persiste la ejecución.
     /// </summary>
-    private static ResultadoClasificacion BuildSinContenidoResult(ClassificationModelConfig model)
+    private static ResultadoClasificacion BuildSinContenidoResult(ClassificationModelConfig model, CausaSinContenido? causa)
     {
         return new ResultadoClasificacion
         {
@@ -995,7 +999,10 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             Confianza = 0.0,
             ConfianzaGPT = 0.0,
             SinContenido = true,
-            FallbackRazon = "Sin contenido textual del documento para clasificar."
+            CausaSinContenido = causa,
+            FallbackRazon = causa is { EsDocumentoSinTexto: false }
+                ? causa.MensajeObtencionFallida()
+                : "Sin contenido textual del documento para clasificar."
         };
     }
 

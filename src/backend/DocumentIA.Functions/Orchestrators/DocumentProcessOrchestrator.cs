@@ -385,6 +385,34 @@ public class DocumentProcessOrchestrator
         // documento completo invalida cualquier peticion posterior.
         var necesidadesSinResultado = new HashSet<NecesidadMarkdown>();
 
+        // Por que el ultimo intento del resolutor no trajo texto (AB#100880). Viaja en los inputs de
+        // clasificacion y prompt para que sus guardas la propaguen, y decide el cierre cuando una
+        // guarda salta: SIN_CONTENIDO_DOCUMENTO solo si el documento esta vacio de verdad.
+        CausaSinContenido? causaSinMarkdown = null;
+
+        // La ruta de prompt cierra en SIN_CONTENIDO_DOCUMENTO, ERROR o PENDIENTE_REINTENTO sin
+        // retornar; los cierres OK posteriores no deben pisar ese estado.
+        var cierrePorFaltaDeTexto = false;
+
+        // Cierre cuando una guarda de contenido salta. La causa la trae el proveedor; si no la
+        // conoce, vale la del ultimo intento del resolutor en esta ejecucion. Mensaje nulo = el
+        // documento esta vacio de verdad y cada ruta conserva su mensaje de siempre.
+        (string Estado, string? Mensaje, string EstadoSeguimiento) ResolverCierreSinContenido(CausaSinContenido? causaProveedor)
+        {
+            var causa = causaProveedor ?? causaSinMarkdown;
+            if (causa is null || causa.EsDocumentoSinTexto)
+            {
+                return ("SIN_CONTENIDO_DOCUMENTO", null, "Failed");
+            }
+
+            if (causa.EsTransitoria)
+            {
+                return ("PENDIENTE_REINTENTO", $"{causa.MensajeObtencionFallida()}. Reintentar más tarde.", "PendienteReintento");
+            }
+
+            return ("ERROR", causa.MensajeObtencionFallida(), "Failed");
+        }
+
         // Declarado aqui y asignado en el Paso 1 para que las funciones locales anteriores al
         // Paso 1 (prompt libre, resumen combinado) puedan capturarlo.
         var datosNormalizados = new Dictionary<string, object>();
@@ -523,7 +551,7 @@ public class DocumentProcessOrchestrator
             if (necesidadesSinResultado.Contains(necesidad)
                 || necesidadesSinResultado.Any(n => n.DocumentoCompleto))
             {
-                return markdownEjecucion ?? new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna };
+                return markdownEjecucion ?? new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna, CausaSinContenido = causaSinMarkdown };
             }
 
             ResultadoMarkdown? resultado = null;
@@ -536,6 +564,7 @@ public class DocumentProcessOrchestrator
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "No se pudo resolver markdown ({Origen}). Se continua con lo que haya.", origenTraza);
+                resultado = new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna, CausaSinContenido = CausaSinContenido.DesdeExcepcion(ex) };
             }
 
             resultado ??= new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna };
@@ -543,15 +572,18 @@ public class DocumentProcessOrchestrator
 
             if (!resultado.TieneContenido)
             {
+                causaSinMarkdown = resultado.CausaSinContenido ?? causaSinMarkdown;
+
                 // Observabilidad: que un paso siga adelante sin el markdown que declaro necesitar
                 // (o con uno mas corto) tiene que verse en el log; es la diferencia entre "el
                 // prompt corrio sobre el documento" y "corrio sobre el recorte" (AB#100245).
                 logger.LogWarning(
                     "El resolutor no devolvio markdown para {Origen} (completo={Completo}, paginasMinimas={Paginas}). "
-                    + "El paso continua con lo que haya en cache y la necesidad no se reintenta.",
+                    + "El paso continua con lo que haya en cache y la necesidad no se reintenta. Causa={Causa}",
                     origenTraza,
                     necesidad.DocumentoCompleto,
-                    necesidad.PaginasMinimas);
+                    necesidad.PaginasMinimas,
+                    causaSinMarkdown?.Describir() ?? "no informada");
 
                 necesidadesSinResultado.Add(necesidad);
                 return markdownEjecucion ?? resultado;
@@ -674,7 +706,8 @@ public class DocumentProcessOrchestrator
                 ResultadoPromptCombinado = resultadoPromptCombinado,
                 ResumenCombinado = resumenCombinado,
                 ForzarResumenPorDefecto = forzarResumenPorDefecto,
-                Prompt = entrada.Instrucciones.Prompt
+                Prompt = entrada.Instrucciones.Prompt,
+                CausaSinMarkdown = string.IsNullOrWhiteSpace(markdownParaPrompt) ? causaSinMarkdown : null
             };
 
             // No se usa EjecutarPasoNegocio: marca "Completed" en cuanto la actividad devuelve sin
@@ -699,7 +732,16 @@ public class DocumentProcessOrchestrator
             {
                 MarcarFinActividad("Prompt", "Failed", resultadoPrompt.Error);
 
-                salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+                // AB#100880: documento vacio de verdad -> SIN_CONTENIDO_DOCUMENTO (MensajeError se
+                // conserva); fallo al obtener el texto -> ERROR o PENDIENTE_REINTENTO con el motivo.
+                var cierre = ResolverCierreSinContenido(resultadoPrompt.CausaSinContenido);
+                cierrePorFaltaDeTexto = true;
+                salida.Resultado.Estado = cierre.Estado;
+                if (cierre.Mensaje is not null)
+                {
+                    salida.Resultado.MensajeError = cierre.Mensaje;
+                }
+
                 salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
                 {
                     Modelo = resultadoPrompt.Modelo,
@@ -709,8 +751,10 @@ public class DocumentProcessOrchestrator
                 };
 
                 logger.LogError(
-                    "Prompt abortado por falta de contenido del documento. Tipología={Tipologia}",
-                    salida.Identificacion.Tipologia);
+                    "Prompt abortado por falta de contenido del documento. Tipología={Tipologia}, Estado={Estado}, Causa={Causa}",
+                    salida.Identificacion.Tipologia,
+                    cierre.Estado,
+                    (resultadoPrompt.CausaSinContenido ?? causaSinMarkdown)?.Describir() ?? "no informada");
 
                 return;
             }
@@ -1386,7 +1430,8 @@ public class DocumentProcessOrchestrator
                             DocumentoBase64Override = docClasif.DocumentoBase64Clasif,
                             CharsTextoNativo = docClasif.CharsTextoNativo,
                             TotalPaginas = docClasif.TotalPaginas,
-                            GenerarResumenPorDefecto = true
+                            GenerarResumenPorDefecto = true,
+                            CausaSinMarkdown = markdownEjecucion is { TieneContenido: true } ? null : causaSinMarkdown
                         });
                     AcumularConsumos(resultadoClasificacion.Consumos);
                     AdjuntarEmbeddings(resultadoClasificacion, RamasClasificacion.Gpt);
@@ -1421,25 +1466,36 @@ public class DocumentProcessOrchestrator
 
                     if (resultadoClasificacion.SinContenido)
                     {
-                        MarcarFinActividad("Clasificar", "Failed", "Sin contenido textual del documento");
+                        // AB#100880: documento vacio de verdad -> SIN_CONTENIDO_DOCUMENTO; fallo al
+                        // obtener el texto -> ERROR, o PENDIENTE_REINTENTO si la causa es transitoria.
+                        var cierre = ResolverCierreSinContenido(resultadoClasificacion.CausaSinContenido);
+                        var mensajeSinContenido = cierre.Mensaje
+                            ?? "Sin contenido del documento: no se puede clasificar ni generar resumen.";
 
-                        const string mensajeSinContenido = "Sin contenido del documento: no se puede clasificar ni generar resumen.";
+                        MarcarFinActividad("Clasificar", "Failed", mensajeSinContenido);
+
+                        logger.LogWarning(
+                            "Clasificacion abortada sin texto del documento. Estado={Estado}, Causa={Causa}",
+                            cierre.Estado,
+                            (resultadoClasificacion.CausaSinContenido ?? causaSinMarkdown)?.Describir() ?? "no informada");
 
                         salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
-                        salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+                        salida.Resultado.Estado = cierre.Estado;
                         salida.Resultado.MensajeError = mensajeSinContenido;
                         salida.Resultado.EstadoCalidad = "ERROR";
                         salida.Resultado.ConfianzaGlobal = 0;
                         salida.Resultado.ConfianzaClasificacion = 0;
 
                         // AB#100180: se persiste (mismo criterio que la guarda de prompt AB#100027).
+                        // Tambien en PENDIENTE_REINTENTO: aqui el cliente no reenvia solo, como en el
+                        // 429, y la ejecucion debe seguir visible en el Monitor (AB#100880).
                         await EjecutarPasoNegocioSinResultado(
                             "Persistir",
                             () => context.CallActivityAsync(
                                 "PersistirActivity",
                                 new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
-                        FinalizarSeguimiento("Failed", mensajeSinContenido);
+                        FinalizarSeguimiento(cierre.EstadoSeguimiento, mensajeSinContenido);
                         return salida;
                     }
 
@@ -2144,7 +2200,7 @@ public class DocumentProcessOrchestrator
 
                 var confidenceCfgClassificationOnly = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
                 // El estado de fallo por falta de contenido no debe ser pisado por el cierre OK.
-                if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+                if (!cierrePorFaltaDeTexto)
                 {
                     salida.Resultado.Estado = "OK";
                 }
@@ -2691,7 +2747,7 @@ public class DocumentProcessOrchestrator
                   && !string.Equals(k, "Markdown", StringComparison.OrdinalIgnoreCase));
 
             // El estado de fallo por falta de contenido no debe ser pisado por los estados de cierre.
-            if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+            if (!cierrePorFaltaDeTexto)
             {
                 // AB#100130 (Fix 2): el camino GPT directo (sin CU) fija FallbackUsado=false siempre;
                 // si esa extraccion agota su propio timeout, ExtraccionTimeoutPropio=true la marca
