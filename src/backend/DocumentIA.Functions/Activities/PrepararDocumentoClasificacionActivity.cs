@@ -8,6 +8,9 @@ namespace DocumentIA.Functions.Activities;
 
 public class PrepararDocumentoClasificacionActivity
 {
+    /// <summary>Contenedor de los recortes de clasificación. Lo limpia una política de ciclo de vida (AB#100814).</summary>
+    public const string ContenedorRecortes = "documents-clasif";
+
     private readonly PdfRecorteService _pdfRecorteService;
     private readonly IBlobStorageService _blobStorageService;
     private readonly ILogger<PrepararDocumentoClasificacionActivity> _logger;
@@ -27,31 +30,39 @@ public class PrepararDocumentoClasificacionActivity
     {
         var maxPaginas = input.MaxPaginasClasificacion ?? 3;
 
+        if (string.IsNullOrWhiteSpace(input.BlobPath))
+        {
+            throw new InvalidOperationException("La entrada no trae BlobPath: el documento debe estar en blob antes de prepararlo.");
+        }
+
         _logger.LogInformation(
             "Preparando documento para clasificación: {NombreDocumento} | MaxPaginas={MaxPaginas} | BlobPath={BlobPath}",
             input.NombreDocumento,
             maxPaginas,
-            input.BlobPath ?? "(ninguno)");
+            input.BlobPath);
 
-        string documentoBase64;
+        // AB#100814: bytes de principio a fin. Nada de base64 en memoria ni en la salida: la
+        // clasificacion recibe una ruta de blob y resuelve el binario por SAS cuando lo necesita.
+        var documento = await _blobStorageService.DownloadDocumentAsync(input.BlobPath);
+        var recorte = _pdfRecorteService.RecortarParaClasificacion(documento, maxPaginas);
 
-        if (!string.IsNullOrEmpty(input.BlobPath))
+        var blobPathClasificacion = input.BlobPath;
+        if (recorte.RecorteAplicado && recorte.PdfRecortado is { Length: > 0 })
         {
-            // Blob-first: descargar desde blob y convertir a base64 para PdfRecorteService
-            var bytes = await _blobStorageService.DownloadDocumentAsync(input.BlobPath);
-            documentoBase64 = Convert.ToBase64String(bytes);
-        }
-        else
-        {
-            documentoBase64 = input.DocumentoBase64
-                ?? throw new InvalidOperationException("La entrada no trae BlobPath ni DocumentoBase64.");
-        }
+            blobPathClasificacion = await _blobStorageService.UploadDocumentAsync(
+                recorte.PdfRecortado,
+                input.NombreDocumento,
+                ContenedorRecortes);
 
-        var recorte = _pdfRecorteService.RecortarParaClasificacion(documentoBase64, maxPaginas);
+            _logger.LogInformation(
+                "Recorte de clasificación subido: {BlobPathClasificacion} ({Bytes} bytes)",
+                blobPathClasificacion,
+                recorte.PdfRecortado.Length);
+        }
 
         return new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = recorte.DocumentoBase64Recortado,
+            BlobPathClasificacion = blobPathClasificacion,
             TotalPaginas = recorte.TotalPaginas,
             CharsTextoNativo = recorte.CharsTextoNativo,
             PaginasIncluidas = recorte.PaginasIncluidas,
