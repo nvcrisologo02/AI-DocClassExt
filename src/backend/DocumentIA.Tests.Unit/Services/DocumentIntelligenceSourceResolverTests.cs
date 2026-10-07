@@ -127,6 +127,35 @@ public class DocumentIntelligenceSourceResolverTests
         contenido.Should().BeOfType<ByteArrayContent>();
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(3000)]
+    public async Task CrearContenido_ConCualquierResto_NoLanzaYDecodificaIgual(int longitud)
+    {
+        var bytes = Enumerable.Range(0, longitud).Select(i => (byte)(i * 7 + 1)).ToArray();
+
+        using var contenido = DiSource.DesdeBytes(bytes).CrearContenido();
+
+        (await LeerBase64Source(contenido)).Should().Equal(bytes);
+    }
+
+    [Fact]
+    public async Task CrearContenido_DosLlamadas_DevuelvenContenidosIndependientes()
+    {
+        var source = DiSource.DesdeBytes([1, 2, 3, 4]);
+
+        using var primero = source.CrearContenido();
+        using var segundo = source.CrearContenido();
+
+        primero.Should().NotBeSameAs(segundo);
+        primero.Should().BeOfType<ByteArrayContent>();
+        segundo.Should().BeOfType<ByteArrayContent>();
+        (await primero.ReadAsStringAsync()).Should().Be(await segundo.ReadAsStringAsync());
+    }
+
     private static Mock<IBlobStorageService> CrearBlobMock(string sasUrl)
     {
         var blob = new Mock<IBlobStorageService>();

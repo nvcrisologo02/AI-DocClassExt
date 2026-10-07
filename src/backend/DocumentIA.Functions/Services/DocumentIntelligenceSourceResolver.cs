@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
@@ -34,24 +35,28 @@ public sealed class DiSource
 
     /// <summary>
     /// Cuerpo HTTP listo para enviar. Con bytes inline escribe {"base64Source":"..."} con
-    /// Utf8JsonWriter.WriteBase64String sobre un MemoryStream dimensionado para el base64
-    /// (sin string intermedio) y lo devuelve como ByteArrayContent sobre el mismo buffer.
+    /// Utf8JsonWriter.WriteBase64String sobre un IBufferWriter que apunta a un array del tamaño
+    /// del cuerpo más una holgura fija (sin strings ni buffer intermedio) y lo devuelve como
+    /// ByteArrayContent sobre ese mismo array.
     /// En los demás casos serializa Body como hasta ahora.
     /// </summary>
     public HttpContent CrearContenido()
     {
         if (InlineBytes is not null)
         {
-            var capacidad = ((InlineBytes.Length + 2) / 3) * 4 + 64;
-            var stream = new MemoryStream(capacidad);
-            using (var writer = new Utf8JsonWriter(stream))
+            // Holgura de 512 bytes: Utf8JsonWriter pide al destino al menos su tamaño de buffer
+            // por defecto (256) aunque el JSON sea más corto; el array sobrante no se envía.
+            var capacidad = ((InlineBytes.Length + 2) / 3) * 4 + 512;
+            var buffer = new byte[capacidad];
+            var destino = new BufferFijoWriter(buffer);
+            using (var json = new Utf8JsonWriter(destino))
             {
-                writer.WriteStartObject();
-                writer.WriteBase64String("base64Source", InlineBytes);
-                writer.WriteEndObject();
+                json.WriteStartObject();
+                json.WriteBase64String("base64Source", InlineBytes);
+                json.WriteEndObject();
             }
 
-            var contenido = new ByteArrayContent(stream.GetBuffer(), 0, (int)stream.Length);
+            var contenido = new ByteArrayContent(buffer, 0, destino.Escrito);
             contenido.Headers.ContentType = new MediaTypeHeaderValue("application/json") { CharSet = "utf-8" };
             return contenido;
         }
@@ -148,5 +153,50 @@ public class DocumentIntelligenceSourceResolver
         return uri.IsLoopback
             || string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase)
             || string.Equals(uri.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+/// <summary>
+/// IBufferWriter sobre un array preasignado. Utf8JsonWriter sobre un Stream acumularía el token
+/// base64 completo en un buffer interno de ArrayPool; con este destino escribe directamente en
+/// el array final, de modo que en memoria solo hay los bytes de entrada y el cuerpo de salida.
+/// </summary>
+internal sealed class BufferFijoWriter : IBufferWriter<byte>
+{
+    private readonly byte[] _buffer;
+    private int _escrito;
+
+    public BufferFijoWriter(byte[] buffer) => _buffer = buffer;
+
+    public int Escrito => _escrito;
+
+    public void Advance(int count)
+    {
+        if (count < 0 || count > _buffer.Length - _escrito)
+        {
+            throw new InvalidOperationException("Se intentó avanzar más allá del buffer fijo.");
+        }
+
+        _escrito += count;
+    }
+
+    public Memory<byte> GetMemory(int sizeHint = 0)
+    {
+        Comprobar(sizeHint);
+        return _buffer.AsMemory(_escrito);
+    }
+
+    public Span<byte> GetSpan(int sizeHint = 0)
+    {
+        Comprobar(sizeHint);
+        return _buffer.AsSpan(_escrito);
+    }
+
+    private void Comprobar(int sizeHint)
+    {
+        if (sizeHint > _buffer.Length - _escrito)
+        {
+            throw new InvalidOperationException("El buffer fijo no tiene espacio para el tamaño solicitado.");
+        }
     }
 }

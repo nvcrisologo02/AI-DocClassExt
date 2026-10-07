@@ -138,9 +138,11 @@ Pico de memoria por activity: el PDF una vez más el recorte.
   markdown y texto normalizado.
 - Camino inline de Document Intelligence (DEV y PRE con `UseInlineContent=true`; PRO en el
   reintento tras InvalidContent): el resolutor devuelve los bytes y el cuerpo se escribe con
-  `Utf8JsonWriter.WriteBase64String` a un `MemoryStream` dimensionado, enviado como
-  `ByteArrayContent`; no se construye ningún string base64 ni JSON. Medido en DEV el
-  2026-10-07: sin este cambio el worker llegaba al límite duro del GC (2,6 GiB) en la
+  `Utf8JsonWriter.WriteBase64String` sobre un `IBufferWriter` que apunta a un array del
+  tamaño del cuerpo más una holgura fija (ceil(n/3)*4+512 bytes; Utf8JsonWriter pide al destino al menos 256 bytes), enviado como `ByteArrayContent`; en memoria
+  hay dos copias, los bytes del documento y el cuerpo UTF-8, frente a las cinco de antes
+  (bytes, string base64 UTF-16, string JSON UTF-16, UTF-8 y buffer de HttpClient). Medido en
+  DEV el 2026-10-07: sin este cambio el worker llegaba al límite duro del GC (2,6 GiB) en la
   clasificación del recorte.
 
 ### 4. Trigger en streaming
