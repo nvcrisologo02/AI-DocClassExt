@@ -91,7 +91,9 @@ Objetivo: demostrar que el commit candidato funciona en DEV con su IA propia. Ej
 
 Prerrequisitos: esquema de DEV al día (pipeline 807 Migrations-BD con `targetEnvironment=dev`) y
 DEV desplegado con el commit candidato (pipeline 799 `targetEnvironment=dev` o los pipelines por
-componente).
+componente). El pipeline 802 (Functions) despliega en DEV desde cualquier rama remota, también
+ramas de trabajo (`bugfix/*`, `feature/*`), para validar un fix antes del merge; PRE y PRO solo
+desde `main` o `develop`.
 
 - [ ] **1.1** Build, tests y formato en local sobre el commit candidato con los comandos del bloque siguiente; copiar los n/n a `release.md`.
 

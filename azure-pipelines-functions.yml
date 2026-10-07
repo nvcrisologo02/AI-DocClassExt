@@ -100,7 +100,12 @@ stages:
 - stage: Deploy
   displayName: Deploy
   dependsOn: Build
-  condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/develop')))
+  # AB#100814: DEV es el entorno de validacion de ramas de trabajo y admite cualquier rama;
+  # PRE y PRO siguen limitados a main y develop.
+  ${{ if eq(parameters.targetEnvironment, 'dev') }}:
+    condition: succeeded()
+  ${{ else }}:
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranch'], 'refs/heads/main'), eq(variables['Build.SourceBranch'], 'refs/heads/develop')))
   jobs:
   - deployment: Deploy
     displayName: Deploy to Azure Functions
