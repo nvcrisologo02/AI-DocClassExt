@@ -36,7 +36,11 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
         var baseEndpoint = model.Endpoint.TrimEnd('/');
         var analyzeUrl = $"{baseEndpoint}/documentintelligence/documentClassifiers/{Uri.EscapeDataString(model.ClassifierId)}:analyze?_overload=classifyDocument&api-version={Uri.EscapeDataString(apiVersion)}";
 
-        var blobPath = input.Entrada.Documento.BlobPath;
+        // AB#100814: el documento a clasificar llega como ruta (recorte u original); el
+        // resolutor lo convierte en SAS urlSource. El base64 solo entra por el campo legado.
+        var blobPath = !string.IsNullOrWhiteSpace(input.BlobPathClasificacion)
+            ? input.BlobPathClasificacion
+            : input.Entrada.Documento.BlobPath;
         var source = await _sourceResolver.ResolveAsync(
             blobPath,
             base64Override: input.DocumentoBase64Override,
