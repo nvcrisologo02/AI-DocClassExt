@@ -6,8 +6,12 @@
 .DESCRIPTION
     Plano de gestion con az rest (la cuenta de desarrollo falla en TLS con el data-plane
     de az CLI). Lee la management policy "default" de la cuenta de documentos del entorno,
-    sustituye o anade la regla "documents-clasif-7d" sin tocar las demas reglas y la escribe.
+    sustituye o anade la regla "documents-clasif-<Days>d" sin tocar las demas reglas y la escribe.
+    Filtra cualquier regla previa documents-clasif-* para permitir cambiar -Days.
     Idempotente: ejecutarlo dos veces deja la misma politica.
+
+    Si no puede leer la politica existente (GET falla con error que no es ManagementPolicyNotFound),
+    aborta con el error de az rest en vez de escribir una politica vacia.
 
     Cuentas por entorno (verificadas el 2026-10-07 con az rest):
       dev  srbstgdevdocai  SRBRGDEVDOCSAI  8764f9ff-fe37-4c03-bde9-6294622bef6d
@@ -45,13 +49,25 @@ $url = "https://management.azure.com/subscriptions/$($c.Sub)/resourceGroups/$($c
 Write-Host "Cuenta: $($c.Cuenta) ($Environment). Regla: $nombreRegla"
 
 $reglasExistentes = @()
-try {
-    $actual = az rest --method get --url $url 2>$null | ConvertFrom-Json
+$salida = (az rest --method get --url $url 2>&1 | Out-String).Trim()
+$codigo = $LASTEXITCODE
+
+if ($codigo -ne 0) {
+    if ($salida -like "*ManagementPolicyNotFound*") {
+        Write-Host "Sin politica previa (se crea nueva)."
+    } else {
+        throw "GET fallo: $salida"
+    }
+} else {
+    # Parsear JSON: si hay avisos (ej. InsecureRequestWarning), quedarse con el bloque JSON
+    $jsonInicio = $salida.IndexOf('{')
+    if ($jsonInicio -ge 0) {
+        $salida = $salida.Substring($jsonInicio)
+    }
+    $actual = $salida | ConvertFrom-Json
     if ($actual -and $actual.properties.policy.rules) {
         $reglasExistentes = @($actual.properties.policy.rules | Where-Object { $_.name -ne $nombreRegla -and $_.name -notlike "documents-clasif-*" })
     }
-} catch {
-    Write-Host "Sin politica previa (se crea nueva)."
 }
 
 $reglaNueva = [ordered]@{
@@ -82,13 +98,23 @@ $cuerpo = [ordered]@{
 $ficheroCuerpo = Join-Path ([System.IO.Path]::GetTempPath()) "lifecycle-$($c.Cuenta).json"
 [System.IO.File]::WriteAllText($ficheroCuerpo, $cuerpo, (New-Object System.Text.UTF8Encoding $false))
 
-if ($PSCmdlet.ShouldProcess($c.Cuenta, "PUT managementPolicies/default con la regla $nombreRegla")) {
-    $resultado = az rest --method put --url $url --body "@$ficheroCuerpo" | ConvertFrom-Json
-    $nombres = @($resultado.properties.policy.rules | ForEach-Object { $_.name })
-    Write-Host "Politica escrita. Reglas: $($nombres -join ', ')"
-    if ($nombres -notcontains $nombreRegla) { throw "La regla $nombreRegla no aparece tras el PUT." }
-} else {
-    Write-Host "Politica resultante (no escrita):"
-    Write-Host $cuerpo
+try {
+    if ($PSCmdlet.ShouldProcess($c.Cuenta, "PUT managementPolicies/default con la regla $nombreRegla")) {
+        $salida = (az rest --method put --url $url --body "@$ficheroCuerpo" 2>&1 | Out-String).Trim()
+        $codigo = $LASTEXITCODE
+
+        if ($codigo -ne 0) {
+            throw "PUT fallo: $salida"
+        }
+
+        $resultado = $salida | ConvertFrom-Json
+        $nombres = @($resultado.properties.policy.rules | ForEach-Object { $_.name })
+        Write-Host "Politica escrita. Reglas: $($nombres -join ', ')"
+        if ($nombres -notcontains $nombreRegla) { throw "La regla $nombreRegla no aparece tras el PUT." }
+    } else {
+        Write-Host "Politica resultante (no escrita):"
+        Write-Host $cuerpo
+    }
+} finally {
+    Remove-Item $ficheroCuerpo -ErrorAction SilentlyContinue
 }
-Remove-Item $ficheroCuerpo -ErrorAction SilentlyContinue
