@@ -1,0 +1,203 @@
+# Release v1.0.0
+
+Fecha: pendiente (ventana por fijar) · Tag: v1.0.0 · Commit: **no fijado** · Tag anterior: `deploy-pro-2026-09-20` (`fe1533f`) · Entorno: PRO
+
+Primera versión con el esquema de `docs/releases/README.md`. El paso 0.1 del runbook queda
+**abierto**: el commit candidato no se puede fijar hasta que el Bug AB#100880 esté integrado en
+`develop` (decisión de alcance del 2026-10-07). Estado de `develop` al abrir este registro:
+`291a424`, 115 commits por delante de `fe1533f`.
+
+## Validación
+
+Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1355/1355 · Tests Admin: 151/151 · Tests AssetResolver: 14/14 · Formato: ok
+E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke 6/6 · E2E PRO: smoke pendiente
+
+Las cuatro cifras de build, tests y formato son del 2026-10-07 sobre `291a424` (develop con el
+merge de AB#100879 y el script de backfill). Los smoke de DEV y PRE son del 2026-10-05 sobre
+`eb0614e` (tag `release-2026-10-05`, runs 79642/79643 en DEV y 79645/79644 en PRE): **hay que
+repetirlos** sobre el commit candidato definitivo, porque incorporará AB#100879 y AB#100880.
+
+## Contenido de la release
+
+### Migraciones y scripts fuera de EF
+
+- `20261005140618_IndiceDocumentosMD5` (AB#100863, AB#100864) · **ya aplicada en PRO** el
+  2026-10-07 a las 07:18 UTC con `scripts/database/indice-documentos-md5-pro.sql` (`ONLINE = ON`,
+  23,9 s, 16,2 MB, sin carga) y registrada en `__EFMigrationsHistory` (AB#100866). Es la única
+  migración nueva frente a PRO, así que el pipeline 807 contra `prod` debe salir con
+  `Pendientes: 0`; si sale con 1, parar y revisar antes de aplicar.
+- `scripts/migrations/clasificador-embeddings/01-modeloconfig-clasificador-embeddings.sql`
+  (AB#100779) con `@Modo='off'` · **antes de desplegar el código**: el orquestador llama a la
+  activity de embeddings en todas las ejecuciones y, si la fila no existe, el proveedor deriva con
+  `fila_ausente` y emite evento y métrica en cada ejecución. Con la fila en `off` no hay llamada al
+  endpoint ni telemetría. Hace copia `ModeloConfigs__bak_<fecha>` y es idempotente.
+- `scripts/migrations/clasificador-embeddings/02-tarifas-embeddings-deployments.sql` (AB#100779) ·
+  líneas `text-embedding-3-large-030358` y `-010650` en el catálogo `tarifas.ia`. Puede ir antes o
+  después del código.
+- `scripts/migrations/costes-ia/02-tarifas-cera16v2-gpt41-cached.sql` (AB#100860) · `CERA16_v2`
+  (0,859) y `gpt-4.1-cached` (0,429) en `tarifas.ia`. El `01` ya está aplicado en PRO.
+- `scripts/ai/set-resource-aliases.sql` (AB#100321) · **después de desplegar el código**, ver
+  "Orden crítico" más abajo. Con backup automático.
+- `scripts/database/backfill-fecha-expiracion-blob.ps1` (AB#100881) · **no es de la ventana**: se
+  ejecuta en D+1, después de ver el primer ciclo del cron limpio.
+
+### Configuración
+
+- `ModeloConfigs` · `clasificador-embeddings/01` · alta de la fila Tipo=5 `clasificador.embeddings`
+  con `Modo = off` y `Restringido.Modo = off`.
+- `ModeloConfigs` (catálogo `tarifas.ia`, Tipo=4) · `clasificador-embeddings/02` y `costes-ia/02` ·
+  cuatro líneas de tarifa nuevas (dos deployments de embeddings, `CERA16_v2`, `gpt-4.1-cached`).
+- `ModeloConfigs` · `scripts/ai/set-resource-aliases.sql` · las filas de PRO pasan de `Endpoint`
+  explícito a `ResourceAlias` (`openai_primary`, `cu_primary`, `cu_secondary`, `di`).
+- App settings de `srbappprodocai`, por el pipeline 799 (`ensure-app-settings.ps1`, que no pisa
+  claves existentes): `AI__Resources__openai_primary__Endpoint`,
+  `AI__Resources__cu_primary__Endpoint`, `AI__Resources__cu_secondary__Endpoint`,
+  `AI__Resources__di__Endpoint`.
+- App settings de `srbappprodocai`, a mano (AB#100868): `BlobRetentionCleanupCron = 0 0 3 * * *`,
+  `BlobRetention__DefaultDays = 2`, `BlobRetention__BatchSize = 2000`. `appsettings.json` no se
+  carga en Functions, así que sin `DefaultDays` ningún documento recibe `FechaExpiracionBlob` y el
+  cron no borra nada.
+- `PromptTemplates`, `Tipologias`, `CatalogoTdn1`, `CatalogoTdn2`, `PluginTipologiaConfigs`:
+  ninguno.
+
+### Artefactos de IA
+
+Ninguno. Esta release no promociona analyzers de Content Understanding, clasificadores de Document
+Intelligence ni datasets a PRO: el primer run real del pipeline 832 es AB#100809 y los manifiestos
+`.prod.` no existen hasta esa primera copia (AB#100812). `infra/ai/deployments.prod.json`,
+`cu-analyzers.json` y `di-artifacts.json` no cambian de contenido aplicado en PRO.
+
+## Orden crítico de la ventana
+
+1. **Configuración antes que código, con una excepción.** `clasificador-embeddings/01` va antes del
+   despliegue (razón arriba). `set-resource-aliases.sql` va **después**, porque en cuanto vacía
+   `Endpoint` y pone el alias los loaders dependen de los app settings `AI__Resources__*`, y esos
+   los crea `ensure-app-settings.ps1` dentro del despliegue de código. `AiEndpointResolver.Resolve`
+   da precedencia al endpoint explícito y lanza `InvalidOperationException` si hay alias sin app
+   setting mapeado: aplicar el script antes del despliegue dejaría PRO sin clasificación ni
+   extracción.
+2. **Comprobar los cuatro `AI__Resources__*` con valor** entre el despliegue y el script de alias.
+   No basta con que la clave exista: un valor vacío cuenta como no mapeado.
+3. **El índice MD5 ya está aplicado**, así que el 807 contra `prod` debe dar `Pendientes: 0`.
+4. **Los app settings del cron van después del despliegue y antes del smoke**: el `set` reinicia el
+   host, así que sustituye al reinicio del paso 4.5 y deja el smoke como prueba del arranque limpio.
+
+## Diff frente a `deploy-pro-2026-09-20`
+
+### Epic
+
+- AB#100298 `[ENTORNOS] IA propia por entorno (DEV/PRE/PRO) y promoción de artefactos de IA` ·
+  cierra cuando Plataforma complete el Step 3 de AB#100321 (retirada de roles cruzados)
+
+### Features
+
+- AB#100302 `[FASE 3] PRO por datos y App Settings; cierre del acceso compartido` · entra en esta
+  release
+- AB#100301 `[FASE 2] PRE como puerta técnica de release` · el cutover de PRE se hizo el 2026-09-23;
+  sigue abierta por AB#100808 y AB#100810, que no son de esta release
+
+### PBIs
+
+- AB#100224 `[COSTES] Control de costes de servicios de IA por ejecución`
+- AB#100235 `[COSTES] Sección de costes en Admin y relleno retroactivo`
+- AB#100303 `Resolvedor de endpoint de IA por alias de recurso en Core`
+- AB#100304 `ResourceAlias y resolución de endpoint en los cuatro registros de modelos`
+- AB#100305 `Registro en Functions, seeds models.json y documentación de alias`
+- AB#100306 `Variables AI_* por entorno en azure-pipelines.yml y App Settings de alias`
+- AB#100307 `Definición de IA en infra/ai y export de analyzers CU`
+- AB#100308 `Export de configuración por release y hash de deriva`
+- AB#100309 `Spike: Copy API de Content Understanding con flujo de token`
+- AB#100310 `Inventario pendiente: analyzers de Foundry 01 DEV/PRE, extractor DI_NS_1.4, dataset de DI Studio, roles cruzados`
+- AB#100312 `Copia versionada del dataset de etiquetado CU al storage de DEV con manifiesto`
+- AB#100313 `Deployments declarativos por entorno (apply-deployments.ps1)`
+- AB#100314 `Reconstrucción de analyzers CU en DEV desde definición y dataset del entorno`
+- AB#100315 `Validación post-build de analyzers: acuerdo de campos origen vs destino`
+- AB#100316 `Copia de clasificadores y modelos custom de DI a DEV por Copy API`
+- AB#100317 `Cutover de DEV: keys en Key Vault, App Settings de alias, set-resource-aliases.sql y vuelta atrás`
+- AB#100320 `Ejecución y puertas de PRE (fase 2a): cutover manual con los scripts de DEV y 4 puertas`
+- AB#100321 `PRO: alias en ModeloConfigs y App Settings, comprobación de deriva, retirada de roles de DEV y PRE sobre PRO, documentación final` · **abierto, Steps 1 y 2 en esta ventana**
+- AB#100664 `Promoción de analyzers CU a DEV por Copy API`
+- AB#100675 `Pipeline azure-pipelines-ai-artifacts.yml (fase 2b)`
+- AB#100676 `Runbook de release: PRE como puerta técnica`
+- AB#100779 `Clasificador híbrido embeddings (A) + GPT en el orquestador` · Fase A en sombra y
+  minors de Fase B (AB#100861); en PRO entra en `off`
+- AB#100878 `Alinear documentación de API y de infraestructura con el código desplegado`
+
+### Fixes
+
+- AB#100863 `Timeouts SQL de 30 s en VerificarDuplicadoPorMD5Activity: Documentos.MD5 sin índice
+  sobre BD S0` · índice ya aplicado en PRO; queda confirmar en Query Store que la consulta por MD5
+  baja de 64.702 lecturas a menos de 10 con la primera ingesta de GDC
+- AB#100879 `IngestDocument devuelve ex.Message al cliente en el 500 genérico` · merge en develop
+  el 2026-10-07
+- AB#100880 `SIN_CONTENIDO_DOCUMENTO se devuelve cuando el documento sí tiene contenido` ·
+  **pendiente de desarrollo**, bloquea el paso 0.1
+- AB#100662 `Admin /costes muestra 0 con 90 días` · el índice ya está en PRO desde el 2026-09-20;
+  esta release lleva el aviso del Admin cuando los agregados no llegan
+- AB#100258 `Las ejecuciones reutilizadas por duplicado no dejan rastro`
+- AB#100020 pre-check de migraciones por conjunto, no solo la última
+- AB#100247 / AB#100240 backfills de cobertura y costes reanudables por `-DesdeId`
+- AB#100235 `test-costes-ia` resolvía la raíz del repo dos niveles por encima
+- AB#100881 script por lotes del backfill de `FechaExpiracionBlob` (herramienta de D+1)
+
+### Infraestructura
+
+- AB#100675 pipeline 832 `azure-pipelines-ai-artifacts.yml` con etapas Guard, Export, AiArtifacts y
+  ConfigSeed, parámetro `dryRun` y aprobaciones de `pre` y `prod`; ADR-001 fija el sentido
+  DEV → PRE → PRO
+- AB#100815 alertas de memoria de PRO por instancia (2,25 GiB) y alerta de OutOfMemory
+  (`srbalertoomprodocai`) · **ya aplicadas en Azure**, el repo solo versiona la definición
+- AB#100307 / AB#100312 a AB#100316 definición versionada de recursos, deployments, analyzers CU,
+  clasificadores DI y datasets en `infra/ai/`
+- AB#100306 / AB#100317 plantilla compartida de endpoints de IA y variables `AI_*` por entorno en
+  los pipelines de Functions y Admin
+- Correcciones de pipeline del 03/09 incorporadas a develop (nombres de app resueltos en tiempo de
+  compilación, endpoint GDC de PRE)
+
+### Configuración
+
+Ver "Contenido de la release". Resumen: `ModeloConfigs` con la fila de embeddings en `off`, cuatro
+líneas nuevas en `tarifas.ia`, el paso de `Endpoint` a `ResourceAlias` en PRO, los cuatro
+`AI__Resources__*__Endpoint` y los tres app settings del cron de limpieza de blobs. Ninguna
+migración pendiente. Secretos: ninguno nuevo.
+
+## Aprobación
+
+| Puerta | Fecha | Resultado | Evidencia |
+|---|---|---|---|
+| 1 Smoke E2E PRE | | | |
+| 2 Golden | | | |
+| 3 Coste | | | |
+| 4 Deriva | | | |
+
+Test Plan 100069 (SMK-1..8): run pendiente.
+Go: pendiente
+
+## Runs de pipeline
+
+| Pipeline | Entorno | Run | Resultado |
+|---|---|---|---|
+| 807 Migrations-BD | pre | | |
+| 799 completo | pre | | |
+| 807 Migrations-BD | prod | | |
+| 799 completo | prod | | |
+
+## Pendientes antes de cerrar la Fase 0
+
+1. **AB#100880** desarrollado y mergeado en `develop` (bloquea 0.1).
+2. Repetir smoke de DEV y PRE sobre el commit candidato definitivo.
+3. Fijar el commit en 0.1 (`git log --oneline -1 origin/develop`) y reescribir la cabecera.
+4. Bloque 1 del plan de ventana (lectura de los app settings de PRO): obligatorio, porque la
+   ausencia de los `AI__Resources__*` se apoya en la comprobación del 05/10 y la cuenta de
+   desarrollo dio `AuthorizationFailed` el 06/10.
+5. Export de configuración de DEV y diff por clave natural (paso 3 del runbook).
+
+## Fuera de esta release
+
+AB#100272 (identificador buscable en el Monitor), AB#100814 (OutOfMemory con PDF grandes en lotes,
+aparcado), AB#100805 y AB#100807 (rotar `docaisql`, limpiar copias y tablas `__bak`), AB#100808
+(purga de `__bak` de PRE y `CatalogoTdn1.Descripcion`), AB#100809 / AB#100811 / AB#100812 (primer
+run real del pipeline 832), AB#100810 (evidencia de las 4 puertas de PRE), AB#100780 / AB#100781 /
+AB#100782 (crecimiento del clasificador, promoción del modelo, confusión TASA/CERJ), AB#99934 y
+AB#99936 a AB#99940 (migración de deployments de modelos), AB#100220 (seguimiento post-release de
+septiembre) y el resto del backlog de calidad de clasificación.
