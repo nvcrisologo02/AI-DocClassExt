@@ -323,6 +323,14 @@ public class ContenidoDocumento
     /// Vacío cuando el flujo usa rutas externas (por ejemplo BlobPath u ObjectIdGDC).
     /// </summary>
     public string? Base64 { get; set; }
+
+    /// <summary>
+    /// Bytes del documento decodificados por el trigger de ingesta directamente desde el JSON,
+    /// sin pasar por un string base64 (AB#100814). Nunca se serializa: no viaja a la
+    /// orquestación. El trigger lo vacía tras subir el documento al blob.
+    /// </summary>
+    [JsonIgnore]
+    public byte[]? Bytes { get; set; }
 }
 
 public class Trazabilidad

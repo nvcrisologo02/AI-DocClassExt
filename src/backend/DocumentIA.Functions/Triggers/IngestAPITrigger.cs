@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using DocumentIA.Core.Models;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Services;
+using DocumentIA.Functions.Serialization;
 using System.Net;
 using System.Text.Json;
 using System.Diagnostics;
@@ -26,6 +27,16 @@ public class IngestAPITrigger
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
+    };
+
+    /// <summary>
+    /// Opciones de la ruta JSON: el base64 del documento se decodifica a bytes al leer el
+    /// stream, sin construir el string (AB#100814).
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptionsIngesta = new()
+    {
+        PropertyNameCaseInsensitive = true,
+        Converters = { new ContenidoDocumentoIngestaConverter() }
     };
 
     // AB#100180: extensiones que la extracción (DI Layout / conversión) sabe tratar. Un fichero
@@ -82,10 +93,11 @@ public class IngestAPITrigger
             }
             else
             {
-                var requestBody = await req.ReadAsStringAsync();
                 try
                 {
-                    contratoEntrada = JsonSerializer.Deserialize<ContratoEntrada>(requestBody!, JsonOptions);
+                    // AB#100814: deserializar desde el stream; el converter deja el documento en
+                    // Content.Bytes sin pasar por el string del cuerpo ni por el string base64.
+                    contratoEntrada = await JsonSerializer.DeserializeAsync<ContratoEntrada>(req.Body, JsonOptionsIngesta);
                 }
                 catch (JsonException ex)
                 {
@@ -104,23 +116,18 @@ public class IngestAPITrigger
                         return await CrearRespuestaExtensionNoSoportadaAsync(req, extensionRechazada);
                     }
 
-                    var base64FromJson = contratoEntrada.Documento?.Content?.Base64?.Trim();
-                    if (!string.IsNullOrEmpty(base64FromJson))
+                    var contenido = contratoEntrada.Documento?.Content;
+                    if (contenido?.Bytes is { Length: > 0 })
                     {
-                        byte[] fileBytes;
-                        try
-                        {
-                            fileBytes = Convert.FromBase64String(base64FromJson);
-                        }
-                        catch (FormatException ex)
-                        {
-                            _logger.LogWarning(ex, "documento.content.base64 no es un base64 válido.");
-                            var badBase64Response = req.CreateResponse(HttpStatusCode.BadRequest);
-                            await badBase64Response.WriteStringAsync("documento.content.base64 no es un base64 válido.");
-                            return badBase64Response;
-                        }
-
-                        await UploadToBlobAndSetHashesAsync(contratoEntrada, fileBytes);
+                        await UploadToBlobAndSetHashesAsync(contratoEntrada, contenido.Bytes);
+                    }
+                    else if (!string.IsNullOrWhiteSpace(contenido?.Base64))
+                    {
+                        // El converter solo deja el string cuando no es base64 decodificable.
+                        _logger.LogWarning("documento.content.base64 no es un base64 válido.");
+                        var badBase64Response = req.CreateResponse(HttpStatusCode.BadRequest);
+                        await badBase64Response.WriteStringAsync("documento.content.base64 no es un base64 válido.");
+                        return badBase64Response;
                     }
                 }
             }
@@ -420,6 +427,7 @@ public class IngestAPITrigger
         entrada.Documento.PreComputedCRC32 = crc32;
         entrada.Documento.PreComputedTamañoBytes = fileBytes.Length;
         entrada.Documento.Content.Base64 = null;
+        entrada.Documento.Content.Bytes = null;
 
         _logger.LogInformation(
             "Fichero subido a blob antes de orquestación. BlobPath={BlobPath}, SHA256={SHA256}, Bytes={Bytes}",
