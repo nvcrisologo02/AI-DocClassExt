@@ -759,6 +759,77 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_SalidaLegadaDePreparar_ReenviaElBase64YUsaLaRutaOriginal()
+    {
+        // AB#100814: instancia en vuelo con la salida antigua de Preparar (base64, sin ruta).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/2026/10/original.pdf");
+#pragma warning disable CS0618
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 8,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
+        });
+#pragma warning restore CS0618
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.1,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await orchestrator.RunOrchestrator(context);
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.BlobPathClasificacion.Should().Be("documents/2026/10/original.pdf");
+#pragma warning disable CS0618
+        clasifInput.DocumentoBase64Override.Should().Be("cmVjb3J0YWRv");
+#pragma warning restore CS0618
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SalidaDePrepararSinRutaNiBase64_UsaLaRutaOriginal()
+    {
+        // AB#100814: salida de Preparar sin ruta ni base64: se repone la ruta del original.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/2026/10/original.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            TotalPaginas = 8,
+            PaginasIncluidas = 8,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.1,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await orchestrator.RunOrchestrator(context);
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.BlobPathClasificacion.Should().Be("documents/2026/10/original.pdf");
+#pragma warning disable CS0618
+        clasifInput.DocumentoBase64Override.Should().BeNull();
+#pragma warning restore CS0618
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ResolveMaxPaginas_PriorizaOverrideTipologia()
     {
         var settings = new ClassificationPreparationSettings

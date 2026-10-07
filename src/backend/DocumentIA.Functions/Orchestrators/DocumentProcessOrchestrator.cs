@@ -1158,6 +1158,7 @@ public class DocumentProcessOrchestrator
                 PaginasIncluidas = salida.Identificacion.Paginas,
                 RecorteAplicado = false
             };
+            string? base64LegadoClasif = null;
 
             salida.DetalleEjecucion.RecorteAplicado = docClasif.RecorteAplicado;
             salida.DetalleEjecucion.PaginasIncluidas = docClasif.PaginasIncluidas;
@@ -1182,6 +1183,14 @@ public class DocumentProcessOrchestrator
                     docClasif = docClasifResult ?? docClasif;
                     if (string.IsNullOrWhiteSpace(docClasif.BlobPathClasificacion))
                     {
+                        // AB#100814: compatibilidad con instancias en vuelo: la salida antigua de Preparar trae
+                        // base64 y no ruta; se reenvia una sola vez para que terminen como antes. Retirar junto
+                        // con los campos [Obsolete].
+#pragma warning disable CS0618
+                        base64LegadoClasif = string.IsNullOrEmpty(docClasif.DocumentoBase64Clasif)
+                            ? null
+                            : docClasif.DocumentoBase64Clasif;
+#pragma warning restore CS0618
                         docClasif.BlobPathClasificacion = blobPathDocumento;
                     }
 
@@ -1441,6 +1450,7 @@ public class DocumentProcessOrchestrator
                             DatosNormalizados = datosNormalizados,
                             UmbralFallbackEfectivo = umbralClasifFallback,
                             BlobPathClasificacion = docClasif.BlobPathClasificacion,
+                            DocumentoBase64Override = base64LegadoClasif,
                             CharsTextoNativo = docClasif.CharsTextoNativo,
                             TotalPaginas = docClasif.TotalPaginas,
                             GenerarResumenPorDefecto = true,

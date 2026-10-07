@@ -842,10 +842,10 @@ namespace DocumentIA.Tests.Unit.Services.Classification
         }
 
         [Fact]
-        public async Task SinContextoTextual_ConRutaDeClasificacion_ElResolutorRecibeElRecorteYNoBase64()
+        public async Task SinContextoTextual_ConRutaDeClasificacion_ElResolutorRecibeElOriginalYNoBase64()
         {
-            // AB#100814: la clasificacion recibe la ruta del recorte; el salvavidas pide el layout
-            // sobre esa ruta y no transporta base64.
+            // AB#100814: aunque la clasificacion reciba la ruta del recorte, el salvavidas pide el layout
+            // sobre el documento original (el markdown se persiste por su SHA256) y no transporta base64.
             var provider = CreateProviderWithLowRuleConfidence();
             var input = new ClasificacionInput
             {
@@ -878,7 +878,7 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             _markdownResolverMock.Verify(p => p.ResolverAsync(
                 It.IsAny<NecesidadMarkdown>(),
                 It.Is<ContextoMarkdown>(c =>
-                    c.BlobPath == "documents-clasif/2026/10/recorte.pdf"
+                    c.BlobPath == "documents/2026/10/x.pdf"
                     && c.Sha256 == "sha-x"
                     && string.IsNullOrEmpty(c.DocumentoBase64)),
                 It.IsAny<CancellationToken>()), Times.Once);
