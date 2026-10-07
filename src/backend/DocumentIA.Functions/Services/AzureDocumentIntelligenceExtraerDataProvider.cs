@@ -1,6 +1,5 @@
 ﻿using System.Diagnostics;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
@@ -66,15 +65,13 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
             base64Entrada: input.Entrada.Documento.Content.Base64,
             cancellationToken);
 
-        var requestBody = JsonSerializer.Serialize(source.Body);
-
         using var client = _httpClientFactory.CreateClient();
 
-        async Task<HttpResponseMessage> EnviarAsync(string cuerpo)
+        async Task<HttpResponseMessage> EnviarAsync(HttpContent contenido)
         {
             var peticion = new HttpRequestMessage(HttpMethod.Post, analyzeUrl)
             {
-                Content = new StringContent(cuerpo, Encoding.UTF8, "application/json")
+                Content = contenido
             };
 
             peticion.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -88,7 +85,7 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
 
         var stopwatch = Stopwatch.StartNew();
 
-        var startResponse = await EnviarAsync(requestBody);
+        var startResponse = await EnviarAsync(source.CrearContenido());
 
         if (!startResponse.IsSuccessStatusCode)
         {
@@ -105,9 +102,9 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
                     "DI respondió InvalidContent con urlSource para BlobPath={BlobPath}. Reintentando con base64Source.",
                     blobPath);
 
-                var inlineBody = await _sourceResolver.BuildInlineBodyAsync(blobPath!, cancellationToken);
+                var inline = await _sourceResolver.BuildInlineSourceAsync(blobPath!, cancellationToken);
                 startResponse.Dispose();
-                startResponse = await EnviarAsync(JsonSerializer.Serialize(inlineBody));
+                startResponse = await EnviarAsync(inline.CrearContenido());
 
                 if (!startResponse.IsSuccessStatusCode)
                 {

@@ -110,7 +110,8 @@ public sealed class AzureDocumentIntelligenceClasificarProviderTests : IDisposab
         _blob.Verify(b => b.DownloadDocumentAsync(RutaRecorte), Times.Once);
         _blob.Verify(b => b.DownloadDocumentAsync(RutaOriginal), Times.Never);
         _handler.Cuerpos[0].Should().Contain("urlSource");
-        _handler.Cuerpos[1].Should().Contain("base64Source").And.Contain(Convert.ToBase64String(ContenidoBlob));
+        using var segundo = System.Text.Json.JsonDocument.Parse(_handler.Cuerpos[1]);
+        segundo.RootElement.GetProperty("base64Source").GetBytesFromBase64().Should().Equal(ContenidoBlob);
     }
 
     private AzureDocumentIntelligenceClasificarProvider CrearSut()

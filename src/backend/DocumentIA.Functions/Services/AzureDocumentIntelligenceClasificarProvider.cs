@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
@@ -47,10 +46,8 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
             base64Entrada: input.Entrada.Documento.Content.Base64,
             cancellationToken);
 
-        var requestBody = JsonSerializer.Serialize(source.Body);
-
         using var client = _httpClientFactory.CreateClient();
-        var startResponse = await SendAnalyzeRequestAsync(client, analyzeUrl, requestBody, model, cancellationToken);
+        var startResponse = await SendAnalyzeRequestAsync(client, analyzeUrl, source.CrearContenido(), model, cancellationToken);
         if (!startResponse.IsSuccessStatusCode)
         {
             var body = await startResponse.Content.ReadAsStringAsync(cancellationToken);
@@ -62,10 +59,9 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
             {
                 _logger.LogWarning("DI respondió InvalidContent con urlSource para BlobPath={BlobPath}. Reintentando con base64Source.", blobPath);
 
-                var inlineBody = await _sourceResolver.BuildInlineBodyAsync(blobPath!, cancellationToken);
-                requestBody = JsonSerializer.Serialize(inlineBody);
+                var inline = await _sourceResolver.BuildInlineSourceAsync(blobPath!, cancellationToken);
                 startResponse.Dispose();
-                startResponse = await SendAnalyzeRequestAsync(client, analyzeUrl, requestBody, model, cancellationToken);
+                startResponse = await SendAnalyzeRequestAsync(client, analyzeUrl, inline.CrearContenido(), model, cancellationToken);
 
                 if (!startResponse.IsSuccessStatusCode)
                 {
@@ -252,13 +248,13 @@ public class AzureDocumentIntelligenceClasificarProvider : IClasificarDataProvid
     private static async Task<HttpResponseMessage> SendAnalyzeRequestAsync(
         HttpClient client,
         string analyzeUrl,
-        string requestBody,
+        HttpContent contenido,
         ClassificationModelConfig model,
         CancellationToken cancellationToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, analyzeUrl)
         {
-            Content = new StringContent(requestBody, Encoding.UTF8, "application/json")
+            Content = contenido
         };
 
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));

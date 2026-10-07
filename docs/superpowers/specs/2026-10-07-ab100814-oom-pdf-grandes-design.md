@@ -26,8 +26,7 @@ DEV con **un solo PDF de 57 MB** (20 páginas escaneadas) y la instancia en repo
 - El worker murió en `ActivityInputConverter.ConvertAsync` al deserializar `ClasificacionInput`.
   Working set de la instancia: 547 MiB → 2.546 MiB en dos minutos; Private Bytes de host y
   worker sumaban ~4,7 GiB. La instancia dejó de reportar métricas (reciclada).
-- Layout no es el problema: `ObtenerMarkdownActivity` usa SAS `urlSource` y no materializa el
-  documento.
+- Layout va por SAS en PRO; en DEV y PRE va inline y materializa el documento en base64 (ver §3).
 
 Microsoft documenta esta situación y su remedio para el proveedor Azure Storage: guardar los
 payloads grandes fuera y pasar referencias ligeras entre operaciones, materializando los datos
@@ -137,6 +136,12 @@ Pico de memoria por activity: el PDF una vez más el recorte.
   el override.
 - La ruta GPT (`GptClasificarDataProvider`, `DocumentWindowExtractor`) no cambia: trabaja con
   markdown y texto normalizado.
+- Camino inline de Document Intelligence (DEV y PRE con `UseInlineContent=true`; PRO en el
+  reintento tras InvalidContent): el resolutor devuelve los bytes y el cuerpo se escribe con
+  `Utf8JsonWriter.WriteBase64String` a un `MemoryStream` dimensionado, enviado como
+  `ByteArrayContent`; no se construye ningún string base64 ni JSON. Medido en DEV el
+  2026-10-07: sin este cambio el worker llegaba al límite duro del GC (2,6 GiB) en la
+  clasificación del recorte.
 
 ### 4. Trigger en streaming
 
@@ -192,6 +197,13 @@ Unitarios (TDD, `DocumentIA.Tests.Unit`):
   y `DocumentoBase64Override` nulo; si Preparar falla, la ruta es la original.
 - `DocumentIntelligenceSourceResolverTests` y proveedores: la ruta de clasificación manda
   sobre la del documento; el campo legado sigue funcionando.
+- `DocumentIntelligenceSourceResolverTests`: los casos inline devuelven `InlineBytes` y
+  `CrearContenido()` produce un JSON `base64Source` que decodifica a los bytes del blob
+  (`application/json`); `CrearContenido_ConBytes_NoProduceStringIntermedio_YElJsonEsValido`
+  fija el JSON exacto `{"base64Source":"AQIDBA=="}` como `ByteArrayContent`; override legado,
+  entrada sin blob y urlSource conservan `Body`.
+- `AzureDocumentIntelligenceClasificarProviderTests` (reintento tras InvalidContent): el
+  segundo cuerpo enviado decodifica a los bytes del blob.
 - Trigger: converter con base64 válido (bytes y sin string), base64 con saltos de línea
   (fallback), base64 inválido (400 con el mismo mensaje), petición sin `base64` (blobPath u
   ObjectIdGDC).
