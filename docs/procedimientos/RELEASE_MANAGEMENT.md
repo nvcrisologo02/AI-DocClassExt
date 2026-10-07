@@ -91,7 +91,9 @@ Objetivo: demostrar que el commit candidato funciona en DEV con su IA propia. Ej
 
 Prerrequisitos: esquema de DEV al día (pipeline 807 Migrations-BD con `targetEnvironment=dev`) y
 DEV desplegado con el commit candidato (pipeline 799 `targetEnvironment=dev` o los pipelines por
-componente).
+componente). El pipeline 802 (Functions) despliega en DEV desde cualquier rama remota, también
+ramas de trabajo (`bugfix/*`, `feature/*`), para validar un fix antes del merge; PRE y PRO solo
+desde `main` o `develop`.
 
 - [ ] **1.1** Build, tests y formato en local sobre el commit candidato con los comandos del bloque siguiente; copiar los n/n a `release.md`.
 
@@ -155,6 +157,8 @@ Vuelta atrás: ver Anexo B, capa 4. El código anterior tolera columnas nuevas, 
   `evidencias/`. La consulta de endpoints es la del paso 2b de `infra/ai/README.md`.
 
 Vuelta atrás: Anexo B, capa 1.
+
+- [ ] **2.2.5** Política de ciclo de vida de los recortes de clasificación en la cuenta de documentos de PRE (`srbstgpredocai`): `pwsh ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment pre -WhatIf` y, revisada la salida, sin `-WhatIf`. Debe conservar las reglas existentes y añadir `documents-clasif-7d` (AB#100814). Anotar la salida en `runbook.md`.
 
 ### 2.3 Configuración del release
 
@@ -373,6 +377,9 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
   identificador nuevo, así que la vuelta atrás es por datos (la fila de `ModeloConfigs` o la
   tipología vuelven al identificador anterior con su copia `__bak`) y el artefacto nuevo se
   queda en PRO sin uso.
+
+- [ ] **4.13** Política de ciclo de vida de los recortes de clasificación en la cuenta de documentos de PRO (`srbstgprodocai`): `pwsh ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment pro -WhatIf` y, revisada la salida, sin `-WhatIf`; antes de 4.4. Debe conservar las reglas existentes y añadir `documents-clasif-7d` (AB#100814). Anotar la salida en `runbook.md`.
+- [ ] **4.14** Tras 4.4, comprobar en `srbappprodocai` que `DOTNET_GCHeapHardLimitPercent` vale `28` (lo fija el pipeline 802; AB#100814) y observar Private Bytes de host y worker en la hora de 4.9: ninguno debe superar ~1,4 GiB.
 
 Verificación: 4.6 en 6/6, 4.7 sin diferencias no explicadas, 4.9 sin anomalías.
 Vuelta atrás: Anexo B, en orden de capas.

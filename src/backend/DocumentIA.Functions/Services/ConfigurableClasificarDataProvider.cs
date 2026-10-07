@@ -475,6 +475,7 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
                 Entrada = input.Entrada,
                 DatosNormalizados = input.DatosNormalizados,
                 UmbralFallbackEfectivo = input.UmbralFallbackEfectivo,
+                BlobPathClasificacion = input.BlobPathClasificacion,
                 DocumentoBase64Override = input.DocumentoBase64Override,
                 CharsTextoNativo = input.CharsTextoNativo,
                 TotalPaginas = input.TotalPaginas,

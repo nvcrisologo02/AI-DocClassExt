@@ -10,6 +10,17 @@ public class ClasificacionInput
     /// null = usar config.FallbackThreshold directamente en el proveedor.
     /// </summary>
     public double? UmbralFallbackEfectivo { get; set; }
+    /// <summary>
+    /// Ruta en blob del documento a clasificar (recorte u original). Los proveedores que
+    /// necesitan el binario lo resuelven por SAS o descarga dentro de la activity (AB#100814).
+    /// </summary>
+    public string? BlobPathClasificacion { get; set; }
+
+    /// <summary>
+    /// Legado: base64 del recorte. El orquestador ya no lo rellena; solo se lee cuando
+    /// BlobPathClasificacion viene vacío (instancias en vuelo). Retirar tras v1.0.0.
+    /// </summary>
+    [Obsolete("El documento viaja por BlobPathClasificacion (AB#100814). Solo lectura legada.")]
     public string? DocumentoBase64Override { get; set; }
     public int CharsTextoNativo { get; set; }
     public int TotalPaginas { get; set; }

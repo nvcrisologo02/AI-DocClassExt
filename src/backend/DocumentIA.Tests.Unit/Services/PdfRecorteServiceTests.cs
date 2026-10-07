@@ -11,55 +11,82 @@ namespace DocumentIA.Tests.Unit.Services;
 public class PdfRecorteServiceTests
 {
     [Fact]
-    public void RecortarParaClasificacion_CuandoExcedeMaxPaginas_RecortaDocumento()
+    public void RecortarParaClasificacion_CuandoExcedeMaxPaginas_DevuelveBytesRecortados()
     {
         var sut = new PdfRecorteService(NullLogger<PdfRecorteService>.Instance);
-        var base64 = BuildPdfBase64WithPages(4);
+        var pdf = BuildPdfWithPages(4);
 
-        var result = sut.RecortarParaClasificacion(base64, 2);
+        var result = sut.RecortarParaClasificacion(pdf, 2);
 
         result.RecorteAplicado.Should().BeTrue();
         result.TotalPaginas.Should().Be(4);
         result.PaginasIncluidas.Should().Be(2);
         result.CharsTextoNativo.Should().BeGreaterThan(0);
+        result.PdfRecortado.Should().NotBeNull();
 
-        var recortadoBytes = Convert.FromBase64String(result.DocumentoBase64Recortado);
-        using var recortado = PdfDocument.Open(recortadoBytes);
+        using var recortado = PdfDocument.Open(result.PdfRecortado!);
         recortado.NumberOfPages.Should().Be(2);
     }
 
     [Fact]
-    public void RecortarParaClasificacion_CuandoNoExcedeMaxPaginas_NoRecortaDocumento()
+    public void RecortarParaClasificacion_CuandoNoExcedeMaxPaginas_NoDevuelveBytes()
     {
         var sut = new PdfRecorteService(NullLogger<PdfRecorteService>.Instance);
-        var base64 = BuildPdfBase64WithPages(2);
+        var pdf = BuildPdfWithPages(2);
 
-        var result = sut.RecortarParaClasificacion(base64, 3);
+        var result = sut.RecortarParaClasificacion(pdf, 3);
 
         result.RecorteAplicado.Should().BeFalse();
         result.TotalPaginas.Should().Be(2);
         result.PaginasIncluidas.Should().Be(2);
-        result.DocumentoBase64Recortado.Should().Be(base64);
+        result.CharsTextoNativo.Should().BeGreaterThan(0);
+        result.PdfRecortado.Should().BeNull();
     }
 
     [Fact]
     public void RecortarParaClasificacion_MaxPaginasInvalido_NormalizaAUno()
     {
         var sut = new PdfRecorteService(NullLogger<PdfRecorteService>.Instance);
-        var base64 = BuildPdfBase64WithPages(3);
+        var pdf = BuildPdfWithPages(3);
 
-        var result = sut.RecortarParaClasificacion(base64, 0);
+        var result = sut.RecortarParaClasificacion(pdf, 0);
 
         result.RecorteAplicado.Should().BeTrue();
         result.TotalPaginas.Should().Be(3);
         result.PaginasIncluidas.Should().Be(1);
 
-        var recortadoBytes = Convert.FromBase64String(result.DocumentoBase64Recortado);
-        using var recortado = PdfDocument.Open(recortadoBytes);
+        using var recortado = PdfDocument.Open(result.PdfRecortado!);
         recortado.NumberOfPages.Should().Be(1);
     }
 
-    private static string BuildPdfBase64WithPages(int pages)
+    [Fact]
+    public void RecortarParaClasificacion_DocumentoNoPdf_NoLanzaNiRecorta()
+    {
+        // AB#100045: XLSX/PPTX empiezan por "PK"; el recorte por paginas solo aplica a PDF.
+        var sut = new PdfRecorteService(NullLogger<PdfRecorteService>.Instance);
+        var pptx = new byte[] { 0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00 };
+
+        var result = sut.RecortarParaClasificacion(pptx, 3);
+
+        result.RecorteAplicado.Should().BeFalse();
+        result.TotalPaginas.Should().Be(0);
+        result.PaginasIncluidas.Should().Be(0);
+        result.PdfRecortado.Should().BeNull();
+    }
+
+    [Fact]
+    public void RecortarParaClasificacion_DocumentoVacio_NoLanzaNiRecorta()
+    {
+        var sut = new PdfRecorteService(NullLogger<PdfRecorteService>.Instance);
+
+        var result = sut.RecortarParaClasificacion(Array.Empty<byte>(), 3);
+
+        result.RecorteAplicado.Should().BeFalse();
+        result.TotalPaginas.Should().Be(0);
+        result.PdfRecortado.Should().BeNull();
+    }
+
+    private static byte[] BuildPdfWithPages(int pages)
     {
         var builder = new PdfDocumentBuilder();
         var font = builder.AddStandard14Font(Standard14Font.Helvetica);
@@ -70,7 +97,6 @@ public class PdfRecorteServiceTests
             page.AddText($"Pagina {i}", 12, new PdfPoint(36, 806), font);
         }
 
-        var bytes = builder.Build();
-        return Convert.ToBase64String(bytes);
+        return builder.Build();
     }
 }

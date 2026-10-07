@@ -13,58 +13,44 @@ public class PdfRecorteService
         _logger = logger;
     }
 
-    public PdfRecorteResultado RecortarParaClasificacion(string documentoBase64, int maxPaginas)
+    /// <summary>
+    /// Recorta un PDF a sus primeras <paramref name="maxPaginas"/> páginas para la clasificación.
+    /// Trabaja con bytes de entrada y salida y abre el documento una sola vez (AB#100814).
+    /// Si no hay recorte (no es PDF, está vacío o no excede el máximo) devuelve PdfRecortado null.
+    /// </summary>
+    public PdfRecorteResultado RecortarParaClasificacion(byte[] documento, int maxPaginas)
     {
         var normalizedMaxPaginas = Math.Max(1, maxPaginas);
 
-        if (string.IsNullOrWhiteSpace(documentoBase64))
+        if (documento is null || documento.Length == 0)
         {
             _logger.LogWarning(
-                "PDF recorte omitido para clasificación: documentoBase64 vacío o nulo. MaxPaginas={MaxPaginas}",
+                "PDF recorte omitido para clasificación: documento vacío. MaxPaginas={MaxPaginas}",
                 normalizedMaxPaginas);
 
-            return new PdfRecorteResultado
-            {
-                DocumentoBase64Recortado = string.Empty,
-                TotalPaginas = 0,
-                CharsTextoNativo = 0,
-                PaginasIncluidas = 0,
-                RecorteAplicado = false
-            };
+            return PdfRecorteResultado.SinRecorte(totalPaginas: 0, charsTextoNativo: 0, paginasIncluidas: 0);
         }
-
-        var pdfBytes = Convert.FromBase64String(documentoBase64);
 
         // Documentos no-PDF (XLSX/PPTX/DOCX empiezan por "PK", imagenes por sus propios magic
-        // bytes): el recorte por paginas solo aplica a PDF. Se devuelve el documento completo tal
-        // cual, en lugar de dejar que PdfPig lance y el llamador pierda el contenido (AB#100045).
-        if (!EsPdf(pdfBytes))
+        // bytes): el recorte por paginas solo aplica a PDF. Se devuelve "sin recorte" en lugar de
+        // dejar que PdfPig lance y el llamador pierda el documento (AB#100045).
+        if (!EsPdf(documento))
         {
             _logger.LogInformation(
-                "Recorte omitido: el documento no es PDF (cabecera no coincide con %PDF). Se devuelve el documento completo sin recortar.");
+                "Recorte omitido: el documento no es PDF (cabecera no coincide con %PDF). Se usará el documento completo sin recortar.");
 
-            return new PdfRecorteResultado
-            {
-                DocumentoBase64Recortado = documentoBase64,
-                TotalPaginas = 0,
-                CharsTextoNativo = 0,
-                PaginasIncluidas = 0,
-                RecorteAplicado = false
-            };
+            return PdfRecorteResultado.SinRecorte(totalPaginas: 0, charsTextoNativo: 0, paginasIncluidas: 0);
         }
 
-        int totalPaginas;
-        int charsTextoNativo = 0;
+        using var pdf = PdfDocument.Open(documento);
 
-        using (var document = PdfDocument.Open(pdfBytes))
+        var totalPaginas = pdf.NumberOfPages;
+        var paginasInspeccionar = Math.Min(totalPaginas, normalizedMaxPaginas + 2);
+        var charsTextoNativo = 0;
+
+        for (var pageNumber = 1; pageNumber <= paginasInspeccionar; pageNumber++)
         {
-            totalPaginas = document.NumberOfPages;
-            var paginasInspeccionar = Math.Min(totalPaginas, normalizedMaxPaginas + 2);
-
-            for (var pageNumber = 1; pageNumber <= paginasInspeccionar; pageNumber++)
-            {
-                charsTextoNativo += document.GetPage(pageNumber).GetWords().Sum(w => w.Text.Length);
-            }
+            charsTextoNativo += pdf.GetPage(pageNumber).GetWords().Sum(w => w.Text.Length);
         }
 
         if (totalPaginas <= normalizedMaxPaginas)
@@ -74,39 +60,28 @@ public class PdfRecorteService
                 totalPaginas,
                 normalizedMaxPaginas);
 
-            return new PdfRecorteResultado
-            {
-                DocumentoBase64Recortado = documentoBase64,
-                TotalPaginas = totalPaginas,
-                CharsTextoNativo = charsTextoNativo,
-                PaginasIncluidas = totalPaginas,
-                RecorteAplicado = false
-            };
+            return PdfRecorteResultado.SinRecorte(totalPaginas, charsTextoNativo, paginasIncluidas: totalPaginas);
         }
 
-        byte[] pdfRecortado;
-        using (var document = PdfDocument.Open(pdfBytes))
+        var builder = new PdfDocumentBuilder();
+        for (var pageNumber = 1; pageNumber <= normalizedMaxPaginas; pageNumber++)
         {
-            var builder = new PdfDocumentBuilder();
-            for (var pageNumber = 1; pageNumber <= normalizedMaxPaginas; pageNumber++)
-            {
-                builder.AddPage(document, pageNumber);
-            }
-
-            pdfRecortado = builder.Build();
+            builder.AddPage(pdf, pageNumber);
         }
+
+        var pdfRecortado = builder.Build();
 
         _logger.LogInformation(
             "PDF recortado para clasificación: {TotalPaginas} -> {PaginasRecortadas} páginas | {BytesOriginal} -> {BytesRecortado} bytes | charsTextoNativo={CharsTextoNativo}",
             totalPaginas,
             normalizedMaxPaginas,
-            pdfBytes.Length,
+            documento.Length,
             pdfRecortado.Length,
             charsTextoNativo);
 
         return new PdfRecorteResultado
         {
-            DocumentoBase64Recortado = Convert.ToBase64String(pdfRecortado),
+            PdfRecortado = pdfRecortado,
             TotalPaginas = totalPaginas,
             CharsTextoNativo = charsTextoNativo,
             PaginasIncluidas = normalizedMaxPaginas,
@@ -138,9 +113,19 @@ public class PdfRecorteService
 
 public class PdfRecorteResultado
 {
-    public string DocumentoBase64Recortado { get; set; } = string.Empty;
+    /// <summary>Bytes del PDF recortado. Null cuando no se aplicó recorte.</summary>
+    public byte[]? PdfRecortado { get; set; }
     public int TotalPaginas { get; set; }
     public int CharsTextoNativo { get; set; }
     public int PaginasIncluidas { get; set; }
     public bool RecorteAplicado { get; set; }
+
+    public static PdfRecorteResultado SinRecorte(int totalPaginas, int charsTextoNativo, int paginasIncluidas) => new()
+    {
+        PdfRecortado = null,
+        TotalPaginas = totalPaginas,
+        CharsTextoNativo = charsTextoNativo,
+        PaginasIncluidas = paginasIncluidas,
+        RecorteAplicado = false
+    };
 }
