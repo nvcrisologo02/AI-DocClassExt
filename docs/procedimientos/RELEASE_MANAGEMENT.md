@@ -156,6 +156,8 @@ Vuelta atrás: ver Anexo B, capa 4. El código anterior tolera columnas nuevas, 
 
 Vuelta atrás: Anexo B, capa 1.
 
+- [ ] **2.2.5** Política de ciclo de vida de los recortes de clasificación en la cuenta de documentos de PRE (`srbstgpredocai`): `pwsh ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment pre -WhatIf` y, revisada la salida, sin `-WhatIf`. Debe conservar las reglas existentes y añadir `documents-clasif-7d` (AB#100814). Anotar la salida en `runbook.md`.
+
 ### 2.3 Configuración del release
 
 El origen de la configuración es siempre DEV, pero el export de 1.3 no se aplica en PRE (regla
@@ -373,6 +375,8 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
   identificador nuevo, así que la vuelta atrás es por datos (la fila de `ModeloConfigs` o la
   tipología vuelven al identificador anterior con su copia `__bak`) y el artefacto nuevo se
   queda en PRO sin uso.
+
+- [ ] **4.13** Política de ciclo de vida de los recortes de clasificación en la cuenta de documentos de PRO (`srbstgprodocai`): `pwsh ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment pro -WhatIf` y, revisada la salida, sin `-WhatIf`; antes de 4.4. Debe conservar las reglas existentes y añadir `documents-clasif-7d` (AB#100814). Anotar la salida en `runbook.md`.
 
 Verificación: 4.6 en 6/6, 4.7 sin diferencias no explicadas, 4.9 sin anomalías.
 Vuelta atrás: Anexo B, en orden de capas.
