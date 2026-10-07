@@ -1,21 +1,26 @@
 # Release v1.0.0
 
-Fecha: pendiente (ventana por fijar) · Tag: v1.0.0 · Commit: **no fijado** · Tag anterior: `deploy-pro-2026-09-20` (`fe1533f`) · Entorno: PRO
+Fecha: pendiente (ventana por fijar) · Tag: v1.0.0 · Commit candidato: `5414335` (`origin/develop`, 2026-10-07, **provisional**) · Tag anterior: `deploy-pro-2026-09-20` (`fe1533f`) · Entorno: PRO
 
-Primera versión con el esquema de `docs/releases/README.md`. El paso 0.1 del runbook queda
-**abierto**: el commit candidato no se puede fijar hasta que el Bug AB#100880 esté integrado en
-`develop` (decisión de alcance del 2026-10-07). Estado de `develop` al abrir este registro:
-`291a424`, 115 commits por delante de `fe1533f`.
+Primera versión con el esquema de `docs/releases/README.md`. Paso 0.1 del runbook: commit
+candidato fijado el 2026-10-07 en `5414335`, el merge de AB#100880 en `develop` (118 commits por
+delante de `fe1533f`). El registro se abrió sobre `291a424` con el paso 0.1 abierto a la espera
+de ese Bug (decisión de alcance del 2026-10-07). **El candidato es provisional**: la tarde del
+2026-10-07 se decidió que el Bug AB#100814 (OutOfMemory con PDF grandes) entra en esta release,
+así que el paso 0.1 se reabre cuando su fix se integre en `develop` y habrá que repetir build,
+tests y smoke sobre el commit definitivo.
 
 ## Validación
 
-Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1355/1355 · Tests Admin: 151/151 · Tests AssetResolver: 14/14 · Formato: ok
-E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke 6/6 · E2E PRO: smoke pendiente
+Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1401/1401 · Tests Admin: 151/151 · Tests AssetResolver: 14/14 · Formato: ok
+E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke pendiente sobre el candidato · E2E PRO: smoke pendiente
 
-Las cuatro cifras de build, tests y formato son del 2026-10-07 sobre `291a424` (develop con el
-merge de AB#100879 y el script de backfill). Los smoke de DEV y PRE son del 2026-10-05 sobre
-`eb0614e` (tag `release-2026-10-05`, runs 79642/79643 en DEV y 79645/79644 en PRE): **hay que
-repetirlos** sobre el commit candidato definitivo, porque incorporará AB#100879 y AB#100880.
+Build, tests unitarios y formato son del 2026-10-07 sobre `5414335` (Admin y AssetResolver, del
+mismo día sobre `85e1b67`, el único commit que separa `291a424` de `5414335`). El smoke de DEV es
+del 2026-10-07 sobre `5414335` (pipeline 802 run 79669, artefactos
+`tests/e2e-postdeploy/artifacts/20261007-123939-dev-smoke`). El smoke de PRE sigue siendo el del
+2026-10-05 sobre `eb0614e` (runs 79645/79644): **hay que repetirlo** sobre `5414335` desplegando
+PRE con el pipeline 802.
 
 ## Contenido de la release
 
@@ -130,8 +135,17 @@ Intelligence ni datasets a PRO: el primer run real del pipeline 832 es AB#100809
   baja de 64.702 lecturas a menos de 10 con la primera ingesta de GDC
 - AB#100879 `IngestDocument devuelve ex.Message al cliente en el 500 genérico` · merge en develop
   el 2026-10-07
-- AB#100880 `SIN_CONTENIDO_DOCUMENTO se devuelve cuando el documento sí tiene contenido` ·
-  **pendiente de desarrollo**, bloquea el paso 0.1
+- AB#100880 `SIN_CONTENIDO_DOCUMENTO se devuelve cuando el documento sí tiene contenido` · merge
+  en develop el 2026-10-07 (`5414335`); validado en DEV el mismo día: un PDF sin texto cierra en
+  `SIN_CONTENIDO_DOCUMENTO` con `CausaSinContenido` "Layout respondió sin texto" (instancia
+  `d7c965834da445218885dd341b61fcdf`); el caso de layout fallido queda cubierto por los 46 tests
+  unitarios nuevos (reproducirlo en DEV exige un endpoint erróneo en `ModeloConfigs`, SQL en
+  `docs/auxiliares/temps/2026-10-07/ab100880-dev-endpoint-erroneo.sql`)
+- AB#100814 `OutOfMemory en el orquestador de PRO con PDF grandes en lotes de Batch` · entra en
+  la release por decisión del 2026-10-07; **pendiente de desarrollo** (diseño y medición en DEV
+  con un PDF de ~50 MB antes de tocar código), reabre el paso 0.1. Estado al 2026-10-07: código
+  sin cambios (base64 en memoria y en los mensajes de Durable), alerta de memoria por instancia
+  (2,25 GiB) disparada el 30/09 y dos veces el 07/10, sin alerta de OutOfMemory en 7 días
 - AB#100662 `Admin /costes muestra 0 con 90 días` · el índice ya está en PRO desde el 2026-09-20;
   esta release lleva el aviso del Admin cuando los agregados no llegan
 - AB#100258 `Las ejecuciones reutilizadas por duplicado no dejan rastro`
@@ -184,9 +198,12 @@ Go: pendiente
 
 ## Pendientes antes de cerrar la Fase 0
 
-1. **AB#100880** desarrollado y mergeado en `develop` (bloquea 0.1).
-2. Repetir smoke de DEV y PRE sobre el commit candidato definitivo.
-3. Fijar el commit en 0.1 (`git log --oneline -1 origin/develop`) y reescribir la cabecera.
+1. ~~AB#100880 desarrollado y mergeado en `develop`~~ · hecho el 2026-10-07 (`5414335`).
+2. Repetir el smoke de PRE sobre `5414335` (DEV ya repetido, 6/6). Requiere desplegar PRE con el
+   pipeline 802.
+3. ~~Fijar el commit en 0.1 y reescribir la cabecera~~ · hecho el 2026-10-07, provisional.
+3b. **AB#100814** desarrollado y mergeado en `develop`; después, fijar el commit definitivo en 0.1
+   y repetir build, tests y smoke de DEV y PRE sobre él.
 4. Bloque 1 del plan de ventana (lectura de los app settings de PRO): obligatorio, porque la
    ausencia de los `AI__Resources__*` se apoya en la comprobación del 05/10 y la cuenta de
    desarrollo dio `AuthorizationFailed` el 06/10.
@@ -194,8 +211,7 @@ Go: pendiente
 
 ## Fuera de esta release
 
-AB#100272 (identificador buscable en el Monitor), AB#100814 (OutOfMemory con PDF grandes en lotes,
-aparcado), AB#100805 y AB#100807 (rotar `docaisql`, limpiar copias y tablas `__bak`), AB#100808
+AB#100272 (identificador buscable en el Monitor), AB#100805 y AB#100807 (rotar `docaisql`, limpiar copias y tablas `__bak`), AB#100808
 (purga de `__bak` de PRE y `CatalogoTdn1.Descripcion`), AB#100809 / AB#100811 / AB#100812 (primer
 run real del pipeline 832), AB#100810 (evidencia de las 4 puertas de PRE), AB#100780 / AB#100781 /
 AB#100782 (crecimiento del clasificador, promoción del modelo, confusión TASA/CERJ), AB#99934 y
