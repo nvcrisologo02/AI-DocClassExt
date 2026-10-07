@@ -103,7 +103,9 @@ public class ClasificarActivityTests
 
         var input = new ClasificacionInput
         {
+#pragma warning disable CS0618
             DocumentoBase64Override = "cmVjb3J0YWRv",
+#pragma warning restore CS0618
             CharsTextoNativo = 987,
             TotalPaginas = 12,
             Entrada = new ContratoEntrada
@@ -123,7 +125,9 @@ public class ClasificarActivityTests
         await sut.Run(input);
 
         captured.Should().NotBeNull();
+#pragma warning disable CS0618
         captured!.DocumentoBase64Override.Should().Be("cmVjb3J0YWRv");
+#pragma warning restore CS0618
         captured.CharsTextoNativo.Should().Be(987);
         captured.TotalPaginas.Should().Be(12);
     }

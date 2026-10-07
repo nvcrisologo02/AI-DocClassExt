@@ -135,7 +135,10 @@ public class DocumentProcessOrchestrator
         var logger = context.CreateReplaySafeLogger<DocumentProcessOrchestrator>();
 
         logger.LogInformation($"Iniciando procesamiento para documento: {entrada.Documento.Name}");
-        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento.BlobPath ?? "(null)"}' | Base64Length: {entrada.Documento.Content.Base64?.Length ?? 0}");
+        logger.LogInformation(
+            "Entrada recibida: ObjectIdGDC={ObjectIdGDC} | BlobPath={BlobPath}",
+            entrada.Documento.ObjectIdGDC ?? "(null)",
+            entrada.Documento.BlobPath ?? "(null)");
 
         var salida = new ContratoSalida
         {
@@ -912,7 +915,10 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
             salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
-            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{entrada.Documento.Content.Base64?[..Math.Min(20, entrada.Documento.Content.Base64.Length)] ?? "(null)"}'");
+            logger.LogInformation(
+                "Canal de entrada: entradaPorObjectIdGdc={EntradaPorObjectIdGdc} | ObjectIdGDC={ObjectIdGDC}",
+                entradaPorObjectIdGdc,
+                entrada.Documento.ObjectIdGDC ?? "(null)");
 
             if (entradaPorObjectIdGdc)
             {
@@ -1138,9 +1144,15 @@ public class DocumentProcessOrchestrator
                 salida.Integridad.RutaBlobStorage = blobPath;
             }
 
+            var blobPathDocumento = !string.IsNullOrWhiteSpace(blobPath)
+                ? blobPath
+                : entrada.Documento.BlobPath;
+
+            // AB#100814: la clasificacion recibe una ruta de blob, nunca base64. Por defecto, el
+            // documento original; la preparacion la sustituye por la del recorte si lo hay.
             var docClasif = new PrepararDocumentoClasificacionResultado
             {
-                DocumentoBase64Clasif = entrada.Documento.Content.Base64,
+                BlobPathClasificacion = blobPathDocumento,
                 TotalPaginas = salida.Identificacion.Paginas,
                 CharsTextoNativo = 0,
                 PaginasIncluidas = salida.Identificacion.Paginas,
@@ -1162,15 +1174,16 @@ public class DocumentProcessOrchestrator
                         "PrepararDocumentoClasificacionActivity",
                         new PrepararDocumentoClasificacionInput
                         {
-                            DocumentoBase64 = entrada.Documento.Content.Base64,
                             NombreDocumento = entrada.Documento.Name,
                             MaxPaginasClasificacion = maxPaginasClasificacion,
-                            BlobPath = !string.IsNullOrWhiteSpace(blobPath)
-                                ? blobPath
-                                : entrada.Documento.BlobPath
+                            BlobPath = blobPathDocumento
                         });
 
                     docClasif = docClasifResult ?? docClasif;
+                    if (string.IsNullOrWhiteSpace(docClasif.BlobPathClasificacion))
+                    {
+                        docClasif.BlobPathClasificacion = blobPathDocumento;
+                    }
 
                     if (salida.Identificacion.Paginas <= 0 && docClasif.TotalPaginas > 0)
                     {
@@ -1427,7 +1440,7 @@ public class DocumentProcessOrchestrator
                             Entrada = entrada,
                             DatosNormalizados = datosNormalizados,
                             UmbralFallbackEfectivo = umbralClasifFallback,
-                            DocumentoBase64Override = docClasif.DocumentoBase64Clasif,
+                            BlobPathClasificacion = docClasif.BlobPathClasificacion,
                             CharsTextoNativo = docClasif.CharsTextoNativo,
                             TotalPaginas = docClasif.TotalPaginas,
                             GenerarResumenPorDefecto = true,

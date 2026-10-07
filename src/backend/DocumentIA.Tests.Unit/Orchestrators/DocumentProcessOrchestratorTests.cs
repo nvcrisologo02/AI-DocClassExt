@@ -701,7 +701,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 8,
             CharsTextoNativo = 1234,
             PaginasIncluidas = 3,
@@ -721,9 +721,41 @@ public class DocumentProcessOrchestratorTests
 
         var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
         clasifInput.Should().NotBeNull();
-        clasifInput!.DocumentoBase64Override.Should().Be("cmVjb3J0YWRv");
+        clasifInput!.BlobPathClasificacion.Should().Be("documents-clasif/2026/10/recorte.pdf");
+#pragma warning disable CS0618
+        clasifInput.DocumentoBase64Override.Should().BeNull();
+#pragma warning restore CS0618
         clasifInput.CharsTextoNativo.Should().Be(1234);
         clasifInput.TotalPaginas.Should().Be(8);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_CuandoPrepararFalla_ClasificaConLaRutaDelDocumentoOriginal()
+    {
+        // AB#100814: si la preparacion falla, la clasificacion usa el blob original; nunca base64.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/2026/10/original.pdf");
+        context.SetupActivityThrow("PrepararDocumentoClasificacionActivity", new InvalidOperationException("sin blob"));
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.1,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await orchestrator.RunOrchestrator(context);
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.BlobPathClasificacion.Should().Be("documents/2026/10/original.pdf");
+#pragma warning disable CS0618
+        clasifInput.DocumentoBase64Override.Should().BeNull();
+#pragma warning restore CS0618
     }
 
     [Fact]
@@ -751,7 +783,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "dGVzdA==",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             CharsTextoNativo = 10,
             PaginasIncluidas = 2,
@@ -943,7 +975,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 8,
             CharsTextoNativo = 1234,
             PaginasIncluidas = 3,
@@ -993,7 +1025,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1043,7 +1075,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1088,7 +1120,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1149,7 +1181,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1186,7 +1218,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1520,7 +1552,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 4,
             PaginasIncluidas = 2,
             RecorteAplicado = true
@@ -2150,7 +2182,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -2179,7 +2211,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -2205,7 +2237,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 6,
             PaginasIncluidas = 5,
             RecorteAplicado = true
@@ -2246,7 +2278,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "documents/blob-first.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -2543,7 +2575,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0ZS1wZGY=",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             CharsTextoNativo = 1200,
@@ -2801,7 +2833,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "documents/sin-contenido.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "dGVzdA==",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 1,
             PaginasIncluidas = 1,
             RecorteAplicado = false
@@ -3164,7 +3196,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 5,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3214,7 +3246,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3265,7 +3297,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3315,7 +3347,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3430,7 +3462,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3640,7 +3672,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "documents/sin-texto.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "dGVzdA==",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 1,
             PaginasIncluidas = 1,
             RecorteAplicado = false
@@ -4219,7 +4251,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -4303,7 +4335,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -4350,7 +4382,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -4398,7 +4430,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
