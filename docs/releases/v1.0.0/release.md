@@ -57,12 +57,21 @@ ese smoke: ver la entrada del Bug.
   cuatro líneas de tarifa nuevas (dos deployments de embeddings, `CERA16_v2`, `gpt-4.1-cached`).
 - `ModeloConfigs` · `scripts/ai/set-resource-aliases.sql` · las filas de PRO pasan de `Endpoint`
   explícito a `ResourceAlias` (`openai_primary`, `cu_primary`, `cu_secondary`, `di`).
+- `ModeloConfigs` · `scripts/ai/set-auth-mode-identity.sql` y `scripts/ai/clear-model-api-keys.sql`
+  (ampliación de AB#100321 decidida en la ventana del 2026-10-08) · las mismas filas pasan a
+  `AuthMode = DefaultAzureCredential` y pierden la `ApiKey`, como DEV y PRE (`infra/ai/README.md`,
+  pasos 3b y 6). Requiere los roles de la identidad de `srbappprodocai`: Cognitive Services User en
+  las tres cuentas de IA de PRO (ya existían) y Foundry User en `upe48…` (existía) y en
+  `srbaisrv-westeurope` (añadido el 2026-10-08 17:27Z). Los app settings `*__AuthMode` de las
+  opciones directas siguen en `ApiKey` con key del Key Vault, igual que en DEV y PRE.
 - App settings de `srbappprodocai`, por el pipeline 799 (`ensure-app-settings.ps1`, que no pisa
   claves existentes): `AI__Resources__openai_primary__Endpoint`,
   `AI__Resources__cu_primary__Endpoint`, `AI__Resources__cu_secondary__Endpoint`,
   `AI__Resources__di__Endpoint`.
 - App settings de `srbappprodocai`, a mano (AB#100868): `BlobRetentionCleanupCron = 0 0 3 * * *`,
-  `BlobRetention__DefaultDays = 2`, `BlobRetention__BatchSize = 2000`. `appsettings.json` no se
+  `BlobRetention__DefaultDays = 2`, `BlobRetention__BatchSize = 5000` (decisión del usuario en la
+  ventana: 5000 en lugar de los 2000 de AB#100868, para absorber el atraso del histórico en unas 15
+  noches), más `DOTNET_GCHeapHardLimitPercent = 28` en el mismo `set`. `appsettings.json` no se
   carga en Functions, así que sin `DefaultDays` ningún documento recibe `FechaExpiracionBlob` y el
   cron no borra nada.
 - `PromptTemplates`, `Tipologias`, `CatalogoTdn1`, `CatalogoTdn2`, `PluginTipologiaConfigs`:
@@ -196,15 +205,17 @@ Intelligence ni datasets a PRO: el primer run real del pipeline 832 es AB#100809
 
 Ver "Contenido de la release". Resumen: `ModeloConfigs` con la fila de embeddings en `off`, cuatro
 líneas nuevas en `tarifas.ia`, el paso de `Endpoint` a `ResourceAlias` en PRO, los cuatro
-`AI__Resources__*__Endpoint` y los tres app settings del cron de limpieza de blobs. Ninguna
-migración pendiente. Secretos: ninguno nuevo.
+`AI__Resources__*__Endpoint`, el paso de PRO a identidad (alias + `DefaultAzureCredential` + purga
+de keys, ampliación de AB#100321), los tres app settings del cron de limpieza de blobs y
+`DOTNET_GCHeapHardLimitPercent`. Ninguna migración pendiente. Secretos: ninguno nuevo; un rol
+nuevo (Foundry User de la identidad de `srbappprodocai` sobre `srbaisrv-westeurope`).
 
 Checklist de AB#100814 (fuera del despliegue de código):
 
 | Elemento | DEV | PRE | PRO |
 |---|---|---|---|
 | Regla `documents-clasif-7d` de ciclo de vida en la cuenta de documentos (`scripts/storage/set-lifecycle-documents-clasif.ps1`; runbook 2.2.5 y 4.13) | aplicada el 2026-10-07 15:30Z en `srbstgdevdocai`, conserva `delete-temp` | aplicada el 2026-10-07 ~18:05Z en `srbstgpredocai` (salida: "Politica escrita. Reglas: delete-temp, documents-clasif-7d"; 2.2.5 hecho) | aplicada el 2026-10-08 08:26Z en `srbstgprodocai` (salida: "Politica escrita. Reglas: delete-temp, documents-clasif-7d"; 4.13 hecho) |
-| App setting `DOTNET_GCHeapHardLimitPercent=28` (pipeline 802; runbook 4.14) | puesto a mano el 2026-10-07 14:18Z y en el pipeline desde `4ab4676` | puesto y validado por el run 79679 del 802 el 2026-10-07 18:11Z | lo pone el pipeline al desplegar; comprobar en 4.14 |
+| App setting `DOTNET_GCHeapHardLimitPercent=28` (pipeline 802; runbook 4.14) | puesto a mano el 2026-10-07 14:18Z y en el pipeline desde `4ab4676` | puesto y validado por el run 79679 del 802 el 2026-10-07 18:11Z | el 799 no lo fija (solo el 802): puesto a mano en el `set` del bloque 7 el 2026-10-08 17:38Z y validado por el stage Validate relanzado (run 79704, 17:43Z); Private Bytes en 4.14 |
 | Contenedor `documents-clasif` | lo crea el código al primer recorte | ídem | ídem |
 
 ## Aprobación
@@ -227,7 +238,7 @@ Go: **2026-10-08 · Ignacio Varas Crisologo** · puertas 1 (2026-10-07 20:27Z), 
 | 807 Migrations-BD | pre | 79681 (`417dca4`) | succeeded, 2026-10-07 19:57Z, 37 aplicadas, `Pendientes: 0` |
 | 799 completo | pre | 79682 (`417dca4`) | succeeded, 2026-10-07 20:10Z, Functions + Admin + AssetResolver, ValidateConfiguration en verde |
 | 807 Migrations-BD | prod | 79691 (`98347ed`) | succeeded, 2026-10-08 08:23Z, adelantado de la ventana; `Pendientes: 0`, BD ya al día (37/37) |
-| 799 completo | prod | | |
+| 799 completo | prod | 79704 (`333a9cf`) | succeeded, 2026-10-08 17:43Z (Validate relanzado tras el `set` de `DOTNET_GCHeapHardLimitPercent`; primer fallo 17:33Z por ese único setting), Functions + Admin + AssetResolver; `ModeloConfigs` sin cambios tras el job de Functions (AB#100905 sin efecto en PRO) |
 
 ## Pendientes antes de cerrar la Fase 0
 
@@ -252,8 +263,9 @@ Go: **2026-10-08 · Ignacio Varas Crisologo** · puertas 1 (2026-10-07 20:27Z), 
 
 Adelantado de la Fase 4 el 2026-10-08, antes de la ventana y sin reinicio: 4.2 (807 a prod, run
 79691, `Pendientes: 0`), 4.3 (seeds en PRO y export de referencia `v1.0.0-pro`) y 4.13 (ciclo de
-vida en `srbstgprodocai`). Quedan para la ventana: 4.1 (copia, la víspera), 4.4 a 4.9, 4.14 y la
-Fase 5.
+vida en `srbstgprodocai`). Ventana de PRO ejecutada el 2026-10-08 de 17:05Z en adelante: 4.1
+(copia `DocumentIA-prerel-20261008`), 4.4 (run 79704), 6b/6c (alias e identidad), bloque 7, 4.6
+(smoke 6/6) y 4.7 (deriva PASS); detalle y horas en `runbook.md`.
 
 ## Fuera de esta release
 
