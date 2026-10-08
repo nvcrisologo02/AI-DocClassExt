@@ -273,4 +273,43 @@ public class CalculadoraCosteIATests
         agregado.TarifasCompletas.Should().BeTrue();
         agregado.ModelosSinTarifa.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Aplicar_Embeddings_TarificaSoloLaEntrada()
+    {
+        var registro = new TarifaRegistry
+        {
+            Tarifas = { new TarifaIA { Modelo = "text-embedding-3-large-030358", VigenteDesde = new DateTime(2026, 4, 1), EurEntradaPor1M = 0.112m } }
+        };
+        var consumo = new ConsumoIA
+        {
+            Actividad = ActividadesIA.Clasificar,
+            Operacion = "classification.embeddings",
+            Modelo = "text-embedding-3-large-030358",
+            TokensEntrada = 1_000_000,
+            TokensSalida = 0
+        };
+
+        CalculadoraCosteIA.Aplicar(consumo, registro, new DateTime(2026, 10, 1));
+
+        consumo.CosteEur.Should().Be(0.112m);
+        consumo.TarifaAplicada.Should().Be("text-embedding-3-large-030358@2026-04-01");
+    }
+
+    [Fact]
+    public void DesglosarPorActividad_EmbeddingsYGptSumanEnClasificacion()
+    {
+        var costes = CalculadoraCosteIA.Agregar(new[]
+        {
+            new ConsumoIA { Actividad = ActividadesIA.Clasificar, Operacion = "classification.embeddings", Modelo = "text-embedding-3-large-030358", CosteEur = 0.0005m },
+            new ConsumoIA { Actividad = ActividadesIA.Clasificar, Operacion = "classification.phase1", Modelo = "gpt-5-mini", CosteEur = 0.0100m },
+            new ConsumoIA { Actividad = ActividadesIA.Clasificar, Operacion = "classification.phase2", Modelo = "gpt-5-mini", CosteEur = 0.0040m }
+        });
+
+        var d = CalculadoraCosteIA.DesglosarPorActividad(costes);
+
+        d.ClasificacionEur.Should().Be(0.0145m);
+        costes.TarifasCompletas.Should().BeTrue();
+        costes.ModelosSinTarifa.Should().BeEmpty();
+    }
 }

@@ -11,17 +11,20 @@ public class ExtractionModelRegistryLoader
     private readonly string? _registryFilePath;
     private readonly IMemoryCache? _cache;
     private readonly IServiceScopeFactory? _scopeFactory;
+    private readonly IAiEndpointResolver _endpointResolver;
     private ExtractionModelRegistry? _cachedRegistry;
 
-    public ExtractionModelRegistryLoader(string registryFilePath)
+    public ExtractionModelRegistryLoader(string registryFilePath, IAiEndpointResolver? endpointResolver = null)
     {
         _registryFilePath = registryFilePath;
+        _endpointResolver = endpointResolver ?? AiEndpointResolver.Empty;
     }
 
-    public ExtractionModelRegistryLoader(IMemoryCache cache, IServiceScopeFactory scopeFactory)
+    public ExtractionModelRegistryLoader(IMemoryCache cache, IServiceScopeFactory scopeFactory, IAiEndpointResolver? endpointResolver = null)
     {
         _cache = cache;
         _scopeFactory = scopeFactory;
+        _endpointResolver = endpointResolver ?? AiEndpointResolver.Empty;
     }
 
     public ExtractionModelRegistry Load()
@@ -55,6 +58,8 @@ public class ExtractionModelRegistryLoader
         {
             PropertyNameCaseInsensitive = true
         }) ?? throw new InvalidDataException($"Registro de modelos de extraccion invalido en {_registryFilePath}");
+
+        ResolverEndpoints(_cachedRegistry);
 
         return _cachedRegistry;
     }
@@ -114,6 +119,16 @@ public class ExtractionModelRegistryLoader
             registry.Models.Add(model);
         }
 
+        ResolverEndpoints(registry);
+
         return registry;
+    }
+
+    private void ResolverEndpoints(ExtractionModelRegistry registry)
+    {
+        foreach (var model in registry.Models)
+        {
+            model.Endpoint = _endpointResolver.Resolve(model.Endpoint, model.ResourceAlias, model.Key);
+        }
     }
 }

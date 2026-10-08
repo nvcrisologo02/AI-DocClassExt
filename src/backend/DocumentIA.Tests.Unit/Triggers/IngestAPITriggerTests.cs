@@ -1,3 +1,4 @@
+using System.Text;
 using System.Net;
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
@@ -109,7 +110,7 @@ public class IngestAPITriggerTests
         var responseBody = await HttpFunctionTestFactory.ReadBodyAsync(response);
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
-        responseBody.Should().Contain("provider");
+        responseBody.Should().Contain("corr-001");
         scheduledTaskName.Should().NotBeNull();
         scheduledTaskName!.Value.Name.Should().Be("DocumentProcessOrchestrator");
         scheduledInput.Should().NotBeNull();
@@ -276,7 +277,7 @@ public class IngestAPITriggerTests
         var responseBody = await HttpFunctionTestFactory.ReadBodyAsync(response);
 
         response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
-        responseBody.Should().Contain("provider");
+        responseBody.Should().Contain("corr-tdn1");
 
         scheduledInput.Should().NotBeNull();
         scheduledInput!.Instrucciones.Classification.NivelClasificacion.Should().Be(ClassificationLevelResolver.LevelTdn1);
@@ -332,6 +333,102 @@ public class IngestAPITriggerTests
 
         durableClient.VerifyNoOtherCalls();
         blobStorage.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task Run_Base64Valido_SubeLosBytesYLaOrquestacionNoRecibeNiBase64NiBytes()
+    {
+        // AB#100814: el trigger decodifica el base64 directamente a bytes desde el stream.
+        var logger = new Mock<ILogger<IngestAPITrigger>>();
+        var blobStorage = new Mock<IBlobStorageService>(MockBehavior.Strict);
+        var contenido = Encoding.UTF8.GetBytes("%PDF-1.4 contenido de prueba");
+        byte[]? subido = null;
+        blobStorage
+            .Setup(b => b.UploadDocumentAsync(It.IsAny<byte[]>(), "test.pdf", "documents"))
+            .Callback<byte[], string, string>((bytes, _, _) => subido = bytes)
+            .ReturnsAsync("documents/2026/10/abc.pdf");
+        var promptValidator = new PromptInstruccionesValidator(new PromptModelRegistryLoader("dummy.json"));
+        var settings = Options.Create(new ClassificationRoutingSettings
+        {
+            NivelClasificacionDefault = ClassificationLevelResolver.LevelTdn1Tdn2
+        });
+
+        ContratoEntrada? scheduledInput = null;
+        var durableClient = new Mock<DurableTaskClient>(MockBehavior.Strict, "test");
+        durableClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(), It.IsAny<object?>(), It.IsAny<StartOrchestrationOptions?>(), It.IsAny<CancellationToken>()))
+            .Callback<TaskName, object?, StartOrchestrationOptions?, CancellationToken>((_, input, _, _) => scheduledInput = input as ContratoEntrada)
+            .ReturnsAsync("instance-814");
+
+        var function = new IngestAPITrigger(logger.Object, promptValidator, CreateRestriccionValidatorSinCatalogo(), blobStorage.Object, settings);
+
+        var body = JsonSerializer.Serialize(new
+        {
+            documento = new { name = "test.pdf", content = new { base64 = Convert.ToBase64String(contenido) } },
+            instrucciones = new { classification = new { } },
+            trazabilidad = new { correlationId = "corr-814", submittedBy = "tester" }
+        });
+
+        var request = HttpFunctionTestFactory.CreateRequest(
+            method: "POST",
+            url: "http://localhost/api/ingest",
+            body: body,
+            headers: new Dictionary<string, string> { ["Content-Type"] = "application/json" },
+            conSerializador: true);
+
+        var response = await function.Run(request, durableClient.Object);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        subido.Should().Equal(contenido);
+        scheduledInput.Should().NotBeNull();
+        scheduledInput!.Documento.BlobPath.Should().Be("documents/2026/10/abc.pdf");
+        scheduledInput.Documento.Content.Base64.Should().BeNull();
+        scheduledInput.Documento.Content.Bytes.Should().BeNull();
+        scheduledInput.Documento.PreComputedTamañoBytes.Should().Be(contenido.Length);
+        scheduledInput.Documento.PreComputedSHA256.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Run_Base64ConSaltosDeLinea_SigueAceptandose()
+    {
+        var logger = new Mock<ILogger<IngestAPITrigger>>();
+        var blobStorage = new Mock<IBlobStorageService>(MockBehavior.Strict);
+        var contenido = new byte[200];
+        blobStorage
+            .Setup(b => b.UploadDocumentAsync(It.Is<byte[]>(bytes => bytes.Length == 200), "test.pdf", "documents"))
+            .ReturnsAsync("documents/2026/10/ceros.pdf");
+        var promptValidator = new PromptInstruccionesValidator(new PromptModelRegistryLoader("dummy.json"));
+        var settings = Options.Create(new ClassificationRoutingSettings
+        {
+            NivelClasificacionDefault = ClassificationLevelResolver.LevelTdn1Tdn2
+        });
+        var durableClient = new Mock<DurableTaskClient>(MockBehavior.Strict, "test");
+        durableClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(), It.IsAny<object?>(), It.IsAny<StartOrchestrationOptions?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync("instance-815");
+
+        var function = new IngestAPITrigger(logger.Object, promptValidator, CreateRestriccionValidatorSinCatalogo(), blobStorage.Object, settings);
+
+        var body = JsonSerializer.Serialize(new
+        {
+            documento = new { name = "test.pdf", content = new { base64 = Convert.ToBase64String(contenido, Base64FormattingOptions.InsertLineBreaks) } },
+            instrucciones = new { classification = new { } },
+            trazabilidad = new { correlationId = "corr-815", submittedBy = "tester" }
+        });
+
+        var request = HttpFunctionTestFactory.CreateRequest(
+            method: "POST",
+            url: "http://localhost/api/ingest",
+            body: body,
+            headers: new Dictionary<string, string> { ["Content-Type"] = "application/json" },
+            conSerializador: true);
+
+        var response = await function.Run(request, durableClient.Object);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Accepted);
+        blobStorage.VerifyAll();
     }
 
     [Fact]
@@ -504,5 +601,56 @@ public class IngestAPITriggerTests
         var response = await function.Run(request, durableClient.Object);
 
         response.StatusCode.Should().NotBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Run_WhenUnhandledExceptionOccurs_Returns500WithCorrelationIdAndWithoutExceptionMessage()
+    {
+        // AB#100879: el 500 generico no debe exponer ex.Message al cliente; debe llevar un
+        // identificador con el que localizar la traza en Application Insights.
+        var logger = new Mock<ILogger<IngestAPITrigger>>();
+        var blobStorage = new Mock<IBlobStorageService>(MockBehavior.Strict);
+        var promptValidator = new PromptInstruccionesValidator(new PromptModelRegistryLoader("dummy.json"));
+        var settings = Options.Create(new ClassificationRoutingSettings
+        {
+            NivelClasificacionDefault = ClassificationLevelResolver.LevelTdn1Tdn2
+        });
+
+        const string mensajeInterno = "Server=srbsqlprodocai;Password=secreto-interno";
+        var durableClient = new Mock<DurableTaskClient>(MockBehavior.Strict, "test");
+        durableClient
+            .Setup(c => c.ScheduleNewOrchestrationInstanceAsync(
+                It.IsAny<TaskName>(),
+                It.IsAny<object?>(),
+                It.IsAny<StartOrchestrationOptions?>(),
+                It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new InvalidOperationException(mensajeInterno));
+
+        var function = new IngestAPITrigger(logger.Object, promptValidator, CreateRestriccionValidatorSinCatalogo(), blobStorage.Object, settings);
+
+        var body = JsonSerializer.Serialize(new
+        {
+            documento = new
+            {
+                name = "documento.pdf",
+                blobPath = "documents/documento.pdf"
+            },
+            instrucciones = new { classification = new { } },
+            trazabilidad = new { correlationId = "corr-500", submittedBy = "tester" }
+        });
+
+        var request = HttpFunctionTestFactory.CreateRequest(
+            method: "POST",
+            url: "http://localhost/api/ingest",
+            body: body,
+            headers: new Dictionary<string, string> { ["Content-Type"] = "application/json" });
+
+        var response = await function.Run(request, durableClient.Object);
+        var responseBody = await HttpFunctionTestFactory.ReadBodyAsync(response);
+
+        response.StatusCode.Should().Be(HttpStatusCode.InternalServerError);
+        responseBody.Should().NotContain("secreto-interno");
+        responseBody.Should().NotContain("Password");
+        responseBody.Should().Contain("corr-500");
     }
 }

@@ -12,6 +12,11 @@ public interface IBlobStorageService
     Task<byte[]> DownloadDocumentAsync(string blobPath);
     Task<bool> DeleteDocumentAsync(string blobPath);
     Task<bool> ExistsAsync(string blobPath);
+    /// <summary>
+    /// ETag actual del blob ("container/ruta"), o null si no existe. Permite revalidar
+    /// una copia en memoria sin descargar el contenido (AB#100779).
+    /// </summary>
+    Task<string?> GetETagAsync(string blobPath);
     string GenerateBlobPath(string sha256, string fileName);
     /// <summary>
     /// Genera una SAS URL de lectura para que servicios externos (Azure DI, CU) accedan al blob.

@@ -1,0 +1,67 @@
+# Puerta 3 (coste) de la release v1.0.0: Cost Management del 07/10 (y 08/10 parcial) por grupo de recursos, agrupado por ResourceId + Meter (solo filas de Microsoft.CognitiveServices), y metricas de Azure Monitor de los recursos de IA. Consulta 2026-10-08 06:32Z-06:40Z, scripts costes-puerta3-v100.ps1 y metricas-puerta3-v100.ps1 (scratchpad de la sesion; Invoke-RestMethod con token de az CLI, un 429 reintentado en PRO).
+
+Ventana evaluada: smoke 1 de PRE 20:11Z-20:13Z (con hosts de PRO por la incidencia del seed, runbook 2.5), golden abortada 20:13Z-20:16Z (idem), restauracion y reinicio 20:23Z, smoke 2 20:25Z-20:27Z, golden 20:28Z-21:52Z.
+
+Resultado: PASS.
+- SRBRGPREDOCSAI factura el 07/10 los meters de IA del smoke y la golden: gpt 4.1 mini (deployment gpt-4o-mini de srbaisrv01predocai) 4.172 k tokens de entrada + 7.359 k cacheados + 131 k de salida (3,04 EUR) y S0 Pre-built Pages 2,31 k paginas (20,31 EUR) en srbdipredocai. Total IA PRE del dia 23,67 EUR.
+- SRBRGDOCSAIPROD no tiene rampa atribuible a la release salvo los 5 minutos de la incidencia: Azure Monitor muestra en upe48-mm2avmdm-swedencentral 253.287 tokens de entrada gpt-4o-mini entre 20:00Z y 20:30Z (75.646 en el cubo 20:00 = smoke 1; 177.641 en el cubo 20:15 = golden abortada) y en srbdiprodocai 107 llamadas / 57 paginas en los mismos cubos. El resto del dia (282 k tokens entre 06:30Z y 17:00Z, 231 paginas) es trafico operativo repartido en horario laboral. Coste estimado de la rampa con las tarifas del dia: ~0,11 EUR de tokens y ~0,49 EUR de paginas.
+- Cuadre Cost Management vs Azure Monitor en PRO: 427,79 k Inp + 107,78 k cached = 535,57 k tokens facturados frente a 535.562 ProcessedPromptTokens; 0,29 k paginas facturadas frente a 288 ProcessedPages.
+- Cuadre en PRE: 11,53 M ProcessedPromptTokens del dia frente a 4,17 M + 7,36 M = 11,53 M facturados; 2.344 ProcessedPages frente a 2,31 k paginas facturadas.
+
+=== Cost Management ===
+subPre=a4f6b357-8f13-4488-9ee8-b9f635426f91 subPro=647c7246-54bc-4d31-b909-431cacf03272 consulta=2026-10-08T06:32:27Z
+--- SRBRGPREDOCSAI (2026-10-07..2026-10-08): 87 filas; columnas: UsageQuantity, Cost, UsageDate, ResourceId, Meter, Currency
+  20261007 srbaisrv01predocai           gpt 4.1 mini cached Inp regnl Tokens          cost=   0,8548 usage=    7.359,23
+  20261007 srbaisrv01predocai           gpt 4.1 mini Inp regnl Tokens                 cost=   1,9383 usage=    4.171,72
+  20261007 srbaisrv01predocai           gpt 4.1 mini Outp regnl Tokens                cost=   0,2429 usage=      130,69
+  20261007 srbaisrv02predocai           Doc Content Extraction Standard Pages         cost=   0,0352 usage=        0,01
+  20261007 srbaisrv02predocai           gpt 4.1 cached Inp glbl Tokens                cost=   0,0006 usage=        1,28
+  20261007 srbaisrv02predocai           gpt 4.1 Inp glbl Tokens                       cost=   0,1409 usage=       80,06
+  20261007 srbaisrv02predocai           gpt 4.1 Outp glbl Tokens                      cost=   0,0318 usage=        4,51
+  20261007 srbaisrv02predocai           Std Contextualization Tokens                  cost=   0,0070 usage=        8,00
+  20261007 srbaisrv02predocai           text-embedding-3-large-glbl Tokens            cost=   0,0003 usage=        2,26
+  20261007 srbdipredocai                S0 pages for doc classifier                   cost=   0,0950 usage=        0,04
+  20261007 srbdipredocai                S0 Pre-built Pages                            cost=  20,3098 usage=        2,31
+  20261007 privatelink.cognitiveservices.azure.com Private Zone                                  cost=   0,0142 usage=        0,03
+  20261008 privatelink.cognitiveservices.azure.com Private Zone                                  cost=   0,0006 usage=        0,00
+  Total RG=31,5741  IA=23,6713  otros(74 filas)=7,9028
+  (SRBRGDOCSAIPROD 429, reintento 1 en 30 s)
+--- SRBRGDOCSAIPROD (2026-10-07..2026-10-08): 78 filas; columnas: UsageQuantity, Cost, UsageDate, ResourceId, Meter, Currency
+  20261007 srbdiprodocai                S0 pages for doc classifier                   cost=   0,0053 usage=        0,00
+  20261007 srbdiprodocai                S0 Pre-built Pages                            cost=   2,5167 usage=        0,29
+  20261007 upe48-mm2avmdm-swedencentral gpt 4.1 mini cached Inp regnl Tokens          cost=   0,0115 usage=      107,78
+  20261007 upe48-mm2avmdm-swedencentral gpt 4.1 mini Inp regnl Tokens                 cost=   0,1822 usage=      427,79
+  20261007 upe48-mm2avmdm-swedencentral gpt 4.1 mini Outp regnl Tokens                cost=   0,0185 usage=       10,86
+  20261007 privatelink.cognitiveservices.azure.com Private Zone                                  cost=   0,0142 usage=        0,03
+  20261008 privatelink.cognitiveservices.azure.com Private Zone                                  cost=   0,0006 usage=        0,00
+  Total RG=12,2961  IA=2,7490  otros(71 filas)=9,5471
+
+=== Metricas de Azure Monitor, ventana 19:45Z-22:15Z ===
+=== metricas ventana 2026-10-07T19:45:00Z .. 2026-10-07T22:15:00Z (UTC, cubos de 15 min) ===
+  srbaisrv01predocai           ProcessedPromptTokens  modeldeploymentname=gpt-4o-mini                    total=  11.391.064  20:15=151020 20:30=1945485 20:45=2164877 21:00=1721521 21:15=2130264 21:30=1936841 21:45=1341056
+  srbaisrv01predocai           GeneratedTokens        modeldeploymentname=gpt-4o-mini                    total=     127.673  20:15=2648 20:30=22378 20:45=23597 21:00=20601 21:15=23315 21:30=22563 21:45=12571
+  srbaisrv02predocai           ProcessedPromptTokens  modeldeploymentname=gpt-4.1-892749                 total=      39.889  20:00=20727 20:15=19162
+  srbaisrv02predocai           ProcessedPromptTokens  modeldeploymentname=text-embedding-3-large-010650  total=       1.132  20:00=566 20:15=566
+  srbaisrv02predocai           GeneratedTokens        modeldeploymentname=gpt-4.1-892749                 total=       1.957  20:00=1211 20:15=746
+  srbdipredocai                TotalCalls                                                                total=       4.456  20:15=88 20:30=738 20:45=831 21:00=729 21:15=794 21:30=812 21:45=464
+  srbdipredocai                ProcessedPages                                                            total=       2.268  20:15=27 20:30=336 20:45=358 21:00=447 21:15=415 21:30=348 21:45=337
+=== PRO, misma ventana ===
+  upe48-mm2avmdm-swedencentral ProcessedPromptTokens  modeldeploymentname=gpt-4o-mini                    total=     253.287  20:00=75646 20:15=177641
+  srbdiprodocai                TotalCalls                                                                total=         107  20:00=43 20:15=64
+  srbdiprodocai                ProcessedPages                                                            total=          57  20:00=14 20:15=43
+
+=== Metricas de PRO, dia completo 07/10 (cubos de 15 min con valor) ===
+
+  srbaisrv01predocai           ProcessedPromptTokens  modeldeploymentname=gpt-4o-mini                    total=  11.530.956  11:00=38244 18:00=38031 18:15=63617 20:15=151020 20:30=1945485 20:45=2164877 21:00=1721521 21:15=2130264 21:30=1936841 21:45=1341056
+  srbaisrv02predocai           ProcessedPromptTokens  modeldeploymentname=gpt-4.1-892749                 total=      81.336  11:00=20726 18:00=20721 20:00=20727 20:15=19162
+  srbaisrv02predocai           ProcessedPromptTokens  modeldeploymentname=text-embedding-3-large-010650  total=       2.264  11:00=566 18:00=566 20:00=566 20:15=566
+  srbdipredocai                ProcessedPages                                                            total=       2.344  11:00=8 18:00=7 18:15=61 20:15=27 20:30=336 20:45=358 21:00=447 21:15=415 21:30=348 21:45=337
+=== PRO, misma ventana ===
+  upe48-mm2avmdm-swedencentral ProcessedPromptTokens  modeldeploymentname=gpt-4o-mini                    total=     535.562  06:30=18189 07:45=179 08:15=3631 09:30=19595 09:45=1322 10:00=16023 10:15=20201 10:45=16023 11:45=33753 12:00=16023 12:45=18880 14:15=14972 14:30=22361 15:00=4394 15:30=30795 15:45=9362 16:45=36572 20:00=75646 20:15=177641
+  upe48-mm2avmdm-swedencentral ProcessedPromptTokens  modeldeploymentname=text-embedding-3-large-030358  total=           0  
+  upe48-mm2avmdm-swedencentral ProcessedPromptTokens  modeldeploymentname=gpt-4.1-715420                 total=           0  
+  srbaisrv-westeurope          ProcessedPromptTokens  modeldeploymentname=gpt-4.1-892749                 total=           0  
+  srbaisrv-westeurope          ProcessedPromptTokens  modeldeploymentname=text-embedding-3-large-010650  total=           0  
+  srbdiprodocai                TotalCalls                                                                total=         264  06:30=10 07:45=2 08:15=8 09:30=12 09:45=5 10:00=2 10:15=6 10:45=2 11:45=8 12:00=2 12:45=9 14:15=16 14:30=10 15:00=8 15:30=16 15:45=25 16:45=16 20:00=43 20:15=64
+  srbdiprodocai                ProcessedPages                                                            total=         288  06:30=1 07:45=1 08:15=3 09:30=3 09:45=2 10:00=1 10:15=3 10:45=1 11:45=2 12:00=1 12:45=3 14:15=54 14:30=3 15:00=2 15:30=76 15:45=9 16:45=66 20:00=14 20:15=43
+

@@ -371,9 +371,15 @@ public class ResultadoClasificacion
     public bool RateLimitExcedido { get; set; }
     /// <summary>
     /// True cuando la clasificación no pudo ejecutarse por falta de contenido textual del
-    /// documento. El orquestador lo traduce a Estado="SIN_CONTENIDO_DOCUMENTO".
+    /// documento. El orquestador lo traduce a Estado="SIN_CONTENIDO_DOCUMENTO" solo si el documento
+    /// está vacío de verdad (ver <see cref="CausaSinContenido"/>); si falló la obtención del texto,
+    /// cierra en ERROR o PENDIENTE_REINTENTO (AB#100880).
     /// </summary>
     public bool SinContenido { get; set; }
+    /// <summary>
+    /// Por qué no había texto cuando <see cref="SinContenido"/> es true. Nula si no se conoce.
+    /// </summary>
+    public CausaSinContenido? CausaSinContenido { get; set; }
     /// <summary>
     /// Umbral de fallback de clasificación aplicado en esta ejecución.
     /// </summary>
@@ -440,6 +446,17 @@ public class ResultadoClasificacion
     /// no traía restricción). Incluye los códigos efectivos y los ignorados por no publicados.
     /// </summary>
     public RestriccionTipologiasAplicada? RestriccionTipologias { get; set; }
+
+    /// <summary>
+    /// Prediccion del clasificador por embeddings en esta ejecucion (AB#100779). Nulo con
+    /// modo off o sin texto, y entonces se omite del JSON.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ResultadoEmbeddings? Embeddings { get; set; }
+
+    /// <summary>Quien contesto: "gpt", "embeddings" o "expectedtype" (RamasClasificacion).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RamaClasificacion { get; set; }
 }
 
 /// <summary>Detalle de la restricción de tipologías aplicada a la clasificación.</summary>

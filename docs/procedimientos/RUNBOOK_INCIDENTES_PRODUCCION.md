@@ -1,7 +1,7 @@
 # Runbook de Incidentes — Producción SRBRGDOCSAIPROD
 
 **Versión:** 1.0  
-**Última actualización:** 2026-06-10  
+**Última actualización:** 2026-10-06  
 **Aplicable a:** SRBRGDOCSAIPROD (Production Only)  
 **Fuente:** Código verificado en Activities + Providers
 
@@ -42,6 +42,8 @@ Desde 2026-08-04 (AB#99083) existen 5 alert rules sobre `srbappiprodocai` que **
 | `srbalertfbkprodocai` (fallback > 20%) | CU degradado, GPT asumiendo extracción | Incidente CU (circuit breaker / timeout) |
 | `srbalertexcprodocai` (> 10 excepciones/5 min) | Fallo transversal (incluye GDC) | Verificación Rápida + Failures en App Insights |
 | `srbalertidleprodocai` (0 requests en horario laboral) | Function App caída o sin flujo de entrada | Verificación Rápida (disponibilidad) |
+| `srbalertmemprodocai` (working set por instancia > 2,25 GiB, desde 2026-10-01) | Instancia cerca del techo del heap .NET (~75 % de 3,5 GB en EP1); típico de lotes con PDF grandes | Revisar si hay un lote de Batch en curso y si aparecen `OutOfMemoryException` (AB#100814) |
+| `srbalertoomprodocai` (cualquier `OutOfMemoryException`, Sev 1, desde 2026-10-01) | Una orquestación falló por memoria; el documento suele terminar OK al reintentarse | Localizar el documento por la traza `Fichero subido a blob` previa en la misma instancia y comprobar su estado en `Documentos` (AB#100814) |
 
 Gestión de reglas y **alta de nuevos correos de aviso**: `docs/observabilidad/MONITOREO_ALERTAS_REAL.md` (script `scripts/observability/create-monitor-alerts.ps1`).
 
@@ -380,6 +382,19 @@ customMetrics
 - 🔴 Mensaje: "Error iniciando DI layout. Status=400"
 - ✅ El mismo documento procesa N veces sin problema (indica corrupto en esta instancia específica)
 
+**Cómo se ve en la salida (desde AB#100880):** cualquier fallo al obtener el texto cierra la ejecución con `MensajeError = "No se pudo obtener el texto del documento: <motivo>..."`, persistida y visible en el Monitor. `SIN_CONTENIDO_DOCUMENTO` queda reservado al documento que de verdad no tiene texto (Layout respondió vacío) y **no** es un incidente de infraestructura.
+
+| Motivo | Estado | Acción del operador |
+|---|---|---|
+| `LayoutTimeout`, `LayoutError (HTTP 429/5xx)` | `PENDIENTE_REINTENTO` | Reintentar más tarde; si persiste, revisar salud y timeout del recurso de DI |
+| `LayoutError (HTTP 400)` con `InvalidContent` | `ERROR` | Este incidente: blob no descargable por DI o contenido corrupto (pasos de abajo) |
+| `LayoutError (HTTP 401/403)` | `ERROR` | Credenciales o rol del recurso de DI en `ModeloConfigs`; no reclamar al remitente |
+| `FormatoNoSoportado` (HTTP 415) | `ERROR` | Pedir el documento en un formato soportado |
+| `SinFuente` | `ERROR` | La ejecución no tenía blob ni base64: revisar subida a blob y trigger |
+| `DocumentoSinTexto` | `SIN_CONTENIDO_DOCUMENTO` | Escaneado sin OCR o página en blanco: acción del remitente, no de plataforma |
+
+Detalle de diagnóstico por motivo en [TROUBLESHOOTING_DIAGNOSTICO.md](../guias/TROUBLESHOOTING_DIAGNOSTICO.md), caso "No se pudo obtener el texto del documento".
+
 **Causas Raíz Posibles:**
 - Base64 del documento está **incompleto o corrupto** en tránsito
 - PDF tiene sectores corruptos (descarga interrumpida, transmisión fallida)
@@ -624,6 +639,12 @@ customEvents
 - 🔴 AppInsights: eventos `AOAI.CircuitOpen` y `AOAI.CircuitRejected` frecuentes
 - 📊 Evento `AOAI.RateLimitRetry` en aumento (reintentos por 429/500/502/503/504)
 - 🟡 Prompts devuelven `PromptResultado.Error` con prefijo `rate_limit_exhausted:` (degradado, no escala el documento a `PENDIENTE_REINTENTO`)
+- ℹ️ `DetalleEjecucion.Seguimiento.Estado = "PendienteReintento"` acompaña a `Resultado.Estado = "PENDIENTE_REINTENTO"`; la instancia queda en `runtimeStatus = Completed`
+
+**No confundir con otros estados de `Resultado.Estado`** (cierran con `runtimeStatus = Completed`, no son 429):
+- `PAGINAS_EXCEDIDAS` → el documento supera `maxPages`, `EstadoCalidad = "REVISION"` (ver `docs/especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md`)
+- `EXTRACCION_INCOMPLETA` → falló Content Understanding, se usó el fallback y no se obtuvo ningún campo útil
+- `ERROR` → excepción capturada por el orquestador; `runtimeStatus = Failed` queda para input nulo, excepción en el preámbulo o fallo de infraestructura
 
 **Causas Raíz Posibles:**
 - Cuota/TPM (tokens-por-minuto) del deployment de Azure OpenAI agotada por volumen de documentos
@@ -682,7 +703,7 @@ Ver `docs/observabilidad/OBSERVABILIDAD_KQL.md` para más queries de circuit bre
    - Evaluar reducir concurrencia de llamadas a Azure OpenAI o distribuir el volumen en el tiempo
 
 **Rollback:**
-- Para desactivar la lógica de resiliencia 429 y volver al comportamiento previo (retry por defecto del SDK, sin estado retriable diferenciado): `AzureOpenAIResilience.MaxRetries = 0` y `AzureOpenAIResilience.EnableCircuitBreaker = false` en appsettings
+- Para desactivar la lógica de resiliencia 429 y volver al comportamiento previo (retry por defecto del SDK, sin estado retriable diferenciado: el error crudo del SDK ante 429 acaba como `Resultado.Estado = "ERROR"` con `runtimeStatus = Completed`, no como HTTP 429 ni como `Failed`): `AzureOpenAIResilience.MaxRetries = 0` y `AzureOpenAIResilience.EnableCircuitBreaker = false` en appsettings
 
 **Escalation:**
 - Si `PENDIENTE_REINTENTO` persiste > 30 min tras confirmar cuota disponible → P2 → Tech Lead

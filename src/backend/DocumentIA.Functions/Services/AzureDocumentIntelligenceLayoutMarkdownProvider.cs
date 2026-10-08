@@ -1,5 +1,4 @@
 using System.Net.Http.Headers;
-using System.Text;
 using System.Text.Json;
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
@@ -58,15 +57,13 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
             base64Entrada: input.DocumentoBase64,
             cancellationToken);
 
-        var requestBody = JsonSerializer.Serialize(source.Body);
-
         using var client = _httpClientFactory.CreateClient();
 
-        async Task<HttpResponseMessage> EnviarAsync(string cuerpo)
+        async Task<HttpResponseMessage> EnviarAsync(HttpContent contenido)
         {
             var peticion = new HttpRequestMessage(HttpMethod.Post, analyzeUrl)
             {
-                Content = new StringContent(cuerpo, Encoding.UTF8, "application/json")
+                Content = contenido
             };
 
             peticion.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -78,7 +75,7 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
             }
         }
 
-        var startResponse = await EnviarAsync(requestBody);
+        var startResponse = await EnviarAsync(source.CrearContenido());
 
         if (!startResponse.IsSuccessStatusCode)
         {
@@ -95,21 +92,23 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
                     "DI layout respondió InvalidContent con urlSource para BlobPath={BlobPath}. Reintentando con base64Source.",
                     input.BlobPath);
 
-                var inlineBody = await _sourceResolver.BuildInlineBodyAsync(input.BlobPath!, cancellationToken);
+                var inline = await _sourceResolver.BuildInlineSourceAsync(input.BlobPath!, cancellationToken);
                 startResponse.Dispose();
-                startResponse = await EnviarAsync(JsonSerializer.Serialize(inlineBody));
+                startResponse = await EnviarAsync(inline.CrearContenido());
 
                 if (!startResponse.IsSuccessStatusCode)
                 {
                     body = await startResponse.Content.ReadAsStringAsync(cancellationToken);
+                    var codigoReintento = (int)startResponse.StatusCode;
                     startResponse.Dispose();
-                    throw new InvalidOperationException($"Error iniciando DI layout. Status={(int)startResponse.StatusCode}. Body={body}");
+                    throw new LayoutRequestException(codigoReintento, $"Error iniciando DI layout. Status={codigoReintento}. Body={body}");
                 }
             }
             else
             {
+                var codigo = (int)startResponse.StatusCode;
                 startResponse.Dispose();
-                throw new InvalidOperationException($"Error iniciando DI layout. Status={(int)startResponse.StatusCode}. Body={body}");
+                throw new LayoutRequestException(codigo, $"Error iniciando DI layout. Status={codigo}. Body={body}");
             }
         }
 
@@ -140,7 +139,8 @@ public class AzureDocumentIntelligenceLayoutMarkdownProvider : ILayoutMarkdownPr
 
             if (!pollResponse.IsSuccessStatusCode)
             {
-                throw new InvalidOperationException($"Error consultando DI layout. Status={(int)pollResponse.StatusCode}. Body={pollBody}");
+                // El codigo viaja tipado: el resolutor decide con el si el fallo es transitorio (AB#100880).
+                throw new LayoutRequestException((int)pollResponse.StatusCode, $"Error consultando DI layout. Status={(int)pollResponse.StatusCode}. Body={pollBody}");
             }
 
             var pollJson = JsonDocument.Parse(pollBody);

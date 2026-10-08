@@ -1,0 +1,273 @@
+{
+  "environment": "pre",
+  "sourceAccount": "upe48-mm2avmdm-swedencentral",
+  "targetAccount": "srbaisrv01predocai",
+  "apiVersion": "2025-11-01",
+  "updatedAtUtc": "2026-09-22T15:35:57.4295010Z",
+  "analyzers": [
+    {
+      "analyzerId": "CERA15",
+      "targetAnalyzerId": "CERA15",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-30T08:46:20Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA15_v1",
+      "targetAnalyzerId": "CERA15_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:11:47Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA16",
+      "targetAnalyzerId": "CERA16",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-15T10:12:45Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA16_v1",
+      "targetAnalyzerId": "CERA16_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-25T11:11:10Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA16_v2",
+      "targetAnalyzerId": "CERA16_v2",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:14:35Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA44_basura",
+      "targetAnalyzerId": "CERA44_basura",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-30T08:47:05Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA44_basura_v1",
+      "targetAnalyzerId": "CERA44_basura_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:13:48Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA44_vado",
+      "targetAnalyzerId": "CERA44_vado",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-25T11:09:15Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA44_vado_v1",
+      "targetAnalyzerId": "CERA44_vado_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:03:56Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA46",
+      "targetAnalyzerId": "CERA46",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-25T11:12:49Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CERA46_v1",
+      "targetAnalyzerId": "CERA46_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:11:07Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "COMU04",
+      "targetAnalyzerId": "COMU04",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-30T08:45:36Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "COMU04_v1",
+      "targetAnalyzerId": "COMU04_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:10:09Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "COMU07",
+      "targetAnalyzerId": "COMU07",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-30T08:42:47Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "COMU07_v1",
+      "targetAnalyzerId": "COMU07_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:05:03Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CU_NS_1.4_3",
+      "targetAnalyzerId": "CU_NS_1.4_3",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-04-15T11:31:57Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CU_NS_1.5_0",
+      "targetAnalyzerId": "CU_NS_1.5_0",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-05-05T05:22:45Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "CU_NS_1.6_0_GGAA",
+      "targetAnalyzerId": "CU_NS_1.6_0_GGAA",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T08:20:35Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "DEAC07",
+      "targetAnalyzerId": "DEAC07",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-30T08:44:49Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "DEAC07_v1",
+      "targetAnalyzerId": "DEAC07_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:09:25Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "DOCJ10",
+      "targetAnalyzerId": "DOCJ10",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-30T08:43:57Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "DOCJ10_v1",
+      "targetAnalyzerId": "DOCJ10_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:07:36Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "DOCJ19",
+      "targetAnalyzerId": "DOCJ19",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-06-30T08:43:20Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    },
+    {
+      "analyzerId": "DOCJ19_v1",
+      "targetAnalyzerId": "DOCJ19_v1",
+      "sourceAccount": "upe48-mm2avmdm-swedencentral",
+      "targetAccount": "srbaisrv01predocai",
+      "status": "present",
+      "sourceCreatedAt": "2026-07-17T10:12:45Z",
+      "definitionMatches": true,
+      "copiedAtUtc": null,
+      "operation": null
+    }
+  ]
+}

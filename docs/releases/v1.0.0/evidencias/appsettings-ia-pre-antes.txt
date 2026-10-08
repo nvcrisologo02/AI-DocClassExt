@@ -1,0 +1,17 @@
+WARNING: Connection verification disabled by environment variable AZURE_CLI_DISABLE_CONNECTION_VERIFICATION
+D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\urllib3/connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'management.azure.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+WARNING: Connection verification disabled by environment variable AZURE_CLI_DISABLE_CONNECTION_VERIFICATION
+WARNING: Connection verification disabled by environment variable AZURE_CLI_DISABLE_CONNECTION_VERIFICATION
+D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\urllib3/connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'management.azure.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\urllib3/connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'management.azure.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+D:\a\_work\1\s\build_scripts\windows\artifacts\cli\Lib\site-packages\urllib3/connectionpool.py:1110: InsecureRequestWarning: Unverified HTTPS request is being made to host 'management.azure.com'. Adding certificate verification is strongly advised. See: https://urllib3.readthedocs.io/en/latest/advanced-usage.html#tls-warnings
+Column1                                              Column2
+---------------------------------------------------  --------------------------------------------------
+Classification__AzureDocumentIntelligence__Endpoint  https://srbdipredocai.cognitiveservices.azure.com/
+Classification__GptFallback__Endpoint                https://srbaisrv01predocai.openai.azure.com
+Extraction__AzureContentUnderstanding__Endpoint      https://srbaisrv01predocai.services.ai.azure.com/
+Extraction__GptFallback__Endpoint                    https://srbaisrv01predocai.openai.azure.com
+AI__Resources__di__Endpoint                          https://srbdipredocai.cognitiveservices.azure.com/
+AI__Resources__cu_secondary__Endpoint                https://srbaisrv02predocai.services.ai.azure.com/
+AI__Resources__cu_primary__Endpoint                  https://srbaisrv01predocai.services.ai.azure.com/
+AI__Resources__openai_primary__Endpoint              https://srbaisrv01predocai.openai.azure.com

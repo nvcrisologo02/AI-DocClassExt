@@ -103,7 +103,7 @@ public class ClasificarActivityTests
 
         var input = new ClasificacionInput
         {
-            DocumentoBase64Override = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             CharsTextoNativo = 987,
             TotalPaginas = 12,
             Entrada = new ContratoEntrada
@@ -123,7 +123,7 @@ public class ClasificarActivityTests
         await sut.Run(input);
 
         captured.Should().NotBeNull();
-        captured!.DocumentoBase64Override.Should().Be("cmVjb3J0YWRv");
+        captured!.BlobPathClasificacion.Should().Be("documents-clasif/2026/10/recorte.pdf");
         captured.CharsTextoNativo.Should().Be(987);
         captured.TotalPaginas.Should().Be(12);
     }

@@ -158,4 +158,112 @@ public class AzureOpenAIResilienceExecutorTests
             .Should().ThrowAsync<RateLimitExhaustedException>();
         calls.Should().Be(2); // sin nuevas invocaciones
     }
+
+    [Fact]
+    public async Task ExecuteOnceAsync_Con429_NoReintentaYPropagaLaExcepcionDelCliente()
+    {
+        var sut = CreateSut(new AzureOpenAIResilienceOptions { MaxRetries = 3, InitialRetryDelayMs = 1 });
+        var calls = 0;
+
+        var act = async () => await sut.ExecuteOnceAsync<int>(
+            "embeddings|test",
+            _ => { calls++; throw new FakeClientResultException(429); },
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ClientResultException>();
+        calls.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task ExecuteOnceAsync_Con429Repetidos_AbreElCircuitoYRechazaLasSiguientes()
+    {
+        var sut = CreateSut(new AzureOpenAIResilienceOptions
+        {
+            MaxRetries = 0,
+            CircuitBreakerFailureThreshold = 2,
+            CircuitBreakerOpenSeconds = 60
+        });
+
+        for (var i = 0; i < 2; i++)
+        {
+            try
+            {
+                await sut.ExecuteOnceAsync<int>("embeddings|test", _ => throw new FakeClientResultException(429), CancellationToken.None);
+            }
+            catch (ClientResultException)
+            {
+            }
+        }
+
+        var calls = 0;
+        var act = async () => await sut.ExecuteOnceAsync("embeddings|test", _ => { calls++; return Task.FromResult(1); }, CancellationToken.None);
+
+        await act.Should().ThrowAsync<RateLimitExhaustedException>().WithMessage("*Circuito abierto*");
+        calls.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task ExecuteOnceAsync_Exito_DevuelveElResultadoYCierraElCircuito()
+    {
+        var sut = CreateSut(new AzureOpenAIResilienceOptions { CircuitBreakerFailureThreshold = 2 });
+        try
+        {
+            await sut.ExecuteOnceAsync<int>("embeddings|test", _ => throw new FakeClientResultException(503), CancellationToken.None);
+        }
+        catch (ClientResultException)
+        {
+        }
+
+        var resultado = await sut.ExecuteOnceAsync("embeddings|test", _ => Task.FromResult(42), CancellationToken.None);
+        try
+        {
+            await sut.ExecuteOnceAsync<int>("embeddings|test", _ => throw new FakeClientResultException(503), CancellationToken.None);
+        }
+        catch (ClientResultException)
+        {
+        }
+
+        resultado.Should().Be(42);
+        // Un fallo, exito, otro fallo: el contador se reinicio y el circuito sigue cerrado.
+        var act = async () => await sut.ExecuteOnceAsync("embeddings|test", _ => Task.FromResult(1), CancellationToken.None);
+        await act.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExecuteOnceAsync_Con400_NoReintentaNiAbreElCircuito()
+    {
+        var sut = CreateSut(new AzureOpenAIResilienceOptions { CircuitBreakerFailureThreshold = 1, CircuitBreakerOpenSeconds = 60 });
+        var calls = 0;
+
+        var act = async () => await sut.ExecuteOnceAsync<int>(
+            "embeddings|test",
+            _ => { calls++; throw new FakeClientResultException(400); },
+            CancellationToken.None);
+
+        (await act.Should().ThrowAsync<ClientResultException>()).Which.Status.Should().Be(400);
+        calls.Should().Be(1);
+
+        // Con umbral 1, un fallo contado habria abierto el circuito.
+        var siguiente = async () => await sut.ExecuteOnceAsync("embeddings|test", _ => Task.FromResult(1), CancellationToken.None);
+        await siguiente.Should().NotThrowAsync();
+    }
+
+    [Fact]
+    public async Task ExecuteOnceAsync_ConHttpRequestException_CuentaComoFalloDelCircuito()
+    {
+        var sut = CreateSut(new AzureOpenAIResilienceOptions { CircuitBreakerFailureThreshold = 2, CircuitBreakerOpenSeconds = 60 });
+
+        for (var i = 0; i < 2; i++)
+        {
+            var fallo = async () => await sut.ExecuteOnceAsync<int>(
+                "embeddings|test", _ => throw new HttpRequestException("red caida"), CancellationToken.None);
+            await fallo.Should().ThrowAsync<HttpRequestException>();
+        }
+
+        var calls = 0;
+        var act = async () => await sut.ExecuteOnceAsync("embeddings|test", _ => { calls++; return Task.FromResult(1); }, CancellationToken.None);
+
+        await act.Should().ThrowAsync<RateLimitExhaustedException>().WithMessage("*Circuito abierto*");
+        calls.Should().Be(0);
+    }
 }

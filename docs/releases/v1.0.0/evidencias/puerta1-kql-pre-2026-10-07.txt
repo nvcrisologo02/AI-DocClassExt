@@ -1,0 +1,19 @@
+--- dependencias por host de IA (PRE, ventana 2026-10-07T20:25:30Z .. 2026-10-07T20:27:45Z):
+  127.0.0.1:34403 | 3 | 3 | ["200"]
+  169.254.129.4:8081 | 1 | 1 | ["200"]
+  BlobBaseClient.Download | 7 | 7 | [""]
+  BlobClient.Upload | 4 | 4 | [""]
+  BlobContainerClient.CreateIfNotExists | 2 | 2 | [""]
+  ContentUnderstandingClient.AnalyzeBinary | 1 | 1 | [""]
+  DefaultAzureCredential.GetToken | 29 | 29 | [""]
+  Invoke | 81 | 81 | [""]
+  srbaisrv01predocai.openai.azure.com | 5 | 5 | ["200"]
+  srbaisrv02predocai.services.ai.azure.com | 5 | 5 | ["202","200"]
+  srbdipredocai.cognitiveservices.azure.com | 24 | 24 | ["200","202"]
+  srbwebpluginassetresolverpre.azurewebsites.net | 2 | 2 | ["200"]
+  srbwidi03.sareb.srb:8090 | 1 | 1 | ["200"]
+--- llamadas o trazas con hosts de PRO (debe ser n=0):
+  n=0
+--- EndpointEfectivo en trazas:
+--- excepciones y 401/403 en la ventana:
+  exception | System.ArgumentException | 1

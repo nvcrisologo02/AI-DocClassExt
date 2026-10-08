@@ -36,7 +36,8 @@
         { "name": "GDC__TimeoutSeconds", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
         { "name": "GDC__HttpBasicUsername", "kind": "KeyVaultRef", "owner": "platform", "secretName": "GDC--HttpBasicUsername" },
         { "name": "GDC__HttpBasicPassword", "kind": "KeyVaultRef", "owner": "platform", "secretName": "GDC--HttpBasicPassword" },
-        { "name": "DocumentIntelligence__UseInlineContent", "kind": "LiteralOrNonSecret", "owner": "pipeline", "allowedValues": ["true", "false"] }
+        { "name": "DocumentIntelligence__UseInlineContent", "kind": "LiteralOrNonSecret", "owner": "pipeline", "allowedValues": ["true", "false"] },
+        { "name": "DOTNET_GCHeapHardLimitPercent", "kind": "LiteralOrNonSecret", "owner": "pipeline", "allowedValues": ["28"] }
       ],
       "forbiddenSettings": [
         { "name": "AzureWebJobsStorage__accountName", "reason": "Conflicts with AzureWebJobsStorage Key Vault reference." },

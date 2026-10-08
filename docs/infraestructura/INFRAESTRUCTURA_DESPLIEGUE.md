@@ -6,7 +6,7 @@
 > La realidad operativa es: **un único Resource Group productivo `SRBRGDOCSAIPROD`** (West Europe), Function App en **plan Consumption**, **sin entorno de staging**, **sin DR/multi-región** ni geo-redundancia. Los SKU, costes, RTO/RPO, VNet y políticas de escalado de este documento son ilustrativos y **no deben usarse para planificación de capacidad, coste ni continuidad**.
 >
 > 👉 **Fuente de verdad de la infraestructura desplegada:** [INFRAESTRUCTURA_REAL_DESPLEGADA.md](INFRAESTRUCTURA_REAL_DESPLEGADA.md).
-> Para el detalle de pipelines/despliegue ver [../procedimientos/CI_CD_DEPLOYMENT_DETAILS.md](../procedimientos/CI_CD_DEPLOYMENT_DETAILS.md) y [../08_CHECKLISTS_DESPLIEGUE.md](../08_CHECKLISTS_DESPLIEGUE.md).
+> Para el detalle de pipelines/despliegue ver [../procedimientos/RELEASE_MANAGEMENT.md](../procedimientos/RELEASE_MANAGEMENT.md) y [../08_CHECKLISTS_DESPLIEGUE.md](../08_CHECKLISTS_DESPLIEGUE.md).
 
 ## 1. TOPOLOGÍA DE DESPLIEGUE
 
@@ -229,7 +229,7 @@ Scheduled query rules sobre `srbappiprodocai` (RG `SRBRGDOCSAIPROD`), gestionada
 | `srbalertexcprodocai` | > 10 excepciones en 5 min | 2 | Email (action group) |
 | `srbalertidleprodocai` | 0 requests en 180 min (horario laboral, evaluada 11:00-18:00) | 2 | Email (action group) |
 
-Metric alerts de plataforma preexistentes: `srbalertcpuprodocai` (CPU), `srbalertmemprodocai` (memoria).
+Metric alerts de plataforma preexistentes: `srbalertcpuprodocai` (CPU, sin action group) y `srbalertmemprodocai` (memoria: working set por instancia > 2,25 GiB, Sev 2, con action group desde 2026-10-01). Desde la misma fecha, `srbalertoomprodocai` (scheduled query, Sev 1) avisa de cualquier `OutOfMemoryException` (AB#100815).
 
 **Action group:** `srbagoperprodocai` (correo a operaciones). Alta/baja de destinatarios y detalle completo en `docs/observabilidad/MONITOREO_ALERTAS_REAL.md`. Queries en OBSERVABILIDAD_KQL.md.
 

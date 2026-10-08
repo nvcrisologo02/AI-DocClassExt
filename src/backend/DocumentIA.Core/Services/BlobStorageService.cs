@@ -140,6 +140,23 @@ public class BlobStorageService : IBlobStorageService
         }
     }
 
+    public async Task<string?> GetETagAsync(string blobPath)
+    {
+        var parts = blobPath.Split('/', 2);
+        var containerClient = _blobServiceClient.GetBlobContainerClient(parts[0]);
+        var blobClient = containerClient.GetBlobClient(parts[1]);
+
+        try
+        {
+            var propiedades = await blobClient.GetPropertiesAsync();
+            return propiedades.Value.ETag.ToString();
+        }
+        catch (RequestFailedException ex) when (ex.Status == 404)
+        {
+            return null;
+        }
+    }
+
     private Task EnsureContainerExistsAsync(BlobContainerClient containerClient, string containerName)
     {
         if (_initializedContainers.ContainsKey(containerName))

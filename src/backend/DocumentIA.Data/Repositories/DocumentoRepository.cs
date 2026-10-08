@@ -43,6 +43,14 @@ public class DocumentoRepository : IDocumentoRepository
             .FirstOrDefaultAsync(d => d.MD5 == md5);
     }
 
+    public async Task<DocumentoDuplicadoMd5?> GetDuplicadoByMD5Async(string md5)
+    {
+        return await _context.Documentos
+            .Where(d => d.MD5 == md5)
+            .Select(d => new DocumentoDuplicadoMd5(d.Id, d.SHA256))
+            .FirstOrDefaultAsync();
+    }
+
     public async Task<DocumentoEntity?> GetByCorrelationIdAsync(string correlationId)
     {
         return await _context.Documentos

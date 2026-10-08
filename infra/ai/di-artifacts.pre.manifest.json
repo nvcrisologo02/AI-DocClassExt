@@ -1,0 +1,70 @@
+{
+  "environment": "pre",
+  "sourceAccount": "srbdiprodocai",
+  "sourceEndpoint": "https://srbdiprodocai.cognitiveservices.azure.com",
+  "targetAccount": "srbdipredocai",
+  "targetEndpoint": "https://srbdipredocai.cognitiveservices.azure.com",
+  "apiVersion": "2024-11-30",
+  "updatedAtUtc": "2026-09-22T15:29:16.3099042Z",
+  "artifacts": [
+    {
+      "kind": "classifier",
+      "id": "DocumentAICC_v1",
+      "status": "copied",
+      "copiedAtUtc": "2026-09-22T15:28:22.5776893Z",
+      "operationId": "31376277096_7e5d3fec-2061-41f2-8d41-9e2678e5ca0b",
+      "source": {
+        "createdDateTime": "2026-05-13T14:29:40Z",
+        "modifiedDateTime": "2026-05-13T14:29:40Z",
+        "expirationDateTime": "2028-05-12T14:29:40Z",
+        "apiVersion": "2024-11-30",
+        "docTypes": [
+          "DOCN",
+          "ESCR-01",
+          "ESCR-06",
+          "ESCR-10",
+          "ESCR-24",
+          "ESCR-26",
+          "ESCR-29",
+          "IAE",
+          "IBI",
+          "Nota-Simple",
+          "PV",
+          "RESTO",
+          "SERE-24",
+          "SERE-25",
+          "SERE-26"
+        ]
+      },
+      "target": {
+        "createdDateTime": "2026-09-22T15:29:11Z",
+        "modifiedDateTime": "2026-05-13T14:29:40Z",
+        "expirationDateTime": "2028-05-12T14:29:40Z",
+        "apiVersion": "2024-11-30",
+        "docTypes": [
+          "DOCN",
+          "ESCR-01",
+          "ESCR-06",
+          "ESCR-10",
+          "ESCR-24",
+          "ESCR-26",
+          "ESCR-29",
+          "IAE",
+          "IBI",
+          "Nota-Simple",
+          "PV",
+          "RESTO",
+          "SERE-24",
+          "SERE-25",
+          "SERE-26"
+        ]
+      }
+    },
+    {
+      "kind": "model",
+      "id": "DI_NS1.4_v0",
+      "status": "not-promoted",
+      "reason": "promote:false, pendingDataFix:true"
+    }
+  ]
+}

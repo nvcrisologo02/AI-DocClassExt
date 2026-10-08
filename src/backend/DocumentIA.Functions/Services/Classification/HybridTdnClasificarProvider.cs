@@ -274,6 +274,9 @@ namespace DocumentIA.Functions.Services.Classification
             {
                 Sha256 = documento.PreComputedSHA256 ?? LeerCadena(input.DatosNormalizados, "SHA256"),
                 Md5 = documento.PreComputedMD5 ?? LeerCadena(input.DatosNormalizados, "MD5"),
+                // AB#100814: el salvavidas usa el documento original, no el recorte: el layout de N
+                // paginas va por SAS con rango (usar el recorte no ahorra memoria) y el markdown se
+                // persiste por el SHA256 del original, cuya cobertura depende de la extension del nombre.
                 BlobPath = documento.BlobPath,
                 DocumentoBase64 = !string.IsNullOrWhiteSpace(input.DocumentoBase64Override)
                     ? input.DocumentoBase64Override
@@ -307,7 +310,12 @@ namespace DocumentIA.Functions.Services.Classification
             }
             else
             {
-                _logger.LogWarning("El resolutor no devolvio markdown para HybridTDN en {Documento}", documento.Name);
+                // La causa sigue viajando hasta la guarda del proveedor GPT (AB#100880).
+                input.CausaSinMarkdown = resultado.CausaSinContenido ?? input.CausaSinMarkdown;
+                _logger.LogWarning(
+                    "El resolutor no devolvio markdown para HybridTDN en {Documento}. Causa={Causa}",
+                    documento.Name,
+                    input.CausaSinMarkdown?.Describir() ?? "no informada");
             }
         }
 

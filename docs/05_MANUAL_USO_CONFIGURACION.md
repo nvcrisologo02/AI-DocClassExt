@@ -88,7 +88,7 @@ Estados habituales y accion recomendada:
 | `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
 | `DUPLICADO` | El documento ya habia sido procesado y no hay ningun resultado anterior reutilizable | Usar resultado existente o seguir criterio de negocio |
 | _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
-| `SIN_CONTENIDO_DOCUMENTO` | Se pidio un resumen o un prompt pero no se pudo leer el documento | Comprobar que el documento no esta corrupto ni es un escaneado sin texto. Si es legible, escalar: puede ser una incidencia del servicio de extraccion |
+| `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto legible: el servicio de lectura respondio sin contenido | Comprobar si es un escaneado sin OCR o una pagina en blanco y pedir un documento legible. Si lo que fallo fue la lectura, el estado es `ERROR` o `PENDIENTE_REINTENTO` con `No se pudo obtener el texto del documento: <motivo>` |
 | `ERROR` | El procesamiento no pudo completarse | Reintentar y, si persiste, escalar a soporte |
 
 #### Paso 5: Revisar confianza del resultado
@@ -705,7 +705,7 @@ Detalles del backfill:
 | `BAJA_CONFIANZA_CLASIFICACION` | IA no pudo clasificar con confianza suficiente | Verificar documento manualmente. Posible documento no soportado. |
 | `DUPLICADO` | Documento ya procesado (SHA256 identico) **sin ninguna ejecucion anterior reutilizable**. Cuando si la hay, el estado es el de aquella ejecucion con `resultado.reutilizadaPorDuplicado = true` y `detalleEjecucion.ejecucionOriginalGuid` informado | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
 | `NO_CLASIFICADO` | No se identifico la tipologia del documento | Revisar el documento; si el tipo es conocido, reenviar con `expectedType`. Si la peticion pedia prompt o resumen, estos si vienen informados en `datosExtraidos`. |
-| `SIN_CONTENIDO_DOCUMENTO` | Se pidio prompt o resumen y no se obtuvo texto del documento por ninguna via | El modelo no se invoca a proposito: es preferible un fallo explicito a un resumen inventado. Ver `docs/guias/TROUBLESHOOTING_DIAGNOSTICO.md`. |
+| `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto: Document Intelligence respondio sin contenido | El modelo no se invoca a proposito: es preferible un fallo explicito a un resumen inventado. Reservado al documento vacio de verdad; un fallo al obtener el texto cierra en `ERROR` o `PENDIENTE_REINTENTO` con el motivo en `mensajeError` (AB#100880). Ver `docs/guias/TROUBLESHOOTING_DIAGNOSTICO.md`. |
 | `PENDIENTE_REINTENTO` | Cuota de Azure OpenAI agotada durante la clasificacion | Estado retriable: reencolar el documento mas tarde. No es un fallo del documento. |
 | `ERROR` | Error en el procesamiento | Consultar `resultado.mensajeError` y `detalleEjecucion.seguimiento`. |
 
@@ -942,7 +942,7 @@ Invoke-RestMethod \
 
 ### 5.6.1 Schema de ConfiguracionJson por Tipo de Proveedor
 
-> Todos los parametros de conexion AI se almacenan **exclusivamente en BD** (tabla `ModeloConfigs`). No hay claves en `appsettings` para estos valores.
+> Los parametros de conexion AI (apiKey, authMode, deploymentName, etc.) se almacenan **exclusivamente en BD** (tabla `ModeloConfigs`); no hay claves en `appsettings` para esos secretos. El `endpoint` puede venir explicito en la fila de BD (como hasta ahora) o, alternativamente, resolverse desde el mapa de alias de recurso en App Settings (ver 5.6.1b).
 > La columna `ConfiguracionJson` del modelo contiene un objeto JSON cuya estructura depende del `provider`.
 
 #### Proveedor `azure-document-intelligence` (Clasificacion)
@@ -1049,6 +1049,78 @@ Invoke-RestMethod \
 ```
 
 > **Nota sobre `authMode`:** Con `"ManagedIdentity"` el campo `apiKey` se ignora y la autenticacion se realiza via Managed Identity de la Function App (sin credenciales en BD).
+
+### 5.6.1b Alias de recurso de IA (ResourceAlias)
+
+Cada fila de `ModeloConfigs` puede indicar, ademas del `endpoint` explicito, un `resourceAlias` que identifica el recurso fisico de IA al que pertenece el modelo. El alias no sustituye al `endpoint`: es una via alternativa de resolucion, pensada para entornos donde el endpoint aun no se conoce en el momento de dar de alta el modelo o donde se quiere centralizar el recurso por entorno sin tocar BD.
+
+| Alias | Servicio | App Setting |
+|-------|----------|-------------|
+| `openai_primary` | Azure OpenAI (extraccion GPT, prompts, clasificacion GPT) | `AI__Resources__openai_primary__Endpoint` |
+| `cu_primary` | Azure Content Understanding (region principal) | `AI__Resources__cu_primary__Endpoint` |
+| `cu_secondary` | Azure Content Understanding (region secundaria, claves de modelo terminadas en `-we`) | `AI__Resources__cu_secondary__Endpoint` |
+| `di` | Azure Document Intelligence (clasificacion y layout) | `AI__Resources__di__Endpoint` |
+
+Regla de resolucion: el `endpoint` explicito de la fila en BD siempre gana. Si la fila no trae `endpoint` y trae `resourceAlias`, el registro resuelve el endpoint desde `AI:Resources:<alias>:Endpoint`. Si el alias no tiene App Setting configurado en ese entorno, la carga del registro lanza `InvalidOperationException`.
+
+El alta y la modificacion de modelos (incluido el `resourceAlias`) siguen siendo una operacion de datos via Admin API o directamente en BD, sin necesidad de despliegue.
+
+El host de Functions no lee la seccion `AI` de `appsettings.json` (ese fichero solo documenta la forma del mapa); los valores tienen que llegar como App Settings en Azure y, en ejecucion local, como entradas `Values` de `local.settings.json` con la clave `AI__Resources__<alias>__Endpoint`.
+
+Un App Setting presente pero con valor vacio cuenta como no mapeado: produce la misma `InvalidOperationException` que si el App Setting no existiera.
+
+### 5.6.1c Clasificador por embeddings (`clasificador.embeddings`)
+
+Fila unica de `ModeloConfigs` con `Tipo = 5` (Embeddings), `Key = clasificador.embeddings`
+y `Provider = azure-openai` (AB#100779, ADR-002). Configura la primera etapa de
+clasificacion: el clasificador A (regresion logistica sobre `text-embedding-3-large`),
+que corre antes del GPT y, segun el modo, solo se persiste o contesta.
+
+```json
+{
+  "DeploymentName": "text-embedding-3-large-030358",
+  "ResourceAlias": "openai_primary",
+  "AuthMode": "DefaultAzureCredential",
+  "Artefacto": { "Container": "documentai", "BlobPath": "modelos/clasificador-embeddings/v1/clasificador-embeddings-v1.json" },
+  "Modo": "sombra",
+  "UmbralConfianza": 0.6,
+  "Restringido": { "Modo": "sombra", "UmbralMasa": 0.5, "UmbralConfianzaCondicionada": 0.8 },
+  "MaxChars": 24000,
+  "TimeoutSeconds": 20
+}
+```
+
+| Campo | Tipo | Obligatorio | Notas |
+|-------|------|-------------|-------|
+| `DeploymentName` | string | Si (modo distinto de off) | Deployment de embeddings del recurso Azure OpenAI del entorno |
+| `ResourceAlias` / `Endpoint` | string | Uno de los dos | Misma resolucion que 5.6.1b. `openai_primary` esta verificado para DEV; antes de activar la fila en PRE o PRO confirmar que el alias existe en el mapa `AI__Resources__*` del entorno |
+| `AuthMode` / `ApiKey` | string | `ApiKey` si `AuthMode=ApiKey` | Misma semantica que los modelos de clasificacion |
+| `Artefacto.Container`, `Artefacto.BlobPath` | string | Si (modo distinto de off) | Blob con el modelo exportado (manifiesto mas pesos) en la cuenta de storage de documentos del entorno |
+| `Modo` | string | No | `off` (defecto), `sombra` o `hibrido`, para peticiones sin restriccion |
+| `UmbralConfianza` | double | No | En `hibrido`, A contesta si su confianza TDN1 alcanza el umbral. Defecto 0,6 |
+| `Restringido.Modo` | string | No | Modo propio de las peticiones con `restriccionTipologias`. Defecto `sombra`. Una fila con `Modo = off` debe llevar tambien `Restringido.Modo = off`: el script 01 lo hace, pero una edicion manual desde el Admin que solo cambie `Modo` deja activo el modo restringido |
+| `Restringido.UmbralMasa`, `Restringido.UmbralConfianzaCondicionada` | double | No | Umbrales del hibrido restringido. Defectos 0,5 y 0,8. Solo actuan con un modelo `calibrado = true` |
+| `MaxChars` | int | No | Recorte del texto antes de la llamada. Defecto 24.000. El orquestador ya colapsa los espacios y recorta a 24.000 caracteres (`EmbeddingsClasificadorConfig.MaxCharsPorDefecto`) antes de llamar a la activity, para no duplicar el markdown completo en el historial Durable: `MaxChars` solo puede bajar ese tope, un valor mayor no tiene efecto |
+| `TimeoutSeconds` | int | No | Tiempo maximo de la llamada de embeddings. Defecto 20. Un endpoint colgado cuesta `TimeoutSeconds` en cada ejecucion y no abre el circuito de resiliencia (solo lo abren los 429 y los fallos HTTP); si ocurre, bajar `TimeoutSeconds` o poner la fila en `off` hasta que el endpoint responda |
+
+Comportamiento:
+
+- Sin fila, fila inactiva, JSON invalido, alias sin mapear o configuracion incompleta: modo
+  `off` con error en el log; nunca una excepcion. Los cambios entran en 5 minutos.
+- `off`: no se llama al deployment ni se descarga el artefacto. `sombra`: A se calcula y se
+  persiste en `DetalleEjecucion.Clasificacion.Embeddings` sin alterar el resultado. `hibrido`:
+  A contesta (`Modelo = embeddings:<version>`, `ProveedorClasif = Embeddings`) cuando llega
+  al umbral y el GPT contesta en el resto. `ExpectedType` sigue mandando.
+- `DetalleEjecucion.Clasificacion.RamaClasificacion` indica quien contesto: `gpt`,
+  `embeddings` o `expectedtype`.
+- Cualquier fallo (artefacto, 429, timeout) deriva al GPT con `Error` en el bloque. Un 429 de
+  embeddings no se reintenta ni produce `PENDIENTE_REINTENTO`.
+- El consumo se registra como `classification.embeddings` con `Modelo` = nombre del
+  deployment; el catalogo `tarifas.ia` necesita una linea por deployment
+  (`scripts/migrations/clasificador-embeddings/02-tarifas-embeddings-deployments.sql`).
+- Alta por entorno: `scripts/migrations/clasificador-embeddings/README.md`. Analisis de la
+  sombra: `scripts/analysis/sombra-embeddings.sql`. Telemetria: evento
+  `Classification.Embeddings` y metrica `Classification.Embeddings.LatenciaMs`.
 
 ### 5.6.2 Resiliencia ante 429 (rate limit) en Azure OpenAI
 

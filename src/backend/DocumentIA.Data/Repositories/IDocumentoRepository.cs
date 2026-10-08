@@ -2,12 +2,24 @@
 
 namespace DocumentIA.Data.Repositories;
 
+/// <summary>
+/// Proyeccion minima del documento que coincide con un MD5: lo unico que necesita la
+/// verificacion de duplicados previa a la descarga desde GDC (AB#100863).
+/// </summary>
+public sealed record DocumentoDuplicadoMd5(int Id, string SHA256);
+
 public interface IDocumentoRepository
 {
     Task<DocumentoEntity?> GetByIdAsync(int id);
     Task<DocumentoEntity?> GetByGuidAsync(string guid);
     Task<DocumentoEntity?> GetBySHA256Async(string sha256);
     Task<DocumentoEntity?> GetByMD5Async(string md5);
+
+    /// <summary>
+    /// Devuelve Id y SHA256 del documento con ese MD5 sin cargar la entidad ni su Resultado,
+    /// o null si no existe. Resuelto en el indice IX_Documentos_MD5 (AB#100863).
+    /// </summary>
+    Task<DocumentoDuplicadoMd5?> GetDuplicadoByMD5Async(string md5);
     Task<DocumentoEntity?> GetByCorrelationIdAsync(string correlationId);
     Task<IEnumerable<DocumentoEntity>> GetAllAsync();
     Task<IEnumerable<DocumentoEntity>> GetByEstadoAsync(string estado);

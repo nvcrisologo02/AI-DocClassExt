@@ -6,6 +6,7 @@ using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Services;
 using DocumentIA.Functions.Activities;
 using DocumentIA.Functions.Services;
+using DocumentIA.Functions.Services.Classification;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -134,7 +135,10 @@ public class DocumentProcessOrchestrator
         var logger = context.CreateReplaySafeLogger<DocumentProcessOrchestrator>();
 
         logger.LogInformation($"Iniciando procesamiento para documento: {entrada.Documento.Name}");
-        logger.LogInformation($"DEBUG - ObjectIdGDC recibido: '{entrada.Documento.ObjectIdGDC ?? "(null)"}' | BlobPath: '{entrada.Documento.BlobPath ?? "(null)"}' | Base64Length: {entrada.Documento.Content.Base64?.Length ?? 0}");
+        logger.LogInformation(
+            "Entrada recibida: ObjectIdGDC={ObjectIdGDC} | BlobPath={BlobPath}",
+            entrada.Documento.ObjectIdGDC ?? "(null)",
+            entrada.Documento.BlobPath ?? "(null)");
 
         var salida = new ContratoSalida
         {
@@ -384,6 +388,34 @@ public class DocumentProcessOrchestrator
         // documento completo invalida cualquier peticion posterior.
         var necesidadesSinResultado = new HashSet<NecesidadMarkdown>();
 
+        // Por que el ultimo intento del resolutor no trajo texto (AB#100880). Viaja en los inputs de
+        // clasificacion y prompt para que sus guardas la propaguen, y decide el cierre cuando una
+        // guarda salta: SIN_CONTENIDO_DOCUMENTO solo si el documento esta vacio de verdad.
+        CausaSinContenido? causaSinMarkdown = null;
+
+        // La ruta de prompt cierra en SIN_CONTENIDO_DOCUMENTO, ERROR o PENDIENTE_REINTENTO sin
+        // retornar; los cierres OK posteriores no deben pisar ese estado.
+        var cierrePorFaltaDeTexto = false;
+
+        // Cierre cuando una guarda de contenido salta. La causa la trae el proveedor; si no la
+        // conoce, vale la del ultimo intento del resolutor en esta ejecucion. Mensaje nulo = el
+        // documento esta vacio de verdad y cada ruta conserva su mensaje de siempre.
+        (string Estado, string? Mensaje, string EstadoSeguimiento) ResolverCierreSinContenido(CausaSinContenido? causaProveedor)
+        {
+            var causa = causaProveedor ?? causaSinMarkdown;
+            if (causa is null || causa.EsDocumentoSinTexto)
+            {
+                return ("SIN_CONTENIDO_DOCUMENTO", null, "Failed");
+            }
+
+            if (causa.EsTransitoria)
+            {
+                return ("PENDIENTE_REINTENTO", $"{causa.MensajeObtencionFallida()}. Reintentar más tarde.", "PendienteReintento");
+            }
+
+            return ("ERROR", causa.MensajeObtencionFallida(), "Failed");
+        }
+
         // Declarado aqui y asignado en el Paso 1 para que las funciones locales anteriores al
         // Paso 1 (prompt libre, resumen combinado) puedan capturarlo.
         var datosNormalizados = new Dictionary<string, object>();
@@ -522,7 +554,7 @@ public class DocumentProcessOrchestrator
             if (necesidadesSinResultado.Contains(necesidad)
                 || necesidadesSinResultado.Any(n => n.DocumentoCompleto))
             {
-                return markdownEjecucion ?? new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna };
+                return markdownEjecucion ?? new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna, CausaSinContenido = causaSinMarkdown };
             }
 
             ResultadoMarkdown? resultado = null;
@@ -535,6 +567,7 @@ public class DocumentProcessOrchestrator
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "No se pudo resolver markdown ({Origen}). Se continua con lo que haya.", origenTraza);
+                resultado = new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna, CausaSinContenido = CausaSinContenido.DesdeExcepcion(ex) };
             }
 
             resultado ??= new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna };
@@ -542,15 +575,18 @@ public class DocumentProcessOrchestrator
 
             if (!resultado.TieneContenido)
             {
+                causaSinMarkdown = resultado.CausaSinContenido ?? causaSinMarkdown;
+
                 // Observabilidad: que un paso siga adelante sin el markdown que declaro necesitar
                 // (o con uno mas corto) tiene que verse en el log; es la diferencia entre "el
                 // prompt corrio sobre el documento" y "corrio sobre el recorte" (AB#100245).
                 logger.LogWarning(
                     "El resolutor no devolvio markdown para {Origen} (completo={Completo}, paginasMinimas={Paginas}). "
-                    + "El paso continua con lo que haya en cache y la necesidad no se reintenta.",
+                    + "El paso continua con lo que haya en cache y la necesidad no se reintenta. Causa={Causa}",
                     origenTraza,
                     necesidad.DocumentoCompleto,
-                    necesidad.PaginasMinimas);
+                    necesidad.PaginasMinimas,
+                    causaSinMarkdown?.Describir() ?? "no informada");
 
                 necesidadesSinResultado.Add(necesidad);
                 return markdownEjecucion ?? resultado;
@@ -673,7 +709,8 @@ public class DocumentProcessOrchestrator
                 ResultadoPromptCombinado = resultadoPromptCombinado,
                 ResumenCombinado = resumenCombinado,
                 ForzarResumenPorDefecto = forzarResumenPorDefecto,
-                Prompt = entrada.Instrucciones.Prompt
+                Prompt = entrada.Instrucciones.Prompt,
+                CausaSinMarkdown = string.IsNullOrWhiteSpace(markdownParaPrompt) ? causaSinMarkdown : null
             };
 
             // No se usa EjecutarPasoNegocio: marca "Completed" en cuanto la actividad devuelve sin
@@ -698,7 +735,16 @@ public class DocumentProcessOrchestrator
             {
                 MarcarFinActividad("Prompt", "Failed", resultadoPrompt.Error);
 
-                salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+                // AB#100880: documento vacio de verdad -> SIN_CONTENIDO_DOCUMENTO (MensajeError se
+                // conserva); fallo al obtener el texto -> ERROR o PENDIENTE_REINTENTO con el motivo.
+                var cierre = ResolverCierreSinContenido(resultadoPrompt.CausaSinContenido);
+                cierrePorFaltaDeTexto = true;
+                salida.Resultado.Estado = cierre.Estado;
+                if (cierre.Mensaje is not null)
+                {
+                    salida.Resultado.MensajeError = cierre.Mensaje;
+                }
+
                 salida.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
                 {
                     Modelo = resultadoPrompt.Modelo,
@@ -708,8 +754,10 @@ public class DocumentProcessOrchestrator
                 };
 
                 logger.LogError(
-                    "Prompt abortado por falta de contenido del documento. Tipología={Tipologia}",
-                    salida.Identificacion.Tipologia);
+                    "Prompt abortado por falta de contenido del documento. Tipología={Tipologia}, Estado={Estado}, Causa={Causa}",
+                    salida.Identificacion.Tipologia,
+                    cierre.Estado,
+                    (resultadoPrompt.CausaSinContenido ?? causaSinMarkdown)?.Describir() ?? "no informada");
 
                 return;
             }
@@ -867,7 +915,10 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
             salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
-            logger.LogInformation($"DEBUG - entradaPorObjectIdGdc={entradaPorObjectIdGdc} | ObjectIdGDC='{entrada.Documento.ObjectIdGDC}' | Base64='{entrada.Documento.Content.Base64?[..Math.Min(20, entrada.Documento.Content.Base64.Length)] ?? "(null)"}'");
+            logger.LogInformation(
+                "Canal de entrada: entradaPorObjectIdGdc={EntradaPorObjectIdGdc} | ObjectIdGDC={ObjectIdGDC}",
+                entradaPorObjectIdGdc,
+                entrada.Documento.ObjectIdGDC ?? "(null)");
 
             if (entradaPorObjectIdGdc)
             {
@@ -1093,14 +1144,21 @@ public class DocumentProcessOrchestrator
                 salida.Integridad.RutaBlobStorage = blobPath;
             }
 
+            var blobPathDocumento = !string.IsNullOrWhiteSpace(blobPath)
+                ? blobPath
+                : entrada.Documento.BlobPath;
+
+            // AB#100814: la clasificacion recibe una ruta de blob, nunca base64. Por defecto, el
+            // documento original; la preparacion la sustituye por la del recorte si lo hay.
             var docClasif = new PrepararDocumentoClasificacionResultado
             {
-                DocumentoBase64Clasif = entrada.Documento.Content.Base64,
+                BlobPathClasificacion = blobPathDocumento,
                 TotalPaginas = salida.Identificacion.Paginas,
                 CharsTextoNativo = 0,
                 PaginasIncluidas = salida.Identificacion.Paginas,
                 RecorteAplicado = false
             };
+            string? base64LegadoClasif = null;
 
             salida.DetalleEjecucion.RecorteAplicado = docClasif.RecorteAplicado;
             salida.DetalleEjecucion.PaginasIncluidas = docClasif.PaginasIncluidas;
@@ -1117,15 +1175,24 @@ public class DocumentProcessOrchestrator
                         "PrepararDocumentoClasificacionActivity",
                         new PrepararDocumentoClasificacionInput
                         {
-                            DocumentoBase64 = entrada.Documento.Content.Base64,
                             NombreDocumento = entrada.Documento.Name,
                             MaxPaginasClasificacion = maxPaginasClasificacion,
-                            BlobPath = !string.IsNullOrWhiteSpace(blobPath)
-                                ? blobPath
-                                : entrada.Documento.BlobPath
+                            BlobPath = blobPathDocumento
                         });
 
                     docClasif = docClasifResult ?? docClasif;
+                    if (string.IsNullOrWhiteSpace(docClasif.BlobPathClasificacion))
+                    {
+                        // AB#100814: compatibilidad con instancias en vuelo: la salida antigua de Preparar trae
+                        // base64 y no ruta; se reenvia una sola vez para que terminen como antes. Retirar junto
+                        // con los campos [Obsolete].
+#pragma warning disable CS0618
+                        base64LegadoClasif = string.IsNullOrEmpty(docClasif.DocumentoBase64Clasif)
+                            ? null
+                            : docClasif.DocumentoBase64Clasif;
+#pragma warning restore CS0618
+                        docClasif.BlobPathClasificacion = blobPathDocumento;
+                    }
 
                     if (salida.Identificacion.Paginas <= 0 && docClasif.TotalPaginas > 0)
                     {
@@ -1257,9 +1324,100 @@ public class DocumentProcessOrchestrator
                 await AsegurarMarkdownAsync(NecesidadMarkdown.Paginas(maxPaginasClasificacion), "LayoutPreClasificacion");
             }
 
+            // 3.0 Clasificador por embeddings (AB#100779): secuencial y previo al GPT. En modo
+            // sombra solo calcula y persiste; en hibrido contesta cuando su confianza llega al
+            // umbral. La activity nunca lanza, pero el try/catch cubre fallos de infraestructura
+            // Durable: nada de lo que haga A puede tumbar el flujo actual.
+            ResultadoEmbeddings? resultadoEmbeddings = null;
+            var textoEmbeddings = TextoClasificacionResolver.Preprocesar(
+                TextoClasificacionResolver.Obtener(datosNormalizados),
+                EmbeddingsClasificadorConfig.MaxCharsPorDefecto);
+            if (!string.IsNullOrWhiteSpace(textoEmbeddings))
+            {
+                try
+                {
+                    resultadoEmbeddings = await context.CallActivityAsync<ResultadoEmbeddings>(
+                        "ClasificarEmbeddingsActivity",
+                        new ClasificarEmbeddingsInput
+                        {
+                            Texto = textoEmbeddings,
+                            ExpectedTypeInformado = !string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType),
+                            RestriccionCodigos = entrada.Instrucciones.RestriccionTipologias?.Codigos,
+                            NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion,
+                            InstanceId = context.InstanceId
+                        });
+                }
+                catch (Exception exEmbeddings)
+                {
+                    logger.LogWarning(exEmbeddings, "Paso 3.0: ClasificarEmbeddingsActivity fallo. Se sigue con el flujo actual.");
+                }
+
+                if (resultadoEmbeddings is not null)
+                {
+                    AcumularConsumos(resultadoEmbeddings.Consumos);
+                    resultadoEmbeddings.Consumos = null;
+
+                    if (string.Equals(resultadoEmbeddings.Decision, DecisionesEmbeddings.Omitido, StringComparison.Ordinal))
+                    {
+                        // Modo off o sin texto: el bloque no se persiste (spec seccion 4).
+                        resultadoEmbeddings = null;
+                    }
+                }
+            }
+
+            // Las funciones locales solo capturan variables ya declaradas en su punto de
+            // definicion (AB#100231): esta va despues de resultadoEmbeddings.
+            void AdjuntarEmbeddings(ResultadoClasificacion destino, string rama)
+            {
+                destino.RamaClasificacion = rama;
+                if (resultadoEmbeddings is null)
+                {
+                    return;
+                }
+
+                destino.Embeddings = resultadoEmbeddings;
+                destino.DetalleProveedores.Add(new PropuestaProveedor
+                {
+                    Proveedor = ResultadoEmbeddings.Proveedor,
+                    Tipologia = resultadoEmbeddings.Tipologia,
+                    Confianza = resultadoEmbeddings.Confianza,
+                    MotivoDescarte = rama == RamasClasificacion.Embeddings ? null : resultadoEmbeddings.Motivo
+                });
+            }
+
+            // Guarda propia frente a ExpectedType: el caller manda aunque el proveedor contestase.
+            var embeddingsContesta = resultadoEmbeddings is not null
+                && string.Equals(resultadoEmbeddings.Decision, DecisionesEmbeddings.Contesta, StringComparison.Ordinal)
+                && string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType);
+
             // 3. Clasificacion
             ResultadoClasificacion resultadoClasificacion;
-            if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType))
+            if (embeddingsContesta)
+            {
+                MarcarInicioActividad("Clasificar");
+                logger.LogInformation(
+                    "Paso 3: clasificado por embeddings ({Tipologia}, confianza {Confianza:F3}, motivo {Motivo})",
+                    resultadoEmbeddings!.Tipologia, resultadoEmbeddings.Confianza, resultadoEmbeddings.Motivo);
+
+                var esDesconocido = string.Equals(resultadoEmbeddings.Tipologia, "Desconocido", StringComparison.OrdinalIgnoreCase);
+                resultadoClasificacion = new ResultadoClasificacion
+                {
+                    Modelo = $"embeddings:{resultadoEmbeddings.VersionModelo}",
+                    Clasificador = ResultadoEmbeddings.Proveedor,
+                    ProveedorClasif = ResultadoEmbeddings.Proveedor,
+                    Confianza = resultadoEmbeddings.Confianza,
+                    FallbackLLM = false,
+                    TipologiaDetectada = resultadoEmbeddings.Tipologia,
+                    Tdn2Detectado = esDesconocido ? null : resultadoEmbeddings.Tdn2,
+                    PropuestaTipologia = esDesconocido ? resultadoEmbeddings.Restringido?.PrediccionSinRestringir ?? string.Empty : string.Empty,
+                    RestriccionTipologias = entrada.Instrucciones.RestriccionTipologias is { Codigos.Count: > 0 } restriccion
+                        ? new RestriccionTipologiasAplicada { Codigos = restriccion.Codigos, CodigosIgnorados = restriccion.CodigosIgnorados }
+                        : null
+                };
+                AdjuntarEmbeddings(resultadoClasificacion, RamasClasificacion.Embeddings);
+                MarcarFinActividad("Clasificar", "Completed", "Clasificacion por embeddings");
+            }
+            else if (!string.IsNullOrWhiteSpace(entrada.Instrucciones.ExpectedType))
             {
                 MarcarInicioActividad("Clasificar");
                 logger.LogInformation("Paso 3: Clasificación omitida por ExpectedType={ExpectedType}", entrada.Instrucciones.ExpectedType);
@@ -1270,6 +1428,7 @@ public class DocumentProcessOrchestrator
                     FallbackLLM = false,
                     TipologiaDetectada = entrada.Instrucciones.ExpectedType
                 };
+                AdjuntarEmbeddings(resultadoClasificacion, RamasClasificacion.ExpectedType);
                 MarcarFinActividad("Clasificar", "Completed", "Clasificación por ExpectedType");
             }
             else
@@ -1290,12 +1449,15 @@ public class DocumentProcessOrchestrator
                             Entrada = entrada,
                             DatosNormalizados = datosNormalizados,
                             UmbralFallbackEfectivo = umbralClasifFallback,
-                            DocumentoBase64Override = docClasif.DocumentoBase64Clasif,
+                            BlobPathClasificacion = docClasif.BlobPathClasificacion,
+                            DocumentoBase64Override = base64LegadoClasif,
                             CharsTextoNativo = docClasif.CharsTextoNativo,
                             TotalPaginas = docClasif.TotalPaginas,
-                            GenerarResumenPorDefecto = true
+                            GenerarResumenPorDefecto = true,
+                            CausaSinMarkdown = markdownEjecucion is { TieneContenido: true } ? null : causaSinMarkdown
                         });
                     AcumularConsumos(resultadoClasificacion.Consumos);
+                    AdjuntarEmbeddings(resultadoClasificacion, RamasClasificacion.Gpt);
 
                     if (resultadoClasificacion.RateLimitExcedido)
                     {
@@ -1327,25 +1489,36 @@ public class DocumentProcessOrchestrator
 
                     if (resultadoClasificacion.SinContenido)
                     {
-                        MarcarFinActividad("Clasificar", "Failed", "Sin contenido textual del documento");
+                        // AB#100880: documento vacio de verdad -> SIN_CONTENIDO_DOCUMENTO; fallo al
+                        // obtener el texto -> ERROR, o PENDIENTE_REINTENTO si la causa es transitoria.
+                        var cierre = ResolverCierreSinContenido(resultadoClasificacion.CausaSinContenido);
+                        var mensajeSinContenido = cierre.Mensaje
+                            ?? "Sin contenido del documento: no se puede clasificar ni generar resumen.";
 
-                        const string mensajeSinContenido = "Sin contenido del documento: no se puede clasificar ni generar resumen.";
+                        MarcarFinActividad("Clasificar", "Failed", mensajeSinContenido);
+
+                        logger.LogWarning(
+                            "Clasificacion abortada sin texto del documento. Estado={Estado}, Causa={Causa}",
+                            cierre.Estado,
+                            (resultadoClasificacion.CausaSinContenido ?? causaSinMarkdown)?.Describir() ?? "no informada");
 
                         salida.DetalleEjecucion.Clasificacion = resultadoClasificacion;
-                        salida.Resultado.Estado = "SIN_CONTENIDO_DOCUMENTO";
+                        salida.Resultado.Estado = cierre.Estado;
                         salida.Resultado.MensajeError = mensajeSinContenido;
                         salida.Resultado.EstadoCalidad = "ERROR";
                         salida.Resultado.ConfianzaGlobal = 0;
                         salida.Resultado.ConfianzaClasificacion = 0;
 
                         // AB#100180: se persiste (mismo criterio que la guarda de prompt AB#100027).
+                        // Tambien en PENDIENTE_REINTENTO: aqui el cliente no reenvia solo, como en el
+                        // 429, y la ejecucion debe seguir visible en el Monitor (AB#100880).
                         await EjecutarPasoNegocioSinResultado(
                             "Persistir",
                             () => context.CallActivityAsync(
                                 "PersistirActivity",
                                 new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
-                        FinalizarSeguimiento("Failed", mensajeSinContenido);
+                        FinalizarSeguimiento(cierre.EstadoSeguimiento, mensajeSinContenido);
                         return salida;
                     }
 
@@ -1387,6 +1560,7 @@ public class DocumentProcessOrchestrator
                             FallbackRazon = "fallback_unclassified",
                             TipologiaDetectada = "Desconocido"
                         };
+                        AdjuntarEmbeddings(salida.DetalleEjecucion.Clasificacion, RamasClasificacion.Gpt);
                         salida.DetalleEjecucion.MotivoErrorTipologia = mensajeTipologiaNoIdentificada;
                         RegistrarModeloLlm(salida.DetalleEjecucion.Clasificacion.Modelo);
 
@@ -2049,7 +2223,7 @@ public class DocumentProcessOrchestrator
 
                 var confidenceCfgClassificationOnly = tipologiaResuelta.ConfidenceConfig ?? new ConfidenceConfig();
                 // El estado de fallo por falta de contenido no debe ser pisado por el cierre OK.
-                if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+                if (!cierrePorFaltaDeTexto)
                 {
                     salida.Resultado.Estado = "OK";
                 }
@@ -2596,7 +2770,7 @@ public class DocumentProcessOrchestrator
                   && !string.Equals(k, "Markdown", StringComparison.OrdinalIgnoreCase));
 
             // El estado de fallo por falta de contenido no debe ser pisado por los estados de cierre.
-            if (!string.Equals(salida.Resultado.Estado, "SIN_CONTENIDO_DOCUMENTO", StringComparison.Ordinal))
+            if (!cierrePorFaltaDeTexto)
             {
                 // AB#100130 (Fix 2): el camino GPT directo (sin CU) fija FallbackUsado=false siempre;
                 // si esa extraccion agota su propio timeout, ExtraccionTimeoutPropio=true la marca

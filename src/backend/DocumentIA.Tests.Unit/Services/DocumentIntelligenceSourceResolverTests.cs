@@ -32,7 +32,8 @@ public class DocumentIntelligenceSourceResolverTests
         var source = await sut.ResolveAsync(BlobPath, "T1VFUkFT", "IGNORADO");
 
         source.UsingUrlSource.Should().BeFalse();
-        LeerPropiedad(source.Body, "base64Source").Should().Be("T1VFUkFT");
+        source.InlineBytes.Should().BeNull();
+        LeerPropiedad(source.Body!, "base64Source").Should().Be("T1VFUkFT");
         blob.Verify(b => b.DownloadDocumentAsync(It.IsAny<string>()), Times.Never);
         blob.Verify(b => b.GenerateSasUrlAsync(It.IsAny<string>(), It.IsAny<TimeSpan?>()), Times.Never);
     }
@@ -46,7 +47,8 @@ public class DocumentIntelligenceSourceResolverTests
         var source = await sut.ResolveAsync(null, null, "REVOTREVNVE8=");
 
         source.UsingUrlSource.Should().BeFalse();
-        LeerPropiedad(source.Body, "base64Source").Should().Be("REVOTREVNVE8=");
+        source.InlineBytes.Should().BeNull();
+        LeerPropiedad(source.Body!, "base64Source").Should().Be("REVOTREVNVE8=");
         blob.Verify(b => b.DownloadDocumentAsync(It.IsAny<string>()), Times.Never);
     }
 
@@ -59,7 +61,11 @@ public class DocumentIntelligenceSourceResolverTests
         var source = await sut.ResolveAsync(BlobPath, null, null);
 
         source.UsingUrlSource.Should().BeFalse();
-        LeerPropiedad(source.Body, "base64Source").Should().Be(Convert.ToBase64String(ContenidoBlob));
+        source.InlineBytes.Should().Equal(ContenidoBlob);
+        source.Body.Should().BeNull();
+        using var contenido = source.CrearContenido();
+        contenido.Headers.ContentType!.MediaType.Should().Be("application/json");
+        (await LeerBase64Source(contenido)).Should().Equal(ContenidoBlob);
         blob.Verify(b => b.DownloadDocumentAsync(BlobPath), Times.Once);
     }
 
@@ -72,7 +78,11 @@ public class DocumentIntelligenceSourceResolverTests
         var source = await sut.ResolveAsync(BlobPath, null, null);
 
         source.UsingUrlSource.Should().BeFalse();
-        LeerPropiedad(source.Body, "base64Source").Should().Be(Convert.ToBase64String(ContenidoBlob));
+        source.InlineBytes.Should().Equal(ContenidoBlob);
+        source.Body.Should().BeNull();
+        using var contenido = source.CrearContenido();
+        contenido.Headers.ContentType!.MediaType.Should().Be("application/json");
+        (await LeerBase64Source(contenido)).Should().Equal(ContenidoBlob);
         blob.Verify(b => b.DownloadDocumentAsync(BlobPath), Times.Once);
     }
 
@@ -86,20 +96,69 @@ public class DocumentIntelligenceSourceResolverTests
         var source = await sut.ResolveAsync(BlobPath, null, null);
 
         source.UsingUrlSource.Should().BeTrue();
-        LeerPropiedad(source.Body, "urlSource").Should().Be(sas);
+        LeerPropiedad(source.Body!, "urlSource").Should().Be(sas);
         blob.Verify(b => b.DownloadDocumentAsync(It.IsAny<string>()), Times.Never);
     }
 
     [Fact]
-    public async Task BuildInlineBodyAsync_DescargaElBlobYDevuelveBase64()
+    public async Task BuildInlineSourceAsync_DescargaElBlobYDevuelveLosBytes()
     {
         var blob = CrearBlobMock("https://srbstgprodocai.blob.core.windows.net/x?sig=y");
         var sut = CrearSut(blob, useInlineContent: false);
 
-        var body = await sut.BuildInlineBodyAsync(BlobPath);
+        var source = await sut.BuildInlineSourceAsync(BlobPath);
 
-        LeerPropiedad(body, "base64Source").Should().Be(Convert.ToBase64String(ContenidoBlob));
+        source.UsingUrlSource.Should().BeFalse();
+        source.InlineBytes.Should().Equal(ContenidoBlob);
+        using var contenido = source.CrearContenido();
+        contenido.Headers.ContentType!.MediaType.Should().Be("application/json");
+        (await LeerBase64Source(contenido)).Should().Equal(ContenidoBlob);
         blob.Verify(b => b.DownloadDocumentAsync(BlobPath), Times.Once);
+    }
+
+    [Fact]
+    public async Task CrearContenido_ConBytes_NoProduceStringIntermedio_YElJsonEsValido()
+    {
+        var source = DiSource.DesdeBytes([1, 2, 3, 4]);
+
+        using var contenido = source.CrearContenido();
+
+        (await contenido.ReadAsStringAsync()).Should().Be("{\"base64Source\":\"AQIDBA==\"}");
+        contenido.Should().BeOfType<ByteArrayContent>();
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(3000)]
+    [InlineData(1_000_000)]
+    [InlineData(5_000_000)]
+    public async Task CrearContenido_ConCualquierResto_NoLanzaYDecodificaIgual(int longitud)
+    {
+        var bytes = new byte[longitud];
+        new Random(12345).NextBytes(bytes);
+
+        using var contenido = DiSource.DesdeBytes(bytes).CrearContenido();
+
+        (await LeerBase64Source(contenido)).Should().Equal(bytes);
+        // {"base64Source":" (17) + base64 + "} (2)
+        contenido.Headers.ContentLength.Should().Be(19 + ((longitud + 2) / 3) * 4);
+    }
+
+    [Fact]
+    public async Task CrearContenido_DosLlamadas_DevuelvenContenidosIndependientes()
+    {
+        var source = DiSource.DesdeBytes([1, 2, 3, 4]);
+
+        using var primero = source.CrearContenido();
+        using var segundo = source.CrearContenido();
+
+        primero.Should().NotBeSameAs(segundo);
+        primero.Should().BeOfType<ByteArrayContent>();
+        segundo.Should().BeOfType<ByteArrayContent>();
+        (await primero.ReadAsStringAsync()).Should().Be(await segundo.ReadAsStringAsync());
     }
 
     private static Mock<IBlobStorageService> CrearBlobMock(string sasUrl)
@@ -121,6 +180,13 @@ public class DocumentIntelligenceSourceResolverTests
             blob.Object,
             settings,
             NullLogger<DocumentIntelligenceSourceResolver>.Instance);
+    }
+
+    private static async Task<byte[]> LeerBase64Source(HttpContent content)
+    {
+        var json = await content.ReadAsStringAsync();
+        using var doc = JsonDocument.Parse(json);
+        return doc.RootElement.GetProperty("base64Source").GetBytesFromBase64();
     }
 
     private static string? LeerPropiedad(object body, string propiedad)

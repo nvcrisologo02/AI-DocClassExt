@@ -188,32 +188,15 @@ Guías detalladas para tareas específicas:
   - Escalation path y contactos
   - *Líneas: ~337 | Tiempo: 15 min diagnosis*
 
-### Release & Versioning
-- **[RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md)**
-  - Semantic versioning strategy
-  - Pre-release timeline (1 semana)
-  - Rollback procedures
-  - Hotfix process
-  - Pre-release checklist
-  - *Líneas: ~263 | Tiempo: 30 min study*
+### Release y despliegue
+- **[RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md)** — runbook de release DEV → PRE → PRO
+  - Fases 0 a 5 con casillas, ejecutor y vuelta atrás; PRE como puerta técnica con cuatro puertas
+  - Anexos: catálogo de pipelines, vuelta atrás por capas, secretos y app settings, KQL
+- **[releases/README.md](releases/README.md)** — registro por versión SemVer (`docs/releases/vX.Y.Z/`)
+- **[RUNBOOK_RELEASE_PRO_2026-09.md](procedimientos/RUNBOOK_RELEASE_PRO_2026-09.md)** — instancia histórica de las releases del 03/09 y 20/09 de 2026
 
-### Migraciones de Base de Datos
-- **[DATABASE_MIGRATION_STRATEGY.md](procedimientos/DATABASE_MIGRATION_STRATEGY.md)**
-  - EF Core migration workflows
-  - Testing local vs staging vs production
-  - Blue-green deployment para 0-downtime
-  - Rollback procedures
-  - Known issues & solutions
-  - *Líneas: ~332 | Tiempo: 20 min lookup*
-
-### CI/CD & Deployments
-- **[CI_CD_DEPLOYMENT_DETAILS.md](procedimientos/CI_CD_DEPLOYMENT_DETAILS.md)**
-  - Pipeline overview (3 pipelines)
-  - Build, test, deploy stages
-  - Staging vs production deployments
-  - Troubleshooting pipeline failures
-  - Secrets management
-  - *Líneas: ~325 | Tiempo: 25 min lookup*
+### Migraciones de base de datos
+- **[DATABASE_MIGRATION_STRATEGY.md](procedimientos/DATABASE_MIGRATION_STRATEGY.md)** — crear y probar migraciones EF Core en local; el despliegue está en el runbook
 
 ---
 
@@ -232,12 +215,7 @@ Guías detalladas para tareas específicas:
   - *Líneas: ~500 | Tiempo: 30 min overview | Status: ✅ Verificado*
 
 ### Procedimientos Relacionados
-- **[CI_CD_DEPLOYMENT_DETAILS.md](procedimientos/CI_CD_DEPLOYMENT_DETAILS.md)**
-  - Pipeline orchestration (manual trigger, no CI/CD automático)
-  - Build → Migration → Deploy Functions → Deploy Admin → Deploy AssetResolver
-  - Troubleshooting pipeline failures
-  - Secrets management en KeyVault
-  - *Líneas: ~325 | Tiempo: 25 min lookup*
+- **[RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md)** — runbook de release con el catálogo de pipelines y el proceso de despliegue por fases
 
 ---
 
@@ -336,9 +314,9 @@ Guías detalladas para tareas específicas:
 | **🆕 Incidente en producción** | RUNBOOK_INCIDENTES_PRODUCCION | `procedimientos/` |
 | **🆕 Infraestructura Azure (real desplegada)** | INFRAESTRUCTURA_REAL_DESPLEGADA ⭐ | `infraestructura/` |
 | Infraestructura — plantilla genérica (NO refleja lo desplegado) | INFRAESTRUCTURA_DESPLIEGUE ⚠️ | `infraestructura/` |
-| **🆕 Release & hotfix** | RELEASE_MANAGEMENT | `procedimientos/` |
-| **🆕 Migración BD** | DATABASE_MIGRATION_STRATEGY | `procedimientos/` |
-| **🆕 CI/CD y pipelines** | CI_CD_DEPLOYMENT_DETAILS | `procedimientos/` |
+| **Release a PRO (runbook)** | RELEASE_MANAGEMENT | `procedimientos/` |
+| **Registro de releases** | releases/README | `docs/releases/` |
+| **Migración BD (desarrollo)** | DATABASE_MIGRATION_STRATEGY | `procedimientos/` |
 | **🆕 Responsabilidades equipo** | TEAM_MATRIX_RESPONSABILIDADES | `referencias/` |
 | Activar autenticación del Admin (EasyAuth) | GUIA_EASYAUTH_ADMIN | `guias/` |
 | Restringir acceso de red al Admin | GUIA_RESTRICCION_ACCESO_ADMIN | `guias/` |
@@ -383,8 +361,7 @@ docs/
 ├── 📁 procedimientos/ (🆕 2026-06-10)
 │   ├── RUNBOOK_INCIDENTES_PRODUCCION.md
 │   ├── RELEASE_MANAGEMENT.md
-│   ├── DATABASE_MIGRATION_STRATEGY.md
-│   └── CI_CD_DEPLOYMENT_DETAILS.md
+│   └── DATABASE_MIGRATION_STRATEGY.md
 │
 ├── 📁 infraestructura/ (🆕 2026-06-10)
 │   └── INFRAESTRUCTURA_DESPLIEGUE.md

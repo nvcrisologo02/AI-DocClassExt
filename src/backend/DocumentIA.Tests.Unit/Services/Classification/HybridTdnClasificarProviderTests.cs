@@ -841,6 +841,85 @@ namespace DocumentIA.Tests.Unit.Services.Classification
             result.Consumos.Should().Contain(c => c.Operacion == "layout.previo");
         }
 
+        [Fact]
+        public async Task SinContextoTextual_ConRutaDeClasificacion_ElResolutorRecibeElOriginalYNoBase64()
+        {
+            // AB#100814: aunque la clasificacion reciba la ruta del recorte, el salvavidas pide el layout
+            // sobre el documento original (el markdown se persiste por su SHA256) y no transporta base64.
+            var provider = CreateProviderWithLowRuleConfidence();
+            var input = new ClasificacionInput
+            {
+                Entrada = new ContratoEntrada
+                {
+                    Documento = new Documento
+                    {
+                        Name = "x.pdf",
+                        BlobPath = "documents/2026/10/x.pdf",
+                        PreComputedSHA256 = "sha-x",
+                        Content = new ContenidoDocumento()
+                    },
+                    Instrucciones = new Instrucciones()
+                },
+                DatosNormalizados = new Dictionary<string, object>(),
+                BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
+                TotalPaginas = 20
+            };
+
+            _markdownResolverMock
+                .Setup(p => p.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoMarkdown { Markdown = "# texto", Paginas = 3, Fuente = FuenteMarkdown.Layout });
+
+            _diProviderMock
+                .Setup(d => d.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoClasificacion { TipologiaDetectada = "escr.compraventa", Confianza = 0.90, ProveedorClasif = "DocumentIntelligence" });
+
+            await provider.ClasificarAsync(input);
+
+            _markdownResolverMock.Verify(p => p.ResolverAsync(
+                It.IsAny<NecesidadMarkdown>(),
+                It.Is<ContextoMarkdown>(c =>
+                    c.BlobPath == "documents/2026/10/x.pdf"
+                    && c.Sha256 == "sha-x"
+                    && string.IsNullOrEmpty(c.DocumentoBase64)),
+                It.IsAny<CancellationToken>()), Times.Once);
+        }
+
+        [Fact]
+        public async Task SinContextoTextualYResolutorSinTexto_DejaLaCausaEnElInput()
+        {
+            // AB#100880: el salvavidas del hibrido es el unico sitio donde el resolutor se llama fuera
+            // del orquestador; la causa debe seguir viajando hasta la guarda del proveedor GPT.
+            var provider = CreateProviderWithLowRuleConfidence();
+            var input = new ClasificacionInput
+            {
+                Entrada = new ContratoEntrada
+                {
+                    Documento = new Documento
+                    {
+                        Name = "x.pdf",
+                        BlobPath = "documents/2026/09/x.pdf",
+                        Content = new ContenidoDocumento { Base64 = "dGVzdA==" }
+                    },
+                    Instrucciones = new Instrucciones()
+                },
+                DatosNormalizados = new Dictionary<string, object>()
+            };
+            var causa = new CausaSinContenido { Motivo = MotivoSinContenido.LayoutError, CodigoHttp = 400 };
+
+            _markdownResolverMock
+                .Setup(p => p.ResolverAsync(It.IsAny<NecesidadMarkdown>(), It.IsAny<ContextoMarkdown>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna, CausaSinContenido = causa });
+
+            _diProviderMock
+                .Setup(d => d.ClasificarAsync(It.IsAny<ClasificacionInput>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new ResultadoClasificacion { TipologiaDetectada = "Desconocido", Confianza = 0, ProveedorClasif = "DocumentIntelligence" });
+
+            await provider.ClasificarAsync(input);
+
+            input.CausaSinMarkdown.Should().BeSameAs(causa);
+            input.DatosNormalizados.Should().NotContainKey("Markdown");
+        }
+
         private HybridTdnClasificarProvider CreateProviderWithHighRuleConfidence()
         {
             var options = Microsoft.Extensions.Options.Options.Create(

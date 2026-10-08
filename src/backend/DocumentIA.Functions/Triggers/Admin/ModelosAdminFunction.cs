@@ -11,6 +11,9 @@ namespace DocumentIA.Functions.Triggers.Admin;
 
 public class ModelosAdminFunction
 {
+    private const string MensajeTipoInvalido =
+        "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt, layout, tarifas, embeddings.";
+
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNameCaseInsensitive = true
@@ -30,7 +33,7 @@ public class ModelosAdminFunction
     {
         if (!TryParseTipo(tipo, out var tipoModelo))
         {
-            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt, layout, tarifas.");
+            return await CreateError(req, HttpStatusCode.BadRequest, MensajeTipoInvalido);
         }
 
         var modelos = await _dbContext.ModeloConfigs
@@ -57,7 +60,7 @@ public class ModelosAdminFunction
 
         if (!TryParseTipo(payload.Tipo, out var tipoModelo))
         {
-            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt, layout, tarifas.");
+            return await CreateError(req, HttpStatusCode.BadRequest, MensajeTipoInvalido);
         }
 
         if (string.IsNullOrWhiteSpace(payload.Key) || string.IsNullOrWhiteSpace(payload.Provider) || string.IsNullOrWhiteSpace(payload.ConfiguracionJson))
@@ -120,7 +123,7 @@ public class ModelosAdminFunction
 
         if (!TryParseTipo(payload.Tipo, out var tipoModelo))
         {
-            return await CreateError(req, HttpStatusCode.BadRequest, "Tipo de modelo invalido. Valores: clasificacion, extraccion, prompt, layout, tarifas.");
+            return await CreateError(req, HttpStatusCode.BadRequest, MensajeTipoInvalido);
         }
 
         if (!TryValidateJson(payload.ConfiguracionJson, out var jsonError))
@@ -182,6 +185,7 @@ public class ModelosAdminFunction
             "prompt" => SetTipo(TipoModelo.Prompt, out tipoModelo),
             "layout" => SetTipo(TipoModelo.Layout, out tipoModelo),
             "tarifas" => SetTipo(TipoModelo.Tarifas, out tipoModelo),
+            "embeddings" => SetTipo(TipoModelo.Embeddings, out tipoModelo),
             _ => false
         };
     }

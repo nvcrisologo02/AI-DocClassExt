@@ -1,3 +1,4 @@
+using Microsoft.Extensions.DependencyInjection;
 using Moq;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Azure.Functions.Worker.Http;
@@ -16,9 +17,20 @@ public static class HttpFunctionTestFactory
         string method = "GET",
         string url = "http://localhost/api/test",
         string? body = null,
-        IReadOnlyDictionary<string, string>? headers = null)
+        IReadOnlyDictionary<string, string>? headers = null,
+        bool conSerializador = false)
     {
-        var context = new Mock<FunctionContext>().Object;
+        var mockContext = new Mock<FunctionContext>();
+        if (conSerializador)
+        {
+            // InstanceServices con serializador: permite que el codigo bajo prueba use WriteAsJsonAsync.
+            var services = new ServiceCollection();
+            services.AddOptions();
+            services.Configure<WorkerOptions>(opts => opts.Serializer = new Azure.Core.Serialization.JsonObjectSerializer());
+            mockContext.Setup(c => c.InstanceServices).Returns(services.BuildServiceProvider());
+        }
+
+        var context = mockContext.Object;
         return new FakeHttpRequestData(context, method, new Uri(url), body, headers);
     }
 

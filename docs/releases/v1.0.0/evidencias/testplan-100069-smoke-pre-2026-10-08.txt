@@ -1,0 +1,18 @@
+Test Plan 100069 "Smoke pre-release PRO" (suite raiz 100070) ejecutado contra PRE el 2026-10-08 con el codigo del candidato 17889bb (mismo arbol de Functions que 417dca4, run 79682 del 799). Evidencia automatizada: runner tests/e2e-postdeploy con el juego ampliado del smoke (S-S1..S-S5 + FF-FF2 + FH-FH5; scratchpad cases-smk) y un caso adicional FH-FH6 (PDF de una pagina en blanco, docs/auxiliares/temps/2026-10-07/pagina-en-blanco.pdf).
+
+Run de Test Plans: 1076834 (registrado el 2026-10-08 06:45Z, Completed, 8 puntos: 5 Passed, 3 NotApplicable). URL: https://sareb.visualstudio.com/AI%20DocClassExt/_testManagement/runs?runId=1076834&_a=runCharts
+
+| Caso SMK | Test Case | Evidencia | Resultado |
+|---|---|---|---|
+| SMK-1 Ingesta E2E: PDF estandar clasifica y persiste | 100071 | S-S1 PASS (OK, 20261008-083807-pre-smoke) | Passed |
+| SMK-2 Clasificacion restringida: conjunto acotado respetado | 100072 | sin caso automatizado (el runner no envia restriccionTipologias); no ejecutado a mano | NotApplicable |
+| SMK-3 Documento Office (XLSX): pipeline completo | 100073 | FF-FF2 PASS (pipeline completo sobre XLSX; estado de negocio NO_CLASIFICADO, rama legitima del caso; 20261008-083807-pre-smoke) | Passed |
+| SMK-4 Guarda de contenido: documento sin texto extraible | 100074 | FH-FH6 PASS: SIN_CONTENIDO_DOCUMENTO, CausaSinContenido {Motivo 0, "Layout respondio sin texto."}, Consumos vacios (sin LLM), instancia 66ef89098ee745ea99c9857ae56e8a14 (20261008-084117-pre-smoke) | Passed |
+| SMK-5 Contrato HTTP: payload invalido devuelve 400 controlado | 100075 | S-S5 PASS (HTTP 400, 20261008-083807-pre-smoke) | Passed |
+| SMK-6 Resumen documental con contenido real | 100076 | S-S4 PASS (OK, 20261008-083807-pre-smoke) | Passed |
+| SMK-7 Monitor Admin refleja la ejecucion | 100077 | comprobacion manual no realizada | NotApplicable |
+| SMK-8 Subida via GDC (solo PRO) | 100078 | no aplica contra PRE | NotApplicable |
+
+Smoke ampliado 20261008-083807-pre-smoke (06:38Z-06:41Z): Total=8 PASS=7 FAIL=1 (OPS-HC, S-S1, S-S2, S-S3, S-S4, S-S5, FF-FF2 PASS; FH-FH5 FAIL). Log: docs/auxiliares/temps/2026-10-08/smoke-ampliado-pre-v1.0.0-testplan.log.
+FH-FH5 (PDF corrupto): Resultado.Estado=ERROR, MensajeError "No se pudo obtener el texto del documento: LayoutError (HTTP 400): ... InvalidContent: The file is corrupted or format is unsupported", CausaSinContenido {Motivo 4 LayoutError, CodigoHttp 400}, Consumos vacios, actividad Clasificar Failed y Persistir completada (instancia f0de697c241d48a0839ebe91b23c46a1). Es el cierre documentado por AB#100880 para LayoutError 400 InvalidContent (docs/contratos/CONTRATO_API_HTTP.md, tabla de motivos) y la primera evidencia en un entorno desplegado de la rama "layout fallido" que no se pudo reproducir en DEV. La asercion de FH-FH5 (SIN_CONTENIDO_DOCUMENTO, NO_CLASIFICADO u OK) es anterior a AB#100880 y hay que actualizarla; no es un fallo de la release.
+Caso FH-FH6 20261008-084117-pre-smoke (06:41Z-06:42Z): Total=2 PASS=2 (OPS-HC, FH-FH6). Log: docs/auxiliares/temps/2026-10-08/smoke-smk4-blanco-pre-v1.0.0.log.

@@ -219,4 +219,53 @@ public class OpenAIPromptDataProviderGuardaContenidoTests : IDisposable
             resilience,
             new Mock<ILogger<OpenAIPromptDataProvider>>().Object);
     }
+
+    // ========== AB#100880: la guarda propaga la causa ==========
+
+    [Fact]
+    public async Task EjecutarPromptAsync_SinTextoYConCausaDeLayout_PropagaLaCausaEnElError()
+    {
+        var resiliencia = new Mock<IAzureOpenAIResilienceExecutor>(MockBehavior.Strict);
+        var sut = CrearSut(resiliencia.Object);
+
+        var causa = new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutTimeout,
+            Detalle = "TimeoutException: Timeout esperando resultado de DI layout"
+        };
+        var input = new PromptActivityInput
+        {
+            Tipologia = "prpe.09",
+            MarkdownExtraido = null,
+            DocumentoBase64 = null,
+            ForzarResumenPorDefecto = true,
+            CausaSinMarkdown = causa
+        };
+
+        var resultado = await sut.EjecutarPromptAsync(input);
+
+        resultado.SinContenido.Should().BeTrue();
+        resultado.CausaSinContenido.Should().BeSameAs(causa);
+        resultado.Error.Should().Be("No se pudo obtener el texto del documento: LayoutTimeout: TimeoutException: Timeout esperando resultado de DI layout");
+        resiliencia.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task EjecutarPromptAsync_SinTextoYConDocumentoSinTexto_MantieneElMensajeDeSinContenido()
+    {
+        var sut = CrearSut(new Mock<IAzureOpenAIResilienceExecutor>(MockBehavior.Strict).Object);
+
+        var input = new PromptActivityInput
+        {
+            Tipologia = "prpe.09",
+            ForzarResumenPorDefecto = true,
+            CausaSinMarkdown = new CausaSinContenido { Motivo = MotivoSinContenido.DocumentoSinTexto }
+        };
+
+        var resultado = await sut.EjecutarPromptAsync(input);
+
+        resultado.SinContenido.Should().BeTrue();
+        resultado.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.DocumentoSinTexto);
+        resultado.Error.Should().Be("Sin contenido del documento: no se ejecuta el prompt ni el resumen.");
+    }
 }

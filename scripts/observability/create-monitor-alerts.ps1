@@ -14,6 +14,12 @@
       6. Dedup fallido          : reutilizacion por duplicado que no encuentra contrato historico (1 h, Sev 3)
       7. ExpectedType invalido  : etiquetas de negocio que no resuelven contra el catalogo (1 h, Sev 3)
       8. Sin contenido textual  : documentos sin texto extraible llegando a la clasificacion (1 h, Sev 3)
+      9. OutOfMemory            : cualquier System.OutOfMemoryException (5 min, Sev 1, sin auto-mitigacion)
+
+    La regla 9 (AB#100815) vigila el modo de fallo de AB#100814 (PDF grandes en lotes). Cada OOM es
+    un evento aislado, asi que no se auto-resuelve: queda abierta hasta que alguien la revisa.
+    El metric alert de memoria (srbalertmemprodocai) no lo gestiona este script; su configuracion
+    esta en docs/observabilidad/MONITOREO_ALERTAS_REAL.md.
 
     Las reglas 6, 7 y 8 (AB#100181) vigilan los modos de fallo corregidos en AB#100177, AB#100179
     y AB#100180: tras desplegar esos fixes deben permanecer en silencio; si saltan, indican que el
@@ -193,6 +199,21 @@ traces
 | summarize n = dcount(operation_Id)
 | where n > 0
 "@
+    },
+    @{
+        Name         = "srbalertoomprodocai"
+        DisplayName  = "DocumentIA - OutOfMemoryException (5 min)"
+        Description  = "Cualquier OutOfMemoryException en DocumentIA PRO. Antesala: srbalertmemprodocai (working set por instancia > 2,25 GiB). AB#100814, AB#100815."
+        Severity     = 1
+        WindowSize   = "5m"
+        Frequency    = "5m"
+        AutoMitigate = "false"
+        Query        = @"
+exceptions
+| where type == 'System.OutOfMemoryException'
+| summarize n = count()
+| where n > 0
+"@
     }
 )
 
@@ -222,7 +243,7 @@ foreach ($rule in $rules) {
         "--evaluation-frequency", $rule.Frequency,
         "--condition", "count 'Incumplimientos' > 0",
         "--condition-query", "Incumplimientos=$queryFlat",
-        "--auto-mitigate", "true"
+        "--auto-mitigate", $(if ($rule.AutoMitigate) { $rule.AutoMitigate } else { "true" })
     )
     if ($ActionGroupId) { $azArgs += @("--action-groups", $ActionGroupId) }
 

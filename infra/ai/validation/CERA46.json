@@ -1,0 +1,37 @@
+{
+  "analyzerId": "CERA46",
+  "datasetVersion": 1,
+  "manifest": "CERA46@1.manifest.json",
+  "selection": {
+    "method": "evenly-spaced-by-name",
+    "sampleSize": 5,
+    "pdfCount": 45
+  },
+  "documents": [
+    {
+      "name": "02806767-92ba-4ab6-b5f0-d04deb227c52",
+      "size": 52912,
+      "md5": "O2Bi7KDIbZTi2gw3/36X9Q=="
+    },
+    {
+      "name": "3e13b956-db63-45b3-b172-f90535cd1060",
+      "size": 48443,
+      "md5": "U59Q9PhFLiZKepbSuygUeQ=="
+    },
+    {
+      "name": "827e85ec-958f-4bb5-a24d-5a2f4673ed2d",
+      "size": 524629,
+      "md5": "+uvNBRDmuWEwRKt1v7sE8Q=="
+    },
+    {
+      "name": "9cf7da0b-e21b-47fe-96c7-08c335e44341",
+      "size": 182686,
+      "md5": "ZKuoDYP2gGzeIl5CBmyrNg=="
+    },
+    {
+      "name": "b69fd9b5-f513-4a08-8def-9777a66fd5fb",
+      "size": 966269,
+      "md5": "pptoVWxTSQpuqjY86nAuWw=="
+    }
+  ]
+}

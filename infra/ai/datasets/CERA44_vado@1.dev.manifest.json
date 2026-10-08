@@ -1,0 +1,677 @@
+{
+  "analyzerId": "CERA44_vado",
+  "version": 1,
+  "environment": "dev",
+  "containerUrl": "https://srbstgdevdocai.blob.core.windows.net/documentai",
+  "prefix": "labeling/CERA44_vado@1",
+  "source": {
+    "containerUrl": "https://srbstgprodocai.blob.core.windows.net/documentai",
+    "prefix": "labelingProjects/6fad949e-aacd-4220-8eb6-2629e51dd7ff/train"
+  },
+  "cutoffDateUtc": "2026-09-21T10:26:04.1441663Z",
+  "fileCount": 110,
+  "totalBytes": 25478472,
+  "status": "copied",
+  "files": [
+    {
+      "name": "122edcbc-f91e-401f-be0e-d154023949af",
+      "size": 1564343,
+      "md5": "RCwh4rmBvSBUsljwhVRLhQ==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "122edcbc-f91e-401f-be0e-d154023949af.labels.json",
+      "size": 157,
+      "md5": "EOI4ga3zjtUwZAAwleDGiQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "122edcbc-f91e-401f-be0e-d154023949af.result.json",
+      "size": 426310,
+      "md5": "gny/cItWv3cUHd0UfSoRSg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "167d37b0-a906-42c0-84c6-ee745b564d11",
+      "size": 307689,
+      "md5": "n2u6cg1jbqF+XXywCFarKQ==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "167d37b0-a906-42c0-84c6-ee745b564d11.labels.json",
+      "size": 177,
+      "md5": "H9hrEMpdUHK8skKV0J5Ltw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "167d37b0-a906-42c0-84c6-ee745b564d11.result.json",
+      "size": 183586,
+      "md5": "D47CT0gttAWrMCjwOAoNOg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "1da5737a-31ac-4c20-8607-c63c2d02197d",
+      "size": 448977,
+      "md5": "X+Jo4bONNHEESwB65QoY+A==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "1da5737a-31ac-4c20-8607-c63c2d02197d.labels.json",
+      "size": 146,
+      "md5": "ZfTyJVXbb/FJLe2dziYhqQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "1da5737a-31ac-4c20-8607-c63c2d02197d.result.json",
+      "size": 113545,
+      "md5": "ADeeVkbWxFx4srGs3Fds3Q==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "22a688d1-4b09-49b2-a20f-4d024be63f1f",
+      "size": 1233303,
+      "md5": "wKxwlJLGqLPacwyc/2zjBA==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "22a688d1-4b09-49b2-a20f-4d024be63f1f.labels.json",
+      "size": 156,
+      "md5": "EVhzdJnJD3bgYjDbiXoQJg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "22a688d1-4b09-49b2-a20f-4d024be63f1f.result.json",
+      "size": 137601,
+      "md5": "dyqcH41Ki404R9eETaHjjg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "24b25670-700c-431e-9c2a-0a0aa87d63e3",
+      "size": 757921,
+      "md5": "xKmzXkbT140C4Cg3yPScOA==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "24b25670-700c-431e-9c2a-0a0aa87d63e3.labels.json",
+      "size": 157,
+      "md5": "ElgcrlfAREbNF5tj4juRQA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "24b25670-700c-431e-9c2a-0a0aa87d63e3.result.json",
+      "size": 134561,
+      "md5": "Bg/qz+60AuZok4pl4P00ig==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "2a4b0882-d442-4f7b-918a-e48e973e1b4f",
+      "size": 178907,
+      "md5": "8/TRjoMjuqfX8vbPrs7K3g==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "2a4b0882-d442-4f7b-918a-e48e973e1b4f.labels.json",
+      "size": 146,
+      "md5": "IgZ+MYDzP/feXMoC7mVrEA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "2a4b0882-d442-4f7b-918a-e48e973e1b4f.result.json",
+      "size": 137628,
+      "md5": "GW7IVwVHx8zQ2/jJGuobPQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "2dc5384c-f81e-41c7-a733-f29f5859a6a1",
+      "size": 163853,
+      "md5": "aGKJ3dDCinGmvnYGekWTXQ==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "2dc5384c-f81e-41c7-a733-f29f5859a6a1.labels.json",
+      "size": 145,
+      "md5": "QiCMO526n21Lof6aGgO+9A==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "2dc5384c-f81e-41c7-a733-f29f5859a6a1.result.json",
+      "size": 189140,
+      "md5": "l85mgk2j63X2MdKZYblLtw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "2dd1bceb-082a-4020-bbb4-c8ac6836757e",
+      "size": 1057274,
+      "md5": "eZmczWwq2Sy3o1lKVa6Adg==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "2dd1bceb-082a-4020-bbb4-c8ac6836757e.labels.json",
+      "size": 145,
+      "md5": "NqXSHMZc7wcN7u/MZYaQ+w==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "2dd1bceb-082a-4020-bbb4-c8ac6836757e.result.json",
+      "size": 124078,
+      "md5": "JTDIet2YjSQBMOAEcW8DSw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "313822db-ae43-45d4-8e9c-dd33a02c60f3",
+      "size": 194795,
+      "md5": "KQSt40pkAt5lRlHc3nYp4g==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "313822db-ae43-45d4-8e9c-dd33a02c60f3.labels.json",
+      "size": 154,
+      "md5": "2nfd9SAd6q3tJg6jxfWcgQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "313822db-ae43-45d4-8e9c-dd33a02c60f3.result.json",
+      "size": 239524,
+      "md5": "45iW0OMJAieDUKGt7oPidg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "3db50350-bb12-4d85-8235-56defb8a6b25",
+      "size": 586893,
+      "md5": "cY7KfVdxgTnPcL/irZU4VA==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "3db50350-bb12-4d85-8235-56defb8a6b25.labels.json",
+      "size": 154,
+      "md5": "61Ra+at1a5j6GtfWEKY5HQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "3db50350-bb12-4d85-8235-56defb8a6b25.result.json",
+      "size": 120513,
+      "md5": "6qBS8rhlDp2aB/r/Ayg2Sw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "40a408a2-c7e3-4369-8613-db832b759b19",
+      "size": 81534,
+      "md5": "AQOw/izpRznIUIFckHjVuw==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "40a408a2-c7e3-4369-8613-db832b759b19.labels.json",
+      "size": 154,
+      "md5": "RDwb15VjPBtSTG5FvrMRug==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "40a408a2-c7e3-4369-8613-db832b759b19.result.json",
+      "size": 69742,
+      "md5": "LPiCyIZXC1bTpfl4WN66LA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "41fc4073-1462-4733-8f12-a3d6cd78d62e",
+      "size": 129843,
+      "md5": "AHxUzGRbh2KpF96uwJyFzg==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "41fc4073-1462-4733-8f12-a3d6cd78d62e.labels.json",
+      "size": 154,
+      "md5": "Dr4aLhcOWwd97499P4ylFg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "41fc4073-1462-4733-8f12-a3d6cd78d62e.result.json",
+      "size": 224519,
+      "md5": "Yxe276I558RXnmmD9RIHLQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "44f683d3-a255-4c72-a65f-9fb7b2bd59eb",
+      "size": 253793,
+      "md5": "R+dv/prg0IUfn5KIOOIIgA==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "44f683d3-a255-4c72-a65f-9fb7b2bd59eb.labels.json",
+      "size": 156,
+      "md5": "GBeV1EZBcqH1Kj6xgpop8A==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "44f683d3-a255-4c72-a65f-9fb7b2bd59eb.result.json",
+      "size": 89704,
+      "md5": "fDu698bgd1UV8vknsCLIFQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "4759d096-84d0-4faa-86e4-fa17fa9cc200",
+      "size": 457870,
+      "md5": "rER6mcEA+v7uPmGqzhYIVg==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "4759d096-84d0-4faa-86e4-fa17fa9cc200.labels.json",
+      "size": 146,
+      "md5": "FBaYl9WqXG9b/OYrqX9mVA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "4759d096-84d0-4faa-86e4-fa17fa9cc200.result.json",
+      "size": 211091,
+      "md5": "+TKlsXITOWJZpZfFX9lw0Q==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "537237cd-c693-43e6-9039-7a306fb0fa52",
+      "size": 448977,
+      "md5": "X+Jo4bONNHEESwB65QoY+A==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "537237cd-c693-43e6-9039-7a306fb0fa52.labels.json",
+      "size": 157,
+      "md5": "mpLNr9QQKpP/RIo0tkM5bQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "537237cd-c693-43e6-9039-7a306fb0fa52.result.json",
+      "size": 113544,
+      "md5": "TPDblBKZn3eCwGib9PX8wg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "5450d62b-a00b-4365-8a15-c138200216e3",
+      "size": 527594,
+      "md5": "3lYPPzSzKRFm+OOJKdDX3w==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "5450d62b-a00b-4365-8a15-c138200216e3.labels.json",
+      "size": 156,
+      "md5": "Sv+BTnMf4ukMyamthe9m+w==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "5450d62b-a00b-4365-8a15-c138200216e3.result.json",
+      "size": 82366,
+      "md5": "arxBuqqaTCjzBlUwPwYHdw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "560e266e-0ef2-410b-bdc1-2b29c3d2463e",
+      "size": 322624,
+      "md5": "VJed5r0zgPul7GiDjKWcRQ==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "560e266e-0ef2-410b-bdc1-2b29c3d2463e.labels.json",
+      "size": 146,
+      "md5": "48SSDuwkOBkvJ+70wLmXoQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "560e266e-0ef2-410b-bdc1-2b29c3d2463e.result.json",
+      "size": 321361,
+      "md5": "6cs4wwvwrauGmmRBh3FHqw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "64a2e6db-fb01-4fee-95bc-0d52a03440ce",
+      "size": 406197,
+      "md5": "Jqz+mU8Jw0faDXPCcvvGHg==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "64a2e6db-fb01-4fee-95bc-0d52a03440ce.labels.json",
+      "size": 145,
+      "md5": "ZKn+msPyFuCkUHtMcAPiBg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "64a2e6db-fb01-4fee-95bc-0d52a03440ce.result.json",
+      "size": 138076,
+      "md5": "SySH/Yt/bTmVUIrOUUvQBA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "652f43d5-4d84-49a3-bcaf-a591c920c108",
+      "size": 516882,
+      "md5": "wL8zNwSiKHrr7J+Z2DJqqQ==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "652f43d5-4d84-49a3-bcaf-a591c920c108.labels.json",
+      "size": 146,
+      "md5": "6mbiDLYt30GAYE8KqHhhYw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "652f43d5-4d84-49a3-bcaf-a591c920c108.result.json",
+      "size": 125690,
+      "md5": "wO4wER/qTkuRQRX43kEZqA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "7173ae16-93f1-4188-aa85-20581195cc37",
+      "size": 345721,
+      "md5": "BuJQV1cH23lIyDsXZ88s/g==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "7173ae16-93f1-4188-aa85-20581195cc37.labels.json",
+      "size": 146,
+      "md5": "By3uqLbOWUfzjgT+3WrNwg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "7173ae16-93f1-4188-aa85-20581195cc37.result.json",
+      "size": 114482,
+      "md5": "ziYs3404EWLaMTf/IzxnUw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "755f7cc0-46e3-478f-ad1c-0a0ea3f385fd",
+      "size": 88370,
+      "md5": "c4G+tMsl5jUCboojqjCrQg==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "755f7cc0-46e3-478f-ad1c-0a0ea3f385fd.labels.json",
+      "size": 146,
+      "md5": "s5rtUHcxETS23McHCpVaVQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "755f7cc0-46e3-478f-ad1c-0a0ea3f385fd.result.json",
+      "size": 120885,
+      "md5": "DAYlsmZkuqY43GCKYG4HjQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "794c719e-6689-4298-8933-f2c524f25327",
+      "size": 51286,
+      "md5": "szfstBFnOIuDjkNh5i9OlA==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "794c719e-6689-4298-8933-f2c524f25327.labels.json",
+      "size": 157,
+      "md5": "VfaFyIYoePAKy+5uThLBWQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "794c719e-6689-4298-8933-f2c524f25327.result.json",
+      "size": 158044,
+      "md5": "Eb6f69tB6IhDNIA5HDQCBQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "7efaac8c-38d5-4767-97e8-1453df5c2529",
+      "size": 1033011,
+      "md5": "+3aCIR4dE6vR5fi8nv+w2g==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "7efaac8c-38d5-4767-97e8-1453df5c2529.labels.json",
+      "size": 145,
+      "md5": "AyV6QifXNEesYJIpctHyVw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "7efaac8c-38d5-4767-97e8-1453df5c2529.result.json",
+      "size": 157948,
+      "md5": "6lNJo1Waq6+t+Cy9GGABZA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "8928da43-89a8-4ca9-a061-4ac335d08017",
+      "size": 187182,
+      "md5": "wSwkKx7c/pBSG4hdlr0T9g==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "8928da43-89a8-4ca9-a061-4ac335d08017.labels.json",
+      "size": 157,
+      "md5": "4KTzIDero7RrhJ5gUZPUoA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "8928da43-89a8-4ca9-a061-4ac335d08017.result.json",
+      "size": 227336,
+      "md5": "bAulb/1SvgR9skqu9gKSEw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "8c477cf7-5380-4ca8-bad6-dcb1929f52fb",
+      "size": 333278,
+      "md5": "KlGNxwlQWLjh0pYx7wt9ow==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "8c477cf7-5380-4ca8-bad6-dcb1929f52fb.labels.json",
+      "size": 146,
+      "md5": "tjsnBljw9LyHLOUQGtDn/Q==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "8c477cf7-5380-4ca8-bad6-dcb1929f52fb.result.json",
+      "size": 119821,
+      "md5": "kCWxwlt76E+QpWrwM84anA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "8e4d40cc-6ca6-4b5d-8f79-119eee69590c",
+      "size": 444717,
+      "md5": "wZoZZbSkOk7y9Llw3LOQTw==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "8e4d40cc-6ca6-4b5d-8f79-119eee69590c.labels.json",
+      "size": 145,
+      "md5": "fYKZDgzMsPO2PyAsEAjQng==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "8e4d40cc-6ca6-4b5d-8f79-119eee69590c.result.json",
+      "size": 138306,
+      "md5": "CRz8fMdU5S6YopBI+RwYpg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "9218b369-f928-49ae-b09f-4747f1f2a473",
+      "size": 23290,
+      "md5": "Goh4fRIZnmNmKawkLnXA/A==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "9218b369-f928-49ae-b09f-4747f1f2a473.labels.json",
+      "size": 154,
+      "md5": "X/R5N3kr40Ni0GP3e1z14w==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "9218b369-f928-49ae-b09f-4747f1f2a473.result.json",
+      "size": 185305,
+      "md5": "OpVIwpiwhTiOkE06fhyHoA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "a3373912-75fa-43eb-91ee-2ba1569487b6",
+      "size": 330276,
+      "md5": "dVyRPQvawFYORJxtXiKX1A==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "a3373912-75fa-43eb-91ee-2ba1569487b6.labels.json",
+      "size": 174,
+      "md5": "3eZoeAaC4yta35fUezImRg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "a3373912-75fa-43eb-91ee-2ba1569487b6.result.json",
+      "size": 127151,
+      "md5": "UwGDWQMCmLs1ERjYN3o81g==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "a5baba75-d695-40e8-a8e8-14a084efcaaa",
+      "size": 2932819,
+      "md5": "T/Wbbp1dhJ/hm2D1VL4UNQ==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "a5baba75-d695-40e8-a8e8-14a084efcaaa.labels.json",
+      "size": 128,
+      "md5": "8Lc3DK9yE/IHtmZRcV2exA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "a71db9bf-7510-4418-8a12-012f78d45766",
+      "size": 667062,
+      "md5": "s5Hp38lMbaPeqNu3yw6YnA==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "a71db9bf-7510-4418-8a12-012f78d45766.labels.json",
+      "size": 146,
+      "md5": "KDvossRTAyco/HupjuDAHg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "a71db9bf-7510-4418-8a12-012f78d45766.result.json",
+      "size": 160519,
+      "md5": "ffi7Hqr/tH6lyddhKWkO3A==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "b3c33298-c740-47d5-9b6a-715392f1908c",
+      "size": 1052842,
+      "md5": "Wm532xOplKW/+Pj1FVv/SA==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "b3c33298-c740-47d5-9b6a-715392f1908c.labels.json",
+      "size": 145,
+      "md5": "VeeWaKF6Bzu9r1KrDgGAkg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "b3c33298-c740-47d5-9b6a-715392f1908c.result.json",
+      "size": 127282,
+      "md5": "9tj/2+QaKj18mSBBGbmVfg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "b7d5e2d0-fab7-418a-b572-4e5a153d2204",
+      "size": 327677,
+      "md5": "MxEGLgVT3uzzLghDGH+v2w==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "b7d5e2d0-fab7-418a-b572-4e5a153d2204.labels.json",
+      "size": 145,
+      "md5": "aN4y7ITd6UM63kdxqP9IVQ==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "b7d5e2d0-fab7-418a-b572-4e5a153d2204.result.json",
+      "size": 417130,
+      "md5": "pMrFbXoHrTnxptzEFD1FEw==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "c47eccb0-7931-4968-9a0e-66eaa62797aa",
+      "size": 589233,
+      "md5": "nU8i43oyHQlhp2Lfi4dTbw==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "c47eccb0-7931-4968-9a0e-66eaa62797aa.labels.json",
+      "size": 146,
+      "md5": "1XYlgSuPYPBS2seSKsmOWA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "c47eccb0-7931-4968-9a0e-66eaa62797aa.result.json",
+      "size": 243150,
+      "md5": "Wy1ofM5zHkDP8jtqTNjZFA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "d014b87a-b656-4bbf-94b3-cff46d6fc391",
+      "size": 289910,
+      "md5": "SNi5vMKXwSeOG88g8kK8KQ==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "d014b87a-b656-4bbf-94b3-cff46d6fc391.labels.json",
+      "size": 154,
+      "md5": "RoGv8aJJBSA/mee8oBiMeg==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "d014b87a-b656-4bbf-94b3-cff46d6fc391.result.json",
+      "size": 232209,
+      "md5": "tJ0K5u35i9texiya+v/x5w==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "d2e1d288-29a3-4647-95fc-c10baa7d432b",
+      "size": 46351,
+      "md5": "F0lAta2RRDv4NOR6XJambQ==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "d2e1d288-29a3-4647-95fc-c10baa7d432b.labels.json",
+      "size": 156,
+      "md5": "UuEAW6xrtJAJ9XZEFTyCuA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "d2e1d288-29a3-4647-95fc-c10baa7d432b.result.json",
+      "size": 93010,
+      "md5": "XUgQycNQin4Uc676fgnhUA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "db2c86a0-a869-4afd-883c-a8fcbca31e34",
+      "size": 423827,
+      "md5": "lHAT15HnLQNqwxEp7xls9w==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "db2c86a0-a869-4afd-883c-a8fcbca31e34.labels.json",
+      "size": 146,
+      "md5": "UrzBVoLdf0Eo49G3+pnmfA==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "db2c86a0-a869-4afd-883c-a8fcbca31e34.result.json",
+      "size": 428873,
+      "md5": "jkhJUW0XyflG/JgFbRnV7A==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "f0089e1f-d79a-4f38-930e-31d866def483",
+      "size": 194841,
+      "md5": "7mrk9Qq1DuK4HhLDLB0UsA==",
+      "contentType": "application/pdf"
+    },
+    {
+      "name": "f0089e1f-d79a-4f38-930e-31d866def483.labels.json",
+      "size": 145,
+      "md5": "EIH2BaX4yU3W1gzM0lOx4w==",
+      "contentType": "application/json"
+    },
+    {
+      "name": "f0089e1f-d79a-4f38-930e-31d866def483.result.json",
+      "size": 237902,
+      "md5": "VTT1/mfFEa5kl/3juyuAiw==",
+      "contentType": "application/json"
+    }
+  ]
+}

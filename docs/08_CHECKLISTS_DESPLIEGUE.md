@@ -348,6 +348,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | `scripts\testing\smoke-test-functions.ps1 -HostName <host>` | Verificar endpoint `/api/tipologias` (requiere PowerShell 7 / `pwsh`) | Post cada deploy |
 | `scripts\testing\test-costes-ia.ps1 -Environment <env>` | Verificar el coste de IA por ejecucion: calculo, tarifas completas, desglose que cuadra y visibilidad condicionada a `incluirCostes` | Tras desplegar o tras tocar el catalogo de tarifas |
 | `scripts\migrations\costes-ia\01-seed-tarifas-ia.sql` | Cargar o actualizar el catalogo de tarifas de IA (fila `tarifas.ia` de `ModeloConfigs`) | Tras las migraciones de costes y al cambiar precios |
+| `scripts\migrations\costes-ia\02-tarifas-cera16v2-gpt41-cached.sql` | Anadir al catalogo las tarifas de `CERA16_v2` y `gpt-4.1-cached` (AB#100860) | Tras el 01, una vez por entorno |
 | `scripts\database\backfill-costes-estimados.ps1` | Estimar el coste de ejecuciones anteriores a la medicion, marcandolas como estimadas | Una vez por entorno, tras cargar el catalogo |
 | `tests/e2e-postdeploy/run-e2e-postdeploy.ps1` | Smoke E2E funcional post-deploy (perfiles smoke/full, cobertura funcional) | Manual, tras 9.2 |
 | `scripts\database\Query-Tipologias.ps1` / `sqlcmd` | Verificar conectividad BD y estado tablas | Post migraciones |

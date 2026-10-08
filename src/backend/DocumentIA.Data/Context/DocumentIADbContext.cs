@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using DocumentIA.Data.Entities;
 
 namespace DocumentIA.Data.Context;
@@ -61,6 +61,13 @@ public class DocumentIADbContext : DbContext
 
         modelBuilder.Entity<DocumentoEntity>()
             .HasIndex(d => new { d.FechaExpiracionBlob, d.RutaBlobStorage });
+
+        // AB#100863: la verificacion de duplicados por MD5 (ingesta desde GDC) hacia scan de
+        // Documentos; el include de SHA256 resuelve la consulta entera en el indice.
+        modelBuilder.Entity<DocumentoEntity>()
+            .HasIndex(d => d.MD5)
+            .HasDatabaseName("IX_Documentos_MD5")
+            .IncludeProperties(d => d.SHA256);
 
         modelBuilder.Entity<TipologiaEntity>()
             .HasIndex(t => t.Codigo)

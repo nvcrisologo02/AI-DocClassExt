@@ -45,6 +45,10 @@ si `environments.json` la tiene informada.
 2. Campos mínimos: `group`, `id`, `caseKey` (único), `name`, `documentPath`
    (relativo al repo), `profiles`, `covers` (ids de la matriz), y el contrato
    de `tests/api-tests/documentia-e2e-common.ps1` (provider, flags, assertions).
+   En casos con extracción, `expectExtractionProviderReached: true` exige que el
+   proveedor primario (CU/DI) haya respondido: sin fallback, o fallback por
+   calidad (`insufficient_extraction:...`). Un fallback por excepción (404, 401,
+   DNS) termina en OK vía GPT y sin esta aserción pasaría desapercibido.
 3. `serial: true` si el caso depende del orden (p. ej. deduplicación).
 4. `requires: ["gdc"]` si necesita la condición GDC.
 5. Ejecutar `Invoke-Pester -Path tests/e2e-postdeploy/tests` (valida esquema,

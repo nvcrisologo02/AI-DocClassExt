@@ -155,10 +155,19 @@ var host = new HostBuilder()
         services.Configure<PromptTracingSettings>(context.Configuration.GetSection("PromptTracing"));
         services.Configure<PipelineSettings>(context.Configuration.GetSection("Pipeline"));
         services.Configure<DocumentIntelligenceSettings>(context.Configuration.GetSection("DocumentIntelligence"));
+        services.Configure<AiResourceMapOptions>(context.Configuration.GetSection(AiResourceMapOptions.SectionName));
+        services.AddSingleton<IAiEndpointResolver, AiEndpointResolver>();
 
         services.AddSingleton<PromptTraceTelemetryService>();
 
         services.AddSingleton<IAzureOpenAIResilienceExecutor, AzureOpenAIResilienceExecutor>();
+        // Clasificador por embeddings (AB#100779): loaders con cache de 5 minutos, fabrica de
+        // clientes y proveedor. La activity la descubre el worker por el atributo [Function].
+        services.AddSingleton<EmbeddingsClasificadorConfigLoader>();
+        services.AddSingleton<ModeloEmbeddingsLoader>();
+        services.AddSingleton<CatalogoParesTdnLoader>();
+        services.AddSingleton<IEmbeddingsClienteFactory, AzureOpenAIEmbeddingsClienteFactory>();
+        services.AddSingleton<IEmbeddingsClasificarProvider, EmbeddingsClasificarProvider>();
 
         services.AddSingleton<MockExtraerDataProvider>();
         services.AddSingleton<AzureContentUnderstandingProvider>();
@@ -326,17 +335,20 @@ var host = new HostBuilder()
         services.AddSingleton<ExtractionModelRegistryLoader>(provider =>
             new ExtractionModelRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),
-                provider.GetRequiredService<IServiceScopeFactory>()));
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<IAiEndpointResolver>()));
 
         services.AddSingleton<ClassificationModelRegistryLoader>(provider =>
             new ClassificationModelRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),
-                provider.GetRequiredService<IServiceScopeFactory>()));
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<IAiEndpointResolver>()));
 
         services.AddSingleton<PromptModelRegistryLoader>(provider =>
             new PromptModelRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),
-                provider.GetRequiredService<IServiceScopeFactory>()));
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<IAiEndpointResolver>()));
 
         services.AddSingleton<PromptInstruccionesValidator>();
         services.AddSingleton<RestriccionTipologiasValidator>();
@@ -344,7 +356,8 @@ var host = new HostBuilder()
         services.AddSingleton<LayoutModelRegistryLoader>(provider =>
             new LayoutModelRegistryLoader(
                 provider.GetRequiredService<IMemoryCache>(),
-                provider.GetRequiredService<IServiceScopeFactory>()));
+                provider.GetRequiredService<IServiceScopeFactory>(),
+                provider.GetRequiredService<IAiEndpointResolver>()));
 
         // Catalogo de tarifas de servicios de IA (AB#100226)
         services.AddSingleton<TarifaRegistryLoader>(provider =>

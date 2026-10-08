@@ -40,7 +40,9 @@ $blobContainers = @(
     "azure-webjobs-hosts",
     "scalarresults",
     "pbt2651-191919255",
-    "extraccion-resultado"
+    "extraccion-resultado",
+    "documents",
+    "documents-clasif"
 )
 
 foreach ($container in $blobContainers) {

@@ -1,0 +1,179 @@
+{
+  "$comment": "Analyzers de Content Understanding de PRO que se promocionan a DEV/PRE por Copy API (scripts/ai/copy-cu-analyzers.ps1). Fuente: inventory-prod-foundry.json. Los projectAnalyzer_* son internos de Studio y no se promocionan.",
+  "sourceAlias": "cu_primary",
+  "generatedFrom": "inventory-prod-foundry.json",
+  "generatedAtUtc": "2026-09-21T08:57:17.1047552Z",
+  "analyzers": [
+    {
+      "analyzerId": "CERA15",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-30T08:46:20Z"
+    },
+    {
+      "analyzerId": "CERA15_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:11:47Z"
+    },
+    {
+      "analyzerId": "CERA16",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-15T10:12:45Z"
+    },
+    {
+      "analyzerId": "CERA16_v1",
+      "promote": true,
+      "referencedByModeloConfigs": true,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-25T11:11:10Z"
+    },
+    {
+      "analyzerId": "CERA16_v2",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:14:35Z"
+    },
+    {
+      "analyzerId": "CERA44_basura",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-30T08:47:05Z"
+    },
+    {
+      "analyzerId": "CERA44_basura_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:13:48Z"
+    },
+    {
+      "analyzerId": "CERA44_vado",
+      "promote": true,
+      "referencedByModeloConfigs": true,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-25T11:09:15Z"
+    },
+    {
+      "analyzerId": "CERA44_vado_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:03:56Z"
+    },
+    {
+      "analyzerId": "CERA46",
+      "promote": true,
+      "referencedByModeloConfigs": true,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-25T11:12:49Z"
+    },
+    {
+      "analyzerId": "CERA46_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:11:07Z"
+    },
+    {
+      "analyzerId": "COMU04",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-30T08:45:36Z"
+    },
+    {
+      "analyzerId": "COMU04_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:10:09Z"
+    },
+    {
+      "analyzerId": "COMU07",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-30T08:42:47Z"
+    },
+    {
+      "analyzerId": "COMU07_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:05:03Z"
+    },
+    {
+      "analyzerId": "CU_NS_1.4_3",
+      "promote": true,
+      "referencedByModeloConfigs": true,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-04-15T11:31:57Z"
+    },
+    {
+      "analyzerId": "CU_NS_1.5_0",
+      "promote": true,
+      "referencedByModeloConfigs": true,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-05-05T05:22:45Z"
+    },
+    {
+      "analyzerId": "CU_NS_1.6_0_GGAA",
+      "promote": true,
+      "referencedByModeloConfigs": true,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T08:20:35Z"
+    },
+    {
+      "analyzerId": "DEAC07",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-30T08:44:49Z"
+    },
+    {
+      "analyzerId": "DEAC07_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:09:25Z"
+    },
+    {
+      "analyzerId": "DOCJ10",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-30T08:43:57Z"
+    },
+    {
+      "analyzerId": "DOCJ10_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:07:36Z"
+    },
+    {
+      "analyzerId": "DOCJ19",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-06-30T08:43:20Z"
+    },
+    {
+      "analyzerId": "DOCJ19_v1",
+      "promote": true,
+      "referencedByModeloConfigs": false,
+      "statusInSource": "ready",
+      "createdAtInSource": "2026-07-17T10:12:45Z"
+    }
+  ],
+  "excluded": {
+    "projectAnalyzer": 21
+  }
+}

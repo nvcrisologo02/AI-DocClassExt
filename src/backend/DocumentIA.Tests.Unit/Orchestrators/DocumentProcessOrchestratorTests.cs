@@ -701,7 +701,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 8,
             CharsTextoNativo = 1234,
             PaginasIncluidas = 3,
@@ -721,9 +721,112 @@ public class DocumentProcessOrchestratorTests
 
         var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
         clasifInput.Should().NotBeNull();
-        clasifInput!.DocumentoBase64Override.Should().Be("cmVjb3J0YWRv");
+        clasifInput!.BlobPathClasificacion.Should().Be("documents-clasif/2026/10/recorte.pdf");
+#pragma warning disable CS0618
+        clasifInput.DocumentoBase64Override.Should().BeNull();
+#pragma warning restore CS0618
         clasifInput.CharsTextoNativo.Should().Be(1234);
         clasifInput.TotalPaginas.Should().Be(8);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_CuandoPrepararFalla_ClasificaConLaRutaDelDocumentoOriginal()
+    {
+        // AB#100814: si la preparacion falla, la clasificacion usa el blob original; nunca base64.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/2026/10/original.pdf");
+        context.SetupActivityThrow("PrepararDocumentoClasificacionActivity", new InvalidOperationException("sin blob"));
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.1,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await orchestrator.RunOrchestrator(context);
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.BlobPathClasificacion.Should().Be("documents/2026/10/original.pdf");
+#pragma warning disable CS0618
+        clasifInput.DocumentoBase64Override.Should().BeNull();
+#pragma warning restore CS0618
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SalidaLegadaDePreparar_ReenviaElBase64YUsaLaRutaOriginal()
+    {
+        // AB#100814: instancia en vuelo con la salida antigua de Preparar (base64, sin ruta).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/2026/10/original.pdf");
+#pragma warning disable CS0618
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            TotalPaginas = 8,
+            PaginasIncluidas = 3,
+            RecorteAplicado = true
+        });
+#pragma warning restore CS0618
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.1,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await orchestrator.RunOrchestrator(context);
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.BlobPathClasificacion.Should().Be("documents/2026/10/original.pdf");
+#pragma warning disable CS0618
+        clasifInput.DocumentoBase64Override.Should().Be("cmVjb3J0YWRv");
+#pragma warning restore CS0618
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SalidaDePrepararSinRutaNiBase64_UsaLaRutaOriginal()
+    {
+        // AB#100814: salida de Preparar sin ruta ni base64: se repone la ruta del original.
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/2026/10/original.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            TotalPaginas = 8,
+            PaginasIncluidas = 8,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "di-test",
+            Confianza = 0.1,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await orchestrator.RunOrchestrator(context);
+
+        var clasifInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasifInput.Should().NotBeNull();
+        clasifInput!.BlobPathClasificacion.Should().Be("documents/2026/10/original.pdf");
+#pragma warning disable CS0618
+        clasifInput.DocumentoBase64Override.Should().BeNull();
+#pragma warning restore CS0618
     }
 
     [Fact]
@@ -751,7 +854,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "dGVzdA==",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             CharsTextoNativo = 10,
             PaginasIncluidas = 2,
@@ -943,7 +1046,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 8,
             CharsTextoNativo = 1234,
             PaginasIncluidas = 3,
@@ -993,7 +1096,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1043,7 +1146,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1088,7 +1191,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1149,7 +1252,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1186,7 +1289,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -1520,7 +1623,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 4,
             PaginasIncluidas = 2,
             RecorteAplicado = true
@@ -2150,7 +2253,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -2179,7 +2282,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -2205,7 +2308,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 6,
             PaginasIncluidas = 5,
             RecorteAplicado = true
@@ -2246,7 +2349,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "documents/blob-first.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 2,
             PaginasIncluidas = 2,
             RecorteAplicado = false
@@ -2543,7 +2646,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0ZS1wZGY=",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             CharsTextoNativo = 1200,
@@ -2801,7 +2904,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "documents/sin-contenido.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "dGVzdA==",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 1,
             PaginasIncluidas = 1,
             RecorteAplicado = false
@@ -3164,7 +3267,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 5,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3214,7 +3317,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3265,7 +3368,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3315,7 +3418,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3430,7 +3533,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3463,6 +3566,326 @@ public class DocumentProcessOrchestratorTests
 
     private static ResultadoMarkdown MarkdownResuelto(string markdown, int paginas, bool completo, FuenteMarkdown fuente = FuenteMarkdown.Layout)
         => new() { Markdown = markdown, Paginas = paginas, Completo = completo, Fuente = fuente };
+
+    // ========== AB#100880: SIN_CONTENIDO_DOCUMENTO solo para el documento vacio de verdad ==========
+
+    private static ResultadoMarkdown MarkdownSinTexto(CausaSinContenido causa)
+        => new() { Fuente = FuenteMarkdown.Ninguna, CausaSinContenido = causa };
+
+    private static ResultadoClasificacion ClasificacionSinContenido(CausaSinContenido? causa) => new()
+    {
+        Modelo = "gpt-4o-mini",
+        Confianza = 0,
+        TipologiaDetectada = "Desconocido",
+        SinContenido = true,
+        CausaSinContenido = causa,
+        FallbackRazon = causa is { EsDocumentoSinTexto: false }
+            ? causa.MensajeObtencionFallida()
+            : "Sin contenido textual del documento para clasificar."
+    };
+
+    private static FakeTaskOrchestrationContext ContextoClasificacionSinContenido(CausaSinContenido? causaProveedor, ResultadoMarkdown? resuelto = null)
+    {
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        if (resuelto is not null)
+        {
+            context.SetupActivity("ObtenerMarkdownActivity", resuelto);
+        }
+        context.SetupActivity("ClasificarActivity", ClasificacionSinContenido(causaProveedor));
+        return context;
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionSinContenidoPorTimeoutDeLayout_CierraEnPendienteReintentoYPersiste()
+    {
+        // Ejecucion 7885 de DEV (27/08): PDF de 123 paginas con texto, DI Layout agoto los 120 s y
+        // el cliente leyo "documento sin contenido". La causa es transitoria: el cierre es retriable.
+        var orchestrator = CreateOrchestrator();
+        var context = ContextoClasificacionSinContenido(new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutTimeout,
+            Detalle = "TimeoutException: Timeout esperando resultado de DI layout"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+        salida.Resultado.MensajeError.Should().Be(
+            "No se pudo obtener el texto del documento: LayoutTimeout: TimeoutException: Timeout esperando resultado de DI layout. Reintentar más tarde.");
+        salida.Resultado.EstadoCalidad.Should().Be("ERROR");
+        salida.Resultado.ConfianzaGlobal.Should().Be(0);
+        salida.DatosExtraidos.Should().NotContainKey("Resumen");
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("PendienteReintento");
+        // Se persiste igual que hoy: la ejecucion debe seguir visible en el Monitor.
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionSinContenidoPorErrorDeLayout_CierraEnErrorYPersiste()
+    {
+        // 401 PermissionDenied del DI (DEV, julio): el documento tenia texto; es infraestructura.
+        var orchestrator = CreateOrchestrator();
+        var context = ContextoClasificacionSinContenido(new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutError,
+            CodigoHttp = 401,
+            Detalle = "LayoutRequestException: Error iniciando DI layout. Status=401. Body=PermissionDenied"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Be(
+            "No se pudo obtener el texto del documento: LayoutError (HTTP 401): LayoutRequestException: Error iniciando DI layout. Status=401. Body=PermissionDenied");
+        salida.Resultado.EstadoCalidad.Should().Be("ERROR");
+        salida.DetalleEjecucion.Seguimiento.Estado.Should().Be("Failed");
+        salida.DetalleEjecucion.Seguimiento.Actividades.Single(a => a.Nombre == "Clasificar").Estado.Should().Be("Failed");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Salida.Resultado.Estado.Should().Be("ERROR");
+    }
+
+    [Theory]
+    [InlineData(MotivoSinContenido.SinFuente, null)]
+    [InlineData(MotivoSinContenido.FormatoNoSoportado, 415)]
+    [InlineData(MotivoSinContenido.LayoutError, 400)]
+    public async Task RunOrchestrator_ClasificacionSinContenidoPorCausaNoTransitoria_CierraEnError(MotivoSinContenido motivo, int? codigoHttp)
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = ContextoClasificacionSinContenido(new CausaSinContenido { Motivo = motivo, CodigoHttp = codigoHttp });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().StartWith($"No se pudo obtener el texto del documento: {motivo}");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionSinContenidoConDocumentoSinTexto_MantieneSinContenidoDocumento()
+    {
+        // Layout respondio y no habia texto: el unico caso reservado a SIN_CONTENIDO_DOCUMENTO.
+        var orchestrator = CreateOrchestrator();
+        var context = ContextoClasificacionSinContenido(new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.DocumentoSinTexto,
+            Detalle = "Layout respondio sin texto."
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        salida.Resultado.MensajeError.Should().Be("Sin contenido del documento: no se puede clasificar ni generar resumen.");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ResolutorSinTextoConCausa_PasaLaCausaAClasificarYDecideConElla()
+    {
+        // El proveedor no siempre conoce la causa (p. ej. una cadena sin HybridTDN). El orquestador
+        // guarda la del ultimo intento del resolutor, la pasa en el input y decide con ella.
+        var orchestrator = CreateOrchestrator();
+        var causaResolutor = new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutError,
+            CodigoHttp = 400,
+            Detalle = "LayoutRequestException: Error iniciando DI layout. Status=400. Body=InvalidContent"
+        };
+        var context = ContextoClasificacionSinContenido(causaProveedor: null, resuelto: MarkdownSinTexto(causaResolutor));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        var clasificarInput = context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity");
+        clasificarInput!.CausaSinMarkdown.Should().NotBeNull();
+        clasificarInput.CausaSinMarkdown!.Motivo.Should().Be(MotivoSinContenido.LayoutError);
+        clasificarInput.CausaSinMarkdown.CodigoHttp.Should().Be(400);
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().StartWith("No se pudo obtener el texto del documento: LayoutError (HTTP 400)");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ResolutorConTexto_NoPasaCausaAClasificar()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownResuelto("# recorte", 3, completo: false));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetLastActivityInput<ClasificacionInput>("ClasificarActivity")!.CausaSinMarkdown.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinContenidoPorErrorDeLayout_CierraEnErrorYNoLoPisaElCierreOk()
+    {
+        // Ruta de prompt (AB#100027): el resolutor fallo con 401 al pedir el documento entero para el
+        // resumen forzado. Antes cerraba en SIN_CONTENIDO_DOCUMENTO con MensajeError nulo.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.ForzarResumenPorDefecto = true;
+        var context = new FakeTaskOrchestrationContext(entrada);
+        var causa = new CausaSinContenido
+        {
+            Motivo = MotivoSinContenido.LayoutError,
+            CodigoHttp = 401,
+            Detalle = "LayoutRequestException: Error iniciando DI layout. Status=401. Body=PermissionDenied"
+        };
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "documents/sin-texto.pdf");
+        context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
+        {
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
+            TotalPaginas = 1,
+            PaginasIncluidas = 1,
+            RecorteAplicado = false
+        });
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownSinTexto(causa));
+        // Sin ContentExtraido: el clasificador no aporta texto propio (con el, el prompt si tendria
+        // markdown y la guarda no saltaria).
+        var clasificacionSinTexto = BuildClasificacionOk();
+        clasificacionSinTexto.ContentExtraido = null;
+        context.SetupActivity("ClasificarActivity", clasificacionSinTexto);
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia(extractionEnabled: true));
+        context.SetupActivity("ExtraerActivity", new global::DocumentIA.Core.Models.ExtraccionResultado
+        {
+            Modelo = "gpt",
+            DatosExtraidos = new Dictionary<string, object>()
+        });
+        context.SetupActivity("ValidarActivity", BuildValidacionOk());
+        context.SetupActivity("IntegrarActivity", new global::DocumentIA.Core.Models.ResultadoIntegracion
+        {
+            Estado = "OK",
+            DatosFinales = new Dictionary<string, object>()
+        });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            CausaSinContenido = causa,
+            Error = causa.MensajeObtencionFallida(),
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("ERROR");
+        salida.Resultado.MensajeError.Should().Be(causa.MensajeObtencionFallida());
+        salida.DatosExtraidos.Should().NotContainKey("Resumen");
+        salida.DetalleEjecucion.Prompt!.Error.Should().Be(causa.MensajeObtencionFallida());
+        var promptInput = context.GetLastActivityInput<PromptActivityInput>("PromptActivity");
+        promptInput!.CausaSinMarkdown.Should().NotBeNull();
+        promptInput.CausaSinMarkdown!.CodigoHttp.Should().Be(401);
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Salida.Resultado.Estado.Should().Be("ERROR");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaDesconocidaYPromptSinContenidoPorTimeout_CierraEnPendienteReintento()
+    {
+        // Cruce con la salida temprana por tipologia desconocida (AB#100028): la causa transitoria
+        // del prompt gana sobre NO_CLASIFICADO, igual que ganaba SIN_CONTENIDO_DOCUMENTO.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            SystemPrompt = "Eres un analista documental.",
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+        var causa = new CausaSinContenido { Motivo = MotivoSinContenido.LayoutTimeout, Detalle = "TimeoutException: Timeout esperando resultado de DI layout" };
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownSinTexto(causa));
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            CausaSinContenido = causa,
+            Error = causa.MensajeObtencionFallida(),
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+        salida.Resultado.MensajeError.Should().EndWith("Reintentar más tarde.");
+        context.GetActivityCallCount("PersistirActivity").Should().Be(1);
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Salida.Resultado.Estado.Should().Be("PENDIENTE_REINTENTO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_PromptSinContenidoConDocumentoSinTexto_MantieneSinContenidoDocumentoSinMensaje()
+    {
+        // Contrato vigente de la ruta de prompt: SIN_CONTENIDO_DOCUMENTO con MensajeError nulo.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Prompt = new PromptInstrucciones
+        {
+            SystemPrompt = "Eres un analista documental.",
+            UserPromptTemplate = "Resume el documento:\n\n{contenido}"
+        };
+        var context = new FakeTaskOrchestrationContext(entrada);
+        var causa = new CausaSinContenido { Motivo = MotivoSinContenido.DocumentoSinTexto };
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ObtenerMarkdownActivity", MarkdownSinTexto(causa));
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "Desconocido"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "Desconocido",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            SinContenido = true,
+            CausaSinContenido = causa,
+            Error = "Sin contenido del documento: no se ejecuta el prompt ni el resumen.",
+            Modelo = "gpt-5-mini"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("SIN_CONTENIDO_DOCUMENTO");
+        salida.Resultado.MensajeError.Should().Be("no clasificable: tipologia desconocida",
+            "la ruta de prompt no sobrescribe el mensaje cuando el documento esta vacio de verdad");
+    }
 
     [Fact]
     public async Task RunOrchestrator_SinExpectedType_PideAlResolutorElRecorteParaClasificar()
@@ -3899,7 +4322,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -3983,7 +4406,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -4030,7 +4453,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -4078,7 +4501,7 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("SubirBlobActivity", "container/test.pdf");
         context.SetupActivity("PrepararDocumentoClasificacionActivity", new PrepararDocumentoClasificacionResultado
         {
-            DocumentoBase64Clasif = "cmVjb3J0YWRv",
+            BlobPathClasificacion = "documents-clasif/2026/10/recorte.pdf",
             TotalPaginas = 10,
             PaginasIncluidas = 3,
             RecorteAplicado = true
@@ -4129,5 +4552,232 @@ public class DocumentProcessOrchestratorTests
             "sin numero de paginas la cobertura del markdown de normalizacion no se puede afirmar");
         salida.DetalleEjecucion.MarkdownPaginas.Should().Be(0);
     }
-}
 
+    private static ResultadoEmbeddings BuildEmbeddings(string decision, string motivo, string? tipologia = "nota.simple") => new()
+    {
+        VersionModelo = "v1",
+        Modo = ModosEmbeddings.Sombra,
+        Tdn1 = "NOTS",
+        Tdn2 = "nots-01",
+        Tipologia = tipologia,
+        Confianza = 0.91,
+        Decision = decision,
+        Motivo = motivo,
+        Deployment = "text-embedding-3-large-030358",
+        LatenciaMs = 230,
+        Consumos = new List<ConsumoIA>
+        {
+            new() { Actividad = ActividadesIA.Clasificar, Operacion = "classification.embeddings", Modelo = "text-embedding-3-large-030358", TokensEntrada = 1200, CosteEur = 0.0001m }
+        }
+    };
+
+    private static FakeTaskOrchestrationContext ContextoConMarkdown(ContratoEntrada? entrada = null)
+    {
+        var entradaEfectiva = entrada ?? BuildEntrada();
+        entradaEfectiva.Instrucciones.IncluirCostes = true;
+        var context = new FakeTaskOrchestrationContext(entradaEfectiva);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResultConMarkdown());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ValidarActivity", new DetalleValidacion());
+        context.SetupActivity("IntegrarActivity", new ResultadoIntegracion { Estado = "OK" });
+        return context;
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_EmbeddingsContesta_NoLlamaAClasificarActivity()
+    {
+        var context = ContextoConMarkdown();
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.Contesta, MotivosEmbeddings.Umbral));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        var clasif = salida.DetalleEjecucion.Clasificacion;
+        clasif.Modelo.Should().Be("embeddings:v1");
+        clasif.Clasificador.Should().Be("Embeddings");
+        clasif.ProveedorClasif.Should().Be("Embeddings");
+        clasif.TipologiaDetectada.Should().Be("nota.simple");
+        clasif.Tdn2Detectado.Should().Be("nots-01");
+        clasif.Confianza.Should().Be(0.91);
+        clasif.RamaClasificacion.Should().Be(RamasClasificacion.Embeddings);
+        clasif.Embeddings.Should().NotBeNull();
+        clasif.Embeddings!.Consumos.Should().BeNull("el orquestador los vacia tras acumularlos");
+        clasif.DetalleProveedores.Should().ContainSingle(p => p.Proveedor == "Embeddings").Which.MotivoDescarte.Should().BeNull();
+        salida.Identificacion.Tdn2.Should().Be("nots-01");
+        salida.DetalleEjecucion.Costes!.Consumos.Should().ContainSingle(c => c.Operacion == "classification.embeddings");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_EmbeddingsDerivaAlGpt_ClasificaConGptYAdjuntaElBloque()
+    {
+        var context = ContextoConMarkdown();
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.DerivarGpt, MotivosEmbeddings.Sombra));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+        var clasif = salida.DetalleEjecucion.Clasificacion;
+        clasif.Modelo.Should().Be("gpt-4o-mini");
+        clasif.RamaClasificacion.Should().Be(RamasClasificacion.Gpt);
+        clasif.Embeddings.Should().NotBeNull();
+        clasif.Embeddings!.Decision.Should().Be(DecisionesEmbeddings.DerivarGpt);
+        clasif.DetalleProveedores.Should().ContainSingle(p => p.Proveedor == "Embeddings").Which.MotivoDescarte.Should().Be(MotivosEmbeddings.Sombra);
+        salida.DetalleEjecucion.Costes!.Consumos.Should().Contain(c => c.Operacion == "classification.embeddings");
+
+        var input = context.GetLastActivityInput<ClasificarEmbeddingsInput>("ClasificarEmbeddingsActivity");
+        input.Should().NotBeNull();
+        input!.Texto.Should().Be("# markdown normalizado");
+        input.ExpectedTypeInformado.Should().BeFalse();
+        input.InstanceId.Should().Be("fake-instance-001");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_EmbeddingsOmitido_NoAdjuntaBloqueYElFlujoEsElActual()
+    {
+        var context = ContextoConMarkdown();
+        context.SetupActivity("ClasificarEmbeddingsActivity", new ResultadoEmbeddings { Decision = DecisionesEmbeddings.Omitido, Motivo = MotivosEmbeddings.Off });
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+        salida.DetalleEjecucion.Clasificacion.Embeddings.Should().BeNull();
+        salida.DetalleEjecucion.Clasificacion.RamaClasificacion.Should().Be(RamasClasificacion.Gpt);
+        salida.DetalleEjecucion.Clasificacion.DetalleProveedores.Should().NotContain(p => p.Proveedor == "Embeddings");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SinTexto_NoLlamaAClasificarEmbeddings()
+    {
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+
+        await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarEmbeddingsActivity").Should().Be(0);
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificarEmbeddingsLanza_SigueConElGpt()
+    {
+        var context = ContextoConMarkdown();
+        context.SetupActivityThrow("ClasificarEmbeddingsActivity", new Exception("activity caida"));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(1);
+        salida.Resultado.Estado.Should().NotBe("ERROR", $"error real: {salida.Resultado.MensajeError}");
+        salida.DetalleEjecucion.Clasificacion.Embeddings.Should().BeNull();
+        salida.DetalleEjecucion.Clasificacion.RamaClasificacion.Should().Be(RamasClasificacion.Gpt);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedTypeYEmbeddingsContesta_ElCallerManda()
+    {
+        // Guarda propia del orquestador: aunque el proveedor devolviera Contesta, con ExpectedType informado manda el caller.
+        var context = ContextoConMarkdown(BuildEntrada(expectedType: "nota.simple"));
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.Contesta, MotivosEmbeddings.Umbral, tipologia: "tasa.09"));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        var clasif = salida.DetalleEjecucion.Clasificacion;
+        clasif.Modelo.Should().Be("expectedtype-input");
+        clasif.TipologiaDetectada.Should().Be("nota.simple");
+        clasif.RamaClasificacion.Should().Be(RamasClasificacion.ExpectedType);
+        clasif.Embeddings.Should().NotBeNull("el bloque se persiste igualmente");
+        clasif.DetalleProveedores.Should().ContainSingle(p => p.Proveedor == "Embeddings").Which.MotivoDescarte.Should().Be(MotivosEmbeddings.Umbral);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ExpectedType_AdjuntaEmbeddingsConRamaExpectedType()
+    {
+        var context = ContextoConMarkdown(BuildEntrada(expectedType: "nota.simple"));
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.DerivarGpt, MotivosEmbeddings.ExpectedType));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().Be("expectedtype-input");
+        salida.DetalleEjecucion.Clasificacion.RamaClasificacion.Should().Be(RamasClasificacion.ExpectedType);
+        salida.DetalleEjecucion.Clasificacion.Embeddings.Should().NotBeNull();
+        context.GetLastActivityInput<ClasificarEmbeddingsInput>("ClasificarEmbeddingsActivity")!.ExpectedTypeInformado.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_EmbeddingsContestaDesconocido_PropagaLaPropuesta()
+    {
+        var context = ContextoConMarkdown();
+        var embeddings = BuildEmbeddings(DecisionesEmbeddings.Contesta, MotivosEmbeddings.MasaInsuficiente, tipologia: "Desconocido");
+        embeddings.Restringido = new RestringidoEmbeddings { Masa = 0.2, ConfianzaCondicionada = 0.5, PrediccionSinRestringir = "nota.simple" };
+        context.SetupActivity("ClasificarEmbeddingsActivity", embeddings);
+
+        var salida = await CreateOrchestrator().RunOrchestrator(context);
+
+        context.GetActivityCallCount("ClasificarActivity").Should().Be(0);
+        salida.DetalleEjecucion.Clasificacion.TipologiaDetectada.Should().Be("Desconocido");
+        salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("nota.simple");
+    }
+
+    private static string ContratoComparable(ContratoSalida salida)
+    {
+        var clasif = salida.DetalleEjecucion.Clasificacion;
+        clasif.Embeddings = null;
+        clasif.RamaClasificacion = null;
+        clasif.DetalleProveedores.RemoveAll(p => p.Proveedor == "Embeddings");
+        salida.DetalleEjecucion.Costes = null;
+        salida.Identificacion.Guid = string.Empty; // el contexto fake genera un guid distinto en cada ejecucion
+        return System.Text.Json.JsonSerializer.Serialize(salida);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Sombra_ContratoIdenticoAlActualSalvoLosCamposAnadidos()
+    {
+        var sinSombra = ContextoConMarkdown();
+        sinSombra.SetupActivity("ClasificarEmbeddingsActivity", new ResultadoEmbeddings { Decision = DecisionesEmbeddings.Omitido, Motivo = MotivosEmbeddings.Off });
+        sinSombra.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var conSombra = ContextoConMarkdown();
+        conSombra.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.DerivarGpt, MotivosEmbeddings.Sombra));
+        conSombra.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        var salidaSin = await CreateOrchestrator().RunOrchestrator(sinSombra);
+        var salidaCon = await CreateOrchestrator().RunOrchestrator(conSombra);
+
+        ContratoComparable(salidaCon).Should().Be(ContratoComparable(salidaSin));
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TextoLargo_LlegaALaActivityColapsadoYRecortado()
+    {
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+        var normalizar = BuildNormalizarResultConMarkdown();
+        normalizar["Markdown"] = "a  \n\n b " + new string('x', 30_000);
+        context.SetupActivity("NormalizarActivity", normalizar);
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ResolverTipologiaActivity", BuildTipologia());
+        context.SetupActivity("ClasificarEmbeddingsActivity", BuildEmbeddings(DecisionesEmbeddings.DerivarGpt, MotivosEmbeddings.Sombra));
+        context.SetupActivity("ClasificarActivity", BuildClasificacionOk());
+
+        await CreateOrchestrator().RunOrchestrator(context);
+
+        var input = context.GetLastActivityInput<ClasificarEmbeddingsInput>("ClasificarEmbeddingsActivity");
+        input.Should().NotBeNull();
+        input!.Texto.Should().StartWith("a b x");
+        input.Texto!.Length.Should().Be(EmbeddingsClasificadorConfig.MaxCharsPorDefecto);
+        input.Texto.Should().NotContain("\n");
+    }
+}

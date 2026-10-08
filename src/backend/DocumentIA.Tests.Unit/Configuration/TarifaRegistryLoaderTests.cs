@@ -61,7 +61,8 @@ public class TarifaRegistryLoaderTests
     [Fact]
     public void Parse_CatalogoDeProduccion_EsJsonValidoYSeCargaEntero()
     {
-        // El literal que inserta scripts/migrations/costes-ia/01-seed-tarifas-ia.sql.
+        // El literal que inserta scripts/migrations/costes-ia/01-seed-tarifas-ia.sql mas las
+        // dos lineas de scripts/migrations/clasificador-embeddings/02-tarifas-embeddings-deployments.sql (AB#100779).
         // El cargador es tolerante a JSON invalido, asi que un error de sintaxis en
         // el script no daria fallo visible: dejaria el catalogo vacio en silencio y
         // todos los costes saldrian a nulo. Este test lo detecta.
@@ -71,7 +72,7 @@ public class TarifaRegistryLoaderTests
         var registry = TarifaRegistryLoader.Parse(json);
 
         registry.Moneda.Should().Be("EUR");
-        registry.Tarifas.Should().HaveCount(18);
+        registry.Tarifas.Should().HaveCount(20);
         registry.Tarifas.Should().OnlyContain(t => !string.IsNullOrWhiteSpace(t.Modelo));
         registry.Tarifas.Should().OnlyContain(t => t.VigenteDesde > DateTime.MinValue);
 
@@ -94,6 +95,10 @@ public class TarifaRegistryLoaderTests
         // Clasificadores reales del recurso de produccion.
         registry.Tarifas.Should().Contain(t => t.Modelo == "DocumentAICC_v1");
         registry.Tarifas.Should().Contain(t => t.Modelo == "CU_NS_1.6_0_GGAA");
+
+        // Deployments de embeddings del clasificador A, tarificados por nombre de deployment.
+        registry.Tarifas.Single(t => t.Modelo == "text-embedding-3-large-030358").EurEntradaPor1M.Should().Be(0.112m);
+        registry.Tarifas.Single(t => t.Modelo == "text-embedding-3-large-010650").EurSalidaPor1M.Should().BeNull();
     }
 
     [Fact]

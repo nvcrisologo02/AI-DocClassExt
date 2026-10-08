@@ -1,0 +1,37 @@
+{
+  "analyzerId": "CU_NS_1.5_0",
+  "datasetVersion": 1,
+  "manifest": "CU_NS_1.5_0@1.manifest.json",
+  "selection": {
+    "method": "evenly-spaced-by-name",
+    "sampleSize": 5,
+    "pdfCount": 50
+  },
+  "documents": [
+    {
+      "name": "03898363-dc6f-43f3-96ec-529b1ea92768",
+      "size": 237286,
+      "md5": "aYPMdubJ88qSLZrrOm0L5g=="
+    },
+    {
+      "name": "2df9871c-c675-4bd8-8674-d75d269be020",
+      "size": 158729,
+      "md5": "B02s/2USsY+7uOHxeYKLJQ=="
+    },
+    {
+      "name": "6e87d19d-8dea-4527-80a6-65c8c365d50b",
+      "size": 201726,
+      "md5": "YEbSMs7sATFcH4YKAtfTLQ=="
+    },
+    {
+      "name": "a3eaf246-f3c6-4bea-9914-04eae4b28d9b",
+      "size": 29042,
+      "md5": "KMO7TwO2kLADcBQzoIApzg=="
+    },
+    {
+      "name": "d7b5bf0a-a0f4-4bfd-8213-2a05b6b27ddf",
+      "size": 359967,
+      "md5": "wH4pWq9plngLwuxi0nkP6w=="
+    }
+  ]
+}
