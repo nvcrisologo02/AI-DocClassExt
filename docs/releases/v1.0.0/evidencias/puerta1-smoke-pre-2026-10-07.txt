@@ -1,0 +1,16 @@
+Smoke E2E PRE v1.0.0 (puerta 1) - run 79682 (417dca4)
+Intento 1: 2026-10-07 20:11:13Z..20:13:06Z, 6/6 (artefactos 20261007-221115-pre-smoke) pero KQL con 30 llamadas a hosts de PRO: NO PASA (ver incidencia en runbook.md, 2.5).
+Intento 2 tras restaurar ModeloConfigs y reiniciar: 2026-10-07 20:25:49Z..20:27:18Z
+  [S-S1] Pipeline completo auto: clasificacion + extraccion nota simple
+  --> PASS : OK
+  [S-S2] classificationOnly con recorte a 3 paginas
+  --> PASS : OK
+  [S-S3] Extraccion dirigida con expectedType nota.simple_bal
+  --> PASS : OK
+  [S-S4] Resumen documental
+  --> PASS : OK
+  [S-S5] Contrato: base64 invalido devuelve 400
+  --> PASS : HTTP 400 recibido correctamente
+  RESUMEN: Total=6 PASS=6 FAIL=0 SKIP=0 N/A=0
+Artefactos: tests/e2e-postdeploy/artifacts/20261007-222550-pre-smoke
+KQL (puerta1-kql-pre-2026-10-07.txt): solo hosts *predocai, n=0 hosts de PRO, 0 x 401/403.

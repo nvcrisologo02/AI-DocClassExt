@@ -14,7 +14,7 @@ que ya estaba en `develop` como `7aca20b`).
 ## Validación
 
 Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1430/1430 · Tests Admin: 151/151 · Tests AssetResolver: 14/14 · Formato: ok
-E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke 6/6 · E2E PRO: smoke pendiente
+E2E DEV: smoke 6/6, full N/A · E2E PRE: smoke 6/6 (run 79682, 2026-10-07 20:27Z) y golden PASS · E2E PRO: smoke pendiente
 
 Build, los tres juegos de tests y formato son del 2026-10-07 sobre el árbol de `17889bb` (ejecutados
 sobre `b083546`, cuyo árbol es idéntico al del merge). Smoke DEV del 2026-10-07 sobre `bb1e81d`
@@ -209,10 +209,10 @@ Checklist de AB#100814 (fuera del despliegue de código):
 
 | Puerta | Fecha | Resultado | Evidencia |
 |---|---|---|---|
-| 1 Smoke E2E PRE | | | |
-| 2 Golden | | | |
-| 3 Coste | | | |
-| 4 Deriva | | | |
+| 1 Smoke E2E PRE | 2026-10-07 20:27Z | PASS (2º intento; el 1º falló la KQL por la incidencia del seed, ver runbook 2.5) | `evidencias/puerta1-smoke-pre-2026-10-07.txt`, `puerta1-kql-pre-2026-10-07.txt` |
+| 2 Golden | 2026-10-07 21:52Z | PASS (TDN1 p=0,6291, TDN2 p=0,7539 frente a BASELINE-GPT4OMINI-DEV; 465/467, 2 × 502 en ingest) | `evidencias/puerta2-compare-golden-pre-2026-10-07.md`, `puerta2-kql-golden-pre-2026-10-07.txt` |
+| 3 Coste | pendiente (D+1, 2026-10-08) | Cost Management del 07/10: PRE debe tener los meters del smoke y la golden; en PRO anotar la rampa de 20:11Z–20:16Z (smoke 1 y golden abortada con hosts de PRO por la incidencia del seed) | |
+| 4 Deriva | 2026-10-07 21:54Z | PASS: hashes idénticos a la referencia 2.3.4 (provisional a las 20:33Z tras restaurar, formal tras la golden) | `evidencias/config-v1.0.0-pre.hashes.json`, `config-v1.0.0-pre-puerta4.hashes.json` |
 
 Test Plan 100069 (SMK-1..8): run pendiente.
 Go: pendiente
@@ -222,8 +222,8 @@ Go: pendiente
 | Pipeline | Entorno | Run | Resultado |
 |---|---|---|---|
 | 802 Functions (validación previa de AB#100814, no sustituye al 799) | pre | 79679 (`417dca4`) | succeeded, 2026-10-07 18:11Z, app settings validados |
-| 807 Migrations-BD | pre | | |
-| 799 completo | pre | | |
+| 807 Migrations-BD | pre | 79681 (`417dca4`) | succeeded, 2026-10-07 19:57Z, 37 aplicadas, `Pendientes: 0` |
+| 799 completo | pre | 79682 (`417dca4`) | succeeded, 2026-10-07 20:10Z, Functions + Admin + AssetResolver, ValidateConfiguration en verde |
 | 807 Migrations-BD | prod | | |
 | 799 completo | prod | | |
 

@@ -1,0 +1,18 @@
+--- dependencias por host de IA (PRE, ventana 2026-10-07T20:28:00Z .. 2026-10-07T21:53:00Z):
+  127.0.0.1:34403 | 227 | 227 | ["200"]
+  BlobBaseClient.Download | 476 | 476 | [""]
+  BlobClient.Upload | 284 | 284 | [""]
+  DefaultAzureCredential.GetToken | 2707 | 2707 | [""]
+  Invoke | 4965 | 4965 | [""]
+  srbaisrv01predocai.openai.azure.com | 469 | 468 | ["200","429"]
+  srbdipredocai.cognitiveservices.azure.com | 2239 | 2239 | ["202","200"]
+  srbwebpluginassetresolverpre.azurewebsites.net | 86 | 86 | ["200"]
+  srbwidi03.sareb.srb:8090 | 85 | 85 | ["200"]
+--- llamadas o trazas con hosts de PRO (debe ser n=0):
+  n=0
+--- EndpointEfectivo en trazas:
+--- excepciones y 401/403 en la ventana:
+--- excepciones por tipo:
+--- requests con codigo >= 500:
+--- arranques del host (trazas Durable banner) y OutOfMemory:
+--- ingest 502 por correlation (ids de la golden):
