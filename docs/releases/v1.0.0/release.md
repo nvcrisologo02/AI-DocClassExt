@@ -102,7 +102,9 @@ Intelligence ni datasets a PRO: el primer run real del pipeline 832 es AB#100809
 - AB#100302 `[FASE 3] PRO por datos y App Settings; cierre del acceso compartido` · entra en esta
   release
 - AB#100301 `[FASE 2] PRE como puerta técnica de release` · el cutover de PRE se hizo el 2026-09-23;
-  sigue abierta por AB#100808 y AB#100810, que no son de esta release
+  AB#100808 (purga de `__bak` de PRE y `CatalogoTdn1.Descripcion`) cerró el 2026-10-07; sigue
+  abierta solo por AB#100810, cubierta por las evidencias de esta release (ver "Fuera de esta
+  release")
 
 ### PBIs
 
@@ -201,7 +203,7 @@ Checklist de AB#100814 (fuera del despliegue de código):
 
 | Elemento | DEV | PRE | PRO |
 |---|---|---|---|
-| Regla `documents-clasif-7d` de ciclo de vida en la cuenta de documentos (`scripts/storage/set-lifecycle-documents-clasif.ps1`; runbook 2.2.5 y 4.13) | aplicada el 2026-10-07 15:30Z en `srbstgdevdocai`, conserva `delete-temp` | aplicada el 2026-10-07 ~18:05Z en `srbstgpredocai` (salida: "Politica escrita. Reglas: delete-temp, documents-clasif-7d"; 2.2.5 hecho) | pendiente (`srbstgprodocai`, antes de 4.4) |
+| Regla `documents-clasif-7d` de ciclo de vida en la cuenta de documentos (`scripts/storage/set-lifecycle-documents-clasif.ps1`; runbook 2.2.5 y 4.13) | aplicada el 2026-10-07 15:30Z en `srbstgdevdocai`, conserva `delete-temp` | aplicada el 2026-10-07 ~18:05Z en `srbstgpredocai` (salida: "Politica escrita. Reglas: delete-temp, documents-clasif-7d"; 2.2.5 hecho) | aplicada el 2026-10-08 08:26Z en `srbstgprodocai` (salida: "Politica escrita. Reglas: delete-temp, documents-clasif-7d"; 4.13 hecho) |
 | App setting `DOTNET_GCHeapHardLimitPercent=28` (pipeline 802; runbook 4.14) | puesto a mano el 2026-10-07 14:18Z y en el pipeline desde `4ab4676` | puesto y validado por el run 79679 del 802 el 2026-10-07 18:11Z | lo pone el pipeline al desplegar; comprobar en 4.14 |
 | Contenedor `documents-clasif` | lo crea el código al primer recorte | ídem | ídem |
 
@@ -224,7 +226,7 @@ Go: **2026-10-08 · Ignacio Varas Crisologo** · puertas 1 (2026-10-07 20:27Z), 
 | 802 Functions (validación previa de AB#100814, no sustituye al 799) | pre | 79679 (`417dca4`) | succeeded, 2026-10-07 18:11Z, app settings validados |
 | 807 Migrations-BD | pre | 79681 (`417dca4`) | succeeded, 2026-10-07 19:57Z, 37 aplicadas, `Pendientes: 0` |
 | 799 completo | pre | 79682 (`417dca4`) | succeeded, 2026-10-07 20:10Z, Functions + Admin + AssetResolver, ValidateConfiguration en verde |
-| 807 Migrations-BD | prod | | |
+| 807 Migrations-BD | prod | 79691 (`98347ed`) | succeeded, 2026-10-08 08:23Z, adelantado de la ventana; `Pendientes: 0`, BD ya al día (37/37) |
 | 799 completo | prod | | |
 
 ## Pendientes antes de cerrar la Fase 0
@@ -242,18 +244,33 @@ Go: **2026-10-08 · Ignacio Varas Crisologo** · puertas 1 (2026-10-07 20:27Z), 
    medición en la entrada de AB#100814, 2.2.5 en `runbook.md`). El working set con dos PDF
    seguidos quedó en 2.043 MiB, a 5 MiB del criterio: vigilar en la hora de observación de PRO
    (4.14) y no cargar lotes de PDF grandes hasta AB#100899.
-4. Bloque 1 del plan de ventana (lectura de los app settings de PRO): obligatorio, porque la
-   ausencia de los `AI__Resources__*` se apoya en la comprobación del 05/10 y la cuenta de
-   desarrollo dio `AuthorizationFailed` el 06/10.
-5. Export de configuración de DEV y diff por clave natural (paso 3 del runbook).
+4. ~~Bloque 1 del plan de ventana (lectura de los app settings de PRO)~~ · hecho el 2026-10-07
+   20:31Z (4.11, con `--subscription 647c7246…`) y repetido el 2026-10-08: los 86 nombres son los
+   mismos, sin `AI__Resources__*`, `DOTNET_GCHeapHardLimitPercent` ni `BlobRetention*`.
+5. ~~Export de configuración de DEV y diff por clave natural (paso 3 del runbook)~~ · hecho el
+   2026-10-07 (1.3, 2.3.2) y contra PRO el 2026-10-08 (4.3).
+
+Adelantado de la Fase 4 el 2026-10-08, antes de la ventana y sin reinicio: 4.2 (807 a prod, run
+79691, `Pendientes: 0`), 4.3 (seeds en PRO y export de referencia `v1.0.0-pro`) y 4.13 (ciclo de
+vida en `srbstgprodocai`). Quedan para la ventana: 4.1 (copia, la víspera), 4.4 a 4.9, 4.14 y la
+Fase 5.
 
 ## Fuera de esta release
 
 AB#100899 (ClassificationLite sube el documento a blob y envía `documento.blobPath`: la memoria
 del host de Functions con cuerpos HTTP grandes, pieza del lado cliente de AB#100814), AB#100272
-(identificador buscable en el Monitor), AB#100805 y AB#100807 (rotar `docaisql`, limpiar copias y tablas `__bak`), AB#100808
-(purga de `__bak` de PRE y `CatalogoTdn1.Descripcion`), AB#100809 / AB#100811 / AB#100812 (primer
-run real del pipeline 832), AB#100810 (evidencia de las 4 puertas de PRE), AB#100780 / AB#100781 /
-AB#100782 (crecimiento del clasificador, promoción del modelo, confusión TASA/CERJ), AB#99934 y
-AB#99936 a AB#99940 (migración de deployments de modelos), AB#100220 (seguimiento post-release de
-septiembre) y el resto del backlog de calidad de clasificación.
+(identificador buscable en el Monitor), AB#100807 (rotar `docaisql`, aplazada; la limpieza de copias
+y tablas `__bak` de AB#100806 ya está hecha desde el 2026-10-01 y AB#100808 cerró el 2026-10-07),
+AB#100809 / AB#100811 / AB#100812 (primer run real del pipeline 832), AB#100780 / AB#100781 /
+AB#100782 (crecimiento del clasificador, promoción del modelo, confusión TASA/CERJ), AB#99934,
+AB#99936 y AB#99938 a AB#99940 (migración de deployments de modelos; AB#99937 está en PRO desde
+antes del 20/09), AB#100220 (seguimiento post-release de septiembre) y el resto del backlog de
+calidad de clasificación.
+
+AB#100810 (evidencia escrita de las 4 puertas de PRE, que hasta ahora "solo constaba de palabra") no
+lleva código, pero queda cubierta por la tabla de aprobación y `evidencias/` de esta release; se
+cierra con enlace a `docs/releases/v1.0.0/` en 5.4.
+
+El rango `fe1533f..17889bb` incluye los merges de sincronización de `master` del 14/08 (`6764fb8`) y
+del 03/09 (`5b16b18`), que citan AB#100080, AB#100129, AB#100130 y AB#100132: PBIs en Done y
+desplegados en PRO en esas releases, no en esta.
