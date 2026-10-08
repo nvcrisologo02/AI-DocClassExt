@@ -331,7 +331,7 @@
   },
   {
     "group": "FH", "id": "FH5", "caseKey": "FH-FH5", "domain": "postdeploy",
-    "name": "Documento corrupto: no rechazado en el HTTP, orquestacion completa sin tipologia real (SIN_CONTENIDO_DOCUMENTO, NO_CLASIFICADO u OK con Desconocido)",
+    "name": "Documento corrupto: no rechazado en el HTTP, orquestacion completa sin tipologia real (ERROR por LayoutError 400 InvalidContent tras AB#100880, SIN_CONTENIDO_DOCUMENTO, NO_CLASIFICADO u OK con Desconocido)",
     "profiles": ["full"], "covers": ["HTTP-06"],
     "documentPath": "tests/e2e-postdeploy/corpus/invalidos/corrupto.pdf",
     "classificationProvider": "auto", "classificationOnly": true,
@@ -339,7 +339,7 @@
     "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
     "assertions": {
       "expectedRuntimeStatus": "Completed",
-      "expectedStatus": ["SIN_CONTENIDO_DOCUMENTO", "NO_CLASIFICADO", "OK"],
+      "expectedStatus": ["ERROR", "SIN_CONTENIDO_DOCUMENTO", "NO_CLASIFICADO", "OK"],
       "expectOutputJsonNotContains": ["\"Tdn2\":\"", "\"tdn2\":\""]
     }
   },

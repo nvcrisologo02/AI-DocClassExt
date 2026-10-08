@@ -211,11 +211,11 @@ Checklist de AB#100814 (fuera del despliegue de código):
 |---|---|---|---|
 | 1 Smoke E2E PRE | 2026-10-07 20:27Z | PASS (2º intento; el 1º falló la KQL por la incidencia del seed, ver runbook 2.5) | `evidencias/puerta1-smoke-pre-2026-10-07.txt`, `puerta1-kql-pre-2026-10-07.txt` |
 | 2 Golden | 2026-10-07 21:52Z | PASS (TDN1 p=0,6291, TDN2 p=0,7539 frente a BASELINE-GPT4OMINI-DEV; 465/467, 2 × 502 en ingest) | `evidencias/puerta2-compare-golden-pre-2026-10-07.md`, `puerta2-kql-golden-pre-2026-10-07.txt` |
-| 3 Coste | pendiente (D+1, 2026-10-08) | Cost Management del 07/10: PRE debe tener los meters del smoke y la golden; en PRO anotar la rampa de 20:11Z–20:16Z (smoke 1 y golden abortada con hosts de PRO por la incidencia del seed) | |
+| 3 Coste | 2026-10-08 06:40Z | PASS: SRBRGPREDOCSAI factura el 07/10 los meters de IA del smoke y la golden (gpt 4.1 mini 11,5 M tokens, 2,31 k páginas S0; 23,67 EUR); SRBRGDOCSAIPROD sin rampa atribuible salvo los 5 min de la incidencia del seed (20:11Z–20:16Z: 253 k tokens y 57 páginas, ~0,6 EUR); Cost Management y Azure Monitor cuadran | `evidencias/puerta3-coste-2026-10-07.txt` |
 | 4 Deriva | 2026-10-07 21:54Z | PASS: hashes idénticos a la referencia 2.3.4 (provisional a las 20:33Z tras restaurar, formal tras la golden) | `evidencias/config-v1.0.0-pre.hashes.json`, `config-v1.0.0-pre-puerta4.hashes.json` |
 
-Test Plan 100069 (SMK-1..8): run pendiente.
-Go: pendiente
+Test Plan 100069 (SMK-1..8): run 1076834 el 2026-10-08 06:45Z contra PRE, 5 Passed (SMK-1, 3, 4, 5, 6) y 3 NotApplicable (SMK-2 sin caso automatizado, SMK-7 no comprobado a mano, SMK-8 solo PRO); `evidencias/testplan-100069-smoke-pre-2026-10-08.txt`.
+Go: **2026-10-08 · Ignacio Varas Crisologo** · puertas 1 (2026-10-07 20:27Z), 2 (2026-10-07 21:52Z), 3 (2026-10-08 06:40Z) y 4 (2026-10-07 21:54Z) en PASS; Test Plan 100069 run 1076834; revisión de work items (runbook 3.2) hecha. Ventana de PRO por fijar: no se ejecuta nada en PRO hasta entonces.
 
 ## Runs de pipeline
 
