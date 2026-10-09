@@ -12,7 +12,7 @@ Cada entorno vive en su propia **suscripción** y **resource group**:
 | **Subscription ID** | `8764f9ff-fe37-4c03-bde9-6294622bef6d` | `a4f6b357-8f13-4488-9ee8-b9f635426f91` | `647c7246-54bc-4d31-b909-431cacf03272` |
 | **Service Connection (ADO)** | `AI DocClassExt DEV` | `AI DocClassExt PRE` | `AI DocClassExt PRO` |
 
-> **ℹ️ IA por entorno.** Cada entorno tiene su propio stack de IA: un Document Intelligence (`srbdi<env>docai`) y **dos** cuentas AIServices/Foundry (`srbaisrv01<env>docai` primaria, CU + OpenAI, y `srbaisrv02<env>docai`, CU secundaria). **DEV usa su IA propia desde 2026-09-22 y PRE desde 2026-09-23** (AB#100320). **PRO sigue apuntando a su IA actual** (`upe48-mm2avmdm-swedencentral` en swedencentral, `srbaisrv-westeurope` en westeurope, DI `srbdiprodocai`) hasta su fase (AB#100302); PRO aún no tiene settings `AI__*`. Los endpoints se resuelven por alias con los app settings `AI__Resources__<alias>__Endpoint` (`AiEndpointResolver`), calculados a partir de `infra/ai/pipeline-variables.yml`. Fuentes: `infra/ai/pipeline-variables.yml`, [ADR-001](../decisiones/ADR-001-promocion-artefactos-ia-dev-pre-pro.md) y [DESPLIEGUE_IA.md](../procedimientos/DESPLIEGUE_IA.md). Ver [Recursos de IA](#recursos-de-ia) y [caveats operativos](#-known-issues--workarounds).
+> **ℹ️ IA por entorno.** Cada entorno tiene su propio stack de IA: un Document Intelligence (`srbdi<env>docai`) y **dos** cuentas AIServices/Foundry (`srbaisrv01<env>docai` primaria, CU + OpenAI, y `srbaisrv02<env>docai`, CU secundaria). **DEV usa su IA propia desde 2026-09-22 y PRE desde 2026-09-23** (AB#100320). **PRO conserva sus recursos** (`upe48-mm2avmdm-swedencentral` en swedencentral, `srbaisrv-westeurope` en westeurope, DI `srbdiprodocai`) y **desde 2026-10-08 (release v1.0.0, AB#100321) los resuelve también por alias e identidad administrada**, igual que DEV y PRE. En los tres entornos los endpoints se resuelven por alias con los app settings `AI__Resources__<alias>__Endpoint` (`AiEndpointResolver`), calculados a partir de `infra/ai/pipeline-variables.yml`; ver "3) Alias e identidad por entorno" en [Recursos de IA](#recursos-de-ia). Fuentes: `infra/ai/pipeline-variables.yml`, [ADR-001](../decisiones/ADR-001-promocion-artefactos-ia-dev-pre-pro.md) y [DESPLIEGUE_IA.md](../procedimientos/DESPLIEGUE_IA.md). Ver [Recursos de IA](#recursos-de-ia) y [caveats operativos](#-known-issues--workarounds).
 
 ---
 
@@ -53,7 +53,7 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 <a id="recursos-de-ia"></a>
 ### Recursos de IA
 
-**1) Recursos de IA por entorno** (DEV y PRE los usan desde 2026-09-22 y 2026-09-23; PRO mantiene los suyos hasta AB#100302):
+**1) Recursos de IA por entorno** (DEV y PRE los usan desde 2026-09-22 y 2026-09-23; PRO mantiene los suyos y los resuelve por alias e identidad desde 2026-10-08, AB#100321):
 
 | Entorno | Document Intelligence | AIServices / Foundry (CU + OpenAI) |
 |---------|-----------------------|-------------------------------------|
@@ -61,13 +61,26 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 | **PRE** | `srbdipredocai` | `srbaisrv01predocai`, `srbaisrv02predocai` |
 | **PRO** | `srbdiprodocai` | `upe48-mm2avmdm-swedencentral` (swedencentral), `srbaisrv-westeurope` (westeurope) |
 
-**2) Endpoints de PRO** (DEV y PRE resuelven los suyos por alias `AI__Resources__<alias>__Endpoint`; PRO aún no tiene settings `AI__*`). Endpoints por entorno en `infra/ai/pipeline-variables.yml`:
+**2) Endpoints de PRO** (los tres entornos resuelven los suyos por alias `AI__Resources__<alias>__Endpoint`; PRO tiene los cuatro settings desde el run 79704 del pipeline 799, 2026-10-08). Endpoints por entorno en `infra/ai/pipeline-variables.yml`:
 
 | Recurso PROD | Kind / SKU | Región | Endpoints | Rol |
 |--------------|-----------|--------|-----------|-----|
 | `upe48-mm2avmdm-swedencentral` | AIServices (Foundry) / S0 | swedencentral | CU: `https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/`<br>OpenAI: `https://upe48-mm2avmdm-swedencentral.openai.azure.com` | **CU primario** + **OpenAI primario** — deployment `gpt-4o-mini` = GptFallback de extracción y clasificación |
 | `srbaisrv-westeurope` | AIServices (Foundry) / S0 | westeurope | CU: `https://srbaisrv-westeurope.services.ai.azure.com/`<br>OpenAI: `https://srbaisrv-westeurope.openai.azure.com/` (control-plane: `…cognitiveservices.azure.com/`) | **CU secundario** (failover / reparto de carga desde Sweden Central) + **OpenAI secundario**. Tag `Purpose=CU-secondary-endpoint`; identity SystemAssigned; reglas VNet a `RedServiciosProduccion`. **No cableado como fallback OpenAI en el pipeline** (los App Settings apuntan a Sweden Central) |
 | `srbdiprodocai` | FormRecognizer | westeurope | `https://srbdiprodocai.cognitiveservices.azure.com/` (API `2024-11-30`) | **Document Intelligence** (clasificación) |
+
+**3) Alias e identidad por entorno** (estado al 2026-10-09; fuente para PRO: `docs/releases/v1.0.0/runbook.md`, nota 6b/6c):
+
+| Aspecto | DEV (desde 2026-09-22) | PRE (desde 2026-09-23) | PRO (desde 2026-10-08, v1.0.0) |
+|---------|------------------------|------------------------|--------------------------------|
+| App settings `AI__Resources__<alias>__Endpoint` | 4 (`openai_primary`, `cu_primary`, `cu_secondary`, `di`) | 4 | 4, creados por el run 79704 del pipeline 799 |
+| `ModeloConfigs` | filas con `ResourceAlias`, sin `Endpoint` | 27 filas con alias (cutover del 23/09) | 28 filas activas con alias (`openai_primary` 10, `cu_primary` 13, `cu_secondary` 2, `di` 3), 0 con `Endpoint` |
+| `AuthMode` de las filas | `DefaultAzureCredential` | `DefaultAzureCredential` | `DefaultAzureCredential`; `ApiKey` purgada en todas las filas activas el 2026-10-08 (`clear-model-api-keys.sql`) |
+| Roles de la identidad de la Function App sobre los recursos de IA del entorno | Cognitive Services User + Foundry User | Cognitive Services User + Foundry User | `srbappprodocai` (`e700ab11…`): Cognitive Services User sobre `upe48-mm2avmdm-swedencentral`, `srbaisrv-westeurope` y `srbdiprodocai`; Foundry User sobre `upe48-mm2avmdm-swedencentral` y `srbaisrv-westeurope` (este último añadido el 2026-10-08) |
+| Opciones directas (`Extraction__AzureContentUnderstanding__*`, `Classification__AzureDocumentIntelligence__*`, `GptFallback__*`) | `ApiKey` desde Key Vault | `ApiKey` desde Key Vault | `ApiKey` desde Key Vault (sin cambio en v1.0.0) |
+| Validación por identidad | smoke y Fase A del clasificador | smoke 6/6 (cutover 23/09) | smoke 6/6 el 2026-10-08 (DI, OpenAI y CU en `srbaisrv-westeurope`); `cu_primary` por identidad pendiente de la primera extracción real (sin tráfico de negocio entre la ventana y el 2026-10-09 09:00Z) |
+
+Pendientes de la Fase 3 (AB#100302 / AB#100321): Plataforma retira los roles de `srbappdevdocai` y `srbapppredocai` sobre `upe48-mm2avmdm-swedencentral`, `srbaisrv-westeurope` y `srbdiprodocai` (Step 3); borrado de las 6 tablas `ModeloConfigs__bak_*` de PRO, ya sin keys, previsto el 2026-10-15.
 
 **Deployments de OpenAI por recurso PROD** (verificado con `az cognitiveservices account deployment list`; los sufijos numéricos son aleatorios y no coinciden entre recursos):
 
@@ -150,10 +163,10 @@ Cada resource group replica la misma topología. Sustituye `{app}`, `{kv}`, `{sq
 ├── Log Analytics Workspace: {law}  (dev: srblawdevdocai · pre: srblawpredocai · pro: srblawprodocai)
 ├── Networking: 5 Private Endpoints (SQL, Storage-blob, KeyVault, DI, Function App) + Private DNS Zones + VNet link
 │                (dev→SRBCoreDev · pre→SRBCorePre · pro→RedServiciosProduccion)
-└── Azure AI Services — por entorno (dev desde 2026-09-22, pre desde 2026-09-23; pro aún en la IA de PRO, AB#100302)
+└── Azure AI Services — por entorno (dev desde 2026-09-22, pre desde 2026-09-23, pro por alias e identidad desde 2026-10-08)
     ├── DI:        {di}         (dev: srbdidevdocai · pre: srbdipredocai · pro: srbdiprodocai)
     ├── AIServices: srbaisrv01<env>docai + srbaisrv02<env>docai   (PRO: upe48-mm2avmdm-swedencentral + srbaisrv-westeurope)
-    └── Endpoints de PRO (dev/pre: alias AI__Resources__<alias>__Endpoint, ver pipeline-variables.yml):
+    └── Endpoints de PRO (los tres entornos: alias AI__Resources__<alias>__Endpoint, ver pipeline-variables.yml):
         ├── CU/OpenAI primario:  upe48-mm2avmdm-swedencentral  (swedencentral)
         ├── CU/OpenAI secundario: srbaisrv-westeurope           (westeurope, CU failover)
         └── Document Intelligence: srbdiprodocai                (westeurope, API 2024-11-30)
@@ -188,7 +201,7 @@ Los tres entornos siguen la **misma topología de red privada**: los servicios P
 
 ## 🔧 Configuración Post-Despliegue (App Settings)
 
-Los App Settings son **idénticos en los tres entornos** salvo los valores que el pipeline parametriza: nombre de Key Vault (`$(KEY_VAULT_NAME)`), resource group, nombres de app, URL de AssetResolver y `GDC__Endpoint`. Los endpoints de IA se aplican de forma literal (mismos valores prod en todos los entornos); solo cambia el Key Vault del que se leen las API keys.
+Los App Settings son **idénticos en los tres entornos** salvo los valores que el pipeline parametriza: nombre de Key Vault (`$(KEY_VAULT_NAME)`), resource group, nombres de app, URL de AssetResolver y `GDC__Endpoint`. Los endpoints de IA de las opciones directas (`Extraction__*`, `Classification__*`) se aplican de forma literal con los valores de PRO y su `AuthMode` sigue en `ApiKey` desde el Key Vault del entorno; las filas de `ModeloConfigs`, que son las que usa el flujo, resuelven en los tres entornos por alias `AI__Resources__<alias>__Endpoint` e identidad administrada (ver "3) Alias e identidad por entorno").
 
 ### **Azure Functions (`{app}`)**
 
@@ -386,6 +399,7 @@ entornos; sin usuario autenticado el Admin opera en modo solo lectura.
 - ✅ Managed Identities en las 3 apps de cada entorno.
 - ✅ RBAC "Key Vault Secrets User" (sin secretos en código — todo desde Key Vault).
 - ✅ SQL con autenticación por Managed Identity (patrón PROD replicado en DEV/PRE).
+- ✅ Recursos de IA (DI, CU, OpenAI) consumidos por `ModeloConfigs` con identidad administrada (`DefaultAzureCredential`) y sin API keys en BD en los tres entornos (DEV 2026-09-22, PRE 2026-09-23, PRO 2026-10-08); las opciones directas de App Settings conservan `ApiKey` desde Key Vault.
 - ⚠️ GDC con SSL bypass (`BypassSslValidation=true`) — workaround del sistema legado.
 - ✅ Admin con EasyAuth activo en los tres entornos (DEV desde 2026-08-06, PRE y PRO desde 2026-09-04; ver [GUIA_EASYAUTH_ADMIN.md](../guias/GUIA_EASYAUTH_ADMIN.md)). Histórico: hasta el 2026-07-31 el App Service del Admin (dev y prod) estaba sin autenticación y con acceso público; el modo solo lectura automático del Admin (sin usuario autenticado) rechaza toda escritura.
 
@@ -414,5 +428,5 @@ entornos; sin usuario autenticado el Admin opera en modo solo lectura.
 
 
 
-**Última actualización:** 2026-10-06
+**Última actualización:** 2026-10-09
 

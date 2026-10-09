@@ -677,8 +677,9 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    (`azure-pipelines-functions.yml`). Cualquiera de los dos crea las cuatro
    `AI__Resources__*__Endpoint` si no existen; el de Functions avisa con un
    warning si ya existen con otro valor. El bloque `dev` apunta a DEV desde
-   el 2026-09-22 y `pre` a PRE desde el 2026-09-23; `prod` sigue en PRO
-   hasta la fase 3. Ningún pipeline cambia las
+   el 2026-09-22 y `pre` a PRE desde el 2026-09-23; `prod` apunta a los
+   recursos de PRO, que PRO resuelve por alias desde el 2026-10-08 (v1.0.0,
+   AB#100321). Ningún pipeline cambia las
    cuatro claves de las opciones directas que ya existen con PRO (ver paso
    2b).
 2b. **Forzar a mano los cuatro endpoints de las opciones directas**
@@ -724,7 +725,8 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    seed no lo revierte porque solo reinyecta propiedades ausentes o vacías.
    Requiere que la identidad de la Function App tenga ya los roles sobre las
    cuentas del entorno; DEV quedó así el 2026-09-22 y PRE lo aplica en su
-   cutover (AB#100320). No aplica a PRO hasta la fase 3.
+   cutover (AB#100320); PRO lo aplicó en la ventana de v1.0.0 (2026-10-08,
+   AB#100321).
 4. **Reinicio de la Function App** para vaciar la caché de registros.
 5. **Comprobación**: una petición de ingest con extracción CU y otra de
    clasificación; en App Insights `EndpointEfectivo` debe ser del entorno y
@@ -737,8 +739,9 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    copia previa `ModeloConfigs__bak_<fecha>`; solo toca filas con identidad.
 
 Vuelta atrás: restaurar `ConfiguracionJson` desde la tabla `__bak`, devolver
-las variables `AI_*` a los valores de PRO y redesplegar; los roles de la
-identidad sobre PRO siguen vigentes hasta la fase 3.
+las variables `AI_*` a los valores de PRO y redesplegar; los roles cruzados de
+DEV y PRE sobre los recursos de PRO siguen vigentes hasta que Plataforma los
+retire (Step 3 de AB#100321).
 
 Dos trampas conocidas y cómo quedan resueltas:
 
