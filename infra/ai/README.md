@@ -85,15 +85,16 @@ de referencia para una limpieza futura de los recursos origen.
   un analyzer/clasificador, **uno por entorno destino** (`.dev.`, `.pre.`, `.prod.`):
   el mismo dataset copiado a DEV y a PRE deja dos manifiestos que no se
   pisan. `copy-labeling-dataset.ps1` lo escribe; con `-DryRun` no escribe
-  nada. `DocumentAICC_v1@1.dev.manifest.json` quedó con
-  `"status": "pendiente de acceso al storage"` (Tarea 8, Step 3): el
-  contenedor `documentai` de `srbstgproapppdocai` existe y no tiene
-  restricciones de red, pero mi identidad no tiene el rol de datos
-  (Storage Blob Data Reader) necesario para listar su contenido y localizar
-  el prefijo exacto del proyecto del clasificador. Nota: PRO usa **dos**
-  cuentas de storage con datasets (ver tabla en "Analyzers y sus datasets" más
-  abajo); la petición a plataforma para este manifiesto y para
-  "Estado inicial de DEV y PRE" cubre las dos, no solo `srbstgproapppdocai`.
+  nada. `DocumentAICC_v1@1.dev.manifest.json` es la excepción: lo escribió a
+  mano la réplica del proyecto de Document Intelligence Studio del
+  2026-10-09 (AB#100924), no `copy-labeling-dataset.ps1`, porque un proyecto
+  de DI Studio no se reubica bajo `labeling/<id>@<version>/`: el Studio lo
+  abre por carpeta y los `<clase>.jsonl` referencian rutas relativas a esa
+  carpeta, así que en DEV conserva el prefijo de PRO (`classification/`).
+  Lleva la misma estructura (origen, prefijo, fecha de corte, ficheros con
+  tamaño y MD5) y `"kind": "di-classifier-project"` para distinguirlo. Nota:
+  PRO usa **dos** cuentas de storage con datasets (ver tabla en "Analyzers y
+  sus datasets" más abajo).
 
 - **`validation/<analyzerId>.json`**: muestra de validación por analyzer
   para `scripts/ai/validate-analyzer.ps1` (paso 5): referencias a 5 blobs PDF
@@ -166,13 +167,37 @@ de referencia para una limpieza futura de los recursos origen.
   | `CERA16_v1` | `srbstgproapppdocai` | `documentai` | `labelingProjects/30189708-d5c2-48ab-8ecf-beb626f8fabb/train` |
   | `CERA44_vado` | `srbstgprodocai` | `documentai` | `labelingProjects/6fad949e-aacd-4220-8eb6-2629e51dd7ff/train` |
   | `CERA46` | `srbstgprodocai` | `documentai` | `labelingProjects/246552b6-ae9f-42f8-b172-d12d508a9038/train` |
+  | `DocumentAICC_v1` (clasificador DI) | `srbstgproapppdocai` | `documentai` | `classification` (15 `<clase>.jsonl` + carpeta por clase con PDF y `.ocr.json`) |
 
-  Extraído de `knowledgeSources` de los 6 exports (más la copia West Europe
-  de `CU_NS_1.5_0`, con el mismo prefijo). Dos cuentas de storage en total:
-  `srbstgproapppdocai` (4 analyzers, 2 prefijos) y `srbstgprodocai` (2
-  analyzers, 2 prefijos). La petición de rol a plataforma para reconstruir
-  estos datasets en DEV/PRE debe pedir **Storage Blob Data Reader sobre las
-  dos cuentas**, no solo sobre `srbstgproapppdocai`.
+  Los 6 de Content Understanding salen de `knowledgeSources` de los exports
+  (más la copia West Europe de `CU_NS_1.5_0`, con el mismo prefijo); el de
+  Document Intelligence se localizó listando el contenedor el 2026-10-09. Dos
+  cuentas de storage en total: `srbstgproapppdocai` (5 artefactos, 3
+  prefijos) y `srbstgprodocai` (2 analyzers, 2 prefijos). Reconstruir estos
+  datasets en DEV/PRE exige **Storage Blob Data Reader sobre las dos
+  cuentas**, no solo sobre `srbstgproapppdocai`.
+
+  **Proyectos de los Studios en DEV (2026-10-09, AB#100924).** Los datasets
+  de `labeling/<id>@<version>/` son copias de `train/` para validar y
+  promocionar; los Studios no los ven como proyecto. Para que los
+  entrenadores etiqueten en DEV (ADR-001) se replicaron además los proyectos
+  en `srbstgdevdocai/documentai`: los 11 de Content Understanding Studio
+  como `labelingProjects/<guid-nuevo>/` (el proyecto se crea en el Studio
+  sobre `srbaisrv01devdocai` y se rellena por script con `analyzer.json`,
+  `train/` y `test/` de PRO; el Studio lee el storage con la identidad del
+  recurso, que necesita Storage Blob Data Contributor) y el de Document
+  Intelligence Studio como `classification/`, misma ruta que en PRO (el
+  proyecto `DocumentAICC_v1 DEV` se crea en el Studio sobre `srbdidevdocai`
+  apuntando a esa carpeta; DI Studio lee el storage con el token del
+  usuario, que necesita Storage Blob Data Contributor sobre
+  `srbstgdevdocai`). El storage de DEV lleva una regla CORS por Studio
+  (`https://contentunderstanding.ai.azure.com` y
+  `https://documentintelligence.ai.azure.com`; el PUT ARM de `blobServices`
+  es de reemplazo y debe incluir las políticas de soft delete completas o la
+  política de retención lo deniega). No se pulsa Train/Build sobre un
+  proyecto replicado: crearía un artefacto paralelo al que gestiona el
+  pipeline 832. Los proyectos no se replican en PRE y los de PRO se
+  conservan hasta el primer ciclo DEV → PRE → PRO.
 
 - **`inventory-prod-foundry.json`** / **`inventory-prod-foundry-westeurope.json`**:
   listado de analyzers custom (excluye los `prebuilt-*`) de **cada una** de
