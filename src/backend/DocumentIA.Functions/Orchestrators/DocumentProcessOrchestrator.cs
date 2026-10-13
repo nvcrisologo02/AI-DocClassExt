@@ -959,6 +959,8 @@ public class DocumentProcessOrchestrator
                     {
                         logger.LogWarning("Documento duplicado detectado por MD5 GDC. Recuperando última ejecución persistida");
 
+                        // AB#100934: la actividad ya devuelve ObtenerUltimaEjecucionDuplicadoResultado; el orquestador se adapta en la tarea siguiente y entonces se retira esta supresion.
+#pragma warning disable DURABLE2002
                         var salidaDuplicado = await context.CallActivityAsync<ContratoSalida?>(
                             "ObtenerUltimaEjecucionDuplicadoActivity",
                             new ObtenerUltimaEjecucionDuplicadoInput
@@ -967,6 +969,7 @@ public class DocumentProcessOrchestrator
                                 ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
                                 NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion
                             });
+#pragma warning restore DURABLE2002
 
                         if (salidaDuplicado is not null)
                         {
@@ -1079,6 +1082,8 @@ public class DocumentProcessOrchestrator
                 {
                     logger.LogWarning("Documento duplicado detectado. Recuperando última ejecución persistida");
 
+                    // AB#100934: la actividad ya devuelve ObtenerUltimaEjecucionDuplicadoResultado; el orquestador se adapta en la tarea siguiente y entonces se retira esta supresion.
+#pragma warning disable DURABLE2002
                     var salidaDuplicado = await context.CallActivityAsync<ContratoSalida?>(
                         "ObtenerUltimaEjecucionDuplicadoActivity",
                         new ObtenerUltimaEjecucionDuplicadoInput
@@ -1087,6 +1092,7 @@ public class DocumentProcessOrchestrator
                             ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
                             NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion
                         });
+#pragma warning restore DURABLE2002
 
                     if (salidaDuplicado is not null)
                     {

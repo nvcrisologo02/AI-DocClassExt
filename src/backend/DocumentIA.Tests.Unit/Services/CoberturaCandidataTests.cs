@@ -58,4 +58,14 @@ public class CoberturaCandidataTests
         CoberturaCandidata.Cubre(det, NecesidadMarkdown.Paginas(4)).Should().BeFalse();
         CoberturaCandidata.Cubre(det, NecesidadMarkdown.Completo()).Should().BeFalse();
     }
+
+    [Fact]
+    public void Cubre_RecorteConMarkdownCompleto_CompletoSirveYPaginasSoloHastaElRecorte()
+    {
+        var det = new DetalleEjecucion { MarkdownCompleto = true, MarkdownPaginas = 0, RecorteAplicado = true, PaginasIncluidas = 3 };
+
+        CoberturaCandidata.Cubre(det, NecesidadMarkdown.Completo()).Should().BeTrue();
+        CoberturaCandidata.Cubre(det, NecesidadMarkdown.Paginas(3)).Should().BeTrue();
+        CoberturaCandidata.Cubre(det, NecesidadMarkdown.Paginas(4)).Should().BeFalse();
+    }
 }

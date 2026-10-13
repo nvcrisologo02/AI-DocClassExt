@@ -11,6 +11,7 @@ namespace DocumentIA.Core.Services;
 /// </summary>
 public static class ClaveIntencionDerivador
 {
+    /// <summary>Devuelve null si el contrato es ilegible, es un DUPLICADO vacio o no trae DetalleEjecucion.</summary>
     public static ClaveIntencion? DesdeContrato(string? contratoJson, string nivelDefault)
     {
         if (string.IsNullOrWhiteSpace(contratoJson))
@@ -31,6 +32,12 @@ public static class ClaveIntencionDerivador
             }
 
             var detalle = Buscar(raiz, "DetalleEjecucion");
+            if (detalle is not { ValueKind: JsonValueKind.Object })
+            {
+                // Contrato hueco o sin DetalleEjecucion: no hay intencion que derivar.
+                return null;
+            }
+
             var clasificacion = Buscar(detalle, "Clasificacion");
             var modelo = Texto(Buscar(clasificacion, "Modelo"));
             var expectedType = string.Equals(modelo, ClaveIntencionBuilder.ModeloExpectedType, StringComparison.OrdinalIgnoreCase)

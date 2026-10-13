@@ -83,6 +83,10 @@ public class ClaveIntencionDerivadorTests
     [InlineData(null)]
     [InlineData("")]
     [InlineData("{no es json")]
+    [InlineData("{}")]
+    [InlineData("null")]
+    [InlineData("[]")]
+    [InlineData("""{"Resultado":{"Estado":"OK"}}""")]
     public void DesdeContrato_ContratoIlegible_DevuelveNull(string? json)
     {
         ClaveIntencionDerivador.DesdeContrato(json, NivelDefault).Should().BeNull();
