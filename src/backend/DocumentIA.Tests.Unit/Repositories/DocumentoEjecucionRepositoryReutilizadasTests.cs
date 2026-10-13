@@ -163,6 +163,39 @@ public class DocumentoEjecucionRepositoryReutilizadasTests
         reutilizaciones.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task GetPagedAsync_Should_FiltrarPorMotivoReutilizacion()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro();
+        filtro.Reutilizadas = FiltroReutilizadas.Incluir;
+        filtro.MotivoReutilizacion = "clave-igual";
+
+        var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        total.Should().Be(1);
+        items.Single().MotivoReutilizacion.Should().Be("clave-igual");
+    }
+
+    [Fact]
+    public async Task GetPagedAsync_Should_FiltrarMotivoDeNoReutilizacionEnFilasPropias()
+    {
+        await using var context = CreateContext();
+        Seed(context);
+        var repo = new DocumentoEjecucionRepository(context);
+
+        var filtro = Filtro();
+        filtro.MotivoReutilizacion = "clave-distinta";
+
+        var (items, total) = await repo.GetPagedAsync(filtro, 1, 25);
+
+        total.Should().Be(1);
+        items.Single().ReutilizadaPorDuplicado.Should().BeFalse();
+    }
+
     private static EjecucionFiltro Filtro() =>
         new() { Desde = Base, Hasta = Base.AddDays(10) };
 
@@ -201,7 +234,8 @@ public class DocumentoEjecucionRepositoryReutilizadasTests
                 Tipologia = "NOTS",
                 ConfianzaGlobal = 0.9,
                 DuracionTotalMs = 1200,
-                CosteIAEur = 0.07m
+                CosteIAEur = 0.07m,
+                MotivoReutilizacion = "clave-distinta"
             },
             // La reutilizacion copia estado y tipologia del original, pero no tiene
             // contrato ni coste propios: su duracion es la de servir la respuesta.
@@ -216,7 +250,8 @@ public class DocumentoEjecucionRepositoryReutilizadasTests
                 ConfianzaGlobal = 0.9,
                 DuracionTotalMs = 40,
                 ReutilizadaPorDuplicado = true,
-                EjecucionOriginalId = 2
+                EjecucionOriginalId = 2,
+                MotivoReutilizacion = "clave-igual"
             });
 
         context.SaveChanges();

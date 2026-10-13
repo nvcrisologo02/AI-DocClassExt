@@ -44,5 +44,8 @@ namespace DocumentIA.Data.Repositories
 
         /// <summary>Id de la ejecucion cuyo contrato se devolvio; null si no es una reutilizacion.</summary>
         public int? EjecucionOriginalId { get; set; }
+
+        /// <summary>Motivo de reutilizacion o de no reutilizacion de la regla de duplicado (AB#100930).</summary>
+        public string? MotivoReutilizacion { get; set; }
     }
 }

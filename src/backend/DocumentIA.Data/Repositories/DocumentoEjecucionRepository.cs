@@ -328,6 +328,11 @@ namespace DocumentIA.Data.Repositories
                 _ => q.Where(e => !e.ReutilizadaPorDuplicado)
             };
 
+            if (!string.IsNullOrWhiteSpace(filtro.MotivoReutilizacion))
+            {
+                q = q.Where(e => e.MotivoReutilizacion == filtro.MotivoReutilizacion);
+            }
+
             if (!string.IsNullOrWhiteSpace(filtro.Tipologia))
             {
                 q = q.Where(e => e.Tipologia == filtro.Tipologia);
@@ -468,7 +473,8 @@ namespace DocumentIA.Data.Repositories
                     CosteIAEur = e.CosteIAEur,
                     CosteEstimado = e.CosteEstimado,
                     ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
-                    EjecucionOriginalId = e.EjecucionOriginalId
+                    EjecucionOriginalId = e.EjecucionOriginalId,
+                    MotivoReutilizacion = e.MotivoReutilizacion
                 })
                 .ToListAsync();
 
@@ -501,7 +507,8 @@ namespace DocumentIA.Data.Repositories
                         ? (e.Documento != null ? e.Documento.NombreArchivo : null)
                         : SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato),
                     ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
-                    EjecucionOriginalId = e.EjecucionOriginalId
+                    EjecucionOriginalId = e.EjecucionOriginalId,
+                    MotivoReutilizacion = e.MotivoReutilizacion
                 })
                 .ToListAsync();
         }

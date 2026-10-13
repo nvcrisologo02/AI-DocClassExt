@@ -89,7 +89,8 @@ public class EjecucionesAdminFunction
                 "incluir" => FiltroReutilizadas.Incluir,
                 "solo" => FiltroReutilizadas.Solo,
                 _ => FiltroReutilizadas.Excluir
-            }
+            },
+            MotivoReutilizacion = Valor("motivo")
         };
     }
 
@@ -163,7 +164,8 @@ public class EjecucionesAdminFunction
             e.CosteIAEur,
             e.CosteEstimado,
             e.ReutilizadaPorDuplicado,
-            e.EjecucionOriginalId
+            e.EjecucionOriginalId,
+            e.MotivoReutilizacion
         }).ToList();
 
         var response = req.CreateResponse(HttpStatusCode.OK);
@@ -417,7 +419,11 @@ public class EjecucionesAdminFunction
             Plugins = plugins,
             ejecucion.ReutilizadaPorDuplicado,
             Reutilizacion = reutilizacion,
-            Reutilizaciones = reutilizaciones
+            Reutilizaciones = reutilizaciones,
+            // AB#100930: la regla de reutilizacion, auditable desde la fila.
+            ejecucion.ClaveIntencion,
+            ClaveIntencionComponentes = ClaveIntencionBuilder.Deserializar(ejecucion.ClaveIntencionJson),
+            ejecucion.MotivoReutilizacion
         };
 
         var response = req.CreateResponse(HttpStatusCode.OK);
