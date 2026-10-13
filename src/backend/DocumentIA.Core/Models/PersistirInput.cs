@@ -32,4 +32,10 @@ public class ReutilizacionInput
     /// de NormalizarActivity y un contrato antiguo puede traer el suyo vacio.
     /// </summary>
     public string Sha256 { get; set; } = string.Empty;
+
+    /// <summary>
+    /// True cuando la reutilizacion ejecuto PromptActivity para completar resumen o prompt
+    /// (AB#100930): la fila persiste entonces el contrato devuelto y el coste del prompt.
+    /// </summary>
+    public bool Completada { get; set; }
 }
