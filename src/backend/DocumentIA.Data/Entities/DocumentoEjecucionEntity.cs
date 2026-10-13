@@ -141,6 +141,27 @@ namespace DocumentIA.Data.Entities
         /// </summary>
         public int? EjecucionOriginalId { get; set; }
 
+        /// <summary>
+        /// Clave de intencion de la peticion (AB#100930): hash de modo, nivel, universo de
+        /// tipologias, ExpectedType y modelo de clasificacion. Es lo que compara la
+        /// reutilizacion por duplicado. Null en filas anteriores al cambio hasta el backfill y
+        /// en las reutilizaciones antiguas, cuya peticion no se conoce.
+        /// </summary>
+        [MaxLength(32)]
+        public string? ClaveIntencion { get; set; }
+
+        /// <summary>Componentes de la clave con sus nombres, para auditoria y Monitor.</summary>
+        [Column(TypeName = "nvarchar(max)")]
+        public string? ClaveIntencionJson { get; set; }
+
+        /// <summary>
+        /// En filas reutilizadas, "clave-igual". En filas no reutilizadas tras detectar un
+        /// duplicado, el motivo (sin-historica, clave-distinta, modelo-extraccion-distinto,
+        /// paginas-insuficientes, contrato-invalido). Null en el resto.
+        /// </summary>
+        [MaxLength(40)]
+        public string? MotivoReutilizacion { get; set; }
+
         /// <summary>Navegacion a la ejecucion reutilizada.</summary>
         public virtual DocumentoEjecucionEntity? EjecucionOriginal { get; set; }
 
