@@ -323,7 +323,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
             RehidratarResultadoSiIncompleto(salida, ultimaConSalida);
             await RehidratarTdnSiIncompletoAsync(salida, documento);
             salida.Resultado.ReutilizadaPorDuplicado = true;
-            salida.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la ultima ejecucion.";
+            salida.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
             return salida;
         }
         catch (JsonException ex)
