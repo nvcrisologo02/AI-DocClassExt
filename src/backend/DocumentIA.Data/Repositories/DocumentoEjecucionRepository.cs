@@ -512,6 +512,56 @@ namespace DocumentIA.Data.Repositories
         /// <summary>Tope de reutilizaciones que se listan en el detalle de una ejecucion.</summary>
         private const int MaxReutilizacionesEnDetalle = 20;
 
+        private const string EstadoDuplicadoVacio = "DUPLICADO";
+
+        public async Task<IReadOnlyList<DocumentoEjecucionEntity>> GetCandidatasPorClaveAsync(
+            int documentoId, string claveIntencion, int skip, int take)
+        {
+            return await _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .Where(e => e.DocumentoId == documentoId
+                    && e.ClaveIntencion == claveIntencion
+                    && !e.ReutilizadaPorDuplicado
+                    && e.EstadoFinal != EstadoDuplicadoVacio)
+                .OrderByDescending(e => e.FechaEjecucion)
+                .ThenByDescending(e => e.Id)
+                .Skip(skip)
+                .Take(take)
+                .ToListAsync();
+        }
+
+        public async Task<IReadOnlyList<DocumentoEjecucionEntity>> GetConContratoSinClaveAsync(int documentoId, int take)
+        {
+            return await _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .Where(e => e.DocumentoId == documentoId
+                    && e.ClaveIntencion == null
+                    && !e.ReutilizadaPorDuplicado
+                    && e.ContratoSalidaCompletoJson != null)
+                .OrderByDescending(e => e.FechaEjecucion)
+                .ThenByDescending(e => e.Id)
+                .Take(take)
+                .ToListAsync();
+        }
+
+        public Task<bool> TieneEjecucionesConContratoAsync(int documentoId)
+        {
+            return _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .AnyAsync(e => e.DocumentoId == documentoId
+                    && !e.ReutilizadaPorDuplicado
+                    && e.ContratoSalidaCompletoJson != null);
+        }
+
+        public async Task ActualizarClaveIntencionAsync(int ejecucionId, string claveIntencion, string componentesJson)
+        {
+            await _context.DocumentoEjecuciones
+                .Where(e => e.Id == ejecucionId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(e => e.ClaveIntencion, claveIntencion)
+                    .SetProperty(e => e.ClaveIntencionJson, componentesJson));
+        }
+
         /// <summary>
         /// Agregados de coste de IA (AB#100237). Todo sobre columnas escalares: el
         /// desglose por llamada vive en el contrato JSON y agregarlo por OPENJSON
