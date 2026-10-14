@@ -960,8 +960,7 @@ public class DocumentProcessOrchestrator
                     ClassificationLevelResolver.LevelTdn1,
                     StringComparison.OrdinalIgnoreCase);
 
-                var pideResumen = (entrada.Instrucciones.ForzarResumenPorDefecto
-                        || (entrada.Instrucciones.ClassificationOnly && esNivelTdn1Peticion))
+                var pideResumen = (entrada.Instrucciones.ForzarResumenPorDefecto || esNivelTdn1Peticion)
                     && !reutilizada.DatosExtraidos.ContainsKey("Resumen");
 
                 var promptHistorico = reutilizada.DetalleEjecucion.Prompt;

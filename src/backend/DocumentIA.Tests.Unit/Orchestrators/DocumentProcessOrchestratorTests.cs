@@ -5017,6 +5017,36 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_Reutilizacion_ModoCompletoTdn1SinResumen_EjecutaPromptSoloResumen()
+    {
+        // El flujo normal fuerza el resumen por defecto con nivel TDN1 sin mirar ClassificationOnly
+        // (forzarResumenDedicado); la reutilizacion aplica el mismo criterio.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: false, forzarResumenPorDefecto: false);
+        entrada.Instrucciones.Classification.NivelClasificacion = ClassificationLevelResolver.LevelTdn1;
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var historica = HistoricaSoloClasificacion(conResumen: false);
+        historica.DetalleEjecucion.ClassificationOnly = false;
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(historica, true));
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Markdown = "# doc", Paginas = 3, Completo = false, Fuente = FuenteMarkdown.BaseDatos });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-4o-mini", Resumen = "resumen nuevo", TiempoMs = 500 });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        salida.DatosExtraidos["Resumen"].Should().Be("resumen nuevo");
+        context.GetActivityCallCount("PromptActivity").Should().Be(1);
+        context.GetLastActivityInput<PromptActivityInput>("PromptActivity")!.ForzarResumenPorDefecto.Should().BeTrue();
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Reutilizacion!.Completada.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_Reutilizacion_PromptAdHocYaEjecutadoConLaMismaPlantilla_NoSeRepite()
     {
         var orchestrator = CreateOrchestrator();
