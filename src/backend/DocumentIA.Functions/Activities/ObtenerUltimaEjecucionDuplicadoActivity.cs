@@ -295,7 +295,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
     {
         var ejecuciones = await _documentoEjecucionRepository.GetByDocumentoIdAsync(documento.Id);
         var conContrato = ejecuciones
-            .Where(e => !string.IsNullOrWhiteSpace(e.ContratoSalidaCompletoJson))
+            .Where(e => !string.IsNullOrWhiteSpace(e.ContratoSalidaCompletoJson) && !e.ReutilizadaPorDuplicado)
             .ToList();
         var candidatas = conContrato
             .Where(e => !EstadoEjecucion.NoReutilizables.Contains(e.EstadoFinal))

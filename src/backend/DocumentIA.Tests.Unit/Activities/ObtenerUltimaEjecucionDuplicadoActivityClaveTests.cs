@@ -307,6 +307,50 @@ public class ObtenerUltimaEjecucionDuplicadoActivityClaveTests
         r.MotivoNoReutilizacion.Should().Be(MotivosReutilizacion.ClaveDistinta);
     }
 
+    [Fact]
+    public async Task ModoEstrictoDesactivado_ReutilizacionMasRecienteQueLaOriginal_ReutilizaLaOriginal()
+    {
+        // La reutilizacion lleva contrato pero nunca es el original (revision final, m-1).
+        var original = Fila(1, null, Contrato(classificationOnly: true));
+        var reutilizacion = Fila(2, null, Contrato(classificationOnly: true));
+        reutilizacion.ReutilizadaPorDuplicado = true;
+        _ejecuciones.Setup(r => r.GetByDocumentoIdAsync(10)).ReturnsAsync(new[] { reutilizacion, original });
+
+        var r = await Sut(estricto: false).Run(Input("cualquiera", false, 3, classificationOnly: true));
+
+        r.Salida.Should().NotBeNull();
+        r.Salida!.DetalleEjecucion.EjecucionOriginalGuid.Should().Be("guid-1");
+    }
+
+    [Fact]
+    public async Task ModoCompleto_GptDirectoHistoricaSinModelKeyEfectivo_ReprocesaUnaVezPorFilasAntiguas()
+    {
+        // Filas anteriores a que GPT-directo y DI persistieran ModelKeyEfectivo: reproceso unico.
+        var clave = ClaveCompleto();
+        _tipologias.Setup(r => r.GetByCodigoAsync("tasacion")).ReturnsAsync(TipologiaPublicada("tasacion", "gpt-4o-mini", provider: "azure-openai"));
+        var fila = Fila(1, clave.Clave, Contrato(classificationOnly: false, modelKeyExtraccion: null));
+        _ejecuciones.Setup(r => r.GetCandidatasPorClaveAsync(10, clave.Clave, 0, 1)).ReturnsAsync(new[] { fila });
+        _ejecuciones.Setup(r => r.GetCandidatasPorClaveAsync(10, clave.Clave, 1, 4)).ReturnsAsync(Array.Empty<DocumentoEjecucionEntity>());
+
+        var r = await Sut().Run(Input(clave.Clave, true, 0, false));
+
+        r.Salida.Should().BeNull();
+        r.MotivoNoReutilizacion.Should().Be(MotivosReutilizacion.ModeloExtraccionDistinto);
+    }
+
+    [Fact]
+    public async Task ModoCompleto_GptDirectoHistoricaConModelKeyEfectivo_Reutiliza()
+    {
+        var clave = ClaveCompleto();
+        _tipologias.Setup(r => r.GetByCodigoAsync("tasacion")).ReturnsAsync(TipologiaPublicada("tasacion", "gpt-4o-mini", provider: "azure-openai"));
+        var fila = Fila(1, clave.Clave, Contrato(classificationOnly: false, modelKeyExtraccion: "gpt-4o-mini"));
+        _ejecuciones.Setup(r => r.GetCandidatasPorClaveAsync(10, clave.Clave, 0, 1)).ReturnsAsync(new[] { fila });
+
+        var r = await Sut().Run(Input(clave.Clave, true, 0, false));
+
+        r.Salida.Should().NotBeNull();
+    }
+
     private ObtenerUltimaEjecucionDuplicadoActivity Sut(bool estricto = true) => new(
         new Mock<ILogger<ObtenerUltimaEjecucionDuplicadoActivity>>().Object,
         _documentos.Object,
@@ -362,11 +406,11 @@ public class ObtenerUltimaEjecucionDuplicadoActivityClaveTests
         return JsonSerializer.Serialize(salida);
     }
 
-    private static TipologiaEntity TipologiaPublicada(string codigo, string modelKey, string? secondaryModelKey = null) => new()
+    private static TipologiaEntity TipologiaPublicada(string codigo, string modelKey, string? secondaryModelKey = null, string provider = "azure-content-understanding") => new()
     {
         Codigo = codigo,
         Activa = true,
         Estado = EstadoTipologia.Published,
-        ConfiguracionJson = $$$"""{"tipologiaId":"{{{codigo}}}","extraction":{"enabled":true,"provider":"azure-content-understanding","modelKey":"{{{modelKey}}}"{{{(secondaryModelKey is null ? "" : $",\"secondaryModelKey\":\"{secondaryModelKey}\"")}}}}}"""
+        ConfiguracionJson = $$$"""{"tipologiaId":"{{{codigo}}}","extraction":{"enabled":true,"provider":"{{{provider}}}","modelKey":"{{{modelKey}}}"{{{(secondaryModelKey is null ? "" : $",\"secondaryModelKey\":\"{secondaryModelKey}\"")}}}}}"""
     };
 }

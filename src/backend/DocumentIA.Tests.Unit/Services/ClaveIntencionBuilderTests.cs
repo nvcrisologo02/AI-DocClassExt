@@ -98,12 +98,13 @@ public class ClaveIntencionBuilderTests
 
     // Vectores compartidos con scripts/database/backfill-clave-intencion.ps1 (-SelfTest). Si
     // cambia la forma canonica hay que cambiar los dos sitios a la vez: un backfill con otra
-    // canonica escribiria claves que nunca coinciden con las vivas.
+    // canonica escribiria claves que nunca coinciden con las vivas. Los hashes son literales
+    // (sha256 de la forma canonica, 32 primeros hex) y replican el -SelfTest del backfill.
     [Theory]
-    [InlineData(false, "TDN1_TDN2", "*", "", "gpt-4o-mini", "v1|completo|TDN1_TDN2|*||gpt-4o-mini")]
-    [InlineData(true, "TDN1", "NOTA.SIMPLE,TASACION", "", "gpt-4o-mini", "v1|solo-clasificacion|TDN1|NOTA.SIMPLE,TASACION||gpt-4o-mini")]
-    [InlineData(false, "TDN1_TDN2", "*", "NOTA.SIMPLE", "expectedtype-input", "v1|completo|TDN1_TDN2|*|NOTA.SIMPLE|expectedtype-input")]
-    public void FormaCanonica_EsLaQueReplicaElBackfill(bool solo, string nivel, string universo, string expected, string modelo, string canonicaEsperada)
+    [InlineData(false, "TDN1_TDN2", "*", "", "gpt-4o-mini", "v1|completo|TDN1_TDN2|*||gpt-4o-mini", "ae16c9e79cf0dac934cb460c80397c65")]
+    [InlineData(true, "TDN1", "NOTA.SIMPLE,TASACION", "", "gpt-4o-mini", "v1|solo-clasificacion|TDN1|NOTA.SIMPLE,TASACION||gpt-4o-mini", "4fc9510621a5ba0162368b8f72f869cc")]
+    [InlineData(false, "TDN1_TDN2", "*", "NOTA.SIMPLE", "expectedtype-input", "v1|completo|TDN1_TDN2|*|NOTA.SIMPLE|expectedtype-input", "ee58c9392080836d32c11865bd8b8f53")]
+    public void FormaCanonica_EsLaQueReplicaElBackfill(bool solo, string nivel, string universo, string expected, string modelo, string canonicaEsperada, string claveEsperada)
     {
         var c = new ClaveIntencionComponentes
         {
@@ -115,15 +116,14 @@ public class ClaveIntencionBuilderTests
         };
 
         ClaveIntencionBuilder.FormaCanonica(c).Should().Be(canonicaEsperada);
-        ClaveIntencionBuilder.Calcular(c).Should().Be(ClaveIntencionBuilder.Calcular(c));
+        ClaveIntencionBuilder.Calcular(c).Should().Be(claveEsperada);
     }
 
     [Fact]
     public void VectorDeReferencia_FijaElHashParaElBackfill()
     {
-        // Hash de "v1|completo|TDN1_TDN2|*||gpt-4o-mini". Se calcula una vez al implementar
-        // (Step 4) y se copia aqui y en el -SelfTest del backfill. Hasta entonces el valor es
-        // el marcador y el test falla a proposito.
+        // Hash de "v1|completo|TDN1_TDN2|*||gpt-4o-mini", copiado tambien en el -SelfTest del
+        // backfill. Si cambia hay que cambiar los dos sitios a la vez.
         var c = ClaveIntencionBuilder.Normalizar(false, null, NivelDefault, null, null, "gpt-4o-mini");
 
         ClaveIntencionBuilder.Calcular(c).Should().Be(VectorReferencia);

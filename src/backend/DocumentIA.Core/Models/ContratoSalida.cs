@@ -185,7 +185,7 @@ public class DetalleEjecucion
 
     /// <summary>
     /// Cuando se detecto un duplicado y no se reutilizo: sin-historica, clave-distinta,
-    /// modelo-extraccion-distinto, paginas-insuficientes o contrato-invalido. La ejecucion
+    /// modelo-extraccion-distinto, paginas-insuficientes, contrato-invalido o historica-fallida. La ejecucion
     /// siguio el flujo normal.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

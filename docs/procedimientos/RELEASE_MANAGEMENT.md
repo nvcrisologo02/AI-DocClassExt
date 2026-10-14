@@ -160,6 +160,8 @@ Vuelta atrás: Anexo B, capa 1.
 
 - [ ] **2.2.5** Política de ciclo de vida de los recortes de clasificación en la cuenta de documentos de PRE (`srbstgpredocai`): `pwsh ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment pre -WhatIf` y, revisada la salida, sin `-WhatIf`. Debe conservar las reglas existentes y añadir `documents-clasif-7d` (AB#100814). Anotar la salida en `runbook.md`.
 
+- [ ] **2.2.6** Drenar orquestaciones en vuelo, antes de 2.2.1. **Obligatorio cuando la release cambia la secuencia de actividades del orquestador** (la de AB#100930 lo hace: una orquestación iniciada con la versión anterior y reanudada tras el despliegue rompe el replay o deserializa un resultado vacío). Parar la ingesta de PRE o esperar a que no haya carga, comprobar que no quedan instancias `Running` ni `Pending` (tabla `Instances` del task hub en el storage de la Function App o el endpoint de estado de Durable), desplegar con 2.2.1 y reanudar la ingesta. Precedente: AB#100176.
+
 ### 2.3 Configuración del release
 
 El origen de la configuración es siempre DEV, pero el export de 1.3 no se aplica en PRE (regla
@@ -380,6 +382,8 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
 
 - [ ] **4.13** Política de ciclo de vida de los recortes de clasificación en la cuenta de documentos de PRO (`srbstgprodocai`): `pwsh ./scripts/storage/set-lifecycle-documents-clasif.ps1 -Environment pro -WhatIf` y, revisada la salida, sin `-WhatIf`; antes de 4.4. Debe conservar las reglas existentes y añadir `documents-clasif-7d` (AB#100814). Anotar la salida en `runbook.md`.
 - [ ] **4.14** Tras 4.4, comprobar en `srbappprodocai` que `DOTNET_GCHeapHardLimitPercent` vale `28` (lo fija el pipeline 802; AB#100814) y observar Private Bytes de host y worker en la hora de 4.9: ninguno debe superar ~1,4 GiB.
+
+- [ ] **4.15** Drenar orquestaciones en vuelo, antes de 4.4. **Obligatorio cuando la release cambia la secuencia de actividades del orquestador** (la de AB#100930 lo hace). Parar la ingesta de PRO (o elegir un momento sin carga), comprobar que no quedan instancias `Running` ni `Pending` en el task hub (tabla `Instances` del storage de la Function App o el endpoint de estado de Durable), desplegar con 4.4 y reanudar la ingesta. Anotar en `runbook.md` la hora de parada, la comprobación y la reanudación. Precedente: AB#100176.
 
 Verificación: 4.6 en 6/6, 4.7 sin diferencias no explicadas, 4.9 sin anomalías.
 Vuelta atrás: Anexo B, en orden de capas.

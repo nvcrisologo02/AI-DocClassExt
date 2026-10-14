@@ -94,6 +94,8 @@ function Test-Vectores {
     if ((Get-FormaCanonica $c2.modo $c2.nivel $c2.universo $c2.expectedType $c2.modeloClasificacion) -ne "v1|solo-clasificacion|TDN1|NOTA.SIMPLE,TASACION||gpt-4o-mini") { $fallos += "canonica 2" }
     if ((Get-FormaCanonica $c3.modo $c3.nivel $c3.universo $c3.expectedType $c3.modeloClasificacion) -ne "v1|completo|TDN1_TDN2|*|NOTA.SIMPLE|expectedtype-input") { $fallos += "canonica 3" }
     if ((Get-ClaveIntencion "v1|completo|TDN1_TDN2|*||gpt-4o-mini") -ne $VECTOR_REFERENCIA) { $fallos += "hash de referencia" }
+    if ((Get-ClaveIntencion "v1|solo-clasificacion|TDN1|NOTA.SIMPLE,TASACION||gpt-4o-mini") -ne "4fc9510621a5ba0162368b8f72f869cc") { $fallos += "hash 2" }
+    if ((Get-ClaveIntencion "v1|completo|TDN1_TDN2|*|NOTA.SIMPLE|expectedtype-input") -ne "ee58c9392080836d32c11865bd8b8f53") { $fallos += "hash 3" }
     if (($c1 | ConvertTo-Json -Compress) -ne '{"modo":"completo","nivel":"TDN1_TDN2","universo":"*","expectedType":"","modeloClasificacion":"gpt-4o-mini"}') { $fallos += "json de componentes" }
     if ($fallos.Count -gt 0) { throw "SelfTest fallido: $($fallos -join ', '). No ejecutar el backfill." }
     Write-Host "SelfTest OK: forma canonica, hash y json de componentes coinciden con ClaveIntencionBuilder."

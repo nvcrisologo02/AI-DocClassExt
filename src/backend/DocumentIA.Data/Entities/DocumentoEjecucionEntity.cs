@@ -157,7 +157,7 @@ namespace DocumentIA.Data.Entities
         /// <summary>
         /// En filas reutilizadas, "clave-igual". En filas no reutilizadas tras detectar un
         /// duplicado, el motivo (sin-historica, clave-distinta, modelo-extraccion-distinto,
-        /// paginas-insuficientes, contrato-invalido). Null en el resto.
+        /// paginas-insuficientes, contrato-invalido, historica-fallida). Null en el resto.
         /// </summary>
         [MaxLength(40)]
         public string? MotivoReutilizacion { get; set; }

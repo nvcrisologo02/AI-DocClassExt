@@ -50,6 +50,8 @@ public class GptDirectExtraerDataProvider
             markdown,
             cancellationToken);
 
+        // El modelKey que realmente uso la llamada: la reutilizacion por duplicado lo compara.
+        resultado.ModelKeyEfectivo = modelKey;
         resultado.FallbackUsado = false;
         // FallbackRazon solo tiene sentido aquí como marca de timeout propio de la llamada GPT
         // directa (GptFallbackExtraerDataProvider.RazonExtraccionTimeout); cualquier otro valor se
