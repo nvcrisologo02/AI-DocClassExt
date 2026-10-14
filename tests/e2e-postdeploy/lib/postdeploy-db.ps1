@@ -143,7 +143,8 @@ function Get-EjecucionesSnapshot {
 WITH Ej AS (
     SELECT e.Id, e.InstanceId, e.EstadoFinal, e.FechaEjecucion,
            e.ReutilizadaPorDuplicado, e.EjecucionOriginalId,
-           e.ContratoSalidaCompletoJson, e.CosteIAEur
+           e.ContratoSalidaCompletoJson, e.CosteIAEur,
+           e.ClaveIntencion, e.MotivoReutilizacion
     FROM dbo.DocumentoEjecuciones e
     INNER JOIN dbo.Documentos d ON d.Id = e.DocumentoId
     WHERE d.SHA256 = @sha
@@ -163,7 +164,11 @@ SELECT
     CAST(u.ReutilizadaPorDuplicado AS int)                       AS UltimaReutilizadaInt,
     u.EjecucionOriginalId                                        AS UltimaEjecucionOriginalId,
     CASE WHEN u.ContratoSalidaCompletoJson IS NULL THEN 0 ELSE 1 END AS UltimaTieneContratoInt,
-    CASE WHEN u.CosteIAEur IS NULL THEN 1 ELSE 0 END             AS UltimaCosteEsNuloInt
+    CASE WHEN u.CosteIAEur IS NULL THEN 1 ELSE 0 END             AS UltimaCosteEsNuloInt,
+    u.ClaveIntencion                                             AS UltimaClaveIntencion,
+    u.MotivoReutilizacion                                        AS UltimaMotivo,
+    CASE WHEN JSON_VALUE(u.ContratoSalidaCompletoJson, '$.DatosExtraidos.Resumen') IS NULL THEN 0 ELSE 1 END AS UltimaTieneResumenInt,
+    (SELECT TOP 1 ClaveIntencion FROM Ej WHERE Id = @idSiembra)  AS SiembraClaveIntencion
 FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
 "@
 
@@ -174,6 +179,8 @@ FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
         UltimaReutilizada = $false; UltimaEjecucionOriginalId = $null
         UltimaTieneContrato = $false; UltimaCosteEsNulo = $false
         UltimaApuntaASiembra = $false
+        UltimaClaveIntencion = $null; UltimaMotivo = $null
+        UltimaTieneResumen = $false; UltimaClaveIgualASiembra = $false
     }
 
     $cmd = $Connection.CreateCommand()
@@ -181,6 +188,8 @@ FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
     [void]$cmd.Parameters.AddWithValue("@sha", $Sha256)
     $valorInstancia = if ([string]::IsNullOrWhiteSpace($InstanceId)) { [System.DBNull]::Value } else { $InstanceId }
     [void]$cmd.Parameters.AddWithValue("@instanceId", $valorInstancia)
+    $valorSiembra = if ($null -eq $IdSiembra) { [System.DBNull]::Value } else { [int]$IdSiembra }
+    [void]$cmd.Parameters.AddWithValue("@idSiembra", $valorSiembra)
 
     $lector = $cmd.ExecuteReader()
     try {
@@ -197,6 +206,11 @@ FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
             $apuntaASiembra = ([int]$IdSiembra -eq $originalId)
         }
 
+        $claveUltima = if ($lector["UltimaClaveIntencion"] -is [System.DBNull]) { $null } else { [string]$lector["UltimaClaveIntencion"] }
+        $motivoUltima = if ($lector["UltimaMotivo"] -is [System.DBNull]) { $null } else { [string]$lector["UltimaMotivo"] }
+        $claveSiembra = if ($lector["SiembraClaveIntencion"] -is [System.DBNull]) { $null } else { [string]$lector["SiembraClaveIntencion"] }
+        $claveIgual = ($null -ne $claveUltima -and $null -ne $claveSiembra -and $claveUltima -eq $claveSiembra)
+
         return [pscustomobject]@{
             Existe                          = $true
             Total                           = [int]$lector["Total"]
@@ -212,6 +226,10 @@ FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
             UltimaTieneContrato             = ([int]$lector["UltimaTieneContratoInt"] -eq 1)
             UltimaCosteEsNulo               = ([int]$lector["UltimaCosteEsNuloInt"] -eq 1)
             UltimaApuntaASiembra            = $apuntaASiembra
+            UltimaClaveIntencion            = $claveUltima
+            UltimaMotivo                    = $motivoUltima
+            UltimaTieneResumen              = ([int]$lector["UltimaTieneResumenInt"] -eq 1)
+            UltimaClaveIgualASiembra        = $claveIgual
         }
     }
     finally { $lector.Close() }

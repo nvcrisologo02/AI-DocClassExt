@@ -119,6 +119,12 @@ function New-DocumentIARequestBody {
     if ($null -ne $Case.PSObject.Properties['forzarProcesadoSinLimitePaginas'] -and $null -ne $Case.forzarProcesadoSinLimitePaginas) {
         $instrucciones["forzarProcesadoSinLimitePaginas"] = [bool]$Case.forzarProcesadoSinLimitePaginas
     }
+    if ($null -ne $Case.PSObject.Properties['restriccionTipologias'] -and $null -ne $Case.restriccionTipologias) {
+        $instrucciones["restriccionTipologias"] = @{ codigos = @($Case.restriccionTipologias) }
+    }
+    if ($null -ne $Case.PSObject.Properties['forzarResumenPorDefecto'] -and $null -ne $Case.forzarResumenPorDefecto) {
+        $instrucciones["forzarResumenPorDefecto"] = [bool]$Case.forzarResumenPorDefecto
+    }
 
     $body = @{
         instrucciones = $instrucciones
