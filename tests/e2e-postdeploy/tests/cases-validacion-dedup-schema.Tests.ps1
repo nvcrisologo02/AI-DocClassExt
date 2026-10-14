@@ -15,7 +15,8 @@ BeforeAll {
         "UltimaId", "UltimaInstanceId", "UltimaEstadoFinal",
         "UltimaReutilizada", "UltimaEjecucionOriginalId",
         "UltimaTieneContrato", "UltimaCosteEsNulo", "UltimaApuntaASiembra",
-        "UltimaClaveIntencion", "UltimaMotivo", "UltimaTieneResumen", "UltimaClaveIgualASiembra"
+        "UltimaClaveIntencion", "UltimaMotivo", "UltimaTieneResumen", "UltimaClaveIgualASiembra",
+        "UltimaPromptOmitido", "UltimaTienePrompt"
     )
     # Metricas que expone Get-MetricasMonitor en run-validacion-dedup.ps1.
     $script:MetricasMonitor = @("totalEjecuciones", "ok", "reutilizadas", "costeEvitadoEur", "costeTotalEur")

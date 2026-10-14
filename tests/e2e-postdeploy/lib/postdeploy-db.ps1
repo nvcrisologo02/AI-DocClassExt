@@ -168,6 +168,8 @@ SELECT
     u.ClaveIntencion                                             AS UltimaClaveIntencion,
     u.MotivoReutilizacion                                        AS UltimaMotivo,
     CASE WHEN JSON_VALUE(u.ContratoSalidaCompletoJson, '$.DatosExtraidos.Resumen') IS NULL THEN 0 ELSE 1 END AS UltimaTieneResumenInt,
+    JSON_VALUE(u.ContratoSalidaCompletoJson, '$.DetalleEjecucion.Prompt.Omitido')        AS UltimaPromptOmitido,
+    CASE WHEN JSON_VALUE(u.ContratoSalidaCompletoJson, '$.DatosExtraidos.ResultadoPrompt') IS NULL THEN 0 ELSE 1 END AS UltimaTienePromptInt,
     (SELECT TOP 1 ClaveIntencion FROM Ej WHERE Id = @idSiembra)  AS SiembraClaveIntencion
 FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
 "@
@@ -181,6 +183,7 @@ FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
         UltimaApuntaASiembra = $false
         UltimaClaveIntencion = $null; UltimaMotivo = $null
         UltimaTieneResumen = $false; UltimaClaveIgualASiembra = $false
+        UltimaPromptOmitido = $null; UltimaTienePrompt = $false
     }
 
     $cmd = $Connection.CreateCommand()
@@ -208,6 +211,7 @@ FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
 
         $claveUltima = if ($lector["UltimaClaveIntencion"] -is [System.DBNull]) { $null } else { [string]$lector["UltimaClaveIntencion"] }
         $motivoUltima = if ($lector["UltimaMotivo"] -is [System.DBNull]) { $null } else { [string]$lector["UltimaMotivo"] }
+        $promptOmitido = if ($lector["UltimaPromptOmitido"] -is [System.DBNull]) { $null } else { [string]$lector["UltimaPromptOmitido"] }
         $claveSiembra = if ($lector["SiembraClaveIntencion"] -is [System.DBNull]) { $null } else { [string]$lector["SiembraClaveIntencion"] }
         $claveIgual = ($null -ne $claveUltima -and $null -ne $claveSiembra -and $claveUltima -eq $claveSiembra)
 
@@ -230,6 +234,8 @@ FROM (SELECT TOP 1 * FROM Ej ORDER BY FechaEjecucion DESC, Id DESC) u
             UltimaMotivo                    = $motivoUltima
             UltimaTieneResumen              = ([int]$lector["UltimaTieneResumenInt"] -eq 1)
             UltimaClaveIgualASiembra        = $claveIgual
+            UltimaPromptOmitido             = $promptOmitido
+            UltimaTienePrompt               = ([int]$lector["UltimaTienePromptInt"] -eq 1)
         }
     }
     finally { $lector.Close() }

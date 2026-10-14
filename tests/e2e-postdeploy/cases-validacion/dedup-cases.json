@@ -271,7 +271,7 @@
   },
   {
     "caseKey": "DUP-09", "group": "DUP", "id": "09", "domain": "validacion",
-    "name": "Misma clave reutiliza y completa el resumen que la historica no tenia (siembra con nivelClasificacion TDN1_TDN2 explicito: no se pudo descartar estaticamente que el clasificador devuelva resumen combinado)",
+    "name": "Misma clave reutiliza y completa el prompt ad hoc que la historica no tenia; la fila de reutilizacion lleva contrato y coste del prompt",
     "covers": ["DUP-09"],
     "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
     "submittedBy": "e2e-validacion-dedup",
@@ -284,12 +284,12 @@
         "forceReprocess": true,
         "skipDuplicateCheck": false,
         "skipGDCUpload": true,
-        "nivelClasificacion": "TDN1_TDN2"
+        "prompt": { "userPromptTemplate": "Resume en una linea el contenido del documento." }
       }
     },
     "pasadas": [
       {
-        "nombre": "misma clave pidiendo resumen por defecto",
+        "nombre": "misma clave con otro prompt ad hoc",
         "request": {
           "classificationProvider": "gpt",
           "classificationOnly": true,
@@ -298,8 +298,7 @@
           "forceReprocess": false,
           "skipDuplicateCheck": false,
           "skipGDCUpload": true,
-          "nivelClasificacion": "TDN1_TDN2",
-          "forzarResumenPorDefecto": true
+          "prompt": { "userPromptTemplate": "Indica en una linea que marca de pagina aparece al final del documento." }
         },
         "assertions": { "expectedRuntimeStatus": "Completed" }
       }
@@ -311,7 +310,8 @@
       { "columna": "UltimaApuntaASiembra", "esperado": true },
       { "columna": "UltimaMotivo", "esperado": "clave-igual" },
       { "columna": "UltimaClaveIgualASiembra", "esperado": true },
-      { "columna": "UltimaTieneResumen", "esperado": true },
+      { "columna": "UltimaPromptOmitido", "esperado": null },
+      { "columna": "UltimaTienePrompt", "esperado": true },
       { "columna": "UltimaTieneContrato", "esperado": true },
       { "columna": "UltimaCosteEsNulo", "esperado": false }
     ]
