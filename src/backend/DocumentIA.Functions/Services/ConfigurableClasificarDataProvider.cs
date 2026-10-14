@@ -86,8 +86,8 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         CancellationToken cancellationToken)
     {
         var requestedProvider = input.Entrada.Instrucciones.Classification.Provider;
-        var resolvedFlow = ResolveFlowName(requestedProvider);
-        var flowProviders = ResolveFlowProviders(resolvedFlow);
+        var resolvedFlow = ResolveFlowName(requestedProvider, _routingSettings);
+        var flowProviders = ResolveFlowProviders(resolvedFlow, _routingSettings);
 
         _logger.LogInformation(
             "Flujo de clasificación resuelto: {Flow}. Providers: {Providers}. Model solicitado: {ModelInstruction}",
@@ -218,22 +218,22 @@ public class ConfigurableClasificarDataProvider : IClasificarDataProvider
         }
     }
 
-    private string ResolveFlowName(string? requestedProvider)
+    internal static string ResolveFlowName(string? requestedProvider, ClassificationRoutingSettings settings)
     {
         if (string.IsNullOrWhiteSpace(requestedProvider)
             || string.Equals(requestedProvider, "auto", StringComparison.OrdinalIgnoreCase))
         {
-            return !string.IsNullOrWhiteSpace(_routingSettings.DefaultFlow)
-                ? _routingSettings.DefaultFlow
-                : _routingSettings.DefaultProvider;
+            return !string.IsNullOrWhiteSpace(settings.DefaultFlow)
+                ? settings.DefaultFlow
+                : settings.DefaultProvider;
         }
 
         return requestedProvider;
     }
 
-    private List<string> ResolveFlowProviders(string flowName)
+    internal static List<string> ResolveFlowProviders(string flowName, ClassificationRoutingSettings settings)
     {
-        if (_routingSettings.Flows.TryGetValue(flowName, out var flow)
+        if (settings.Flows.TryGetValue(flowName, out var flow)
             && flow.Providers.Count > 0)
         {
             return flow.Providers;

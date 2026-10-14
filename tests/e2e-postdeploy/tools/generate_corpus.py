@@ -180,6 +180,17 @@ def write_control_marcado(path: Path, pages: int = 12) -> None:
     print(f"OK  {path}")
 
 
+def write_blank_pdf(path: Path) -> None:
+    """Una pagina A4 sin texto: Document Intelligence responde sin contenido y la
+    ejecucion cierra en SIN_CONTENIDO_DOCUMENTO de forma determinista (AB#100880),
+    que es el estado de fallo que DUP-11 necesita sembrar (AB#100956)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    c = canvas.Canvas(str(path), pagesize=A4)
+    c.showPage()
+    c.save()
+    print(f"OK  {path}")
+
+
 if __name__ == "__main__":
     write_pdf(ROOT / "nota-simple" / "nota-simple-sintetica.pdf", NOTA_SIMPLE, pages=2)
     write_pdf(ROOT / "tasacion" / "tasacion-sintetica.pdf", TASACION, pages=2)
@@ -191,4 +202,5 @@ if __name__ == "__main__":
     write_xlsx(ROOT / "formatos" / "listado-activos-sintetico.xlsx")
     write_corrupt_pdf(ROOT / "invalidos" / "corrupto.pdf")
     write_control_marcado(ROOT / "control" / "documento-12-paginas-marcado.pdf")
+    write_blank_pdf(ROOT / "control" / "documento-en-blanco.pdf")
     print("Corpus generado.")

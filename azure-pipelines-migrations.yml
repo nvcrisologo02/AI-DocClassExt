@@ -16,6 +16,13 @@ parameters:
     displayName: Add transient firewall rule for agent IP (fallback hosted)
     type: boolean
     default: false
+  # Backfill de ClaveIntencion/ClaveIntencionJson en DocumentoEjecuciones (AB#100930) tras aplicar
+  # las migraciones. Idempotente: solo toca filas con ClaveIntencion NULL, asi que relanzarlo con
+  # el parametro activo no recalcula nada ya escrito. El primer run por entorno es el pesado.
+  - name: backfillClaveIntencion
+    displayName: Backfill ClaveIntencion en el historico (scripts/database/backfill-clave-intencion.ps1)
+    type: boolean
+    default: false
 
 # Generate: agente hosted (no necesita red privada).
 # Apply: Managed DevOps Pool en VNet (acceso a Azure SQL por private endpoint).
@@ -88,6 +95,9 @@ stages:
   - deployment: Apply
     displayName: Apply migrations to Azure SQL
     environment: ${{ parameters.targetEnvironment }}
+    # El backfill de ClaveIntencion recorre todo el historico por lotes; en PRO supera el timeout
+    # por defecto de 60 min. Si aun asi se agota, el script es reanudable (-DesdeId del ultimo lote).
+    timeoutInMinutes: 240
     pool:
       name: docia-mdp-private
     strategy:
@@ -126,6 +136,29 @@ stages:
                   -Database "$(sqlDatabaseName)" `
                   -ScriptPath "$(Pipeline.Workspace)/MigrationsScript/migrations.sql" `
                   -MigrationsDir "src/backend/DocumentIA.Data/Migrations"
+          - ${{ if eq(parameters.backfillClaveIntencion, true) }}:
+            - task: AzureCLI@2
+              displayName: Backfill ClaveIntencion (AB#100930)
+              inputs:
+                azureSubscription: '$(azureSubscription)'
+                scriptType: 'pscore'
+                scriptLocation: 'inlineScript'
+                inlineScript: |
+                  # 1) Autotest sin red: si la forma canonica o el hash no coinciden con
+                  #    ClaveIntencionBuilder, no se escribe nada.
+                  pwsh -File .\scripts\database\backfill-clave-intencion.ps1 -SelfTest
+                  if ($LASTEXITCODE -ne 0) { throw "SelfTest del backfill fallido; no se ejecuta." }
+                  # 2) Recuento previo (tope: incluye filas que luego se saltan y quedan a NULL).
+                  pwsh -File .\scripts\database\backfill-clave-intencion.ps1 `
+                    -Server "$(sqlServerName).database.windows.net" `
+                    -Database "$(sqlDatabaseName)" `
+                    -WhatIf
+                  if ($LASTEXITCODE -ne 0) { throw "Recuento previo del backfill fallido." }
+                  # 3) Backfill real por lotes. Solo toca filas con ClaveIntencion NULL.
+                  pwsh -File .\scripts\database\backfill-clave-intencion.ps1 `
+                    -Server "$(sqlServerName).database.windows.net" `
+                    -Database "$(sqlDatabaseName)"
+                  if ($LASTEXITCODE -ne 0) { throw "Backfill de ClaveIntencion fallido; reanudar con -DesdeId del ultimo lote." }
           - ${{ if eq(parameters.addTransientFirewallRule, true) }}:
             - task: AzureCLI@2
               displayName: Remove transient firewall rule

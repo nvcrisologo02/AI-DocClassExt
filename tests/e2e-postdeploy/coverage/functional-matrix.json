@@ -46,5 +46,11 @@
   { "id": "DUP-02", "area": "Dedup", "descripcion": "La peticion repetida se sirve por duplicado y deja su propia fila, sin contrato ni coste, vinculada a la ejecucion original" },
   { "id": "DUP-03", "area": "Dedup", "descripcion": "forceReprocess vuelve a ejecutar de verdad: la fila nueva no se marca como reutilizacion" },
   { "id": "DUP-04", "area": "Dedup", "descripcion": "Una reutilizacion no mueve el total de ejecuciones, ni la calidad, ni el coste del periodo: solo el contador de reutilizadas" },
-  { "id": "DUP-05", "area": "Dedup", "descripcion": "La fila de reutilizacion lleva el InstanceId de la peticion que la provoco y se registra una sola vez" }
+  { "id": "DUP-05", "area": "Dedup", "descripcion": "La fila de reutilizacion lleva el InstanceId de la peticion que la provoco y se registra una sola vez" },
+  { "id": "DUP-06", "area": "Dedup", "descripcion": "Una restriccion de tipologias y el universo completo no comparten resultado: la segunda peticion se procesa con motivo clave-distinta" },
+  { "id": "DUP-07", "area": "Dedup", "descripcion": "Solo clasificacion y despues pipeline completo no reutiliza" },
+  { "id": "DUP-08", "area": "Dedup", "descripcion": "Pipeline completo y despues solo clasificacion no reutiliza" },
+  { "id": "DUP-09", "area": "Dedup", "descripcion": "Misma clave reutiliza y completa el prompt ad hoc que la historica no tenia sobre el markdown historico; la fila de reutilizacion lleva contrato y coste del prompt" },
+  { "id": "DUP-10", "area": "Dedup", "descripcion": "Misma clave con mas paginas pedidas que las procesadas reprocesa con motivo paginas-insuficientes" },
+  { "id": "DUP-11", "area": "Dedup", "descripcion": "Una historica en estado de fallo no se reutiliza: el reenvio sin forceReprocess reprocesa con motivo historica-fallida" }
 ]

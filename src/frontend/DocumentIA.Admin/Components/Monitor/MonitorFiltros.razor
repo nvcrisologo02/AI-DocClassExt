@@ -73,6 +73,19 @@
                 <option value="solo">Solo reutilizaciones</option>
             </select>
         </div>
+        <div class="col-6 col-lg-2">
+            <label class="form-label small text-muted mb-1">Motivo dedup</label>
+            <select class="form-select" value="@Filtro.Motivo" @onchange="OnMotivoCambiado">
+                <option value="">Todos</option>
+                <option value="clave-igual">Reutilizada: clave igual</option>
+                <option value="sin-historica">Sin histórica</option>
+                <option value="clave-distinta">Clave distinta</option>
+                <option value="modelo-extraccion-distinto">Modelo de extracción distinto</option>
+                <option value="paginas-insuficientes">Páginas insuficientes</option>
+                <option value="contrato-invalido">Contrato inválido</option>
+                <option value="historica-fallida">Histórica fallida</option>
+            </select>
+        </div>
         }
         <div class="col-12 col-lg-3">
             <label class="form-label small text-muted mb-1">Buscar</label>
@@ -159,6 +172,7 @@
     private async Task OnEstadoCambiado(ChangeEventArgs e) => await Emitir(f => f.Estado = Texto(e));
     private async Task OnFlujoCambiado(ChangeEventArgs e) => await Emitir(f => f.Flujo = Texto(e));
     private async Task OnReutilizadasCambiado(ChangeEventArgs e) => await Emitir(f => f.Reutilizadas = Texto(e));
+    private async Task OnMotivoCambiado(ChangeEventArgs e) => await Emitir(f => f.Motivo = Texto(e));
 
     // La busqueda se retrasa para no lanzar una consulta por pulsacion. El
     // callback del Timer corre en un hilo del pool, fuera del contexto de

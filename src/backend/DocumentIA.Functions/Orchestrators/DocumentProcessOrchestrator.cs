@@ -320,7 +320,7 @@ public class DocumentProcessOrchestrator
         //
         // No usa EjecutarPasoNegocioSinResultado a proposito: aquel relanza, y un fallo
         // escribiendo la traza no puede convertir en error una peticion ya resuelta.
-        async Task RegistrarReutilizacionAsync(ContratoSalida reutilizada, string sha256)
+        async Task RegistrarReutilizacionAsync(ContratoSalida reutilizada, string sha256, bool completada = false)
         {
             // El guid de la fila reutilizada lo trae ObtenerUltimaEjecucionDuplicadoActivity
             // en DetalleEjecucion.EjecucionOriginalGuid. No sirve Identificacion.Guid: ese es
@@ -364,7 +364,8 @@ public class DocumentProcessOrchestrator
                         Reutilizacion = new ReutilizacionInput
                         {
                             EjecucionOriginalGuid = guidOriginal,
-                            Sha256 = sha256
+                            Sha256 = sha256,
+                            Completada = completada
                         }
                     });
                 MarcarFinActividad("Persistir", "Completed", "Reutilizacion registrada");
@@ -779,7 +780,8 @@ public class DocumentProcessOrchestrator
                 Modelo = resultadoPrompt.Modelo,
                 TiempoMs = resultadoPrompt.TiempoMs,
                 CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
-                Error = resultadoPrompt.Error
+                Error = resultadoPrompt.Error,
+                PlantillaHash = PromptPlantillaHash.Calcular(entrada.Instrucciones.Prompt)
             };
             RegistrarModeloLlm(resultadoPrompt.Modelo);
 
@@ -915,6 +917,230 @@ public class DocumentProcessOrchestrator
             salida.DetalleEjecucion.ClassificationOnly = entrada.Instrucciones.ClassificationOnly;
             salida.DetalleEjecucion.NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion;
 
+            // AB#100930: la clave de intencion identifica "la misma peticion" para la
+            // reutilizacion por duplicado y se persiste en toda ejecucion, tambien sin duplicado
+            // y tambien con el interruptor en modo legado. Se calcula en actividad porque el
+            // registro de modelos lee BD. Un resultado nulo solo ocurre en tests sin la actividad
+            // configurada: la ejecucion sigue y la seleccion estricta no reutiliza.
+            var claveIntencion = await context.CallActivityAsync<ClaveIntencion?>(
+                "CalcularClaveIntencionActivity",
+                entrada.Instrucciones);
+            salida.DetalleEjecucion.ClaveIntencion = claveIntencion?.Clave;
+            salida.DetalleEjecucion.ClaveIntencionComponentes = claveIntencion?.Componentes;
+
+            // Necesidad de paginas de la peticion (spec AB#100930, seccion 10): modo completo o
+            // sin limite de paginas piden el documento entero; solo clasificacion, el recorte.
+            var necesidadDedup = !entrada.Instrucciones.ClassificationOnly || entrada.Instrucciones.ForzarProcesadoSinLimitePaginas
+                ? NecesidadMarkdown.Completo()
+                : NecesidadMarkdown.Paginas(maxPaginasClasificacion);
+
+            ObtenerUltimaEjecucionDuplicadoInput BuildDuplicadoInput(string sha256) => new()
+            {
+                SHA256 = sha256,
+                ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
+                NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion,
+                ClaveIntencion = claveIntencion?.Clave,
+                DocumentoCompleto = necesidadDedup.DocumentoCompleto,
+                PaginasMinimas = necesidadDedup.PaginasMinimas,
+                ExtraccionModelKeyPedido = string.IsNullOrWhiteSpace(entrada.Instrucciones.Extraction.Model)
+                    || entrada.Instrucciones.Extraction.Model.Equals("auto", StringComparison.OrdinalIgnoreCase)
+                    ? null
+                    : entrada.Instrucciones.Extraction.Model
+            };
+
+            // AB#100930 (spec, seccion 4): la historica sirve pero puede faltarle el resumen o el
+            // prompt que pide esta peticion. Se ejecuta solo ese paso sobre el markdown guardado
+            // de la historica; sin markdown que cubra, no se reprocesa el documento por un prompt.
+            // Devuelve true si PromptActivity llego a ejecutarse con resultado.
+            async Task<bool> CompletarReutilizacionAsync(ContratoSalida reutilizada, string sha256)
+            {
+                var hashPedido = PromptPlantillaHash.Calcular(entrada.Instrucciones.Prompt);
+                var esNivelTdn1Peticion = string.Equals(
+                    entrada.Instrucciones.Classification.NivelClasificacion,
+                    ClassificationLevelResolver.LevelTdn1,
+                    StringComparison.OrdinalIgnoreCase);
+
+                var pideResumen = (entrada.Instrucciones.ForzarResumenPorDefecto || esNivelTdn1Peticion)
+                    && !reutilizada.DatosExtraidos.ContainsKey("Resumen");
+
+                var promptHistorico = reutilizada.DetalleEjecucion.Prompt;
+                var pidePrompt = entrada.Instrucciones.Prompt is not null
+                    && !(promptHistorico is { Error: null, Omitido: null }
+                        && string.Equals(promptHistorico.PlantillaHash, hashPedido, StringComparison.Ordinal));
+
+                if (!pideResumen && !pidePrompt)
+                {
+                    return false;
+                }
+
+                // Regla 6 (AB#100245): un prompt ad hoc lee el documento entero; el resumen por
+                // defecto se conforma con el recorte de clasificacion.
+                var necesidad = pidePrompt
+                    ? NecesidadMarkdown.Completo()
+                    : NecesidadMarkdown.Paginas(maxPaginasClasificacion);
+
+                ResultadoMarkdown markdown;
+                try
+                {
+                    markdown = await context.CallActivityAsync<ResultadoMarkdown>(
+                        "ObtenerMarkdownActivity",
+                        new ObtenerMarkdownInput
+                        {
+                            Necesidad = necesidad,
+                            Contexto = new ContextoMarkdown
+                            {
+                                Sha256 = sha256,
+                                Md5 = salida.Integridad.MD5,
+                                NombreDocumento = entrada.Documento.Name,
+                                Tipologia = reutilizada.Identificacion.Tipologia,
+                                SoloPersistido = true
+                            }
+                        }) ?? new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna };
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "No se pudo leer el markdown histórico para completar la reutilización");
+                    markdown = new ResultadoMarkdown { Fuente = FuenteMarkdown.Ninguna };
+                }
+
+                if (!markdown.Cubre(necesidad))
+                {
+                    reutilizada.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+                    {
+                        Omitido = MarkdownResolver.MarkdownInsuficiente,
+                        PlantillaHash = hashPedido
+                    };
+                    logger.LogInformation(
+                        "Reutilización sin completar: el markdown histórico no cubre (completo={Completo}, paginas={Paginas})",
+                        necesidad.DocumentoCompleto, necesidad.PaginasMinimas);
+                    return false;
+                }
+
+                if (!seguimiento.Actividades.Any(a => string.Equals(a.Nombre, "Prompt", StringComparison.Ordinal)))
+                {
+                    seguimiento.ActividadesTotales++;
+                    seguimiento.Actividades.Add(new TrazaActividad { Nombre = "Prompt", Estado = "Pending" });
+                }
+
+                MarcarInicioActividad("Prompt");
+                PromptResultado resultadoPrompt;
+                try
+                {
+                    resultadoPrompt = await context.CallActivityAsync<PromptResultado>("PromptActivity", new PromptActivityInput
+                    {
+                        Tipologia = reutilizada.Identificacion.Tipologia,
+                        MarkdownExtraido = markdown.Markdown,
+                        DatosExtraidos = reutilizada.DatosExtraidos,
+                        ForzarResumenPorDefecto = pideResumen,
+                        Prompt = pidePrompt ? entrada.Instrucciones.Prompt : null
+                    });
+                }
+                catch (Exception ex)
+                {
+                    // Un fallo del prompt no convierte en error una reutilizacion ya resuelta.
+                    MarcarFinActividad("Prompt", "Failed", ex.Message);
+                    logger.LogWarning(ex, "PromptActivity falló al completar la reutilización; se devuelve la histórica sin completar");
+                    reutilizada.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion { Error = ex.Message, PlantillaHash = hashPedido };
+                    return false;
+                }
+
+                if (resultadoPrompt.SinContenido || resultadoPrompt.Error is not null)
+                {
+                    MarcarFinActividad("Prompt", "Failed", resultadoPrompt.Error);
+                    reutilizada.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+                    {
+                        Modelo = resultadoPrompt.Modelo,
+                        TiempoMs = resultadoPrompt.TiempoMs,
+                        Error = resultadoPrompt.Error,
+                        PlantillaHash = hashPedido
+                    };
+                    return false;
+                }
+
+                MarcarFinActividad("Prompt", "Completed", "Reutilización completada");
+
+                if (pidePrompt && !string.IsNullOrWhiteSpace(resultadoPrompt.Resultado))
+                {
+                    reutilizada.DatosExtraidos["ResultadoPrompt"] = resultadoPrompt.Resultado;
+                }
+
+                if (pideResumen && !string.IsNullOrWhiteSpace(resultadoPrompt.Resumen))
+                {
+                    reutilizada.DatosExtraidos["Resumen"] = resultadoPrompt.Resumen;
+                }
+
+                reutilizada.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+                {
+                    Modelo = resultadoPrompt.Modelo,
+                    TiempoMs = resultadoPrompt.TiempoMs,
+                    CombinedWithFallback = resultadoPrompt.CombinedWithFallback,
+                    PlantillaHash = hashPedido
+                };
+
+                // El unico coste de IA de la reutilizacion es este prompt (spec, seccion 4). El de
+                // la original sigue informativo.
+                var costeOriginal = reutilizada.DetalleEjecucion.Costes?.CosteEjecucionOriginalEur;
+                var costes = CalculadoraCosteIA.Agregar(resultadoPrompt.Consumos);
+                costes.ReutilizadaPorDuplicado = true;
+                costes.CosteEjecucionOriginalEur = costeOriginal;
+                reutilizada.DetalleEjecucion.Costes = costes;
+
+                return true;
+            }
+
+            // Unico punto de reutilizacion para las dos ramas de duplicado (SHA256 y MD5 de GDC).
+            // Devuelve la salida reutilizada lista para responder, o null con Reprocesar: en modo
+            // estricto el llamador sigue el flujo normal con MotivoNoReutilizacion informado; en
+            // modo legado la rama SHA256 devuelve DUPLICADO vacio como hasta ahora (AB#100178),
+            // salvo que todas las historicas esten en estado de fallo (AB#100956), que reprocesa.
+            async Task<(ContratoSalida? Reutilizada, bool Reprocesar)> IntentarReutilizarAsync(
+                string sha256,
+                string mensajeEstricto,
+                string mensajeLegado)
+            {
+                var resultado = await context.CallActivityAsync<ObtenerUltimaEjecucionDuplicadoResultado?>(
+                    "ObtenerUltimaEjecucionDuplicadoActivity",
+                    BuildDuplicadoInput(sha256));
+
+                if (resultado?.Salida is not { } reutilizada)
+                {
+                    var reprocesar = resultado is null
+                        || resultado.ModoEstricto
+                        || resultado.MotivoNoReutilizacion == MotivosReutilizacion.HistoricaFallida;
+                    if (reprocesar && resultado is not null)
+                    {
+                        salida.DetalleEjecucion.MotivoNoReutilizacion = resultado.MotivoNoReutilizacion;
+                        logger.LogInformation(
+                            "Duplicado sin histórica compatible ({Motivo}): se procesa el documento",
+                            resultado.MotivoNoReutilizacion);
+                    }
+
+                    return (null, reprocesar);
+                }
+
+                if (reutilizada.Integridad.TamanoBytes <= 0 && salida.Integridad.TamanoBytes > 0)
+                {
+                    reutilizada.Integridad.TamanoBytes = salida.Integridad.TamanoBytes;
+                }
+
+                reutilizada.Resultado.ReutilizadaPorDuplicado = true;
+                reutilizada.Resultado.MensajeReutilizacion = resultado.ModoEstricto ? mensajeEstricto : mensajeLegado;
+                reutilizada.DetalleEjecucion.ClaveIntencion = claveIntencion?.Clave;
+                reutilizada.DetalleEjecucion.ClaveIntencionComponentes = claveIntencion?.Componentes;
+                reutilizada.DetalleEjecucion.Costes = new CostesIA
+                {
+                    ReutilizadaPorDuplicado = true,
+                    CosteEjecucionOriginalEur = reutilizada.DetalleEjecucion.Costes?.CosteTotalEur
+                };
+
+                var completada = await CompletarReutilizacionAsync(reutilizada, sha256);
+                await RegistrarReutilizacionAsync(reutilizada, sha256, completada);
+
+                FinalizarSeguimiento("Completed", "Documento duplicado detectado. Devolviendo la ejecución con la misma intención");
+                reutilizada.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
+                return (reutilizada, true);
+            }
+
             logger.LogInformation(
                 "Canal de entrada: entradaPorObjectIdGdc={EntradaPorObjectIdGdc} | ObjectIdGDC={ObjectIdGDC}",
                 entradaPorObjectIdGdc,
@@ -957,34 +1183,18 @@ public class DocumentProcessOrchestrator
 
                     if (duplicadoPorMd5.Existe && !entrada.Instrucciones.ForceReprocess && !string.IsNullOrWhiteSpace(duplicadoPorMd5.SHA256))
                     {
-                        logger.LogWarning("Documento duplicado detectado por MD5 GDC. Recuperando última ejecución persistida");
+                        logger.LogWarning("Documento duplicado detectado por MD5 GDC. Buscando ejecución con la misma intención");
 
-                        var salidaDuplicado = await context.CallActivityAsync<ContratoSalida?>(
-                            "ObtenerUltimaEjecucionDuplicadoActivity",
-                            new ObtenerUltimaEjecucionDuplicadoInput
-                            {
-                                SHA256 = duplicadoPorMd5.SHA256,
-                                ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
-                                NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion
-                            });
-
-                        if (salidaDuplicado is not null)
+                        var (reutilizadaGdc, _) = await IntentarReutilizarAsync(
+                            duplicadoPorMd5.SHA256,
+                            "Documento ya procesado previamente (checksum GDC). Se reutiliza la última ejecución con la misma intención.",
+                            "Documento ya procesado previamente (checksum GDC). Se reutiliza la última ejecución.");
+                        if (reutilizadaGdc is not null)
                         {
-                            salidaDuplicado.Resultado.ReutilizadaPorDuplicado = true;
-                            salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente (checksum GDC). Se reutiliza la última ejecución.";
-
-                            salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
-                            {
-                                ReutilizadaPorDuplicado = true,
-                                CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
-                            };
-
-                            await RegistrarReutilizacionAsync(salidaDuplicado, duplicadoPorMd5.SHA256);
-
-                            FinalizarSeguimiento("Completed", "Documento duplicado detectado por checksum GDC. Devolviendo última ejecución");
-                            salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
-                            return salidaDuplicado;
+                            return reutilizadaGdc;
                         }
+
+                        // Sin historica compatible se descarga el documento y se sigue (spec, seccion 3).
                     }
                 }
                 else
@@ -1077,54 +1287,36 @@ public class DocumentProcessOrchestrator
 
                 if (esDuplicado && !entrada.Instrucciones.ForceReprocess)
                 {
-                    logger.LogWarning("Documento duplicado detectado. Recuperando última ejecución persistida");
+                    logger.LogWarning("Documento duplicado detectado. Buscando ejecución con la misma intención");
 
-                    var salidaDuplicado = await context.CallActivityAsync<ContratoSalida?>(
-                        "ObtenerUltimaEjecucionDuplicadoActivity",
-                        new ObtenerUltimaEjecucionDuplicadoInput
-                        {
-                            SHA256 = salida.Integridad.SHA256,
-                            ClassificationOnly = entrada.Instrucciones.ClassificationOnly,
-                            NivelClasificacion = entrada.Instrucciones.Classification.NivelClasificacion
-                        });
-
-                    if (salidaDuplicado is not null)
+                    var (reutilizadaSha, reprocesar) = await IntentarReutilizarAsync(
+                        salida.Integridad.SHA256,
+                        "Documento ya procesado previamente. Se reutiliza la última ejecución con la misma intención.",
+                        "Documento ya procesado previamente. Se reutiliza la última ejecución.");
+                    if (reutilizadaSha is not null)
                     {
-                        if (salidaDuplicado.Integridad.TamanoBytes <= 0 && salida.Integridad.TamanoBytes > 0)
-                        {
-                            salidaDuplicado.Integridad.TamanoBytes = salida.Integridad.TamanoBytes;
-                        }
-
-                        salidaDuplicado.Resultado.ReutilizadaPorDuplicado = true;
-                        salidaDuplicado.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
-
-                        salidaDuplicado.DetalleEjecucion.Costes = new CostesIA
-                        {
-                            ReutilizadaPorDuplicado = true,
-                            CosteEjecucionOriginalEur = salidaDuplicado.DetalleEjecucion.Costes?.CosteTotalEur
-                        };
-
-                        await RegistrarReutilizacionAsync(salidaDuplicado, salida.Integridad.SHA256);
-
-                        FinalizarSeguimiento("Completed", "Documento duplicado detectado. Devolviendo última ejecución");
-                        salidaDuplicado.DetalleEjecucion.Seguimiento = salida.DetalleEjecucion.Seguimiento;
-                        return salidaDuplicado;
+                        return reutilizadaSha;
                     }
 
-                    salida.Resultado.Estado = "DUPLICADO";
-                    salida.Resultado.ReutilizadaPorDuplicado = true;
-                    salida.Resultado.MensajeReutilizacion = "Documento duplicado detectado sin ejecución histórica reutilizable.";
+                    if (!reprocesar)
+                    {
+                        // Regla anterior (Dedup:ModoEstricto=false): DUPLICADO vacio persistido (AB#100178).
+                        salida.Resultado.Estado = "DUPLICADO";
+                        salida.Resultado.ReutilizadaPorDuplicado = true;
+                        salida.Resultado.MensajeReutilizacion = "Documento duplicado detectado sin ejecución histórica reutilizable.";
 
-                    // AB#100178: sin esta llamada la ejecución desaparecía (PersistirActivity es el
-                    // único escritor de DocumentoEjecuciones y el monitor solo lee esa tabla).
-                    await EjecutarPasoNegocioSinResultado(
-                        "Persistir",
-                        () => context.CallActivityAsync(
-                            "PersistirActivity",
-                            new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
+                        await EjecutarPasoNegocioSinResultado(
+                            "Persistir",
+                            () => context.CallActivityAsync(
+                                "PersistirActivity",
+                                new PersistirInput { Salida = salida, SubmittedBy = submittedByEjecucion }));
 
-                    FinalizarSeguimiento("Completed", "Documento detectado como duplicado");
-                    return salida;
+                        FinalizarSeguimiento("Completed", "Documento detectado como duplicado");
+                        return salida;
+                    }
+
+                    // Sin historica compatible (modo estricto, o historica fallida en cualquier modo): el documento se procesa como uno nuevo
+                    // y la ejecucion persiste con MotivoNoReutilizacion (spec AB#100930, seccion 3).
                 }
             }
 

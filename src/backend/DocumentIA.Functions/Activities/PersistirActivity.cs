@@ -265,6 +265,14 @@ namespace DocumentIA.Functions.Activities
                     ClassificationOnly = salida.DetalleEjecucion.ClassificationOnly,
                     NivelClasificacion = salida.DetalleEjecucion.NivelClasificacion,
 
+                    // AB#100930: clave de intencion de la peticion y, si hubo duplicado sin
+                    // historica compatible, por que no se reutilizo.
+                    ClaveIntencion = salida.DetalleEjecucion.ClaveIntencion,
+                    ClaveIntencionJson = salida.DetalleEjecucion.ClaveIntencionComponentes is { } componentes
+                        ? ClaveIntencionBuilder.Serializar(componentes)
+                        : null,
+                    MotivoReutilizacion = salida.DetalleEjecucion.MotivoNoReutilizacion,
+
                     // AB#100168: normalizado en escritura (trim + mayusculas), igual que hacia
                     // la columna calculada, para que el filtro del SP siga comparando igual.
                     IdActivo = string.IsNullOrWhiteSpace(salida.Integridad.IdActivo)
@@ -467,6 +475,36 @@ namespace DocumentIA.Functions.Activities
                     reutilizacion.EjecucionOriginalGuid);
             }
 
+            // AB#100930: una reutilizacion completada con prompt o resumen es la unica que tiene
+            // contenido y coste propios: el contrato devuelto (con lo anadido) y lo que costo el
+            // prompt. Sin completar sigue sin contrato ni coste, como hasta ahora.
+            var completada = reutilizacion.Completada;
+            var actividadesSeguimiento = salida.DetalleEjecucion.Seguimiento?.Actividades;
+            var timelineJson = actividadesSeguimiento is { Count: > 0 }
+                ? JsonSerializer.Serialize(actividadesSeguimiento)
+                : null;
+
+            string? contratoJson = null;
+            if (completada)
+            {
+                // Mismo podado que el alta normal (AB#100166): el timeline va en su columna.
+                if (salida.DetalleEjecucion.Seguimiento != null)
+                {
+                    salida.DetalleEjecucion.Seguimiento.Actividades = new List<TrazaActividad>();
+                }
+
+                contratoJson = JsonSerializer.Serialize(salida, new JsonSerializerOptions { WriteIndented = false });
+
+                if (salida.DetalleEjecucion.Seguimiento != null && actividadesSeguimiento != null)
+                {
+                    salida.DetalleEjecucion.Seguimiento.Actividades = actividadesSeguimiento;
+                }
+            }
+
+            var desgloseCoste = completada
+                ? CalculadoraCosteIA.DesglosarPorActividad(salida.DetalleEjecucion.Costes)
+                : null;
+
             var ejecucion = new DocumentoEjecucionEntity
             {
                 DocumentoId = documento.Id,
@@ -482,9 +520,7 @@ namespace DocumentIA.Functions.Activities
                 ClassificationOnly = salida.DetalleEjecucion.ClassificationOnly,
                 NivelClasificacion = salida.DetalleEjecucion.NivelClasificacion,
                 DuracionTotalMs = salida.DetalleEjecucion.Seguimiento?.DuracionTotalMs ?? 0,
-                ActivityTimelineJson = salida.DetalleEjecucion.Seguimiento?.Actividades is { Count: > 0 } actividades
-                    ? JsonSerializer.Serialize(actividades)
-                    : null,
+                ActivityTimelineJson = timelineJson,
 
                 // Copiado del contrato reutilizado, para que la fila sea legible sin join.
                 // El EstadoFinal es el del original a proposito: la reutilizacion de un
@@ -499,7 +535,16 @@ namespace DocumentIA.Functions.Activities
                     ? null
                     : salida.Integridad.IdActivo.Trim().ToUpperInvariant(),
 
-                ContratoSalidaCompletoJson = null,
+                ClaveIntencion = salida.DetalleEjecucion.ClaveIntencion,
+                ClaveIntencionJson = salida.DetalleEjecucion.ClaveIntencionComponentes is { } componentes
+                    ? ClaveIntencionBuilder.Serializar(componentes)
+                    : null,
+                MotivoReutilizacion = salida.DetalleEjecucion.MotivoReutilizacion,
+
+                ContratoSalidaCompletoJson = contratoJson,
+                CosteIAEur = completada ? salida.DetalleEjecucion.Costes?.CosteTotalEur : null,
+                TokensIA = completada ? salida.DetalleEjecucion.Costes?.TokensTotales : null,
+                CostePromptEur = desgloseCoste?.PromptEur,
                 CosteEstimado = false
             };
 

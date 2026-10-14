@@ -227,6 +227,7 @@ public class AzureDocumentIntelligenceExtraerDataProvider : IExtraerDataProvider
             {
                 Proveedor = model.Provider,
                 Modelo = model.AnalyzerId,
+                ModelKeyEfectivo = tipologiaConfig.Extraction.ModelKey,
                 LayoutEnabled = false,
                 ConfianzaExtraccion = confianzaExtraccion,
                 ProveedorExtrac = "DocumentIntelligence",

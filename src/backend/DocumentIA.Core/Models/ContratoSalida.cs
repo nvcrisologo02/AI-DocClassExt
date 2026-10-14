@@ -166,6 +166,30 @@ public class DetalleEjecucion
     public bool ClassificationOnly { get; set; }
     /// <summary>Nivel de clasificación usado en la petición (TDN1, TDN1/TDN2, etc.). Forma parte de la clave de deduplicación cuando se informa.</summary>
     public string? NivelClasificacion { get; set; }
+
+    /// <summary>
+    /// Clave de intencion de la peticion (AB#100930): hash de modo, nivel, universo de
+    /// tipologias, ExpectedType y modelo de clasificacion efectivo. Es lo que compara la
+    /// reutilizacion por duplicado. Null se omite del JSON.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ClaveIntencion { get; set; }
+
+    /// <summary>Componentes de la clave con sus nombres, para auditoria.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ClaveIntencionComponentes? ClaveIntencionComponentes { get; set; }
+
+    /// <summary>En respuestas reutilizadas: "clave-igual".</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MotivoReutilizacion { get; set; }
+
+    /// <summary>
+    /// Cuando se detecto un duplicado y no se reutilizo: sin-historica, clave-distinta,
+    /// modelo-extraccion-distinto, paginas-insuficientes, contrato-invalido o historica-fallida. La ejecucion
+    /// siguio el flujo normal.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? MotivoNoReutilizacion { get; set; }
     /// <summary>
     /// Tipología ejecutada en runtime (puede diferir de la esperada en entrada).
     /// </summary>
@@ -259,6 +283,21 @@ public class ResultadoPromptEjecucion
     /// Mensaje de error de la ejecución del prompt, si existe.
     /// </summary>
     public string? Error { get; set; }
+
+    /// <summary>
+    /// SHA-256 truncado (16 hex) de SystemPrompt, UserPromptTemplate y ModelKey del prompt
+    /// ad hoc de la peticion. Permite saber si una historica ya ejecuto el mismo prompt
+    /// (AB#100930). Null con el prompt de la tipologia.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PlantillaHash { get; set; }
+
+    /// <summary>
+    /// "markdown-insuficiente" cuando una reutilizacion no pudo completar el prompt porque la
+    /// historica no tiene markdown guardado o no cubre las paginas pedidas. Null si se ejecuto.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Omitido { get; set; }
 }
 
 public class SeguimientoOrquestacion

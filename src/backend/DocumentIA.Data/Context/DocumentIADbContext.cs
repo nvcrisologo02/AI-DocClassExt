@@ -147,6 +147,25 @@ public class DocumentIADbContext : DbContext
             .HasDatabaseName("IX_DocumentoEjecuciones_InstanceId_Reutilizadas")
             .HasFilter("[ReutilizadaPorDuplicado] = 1");
 
+        // AB#100930: el indice de la FK se declara explicito porque la convencion de EF lo
+        // retiraria al verlo cubierto como prefijo por IX_DocumentoEjecuciones_Documento_Clave.
+        // Mantenerlo deja la migracion puramente aditiva y evita un DROP INDEX en PRO.
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasIndex(e => e.DocumentoId)
+            .HasDatabaseName("IX_DocumentoEjecuciones_DocumentoId");
+
+        // AB#100930: la seleccion de historica por duplicado busca la ultima ejecucion del
+        // documento con la misma clave de intencion. Clave (DocumentoId, ClaveIntencion,
+        // FechaEjecucion DESC) resuelve "la mas reciente" sin ordenar; el INCLUDE evita el key
+        // lookup para descartar reutilizaciones y DUPLICADO vacios. Los LOB (contrato y
+        // timeline) se quedan fuera a proposito: duplicarlos en el indice multiplicaria el
+        // tamano de la tabla en el S0 de PRO, y la fila ganadora es una sola (un lookup).
+        modelBuilder.Entity<DocumentoEjecucionEntity>()
+            .HasIndex(e => new { e.DocumentoId, e.ClaveIntencion, e.FechaEjecucion })
+            .IsDescending(false, false, true)
+            .HasDatabaseName("IX_DocumentoEjecuciones_Documento_Clave")
+            .IncludeProperties(e => new { e.EjecucionGuid, e.Tipologia, e.EstadoFinal, e.ReutilizadaPorDuplicado });
+
         // Indices para rendimiento
         modelBuilder.Entity<DocumentoEjecucionEntity>()
             .HasIndex(e => e.EjecucionGuid)

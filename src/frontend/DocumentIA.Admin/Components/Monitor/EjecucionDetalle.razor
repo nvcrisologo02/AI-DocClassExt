@@ -90,6 +90,31 @@ else
         </div>
     }
 
+    @* AB#100930: la regla de reutilizacion por duplicado, auditable desde la fila. *@
+    @if (!string.IsNullOrEmpty(Detalle.ClaveIntencion))
+    {
+        <div class="mb-3">
+            <div class="detail-section-label">Clave de intención</div>
+            <div class="small">
+                <code style="font-size:0.75rem;user-select:all">@Detalle.ClaveIntencion</code>
+                @if (!string.IsNullOrEmpty(Detalle.MotivoReutilizacion))
+                {
+                    <span class="badge bg-secondary ms-2">@Detalle.MotivoReutilizacion</span>
+                }
+            </div>
+            @if (Detalle.ClaveIntencionComponentes is { } comp)
+            {
+                <dl class="row mb-0 mt-1 small">
+                    <dt class="col-4 col-lg-2 text-muted">Modo</dt><dd class="col-8 col-lg-10 mb-0">@comp.Modo</dd>
+                    <dt class="col-4 col-lg-2 text-muted">Nivel</dt><dd class="col-8 col-lg-10 mb-0">@comp.Nivel</dd>
+                    <dt class="col-4 col-lg-2 text-muted">Universo</dt><dd class="col-8 col-lg-10 mb-0">@comp.Universo</dd>
+                    <dt class="col-4 col-lg-2 text-muted">ExpectedType</dt><dd class="col-8 col-lg-10 mb-0">@(string.IsNullOrEmpty(comp.ExpectedType) ? "—" : comp.ExpectedType)</dd>
+                    <dt class="col-4 col-lg-2 text-muted">Modelo</dt><dd class="col-8 col-lg-10 mb-0">@comp.ModeloClasificacion</dd>
+                </dl>
+            }
+        </div>
+    }
+
     <!-- Identificacion -->
     <div class="row g-3 mb-3">
         <div class="col-12">

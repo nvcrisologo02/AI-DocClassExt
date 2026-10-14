@@ -145,4 +145,15 @@ public class MonitorFiltrosTests : TestContext
 
         cut.Markup.Should().NotContain("Completa las dos fechas");
     }
+
+    [Fact]
+    public void MotivoDedup_OfreceHistoricaFallida()
+    {
+        // AB#100956: el filtro es una lista cerrada; sin la opcion el motivo nuevo no se puede buscar.
+        var cut = Render(new MonitorFiltroDto(), []);
+
+        var motivo = cut.FindAll("select").First(s => s.QuerySelectorAll("option").Any(o => o.GetAttribute("value") == "contrato-invalido"));
+
+        motivo.QuerySelectorAll("option").Select(o => o.GetAttribute("value")).Should().Contain("historica-fallida");
+    }
 }
