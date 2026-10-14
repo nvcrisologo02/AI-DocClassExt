@@ -33,6 +33,9 @@ public static class MotivosReutilizacion
     public const string ModeloExtraccionDistinto = "modelo-extraccion-distinto";
     public const string PaginasInsuficientes = "paginas-insuficientes";
     public const string ContratoInvalido = "contrato-invalido";
+
+    /// <summary>Todas las historicas con esa clave estan en estado de fallo (AB#100956).</summary>
+    public const string HistoricaFallida = "historica-fallida";
 }
 
 internal static class ClaveIntencionBuilderConstantes

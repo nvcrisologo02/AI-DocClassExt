@@ -57,6 +57,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityClaveTests
         var clave = ClaveSolo();
         _ejecuciones.Setup(r => r.GetCandidatasPorClaveAsync(10, clave.Clave, 0, 1)).ReturnsAsync(Array.Empty<DocumentoEjecucionEntity>());
         _ejecuciones.Setup(r => r.GetConContratoSinClaveAsync(10, 50)).ReturnsAsync(Array.Empty<DocumentoEjecucionEntity>());
+        _ejecuciones.Setup(r => r.TieneFallidasPorClaveAsync(10, clave.Clave)).ReturnsAsync(false);
         _ejecuciones.Setup(r => r.TieneEjecucionesConContratoAsync(10)).ReturnsAsync(true);
 
         var r = await Sut().Run(Input(clave.Clave, false, 3, true));
@@ -71,11 +72,30 @@ public class ObtenerUltimaEjecucionDuplicadoActivityClaveTests
         var clave = ClaveSolo();
         _ejecuciones.Setup(r => r.GetCandidatasPorClaveAsync(10, clave.Clave, 0, 1)).ReturnsAsync(Array.Empty<DocumentoEjecucionEntity>());
         _ejecuciones.Setup(r => r.GetConContratoSinClaveAsync(10, 50)).ReturnsAsync(Array.Empty<DocumentoEjecucionEntity>());
+        _ejecuciones.Setup(r => r.TieneFallidasPorClaveAsync(10, clave.Clave)).ReturnsAsync(false);
         _ejecuciones.Setup(r => r.TieneEjecucionesConContratoAsync(10)).ReturnsAsync(false);
 
         var r = await Sut().Run(Input(clave.Clave, false, 3, true));
 
         r.MotivoNoReutilizacion.Should().Be(MotivosReutilizacion.SinHistorica);
+    }
+
+    [Fact]
+    public async Task SinCandidatasPeroConFallidasDeLaMismaClave_HistoricaFallida()
+    {
+        // AB#100956: el filtro del repositorio ya ha dejado fuera las fallidas; la actividad
+        // tiene que explicar que no reutiliza por eso, no por clave-distinta.
+        var clave = ClaveSolo();
+        _ejecuciones.Setup(r => r.GetCandidatasPorClaveAsync(10, clave.Clave, 0, 1)).ReturnsAsync(Array.Empty<DocumentoEjecucionEntity>());
+        _ejecuciones.Setup(r => r.GetConContratoSinClaveAsync(10, 50)).ReturnsAsync(Array.Empty<DocumentoEjecucionEntity>());
+        _ejecuciones.Setup(r => r.TieneFallidasPorClaveAsync(10, clave.Clave)).ReturnsAsync(true);
+
+        var r = await Sut().Run(Input(clave.Clave, false, 3, true));
+
+        r.Salida.Should().BeNull();
+        r.ModoEstricto.Should().BeTrue();
+        r.MotivoNoReutilizacion.Should().Be(MotivosReutilizacion.HistoricaFallida);
+        _ejecuciones.Verify(r => r.TieneEjecucionesConContratoAsync(It.IsAny<int>()), Times.Never);
     }
 
     [Fact]
@@ -234,6 +254,48 @@ public class ObtenerUltimaEjecucionDuplicadoActivityClaveTests
         r.Salida.Should().NotBeNull();
         r.MotivoNoReutilizacion.Should().BeNull();
         r.Salida!.DetalleEjecucion.MotivoReutilizacion.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ModoEstrictoDesactivado_TodasLasHistoricasEnFallo_NoReutilizaYMotivaHistoricaFallida()
+    {
+        // AB#100956: tambien con la regla anterior un ERROR no se sirve; el orquestador reprocesa.
+        var fallida = Fila(1, null, Contrato(classificationOnly: true));
+        fallida.EstadoFinal = "ERROR";
+        _ejecuciones.Setup(r => r.GetByDocumentoIdAsync(10)).ReturnsAsync(new[] { fallida });
+
+        var r = await Sut(estricto: false).Run(Input("cualquiera", false, 3, classificationOnly: true));
+
+        r.ModoEstricto.Should().BeFalse();
+        r.Salida.Should().BeNull();
+        r.MotivoNoReutilizacion.Should().Be(MotivosReutilizacion.HistoricaFallida);
+    }
+
+    [Fact]
+    public async Task ModoEstrictoDesactivado_UltimaEnFalloYAnteriorValida_ReutilizaLaValida()
+    {
+        var valida = Fila(1, null, Contrato(classificationOnly: true));
+        var fallida = Fila(2, null, Contrato(classificationOnly: true));
+        fallida.EstadoFinal = "PENDIENTE_REINTENTO";
+        _ejecuciones.Setup(r => r.GetByDocumentoIdAsync(10)).ReturnsAsync(new[] { fallida, valida });
+
+        var r = await Sut(estricto: false).Run(Input("cualquiera", false, 3, classificationOnly: true));
+
+        r.Salida.Should().NotBeNull();
+        r.MotivoNoReutilizacion.Should().BeNull();
+        r.Salida!.DetalleEjecucion.EjecucionOriginalGuid.Should().Be("guid-1");
+    }
+
+    [Fact]
+    public async Task ModoEstrictoDesactivado_SinNingunContrato_SinMotivo()
+    {
+        // Sin historica con contrato la regla anterior sigue devolviendo DUPLICADO vacio (AB#100178).
+        _ejecuciones.Setup(r => r.GetByDocumentoIdAsync(10)).ReturnsAsync(Array.Empty<DocumentoEjecucionEntity>());
+
+        var r = await Sut(estricto: false).Run(Input("cualquiera", false, 3, true));
+
+        r.Salida.Should().BeNull();
+        r.MotivoNoReutilizacion.Should().BeNull();
     }
 
     [Fact]

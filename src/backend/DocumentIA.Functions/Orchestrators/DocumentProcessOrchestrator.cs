@@ -1090,10 +1090,11 @@ public class DocumentProcessOrchestrator
             }
 
             // Unico punto de reutilizacion para las dos ramas de duplicado (SHA256 y MD5 de GDC).
-            // Devuelve la salida reutilizada lista para responder, o null: en modo estricto el
-            // llamador sigue el flujo normal con MotivoNoReutilizacion informado; en modo legado
-            // la rama SHA256 devuelve DUPLICADO vacio como hasta ahora (AB#100178).
-            async Task<(ContratoSalida? Reutilizada, bool ModoEstricto)> IntentarReutilizarAsync(
+            // Devuelve la salida reutilizada lista para responder, o null con Reprocesar: en modo
+            // estricto el llamador sigue el flujo normal con MotivoNoReutilizacion informado; en
+            // modo legado la rama SHA256 devuelve DUPLICADO vacio como hasta ahora (AB#100178),
+            // salvo que todas las historicas esten en estado de fallo (AB#100956), que reprocesa.
+            async Task<(ContratoSalida? Reutilizada, bool Reprocesar)> IntentarReutilizarAsync(
                 string sha256,
                 string mensajeEstricto,
                 string mensajeLegado)
@@ -1104,7 +1105,10 @@ public class DocumentProcessOrchestrator
 
                 if (resultado?.Salida is not { } reutilizada)
                 {
-                    if (resultado?.ModoEstricto == true)
+                    var reprocesar = resultado is null
+                        || resultado.ModoEstricto
+                        || resultado.MotivoNoReutilizacion == MotivosReutilizacion.HistoricaFallida;
+                    if (reprocesar && resultado is not null)
                     {
                         salida.DetalleEjecucion.MotivoNoReutilizacion = resultado.MotivoNoReutilizacion;
                         logger.LogInformation(
@@ -1112,7 +1116,7 @@ public class DocumentProcessOrchestrator
                             resultado.MotivoNoReutilizacion);
                     }
 
-                    return (null, resultado?.ModoEstricto ?? true);
+                    return (null, reprocesar);
                 }
 
                 if (reutilizada.Integridad.TamanoBytes <= 0 && salida.Integridad.TamanoBytes > 0)
@@ -1286,7 +1290,7 @@ public class DocumentProcessOrchestrator
                 {
                     logger.LogWarning("Documento duplicado detectado. Buscando ejecución con la misma intención");
 
-                    var (reutilizadaSha, modoEstricto) = await IntentarReutilizarAsync(
+                    var (reutilizadaSha, reprocesar) = await IntentarReutilizarAsync(
                         salida.Integridad.SHA256,
                         "Documento ya procesado previamente. Se reutiliza la última ejecución con la misma intención.",
                         "Documento ya procesado previamente. Se reutiliza la última ejecución.");
@@ -1295,7 +1299,7 @@ public class DocumentProcessOrchestrator
                         return reutilizadaSha;
                     }
 
-                    if (!modoEstricto)
+                    if (!reprocesar)
                     {
                         // Regla anterior (Dedup:ModoEstricto=false): DUPLICADO vacio persistido (AB#100178).
                         salida.Resultado.Estado = "DUPLICADO";
@@ -1312,7 +1316,7 @@ public class DocumentProcessOrchestrator
                         return salida;
                     }
 
-                    // Modo estricto sin historica compatible: el documento se procesa como uno nuevo
+                    // Sin historica compatible (modo estricto, o historica fallida en cualquier modo): el documento se procesa como uno nuevo
                     // y la ejecucion persiste con MotivoNoReutilizacion (spec AB#100930, seccion 3).
                 }
             }

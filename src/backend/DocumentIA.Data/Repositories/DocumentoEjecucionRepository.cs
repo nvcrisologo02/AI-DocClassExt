@@ -519,8 +519,6 @@ namespace DocumentIA.Data.Repositories
         /// <summary>Tope de reutilizaciones que se listan en el detalle de una ejecucion.</summary>
         private const int MaxReutilizacionesEnDetalle = 20;
 
-        private const string EstadoDuplicadoVacio = "DUPLICADO";
-
         public async Task<IReadOnlyList<DocumentoEjecucionEntity>> GetCandidatasPorClaveAsync(
             int documentoId, string claveIntencion, int skip, int take)
         {
@@ -529,7 +527,7 @@ namespace DocumentIA.Data.Repositories
                 .Where(e => e.DocumentoId == documentoId
                     && e.ClaveIntencion == claveIntencion
                     && !e.ReutilizadaPorDuplicado
-                    && e.EstadoFinal != EstadoDuplicadoVacio)
+                    && !EstadoEjecucion.NoReutilizables.Contains(e.EstadoFinal))
                 .OrderByDescending(e => e.FechaEjecucion)
                 .ThenByDescending(e => e.Id)
                 .Skip(skip)
@@ -544,11 +542,22 @@ namespace DocumentIA.Data.Repositories
                 .Where(e => e.DocumentoId == documentoId
                     && e.ClaveIntencion == null
                     && !e.ReutilizadaPorDuplicado
-                    && e.ContratoSalidaCompletoJson != null)
+                    && e.ContratoSalidaCompletoJson != null
+                    && !EstadoEjecucion.NoReutilizables.Contains(e.EstadoFinal))
                 .OrderByDescending(e => e.FechaEjecucion)
                 .ThenByDescending(e => e.Id)
                 .Take(take)
                 .ToListAsync();
+        }
+
+        public Task<bool> TieneFallidasPorClaveAsync(int documentoId, string claveIntencion)
+        {
+            return _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .AnyAsync(e => e.DocumentoId == documentoId
+                    && e.ClaveIntencion == claveIntencion
+                    && !e.ReutilizadaPorDuplicado
+                    && EstadoEjecucion.Fallidos.Contains(e.EstadoFinal));
         }
 
         public Task<bool> TieneEjecucionesConContratoAsync(int documentoId)

@@ -126,7 +126,8 @@ normalización, clasificación, extracción, prompt, persistencia). La ejecució
 más del mismo documento, con su clave. El estado `DUPLICADO` sin reutilización desaparece de
 la salida. `DetalleEjecucion.MotivoNoReutilizacion` informa por qué no se reutilizó:
 `sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`,
-`contrato-invalido`.
+`historica-fallida`, `contrato-invalido` (`historica-fallida` añadido por AB#100956 el 2026-10-14:
+las históricas en estado de fallo no son candidatas en ningún modo).
 
 Aplica a las dos ramas de duplicado: por SHA256 (paso 2) y por MD5 de GDC (pre-GDC). En la
 rama GDC el documento aún no se ha descargado; "continuar" significa descargarlo y seguir.

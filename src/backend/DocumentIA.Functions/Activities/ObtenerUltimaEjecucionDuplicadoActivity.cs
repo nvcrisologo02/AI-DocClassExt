@@ -58,9 +58,9 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
 
         if (!estricto)
         {
-            var legada = await SeleccionarLegadoAsync(request, documento);
+            var (legada, motivoLegado) = await SeleccionarLegadoAsync(request, documento);
             return legada is null
-                ? ObtenerUltimaEjecucionDuplicadoResultado.NoReutilizada(null, false)
+                ? ObtenerUltimaEjecucionDuplicadoResultado.NoReutilizada(motivoLegado, false)
                 : ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(legada, false);
         }
 
@@ -98,6 +98,13 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
 
         if (candidatas.Count == 0)
         {
+            // AB#100956: las fallidas con esta clave no llegan aqui (filtro del repositorio);
+            // si existen, el motivo es ese y no clave-distinta.
+            if (await _documentoEjecucionRepository.TieneFallidasPorClaveAsync(documento.Id, clave))
+            {
+                return (null, MotivosReutilizacion.HistoricaFallida);
+            }
+
             var hayOtras = await _documentoEjecucionRepository.TieneEjecucionesConContratoAsync(documento.Id);
             return (null, hayOtras ? MotivosReutilizacion.ClaveDistinta : MotivosReutilizacion.SinHistorica);
         }
@@ -281,12 +288,17 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
     /// <summary>
     /// Regla anterior (Dedup:ModoEstricto = false): ClassificationOnly y NivelClasificacion con
     /// fallback a la ultima con contrato (AB#100177). Se retira con el interruptor.
+    /// Con todas las historicas con contrato en estado de fallo devuelve el motivo
+    /// historica-fallida para que el orquestador reprocese (AB#100956).
     /// </summary>
-    private async Task<ContratoSalida?> SeleccionarLegadoAsync(ObtenerUltimaEjecucionDuplicadoInput request, DocumentoEntity documento)
+    private async Task<(ContratoSalida? Salida, string? Motivo)> SeleccionarLegadoAsync(ObtenerUltimaEjecucionDuplicadoInput request, DocumentoEntity documento)
     {
         var ejecuciones = await _documentoEjecucionRepository.GetByDocumentoIdAsync(documento.Id);
-        var candidatas = ejecuciones
+        var conContrato = ejecuciones
             .Where(e => !string.IsNullOrWhiteSpace(e.ContratoSalidaCompletoJson))
+            .ToList();
+        var candidatas = conContrato
+            .Where(e => !EstadoEjecucion.NoReutilizables.Contains(e.EstadoFinal))
             .ToList();
 
         var ultimaConSalida = candidatas.FirstOrDefault(e =>
@@ -304,8 +316,16 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
 
         if (ultimaConSalida is null)
         {
+            if (conContrato.Any(e => EstadoEjecucion.Fallidos.Contains(e.EstadoFinal)))
+            {
+                _logger.LogWarning(
+                    "Modo legado: las ejecuciones con contrato del documento ID={DocumentoId} estan en estado de fallo; se reprocesa",
+                    documento.Id);
+                return (null, MotivosReutilizacion.HistoricaFallida);
+            }
+
             _logger.LogWarning("No hay ninguna ejecucion con contrato serializado para documento ID={DocumentoId}", documento.Id);
-            return null;
+            return (null, null);
         }
 
         try
@@ -315,7 +335,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (salida is null)
             {
-                return null;
+                return (null, null);
             }
 
             ContratoTimelineRehidratador.Rehidratar(salida, ultimaConSalida.ActivityTimelineJson);
@@ -324,12 +344,12 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
             await RehidratarTdnSiIncompletoAsync(salida, documento);
             salida.Resultado.ReutilizadaPorDuplicado = true;
             salida.Resultado.MensajeReutilizacion = "Documento ya procesado previamente. Se reutiliza la última ejecución.";
-            return salida;
+            return (salida, null);
         }
         catch (JsonException ex)
         {
             _logger.LogError(ex, "JSON invalido al recuperar salida de ejecucion {EjecucionId}", ultimaConSalida.Id);
-            return null;
+            return (null, null);
         }
     }
 

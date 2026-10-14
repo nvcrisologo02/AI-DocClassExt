@@ -354,5 +354,47 @@
       { "columna": "UltimaMotivo", "esperado": "paginas-insuficientes" },
       { "columna": "UltimaClaveIgualASiembra", "esperado": true }
     ]
+  },
+  {
+    "caseKey": "DUP-11", "group": "DUP", "id": "11", "domain": "validacion",
+    "name": "Historica en estado de fallo: el reenvio sin forceReprocess reprocesa con motivo historica-fallida",
+    "covers": ["DUP-11"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-en-blanco.pdf",
+    "submittedBy": "e2e-validacion-dedup",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt",
+        "classificationOnly": true,
+        "maxPagesForClassificationOnly": 3,
+        "umbral": 0.01,
+        "forceReprocess": true,
+        "skipDuplicateCheck": false,
+        "skipGDCUpload": true
+      },
+      "assertions": { "expectedRuntimeStatus": "Completed", "expectedStatus": ["SIN_CONTENIDO_DOCUMENTO"] }
+    },
+    "pasadas": [
+      {
+        "nombre": "reenvio sin forceReprocess tras una historica fallida",
+        "request": {
+          "classificationProvider": "gpt",
+          "classificationOnly": true,
+          "maxPagesForClassificationOnly": 3,
+          "umbral": 0.01,
+          "forceReprocess": false,
+          "skipDuplicateCheck": false,
+          "skipGDCUpload": true
+        },
+        "assertions": { "expectedRuntimeStatus": "Completed", "expectedStatus": ["SIN_CONTENIDO_DOCUMENTO"] }
+      }
+    ],
+    "dbAssertions": [
+      { "columna": "Total", "esperado": 2 },
+      { "columna": "Reutilizadas", "esperado": 0 },
+      { "columna": "UltimaReutilizada", "esperado": false },
+      { "columna": "UltimaEstadoFinal", "esperado": "SIN_CONTENIDO_DOCUMENTO" },
+      { "columna": "UltimaMotivo", "esperado": "historica-fallida" },
+      { "columna": "UltimaClaveIgualASiembra", "esperado": true }
+    ]
   }
 ]

@@ -174,7 +174,7 @@ uno de los dos runners borraría filas que el otro está usando.
 
 ## Validación de la reutilización por duplicado (run-validacion-dedup.ps1)
 
-Juego de pruebas aparte para las invariantes DUP-01..DUP-10 (`Area: Dedup` de
+Juego de pruebas aparte para las invariantes DUP-01..DUP-11 (`Area: Dedup` de
 `coverage/functional-matrix.json`):
 
 - DUP-01..DUP-05 (AB#100258, reutilización básica): una petición repetida de un
@@ -191,6 +191,11 @@ Juego de pruebas aparte para las invariantes DUP-01..DUP-10 (`Area: Dedup` de
     no tenía; la fila de reutilización lleva contrato y coste del prompt.
   - DUP-10: misma clave con más páginas pedidas que las procesadas reprocesa con
     motivo `paginas-insuficientes`.
+- DUP-11 (AB#100956, históricas fallidas): una ejecución en `ERROR`,
+  `PENDIENTE_REINTENTO` o `SIN_CONTENIDO_DOCUMENTO` nunca se reutiliza; el reenvío
+  sin `forceReprocess` reprocesa y la fila nueva lleva `historica-fallida`. Siembra
+  con `corpus/control/documento-en-blanco.pdf` (cierra en `SIN_CONTENIDO_DOCUMENTO`
+  de forma determinista).
 
 Misma mecánica que el juego de markdown (siembra → pasadas → aserciones →
 limpieza por SHA256, mismos parámetros `-Environment`, `-WhatIf`,

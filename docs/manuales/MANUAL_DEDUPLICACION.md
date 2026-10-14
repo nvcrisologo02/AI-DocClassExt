@@ -37,7 +37,7 @@ flowchart TD
 2. **`VerificarDuplicadoActivity`** (SHA256) o, en peticiones por `objectIdGDC`, `VerificarDuplicadoPorMD5Activity` antes de descargar (MD5 de GDC). Las dos ramas comparten el mismo punto de reutilización.
 3. **Candidata por clave.** Se busca la última ejecución del documento con contrato y la misma clave, servida por el índice `IX_DocumentoEjecuciones_Documento_Clave`. Las filas de reutilización y las de estado `DUPLICADO` nunca son candidatas.
 4. **Segunda fase** sobre la candidata: el modelo de extracción (solo en modo completo) y la cobertura de páginas. Si no la supera se examina la siguiente con la misma clave, hasta `Dedup__MaxCandidatas`.
-5. **Reutilizar y completar**, o **procesar con motivo**: sin candidata válida el documento se descarga (en la rama GDC) y se procesa por el flujo normal; la ejecución queda como una más del documento con `motivoNoReutilizacion` (`sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `contrato-invalido`).
+5. **Reutilizar y completar**, o **procesar con motivo**: sin candidata válida el documento se descarga (en la rama GDC) y se procesa por el flujo normal; la ejecución queda como una más del documento con `motivoNoReutilizacion` (`sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `historica-fallida`, `contrato-invalido`).
 
 Con `Dedup__ModoEstricto = false` el flujo vuelve a la regla anterior (ver 12).
 
@@ -89,8 +89,8 @@ Cuando se detecta duplicado y `ForceReprocess = false`, en modo estricto:
 1. Busca el `DocumentoEntity` por SHA256. Si no existe, o la petición llega sin clave, no reutiliza (`sin-historica` y `clave-distinta` respectivamente).
 2. **Candidata por clave:** `GetCandidatasPorClaveAsync` devuelve la última ejecución del documento con la misma `ClaveIntencion`, sin contar las filas de reutilización ni las de estado `DUPLICADO`, ordenadas por fecha descendente.
 3. **Derivación al vuelo (filas antiguas):** si el documento no tiene ninguna fila con esa clave, se cargan sus ejecuciones con contrato y sin clave (como mucho `Dedup__MaxDerivacionAlVuelo`, las más recientes), se deriva la clave de cada una desde su contrato con `ClaveIntencionDerivador` (la misma función que el backfill), se graba en la fila para no repetirlo y se consideran candidatas las que coinciden.
-4. **Sin ninguna candidata:** `clave-distinta` si el documento tiene alguna ejecución con contrato (hay histórico, pero de otra intención) y `sin-historica` si no.
-5. **Segunda fase por candidata** (hasta `Dedup__MaxCandidatas` candidatas, de una en una): contrato legible y distinto de `DUPLICADO` (`contrato-invalido`); en modo completo, el `ModelKeyEfectivo` persistido debe coincidir con el modelo que la tipología publicada de la candidata usaría hoy (el primario o el secundario de su configuración, o el pedido en la petición) y la tipología debe seguir publicada y activa (`modelo-extraccion-distinto`); la candidata debe cubrir las páginas pedidas con la regla de cobertura del resolutor de markdown (`paginas-insuficientes`). Si falla, pasa a la siguiente; si se agotan, el resultado lleva el motivo de la última descartada.
+4. **Sin ninguna candidata:** `historica-fallida` si hay ejecuciones con esa clave en estado de fallo (`ERROR`, `PENDIENTE_REINTENTO`, `SIN_CONTENIDO_DOCUMENTO`; nunca son candidatas, AB#100956), `clave-distinta` si el documento tiene alguna ejecución con contrato de otra intención y `sin-historica` si no.
+5. **Segunda fase por candidata** (hasta `Dedup__MaxCandidatas` candidatas, de una en una): estado fuera de `EstadoEjecucion.NoReutilizables` (lo garantiza la consulta); contrato legible y distinto de `DUPLICADO` (`contrato-invalido`); en modo completo, el `ModelKeyEfectivo` persistido debe coincidir con el modelo que la tipología publicada de la candidata usaría hoy (el primario o el secundario de su configuración, o el pedido en la petición) y la tipología debe seguir publicada y activa (`modelo-extraccion-distinto`); la candidata debe cubrir las páginas pedidas con la regla de cobertura del resolutor de markdown (`paginas-insuficientes`). Si falla, pasa a la siguiente; si se agotan, el resultado lleva el motivo de la última descartada.
 6. **Candidata válida:** deserializa el contrato y establece `Resultado.ReutilizadaPorDuplicado = true`, `Resultado.MensajeReutilizacion` (literal del código, sin tildes: «Documento ya procesado previamente. Se reutiliza la ultima ejecucion con la misma intencion.»), `DetalleEjecucion.MotivoReutilizacion = "clave-igual"` y `DetalleEjecucion.EjecucionOriginalGuid = EjecucionGuid` de la fila seleccionada. Es el único puente hacia la ejecución original: ese GUID se genera al persistir y no viaja dentro del contrato (`Identificacion.Guid` es el GUID del documento, no de la ejecución).
 
 **Modo legado (`Dedup__ModoEstricto = false`).** Se aplica la regla anterior: la primera ejecución con `ContratoSalidaCompletoJson` poblado que coincide en `ClassificationOnly` y `NivelClasificacion`; sin coincidencia exacta, la última con contrato (AB#100177). Sin ninguna con contrato devuelve `null` y el orquestador responde `DUPLICADO` vacío en la rama SHA256 (AB#100178). La clave se calcula y se persiste igualmente.
@@ -111,7 +111,7 @@ Después corrige la identidad del contrato (`DetalleEjecucion.InstanceId` y `Ope
 Reglas:
 
 - **Una reutilización completada deja de ser «sin contrato»**: tiene contrato y coste propios (solo el del prompt); `ReutilizadaPorDuplicado = 1` sigue siendo lo que la distingue de una ejecución de IA completa, y `costes.reutilizadaPorDuplicado` sigue a `true`.
-- **`EstadoFinal` es el de la original a propósito**: reutilizar un `ERROR` sigue contando como error.
+- **`EstadoFinal` es el de la original a propósito**: como una original en estado de fallo ya no se reutiliza (AB#100956), una reutilización nunca cuenta como error.
 - **Idempotente por `InstanceId`**: si ya existe una fila de reutilización con ese `InstanceId`, no inserta otra (un reintento de Durable tras un fallo posterior al commit no duplica la traza).
 - **Nunca falla la respuesta**: el orquestador envuelve la llamada en su propio `try/catch`; si registrar la traza falla, se loguea y la respuesta reutilizada se devuelve igual.
 - Si la ejecución original no se localiza por su GUID, la fila se graba sin vínculo (`EjecucionOriginalId = NULL`) con un aviso en el log. Las reutilizaciones grabadas antes de la corrección `36dbd24` (el orquestador pasaba el GUID del documento en vez del de la ejecución) están en esa situación y no suman en el coste evitado.
@@ -124,7 +124,7 @@ Reglas:
 |---|---|---|---|
 | `false` | `false` | No | Pipeline completo normal. |
 | `false` | `false` | Sí, con salida previa de la misma clave | **Short-circuit**: devuelve salida previa (completando resumen o prompt si faltan). `Estado` = el de la ejecución previa. `ReutilizadaPorDuplicado = true`. Registra una fila de reutilización vinculada a la original (3.4). |
-| `false` | `false` | Sí, sin histórica con la misma clave | **Se procesa** el documento por el flujo normal (modo estricto, defecto). La ejecución queda como una más del documento, con su `ClaveIntencion` y `motivoNoReutilizacion` (`sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes` o `contrato-invalido`). `Estado` es el del procesamiento. |
+| `false` | `false` | Sí, sin histórica con la misma clave | **Se procesa** el documento por el flujo normal (modo estricto, defecto). La ejecución queda como una más del documento, con su `ClaveIntencion` y `motivoNoReutilizacion` (`sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `historica-fallida` o `contrato-invalido`). `Estado` es el del procesamiento. |
 | `false` | `false` | Sí, sin salida previa, con `Dedup__ModoEstricto = false` | Modo legado: **short-circuit**, devuelve respuesta vacía. `Estado = "DUPLICADO"`. `ReutilizadaPorDuplicado = true`. Persiste una ejecución normal con ese estado (AB#100178) y `ReutilizadaPorDuplicado = 0` en BD: no reutilizó nada. |
 | `false` | `true` | Sí | Reprocesa completamente, ignorando el duplicado. |
 | `true` | — | — | Omite verificación. Pipeline completo. |
@@ -151,7 +151,7 @@ En `ContratoSalida.DetalleEjecucion` (AB#100258):
 | `detalleEjecucion.claveIntencion` | string | AB#100930. Clave de intención de la petición (32 hex). Siempre informada. |
 | `detalleEjecucion.claveIntencionComponentes` | objeto | AB#100930. `{ modo, nivel, universo, expectedType, modeloClasificacion }`. |
 | `detalleEjecucion.motivoReutilizacion` | string? | AB#100930. Solo en reutilizadas: `clave-igual`. |
-| `detalleEjecucion.motivoNoReutilizacion` | string? | AB#100930. Solo tras un duplicado sin reutilización: `sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes` o `contrato-invalido`. |
+| `detalleEjecucion.motivoNoReutilizacion` | string? | AB#100930. Solo tras un duplicado sin reutilización: `sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `historica-fallida` o `contrato-invalido`. |
 | `detalleEjecucion.prompt.plantillaHash` | string? | AB#100930. Hash (16 hex) del prompt ad hoc pedido; permite saber si la histórica ya lo ejecutó. |
 | `detalleEjecucion.prompt.omitido` | string? | AB#100930. `markdown-insuficiente` si la reutilización no pudo completar el prompt. |
 | `detalleEjecucion.costes.reutilizadaPorDuplicado` | bool | `true` en reutilización. El bloque de costes llega a cero salvo que la reutilización complete un prompt o resumen: entonces lleva el coste de ese paso. |
@@ -207,7 +207,7 @@ Columnas de la clave de intención (migración `20261013092225_ClaveIntencionDed
 |---|---|---|
 | `ClaveIntencion` | `nvarchar(32) NULL` | Hash de la petición (modo, nivel, universo, `expectedType`, modelo de clasificación). Se graba en toda ejecución nueva. |
 | `ClaveIntencionJson` | `nvarchar(max) NULL` | Los componentes con sus nombres, para auditoría y Monitor. |
-| `MotivoReutilizacion` | `nvarchar(40) NULL` | En filas reutilizadas, `clave-igual`; en filas no reutilizadas tras un duplicado, el motivo (`sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `contrato-invalido`); vacío en el resto. |
+| `MotivoReutilizacion` | `nvarchar(40) NULL` | En filas reutilizadas, `clave-igual`; en filas no reutilizadas tras un duplicado, el motivo (`sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `historica-fallida`, `contrato-invalido`); vacío en el resto. |
 
 Índice `IX_DocumentoEjecuciones_Documento_Clave` sobre `(DocumentoId, ClaveIntencion, FechaEjecucion DESC)` con `EjecucionGuid`, `Tipologia`, `EstadoFinal` y `ReutilizadaPorDuplicado` incluidas: sirve la consulta de la candidata.
 
@@ -229,7 +229,7 @@ Desde AB#100258 el Monitor (`/monitor`) las distingue:
 - **Listado**: badge "Reutilizada" en la fila; el modal del contrato JSON se deshabilita en esas filas con el texto "el contrato es el de la ejecución #X", enlazada.
 - **Detalle, en los dos sentidos**: en la reutilización, banner "Servida reutilizando la ejecución #X del \<fecha\>" más lo que sí es suyo (fecha, solicitante, `InstanceId`, `OperationId`, duración real). En la original, bloque "Reutilizada N veces" con la lista de peticiones que la aprovecharon.
 - **Clave de intención y motivo (AB#100930)**: el detalle de una ejecución muestra la clave, el motivo (`clave-igual`, o el de no reutilización) y sus cinco componentes (modo, nivel, universo, `ExpectedType`, modelo). Los agregados no cambian.
-- **Filtro «Motivo dedup»** (parámetro `motivo` del endpoint): *Todos*, `clave-igual`, `sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `contrato-invalido`. Se combina con el selector tri-estado: las filas `clave-igual` son reutilizaciones, así que para verlas hay que elegir *Incluir* o *Solo reutilizadas*; los demás motivos son de ejecuciones propias.
+- **Filtro «Motivo dedup»** (parámetro `motivo` del endpoint): *Todos*, `clave-igual`, `sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `historica-fallida`, `contrato-invalido`. Se combina con el selector tri-estado: las filas `clave-igual` son reutilizaciones, así que para verlas hay que elegir *Incluir* o *Solo reutilizadas*; los demás motivos son de ejecuciones propias.
 - **KPIs**, calculados aparte sobre la misma ventana temporal: **peticiones servidas por reutilización** (recuento) y **coste evitado** (suma del `CosteIAEur` medido de las ejecuciones originales reutilizadas; si la original no tenía coste medido o el vínculo falta, no suma).
 
 ## 9. Consumidor externo: `sp_ObtenerDocumentoEjecucionesPorIdActivo`
@@ -263,7 +263,7 @@ App setting `Dedup__ModoEstricto` (sección `Dedup` de `DedupOptions`; `true` po
 | | `true` (modo estricto, defecto) | `false` (modo legado, vuelta atrás) |
 |---|---|---|
 | Selección de la histórica | Misma clave de intención, más segunda fase (modelo de extracción y páginas) | `ClassificationOnly` y `NivelClasificacion`, con fallback a la última con contrato (AB#100177) |
-| Duplicado sin histórica compatible | Se procesa el documento; `motivoNoReutilizacion` informado | Rama SHA256: `Estado = "DUPLICADO"` vacío persistido (AB#100178). Rama MD5 de GDC: se descarga y procesa |
+| Duplicado sin histórica compatible | Se procesa el documento; `motivoNoReutilizacion` informado | Rama SHA256: `Estado = "DUPLICADO"` vacío persistido (AB#100178). Rama MD5 de GDC: se descarga y procesa. Excepción (AB#100956): si todas las históricas con contrato están en estado de fallo, el modo legado también reprocesa y la ejecución lleva `historica-fallida` |
 | Clave de intención | Se calcula y persiste | Se calcula y persiste igualmente |
 | Completar resumen o prompt | Sí | Sí (el orquestador completa en ambos modos) |
 

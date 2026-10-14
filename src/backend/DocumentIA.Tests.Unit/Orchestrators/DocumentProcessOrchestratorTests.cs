@@ -3203,6 +3203,49 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ModoLegadoConHistoricaFallida_ReprocesaEnVezDeDuplicadoVacio()
+    {
+        // AB#100956: un reintento de un documento cuya historica termino en ERROR reprocesa
+        // tambien con Dedup:ModoEstricto=false; ni DUPLICADO vacio ni el ERROR servido.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba(classificationOnly: false));
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.NoReutilizada(MotivosReutilizacion.HistoricaFallida, modoEstricto: false));
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "nota.simple",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().NotBe("DUPLICADO");
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeFalse();
+        salida.DetalleEjecucion.MotivoNoReutilizacion.Should().Be("historica-fallida");
+        context.GetActivityCallCount("SubirBlobActivity").Should().Be(1, "con la historica fallida el documento se procesa");
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistido.Should().NotBeNull();
+        persistido!.Reutilizacion.Should().BeNull();
+        persistido.Salida.DetalleEjecucion.MotivoNoReutilizacion.Should().Be("historica-fallida");
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClassificationOnlyConTipologiaDesconocida_PersisteEjecucion()
     {
         var orchestrator = CreateOrchestrator();

@@ -116,6 +116,70 @@ public class DocumentoEjecucionRepositoryClaveTests : IDisposable
         fila.MotivoReutilizacion.Should().BeNull();
     }
 
+    [Fact]
+    public async Task GetCandidatasPorClave_ExcluyeLasFilasEnEstadoDeFallo()
+    {
+        // AB#100956: ERROR, PENDIENTE_REINTENTO, SIN_CONTENIDO_DOCUMENTO y las variantes
+        // historicas de error nunca son candidatas, aunque tengan contrato y la misma clave.
+        Sembrar(
+            Fila(1, "k1", Base.AddDays(1), estado: "OK", contrato: "{\"a\":1}"),
+            Fila(2, "k1", Base.AddDays(2), estado: "ERROR", contrato: "{\"a\":2}"),
+            Fila(3, "k1", Base.AddDays(3), estado: "PENDIENTE_REINTENTO", contrato: "{\"a\":3}"),
+            Fila(4, "k1", Base.AddDays(4), estado: "SIN_CONTENIDO_DOCUMENTO", contrato: "{\"a\":4}"),
+            Fila(5, "k1", Base.AddDays(5), estado: "Fallido", contrato: "{\"a\":5}"),
+            Fila(6, "k1", Base.AddDays(6), estado: "Error", contrato: "{\"a\":6}"));
+        var repo = new DocumentoEjecucionRepository(_context);
+
+        var candidatas = await repo.GetCandidatasPorClaveAsync(10, "k1", 0, 6);
+
+        candidatas.Should().ContainSingle().Which.Id.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task GetCandidatasPorClave_ConservaLosEstadosDeExitoYRevisionDelHistorico()
+    {
+        Sembrar(
+            Fila(1, "k1", Base.AddDays(1), estado: "Completado", contrato: "{}"),
+            Fila(2, "k1", Base.AddDays(2), estado: "VALIDACION_CON_ERRORES", contrato: "{}"),
+            Fila(3, "k1", Base.AddDays(3), estado: "BAJA_CONFIANZA_CLASIFICACION", contrato: "{}"),
+            Fila(4, "k1", Base.AddDays(4), estado: "NO_CLASIFICADO", contrato: "{}"),
+            Fila(5, "k1", Base.AddDays(5), estado: "REVISION", contrato: "{}"));
+        var repo = new DocumentoEjecucionRepository(_context);
+
+        var candidatas = await repo.GetCandidatasPorClaveAsync(10, "k1", 0, 5);
+
+        candidatas.Select(e => e.Id).Should().Equal(5, 4, 3, 2, 1);
+    }
+
+    [Fact]
+    public async Task GetConContratoSinClave_ExcluyeLasFilasEnEstadoDeFallo()
+    {
+        Sembrar(
+            Fila(1, null, Base.AddDays(1), estado: "ERROR", contrato: "{\"a\":1}"),
+            Fila(2, null, Base.AddDays(2), estado: "SIN_CONTENIDO_DOCUMENTO", contrato: "{\"a\":2}"),
+            Fila(3, null, Base.AddDays(3), estado: "OK", contrato: "{\"a\":3}"));
+        var repo = new DocumentoEjecucionRepository(_context);
+
+        (await repo.GetConContratoSinClaveAsync(10, 10)).Should().ContainSingle().Which.Id.Should().Be(3);
+    }
+
+    [Fact]
+    public async Task TieneFallidasPorClave_SoloCuentaFilasPropiasFallidasConEsaClave()
+    {
+        Sembrar(
+            Fila(1, "k1", Base.AddDays(1), estado: "ERROR", contrato: "{}"),
+            Fila(2, "k2", Base.AddDays(2), estado: "ERROR", contrato: null, reutilizada: true, originalId: 1),
+            Fila(3, "k3", Base.AddDays(3), estado: "OK", contrato: "{}"),
+            Fila(4, "k4", Base.AddDays(4), estado: "DUPLICADO", contrato: "{}"));
+        var repo = new DocumentoEjecucionRepository(_context);
+
+        (await repo.TieneFallidasPorClaveAsync(10, "k1")).Should().BeTrue();
+        (await repo.TieneFallidasPorClaveAsync(10, "k2")).Should().BeFalse("una reutilizacion no cuenta");
+        (await repo.TieneFallidasPorClaveAsync(10, "k3")).Should().BeFalse();
+        (await repo.TieneFallidasPorClaveAsync(10, "k4")).Should().BeFalse("DUPLICADO vacio no es un fallo");
+        (await repo.TieneFallidasPorClaveAsync(99, "k1")).Should().BeFalse();
+    }
+
     private void Sembrar(params DocumentoEjecucionEntity[] filas)
     {
         if (!_context.Documentos.Any(d => d.Id == 10))

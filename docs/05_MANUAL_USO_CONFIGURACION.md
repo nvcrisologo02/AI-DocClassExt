@@ -89,7 +89,7 @@ Estados habituales y accion recomendada:
 | `DUPLICADO` | Solo con `Dedup__ModoEstricto = false`: el documento ya habia sido procesado y no hay ningun resultado anterior reutilizable (en modo estricto, el defecto, se procesa) | Usar resultado existente o seguir criterio de negocio |
 | _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
 | `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto legible: el servicio de lectura respondio sin contenido | Comprobar si es un escaneado sin OCR o una pagina en blanco y pedir un documento legible. Si lo que fallo fue la lectura, el estado es `ERROR` o `PENDIENTE_REINTENTO` con `No se pudo obtener el texto del documento: <motivo>` |
-| `ERROR` | El procesamiento no pudo completarse | Reintentar y, si persiste, escalar a soporte |
+| `ERROR` | El procesamiento no pudo completarse | Reintentar enviando el mismo documento: desde AB#100956 un reintento no reutiliza una ejecución en error y reprocesa (en versiones anteriores hacía falta `forceReprocess = true`). Si persiste, escalar a soporte |
 
 #### Paso 5: Revisar confianza del resultado
 

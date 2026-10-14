@@ -341,9 +341,10 @@ Desde AB#100930 un duplicado solo reutiliza una ejecución anterior del mismo do
 | `modelo-extraccion-distinto` | La tipología de la histórica usa hoy otro modelo de extracción que el persistido, o ya no está publicada/activa, o la petición fija otro `extraction.model`. | Esperado tras cambiar el modelo de la tipología. Si no se esperaba, revisar la configuración publicada de la tipología y `instrucciones.extraction.model`. |
 | `paginas-insuficientes` | La petición pide más páginas de las que procesó la histórica (p. ej. histórica con recorte de `maxPagesForClassificationOnly` frente a una petición del documento completo). | Pedir un número de páginas menor o igual que el de la histórica, o aceptar el reproceso. |
 | `contrato-invalido` | La fila original no tiene contrato legible (JSON vacío o corrupto, o estado `DUPLICADO` heredado). | Revisar la fila original en `DocumentoEjecuciones` (Monitor o SQL). El reproceso deja una ejecución válida para las siguientes peticiones. |
+| `historica-fallida` | Todas las ejecuciones del documento con esa intención terminaron en `ERROR`, `PENDIENTE_REINTENTO` o `SIN_CONTENIDO_DOCUMENTO`: no hay resultado útil que servir (AB#100956). | Esperado: el reenvío reprocesa sin `forceReprocess`. Si el reproceso vuelve a fallar, la causa está en el documento o en la lectura (ver `mensajeError`), no en la deduplicación. |
 | `sin-historica` | Primera ejecución útil del documento: no hay ninguna ejecución anterior con contrato. | Ninguna; es el caso normal de un documento nuevo en su primera repetición. |
 
-Si `motivoNoReutilizacion` no aparece y el documento sí se reutilizó con otra intención, comprobar `Dedup__ModoEstricto` en la function app: con `false` rige la regla anterior (modo y nivel con fallback a la última con contrato) y se vuelve a emitir `DUPLICADO` cuando no hay histórica (ver MANUAL_DEDUPLICACION §12).
+Si `motivoNoReutilizacion` no aparece y el documento sí se reutilizó con otra intención, comprobar `Dedup__ModoEstricto` en la function app: con `false` rige la regla anterior (modo y nivel con fallback a la última con contrato) y se vuelve a emitir `DUPLICADO` cuando no hay histórica (ver MANUAL_DEDUPLICACION §12). La única excepción del modo legado es `historica-fallida`, que reprocesa en ambos modos.
 
 **¿Por qué una reutilización tiene coste? (AB#100930)**
 
