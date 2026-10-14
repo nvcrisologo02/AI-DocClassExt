@@ -170,8 +170,15 @@ Backfill `scripts/database/backfill-clave-intencion.ps1`, por lotes y reanudable
 `-DesdeId`, mismo patrón que `backfill-markdown-cobertura.ps1`: para cada fila con contrato y
 sin clave, deriva los componentes del JSON (`DetalleEjecucion.ClassificationOnly`,
 `NivelClasificacion`, `Clasificacion.RestriccionTipologias.Codigos`, `Clasificacion.Modelo`,
-`Identificacion` para `ExpectedType`) y graba clave y JSON. Se lanza en D+1 tras validar el
-despliegue; la derivación al vuelo de la sección 2 queda como red de seguridad.
+`Identificacion` para `ExpectedType`) y graba clave y JSON. Se lanza en el mismo run de
+Migrations-BD que la migración (parámetro `backfillClaveIntencion`); la derivación al vuelo de
+la sección 2 queda como red de seguridad.
+
+> Nota 2026-10-14: cambio de decisión. El diseño del 2026-10-13 lanzaba el backfill un día después,
+> tras validar el despliegue. Se lanza en el mismo run de Migrations-BD que la migración, activando el
+> parámetro booleano `backfillClaveIntencion` (defecto `false`): tras aplicar las migraciones, y
+> en el mismo pool privado, el pipeline ejecuta `-SelfTest`, `-WhatIf` y el backfill real por
+> lotes, y aborta en el primer paso que falle. El script sigue siendo reanudable (`-DesdeId`).
 
 ## 6. Interruptor y vuelta atrás
 
@@ -211,8 +218,17 @@ Unitarias (Core y Functions):
 
 E2E post-despliegue (perfil full, casos nuevos `DUP-06` a `DUP-10`): restricción y luego
 universo completo no reutiliza; solo clasificación y luego completo no reutiliza; completo y
-luego solo clasificación no reutiliza; misma clave reutiliza y completa el resumen; misma
+luego solo clasificación no reutiliza; misma clave reutiliza y completa el prompt ad hoc; misma
 clave con más páginas pedidas reprocesa.
+
+> Nota 2026-10-14: desvío de DUP-09. El diseño del 2026-10-13 decía «misma clave reutiliza y
+> completa el resumen». DUP-09 demuestra la complección por prompt ad hoc: con
+> `classificationProvider: gpt` la siembra siempre trae resumen combinado (el clasificador GPT
+> devuelve `ResumenCombinado`), así que la rama «completar el resumen» no es alcanzable en E2E y
+> queda cubierta solo por las pruebas unitarias. DUP-09 siembra solo clasificación con un prompt A
+> y la pasada, con la misma clave y un prompt B (hash de plantilla distinto), ejecuta ese prompt
+> sobre el markdown guardado; es la misma invariante de la sección 4 (reutilizar y completar) por
+> la otra rama.
 
 ## 9. Despliegue, riesgos e impacto
 
@@ -227,7 +243,8 @@ clave con más páginas pedidas reprocesa.
 - ADR: cambia la semántica de un contrato externo; se propondrá `ADR-003` al cerrar esta spec
   y antes de desplegar.
 - Documentación: `CONTRATO_API_HTTP.md`, troubleshooting, `MODELO_DATOS` (columnas e índice),
-  runbook de release (script de índice en PRO y backfill en D+1).
+  runbook de release (script de índice en PRO y backfill en el mismo run de Migrations-BD que la
+  migración, con el parámetro `backfillClaveIntencion`; ver la nota de la sección 5, 2026-10-14).
 
 ## 10. Páginas
 

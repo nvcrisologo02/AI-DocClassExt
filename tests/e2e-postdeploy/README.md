@@ -174,12 +174,23 @@ uno de los dos runners borraría filas que el otro está usando.
 
 ## Validación de la reutilización por duplicado (run-validacion-dedup.ps1)
 
-Juego de pruebas aparte para las invariantes DUP-01..DUP-05 (`Area: Dedup` de
-`coverage/functional-matrix.json`), introducidas en AB#100258: una petición
-repetida de un documento ya procesado se sirve con el contrato de otra
-ejecución **y deja su propia fila** en `DocumentoEjecuciones`, marcada con
-`ReutilizadaPorDuplicado = 1`, sin contrato ni coste propios y vinculada a la
-original por `EjecucionOriginalId`.
+Juego de pruebas aparte para las invariantes DUP-01..DUP-10 (`Area: Dedup` de
+`coverage/functional-matrix.json`):
+
+- DUP-01..DUP-05 (AB#100258, reutilización básica): una petición repetida de un
+  documento ya procesado se sirve con el contrato de otra ejecución **y deja su
+  propia fila** en `DocumentoEjecuciones`, marcada con `ReutilizadaPorDuplicado = 1`
+  y vinculada a la original por `EjecucionOriginalId`. Esa fila no lleva contrato
+  ni coste propios, salvo que la reutilización complete un prompt (DUP-09).
+- DUP-06..DUP-10 (AB#100939, clave de intención): la reutilización solo vale con
+  la misma intención.
+  - DUP-06: una restricción de tipologías y el universo completo no comparten resultado.
+  - DUP-07: solo clasificación y después pipeline completo no reutiliza.
+  - DUP-08: pipeline completo y después solo clasificación no reutiliza.
+  - DUP-09: misma clave reutiliza y completa el prompt ad hoc que la histórica
+    no tenía; la fila de reutilización lleva contrato y coste del prompt.
+  - DUP-10: misma clave con más páginas pedidas que las procesadas reprocesa con
+    motivo `paginas-insuficientes`.
 
 Misma mecánica que el juego de markdown (siembra → pasadas → aserciones →
 limpieza por SHA256, mismos parámetros `-Environment`, `-WhatIf`,
@@ -192,12 +203,35 @@ limpieza por SHA256, mismos parámetros `-Environment`, `-WhatIf`,
   `UltimaTieneContrato`, `UltimaCosteEsNulo`, `UltimaEjecucionOriginalId`,
   `UltimaApuntaASiembra`, que compara con el Id que dejó la siembra) y el
   recuento por `InstanceId` de la última pasada (`FilasConInstanceIdPasada`,
-  `ReutilizadasConInstanceIdPasada`).
+  `ReutilizadasConInstanceIdPasada`). Columnas añadidas con la clave de intención
+  (AB#100939), todas sobre la última fila:
+  - `UltimaClaveIntencion`: su `ClaveIntencion`.
+  - `UltimaMotivo`: su `MotivoReutilizacion` (`clave-igual` en reutilizadas; el
+    motivo de no reutilización en filas propias tras un duplicado).
+  - `UltimaTieneResumen`: el contrato guardado trae `DatosExtraidos.Resumen`.
+  - `UltimaClaveIgualASiembra`: su clave es la que dejó la siembra (se calcula
+    en `Get-EjecucionesSnapshot`, comparando `UltimaClaveIntencion` con
+    `SiembraClaveIntencion`, la clave de la fila de la siembra).
+  - `UltimaPromptOmitido`: valor de `DetalleEjecucion.Prompt.Omitido` del contrato
+    (`NULL` si el prompt se ejecutó).
+  - `UltimaTienePrompt`: el contrato guardado trae `DatosExtraidos.ResultadoPrompt`.
 - El caso de tipo `agregados` (DUP-04) lee además `management/ejecuciones/agregados`
   y `management/ejecuciones/costes` antes y después de la pasada, sobre la
   misma ventana temporal, y asevera **deltas** (`apiAssertions`: `totalEjecuciones`,
   `ok` y `costeTotalEur` en 0; `reutilizadas` en +1). Es la prueba de que una
   reutilización no infla los KPIs del Monitor.
+
+Los campos de `seed.request` y de `pasadas[].request` son los de un caso de
+`run-e2e-postdeploy.ps1` (`New-DocumentIARequestBody`). Los dos que añaden DUP-06
+a DUP-10 son `restriccionTipologias` (array de códigos de tipología, p. ej.
+`["nota.simple"]`, que va a `instrucciones.restriccionTipologias.codigos`) y
+`prompt.userPromptTemplate` (prompt ad hoc, que va a `instrucciones.prompt`).
+
+También está admitido `forzarResumenPorDefecto` (bool, que va a
+`instrucciones.forzarResumenPorDefecto`), añadido junto a `restriccionTipologias`
+en `New-DocumentIARequestBody`. Ningún caso del juego actual lo usa, porque DUP-09
+se rediseñó por prompt ad hoc; queda disponible para forzar el resumen dedicado en
+una siembra si hace falta volver a la rama del resumen.
 
 Casos en `cases-validacion/dedup-cases.json`; su esquema lo valida
 `tests/cases-validacion-dedup-schema.Tests.ps1`, que además impide que ningún
@@ -209,10 +243,22 @@ original no hay nada que reutilizar).
     pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -SoloLimpieza
     pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev
     pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -CaseKey DUP-02,DUP-05
+    pwsh ./tests/e2e-postdeploy/run-validacion-dedup.ps1 -Environment dev -CaseKey DUP-06,DUP-09
 
-Coste y tiempo: nueve pasadas reales por el pipeline en el juego completo (una
-siembra por caso más una pasada en DUP-02..05), todas `classificationOnly` a 3
-páginas sobre el documento de control; las pasadas de duplicado no consumen IA.
+Coste y tiempo: 19 peticiones reales por el pipeline en el juego completo (10
+siembras, una por caso, más 9 pasadas en DUP-02..DUP-10), contadas desde los
+`request` de `dedup-cases.json`. Todas son `classificationOnly` a 3 páginas sobre
+el documento de control salvo la siembra de DUP-08 y la pasada de DUP-07 (pipeline
+completo) y la pasada de DUP-10 (6 páginas). No todas consumen IA:
+
+- No la consumen las pasadas de DUP-02, DUP-04 y DUP-05 (misma petición sin forzar
+  reproceso: se sirven por reutilización).
+- La consumen las 10 siembras y las pasadas que reprocesan: DUP-03 (`forceReprocess`),
+  DUP-06, DUP-07, DUP-08 y DUP-10 (otra intención o más páginas, sin histórica
+  compatible).
+- La pasada de DUP-09 reutiliza la clasificación pero ejecuta un prompt ad hoc
+  sobre el markdown guardado: consume IA solo en ese prompt.
+
 `ERROR` en la precondición significa que la siembra no dejó exactamente una
 ejecución propia con contrato: sin original, el resultado de la pasada no
 probaría nada. No ejecutar en paralelo con `run-validacion-markdown.ps1`: ambos

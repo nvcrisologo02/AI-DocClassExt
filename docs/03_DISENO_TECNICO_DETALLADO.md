@@ -17,9 +17,11 @@ flowchart TD
     START([Inicio]) --> NORM["NormalizarActivity<br/>SHA256 + MD5 + CRC32<br/>+ paginas PDF"]
 
     NORM --> DUP{"VerificarDuplicadoActivity<br/>SHA256 en BD?"}
-    DUP -->|"Duplicado +<br/>!forceReprocess"| REUSE["PersistirActivity<br/>(rama reutilizacion)<br/>fila propia vinculada<br/>a la ejecucion original"]
-    REUSE --> CACHE["Retorna resultado<br/>cacheado<br/>(ReutilizadaPorDuplicado=true,<br/>InstanceId real,<br/>EjecucionOriginalGuid)"]
+    DUP -->|"Duplicado +<br/>!forceReprocess"| SEL{"ObtenerUltimaEjecucionDuplicadoActivity<br/>historica con la misma<br/>clave de intencion?"}
+    SEL -->|"Si (completa<br/>resumen o prompt<br/>si faltan)"| REUSE["PersistirActivity<br/>(rama reutilizacion)<br/>fila propia vinculada<br/>a la ejecucion original"]
+    REUSE --> CACHE["Retorna resultado<br/>de la misma intencion<br/>(ReutilizadaPorDuplicado=true,<br/>InstanceId real,<br/>EjecucionOriginalGuid)"]
     CACHE --> FIN_OK([Completed])
+    SEL -->|"No: sin historica<br/>compatible<br/>(motivoNoReutilizacion)"| LAST
 
     DUP -->|"No duplicado /<br/>forceReprocess"| LAST{"skipDuplicateCheck?"}
     LAST -->|"Si"| BLOB
@@ -93,7 +95,8 @@ flowchart TD
 | 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 | 12 | Integrar | `IntegrarActivity` | datos + tipologia + plugins config | DatosFinales + plugins results | Ejecucion por prioridad |
 | 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP (`searchEntities` + `create`) con timeout 120s |
-| 14 | Persistir | `PersistirActivity` | `PersistirInput` (ContratoSalida completo + `SubmittedBy` de `trazabilidad`; opcionalmente `Reutilizacion` = `{ EjecucionOriginalGuid, Sha256 }`) | void | BD + auditoria. `PersistirInput` es un envoltorio interno del orquestador (no altera los contratos de entrada/salida): permite guardar el solicitante en `DocumentoEjecucionEntity.SubmittedBy`. Con `Reutilizacion` informado toma la **rama de reutilizacion** (AB#100258): inserta solo una fila de `DocumentoEjecuciones` marcada y vinculada a la original, mas auditoria; no toca `Documentos`, resultados, plugins ni validaciones. |
+| 14 | Persistir | `PersistirActivity` | `PersistirInput` (ContratoSalida completo + `SubmittedBy` de `trazabilidad`; opcionalmente `Reutilizacion` = `{ EjecucionOriginalGuid, Sha256, Completada }`) | void | BD + auditoria. `PersistirInput` es un envoltorio interno del orquestador (no altera los contratos de entrada/salida): permite guardar el solicitante en `DocumentoEjecucionEntity.SubmittedBy`. Con `Reutilizacion` informado toma la **rama de reutilizacion** (AB#100258): inserta solo una fila de `DocumentoEjecuciones` marcada y vinculada a la original, mas auditoria; no toca `Documentos`, resultados, plugins ni validaciones. Con `Completada = true` (AB#100930: la reutilizacion ejecuto un prompt o resumen) la fila lleva ademas el contrato devuelto y el coste de ese paso. En toda fila persiste `ClaveIntencion`, `ClaveIntencionJson` y `MotivoReutilizacion`. |
+| — | CalcularClaveIntencion | `CalcularClaveIntencionActivity` | `Instrucciones` de la peticion | `ClaveIntencion` (clave de 32 hex + componentes) | Previa a todas las demas (no entra en el orden 1-14). Calcula la clave de intencion con `ClaveIntencionBuilder` (Core) a partir de la peticion y la configuracion activa (el registro de modelos lee BD, de ahi que sea actividad). Se persiste en toda ejecucion y alimenta `ObtenerUltimaEjecucionDuplicadoActivity`. AB#100930. |
 
 ### 3.1.1 Comportamiento del orquestador segun entrada y configuracion
 
@@ -111,8 +114,10 @@ flowchart TD
     DOC --> NORM
 
     NORM --> DUP{"VerificarDuplicadoActivity<br/>SHA256 en BD?"}
-    DUP -->|duplicado + !forceReprocess| CACHE["Retorno cacheado<br/>ReutilizadaPorDuplicado=true<br/>+ traza de reutilizacion en BD"]
+    DUP -->|duplicado + !forceReprocess| SEL{"Historica con la<br/>misma clave de intencion?"}
+    SEL -->|si| CACHE["Retorno de la misma intencion<br/>ReutilizadaPorDuplicado=true<br/>+ traza de reutilizacion en BD<br/>(completa resumen o prompt si faltan)"]
     CACHE --> FIN([Completed])
+    SEL -->|"no: continua<br/>(motivoNoReutilizacion)"| SKIP
 
     DUP -->|no duplicado / forceReprocess| SKIP{"skipDuplicateCheck?"}
     SKIP -->|si| BLOB
@@ -289,20 +294,25 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
 **D7 — NivelClasificacion en clave de deduplicación**:
 - `ContratoSalida.DetalleEjecucion.NivelClasificacion` (string?) — refleja el valor de la petición.
 - `DocumentoEjecucionEntity.NivelClasificacion` (nvarchar(20) NULL) — migración `20260525151946_AddNivelClasificacionToEjecuciones`.
-- `ObtenerUltimaEjecucionDuplicadoActivity` incluye `NivelClasificacion` en el filtro LINQ in-memory.
+- Hasta AB#100930, `ObtenerUltimaEjecucionDuplicadoActivity` incluia `NivelClasificacion` en un filtro LINQ in-memory. Desde AB#100930 el nivel es un componente de la clave de intencion (ver Deduplicacion); el filtro solo sigue vigente con `Dedup__ModoEstricto = false`.
 - `PersistirActivity` persiste el valor en la entidad BD.
 
 Deduplicación:
 
-- La reutilización de ejecuciones previas se confronta por `SHA256 + ClassificationOnly + NivelClasificacion` para evitar mezclar procesos completos con procesos de solo clasificación, y para distinguir ejecuciones con distinto nivel jerárquico GPT.
+- La reutilización de ejecuciones previas se confronta por documento (`SHA256`) y **clave de intención** (AB#100930): modo (`ClassificationOnly`), nivel de clasificación, universo de tipologías, `ExpectedType` y modelo de clasificación efectivo, normalizados por `ClaveIntencionBuilder` (Core) y hasheados (SHA-256 truncado a 32 hex). Evita mezclar procesos completos con procesos de solo clasificación, ejecuciones con distinto nivel o restricción, y peticiones con `ExpectedType`. Sustituye a la regla anterior (`SHA256 + ClassificationOnly + NivelClasificacion` con fallback a la última con contrato, AB#100177).
+- `CalcularClaveIntencionActivity` calcula la clave al inicio de la orquestación y viaja en `DetalleEjecucion.ClaveIntencion` / `ClaveIntencionComponentes`; `PersistirActivity` la graba en toda ejecución.
+- `ObtenerUltimaEjecucionDuplicadoActivity` recibe la clave y la necesidad de páginas: consulta una candidata por `(DocumentoId, ClaveIntencion)` con el índice `IX_DocumentoEjecuciones_Documento_Clave`, aplica una segunda fase (modelo de extracción de la tipología y cobertura de páginas) y examina hasta `Dedup__MaxCandidatas` candidatas. Las filas antiguas sin clave se derivan al vuelo (hasta `Dedup__MaxDerivacionAlVuelo`) con `ClaveIntencionDerivador`, la misma función que el backfill.
+- Sin candidata válida el orquestador **continúa por el flujo normal** (también en la rama de MD5 de GDC, descargando el documento) y la ejecución queda con `MotivoNoReutilizacion` (`sin-historica`, `clave-distinta`, `modelo-extraccion-distinto`, `paginas-insuficientes`, `contrato-invalido`). Con `Dedup__ModoEstricto = false` rige la regla anterior.
+- `CompletarReutilizacionAsync` (orquestador): si la histórica no trae el resumen o el prompt pedidos, ejecuta solo `PromptActivity` sobre su markdown guardado (sin Document Intelligence); sin markdown que cubra marca `Prompt.Omitido = "markdown-insuficiente"`.
+- Persistencia: columnas `ClaveIntencion nvarchar(32)`, `ClaveIntencionJson nvarchar(max)` y `MotivoReutilizacion nvarchar(40)` en `DocumentoEjecuciones` (migración `20261013092225_ClaveIntencionDedup`) e índice `IX_DocumentoEjecuciones_Documento_Clave`; en PRO se aplican con `scripts/database/indice-documento-clave-pro.sql`. El Monitor muestra clave, componentes y motivo, y filtra por motivo (`EjecucionFiltro.MotivoReutilizacion`, parámetro `motivo`).
 
 Traza de la reutilización (AB#100258):
 
-- `ObtenerUltimaEjecucionDuplicadoActivity` rellena `DetalleEjecucion.EjecucionOriginalGuid` con el `EjecucionGuid` de la fila cuyo contrato devuelve. Es el único puente hacia la original: ese GUID se genera al persistir y no viaja en el contrato (`Identificacion.Guid` es el del documento; usarlo dejaba la traza sin vínculo, corrección `36dbd24`). Solo son candidatas las filas con `ContratoSalidaCompletoJson`, así que una reutilización nunca se reutiliza.
-- `RegistrarReutilizacionAsync` (orquestador) sustituye en el contrato reutilizado `InstanceId`, `OperationId`, `Seguimiento`, `ClassificationOnly` y `NivelClasificacion` por los de la llamada actual y llama a `PersistirActivity` con `ReutilizacionInput { EjecucionOriginalGuid, Sha256 }`. Va en su propio `try/catch` y no usa `EjecutarPasoNegocioSinResultado`: un fallo escribiendo la traza se loguea y no convierte en error una petición ya resuelta.
-- `PersistirActivity.PersistirReutilizacionAsync` inserta una fila en `DocumentoEjecuciones` con `ReutilizadaPorDuplicado = 1`, `EjecucionOriginalId` (por `GetByGuidAsync`), `ContratoSalidaCompletoJson = NULL`, sin coste, con identidad y duración de esta llamada y `Tipologia`/`EstadoFinal`/confianzas copiados de la original; más una fila de `Auditoria` (`REUTILIZACION_DUPLICADO`). Idempotente por `InstanceId` (índice filtrado `IX_DocumentoEjecuciones_InstanceId_Reutilizadas`). No toca `Documentos`, `ResultadosProcesamiento`, plugins ni validaciones.
+- `ObtenerUltimaEjecucionDuplicadoActivity` rellena `DetalleEjecucion.EjecucionOriginalGuid` con el `EjecucionGuid` de la fila cuyo contrato devuelve. Es el único puente hacia la original: ese GUID se genera al persistir y no viaja en el contrato (`Identificacion.Guid` es el del documento; usarlo dejaba la traza sin vínculo, corrección `36dbd24`). En modo estricto, `GetCandidatasPorClaveAsync` excluye las filas con `ReutilizadaPorDuplicado` (y las de estado `DUPLICADO`), así que una reutilización nunca se reutiliza aunque, si completó un prompt o resumen (AB#100930), tenga contrato propio.
+- `RegistrarReutilizacionAsync` (orquestador) sustituye en el contrato reutilizado `InstanceId`, `OperationId`, `Seguimiento`, `ClassificationOnly` y `NivelClasificacion` por los de la llamada actual y llama a `PersistirActivity` con `ReutilizacionInput { EjecucionOriginalGuid, Sha256, Completada }` (`Completada` es true si la reutilización ejecutó `PromptActivity`, AB#100930). Va en su propio `try/catch` y no usa `EjecutarPasoNegocioSinResultado`: un fallo escribiendo la traza se loguea y no convierte en error una petición ya resuelta.
+- `PersistirActivity.PersistirReutilizacionAsync` inserta una fila en `DocumentoEjecuciones` con `ReutilizadaPorDuplicado = 1`, `EjecucionOriginalId` (por `GetByGuidAsync`), `ContratoSalidaCompletoJson = NULL` y sin coste (salvo reutilización completada, AB#100930, que persiste contrato y coste del prompt), con identidad y duración de esta llamada y `Tipologia`/`EstadoFinal`/confianzas copiados de la original; más una fila de `Auditoria` (`REUTILIZACION_DUPLICADO`). Idempotente por `InstanceId` (índice filtrado `IX_DocumentoEjecuciones_InstanceId_Reutilizadas`). No toca `Documentos`, `ResultadosProcesamiento`, plugins ni validaciones.
 - Lectura: `EjecucionFiltro.Reutilizadas` (`FiltroReutilizadas.Excluir` por defecto, `Incluir`, `Solo`) se aplica en `AplicarFiltro`, embudo común de listado, agregados, histograma, matriz y costes, de modo que las cifras históricas no cambian. `EjecucionAgregadosResult` añade `Reutilizadas` y `CosteEvitadoEur`, calculados aparte con `Solo` y por join con la original. El SP `sp_ObtenerDocumentoEjecucionesPorIdActivo` excluye salvo `@IncluirReutilizadas = 1` (script `scripts/database/sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql`, fuera de EF).
-- La rama `DUPLICADO` sin histórico reutilizable no cambia: persiste desde AB#100178 con el flag a 0.
+- La rama `DUPLICADO` sin histórico reutilizable (persistida desde AB#100178 con el flag a 0) solo existe con `Dedup__ModoEstricto = false`; en modo estricto el documento se procesa (AB#100930).
 
 Limit pages en ClassificationOnly:
 
@@ -322,7 +332,8 @@ Resumen de comportamiento por activity:
 
 - `NormalizarActivity`: hidrata/decodifica documento y calcula integridad (`SHA256`, `MD5`, `CRC32`) y metadatos de páginas.
 - `VerificarDuplicadoActivity`: consulta duplicidad por `SHA256`; con `forceReprocess=false` permite retorno temprano de ejecución previa.
-- `ObtenerUltimaEjecucionDuplicadoActivity`: recupera y rehidrata el contrato de la última ejecución con contrato compatible, y lo devuelve con `EjecucionOriginalGuid` informado (AB#100258).
+- `CalcularClaveIntencionActivity`: calcula la clave de intención de la petición (AB#100930).
+- `ObtenerUltimaEjecucionDuplicadoActivity`: recupera y rehidrata el contrato de la última ejecución con la misma clave de intención (y que supere la segunda fase de modelo de extracción y páginas), o informa del motivo de no reutilización (AB#100930); lo devuelve con `EjecucionOriginalGuid` informado (AB#100258).
 - `SubirBlobActivity`: persiste binario en blob (`documents/`) para trazabilidad operativa.
 - `ClasificarActivity`: resuelve un flujo configurable de providers y los ejecuta en orden hasta resultado satisfactorio; si no hay resultado, aplica fallback global final si está activo. Fallback chain: RuleBasedTdnClassifier → DocumentIntelligenceProvider → FoundryTdnRescueClassifier → GptClasificarDataProvider (two-phase).
 - `GptClasificarDataProvider`: implementa clasificación jerárquica de dos fases:
@@ -339,7 +350,7 @@ Resumen de comportamiento por activity:
 - `ObtenerActivoActivity`: resuelve activo vía AssetResolver según criterios configurados.
 - `IntegrarActivity`: aplica plugins por prioridad y consolida `DatosFinales`.
 - `SubirGDCActivity`: gestiona deduplicación previa (`searchEntities`) y subida (`create`) con timeout de 120s en orquestación.
-- `PersistirActivity`: persiste resultado integral y auditoría. Con `PersistirInput.Reutilizacion` informado toma la rama de reutilización: una única fila marcada y vinculada a la original, sin contrato ni coste (AB#100258).
+- `PersistirActivity`: persiste resultado integral y auditoría. Con `PersistirInput.Reutilizacion` informado toma la rama de reutilización: una única fila marcada y vinculada a la original, sin contrato ni coste (AB#100258); si la reutilización se completó con un prompt o resumen (`Reutilizacion.Completada`, AB#100930), la fila persiste además el contrato devuelto y el coste de ese paso.
 
 Estados funcionales de cierre del pipeline:
 
@@ -348,7 +359,7 @@ Estados funcionales de cierre del pipeline:
 - `NO_CLASIFICADO`: clasificación parcial con código TDN1 conocido pero tipología TDN1/TDN2 no resuelta. Pipeline continúa con tipología parcial. Cuando el estado viene de una salida temprana (tipología no resoluble o `Desconocido`), el prompt y el resumen se ejecutan igualmente si la petición los pidió.
 - `SIN_CONTENIDO_DOCUMENTO`: se pidió clasificación GPT, prompt o resumen y Document Intelligence Layout respondió sin texto (documento vacío de verdad). Si lo que falló fue la obtención del texto, `ResultadoMarkdown.CausaSinContenido` lleva el motivo (`MotivoSinContenido`: `SinFuente`, `FormatoNoSoportado`, `LayoutTimeout`, `LayoutError` con código HTTP) desde `MarkdownResolver`, las guardas lo propagan en `FallbackRazon` / `PromptResultado.Error` y el orquestador cierra en `PENDIENTE_REINTENTO` (causa transitoria: timeout, 429, 5xx) o `ERROR`, persistiendo igual (AB#100880). No se invoca al LLM; la actividad `Prompt` queda en `Failed` y no se persiste ni `Resumen` ni `ResultadoPrompt`. **Cuenta y se filtra como error** (`EstadoEjecucion.Error` en `DocumentIA.Data/Repositories/EstadoEjecucion.cs`), de modo que los agregados del Monitor y el badge lo tratan como fallo, no como estado desconocido. Al desplegarlo, parte del volumen que antes cerraba en `OK` —con un resumen inventado sobre un documento que el sistema nunca leyó— pasa a contarse aquí: es un cambio esperado en las métricas de operación.
 - `VALIDACION_CON_ERRORES`
-- `DUPLICADO`: solo cuando el documento existe y **no hay ninguna ejecución reutilizable**. Si la hay, el estado devuelto es el de aquella ejecución con `Resultado.ReutilizadaPorDuplicado = true`, y la petición queda registrada como fila de reutilización (AB#100258).
+- `DUPLICADO`: solo con `Dedup__ModoEstricto = false` (modo de vuelta atrás), cuando el documento existe y **no hay ninguna ejecución reutilizable**; en modo estricto (defecto, AB#100930) ese documento se procesa y `Resultado.Estado` es el del procesamiento, con `DetalleEjecucion.MotivoNoReutilizacion`. Si hay ejecución con la misma intención, el estado devuelto es el de aquella ejecución con `Resultado.ReutilizadaPorDuplicado = true`, y la petición queda registrada como fila de reutilización (AB#100258).
 - `BAJA_CONFIANZA_CLASIFICACION`
 - `ERROR`
 
@@ -1308,8 +1319,8 @@ async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
 
 | Condicion | Actividad | Estado final | Se persiste? |
 |-----------|-----------|-------------|-------------|
-| Documento duplicado, !forceReprocess, con ejecución reutilizable | VerificarDuplicado | El de la ejecución original (`ReutilizadaPorDuplicado=true`) | Si: fila de reutilización sin contrato, vinculada a la original (AB#100258) |
-| Documento duplicado, !forceReprocess, sin ejecución reutilizable | VerificarDuplicado | `DUPLICADO` | Si (parcial, AB#100178) |
+| Documento duplicado, !forceReprocess, con ejecución de la misma intención | VerificarDuplicado | El de la ejecución original (`ReutilizadaPorDuplicado=true`) | Si: fila de reutilización vinculada a la original (AB#100258); sin contrato salvo que complete un prompt o resumen (AB#100930) |
+| Documento duplicado, !forceReprocess, sin ejecución reutilizable, `Dedup__ModoEstricto=false` | VerificarDuplicado | `DUPLICADO` | Si (parcial, AB#100178). En modo estricto (defecto) no es salida anticipada: el documento se procesa con `motivoNoReutilizacion` |
 | Confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (parcial) |
 | Tipologia no resuelta | ResolverTipologia | `ERROR` | Si (parcial) |
 | Cuota Azure OpenAI agotada (429 sostenido tras reintentos/cooldown) | Clasificar | `PENDIENTE_REINTENTO` (ver 3.9.5) | Si (parcial) |
@@ -1461,7 +1472,7 @@ stateDiagram-v2
         ValidacionConErrores : Estado = VALIDACION_CON_ERRORES
         BajaConfianza : Estado = BAJA_CONFIANZA_CLASIFICACION
         ErrorEstado : Estado = ERROR
-        Duplicado : Estado = el de la ejecucion original<br/>(DUPLICADO solo sin historico reutilizable)
+        Duplicado : Estado = el de la ejecucion original<br/>(DUPLICADO solo sin historico reutilizable<br/>y con Dedup__ModoEstricto=false)
         ReutilizacionRegistrada : Fila ReutilizadaPorDuplicado=1<br/>vinculada a la original
         ErrorTipologia : Estado = ERROR (tipologia)
         RateLimitAgotado : Estado = PENDIENTE_REINTENTO (3.9.5)

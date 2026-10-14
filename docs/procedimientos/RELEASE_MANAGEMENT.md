@@ -133,7 +133,7 @@ administrador de Entra del servidor SQL, plataforma si el proyecto no lo es).
 - [ ] **2.1.3** Scripts SQL de la release fuera de EF listados en 0.5, aplicados en PRE con token de Entra y medidos (duración por lote); antes de 2.1.1 si sustituyen a una migración EF (la registran en `__EFMigrationsHistory`).
 
 Ejemplos de 2.1.3: `scripts/database/indice-monitor-costes-pro.sql` (AB#100662, aplicado en PRE
-y PRO) e `indice-monitor-reutilizacion-pro.sql` (release del 20/09). Patrón recomendado en
+y PRO), `indice-monitor-reutilizacion-pro.sql` (release del 20/09) e `indice-documento-clave-pro.sql` (AB#100930: añade las columnas `ClaveIntencion`, `ClaveIntencionJson` y `MotivoReutilizacion`, crea `IX_DocumentoEjecuciones_Documento_Clave` ONLINE y registra la migración `ClaveIntencionDedup` en `__EFMigrationsHistory`, de modo que 4.2 cierre en `Pendientes: 0`). Patrón recomendado en
 `docs/procedimientos/DATABASE_MIGRATION_STRATEGY.md`.
 
 La primera release que lleve el clasificador por embeddings (AB#100779, develop 2aa9f02)
@@ -354,7 +354,7 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
 
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlprodocai.database.windows.net -ReleaseTag vX.Y.Z-pro-despues
 
-- [ ] **4.8** Backfills reanudables, solo si la release los trae y solo después de 4.6 (ejemplos: `scripts/database/backfill-costes-estimados.ps1`, `scripts/database/backfill-markdown-cobertura.ps1`).
+- [ ] **4.8** Backfills reanudables, solo si la release los trae y solo después de 4.6 (ejemplos: `scripts/database/backfill-costes-estimados.ps1`, `scripts/database/backfill-markdown-cobertura.ps1`). Excepción: `scripts/database/backfill-clave-intencion.ps1` (AB#100930) no espera a 4.6; se lanza en el **mismo run de Migrations-BD** de 4.2 activando el parámetro `backfillClaveIntencion` (defecto `false`). Tras aplicar las migraciones, el pipeline ejecuta en el pool privado `-SelfTest`, `-WhatIf` y el backfill real por lotes, y aborta en el primer paso que falle; el primer run por entorno es el pesado (en DEV: 10.159 filas, ~40 s por lote de 2.000). Es idempotente (solo toca filas con `ClaveIntencion` NULL) y reanudable: si hay que relanzarlo a mano, `-DesdeId` con el último lote. Así el histórico llega con clave antes de que 4.4 despliegue el código que la usa; la derivación al vuelo queda solo como red de seguridad. Requiere que las columnas ya existan (4.10 antes de 4.2).
 - [ ] **4.9** Observación de una hora con las KQL del Anexo D: sin subida de fallos ni de `CU.CircuitOpen`.
 - [ ] **4.10** Scripts SQL de la release fuera de EF listados en 0.5 (los de 2.1.3), aplicados en PRO con token de Entra; siempre antes de 4.4 (esquema antes que código) y antes de 4.2 si sustituyen a una migración EF. Anotar la duración por lote.
 - [ ] **4.11** Antes de 4.4: guardar en `evidencias/` los endpoints de IA y los nombres de los app settings de `srbappprodocai`, como en 2.2.4 (comandos abajo).
