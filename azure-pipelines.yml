@@ -114,6 +114,9 @@ variables:
     value: 'true'
   - name: promptTracingMaxPromptTextChars
     value: '20000'
+  # dedupModoEstricto: interruptor de la reutilizacion por clave de intencion (AB#100930). 'false' vuelve a la regla anterior por modo y nivel sin deshacer datos.
+  - name: dedupModoEstricto
+    value: 'true'
   # RBAC de Key Vault: 'false' = el pipeline solo VERIFICA que la MI ya tiene
   # 'Key Vault Secrets User' (pre-asignado con scripts/configuration/assign-keyvault-rbac.ps1).
   # 'true' = el pipeline intenta crear la asignacion (requiere que el SP tenga permiso RBAC).
@@ -346,6 +349,7 @@ stages:
                         "Classification__GptFallback__TimeoutSeconds=30",
                         "GDC__Endpoint=$(GDC_ENDPOINT)",
                         "DocumentIntelligence__UseInlineContent=$(DI_USE_INLINE_CONTENT)",
+                        "Dedup__ModoEstricto=$(dedupModoEstricto)",
                         "GDC__TimeoutSeconds=$(gdcTimeoutSeconds)",
                         "GDC__HttpBasicUsername=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicUsername)",
                         "GDC__HttpBasicPassword=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=GDC--HttpBasicPassword)",
@@ -387,7 +391,8 @@ stages:
                         "Extraction__AzureContentUnderstanding__InitialRetryDelayMs",
                         "PromptTracing__Enabled",
                         "PromptTracing__IncludePromptText",
-                        "PromptTracing__MaxPromptTextChars"
+                        "PromptTracing__MaxPromptTextChars",
+                        "Dedup__ModoEstricto"
                       )
                       
                       $appliedSettings = az functionapp config appsettings list `

@@ -76,6 +76,9 @@ variables:
     value: 'true'
   - name: promptTracingMaxPromptTextChars
     value: '20000'
+  # dedupModoEstricto: interruptor de la reutilizacion por clave de intencion (AB#100930). 'false' vuelve a la regla anterior por modo y nivel sin deshacer datos.
+  - name: dedupModoEstricto
+    value: 'true'
   - name: maxConcurrentActivityFunctions
     value: '4'
   - name: maxConcurrentOrchestratorFunctions
@@ -155,6 +158,7 @@ stages:
                   "PromptTracing__IncludePromptText=$(promptTracingIncludePromptText)",
                   "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)",
                   "DocumentIntelligence__UseInlineContent=$(diUseInlineContent)",
+                  "Dedup__ModoEstricto=$(dedupModoEstricto)",
                   "DOTNET_GCHeapHardLimitPercent=$(gcHeapHardLimitPercent)",
                   # Mapa de alias de recursos de IA (AB#100317): el registro de modelos resuelve
                   # ModeloConfigs.ResourceAlias contra estos settings. Solo se crean si faltan.
@@ -186,6 +190,7 @@ stages:
                   "PromptTracing__IncludePromptText",
                   "PromptTracing__MaxPromptTextChars",
                   "DocumentIntelligence__UseInlineContent",
+                  "Dedup__ModoEstricto",
                   "DOTNET_GCHeapHardLimitPercent",
                   "AI__Resources__openai_primary__Endpoint",
                   "AI__Resources__cu_primary__Endpoint",
