@@ -1,0 +1,81 @@
+Puerta 2 - golden PRE 2026-10-15T08:04:00Z..2026-10-15T09:38:00Z, App Insights srbappipredocai
+--- dependencias por target (hosts de IA, Anexo D variante por target):
+  127.0.0.1:36025 | 276 | 276 | ["200"]
+  BlobBaseClient.Download | 511 | 511 | [""]
+  BlobClient.Upload | 336 | 336 | [""]
+  DefaultAzureCredential.GetToken | 3048 | 3048 | [""]
+  Invoke | 5563 | 5563 | [""]
+  ManagedIdentityCredential.GetToken | 1 | 1 | [""]
+  srbaisrv01predocai.openai.azure.com | 496 | 496 | ["200"]
+  srbdipredocai.cognitiveservices.azure.com | 2550 | 2550 | ["200","202"]
+  srbstgpredocai.blob.core.windows.net | 847 | 847 | ["201","200"]
+  srbwebpluginassetresolverpre.azurewebsites.net | 9 | 9 | ["200"]
+  srbwidi03.sareb.srb:8090 | 9 | 9 | ["200"]
+  tcp:srbsqlpredocai.database.windows.net,1433 | DocumentIA | 3886 | 3886 | [""]
+--- hosts de IA de PRE por codigo:
+  srbaisrv01predocai.openai.azure.com | 200 | 496
+  srbdipredocai.cognitiveservices.azure.com | 202 | 262
+  srbdipredocai.cognitiveservices.azure.com | 200 | 2288
+--- hosts de PRO en dependencias o trazas (debe ser n=0):
+  0
+--- KQL Anexo D original por parse_url(data):
+  n=0 (sin filas)
+--- requests por nombre (total, fallos):
+  DocumentProcessOrchestrator | 4934 | 0
+  ClasificarActivity | 467 | 0
+  ObtenerMarkdownActivity | 467 | 0
+  NormalizarActivity | 467 | 0
+  VerificarDuplicadoActivity | 467 | 0
+  SubirBlobActivity | 467 | 0
+  PrepararDocumentoClasificacionActivity | 467 | 0
+  IngestDocument | 467 | 0
+  CalcularClaveIntencionActivity | 467 | 0
+  ClasificarEmbeddingsActivity | 467 | 0
+  PersistirActivity | 460 | 0
+  ResolverTipologiaActivity | 271 | 0
+  Admin_GetAgregados | 174 | 0
+  Admin_GetUltimasEjecuciones | 173 | 0
+  PostHealthcheck | 172 | 0
+  GET Ping/Ping | 86 | 0
+  Admin_GetConfiguration | 2 | 0
+--- requests con codigo >= 500:
+  n=0 (sin filas)
+--- excepciones por tipo:
+  System.ArgumentNullException | Failed to initialize scale monitoring for 'BlobCleanupTimerTrigger' function. | 1
+--- 401/403 en dependencias:
+  n=0 (sin filas)
+--- eventos CU.*:
+  n=0 (sin filas)
+--- trazas EXTRACCION_TIMEOUT_GPT / OutOfMemory / Durable banner:
+  n=0 (sin filas)
+--- DocumentProcessed por 15 min:
+  2026-10-15T08:00:00Z | 50
+  2026-10-15T08:15:00Z | 84
+  2026-10-15T08:30:00Z | 73
+  2026-10-15T08:45:00Z | 73
+  2026-10-15T09:00:00Z | 81
+  2026-10-15T09:15:00Z | 74
+  2026-10-15T09:30:00Z | 25
+
+--- Notas de lectura (2026-10-15 09:45Z)
+Golden eval/runs/20261015-080441-v1.1.0-pre: DocumentIA.Batch 73121ad, 08:04:41Z-09:37:06Z, 92,4 min,
+467 OK, 0 error, 0 timeout, 0 rate limit, 0 fallback.
+
+Hosts: la consulta del Anexo D por parse_url(data) no devuelve filas en PRE (campo data vacio);
+la lectura se hace por target. Solo IA de PRE: srbaisrv01predocai 496 llamadas (todas 200) y
+srbdipredocai 2.550 (200/202). 0 hosts de PRO, 0 x 401/403, 0 requests 5xx, 0 eventos CU.*,
+0 trazas EXTRACCION_TIMEOUT_GPT u OutOfMemory.
+
+467 ingestas frente a 460 PersistirActivity y 460 DocumentProcessed: las 7 sin persistir son
+BAJA_CONFIANZA_CLASIFICACION (confianza 0,30-0,45; CEDU-01 ..106811263, CERA-17 ..106814682,
+CORR-02 ..106602666, CORR-02 ..106712548, FICH-02 ..106172833, FOTO-01 ..106696864,
+LIPR-06 ..105875124). El orquestador devuelve sin persistir por debajo del umbral
+(DocumentProcessOrchestrator, rama "Clasificacion por debajo de umbral"), sin cambios entre
+v1.0.0 y 8ad5b1e. BASELINE-GPT4OMINI-DEV y la golden de v1.0.0 tenian 8 casos asi.
+BD de PRE en la ventana: 460 DocumentoEjecuciones OK, todas con ClaveIntencion y
+ReutilizadaPorDuplicado=0 (golden con forceReprocess). Las trazas "Documento duplicado
+encontrado" son la deteccion por hash; con forceReprocess no se reutiliza.
+
+Excepcion unica: System.ArgumentNullException "Failed to initialize scale monitoring for
+'BlobCleanupTimerTrigger'" a las 09:18:48Z en fe0000D5 (instancia del controlador de escala).
+Recurrente en PRE desde el 2026-09-23 (mas de 100 en 30 dias), ajena a la release.

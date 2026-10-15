@@ -139,10 +139,10 @@ resultado; en la release siguiente se retira el interruptor `Dedup__ModoEstricto
 
 | Puerta | Fecha | Resultado | Evidencia |
 |---|---|---|---|
-| 1 Smoke E2E PRE | | | |
-| 2 Golden | | | |
+| 1 Smoke E2E PRE | 2026-10-15 07:58Z | PASS (6/6; 0 hosts de PRO leídos por `target`; única excepción la conocida de AB#100906) | `evidencias/puerta1-kql-smoke-pre-2026-10-15.txt` |
+| 2 Golden | 2026-10-15 09:37Z | PASS (TDN1 p=0,0654, TDN2 p=0,7539 frente a BASELINE-GPT4OMINI-DEV; 467/467 OK, 0 timeout; DocumentIA.Batch `73121ad`) | `evidencias/puerta2-compare-golden-pre-2026-10-15.md`, `puerta2-kql-golden-pre-2026-10-15.txt` |
 | 3 Coste | | | |
-| 4 Deriva | | | |
+| 4 Deriva | 2026-10-15 09:42Z | PASS: hashes idénticos a la referencia 2.3.4 (provisional a las 08:05Z, formal tras la golden) | `evidencias/config-v1.1.0-pre.hashes.json`, `config-v1.1.0-pre-puerta4.hashes.json` |
 
 Test Plan 100069 (SMK-1..8): run <id> el <fecha>, <resultado>.
 Go: <fecha> · <nombre>

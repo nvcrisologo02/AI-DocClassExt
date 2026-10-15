@@ -518,6 +518,29 @@ dependencies
 | order by host asc
 ```
 
+Variante por `target` (verificada en PRE el 2026-10-15): en el App Insights de PRE el campo `data`
+de las dependencias HTTP llega vacío y la consulta anterior no devuelve filas. El host se lee
+entonces de `target`, que sí viene relleno. Es la lectura que se usa para las puertas 1 y 2 cuando
+la consulta por `parse_url(data)` no devuelve nada; el criterio es el mismo (cero hosts de PRO,
+cero 401/403):
+
+```kusto
+dependencies
+| where timestamp between (datetime(<inicio>) .. datetime(<fin>))
+| where target has_any ("openai.azure.com", "services.ai.azure.com", "cognitiveservices.azure.com")
+| summarize llamadas = count(), no_ok = countif(resultCode !in ("200", "201", "202")) by target, resultCode
+| order by target asc
+```
+
+Hosts de PRO en la ventana (debe devolver n=0):
+
+```kusto
+union dependencies, traces
+| where timestamp between (datetime(<inicio>) .. datetime(<fin>))
+| where target has "prodocai" or target has "upe48" or name has "prodocai" or message has "prodocai"
+| summarize n = count()
+```
+
 Estado del circuito de Content Understanding y failovers:
 
 ```kusto
