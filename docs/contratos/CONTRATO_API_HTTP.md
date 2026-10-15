@@ -111,16 +111,16 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 
 | Campo | Tipo | Validación | Descripción |
 |---|---|---|---|
-| `prompt.systemPrompt` | string? | ≤ 5000 chars | System message para el modelo. Si se omite, se usa el de la tipología o ninguno. |
-| `prompt.userPromptTemplate` | string? | ≤ 5000 chars | Plantilla de usuario. Puede incluir `{{CONTENT}}` como marcador del contenido del documento. Si se omite, se usa el de la tipología. |
+| `prompt.systemPrompt` | string? | ≤ 50000 chars | System message para el modelo. Si se omite, se usa el de la tipología o ninguno. |
+| `prompt.userPromptTemplate` | string? | ≤ 50000 chars | Plantilla de usuario. Puede incluir `{{CONTENT}}` como marcador del contenido del documento. Si se omite, se usa el de la tipología. |
 | `prompt.modelKey` | string? | Clave existente en registro de modelos | Modelo a usar. Si se omite, se usa el de la tipología o el default del sistema. |
 | `prompt.temperature` | double? | `[0.0 – 2.0]` | Temperatura de generación. Si se omite, se usa la de la tipología o `0.0`. |
-| `prompt.maxTokens` | int? | `[100 – 4000]` | Máximo de tokens en la respuesta. Si se omite, se usa el de la tipología o `2000`. |
+| `prompt.maxTokens` | int? | `[100 – 16384]` | Máximo de tokens en la respuesta. Si se omite, se usa el de la tipología o `2000`. |
 | `prompt.contentMode` | string? | `"markdown"` \| `"vision"` | Cómo se envía el contenido al modelo. `markdown` = texto extraído; `vision` = imagen del documento. Si se omite, se usa el de la tipología o `"markdown"`. |
 
 > **Nota:** Si la tipología tiene `PromptEnabled = false` y **no** existe `instrucciones.prompt` en la petición, el paso de prompt se omite. Si se envía `instrucciones.prompt`, el paso se ejecuta aunque la tipología no tenga `PromptConfig`.
 
-> **Resultado:** El resultado del prompt se almacena en `datosExtraidos["PromptResult"]` dentro del output final.
+> **Resultado:** El resultado del prompt se almacena en `DatosExtraidos["ResultadoPrompt"]` dentro del output final (la clave `PromptResult` que figuraba aquí no existe en el código).
 
 **`instrucciones.assetResolver`** _(opcional)_
 
