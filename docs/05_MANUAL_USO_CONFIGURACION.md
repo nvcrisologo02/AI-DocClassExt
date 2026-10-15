@@ -702,6 +702,8 @@ Un documento duplicado (mismo SHA256, o mismo checksum MD5 de GDC) solo reutiliz
 | `Dedup__MaxCandidatas` | `5` | Ejecuciones con la misma clave que se examinan (segunda fase: modelo de extraccion y paginas) antes de rendirse. |
 | `Dedup__MaxDerivacionAlVuelo` | `50` | Filas antiguas con contrato y sin clave que se derivan al vuelo por documento y peticion, mientras el backfill no las haya rellenado. |
 
+`Dedup__ModoEstricto=true` lo crean los pipelines 802 (Functions) y 799 (completo) en la tarea "Set CU Resiliencia App Settings" (variable `dedupModoEstricto`), con `ensure-app-settings.ps1`: si el setting ya existe, se conserva el valor que tenga. Para volver atras se cambia a `false` a mano en la Function App; un redespliegue no lo pisa. `Dedup__MaxCandidatas` y `Dedup__MaxDerivacionAlVuelo` no los fija el pipeline: solo se crean si hace falta cambiar el defecto.
+
 Cuando poner `Dedup__ModoEstricto = false`: solo como vuelta atras temporal, si un integrador depende de recibir `DUPLICADO` vacio o de que una misma peticion reciba siempre la ultima ejecucion aunque tuviera otra intencion. Se retira en la release siguiente a la validacion del modo estricto en PRO (ver `docs/manuales/MANUAL_DEDUPLICACION.md` §12).
 
 `Classification:NivelClasificacionDefault` (`Classification__NivelClasificacionDefault`, defecto `TDN1_TDN2`) debe ser el mismo que asume el backfill del historico (`scripts/database/backfill-clave-intencion.ps1`, que usa `TDN1_TDN2` cuando el nivel viene vacio): si difieren, las claves de las filas antiguas no coincidirian con las de las peticiones nuevas y no se reutilizarian.

@@ -1,6 +1,6 @@
 # Release v1.1.0
 
-Fecha: pendiente (ventana por fijar) · Tag: v1.1.0 · Commit candidato: `290ad6b` (`origin/develop`, 2026-10-14) · Tag anterior: `v1.0.0` (`333a9cf`, código de `17889bb`) · Entorno: PRO
+Fecha: pendiente (ventana por fijar) · Tag: v1.1.0 · Commit candidato: `8ad5b1e` (`origin/develop`, 2026-10-15; antes `290ad6b`) · Tag anterior: `v1.0.0` (`333a9cf`, código de `17889bb`) · Entorno: PRO
 
 Paso 0.1 del runbook: candidato fijado el 2026-10-14 en `290ad6b`, el merge `--no-ff` de
 `feature/100930-dedup-clave-intencion` (punta `c4fab0f`) en `develop`. Versión MINOR porque la
@@ -8,12 +8,19 @@ release lleva el PBI AB#100930. La rama se validó en DEV sobre `7640186` (pipel
 79770, DUP-01..11 11/11 PASS); `c4fab0f` añade solo el criterio de resumen por defecto en la
 reutilización con su test unitario y no está desplegado en ningún entorno.
 
+Candidato actualizado el 2026-10-15 a `8ad5b1e`: sobre `290ad6b` solo añade `39155ec` (docs de esta
+release), `3449b52` (los pipelines 802 y 799 fijan el app setting `Dedup__ModoEstricto=true`;
+decisión del usuario en la Fase 2: el interruptor lo gestiona el pipeline como el resto de settings
+de funcionalidad, no un `az` manual) y `8ad5b1e` (el filtro de validación de esa tarea incluye el
+prefijo `Dedup__`; sin él, el run 79780 del 802 en DEV creó el setting y falló al no verlo). El
+código de aplicación es idéntico al de `290ad6b`, con el que se hizo la Fase 1.
+
 ## Validación
 
 Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1521/1521 · Tests Admin: 154/154 · Tests AssetResolver: 14/14 · Formato: ok
-E2E DEV: smoke pendiente sobre `290ad6b` (Fase 1.2), full N/A · E2E PRE: smoke pendiente · E2E PRO: smoke pendiente
+E2E DEV: smoke 6/6 y full 31 PASS / 1 N/A sobre el código de `290ad6b` (802 run 79771 y 800 run 79772 desde `develop` `39155ec`; los 2 FAIL de FE-FE4/FE-FE5 fueron timeouts transitorios del fallback GPT de DEV, PASS al repetirlos el 2026-10-15; detalle en `runbook.md` 1.2) · E2E PRE: smoke 6/6 (`20261015-095036-pre-smoke`, 07:50Z–07:52Z, sobre `8ad5b1e`) · E2E PRO: smoke pendiente
 
-Build, los tres juegos de tests y formato son del 2026-10-14 sobre el árbol de `290ad6b`.
+Build, los tres juegos de tests y formato se pasaron el 2026-10-14 sobre `290ad6b` y se repitieron el 2026-10-15 sobre `3449b52` con el mismo resultado.
 Los tests de AssetResolver fallaban en local con CS1705 (EF Core 8.0.31 frente a 8.0.32) por
 las versiones flotantes `8.*` de `src/plugins/*.csproj` resueltas en restores distintos; se
 corrige con `dotnet restore src/plugins/DocumentIA.AssetResolver.Tests --force` y no afecta
@@ -42,9 +49,11 @@ al pipeline (restaura ambos proyectos en el mismo run). Validación E2E en DEV d
 
 - Tablas de configuración: ninguna (`ModeloConfigs`, `PromptTemplates`, `Tipologias`,
   `CatalogoTdn1`, `CatalogoTdn2`, `PluginTipologiaConfigs` sin cambios).
-- App settings: `Dedup__ModoEstricto=true` en `srbapppredocai` y `srbappprodocai`. El código
-  asume `true` sin el setting (`DedupOptions`); ponerlo explícito deja visible el interruptor de
-  vuelta atrás (`false` = regla anterior por modo y nivel, sin deshacer datos). Opcionales con
+- App settings: `Dedup__ModoEstricto=true` en `srbapppredocai` y `srbappprodocai`, creado por los
+  pipelines 802 y 799 en la tarea "Set CU Resiliencia App Settings" (variable `dedupModoEstricto`,
+  `3449b52` y `8ad5b1e`; `ensure-app-settings.ps1` lo crea si falta y no pisa el existente). El código asume
+  `true` sin el setting (`DedupOptions`); tenerlo explícito deja visible el interruptor de vuelta
+  atrás (`false` = regla anterior por modo y nivel, sin deshacer datos). Opcionales con
   sus valores por defecto: `Dedup__MaxCandidatas` (5) y `Dedup__MaxDerivacionAlVuelo` (50). No
   están en el contrato de `ValidateConfiguration` y no hace falta añadirlos.
 
@@ -142,7 +151,7 @@ Go: <fecha> · <nombre>
 
 | Pipeline | Entorno | Run | Resultado |
 |---|---|---|---|
-| 807 Migrations-BD (`backfillClaveIntencion=true`) | pre | | |
-| 799 completo | pre | | |
+| 807 Migrations-BD (`backfillClaveIntencion=true`) | pre | 79778 (`39155ec`, 2026-10-15 07:07Z) | succeeded: Pendientes 0 (índice ONLINE aplicado antes en 2.1.3), backfill 1.013 filas, 60 reutilizaciones a NULL por diseño |
+| 802 Functions + 800 Admin (en lugar del 799, por AB#100905; AssetResolver sin cambios) | pre | 79783 y 79784 (`8ad5b1e`, 2026-10-15 07:39Z) | ambos succeeded; `Dedup__ModoEstricto=true` creado por el 802; sin stage ValidateConfiguration (comprobación manual en runbook 2.2.2) |
 | 807 Migrations-BD (`backfillClaveIntencion=true`) | prod | | |
 | 799 completo | prod | | |
