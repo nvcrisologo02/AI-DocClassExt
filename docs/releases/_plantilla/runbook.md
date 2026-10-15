@@ -38,12 +38,12 @@ Instancia de docs/procedimientos/RELEASE_MANAGEMENT.md. Marcar cada paso con fec
 - [ ] **2.5.1** Puerta 1 (smoke) pasada; resumen del run y salida de la KQL en `evidencias/`. — <fecha> · <resultado>
 - [ ] **2.5.2** Puerta 2 (golden) pasada; `compare.md` en `evidencias/`. — <fecha> · <resultado>
 - [ ] **2.5.3** Puerta 4 (deriva) pasada; los dos `.hashes.json` (referencia de 2.3.4 o 2.4.8 y el de la puerta) en `evidencias/`. — <fecha> · <resultado>
-- [ ] **2.5.4** Puerta 3 (coste) pasada al día siguiente; cuadre en `evidencias/`. — <fecha> · <resultado>
+- [ ] **2.5.4** Puerta 3 (coste): si aplica (RELEASE_MANAGEMENT.md 2.5), pasada al día siguiente con el cuadre en `evidencias/`; si no, N/A con motivo y las métricas de Azure Monitor del mismo día en `evidencias/`. — <fecha> · <resultado>
 ## Fase 3 — Aprobación
 - [ ] **3.1** Smoke pre-release PRO: ejecutar el Test Plan 100069 (casos SMK-1 a SMK-8) contra PRE con el commit candidato y registrar el ID del run de Test Plans y el resultado en `release.md`. El MCP de Azure DevOps no expone Test Plans; usar la REST API (skill `azure-devops-testplans`). — <fecha> · <resultado>
 - [ ] **3.2** Revisión del diff de 0.4 por quien aprueba: cada `AB#` listado está en Azure DevOps en To Validate o superior si es PBI o Bug, y en Done si es Task. — <fecha> · <resultado>
-- [ ] **3.3** Puerta 3 (coste) cerrada (2.5.4). — <fecha> · <resultado>
-- [ ] **3.4** "Go" escrito en el bloque de aprobación de `release.md`: fecha, nombre y las cuatro puertas con fecha de PASS. — <fecha> · <resultado>
+- [ ] **3.3** Puerta 3 (coste) cerrada o N/A con motivo (2.5.4). — <fecha> · <resultado>
+- [ ] **3.4** "Go" escrito en el bloque de aprobación de `release.md`: fecha, nombre y las cuatro puertas con fecha de PASS (o N/A con motivo en la 3). — <fecha> · <resultado>
 ## Fase 4 — PRO
 - [ ] **4.1** Copia de seguridad: `az sql db copy --name DocumentIA --dest-name DocumentIA-prerel-<yyyyMMdd> --server srbsqlprodocai --resource-group SRBRGDOCSAIPROD` y verificación contra el origen con `query-sql.ps1`: número de filas de `Documentos` y `DocumentoEjecuciones` y última fila de `__EFMigrationsHistory` iguales en las dos BD. Anotar en `runbook.md`. — <fecha> · <resultado>
 - [ ] **4.2** Pipeline 807 Migrations-BD con `targetEnvironment=prod` desde el commit candidato. Comprobar en el log del stage Apply que `Pendientes: N` lista las migraciones de 0.5 y que cierra con `Migrations aplicadas y verificadas correctamente`. — <fecha> · <resultado>

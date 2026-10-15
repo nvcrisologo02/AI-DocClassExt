@@ -37,7 +37,7 @@ Las tres listas de la Fase 0 del runbook (0.5 y 0.6); se dejan con "ninguno" si 
 |---|---|---|---|
 | 1 Smoke E2E PRE | | | |
 | 2 Golden | | | |
-| 3 Coste | | | |
+| 3 Coste (condicional: PASS o N/A con motivo) | | | |
 | 4 Deriva | | | |
 
 Test Plan 100069 (SMK-1..8): run <id> el <fecha>, <resultado>.

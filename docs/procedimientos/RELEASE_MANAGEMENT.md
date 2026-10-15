@@ -15,7 +15,7 @@ plataforma (alta del SPN en la BD antes de 2.1, cuota o roles en 2.4) lo dicen e
    nuevas; el código anterior ignora las columnas que no conoce.
 2. **PRE es puerta obligatoria.** Nada se despliega en PRO sin haber pasado por PRE con la
    misma versión de código, esquema, configuración y artefactos de IA.
-3. **Nada llega a PRO sin las cuatro puertas en PASS y el Smoke pre-release (Test Plan 100069).**
+3. **Nada llega a PRO sin las cuatro puertas en PASS (la 3, o N/A con motivo cuando no aplica) y el Smoke pre-release (Test Plan 100069).**
    Azure DevOps no tiene hoy ningún check de aprobación en los environments `pre` y `prod`
    (verificado el 2026-09-24): el pipeline puede desplegar a PRO sin aprobación, así que la
    puerta humana es el "go" escrito en `release.md` (Fase 3).
@@ -278,16 +278,26 @@ Vuelta atrás: Anexo B, capa 3.
 
 ### 2.5 Las cuatro puertas
 
-Las puertas 1, 2 y 4 se pasan en la misma sesión. La 3 se cierra al día siguiente porque Cost
-Management ingiere con un día de retraso. Las cuatro son condición para el "go" de la Fase 3;
-la Fase 3 puede empezar con la 3 pendiente. Evidencias en `docs/releases/vX.Y.Z/evidencias/`
+Las puertas 1, 2 y 4 se pasan en la misma sesión y son siempre obligatorias. La 3 es
+condicional: aplica solo cuando la release toca la IA (`infra/ai/`, filas de `ModeloConfigs`,
+endpoints, alias, modo de acceso, deployments, analyzers o clasificadores), cuando se despliega
+con el 799 (su seed puede rellenar endpoints de PRO) o cuando cambia el consumo esperado
+(modelo, prompts, páginas enviadas a DI). Si aplica, se cierra al día siguiente porque Cost
+Management ingiere con un día de retraso, y la Fase 3 puede empezar con ella pendiente. Si no
+aplica, se marca N/A con el motivo y se sustituye por la comprobación cruzada del mismo día:
+métricas de Azure Monitor (`TotalCalls`, `ProcessedPromptTokens`, `ProcessedPages`) de los
+recursos de IA de PRE y PRO en la ventana del smoke y la golden. Lo que no se explique con
+tráfico propio de PRO convierte la puerta 3 en obligatoria. Motivo: las puertas 1 y 2 ya miran
+los hosts en la telemetría y la 4 descarta cambios de endpoints; la factura solo añade una
+fuente independiente cuando la release puede mover el consumo de IA (decisión del 2026-10-15,
+release v1.1.0). Evidencias en `docs/releases/vX.Y.Z/evidencias/`
 (texto corto, sin secretos).
 
 | Puerta | Comando | PASS |
 |---|---|---|
 | 1 Smoke E2E | `pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pre -Profile smoke` | 6/6 PASS y, en App Insights de PRE en la ventana del smoke, cero dependencias a hosts de IA de PRO y cero 401/403 (KQL "hosts de IA" del Anexo D) |
 | 2 Golden | Repo DocumentIA.Batch: `dotnet run --project src/DocumentIA.Batch.Evaluation -c Debug -- run --set golden --env PRE --parallel 2 --label vX.Y.Z-pre --corpus-root <corpus> --config <eval-config-pre.json>` y `-- compare --a eval/runs/<linea-base-DEV> --b eval/runs/<run-PRE>` | p ≥ 0,05 en TDN1 y TDN2 frente a la línea base de DEV con el mismo modelo. Si la release cambia el modelo, regenerar la línea base en DEV antes |
-| 3 Coste | Cost Management por grupo de recursos (SRBRGPREDOCSAI y SRBRGDOCSAIPROD) con agrupación ResourceId + Meter para el día del smoke y la golden; para PRO usar `az rest` (con `curl` y token de az CLI devuelve 401). Métricas de Azure Monitor de los recursos de IA como confirmación el mismo día | Meters de IA (`gpt … Tokens`, `S0 Pre-built Pages`) facturados en SRBRGPREDOCSAI; PRO sin rampa de tokens ni páginas atribuible a la release |
+| 3 Coste (condicional, ver arriba) | Cost Management por grupo de recursos (SRBRGPREDOCSAI y SRBRGDOCSAIPROD) con agrupación ResourceId + Meter para el día del smoke y la golden; para PRO usar `az rest` (con `curl` y token de az CLI devuelve 401). Métricas de Azure Monitor de los recursos de IA como confirmación el mismo día | Meters de IA (`gpt … Tokens`, `S0 Pre-built Pages`) facturados en SRBRGPREDOCSAI; PRO sin rampa de tokens ni páginas atribuible a la release |
 | 4 Deriva | Export de PRE al terminar las puertas 1 y 2 (`pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlpredocai.database.windows.net -ReleaseTag vX.Y.Z-pre-puerta4`, solo lectura) frente al `config-vX.Y.Z-pre.hashes.json` de 2.3.4 o 2.4.8. Compara PRE consigo mismo, no con DEV | Hash idéntico en ModeloConfigs, PromptTemplates, Tipologias, CatalogoTdn1 y CatalogoTdn2 (sin deriva desde la referencia). Toda diferencia se explica por escrito en `runbook.md` o se corrige antes de la Fase 3 |
 
 Detalle de la puerta 2: `<eval-config-pre.json>` es una copia local, fuera de git, de
@@ -300,10 +310,10 @@ Anotar en `release.md` el commit del repo DocumentIA.Batch usado.
 - [ ] **2.5.1** Puerta 1 (smoke) pasada; resumen del run y salida de la KQL en `evidencias/`.
 - [ ] **2.5.2** Puerta 2 (golden) pasada; `compare.md` en `evidencias/`.
 - [ ] **2.5.3** Puerta 4 (deriva) pasada; los dos `.hashes.json` (referencia de 2.3.4 o 2.4.8 y el de la puerta) en `evidencias/`.
-- [ ] **2.5.4** Puerta 3 (coste) pasada al día siguiente; cuadre en `evidencias/`.
+- [ ] **2.5.4** Puerta 3 (coste): si aplica, pasada al día siguiente con el cuadre en `evidencias/`; si no, N/A con motivo y las métricas de Azure Monitor del mismo día en `evidencias/`.
 
 Verificación: 2.1 a 2.4 marcados o tachados con motivo, y las cuatro puertas en la tabla de
-aprobación de `release.md` (la 3 puede quedar pendiente hasta el día siguiente).
+aprobación de `release.md` (la 3 puede quedar pendiente hasta el día siguiente o figurar como N/A con motivo).
 Vuelta atrás: si una puerta falla, se corrige en `develop`, se vuelve a 0.1 con un commit nuevo
 y se repite la Fase 2 entera. No se parchea PRE a mano.
 
@@ -311,19 +321,19 @@ y se repite la Fase 2 entera. No se parchea PRE a mano.
 
 Objetivo: dejar constancia escrita de que la release puede ir a PRO. Ejecutor: proyecto.
 
-Prerrequisitos: puertas 1, 2 y 4 en PASS (la 3 puede estar pendiente al empezar, no al firmar).
+Prerrequisitos: puertas 1, 2 y 4 en PASS (la 3 puede estar pendiente al empezar, no al firmar; si es N/A, con su motivo escrito).
 
 - [ ] **3.1** Smoke pre-release PRO: ejecutar el Test Plan 100069 (casos SMK-1 a SMK-8) contra PRE con el commit candidato y registrar el ID del run de Test Plans y el resultado en `release.md`. El MCP de Azure DevOps no expone Test Plans; usar la REST API (skill `azure-devops-testplans`).
 - [ ] **3.2** Revisión del diff de 0.4 por quien aprueba: cada `AB#` listado está en Azure DevOps en To Validate o superior si es PBI o Bug, y en Done si es Task.
-- [ ] **3.3** Puerta 3 (coste) cerrada (2.5.4).
-- [ ] **3.4** "Go" escrito en el bloque de aprobación de `release.md`: fecha, nombre y las cuatro puertas con fecha de PASS.
+- [ ] **3.3** Puerta 3 (coste) cerrada o N/A con motivo (2.5.4).
+- [ ] **3.4** "Go" escrito en el bloque de aprobación de `release.md`: fecha, nombre y las cuatro puertas con fecha de PASS (o N/A con motivo en la 3).
 
 Nota: los environments `pre` y `prod` de Azure DevOps no tienen approval check (verificado el
 2026-09-24 con `GET _apis/pipelines/checks/configurations`). Mejora propuesta, fuera de este
 runbook: un check de aprobación en el environment `prod` con su propio work item.
 
 Verificación: el bloque de aprobación de `release.md` tiene el run del Test Plan 100069, las
-cuatro puertas con fecha de PASS y el "go" con fecha y nombre.
+cuatro puertas con fecha de PASS (la 3 puede ser N/A con motivo) y el "go" con fecha y nombre.
 Vuelta atrás: sin "go" no hay Fase 4. La release vuelve a 0.1.
 
 ## Fase 4 — PRO
