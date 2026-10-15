@@ -83,7 +83,7 @@ public static class HttpFunctionTestFactory
     {
         public FakeHttpResponseData(FunctionContext context) : base(context)
         {
-            Body = new MemoryStream();
+            Body = new SoloEscrituraAsincronaStream();
             Headers = new HttpHeadersCollection();
         }
 
@@ -91,5 +91,47 @@ public static class HttpFunctionTestFactory
         public override HttpHeadersCollection Headers { get; set; }
         public override Stream Body { get; set; }
         public override HttpCookies Cookies { get; } = null!;
+    }
+
+    /// <summary>
+    /// Cuerpo de respuesta que rechaza las escrituras sincronas, como hace Kestrel con la
+    /// integracion ASP.NET Core del worker (AllowSynchronousIO=false): un trigger que use
+    /// Body.Write o WriteString pasa en memoria pero devuelve 500 en Azure (AB#100968).
+    /// </summary>
+    private sealed class SoloEscrituraAsincronaStream : Stream
+    {
+        private const string Mensaje = "Synchronous operations are disallowed. Call WriteAsync or set AllowSynchronousIO to true instead.";
+        private readonly MemoryStream _inner = new();
+
+        public override bool CanRead => true;
+        public override bool CanSeek => true;
+        public override bool CanWrite => true;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+
+        public override void Flush() => throw new InvalidOperationException(Mensaje);
+        public override void Write(byte[] buffer, int offset, int count) => throw new InvalidOperationException(Mensaje);
+        public override void Write(ReadOnlySpan<byte> buffer) => throw new InvalidOperationException(Mensaje);
+        public override void WriteByte(byte value) => throw new InvalidOperationException(Mensaje);
+
+        public override Task FlushAsync(CancellationToken cancellationToken) => _inner.FlushAsync(cancellationToken);
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            _inner.WriteAsync(buffer, offset, count, cancellationToken);
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default) =>
+            _inner.WriteAsync(buffer, cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => _inner.Read(buffer, offset, count);
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => _inner.SetLength(value);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
     }
 }

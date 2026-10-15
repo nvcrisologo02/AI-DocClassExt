@@ -44,7 +44,7 @@ public class MarkdownFunction
             return req.CreateResponse(HttpStatusCode.NotFound);
         }
 
-        return Responder(req, documento);
+        return await ResponderAsync(req, documento);
     }
 
     [Function("GetMarkdownPorEjecucion")]
@@ -68,10 +68,10 @@ public class MarkdownFunction
             return req.CreateResponse(HttpStatusCode.NotFound);
         }
 
-        return Responder(req, documento);
+        return await ResponderAsync(req, documento);
     }
 
-    private HttpResponseData Responder(HttpRequestData req, DocumentoEntity documento)
+    private async Task<HttpResponseData> ResponderAsync(HttpRequestData req, DocumentoEntity documento)
     {
         // La forma binaria es la actual; la Base64 es el mismo GZip y cubre las filas historicas
         // sin migrar (AB#100169).
@@ -103,8 +103,10 @@ public class MarkdownFunction
         if (AceptaGzip(req))
         {
             // Lo almacenado ya es GZip: se envia tal cual, sin descomprimir ni recomprimir.
+            // Siempre en asincrono: con la integracion ASP.NET Core del worker, Kestrel rechaza
+            // las escrituras sincronas y la peticion acaba en 500.
             response.Headers.Add("Content-Encoding", "gzip");
-            response.Body.Write(gzip, 0, gzip.Length);
+            await response.Body.WriteAsync(gzip);
             return response;
         }
 
@@ -115,7 +117,7 @@ public class MarkdownFunction
             return req.CreateResponse(HttpStatusCode.InternalServerError);
         }
 
-        response.WriteString(texto);
+        await response.WriteStringAsync(texto);
         return response;
     }
 
