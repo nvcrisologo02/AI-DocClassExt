@@ -421,6 +421,44 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 
 ---
 
+## 4.ter. Markdown del documento
+
+### `GET /api/documentos/{sha256}/markdown` · `GET /api/ejecuciones/{guid}/markdown`
+
+Devuelve el markdown persistido de un documento (AB#100968). Es la vía para obtenerlo fuera de la respuesta síncrona del ingest: el contrato que se persiste en `DocumentoEjecuciones` se guarda **sin** `detalleEjecucion.postproceso.markdown` (AB#100169), de modo que ni el detalle del Monitor ni una respuesta reutilizada por duplicado (§5, estado `DUPLICADO`) lo llevan. El texto vive comprimido en `Documentos.NormalizacionMarkdownGzip` con su cobertura, y este endpoint solo lo lee: **nunca llama a Document Intelligence Layout** ni escribe nada. Requiere Function Key (`AuthorizationLevel.Function`).
+
+- `{sha256}`: `integridad.sha256` de cualquier respuesta del documento.
+- `{guid}`: `identificacion.guid` de la respuesta o `EjecucionGuid` del Monitor. Resuelve la ejecución y sirve el markdown de su documento, también si la ejecución fue una reutilización.
+
+#### Request
+
+| Cabecera | Efecto |
+|---|---|
+| `Accept-Encoding: gzip` | La respuesta lleva `Content-Encoding: gzip` con los bytes almacenados tal cual, sin descomprimir ni recomprimir en el servidor. Es la forma recomendada: es la más barata para ambas partes. Sin esta cabecera se devuelve el texto plano. |
+| `If-None-Match: <etag>` | Si coincide con el `ETag` actual, `304 Not Modified` sin cuerpo. |
+
+#### Respuesta — `200 OK`
+
+Cuerpo `text/markdown; charset=utf-8` con el markdown íntegro (comprimido o no según `Accept-Encoding`).
+
+| Cabecera | Descripción |
+|---|---|
+| `ETag` | `"<sha256>-<paginas>-<completo|parcial>"`. Incluye la cobertura porque una ejecución posterior puede sustituir un recorte por el documento entero bajo el mismo SHA256; el validador deja de coincidir y el cliente recibe el texto nuevo. |
+| `X-Markdown-Paginas` | Páginas que cubre el markdown. `0` si no se conoce. |
+| `X-Markdown-Completo` | `true` si cubre el documento entero; `false` si es el recorte usado en clasificación. |
+
+#### Otros códigos
+
+| Código | Cuándo |
+|---|---|
+| `304 Not Modified` | `If-None-Match` coincide con el `ETag` actual. Lleva `ETag`, sin cuerpo. |
+| `404 Not Found` | El SHA256 o el guid no existen, o el documento no tiene markdown persistido. Esto último ocurre cuando la única fuente fue `classification.markdown` del caller (que no se persiste, §3) o cuando Layout no devolvió texto. |
+| `401 Unauthorized` | Function Key ausente o inválida. |
+
+> **Por qué no un flag en el ingest.** Se descartó un `instrucciones.incluirMarkdown`: el markdown pesa cientos de KB y Durable serializa el output de la orquestación en Storage. Un GET aparte es aditivo, no cambia el contrato de salida y sirve igual para ejecuciones nuevas y reutilizadas. Consultar por `objectIdGDC` no está soportado: no es columna indexada.
+
+---
+
 ## 5. Estados posibles en `resultado.estado`
 
 Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.Estado` (ver convención de nombres en §4). ¿Continúa el pipeline tras cada estado?: `OK` sí; `NO_CLASIFICADO` no; `SIN_CONTENIDO_DOCUMENTO` no; `PENDIENTE_REINTENTO` no; `VALIDACION_CON_ERRORES` sí; `BAJA_CONFIANZA_CLASIFICACION` no; `DUPLICADO` no (solo con `Dedup:ModoEstricto = false`, ver §5); `PAGINAS_EXCEDIDAS` no (retorna tras clasificar); `EXTRACCION_INCOMPLETA` estado de cierre tras la extracción; `ERROR` termina el procesamiento.
@@ -535,6 +573,7 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 | `detalleEjecucion.postproceso.normalizaciones` | Lista de transformaciones aplicadas. |
 | `detalleEjecucion.postproceso.validaciones` | Lista de reglas de validación ejecutadas. |
 | `detalleEjecucion.postproceso.inconsistencias` | Lista de inconsistencias detectadas. |
+| `detalleEjecucion.postproceso.markdown` | Markdown del documento usado en la ejecución (cobertura en `detalleEjecucion.markdownPaginas` y `markdownCompleto`). **Solo viaja en la respuesta síncrona de una ejecución nueva**: no se persiste en el contrato (AB#100169), el detalle del Monitor no lo muestra y una respuesta reutilizada por duplicado llega con `null`. Para obtenerlo después, o en una reutilización, usar `GET /api/documentos/{sha256}/markdown` (§4.ter). |
 | `detalleEjecucion.integracion.plugins` | Lista de plugins ejecutados con su resultado individual. |
 | `detalleEjecucion.assetResolver` | Resultado de resolucion de activo. `null` si AssetResolver deshabilitado. |
 | `detalleEjecucion.assetResolver.ejecutado` | `true` si el paso se ejecuto. |
@@ -680,7 +719,7 @@ $status.output.resultado
 - El documento puede enviarse en Base64 (RFC 4648, sin saltos de línea) o por referencia `objectIdGDC`.
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
-- Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización exige la misma intención: se devuelve la última ejecución del documento con la misma clave de intención (ver §5, estado `DUPLICADO`); sin ella, el documento se descarga y procesa.
+- Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización exige la misma intención: se devuelve la última ejecución del documento con la misma clave de intención (ver §5, estado `DUPLICADO`); sin ella, el documento se descarga y procesa. La respuesta reutilizada no lleva `detalleEjecucion.postproceso.markdown`; se obtiene con el GET de §4.ter.
 - Cuando el documento llega por `objectIdGDC`, además de la deduplicación por SHA256 existe la **reutilización por checksum MD5 de GDC**: si el checksum ya fue procesado, se devuelve la última ejecución con la misma intención; sin ella, el documento se descarga y procesa. El mensaje es `Resultado.MensajeReutilizacion` = "Documento ya procesado previamente (checksum GDC)...". Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
 - **Toda petición servida por reutilización queda registrada** (AB#100258) como una ejecución propia en la base de datos, sin contrato propio y con coste cero salvo el del prompt o resumen que complete (AB#100930), vinculada a la original y visible en el Monitor de Admin. Para el llamador el cambio es **aditivo**: el único campo nuevo (`detalleEjecucion.ejecucionOriginalGuid`) solo aparece en respuestas reutilizadas, y lo único que cambia de valor es `detalleEjecucion.instanceId` / `operationId` en esas respuestas, que pasan a ser los de la llamada actual. `statusQueryUri`, los estados y el resto del contrato no cambian. Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
 - **Aviso de cambio de contrato (AB#100930):** `resultado.estado = "DUPLICADO"` deja de emitirse en modo estricto (`Dedup:ModoEstricto = true`, el defecto): un documento duplicado sin ejecución con la misma intención se procesa y devuelve el estado del procesamiento, con `detalleEjecucion.motivoNoReutilizacion` informado. Los integradores que dependan de un `DUPLICADO` con contrato vacío deben tratar la respuesta como una procesada normal. Además, una petición que cambia modo, nivel, restricción de tipologías, `expectedType` o modelo, o que pide más páginas, ya no recibe la ejecución anterior sino un reproceso. El resto de campos del contrato no cambia; los campos nuevos de `detalleEjecucion` son aditivos. Fecha de despliegue en PRO: pendiente de confirmar (se anotará en el registro de la release).
@@ -786,6 +825,8 @@ Solo se listan ruta, método, autenticación y códigos; los cuerpos no se docum
 | Método | Ruta | Auth | Códigos |
 |---|---|---|---|
 | `GET` | `/api/tipologias` (listado público de tipologías) | Anónimo | 200 (500 del host ante excepción) |
+| `GET` | `/api/documentos/{sha256}/markdown` (§4.ter) | Function | 200, 304, 404 |
+| `GET` | `/api/ejecuciones/{guid}/markdown` (§4.ter) | Function | 200, 304, 404 |
 | `GET` | `/api/management/catalogotdn1` | Function | 200 |
 | `GET` | `/api/management/catalogotdn1/{id}` | Function | 200, 404 |
 | `POST` | `/api/management/catalogotdn1` | Function | 201, 400, 409 |
