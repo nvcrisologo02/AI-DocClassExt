@@ -1,6 +1,16 @@
 # Release v1.1.0
 
-Fecha: pendiente (ventana por fijar) · Tag: v1.1.0 · Commit candidato: `8ad5b1e` (`origin/develop`, 2026-10-15; antes `290ad6b`) · Tag anterior: `v1.0.0` (`333a9cf`, código de `17889bb`) · Entorno: PRO
+Fecha: pendiente (ventana por fijar) · Tag: v1.1.0 · Commit candidato: `636c680` (`origin/develop`, 2026-10-16; antes `8ad5b1e` y `290ad6b`) · Tag anterior: `v1.0.0` (`333a9cf`, código de `17889bb`) · Entorno: PRO
+
+**Candidato reabierto el 2026-10-16 en `636c680`** (decisión del usuario): el candidato `8ad5b1e`
+aprobado el 2026-10-15 no llegó a PRO (sin tag, PRO sigue en v1.0.0) y la release se rehace
+desde `develop` con todo lo que lleva, es decir, añade el PBI AB#100968 (GET de markdown
+persistido: `8932041`, `3611fc4`, `dc7c994`, `499b0b4`, `636c680`; solo `DocumentIA.Functions`,
+tests y docs; sin migraciones, sin Admin, sin YAML, sin configuración). Se repiten la Fase 1 (DEV),
+la Fase 2 (PRE) y la Fase 3 sobre `636c680` con estas salvedades decididas por el usuario: la
+puerta 2 (golden) se conserva del 2026-10-15 porque el GET no toca el proceso de clasificación
+(mismo código de orquestador, modelos y prompts que `8ad5b1e`), y la puerta 3 (coste) sigue N/A
+con el mismo motivo. Lo registrado abajo para `290ad6b` y `8ad5b1e` se conserva como histórico.
 
 Paso 0.1 del runbook: candidato fijado el 2026-10-14 en `290ad6b`, el merge `--no-ff` de
 `feature/100930-dedup-clave-intencion` (punta `c4fab0f`) en `develop`. Versión MINOR porque la
@@ -17,7 +27,7 @@ código de aplicación es idéntico al de `290ad6b`, con el que se hizo la Fase 
 
 ## Validación
 
-Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1521/1521 · Tests Admin: 154/154 · Tests AssetResolver: 14/14 · Formato: ok
+Build: `dotnet build src/backend/DocumentIA.sln` → correcto, 0 advertencias · Tests unitarios: 1530/1530 · Tests Admin: 154/154 · Tests AssetResolver: 14/14 · Formato: ok (sobre `636c680`, 2026-10-16 06:22Z–06:24Z; logs en `docs/auxiliares/temps/2026-10-16/1-1-*.log`; sobre `8ad5b1e` eran 1521 unitarios: los 9 nuevos son los del trigger de markdown)
 E2E DEV: smoke 6/6 y full 31 PASS / 1 N/A sobre el código de `290ad6b` (802 run 79771 y 800 run 79772 desde `develop` `39155ec`; los 2 FAIL de FE-FE4/FE-FE5 fueron timeouts transitorios del fallback GPT de DEV, PASS al repetirlos el 2026-10-15; detalle en `runbook.md` 1.2) · E2E PRE: smoke 6/6 (`20261015-095036-pre-smoke`, 07:50Z–07:52Z, sobre `8ad5b1e`) · E2E PRO: smoke pendiente
 
 Build, los tres juegos de tests y formato se pasaron el 2026-10-14 sobre `290ad6b` y se repitieron el 2026-10-15 sobre `3449b52` con el mismo resultado.
@@ -95,6 +105,8 @@ resultado; en la release siguiente se retira el interruptor `Dedup__ModoEstricto
   AB#100941, Done; PBI en Committed hasta el cierre de la release).
 - AB#100956 (task del Bug AB#100955): las históricas en estado de fallo no se reutilizan y el
   reenvío reprocesa (`7b6cb80`).
+- AB#100968 [API] GET de markdown persistido por sha256 o guid de ejecución (task AB#100971,
+  validación en DEV; añadido al reabrir el candidato el 2026-10-16).
 
 ### Features
 - `ce9605c`, `6cfbde2` clave de intención en Core, derivación desde contratos antiguos y
@@ -110,6 +122,9 @@ resultado; en la release siguiente se retira el interruptor `Dedup__ModoEstricto
 - `5f08ba3`, `640ca80` E2E DUP-06 a DUP-10 (AB#100939).
 - `b92bdba` contrato, manuales, troubleshooting, diseño técnico, runbook, README e2e y ADR-003
   (AB#100940).
+- `8932041`, `dc7c994` GET `/api/documentos/{sha256}/markdown` y `/api/ejecuciones/{guid}/markdown`
+  (`MarkdownFunction`, AuthorizationLevel.Function, gzip, ETag y 304, 404; solo lectura de BD) con
+  sus tests; `3611fc4` y `636c680` contrato y guía (AB#100968).
 
 ### Fixes
 - `7b6cb80` históricas en estado de fallo excluidas; DUP-11 (AB#100956).
@@ -117,6 +132,9 @@ resultado; en la release siguiente se retira el interruptor `Dedup__ModoEstricto
   runbook, legado excluye reutilizaciones como originales (AB#100930).
 - `c4fab0f` la reutilización pide el resumen por defecto con TDN1 sin exigir ClassificationOnly
   (AB#100930).
+- `499b0b4` el GET de markdown escribe el cuerpo en asíncrono: con la integración ASP.NET Core
+  del worker, `Body.Write` síncrono devolvía 500 con cabeceras correctas y cuerpo vacío (DEV,
+  2026-10-15); el fake de tests rechaza desde entonces las escrituras síncronas (AB#100968).
 
 ### Infraestructura
 - `azure-pipelines-migrations.yml`: parámetro `backfillClaveIntencion` y paso de backfill tras
