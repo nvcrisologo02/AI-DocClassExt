@@ -210,7 +210,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
     /// compara el ModelKeyEfectivo persistido con el que la tipologia publicada usaria hoy (o el
     /// que pide la peticion). La tipologia puede usar hoy el primario o el secundario (round robin
     /// del proveedor); el modelo pedido, si existe, manda. Tipologia no resuelta, no publicada o modelo distinto: no sirve.
-    /// Ambos vacios (tipologia sin extraccion) coinciden.
+    /// Ambos vacios (tipologia sin extraccion) coinciden; con la extraccion desactivada el modelo esperado es vacio.
     /// </summary>
     private async Task<bool> ModeloExtraccionCoincideAsync(ContratoSalida salida, string? modelKeyPedido)
     {
@@ -231,12 +231,20 @@ public class ObtenerUltimaEjecucionDuplicadoActivity
         bool Coincide(string? candidato) =>
             string.Equals((candidato ?? string.Empty).Trim(), historico, StringComparison.OrdinalIgnoreCase);
 
+        var extraccion = tipologia.GetExtractionConfig();
+
+        // AB#100988: con la extraccion desactivada el orquestador no extrae (ni con modelo pedido)
+        // y la historica no tiene ModelKeyEfectivo, aunque la tipologia conserve modelKey.
+        if (!extraccion.Enabled)
+        {
+            return Coincide(null);
+        }
+
         if (!string.IsNullOrWhiteSpace(modelKeyPedido))
         {
             return Coincide(modelKeyPedido);
         }
 
-        var extraccion = tipologia.GetExtractionConfig();
         return Coincide(extraccion.ModelKey)
             || (!string.IsNullOrWhiteSpace(extraccion.SecondaryModelKey) && Coincide(extraccion.SecondaryModelKey));
     }
