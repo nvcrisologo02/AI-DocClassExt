@@ -1,0 +1,54 @@
+
+=== Dependencias de IA por target (debe ser solo PRE: srbdipredocai, srbaisrv01predocai, srbaisrv02predocai) ===
+target | resultCode | llamadas | fallos
+srbdipredocai.cognitiveservices.azure.com | 200 | 24 | 0
+srbaisrv01predocai.openai.azure.com | 200 | 6 | 0
+srbdipredocai.cognitiveservices.azure.com | 202 | 4 | 0
+
+=== Hosts de PRO en la ventana (debe estar vacio) ===
+target | n
+(sin filas)
+
+=== Requests por nombre ===
+name | total | fallos
+DocumentProcessOrchestrator | 49 | 0
+ResolverTipologiaActivity | 6 | 0
+IngestDocument | 5 | 0
+NormalizarActivity | 4 | 0
+SubirBlobActivity | 4 | 0
+PersistirActivity | 4 | 0
+PrepararDocumentoClasificacionActivity | 4 | 0
+CalcularClaveIntencionActivity | 4 | 0
+ValidarActivity | 3 | 0
+ObtenerMarkdownActivity | 3 | 0
+ClasificarEmbeddingsActivity | 3 | 0
+IntegrarActivity | 3 | 0
+PersistirMarkdownActivity | 2 | 0
+ClasificarActivity | 2 | 0
+GetTipologiasPublicadas | 1 | 0
+PostHealthcheck | 1 | 0
+GET Ping/Ping | 1 | 0
+ObtenerActivoActivity | 1 | 0
+POST AssetResolver/GetAAIIInfo | 1 | 0
+PromptActivity | 1 | 0
+ExtraerActivity | 1 | 0
+
+=== 401/403 en dependencias ===
+target | name | n
+(sin filas)
+
+=== Excepciones ===
+type | outerMessage | operation_Name | n
+System.ArgumentException | Keyword not supported: '@microsoft.keyvault(vaultname'. | POST AssetResolver/GetAAIIInfo | 1
+
+=== Eventos CU.* ===
+name | n
+(sin filas)
+
+=== GET de markdown: requests ===
+timestamp | name | resultCode | duration
+(sin filas)
+
+=== GET de markdown: dependencias (solo SQL) ===
+type | target | n
+(sin filas)

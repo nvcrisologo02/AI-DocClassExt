@@ -8,7 +8,7 @@ PATCH: un único fix de la reutilización por duplicado (AB#100988), encontrado 
 
 Build: `dotnet build src/backend/DocumentIA.sln` → 0 advertencias, 0 errores · Tests unitarios: 1535/1535 · Tests Admin: 154/154 · Tests AssetResolver: 14/14 · Formato: ok (2026-10-16 ~22:55Z, sobre `45fab3a`, mismo árbol de código que `40b6c71`)
 Pester del runner E2E (esquema del juego DUP incluido): 128/128
-E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run completo; DUP-12 1/1 tras corregir su documento) · E2E PRE: smoke pendiente · E2E PRO: smoke pendiente
+E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run completo; DUP-12 1/1 tras corregir su documento) · E2E PRE: smoke 6/6 (802 run 79819) · E2E PRO: smoke pendiente
 
 ## Contenido de la release
 
@@ -44,10 +44,10 @@ E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run comple
 
 | Puerta | Fecha | Resultado | Evidencia |
 |---|---|---|---|
-| 1 Smoke E2E PRE | | | |
+| 1 Smoke E2E PRE | 2026-10-16 | PASS (6/6, 0 hosts de PRO, 0 × 401/403) | `evidencias/puerta1-kql-smoke-pre-2026-10-16.txt` |
 | 2 Golden | 2026-10-16 | N/A (decisión del usuario, ver "Decisiones") | — |
 | 3 Coste (condicional: PASS o N/A con motivo) | 2026-10-16 | N/A (sin cambios en IA) | — |
-| 4 Deriva | | | |
+| 4 Deriva | 2026-10-16 | PASS (hash idéntico en las 5 tablas) | `evidencias/config-v1.1.1-pre.hashes.json`, `config-v1.1.1-pre-puerta4.hashes.json` |
 
 Test Plan 100069 (SMK-1..8): run <id> el <fecha>, <resultado>.
 Go: <fecha> · <nombre>
@@ -57,5 +57,5 @@ Go: <fecha> · <nombre>
 | Pipeline | Entorno | Run | Resultado |
 |---|---|---|---|
 | 802 Functions | dev | 79818 (`b7b62e7`, código `40b6c71`) | succeeded |
-| 802 Functions | pre | | |
+| 802 Functions | pre | 79819 (`3c0b79f`, código `40b6c71`) | succeeded |
 | 802 Functions | prod | | |
