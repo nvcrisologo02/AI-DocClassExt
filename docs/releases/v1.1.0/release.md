@@ -162,6 +162,8 @@ resultado; en la release siguiente se retira el interruptor `Dedup__ModoEstricto
 | 3 Coste | 2026-10-15 10:05Z | N/A: la release no toca la IA ni usa el 799 (puerta condicional desde RELEASE_MANAGEMENT.md 2.5); métricas de Azure Monitor del día sin rampa en PRO atribuible a la release | `evidencias/puerta3-na-metricas-ia-2026-10-15.txt` |
 | 4 Deriva | 2026-10-15 09:42Z | PASS: hashes idénticos a la referencia 2.3.4 (provisional a las 08:05Z, formal tras la golden) | `evidencias/config-v1.1.0-pre.hashes.json`, `config-v1.1.0-pre-puerta4.hashes.json` |
 
+**Puertas sobre el candidato reabierto `636c680` (2026-10-16):** 1 PASS 06:58Z (smoke `20261016-085412-pre-smoke` 6/6, 0 hosts de PRO, GET de markdown en PRE OK; `evidencias/puerta1-kql-smoke-pre-2026-10-16.txt`, `get-markdown-pre-2026-10-16.txt`) · 2 conservada del 2026-10-15 por decisión del usuario (el GET no toca la clasificación) · 3 N/A con el mismo motivo · 4 PASS 07:00Z (`evidencias/config-v1.1.0-pre-puerta4-636c680.hashes.json`). Fase 3 pendiente sobre `636c680`: Test Plan 100069 y Go nuevos.
+
 Test Plan 100069 (SMK-1..8): run 1076840 el 2026-10-15 11:33Z contra PRE, 5 Passed (SMK-1, 3, 4, 5, 6) y 3 NotApplicable (SMK-2 sin caso automatizado, SMK-7 no comprobado a mano, SMK-8 solo PRO); `evidencias/testplan-100069-smoke-pre-2026-10-15.txt`.
 Go: **2026-10-15 · Ignacio Varas Crisologo** · puertas 1 (2026-10-15 07:58Z), 2 (2026-10-15 09:37Z) y 4 (2026-10-15 09:42Z) en PASS y 3 N/A con motivo (2026-10-15 10:05Z); Test Plan 100069 run 1076840; revisión de work items (runbook 3.2) hecha. Ventana de PRO por fijar: no se ejecuta nada en PRO hasta entonces.
 
@@ -171,5 +173,7 @@ Go: **2026-10-15 · Ignacio Varas Crisologo** · puertas 1 (2026-10-15 07:58Z), 
 |---|---|---|---|
 | 807 Migrations-BD (`backfillClaveIntencion=true`) | pre | 79778 (`39155ec`, 2026-10-15 07:07Z) | succeeded: Pendientes 0 (índice ONLINE aplicado antes en 2.1.3), backfill 1.013 filas, 60 reutilizaciones a NULL por diseño |
 | 802 Functions + 800 Admin (en lugar del 799, por AB#100905; AssetResolver sin cambios) | pre | 79783 y 79784 (`8ad5b1e`, 2026-10-15 07:39Z) | ambos succeeded; `Dedup__ModoEstricto=true` creado por el 802; sin stage ValidateConfiguration (comprobación manual en runbook 2.2.2) |
+| 802 Functions (candidato reabierto; sin 800 ni 807: Admin y migraciones sin cambios) | dev | 79798 (`636c680`, 2026-10-16 06:24Z) | succeeded; smoke DEV 6/6, GET de markdown 22/22 |
+| 802 Functions (candidato reabierto) | pre | 79799 (`636c680`, 2026-10-16 06:39Z) | succeeded; puertas 1 y 4 PASS |
 | 807 Migrations-BD (`backfillClaveIntencion=true`) | prod | | |
 | 799 completo | prod | | |
