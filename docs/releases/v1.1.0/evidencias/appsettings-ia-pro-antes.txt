@@ -1,0 +1,10 @@
+Column1                                              Column2
+---------------------------------------------------  -----------------------------------------------------------
+Classification__AzureDocumentIntelligence__Endpoint  https://srbdiprodocai.cognitiveservices.azure.com/
+Classification__GptFallback__Endpoint                https://upe48-mm2avmdm-swedencentral.openai.azure.com
+Extraction__AzureContentUnderstanding__Endpoint      https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/
+Extraction__GptFallback__Endpoint                    https://upe48-mm2avmdm-swedencentral.openai.azure.com
+AI__Resources__cu_secondary__Endpoint                https://srbaisrv-westeurope.services.ai.azure.com/
+AI__Resources__cu_primary__Endpoint                  https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/
+AI__Resources__di__Endpoint                          https://srbdiprodocai.cognitiveservices.azure.com/
+AI__Resources__openai_primary__Endpoint              https://upe48-mm2avmdm-swedencentral.openai.azure.com
