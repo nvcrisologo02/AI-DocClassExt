@@ -174,7 +174,7 @@ uno de los dos runners borraría filas que el otro está usando.
 
 ## Validación de la reutilización por duplicado (run-validacion-dedup.ps1)
 
-Juego de pruebas aparte para las invariantes DUP-01..DUP-11 (`Area: Dedup` de
+Juego de pruebas aparte para las invariantes DUP-01..DUP-12 (`Area: Dedup` de
 `coverage/functional-matrix.json`):
 
 - DUP-01..DUP-05 (AB#100258, reutilización básica): una petición repetida de un
@@ -196,6 +196,12 @@ Juego de pruebas aparte para las invariantes DUP-01..DUP-11 (`Area: Dedup` de
   sin `forceReprocess` reprocesa y la fila nueva lleva `historica-fallida`. Siembra
   con `corpus/control/documento-en-blanco.pdf` (cierra en `SIN_CONTENIDO_DOCUMENTO`
   de forma determinista).
+- DUP-12 (AB#100988, extracción desactivada): siembra y reenvío en pipeline
+  completo con `expectedType` `nots.01` (`extraction.enabled = false` con
+  `modelKey` relleno, igual en DEV y PRO). La histórica no lleva
+  `ModelKeyEfectivo` y el reenvío debe reutilizarla con `clave-igual`; hasta
+  v1.1.0 reprocesaba con `modelo-extraccion-distinto`. Depende de que `nots.01`
+  siga con la extracción desactivada en el entorno.
 
 Misma mecánica que el juego de markdown (siembra → pasadas → aserciones →
 limpieza por SHA256, mismos parámetros `-Environment`, `-WhatIf`,

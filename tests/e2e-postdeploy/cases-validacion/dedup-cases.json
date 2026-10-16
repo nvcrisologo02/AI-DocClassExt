@@ -396,5 +396,49 @@
       { "columna": "UltimaMotivo", "esperado": "historica-fallida" },
       { "columna": "UltimaClaveIgualASiembra", "esperado": true }
     ]
+  },
+  {
+    "caseKey": "DUP-12", "group": "DUP", "id": "12", "domain": "validacion",
+    "name": "Pipeline completo con tipologia de extraccion desactivada y modelKey relleno reutiliza",
+    "covers": ["DUP-12"],
+    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "submittedBy": "e2e-validacion-dedup",
+    "seed": {
+      "request": {
+        "classificationProvider": "gpt",
+        "classificationOnly": false,
+        "expectedType": "nots.01",
+        "maxPagesForClassificationOnly": 3,
+        "umbral": 0.01,
+        "forceReprocess": true,
+        "skipDuplicateCheck": false,
+        "skipGDCUpload": true
+      },
+      "assertions": { "expectedRuntimeStatus": "Completed" }
+    },
+    "pasadas": [
+      {
+        "nombre": "reenvio en pipeline completo sin forzar reproceso",
+        "request": {
+          "classificationProvider": "gpt",
+          "classificationOnly": false,
+          "expectedType": "nots.01",
+          "maxPagesForClassificationOnly": 3,
+          "umbral": 0.01,
+          "forceReprocess": false,
+          "skipDuplicateCheck": false,
+          "skipGDCUpload": true
+        },
+        "assertions": { "expectedRuntimeStatus": "Completed" }
+      }
+    ],
+    "dbAssertions": [
+      { "columna": "Total", "esperado": 2 },
+      { "columna": "Reutilizadas", "esperado": 1 },
+      { "columna": "UltimaReutilizada", "esperado": true },
+      { "columna": "UltimaApuntaASiembra", "esperado": true },
+      { "columna": "UltimaMotivo", "esperado": "clave-igual" },
+      { "columna": "UltimaClaveIgualASiembra", "esperado": true }
+    ]
   }
 ]
