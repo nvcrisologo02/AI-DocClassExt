@@ -1,0 +1,59 @@
+
+=== Dependencias de IA por target (debe ser solo PRE: srbdipredocai, srbaisrv01predocai, srbaisrv02predocai) ===
+target | resultCode | llamadas | fallos
+srbdipredocai.cognitiveservices.azure.com | 200 | 66 | 0
+srbaisrv01predocai.openai.azure.com | 200 | 14 | 0
+srbdipredocai.cognitiveservices.azure.com | 202 | 13 | 0
+srbdipredocai.cognitiveservices.azure.com | 400 | 3 | 3
+
+=== Hosts de PRO en la ventana (debe estar vacio) ===
+target | n
+(sin filas)
+
+=== Requests por nombre ===
+name | total | fallos
+DocumentProcessOrchestrator | 124 | 0
+ResolverTipologiaActivity | 13 | 0
+IngestDocument | 13 | 0
+SubirBlobActivity | 11 | 0
+CalcularClaveIntencionActivity | 11 | 0
+NormalizarActivity | 11 | 0
+PersistirActivity | 11 | 0
+PrepararDocumentoClasificacionActivity | 11 | 2
+ObtenerMarkdownActivity | 9 | 0
+ClasificarActivity | 7 | 0
+ClasificarEmbeddingsActivity | 7 | 0
+ValidarActivity | 6 | 0
+IntegrarActivity | 6 | 0
+PersistirMarkdownActivity | 4 | 0
+GetTipologiasPublicadas | 2 | 0
+PostHealthcheck | 2 | 0
+POST AssetResolver/GetAAIIInfo | 2 | 0
+ExtraerActivity | 2 | 0
+PromptActivity | 2 | 0
+ObtenerActivoActivity | 2 | 0
+GET Ping/Ping | 1 | 0
+
+=== 401/403 en dependencias ===
+target | name | n
+(sin filas)
+
+=== Excepciones ===
+type | outerMessage | operation_Name | n
+System.ArgumentException | Keyword not supported: '@microsoft.keyvault(vaultname'. | POST AssetResolver/GetAAIIInfo | 2
+Microsoft.Azure.Functions.Worker.Extensions.DurableTask.Exceptions.DurableSerializationException | { "errorType": "UglyToad.PdfPig.Core.PdfDocumentFormatException", "errorMessage": "Could not find an xref trailer or str |  | 4
+DurableTask.Core.Exceptions.TaskFailedException | Task 'PrepararDocumentoClasificacionActivity' (#3) failed with an unhandled exception: Could not find an xref trailer or |  | 2
+DocumentIA.Core.Models.LayoutRequestException | Error iniciando DI layout. Status=400. Body={"error":{"code":"InvalidRequest","message":"Invalid request.","innererror": |  | 2
+System.InvalidOperationException | Error iniciando clasificaci¢n DI. Status=400. Body={"error":{"code":"InvalidRequest","message":"Invalid request.","inner |  | 1
+
+=== Eventos CU.* ===
+name | n
+(sin filas)
+
+=== GET de markdown: requests ===
+timestamp | name | resultCode | duration
+(sin filas)
+
+=== GET de markdown: dependencias (solo SQL) ===
+type | target | n
+(sin filas)
