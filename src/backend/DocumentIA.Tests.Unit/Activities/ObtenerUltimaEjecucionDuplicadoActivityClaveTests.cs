@@ -351,6 +351,39 @@ public class ObtenerUltimaEjecucionDuplicadoActivityClaveTests
         r.Salida.Should().NotBeNull();
     }
 
+    [Fact]
+    public async Task ModoCompleto_TipologiaConExtraccionDesactivadaYModelKey_Reutiliza()
+    {
+        // AB#100988: el orquestador omite la extraccion y la historica no tiene ModelKeyEfectivo,
+        // aunque la tipologia conserve modelKey.
+        var clave = ClaveCompleto();
+        _tipologias.Setup(r => r.GetByCodigoAsync("nots.01")).ReturnsAsync(TipologiaPublicada("nots.01", "nots.01.1_0.azure-cu", enabled: false));
+        var fila = Fila(1, clave.Clave, Contrato(classificationOnly: false, tipologia: "nots.01", modelKeyExtraccion: null));
+        _ejecuciones.Setup(r => r.GetCandidatasPorClaveAsync(10, clave.Clave, 0, 1)).ReturnsAsync(new[] { fila });
+
+        var r = await Sut().Run(Input(clave.Clave, true, 0, false));
+
+        r.Salida.Should().NotBeNull();
+        r.MotivoNoReutilizacion.Should().BeNull();
+        r.Salida!.DetalleEjecucion.MotivoReutilizacion.Should().Be(MotivosReutilizacion.ClaveIgual);
+    }
+
+    [Fact]
+    public async Task ModoCompleto_TipologiaConExtraccionDesactivada_ModeloPedidoNoCuenta_Reutiliza()
+    {
+        // Con la extraccion desactivada el modelo pedido no se usa: no hay extraccion que comparar.
+        var clave = ClaveCompleto();
+        _tipologias.Setup(r => r.GetByCodigoAsync("nots.01")).ReturnsAsync(TipologiaPublicada("nots.01", "nots.01.1_0.azure-cu", enabled: false));
+        var fila = Fila(1, clave.Clave, Contrato(classificationOnly: false, tipologia: "nots.01", modelKeyExtraccion: null));
+        _ejecuciones.Setup(r => r.GetCandidatasPorClaveAsync(10, clave.Clave, 0, 1)).ReturnsAsync(new[] { fila });
+        var input = Input(clave.Clave, true, 0, false);
+        input.ExtraccionModelKeyPedido = "nots.01.1_0.azure-cu";
+
+        var r = await Sut().Run(input);
+
+        r.Salida.Should().NotBeNull();
+    }
+
     private ObtenerUltimaEjecucionDuplicadoActivity Sut(bool estricto = true) => new(
         new Mock<ILogger<ObtenerUltimaEjecucionDuplicadoActivity>>().Object,
         _documentos.Object,
@@ -406,11 +439,11 @@ public class ObtenerUltimaEjecucionDuplicadoActivityClaveTests
         return JsonSerializer.Serialize(salida);
     }
 
-    private static TipologiaEntity TipologiaPublicada(string codigo, string modelKey, string? secondaryModelKey = null, string provider = "azure-content-understanding") => new()
+    private static TipologiaEntity TipologiaPublicada(string codigo, string modelKey, string? secondaryModelKey = null, string provider = "azure-content-understanding", bool enabled = true) => new()
     {
         Codigo = codigo,
         Activa = true,
         Estado = EstadoTipologia.Published,
-        ConfiguracionJson = $$$"""{"tipologiaId":"{{{codigo}}}","extraction":{"enabled":true,"provider":"{{{provider}}}","modelKey":"{{{modelKey}}}"{{{(secondaryModelKey is null ? "" : $",\"secondaryModelKey\":\"{secondaryModelKey}\"")}}}}}"""
+        ConfiguracionJson = $$$"""{"tipologiaId":"{{{codigo}}}","extraction":{"enabled":{{{(enabled ? "true" : "false")}}},"provider":"{{{provider}}}","modelKey":"{{{modelKey}}}"{{{(secondaryModelKey is null ? "" : $",\"secondaryModelKey\":\"{secondaryModelKey}\"")}}}}}"""
     };
 }
