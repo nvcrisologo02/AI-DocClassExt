@@ -49,8 +49,8 @@ E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run comple
 | 3 Coste (condicional: PASS o N/A con motivo) | 2026-10-16 | N/A (sin cambios en IA) | — |
 | 4 Deriva | 2026-10-16 | PASS (hash idéntico en las 5 tablas) | `evidencias/config-v1.1.1-pre.hashes.json`, `config-v1.1.1-pre-puerta4.hashes.json` |
 
-Test Plan 100069 (SMK-1..8): run <id> el <fecha>, <resultado>.
-Go: <fecha> · <nombre>
+Test Plan 100069 (SMK-1..8): run 1076850 el 2026-10-16, Completed (5 Passed, 3 NotApplicable).
+Go: **2026-10-16 · Ignacio Varas Crisologo** sobre el candidato `40b6c71` · puertas 1 (2026-10-16 23:36Z) y 4 (2026-10-16 23:38Z) en PASS, 2 y 3 N/A con motivo; Test Plan 100069 run 1076850; revisión 3.2 hecha (AB#100988 To Validate, AB#100989 Done).
 
 ## Runs de pipeline
 
