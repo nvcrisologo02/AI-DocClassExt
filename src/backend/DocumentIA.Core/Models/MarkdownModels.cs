@@ -201,6 +201,13 @@ public sealed class ContextoMarkdown
 
     public bool ForceReprocess { get; set; }
 
+    /// <summary>
+    /// True cuando solo vale el markdown ya persistido (AB#100930): completar una reutilizacion
+    /// no debe pagar Layout ni reprocesar el documento. Si lo persistido no cubre, el resultado
+    /// vuelve sin contenido con causa "markdown-insuficiente".
+    /// </summary>
+    public bool SoloPersistido { get; set; }
+
     /// <summary>Instrucciones.Classification.Markdown. Gana siempre y no se persiste.</summary>
     public string? MarkdownCaller { get; set; }
 

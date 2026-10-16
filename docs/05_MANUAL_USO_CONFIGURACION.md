@@ -86,10 +86,10 @@ Estados habituales y accion recomendada:
 | `OK` | Documento procesado correctamente | Continuar flujo normal |
 | `VALIDACION_CON_ERRORES` | Se extrajeron datos pero hay inconsistencias | Revisar campos marcados y corregir/confirmar |
 | `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
-| `DUPLICADO` | El documento ya habia sido procesado y no hay ningun resultado anterior reutilizable | Usar resultado existente o seguir criterio de negocio |
+| `DUPLICADO` | Solo con `Dedup__ModoEstricto = false`: el documento ya habia sido procesado y no hay ningun resultado anterior reutilizable (en modo estricto, el defecto, se procesa) | Usar resultado existente o seguir criterio de negocio |
 | _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
 | `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto legible: el servicio de lectura respondio sin contenido | Comprobar si es un escaneado sin OCR o una pagina en blanco y pedir un documento legible. Si lo que fallo fue la lectura, el estado es `ERROR` o `PENDIENTE_REINTENTO` con `No se pudo obtener el texto del documento: <motivo>` |
-| `ERROR` | El procesamiento no pudo completarse | Reintentar y, si persiste, escalar a soporte |
+| `ERROR` | El procesamiento no pudo completarse | Reintentar enviando el mismo documento: desde AB#100956 un reintento no reutiliza una ejecución en error y reprocesa (en versiones anteriores hacía falta `forceReprocess = true`). Si persiste, escalar a soporte |
 
 #### Paso 5: Revisar confianza del resultado
 
@@ -642,7 +642,7 @@ La retencion del blob se usa como almacenamiento temporal. La fuente de verdad d
 Reglas de resolucion:
 
 1. Si la tipologia define `retentionPolicy.blobRetentionDays`, ese valor tiene prioridad.
-2. Si no lo define, se usa `BlobRetention:DefaultDays` de `appsettings.json`.
+2. Si no lo define, se usa el app setting `BlobRetention__DefaultDays` de la Function App.
 3. Si el valor final es `-1` (o no hay valor), no se programa expiracion (`FechaExpiracionBlob = null`).
 
 Configuracion por tipologia (en `ConfiguracionJson`):
@@ -657,15 +657,15 @@ Configuracion por tipologia (en `ConfiguracionJson`):
 }
 ```
 
-Configuracion global en Functions (`appsettings.json`):
+Configuracion global en Functions (app settings de la Function App):
 
-```json
-"BlobRetention": {
-  "DefaultDays": 2,
-  "CleanupCron": "0 0 3 * * *",
-  "BatchSize": 200
-}
-```
+| App setting | Valor | Uso |
+|---|---|---|
+| `BlobRetentionCleanupCron` | `0 0 3 * * *` | Cron del `BlobCleanupTimerTrigger`. Sin el setting el host no indexa el trigger y no hay limpieza. |
+| `BlobRetention__DefaultDays` | `2` | Dias de retencion por defecto. Sin el setting, `PersistirActivity` no pone `FechaExpiracionBlob` y nada caduca. |
+| `BlobRetention__BatchSize` | DEV y PRE `2000`, PRO `5000` | Documentos por ciclo. Sin el setting, el codigo usa 200. |
+
+`appsettings.json` de Functions no se carga en Azure: estos valores solo existen como app settings. Los crean los pipelines 802 y 799 (AB#100983) con `ensure-app-settings.ps1`, que no pisa un valor existente, y el contrato `scripts/config/azure-appsettings-contract.json` los exige.
 
 Comportamiento de limpieza:
 
@@ -676,21 +676,36 @@ Comportamiento de limpieza:
 
 ### Migración de datos legacy en SQL Server
 
-Para incluir histórico en la limpieza automática de blobs se incluye script idempotente:
-
-- `scripts/migrations/backfill-documentos-fecha-expiracion-blob-2-dias.sql`
+Para incluir histórico en la limpieza automática de blobs se usa el backfill por lotes `scripts/database/backfill-fecha-expiracion-blob.ps1` (marca de agua sobre `Id`, reanudable). El SQL `scripts/migrations/backfill-documentos-fecha-expiracion-blob-2-dias.sql` hace un único UPDATE en transacción y no es apto para bases S0.
 
 Uso recomendado:
 
-1. Desplegar backend con `BlobRetention:DefaultDays = 2`.
-2. Ejecutar script sobre la base objetivo.
-3. Verificar la salida del script (`RowsUpdated`, `RetentionDaysApplied`, `ExecutedAtUtc`).
+1. Desplegar con `BlobRetention__DefaultDays = 2` en la Function App.
+2. Ejecutar el script con `-CountOnly` y revisar el número de candidatos.
+3. Ejecutar el backfill real por lotes. `-HastaFechaUtc` se pasa sin sufijo `Z`: con `Z`, PowerShell la convierte a hora local y el corte se desplaza.
+4. Comprobar que no quedan documentos con blob y sin `FechaExpiracionBlob`, y el siguiente ciclo `BlobCleanupCycle` en App Insights.
 
 Detalles del backfill:
 
 - Aplica a todas las tipologías.
 - Solo afecta documentos con `RutaBlobStorage` informada y `FechaExpiracionBlob IS NULL`.
 - Calcula `FechaExpiracionBlob = COALESCE(FechaProceso, FechaCreacion, SYSUTCDATETIME()) + 2 dias`.
+
+### 5.10.2 Reutilizacion por duplicado (`Dedup`, AB#100930)
+
+Un documento duplicado (mismo SHA256, o mismo checksum MD5 de GDC) solo reutiliza una ejecucion anterior si tiene la misma clave de intencion (modo, nivel, universo de tipologias, `expectedType` y modelo de clasificacion). Seccion `Dedup` de `appsettings.json` y, en Azure, app settings con doble guion bajo:
+
+| App setting | Defecto | Que hace |
+|---|---|---|
+| `Dedup__ModoEstricto` | `true` | `true`: seleccion por clave de intencion; sin historica compatible el documento se procesa y `detalleEjecucion.motivoNoReutilizacion` dice por que. `false`: vuelta atras a la regla anterior (modo y nivel con fallback a la ultima ejecucion con contrato) y `DUPLICADO` vacio sin historica. La clave se calcula y persiste en ambos modos. |
+| `Dedup__MaxCandidatas` | `5` | Ejecuciones con la misma clave que se examinan (segunda fase: modelo de extraccion y paginas) antes de rendirse. |
+| `Dedup__MaxDerivacionAlVuelo` | `50` | Filas antiguas con contrato y sin clave que se derivan al vuelo por documento y peticion, mientras el backfill no las haya rellenado. |
+
+`Dedup__ModoEstricto=true` lo crean los pipelines 802 (Functions) y 799 (completo) en la tarea "Set CU Resiliencia App Settings" (variable `dedupModoEstricto`), con `ensure-app-settings.ps1`: si el setting ya existe, se conserva el valor que tenga. Para volver atras se cambia a `false` a mano en la Function App; un redespliegue no lo pisa. `Dedup__MaxCandidatas` y `Dedup__MaxDerivacionAlVuelo` no los fija el pipeline: solo se crean si hace falta cambiar el defecto.
+
+Cuando poner `Dedup__ModoEstricto = false`: solo como vuelta atras temporal, si un integrador depende de recibir `DUPLICADO` vacio o de que una misma peticion reciba siempre la ultima ejecucion aunque tuviera otra intencion. Se retira en la release siguiente a la validacion del modo estricto en PRO (ver `docs/manuales/MANUAL_DEDUPLICACION.md` §12).
+
+`Classification:NivelClasificacionDefault` (`Classification__NivelClasificacionDefault`, defecto `TDN1_TDN2`) debe ser el mismo que asume el backfill del historico (`scripts/database/backfill-clave-intencion.ps1`, que usa `TDN1_TDN2` cuando el nivel viene vacio): si difieren, las claves de las filas antiguas no coincidirian con las de las peticiones nuevas y no se reutilizarian.
 
 ---
 
@@ -703,7 +718,7 @@ Detalles del backfill:
 | `OK` | Procesamiento completo, datos fiables | Consumir datos normalmente |
 | `VALIDACION_CON_ERRORES` | Extraccion OK pero validacion detecto errores | Revisar `postproceso.inconsistencias`. Datos pueden requerir correccion manual. |
 | `BAJA_CONFIANZA_CLASIFICACION` | IA no pudo clasificar con confianza suficiente | Verificar documento manualmente. Posible documento no soportado. |
-| `DUPLICADO` | Documento ya procesado (SHA256 identico) **sin ninguna ejecucion anterior reutilizable**. Cuando si la hay, el estado es el de aquella ejecucion con `resultado.reutilizadaPorDuplicado = true` y `detalleEjecucion.ejecucionOriginalGuid` informado | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
+| `DUPLICADO` | Solo con `Dedup__ModoEstricto = false`: documento ya procesado (SHA256 identico) **sin ninguna ejecucion anterior reutilizable**. En modo estricto (defecto) ese documento se procesa y el motivo va en `detalleEjecucion.motivoNoReutilizacion`. Cuando hay ejecucion con la misma intencion, el estado es el de aquella ejecucion con `resultado.reutilizadaPorDuplicado = true` y `detalleEjecucion.ejecucionOriginalGuid` informado | Consultar resultado anterior. Usar `forceReprocess=true` si se desea reprocesar. |
 | `NO_CLASIFICADO` | No se identifico la tipologia del documento | Revisar el documento; si el tipo es conocido, reenviar con `expectedType`. Si la peticion pedia prompt o resumen, estos si vienen informados en `datosExtraidos`. |
 | `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto: Document Intelligence respondio sin contenido | El modelo no se invoca a proposito: es preferible un fallo explicito a un resumen inventado. Reservado al documento vacio de verdad; un fallo al obtener el texto cierra en `ERROR` o `PENDIENTE_REINTENTO` con el motivo en `mensajeError` (AB#100880). Ver `docs/guias/TROUBLESHOOTING_DIAGNOSTICO.md`. |
 | `PENDIENTE_REINTENTO` | Cuota de Azure OpenAI agotada durante la clasificacion | Estado retriable: reencolar el documento mas tarde. No es un fallo del documento. |

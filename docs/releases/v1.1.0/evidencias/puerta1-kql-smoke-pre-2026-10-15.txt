@@ -1,0 +1,55 @@
+Puerta 1 - smoke PRE 2026-10-15 07:50:30Z..07:53:30Z (run 20261015-095036-pre-smoke), App Insights srbappipredocai
+
+Hosts de IA (KQL del Anexo D): ['host', 'resultCode', 'llamadas', 'no_ok']
+   (sin filas)
+
+Hosts de PRO en la ventana: ninguno
+
+Requests: ['name', 'total', 'fallos']
+   ['DocumentProcessOrchestrator', 45, 0]
+   ['ResolverTipologiaActivity', 6, 0]
+   ['IngestDocument', 4, 0]
+   ['NormalizarActivity', 4, 0]
+   ['SubirBlobActivity', 4, 0]
+   ['PrepararDocumentoClasificacionActivity', 4, 0]
+   ['CalcularClaveIntencionActivity', 4, 0]
+   ['ObtenerMarkdownActivity', 3, 0]
+   ['ClasificarEmbeddingsActivity', 3, 0]
+   ['PersistirActivity', 3, 0]
+   ['PersistirMarkdownActivity', 2, 0]
+   ['ValidarActivity', 2, 0]
+   ['ClasificarActivity', 2, 0]
+   ['IntegrarActivity', 2, 0]
+   ['GetTipologiasPublicadas', 1, 0]
+   ['PostHealthcheck', 1, 0]
+   ['POST AssetResolver/GetAAIIInfo', 1, 0]
+   ['GET Ping/Ping', 1, 0]
+   ['ExtraerActivity', 1, 0]
+   ['ObtenerActivoActivity', 1, 0]
+
+Excepciones: [['System.ArgumentException', 1]]
+
+Eventos CU.*: ninguno
+
+[Reconsulta 07:57:48Z] Hosts de IA (KQL del Anexo D): ['host', 'resultCode', 'llamadas', 'no_ok']
+   (sin filas)
+
+Dependencias por tipo y destino: ['type', 'target', 'n', 'fallos']
+   ['InProc', 'Invoke', 101, 0]
+   ['SQL', 'tcp:srbsqlpredocai.database.windows.net,1433 | DocumentIA', 65, 0]
+   ['InProc | Microsoft.AAD', 'DefaultAzureCredential.GetToken', 32, 0]
+   ['HTTP', 'srbdipredocai.cognitiveservices.azure.com', 26, 0]
+   ['Azure blob', 'srbstgpredocai.blob.core.windows.net', 16, 2]
+   ['HTTP', 'srbaisrv02predocai.services.ai.azure.com', 10, 0]
+   ['InProc | Microsoft.Storage', 'BlobBaseClient.Download', 9, 0]
+   ['HTTP', 'srbaisrv01predocai.openai.azure.com', 6, 0]
+   ['InProc | Microsoft.Storage', 'BlobClient.Upload', 5, 0]
+   ['HTTP', '127.0.0.1:36025', 4, 0]
+   ['HTTP', 'srbwebpluginassetresolverpre.azurewebsites.net', 2, 0]
+   ['InProc | Microsoft.Storage', 'BlobContainerClient.CreateIfNotExists', 2, 0]
+   ['HTTP', 'srbwidi03.sareb.srb:8090', 1, 0]
+   ['HTTP', '169.254.129.7:8081', 1, 0]
+   ['InProc | Microsoft.CognitiveServices', 'ContentUnderstandingClient.AnalyzeBinary', 1, 0]
+
+Excepciones detalle:
+   ['2026-10-15T07:52:18.0321502Z', 'System.ArgumentException', "Keyword not supported: '@microsoft.keyvault(vaultname'.", 'POST AssetResolver/GetAAIIInfo']

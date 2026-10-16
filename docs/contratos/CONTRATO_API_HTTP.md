@@ -99,7 +99,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `gpt` \| `mock`. Si se informa `nivelClasificacion`, el sistema **fuerza automáticamente** `provider="gpt"` (D2). |
 | `classification.model` | string | Reservado. Usar `"auto"`. El model key se resuelve desde la configuración de la tipología. |
 | `classification.umbral` | double? | _(Opcional)_ Umbral de confianza para activar fallback GPT y para el check `BAJA_CONFIANZA_CLASIFICACION`. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor. |
-| `classification.nivelClasificacion` | string? | _(Opcional)_ Nivel jerárquico de clasificación deseado. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases, nivel completo). `null` / vacío = clasificación completa por defecto. Si se informa, el proveedor se fuerza a `"gpt"` automáticamente y el campo forma parte de la clave de deduplicación (`SHA256 + classificationOnly + nivelClasificacion`). |
+| `classification.nivelClasificacion` | string? | _(Opcional)_ Nivel jerárquico de clasificación deseado. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases, nivel completo). `null` / vacío = clasificación completa por defecto. Si se informa, el proveedor se fuerza a `"gpt"` automáticamente y el campo forma parte de la clave de intención con la que se decide la reutilización por duplicado (ver §5, estado `DUPLICADO`). |
 | `classification.markdown` | string? | _(Opcional)_ Markdown pre-procesado del documento aportado por el caller. Si se informa, gana siempre en `MarkdownResolver` (fuente `Caller`) y no se llama a Document Intelligence Layout ni se persiste. Útil para reutilizar texto ya extraído en integraciones batch. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3. |
 | `extraction.provider` | string | `auto` \| `azure-content-understanding` \| `azure-cu` \| `azure-document-intelligence` \| `azure-di` \| `azure-openai` \| `gpt` \| `mock`. Si se especifica un valor distinto de `"auto"`, sobreescribe el proveedor configurado en la tipología para esta petición. Con `azure-openai` se activa extracción GPT directa (sin CU). |
 | `extraction.model` | string | Model key del registro de modelos de extracción. Si se especifica un valor distinto de `"auto"`, sobreescribe el `modelKey` configurado en la tipología para esta petición. Debe coincidir con una clave publicada en `ModeloConfigs` (los JSON de modelos son solo seed/referencia). |
@@ -111,16 +111,16 @@ Permite ejecutar un prompt ad-hoc sobre el documento sin necesidad de configurar
 
 | Campo | Tipo | Validación | Descripción |
 |---|---|---|---|
-| `prompt.systemPrompt` | string? | ≤ 5000 chars | System message para el modelo. Si se omite, se usa el de la tipología o ninguno. |
-| `prompt.userPromptTemplate` | string? | ≤ 5000 chars | Plantilla de usuario. Puede incluir `{{CONTENT}}` como marcador del contenido del documento. Si se omite, se usa el de la tipología. |
+| `prompt.systemPrompt` | string? | ≤ 50000 chars | System message para el modelo. Si se omite, se usa el de la tipología o ninguno. |
+| `prompt.userPromptTemplate` | string? | ≤ 50000 chars | Plantilla de usuario. Puede incluir `{{CONTENT}}` como marcador del contenido del documento. Si se omite, se usa el de la tipología. |
 | `prompt.modelKey` | string? | Clave existente en registro de modelos | Modelo a usar. Si se omite, se usa el de la tipología o el default del sistema. |
 | `prompt.temperature` | double? | `[0.0 – 2.0]` | Temperatura de generación. Si se omite, se usa la de la tipología o `0.0`. |
-| `prompt.maxTokens` | int? | `[100 – 4000]` | Máximo de tokens en la respuesta. Si se omite, se usa el de la tipología o `2000`. |
+| `prompt.maxTokens` | int? | `[100 – 16384]` | Máximo de tokens en la respuesta. Si se omite, se usa el de la tipología o `2000`. |
 | `prompt.contentMode` | string? | `"markdown"` \| `"vision"` | Cómo se envía el contenido al modelo. `markdown` = texto extraído; `vision` = imagen del documento. Si se omite, se usa el de la tipología o `"markdown"`. |
 
 > **Nota:** Si la tipología tiene `PromptEnabled = false` y **no** existe `instrucciones.prompt` en la petición, el paso de prompt se omite. Si se envía `instrucciones.prompt`, el paso se ejecuta aunque la tipología no tenga `PromptConfig`.
 
-> **Resultado:** El resultado del prompt se almacena en `datosExtraidos["PromptResult"]` dentro del output final.
+> **Resultado:** El resultado del prompt se almacena en `DatosExtraidos["ResultadoPrompt"]` dentro del output final (la clave `PromptResult` que figuraba aquí no existe en el código).
 
 **`instrucciones.assetResolver`** _(opcional)_
 
@@ -421,9 +421,47 @@ Mismo payload que `200 OK` pero con `status == "unhealthy"` y `ok: false`. Devue
 
 ---
 
+## 4.ter. Markdown del documento
+
+### `GET /api/documentos/{sha256}/markdown` · `GET /api/ejecuciones/{guid}/markdown`
+
+Devuelve el markdown persistido de un documento (AB#100968). Es la vía para obtenerlo fuera de la respuesta síncrona del ingest: el contrato que se persiste en `DocumentoEjecuciones` se guarda **sin** `detalleEjecucion.postproceso.markdown` (AB#100169), de modo que ni el detalle del Monitor ni una respuesta reutilizada por duplicado (§5, estado `DUPLICADO`) lo llevan. El texto vive comprimido en `Documentos.NormalizacionMarkdownGzip` con su cobertura, y este endpoint solo lo lee: **nunca llama a Document Intelligence Layout** ni escribe nada. Requiere Function Key (`AuthorizationLevel.Function`).
+
+- `{sha256}`: `integridad.sha256` de cualquier respuesta del documento.
+- `{guid}`: `identificacion.guid` de la respuesta o `EjecucionGuid` del Monitor. Resuelve la ejecución y sirve el markdown de su documento, también si la ejecución fue una reutilización.
+
+#### Request
+
+| Cabecera | Efecto |
+|---|---|
+| `Accept-Encoding: gzip` | La respuesta lleva `Content-Encoding: gzip` con los bytes almacenados tal cual, sin descomprimir ni recomprimir en el servidor. Es la forma recomendada: es la más barata para ambas partes. Sin esta cabecera se devuelve el texto plano. |
+| `If-None-Match: <etag>` | Si coincide con el `ETag` actual, `304 Not Modified` sin cuerpo. |
+
+#### Respuesta — `200 OK`
+
+Cuerpo `text/markdown; charset=utf-8` con el markdown íntegro (comprimido o no según `Accept-Encoding`).
+
+| Cabecera | Descripción |
+|---|---|
+| `ETag` | `"<sha256>-<paginas>-<completo|parcial>"`. Incluye la cobertura porque una ejecución posterior puede sustituir un recorte por el documento entero bajo el mismo SHA256; el validador deja de coincidir y el cliente recibe el texto nuevo. |
+| `X-Markdown-Paginas` | Páginas que cubre el markdown. `0` si no se conoce. |
+| `X-Markdown-Completo` | `true` si cubre el documento entero; `false` si es el recorte usado en clasificación. |
+
+#### Otros códigos
+
+| Código | Cuándo |
+|---|---|
+| `304 Not Modified` | `If-None-Match` coincide con el `ETag` actual. Lleva `ETag`, sin cuerpo. |
+| `404 Not Found` | El SHA256 o el guid no existen, o el documento no tiene markdown persistido. Esto último ocurre cuando la única fuente fue `classification.markdown` del caller (que no se persiste, §3) o cuando Layout no devolvió texto. |
+| `401 Unauthorized` | Function Key ausente o inválida. |
+
+> **Por qué no un flag en el ingest.** Se descartó un `instrucciones.incluirMarkdown`: el markdown pesa cientos de KB y Durable serializa el output de la orquestación en Storage. Un GET aparte es aditivo, no cambia el contrato de salida y sirve igual para ejecuciones nuevas y reutilizadas. Consultar por `objectIdGDC` no está soportado: no es columna indexada.
+
+---
+
 ## 5. Estados posibles en `resultado.estado`
 
-Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.Estado` (ver convención de nombres en §4). ¿Continúa el pipeline tras cada estado?: `OK` sí; `NO_CLASIFICADO` no; `SIN_CONTENIDO_DOCUMENTO` no; `PENDIENTE_REINTENTO` no; `VALIDACION_CON_ERRORES` sí; `BAJA_CONFIANZA_CLASIFICACION` no; `DUPLICADO` no; `PAGINAS_EXCEDIDAS` no (retorna tras clasificar); `EXTRACCION_INCOMPLETA` estado de cierre tras la extracción; `ERROR` termina el procesamiento.
+Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.Estado` (ver convención de nombres en §4). ¿Continúa el pipeline tras cada estado?: `OK` sí; `NO_CLASIFICADO` no; `SIN_CONTENIDO_DOCUMENTO` no; `PENDIENTE_REINTENTO` no; `VALIDACION_CON_ERRORES` sí; `BAJA_CONFIANZA_CLASIFICACION` no; `DUPLICADO` no (solo con `Dedup:ModoEstricto = false`, ver §5); `PAGINAS_EXCEDIDAS` no (retorna tras clasificar); `EXTRACCION_INCOMPLETA` estado de cierre tras la extracción; `ERROR` termina el procesamiento.
 
 | Estado | Descripción |
 |---|---|
@@ -434,7 +472,7 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 | `PENDIENTE_REINTENTO` | La clasificación GPT se pospuso porque la cuota de Azure OpenAI quedó agotada (`429 Too Many Requests`) tras agotar los reintentos y/o con el circuito abierto. Es un estado **retriable**: el documento debe reencolarse/reprocesarse más tarde, no representa un fallo definitivo. Va acompañado de `estadoCalidad = "ERROR"`, confianzas a `0` y `mensajeError` con el detalle (p. ej. `"Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`). No debe confundirse con `NO_CLASIFICADO` (documento genuinamente no clasificable). **También** cuando no se pudo obtener el texto del documento por una causa transitoria (timeout de Document Intelligence Layout, `429` o `5xx`): `mensajeError = "No se pudo obtener el texto del documento: LayoutTimeout: ... . Reintentar más tarde."`. A diferencia del caso de cuota, este sí se persiste (AB#100880). |
 | `VALIDACION_CON_ERRORES` | Extracción completada pero alguna regla de validación no se cumplió. Los datos se devuelven. |
 | `BAJA_CONFIANZA_CLASIFICACION` | La confianza de clasificación está por debajo del umbral. El orquestador **retorna sin extraer** (no se devuelven datos extraídos) y `EstadoCalidad` queda vacío. |
-| `DUPLICADO` | El documento ya existe en la base de datos (mismo SHA256) y **no hay ninguna ejecución anterior reutilizable**. Cuando sí la hay, `resultado.estado` es el de aquella ejecución (normalmente `OK`), `resultado.reutilizadaPorDuplicado = true`, `resultado.mensajeReutilizacion` lo indica y `detalleEjecucion.ejecucionOriginalGuid` apunta a la ejecución cuyo contrato se devuelve (§6). Se prefiere la ejecución que coincide en `classificationOnly` + `nivelClasificacion`; sin coincidencia exacta, la última con contrato. |
+| `DUPLICADO` | Solo con `Dedup:ModoEstricto = false` (modo de vuelta atrás). En modo estricto (defecto) el documento duplicado sin ejecución reutilizable **se procesa** y `resultado.estado` es el del procesamiento; `detalleEjecucion.motivoNoReutilizacion` indica por qué no se reutilizó. Cuando sí hay una ejecución reutilizable, `resultado.estado` es el de aquella ejecución (normalmente `OK`), `resultado.reutilizadaPorDuplicado = true`, `resultado.mensajeReutilizacion` lo indica y `detalleEjecucion.ejecucionOriginalGuid` apunta a la ejecución cuyo contrato se devuelve (§6). **Regla de selección (AB#100930):** se reutiliza la última ejecución del mismo documento con contrato y con la misma **clave de intención**, que compara cinco componentes: modo (`solo-clasificacion` o `completo`), nivel de clasificación, universo de tipologías (sin restricción o el conjunto efectivo de `restriccionTipologias`), `expectedType` y modelo de clasificación efectivo. Sobre la candidata se comprueban además el modelo de extracción (en modo completo, el persistido debe coincidir con el que la tipología publicada usaría hoy) y la cobertura de páginas: una petición que pide más páginas de las que procesó la candidata no la reutiliza, y una que pide menos recibe la histórica. Si la candidata más reciente no pasa la segunda fase se examinan las siguientes con la misma clave (hasta `Dedup:MaxCandidatas`). Ya no existe el fallback a «la última con contrato». |
 | `ERROR` | Error irrecuperable durante el procesamiento (clasificación fallida, excepción no controlada). Consultar `mensajeError`. **También** cuando no se pudo obtener el texto del documento por una causa no transitoria (p. ej. `"No se pudo obtener el texto del documento: LayoutError (HTTP 401): LayoutRequestException: ..."`): el documento puede tener contenido; lo que falló es la infraestructura o el formato (AB#100880, ver tabla de motivos más abajo). |
 | `PAGINAS_EXCEDIDAS` | El documento supera el límite de páginas configurado. Tras clasificar, el orquestador fija `EstadoCalidad = "REVISION"`, `ConfianzaExtraccion = 0`, `Integracion.Estado = OK` (mensaje "Omitido: límite de páginas excedido") y GDC `Skipped`, persiste y **retorna sin extraer ni validar**. Ver `docs/especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md`. |
 | `EXTRACCION_INCOMPLETA` | Estado de cierre: se fija cuando hubo fallback de extracción (p. ej. tras `CuExtraccionException`) o timeout propio y cero campos útiles (excluyendo `Paginas` y Markdown). `MensajeError` = "Fallback de extracción sin datos. Razón: {FallbackRazon}". |
@@ -509,7 +547,13 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 | `detalleEjecucion.operationId` | `operation_Id` de Application Insights (W3C TraceId). Usar en KQL: `union traces,requests,exceptions \| where operation_Id == "<operationId>"` para obtener la traza completa. Ídem: el de esta llamada, también en respuestas reutilizadas. |
 | `detalleEjecucion.ejecucionOriginalGuid` | **Solo en respuestas reutilizadas** (`resultado.reutilizadaPorDuplicado = true`): `EjecucionGuid` de la ejecución cuyo contrato se devuelve. En una ejecución normal es `null` y **se omite del JSON**. Es el identificador con el que localizar la ejecución original en el Monitor de Admin (AB#100258). |
 | `detalleEjecucion.classificationOnly` | Refleja el valor de `instrucciones.classificationOnly` de la petición original. |
-| `detalleEjecucion.nivelClasificacion` | Nivel de clasificación usado en la petición (`"TDN1"`, `"TDN1/TDN2"` o `null`). Forma parte de la clave de deduplicación cuando se informa. |
+| `detalleEjecucion.nivelClasificacion` | Nivel de clasificación usado en la petición (`"TDN1"`, `"TDN1/TDN2"` o `null`). Es uno de los componentes de la clave de intención. |
+| `detalleEjecucion.claveIntencion` | _(AB#100930)_ string, 32 caracteres hexadecimales. Clave de intención de la petición (hash de modo, nivel, universo, `expectedType` y modelo de clasificación). Se informa siempre, también con `Dedup:ModoEstricto = false`. En una respuesta reutilizada es la de la petición, que por definición es la de la ejecución original. |
+| `detalleEjecucion.claveIntencionComponentes` | _(AB#100930)_ objeto `{ modo, nivel, universo, expectedType, modeloClasificacion }` con los componentes que dieron la clave: `modo` = `solo-clasificacion` \| `completo`; `universo` = `*` sin restricción o los códigos efectivos en mayúsculas, ordenados y separados por coma; `modeloClasificacion` = deployment GPT, id de clasificador de Document Intelligence o `expectedtype-input` cuando se informa `expectedType`. |
+| `detalleEjecucion.motivoReutilizacion` | _(AB#100930)_ **Solo en respuestas reutilizadas**: `clave-igual`. En el resto se omite del JSON. |
+| `detalleEjecucion.motivoNoReutilizacion` | _(AB#100930)_ **Solo tras detectar un duplicado sin reutilizarlo** (la ejecución siguió el flujo normal): `sin-historica` (ninguna ejecución con contrato), `clave-distinta` (hay ejecuciones, ninguna con la misma intención), `modelo-extraccion-distinto` (la tipología usa hoy otro modelo de extracción), `paginas-insuficientes` (la histórica procesó menos páginas de las pedidas), `historica-fallida` (todas las ejecuciones con esa intención terminaron en estado de fallo; el documento se ha reprocesado) o `contrato-invalido` (la fila original no tiene contrato legible). En el resto se omite del JSON. |
+| `detalleEjecucion.prompt.plantillaHash` | _(AB#100930)_ SHA-256 truncado (16 hex) del prompt ad hoc de la petición (sistema, plantilla de usuario y modelo). Permite saber si una histórica ya ejecutó el mismo prompt. Se omite con el prompt de la tipología. |
+| `detalleEjecucion.prompt.omitido` | _(AB#100930)_ `markdown-insuficiente` cuando una reutilización no pudo completar el prompt porque la histórica no tiene markdown guardado o no cubre las páginas pedidas; la respuesta se devuelve sin el prompt y no se reprocesa el documento. Se omite si el prompt se ejecutó. |
 | `detalleEjecucion.runTipologia` | Clave de tipología usada en la ejecución. |
 | `detalleEjecucion.clasificacion.modelo` | Modelo de clasificación usado. |
 | `detalleEjecucion.clasificacion.confianza` | Confianza final (DI o GPT si hubo fallback). |
@@ -529,6 +573,7 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 | `detalleEjecucion.postproceso.normalizaciones` | Lista de transformaciones aplicadas. |
 | `detalleEjecucion.postproceso.validaciones` | Lista de reglas de validación ejecutadas. |
 | `detalleEjecucion.postproceso.inconsistencias` | Lista de inconsistencias detectadas. |
+| `detalleEjecucion.postproceso.markdown` | Markdown del documento usado en la ejecución (cobertura en `detalleEjecucion.markdownPaginas` y `markdownCompleto`). **Solo viaja en la respuesta síncrona de una ejecución nueva**: no se persiste en el contrato (AB#100169), el detalle del Monitor no lo muestra y una respuesta reutilizada por duplicado llega con `null`. Para obtenerlo después, o en una reutilización, usar `GET /api/documentos/{sha256}/markdown` (§4.ter). |
 | `detalleEjecucion.integracion.plugins` | Lista de plugins ejecutados con su resultado individual. |
 | `detalleEjecucion.assetResolver` | Resultado de resolucion de activo. `null` si AssetResolver deshabilitado. |
 | `detalleEjecucion.assetResolver.ejecutado` | `true` si el paso se ejecuto. |
@@ -618,7 +663,7 @@ Cubre **solo servicios de IA**. No contabiliza Blob Storage, SQL, Functions ni n
 ### Notas
 
 - **Una tarifa que falta nunca hace fallar una ejecución.** El consumo se registra igual con sus tokens y páginas, el coste queda a `null` y `tarifasCompletas` pasa a `false`. Es preferible a devolver una cifra inventada.
-- **La reutilización por duplicado no gasta IA.** El bloque llega a cero y marcado como reutilizado; el coste de la ejecución original va aparte, para que sumar costes sobre el histórico no cuente dos veces el mismo gasto.
+- **La reutilización por duplicado no repite la IA de la ejecución original.** El bloque llega marcado como reutilizado; el coste de la ejecución original va aparte, para que sumar costes sobre el histórico no cuente dos veces el mismo gasto. Una reutilización que completa resumen o prompt sí tiene coste: el del prompt, y `costes.reutilizadaPorDuplicado` sigue a `true`.
 - **Una llamada combinada genera un único consumo.** Cuando una sola invocación al modelo resuelve extracción y resumen a la vez, se ha pagado una vez.
 - **El coste es una estimación** basada en un catálogo de tarifas mantenido a mano. No sustituye a la facturación real y conviene contrastarlo periódicamente.
 - El agregado también se persiste en las columnas `CosteIAEur` y `TokensIA` de `DocumentoEjecuciones`, para poder explotarlo sin abrir el contrato.
@@ -674,9 +719,10 @@ $status.output.resultado
 - El documento puede enviarse en Base64 (RFC 4648, sin saltos de línea) o por referencia `objectIdGDC`.
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
 - Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
-- Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización prefiere la ejecución compatible por `hash + classificationOnly + nivelClasificacion` y, si no la hay, la última con contrato.
-- Cuando el documento llega por `objectIdGDC`, además de la deduplicación por SHA256 existe la **reutilización por checksum MD5 de GDC**: si el checksum ya fue procesado, se devuelve la última ejecución con `Resultado.MensajeReutilizacion` = "Documento ya procesado previamente (checksum GDC)...". Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
-- **Toda petición servida por reutilización queda registrada** (AB#100258) como una ejecución propia en la base de datos, sin contrato ni coste, vinculada a la original y visible en el Monitor de Admin. Para el llamador el cambio es **aditivo**: el único campo nuevo (`detalleEjecucion.ejecucionOriginalGuid`) solo aparece en respuestas reutilizadas, y lo único que cambia de valor es `detalleEjecucion.instanceId` / `operationId` en esas respuestas, que pasan a ser los de la llamada actual. `statusQueryUri`, los estados y el resto del contrato no cambian. Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
+- Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización exige la misma intención: se devuelve la última ejecución del documento con la misma clave de intención (ver §5, estado `DUPLICADO`); sin ella, el documento se descarga y procesa. La respuesta reutilizada no lleva `detalleEjecucion.postproceso.markdown`; se obtiene con el GET de §4.ter.
+- Cuando el documento llega por `objectIdGDC`, además de la deduplicación por SHA256 existe la **reutilización por checksum MD5 de GDC**: si el checksum ya fue procesado, se devuelve la última ejecución con la misma intención; sin ella, el documento se descarga y procesa. El mensaje es `Resultado.MensajeReutilizacion` = "Documento ya procesado previamente (checksum GDC)...". Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
+- **Toda petición servida por reutilización queda registrada** (AB#100258) como una ejecución propia en la base de datos, sin contrato propio y con coste cero salvo el del prompt o resumen que complete (AB#100930), vinculada a la original y visible en el Monitor de Admin. Para el llamador el cambio es **aditivo**: el único campo nuevo (`detalleEjecucion.ejecucionOriginalGuid`) solo aparece en respuestas reutilizadas, y lo único que cambia de valor es `detalleEjecucion.instanceId` / `operationId` en esas respuestas, que pasan a ser los de la llamada actual. `statusQueryUri`, los estados y el resto del contrato no cambian. Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
+- **Aviso de cambio de contrato (AB#100930):** `resultado.estado = "DUPLICADO"` deja de emitirse en modo estricto (`Dedup:ModoEstricto = true`, el defecto): un documento duplicado sin ejecución con la misma intención se procesa y devuelve el estado del procesamiento, con `detalleEjecucion.motivoNoReutilizacion` informado. Los integradores que dependan de un `DUPLICADO` con contrato vacío deben tratar la respuesta como una procesada normal. Además, una petición que cambia modo, nivel, restricción de tipologías, `expectedType` o modelo, o que pide más páginas, ya no recibe la ejecución anterior sino un reproceso. El resto de campos del contrato no cambia; los campos nuevos de `detalleEjecucion` son aditivos. Fecha de despliegue en PRO: pendiente de confirmar (se anotará en el registro de la release).
 - Si `skipGDCUpload=true` (o se fuerza automáticamente por entrada `objectIdGDC`), el paso GDC finaliza como `Skipped` y se reporta como exitoso (`detalleEjecucion.gdc.exitoso=true`).
 - Si se envía `instrucciones.prompt`, la validación ocurre en el trigger HTTP (respuesta `400` inmediata si inválido). No es necesario esperar al resultado de la orquestación para detectar errores de prompt.
 - En `classificationOnly=true`, `Integrar` solo se ejecuta con `executeIntegrarWhenClassificationOnly=true` y `trazabilidad.idActivo` informado.
@@ -779,6 +825,8 @@ Solo se listan ruta, método, autenticación y códigos; los cuerpos no se docum
 | Método | Ruta | Auth | Códigos |
 |---|---|---|---|
 | `GET` | `/api/tipologias` (listado público de tipologías) | Anónimo | 200 (500 del host ante excepción) |
+| `GET` | `/api/documentos/{sha256}/markdown` (§4.ter) | Function | 200, 304, 404 |
+| `GET` | `/api/ejecuciones/{guid}/markdown` (§4.ter) | Function | 200, 304, 404 |
 | `GET` | `/api/management/catalogotdn1` | Function | 200 |
 | `GET` | `/api/management/catalogotdn1/{id}` | Function | 200, 404 |
 | `POST` | `/api/management/catalogotdn1` | Function | 201, 400, 409 |

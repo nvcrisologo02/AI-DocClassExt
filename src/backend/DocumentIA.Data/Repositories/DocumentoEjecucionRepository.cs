@@ -328,6 +328,11 @@ namespace DocumentIA.Data.Repositories
                 _ => q.Where(e => !e.ReutilizadaPorDuplicado)
             };
 
+            if (!string.IsNullOrWhiteSpace(filtro.MotivoReutilizacion))
+            {
+                q = q.Where(e => e.MotivoReutilizacion == filtro.MotivoReutilizacion);
+            }
+
             if (!string.IsNullOrWhiteSpace(filtro.Tipologia))
             {
                 q = q.Where(e => e.Tipologia == filtro.Tipologia);
@@ -468,7 +473,8 @@ namespace DocumentIA.Data.Repositories
                     CosteIAEur = e.CosteIAEur,
                     CosteEstimado = e.CosteEstimado,
                     ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
-                    EjecucionOriginalId = e.EjecucionOriginalId
+                    EjecucionOriginalId = e.EjecucionOriginalId,
+                    MotivoReutilizacion = e.MotivoReutilizacion
                 })
                 .ToListAsync();
 
@@ -501,7 +507,8 @@ namespace DocumentIA.Data.Repositories
                         ? (e.Documento != null ? e.Documento.NombreArchivo : null)
                         : SqlJsonFunctions.JsonValue(e.ContratoSalidaCompletoJson, RutaNombreEnContrato),
                     ReutilizadaPorDuplicado = e.ReutilizadaPorDuplicado,
-                    EjecucionOriginalId = e.EjecucionOriginalId
+                    EjecucionOriginalId = e.EjecucionOriginalId,
+                    MotivoReutilizacion = e.MotivoReutilizacion
                 })
                 .ToListAsync();
         }
@@ -511,6 +518,65 @@ namespace DocumentIA.Data.Repositories
 
         /// <summary>Tope de reutilizaciones que se listan en el detalle de una ejecucion.</summary>
         private const int MaxReutilizacionesEnDetalle = 20;
+
+        public async Task<IReadOnlyList<DocumentoEjecucionEntity>> GetCandidatasPorClaveAsync(
+            int documentoId, string claveIntencion, int skip, int take)
+        {
+            return await _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .Where(e => e.DocumentoId == documentoId
+                    && e.ClaveIntencion == claveIntencion
+                    && !e.ReutilizadaPorDuplicado
+                    && !EstadoEjecucion.NoReutilizables.Contains(e.EstadoFinal))
+                .OrderByDescending(e => e.FechaEjecucion)
+                .ThenByDescending(e => e.Id)
+                .Skip(skip)
+                .Take(take)
+                .ToListAsync();
+        }
+
+        public async Task<IReadOnlyList<DocumentoEjecucionEntity>> GetConContratoSinClaveAsync(int documentoId, int take)
+        {
+            return await _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .Where(e => e.DocumentoId == documentoId
+                    && e.ClaveIntencion == null
+                    && !e.ReutilizadaPorDuplicado
+                    && e.ContratoSalidaCompletoJson != null
+                    && !EstadoEjecucion.NoReutilizables.Contains(e.EstadoFinal))
+                .OrderByDescending(e => e.FechaEjecucion)
+                .ThenByDescending(e => e.Id)
+                .Take(take)
+                .ToListAsync();
+        }
+
+        public Task<bool> TieneFallidasPorClaveAsync(int documentoId, string claveIntencion)
+        {
+            return _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .AnyAsync(e => e.DocumentoId == documentoId
+                    && e.ClaveIntencion == claveIntencion
+                    && !e.ReutilizadaPorDuplicado
+                    && EstadoEjecucion.Fallidos.Contains(e.EstadoFinal));
+        }
+
+        public Task<bool> TieneEjecucionesConContratoAsync(int documentoId)
+        {
+            return _context.DocumentoEjecuciones
+                .AsNoTracking()
+                .AnyAsync(e => e.DocumentoId == documentoId
+                    && !e.ReutilizadaPorDuplicado
+                    && e.ContratoSalidaCompletoJson != null);
+        }
+
+        public async Task ActualizarClaveIntencionAsync(int ejecucionId, string claveIntencion, string componentesJson)
+        {
+            await _context.DocumentoEjecuciones
+                .Where(e => e.Id == ejecucionId)
+                .ExecuteUpdateAsync(s => s
+                    .SetProperty(e => e.ClaveIntencion, claveIntencion)
+                    .SetProperty(e => e.ClaveIntencionJson, componentesJson));
+        }
 
         /// <summary>
         /// Agregados de coste de IA (AB#100237). Todo sobre columnas escalares: el

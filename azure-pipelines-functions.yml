@@ -30,6 +30,9 @@ variables:
     # gcHeapHardLimitPercent: tope del heap del GC por proceso en hexadecimal (28 = 40 %). Host y worker suman 80 % del contenedor (AB#100814).
     - name: gcHeapHardLimitPercent
       value: '28'
+    # blobRetentionBatchSize: lote del BlobCleanupTimerTrigger (AB#100983). PRO usa 5000 desde v1.0.0 (AB#100868).
+    - name: blobRetentionBatchSize
+      value: '2000'
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: azureSubscription
       value: AI DocClassExt PRE
@@ -41,6 +44,8 @@ variables:
       value: 'true'
     - name: gcHeapHardLimitPercent
       value: '28'
+    - name: blobRetentionBatchSize
+      value: '2000'
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: azureSubscription
       value: AI DocClassExt PRO
@@ -52,6 +57,8 @@ variables:
       value: 'false'
     - name: gcHeapHardLimitPercent
       value: '28'
+    - name: blobRetentionBatchSize
+      value: '5000'
   # Endpoints de IA por entorno (AI_*): fuente unica compartida con azure-pipelines.yml.
   - template: infra/ai/pipeline-variables.yml
     parameters:
@@ -76,6 +83,14 @@ variables:
     value: 'true'
   - name: promptTracingMaxPromptTextChars
     value: '20000'
+  # dedupModoEstricto: interruptor de la reutilizacion por clave de intencion (AB#100930). 'false' vuelve a la regla anterior por modo y nivel sin deshacer datos.
+  - name: dedupModoEstricto
+    value: 'true'
+  # Retencion de blobs (AB#100983): el trigger lee el cron de un app setting y appsettings.json no se carga en Functions.
+  - name: blobRetentionCleanupCron
+    value: '0 0 3 * * *'
+  - name: blobRetentionDefaultDays
+    value: '2'
   - name: maxConcurrentActivityFunctions
     value: '4'
   - name: maxConcurrentOrchestratorFunctions
@@ -155,7 +170,11 @@ stages:
                   "PromptTracing__IncludePromptText=$(promptTracingIncludePromptText)",
                   "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)",
                   "DocumentIntelligence__UseInlineContent=$(diUseInlineContent)",
+                  "Dedup__ModoEstricto=$(dedupModoEstricto)",
                   "DOTNET_GCHeapHardLimitPercent=$(gcHeapHardLimitPercent)",
+                  "BlobRetentionCleanupCron=$(blobRetentionCleanupCron)",
+                  "BlobRetention__DefaultDays=$(blobRetentionDefaultDays)",
+                  "BlobRetention__BatchSize=$(blobRetentionBatchSize)",
                   # Mapa de alias de recursos de IA (AB#100317): el registro de modelos resuelve
                   # ModeloConfigs.ResourceAlias contra estos settings. Solo se crean si faltan.
                   "AI__Resources__openai_primary__Endpoint=$(AI_OPENAI_PRIMARY_ENDPOINT)",
@@ -186,7 +205,11 @@ stages:
                   "PromptTracing__IncludePromptText",
                   "PromptTracing__MaxPromptTextChars",
                   "DocumentIntelligence__UseInlineContent",
+                  "Dedup__ModoEstricto",
                   "DOTNET_GCHeapHardLimitPercent",
+                  "BlobRetentionCleanupCron",
+                  "BlobRetention__DefaultDays",
+                  "BlobRetention__BatchSize",
                   "AI__Resources__openai_primary__Endpoint",
                   "AI__Resources__cu_primary__Endpoint",
                   "AI__Resources__cu_secondary__Endpoint",
@@ -196,7 +219,7 @@ stages:
                 $appliedSettings = az functionapp config appsettings list `
                   --resource-group "$(azureResourceGroup)" `
                   --name "$(functionAppName)" `
-                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'DocumentIntelligence__') || starts_with(name, 'AI__Resources__') || starts_with(name, 'DOTNET_GC')].{name: name, value: value}" `
+                  --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'DocumentIntelligence__') || starts_with(name, 'AI__Resources__') || starts_with(name, 'DOTNET_GC') || starts_with(name, 'Dedup__') || starts_with(name, 'BlobRetention')].{name: name, value: value}" `
                   -o json | ConvertFrom-Json
                 
                 $appliedNames = $appliedSettings | Select-Object -ExpandProperty name

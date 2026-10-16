@@ -1,11 +1,13 @@
 #nullable enable
 using System.Text.Json;
+using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
 using DocumentIA.Data.Entities;
 using DocumentIA.Data.Repositories;
 using DocumentIA.Functions.Activities;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Moq;
 
 namespace DocumentIA.Tests.Unit.Activities;
@@ -29,7 +31,8 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             _logger.Object,
             _documentoRepository.Object,
             _documentoEjecucionRepository.Object,
-            _tipologiaRepository.Object);
+            _tipologiaRepository.Object,
+            Options.Create(new DedupOptions { ModoEstricto = false }));
     }
 
     [Fact]
@@ -39,7 +42,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetBySHA256Async("sha-1"))
             .ReturnsAsync((DocumentoEntity?)null);
 
-        var result = await _sut.Run("sha-1");
+        var result = (await _sut.Run("sha-1")).Salida;
 
         result.Should().BeNull();
         _documentoRepository.Verify(r => r.GetBySHA256Async("sha-1"), Times.Once);
@@ -87,7 +90,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
             .ReturnsAsync(new[] { reutilizacion, real });
 
-        var result = await _sut.Run("sha-reuse");
+        var result = (await _sut.Run("sha-reuse")).Salida;
 
         result.Should().NotBeNull();
         result!.Identificacion.Documento.Should().Be("doc.pdf");
@@ -120,7 +123,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
             .ReturnsAsync(new[] { ejecucion });
 
-        var result = await _sut.Run("sha-guid");
+        var result = (await _sut.Run("sha-guid")).Salida;
 
         result.Should().NotBeNull();
         result!.DetalleEjecucion.EjecucionOriginalGuid.Should().Be("guid-de-la-ejecucion");
@@ -164,7 +167,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
             .ReturnsAsync(new[] { ejecucion });
 
-        var result = await _sut.Run("sha-2");
+        var result = (await _sut.Run("sha-2")).Salida;
 
         result.Should().NotBeNull();
         result!.Identificacion.Documento.Should().Be("doc.pdf");
@@ -228,7 +231,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
             .ReturnsAsync(new[] { ejecucion });
 
-        var result = await _sut.Run("sha-historic");
+        var result = (await _sut.Run("sha-historic")).Salida;
 
         result.Should().NotBeNull();
         result!.Resultado.Estado.Should().Be("OK");
@@ -265,7 +268,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
             .ReturnsAsync(new[] { ejecucionSinSalida });
 
-        var result = await _sut.Run("sha-3");
+        var result = (await _sut.Run("sha-3")).Salida;
 
         result.Should().BeNull();
     }
@@ -292,7 +295,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             }
         });
 
-        var result = await _sut.Run(documento.SHA256);
+        var result = (await _sut.Run(documento.SHA256)).Salida;
 
         result.Should().NotBeNull();
         result!.Identificacion.Tdn1.Should().Be("COMU");
@@ -320,7 +323,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             }
         });
 
-        var result = await _sut.Run(documento.SHA256);
+        var result = (await _sut.Run(documento.SHA256)).Salida;
 
         result.Should().NotBeNull();
         result!.Identificacion.Tdn1.Should().Be("COMU");
@@ -354,7 +357,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
                 ConfiguracionJson = "{\"classification\":{\"tdn1\":\"COMU\",\"tdn2\":\"COMU-48\"}}"
             });
 
-        var result = await _sut.Run(documento.SHA256);
+        var result = (await _sut.Run(documento.SHA256)).Salida;
 
         result.Should().NotBeNull();
         result!.Identificacion.Tdn1.Should().Be("COMU");
@@ -380,7 +383,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             }
         });
 
-        var result = await _sut.Run(documento.SHA256);
+        var result = (await _sut.Run(documento.SHA256)).Salida;
 
         result.Should().NotBeNull();
         result!.Identificacion.Tdn1.Should().BeNull();
@@ -410,7 +413,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByCodigoAsync("comu.48"))
             .ThrowsAsync(new InvalidOperationException("BD no disponible"));
 
-        var result = await _sut.Run(documento.SHA256);
+        var result = (await _sut.Run(documento.SHA256)).Salida;
 
         result.Should().NotBeNull();
         result!.Identificacion.Tdn1.Should().BeNull();
@@ -444,12 +447,12 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
             .ReturnsAsync(new List<DocumentoEjecucionEntity> { ejecucionHistorica });
 
-        var result = await _sut.Run(new ObtenerUltimaEjecucionDuplicadoInput
+        var result = (await _sut.Run(new ObtenerUltimaEjecucionDuplicadoInput
         {
             SHA256 = "sha-gdc",
             ClassificationOnly = false,
             NivelClasificacion = "TDN1_TDN2"
-        });
+        })).Salida;
 
         result.Should().NotBeNull();
         result!.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
@@ -491,12 +494,12 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
             .ReturnsAsync(ejecuciones);
 
-        var result = await _sut.Run(new ObtenerUltimaEjecucionDuplicadoInput
+        var result = (await _sut.Run(new ObtenerUltimaEjecucionDuplicadoInput
         {
             SHA256 = "sha-exacta",
             ClassificationOnly = true,
             NivelClasificacion = "TDN1_TDN2"
-        });
+        })).Salida;
 
         result.Should().NotBeNull();
         result!.DatosExtraidos["Resumen"].ToString().Should().Contain("resumen-exacto");
@@ -532,7 +535,7 @@ public class ObtenerUltimaEjecucionDuplicadoActivityTests
             .Setup(r => r.GetByDocumentoIdAsync(documento.Id))
             .ReturnsAsync(new List<DocumentoEjecucionEntity> { ejecucion });
 
-        var result = await _sut.Run("sha-timeline");
+        var result = (await _sut.Run("sha-timeline")).Salida;
 
         result.Should().NotBeNull();
         result!.DetalleEjecucion.Seguimiento.Actividades.Should().HaveCount(1);

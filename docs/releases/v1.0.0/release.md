@@ -47,7 +47,8 @@ ese smoke: ver la entrada del Bug.
 - `scripts/ai/set-resource-aliases.sql` (AB#100321) · **después de desplegar el código**, ver
   "Orden crítico" más abajo. Con backup automático.
 - `scripts/database/backfill-fecha-expiracion-blob.ps1` (AB#100881) · **no es de la ventana**: se
-  ejecuta en D+1, después de ver el primer ciclo del cron limpio.
+  ejecuta en D+1, después de ver el primer ciclo del cron limpio. Hecho el 2026-10-09 06:16Z–06:17Z:
+  18 lotes de 5000, 71.776 filas, 0 restantes (detalle en `runbook.md`, 4.8).
 
 ### Configuración
 

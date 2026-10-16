@@ -16,6 +16,8 @@ namespace DocumentIA.Functions.Services;
 /// </summary>
 public sealed class MarkdownResolver : IMarkdownResolver
 {
+    public const string MarkdownInsuficiente = "markdown-insuficiente";
+
     private readonly ILayoutMarkdownProvider _layout;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<MarkdownResolver> _logger;
@@ -66,6 +68,24 @@ public sealed class MarkdownResolver : IMarkdownResolver
         if (!contexto.ForceReprocess && persistido is not null && persistido.Cubre(necesidad))
         {
             return persistido;
+        }
+
+        // AB#100930: completar una reutilizacion solo puede usar lo que ya hay en BD.
+        if (contexto.SoloPersistido)
+        {
+            _logger.LogInformation(
+                "Markdown persistido de {Documento} no cubre la necesidad (completo={Completo}, paginas={Paginas}); no se llama a Layout",
+                contexto.NombreDocumento, necesidad.DocumentoCompleto, necesidad.PaginasMinimas);
+
+            return new ResultadoMarkdown
+            {
+                Fuente = FuenteMarkdown.Ninguna,
+                CausaSinContenido = new CausaSinContenido
+                {
+                    Motivo = MotivoSinContenido.SinFuente,
+                    Detalle = MarkdownInsuficiente
+                }
+            };
         }
 
         // 4. Layout. Si no trae texto, la causa viaja con el resultado: las guardas de contenido

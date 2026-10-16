@@ -62,6 +62,12 @@ namespace DocumentIA.Data.Repositories
         public FiltroReutilizadas Reutilizadas { get; set; } = FiltroReutilizadas.Excluir;
 
         /// <summary>
+        /// Filtra por DocumentoEjecuciones.MotivoReutilizacion (AB#100930): "clave-igual" en
+        /// reutilizaciones, o un motivo de no reutilizacion en filas propias. Null no filtra.
+        /// </summary>
+        public string? MotivoReutilizacion { get; set; }
+
+        /// <summary>
         /// Copia del filtro cambiando solo el tratamiento de las reutilizaciones. La usan
         /// los KPIs que las miden aparte: sin copiar el resto de recortes describirian un
         /// conjunto distinto del que muestra la tabla.

@@ -1,0 +1,7 @@
+fecha 2026-10-16T06:56:06Z base https://srbapppredocai.azurewebsites.net
+sha 200: 200 bytes=8641 etag=ETag: "96252ca45e5e3f1dd5e87634450f096f8e42d6e5d7d6ae318346cecda15242f9-2-completo"
+guid 200: 200 igual=si
+gzip: 200 bytes=2288 (BD 2288) Content-Encoding: gzip
+304: 304
+404 sha: 404
+401: 401

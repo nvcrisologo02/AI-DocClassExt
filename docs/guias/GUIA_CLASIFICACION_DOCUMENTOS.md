@@ -1000,7 +1000,7 @@ x-functions-key: <function-key>    (producción)
       "CodigoPostal": "46370",
       "Provincia": "Valencia",
       "Municipio": "Chiva",
-      "PromptResult": "1) Objetivo: certifica situación jurídica de finca...\n2) Datos clave: ..."
+      "ResultadoPrompt": "1) Objetivo: certifica situación jurídica de finca...\n2) Datos clave: ..."
     },
     "resultado": {
       "estado": "OK",
@@ -1278,7 +1278,7 @@ Ejecutar un prompt propio sin necesitar configurar la tipología:
 }
 ```
 
-**El resultado en `datosExtraidos["PromptResult"]`:**
+**El resultado en `datosExtraidos["ResultadoPrompt"]`:**
 ```
 {
   "NIF": "12345678A",

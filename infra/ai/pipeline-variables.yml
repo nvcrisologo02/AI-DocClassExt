@@ -11,8 +11,8 @@
 # "Cutover de un entorno", paso 2b).
 #
 # Estado: dev en sus recursos propios desde el 2026-09-22 y pre desde el
-# 2026-09-23 (AB#100320); prod sigue apuntando a la IA de PRO hasta su fase
-# (AB#100302).
+# 2026-09-23 (AB#100320); prod resuelve sus propios recursos por alias desde
+# el 2026-10-08 (v1.0.0, AB#100321).
 parameters:
   - name: targetEnvironment
     type: string

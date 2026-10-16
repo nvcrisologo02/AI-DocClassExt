@@ -154,6 +154,7 @@ var host = new HostBuilder()
         services.Configure<ClassificationPromptsSettings>(context.Configuration.GetSection("ClassificationPrompts"));
         services.Configure<PromptTracingSettings>(context.Configuration.GetSection("PromptTracing"));
         services.Configure<PipelineSettings>(context.Configuration.GetSection("Pipeline"));
+        services.Configure<DedupOptions>(context.Configuration.GetSection(DedupOptions.Seccion));
         services.Configure<DocumentIntelligenceSettings>(context.Configuration.GetSection("DocumentIntelligence"));
         services.Configure<AiResourceMapOptions>(context.Configuration.GetSection(AiResourceMapOptions.SectionName));
         services.AddSingleton<IAiEndpointResolver, AiEndpointResolver>();
@@ -352,6 +353,7 @@ var host = new HostBuilder()
 
         services.AddSingleton<PromptInstruccionesValidator>();
         services.AddSingleton<RestriccionTipologiasValidator>();
+        services.AddSingleton<ClaveIntencionResolver>();
 
         services.AddSingleton<LayoutModelRegistryLoader>(provider =>
             new LayoutModelRegistryLoader(

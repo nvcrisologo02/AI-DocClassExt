@@ -574,4 +574,33 @@ public class MarkdownResolverTests
         r.Fuente.Should().Be(FuenteMarkdown.Ninguna);
         r.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.LayoutTimeout);
     }
+
+    [Fact]
+    public async Task Resolver_SoloPersistido_DevuelveBdSiCubreYNoLlamaALayout()
+    {
+        BdTiene("# doc", 14, true);
+        var contexto = Contexto();
+        contexto.SoloPersistido = true;
+
+        var resultado = await _sut.ResolverAsync(NecesidadMarkdown.Completo(), contexto);
+
+        resultado.Fuente.Should().Be(FuenteMarkdown.BaseDatos);
+        resultado.TieneContenido.Should().BeTrue();
+        _layout.Verify(l => l.ExtraerMarkdownAsync(It.IsAny<ExtraerMarkdownLayoutInput>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task Resolver_SoloPersistido_SinCobertura_NoLlamaALayoutYDevuelveCausa()
+    {
+        BdTiene("# doc", 3, false);
+        var contexto = Contexto();
+        contexto.SoloPersistido = true;
+
+        var resultado = await _sut.ResolverAsync(NecesidadMarkdown.Completo(), contexto);
+
+        resultado.TieneContenido.Should().BeFalse();
+        resultado.CausaSinContenido!.Motivo.Should().Be(MotivoSinContenido.SinFuente);
+        resultado.CausaSinContenido.Detalle.Should().Be("markdown-insuficiente");
+        _layout.Verify(l => l.ExtraerMarkdownAsync(It.IsAny<ExtraerMarkdownLayoutInput>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
 }

@@ -327,6 +327,29 @@
    "@
    ```
 
+**¿Por qué no se reutilizó? (AB#100930)**
+
+Desde AB#100930 un duplicado solo reutiliza una ejecución anterior del mismo documento con la **misma intención** (modo, nivel, universo de tipologías, `expectedType` y modelo de clasificación). Si el documento esperado como reutilizado se ha procesado de nuevo, o el resultado reutilizado no es el que se esperaba:
+
+1. Leer el motivo en la respuesta (`detalleEjecucion.motivoNoReutilizacion`; en una reutilización, `detalleEjecucion.motivoReutilizacion = "clave-igual"`) o, en el Monitor de Admin, el campo «Motivo» del detalle de la ejecución (`MotivoReutilizacion`). El Monitor también permite filtrar por motivo (filtro «Motivo dedup»; para `clave-igual` hay que incluir las reutilizaciones en el selector).
+2. Comparar `detalleEjecucion.claveIntencionComponentes` de la petición con los de la ejecución original (ambos visibles en el detalle del Monitor): el componente que difiere explica `clave-distinta`.
+3. Aplicar la tabla:
+
+| Motivo | Causa | Acción |
+|---|---|---|
+| `clave-distinta` | Hay ejecuciones del documento, pero ninguna con la misma intención: la petición cambió modo (`classificationOnly`), nivel, restricción de tipologías (`restriccionTipologias`), `expectedType` o el modelo de clasificación efectivo. | Si el cambio es voluntario, es el comportamiento esperado (se reprocesa). Si no, unificar los parámetros entre llamadas. |
+| `modelo-extraccion-distinto` | La tipología de la histórica usa hoy otro modelo de extracción que el persistido, o ya no está publicada/activa, o la petición fija otro `extraction.model`. | Esperado tras cambiar el modelo de la tipología. Si no se esperaba, revisar la configuración publicada de la tipología y `instrucciones.extraction.model`. |
+| `paginas-insuficientes` | La petición pide más páginas de las que procesó la histórica (p. ej. histórica con recorte de `maxPagesForClassificationOnly` frente a una petición del documento completo). | Pedir un número de páginas menor o igual que el de la histórica, o aceptar el reproceso. |
+| `contrato-invalido` | La fila original no tiene contrato legible (JSON vacío o corrupto, o estado `DUPLICADO` heredado). | Revisar la fila original en `DocumentoEjecuciones` (Monitor o SQL). El reproceso deja una ejecución válida para las siguientes peticiones. |
+| `historica-fallida` | Todas las ejecuciones del documento con esa intención terminaron en `ERROR`, `PENDIENTE_REINTENTO` o `SIN_CONTENIDO_DOCUMENTO`: no hay resultado útil que servir (AB#100956). | Esperado: el reenvío reprocesa sin `forceReprocess`. Si el reproceso vuelve a fallar, la causa está en el documento o en la lectura (ver `mensajeError`), no en la deduplicación. |
+| `sin-historica` | Primera ejecución útil del documento: no hay ninguna ejecución anterior con contrato. | Ninguna; es el caso normal de un documento nuevo en su primera repetición. |
+
+Si `motivoNoReutilizacion` no aparece y el documento sí se reutilizó con otra intención, comprobar `Dedup__ModoEstricto` en la function app: con `false` rige la regla anterior (modo y nivel con fallback a la última con contrato) y se vuelve a emitir `DUPLICADO` cuando no hay histórica (ver MANUAL_DEDUPLICACION §12). La única excepción del modo legado es `historica-fallida`, que reprocesa en ambos modos.
+
+**¿Por qué una reutilización tiene coste? (AB#100930)**
+
+Una reutilización normalmente no repite la IA de la original. Si `costes.reutilizadaPorDuplicado = true` pero `costeTotalEur` > 0, la reutilización **completó un resumen o un prompt** que la histórica no traía: ejecutó solo `PromptActivity` sobre el markdown guardado. Se comprueba con la actividad `Prompt` en `detalleEjecucion.seguimiento` y con `detalleEjecucion.prompt` (`plantillaHash`). Si la histórica no tenía markdown que cubriese las páginas, no completa y `detalleEjecucion.prompt.omitido = "markdown-insuficiente"` (sin coste).
+
 ---
 
 ### CASO 5: Error de acceso a Azure Storage

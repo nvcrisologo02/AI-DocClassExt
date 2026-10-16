@@ -44,6 +44,22 @@ Describe "New-DocumentIARequestBody extensiones" {
         $json = New-DocumentIARequestBody -Case $case -DocumentBase64 "QUJD" -DocumentName "x.pdf" | ConvertFrom-Json
         $json.instrucciones.forzarProcesadoSinLimitePaginas | Should -BeTrue
     }
+    It "restriccionTipologias del caso se incluye en instrucciones.restriccionTipologias.codigos" {
+        $case = $script:baseCase.PSObject.Copy()
+        $case | Add-Member -NotePropertyName restriccionTipologias -NotePropertyValue @("nota.simple", "tasacion") -Force
+        $json = New-DocumentIARequestBody -Case $case -DocumentBase64 "QUJD" -DocumentName "x.pdf" | ConvertFrom-Json
+        @($json.instrucciones.restriccionTipologias.codigos) | Should -Be @("nota.simple", "tasacion")
+    }
+    It "sin restriccionTipologias no se emite la propiedad" {
+        $json = New-DocumentIARequestBody -Case $script:baseCase -DocumentBase64 "QUJD" -DocumentName "x.pdf" | ConvertFrom-Json
+        $json.instrucciones.PSObject.Properties['restriccionTipologias'] | Should -BeNullOrEmpty
+    }
+    It "forzarResumenPorDefecto del caso se incluye" {
+        $case = $script:baseCase.PSObject.Copy()
+        $case | Add-Member -NotePropertyName forzarResumenPorDefecto -NotePropertyValue $true -Force
+        $json = New-DocumentIARequestBody -Case $case -DocumentBase64 "QUJD" -DocumentName "x.pdf" | ConvertFrom-Json
+        $json.instrucciones.forzarResumenPorDefecto | Should -BeTrue
+    }
 }
 
 Describe "Test-CaseAssertions nuevas aserciones" {

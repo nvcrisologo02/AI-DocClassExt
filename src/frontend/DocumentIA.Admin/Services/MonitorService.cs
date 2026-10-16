@@ -45,6 +45,9 @@ public class EjecucionResumenDto
 
     /// <summary>Id de la ejecucion cuyo contrato se devolvio.</summary>
     public int? EjecucionOriginalId { get; set; }
+
+    /// <summary>Motivo de reutilizacion o de no reutilizacion de la regla de duplicado (AB#100930).</summary>
+    public string? MotivoReutilizacion { get; set; }
 }
 
 public class ActividadResumenDto
@@ -197,6 +200,21 @@ public class EjecucionDetalleDto
 
     /// <summary>Desde la ejecucion original: las veces que se sirvio su contrato.</summary>
     public List<ReutilizacionUsoDto> Reutilizaciones { get; set; } = [];
+
+    /// <summary>Clave de intencion y sus componentes (AB#100930). Nulos en filas anteriores al cambio.</summary>
+    public string? ClaveIntencion { get; set; }
+    public ClaveIntencionComponentesDto? ClaveIntencionComponentes { get; set; }
+    /// <summary>"clave-igual" en reutilizaciones; motivo de no reutilizacion en filas propias tras un duplicado.</summary>
+    public string? MotivoReutilizacion { get; set; }
+}
+
+public class ClaveIntencionComponentesDto
+{
+    public string Modo { get; set; } = string.Empty;
+    public string Nivel { get; set; } = string.Empty;
+    public string Universo { get; set; } = string.Empty;
+    public string ExpectedType { get; set; } = string.Empty;
+    public string ModeloClasificacion { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -425,6 +443,9 @@ public class MonitorFiltroDto
     /// </summary>
     public string? Reutilizadas { get; set; }
 
+    /// <summary>Filtra por motivo de la regla de duplicado (AB#100930); null no filtra.</summary>
+    public string? Motivo { get; set; }
+
     public string ToQueryString()
     {
         var (desde, hasta) = VentanaUtc();
@@ -446,6 +467,7 @@ public class MonitorFiltroDto
         if (ConfianzaMax is { } max) partes.Add($"confmax={max.ToString(CultureInfo.InvariantCulture)}");
         if (IncluirEstimados) partes.Add("incluirestimados=true");
         if (!string.IsNullOrWhiteSpace(Reutilizadas)) partes.Add($"reutilizadas={Uri.EscapeDataString(Reutilizadas)}");
+        if (!string.IsNullOrWhiteSpace(Motivo)) partes.Add($"motivo={Uri.EscapeDataString(Motivo)}");
         return string.Join("&", partes);
     }
 

@@ -1,5 +1,6 @@
 using DocumentIA.Core.Configuration;
 using DocumentIA.Core.Models;
+using DocumentIA.Core.Services;
 using DocumentIA.Functions.Activities;
 using DocumentIA.Functions.Services;
 using DocumentIA.Functions.Orchestrators;
@@ -460,46 +461,136 @@ public class DocumentProcessOrchestratorTests
         input.MapeoColeccionActivos.Should().NotBeNull().And.BeEmpty();
     }
 
+    private static ClaveIntencion ClaveDePrueba(bool classificationOnly = true) => ClaveIntencionBuilder.Construir(
+        ClaveIntencionBuilder.Normalizar(classificationOnly, "TDN1_TDN2", "TDN1_TDN2", null, null, "gpt-4o-mini"));
+
     [Fact]
     public async Task RunOrchestrator_DuplicadoDetectado_RetornaSalidaReutilizada()
     {
         var orchestrator = CreateOrchestrator();
         var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
 
-        var salidaPrevia = new ContratoSalida
-        {
-            Resultado = new ResultadoFinal { Estado = "OK" }
-        };
+        var salidaPrevia = new ContratoSalida { Resultado = new ResultadoFinal { Estado = "OK" } };
+        salidaPrevia.DetalleEjecucion.MotivoReutilizacion = MotivosReutilizacion.ClaveIgual;
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
         context.SetupActivity("VerificarDuplicadoActivity", true);
-        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", salidaPrevia);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(salidaPrevia, modoEstricto: true));
 
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
         salida.Resultado.MensajeReutilizacion.Should().NotBeNullOrWhiteSpace();
+        salida.DetalleEjecucion.ClaveIntencion.Should().Be(ClaveDePrueba().Clave);
 
         var duplicadoInput = context.GetLastActivityInput<ObtenerUltimaEjecucionDuplicadoInput>("ObtenerUltimaEjecucionDuplicadoActivity");
         duplicadoInput.Should().NotBeNull();
         duplicadoInput!.ClassificationOnly.Should().BeTrue();
+        duplicadoInput.ClaveIntencion.Should().Be(ClaveDePrueba().Clave);
+        duplicadoInput.DocumentoCompleto.Should().BeFalse();
+        duplicadoInput.PaginasMinimas.Should().BeGreaterThan(0);
     }
 
     [Fact]
-    public async Task RunOrchestrator_DuplicadoSinHistorialReutilizable_RetornaEstadoDuplicado()
+    public async Task RunOrchestrator_DuplicadoSinHistoricaCompatible_ContinuaElFlujoYPersisteElMotivo()
     {
         var orchestrator = CreateOrchestrator();
-        var entrada = BuildEntrada(expectedType: "nota.simple");
-        var context = new FakeTaskOrchestrationContext(entrada);
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba(classificationOnly: false));
         context.SetupActivity("VerificarDuplicadoActivity", true);
-        context.SetupActivity<ContratoSalida?>("ObtenerUltimaEjecucionDuplicadoActivity", null);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.NoReutilizada(MotivosReutilizacion.ClaveDistinta, modoEstricto: true));
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "nota.simple",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().NotBe("DUPLICADO");
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeFalse();
+        salida.DetalleEjecucion.MotivoNoReutilizacion.Should().Be("clave-distinta");
+        context.GetActivityCallCount("SubirBlobActivity").Should().Be(1, "sin historica compatible el documento se procesa");
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistido.Should().NotBeNull();
+        persistido!.Reutilizacion.Should().BeNull();
+        persistido.Salida.DetalleEjecucion.MotivoNoReutilizacion.Should().Be("clave-distinta");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ModoEstrictoDesactivado_SinHistorica_DevuelveDuplicadoVacioComoAntes()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(expectedType: "nota.simple"));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba(classificationOnly: false));
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.NoReutilizada(null, modoEstricto: false));
+
         var salida = await orchestrator.RunOrchestrator(context);
 
         salida.Resultado.Estado.Should().Be("DUPLICADO");
         salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        salida.DetalleEjecucion.ClaveIntencion.Should().Be(ClaveDePrueba(false).Clave, "la clave se persiste en ambos modos");
         context.GetLastActivityInput<object>("SubirBlobActivity").Should().BeNull();
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_DuplicadoPorMd5Gdc_SinHistoricaCompatible_DescargaYContinua()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(objectIdGdc: "obj-1"));
+
+        context.SetupActivity("ObtenerMetadatosDocumentoGDCActivity", new GdcDocumentoMetadatos { MD5 = "md5-1" });
+        context.SetupActivity("VerificarDuplicadoPorMD5Activity", new VerificarDuplicadoMd5Result { Existe = true, SHA256 = "sha-1" });
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba(classificationOnly: false));
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.NoReutilizada(MotivosReutilizacion.PaginasInsuficientes, modoEstricto: true));
+        context.SetupActivity("ObtenerDocumentoGDCActivity", new ObtenerDocumentoGDCResult { BlobPath = "gdc/doc.pdf", PreComputedSHA256 = "sha-1" });
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerDocumentoGDCActivity").Should().Be(1);
+        salida.DetalleEjecucion.MotivoNoReutilizacion.Should().Be("paginas-insuficientes");
+        salida.Resultado.Estado.Should().NotBe("DUPLICADO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_SinDuplicado_PersisteLaClaveIgualmente()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.ClaveIntencion.Should().Be(ClaveDePrueba().Clave);
+        salida.DetalleEjecucion.ClaveIntencionComponentes.Should().NotBeNull();
+        salida.DetalleEjecucion.MotivoNoReutilizacion.Should().BeNull();
+        context.GetLastActivityInput<Instrucciones>("CalcularClaveIntencionActivity").Should().NotBeNull();
     }
 
     // AB#100258: la reutilizacion deja traza propia. Sin esto la peticion no existe para
@@ -516,7 +607,8 @@ public class DocumentProcessOrchestratorTests
         // Identificacion.Guid es el guid del DOCUMENTO; el de la ejecucion reutilizada lo
         // trae la actividad en DetalleEjecucion.EjecucionOriginalGuid. Son distintos a
         // proposito: el orquestador tiene que propagar el segundo, no el primero.
-        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(new ContratoSalida
         {
             Identificacion = new Identificacion { Guid = "guid-del-documento", Tipologia = "inli.13" },
             Resultado = new ResultadoFinal { Estado = "OK" },
@@ -526,7 +618,7 @@ public class DocumentProcessOrchestratorTests
                 OperationId = "operacion-vieja",
                 EjecucionOriginalGuid = "guid-ejecucion-original"
             }
-        });
+        }, modoEstricto: true));
 
         await orchestrator.RunOrchestrator(context);
 
@@ -550,7 +642,8 @@ public class DocumentProcessOrchestratorTests
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", true);
-        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(new ContratoSalida
         {
             Identificacion = new Identificacion { Guid = "guid-contrato-original" },
             Resultado = new ResultadoFinal { Estado = "OK" },
@@ -571,7 +664,7 @@ public class DocumentProcessOrchestratorTests
                     ]
                 }
             }
-        });
+        }, modoEstricto: true));
 
         await orchestrator.RunOrchestrator(context);
 
@@ -602,7 +695,8 @@ public class DocumentProcessOrchestratorTests
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", true);
-        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(new ContratoSalida
         {
             Identificacion = new Identificacion { Guid = "guid-del-documento" },
             Resultado = new ResultadoFinal { Estado = "OK" },
@@ -611,7 +705,7 @@ public class DocumentProcessOrchestratorTests
                 InstanceId = "instancia-vieja",
                 EjecucionOriginalGuid = "guid-ejecucion-original"
             }
-        });
+        }, modoEstricto: true));
 
         var salida = await orchestrator.RunOrchestrator(context);
 
@@ -628,10 +722,11 @@ public class DocumentProcessOrchestratorTests
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", true);
-        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", new ContratoSalida
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(new ContratoSalida
         {
             Resultado = new ResultadoFinal { Estado = "OK" }
-        });
+        }, modoEstricto: true));
         context.SetupActivityThrow("PersistirActivity", new Exception("BD caida"));
 
         var salida = await orchestrator.RunOrchestrator(context);
@@ -3095,7 +3190,9 @@ public class DocumentProcessOrchestratorTests
 
         context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
         context.SetupActivity("VerificarDuplicadoActivity", true);
-        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", (ContratoSalida?)null);
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba(classificationOnly: false));
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.NoReutilizada(null, modoEstricto: false));
 
         var salida = await orchestrator.RunOrchestrator(context);
 
@@ -3103,6 +3200,49 @@ public class DocumentProcessOrchestratorTests
         context.GetActivityCallCount("PersistirActivity").Should().Be(1);
         var persistirInput = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
         persistirInput!.Salida.Resultado.Estado.Should().Be("DUPLICADO");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ModoLegadoConHistoricaFallida_ReprocesaEnVezDeDuplicadoVacio()
+    {
+        // AB#100956: un reintento de un documento cuya historica termino en ERROR reprocesa
+        // tambien con Dedup:ModoEstricto=false; ni DUPLICADO vacio ni el ERROR servido.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada();
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba(classificationOnly: false));
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.NoReutilizada(MotivosReutilizacion.HistoricaFallida, modoEstricto: false));
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0,
+            TipologiaDetectada = "nota.simple"
+        });
+        context.SetupActivity("ResolverTipologiaActivity", new ResolvedTipologia(
+            RequestedValue: "nota.simple",
+            TipologiaId: "Desconocido",
+            Version: "N/A",
+            TechnicalKey: "Desconocido",
+            IsDefault: true,
+            SkipGDCUpload: true,
+            PromptEnabled: false,
+            ExtractionEnabled: false));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().NotBe("DUPLICADO");
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeFalse();
+        salida.DetalleEjecucion.MotivoNoReutilizacion.Should().Be("historica-fallida");
+        context.GetActivityCallCount("SubirBlobActivity").Should().Be(1, "con la historica fallida el documento se procesa");
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistido.Should().NotBeNull();
+        persistido!.Reutilizacion.Should().BeNull();
+        persistido.Salida.DetalleEjecucion.MotivoNoReutilizacion.Should().Be("historica-fallida");
     }
 
     [Fact]
@@ -4779,5 +4919,182 @@ public class DocumentProcessOrchestratorTests
         input!.Texto.Should().StartWith("a b x");
         input.Texto!.Length.Should().Be(EmbeddingsClasificadorConfig.MaxCharsPorDefecto);
         input.Texto.Should().NotContain("\n");
+    }
+
+    private static ContratoSalida HistoricaSoloClasificacion(bool conResumen)
+    {
+        var h = new ContratoSalida
+        {
+            Identificacion = new Identificacion { Tipologia = "tasacion", Documento = "doc.pdf" },
+            Resultado = new ResultadoFinal { Estado = "OK" },
+            DetalleEjecucion = new DetalleEjecucion { ClassificationOnly = true, MotivoReutilizacion = MotivosReutilizacion.ClaveIgual, EjecucionOriginalGuid = "guid-orig" }
+        };
+        if (conResumen) h.DatosExtraidos["Resumen"] = "ya tenia resumen";
+        return h;
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Reutilizacion_PideResumenYLaHistoricaNoLoTiene_EjecutaPromptSobreMarkdownDeBd()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: true, forzarResumenPorDefecto: true);
+        // El orquestador anula Costes del contrato devuelto si no se piden; aqui se inspeccionan.
+        entrada.Instrucciones.IncluirCostes = true;
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(HistoricaSoloClasificacion(conResumen: false), true));
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Markdown = "# doc", Paginas = 3, Completo = false, Fuente = FuenteMarkdown.BaseDatos });
+        context.SetupActivity("PromptActivity", new PromptResultado
+        {
+            Modelo = "gpt-4o-mini",
+            Resumen = "resumen nuevo",
+            TiempoMs = 500,
+            Consumos = new List<ConsumoIA> { new() { Actividad = ActividadesIA.Prompt, Modelo = "gpt-4o-mini", TokensEntrada = 100, TokensSalida = 20, CosteEur = 0.001m } }
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        salida.DatosExtraidos["Resumen"].Should().Be("resumen nuevo");
+        salida.DetalleEjecucion.Prompt!.Omitido.Should().BeNull();
+        var markdownInput = context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity")!;
+        markdownInput.Contexto.SoloPersistido.Should().BeTrue();
+        markdownInput.Necesidad.DocumentoCompleto.Should().BeFalse();
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity")!;
+        persistido.Reutilizacion!.Completada.Should().BeTrue();
+        persistido.Salida.DetalleEjecucion.Costes!.ReutilizadaPorDuplicado.Should().BeTrue();
+        persistido.Salida.DetalleEjecucion.Costes.CosteTotalEur.Should().Be(0.001m);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Reutilizacion_MarkdownNoCubre_NoEjecutaPromptYMarcaOmitido()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true, forzarResumenPorDefecto: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(HistoricaSoloClasificacion(conResumen: false), true));
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown
+        {
+            Fuente = FuenteMarkdown.Ninguna,
+            CausaSinContenido = new CausaSinContenido { Motivo = MotivoSinContenido.SinFuente, Detalle = "markdown-insuficiente" }
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        salida.DatosExtraidos.Should().NotContainKey("Resumen");
+        salida.DetalleEjecucion.Prompt!.Omitido.Should().Be("markdown-insuficiente");
+        salida.DetalleEjecucion.MotivoNoReutilizacion.Should().BeNull();
+        context.GetActivityCallCount("PromptActivity").Should().Be(0);
+        context.GetActivityCallCount("SubirBlobActivity").Should().Be(0, "no se reprocesa el documento por un prompt");
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Reutilizacion!.Completada.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Reutilizacion_HistoricaYaTieneResumen_NoEjecutaNada()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada(classificationOnly: true, forzarResumenPorDefecto: true));
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(HistoricaSoloClasificacion(conResumen: true), true));
+
+        await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("ObtenerMarkdownActivity").Should().Be(0);
+        context.GetActivityCallCount("PromptActivity").Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Reutilizacion_ModoCompletoTdn1SinResumen_EjecutaPromptSoloResumen()
+    {
+        // El flujo normal fuerza el resumen por defecto con nivel TDN1 sin mirar ClassificationOnly
+        // (forzarResumenDedicado); la reutilizacion aplica el mismo criterio.
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: false, forzarResumenPorDefecto: false);
+        entrada.Instrucciones.Classification.NivelClasificacion = ClassificationLevelResolver.LevelTdn1;
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var historica = HistoricaSoloClasificacion(conResumen: false);
+        historica.DetalleEjecucion.ClassificationOnly = false;
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity",
+            ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(historica, true));
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Markdown = "# doc", Paginas = 3, Completo = false, Fuente = FuenteMarkdown.BaseDatos });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-4o-mini", Resumen = "resumen nuevo", TiempoMs = 500 });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.ReutilizadaPorDuplicado.Should().BeTrue();
+        salida.DatosExtraidos["Resumen"].Should().Be("resumen nuevo");
+        context.GetActivityCallCount("PromptActivity").Should().Be(1);
+        context.GetLastActivityInput<PromptActivityInput>("PromptActivity")!.ForzarResumenPorDefecto.Should().BeTrue();
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity")!.Reutilizacion!.Completada.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Reutilizacion_PromptAdHocYaEjecutadoConLaMismaPlantilla_NoSeRepite()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: true);
+        entrada.Instrucciones.Prompt = new PromptInstrucciones { SystemPrompt = "s", UserPromptTemplate = "u {{CONTENT}}" };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var historica = HistoricaSoloClasificacion(conResumen: true);
+        historica.DatosExtraidos["ResultadoPrompt"] = "respuesta previa";
+        historica.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion
+        {
+            Modelo = "gpt-4o-mini",
+            PlantillaHash = PromptPlantillaHash.Calcular(entrada.Instrucciones.Prompt)
+        };
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(historica, true));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetActivityCallCount("PromptActivity").Should().Be(0);
+        salida.DatosExtraidos["ResultadoPrompt"].Should().Be("respuesta previa");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_Reutilizacion_PromptAdHocDistinto_SeEjecutaConDocumentoCompleto()
+    {
+        var orchestrator = CreateOrchestrator();
+        var entrada = BuildEntrada(classificationOnly: true);
+        entrada.Instrucciones.Prompt = new PromptInstrucciones { SystemPrompt = "s", UserPromptTemplate = "otro {{CONTENT}}" };
+        var context = new FakeTaskOrchestrationContext(entrada);
+
+        var historica = HistoricaSoloClasificacion(conResumen: true);
+        historica.DetalleEjecucion.Prompt = new ResultadoPromptEjecucion { Modelo = "gpt-4o-mini", PlantillaHash = "0000000000000000" };
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("CalcularClaveIntencionActivity", ClaveDePrueba());
+        context.SetupActivity("VerificarDuplicadoActivity", true);
+        context.SetupActivity("ObtenerUltimaEjecucionDuplicadoActivity", ObtenerUltimaEjecucionDuplicadoResultado.Reutilizada(historica, true));
+        context.SetupActivity("ObtenerMarkdownActivity", new ResultadoMarkdown { Markdown = "# doc", Paginas = 12, Completo = true, Fuente = FuenteMarkdown.BaseDatos });
+        context.SetupActivity("PromptActivity", new PromptResultado { Modelo = "gpt-4o-mini", Resultado = "respuesta nueva", TiempoMs = 300 });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        context.GetLastActivityInput<ObtenerMarkdownInput>("ObtenerMarkdownActivity")!.Necesidad.DocumentoCompleto.Should().BeTrue();
+        salida.DatosExtraidos["ResultadoPrompt"].Should().Be("respuesta nueva");
+        salida.DetalleEjecucion.Prompt!.PlantillaHash.Should().Be(PromptPlantillaHash.Calcular(entrada.Instrucciones.Prompt));
     }
 }

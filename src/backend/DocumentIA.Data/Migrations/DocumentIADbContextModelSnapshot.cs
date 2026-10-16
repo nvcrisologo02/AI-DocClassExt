@@ -11214,6 +11214,13 @@ namespace DocumentIA.Data.Migrations
                     b.Property<bool>("ClassificationOnly")
                         .HasColumnType("bit");
 
+                    b.Property<string>("ClaveIntencion")
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<string>("ClaveIntencionJson")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<double>("ConfianzaClasificacion")
                         .HasColumnType("float");
 
@@ -11302,6 +11309,10 @@ namespace DocumentIA.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<string>("MotivoReutilizacion")
+                        .HasMaxLength(40)
+                        .HasColumnType("nvarchar(40)");
+
                     b.Property<string>("NivelClasificacion")
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
@@ -11329,7 +11340,8 @@ namespace DocumentIA.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DocumentoId");
+                    b.HasIndex("DocumentoId")
+                        .HasDatabaseName("IX_DocumentoEjecuciones_DocumentoId");
 
                     b.HasIndex("EjecucionGuid")
                         .IsUnique();
@@ -11347,6 +11359,12 @@ namespace DocumentIA.Data.Migrations
 
                     b.HasIndex("IdActivo", "DocumentoId")
                         .HasDatabaseName("IX_DocumentoEjecuciones_IdActivo_DocumentoId");
+
+                    b.HasIndex("DocumentoId", "ClaveIntencion", "FechaEjecucion")
+                        .IsDescending(false, false, true)
+                        .HasDatabaseName("IX_DocumentoEjecuciones_Documento_Clave");
+
+                    SqlServerIndexBuilderExtensions.IncludeProperties(b.HasIndex("DocumentoId", "ClaveIntencion", "FechaEjecucion"), new[] { "EjecucionGuid", "Tipologia", "EstadoFinal", "ReutilizadaPorDuplicado" });
 
                     b.ToTable("DocumentoEjecuciones");
                 });
