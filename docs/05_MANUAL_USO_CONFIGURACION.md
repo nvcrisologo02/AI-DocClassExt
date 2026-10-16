@@ -642,7 +642,7 @@ La retencion del blob se usa como almacenamiento temporal. La fuente de verdad d
 Reglas de resolucion:
 
 1. Si la tipologia define `retentionPolicy.blobRetentionDays`, ese valor tiene prioridad.
-2. Si no lo define, se usa `BlobRetention:DefaultDays` de `appsettings.json`.
+2. Si no lo define, se usa el app setting `BlobRetention__DefaultDays` de la Function App.
 3. Si el valor final es `-1` (o no hay valor), no se programa expiracion (`FechaExpiracionBlob = null`).
 
 Configuracion por tipologia (en `ConfiguracionJson`):
@@ -657,15 +657,15 @@ Configuracion por tipologia (en `ConfiguracionJson`):
 }
 ```
 
-Configuracion global en Functions (`appsettings.json`):
+Configuracion global en Functions (app settings de la Function App):
 
-```json
-"BlobRetention": {
-  "DefaultDays": 2,
-  "CleanupCron": "0 0 3 * * *",
-  "BatchSize": 200
-}
-```
+| App setting | Valor | Uso |
+|---|---|---|
+| `BlobRetentionCleanupCron` | `0 0 3 * * *` | Cron del `BlobCleanupTimerTrigger`. Sin el setting el host no indexa el trigger y no hay limpieza. |
+| `BlobRetention__DefaultDays` | `2` | Dias de retencion por defecto. Sin el setting, `PersistirActivity` no pone `FechaExpiracionBlob` y nada caduca. |
+| `BlobRetention__BatchSize` | DEV y PRE `2000`, PRO `5000` | Documentos por ciclo. Sin el setting, el codigo usa 200. |
+
+`appsettings.json` de Functions no se carga en Azure: estos valores solo existen como app settings. Los crean los pipelines 802 y 799 (AB#100983) con `ensure-app-settings.ps1`, que no pisa un valor existente, y el contrato `scripts/config/azure-appsettings-contract.json` los exige.
 
 Comportamiento de limpieza:
 
@@ -676,15 +676,14 @@ Comportamiento de limpieza:
 
 ### Migración de datos legacy en SQL Server
 
-Para incluir histórico en la limpieza automática de blobs se incluye script idempotente:
-
-- `scripts/migrations/backfill-documentos-fecha-expiracion-blob-2-dias.sql`
+Para incluir histórico en la limpieza automática de blobs se usa el backfill por lotes `scripts/database/backfill-fecha-expiracion-blob.ps1` (marca de agua sobre `Id`, reanudable). El SQL `scripts/migrations/backfill-documentos-fecha-expiracion-blob-2-dias.sql` hace un único UPDATE en transacción y no es apto para bases S0.
 
 Uso recomendado:
 
-1. Desplegar backend con `BlobRetention:DefaultDays = 2`.
-2. Ejecutar script sobre la base objetivo.
-3. Verificar la salida del script (`RowsUpdated`, `RetentionDaysApplied`, `ExecutedAtUtc`).
+1. Desplegar con `BlobRetention__DefaultDays = 2` en la Function App.
+2. Ejecutar el script con `-CountOnly` y revisar el número de candidatos.
+3. Ejecutar el backfill real por lotes. `-HastaFechaUtc` se pasa sin sufijo `Z`: con `Z`, PowerShell la convierte a hora local y el corte se desplaza.
+4. Comprobar que no quedan documentos con blob y sin `FechaExpiracionBlob`, y el siguiente ciclo `BlobCleanupCycle` en App Insights.
 
 Detalles del backfill:
 
