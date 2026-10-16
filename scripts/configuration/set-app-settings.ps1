@@ -64,6 +64,7 @@ az functionapp config appsettings set `
         "AssetResolver__ApiKey=@Microsoft.KeyVault(VaultName=$keyVaultName;SecretName=AssetResolverApiKey)" `
         "RunDatabaseMigrationsOnStartup=false" `
         "BlobRetention__DefaultDays=2" `
+        "BlobRetention__BatchSize=5000" `
         "BlobRetentionCleanupCron=0 0 3 * * *" `
     --output none
 
