@@ -1,6 +1,8 @@
 # Release v1.1.0
 
-Fecha: pendiente (ventana por fijar) · Tag: v1.1.0 · Commit candidato: `636c680` (`origin/develop`, 2026-10-16; antes `8ad5b1e` y `290ad6b`) · Tag anterior: `v1.0.0` (`333a9cf`, código de `17889bb`) · Entorno: PRO
+Fecha: pendiente (ventana por fijar) · Tag: v1.1.0 · Commit candidato: `81ef03c` (`develop`, 2026-10-16, pendiente de push; antes `636c680`, `8ad5b1e` y `290ad6b`) · Tag anterior: `v1.0.0` (`333a9cf`, código de `17889bb`) · Entorno: PRO
+
+**Candidato reabierto de nuevo el 2026-10-16 en `81ef03c`** (decisión del usuario): el Go de `636c680` queda sustituido para incluir el Bug AB#100983 (tasks AB#100984 y AB#100985). Los pipelines 802 y 799 aseguran `BlobRetentionCleanupCron`, `BlobRetention__DefaultDays` y `BlobRetention__BatchSize`, y el 799 también `DOTNET_GCHeapHardLimitPercent`. El contrato de settings los exige y un test unitario lo vigila. Sin cambios de código de aplicación, migraciones ni Admin. En PRO no cambia ningún valor: los settings ya existen y `ensure-app-settings.ps1` no los pisa; el 799 de la Fase 4 los validará. Validado en DEV desde la rama (802 run 79800, `f6568c7`, mismo árbol que `81ef03c`), con el backfill de DEV hecho (7.272 filas). Se repiten las Fases 1 a 3 sobre `81ef03c` cuando se suba `develop`; golden conservada y coste N/A con el mismo motivo.
 
 **Candidato reabierto el 2026-10-16 en `636c680`** (decisión del usuario): el candidato `8ad5b1e`
 aprobado el 2026-10-15 no llegó a PRO (sin tag, PRO sigue en v1.0.0) y la release se rehace
@@ -105,6 +107,7 @@ resultado; en la release siguiente se retira el interruptor `Dedup__ModoEstricto
   AB#100941, Done; PBI en Committed hasta el cierre de la release).
 - AB#100956 (task del Bug AB#100955): las históricas en estado de fallo no se reutilizan y el
   reenvío reprocesa (`7b6cb80`).
+- AB#100983 [Bug] Retención de blobs fuera de los pipelines: DEV y PRE sin limpieza y el trigger no indexa (tasks AB#100984 y AB#100985; añadido el 2026-10-16).
 - AB#100968 [API] GET de markdown persistido por sha256 o guid de ejecución (task AB#100971,
   validación en DEV; añadido al reabrir el candidato el 2026-10-16).
 
@@ -146,6 +149,7 @@ resultado; en la release siguiente se retira el interruptor `Dedup__ModoEstricto
   `03be249`), D+1 de v1.0.0 (AB#100881, `e442b68`) y cierre de v1.0.0 (`aade2b7`, `712c522`).
 
 ### Configuración
+- `f6568c7` y `81ef03c`: settings de retención de blobs y `DOTNET_GCHeapHardLimitPercent` desde los pipelines 802 y 799, contrato de settings y manual de configuración (AB#100983).
 - Migración `ClaveIntencionDedup` y script ONLINE (arriba).
 - App setting `Dedup__ModoEstricto=true` (arriba). Sin secretos nuevos.
 - Contrato de salida: campos nuevos `detalleEjecucion.claveIntencion`,
