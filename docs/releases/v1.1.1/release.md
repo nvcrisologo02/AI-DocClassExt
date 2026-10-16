@@ -8,7 +8,7 @@ PATCH: un único fix de la reutilización por duplicado (AB#100988), encontrado 
 
 Build: `dotnet build src/backend/DocumentIA.sln` → 0 advertencias, 0 errores · Tests unitarios: 1535/1535 · Tests Admin: 154/154 · Tests AssetResolver: 14/14 · Formato: ok (2026-10-16 ~22:55Z, sobre `45fab3a`, mismo árbol de código que `40b6c71`)
 Pester del runner E2E (esquema del juego DUP incluido): 128/128
-E2E DEV: smoke pendiente, juego DUP pendiente (DUP-12 nuevo) · E2E PRE: smoke pendiente · E2E PRO: smoke pendiente
+E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run completo; DUP-12 1/1 tras corregir su documento) · E2E PRE: smoke pendiente · E2E PRO: smoke pendiente
 
 ## Contenido de la release
 
@@ -56,6 +56,6 @@ Go: <fecha> · <nombre>
 
 | Pipeline | Entorno | Run | Resultado |
 |---|---|---|---|
-| 802 Functions | dev | | |
+| 802 Functions | dev | 79818 (`b7b62e7`, código `40b6c71`) | succeeded |
 | 802 Functions | pre | | |
 | 802 Functions | prod | | |

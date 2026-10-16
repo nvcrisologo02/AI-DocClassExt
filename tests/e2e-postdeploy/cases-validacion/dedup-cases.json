@@ -401,7 +401,7 @@
     "caseKey": "DUP-12", "group": "DUP", "id": "12", "domain": "validacion",
     "name": "Pipeline completo con tipologia de extraccion desactivada y modelKey relleno reutiliza",
     "covers": ["DUP-12"],
-    "documentPath": "tests/e2e-postdeploy/corpus/control/documento-12-paginas-marcado.pdf",
+    "documentPath": "tests/e2e-postdeploy/corpus/tasacion/tasacion-sintetica.pdf",
     "submittedBy": "e2e-validacion-dedup",
     "seed": {
       "request": {

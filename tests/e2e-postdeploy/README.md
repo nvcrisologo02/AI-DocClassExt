@@ -201,7 +201,11 @@ Juego de pruebas aparte para las invariantes DUP-01..DUP-12 (`Area: Dedup` de
   `modelKey` relleno, igual en DEV y PRO). La histórica no lleva
   `ModelKeyEfectivo` y el reenvío debe reutilizarla con `clave-igual`; hasta
   v1.1.0 reprocesaba con `modelo-extraccion-distinto`. Depende de que `nots.01`
-  siga con la extracción desactivada en el entorno.
+  siga con la extracción desactivada en el entorno. Usa
+  `corpus/tasacion/tasacion-sintetica.pdf` (2 páginas, como el caso de PRO): con
+  `expectedType` y sin extracción no se obtiene markdown, y un documento más largo
+  que el recorte de clasificación caería en `paginas-insuficientes`, que en
+  pipeline completo exige cobertura completa.
 
 Misma mecánica que el juego de markdown (siembra → pasadas → aserciones →
 limpieza por SHA256, mismos parámetros `-Environment`, `-WhatIf`,
