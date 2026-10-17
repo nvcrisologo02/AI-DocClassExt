@@ -1,0 +1,48 @@
+
+=== Volumen de la ventana ===
+
+Filas  IdMin  IdMax
+-----  -----  -----
+ 1840 137637 139476
+
+
+(0.1 s)
+
+=== Criterio de exito AB#100930: reutilizaciones con clave distinta (debe ser 0) ===
+
+Reutilizaciones ConClaveDistinta SinOriginal
+--------------- ---------------- -----------
+              3                0           0
+
+
+(0.1 s)
+
+=== Motivos por modo y extraccion (desde v1.1.0; Fix = desde v1.1.1) ===
+
+Modo        ExtEnabled Motivo                     Filas FilasFix
+----        ---------- ------                     ----- --------
+completo    false      (null)                         4        2
+completo    false      modelo-extraccion-distinto     1        0
+completo    false      clave-igual                    1        1
+completo    true       (null)                         2        1
+solo-clasif ?          (null)                      1191     1190
+solo-clasif ?          historica-fallida              1        1
+solo-clasif ?          clave-igual                    1        0
+solo-clasif false      (null)                       649      648
+solo-clasif false      clave-igual                    1        1
+solo-clasif false      clave-distinta                 1        0
+solo-clasif true       (null)                         8        8
+
+
+(194 s)
+
+=== Hueco: paginas-insuficientes por tipologia (paginas del documento y si su markdown era completo) ===
+(sin filas)
+(0.3 s)
+
+EstadoFinal Filas Ultima
+----------- ----- ------
+OK           1862 17/10/2026 15:48:41
+ERROR           2 17/10/2026 0:05:31
+
+

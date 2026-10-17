@@ -1,0 +1,61 @@
+=== Hosts de IA por target (14:00-15:00Z)
+target | resultCode | llamadas | no_ok
+srbdiprodocai.cognitiveservices.azure.com | 200 | 1285 | 0
+srbdiprodocai.cognitiveservices.azure.com | 202 | 188 | 0
+upe48-mm2avmdm-swedencentral.openai.azure.com | 200 | 344 | 0
+=== Circuito CU y failovers por hora desde 11:00Z
+name | timestamp | count_
+(sin filas)
+=== Fallos de requests por hora desde 11:00Z (tendencia)
+timestamp | total | fallos | tasa
+2026-10-17T11:00:00Z | 5141 | 0 | 0
+2026-10-17T12:00:00Z | 9373 | 0 | 0
+2026-10-17T13:00:00Z | 9246 | 0 | 0
+2026-10-17T14:00:00Z | 9617 | 1 | 0.01
+2026-10-17T15:00:00Z | 9569 | 0 | 0
+2026-10-17T16:00:00Z | 3953 | 0 | 0
+=== Tasa de fallo por función (14:00-15:00Z)
+name | total | fallos | tasa_fallo
+ClasificarActivity | 453 | 1 | 0.22
+ObtenerMarkdownActivity | 451 | 0 | 0
+DocumentProcessOrchestrator | 4601 | 0 | 0
+NormalizarActivity | 451 | 0 | 0
+VerificarDuplicadoActivity | 451 | 0 | 0
+SubirBlobActivity | 451 | 0 | 0
+PrepararDocumentoClasificacionActivity | 451 | 0 | 0
+ClasificarEmbeddingsActivity | 453 | 0 | 0
+ResolverTipologiaActivity | 95 | 0 | 0
+PersistirActivity | 443 | 0 | 0
+IngestDocument | 451 | 0 | 0
+CalcularClaveIntencionActivity | 451 | 0 | 0
+Admin_GetUltimasEjecuciones | 120 | 0 | 0
+PostHealthcheck | 120 | 0 | 0
+Admin_GetAgregados | 120 | 0 | 0
+GET Ping/Ping | 55 | 0 | 0
+=== Fallos con código (14:00-15:00Z)
+name | resultCode | n
+ClasificarActivity | 0 | 1
+=== Excepciones (14:00-15:00Z)
+type | msg | operation_Name | n
+DurableTask.Core.Exceptions.TaskFailedException | Task 'ClasificarActivity' (#7) failed with an unhandled exception: The operation was canceled. |  | 1
+=== Private Bytes por proceso e instancia desde 11:00Z (MiB)
+cloud_RoleInstance | proc | max_MiB | p95_MiB
+f5105a099b0b | worker | 554 | 470
+f5105a099b0b | host pid 82 | 446 | 433
+ea74e971a0a7 | worker | 277 | 277
+=== p50/p95 de ObtenerUltimaEjecucionDuplicadoActivity desde 11:00Z (s)
+n | p50_s | p95_s
+0 | None | None
+=== BlobCleanupCycle en PRO
+timestamp | inst | customMeasurements
+2026-10-17T03:14:01.9897095Z | f5105a099b0b | {"blobs_error":0,"blobs_eliminados":5000,"blobs_procesados":5000,"blobs_no_encontrados":0,"bytes_liberados":6717355960}
+=== Ejecución del trigger en PRO
+timestamp | success | duracion_s
+2026-10-17T03:00:00.0250834Z | True | 842
+=== p50/p95 de ObtenerUltimaEjecucionDuplicadoActivity desde 4.4 de v1.1.0 (s)
+n | p50_s | p95_s | max_s
+0 | None | None | None
+=== Requests con Duplicado o Ultima desde v1.1.0
+name | n | p50_s | p95_s | max_s
+Admin_GetUltimasEjecuciones | 1244 | 0.017 | 0.043 | 10.588
+ObtenerUltimaEjecucionDuplicadoActivity | 6 | 0.045 | 0.195 | 0.195

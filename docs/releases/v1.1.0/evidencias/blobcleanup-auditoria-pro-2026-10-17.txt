@@ -1,0 +1,24 @@
+
+=== Tramo leido (MinFecha debe ser anterior a 2026-10-17 03:00) ===
+
+Filas MinFecha            MaxFecha
+----- --------            --------
+30000 14/10/2026 14:58:54 17/10/2026 15:49:41
+
+
+
+=== Acciones de limpieza desde 2026-10-17 02:55Z ===
+
+Accion        Nivel Filas Primera            Ultima
+------        ----- ----- -------            ------
+BlobEliminado Info   5000 17/10/2026 3:06:12 17/10/2026 3:14:01
+
+
+
+=== Bytes liberados (Documentos de las filas BlobEliminado) ===
+
+Docs      Bytes
+----      -----
+5000 6717355960
+
+
