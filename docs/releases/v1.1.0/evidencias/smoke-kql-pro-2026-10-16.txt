@@ -1,0 +1,15 @@
+Smoke PRO v1.1.0 (4.6) - 2026-10-16
+Run: tests/e2e-postdeploy/artifacts/20261016-220203-pro-smoke (20:02:03Z-20:04:05Z), 6/6 PASS, lanzado por el usuario.
+Despliegue: 799 run 79817 sobre develop efa094d (codigo 81ef03c).
+KQL App Insights srbappiprodocai (19eeb2fb-8544-41c5-931a-b0983a26e92e), ventana 20:01:30Z-20:10:00Z:
+
+Dependencias externas por target (n / fallos / 401-403):
+  srbdiprodocai.cognitiveservices.azure.com            24 / 0 / 0
+  srbaisrv-westeurope.services.ai.azure.com             8 / 0 / 0
+  upe48-mm2avmdm-swedencentral.openai.azure.com         6 / 0 / 0
+  srbwebpluginassetresolver.azurewebsites.net           2 / 0 / 0
+  srbwidp05.sareb.srb:8090                              1 / 0 / 0
+  DefaultAzureCredential.GetToken 30, ManagedIdentityCredential.GetToken 1, blob 12: 0 fallos
+Requests: 0 fallos (49 DocumentProcessOrchestrator, 5 IngestDocument, 4 CalcularClaveIntencionActivity, 4 PersistirActivity, ...).
+Excepciones: 0. Eventos CU.*: 0. Eventos: Prompt.Trace 5, DocumentProcessed 4, Classification.HybridTDN 1.
+Arranque del host tras el 799 (19:50Z-19:51Z): 0 excepciones, sin "Error indexing"; BlobCleanupTimerTrigger programado 2026-10-17 03:00:00Z.

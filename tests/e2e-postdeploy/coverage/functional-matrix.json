@@ -52,5 +52,6 @@
   { "id": "DUP-08", "area": "Dedup", "descripcion": "Pipeline completo y despues solo clasificacion no reutiliza" },
   { "id": "DUP-09", "area": "Dedup", "descripcion": "Misma clave reutiliza y completa el prompt ad hoc que la historica no tenia sobre el markdown historico; la fila de reutilizacion lleva contrato y coste del prompt" },
   { "id": "DUP-10", "area": "Dedup", "descripcion": "Misma clave con mas paginas pedidas que las procesadas reprocesa con motivo paginas-insuficientes" },
-  { "id": "DUP-11", "area": "Dedup", "descripcion": "Una historica en estado de fallo no se reutiliza: el reenvio sin forceReprocess reprocesa con motivo historica-fallida" }
+  { "id": "DUP-11", "area": "Dedup", "descripcion": "Una historica en estado de fallo no se reutiliza: el reenvio sin forceReprocess reprocesa con motivo historica-fallida" },
+  { "id": "DUP-12", "area": "Dedup", "descripcion": "En pipeline completo, una tipologia con la extraccion desactivada y modelKey relleno reutiliza la historica (AB#100988)" }
 ]

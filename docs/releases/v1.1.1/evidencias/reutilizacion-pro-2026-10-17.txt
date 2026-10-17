@@ -1,0 +1,14 @@
+Validacion del fix AB#100988 en PRO tras el 802 run 79820 (2026-10-17), consulta de solo lectura sobre DocumentoEjecuciones (FechaEjecucion >= 00:03:30Z).
+P1 (137649): RP1 de v1.1.0, nota-simple-sintetica.pdf (Documento 22228, nots.01 con extraction.enabled=false y modelKey), pipeline completo sin force: reutiliza 137645 (la de S-S1 del smoke 4.6). Artefactos 20261017-020404-pro-smoke 2/2 PASS.
+P2 (137650): documento real de PRO por blobPath (Documento 136988, nots.02, 3 paginas, original 137624 de DocumentIA.Batch.ClassificationLite), solo clasificacion sin force: reutiliza 137624. Instancia 3c4f3c7f75b7430d9c08ed252dfbd34d.
+P3 (137651): documento real por blobPath (Documento 136978, original 137614 en ERROR), misma intencion sin force: no reutiliza (historica-fallida, AB#100955) y reprocesa; vuelve a cerrar en ERROR. Instancia 24101186d05349f79dd2a49286d6b10d.
+Script de P2/P3: docs/auxiliares/temps/2026-10-17/reutilizacion-pro/probar-reutilizacion-blobpath.ps1. Lanzados por el usuario.
+
+
+    Id Fecha               DocumentoId EstadoFinal  Reut Motivo            OrigId EstadoOrig Clave
+    -- -----               ----------- -----------  ---- ------            ------ ---------- -----
+137649 2026-10-17 00:04:06       22228 OK           True clave-igual       137645 OK         igual
+137650 2026-10-17 00:05:20      136988 OK           True clave-igual       137624 OK         igual
+137651 2026-10-17 00:05:31      136978 ERROR       False historica-fallida                   
+
+

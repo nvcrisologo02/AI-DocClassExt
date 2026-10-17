@@ -26,5 +26,7 @@ Cómo regenerar la plantilla: `_plantilla/runbook.md` no se edita a mano; tras c
 
 | Versión | Fecha | Commit | Work items | Registro |
 |---|---|---|---|---|
+| v1.1.1 | 2026-10-17 | registro de la release sobre `develop` (código de `40b6c71`) | AB#100988 (reutilización en modo completo con extracción desactivada; Task AB#100989) | [v1.1.1/release.md](v1.1.1/release.md), [runbook.md](v1.1.1/runbook.md); tag `v1.1.1` |
+| v1.1.0 | 2026-10-16 | `efa094d` (código de `81ef03c`) | AB#100930 (dedup con clave de intención; cierre tras el criterio de éxito de 4.9), AB#100955, AB#100968 (GET de markdown), AB#100983 (retención de blobs desde los pipelines) | [v1.1.0/release.md](v1.1.0/release.md), [runbook.md](v1.1.0/runbook.md); tag `v1.1.0` |
 | v1.0.0 | 2026-10-08 | `333a9cf` (código de `17889bb`) | AB#100814, AB#100880, AB#100879, AB#100863, AB#100321 (Steps 1 y 2 ampliados a identidad), AB#100868, AB#100779 en `off`; backfill AB#100881 en D+1 | [v1.0.0/release.md](v1.0.0/release.md), [runbook.md](v1.0.0/runbook.md); tag `v1.0.0` |
 | (histórico) | 2026-09-20 | `fe1533f` | ver `docs/procedimientos/RUNBOOK_RELEASE_PRO_2026-09.md` | tag `deploy-pro-2026-09-20` |
