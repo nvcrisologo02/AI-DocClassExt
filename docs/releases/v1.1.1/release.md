@@ -1,6 +1,6 @@
 # Release v1.1.1
 
-Fecha: pendiente · Tag: v1.1.1 · Commit: `40b6c71` (código candidato; `develop` puede llevar encima solo commits de documentación y del juego E2E de esta release) · Tag anterior: v1.1.0 (`efa094d`) · Entorno: PRO
+Fecha: 2026-10-17 · Tag: v1.1.1 · Commit: `40b6c71` (código desplegado en PRO con el 802 run 79820; `develop` puede llevar encima solo commits de documentación y del juego E2E de esta release) · Tag anterior: v1.1.0 (`efa094d`) · Entorno: PRO
 
 PATCH: un único fix de la reutilización por duplicado (AB#100988), encontrado en la validación en PRO de v1.1.0.
 
@@ -49,6 +49,10 @@ E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run comple
 | P1 | Pipeline completo, `nots.01` con extracción desactivada (el bug) | 137649 | Reutiliza 137645, `clave-igual` |
 | P2 | Documento real por `blobPath`, solo clasificación | 137650 | Reutiliza 137624, `clave-igual` |
 | P3 | Documento real con histórica en ERROR | 137651 | No reutiliza, `historica-fallida`; reprocesa |
+
+## Cierre
+
+Release dada por finalizada como OK por el usuario el 2026-10-17 ~00:10Z. Pendiente para la siguiente sesión: observación de una hora con tráfico real (4.9) y Private Bytes (4.14), primer ciclo de `BlobCleanupTimerTrigger` (03:00Z) y criterio de éxito de AB#100930 (D+1).
 
 ## Aprobación
 
