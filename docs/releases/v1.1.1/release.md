@@ -8,7 +8,7 @@ PATCH: un único fix de la reutilización por duplicado (AB#100988), encontrado 
 
 Build: `dotnet build src/backend/DocumentIA.sln` → 0 advertencias, 0 errores · Tests unitarios: 1535/1535 · Tests Admin: 154/154 · Tests AssetResolver: 14/14 · Formato: ok (2026-10-16 ~22:55Z, sobre `45fab3a`, mismo árbol de código que `40b6c71`)
 Pester del runner E2E (esquema del juego DUP incluido): 128/128
-E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run completo; DUP-12 1/1 tras corregir su documento) · E2E PRE: smoke 6/6 (802 run 79819) · E2E PRO: smoke pendiente
+E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run completo; DUP-12 1/1 tras corregir su documento) · E2E PRE: smoke 6/6 (802 run 79819) · E2E PRO: smoke 6/6 (802 run 79820)
 
 ## Contenido de la release
 
@@ -40,6 +40,16 @@ E2E DEV: smoke 6/6 (802 run 79818), juego DUP 12/12 (DUP-01..11 en el run comple
 - **Puerta 3 (coste): N/A.** Sin cambios en recursos ni modelos de IA; el efecto esperado es menos coste (menos reprocesos).
 - Drenado de orquestaciones (2.2.6/4.15): no obligatorio. La release no cambia la secuencia de actividades del orquestador; solo el resultado de una actividad.
 
+## Validación del fix en PRO
+
+2026-10-17 00:04Z–00:06Z, tras el 802 run 79820 (`evidencias/reutilizacion-pro-2026-10-17.txt`):
+
+| Prueba | Caso | Fila | Resultado |
+|---|---|---|---|
+| P1 | Pipeline completo, `nots.01` con extracción desactivada (el bug) | 137649 | Reutiliza 137645, `clave-igual` |
+| P2 | Documento real por `blobPath`, solo clasificación | 137650 | Reutiliza 137624, `clave-igual` |
+| P3 | Documento real con histórica en ERROR | 137651 | No reutiliza, `historica-fallida`; reprocesa |
+
 ## Aprobación
 
 | Puerta | Fecha | Resultado | Evidencia |
@@ -58,4 +68,4 @@ Go: **2026-10-16 · Ignacio Varas Crisologo** sobre el candidato `40b6c71` · pu
 |---|---|---|---|
 | 802 Functions | dev | 79818 (`b7b62e7`, código `40b6c71`) | succeeded |
 | 802 Functions | pre | 79819 (`3c0b79f`, código `40b6c71`) | succeeded |
-| 802 Functions | prod | | |
+| 802 Functions | prod | 79820 (`3c0b79f`, código `40b6c71`) | succeeded |
