@@ -47,7 +47,7 @@ septiembre de 2026; no es una vía de promoción.
 Reglas que no se saltan:
 
 - Una versión nueva de analyzer o clasificador lleva **identificador nuevo**; sustituir uno existente (`-Force`) es decisión manual fuera del pipeline.
-- La configuración de BD **no se promociona por `Id`** (regla fija 4 del runbook): el pipeline solo exporta y compara, nunca aplica.
+- La configuración de BD **no se promociona por `Id`** (regla fija 4 del runbook): el pipeline exporta y compara, y solo con `applyMissingConfig` da de alta por clave natural las filas que faltan en el destino. Nunca actualiza ni borra (ADR-004).
 - PRO no cambia de recursos: `apply-deployments.ps1` no corre contra `prod`.
 
 ## 3. Mecanismo estándar: pipeline 832 "AI DocClassExt (AiArtifacts)"
@@ -67,6 +67,7 @@ Parámetros:
 | `releaseTag` | `auto` (= `build-<id>`) | Nombre de los ficheros de config exportados |
 | `runValidation` | `true` | Lanza la validación (cuesta dinero: `analyzeBinary` en los dos lados) |
 | `dryRun` | `false` | Ensayo sin escrituras; **el primer run de cada salto se lanza así** |
+| `applyMissingConfig` | `false` | Altas por clave natural de la config que solo existe en el origen (ADR-004). Con `dryRun` solo genera `altas-config.sql`; sin él añade la etapa ConfigApply |
 
 Etapas: **Guard** (rechaza combinaciones inválidas de parámetros) → **Export**
 (config de la BD del origen, artefacto `db-config`) → **AiArtifacts** (job de
@@ -74,7 +75,11 @@ despliegue sobre el environment del destino: datasets, deployments fuera de
 `prod`, analyzers CU en primaria y secundaria, artefactos DI y validación;
 publica manifiestos e informe en `ai-artifacts-<env>-<intento>`) →
 **ConfigSeed** (export del destino y diff por clave natural, artefacto
-`config-diff`; no aplica nada).
+`config-diff`; con `applyMissingConfig` añade `altas-config.sql` y comprueba los
+App Settings de los alias de `ModeloConfigs`; no escribe) → **ConfigApply** (solo
+con `applyMissingConfig` y sin `dryRun`: aprobación del environment del destino,
+copia `__bak`, altas en una transacción y diff posterior sin altas pendientes;
+artefacto `config-apply-<intento>`).
 
 El pipeline es idempotente: sobre un entorno ya promocionado todo sale
 `present`/`ok`, y un artefacto que existe en destino con otra definición para

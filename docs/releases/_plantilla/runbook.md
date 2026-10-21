@@ -47,7 +47,7 @@ Instancia de docs/procedimientos/RELEASE_MANAGEMENT.md. Marcar cada paso con fec
 ## Fase 4 — PRO
 - [ ] **4.1** Copia de seguridad: `az sql db copy --name DocumentIA --dest-name DocumentIA-prerel-<yyyyMMdd> --server srbsqlprodocai --resource-group SRBRGDOCSAIPROD` y verificación contra el origen con `query-sql.ps1`: número de filas de `Documentos` y `DocumentoEjecuciones` y última fila de `__EFMigrationsHistory` iguales en las dos BD. Anotar en `runbook.md`. — <fecha> · <resultado>
 - [ ] **4.2** Pipeline 807 Migrations-BD con `targetEnvironment=prod` desde el commit candidato. Comprobar en el log del stage Apply que `Pendientes: N` lista las migraciones de 0.5 y que cierra con `Migrations aplicadas y verificadas correctamente`. — <fecha> · <resultado>
-- [ ] **4.3** Configuración en PRO, igual que 2.3.2 a 2.3.4: export previo y diff por clave natural sin `ModeloConfigs`, seeds propios de la release con su copia `__bak` (nunca `config-vX.Y.Z.sql`) y export de referencia `vX.Y.Z-pro` (comandos abajo). — <fecha> · <resultado>
+- [ ] **4.3** Configuración en PRO, igual que 2.3.2 a 2.3.4: export previo y diff por clave natural, seeds propios de la release con su copia `__bak` (nunca `config-vX.Y.Z.sql`) y export de referencia `vX.Y.Z-pro` (comandos abajo). Las filas que solo faltan en PRO pueden ir en su lugar por las altas del pipeline 832 (`applyMissingConfig`, en 4.12); el export de referencia se repite entonces después de 4.12. — <fecha> · <resultado>
 - [ ] **4.4** Pipeline 799 con `targetEnvironment=prod` desde el commit candidato; `ValidateConfiguration` en verde. Anotar ID del run. Pipelines por componente solo en el caso que admite el Anexo A. — <fecha> · <resultado>
 - [ ] **4.5** Reiniciar `srbappprodocai` solo si la release cambió alias o app settings de IA: `az functionapp restart -n srbappprodocai -g SRBRGDOCSAIPROD`. — <fecha> · <resultado>
 - [ ] **4.6** Smoke en PRO: `pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pro -Profile smoke` → 6/6. — <fecha> · <resultado>
@@ -66,7 +66,7 @@ Instancia de docs/procedimientos/RELEASE_MANAGEMENT.md. Marcar cada paso con fec
 - [ ] **5.3** Sincronizar `master` con un merge `--no-ff` del commit desplegado (no hay fast-forward: `master` lleva sus propios merges), confirmado antes con el responsable del repo, y `git push origin master`. — <fecha> · <resultado>
 - [ ] **5.4** Work items de la release a Done en Azure DevOps con un comentario que enlaza `docs/releases/vX.Y.Z/release.md`. — <fecha> · <resultado>
 - [ ] **5.5** Fila nueva en la tabla de `docs/releases/README.md`. — <fecha> · <resultado>
-- [ ] **5.6** Limpiezas diferidas, con fecha prevista escrita en `runbook.md`: borrar `DocumentIA-prerel-<fecha>` tras el periodo de validación (7 días salvo indicación), borrar las tablas `ModeloConfigs__bak_*` de 2.4.5 y 4.3 una vez purgadas sus keys. — <fecha> · <resultado>
+- [ ] **5.6** Limpiezas diferidas, con fecha prevista escrita en `runbook.md`: borrar `DocumentIA-prerel-<fecha>` tras el periodo de validación (7 días salvo indicación), borrar las tablas `ModeloConfigs__bak_*` de 2.4.5 y 4.3 una vez purgadas sus keys y las `<Tabla>__bak_configseed_build<id>` de ConfigApply. — <fecha> · <resultado>
 - [ ] **5.7** Commit de `docs/releases/vX.Y.Z/` en `develop`: `docs(release): registro de la release vX.Y.Z (AB#<PBI principal>)`. — <fecha> · <resultado>
 
 ## Limpiezas diferidas

@@ -22,7 +22,9 @@ plataforma (alta del SPN en la BD antes de 2.1, cuota o roles en 2.4) lo dicen e
 4. **La configuración nunca se promociona por `Id`.** El export de DEV (`config-vX.Y.Z.sql`) es
    un MERGE por clave primaria con `IDENTITY_INSERT` y los `Id` no coinciden entre entornos: se
    usa como referencia y evidencia, y en PRE y PRO solo se aplican los seeds propios de la
-   release (2.3 y 4.3).
+   release (2.3 y 4.3) o las altas por clave natural del pipeline 832 con
+   `applyMissingConfig` (ADR-004): solo filas que faltan en el destino, sin `Id`, nunca
+   actualiza ni borra.
 
 Acceso a SQL: `sqlcmd -G` falla por MFA en este entorno. Las consultas de los pasos (0.5, 4.1 y
 las comprobaciones de 2.4.5) se lanzan con `pwsh ./scripts/database/query-sql.ps1 -Server <servidor> -Query "<consulta>"`,
@@ -238,7 +240,8 @@ además el del SC de PRO y el del environment `prod`.
 | Guard | Rechaza `dev` sin `fromProd`, `fromProd` con `prod` y `prod` sin `preGatesPassed` | — |
 | Export | `export-config-release.ps1` contra la BD del origen (solo lectura) → artefacto `db-config`. No corre con `fromProd` | SC del origen |
 | AiArtifacts | Job de despliegue sobre el environment de ADO del destino: `copy-labeling-dataset.ps1` por analyzer versionado, `apply-deployments.ps1` (fuera de `prod`), `copy-cu-analyzers.ps1` en las cuentas primaria y secundaria, `copy-di-artifacts.ps1` y `validate-analyzer.ps1` (destino frente al origen). Publica los manifiestos (`ai-artifacts-<env>-<intento>`) para versionarlos a mano en `infra/ai/` | SC `AI DocClassExt Promocion IA`; `apply-deployments.ps1` con el SC del destino |
-| ConfigSeed | Export de la BD del destino y diff por clave natural frente al origen (`diff-config-exports.py`, mismas claves que 2.3.2; en `prod` sin `ModeloConfigs`) → artefacto `config-diff`. **No aplica nada** (regla fija 4). No corre con `fromProd` | SC del destino |
+| ConfigSeed | Export de la BD del destino y diff por clave natural frente al origen (`diff-config-exports.py`, mismas claves que 2.3.2, `ModeloConfigs` incluido también en `prod`) → artefacto `config-diff`. Con `applyMissingConfig` añade `altas-config.sql` (filas que solo existen en el origen; rechaza `ModeloConfigs` con `Endpoint` o `ApiKey` con valor) y comprueba en el destino los App Settings `AI__Resources__<alias>__Endpoint` de esas filas. No escribe. No corre con `fromProd` | SC del destino |
+| ConfigApply | Solo con `applyMissingConfig` y sin `dryRun`. Etapa propia sobre el environment del destino: la aprobación llega después de publicar `config-diff`. `apply-config-altas.ps1` copia cada tabla que recibe altas en `<Tabla>__bak_configseed_build<id>`, ejecuta las altas en una transacción y un diff posterior debe salir sin altas pendientes → artefacto `config-apply-<intento>` (ADR-004) | SC del destino |
 
 Los scripts son idempotentes y el pipeline no pasa `-Force`: sobre un entorno ya promocionado
 todo sale `present` u `ok`, y un analyzer o clasificador que existe en destino con otra
@@ -344,18 +347,18 @@ plataforma solo si hay cuota, roles o red.
 Prerrequisitos: "go" de 3.4. Ventana acordada con negocio si la release lleva migraciones que
 bloquean tablas grandes.
 
-`ModeloConfigs` de PRO queda fuera de los diffs y de la comparación de deriva de esta fase hasta
-el cutover de IA de PRO (Fase 3 de AB#100298): sus filas siguen con los recursos y el modo de
-acceso propios de PRO y no se comparan con DEV. El `.sql` de un export de PRO puede llevar keys
+Desde el cutover de la v1.0.0 (AB#100321) `ModeloConfigs` de PRO resuelve sus recursos por
+`ResourceAlias` e identidad: entra en el diff por clave natural de 4.3 y de ConfigSeed (ADR-004).
+La comparación de deriva de 4.7 lo sigue dejando fuera. El `.sql` de un export de PRO puede llevar keys
 en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (gitignored) y a
 `evidencias/` solo va el `.hashes.json`.
 
 - [ ] **4.1** Copia de seguridad: `az sql db copy --name DocumentIA --dest-name DocumentIA-prerel-<yyyyMMdd> --server srbsqlprodocai --resource-group SRBRGDOCSAIPROD` y verificación contra el origen con `query-sql.ps1`: número de filas de `Documentos` y `DocumentoEjecuciones` y última fila de `__EFMigrationsHistory` iguales en las dos BD. Anotar en `runbook.md`.
 - [ ] **4.2** Pipeline 807 Migrations-BD con `targetEnvironment=prod` desde el commit candidato. Comprobar en el log del stage Apply que `Pendientes: N` lista las migraciones de 0.5 y que cierra con `Migrations aplicadas y verificadas correctamente`.
-- [ ] **4.3** Configuración en PRO, igual que 2.3.2 a 2.3.4: export previo y diff por clave natural sin `ModeloConfigs`, seeds propios de la release con su copia `__bak` (nunca `config-vX.Y.Z.sql`) y export de referencia `vX.Y.Z-pro` (comandos abajo).
+- [ ] **4.3** Configuración en PRO, igual que 2.3.2 a 2.3.4: export previo y diff por clave natural, seeds propios de la release con su copia `__bak` (nunca `config-vX.Y.Z.sql`) y export de referencia `vX.Y.Z-pro` (comandos abajo). Las filas que solo faltan en PRO pueden ir en su lugar por las altas del pipeline 832 (`applyMissingConfig`, en 4.12); el export de referencia se repite entonces después de 4.12.
 
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlprodocai.database.windows.net -ReleaseTag vX.Y.Z-pro-antes
-      python scripts/database/diff-config-exports.py artifacts/db-config/config-vX.Y.Z-pro-antes.sql artifacts/db-config/config-vX.Y.Z.sql PromptTemplates=PromptKey+Version Tipologias=Codigo CatalogoTdn1=Codigo CatalogoTdn2=Codigo PluginTipologiaConfigs=TipologiaCodigo
+      python scripts/database/diff-config-exports.py artifacts/db-config/config-vX.Y.Z-pro-antes.sql artifacts/db-config/config-vX.Y.Z.sql ModeloConfigs=Key PromptTemplates=PromptKey+Version Tipologias=Codigo CatalogoTdn1=Codigo CatalogoTdn2=Codigo PluginTipologiaConfigs=TipologiaCodigo
       # seeds de la release listados en 0.5, con token de Entra
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlprodocai.database.windows.net -ReleaseTag vX.Y.Z-pro
 
@@ -384,7 +387,8 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
   anota en `runbook.md`.
 
   En `prod` el pipeline no toca los deployments (`apply-deployments.ps1` queda fuera; PRO no
-  cambia de recursos) ni `ModeloConfigs`, que sigue fuera del diff hasta el cutover de IA de PRO.
+  cambia de recursos). `ModeloConfigs` entra en el diff de ConfigSeed y, con `applyMissingConfig`,
+  en las altas por clave natural (ADR-004).
   No sobrescribe un artefacto existente con otra definición: una versión nueva lleva
   identificador nuevo, así que la vuelta atrás es por datos (la fila de `ModeloConfigs` o la
   tipología vuelven al identificador anterior con su copia `__bak`) y el artefacto nuevo se
@@ -415,7 +419,7 @@ explicadas, 4.9 sin anomalías) y sin vuelta atrás en curso.
 
 - [ ] **5.4** Work items de la release a Done en Azure DevOps con un comentario que enlaza `docs/releases/vX.Y.Z/release.md`.
 - [ ] **5.5** Fila nueva en la tabla de `docs/releases/README.md`.
-- [ ] **5.6** Limpiezas diferidas, con fecha prevista escrita en `runbook.md`: borrar `DocumentIA-prerel-<fecha>` tras el periodo de validación (7 días salvo indicación), borrar las tablas `ModeloConfigs__bak_*` de 2.4.5 y 4.3 una vez purgadas sus keys.
+- [ ] **5.6** Limpiezas diferidas, con fecha prevista escrita en `runbook.md`: borrar `DocumentIA-prerel-<fecha>` tras el periodo de validación (7 días salvo indicación), borrar las tablas `ModeloConfigs__bak_*` de 2.4.5 y 4.3 una vez purgadas sus keys y las `<Tabla>__bak_configseed_build<id>` de ConfigApply.
 - [ ] **5.7** Commit de `docs/releases/vX.Y.Z/` en `develop`: `docs(release): registro de la release vX.Y.Z (AB#<PBI principal>)`.
 
 Verificación: `git tag -l vX.Y.Z` devuelve el tag; `git merge-base --is-ancestor <commit> origin/master`

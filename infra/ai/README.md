@@ -607,7 +607,8 @@ solicitud del 2026-09-22, fuera de git). Su uso dentro de una release está en
 | `preGatesPassed` | booleano, `false` | Obligatorio con `prod`: las cuatro puertas de PRE en PASS |
 | `releaseTag` | texto, `auto` (por defecto) = `build-<id>` | Nombre de los ficheros de config exportados; ADO trata como obligatorio un parámetro string sin default no vacío, de ahí el centinela `auto` |
 | `runValidation` | booleano, `true` | Lanza `validate-analyzer.ps1` (cuesta dinero: `analyzeBinary` en los dos lados) |
-| `dryRun` | booleano, `false` | Ensayo sin escrituras: todos los scripts de `scripts/ai/` reciben `-DryRun` (solo GET y el plan de lo que harían); Export y ConfigSeed corren igual porque solo leen. Lanzar así el primer run de cada salto |
+| `dryRun` | booleano, `false` | Ensayo sin escrituras: todos los scripts de `scripts/ai/` reciben `-DryRun` (solo GET y el plan de lo que harían); Export y ConfigSeed corren igual porque solo leen, y ConfigApply no se incluye. Lanzar así el primer run de cada salto |
+| `applyMissingConfig` | booleano, `false` | Altas por clave natural de la config que solo existe en el origen (ADR-004): ConfigSeed genera `altas-config.sql` y, sin `dryRun`, ConfigApply lo aplica tras la aprobación |
 
 Etapas, todas en el pool privado `docia-mdp-private` (SQL y DI de PRE por
 private endpoint):
@@ -627,11 +628,22 @@ private endpoint):
    en el artefacto `ai-artifacts-<env>-<intento>`, también si falla: los
    manifiestos se escriben en el agente y hay que versionarlos a mano aquí.
 4. **ConfigSeed**: export de la BD del destino y `diff-config-exports.py`
-   por clave natural frente al export del origen (en `prod` sin
-   `ModeloConfigs`). Artefacto `config-diff` con el diff y el `.hashes.json`
-   del destino; su `.sql` no se publica porque puede llevar keys. **No aplica
-   nada**: la configuración no se promociona por `Id` (regla fija 4 del
-   runbook).
+   por clave natural frente al export del origen (`ModeloConfigs` incluido
+   también en `prod`). Artefacto `config-diff` con el diff y el `.hashes.json`
+   del destino; su `.sql` no se publica porque puede llevar keys. No escribe:
+   la configuración no se promociona por `Id` (regla fija 4 del runbook). Con
+   `applyMissingConfig` añade `altas-config.sql`, con las filas que solo
+   existen en el origen y sin `Id` (rechaza `ModeloConfigs` con `Endpoint` o
+   `ApiKey` con valor), y comprueba que el destino tiene el App Setting
+   `AI__Resources__<alias>__Endpoint` de cada alias.
+5. **ConfigApply**: solo con `applyMissingConfig` y sin `dryRun`. Job de
+   despliegue sobre el environment del destino, en una etapa propia para que
+   la aprobación llegue con `config-diff` ya publicado.
+   `apply-config-altas.ps1` copia cada tabla que recibe altas en
+   `<Tabla>__bak_configseed_build<id>`, ejecuta las altas en una transacción
+   (solo `INSERT` sobre las 6 tablas de configuración) y un diff posterior
+   debe salir sin altas pendientes. Artefacto `config-apply-<intento>`
+   (ADR-004).
 
 El pipeline no pasa `-Force`: sobre un entorno ya promocionado todo sale
 `present` u `ok`, y un artefacto que existe en destino con otra definición
