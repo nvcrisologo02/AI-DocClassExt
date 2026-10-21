@@ -2,15 +2,16 @@
    DocumentIA - Alta de tipologias con alcance solo de clasificacion (AB#101074)
 
    DESTINO : srbsqldevdocai.database.windows.net / DocumentIA
-   Aplicado: DEV el 2026-10-21 (15 insertadas; relanzado: 15 omitidas)
+   Aplicado: DEV el 2026-10-21 (15 insertadas; relanzado: 15 omitidas).
+             Ampliado a 19 el mismo dia (ACUE-12, COMU-18, ESIN-AI, FICH-25).
    PRE/PRO : no se ejecuta a mano. Llegan con el alta por clave natural de
              la etapa ConfigSeed del pipeline 832 (AB#101075), que toma DEV
              como origen. Hasta que exista, este script es el registro de
              lo dado de alta en DEV.
 
-   TDN2 (15): ACTT-04, CERA-04, CERJ-54, CERT-19, CNCV-05, CNCV-29, CNCV-70,
-              COMU-66, COMU-84, COMU-87, COMU-88, DOCA-39, ESCR-27, ESIN-AH,
-              LIPR-13
+   TDN2 (19): ACTT-04, ACUE-12, CERA-04, CERJ-54, CERT-19, CNCV-05, CNCV-29,
+              CNCV-70, COMU-18, COMU-66, COMU-84, COMU-87, COMU-88, DOCA-39,
+              ESCR-27, ESIN-AH, ESIN-AI, FICH-25, LIPR-13
    LIPR-13 no existe en CatalogoTdn2: el paso 0.b la da de alta antes (TDN1
    LIPR, resuelto por codigo). Exige rellenar @NombreLipr13.
 
@@ -54,7 +55,8 @@ DECLARE @Codigos TABLE (Tdn2 nvarchar(20) NOT NULL PRIMARY KEY);
 INSERT INTO @Codigos (Tdn2) VALUES
     (N'ACTT-04'), (N'CERA-04'), (N'CERJ-54'), (N'CERT-19'), (N'CNCV-05'),
     (N'CNCV-29'), (N'CNCV-70'), (N'COMU-66'), (N'COMU-84'), (N'COMU-87'),
-    (N'COMU-88'), (N'DOCA-39'), (N'ESCR-27'), (N'ESIN-AH'), (N'LIPR-13');
+    (N'COMU-88'), (N'DOCA-39'), (N'ESCR-27'), (N'ESIN-AH'), (N'LIPR-13'),
+    (N'ACUE-12'), (N'COMU-18'), (N'ESIN-AI'), (N'FICH-25');
 
 IF NOT EXISTS (SELECT 1 FROM dbo.CatalogoTdn2 WHERE Codigo = N'LIPR-13')
 BEGIN
