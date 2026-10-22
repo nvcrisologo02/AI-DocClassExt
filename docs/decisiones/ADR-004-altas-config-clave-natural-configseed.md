@@ -1,11 +1,11 @@
 # ADR-004: Altas de configuración por clave natural en ConfigSeed
-Fecha: 2026-10-21 · Estado: propuesta · Work Item: AB#101075 · Session ID: sin Session ID (proyecto sin `Gobernanza: activa`; traspaso en `docs/auxiliares/temps/2026-10-21/`)
+Fecha: 2026-10-21 · Estado: aceptada (2026-10-22, tras el ensayo DEV→PRE del run 79876) · Work Item: AB#101075 · Session ID: sin Session ID (proyecto sin `Gobernanza: activa`; traspaso en `docs/auxiliares/temps/2026-10-21/`)
 
 ## Contexto y problema
 
 La regla fija 4 de `RELEASE_MANAGEMENT.md` prohíbe promocionar la configuración por `Id`: el export de DEV es un `MERGE` por clave primaria con `IDENTITY_INSERT` y los `Id` no coinciden entre entornos. En PRE y PRO solo se aplican a mano los seeds propios de cada release (pasos 2.3.3 y 4.3). La etapa ConfigSeed del pipeline 832 (`azure-pipelines-ai-artifacts.yml`, ADR-001) ya calcula por clave natural qué falta en el destino, pero no aplica nada.
 
-Dos hechos obligan a revisarlo. Primero, si en PRE y PRO se retira la escritura directa en BD, la carga manual de seeds deja de ser posible. Segundo, el caso real de AB#101074: 15 tipologías solo de clasificación y la fila `LIPR-13` de `CatalogoTdn2` existen en DEV y faltan en PRE y PRO, y la única vía hoy es repetir a mano el script en cada entorno.
+Dos hechos obligan a revisarlo. Primero, si en PRE y PRO se retira la escritura directa en BD, la carga manual de seeds deja de ser posible. Segundo, el caso real de AB#101074: 19 tipologías solo de clasificación y la fila `LIPR-13` de `CatalogoTdn2` existen en DEV y faltan en PRE y PRO, y la única vía hoy es repetir a mano el script en cada entorno.
 
 Además, ConfigSeed excluía `ModeloConfigs` en `prod` porque sus filas llevaban recursos y keys propios de PRO. Desde el cutover de la v1.0.0 (2026-10-08, AB#100321) PRO resuelve sus recursos por `ResourceAlias` e identidad, y la exclusión ha quedado desfasada.
 

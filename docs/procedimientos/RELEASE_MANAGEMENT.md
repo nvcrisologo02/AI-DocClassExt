@@ -16,9 +16,10 @@ plataforma (alta del SPN en la BD antes de 2.1, cuota o roles en 2.4) lo dicen e
 2. **PRE es puerta obligatoria.** Nada se despliega en PRO sin haber pasado por PRE con la
    misma versión de código, esquema, configuración y artefactos de IA.
 3. **Nada llega a PRO sin las cuatro puertas en PASS (la 3, o N/A con motivo cuando no aplica) y el Smoke pre-release (Test Plan 100069).**
-   Azure DevOps no tiene hoy ningún check de aprobación en los environments `pre` y `prod`
-   (verificado el 2026-09-24): el pipeline puede desplegar a PRO sin aprobación, así que la
-   puerta humana es el "go" escrito en `release.md` (Fase 3).
+   Los environments `pre` y `prod` de Azure DevOps tienen un check de aprobación (64 y 65,
+   creados el 2026-09-30, un único aprobador; ver `DESPLIEGUE_IA.md` §4): el pipeline se
+   detiene antes de tocar PRE o PRO. La puerta humana sigue siendo el "go" escrito en
+   `release.md` (Fase 3); la aprobación del check no lo sustituye.
 4. **La configuración nunca se promociona por `Id`.** El export de DEV (`config-vX.Y.Z.sql`) es
    un MERGE por clave primaria con `IDENTITY_INSERT` y los `Id` no coinciden entre entornos: se
    usa como referencia y evidencia, y en PRE y PRO solo se aplican los seeds propios de la
@@ -331,9 +332,9 @@ Prerrequisitos: puertas 1, 2 y 4 en PASS (la 3 puede estar pendiente al empezar,
 - [ ] **3.3** Puerta 3 (coste) cerrada o N/A con motivo (2.5.4).
 - [ ] **3.4** "Go" escrito en el bloque de aprobación de `release.md`: fecha, nombre y las cuatro puertas con fecha de PASS (o N/A con motivo en la 3).
 
-Nota: los environments `pre` y `prod` de Azure DevOps no tienen approval check (verificado el
-2026-09-24 con `GET _apis/pipelines/checks/configurations`). Mejora propuesta, fuera de este
-runbook: un check de aprobación en el environment `prod` con su propio work item.
+Nota: los environments `pre` y `prod` de Azure DevOps tienen approval check (64 y 65, creados
+el 2026-09-30; verificado el 2026-10-22 con `GET _apis/pipelines/checks/configurations`). El
+check se aprueba después del "go" de 3.4, no antes.
 
 Verificación: el bloque de aprobación de `release.md` tiene el run del Test Plan 100069, las
 cuatro puertas con fecha de PASS (la 3 puede ser N/A con motivo) y el "go" con fecha y nombre.
