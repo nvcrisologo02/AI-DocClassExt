@@ -8,12 +8,17 @@
    en vez de terminar el circuito de Blazor Server. *@
 
 <div class="card mb-3"><div class="card-body">
-    <h6 class="text-muted mb-3">Coste diario</h6>
+    <div class="d-flex justify-content-between align-items-baseline mb-2">
+        <h6 class="sareb-grafico-titulo mb-0">@($"coste de IA por día · {Periodo}")</h6>
+        <span class="sareb-grafico-unidad">€</span>
+    </div>
     <div id="@_elementId" style="min-height: 240px;"></div>
+    <p class="sareb-grafico-fuente mb-0">Fuente: ejecuciones registradas en DocumentIA; horas en hora peninsular.</p>
 </div></div>
 
 @code {
     [Parameter] public List<CosteSeriePuntoDto> Serie { get; set; } = [];
+    [Parameter] public string Periodo { get; set; } = "";
 
     private readonly string _elementId = $"gc-{Guid.NewGuid():N}";
     private bool _creado;
@@ -54,7 +59,8 @@
                     chart = new { type = "bar", height = 240, toolbar = new { show = false }, animations = new { enabled = false } },
                     plotOptions = new { bar = new { columnWidth = "60%", borderRadius = 3 } },
                     dataLabels = new { enabled = false },
-                    colors = new[] { "#0d6efd" },
+                    colors = new[] { SarebPaleta.Verde },
+                    grid = new { borderColor = SarebPaleta.GrisClaro, strokeDashArray = 2 },
                     xaxis = new { categories = categorias },
                     yaxis = new { decimalsInFloat = 2 },
                     legend = new { show = false },

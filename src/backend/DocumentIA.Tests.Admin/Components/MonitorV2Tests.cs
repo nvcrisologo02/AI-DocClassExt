@@ -65,6 +65,23 @@ public class MonitorMatrizTests : TestContext
 
         cut.Markup.Should().Contain("25778", "22140 + 2980 + 658");
     }
+
+    // El texto negro contrasta mejor que el blanco sobre el verde y el azul de la
+    // escala (revision final de AB#101124): el blanco se reserva al azul oscuro,
+    // el ultimo paso. Con maximo 999, 100 cae en el cuarto paso y 999 en el quinto.
+    [Fact]
+    public void TextoBlanco_SoloEnElPasoMasOscuroDeLaEscala()
+    {
+        var cut = RenderComponent<MonitorMatriz>(p => p.Add(c => c.Celdas,
+        [
+            new() { EstadoProceso = "OK", Calidad = "OK", Total = 999 },
+            new() { EstadoProceso = "OK", Calidad = "REVISION", Total = 100 }
+        ]));
+
+        var botones = cut.FindAll("button");
+        botones.First(b => b.TextContent.Trim() == "100").ClassList.Should().NotContain("text-white");
+        botones.First(b => b.TextContent.Trim() == "999").ClassList.Should().Contain("text-white");
+    }
 }
 
 public class MonitorHistogramaTests : TestContext
@@ -175,6 +192,19 @@ public class MonitorLecturasTests : TestContext
 
         emitido.Should().Be("REVISION");
     }
+
+    // Naranja y rojo van pegados en la barra y solo los separaba el color: cada
+    // tramo lleva su recuento como texto para no depender de distinguirlos.
+    [Fact]
+    public void Tramos_LlevanSuRecuentoComoTexto()
+    {
+        var cut = RenderComponent<MonitorLecturas>(p => p
+            .Add(c => c.CalidadOk, 100)
+            .Add(c => c.CalidadRevision, 30)
+            .Add(c => c.CalidadError, 5));
+
+        cut.FindAll("button").Select(b => b.TextContent.Trim()).Should().Equal("100", "30", "5");
+    }
 }
 
 // La pagina completa: mismo blindaje que la original, porque comparte el mismo
@@ -235,6 +265,31 @@ public class MonitorV2PaginaTests : TestContext
             new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }));
 
         await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(new MonitorFiltroDto { RangoDias = 7 }));
+
+        cut.Markup.Should().NotContain("Auto-refresco pausado");
+    }
+
+    // AB#101128: el Monitor arranca en las ultimas 24 horas.
+    [Fact]
+    public void ArrancaConLasUltimas24Horas()
+    {
+        RegistrarBackend(_ => DocumentIA.Tests.Admin.Helpers.StubHttpMessageHandler.Json("[]"));
+
+        var cut = RenderComponent<DocumentIA.Admin.Components.Pages.MonitorV2>();
+
+        var filtro = cut.FindComponent<DocumentIA.Admin.Components.Monitor.MonitorFiltros>().Instance.Filtro;
+        filtro.RangoDias.Should().Be(1);
+        filtro.MesEnCurso.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ConMesEnCurso_NoPausaElAutoRefresco()
+    {
+        RegistrarBackend(_ => DocumentIA.Tests.Admin.Helpers.StubHttpMessageHandler.Json("[]"));
+        var cut = RenderComponent<DocumentIA.Admin.Components.Pages.MonitorV2>();
+        var filtros = cut.FindComponent<DocumentIA.Admin.Components.Monitor.MonitorFiltros>();
+
+        await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(new MonitorFiltroDto { MesEnCurso = true }));
 
         cut.Markup.Should().NotContain("Auto-refresco pausado");
     }

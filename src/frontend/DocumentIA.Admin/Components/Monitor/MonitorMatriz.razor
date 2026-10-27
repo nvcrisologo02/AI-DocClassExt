@@ -42,7 +42,7 @@
                                         @if (n > 0)
                                         {
                                             <button type="button"
-                                                    class="btn btn-sm w-100 border-0 @(Intensidad(n) >= 3 ? "text-white" : "")"
+                                                    class="btn btn-sm w-100 border-0 @(Intensidad(n) == Pasos.Length - 1 ? "text-white" : "")"
                                                     style="background:@Fondo(n);font-variant-numeric:tabular-nums"
                                                     title="@estado · @c.Etiqueta: @n ejecuciones"
                                                     @onclick="() => CeldaSeleccionada.InvokeAsync((estado, c.Clave))">
@@ -87,12 +87,9 @@
         new("ERROR", "Insuficiente", "< 0,70")
     ];
 
-    // Un solo tono, mas oscuro cuanto mayor es el recuento: la magnitud ya la
+    // Un solo recorrido, mas oscuro cuanto mayor es el recuento: la magnitud ya la
     // lleva el color, asi que no hace falta gastar tonos distintos por categoria.
-    private static readonly string[] Pasos =
-    [
-        "#cde2fb", "#86b6ef", "#3987e5", "#1c5cab", "#104281"
-    ];
+    private static readonly string[] Pasos = SarebPaleta.Escala;
 
     // Los estados se toman de los datos, no de una lista fija: cualquier estado
     // nuevo del orquestador aparece solo, sin quedar fuera del recuento.

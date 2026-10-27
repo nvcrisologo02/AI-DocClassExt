@@ -2,7 +2,8 @@
 @* Las dos lecturas del mismo conjunto, lado a lado: que hizo el proceso y cuanta
    confianza merece el resultado. Presentarlas juntas es lo que evita volver a
    confundirlas, que es el origen del contador "En revisión" que siempre valia
-   cero. Cada tramo navega al listado con ese recorte. *@
+   cero. Cada tramo navega al listado con ese recorte y lleva su recuento como
+   texto, para que naranja y rojo no se distingan solo por el color. *@
 
 <div class="row g-3 mb-4">
     <div class="col-md-6">
@@ -19,10 +20,10 @@
                     <div class="d-flex mb-2" style="height:22px;gap:2px">
                         @foreach (var g in Proceso)
                         {
-                            <button type="button" class="btn p-0 border-0"
-                                    style="width:@Ancho(g.Total, TotalProceso)%;background:@ColorProceso(g.Grupo);border-radius:3px"
+                            <button type="button" class="btn p-0 border-0 sareb-tramo"
+                                    style="width:@Ancho(g.Total, TotalProceso)%;background:@ColorProceso(g.Grupo)"
                                     title="@g.Grupo: @g.Total"
-                                    @onclick="() => EstadoSeleccionado.InvokeAsync(g.Grupo)"></button>
+                                    @onclick="() => EstadoSeleccionado.InvokeAsync(g.Grupo)">@g.Total</button>
                         }
                     </div>
                     <div class="d-flex flex-wrap gap-3" style="font-size:0.75rem">
@@ -54,10 +55,10 @@
                     <div class="d-flex mb-2" style="height:22px;gap:2px">
                         @foreach (var c in Calidades)
                         {
-                            <button type="button" class="btn p-0 border-0"
-                                    style="width:@Ancho(c.Total, TotalCalidad)%;background:@c.Color;border-radius:3px"
+                            <button type="button" class="btn p-0 border-0 sareb-tramo"
+                                    style="width:@Ancho(c.Total, TotalCalidad)%;background:@c.Color"
                                     title="@c.Etiqueta: @c.Total"
-                                    @onclick="() => CalidadSeleccionada.InvokeAsync(c.Clave)"></button>
+                                    @onclick="() => CalidadSeleccionada.InvokeAsync(c.Clave)">@c.Total</button>
                         }
                     </div>
                     <div class="d-flex flex-wrap gap-3" style="font-size:0.75rem">
@@ -91,9 +92,9 @@
 
     private List<Tramo> Calidades =>
     [
-        new("OK", "Suficiente", CalidadOk, "#0ca30c"),
-        new("REVISION", "Requiere revisión", CalidadRevision, "#fab219"),
-        new("ERROR", "Insuficiente", CalidadError, "#d03b3b")
+        new("OK", "Suficiente", CalidadOk, SarebPaleta.Ok),
+        new("REVISION", "Requiere revisión", CalidadRevision, SarebPaleta.Revision),
+        new("ERROR", "Insuficiente", CalidadError, SarebPaleta.Error)
     ];
 
     // Verde solo para el estado que representa "termino sin incidencias"; el
@@ -101,11 +102,11 @@
     // en vez de heredar un color que insinue algo que no sabemos.
     private static string ColorProceso(string estado) => estado switch
     {
-        "OK" or "Completado" or "Completed" => "#0ca30c",
-        "VALIDACION_CON_ERRORES" or "EXTRACCION_INCOMPLETA" => "#ec835a",
-        "Error" or "ERROR" or "Fallido" or "PAGINAS_EXCEDIDAS" or "SIN_CONTENIDO_DOCUMENTO" => "#d03b3b",
-        "NO_CLASIFICADO" or "BAJA_CONFIANZA_CLASIFICACION" => "#fab219",
-        _ => "#898781"
+        "OK" or "Completado" or "Completed" => SarebPaleta.Ok,
+        "VALIDACION_CON_ERRORES" or "EXTRACCION_INCOMPLETA" => SarebPaleta.Error,
+        "Error" or "ERROR" or "Fallido" or "PAGINAS_EXCEDIDAS" or "SIN_CONTENIDO_DOCUMENTO" => SarebPaleta.Error,
+        "NO_CLASIFICADO" or "BAJA_CONFIANZA_CLASIFICACION" => SarebPaleta.Revision,
+        _ => SarebPaleta.Neutro
     };
 
     // El ancho se interpola dentro de un atributo style, asi que tiene que salir

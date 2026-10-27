@@ -11,38 +11,6 @@
 
 <PageTitle>Monitor de calidad</PageTitle>
 
-@* Estilos del panel. Van en la pagina y no en un fichero .razor.css porque el
-   CSS aislado no alcanza a los componentes hijos, y aqui el objetivo es que
-   matriz, histograma, lecturas y desglose compartan una misma superficie. Todo
-   queda acotado bajo .mv2 para no alterar el resto del Admin. *@
-<style>
-    .mv2 { --mv2-border: rgba(11,11,11,.10); --mv2-ink-2:#52514e; --mv2-muted:#898781; }
-    .mv2 .card, .mv2 .mv2-card {
-        border: 1px solid var(--mv2-border);
-        border-radius: 12px;
-        box-shadow: none !important;
-        background: #fff;
-    }
-    .mv2 .card-header {
-        background: transparent;
-        border-bottom: 1px solid var(--mv2-border);
-        padding-top: .6rem; padding-bottom: .6rem;
-    }
-    .mv2 .card-header .fw-semibold { font-size: .875rem; }
-    .mv2 h1 { letter-spacing: -.01em; }
-
-    .mv2-hero { font-size: 2.9rem; font-weight: 600; line-height: 1.05; letter-spacing: -.02em; }
-    .mv2-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 1.1rem; }
-    .mv2-kpi-label { font-size: .75rem; color: var(--mv2-muted); }
-    .mv2-kpi-value { font-size: 1.5rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
-    .mv2-kpi-foot { font-size: .72rem; color: var(--mv2-ink-2); }
-
-    /* La tabla del listado se hereda del Monitor original; aqui solo se suaviza
-       para que no desentone con el resto de superficies. */
-    .mv2 .table > :not(caption) > * > * { padding: .5rem .6rem; }
-    .mv2 .table-light th { background: #f7f7f5; color: var(--mv2-muted); font-weight: 500; }
-</style>
-
 <div class="mv2">
 
 <div class="d-flex justify-content-between align-items-center mb-4">
@@ -90,7 +58,7 @@
 <MonitorDesglose Tipologias="_agregados?.PorTipologia ?? []"
                  Modelos="_agregados?.PorModelo ?? []" />
 
-<MonitorGraficos Serie="_agregados?.Serie ?? []" />
+<MonitorGraficos Serie="_agregados?.Serie ?? []" Periodo="@_filtro.DescripcionPeriodo()" />
 
 @if (HayRecorte)
 {
@@ -121,7 +89,7 @@
 @code {
     [Parameter] public string? Guid { get; set; }
 
-    private MonitorFiltroDto _filtro = new();
+    private MonitorFiltroDto _filtro = new() { RangoDias = 1 };
     private PagedResultDto<EjecucionResumenDto>? _pagina;
     private DashboardAgregadosDto? _agregados;
     private IReadOnlyList<string> _tipologias = [];

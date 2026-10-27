@@ -1288,6 +1288,38 @@ GUIA_EASYAUTH_ADMIN. A fecha 2026-08-06, DEV dispone de app registration y grupo
 verificados (activación del App Service pendiente); PRE y PROD siguen sin
 proveedor, por lo que sus despliegues operan en modo solo lectura.
 
+### 3.8.5 Identidad visual del Admin
+
+El Admin sigue el manual de identidad y la guía de estilo de SAREB (AB#101124). El tema se aplica con tokens CSS sobre Bootstrap 5.1.0, sin recompilarlo:
+
+- `wwwroot/sareb.css` se carga en `App.razor` después de `bootstrap/bootstrap.min.css` y antes de `app.css`. Declara los tokens en `:root` y sobrescribe las variables de Bootstrap. En la 5.1 las utilidades `text-*` y `bg-*` leen `--bs-<color>-rgb`, así que se redefinen las dos variables de cada color; botones, foco de formularios, paginación y validación llevan colores fijos en Bootstrap y tienen reglas propias en `sareb.css`. `app.css` no conserva ningún color de la plantilla de Blazor (un test lo comprueba): el límite de error va en rojo de la paleta con texto negro y el checkbox de borde oscuro usa el verde gris.
+- `Services/SarebPaleta.cs` contiene los mismos colores como constantes para lo que se pinta desde C# (gráficos). Si cambia un valor, cambia en los dos sitios.
+- Logo en `wwwroot/img/sareb-logo-negativo.png` (negativo; el positivo no se incluye porque ninguna página lo usa, y un test comprueba que no quedan imágenes sin uso en `wwwroot/img`), reescalado desde `logos-sareb-services` de los recursos corporativos y recortado a su caja visible (sin margen transparente), para que a 40 px de alto la marca ocupe esa altura; el área de respeto la da el relleno de `.sareb-marca` (AB#101127). La barra lateral es verde corporativo con el logo negativo y la denominación «DocumentIA · Administración».
+
+| Token CSS | Valor | Uso |
+|---|---|---|
+| `--sareb-verde` | `#00858C` | primario (`--bs-primary`), enlaces, foco, barra lateral |
+| `--sareb-azul-oscuro` | `#046E97` | hover del primario, segunda serie de gráficos |
+| `--sareb-azul` | `#0086AD` | `--bs-info`, tercera serie |
+| `--sareb-turquesa` | `#00ABA8` | `--bs-success` (estado correcto) |
+| `--sareb-verde-claro` | `#90CCB7` | cabeceras de tabla, marcador del ítem activo del menú |
+| `--sareb-verde-gris` | `#6F927C` | texto secundario, etiquetas de KPI |
+| `--sareb-gris` | `#BBBEB4` | bordes, `--bs-secondary` |
+| `--sareb-gris-claro` | `#AFB6AC` | serie neutra adicional |
+| `--sareb-naranja` | `#F39E48` | `--bs-warning` (en revisión); con texto oscuro, no llega a AA con blanco |
+| `--sareb-rojo` | `#EA6B43` | `--bs-danger` (con error) |
+
+Tipografía `Arial, Helvetica, sans-serif` (manual 3.1). El manual imprime el color 7 como «GF927C»; es una errata de `#6F927C`.
+
+Gráficos, tablas y KPIs (AB#101126):
+
+- `wwwroot/js/apexcharts-interop.js` fija valores por defecto globales en `window.Apex` según la guía 6.6: Arial, sin animaciones ni degradados (`fill.type = solid`) y leyenda abajo a la izquierda. Ningún color se fija ahí, ni el de la rejilla (un test lo comprueba): cada componente los pasa desde `SarebPaleta` (`MonitorGraficos`: `Neutro` para el total y `Error` para los fallos; `CostesGrafico`: `Verde`; rejilla en `GrisClaro` en los dos). Las ventanas relativas de `MonitorFiltroDto` toman el «ahora» de un `TimeProvider` (`ToQueryString(TimeProvider)`), con `TimeProvider.System` por defecto.
+- `MonitorGraficos` y `CostesGrafico` reciben el parámetro `Periodo`, que las páginas rellenan con `MonitorFiltroDto.DescripcionPeriodo()` («últimas 24 horas», «últimos N días», «mes en curso» o «del d/M/yyyy al d/M/yyyy»). La tarjeta muestra título en minúscula y negrita con el periodo (`.sareb-grafico-titulo`), unidad arriba a la derecha (`.sareb-grafico-unidad`: `nº` o `€`) y la fuente en nota al pie (`.sareb-grafico-fuente`).
+- Tablas según el manual 3.5: el encabezado de una tarjeta que contiene una tabla va en blanco negrita sobre verde corporativo (selector `:has`, soportado por Chrome y Edge actuales); las cabeceras de columna en negro negrita sobre verde claro; filas alternas y hover con verde claro translúcido; `table-dark` pasa a verde corporativo. Las alertas de Bootstrap 5.1 tienen colores fijos y se redefinen con la paleta.
+- La superficie de los paneles de Monitor y Costes (`.mv2`: tarjetas, KPIs, cifra destacada) vivía duplicada en un bloque `<style>` de cada página; ahora está una sola vez en `sareb.css`. Los bloques `<style>` de `PromptEditor`, `EjecucionDetalle` y `JsonEditorComponent` conservan su estructura y solo cambian los literales de color por tokens.
+- Los componentes de lectura del Monitor y de Costes (`MonitorLecturas`, `MonitorHistograma`, `MonitorMatriz`, `MonitorDesglose`, `MonitorCalidadKpis`, `CostesKpis`, `CostesDesglose`) tampoco llevan literales de color: los estados usan `SarebPaleta.Ok`, `Revision`, `Error` y `Neutro` (los estados de proceso con incidencia y los de error comparten `Error`); los KPIs llevan la cifra en verde corporativo y el estado en una barra lateral (`.sareb-kpi-ok`, `.sareb-kpi-revision`, `.sareb-kpi-error`), porque turquesa y naranja como texto no llegan al 3:1; el desglose por actividad, `Verde`, `AzulOscuro`, `Turquesa` y `Naranja`; la matriz proceso × calidad, la escala `SarebPaleta.Escala` (de verde claro a azul oscuro). `PaletaComponentesTests` falla si aparece en su marcado un color hexadecimal fuera de la paleta (AB#101124).
+- Contraste: sobre turquesa, naranja, rojo, gris y azul el texto va en negro (6:1 o más), no en blanco (entre 1,9:1 y 4,2:1). Así se pintan badges, `btn-success`, `btn-danger`, el banner de entorno (`text-black`; `text-dark` se queda en 3,8:1 sobre el azul) y las cabeceras de tarjeta con `bg-*`. `sareb.css` cubre también hover, foco, activo, deshabilitado y `btn-check` de cada botón, y hover y foco de la paginación, para que no reaparezcan los colores de plantilla. En las cabeceras verdes de tarjetas con tabla, botones `btn-outline-primary`, enlaces y `text-muted` pasan a blanco. `SarebCssTests` y `KpisContrasteTests` vigilan estas reglas (AB#101124).
+
 
 ## 3.9 Manejo de Errores en Durable Functions
 
