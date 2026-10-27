@@ -100,7 +100,7 @@ else
 @code {
     [Parameter] public string? Guid { get; set; }
 
-    private MonitorFiltroDto _filtro = new();
+    private MonitorFiltroDto _filtro = new() { MesEnCurso = true };
     private PagedResultDto<EjecucionResumenDto>? _pagina;
     private CostesResumenDto? _costes;
     private IReadOnlyList<string> _tipologias = [];

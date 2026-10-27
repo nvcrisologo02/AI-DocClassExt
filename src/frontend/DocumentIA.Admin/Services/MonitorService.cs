@@ -413,6 +413,11 @@ public class MonitorFiltroDto
 
     public bool EsRangoFijo => Desde is not null && Hasta is not null;
 
+    // Mes en curso (AB#101128): ventana viva desde el dia 1 del mes peninsular hasta
+    // ahora. No cuenta como rango fijo, asi que el auto-refresco sigue activo y la
+    // ventana se recalcula en cada consulta. Un rango fijo completo manda sobre ella.
+    public bool MesEnCurso { get; set; }
+
     // El input nativo de fecha no impide teclear un año de cuatro nueves. Fuera de
     // este tramo no hay datos que consultar y sumar un dia al maximo de DateOnly
     // lanza una excepcion que las paginas no capturan.
@@ -485,7 +490,29 @@ public class MonitorFiltroDto
         }
 
         var ahora = DateTime.UtcNow;
+        if (MesEnCurso)
+        {
+            var hoy = DateOnly.FromDateTime(HoraEspana.Desde(ahora));
+            return (HoraEspana.InicioDelDiaUtc(new DateOnly(hoy.Year, hoy.Month, 1)), ahora);
+        }
+
         return (ahora.AddDays(-RangoDias), ahora);
+    }
+
+    // Texto del periodo para los titulos de los graficos (guia de estilo 6.6): los
+    // dos graficos lo escriben igual porque sale del mismo filtro.
+    public string DescripcionPeriodo()
+    {
+        if (Desde is { } d1 && Hasta is { } d2)
+        {
+            var (primero, ultimo) = d1 <= d2 ? (d1, d2) : (d2, d1);
+            // Cultura invariante: en un formato personalizado "/" es el separador de
+            // fecha de la cultura actual, no una barra literal.
+            return $"del {primero.ToString("d/M/yyyy", CultureInfo.InvariantCulture)} al {ultimo.ToString("d/M/yyyy", CultureInfo.InvariantCulture)}";
+        }
+
+        if (MesEnCurso) return "mes en curso";
+        return RangoDias == 1 ? "últimas 24 horas" : $"últimos {RangoDias} días";
     }
 
     private static DateOnly Acotar(DateOnly dia) =>

@@ -121,7 +121,7 @@
 @code {
     [Parameter] public string? Guid { get; set; }
 
-    private MonitorFiltroDto _filtro = new();
+    private MonitorFiltroDto _filtro = new() { RangoDias = 1 };
     private PagedResultDto<EjecucionResumenDto>? _pagina;
     private DashboardAgregadosDto? _agregados;
     private IReadOnlyList<string> _tipologias = [];

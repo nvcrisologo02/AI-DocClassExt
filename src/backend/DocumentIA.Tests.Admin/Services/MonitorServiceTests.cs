@@ -309,4 +309,67 @@ public class MonitorServiceTests
         accion.Should().NotThrow();
         ExtraerInstante(filtro.ToQueryString(), "hasta").Should().BeAfter(ExtraerInstante(filtro.ToQueryString(), "desde"));
     }
+
+    // Mes en curso (AB#101128): ventana viva desde el dia 1 a las 00:00 en hora
+    // peninsular hasta ahora. No es un rango fijo: se recalcula en cada consulta.
+    [Fact]
+    public void ToQueryString_ConMesEnCurso_EmpiezaElDiaUnoALaMedianochePeninsular()
+    {
+        var hoy = DateOnly.FromDateTime(HoraEspana.Desde(DateTime.UtcNow));
+        var filtro = new MonitorFiltroDto { MesEnCurso = true, RangoDias = 90 };
+
+        var query = filtro.ToQueryString();
+
+        ExtraerInstante(query, "desde").Should().Be(HoraEspana.InicioDelDiaUtc(new DateOnly(hoy.Year, hoy.Month, 1)));
+        ExtraerInstante(query, "hasta").Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
+    }
+
+    [Fact]
+    public void ToQueryString_RangoFijo_MandaSobreMesEnCurso()
+    {
+        var filtro = new MonitorFiltroDto
+        {
+            MesEnCurso = true,
+            Desde = new DateOnly(2026, 8, 1),
+            Hasta = new DateOnly(2026, 8, 31)
+        };
+
+        ExtraerInstante(filtro.ToQueryString(), "desde").Should().Be(new DateTime(2026, 7, 31, 22, 0, 0, DateTimeKind.Utc));
+    }
+
+    [Fact]
+    public void EsRangoFijo_EsFalsoConMesEnCurso()
+    {
+        new MonitorFiltroDto { MesEnCurso = true }.EsRangoFijo.Should().BeFalse(
+            "el auto-refresco del Monitor no debe pausarse con una ventana viva");
+    }
+
+    [Fact]
+    public void Clonar_CopiaMesEnCurso()
+    {
+        new MonitorFiltroDto { MesEnCurso = true }.Clonar().MesEnCurso.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(1, "últimas 24 horas")]
+    [InlineData(7, "últimos 7 días")]
+    [InlineData(90, "últimos 90 días")]
+    public void DescripcionPeriodo_ConRangoRelativo(int dias, string esperado)
+    {
+        new MonitorFiltroDto { RangoDias = dias }.DescripcionPeriodo().Should().Be(esperado);
+    }
+
+    [Fact]
+    public void DescripcionPeriodo_ConMesEnCurso()
+    {
+        new MonitorFiltroDto { MesEnCurso = true }.DescripcionPeriodo().Should().Be("mes en curso");
+    }
+
+    [Fact]
+    public void DescripcionPeriodo_ConRangoFijo_OrdenaLosExtremos()
+    {
+        var filtro = new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 31), Hasta = new DateOnly(2026, 8, 1) };
+
+        filtro.DescripcionPeriodo().Should().Be("del 1/8/2026 al 31/8/2026");
+    }
 }

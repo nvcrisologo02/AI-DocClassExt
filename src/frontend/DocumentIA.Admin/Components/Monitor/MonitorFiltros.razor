@@ -6,6 +6,7 @@
             <label class="form-label small text-muted mb-1">Rango</label>
             <select class="form-select" value="@ValorRango" @onchange="OnRangoCambiado">
                 <option value="1">Últimas 24 horas</option>
+                <option value="@RangoMesEnCurso">Mes en curso</option>
                 <option value="7">Últimos 7 días</option>
                 <option value="30">Últimos 30 días</option>
                 <option value="90">Últimos 90 días</option>
@@ -119,6 +120,7 @@
     private bool _disposed;
 
     private const string RangoPersonalizado = "custom";
+    private const string RangoMesEnCurso = "mes";
 
     // El modo se recuerda aparte del filtro: al borrar una fecha el filtro deja de
     // ser fijo, pero los inputs deben seguir a la vista para poder completarla.
@@ -129,7 +131,10 @@
         if (Filtro.EsRangoFijo) _personalizado = true;
     }
 
-    private string ValorRango => _personalizado ? RangoPersonalizado : Filtro.RangoDias.ToString();
+    private string ValorRango =>
+        _personalizado ? RangoPersonalizado
+        : Filtro.MesEnCurso ? RangoMesEnCurso
+        : Filtro.RangoDias.ToString();
 
     private static string? Fecha(DateOnly? dia) => dia?.ToString("yyyy-MM-dd");
 
@@ -146,6 +151,7 @@
             var hoy = DateOnly.FromDateTime(HoraEspana.Desde(DateTime.UtcNow));
             await Emitir(f =>
             {
+                f.MesEnCurso = false;
                 f.Desde = new DateOnly(hoy.Year, hoy.Month, 1);
                 f.Hasta = hoy;
             });
@@ -153,8 +159,23 @@
         }
 
         _personalizado = false;
+
+        // Mes en curso es una ventana viva, no un periodo cerrado: sin fechas, para
+        // que el propio filtro la recalcule en cada consulta (AB#101128).
+        if (valor == RangoMesEnCurso)
+        {
+            await Emitir(f =>
+            {
+                f.MesEnCurso = true;
+                f.Desde = null;
+                f.Hasta = null;
+            });
+            return;
+        }
+
         await Emitir(f =>
         {
+            f.MesEnCurso = false;
             f.RangoDias = int.TryParse(valor, out var d) ? d : 7;
             f.Desde = null;
             f.Hasta = null;

@@ -1748,6 +1748,7 @@ Pagina `/costes`. **No aparece en el menu de navegacion**: se accede por URL dir
 - **Listado de ejecuciones** con su coste, paginado, con enlace al detalle. El detalle muestra el desglose por llamada de esa ejecucion.
 - **Ejecuciones estimadas**: las anteriores a la puesta en marcha de la medicion se rellenaron de forma retroactiva a partir de la volumetria persistida. Van marcadas y se pueden excluir con el conmutador de estimados. Son una estimacion, no facturacion.
 - **Rango personalizado** (AB#100284): ademas de las ventanas relativas, el desplegable Rango ofrece *Personalizado* con dos fechas Desde/Hasta, inclusivas y en hora peninsular, precargadas con el mes en curso. Sirve para sacar el coste de un mes natural o de cualquier periodo cerrado. La misma opcion existe en el Monitor, donde ademas pausa el auto-refresco mientras el rango sea fijo.
+- **Mes en curso** (AB#101128): opcion del desplegable Rango, tras *Ultimas 24 horas*. Va desde las 00:00 del dia 1 del mes en hora peninsular hasta ahora y se recalcula en cada consulta, asi que se actualiza sola al cambiar de mes. Costes arranca en *Mes en curso* y el Monitor en *Ultimas 24 horas*. Con *Mes en curso* el auto-refresco del Monitor no se pausa, porque no es un rango fijo.
 
 Aviso de lectura: cada entorno usa la cuenta de IA de produccion, asi que la suma de un entorno no es comparable con la factura de su grupo de recursos.
 

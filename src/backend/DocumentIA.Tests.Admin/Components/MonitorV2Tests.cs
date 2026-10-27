@@ -238,4 +238,29 @@ public class MonitorV2PaginaTests : TestContext
 
         cut.Markup.Should().NotContain("Auto-refresco pausado");
     }
+
+    // AB#101128: el Monitor arranca en las ultimas 24 horas.
+    [Fact]
+    public void ArrancaConLasUltimas24Horas()
+    {
+        RegistrarBackend(_ => DocumentIA.Tests.Admin.Helpers.StubHttpMessageHandler.Json("[]"));
+
+        var cut = RenderComponent<DocumentIA.Admin.Components.Pages.MonitorV2>();
+
+        var filtro = cut.FindComponent<DocumentIA.Admin.Components.Monitor.MonitorFiltros>().Instance.Filtro;
+        filtro.RangoDias.Should().Be(1);
+        filtro.MesEnCurso.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task ConMesEnCurso_NoPausaElAutoRefresco()
+    {
+        RegistrarBackend(_ => DocumentIA.Tests.Admin.Helpers.StubHttpMessageHandler.Json("[]"));
+        var cut = RenderComponent<DocumentIA.Admin.Components.Pages.MonitorV2>();
+        var filtros = cut.FindComponent<DocumentIA.Admin.Components.Monitor.MonitorFiltros>();
+
+        await cut.InvokeAsync(() => filtros.Instance.FiltroCambiado.InvokeAsync(new MonitorFiltroDto { MesEnCurso = true }));
+
+        cut.Markup.Should().NotContain("Auto-refresco pausado");
+    }
 }
