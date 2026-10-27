@@ -424,8 +424,10 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 - Debe venir exactamente una fuente de documento: `objectIdGDC` o `content.base64`.
 - Si se usa `documento.objectIdGDC`, el sistema fuerza `instrucciones.skipGDCUpload = true`.
 - `instrucciones.classificationOnly=true` y `instrucciones.expectedType` informado son incompatibles (`400 Bad Request`).
-- La **clave de deduplicacion** es `SHA256 + classificationOnly + nivelClasificacion`. Peticiones con el mismo
-  documento pero distinto `nivelClasificacion` no reutilizan el resultado anterior.
+- Un documento ya procesado solo reutiliza una ejecucion anterior con la misma **clave de intencion** (modo,
+  `nivelClasificacion`, universo de tipologias, `expectedType` y modelo de clasificacion). Peticiones con el mismo
+  documento pero distinto `nivelClasificacion` no reutilizan el resultado anterior. Ver la seccion `Dedup` de este
+  manual y ADR-003.
 - Si se informa `instrucciones.classification.nivelClasificacion`, el sistema fuerza `provider="gpt"` aunque se
   haya indicado otro proveedor en la peticion.
 - En ruta `provider="gpt"` (directa o forzada por `nivelClasificacion`), `instrucciones.classification.model`

@@ -885,7 +885,7 @@ Write-Host "State: $funcStatus" -ForegroundColor $(if ($funcStatus -eq "Running"
 # 2. HTTP endpoint
 Write-Host "`n[2/5] HTTP endpoint..." -ForegroundColor Yellow
 try {
-    $health = Invoke-RestMethod -Uri "$ApiUrl/api/health" -ErrorAction Stop
+    $health = Invoke-RestMethod -Method POST -Uri "$ApiUrl/api/healthcheck" -ErrorAction Stop
     Write-Host "✓ API responding" -ForegroundColor Green
 } catch {
     Write-Host "✗ API not responding: $($_.Exception.Message)" -ForegroundColor Red
@@ -918,8 +918,7 @@ Write-Host "`n=== Check Complete ===" -ForegroundColor Cyan
 
 **health.http:**
 ```http
-GET https://srbappprodocai.azurewebsites.net/api/health
-x-functions-key: {{functionKey}}
+POST https://srbappprodocai.azurewebsites.net/api/healthcheck
 
 ###
 
