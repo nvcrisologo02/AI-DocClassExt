@@ -1740,7 +1740,7 @@ Ademas de las secciones anteriores, el Admin incluye:
 
 ### 5.9.7 Seccion Costes
 
-Pagina `/costes`. **No aparece en el menu de navegacion**: se accede por URL directa o desde el detalle de una ejecucion. Es la vista de coste de IA agregado y por ejecucion, con los mismos filtros del Monitor (rango de fechas, tipologia, estado, flujo, solicitante y busqueda libre).
+Pagina `/costes`. Entrada **Cuadro de costes** del menu de navegacion (AB#101127). Es la vista de coste de IA agregado y por ejecucion, con los mismos filtros del Monitor (rango de fechas, tipologia, estado, flujo, solicitante y busqueda libre).
 
 - **Totales del periodo**: coste, tokens, paginas y numero de ejecuciones con coste.
 - **Desglose** por actividad, por tipologia y por modelo, para ver donde se concentra el gasto.

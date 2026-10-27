@@ -188,3 +188,9 @@ a, .btn-link {
 .sareb-grafico-titulo { font-weight: 700; color: #000; }
 .sareb-grafico-unidad { font-size: .8rem; font-weight: 400; color: var(--sareb-verde-gris); }
 .sareb-grafico-fuente { font-size: .72rem; color: var(--sareb-verde-gris); margin-top: .5rem; }
+
+/* Inicio (AB#101127). */
+.sareb-inicio-titulo { color: var(--sareb-verde); font-weight: 700; }
+.sareb-acceso { border: 1px solid var(--sareb-gris); color: inherit; }
+.sareb-acceso:hover { border-color: var(--sareb-verde); }
+.sareb-acceso-titulo { color: var(--sareb-verde); font-weight: 700; }

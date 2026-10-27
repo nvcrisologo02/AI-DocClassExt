@@ -87,7 +87,7 @@ Los campos están documentados uno a uno en la sección 6.bis del [contrato HTTP
 
 ### 3.3 Consultarlos en Admin
 
-La sección está en la ruta `/costes`. **No aparece en el menú**, se llega escribiendo la dirección.
+La sección está en la ruta `/costes`. Se abre desde la entrada **Cuadro de costes** del menú.
 
 Usa los mismos filtros que el Monitor: rango de fechas, tipología, estado, flujo, búsqueda por documento o identificador, y solicitante. Muestra cuatro bloques:
 

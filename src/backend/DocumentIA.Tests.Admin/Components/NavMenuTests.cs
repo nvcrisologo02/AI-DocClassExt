@@ -25,4 +25,33 @@ public class NavMenuTests : TestContext
 
         cut.Markup.Should().NotContain("DocumentIA.Admin");
     }
+
+    private static List<(string Href, string Texto)> Enlaces(IRenderedComponent<NavMenu> cut) =>
+        cut.FindAll("nav a.nav-link")
+            .Select(a => (a.GetAttribute("href") ?? "", a.TextContent.Trim()))
+            .ToList();
+
+    [Fact]
+    public void Menu_MonitorApuntaALaVersionDos()
+    {
+        var cut = RenderComponent<NavMenu>();
+
+        Enlaces(cut).Should().ContainSingle(e => e.Texto == "Monitor").Which.Href.Should().Be("monitor-v2");
+    }
+
+    [Fact]
+    public void Menu_IncluyeCuadroDeCostes()
+    {
+        var cut = RenderComponent<NavMenu>();
+
+        Enlaces(cut).Should().ContainSingle(e => e.Texto == "Cuadro de costes").Which.Href.Should().Be("costes");
+    }
+
+    [Fact]
+    public void Menu_NoEnlazaElMonitorOriginal()
+    {
+        var cut = RenderComponent<NavMenu>();
+
+        Enlaces(cut).Select(e => e.Href).Should().NotContain("monitor");
+    }
 }
