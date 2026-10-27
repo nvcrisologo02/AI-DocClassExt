@@ -21,6 +21,10 @@ public static class SarebPaleta
     // De menos a mas intensidad, como pide la guia para comparativas.
     public static readonly string[] Serie = [GrisClaro, Gris, VerdeClaro, Turquesa, Azul, AzulOscuro, Verde];
 
+    // Escala de magnitud (matriz del Monitor): de claro a oscuro, sin saltos de
+    // luminosidad; desde el cuarto paso el texto va en blanco.
+    public static readonly string[] Escala = [VerdeClaro, Turquesa, Verde, Azul, AzulOscuro];
+
     public const string Ok = Turquesa;
     public const string Revision = Naranja;
     public const string Error = Rojo;

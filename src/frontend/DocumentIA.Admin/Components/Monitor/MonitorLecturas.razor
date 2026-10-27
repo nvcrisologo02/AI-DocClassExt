@@ -91,9 +91,9 @@
 
     private List<Tramo> Calidades =>
     [
-        new("OK", "Suficiente", CalidadOk, "#0ca30c"),
-        new("REVISION", "Requiere revisión", CalidadRevision, "#fab219"),
-        new("ERROR", "Insuficiente", CalidadError, "#d03b3b")
+        new("OK", "Suficiente", CalidadOk, SarebPaleta.Ok),
+        new("REVISION", "Requiere revisión", CalidadRevision, SarebPaleta.Revision),
+        new("ERROR", "Insuficiente", CalidadError, SarebPaleta.Error)
     ];
 
     // Verde solo para el estado que representa "termino sin incidencias"; el
@@ -101,11 +101,11 @@
     // en vez de heredar un color que insinue algo que no sabemos.
     private static string ColorProceso(string estado) => estado switch
     {
-        "OK" or "Completado" or "Completed" => "#0ca30c",
-        "VALIDACION_CON_ERRORES" or "EXTRACCION_INCOMPLETA" => "#ec835a",
-        "Error" or "ERROR" or "Fallido" or "PAGINAS_EXCEDIDAS" or "SIN_CONTENIDO_DOCUMENTO" => "#d03b3b",
-        "NO_CLASIFICADO" or "BAJA_CONFIANZA_CLASIFICACION" => "#fab219",
-        _ => "#898781"
+        "OK" or "Completado" or "Completed" => SarebPaleta.Ok,
+        "VALIDACION_CON_ERRORES" or "EXTRACCION_INCOMPLETA" => SarebPaleta.Error,
+        "Error" or "ERROR" or "Fallido" or "PAGINAS_EXCEDIDAS" or "SIN_CONTENIDO_DOCUMENTO" => SarebPaleta.Error,
+        "NO_CLASIFICADO" or "BAJA_CONFIANZA_CLASIFICACION" => SarebPaleta.Revision,
+        _ => SarebPaleta.Neutro
     };
 
     // El ancho se interpola dentro de un atributo style, asi que tiene que salir

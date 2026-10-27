@@ -15,22 +15,22 @@
         <div class="mv2-kpis flex-fill">
             <div>
                 <div class="mv2-kpi-label">Proceso completado</div>
-                <div class="mv2-kpi-value" style="color:#0ca30c">@Porcentaje(ProcesoCompletado)</div>
+                <div class="mv2-kpi-value text-success">@Porcentaje(ProcesoCompletado)</div>
                 <div class="mv2-kpi-foot">@Formato(ProcesoCompletado) de @Formato(Agregados?.TotalEjecuciones ?? 0)</div>
             </div>
             <div>
                 <div class="mv2-kpi-label">Confianza suficiente</div>
-                <div class="mv2-kpi-value" style="color:#0ca30c">@Porcentaje(Agregados?.CalidadOk)</div>
+                <div class="mv2-kpi-value text-success">@Porcentaje(Agregados?.CalidadOk)</div>
                 <div class="mv2-kpi-foot">≥ 0,85</div>
             </div>
             <div>
                 <div class="mv2-kpi-label">Requieren revisión</div>
-                <div class="mv2-kpi-value" style="color:#9a6700">@Formato(Agregados?.CalidadRevision ?? 0)</div>
+                <div class="mv2-kpi-value text-warning">@Formato(Agregados?.CalidadRevision ?? 0)</div>
                 <div class="mv2-kpi-foot">0,70 – 0,85</div>
             </div>
             <div>
                 <div class="mv2-kpi-label">Confianza insuficiente</div>
-                <div class="mv2-kpi-value" style="color:#d03b3b">@Formato(Agregados?.CalidadError ?? 0)</div>
+                <div class="mv2-kpi-value text-danger">@Formato(Agregados?.CalidadError ?? 0)</div>
                 <div class="mv2-kpi-foot">&lt; 0,70</div>
             </div>
             <div>
