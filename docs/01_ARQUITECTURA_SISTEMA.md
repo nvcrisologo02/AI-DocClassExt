@@ -280,13 +280,16 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 
 ---
 
-## 1.5 Decisiones Arquitectonicas de diseno (DA)
+## 1.5 Decisiones Arquitectonicas (ADR)
 
-> Estas decisiones son el registro historico del diseno inicial y se numeran `DA-NN` para no confundirlas con los
-> ADR formales de `docs/decisiones/` (`ADR-NNN-<slug>.md`), que son los vigentes. Cuando una cita dice "ADR-003" se
-> refiere al de `docs/decisiones/`, no a DA-03.
+> **Registro historico del diseno inicial (nota del 2026-10-27).** Los siete bloques siguientes se conservan tal
+> como se escribieron y su campo de estado puede no reflejar la situacion actual: el estado vigente de la
+> autenticacion esta en §1.4.6 y la IA es propia de cada entorno desde la Epic AB#100298. Su numeracion es local a
+> este documento y no coincide con la de los ADR formales de `docs/decisiones/` (`ADR-NNN-<slug>.md`), que son los
+> vigentes: cuando una referencia cita "ADR-001", "ADR-002" o "ADR-003" sin otro contexto, se refiere a
+> `docs/decisiones/`.
 
-### DA-01: Azure Durable Functions como motor de orquestacion
+### ADR-001: Azure Durable Functions como motor de orquestacion
 
 | Aspecto | Detalle |
 |---------|---------|
@@ -296,7 +299,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 | **Justificacion** | - Modelo de codigo C# nativo (no YAML/JSON designer). <br/>- Persistencia automatica de estado en Storage. <br/>- customStatus para polling de progreso. <br/>- Retry policies y timer support built-in. <br/>- Consumption plan (pago por ejecucion). <br/>- Todo en un unico proyecto .NET desplegable. |
 | **Riesgos** | Replay semantics requieren cuidado (no I/O en el orchestrator). Tamaño de input/output limitado por Storage. |
 
-### DA-02: EF Core Code-First sobre SQL Server
+### ADR-002: EF Core Code-First sobre SQL Server
 
 | Aspecto | Detalle |
 |---------|---------|
@@ -306,7 +309,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 | **Justificacion** | - Migraciones automaticas aplican cambios de schema sin scripts manuales. <br/>- `DbContext.Database.Migrate()` en startup para dev local. <br/>- Seed data desde archivos JSON de config. <br/>- Facilidad de evolucionar el modelo durante la evolución del sistema. <br/>- Repository pattern para desacoplamiento. |
 | **Trade-offs** | Menos control sobre SQL generado. Para consultas criticas de rendimiento futuras se puede usar raw SQL/Dapper puntualmente. |
 
-### DA-03: Azure DI + GPT fallback para clasificacion
+### ADR-003: Azure DI + GPT fallback para clasificacion
 
 | Aspecto | Detalle |
 |---------|---------|
@@ -316,7 +319,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 | **Justificacion** | - DI es rapido y barato para documentos que coinciden con el entrenamiento. <br/>- GPT maneja documentos fuera de distribucion con reasoning. <br/>- Umbral configurable por tipologia (`clasifUmbralFallback`). <br/>- Mismo patron para extraccion: CU primario + GPT fallback. |
 | **Metricas** | DI: ~2-5s, GPT: ~5-15s. Fallback solo se activa cuando confianza DI < umbral. |
 
-### DA-04: Sistema de plugins DLL dinamico
+### ADR-004: Sistema de plugins DLL dinamico
 
 | Aspecto | Detalle |
 |---------|---------|
@@ -325,15 +328,15 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 | **Decision** | **(A) Plugins DLL + REST/SOAP** |
 | **Justificacion** | - DLLs compiladas externamente (SarebEnrichments.dll), cargadas desde `AppContext.BaseDirectory/plugins/`. <br/>- Plugins REST/SOAP no requieren codigo .NET. <br/>- PluginFactory + ResilientPlugin abstraen la complejidad. <br/>- Prioridad configurable: plugins criticos (P1) detienen la cadena si fallan. |
 
-### DA-05: Dual AuthMode (ApiKey + Managed Identity)
+### ADR-005: Dual AuthMode (ApiKey + Managed Identity)
 
 | Aspecto | Detalle |
 |---------|---------|
 | **Contexto** | El sistema necesita funcionar rapidamente con API Keys, pero la produccion final debe usar Managed Identity (zero-secret). |
 | **Decision** | Implementar ambos modos desde el inicio, seleccionables por configuracion (`AuthMode: "ApiKey"` o `"DefaultAzureCredential"`). |
-| **Estado** | Actualizado 2026-10-27: las filas de `ModeloConfigs` usan `DefaultAzureCredential` en DEV, PRE y PRO (PRO desde la release v1.0.0, 2026-10-08, con la identidad `e700ab11-6478-4aa3-ad3c-b6b7a92279ab` y sus roles Cognitive Services User y Foundry User). Las opciones directas de app settings siguen en `ApiKey` desde Key Vault. Ver §1.4.6. |
+| **Estado** | ApiKey activo en produccion. MI preparado en codigo, pendiente asignacion roles RBAC (`Cognitive Services User`) a la System Managed Identity `e700ab11-6478-4aa3-ad3c-b6b7a92279ab`. |
 
-### DA-06: Docker SQL local con auto-migraciones
+### ADR-006: Docker SQL local con auto-migraciones
 
 | Aspecto | Detalle |
 |---------|---------|
@@ -341,7 +344,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 | **Decision** | `docker-compose.yml` con SQL Server 2022 Developer + Azurite. `Program.cs` aplica migraciones automaticamente en startup (`RunDatabaseMigrationsOnStartup=true`). |
 | **Transicion** | Cuando Azure SQL (`srbsqlprodocai`) este disponible, solo cambia `SqlConnectionString`. El seed se aplica desde `config/` automaticamente. |
 
-### DA-07: Coste de IA por ejecucion con tarifa por modelo fisico
+### ADR-007: Coste de IA por ejecucion con tarifa por modelo fisico
 
 | Aspecto | Detalle |
 |---------|---------|
@@ -349,7 +352,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 | **Opciones** | (A) Tarifa por fila de `ModeloConfigs`, (B) tarifa por modelo fisico consumido con vigencia temporal, (C) calculo externo periodico contra la facturacion |
 | **Decision** | **(B) Catalogo de tarifas por modelo fisico**, en una fila unica de `ModeloConfigs` (`Tipo=4`), con una linea por modelo y fecha de vigencia. |
 | **Justificacion** | - Varias filas de configuracion comparten el mismo deployment: ligar el precio a la fila lo duplicaria y se desalinearia. <br/>- La vigencia por linea permite cambiar precios sin reescribir el pasado: cada ejecucion se tarifa con lo que se facturaba entonces. <br/>- Reutiliza una columna JSON existente: sin cambio de esquema y editable desde Admin. <br/>- El calculo vive en las actividades, no en el orquestador, que debe seguir siendo determinista y no puede leer BD. |
-| **Riesgos** | El catalogo se mantiene a mano: da estimacion, no facturacion. Un modelo sin tarifa no rompe nada, pero deja el agregado marcado como incompleto. Actualizado 2026-10-27: desde la IA propia por entorno (Epic AB#100298, ADR-001 de `docs/decisiones/`) cada entorno tiene sus propias cuentas de IA, asi que la factura de la cuenta ya no mezcla entornos; sigue siendo una estimacion frente a la facturacion. |
+| **Riesgos** | El catalogo se mantiene a mano: da estimacion, no facturacion. Un modelo sin tarifa no rompe nada, pero deja el agregado marcado como incompleto. La suma por entorno no es comparable con la factura del grupo de recursos, que mezcla DEV, PRE y PRO sobre la misma cuenta de IA. |
 
 ---
 
