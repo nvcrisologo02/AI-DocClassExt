@@ -1374,7 +1374,8 @@ Clasificar todos los PDFs de una carpeta:
 # Clasificación masiva de documentos
 param(
     [string]$InputFolder = "C:\docs\pendientes",
-    [string]$Endpoint = "http://localhost:7071/api/IngestDocument"
+    [string]$Endpoint = "http://localhost:7071/api/IngestDocument",
+    [string]$DurableKey = ""  # clave de sistema durabletask_extension; vacía en local
 )
 
 $pdfs = Get-ChildItem -Path $InputFolder -Filter "*.pdf"
@@ -1409,7 +1410,8 @@ foreach ($pdf in $pdfs) {
         $maxRetries = 60; $retry = 0
         do {
             Start-Sleep -Seconds 2
-            $status = Invoke-RestMethod -Method GET -Uri $resp.statusQueryUri
+            # Clave de sistema durabletask_extension, no la Function Key (CONTRATO_API_HTTP.md §4)
+            $status = Invoke-RestMethod -Method GET -Uri "$($resp.statusQueryUri)?code=$DurableKey"
             $retry++
         } while ($status.runtimeStatus -eq "Running" -and $retry -lt $maxRetries)
 

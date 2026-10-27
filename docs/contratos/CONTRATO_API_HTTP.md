@@ -88,7 +88,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 
 | Campo | Tipo | Descripción |
 |---|---|---|
-| `expectedType` | string | Si se especifica, omite la clasificación IA y usa este valor como tipología. Ej: `"nota-simple"`. Vacío = clasificación automática. |
+| `expectedType` | string | Si se especifica, usa este valor como tipología con confianza 1.0 y omite la clasificación con GPT. Ej: `"nota-simple"`. Vacío = clasificación automática. Si el clasificador por embeddings está activo en el entorno, se ejecuta igualmente en modo sombra para medición: no cambia la tipología, pero su consumo aparece en `costes.consumos` con actividad `Clasificar` (ver §6.bis). |
 | `skipDuplicateCheck` | bool | `true` = omitir la verificación de duplicados por SHA256. Default: `false`. |
 | `forceReprocess` | bool | `true` = aunque el documento sea duplicado, procesar igualmente (no reutilizar ejecución anterior). Default: `false`. |
 | `classificationOnly` | bool | `true` = ejecutar solo clasificación/resolución de tipología. Omite `Extraer`, `Prompt`, `Validar` y `ObtenerActivo` (marcadas como `Skipped` en seguimiento). Default: `false`. |
@@ -241,7 +241,7 @@ Modo multipart/blob-first:
 | Campo | Descripción |
 |---|---|
 | `instanceId` | ID de la instancia de orquestación Durable. Usar para polling. |
-| `statusQueryUri` | URL completa para consultar el estado de la instancia. |
+| `statusQueryUri` | URL completa para consultar el estado de la instancia. **No incluye clave**: el llamador debe añadir la clave de sistema `durabletask_extension` (ver §4). |
 | `correlationId` | Copia del `correlationId` enviado en la petición. |
 
 #### Respuestas de error
@@ -274,7 +274,9 @@ No existen `403`, `409`, `413`, `415`, `422`, `429` ni `503` en este endpoint. L
 
 ### `GET {statusQueryUri}`
 
-La URL se obtiene del campo `statusQueryUri` del `202 Accepted`. Requiere la Function Key del Durable Task extension.
+La URL se obtiene del campo `statusQueryUri` del `202 Accepted` y llega **sin clave**. El sondeo requiere la **clave de sistema `durabletask_extension` del host**, no la Function Key de §2: con la Function Key la respuesta es `403`. Se envía como query parameter añadido a la URL: `{statusQueryUri}?code=<clave-durabletask_extension>`.
+
+La clave de sistema se obtiene de `systemKeys.durabletask_extension` en la respuesta de `listKeys` del host (Azure Portal → Function App → *App keys* → *System keys*, o `POST .../host/default/listKeys` de ARM) y la entrega el equipo de DocumentIA por el mismo canal que la Function Key. Es un **segundo secreto** que el llamador debe custodiar. En local (`func host start`) no se requiere.
 
 > **Convención de nombres** (verificado en runtime el 2026-10-05): el `output` del orquestador sale en **PascalCase** (`Resultado.Estado`, `EstadoCalidad`, `DetalleEjecucion.Seguimiento.Estado`), mientras que `customStatus` sale en **camelCase** (`actividadActual`, `actividadesCompletadas`). El sobre de Durable (`runtimeStatus`, `customStatus`, `output`, `instanceId`, `createdTime`, `lastUpdatedTime`) va en camelCase. Los ejemplos JSON de `output` de este documento usan PascalCase; en el texto y en las tablas, los nombres de campo del output pueden aparecer abreviados (p. ej. `resultado.estado`) y corresponden a la clave PascalCase equivalente.
 
@@ -573,6 +575,9 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 | `detalleEjecucion.postproceso.normalizaciones` | Lista de transformaciones aplicadas. |
 | `detalleEjecucion.postproceso.validaciones` | Lista de reglas de validación ejecutadas. |
 | `detalleEjecucion.postproceso.inconsistencias` | Lista de inconsistencias detectadas. |
+| `detalleEjecucion.markdownFuente` | De dónde salió el markdown usado en la ejecución: `Layout` (extraído ahora con Document Intelligence Layout, con consumo `Layout` en costes), `BaseDatos` (reutilizado de una ejecución anterior del mismo contenido, localizado por SHA-256 y, si no, por MD5; sin consumo `Layout`), `Caller` (aportado en la petición), `CacheEjecucion` (ya resuelto en un paso anterior de la misma ejecución) o `Clasificador` / `Extraccion` / `Normalizacion` (texto obtenido como subproducto de ese paso). `null` si la ejecución no usó markdown. Es independiente de `resultado.reutilizadaPorDuplicado`, que solo indica la reutilización de la ejecución completa: con `markdownFuente = BaseDatos` el resto de pasos (clasificación, prompt, resumen) se ejecutan igualmente. |
+| `detalleEjecucion.markdownPaginas` | Páginas que cubre el markdown usado. `0` si no se conoce. |
+| `detalleEjecucion.markdownCompleto` | `true` si el markdown usado cubre el documento entero. |
 | `detalleEjecucion.postproceso.markdown` | Markdown del documento usado en la ejecución (cobertura en `detalleEjecucion.markdownPaginas` y `markdownCompleto`). **Solo viaja en la respuesta síncrona de una ejecución nueva**: no se persiste en el contrato (AB#100169), el detalle del Monitor no lo muestra y una respuesta reutilizada por duplicado llega con `null`. Para obtenerlo después, o en una reutilización, usar `GET /api/documentos/{sha256}/markdown` (§4.ter). |
 | `detalleEjecucion.integracion.plugins` | Lista de plugins ejecutados con su resultado individual. |
 | `detalleEjecucion.assetResolver` | Resultado de resolucion de activo. `null` si AssetResolver deshabilitado. |
@@ -702,10 +707,12 @@ $response = Invoke-RestMethod `
 $instanceId = $response.instanceId
 Write-Host "Instancia iniciada: $instanceId"
 
-# Polling
+# Polling: clave de sistema durabletask_extension, no la Function Key (ver §4).
+# En local no hace falta clave.
+$durableKey = $env:DOCUMENTIA_DURABLE_KEY
 do {
     Start-Sleep -Seconds 3
-    $status = Invoke-RestMethod -Uri $response.statusQueryUri
+    $status = Invoke-RestMethod -Uri "$($response.statusQueryUri)?code=$durableKey"
     Write-Host "Estado: $($status.runtimeStatus)"
 } while ($status.runtimeStatus -in @("Pending", "Running"))
 
@@ -718,7 +725,8 @@ $status.output.resultado
 
 - El documento puede enviarse en Base64 (RFC 4648, sin saltos de línea) o por referencia `objectIdGDC`.
 - El `correlationId` debe ser único por petición para facilitar trazabilidad en logs.
-- Si `expectedType` está presente, el sistema omite la clasificación IA y usa el valor proporcionado con confianza 1.0.
+- Si `expectedType` está presente, el sistema omite la clasificación con GPT y usa el valor proporcionado con confianza 1.0. El clasificador por embeddings, si está activo en el entorno, se ejecuta en sombra y su consumo aparece en costes (ver §3).
+- El markdown de un documento ya procesado se reutiliza aunque la ejecución no se reutilice: dos peticiones con el mismo contenido (mismo SHA-256 o, si no, mismo MD5), aunque lleguen con distinto `objectIdGDC`, comparten el markdown y la segunda no consume Layout. Se identifica con `detalleEjecucion.markdownFuente = "BaseDatos"` (ver §6). Con `forceReprocess = true` se vuelve a extraer.
 - Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización exige la misma intención: se devuelve la última ejecución del documento con la misma clave de intención (ver §5, estado `DUPLICADO`); sin ella, el documento se descarga y procesa. La respuesta reutilizada no lleva `detalleEjecucion.postproceso.markdown`; se obtiene con el GET de §4.ter.
 - Cuando el documento llega por `objectIdGDC`, además de la deduplicación por SHA256 existe la **reutilización por checksum MD5 de GDC**: si el checksum ya fue procesado, se devuelve la última ejecución con la misma intención; sin ella, el documento se descarga y procesa. El mensaje es `Resultado.MensajeReutilizacion` = "Documento ya procesado previamente (checksum GDC)...". Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
 - **Toda petición servida por reutilización queda registrada** (AB#100258) como una ejecución propia en la base de datos, sin contrato propio y con coste cero salvo el del prompt o resumen que complete (AB#100930), vinculada a la original y visible en el Monitor de Admin. Para el llamador el cambio es **aditivo**: el único campo nuevo (`detalleEjecucion.ejecucionOriginalGuid`) solo aparece en respuestas reutilizadas, y lo único que cambia de valor es `detalleEjecucion.instanceId` / `operationId` en esas respuestas, que pasan a ser los de la llamada actual. `statusQueryUri`, los estados y el resto del contrato no cambian. Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).

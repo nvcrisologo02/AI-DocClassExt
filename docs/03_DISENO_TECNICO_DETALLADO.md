@@ -1608,10 +1608,12 @@ Reglas de validación del trigger:
 ```json
 {
   "instanceId": "abc123def456ghi789",
-  "statusQueryUri": "https://srbappprodocai.azurewebsites.net/runtime/webhooks/durabletask/instances/abc123def456ghi789?code=<system-key>",
+  "statusQueryUri": "https://srbappprodocai.azurewebsites.net/runtime/webhooks/durabletask/instances/abc123def456ghi789",
   "correlationId": "a1b2c3d4-0000-0000-0000-000000000000"
 }
 ```
+
+La URL llega sin clave; el sondeo exige añadir `?code=<clave de sistema durabletask_extension>` (ver [CONTRATO_API_HTTP.md §4](contratos/CONTRATO_API_HTTP.md#4-polling-de-estado)).
 
 ### 3.12.3 GET statusQueryUri — Running
 
