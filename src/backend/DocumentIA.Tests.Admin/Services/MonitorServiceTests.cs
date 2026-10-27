@@ -324,6 +324,26 @@ public class MonitorServiceTests
         ExtraerInstante(query, "hasta").Should().BeCloseTo(DateTime.UtcNow, TimeSpan.FromSeconds(5));
     }
 
+    // Con un reloj inyectado la ventana se puede fijar: el 15 de marzo a las 10:00
+    // UTC empieza el 1 de marzo a las 00:00 peninsular, que es el 28 de febrero
+    // a las 23:00 UTC.
+    [Fact]
+    public void ToQueryString_ConMesEnCurso_UsaElRelojRecibido()
+    {
+        var reloj = new RelojFijo(new DateTimeOffset(2026, 3, 15, 10, 0, 0, TimeSpan.Zero));
+        var filtro = new MonitorFiltroDto { MesEnCurso = true };
+
+        var query = filtro.ToQueryString(reloj);
+
+        ExtraerInstante(query, "desde").Should().Be(new DateTime(2026, 2, 28, 23, 0, 0, DateTimeKind.Utc));
+        ExtraerInstante(query, "hasta").Should().Be(new DateTime(2026, 3, 15, 10, 0, 0, DateTimeKind.Utc));
+    }
+
+    private sealed class RelojFijo(DateTimeOffset ahora) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => ahora;
+    }
+
     [Fact]
     public void ToQueryString_RangoFijo_MandaSobreMesEnCurso()
     {

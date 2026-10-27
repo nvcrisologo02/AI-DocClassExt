@@ -1,8 +1,8 @@
 /* Identidad corporativa SAREB (AB#101124). Manual de identidad 1.3 y 3.1, guia
    de estilo 6.6. Se carga despues de bootstrap.min.css y antes de app.css.
    Bootstrap es 5.1: las utilidades text-* y bg-* leen --bs-<color>-rgb, por eso
-   se redefinen las dos variables; botones, foco y table-dark llevan los colores
-   fijos y necesitan reglas propias. Los mismos colores estan en SarebPaleta.cs. */
+   se redefinen las dos variables; botones y foco llevan los colores fijos y
+   necesitan reglas propias. Los mismos colores estan en SarebPaleta.cs. */
 
 :root {
     --sareb-verde: #00858C;
@@ -225,14 +225,6 @@ a, .btn-link {
     --bs-table-striped-bg: rgba(var(--sareb-verde-claro-rgb), 0.12);
     --bs-table-hover-bg: rgba(var(--sareb-verde-claro-rgb), 0.25);
 }
-.table-dark {
-    --bs-table-bg: var(--sareb-verde);
-    --bs-table-striped-bg: var(--sareb-verde);
-    --bs-table-hover-bg: var(--sareb-azul-oscuro);
-    color: #fff;
-    border-color: var(--sareb-verde);
-}
-
 /* Alertas: Bootstrap 5.1 las pinta con colores fijos. */
 .alert-danger { color: #7a2e17; background-color: rgba(234, 107, 67, .12); border-color: rgba(234, 107, 67, .4); }
 .alert-warning { color: #6b3f0f; background-color: rgba(243, 158, 72, .15); border-color: rgba(243, 158, 72, .45); }
@@ -258,3 +250,14 @@ a, .btn-link {
 .sareb-kpi-ok { border-left-color: var(--sareb-turquesa); }
 .sareb-kpi-revision { border-left-color: var(--sareb-naranja); }
 .sareb-kpi-error { border-left-color: var(--sareb-rojo); }
+
+/* Tramos de las barras de lectura del Monitor: el recuento va dentro del tramo,
+   en negro sobre turquesa, naranja, rojo o gris, y se recorta si no cabe. */
+.sareb-tramo {
+    border-radius: 3px;
+    color: #000;
+    font-size: .7rem;
+    line-height: 22px;
+    white-space: nowrap;
+    overflow: hidden;
+}

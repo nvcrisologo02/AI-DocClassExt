@@ -100,9 +100,9 @@ Un interruptor decide si los importes incluyen las ejecuciones estimadas. Por de
 
 #### Coste de un mes natural o de un periodo cerrado
 
-El desplegable **Rango** ofrece ventanas relativas (24 horas, **Mes en curso**, 7, 30 o 90 días) y la opción **Personalizado**. «Mes en curso» va desde las 00:00 del día 1 del mes, en hora peninsular, hasta ahora, y se actualiza sola al cambiar de mes; la página arranca con ella seleccionada (AB#101128). Al elegirla aparecen dos fechas, *Desde* y *Hasta*, precargadas con el día 1 del mes en curso y hoy: para un mes natural basta con ajustar el mes. Las dos fechas son inclusivas y se interpretan en hora peninsular, así que "del 1 al 31 de agosto" cubre desde las 00:00 del día 1 hasta las 23:59:59 del día 31. Cabecera, desglose, gráfico y listado responden al mismo periodo.
+El desplegable **Rango** ofrece ventanas relativas (24 horas, **Mes en curso**, 7, 30 o 90 días) y la opción **Personalizado**. «Mes en curso» va desde las 00:00 del día 1 del mes, en hora peninsular, hasta ahora, y se actualiza sola al cambiar de mes; la página arranca con ella seleccionada (AB#101128). Al elegir **Personalizado** aparecen dos fechas, *Desde* y *Hasta*, precargadas con el día 1 del mes en curso y hoy: para un mes natural basta con ajustar el mes. Las dos fechas son inclusivas y se interpretan en hora peninsular, así que "del 1 al 31 de agosto" cubre desde las 00:00 del día 1 hasta las 23:59:59 del día 31. Cabecera, desglose, gráfico y listado responden al mismo periodo.
 
-Mientras falte una de las dos fechas sigue vigente la ventana relativa anterior. Volver a cualquier ventana relativa borra las fechas.
+Mientras falte una de las dos fechas sigue vigente la ventana relativa anterior (en esta página, normalmente «Mes en curso»). Volver a cualquier ventana relativa borra las fechas.
 
 Una salvedad: los puntos de la evolución diaria se agrupan por día UTC, no peninsular. Los totales del periodo son exactos; un documento procesado a las 23:30 hora española de un día puede aparecer en la barra del día siguiente.
 

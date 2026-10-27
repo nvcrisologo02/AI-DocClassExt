@@ -75,6 +75,19 @@ public class MonitorGraficosTests : TestContext
         opciones.GetProperty("fill").GetProperty("type").GetString().Should().Be("solid");
     }
 
+    // La rejilla tambien sale de SarebPaleta: el interop JS no guarda ningun color.
+    [Fact]
+    public void Opciones_LlevanLaRejillaConElGrisDeLaPaleta()
+    {
+        JSInterop.Setup<bool>("documentIaCharts.crear", _ => true).SetResult(true);
+
+        RenderComponent<MonitorGraficos>(p => p.Add(c => c.Serie, SerieDeUnDia()));
+
+        var opciones = JsonSerializer.SerializeToElement(JSInterop.Invocations["documentIaCharts.crear"].Single().Arguments[1]);
+        opciones.TryGetProperty("grid", out var rejilla).Should().BeTrue();
+        rejilla.GetProperty("borderColor").GetString().Should().Be(SarebPaleta.GrisClaro);
+    }
+
     [Fact]
     public void Tarjeta_MuestraTituloConPeriodoUnidadYFuente()
     {

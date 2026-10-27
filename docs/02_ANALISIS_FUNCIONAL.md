@@ -197,7 +197,7 @@ flowchart TB
 |-------|---------|
 | **Actor principal** | Administrador |
 | **Endpoints** | `GET /management/ejecuciones` (listado paginado), `GET /management/ejecuciones/agregados` (KPIs + serie diaria), `GET /management/ejecuciones/{guid}/detalle` |
-| **UI** | Pagina `/monitor` del Admin: KPIs, grafico de serie temporal, tabla paginada con fila desplegable y modal con el JSON completo del contrato de salida (copiar URL, copiar JSON, descargar). Cada ejecucion es enlazable por `/monitor/{guid}`. |
+| **UI** | Pagina `/monitor-v2` del Admin, entrada **Monitor** del menu (AB#101127; la ruta `/monitor` de la version anterior se conserva sin entrada de menu): KPIs, lecturas de proceso y calidad, grafico de serie temporal, tabla paginada con fila desplegable y modal con el JSON completo del contrato de salida (copiar URL, copiar JSON, descargar). Cada ejecucion es enlazable por `/monitor-v2/{guid}`. |
 | **Filtros** | Rango de fechas relativo (default: ultimos 7 dias), mes en curso (desde las 00:00 del dia 1 en hora peninsular hasta ahora, recalculado en cada consulta; AB#101128) o personalizado con Desde/Hasta inclusivos en hora peninsular (AB#100284; con rango fijo el auto-refresco se pausa), tipologia, estado, flujo, solicitante (`submittedby`, el `trazabilidad.submittedBy` de la peticion) y busqueda libre por nombre de documento o GUID. Un unico filtro gobierna KPIs, grafico y tabla; la consulta y los agregados se calculan en servidor. |
 | **Nota** | El solicitante mostrado/filtrado usa `DocumentoEjecuciones.SubmittedBy` con fallback al `SubmittedBy` del documento (`COALESCE`), para cubrir ejecuciones anteriores a la migracion de 2026-08-05. |
 

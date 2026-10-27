@@ -1754,7 +1754,7 @@ Aviso de lectura: cada entorno usa la cuenta de IA de produccion, asi que la sum
 
 ### 5.9.8 Reutilizaciones por duplicado en el Monitor
 
-Desde AB#100258, cada peticion que el sistema resuelve devolviendo el resultado de una ejecucion anterior (deduplicacion por SHA256) queda registrada como una fila propia, y el Monitor (`/monitor`) la distingue:
+Desde AB#100258, cada peticion que el sistema resuelve devolviendo el resultado de una ejecucion anterior (deduplicacion por SHA256) queda registrada como una fila propia, y el Monitor (entrada **Monitor** del menu, ruta `/monitor-v2`; la ruta `/monitor` de la version anterior se conserva sin entrada de menu, AB#101127) la distingue:
 
 - **Por defecto no se muestran** ni cuentan: quedan fuera del listado, de los KPIs, del histograma, de la matriz y de la seccion de costes, porque no son ejecuciones de IA. Las cifras que el Monitor mostraba antes no cambian.
 - **Filtro "Reutilizadas"** con tres valores: *Excluir* (por defecto), *Incluir* y *Solo reutilizadas*.

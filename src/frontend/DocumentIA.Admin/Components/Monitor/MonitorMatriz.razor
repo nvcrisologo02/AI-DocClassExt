@@ -42,7 +42,7 @@
                                         @if (n > 0)
                                         {
                                             <button type="button"
-                                                    class="btn btn-sm w-100 border-0 @(Intensidad(n) >= 3 ? "text-white" : "")"
+                                                    class="btn btn-sm w-100 border-0 @(Intensidad(n) == Pasos.Length - 1 ? "text-white" : "")"
                                                     style="background:@Fondo(n);font-variant-numeric:tabular-nums"
                                                     title="@estado · @c.Etiqueta: @n ejecuciones"
                                                     @onclick="() => CeldaSeleccionada.InvokeAsync((estado, c.Clave))">

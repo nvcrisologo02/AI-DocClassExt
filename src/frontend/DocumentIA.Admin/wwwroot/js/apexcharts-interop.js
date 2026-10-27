@@ -3,13 +3,12 @@
 // desaparecer sin recargar la pagina, y sin destruir quedarian colgando.
 
 // Valores por defecto segun la guia de estilo de SAREB (6.6): Arial, sin
-// animaciones ni degradados, rejilla discreta y leyenda abajo a la izquierda.
-// Los colores no se fijan aqui: llegan desde C# (SarebPaleta) en cada grafico,
+// animaciones ni degradados y leyenda abajo a la izquierda. Ningun color se
+// fija aqui, ni el de la rejilla: llegan desde C# (SarebPaleta) en cada grafico,
 // para no mantener la paleta en dos sitios.
 window.Apex = {
     chart: { fontFamily: 'Arial, Helvetica, sans-serif', animations: { enabled: false } },
     fill: { type: 'solid' },
-    grid: { borderColor: '#AFB6AC', strokeDashArray: 2 },
     legend: { position: 'bottom', horizontalAlign: 'left' }
 };
 

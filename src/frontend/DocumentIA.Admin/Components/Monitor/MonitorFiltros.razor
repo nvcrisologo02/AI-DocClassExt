@@ -142,6 +142,8 @@
     // propio filtro en cada consulta para que el auto-refresco siga viendo lo mas
     // reciente. El personalizado es lo contrario: un periodo cerrado, precargado con
     // el mes en curso porque el caso tipico es sacar el coste de un mes natural.
+    // MesEnCurso se deja como estaba: un rango fijo completo manda sobre el, y
+    // mientras falte una fecha sigue vigente la ventana relativa anterior.
     private async Task OnRangoCambiado(ChangeEventArgs e)
     {
         var valor = e.Value?.ToString();
@@ -151,7 +153,6 @@
             var hoy = DateOnly.FromDateTime(HoraEspana.Desde(DateTime.UtcNow));
             await Emitir(f =>
             {
-                f.MesEnCurso = false;
                 f.Desde = new DateOnly(hoy.Year, hoy.Month, 1);
                 f.Hasta = hoy;
             });

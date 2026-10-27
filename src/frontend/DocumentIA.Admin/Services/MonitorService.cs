@@ -451,9 +451,13 @@ public class MonitorFiltroDto
     /// <summary>Filtra por motivo de la regla de duplicado (AB#100930); null no filtra.</summary>
     public string? Motivo { get; set; }
 
-    public string ToQueryString()
+    public string ToQueryString() => ToQueryString(TimeProvider.System);
+
+    // El "ahora" de las ventanas relativas entra como parametro para que los tests
+    // fijen la fecha en vez de leer el reloj del sistema.
+    public string ToQueryString(TimeProvider reloj)
     {
-        var (desde, hasta) = VentanaUtc();
+        var (desde, hasta) = VentanaUtc(reloj);
         var partes = new List<string>
         {
             $"desde={Uri.EscapeDataString(desde.ToString("o"))}",
@@ -479,7 +483,7 @@ public class MonitorFiltroDto
     // El backend filtra con ">= desde" y "< hasta": el extremo superior de un rango
     // fijo es la medianoche del dia siguiente al ultimo pedido, para que ese dia
     // entre completo. Extremos invertidos se intercambian en vez de fallar.
-    private (DateTime Desde, DateTime Hasta) VentanaUtc()
+    private (DateTime Desde, DateTime Hasta) VentanaUtc(TimeProvider reloj)
     {
         if (Desde is { } d1 && Hasta is { } d2)
         {
@@ -489,7 +493,7 @@ public class MonitorFiltroDto
             return (HoraEspana.InicioDelDiaUtc(primero), HoraEspana.InicioDelDiaUtc(ultimo.AddDays(1)));
         }
 
-        var ahora = DateTime.UtcNow;
+        var ahora = reloj.GetUtcNow().UtcDateTime;
         if (MesEnCurso)
         {
             var hoy = DateOnly.FromDateTime(HoraEspana.Desde(ahora));
