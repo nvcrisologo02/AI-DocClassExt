@@ -1311,6 +1311,13 @@ El Admin sigue el manual de identidad y la guía de estilo de SAREB (AB#101124).
 
 Tipografía `Arial, Helvetica, sans-serif` (manual 3.1). El manual imprime el color 7 como «GF927C»; es una errata de `#6F927C`.
 
+Gráficos, tablas y KPIs (AB#101126):
+
+- `wwwroot/js/apexcharts-interop.js` fija valores por defecto globales en `window.Apex` según la guía 6.6: Arial, sin animaciones ni degradados (`fill.type = solid`), rejilla discreta en `#AFB6AC` y leyenda abajo a la izquierda. Los colores no se fijan ahí: cada componente los pasa desde `SarebPaleta` (`MonitorGraficos`: `Neutro` para el total y `Error` para los fallos; `CostesGrafico`: `Verde`).
+- `MonitorGraficos` y `CostesGrafico` reciben el parámetro `Periodo`, que las páginas rellenan con `MonitorFiltroDto.DescripcionPeriodo()` («últimas 24 horas», «últimos N días», «mes en curso» o «del d/M/yyyy al d/M/yyyy»). La tarjeta muestra título en minúscula y negrita con el periodo (`.sareb-grafico-titulo`), unidad arriba a la derecha (`.sareb-grafico-unidad`: `nº` o `€`) y la fuente en nota al pie (`.sareb-grafico-fuente`).
+- Tablas según el manual 3.5: el encabezado de una tarjeta que contiene una tabla va en blanco negrita sobre verde corporativo (selector `:has`, soportado por Chrome y Edge actuales); las cabeceras de columna en negro negrita sobre verde claro; filas alternas y hover con verde claro translúcido; `table-dark` pasa a verde corporativo. Las alertas de Bootstrap 5.1 tienen colores fijos y se redefinen con la paleta.
+- La superficie de los paneles de Monitor y Costes (`.mv2`: tarjetas, KPIs, cifra destacada) vivía duplicada en un bloque `<style>` de cada página; ahora está una sola vez en `sareb.css`. Los bloques `<style>` de `PromptEditor`, `EjecucionDetalle` y `JsonEditorComponent` conservan su estructura y solo cambian los literales de color por tokens.
+
 
 ## 3.9 Manejo de Errores en Durable Functions
 

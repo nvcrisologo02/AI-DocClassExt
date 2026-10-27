@@ -120,3 +120,71 @@ a, .btn-link {
 .validation-message {
     color: var(--sareb-rojo);
 }
+
+/* Superficie de los paneles de Monitor y Costes. Antes vivia duplicada en un
+   bloque <style> de cada pagina; el CSS aislado de Blazor no alcanza a los
+   componentes hijos, por eso va aqui y acotado bajo .mv2. */
+.mv2 { --mv2-border: var(--sareb-gris); --mv2-ink-2: #3c3c3b; --mv2-muted: var(--sareb-verde-gris); }
+.mv2 .card, .mv2 .mv2-card {
+    border: 1px solid var(--mv2-border);
+    border-radius: 8px;
+    box-shadow: none !important;
+    background: #fff;
+}
+.mv2 .card-header {
+    background: transparent;
+    border-bottom: 1px solid var(--mv2-border);
+    padding-top: .6rem; padding-bottom: .6rem;
+}
+.mv2 .card-header .fw-semibold { font-size: .875rem; }
+.mv2 h1 { color: var(--sareb-verde); }
+.mv2-hero { font-size: 2.9rem; font-weight: 700; line-height: 1.05; color: var(--sareb-verde); }
+.mv2-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 1.1rem; }
+.mv2-kpi-label { font-size: .75rem; color: var(--sareb-verde-gris); }
+.mv2-kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.2; color: var(--sareb-verde); }
+.mv2-kpi-foot { font-size: .72rem; color: var(--mv2-ink-2); }
+.mv2 .table > :not(caption) > * > * { padding: .5rem .6rem; }
+
+/* Tablas (manual 3.5): titulo en blanco negrita sobre verde, cabeceras en negro
+   negrita sobre verde claro, datos en regular. Las tarjetas con tabla ponen la
+   tabla dentro de .card-body, a veces envuelta en .table-responsive o en un
+   bloque condicional, de ahi el descendiente y no el hijo directo. */
+.card:has(> .table-responsive > .table) > .card-header,
+.card:has(> .table) > .card-header,
+.card:has(> .card-body .table) > .card-header {
+    background-color: var(--sareb-verde);
+    color: #fff;
+    font-weight: 700;
+}
+/* text-muted lleva !important en Bootstrap: sobre el verde se aclara. */
+.card:has(> .card-body .table) > .card-header .text-muted {
+    color: rgba(255, 255, 255, .85) !important;
+}
+.table thead th, .table .table-light th, .table-light th {
+    background-color: var(--sareb-verde-claro);
+    color: #000;
+    font-weight: 700;
+}
+.table {
+    --bs-table-striped-bg: rgba(var(--sareb-verde-claro-rgb), 0.12);
+    --bs-table-hover-bg: rgba(var(--sareb-verde-claro-rgb), 0.25);
+}
+.table-dark {
+    --bs-table-bg: var(--sareb-verde);
+    --bs-table-striped-bg: var(--sareb-verde);
+    --bs-table-hover-bg: var(--sareb-azul-oscuro);
+    color: #fff;
+    border-color: var(--sareb-verde);
+}
+
+/* Alertas: Bootstrap 5.1 las pinta con colores fijos. */
+.alert-danger { color: #7a2e17; background-color: rgba(234, 107, 67, .12); border-color: rgba(234, 107, 67, .4); }
+.alert-warning { color: #6b3f0f; background-color: rgba(243, 158, 72, .15); border-color: rgba(243, 158, 72, .45); }
+.alert-info { color: #023f56; background-color: rgba(0, 134, 173, .10); border-color: rgba(0, 134, 173, .35); }
+.alert-success { color: #00504e; background-color: rgba(0, 171, 168, .10); border-color: rgba(0, 171, 168, .35); }
+
+/* Graficos (guia 6.6): titulo breve en minuscula y negrita con el periodo,
+   unidad arriba a la derecha en regular y fuente en nota al pie. */
+.sareb-grafico-titulo { font-weight: 700; color: #000; }
+.sareb-grafico-unidad { font-size: .8rem; font-weight: 400; color: var(--sareb-verde-gris); }
+.sareb-grafico-fuente { font-size: .72rem; color: var(--sareb-verde-gris); margin-top: .5rem; }

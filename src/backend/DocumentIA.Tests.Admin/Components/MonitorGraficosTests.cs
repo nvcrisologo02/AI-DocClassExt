@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Bunit;
 using DocumentIA.Admin.Components.Monitor;
 using DocumentIA.Admin.Services;
@@ -58,5 +59,33 @@ public class MonitorGraficosTests : TestContext
 
         actualizar.Should().NotThrow(
             "el auto-refresco actualiza el grafico sin intervencion del usuario: un fallo ahi no debe tumbar la pagina");
+    }
+
+    // Guia de estilo 6.6: base neutra y un color intenso para destacar.
+    [Fact]
+    public void Opciones_UsanLaPaletaSareb()
+    {
+        JSInterop.Setup<bool>("documentIaCharts.crear", _ => true).SetResult(true);
+
+        RenderComponent<MonitorGraficos>(p => p.Add(c => c.Serie, SerieDeUnDia()));
+
+        var opciones = JsonSerializer.SerializeToElement(JSInterop.Invocations["documentIaCharts.crear"].Single().Arguments[1]);
+        opciones.GetProperty("colors").EnumerateArray().Select(c => c.GetString())
+            .Should().Equal(SarebPaleta.Neutro, SarebPaleta.Error);
+        opciones.GetProperty("fill").GetProperty("type").GetString().Should().Be("solid");
+    }
+
+    [Fact]
+    public void Tarjeta_MuestraTituloConPeriodoUnidadYFuente()
+    {
+        JSInterop.Setup<bool>("documentIaCharts.crear", _ => true).SetResult(true);
+
+        var cut = RenderComponent<MonitorGraficos>(p => p
+            .Add(c => c.Serie, SerieDeUnDia())
+            .Add(c => c.Periodo, "últimas 24 horas"));
+
+        cut.Find(".sareb-grafico-titulo").TextContent.Should().Be("ejecuciones por día · últimas 24 horas");
+        cut.Find(".sareb-grafico-unidad").TextContent.Should().Be("nº");
+        cut.Find(".sareb-grafico-fuente").TextContent.Should().StartWith("Fuente:");
     }
 }
