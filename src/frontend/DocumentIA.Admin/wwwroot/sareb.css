@@ -1,0 +1,122 @@
+/* Identidad corporativa SAREB (AB#101124). Manual de identidad 1.3 y 3.1, guia
+   de estilo 6.6. Se carga despues de bootstrap.min.css y antes de app.css.
+   Bootstrap es 5.1: las utilidades text-* y bg-* leen --bs-<color>-rgb, por eso
+   se redefinen las dos variables; botones, foco y table-dark llevan los colores
+   fijos y necesitan reglas propias. Los mismos colores estan en SarebPaleta.cs. */
+
+:root {
+    --sareb-verde: #00858C;
+    --sareb-azul-oscuro: #046E97;
+    --sareb-azul: #0086AD;
+    --sareb-turquesa: #00ABA8;
+    --sareb-verde-claro: #90CCB7;
+    --sareb-verde-gris: #6F927C;
+    --sareb-gris: #BBBEB4;
+    --sareb-gris-claro: #AFB6AC;
+    --sareb-naranja: #F39E48;
+    --sareb-rojo: #EA6B43;
+
+    --sareb-verde-rgb: 0, 133, 140;
+    --sareb-verde-claro-rgb: 144, 204, 183;
+
+    --bs-primary: var(--sareb-verde);
+    --bs-primary-rgb: 0, 133, 140;
+    --bs-info: var(--sareb-azul);
+    --bs-info-rgb: 0, 134, 173;
+    --bs-success: var(--sareb-turquesa);
+    --bs-success-rgb: 0, 171, 168;
+    --bs-warning: var(--sareb-naranja);
+    --bs-warning-rgb: 243, 158, 72;
+    --bs-danger: var(--sareb-rojo);
+    --bs-danger-rgb: 234, 107, 67;
+    --bs-secondary: var(--sareb-gris);
+    --bs-secondary-rgb: 187, 190, 180;
+
+    --bs-font-sans-serif: Arial, Helvetica, sans-serif;
+    --bs-body-font-family: Arial, Helvetica, sans-serif;
+}
+
+html, body {
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+a, .btn-link {
+    color: var(--sareb-verde);
+}
+
+    a:hover, .btn-link:hover {
+        color: var(--sareb-azul-oscuro);
+    }
+
+.btn-primary {
+    color: #fff;
+    background-color: var(--sareb-verde);
+    border-color: var(--sareb-verde);
+}
+
+    .btn-primary:hover, .btn-primary:focus, .btn-primary:active {
+        color: #fff;
+        background-color: var(--sareb-azul-oscuro);
+        border-color: var(--sareb-azul-oscuro);
+    }
+
+.btn-outline-primary {
+    color: var(--sareb-verde);
+    border-color: var(--sareb-verde);
+}
+
+    .btn-outline-primary:hover {
+        color: #fff;
+        background-color: var(--sareb-verde);
+        border-color: var(--sareb-verde);
+    }
+
+.btn-danger {
+    background-color: var(--sareb-rojo);
+    border-color: var(--sareb-rojo);
+}
+
+.btn-success {
+    background-color: var(--sareb-turquesa);
+    border-color: var(--sareb-turquesa);
+}
+
+/* El naranja no llega a AA con texto blanco: el aviso sigue con texto oscuro. */
+.btn-warning {
+    color: #000;
+    background-color: var(--sareb-naranja);
+    border-color: var(--sareb-naranja);
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus,
+.form-control:focus, .form-select:focus, .form-check-input:focus {
+    border-color: var(--sareb-verde);
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem rgba(var(--sareb-verde-rgb), 0.5);
+}
+
+.form-check-input:checked {
+    background-color: var(--sareb-verde);
+    border-color: var(--sareb-verde);
+}
+
+.page-link {
+    color: var(--sareb-verde);
+}
+
+.page-item.active .page-link {
+    background-color: var(--sareb-verde);
+    border-color: var(--sareb-verde);
+}
+
+/* Validacion de formularios de Blazor. */
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--sareb-turquesa);
+}
+
+.invalid {
+    outline: 1px solid var(--sareb-rojo);
+}
+
+.validation-message {
+    color: var(--sareb-rojo);
+}

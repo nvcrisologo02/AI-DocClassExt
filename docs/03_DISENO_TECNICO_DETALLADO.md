@@ -1288,6 +1288,29 @@ GUIA_EASYAUTH_ADMIN. A fecha 2026-08-06, DEV dispone de app registration y grupo
 verificados (activación del App Service pendiente); PRE y PROD siguen sin
 proveedor, por lo que sus despliegues operan en modo solo lectura.
 
+### 3.8.5 Identidad visual del Admin
+
+El Admin sigue el manual de identidad y la guía de estilo de SAREB (AB#101124). El tema se aplica con tokens CSS sobre Bootstrap 5.1.0, sin recompilarlo:
+
+- `wwwroot/sareb.css` se carga en `App.razor` después de `bootstrap/bootstrap.min.css` y antes de `app.css`. Declara los tokens en `:root` y sobrescribe las variables de Bootstrap. En la 5.1 las utilidades `text-*` y `bg-*` leen `--bs-<color>-rgb`, así que se redefinen las dos variables de cada color; botones, foco de formularios, paginación y validación llevan colores fijos en Bootstrap y tienen reglas propias en `sareb.css`.
+- `Services/SarebPaleta.cs` contiene los mismos colores como constantes para lo que se pinta desde C# (gráficos). Si cambia un valor, cambia en los dos sitios.
+- Logos en `wwwroot/img/sareb-logo.png` (positivo) y `sareb-logo-negativo.png` (negativo), reescalados a 600 px desde `logos-sareb-services` de los recursos corporativos. La barra lateral es verde corporativo con el logo negativo y la denominación «DocumentIA · Administración».
+
+| Token CSS | Valor | Uso |
+|---|---|---|
+| `--sareb-verde` | `#00858C` | primario (`--bs-primary`), enlaces, foco, barra lateral |
+| `--sareb-azul-oscuro` | `#046E97` | hover del primario, segunda serie de gráficos |
+| `--sareb-azul` | `#0086AD` | `--bs-info`, tercera serie |
+| `--sareb-turquesa` | `#00ABA8` | `--bs-success` (estado correcto) |
+| `--sareb-verde-claro` | `#90CCB7` | cabeceras de tabla, marcador del ítem activo del menú |
+| `--sareb-verde-gris` | `#6F927C` | texto secundario, etiquetas de KPI |
+| `--sareb-gris` | `#BBBEB4` | bordes, `--bs-secondary` |
+| `--sareb-gris-claro` | `#AFB6AC` | serie neutra adicional |
+| `--sareb-naranja` | `#F39E48` | `--bs-warning` (en revisión); con texto oscuro, no llega a AA con blanco |
+| `--sareb-rojo` | `#EA6B43` | `--bs-danger` (con error) |
+
+Tipografía `Arial, Helvetica, sans-serif` (manual 3.1). El manual imprime el color 7 como «GF927C»; es una errata de `#6F927C`.
+
 
 ## 3.9 Manejo de Errores en Durable Functions
 
