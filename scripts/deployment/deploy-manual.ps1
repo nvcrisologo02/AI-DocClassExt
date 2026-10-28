@@ -136,7 +136,7 @@ if ($KuduUser -and $KuduPassword) {
         Write-Host "  $functionApp desplegado correctamente" -ForegroundColor Green
         Write-Host "========================================`n" -ForegroundColor Green
         Write-Host "Smoke test:" -ForegroundColor Yellow
-        Write-Host "  Invoke-RestMethod -Method GET -Uri 'https://$functionApp.azurewebsites.net/api/health'" -ForegroundColor White
+        Write-Host "  Invoke-RestMethod -Method POST -Uri 'https://$functionApp.azurewebsites.net/api/healthcheck'" -ForegroundColor White
     } catch {
         Write-Host "`n[ERROR] Deploy fallido: $_" -ForegroundColor Red
         Write-Host "  Comprueba las credenciales Kudu o usa la opcion Cloud Shell." -ForegroundColor Yellow

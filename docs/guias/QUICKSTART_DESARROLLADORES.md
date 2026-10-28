@@ -154,20 +154,16 @@ Hit CTRL+C to exit...
 En una **tercera terminal**:
 
 ```powershell
-# Test simple para confirmar que funciona:
-curl http://localhost:7071/api/health
+# Test simple para confirmar que funciona (el endpoint es POST y anonimo):
+curl -X POST http://localhost:7071/api/healthcheck
 
 # O con PowerShell nativo:
-Invoke-WebRequest -Uri "http://localhost:7071/api/health" -Method GET
+Invoke-RestMethod -Method POST -Uri "http://localhost:7071/api/healthcheck"
 ```
 
-**Esperado:** Respuesta HTTP 200 con JSON:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2026-06-10T10:30:45Z"
-}
-```
+**Esperado:** HTTP 200 (503 si algun componente esta `Unhealthy`) con un JSON con `ok`, `status`, `timestamp` y
+`components` (`functions`, `assetResolver`, `gdc`, `modelProviders`). Detalle en
+`docs/contratos/CONTRATO_API_HTTP.md` y `docs/manuales/MANUAL_HEALTHCHECK.md`.
 
 ✅ **¡Sistema está listo!**
 

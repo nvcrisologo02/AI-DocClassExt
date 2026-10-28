@@ -273,14 +273,21 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 
 | Modo | Mecanismo | Uso actual |
 |------|-----------|-----------|
-| `ApiKey` | Header `Ocp-Apim-Subscription-Key` (DI) / `api-key` (OpenAI/CU) | Produccion (actual) |
-| `DefaultAzureCredential` | Bearer token via Managed Identity | Preparado, pendiente asignacion RBAC |
+| `ApiKey` | Header `Ocp-Apim-Subscription-Key` (DI) / `api-key` (OpenAI/CU) | Opciones directas de app settings (`Extraction__AzureContentUnderstanding__*`, `Classification__AzureDocumentIntelligence__*`, `GptFallback__*`), con la clave desde Key Vault, en los tres entornos |
+| `DefaultAzureCredential` | Bearer token via Managed Identity | Filas de `ModeloConfigs` en DEV, PRE y PRO. PRO paso a identidad en la release v1.0.0 (2026-10-08) y sus `ApiKey` se purgaron; ver `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md` |
 
 `DocumentIntelligenceAuthHelper` implementa la logica con lazy singleton de `DefaultAzureCredential` thread-safe.
 
 ---
 
 ## 1.5 Decisiones Arquitectonicas (ADR)
+
+> **Registro historico del diseno inicial (nota del 2026-10-27).** Los siete bloques siguientes se conservan tal
+> como se escribieron y su campo de estado puede no reflejar la situacion actual: el estado vigente de la
+> autenticacion esta en §1.4.6 y la IA es propia de cada entorno desde la Epic AB#100298. Su numeracion es local a
+> este documento y no coincide con la de los ADR formales de `docs/decisiones/` (`ADR-NNN-<slug>.md`), que son los
+> vigentes: cuando una referencia cita "ADR-001", "ADR-002" o "ADR-003" sin otro contexto, se refiere a
+> `docs/decisiones/`.
 
 ### ADR-001: Azure Durable Functions como motor de orquestacion
 

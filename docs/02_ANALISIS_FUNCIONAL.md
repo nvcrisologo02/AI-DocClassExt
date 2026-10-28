@@ -220,16 +220,26 @@ flowchart TB
 
 ## 2.4 Reglas de Negocio Criticas
 
-### RN1: Deduplicacion por SHA256
+### RN1: Deduplicacion por SHA256 y clave de intencion
+
+Regla vigente desde v1.1.0 (ADR-003, `docs/decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md`).
 
 - Antes de procesar, se calcula SHA256 del documento y se busca en BD.
-- Si existe y `forceReprocess=false`, se retorna el resultado anterior.
+- Una ejecucion historica del mismo documento solo se reutiliza si tiene la misma **clave de intencion**: modo
+  (`classificationOnly`), `nivelClasificacion`, universo de tipologias, `expectedType` y modelo de clasificacion
+  efectivo. La identidad es exacta: una historica "mas completa" no sirve a una peticion "menor". Ademas debe cubrir
+  al menos las paginas pedidas y usar el mismo modelo de extraccion.
+- Una historica en estado de fallo (`ERROR`, `PENDIENTE_REINTENTO`, `SIN_CONTENIDO_DOCUMENTO` y variantes) nunca se
+  reutiliza.
+- Si no hay historica compatible, el documento **se procesa** como una ejecucion mas y
+  `detalleEjecucion.motivoNoReutilizacion` dice por que (`sin-historica`, `clave-distinta`,
+  `modelo-extraccion-distinto`, `paginas-insuficientes`, `contrato-invalido`, `historica-fallida`). En modo estricto
+  (`Dedup__ModoEstricto = true`, el defecto) ya no se emite `DUPLICADO`.
+- Si la historica sirve pero no trae el resumen o el prompt pedidos, se ejecuta solo ese paso sobre su markdown.
 - Si existe y `forceReprocess=true`, se reprocesa completamente.
 - `SkipDuplicateCheck=true` omite la verificacion (procesamiento incondicional).
-- La **clave de deduplicacion** es `SHA256 + classificationOnly + nivelClasificacion`. Dos peticiones con el mismo
-  SHA256 pero distinto `nivelClasificacion` se tratan como ejecuciones independientes y no se reutilizan entre si.
-  Sin coincidencia exacta se reutiliza la ultima ejecucion con contrato (AB#100177), y la fila que se graba describe
-  lo que pidio el cliente, no lo que hizo la original.
+- `Dedup__ModoEstricto = false` es solo vuelta atras temporal a la regla anterior (modo y nivel, con recurso a la
+  ultima ejecucion con contrato y `DUPLICADO` vacio sin historica). Detalle en `docs/manuales/MANUAL_DEDUPLICACION.md`.
 - **Toda peticion servida por reutilizacion deja traza propia** (AB#100258): una fila en `DocumentoEjecuciones` con
   `ReutilizadaPorDuplicado = 1`, sin contrato ni coste, vinculada por `EjecucionOriginalId` a la ejecucion reutilizada
   y con el `InstanceId`/`OperationId`/solicitante de la llamada actual. Su `EstadoFinal` es el de la original
@@ -323,8 +333,9 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 3. **D4 — Markdown pre-procesado**: si se informa `instrucciones.classification.markdown`, ese texto gana
    siempre en `MarkdownResolver` (fuente `Caller`) y no se llama a Document Intelligence Layout. Util en
    integraciones batch que ya tienen el markdown extraido. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3.
-4. **D7 — Clave de deduplicacion extendida**: el campo `nivelClasificacion` forma parte de la clave de deduplicacion
-   junto con `SHA256` y `classificationOnly`. Ver RN1.
+4. **D7 — Clave de deduplicacion extendida**: el campo `nivelClasificacion` forma parte de la clave de deduplicacion.
+   Desde v1.1.0 la clave es la clave de intencion de ADR-003 (modo, nivel, universo de tipologias, `expectedType` y
+   modelo de clasificacion). Ver RN1.
 5. **Confianza dinamica self-reported**: GPT reporta su propia certeza sobre cada clasificacion mediante un campo
    `confianza` (0.0-1.0) en el JSON de respuesta. El sistema extrae este valor y lo usa como `ConfianzaClasificacion`
    final. Si GPT no reporta confianza, se aplica fallback a 0.9 para mantener compatibilidad con versiones anteriores.
