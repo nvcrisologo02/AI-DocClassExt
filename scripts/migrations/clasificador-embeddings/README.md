@@ -6,8 +6,11 @@ Scripts de datos de la Fase A (sombra en DEV). No hay cambios de esquema.
 |---|---|---|
 | `01-modeloconfig-clasificador-embeddings.sql` | Fila `ModeloConfigs` Tipo=5 `clasificador.embeddings` con deployment, artefacto, modo y umbrales. Copia la credencial de `classification.gpt4o-mini-fallback`. | DEV con `@Modo='sombra'`; PRE y PRO con `@Modo='off'` |
 | `02-tarifas-embeddings-deployments.sql` | Lineas `text-embedding-3-large-030358` y `-010650` en el catalogo `tarifas.ia`. | DEV, PRE y PRO |
+| `03-modeloconfig-embeddings-v2.sql` | Apunta la fila `clasificador.embeddings` al artefacto v2 (solo `Artefacto.BlobPath`; modo y umbrales intactos). | DEV (PRE y PRO con AB#100781) |
 
 Orden: 01 y despues 02. Ambos hacen backup `ModeloConfigs__bak_<fecha>` y son idempotentes.
+
+Para una version nueva del artefacto: se sube primero al blob y despues se ejecuta el 03; la app lo recoge en <= 5 min y v1 se conserva en el blob.
 
 En PRE y PRO el 01 (con `@Modo='off'`) va **antes de desplegar el codigo** que incluye el
 paso 3.0 del orquestador (develop 2aa9f02). El orquestador llama a la activity en todas las
