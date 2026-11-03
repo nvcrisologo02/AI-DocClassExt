@@ -1117,7 +1117,7 @@ que corre antes del GPT y, segun el modo, solo se persiste o contesta.
 | `UmbralConfianza` | double | No | En `hibrido`, A contesta si su confianza TDN1 alcanza el umbral. Defecto 0,6 |
 | `Restringido.Modo` | string | No | Modo propio de las peticiones con `restriccionTipologias`. Defecto `sombra`. Una fila con `Modo = off` debe llevar tambien `Restringido.Modo = off`: el script 01 lo hace, pero una edicion manual desde el Admin que solo cambie `Modo` deja activo el modo restringido |
 | `Restringido.UmbralMasa`, `Restringido.UmbralConfianzaCondicionada` | double | No | Umbrales del hibrido restringido. Defectos 0,5 y 0,8. Solo actuan con un modelo `calibrado = true` |
-| `MaxChars` | int | No | Recorte del texto antes de la llamada. Defecto 24.000. El orquestador ya colapsa los espacios y recorta a 24.000 caracteres (`EmbeddingsClasificadorConfig.MaxCharsPorDefecto`) antes de llamar a la activity, para no duplicar el markdown completo en el historial Durable: `MaxChars` solo puede bajar ese tope, un valor mayor no tiene efecto |
+| `MaxChars` | int | No | Recorte del texto antes de la llamada, en caracteres (el tope real del deployment son 8.192 tokens; ver el reintento por mitades en Comportamiento). Defecto 24.000. El orquestador ya colapsa los espacios y recorta a 24.000 caracteres (`EmbeddingsClasificadorConfig.MaxCharsPorDefecto`) antes de llamar a la activity, para no duplicar el markdown completo en el historial Durable: `MaxChars` solo puede bajar ese tope, un valor mayor no tiene efecto |
 | `TimeoutSeconds` | int | No | Tiempo maximo de la llamada de embeddings. Defecto 20. Un endpoint colgado cuesta `TimeoutSeconds` en cada ejecucion y no abre el circuito de resiliencia (solo lo abren los 429 y los fallos HTTP); si ocurre, bajar `TimeoutSeconds` o poner la fila en `off` hasta que el endpoint responda |
 
 Comportamiento:
@@ -1132,6 +1132,10 @@ Comportamiento:
   `embeddings` o `expectedtype`.
 - Cualquier fallo (artefacto, 429, timeout) deriva al GPT con `Error` en el bloque. Un 429 de
   embeddings no se reintenta ni produce `PENDIENTE_REINTENTO`.
+- Excepcion (AB#101245): si el deployment rechaza la entrada por superar sus 8.192 tokens
+  (HTTP 400 con `maximum input length`), el cliente reintenta con la primera mitad del texto,
+  hasta tres veces, y deja un warning por recorte en el log del worker. Es el mismo tratamiento
+  con el que se entrenaron v1 y v2 en el Batch. Agotados los recortes, deriva al GPT con `Error`.
 - El consumo se registra como `classification.embeddings` con `Modelo` = nombre del
   deployment; el catalogo `tarifas.ia` necesita una linea por deployment
   (`scripts/migrations/clasificador-embeddings/02-tarifas-embeddings-deployments.sql`).
