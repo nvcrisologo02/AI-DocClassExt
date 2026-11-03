@@ -23,6 +23,18 @@ public class ModeloEmbeddingsTests
     }
 
     [Fact]
+    public void Parse_IgnoraCamposDesconocidosDelManifiesto()
+    {
+        var json = File.ReadAllText(RutaFixture("clasificador-embeddings-fixture.json"))
+            .Replace("\"calibrado\":", "\"cortes\":[{\"origen\":\"corpus-v1\",\"nDocumentos\":2}],\"fuenteEtiquetas\":\"manual\",\"calibrado\":");
+        json.Should().Contain("fuenteEtiquetas");
+
+        var modelo = ModeloEmbeddings.Parse(json);
+
+        modelo.Manifiesto.Dimensiones.Should().Be(8);
+    }
+
+    [Fact]
     public void Parse_JsonInvalido_LanzaInvalidData()
     {
         var act = () => ModeloEmbeddings.Parse("{ esto no es json");
