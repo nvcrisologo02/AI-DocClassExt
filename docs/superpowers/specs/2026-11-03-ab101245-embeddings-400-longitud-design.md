@@ -41,3 +41,9 @@ Que un documento largo no pierda la clasificación por embeddings por un recorte
 
 - Una llamada extra (unos cientos de milisegundos) solo en los documentos afectados, dentro del `TimeoutSeconds` del proveedor.
 - Si en el futuro `MaxChars` sube mucho, tres recortes pueden no bastar; el error se persiste igual que hoy.
+
+## Estado (2026-11-03, cierre)
+
+- Implementado en `bugfix/101245-embeddings-400-longitud` (fix 0bb3766, docs 70b1e47): `EmbeddingsClienteConRecorte`, factoría envolviendo el cliente real, manual 5.6.1c. Tests: 9 nuevos, suite 1.545/1.545, build sin warnings, formato limpio.
+- Verificado en DEV con la rama desplegada por el pipeline 802 (run 79997). Ejecución 10894 (`SubmittedBy = ab101245-verificacion`, CERT-05_4.pdf, 7 páginas sin recorte, texto de 23.551 caracteres): bloque Embeddings sin `Error`, `cert.05` con confianza 0,975, latencia 516 ms. Reproducción fuera de línea con el mismo texto persistido: 24.000 caracteres responden HTTP 400 `maximum input length is 8192 tokens`; 12.000 caracteres entran con 5.205 tokens. La primera ingesta (10893) no sirvió porque el tope por defecto de 3 páginas dejó el texto en 8.729 caracteres (3.837 tokens).
+- Hallazgo colateral, fuera de este Bug: las trazas de las categorías `DocumentIA.*` del worker (por ejemplo el warning de recorte o el aviso "fallo no controlado" del proveedor) no llegan a Application Insights de DEV (`srbappidevdocai`); solo llegan las del host (`Function.*`, `Host.*`). Comprobado también en la franja del 22/10 con los 400 originales.
