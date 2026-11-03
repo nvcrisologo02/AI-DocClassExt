@@ -86,6 +86,7 @@ El modelo v1 (entrenado el 2026-10-02 con 6.313 documentos, 37 familias, 85 tipo
 ## Estado (2026-11-03, tras la ejecución del plan)
 
 - Objetivo 1 cumplido: v2 (6.809 documentos, 39 familias, 102 tipologías, `cortes` y `fuenteEtiquetas` en el manifiesto) publicado en `srbstgdevdocai/documentai/modelos/clasificador-embeddings/v2/` y fila 1026 de `ModeloConfigs` apuntada con el script `scripts/migrations/clasificador-embeddings/03-modeloconfig-embeddings-v2.sql`, modo `sombra`.
+- Verificación de cierre en DEV: ejecución 10892 (InstanceId 0f208f8ad8e34e10a406204bd0691f8f, 2026-11-03 13:02 UTC, documento sintético enviado para la prueba) con `VersionModelo = v2`, `Modo = sombra`, A = escr.10 con confianza 0,976, misma tipología que el GPT (ESCR-10), sin error.
 - Objetivo 2 cumplido: `fiav.06` dada de alta en DEV con `scripts/database/seed-tipologia-fiav06-ab100780.sql`.
 - Objetivo 3 cumplido: `puerta_calidad.py` → PASA. TDN1 en cal 87,4 % (v1 87,2 %); TDN1 en hold2 (121 docs nuevos) 90,9 % (v1 67,8 %). Cifras en INFORME.md §13 del repo DocumentIA.Batch.
 - Objetivo 4 cumplido: `inventario_manifiesto.py` (manifiesto por carpeta, exclusiones, particiones) y `--inventario` en `texto.py`, `di_layout.py`, `exportar_modelo.py` y `puerta_calidad.py`.
