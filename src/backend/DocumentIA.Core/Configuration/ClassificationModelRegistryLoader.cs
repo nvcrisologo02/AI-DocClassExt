@@ -165,4 +165,6 @@ public class ClassificationModelConfig
     public double FallbackThreshold { get; set; } = 0.6;
     public double Temperature { get; set; } = 0.0;
     public int MaxTokens { get; set; } = 150;
+    /// <summary>Esfuerzo de razonamiento (none, minimal, low, medium, high). Nulo o vacío significa no enviarlo al modelo.</summary>
+    public string? ReasoningEffort { get; set; }
 }
