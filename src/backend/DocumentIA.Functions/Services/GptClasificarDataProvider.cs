@@ -856,8 +856,9 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
+        OpenAiModelCapabilities.WarnIfInvalidReasoningEffort(_logger, model.ReasoningEffort, model.Key);
         OpenAiModelCapabilities.ConfigureChatOptions(options, model.DeploymentName, model.Temperature,
-            Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens));
+            Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens), model.ReasoningEffort);
 
         var perAttemptTimeout = TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds));
 

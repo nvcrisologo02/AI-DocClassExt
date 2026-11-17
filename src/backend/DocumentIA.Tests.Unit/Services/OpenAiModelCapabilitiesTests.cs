@@ -1,5 +1,7 @@
 using DocumentIA.Functions.Services;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
+using Moq;
 using OpenAI.Chat;
 using Xunit;
 
@@ -218,6 +220,41 @@ namespace DocumentIA.Tests.Unit.Services
             options.Temperature.Should().BeNull();
             options.MaxOutputTokenCount.Should().BeNull();
             options.ReasoningEffortLevel.Should().BeNull();
+        }
+
+        [Fact]
+        public void WarnIfInvalidReasoningEffort_ValorDesconocido_EmiteAviso()
+        {
+            var logger = new Mock<ILogger>();
+
+            OpenAiModelCapabilities.WarnIfInvalidReasoningEffort(logger.Object, "ultra", "classification.x");
+
+            logger.Verify(l => l.Log(
+                LogLevel.Warning,
+                It.IsAny<EventId>(),
+                It.Is<It.IsAnyType>((v, _) => v.ToString()!.Contains("ultra") && v.ToString()!.Contains("classification.x")),
+                null,
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Once);
+        }
+
+        [Theory]
+        [InlineData("none")]
+        [InlineData(" High ")]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        public void WarnIfInvalidReasoningEffort_ValorValidoOVacio_NoEmiteAviso(string? valor)
+        {
+            var logger = new Mock<ILogger>();
+
+            OpenAiModelCapabilities.WarnIfInvalidReasoningEffort(logger.Object, valor, "classification.x");
+
+            logger.Verify(l => l.Log(
+                It.IsAny<LogLevel>(),
+                It.IsAny<EventId>(),
+                It.IsAny<It.IsAnyType>(),
+                It.IsAny<Exception?>(),
+                It.IsAny<Func<It.IsAnyType, Exception?, string>>()), Times.Never);
         }
     }
 }

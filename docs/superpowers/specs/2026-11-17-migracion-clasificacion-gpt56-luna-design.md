@@ -77,7 +77,7 @@ El punto de decisión es cómo emitir `reasoning_effort` y `max_completion_token
 - `ClassificationModelConfig` y `PromptModelConfig`: nueva propiedad `ReasoningEffort` (`string?`, por defecto `null`). Valores admitidos: `none`, `minimal`, `low`, `medium`, `high`. `null` o vacío significa "no enviar" (comportamiento actual). Un valor fuera de la lista se registra como aviso y no se envía.
 - `OpenAiModelCapabilities.ConfigureChatOptions`: nueva sobrecarga que recibe además `reasoningEffort`. Comportamiento:
   - Modelo clásico (gpt-4x, gpt-35): igual que hoy (`temperature` y `max_tokens`); `reasoningEffort` se ignora.
-  - Modelo de razonamiento: no se envía `temperature`; se envía el límite de salida (el SDK beta lo serializa como `max_completion_tokens`) cuando `maxOutputTokens > 0`; se envía `reasoning_effort` cuando `reasoningEffort` está informado y es válido.
+  - Modelo de razonamiento: no se envía `temperature`; se envía el límite de salida (el SDK beta lo serializa como `max_completion_tokens` solo si el cliente de Azure activa `SetNewMaxCompletionTokensPropertyEnabled()`; si no, sale como `max_tokens`) cuando `maxOutputTokens > 0`; se envía `reasoning_effort` cuando `reasoningEffort` está informado y es válido.
   - La sobrecarga actual se mantiene y delega con `reasoningEffort = null`, para que extracción no cambie.
 - Puntos de llamada que cambian: `GptClasificarDataProvider` (pasa `modelConfig.ReasoningEffort`), `OpenAIPromptDataProvider` en prompt libre y en resumen (pasa el del `PromptModelConfig`). `GptFallbackExtraerDataProvider` no cambia.
 - Tests (unitarios, `DocumentIA.Tests.Unit`):

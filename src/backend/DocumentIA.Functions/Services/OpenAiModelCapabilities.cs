@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Azure.AI.OpenAI.Chat;
+using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
@@ -7,8 +8,10 @@ namespace DocumentIA.Functions.Services;
 /// <summary>
 /// Capacidades por familia de modelo Azure OpenAI. Los modelos de razonamiento
 /// (familia gpt-5 y o-series) rechazan el parámetro temperature con HTTP 400:
-/// solo debe enviarse a los modelos clásicos (gpt-4x, gpt-35). El SDK actual emite
-/// 'max_completion_tokens' y 'reasoning_effort': la sobrecarga de cinco parámetros de
+/// solo debe enviarse a los modelos clásicos (gpt-4x, gpt-35). El SDK actual admite
+/// 'reasoning_effort' y 'max_completion_tokens' (este último solo cuando el cliente de Azure
+/// lo emite, lo que exige activar SetNewMaxCompletionTokensPropertyEnabled; si no, sale como
+/// 'max_tokens'): la sobrecarga de cinco parámetros de
 /// ConfigureChatOptions los envía a los modelos de razonamiento; la de cuatro se
 /// conserva sin cambios para la extracción.
 /// </summary>
@@ -74,6 +77,18 @@ public static partial class OpenAiModelCapabilities
 
         level = default;
         return false;
+    }
+
+    /// <summary>
+    /// Avisa en el log cuando el esfuerzo de razonamiento está informado pero no es válido
+    /// (en ese caso no se envía). Nulo o vacío no genera aviso.
+    /// </summary>
+    public static void WarnIfInvalidReasoningEffort(ILogger logger, string? reasoningEffort, string modelKey)
+    {
+        if (!string.IsNullOrWhiteSpace(reasoningEffort) && !TryParseReasoningEffort(reasoningEffort, out _))
+        {
+            logger.LogWarning("ReasoningEffort '{ReasoningEffort}' no válido en el modelo {ModelKey}; no se envía.", reasoningEffort, modelKey);
+        }
     }
 
     /// <summary>

@@ -192,7 +192,8 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             };
 
             var options = new ChatCompletionOptions();
-            OpenAiModelCapabilities.ConfigureChatOptions(options, modelConfig.DeploymentName, promptConfig.Temperature, promptConfig.MaxTokens);
+            OpenAiModelCapabilities.WarnIfInvalidReasoningEffort(_logger, modelConfig.ReasoningEffort, modelConfig.Key);
+            OpenAiModelCapabilities.ConfigureChatOptions(options, modelConfig.DeploymentName, promptConfig.Temperature, promptConfig.MaxTokens, modelConfig.ReasoningEffort);
 
             var traceContenido = !string.IsNullOrWhiteSpace(input.MarkdownExtraido)
                 ? input.MarkdownExtraido!
@@ -340,8 +341,9 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
+        OpenAiModelCapabilities.WarnIfInvalidReasoningEffort(_logger, modelConfig.ReasoningEffort, modelConfig.Key);
         OpenAiModelCapabilities.ConfigureChatOptions(options, modelConfig.DeploymentName, resumenConfig.Temperature,
-            Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0));
+            Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0), modelConfig.ReasoningEffort);
 
         var perAttemptTimeout = TimeSpan.FromSeconds(modelConfig.TimeoutSeconds);
 
