@@ -85,6 +85,7 @@ El punto de decisión es cómo emitir `reasoning_effort` y `max_completion_token
   - Validación de `ReasoningEffort` (valores válidos, nulo, inválido).
   - Deserialización de las dos configuraciones con y sin la propiedad nueva.
   - Los tests existentes de `OpenAiModelCapabilitiesTests` y `GptClasificarDataProviderTests` siguen en verde.
+- Verificado en la Tarea 5 (2026-11-17): el cliente de Azure 2.9.0-beta.1 usa `api-version` `2025-04-01-preview`; la API de esfuerzo es `ChatCompletionOptions.ReasoningEffortLevel` (`ChatReasoningEffortLevel?`); para emitir `max_completion_tokens` en lugar de `max_tokens` hace falta llamar a `SetNewMaxCompletionTokensPropertyEnabled()` (experimental, `AOAI001`), que el helper activa en deployments de razonamiento.
 - Admin (`src/frontend/DocumentIA.Admin`, `ModeloEdit.razor`): el constructor comprueba si el editor de modelos edita el JSON libre o campos tipados. Si es JSON libre, nada que hacer; si es tipado, se añade el campo `ReasoningEffort` para que un guardado desde Admin no lo pierda.
 
 ### 6.3 Base de datos de DEV
