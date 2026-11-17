@@ -1048,6 +1048,7 @@ Invoke-RestMethod \
 | `deploymentName` | string | Sí | Nombre del deployment en Azure OpenAI |
 | `temperature` | double | No | Temperatura de generacion. Default: `0.0` |
 | `maxTokens` | int | No | Tokens maximos de respuesta. Default: `4096` |
+| `reasoningEffort` | string | No | Solo modelos de razonamiento (familias `gpt-5*` y o-series): `none`, `minimal`, `low`, `medium`, `high`. Nulo o vacío = no se envía (comportamiento anterior); otro valor = aviso en el log y no se envía. En modelos clásicos se ignora. Cuando está informado y es válido, la llamada envía `reasoning_effort` y, si `maxTokens` > 0, `max_completion_tokens` (en lugar de `max_tokens`); a los modelos de razonamiento nunca se les envía `temperature`. Aplica a clasificación y a prompt (incluido el resumen); la extracción con fallback GPT no lo usa. Ejemplo en DEV: filas `classification.gpt56-luna` y `prompt.gpt56-luna` (`scripts/migrations/gpt56-luna/`). |
 | `minFieldsRatio` | double | No | Completitud minima para activar este modelo como fallback |
 | `useAsFallback` | bool | No | `true` = actuar como fallback de extraccion GPT |
 
