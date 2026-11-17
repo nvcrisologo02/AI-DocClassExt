@@ -86,6 +86,7 @@ El punto de decisión es cómo emitir `reasoning_effort` y `max_completion_token
   - Deserialización de las dos configuraciones con y sin la propiedad nueva.
   - Los tests existentes de `OpenAiModelCapabilitiesTests` y `GptClasificarDataProviderTests` siguen en verde.
 - Verificado en la Tarea 5 (2026-11-17): el cliente de Azure 2.9.0-beta.1 usa `api-version` `2025-04-01-preview`; la API de esfuerzo es `ChatCompletionOptions.ReasoningEffortLevel` (`ChatReasoningEffortLevel?`); para emitir `max_completion_tokens` en lugar de `max_tokens` hace falta llamar a `SetNewMaxCompletionTokensPropertyEnabled()` (experimental, `AOAI001`), que el helper activa en deployments de razonamiento.
+- Api-version (revisión final de rama, 2026-11-17): el SDK 2.9.0-beta.1 cambia la api-version por defecto de todo el tráfico de Azure OpenAI del Function App, de `2024-10-21` (GA, SDK 2.1.0) a `2025-04-01-preview`, porque ningún cliente fija `ServiceVersion`. Afecta a cuatro clientes: `GptClasificarDataProvider` (clasificación), `OpenAIPromptDataProvider` (prompt libre y resumen), `OpenAiClientFactory` (extracción con fallback GPT) y `Classification/AzureOpenAIEmbeddingsCliente` (embeddings en sombra).
 - Admin (`src/frontend/DocumentIA.Admin`, `ModeloEdit.razor`): el constructor comprueba si el editor de modelos edita el JSON libre o campos tipados. Si es JSON libre, nada que hacer; si es tipado, se añade el campo `ReasoningEffort` para que un guardado desde Admin no lo pierda.
 
 ### 6.3 Base de datos de DEV
@@ -156,6 +157,7 @@ La Task AB#99936 (A/B gpt-5-mini) se actualizó el 2026-11-17 con el resultado d
 - `ForceReprocess` y la reutilización por duplicado: la pasada de control usa la misma configuración que las pasadas anteriores del harness; si la dedup interfiere en la candidata, se verá en el número de ejecuciones reales frente a 467.
 - Deriva entre pasadas: candidata y control se lanzan el mismo día, sin cambios de configuración en DEV entre ambas.
 - Coste de la beta en PRO: no es decisión de esta unidad; se recoge en el cutover (AB#99939) junto con la alternativa del enfoque 3 si para entonces el paquete estable ya cubre los campos.
+- Api-version preview en todo el tráfico: la pasada de control de la Fase 3 también irá con la api-version `2025-04-01-preview`, así que compara modelos con el mismo api-version pero no equivale a "develop tal cual" (que usa `2024-10-21`). Mitigación: las comprobaciones de regresión tras desplegar (Tarea 9, Paso 4b).
 
 ## 9. Estado
 
