@@ -6,7 +6,10 @@ namespace DocumentIA.Functions.Services;
 /// <summary>
 /// Capacidades por familia de modelo Azure OpenAI. Los modelos de razonamiento
 /// (familia gpt-5 y o-series) rechazan el parámetro temperature con HTTP 400:
-/// solo debe enviarse a los modelos clásicos (gpt-4x, gpt-35).
+/// solo debe enviarse a los modelos clásicos (gpt-4x, gpt-35). El SDK actual emite
+/// 'max_completion_tokens' y 'reasoning_effort': la sobrecarga de cinco parámetros de
+/// ConfigureChatOptions los envía a los modelos de razonamiento; la de cuatro se
+/// conserva sin cambios para la extracción.
 /// </summary>
 public static partial class OpenAiModelCapabilities
 {
@@ -41,9 +44,8 @@ public static partial class OpenAiModelCapabilities
 
     /// <summary>
     /// Configura temperature y límite de salida según la familia del modelo.
-    /// Para modelos de razonamiento no se envía ninguno de los dos: rechazan
-    /// temperature != default y el SDK estable serializa el límite como
-    /// 'max_tokens', que estos modelos rechazan (exigen 'max_completion_tokens').
+    /// Sobrecarga conservada para la extracción: en modelos de razonamiento no se
+    /// envía ni temperature ni límite de salida.
     /// </summary>
     public static void ConfigureChatOptions(ChatCompletionOptions options, string? deploymentName, double temperature, int? maxOutputTokens)
     {
@@ -52,6 +54,44 @@ public static partial class OpenAiModelCapabilities
         if (SupportsTemperature(deploymentName) && maxOutputTokens is > 0)
         {
             options.MaxOutputTokenCount = maxOutputTokens;
+        }
+    }
+
+    /// <summary>
+    /// Interpreta el esfuerzo de razonamiento configurado (none, minimal, low, medium,
+    /// high; sin distinguir mayúsculas ni espacios). Devuelve false para nulo, vacío
+    /// o un valor desconocido.
+    /// </summary>
+    public static bool TryParseReasoningEffort(string? value, out ChatReasoningEffortLevel level)
+    {
+        var normalizado = value?.Trim().ToLowerInvariant();
+        if (normalizado is "none" or "minimal" or "low" or "medium" or "high")
+        {
+            level = new ChatReasoningEffortLevel(normalizado);
+            return true;
+        }
+
+        level = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Configura temperature, límite de salida y esfuerzo de razonamiento. Los modelos
+    /// clásicos reciben temperature y límite; los de razonamiento reciben el límite
+    /// (como 'max_completion_tokens') y el esfuerzo, si es válido, y nunca temperature.
+    /// </summary>
+    public static void ConfigureChatOptions(ChatCompletionOptions options, string? deploymentName, double temperature, int? maxOutputTokens, string? reasoningEffort)
+    {
+        ApplyTemperature(options, deploymentName, temperature);
+
+        if (maxOutputTokens is > 0)
+        {
+            options.MaxOutputTokenCount = maxOutputTokens;
+        }
+
+        if (!SupportsTemperature(deploymentName) && TryParseReasoningEffort(reasoningEffort, out var level))
+        {
+            options.ReasoningEffortLevel = level;
         }
     }
 }

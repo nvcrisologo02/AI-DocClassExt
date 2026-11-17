@@ -86,9 +86,10 @@ namespace DocumentIA.Tests.Unit.Services
         [Fact]
         public void ConfigureChatOptions_ModeloRazonamiento_NoEnviaTemperatureNiMaxTokens()
         {
-            // El SDK estable (OpenAI 2.1.0) serializa MaxOutputTokenCount como
-            // 'max_tokens', que la familia gpt-5 rechaza con HTTP 400
-            // (exige 'max_completion_tokens'): no se debe enviar ninguno de los dos.
+            // La sobrecarga de cuatro parámetros se conserva sin cambios para la
+            // extracción: no envía temperature ni límite a los modelos de razonamiento.
+            // El SDK actual ya sabe emitir 'max_completion_tokens'; esa ruta es la
+            // sobrecarga de cinco parámetros (con esfuerzo de razonamiento).
             var options = new ChatCompletionOptions();
 
             OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5-mini", 0.0, 2000);
@@ -106,6 +107,117 @@ namespace DocumentIA.Tests.Unit.Services
 
             options.Temperature.Should().Be(0f);
             options.MaxOutputTokenCount.Should().BeNull();
+        }
+
+        [Theory]
+        [InlineData("none", "none")]
+        [InlineData("minimal", "minimal")]
+        [InlineData("low", "low")]
+        [InlineData("medium", "medium")]
+        [InlineData("high", "high")]
+        [InlineData(" None ", "none")]
+        [InlineData("HIGH", "high")]
+        public void TryParseReasoningEffort_ValoresValidos_Devuelve(string valor, string normalizado)
+        {
+            var ok = OpenAiModelCapabilities.TryParseReasoningEffort(valor, out var level);
+
+            ok.Should().BeTrue();
+            level.ToString().Should().Be(normalizado);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("   ")]
+        [InlineData("ultra")]
+        [InlineData("xhigh")]
+        public void TryParseReasoningEffort_ValoresInvalidos_DevuelveFalse(string? valor)
+        {
+            var ok = OpenAiModelCapabilities.TryParseReasoningEffort(valor, out var level);
+
+            ok.Should().BeFalse();
+            level.Should().Be(default(ChatReasoningEffortLevel));
+        }
+
+        [Fact]
+        public void ConfigureChatOptions_Razonamiento_ConEsfuerzo_EnviaEsfuerzoYLimite()
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5.6-luna", 0.0, 2000, "none");
+
+            options.Temperature.Should().BeNull();
+            options.MaxOutputTokenCount.Should().Be(2000);
+            options.ReasoningEffortLevel.Should().Be(new ChatReasoningEffortLevel("none"));
+        }
+
+        [Fact]
+        public void ConfigureChatOptions_Razonamiento_ConSufijo_EnviaEsfuerzo()
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5.6-luna-dz", 0.0, 2000, "low");
+
+            options.ReasoningEffortLevel.Should().Be(new ChatReasoningEffortLevel("low"));
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData(0)]
+        public void ConfigureChatOptions_Razonamiento_SinLimite_EnviaSoloEsfuerzo(int? limite)
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5.6-luna", 0.0, limite, "none");
+
+            options.MaxOutputTokenCount.Should().BeNull();
+            options.ReasoningEffortLevel.Should().Be(new ChatReasoningEffortLevel("none"));
+        }
+
+        [Fact]
+        public void ConfigureChatOptions_Razonamiento_EsfuerzoInvalido_NoLoEnvia()
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5.6-luna", 0.0, 2000, "ultra");
+
+            options.ReasoningEffortLevel.Should().BeNull();
+            options.MaxOutputTokenCount.Should().Be(2000);
+        }
+
+        [Fact]
+        public void ConfigureChatOptions_Razonamiento_EsfuerzoNulo_NoEnviaEsfuerzo()
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5-mini", 0.0, 2000, null);
+
+            options.ReasoningEffortLevel.Should().BeNull();
+            options.MaxOutputTokenCount.Should().Be(2000);
+        }
+
+        [Fact]
+        public void ConfigureChatOptions_Clasico_IgnoraEsfuerzo()
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-4o-mini", 0.0, 150, "none");
+
+            options.Temperature.Should().Be(0f);
+            options.MaxOutputTokenCount.Should().Be(150);
+            options.ReasoningEffortLevel.Should().BeNull();
+        }
+
+        [Fact]
+        public void ConfigureChatOptions_SobrecargaAntigua_MantieneComportamiento()
+        {
+            var options = new ChatCompletionOptions();
+
+            OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5-mini", 0.0, 2000);
+
+            options.Temperature.Should().BeNull();
+            options.MaxOutputTokenCount.Should().BeNull();
+            options.ReasoningEffortLevel.Should().BeNull();
         }
     }
 }
