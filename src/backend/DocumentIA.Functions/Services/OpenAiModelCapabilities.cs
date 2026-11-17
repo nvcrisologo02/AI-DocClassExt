@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Azure.AI.OpenAI.Chat;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
@@ -78,7 +79,8 @@ public static partial class OpenAiModelCapabilities
     /// <summary>
     /// Configura temperature, límite de salida y esfuerzo de razonamiento. Los modelos
     /// clásicos reciben temperature y límite; los de razonamiento reciben el límite
-    /// (como 'max_completion_tokens') y el esfuerzo, si es válido, y nunca temperature.
+    /// (como 'max_completion_tokens', activando la propiedad nueva en el cliente de Azure
+    /// con SetNewMaxCompletionTokensPropertyEnabled) y el esfuerzo, si es válido, y nunca temperature.
     /// </summary>
     public static void ConfigureChatOptions(ChatCompletionOptions options, string? deploymentName, double temperature, int? maxOutputTokens, string? reasoningEffort)
     {
@@ -87,6 +89,12 @@ public static partial class OpenAiModelCapabilities
         if (maxOutputTokens is > 0)
         {
             options.MaxOutputTokenCount = maxOutputTokens;
+
+            if (!SupportsTemperature(deploymentName))
+            {
+                // El cliente de Azure serializa el límite como 'max_tokens' salvo que se active la propiedad nueva.
+                options.SetNewMaxCompletionTokensPropertyEnabled();
+            }
         }
 
         if (!SupportsTemperature(deploymentName) && TryParseReasoningEffort(reasoningEffort, out var level))
