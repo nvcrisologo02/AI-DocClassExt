@@ -177,25 +177,25 @@ namespace DocumentIA.Tests.Unit.Services
         }
 
         [Fact]
-        public void ConfigureChatOptions_Razonamiento_EsfuerzoInvalido_NoLoEnvia()
+        public void ConfigureChatOptions_Razonamiento_EsfuerzoInvalido_NoEnviaEsfuerzoNiLimite()
         {
             var options = new ChatCompletionOptions();
 
             OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5.6-luna", 0.0, 2000, "ultra");
 
             options.ReasoningEffortLevel.Should().BeNull();
-            options.MaxOutputTokenCount.Should().Be(2000);
+            options.MaxOutputTokenCount.Should().BeNull();
         }
 
         [Fact]
-        public void ConfigureChatOptions_Razonamiento_EsfuerzoNulo_NoEnviaEsfuerzo()
+        public void ConfigureChatOptions_Razonamiento_EsfuerzoNulo_NoEnviaEsfuerzoNiLimite()
         {
             var options = new ChatCompletionOptions();
 
             OpenAiModelCapabilities.ConfigureChatOptions(options, "gpt-5-mini", 0.0, 2000, null);
 
             options.ReasoningEffortLevel.Should().BeNull();
-            options.MaxOutputTokenCount.Should().Be(2000);
+            options.MaxOutputTokenCount.Should().BeNull();
         }
 
         [Fact]

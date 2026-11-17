@@ -92,29 +92,40 @@ public static partial class OpenAiModelCapabilities
     }
 
     /// <summary>
-    /// Configura temperature, límite de salida y esfuerzo de razonamiento. Los modelos
-    /// clásicos reciben temperature y límite; los de razonamiento reciben el límite
-    /// (como 'max_completion_tokens', activando la propiedad nueva en el cliente de Azure
-    /// con SetNewMaxCompletionTokensPropertyEnabled) y el esfuerzo, si es válido, y nunca temperature.
+    /// Configura temperature, límite de salida y esfuerzo de razonamiento. Los modelos clásicos
+    /// reciben temperature y límite. Los de razonamiento nunca reciben temperature; el límite
+    /// (como 'max_completion_tokens', activando la propiedad nueva en el cliente de Azure con
+    /// SetNewMaxCompletionTokensPropertyEnabled) y el esfuerzo se envían solo cuando
+    /// <paramref name="reasoningEffort"/> es válido. Sin esfuerzo válido, se comporta como la
+    /// sobrecarga de cuatro parámetros (ni límite ni esfuerzo), para no alterar las filas existentes.
     /// </summary>
     public static void ConfigureChatOptions(ChatCompletionOptions options, string? deploymentName, double temperature, int? maxOutputTokens, string? reasoningEffort)
     {
         ApplyTemperature(options, deploymentName, temperature);
 
+        if (SupportsTemperature(deploymentName))
+        {
+            if (maxOutputTokens is > 0)
+            {
+                options.MaxOutputTokenCount = maxOutputTokens;
+            }
+
+            return;
+        }
+
+        if (!TryParseReasoningEffort(reasoningEffort, out var level))
+        {
+            return;
+        }
+
         if (maxOutputTokens is > 0)
         {
             options.MaxOutputTokenCount = maxOutputTokens;
 
-            if (!SupportsTemperature(deploymentName))
-            {
-                // El cliente de Azure serializa el límite como 'max_tokens' salvo que se active la propiedad nueva.
-                options.SetNewMaxCompletionTokensPropertyEnabled();
-            }
+            // El cliente de Azure serializa el límite como 'max_tokens' salvo que se active la propiedad nueva.
+            options.SetNewMaxCompletionTokensPropertyEnabled();
         }
 
-        if (!SupportsTemperature(deploymentName) && TryParseReasoningEffort(reasoningEffort, out var level))
-        {
-            options.ReasoningEffortLevel = level;
-        }
+        options.ReasoningEffortLevel = level;
     }
 }

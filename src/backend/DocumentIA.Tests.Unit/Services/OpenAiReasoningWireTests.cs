@@ -33,7 +33,7 @@ public sealed class OpenAiReasoningWireTests
     [Fact]
     public async Task CompleteChat_GptLuna_EnviaReasoningEffortYMaxCompletionTokens()
     {
-        using var cuerpo = await EnviarPeticionAsync("gpt-5.6-luna", 150, "none");
+        using var cuerpo = await EnviarPeticionAsync("gpt-5.6-luna", 2000, "none");
         var raiz = cuerpo.RootElement;
 
         raiz.GetProperty("reasoning_effort").GetString().Should().Be("none");
@@ -49,11 +49,12 @@ public sealed class OpenAiReasoningWireTests
         var raiz = cuerpo.RootElement;
 
         raiz.GetProperty("temperature").GetDouble().Should().Be(0);
+        raiz.GetProperty("max_tokens").GetInt32().Should().Be(150);
         raiz.TryGetProperty("reasoning_effort", out _).Should().BeFalse();
         raiz.TryGetProperty("max_completion_tokens", out _).Should().BeFalse();
     }
 
-    private async Task<JsonDocument> EnviarPeticionAsync(string deployment, int maxTokensClasico, string reasoningEffort)
+    private async Task<JsonDocument> EnviarPeticionAsync(string deployment, int limite, string reasoningEffort)
     {
         var handler = new FakeHandler();
         handler.Respuestas.Enqueue(new HttpResponseMessage(HttpStatusCode.OK)
@@ -69,7 +70,6 @@ public sealed class OpenAiReasoningWireTests
         var chat = cliente.GetChatClient(deployment);
 
         var options = new ChatCompletionOptions { ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat() };
-        var limite = deployment.StartsWith("gpt-5", StringComparison.Ordinal) ? 2000 : maxTokensClasico;
         OpenAiModelCapabilities.ConfigureChatOptions(options, deployment, 0.0, limite, reasoningEffort);
 
         await chat.CompleteChatAsync([new SystemChatMessage("s"), new UserChatMessage("u")], options);
