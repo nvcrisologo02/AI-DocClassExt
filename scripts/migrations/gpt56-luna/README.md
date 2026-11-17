@@ -39,6 +39,9 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   MaxTokens 2000) e Id 1028 (`prompt.gpt56-luna`), ambas gpt-5.6-luna / none / sin flags; línea
   `gpt-5.6-luna` añadida al catálogo (23 líneas, JSON válido). Backups
   `ModeloConfigs__bak_20261117_134130` y `..._134138`. Reejecución de ambos sin cambios ni backup.
+- Rama desplegada en DEV con el pipeline 802 (run 80138). Humo de clasificación con
+  `classification.gpt56-luna` (3 documentos): 3/3 OK, `ModeloClasificacion` gpt-5.6-luna, coste y
+  tokens informados, `TokensRazonamiento` 0. Detalle en la spec, sección 9.
 
 ## Qué NO cubren estos scripts
 
