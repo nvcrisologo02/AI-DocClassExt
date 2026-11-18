@@ -396,7 +396,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 tipologiaDetectada: tdn1Code,
                 propuesta: tdn1Code,
                 confianza: confianzaPhase1,
-                resumen: resumenPhase1);
+                resumen: resumenPhase1,
+                tdn1Detectado: tdn1Code);
         }
 
         // Phase 2: NO incluir instrucción de resumen
@@ -464,7 +465,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 propuesta: string.IsNullOrWhiteSpace(propuesta) ? tdn1Code : propuesta,
                 confianza: confianzaPhase1,
                 resumen: resumenPhase1,
-                fallbackRazon: fallbackRazon);
+                fallbackRazon: fallbackRazon,
+                tdn1Detectado: tdn1Code);
         }
 
         var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
@@ -481,7 +483,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 propuesta: justificacionVirtual,
                 confianza: confianzaPhase2,
                 resumen: resumenPhase1,
-                tdn2Detectado: phase2Parsed.Value.Tdn2);
+                tdn2Detectado: phase2Parsed.Value.Tdn2,
+                tdn1Detectado: tdn1Code);
         }
 
         stopwatch.Stop();
@@ -1043,7 +1046,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null, string? fallbackRazon = null, string? tdn2Detectado = null)
+    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null, string? fallbackRazon = null, string? tdn2Detectado = null, string? tdn1Detectado = null)
     {
         return new ResultadoClasificacion
         {
@@ -1051,6 +1054,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             ProveedorClasif = "GPT4oMini",
             TipologiaDetectada = tipologiaDetectada,
             Tdn2Detectado = tdn2Detectado,
+            Tdn1Detectado = tdn1Detectado,
             // Confianza autoreportada por el modelo (antes se forzaba a 0.1).
             Confianza = confianza,
             ConfianzaGPT = confianza,

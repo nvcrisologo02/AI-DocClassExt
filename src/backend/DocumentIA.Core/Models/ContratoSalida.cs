@@ -437,6 +437,13 @@ public class ResultadoClasificacion
     /// TDN2 y persistirlo en Identificacion.Tdn2 también en resultados virtuales.
     /// </summary>
     public string? Tdn2Detectado { get; set; }
+
+    /// <summary>
+    /// Familia TDN1 resuelta en la fase 1 de la clasificación jerárquica. Es nula si la fase 1
+    /// no llegó a resolverla. Permite persistir la familia real cuando el resultado es una
+    /// tipología virtual y el modelo escribe el código TDN2 en la propuesta.
+    /// </summary>
+    public string? Tdn1Detectado { get; set; }
     /// <summary>
     /// Propuesta libre de tipología cuando no existe mapeo final de catálogo.
     /// </summary>
