@@ -1859,8 +1859,14 @@ public class DocumentProcessOrchestrator
                     salida.Identificacion.Tipologia = tipologiaParcial;
                     salida.Identificacion.TipologiaFamilia = tipologiaParcial;
 
+                    // Familia informada por la clasificación: los modelos que escriben el TDN2 en propuesta
+                    // dejarían Tdn1 = Tdn2 si se derivara de la tipología virtual.
+                    if (!string.IsNullOrWhiteSpace(resultadoClasificacion.Tdn1Detectado))
+                    {
+                        salida.Identificacion.Tdn1 = resultadoClasificacion.Tdn1Detectado;
+                    }
                     // Asignar Tdn1 si hay código válido (para todos los casos virtuales)
-                    if (!string.IsNullOrWhiteSpace(tipologiaParcial)
+                    else if (!string.IsNullOrWhiteSpace(tipologiaParcial)
                         && !string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase))
                     {
                         salida.Identificacion.Tdn1 = tipologiaParcial;

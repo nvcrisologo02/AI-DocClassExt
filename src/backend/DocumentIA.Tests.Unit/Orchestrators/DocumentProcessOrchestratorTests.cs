@@ -1646,6 +1646,68 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualConTdn1Detectado_PersisteLaFamiliaEnTdn1()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "FICH-19",
+            Tdn2Detectado = "FICH-19",
+            Tdn1Detectado = "FICH",
+            ClasificacionParcial = true,
+            FallbackRazon = "Tipologia Virtual",
+            PropuestaTipologia = "Ficha de inmueble"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tdn1.Should().Be("FICH");
+        salida.Identificacion.Tdn2.Should().Be("FICH-19");
+        salida.Identificacion.Tipologia.Should().Be("FICH-19");
+        salida.Identificacion.TipologiaFamilia.Should().Be("FICH-19");
+        salida.DetalleEjecucion.RunTipologia.Should().Be("FICH-19");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualSinTdn1Detectado_ConservaElComportamientoActual()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "FICH-19",
+            Tdn2Detectado = "FICH-19",
+            ClasificacionParcial = true,
+            FallbackRazon = "Tipologia Virtual",
+            PropuestaTipologia = "Ficha de inmueble"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tdn1.Should().Be("FICH-19");
+        salida.Identificacion.Tdn2.Should().Be("FICH-19");
+    }
+
+    [Fact]
     public async Task RunOrchestrator_TipologiaCatalogoResuelta_PueblaTdn1YTdn2DesdeTipologia()
     {
         var orchestrator = CreateOrchestrator();
