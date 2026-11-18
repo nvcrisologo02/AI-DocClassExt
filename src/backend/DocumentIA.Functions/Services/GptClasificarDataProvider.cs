@@ -885,7 +885,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             response.Value.Usage,
             actividad: ActividadesIA.Clasificar,
             operacion: operation,
-            modelo: model.DeploymentName);
+            modelo: model.DeploymentName,
+            tokensEscrituraCache: UsoOpenAiMapper.LeerCacheWriteTokens(response.GetRawResponse().Content));
 
         return (response.Value.Content[0].Text, consumo);
     }

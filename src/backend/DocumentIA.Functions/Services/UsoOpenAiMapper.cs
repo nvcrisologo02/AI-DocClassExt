@@ -1,4 +1,5 @@
 using DocumentIA.Core.Models;
+using System.Text.Json;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
@@ -16,7 +17,7 @@ public static class UsoOpenAiMapper
     /// Construye el consumo de una llamada. Un uso nulo produce igualmente un
     /// consumo, sin cifras: interesa saber que la llamada se hizo y se pago.
     /// </summary>
-    public static ConsumoIA Mapear(ChatTokenUsage? uso, string actividad, string operacion, string? modelo)
+    public static ConsumoIA Mapear(ChatTokenUsage? uso, string actividad, string operacion, string? modelo, int? tokensEscrituraCache = null)
     {
         var consumo = new ConsumoIA
         {
@@ -25,6 +26,8 @@ public static class UsoOpenAiMapper
             Proveedor = ProveedoresIA.AzureOpenAI,
             Modelo = modelo ?? string.Empty
         };
+
+        consumo.TokensEscrituraCache = tokensEscrituraCache;
 
         if (uso is null)
         {
@@ -39,5 +42,40 @@ public static class UsoOpenAiMapper
         consumo.TokensRazonamiento = uso.OutputTokenDetails?.ReasoningTokenCount;
 
         return consumo;
+    }
+
+    /// <summary>
+    /// Lee usage.prompt_tokens_details.cache_write_tokens del cuerpo crudo de la
+    /// respuesta, porque el SDK no lo expone. Nunca lanza: devuelve nulo si el
+    /// cuerpo es nulo, no es JSON o falta cualquiera de los niveles.
+    /// </summary>
+    public static int? LeerCacheWriteTokens(BinaryData? cuerpoRespuesta)
+    {
+        if (cuerpoRespuesta is null)
+        {
+            return null;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(cuerpoRespuesta);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("usage", out var usage)
+                && usage.ValueKind == JsonValueKind.Object
+                && usage.TryGetProperty("prompt_tokens_details", out var detalles)
+                && detalles.ValueKind == JsonValueKind.Object
+                && detalles.TryGetProperty("cache_write_tokens", out var escritos)
+                && escritos.ValueKind == JsonValueKind.Number
+                && escritos.TryGetInt32(out var valor))
+            {
+                return valor;
+            }
+        }
+        catch (JsonException)
+        {
+            // Cuerpo no JSON: sin dato, no es un error de la llamada.
+        }
+
+        return null;
     }
 }

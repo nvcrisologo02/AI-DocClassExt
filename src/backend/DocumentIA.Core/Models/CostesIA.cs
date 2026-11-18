@@ -58,6 +58,9 @@ public class ConsumoIA
     /// <summary>Tokens de entrada servidos desde cache. Subconjunto de TokensEntrada, no un sumando.</summary>
     public int? TokensEntradaCache { get; set; }
 
+    /// <summary>Tokens de entrada escritos en la cache de prompts en esta llamada. Recargo aparte: no se restan de TokensEntrada.</summary>
+    public int? TokensEscrituraCache { get; set; }
+
     /// <summary>Tokens de salida totales. Incluye los de razonamiento.</summary>
     public int? TokensSalida { get; set; }
 

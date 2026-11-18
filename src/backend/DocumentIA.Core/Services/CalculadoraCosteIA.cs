@@ -58,6 +58,23 @@ public static class CalculadoraCosteIA
             coste += entradaCache / PorMillon * tarifa.EurEntradaCachePor1M.Value;
         }
 
+        // La escritura en cache es un recargo: esos tokens ya se pagaron como entrada
+        // plena, por eso no se restan de la entrada. Sin precio de escritura en la
+        // tarifa no se suma nada y se deja marca en TarifaAplicada (la calculadora
+        // es estatica y no tiene logger).
+        var escrituraSinPrecio = false;
+        if (consumo.TokensEscrituraCache > 0)
+        {
+            if (tarifa.EurEscrituraCachePor1M.HasValue)
+            {
+                coste += consumo.TokensEscrituraCache.Value / PorMillon * tarifa.EurEscrituraCachePor1M.Value;
+            }
+            else
+            {
+                escrituraSinPrecio = true;
+            }
+        }
+
         // Los tokens de razonamiento ya vienen incluidos en TokensSalida.
         if (consumo.TokensSalida > 0 && tarifa.EurSalidaPor1M.HasValue)
         {
@@ -80,6 +97,11 @@ public static class CalculadoraCosteIA
             "{0}@{1:yyyy-MM-dd}",
             tarifa.Modelo,
             tarifa.VigenteDesde);
+
+        if (escrituraSinPrecio)
+        {
+            consumo.TarifaAplicada += "|sin-precio-escritura";
+        }
     }
 
     /// <summary>
