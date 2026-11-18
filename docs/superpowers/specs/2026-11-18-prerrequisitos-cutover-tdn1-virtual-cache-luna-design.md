@@ -127,3 +127,48 @@ AB#99938 y AB#99939 son tasks del plan gpt-5-mini de julio (app settings y cutov
 ## 9. Estado
 
 Borrador (2026-11-18) revisado por un constructor (subagente): ocho preguntas, todas resueltas en el documento como decisiones del constructor principal (6.1 caminos virtuales y bloque de nivel TDN1; 6.2 fórmula de coste, precio de escritura y Monitor; 6.3 humo con el cuerpo del backend como puerta bloqueante; 6.4 muestra versionada en el Batch, sondeos antes de cada pasada e interferencias). Pendiente: aprobación del usuario y entonces `superpowers:writing-plans`.
+
+Aprobada por el usuario el 2026-11-18 y ejecutada por subagentes en la rama `feature/101411-prerrequisitos-cutover` (Tareas 0-8 del plan); el resultado de la medición está en la sección 10. Queda la Tarea 9 (documentación, AB#101414) y el revisor final de rama.
+
+## 10. Resultado de la medición en DEV (2026-11-18, AB#101413)
+
+Tres pasadas secuenciales sobre la muestra fija de 50 documentos (`eval/golden-muestra-cache.txt` del Batch: las 10 familias con más filas validadas en `golden.csv`, 5 documentos por familia, commit a0b1d12 de `feature/101413-muestra-cache-luna`), el mismo día, `ParallelQueries` 2, `MaxPages` 10, `ClassificationOnly`, `ForceReprocess`, harness con `-OnlyFiles`. DEV ejecutó la rama `feature/101411-prerrequisitos-cutover` (run 80158 del pipeline 802 sobre 3d51225 para las pasadas 1 y 2; run 80160 sobre 1af617c para la pasada 3, que añade `promptCache.mode`) y volvió a `develop` 83ca620 con el run 80161. Deployment `gpt-5.6-luna` Data Zone a 150K TPM sin tráfico ajeno (0 tokens en las dos horas previas; Azure Monitor cuenta 206 respuestas 200 y 1 respuesta 429 de luna entre 12:30 y 13:20 UTC, y las 206 son las llamadas de las pasadas 2 y 3 y de los dos sondeos). Control `eval/runs/20261118-133712-gpt4omini-control` (12:37:18-12:46:51 UTC, `Model = auto`, gpt-4.1-mini bajo el deployment `gpt-4o-mini`); pasada 2 `eval/runs/20261118-134806-gpt56-luna-golden` (12:48:09-12:57:07, `classification.gpt56-luna` sin bloque `promptCache`, script 04); pasada 3 `eval/runs/20261118-140658-gpt56-luna-golden` (13:07:01-13:15:31, script 03 con `{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m","mode":"explicit"}`). Las tres completaron 50 de 50 en el harness en una sola pasada, sin errores ni timeouts. Consultas `scripts/migrations/gpt56-luna/medicion/01-03` sobre la ventana de cada `run-info.json`; compares del harness en `eval/runs/compare-20261118-*`.
+
+### 10.1 Condiciones que hay que conocer
+
+- **Las escrituras en caché se cobran en GPT-5.6.** La documentación oficial de prompt caching (learn.microsoft.com/azure/foundry/openai/how-to/prompt-caching, leída el 2026-11-18) dice que en la familia GPT-5.6 y posteriores las escrituras en caché se facturan aparte de las lecturas (los modelos anteriores no las cobran), que el modo `implicit` añade siempre un breakpoint en el último mensaje (escribe el prompt entero) y que `explicit` sin breakpoints desactiva la caché y sus cargos. El precio confirmado y aplicado en DEV con el script 05 es 0,2469 € por millón de tokens escritos (medidor Data Zone de West Europe «5.6 luna ShortCo Cd Wr Std DZ», Retail Prices API, vigente desde 2026-08-01; el medidor de retención 12 h, 0,5386 €, no aplica con `ttl` 30m). El sondeo previo a la pasada 2 lo confirmó: con el bloque `promptCache` ausente, la fase 1 de un documento de 15.399 tokens de entrada devolvió `cache_write_tokens` 15.396. Consecuencia retroactiva: la pasada de luna del 2026-11-17 (spec anterior, sección 10) pagó la escritura del prompt entero en cada llamada sin que el código la leyera; su ratio de coste 0,85 estaba subestimado.
+- **El prefijo reutilizable de luna es de 1.127 tokens; el del control, de 13.536.** `classification.phase1.system` tiene 4.342 caracteres (unos 1.127 tokens) y `classification.phase1.user` (15.099 caracteres) lleva instrucciones, `{CONTEXT_PROMPT}`, el catálogo `{TDN1_CATALOG}` y, al final, `{DOCUMENT_TEXT}`; `GptClasificarDataProvider.CompleteChatAsync` envía el mensaje de usuario como una sola parte de texto. gpt-4.1-mini (caché automática de la generación anterior) casa cualquier prefijo común en tramos de 128 tokens y reutiliza system + instrucciones + catálogo. En GPT-5.6 las lecturas solo casan en breakpoints: el del fin del system prompt (1.127 tokens, puesto por el servicio en `implicit` y por nosotros en `explicit`) y el del fin del prompt completo, que nunca se repite entre documentos. Por eso las pasadas 2 y 3 leen exactamente 1.127 tokens de caché por llamada de fase 1 y 0 en la fase 2, igual que el 7% del 17 de noviembre. El modo explicit no cambia lo que se lee; cambia lo que se escribe (de 17.208 tokens por llamada a 1.127 una vez por TTL y clave).
+- **Qué hay en BD.** El orquestador no persiste `BAJA_CONFIANZA_CLASIFICACION`: coste, tokens y latencia cubren 48 ejecuciones del control, 43 de la pasada 2 y 40 de la pasada 3 (luna devuelve más confianzas bajo el umbral 0,6, como el 17/11). La exactitud sale del harness (50/50 en las tres). El sondeo 1 (ACTE-02, 12:37:40) cae dentro de la ventana del control y se excluye por `ModeloClasificacion`.
+
+### 10.2 Tabla
+
+| Métrica | 1 · Control (gpt-4.1-mini) | 2 · luna sin caché (implicit) | 3 · luna con caché (explicit) | Lectura |
+|---|---|---|---|---|
+| Documentos (harness / persistidas en BD) | 50 / 48 | 50 / 43 | 50 / 40 | luna: 7 y 10 bajo el umbral de confianza |
+| Entrada / en caché, fase 1 (media por llamada) | 18.212,8 / 13.536,0 (74,3%) | 18.338,1 / 1.127,0 (6,1%) | 18.399,7 / 1.127,0 (6,1%) | la caché de luna se limita al system prompt |
+| Entrada / en caché, fase 2 | 6.598,5 / 1.666,7 (25,3%) | 6.661,7 / 0 | 6.764,5 / 0 | sin prefijo común con breakpoint |
+| `cache_write_tokens` medios, fase 1 / fase 2 | no informado | 17.208,1 / 6.658,7 | 0 / 0 | explicit elimina la escritura del documento |
+| Coste medio de clasificación por documento | 0,006391 € | 0,011273 € | 0,005408 € | ratios 1,76 y **0,85** frente al control |
+| Coste medio sin valorar escrituras | 0,006391 € | 0,005380 € | 0,005408 € | iguales: manda la tarifa, no la caché |
+| Coste de escritura en caché por documento | 0 | 0,005893 € | 0 | (17.208 + 6.659) × 0,2469 €/M |
+| Tipologías virtuales / con `Tdn1 = Tdn2` | 19 / 0 | 14 / **0** | 12 / **0** | normalización de 6.1 verificada |
+| TDN1 / TDN2 por harness (n 50) | 60% (30) / 34% (17) | 68% (34) / 40% (20) | 68% (34) / 40% (20) | 2 y 3 idénticas (b01 = b10 = 0); frente a 1: b10 6 / b01 2 y b10 7 / b01 4, p 0,29 y 0,55, dentro del ruido |
+| p50 / p95 `DuracionTotalMs` (BD) | 13.986 / 24.656 ms | 12.015 / 19.405 ms | 12.289 / 19.188 ms | luna más rápida (ratio p50 0,86-0,88) |
+| HTTP 400 / 429 (Azure Monitor, luna) | 0 / 0 | 0 / 0 | 0 / 1 (reintentado, sin huella en el harness) | cumple |
+
+### 10.3 Veredicto frente a 6.5
+
+| Criterio 6.5 | Resultado |
+|---|---|
+| Normalización: 0 resultados virtuales con `Tdn2` informado y `Tdn1 = Tdn2` en las pasadas 2 y 3 | **Cumple** (0 de 14 y 0 de 12; el 17/11 eran 136 de 159). TDN1 por harness pasa de 49,7% (golden del 17/11) a 68% sobre la muestra sin tocar el modelo. Suite unitaria 1618/1618; cuerpo idéntico con `PromptCache` apagado (test de regresión). |
+| Caché: pasada 3 con al menos el 50% de la entrada de la fase 1 en caché | **No cumple**: 6,1%. No es del SKU ni del modelo: es la posición del breakpoint. El contenido estable (instrucciones + catálogo, unos 12.400 tokens) está en el mensaje de usuario, después del system prompt y antes de `{DOCUMENT_TEXT}`, y no tiene breakpoint. |
+| Coste medio de la pasada 3 frente a la 1 | **No cumple**: 0,85 (> 0,7). Con la caché recuperada el ratio quedaría cerca del límite: la entrada en caché cuesta 0,0197 frente a 0,1975 por millón, así que leer de caché 13.500 de los 18.400 tokens de la fase 1 ahorraría unos 0,0024 €/doc y dejaría el ratio en torno a 0,48-0,50. |
+| Cero HTTP 400 en las tres pasadas | **Cumple**. |
+
+**Conclusión.** La normalización de la tipología virtual funciona y basta por sí sola para que luna supere al control en TDN1 y TDN2 sobre la muestra (dentro del ruido con n 50). La caché, tal como está diseñada (breakpoint en el system prompt), no aporta ahorro porque el system prompt es el 6% de la entrada; su valor en esta medición es haber eliminado la escritura del documento entero, que en modo `implicit` encarece luna un 76% sobre el control. Antes del cutover:
+
+1. Partir el mensaje de usuario de la fase 1 (y de la fase 2) en dos partes, tramo estable hasta `{DOCUMENT_TEXT}` con `prompt_cache_breakpoint` y documento aparte, para que la caché lea los ~13.500 tokens que hoy lee gpt-4.1-mini. Es un cambio acotado en `PromptCacheRequestPolicy` y en `CompleteChatAsync`, y se mide con la misma muestra. Riesgo: `{CONTEXT_PROMPT}` va antes del catálogo y, si varía por petición, rompe el prefijo.
+2. No desplegar luna con la caché apagada ni en `implicit`: en ambos casos paga la escritura del prompt entero. Si no se quiere caché, `explicit` sin breakpoints.
+3. Comprobar en Cost Management que el medidor de escritura facturado es el de 30 min (precio de lista, por confirmar en factura) y revisar el umbral de confianza con luna (10 de 50 bajo 0,6 frente a 2 del control).
+
+Estado al cerrar: fila `classification.gpt56-luna` de DEV con `promptCache.enabled = true` y `mode = explicit` (sin `IsDefault`, no afecta al flujo por defecto); tarifa `gpt-5.6-luna` con `EurEscrituraCachePor1M` 0,2469; DEV de vuelta en `develop` (run 80161). La decisión (cutover, segunda candidata o no migrar) es del usuario con esta sección delante.
