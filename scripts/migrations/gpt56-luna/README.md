@@ -29,7 +29,7 @@ Prerrequisitos del cutover (AB#101412). Los scripts 03 y 04 **solo cambian la fi
 |---|---|---|
 | 5 | `03-dev-promptcache-on-gpt56-luna.sql` — **solo DEV**: escribe `promptCache` = `{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m"}` en la fila luna. Idempotente, backup solo si cambia, `ISJSON` antes de guardar | Solo afecta a las peticiones que piden la clave luna |
 | 6 | `04-dev-promptcache-off-gpt56-luna.sql` — **solo DEV**: `promptCache.enabled = false` (conserva el resto del bloque para volver a encender con el 03). Idempotente: sin bloque o ya apagado, no hace nada | Ninguno: devuelve el comportamiento sin caché |
-| 7 | `05-dev-tarifa-escritura-cache-gpt56-luna.sql` — **solo DEV**: `EurEscrituraCachePor1M` en la línea `gpt-5.6-luna` de `tarifas.ia`. **Necesita el precio confirmado**: `@EurEscrituraCachePor1M` está a `NULL` y el script falla con `THROW` hasta que se rellene con precio, fuente y fecha. No se ejecuta sin esa confirmación. Falla si la línea no existe (ejecutar antes el 02) | Ninguno: solo añade una propiedad a una línea |
+| 7 | `05-dev-tarifa-escritura-cache-gpt56-luna.sql` — **solo DEV**: `EurEscrituraCachePor1M` en la línea `gpt-5.6-luna` de `tarifas.ia`. Precio confirmado el 2026-11-18: 0,2469 € por millón de tokens escritos en caché (medidor Data Zone de West Europe «5.6 luna ShortCo Cd Wr Std DZ», Retail Prices API, vigente desde 2026-08-01); el medidor de retención 12 h (0,5386) no aplica porque la petición usa ttl 30m. Si la variable queda a `NULL` el script falla con `THROW` y no toca nada. Falla si la línea no existe (ejecutar antes el 02) | Ninguno: solo añade una propiedad a una línea |
 
 ### Consultas de medición (`medicion/`, solo lectura)
 

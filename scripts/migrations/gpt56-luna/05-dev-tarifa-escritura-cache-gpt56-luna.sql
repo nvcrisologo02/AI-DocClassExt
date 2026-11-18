@@ -7,8 +7,8 @@
 -- entrada normal; sin este precio, las ejecuciones con TokensEscrituraCache
 -- > 0 salen marcadas con '|sin-precio-escritura' en TarifaAplicada.
 --
--- NO SE EJECUTA SIN PRECIO CONFIRMADO. No se inventa: mientras la variable
--- siga a NULL el script falla con THROW y no toca nada.
+-- Si la variable esta a NULL el script falla con THROW y no toca nada; el
+-- precio se confirmo el 2026-11-18 (ver mas abajo).
 --
 -- Idempotente: si la linea ya tiene ese valor, PRINT y sin backup ni cambios.
 -- Falla si la linea gpt-5.6-luna no existe (ejecutar antes el script 02).
@@ -24,8 +24,12 @@
 SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
--- Precio pendiente de confirmar por el usuario (Tarea 8, paso 2); fuente y fecha: <rellenar>
-DECLARE @EurEscrituraCachePor1M DECIMAL(12,6) = NULL;
+-- Precio confirmado por el usuario el 2026-11-18 (Tarea 8, paso 2). Fuente: Azure Retail
+-- Prices API (EUR, armRegionName westeurope, productName 'Azure OpenAI GPT5'), medidor
+-- '5.6 luna ShortCo Cd Wr Std DZ 1M Tokens' (escritura en cache, Data Zone, contexto
+-- corto), 0.2469 EUR por millon, vigente desde 2026-08-01. El medidor de retencion 12 h
+-- ('56luna ShCo CdWr12h Dz', 0.5386) no aplica: la peticion usa ttl 30m.
+DECLARE @EurEscrituraCachePor1M DECIMAL(12,6) = 0.2469;
 
 IF @EurEscrituraCachePor1M IS NULL
     THROW 50040, 'Rellenar @EurEscrituraCachePor1M con el precio confirmado antes de ejecutar.', 1;
