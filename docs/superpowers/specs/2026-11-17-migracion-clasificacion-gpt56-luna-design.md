@@ -213,11 +213,29 @@ Golden de 467 documentos en DEV el 2026-11-17, mismo código (rama `feature/9993
 | Cero HTTP 400 y sin 429 persistentes con `ParallelQueries` 2 | **Cumple a 150K TPM; no cumple a 50K.** |
 | Coste medio igual o inferior a la mitad del control | **No cumple.** 0,85 del control. La tarifa de luna es menor, pero el `gpt-4o-mini` de DEV cobra el 76% de la entrada a precio de caché y luna solo el 7%. El ahorro esperado (unos 0,24 frente a unos 0,65 c€) se calculó con precios de lista sin caché. |
 | p50 de la llamada GPT no superior a 1,5 veces el control | **Cumple.** 0,84 (sin el tramo de cuota 50K). |
-| Prompt libre y resumen (6.5) | **Pendiente** (Tarea 11, AB#101374). El humo de 20 documentos exige un override de plantilla porque las tipologías de DEV tienen `PromptConfig.Enabled = false` y el resumen forzado no obedece `Instrucciones.Prompt.ModelKey` sin él. |
+| Prompt libre y resumen (6.5) | **Cumple** (10.4): 20/20 respuestas en cada brazo, modelo correcto, sin HTTP 400, textos no vacíos, coste 0,63 del control, latencia igual; veredicto del usuario sobre los 20 pares: comparable o mejor. |
 
-**Conclusión.** La prueba no cumple 6.6 tal como está escrito: falla el criterio de coste y el de calidad queda en mixto. En calidad, luna acierta más TDN2 y, descontado el artefacto de la tipología virtual, más TDN1; a cambio produce más resultados bajo el umbral de confianza. En coste, la ventaja de tarifa se la come la diferencia de caché de prompt. La decisión (cutover AB#99938/99939, segunda candidata gpt-5.4-mini como prevé 6.6, o no migrar todavía) es del usuario. Antes de cualquier cutover convendría:
+**Conclusión.** La prueba no cumple 6.6 tal como está escrito: falla el criterio de coste y el de calidad de clasificación queda en mixto; prompt libre y resumen cumplen. En calidad, luna acierta más TDN2 y, descontado el artefacto de la tipología virtual, más TDN1; a cambio produce más resultados bajo el umbral de confianza. En coste, la ventaja de tarifa se la come la diferencia de caché de prompt. La decisión (cutover AB#99938/99939, segunda candidata gpt-5.4-mini como prevé 6.6, o no migrar todavía) es del usuario. Antes de cualquier cutover convendría:
 
 1. Normalizar en el backend la tipología virtual (Tdn1 = familia del código devuelto, Tdn2 = código), independiente del modelo; corrige el informe de TDN1 para cualquier modelo que escriba el TDN2 en `propuesta`.
 2. Entender la caché de luna (7% frente a 76% con el mismo prefijo de prompt): si es propio del SKU Data Zone o del modelo, el coste real no bajará; si es de la forma del prompt, se puede recuperar.
 3. Revisar el umbral de confianza con luna (44 bajas frente a 10) antes de dar por buena la mejora de TDN2.
-4. Cerrar la Tarea 11 (prompt libre y resumen) con las salidas del humo.
+
+### 10.4 Prompt libre y resumen (Tarea 11, AB#101374)
+
+Humo del 2026-11-18 en DEV sobre 20 documentos de la golden (2 por tipología: deac.07, actr.01, nots.01, nova.04, decl.09, nots.02, lipr.06, cedu.01, prpe.09, ofer.01), en modo solo clasificación con `ForzarResumenPorDefecto` y la plantilla de la tipología enviada como override en los dos brazos; la candidata añade `Instrucciones.Prompt.ModelKey = prompt.gpt56-luna`, el control usa el modelo de la tipología. Script `docs/auxiliares/temps/2026-11-17/golden-luna/prompt-smoke.ps1`; textos y métricas desde BD (`prompt-smoke-bd.json`, `resumenes-lado-a-lado.md`).
+
+- Hallazgo previo: en DEV las diez tipologías tienen `PromptConfig.Enabled = false`, y con solo `ModelKey` en la petición el proveedor ejecuta únicamente el resumen forzado con el modelo por defecto (`promptActivo` falso; el resumen no obedece el `ModelKey` de la petición). Con `SystemPrompt` y `UserPromptTemplate` en la petición (`tienePromptOverride`), prompt y resumen usan el `ModelKey` efectivo. El camino medido es "prompt ad hoc", con la misma plantilla, el mismo modelo y el mismo resumen que tomaría la tipología si estuviera habilitada.
+
+| Métrica | Control (gpt-4o-mini) | Candidata (gpt-5.6-luna) |
+|---|---|---|
+| Peticiones completadas / modelo de prompt informado | 20/20 / gpt-4o-mini en las 20 | 20/20 / gpt-5.6-luna en las 20 |
+| Estado final | 19 OK, 1 NO_CLASIFICADO (cedu.01 → Desconocido) | 19 OK, 1 NO_CLASIFICADO (el mismo documento) |
+| HTTP 400 / `Prompt.Error` | 0 / 0 | 0 / 0 |
+| Resultado o resumen vacíos | 0 | 0 |
+| Longitud media resultado / resumen (caracteres) | 1.298 / 963 | 2.692 / 786 |
+| Tiempo de prompt p50 / máximo | 5.330 / 8.671 ms | 5.310 / 9.972 ms |
+| `CostePromptEur` medio | 0,003890 € | 0,002447 € (0,63) |
+| `TokensRazonamiento` | 0 | 0 |
+
+Veredicto del usuario sobre los 20 pares (2026-11-18): **comparable o mejor**. Criterio 6.5 cumplido. Observación: la candidata escribe resultados más largos (hasta 1.535 tokens de salida con límite 1.600 en las actas largas); si el límite de salida del prompt importa en producción, habrá que revisarlo en el cutover.
