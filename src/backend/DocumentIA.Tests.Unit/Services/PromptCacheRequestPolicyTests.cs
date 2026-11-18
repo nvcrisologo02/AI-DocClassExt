@@ -16,6 +16,51 @@ public class PromptCacheRequestPolicyTests
     private static JsonNode Parse(string json) => JsonNode.Parse(json)!;
 
     [Fact]
+    public void Reescribir_SinModo_EnviaImplicit()
+    {
+        var resultado = Parse(PromptCacheRequestPolicy.Reescribir(CuerpoBase, Clave, "30m", breakpoint: true));
+
+        resultado["prompt_cache_options"]!["mode"]!.GetValue<string>().Should().Be("implicit");
+    }
+
+    [Fact]
+    public void Reescribir_ModoExplicit_EnviaExplicitYConservaElBreakpointDelSystem()
+    {
+        var resultado = Parse(PromptCacheRequestPolicy.Reescribir(CuerpoBase, Clave, "30m", breakpoint: true, mode: "explicit"));
+
+        resultado["prompt_cache_options"]!["mode"]!.GetValue<string>().Should().Be("explicit");
+        resultado["prompt_cache_options"]!["ttl"]!.GetValue<string>().Should().Be("30m");
+        resultado["messages"]![0]!["content"]![0]!["prompt_cache_breakpoint"]!["mode"]!.GetValue<string>().Should().Be("explicit");
+    }
+
+    [Theory]
+    [InlineData("EXPLICIT", "explicit")]
+    [InlineData("Implicit", "implicit")]
+    [InlineData("otro", "implicit")]
+    [InlineData("", "implicit")]
+    [InlineData(null, "implicit")]
+    public void Reescribir_ModoNormalizado_SoloAceptaImplicitOExplicit(string? mode, string esperado)
+    {
+        var resultado = Parse(PromptCacheRequestPolicy.Reescribir(CuerpoBase, Clave, "30m", breakpoint: false, mode: mode));
+
+        resultado["prompt_cache_options"]!["mode"]!.GetValue<string>().Should().Be(esperado);
+    }
+
+    [Fact]
+    public void Crear_ModoExplicit_LoPropagaAlCuerpoReescrito()
+    {
+        var model = new ClassificationModelConfig
+        {
+            PromptCache = new PromptCacheConfig { Enabled = true, Mode = "explicit" }
+        };
+
+        var politica = PromptCacheRequestPolicy.Crear(model, "phase1", "sistema");
+
+        politica.Should().NotBeNull();
+        politica!.Mode.Should().Be("explicit");
+    }
+
+    [Fact]
     public void Reescribir_AnadeClaveYOpciones()
     {
         var resultado = Parse(PromptCacheRequestPolicy.Reescribir(CuerpoBase, Clave, "30m", breakpoint: false));

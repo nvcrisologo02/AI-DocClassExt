@@ -4,10 +4,13 @@
 -- Prerrequisitos del cutover a gpt-5.6-luna (AB#99934, task AB#101412).
 -- Escribe el bloque promptCache en la ConfiguracionJson de la fila
 -- classification.gpt56-luna (Tipo 0, Activo = 1):
---   {"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m"}
+--   {"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m","mode":"explicit"}
 -- Solo toca esa fila: no modifica las filas por defecto del entorno ni
 -- prompt.gpt56-luna. Con el bloque ausente o enabled = false la app no envia
 -- ningun campo de cache (comportamiento anterior).
+-- mode = explicit: en GPT-5.6 las escrituras en cache se cobran y con implicit el
+-- servicio escribe el prompt entero (documento incluido) en cada llamada; con
+-- explicit solo se escribe el system prompt (breakpoint), una vez por TTL.
 --
 -- Idempotente: si el bloque ya vale exactamente eso, PRINT y sin backup ni
 -- cambios. Backup previo de la tabla (ModeloConfigs__bak_<ts>) solo si hay
@@ -31,7 +34,7 @@ IF @Id IS NULL
 IF ISJSON(@json) <> 1
     THROW 50021, 'La ConfiguracionJson de classification.gpt56-luna no es JSON valido.', 1;
 
-DECLARE @cache NVARCHAR(400) = N'{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m"}';
+DECLARE @cache NVARCHAR(400) = N'{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m","mode":"explicit"}';
 IF ISJSON(@cache) <> 1
     THROW 50022, 'El bloque promptCache a escribir no es JSON valido.', 1;
 
@@ -39,8 +42,9 @@ IF JSON_VALUE(@json, '$.promptCache.enabled') = 'true'
    AND JSON_VALUE(@json, '$.promptCache.keyPrefix') = N'documentia-clasif'
    AND JSON_VALUE(@json, '$.promptCache.breakpoint') = 'true'
    AND JSON_VALUE(@json, '$.promptCache.ttl') = N'30m'
+   AND JSON_VALUE(@json, '$.promptCache.mode') = N'explicit'
 BEGIN
-    PRINT 'promptCache ya esta encendido con los valores pedidos. Sin backup ni cambios.';
+    PRINT 'promptCache ya esta encendido con los valores pedidos (incluido mode). Sin backup ni cambios.';
 END
 ELSE
 BEGIN

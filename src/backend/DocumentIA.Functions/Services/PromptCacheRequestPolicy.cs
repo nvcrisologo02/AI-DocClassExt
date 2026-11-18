@@ -16,12 +16,17 @@ public sealed class PromptCacheRequestPolicy : PipelinePolicy
     private readonly string _cacheKey;
     private readonly string _ttl;
     private readonly bool _breakpoint;
+    private readonly string _mode;
 
     /// <summary>Clave de caché que la política inyecta en la petición.</summary>
     public string CacheKey => _cacheKey;
 
-    public PromptCacheRequestPolicy(string cacheKey, string ttl, bool breakpoint)
+    /// <summary>Modo de caché normalizado (<c>implicit</c> o <c>explicit</c>) que la política inyecta.</summary>
+    public string Mode => _mode;
+
+    public PromptCacheRequestPolicy(string cacheKey, string ttl, bool breakpoint, string? mode = null)
     {
+        _mode = NormalizarModo(mode);
         _cacheKey = cacheKey;
         _ttl = ttl;
         _breakpoint = breakpoint;
@@ -40,21 +45,23 @@ public sealed class PromptCacheRequestPolicy : PipelinePolicy
         }
 
         var clave = PromptCacheKeyBuilder.Build(config.KeyPrefix, operation, systemText);
-        return new PromptCacheRequestPolicy(clave, config.Ttl, config.Breakpoint);
+        return new PromptCacheRequestPolicy(clave, config.Ttl, config.Breakpoint, config.Mode);
     }
 
     /// <summary>
     /// Añade al cuerpo la clave y las opciones de caché y, con <paramref name="breakpoint"/>, marca el
     /// mensaje de sistema como punto de corte. Sin mensaje de sistema solo se añaden clave y opciones.
+    /// El modo solo admite <c>implicit</c> o <c>explicit</c> (sin distinguir mayúsculas); vacío, nulo o
+    /// desconocido se normaliza a <c>implicit</c> sin aviso.
     /// </summary>
-    public static string Reescribir(string bodyJson, string cacheKey, string ttl, bool breakpoint)
+    public static string Reescribir(string bodyJson, string cacheKey, string ttl, bool breakpoint, string? mode = null)
     {
         var raiz = JsonNode.Parse(bodyJson)!.AsObject();
 
         raiz["prompt_cache_key"] = cacheKey;
         raiz["prompt_cache_options"] = new JsonObject
         {
-            ["mode"] = "implicit",
+            ["mode"] = NormalizarModo(mode),
             ["ttl"] = ttl
         };
 
@@ -72,6 +79,9 @@ public sealed class PromptCacheRequestPolicy : PipelinePolicy
 
         return raiz.ToJsonString();
     }
+
+    private static string NormalizarModo(string? mode) =>
+        string.Equals(mode?.Trim(), "explicit", StringComparison.OrdinalIgnoreCase) ? "explicit" : "implicit";
 
     private static void MarcarBreakpoint(JsonObject system)
     {
@@ -132,6 +142,6 @@ public sealed class PromptCacheRequestPolicy : PipelinePolicy
         }
 
         message.Request.Content = BinaryContent.Create(
-            BinaryData.FromString(Reescribir(cuerpo, _cacheKey, _ttl, _breakpoint)));
+            BinaryData.FromString(Reescribir(cuerpo, _cacheKey, _ttl, _breakpoint, _mode)));
     }
 }

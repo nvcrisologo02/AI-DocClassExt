@@ -16,4 +16,12 @@ public sealed class PromptCacheConfig
 
     /// <summary>Tiempo de retención de la caché (por ejemplo "30m").</summary>
     public string Ttl { get; set; } = "30m";
+
+    /// <summary>
+    /// Modo de caché (<c>prompt_cache_options.mode</c>): <c>implicit</c> o <c>explicit</c>. Con <c>implicit</c> el
+    /// servicio marca siempre el último mensaje y escribe el prompt entero (documento incluido) en cada llamada;
+    /// con <c>explicit</c> solo se escriben los puntos de corte propios (el mensaje de sistema), una vez por TTL.
+    /// Un valor vacío o desconocido se trata como <c>implicit</c> (sin aviso).
+    /// </summary>
+    public string Mode { get; set; } = "implicit";
 }

@@ -226,6 +226,21 @@ public class ClassificationModelRegistryLoaderTests : IDisposable
         cache.KeyPrefix.Should().Be("documentia-clasif");
         cache.Breakpoint.Should().BeTrue();
         cache.Ttl.Should().Be("30m");
+        cache.Mode.Should().Be("implicit");
+    }
+
+    [Fact]
+    public void Deserializar_ConPromptCacheMode_LeeElModo()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""x"", ""provider"": ""azure-openai"", ""promptCache"": { ""enabled"": true, ""mode"": ""explicit"" } }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath);
+
+        loader.GetModel("x").PromptCache!.Mode.Should().Be("explicit");
     }
 
     public void Dispose()
