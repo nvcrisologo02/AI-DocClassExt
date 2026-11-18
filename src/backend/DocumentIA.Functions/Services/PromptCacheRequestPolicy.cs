@@ -9,7 +9,8 @@ namespace DocumentIA.Functions.Services;
 /// <summary>
 /// Política de pipeline que reescribe el cuerpo JSON de la petición de Chat Completions para añadir
 /// los campos de caché de prompt (<c>prompt_cache_key</c>, <c>prompt_cache_options</c> y, si procede,
-/// <c>prompt_cache_breakpoint</c> en el mensaje de sistema), que el SDK instalado no expone.
+/// <c>prompt_cache_breakpoint</c> en el mensaje de sistema y al final del tramo estable del mensaje de
+/// usuario), que el SDK instalado no expone.
 /// </summary>
 public sealed class PromptCacheRequestPolicy : PipelinePolicy
 {
@@ -50,7 +51,9 @@ public sealed class PromptCacheRequestPolicy : PipelinePolicy
 
     /// <summary>
     /// Añade al cuerpo la clave y las opciones de caché y, con <paramref name="breakpoint"/>, marca el
-    /// mensaje de sistema como punto de corte. Sin mensaje de sistema solo se añaden clave y opciones.
+    /// mensaje de sistema como punto de corte. Si además el primer mensaje de usuario llega en varias partes
+    /// (tramo estable y documento, AB#101428), marca también su primera parte. Un usuario en una sola parte o
+    /// como string no se toca. Sin mensaje de sistema solo se añaden clave, opciones y el corte del usuario.
     /// El modo solo admite <c>implicit</c> o <c>explicit</c> (sin distinguir mayúsculas); vacío, nulo o
     /// desconocido se normaliza a <c>implicit</c> sin aviso.
     /// </summary>
@@ -74,6 +77,15 @@ public sealed class PromptCacheRequestPolicy : PipelinePolicy
             if (system is not null)
             {
                 MarcarBreakpoint(system);
+            }
+
+            var usuario = mensajes
+                .OfType<JsonObject>()
+                .FirstOrDefault(m => m["role"]?.GetValue<string>() == "user");
+
+            if (usuario is not null)
+            {
+                MarcarBreakpointUsuario(usuario);
             }
         }
 
@@ -99,6 +111,14 @@ public sealed class PromptCacheRequestPolicy : PipelinePolicy
         else if (contenido is JsonArray partes && partes.Count > 0 && partes[^1] is JsonObject ultima)
         {
             ultima["prompt_cache_breakpoint"] = new JsonObject { ["mode"] = "explicit" };
+        }
+    }
+
+    private static void MarcarBreakpointUsuario(JsonObject usuario)
+    {
+        if (usuario["content"] is JsonArray partes && partes.Count > 1 && partes[0] is JsonObject tramoEstable)
+        {
+            tramoEstable["prompt_cache_breakpoint"] = new JsonObject { ["mode"] = "explicit" };
         }
     }
 

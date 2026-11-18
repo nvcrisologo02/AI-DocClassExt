@@ -13,7 +13,49 @@ public class PromptCacheRequestPolicyTests
     private const string CuerpoBase =
         "{\"messages\":[{\"role\":\"system\",\"content\":\"S\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"U\"}]}],\"response_format\":{\"type\":\"json_object\"},\"model\":\"gpt-5.6-luna\"}";
 
+    private const string CuerpoDosPartes =
+        "{\"messages\":[{\"role\":\"system\",\"content\":\"S\"},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"ESTABLE\"},{\"type\":\"text\",\"text\":\"DOC\"}]}],\"model\":\"gpt-5.6-luna\"}";
+
+    private const string CuerpoUsuarioString =
+        "{\"messages\":[{\"role\":\"system\",\"content\":\"S\"},{\"role\":\"user\",\"content\":\"U\"}],\"model\":\"gpt-5.6-luna\"}";
+
     private static JsonNode Parse(string json) => JsonNode.Parse(json)!;
+
+    [Fact]
+    public void Reescribir_UsuarioEnDosPartes_MarcaSoloLaPrimera()
+    {
+        var r = Parse(PromptCacheRequestPolicy.Reescribir(CuerpoDosPartes, Clave, "30m", breakpoint: true, mode: "explicit"));
+
+        r["messages"]![1]!["content"]![0]!["prompt_cache_breakpoint"]!["mode"]!.GetValue<string>().Should().Be("explicit");
+        r["messages"]![1]!["content"]![0]!["text"]!.GetValue<string>().Should().Be("ESTABLE");
+        r["messages"]![1]!["content"]![1]!.AsObject().ContainsKey("prompt_cache_breakpoint").Should().BeFalse();
+        r["messages"]![0]!["content"]![0]!["prompt_cache_breakpoint"]!["mode"]!.GetValue<string>().Should().Be("explicit");
+    }
+
+    [Fact]
+    public void Reescribir_UsuarioUnaParte_NoMarcaElUsuario()
+    {
+        var r = Parse(PromptCacheRequestPolicy.Reescribir(CuerpoBase, Clave, "30m", breakpoint: true, mode: "explicit"));
+
+        r["messages"]![1]!["content"]![0]!.AsObject().ContainsKey("prompt_cache_breakpoint").Should().BeFalse();
+    }
+
+    [Fact]
+    public void Reescribir_UsuarioComoString_LoDejaComoString()
+    {
+        var r = Parse(PromptCacheRequestPolicy.Reescribir(CuerpoUsuarioString, Clave, "30m", breakpoint: true, mode: "explicit"));
+
+        r["messages"]![1]!["content"]!.GetValue<string>().Should().Be("U");
+    }
+
+    [Fact]
+    public void Reescribir_SinBreakpoint_NoMarcaElUsuarioEnDosPartes()
+    {
+        var r = Parse(PromptCacheRequestPolicy.Reescribir(CuerpoDosPartes, Clave, "30m", breakpoint: false, mode: "explicit"));
+
+        r["messages"]![1]!["content"]![0]!.AsObject().ContainsKey("prompt_cache_breakpoint").Should().BeFalse();
+        r["messages"]![1]!["content"]![1]!.AsObject().ContainsKey("prompt_cache_breakpoint").Should().BeFalse();
+    }
 
     [Fact]
     public void Reescribir_SinModo_EnviaImplicit()
