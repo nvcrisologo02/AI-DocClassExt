@@ -865,7 +865,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         var perAttemptTimeout = TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds));
 
-        var chatClient = CreateChatClient(model);
+        var policy = PromptCacheRequestPolicy.Crear(model, operation, systemText);
+        var chatClient = CreateChatClient(model, policy);
         var circuitKey = $"{model.Endpoint}|{model.DeploymentName}";
         var response = await _resilience.ExecuteAsync(
             circuitKey,
@@ -1161,12 +1162,17 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return ValidateGptModel(_modelRegistryLoader.GetModel(requestedModel));
     }
 
-    private ChatClient CreateChatClient(ClassificationModelConfig model)
+    private ChatClient CreateChatClient(ClassificationModelConfig model, PromptCacheRequestPolicy? policy)
     {
         var clientOptions = new AzureOpenAIClientOptions
         {
             RetryPolicy = new ClientRetryPolicy(maxRetries: 0)
         };
+
+        if (policy is not null)
+        {
+            clientOptions.AddPolicy(policy, PipelinePosition.PerCall);
+        }
 
         AzureOpenAIClient azureClient;
 
