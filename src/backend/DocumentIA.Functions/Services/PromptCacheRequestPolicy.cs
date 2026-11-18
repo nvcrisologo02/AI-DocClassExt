@@ -17,7 +17,7 @@ public sealed class PromptCacheRequestPolicy : PipelinePolicy
     private readonly string _ttl;
     private readonly bool _breakpoint;
 
-    /// <summary>Clave de caché que la política inyecta en la petición.</summary>
+    /// <summary>Clave de cachÃ© que la polÃ­tica inyecta en la peticiÃ³n.</summary>
     public string CacheKey => _cacheKey;
 
     public PromptCacheRequestPolicy(string cacheKey, string ttl, bool breakpoint)
