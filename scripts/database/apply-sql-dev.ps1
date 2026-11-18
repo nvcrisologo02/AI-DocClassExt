@@ -22,7 +22,8 @@
 
 .PARAMETER Server
   FQDN del servidor. Por defecto el de DEV (srbsqldevdocai.database.windows.net). Para
-  otro entorno hay que indicarlo a proposito; este script no esta pensado para PRO.
+  otro entorno hay que indicarlo a proposito con -PermitirNoDev (sin el switch el script
+  rechaza cualquier servidor que no sea el de DEV); no esta pensado para PRO.
 
 .PARAMETER Database
   Base de datos. Por defecto DocumentIA.
@@ -34,9 +35,17 @@
 param(
     [Parameter(Mandatory)][string]$ScriptPath,
     [string]$Server = "srbsqldevdocai.database.windows.net",
-    [string]$Database = "DocumentIA"
+    [string]$Database = "DocumentIA",
+    [switch]$PermitirNoDev
 )
 $ErrorActionPreference = "Stop"
+
+# Solo DEV salvo peticion expresa: el token Entra tambien abre PRE y PRO, y reutilizar un
+# comando de query-sql.ps1 con otro -Server escribiria alli por descuido.
+$servidoresDev = @("srbsqldevdocai.database.windows.net")
+if ($Server -notin $servidoresDev -and -not $PermitirNoDev) {
+    throw "Servidor '$Server' no es de DEV. Este script escribe; para otro entorno pasa -PermitirNoDev a proposito."
+}
 if (-not (Test-Path -LiteralPath $ScriptPath)) { throw "No existe el fichero: $ScriptPath" }
 
 $token = az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv
