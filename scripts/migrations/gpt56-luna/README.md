@@ -32,6 +32,11 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
 
 - Deployment creado en `srbaisrv01devdocai` (West Europe): `gpt-5.6-luna` / `2026-07-09` /
   `DataZoneStandard` / 50, `provisioningState` Succeeded. Cuota Data Zone suficiente para 50K TPM.
+- **Capacidad subida a 150K TPM el 2026-11-17 a las 16:22 UTC** (con sí explícito, `az cognitiveservices account
+  deployment create ... --sku-capacity 150`): con 50K TPM y `ParallelQueries` 2 la golden daba 429 con
+  `Retry-After` 60 s (13 de 48 llamadas en 30 min) y la latencia medida no era del modelo. Igual que la
+  capacidad del `gpt-4o-mini` de DEV (150). El script sigue creando con 50 por defecto (`CAPACITY=150` para
+  replicarlo); el dimensionado de PRE/PRO es decisión del cutover.
 - Smoke: HTTP 200, `finish_reason` `stop`, contenido `OK`, `usage.completion_tokens_details.reasoning_tokens` 0,
   `prompt_tokens` 10, `completion_tokens` 4. El servicio acepta `reasoning_effort` y
   `max_completion_tokens` con api-version `2025-04-01-preview`.
