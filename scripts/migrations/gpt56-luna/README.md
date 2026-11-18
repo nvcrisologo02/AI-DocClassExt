@@ -45,9 +45,9 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   `gpt-5.6-luna` añadida al catálogo (23 líneas, JSON válido). Backups
   `ModeloConfigs__bak_20261117_134130` y `..._134138`. Reejecución de ambos sin cambios ni backup.
 - Rama desplegada en DEV con el pipeline 802 "AI DocClassExt (Functions)" (run 80138, `targetEnvironment=dev`,
-  rama `feature/99934-gpt56-luna-dev`): **DEV ejecuta esta rama, no `develop`, mientras dura la medición.**
-  Para devolverlo: encolar el 802 a mano sobre `develop` con `targetEnvironment=dev` (Tarea 12 del plan; pide sí).
-  Las filas `*.gpt56-luna` y el deployment pueden quedarse: con el código de `develop` la propiedad
+  rama `feature/99934-gpt56-luna-dev`): DEV ejecutó esta rama durante la medición (17/11) y **volvió a `develop`
+  el 2026-11-18 con el run 80153 del 802** (`develop` 83ca620, `targetEnvironment=dev`, succeeded 09:02 UTC).
+  Las filas `*.gpt56-luna` y el deployment se quedan: con el código de `develop` la propiedad
   `ReasoningEffort` se ignora al deserializar y las filas no entran en la resolución por defecto. Humo de clasificación con
   `classification.gpt56-luna` (3 documentos): 3/3 OK, `ModeloClasificacion` gpt-5.6-luna, coste y
   tokens informados, `TokensRazonamiento` 0. Detalle en la spec, sección 9.
