@@ -195,6 +195,39 @@ public class ClassificationModelRegistryLoaderTests : IDisposable
         loader.GetModel("default.azure-di").Endpoint.Should().Be("https://pro.example/");
     }
 
+    [Fact]
+    public void Deserializar_SinPromptCache_DejaLaPropiedadNula()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""x"", ""provider"": ""azure-openai"", ""reasoningEffort"": ""none"" }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath);
+
+        loader.GetModel("x").PromptCache.Should().BeNull();
+    }
+
+    [Fact]
+    public void Deserializar_ConPromptCache_LeeValoresYDefaults()
+    {
+        File.WriteAllText(_registryPath, @"{
+            ""models"": [
+                { ""key"": ""x"", ""provider"": ""azure-openai"", ""promptCache"": { ""enabled"": true } }
+            ]
+        }");
+
+        var loader = new ClassificationModelRegistryLoader(_registryPath);
+
+        var cache = loader.GetModel("x").PromptCache;
+        cache.Should().NotBeNull();
+        cache!.Enabled.Should().BeTrue();
+        cache.KeyPrefix.Should().Be("documentia-clasif");
+        cache.Breakpoint.Should().BeTrue();
+        cache.Ttl.Should().Be("30m");
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_tempDirectory))
