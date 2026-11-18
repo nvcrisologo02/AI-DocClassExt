@@ -173,3 +173,51 @@ Fase 2 (DEV) cerrada el 2026-11-17:
 - Humo de clasificación con `classification.gpt56-luna` (harness, 3 documentos ACTE-02, ACTR-01, ACTT-10): 3/3 OK; en `DocumentoEjecuciones` `ModeloClasificacion` gpt-5.6-luna, `CosteClasificacionEur` 0,0044-0,0049 (tarifa aplicada), `TokensIA` 21-26K, `TokensRazonamiento` 0 en las dos fases. Mismas predicciones TDN1 que el modelo por defecto en los tres documentos, con confianza 0,98-0,99 frente a 0,90-0,95.
 - Regresión por api-version (Tarea 9, paso 4b): (2) embeddings en sombra: las seis ejecuciones nuevas traen el candidato `Proveedor=Embeddings` con `MotivoDescarte=sombra` y el consumo `classification.embeddings` registrado; (3) clasificación por defecto (`Model = auto`, 3 documentos): 3/3 OK con gpt-4o-mini, coste y tokens como antes. (1) extracción con fallback GPT y resumen: no se pueden forzar desde el harness; se ejercitaron con el runner E2E post-despliegue perfil smoke en DEV (artefacto `20261117-151609-dev-smoke`, 6/6 PASS): S-S3 (extracción dirigida `nota.simple_bal`) registró el consumo `extraction.gpt.fallback` con gpt-4o-mini (4946 tokens de entrada, 772 de salida) y `CosteExtraccionEur` 0,06; S-S4 (resumen documental) registró `prompt.resultado` con gpt-4o-mini (213 / 169) y estado OK; S-S1 (pipeline completo auto) y S-S2 (classificationOnly) OK. Ninguna regresión atribuible a la api-version `2025-04-01-preview` en los cuatro clientes.
 - Observaciones para la Fase 3: la caché de prompt de luna fue de 1127 tokens frente a 13824 de gpt-4o-mini en el mismo documento (el coste de entrada real de luna puede ser mayor que el de lista por caché); `DuracionClasificacionMs` llega nulo en las seis ejecuciones, también en las del modelo por defecto, así que no es efecto del despliegue.
+
+## 10. Resultado
+
+Golden de 467 documentos en DEV el 2026-11-17, mismo código (rama `feature/99934-gpt56-luna-dev`, run 80138 del pipeline 802), mismo día, `ParallelQueries` 2, `MaxPages` 10, `ClassificationOnly`. Control `eval/runs/20261117-154955-gpt4omini-control` (`Model = auto`, es decir gpt-4.1-mini bajo el deployment `gpt-4o-mini`, 150K TPM Standard) de 14:50 a 16:10 UTC; candidata `eval/runs/20261117-154955-gpt56-luna-golden` (`classification.gpt56-luna`, `ReasoningEffort` none) de 16:10 a 17:41 UTC. Ambas 467/467 OK en el harness, cero HTTP 400, `TokensRazonamiento` 0 en todas las llamadas. Compares en `eval/runs/compare-20261117-154955-gpt4omini-control-vs-20261117-154955-gpt56-luna-golden/compare.md` y `compare-BASELINE-GPT4OMINI-DEV-vs-20261117-154955-gpt56-luna-golden/compare.md`; coste y latencia en `docs/auxiliares/temps/2026-11-17/golden-luna/coste-latencia-*.txt` (consultas incluidas).
+
+### 10.1 Condiciones de la medición que hay que conocer
+
+- **Cuota del deployment.** La candidata arrancó con 50K TPM (6.1) y, con dos peticiones en paralelo y unos 25K tokens por documento, el servicio devolvía 429 con `Retry-After` 60 s (13 de 48 llamadas en los primeros 30 minutos; `AzureOpenAIResilienceExecutor` honra la espera, así que el harness no lo ve como `rate_limit`). Con sí explícito, a las 16:22 UTC se subió el deployment a 150K TPM, igual que el `gpt-4o-mini` de DEV; el efecto tardó unos 11 minutos. Las ejecuciones hasta las 16:34 UTC (47 persistidas) se informan aparte como "cuota 50K". En el resto de la pasada hubo 22 respuestas 429 sobre 982 llamadas, reintentadas sin huella en la latencia. Para PRO, la cuota Data Zone de luna tendrá que dimensionarse como la actual del modelo por defecto; con 50K el criterio "sin 429 persistentes" no se cumple.
+- **Red local.** Entre 16:35 y 16:41 UTC la máquina que ejecuta el harness perdió la resolución DNS del backend; la pasada 1 de luna dejó 241 filas en error y la pasada 2 (`--resume`) las rehizo. No afecta a DEV ni al modelo.
+- **Qué hay en BD.** El orquestador no persiste las ejecuciones que terminan en `BAJA_CONFIANZA_CLASIFICACION` ni en error, así que coste, tokens y latencia de BD cubren 456 ejecuciones del control (10 de baja confianza y 1 error fuera) y 425 de luna (44 de baja confianza fuera). La exactitud sale del harness (467/467 en ambas). `DuracionClasificacionMs` llega nulo en DEV; la latencia es `DuracionTotalMs` (BD) y `duracion_ms` extremo a extremo del harness, con el mismo recorrido en los dos brazos.
+- **Tipologías virtuales.** Cuando la fase 2 devuelve un TDN2 del catálogo sin tipología publicada en DEV, `GptClasificarDataProvider` devuelve una tipología virtual (`ClasificacionParcial`). Pasa por igual en los dos brazos (control 188 de 456, luna 159 de 425). La diferencia es de formato: la tipología virtual toma como código lo que el modelo escribe antes de los dos puntos en su campo `propuesta`; gpt-4.1-mini escribe la familia (`ESIN: ...`) y luna escribe muchas veces el código TDN2, o nada, con lo que el contrato persiste `Tdn1 = Tdn2 = FICH-19` y el harness lo cuenta como fallo de TDN1. Son 136 de las 467 predicciones de luna (0 en el control); 76 de ellas con la familia correcta y 22 con el TDN2 correcto. Por eso TDN1 se informa de dos maneras.
+
+### 10.2 Tabla
+
+| Métrica | Control (gpt-4.1-mini) | Candidata (gpt-5.6-luna) | Lectura |
+|---|---|---|---|
+| TDN1 tal como lo informa el contrato | 56,32% (263/467) | 49,68% (232/467) | b01 77 / b10 46, McNemar p = 0,0066: **empeora** |
+| TDN1 normalizado por familia del código | 56,32% (263/467) | 65,95% (308/467) | b01 14 / b10 59, p < 0,001: **mejora** |
+| TDN2 | 34,05% (159/467) | 40,69% (190/467) | b01 17 / b10 48, p = 0,0002: **mejora** |
+| TDN1 / TDN2 frente a BASELINE-GPT4OMINI-DEV (septiembre) | 55,89% / 33,40% | 49,68% / 40,69% | p 0,0141 (empeora) / p < 0,0001 (mejora) |
+| BAJA_CONFIANZA_CLASIFICACION (harness) | 10 (más 1 error) | 44 | luna devuelve más confianzas bajo el umbral 0,6 |
+| Coste de clasificación medio por documento (BD) | 0,006168 € (n 456) | 0,005251 € (n 425); 0,005222 € con cuota 150K (n 378) | ratio 0,85: **no llega a la mitad** |
+| Tokens IA por documento (BD) | 27.841 | 27.956 | iguales |
+| Entrada / en caché, fase 1 (por llamada) | 18.191 / 13.759 (76%; 453 de 456 llamadas con caché) | 18.223 / 1.229 (7%) | la caché explica el coste |
+| Entrada / en caché, fase 2 | 6.333 / 1.653 | 6.301 / 46 | ídem |
+| Coste por llamada fase 1 / fase 2 | 0,00357 € / 0,00228 € | 0,00358 € / 0,00133 € | fase 1 igual; fase 2 un 42% menor |
+| p50 / p95 duración total (BD, cuota 150K) | 12.984 / 20.119 ms (n 456) | 10.872 / 18.737 ms (n 378) | ratio p50 0,84: **cumple** (≤ 1,5) |
+| p50 / p95 extremo a extremo del harness | 13.091 / 20.740 ms (467) | 11.474 / 42.045 ms (467) | el p95 de luna arrastra el tramo con cuota 50K |
+| p50 / p95 duración total con cuota 50K | — | 39.824 / 73.823 ms (n 47) | 429 más 60 s de espera por llamada |
+| HTTP 400 / 429 | 0 / 0 | 0 / 54 de 982 (32 con 50K, 22 con 150K) | cero 400; 429 no persistentes a 150K |
+| Tipologías virtuales | 188 de 456 | 159 de 425 | mismo fenómeno en ambos |
+
+### 10.3 Veredicto frente a 6.6
+
+| Criterio 6.6 | Resultado |
+|---|---|
+| TDN1 y TDN2 no peores que el control | **Mixto.** TDN2 mejora de forma significativa (6,6 puntos más). TDN1 empeora tal como lo informa el contrato (6,6 puntos menos) y mejora si se normaliza la tipología virtual por familia (9,6 puntos más); la diferencia es el formato del campo `propuesta` de luna en el camino virtual, que el backend puede normalizar sin tocar el modelo. |
+| Cero HTTP 400 y sin 429 persistentes con `ParallelQueries` 2 | **Cumple a 150K TPM; no cumple a 50K.** |
+| Coste medio igual o inferior a la mitad del control | **No cumple.** 0,85 del control. La tarifa de luna es menor, pero el `gpt-4o-mini` de DEV cobra el 76% de la entrada a precio de caché y luna solo el 7%. El ahorro esperado (unos 0,24 frente a unos 0,65 c€) se calculó con precios de lista sin caché. |
+| p50 de la llamada GPT no superior a 1,5 veces el control | **Cumple.** 0,84 (sin el tramo de cuota 50K). |
+| Prompt libre y resumen (6.5) | **Pendiente** (Tarea 11, AB#101374). El humo de 20 documentos exige un override de plantilla porque las tipologías de DEV tienen `PromptConfig.Enabled = false` y el resumen forzado no obedece `Instrucciones.Prompt.ModelKey` sin él. |
+
+**Conclusión.** La prueba no cumple 6.6 tal como está escrito: falla el criterio de coste y el de calidad queda en mixto. En calidad, luna acierta más TDN2 y, descontado el artefacto de la tipología virtual, más TDN1; a cambio produce más resultados bajo el umbral de confianza. En coste, la ventaja de tarifa se la come la diferencia de caché de prompt. La decisión (cutover AB#99938/99939, segunda candidata gpt-5.4-mini como prevé 6.6, o no migrar todavía) es del usuario. Antes de cualquier cutover convendría:
+
+1. Normalizar en el backend la tipología virtual (Tdn1 = familia del código devuelto, Tdn2 = código), independiente del modelo; corrige el informe de TDN1 para cualquier modelo que escriba el TDN2 en `propuesta`.
+2. Entender la caché de luna (7% frente a 76% con el mismo prefijo de prompt): si es propio del SKU Data Zone o del modelo, el coste real no bajará; si es de la forma del prompt, se puede recuperar.
+3. Revisar el umbral de confianza con luna (44 bajas frente a 10) antes de dar por buena la mejora de TDN2.
+4. Cerrar la Tarea 11 (prompt libre y resumen) con las salidas del humo.
