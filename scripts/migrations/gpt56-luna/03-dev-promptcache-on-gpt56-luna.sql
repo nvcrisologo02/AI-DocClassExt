@@ -10,7 +10,8 @@
 -- ningun campo de cache (comportamiento anterior).
 -- mode = explicit: en GPT-5.6 las escrituras en cache se cobran y con implicit el
 -- servicio escribe el prompt entero (documento incluido) en cada llamada; con
--- explicit solo se escribe el system prompt (breakpoint), una vez por TTL.
+-- explicit solo se escriben los breakpoints (system prompt y tramo estable del
+-- mensaje de usuario, AB#101428), una vez por TTL.
 --
 -- Idempotente: si el bloque ya vale exactamente eso, PRINT y sin backup ni
 -- cambios. Backup previo de la tabla (ModeloConfigs__bak_<ts>) solo si hay

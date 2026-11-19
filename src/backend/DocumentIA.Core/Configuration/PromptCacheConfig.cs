@@ -11,7 +11,7 @@ public sealed class PromptCacheConfig
     /// <summary>Prefijo de la clave de caché (<c>prompt_cache_key</c>).</summary>
     public string KeyPrefix { get; set; } = "documentia-clasif";
 
-    /// <summary>Indica si se marca un punto de corte de caché tras el mensaje de sistema.</summary>
+    /// <summary>Indica si se marcan puntos de corte de caché tras el mensaje de sistema y tras el tramo estable del mensaje de usuario.</summary>
     public bool Breakpoint { get; set; } = true;
 
     /// <summary>Tiempo de retención de la caché (por ejemplo "30m").</summary>
@@ -20,7 +20,7 @@ public sealed class PromptCacheConfig
     /// <summary>
     /// Modo de caché (<c>prompt_cache_options.mode</c>): <c>implicit</c> o <c>explicit</c>. Con <c>implicit</c> el
     /// servicio marca siempre el último mensaje y escribe el prompt entero (documento incluido) en cada llamada;
-    /// con <c>explicit</c> solo se escriben los puntos de corte propios (el mensaje de sistema), una vez por TTL.
+    /// con <c>explicit</c> solo se escriben los puntos de corte propios (system y tramo estable del usuario), una vez por TTL.
     /// Un valor vacío o desconocido se trata como <c>implicit</c> (sin aviso).
     /// </summary>
     public string Mode { get; set; } = "implicit";
