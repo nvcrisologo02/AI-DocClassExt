@@ -106,6 +106,9 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   DEV»): fase 1 con el 74,1% en caché, ratio de coste 0,49 frente al control y 0 HTTP 400. Golden completo de
   467 (misma spec, «Golden completo en DEV»): TDN1 66,0% y TDN2 41,8% frente a 56,8% y 34,3% del control,
   76,0% en caché en la fase 1, ratio 0,45 y 48 contratos de baja confianza frente a 8.
+- AB#101435 (commit 7d325f3, **no desplegado en DEV**): la tipología virtual pasa a aplicar el umbral de baja
+  confianza. Estimación sobre el `results.csv` de ese golden, no medida: luna pasaría de 48 a unos 66 documentos en baja
+  confianza y los errores de TDN1 que salen como OK bajarían de 131 a 118. En el control, de 8 a 16.
 
 ## Qué NO cubren estos scripts
 

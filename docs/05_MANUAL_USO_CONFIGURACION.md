@@ -85,7 +85,7 @@ Estados habituales y accion recomendada:
 |---|---|---|
 | `OK` | Documento procesado correctamente | Continuar flujo normal |
 | `VALIDACION_CON_ERRORES` | Se extrajeron datos pero hay inconsistencias | Revisar campos marcados y corregir/confirmar |
-| `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
+| `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento. También se da cuando solo identifica la familia (TDN1) o el documento queda como Desconocido y la confianza no llega al umbral | Revisar manualmente y reenviar si procede |
 | `DUPLICADO` | Solo con `Dedup__ModoEstricto = false`: el documento ya habia sido procesado y no hay ningun resultado anterior reutilizable (en modo estricto, el defecto, se procesa) | Usar resultado existente o seguir criterio de negocio |
 | _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
 | `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto legible: el servicio de lectura respondio sin contenido | Comprobar si es un escaneado sin OCR o una pagina en blanco y pedir un documento legible. Si lo que fallo fue la lectura, el estado es `ERROR` o `PENDIENTE_REINTENTO` con `No se pudo obtener el texto del documento: <motivo>` |
