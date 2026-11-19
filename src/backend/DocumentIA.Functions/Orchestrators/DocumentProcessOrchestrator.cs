@@ -1855,7 +1855,9 @@ public class DocumentProcessOrchestrator
                 {
                     // Tipología virtual: GPT identificó familia TDN1 pero no puede mapearla al catálogo,
                     // o se extrajo TDN1 de propuesta sin código de catálogo completo.
-                    // El pipeline se detiene aquí con Estado=OK y PropuestaTipologia accesible en la salida.
+                    // El pipeline se detiene aquí y persiste, con PropuestaTipologia accesible en la salida.
+                    // Estado=OK, o BAJA_CONFIANZA_CLASIFICACION si la confianza no alcanza el umbral
+                    // (instrucciones ?? proveedor ?? 0.6; no hay tipología de catálogo) (AB#101435).
                     salida.Identificacion.Tipologia = tipologiaParcial;
                     salida.Identificacion.TipologiaFamilia = tipologiaParcial;
 
@@ -1949,7 +1951,19 @@ public class DocumentProcessOrchestrator
                     MarcarActividadOmitida("SubirGDC", motivoOmision);
 
                     var confidenceCfgVirtual = new ConfidenceConfig();
-                    salida.Resultado.Estado = "OK";
+                    var umbralBajaConfianzaVirtual = entrada.Instrucciones.Classification.Umbral
+                        ?? resultadoClasificacion.UmbralFallbackAplicado
+                        ?? 0.6;
+                    var esBajaConfianzaVirtual = resultadoClasificacion.Confianza < umbralBajaConfianzaVirtual;
+                    if (esBajaConfianzaVirtual)
+                    {
+                        logger.LogWarning(
+                            "Confianza de clasificacion baja en tipologia virtual: {Confianza} (umbral: {Umbral})",
+                            resultadoClasificacion.Confianza,
+                            umbralBajaConfianzaVirtual);
+                    }
+
+                    salida.Resultado.Estado = esBajaConfianzaVirtual ? "BAJA_CONFIANZA_CLASIFICACION" : "OK";
                     salida.Resultado.ConfianzaGlobal = RedondearSalida(
                         ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
                     salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
@@ -1975,7 +1989,9 @@ public class DocumentProcessOrchestrator
                         ? $"Tipología parcial TDN1: GlobalFallback identificó '{tipologiaParcial}' con confianza baja"
                         : "Tipología virtual TDN1: propuesta sin código de catálogo";
 
-                    FinalizarSeguimiento("Completed", mensajeFinal);
+                    FinalizarSeguimiento(
+                        "Completed",
+                        esBajaConfianzaVirtual ? $"{mensajeFinal}. Clasificación por debajo de umbral" : mensajeFinal);
                     return salida;
                 }
 
