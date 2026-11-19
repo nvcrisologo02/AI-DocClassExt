@@ -10,7 +10,11 @@ frente a control) y el cutover quedan fuera: ver la spec
 Requisitos de código: `Azure.AI.OpenAI` 2.9.0-beta.1 y la propiedad `ReasoningEffort`
 en las configuraciones de modelo (rama `feature/99934-gpt56-luna-dev`, AB#101371). Sin
 ese código la fila resuelve pero el helper no envía `reasoning_effort` ni
-`max_completion_tokens`.
+`max_completion_tokens`. La caché de prompt (scripts 03-05) necesita además el código de
+`feature/101411-prerrequisitos-cutover` (AB#101412 y AB#101428). Con `develop`, pedir la
+clave luna ignora el bloque `promptCache`: la llamada sale sin campos de caché, el servicio
+aplica su modo por defecto (`implicit`), que escribe y cobra el prompt entero en cada llamada,
+y `develop` tampoco registra esas escrituras en el coste.
 
 ## Orden de ejecución
 
@@ -84,6 +88,22 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   `ReasoningEffort` se ignora al deserializar y las filas no entran en la resolución por defecto. Humo de clasificación con
   `classification.gpt56-luna` (3 documentos): 3/3 OK, `ModeloClasificacion` gpt-5.6-luna, coste y
   tokens informados, `TokensRazonamiento` 0. Detalle en la spec, sección 9.
+
+## Estado en DEV tras los prerrequisitos del cutover (leído el 2026-11-19)
+
+- Script 03 aplicado: la fila Id 1027 (`classification.gpt56-luna`) tiene
+  `promptCache` = `{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m","mode":"explicit"}`
+  (`FechaActualizacion` 2026-11-18 13:04:59) y sigue sin `IsDefault`. El 04 no se aplicó después, así que la
+  caché queda encendida. `prompt.gpt56-luna` y las filas por defecto no se tocaron.
+- Script 05 aplicado: la línea `gpt-5.6-luna` de `tarifas.ia` (VigenteDesde 2026-11-17) tiene
+  `EurEscrituraCachePor1M` 0,2469.
+- Backups de `ModeloConfigs` de estos pasos: `ModeloConfigs__bak_20261118_123946` y `..._130459`.
+- Runs del 802 sobre DEV: 80158 (3d51225), 80160 (1af617c), 80161 (`develop`, vuelta temporal) y **80164
+  (72d4626, rama `feature/101411-prerrequisitos-cutover`)**. Por decisión del 2026-11-19, DEV se queda en
+  72d4626 hasta terminar el golden completo (AB#101433). Volver a `develop` antes se pregunta (ver «Requisitos
+  de código»).
+- Medición con la muestra de 50 (spec `2026-11-18-breakpoint-tramo-estable-usuario-design.md`, «Resultado en
+  DEV»): fase 1 con el 74,1% en caché, ratio de coste 0,49 frente al control y 0 HTTP 400.
 
 ## Qué NO cubren estos scripts
 

@@ -287,6 +287,11 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
     `salida.Identificacion.Tipologia = "Desconocido"`, pipeline detenido, estado `OK`.
   - Si `tipologiaParcial` es un código TDN1 conocido → **código conocido**: `salida.Identificacion.Tdn1 = tipologiaParcial`,
     el pipeline continúa normalmente (extracción, validación, plugins). Estado final determinado por el resto del pipeline.
+- **`Tdn1` de la tipología virtual** (AB#101411): cuando la clasificación informa la familia de la fase 1
+  (`ResultadoClasificacion.Tdn1Detectado`, que rellena `GptClasificarDataProvider`), `salida.Identificacion.Tdn1`
+  toma esa familia. Si no la informa, se mantiene la regla anterior: `Tdn1` = código virtual cuando no es nulo
+  ni `Desconocido`. Sin esto, los modelos que escriben el TDN2 en `propuesta` (caso de `gpt-5.6-luna`) dejaban
+  `Tdn1 = Tdn2`. `Tipologia` y `TipologiaFamilia` siguen recibiendo el código virtual sin cambios.
 
 **D6 — PropuestaTipologia en salida** (`ContratoSalida.cs`):
 - Nueva propiedad `Identificacion.PropuestaTipologia` (string, inicializada a `string.Empty`). Solo se informa cuando hay tipología virtual.
@@ -343,6 +348,7 @@ Resumen de comportamiento por activity:
   - **Catalog Enrichment**: Cada tipología publicada en la familia aporta: tipologiacodigo (ESCR-06), tipologiaNombre (Escritura: venta), tdn2 (ESCR-06), gptdescripcion (texto enriquecido con descripción principal, contexto descriptivo, criterio de clasificación automática).
   - **Model Resolution**: Modelo LLM resuelto por petición desde `instrucciones.classification.model` (si viene explícito y válido). `auto`/vacío usa fallback del registro (`useAsFallback=true`). Cliente de chat creado dinámicamente por petición para evitar lock-in de deployment.
   - **Capacidades por familia de modelo** (`OpenAiModelCapabilities`, `DocumentIA.Functions/Services`): los modelos de razonamiento (familias `gpt-5*` y o-series) rechazan `temperature` con HTTP 400, así que solo se envía a los clásicos (`gpt-4x`, `gpt-35`). Las configuraciones de modelo de clasificación y de prompt (`ClassificationModelConfig`, `PromptModelConfig`) admiten `ReasoningEffort` (`none`, `minimal`, `low`, `medium`, `high`; nulo = no enviar; inválido = aviso y no enviar). La sobrecarga de cinco parámetros de `ConfigureChatOptions` envía a los modelos de razonamiento `reasoning_effort` y, si hay límite de salida, `max_completion_tokens` (activando `SetNewMaxCompletionTokensPropertyEnabled()` del cliente de Azure) solo cuando el esfuerzo está informado y es válido; sin esfuerzo se comporta como la sobrecarga de cuatro, que conserva la extracción con fallback GPT sin cambios (`GptFallbackExtraerDataProvider`). La usan `GptClasificarDataProvider` y `OpenAIPromptDataProvider` (prompt libre y resumen). SDK: `Azure.AI.OpenAI` fijado en `2.9.0-beta.1` (sin comodín), que usa la api-version `2025-04-01-preview` para los cuatro clientes de Azure OpenAI del Function App (clasificación, prompt/resumen, `OpenAiClientFactory` de extracción y `AzureOpenAIEmbeddingsCliente`). Introducido en AB#99934 (prueba de `gpt-5.6-luna` en DEV, 2026-11-17); tests en `OpenAiModelCapabilitiesTests` y el test de serialización en el cable.
+  - **Caché de prompt por modelo** (AB#101412 y AB#101428): `ClassificationModelConfig.PromptCache` (`PromptCacheConfig`, Core) con `Enabled` (por defecto `false`), `KeyPrefix` (`documentia-clasif`), `Breakpoint` (`true`), `Ttl` (`30m`) y `Mode` (`implicit` por defecto; vacío o desconocido se trata como `implicit`). Solo vale para GPT-5.6 y posteriores: los modelos anteriores responden HTTP 400 a estos campos, así que en ellos el bloque se deja sin informar o con `enabled: false`. El SDK instalado no expone los campos, por eso `PromptCacheRequestPolicy` (política de pipeline, `DocumentIA.Functions/Services`) reescribe el cuerpo JSON de la petición. Añade `prompt_cache_key`, que construye `PromptCacheKeyBuilder` como `{keyPrefix}:{operación}:{12 primeros hex del SHA-256 del system}`, y `prompt_cache_options` (`mode`, `ttl`). Con `breakpoint` añade también `prompt_cache_breakpoint: {"mode":"explicit"}` en el mensaje de sistema y en la primera parte del mensaje de usuario. Con la caché activa, `CompleteChatAsync` envía el usuario en dos partes de texto: `UserPromptSplitter` corta la plantilla en el primer `{DOCUMENT_TEXT}`, de modo que la primera parte es el tramo estable (instrucciones y catálogo) y la segunda el documento y lo que va detrás. Sin caché, el cuerpo es idéntico al anterior (una sola parte). En GPT-5.6 las lecturas solo casan en breakpoints y las escrituras se cobran: en modo `explicit` solo se escriben los dos prefijos marcados, una vez por TTL, mientras que `implicit` marca además el último mensaje y escribe el prompt entero, documento incluido, en cada llamada. Por eso la fila de DEV usa `explicit`. El consumo lee `usage.prompt_tokens_details.cache_write_tokens` del cuerpo crudo de la respuesta (`UsoOpenAiMapper.LeerCacheWriteTokens`). Medido en DEV (muestra de 50, run 80164): fase 1 con el 74,1% de la entrada en caché y coste de clasificación de luna 0,49 veces el del control.
   - **Fallback Mapping**: ResolveTipologiaByTdn2() mapea TDN2 code a tipología final (ej., ESCR-06 → tipología con ResolvedTdn2='ESCR-06').
 - `ClassificationTipologiaPromptBuilder`: construye catálogos dinámicos. BuildTdn1Catalog() devuelve todas las familias TDN1 publicadas. BuildTdn2CatalogByFamilia(tdn1Code) consulta ITipologiaRepository directamente, filtra por ResolvedTdn1 = familia, retorna todas las tipologías published+activas con ConfiguracionJson poblado (incluyendo tipologiaNombre [nuevo campo] + gptdescripcion campos). El campo `Nombre` en TdnCatalogItem se resuelve desde TipologiaConfig.TipologiaNombre en tiempo de consulta, enriqueciendo los catálogos con nombre legible de tipología para GPT. Respeta cache 5-min TTL.
 - `ResolverTipologiaActivity`: resuelve configuración efectiva por familia/version.
@@ -1542,7 +1548,7 @@ sumar los importes ya calculados, porque sumar decimales es determinista.
 | `TarifaRegistryLoader` | Core.Configuration | Carga el catalogo con cache de 5 min; tolerante a JSON invalido y a fila ausente |
 | `CalculadoraCosteIA` | Core.Services | Resuelve la linea vigente por modelo y fecha, calcula y agrega |
 | `ConsumosIA` | Core.Services | Fusiona consumos entre proveedores encadenados |
-| `UsoOpenAiMapper` | Functions.Services | Traduce el bloque de uso del SDK de OpenAI |
+| `UsoOpenAiMapper` | Functions.Services | Traduce el bloque de uso del SDK de OpenAI; lee `cache_write_tokens` del cuerpo crudo (`TokensEscrituraCache`), que el SDK no expone |
 | `UsoContentUnderstandingMapper` | Core.Services | Traduce el bloque `usage` de Content Understanding |
 | `TarificadorDeConsumos` | Functions.Services | Aplica el catalogo en la actividad; un fallo no tumba el procesamiento |
 
@@ -1576,6 +1582,10 @@ trae `incluirCostes`. Al ser anulable, se omite del JSON.
 5. Una llamada combinada (extraccion + resumen) genera **un solo** consumo.
 6. Un consumo sin ninguna magnitud no se tarifa a cero: se deja sin coste.
 7. El importe es `decimal`, nunca `double`.
+8. Los tokens escritos en cache (`TokensEscrituraCache`, AB#101412) son un **recargo**:
+   ya se pagan como entrada plena y no se restan de ella. Se tarifican con
+   `EurEscrituraCachePor1M` de la linea del catalogo. Si la linea no tiene ese precio,
+   no se suma nada y `TarifaAplicada` lleva la marca `|sin-precio-escritura`.
 
 Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) para el detalle funcional y de uso.
 
