@@ -99,11 +99,13 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   `EurEscrituraCachePor1M` 0,2469.
 - Backups de `ModeloConfigs` de estos pasos: `ModeloConfigs__bak_20261118_123946` y `..._130459`.
 - Runs del 802 sobre DEV: 80158 (3d51225), 80160 (1af617c), 80161 (`develop`, vuelta temporal) y **80164
-  (72d4626, rama `feature/101411-prerrequisitos-cutover`)**. Por decisión del 2026-11-19, DEV se queda en
-  72d4626 hasta terminar el golden completo (AB#101433). Volver a `develop` antes se pregunta (ver «Requisitos
-  de código»).
+  (72d4626, rama `feature/101411-prerrequisitos-cutover`)**. Por decisión del 2026-11-19, DEV se quedó en
+  72d4626 para el golden completo (AB#101433, terminado el mismo día) y sigue ahí. Volver a `develop` se pregunta,
+  porque `develop` no tiene el código de caché (ver «Requisitos de código»).
 - Medición con la muestra de 50 (spec `2026-11-18-breakpoint-tramo-estable-usuario-design.md`, «Resultado en
-  DEV»): fase 1 con el 74,1% en caché, ratio de coste 0,49 frente al control y 0 HTTP 400.
+  DEV»): fase 1 con el 74,1% en caché, ratio de coste 0,49 frente al control y 0 HTTP 400. Golden completo de
+  467 (misma spec, «Golden completo en DEV»): TDN1 66,0% y TDN2 41,8% frente a 56,8% y 34,3% del control,
+  76,0% en caché en la fase 1, ratio 0,45 y 48 contratos de baja confianza frente a 8.
 
 ## Qué NO cubren estos scripts
 
