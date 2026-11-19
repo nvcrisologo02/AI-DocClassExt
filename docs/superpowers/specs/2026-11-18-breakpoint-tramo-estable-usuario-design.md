@@ -51,3 +51,31 @@ El usuario eligió A el 2026-11-18.
 - Plantilla sin `{DOCUMENT_TEXT}`: todo va como una sola parte y no hay breakpoint en el usuario.
 - Diferencia conocida y aceptada: hoy, si un valor sustituido contiene literalmente un marcador como `{DOCUMENT_TEXT}`, la cadena de `Replace` lo vuelve a sustituir. Con el corte previo, no. Es un caso patológico; basta un comentario.
 - Test de hilo con transporte falso, como `OpenAiReasoningWireTests`, que compruebe que el SDK serializa dos partes como array `content` sin fusionarlas y que la política deja el breakpoint en la primera.
+
+## Resultado en DEV (2026-11-18, AB#101428)
+
+Pasada de luna sobre la muestra fija de 50 (`eval/golden-muestra-cache.txt` del Batch, a0b1d12), `ParallelQueries` 2, `MaxPages` 10, `ClassificationOnly`, `ForceReprocess`, harness con `-OnlyFiles`, 16:23:37-16:32:00 UTC. DEV ejecutaba la rama en 72d4626 (run 80164 del pipeline 802). Fila `classification.gpt56-luna` con `promptCache` explicit, breakpoint y ttl 30m, sin cambios desde la sección 10 de la spec de prerrequisitos. Sin tráfico de luna en los 30 minutos previos. Control: la pasada 1 del 2026-11-18 (`eval/runs/20261118-133712-gpt4omini-control`), con la misma muestra y configuración; no se repitió por decisión del usuario. Pasada: `eval/runs/20261118-172333-gpt56-luna-golden`; compares `eval/runs/compare-20261118-133712-gpt4omini-control-vs-20261118-172333-gpt56-luna-golden` y `compare-20261118-140658-...-vs-20261118-172333-...`.
+
+| Métrica | Control (gpt-4.1-mini) | luna, breakpoint solo en el system (pasada 3) | luna con breakpoint tras el tramo estable |
+|---|---|---|---|
+| Documentos (harness / persistidas en BD) | 50 / 48 | 50 / 40 | 50 / 42 |
+| Entrada / en caché, fase 1 (media por llamada) | 18.212,8 / 13.536,0 (74,3%) | 18.399,7 / 1.127,0 (6,1%) | 18.395,4 / 13.632,5 (**74,1%**) |
+| Entrada / en caché, fase 2 | 6.598,5 / 1.666,7 (25,3%) | 6.764,5 / 0 | 6.712,3 / 1.818,2 (27,1%) |
+| `cache_write_tokens` medios, fase 1 / fase 2 | no informado | 0 / 0 | 332,5 / 712,6 |
+| Coste medio de clasificación por documento | 0,006391 € | 0,005408 € (ratio 0,85) | **0,003112 € (ratio 0,49)** |
+| Tipologías virtuales / con `Tdn1 = Tdn2` | 19 / 0 | 12 / 0 | 15 / 0 |
+| TDN1 / TDN2 por harness (n 50) | 60% / 34% | 68% / 40% | 72% / 42% |
+| p50 / p95 `DuracionTotalMs` (BD) | 13.986 / 24.656 ms | 12.289 / 19.188 ms | 12.718 / 19.123 ms |
+| HTTP 400 / 429 (Azure Monitor, luna) | 0 / 0 | 0 / 1 | 0 / 0 (100 respuestas 200) |
+
+Frente al control, TDN1 da b10 7 / b01 1 (McNemar p 0,07) y TDN2 b10 8 / b01 4 (p 0,39): dentro del ruido con n 50. Frente a la pasada 3, TDN1 b10 2 / b01 0 y TDN2 b10 2 / b01 1: el texto que ve el modelo no ha cambiado de forma apreciable.
+
+| Criterio de AB#101428 | Resultado |
+|---|---|
+| Fase 1 con al menos el 50% de la entrada en caché | **Cumple**: 74,1%, igual que el control |
+| Ratio de coste ≤ 0,7 frente al control | **Cumple**: 0,49, dentro de la previsión de 0,48-0,50 |
+| Cero HTTP 400 | **Cumple** |
+| Cuerpo idéntico con `promptCache` apagado o ausente | **Cumple**: test de hilo `SinCache_CuerpoIgualAlDeUnaSolaParteConcatenada` |
+| Suite verde, build sin avisos, formato limpio | **Cumple**: 1630/1630, 0 avisos, `dotnet format --verify-no-changes` limpio |
+
+Lectura. Las escrituras de la fase 2 (712 tokens de media) vienen de que su tramo estable depende de la familia TDN1: cada familia escribe su catálogo TDN2 la primera vez en cada TTL. Con tráfico real, más denso por familia que la muestra de 5 documentos por familia, deberían bajar. La revisión final de rama (sin Critical) dejó tres menores aplazados y una advertencia ya decidida: un `Instrucciones.Prompt` variable por petición rompe el prefijo del catálogo y se asume.
