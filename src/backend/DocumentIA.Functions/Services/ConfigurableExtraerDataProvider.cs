@@ -244,16 +244,8 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
             (!string.IsNullOrWhiteSpace(promptConfig.ModelKey) || !string.IsNullOrWhiteSpace(_promptDefaults.ModelKey)))
         {
             // Copia: ResolvePromptConfig devuelve la instancia de la tipología (en caché) cuando no hay defaults.
-            promptConfig = new PromptConfig
-            {
-                Enabled = promptConfig.Enabled,
-                ModelKey = PromptModelKeyResolver.Resolve(null, promptConfig.ModelKey, _promptDefaults.ModelKey),
-                SystemPrompt = promptConfig.SystemPrompt,
-                UserPromptTemplate = promptConfig.UserPromptTemplate,
-                MaxTokens = promptConfig.MaxTokens,
-                Temperature = promptConfig.Temperature,
-                ContentMode = promptConfig.ContentMode
-            };
+            promptConfig = promptConfig.WithModelKey(
+                PromptModelKeyResolver.Resolve(null, promptConfig.ModelKey, _promptDefaults.ModelKey));
         }
 
         // Optimización: si prompt está habilitado y usa el mismo modelo/deployment que el fallback,

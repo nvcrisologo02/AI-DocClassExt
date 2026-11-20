@@ -86,7 +86,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
             return new PromptResultado
             {
-                Modelo = TryResolveModelKey(effectivePromptConfig?.ModelKey),
+                Modelo = ResolverEtiquetaModelo(input.Prompt?.ModelKey, effectivePromptConfig?.ModelKey),
                 Resultado = input.ResultadoPromptCombinado ?? string.Empty,
                 Resumen = input.ResumenCombinado ?? string.Empty,
                 TiempoMs = 0,
@@ -103,7 +103,8 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         string modelKey;
         try
         {
-            modelKey = PromptModelKeyResolver.Resolve(null, promptConfig?.ModelKey, _promptDefaults.ModelKey);
+            // La clave de la petición aplica también al resumen por defecto sin prompt (promptConfig nulo).
+            modelKey = PromptModelKeyResolver.Resolve(input.Prompt?.ModelKey, promptConfig?.ModelKey, _promptDefaults.ModelKey);
         }
         catch (InvalidOperationException ex)
         {
@@ -552,11 +553,30 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
     }
 
     // Solo para rotular el resultado reutilizado: sin clave efectiva devuelve vacío en vez de lanzar.
-    private string TryResolveModelKey(string? tipologiaModelKey)
+    /// <summary>
+    /// Etiqueta de modelo de la rama de reutilización: el mismo DeploymentName que devuelve la rama
+    /// que ejecuta el prompt, para que ModeloLLMUsado y el coste por ejecución lean lo mismo en ambas.
+    /// Si la clave no está en el registro se devuelve la propia clave (la reutilización no falla por eso).
+    /// </summary>
+    private string ResolverEtiquetaModelo(string? requestModelKey, string? tipologiaModelKey)
     {
-        return string.IsNullOrWhiteSpace(tipologiaModelKey) && string.IsNullOrWhiteSpace(_promptDefaults.ModelKey)
-            ? string.Empty
-            : PromptModelKeyResolver.Resolve(null, tipologiaModelKey, _promptDefaults.ModelKey);
+        if (string.IsNullOrWhiteSpace(requestModelKey)
+            && string.IsNullOrWhiteSpace(tipologiaModelKey)
+            && string.IsNullOrWhiteSpace(_promptDefaults.ModelKey))
+        {
+            return string.Empty;
+        }
+
+        var modelKey = PromptModelKeyResolver.Resolve(requestModelKey, tipologiaModelKey, _promptDefaults.ModelKey);
+        try
+        {
+            return _promptModelRegistryLoader.GetModel(modelKey).DeploymentName;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Clave de modelo {ModelKey} sin entrada en el registro; la reutilización conserva la clave como etiqueta.", modelKey);
+            return modelKey;
+        }
     }
 
     private static bool HasPromptDefinition(PromptConfig promptConfig)

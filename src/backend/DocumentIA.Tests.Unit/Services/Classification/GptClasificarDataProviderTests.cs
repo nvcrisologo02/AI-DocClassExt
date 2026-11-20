@@ -1341,6 +1341,16 @@ Contenido del documento:
             result.Should().NotBeNull();
             result!.ModelKey.Should().BeEmpty();
             result.UserPromptTemplate.Should().Contain("Resumen de");
+
+            // La degradación no es silenciosa: el defecto vacío queda registrado como error.
+            _loggerMock.Verify(
+                l => l.Log(
+                    LogLevel.Error,
+                    It.IsAny<EventId>(),
+                    It.Is<It.IsAnyType>((v, t) => v.ToString()!.Contains("PromptDefaults:ModelKey")),
+                    It.IsAny<Exception?>(),
+                    It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
+                Times.Once);
         }
 
         [Fact]
