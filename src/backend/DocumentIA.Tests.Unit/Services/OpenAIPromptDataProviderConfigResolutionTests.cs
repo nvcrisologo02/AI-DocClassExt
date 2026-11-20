@@ -162,12 +162,38 @@ public class OpenAIPromptDataProviderConfigResolutionTests
     }
 
     [Fact]
-    public void PromptDefaultsSettings_DefaultsToGptModelKey()
+    public void PromptDefaultsSettings_SinConfigurar_ModelKeyVacio()
     {
+        // El defecto de código es vacío: la clave real sale de PromptDefaults:ModelKey.
         var settings = new PromptDefaultsSettings();
 
-        settings.ModelKey.Should().Be("default.gpt4o-mini");
-        settings.ToPromptConfig().ModelKey.Should().Be("default.gpt4o-mini");
+        settings.ModelKey.Should().BeEmpty();
+        settings.ToPromptConfig().ModelKey.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ResolvePromptConfig_TipologiaSinModelKey_HeredaDefault(string modelKeyTipologia)
+    {
+        var tipologia = new PromptConfig { Enabled = true, ModelKey = modelKeyTipologia, SystemPrompt = "sys" };
+        var defaults = new PromptDefaultsSettings { ModelKey = "prompt.gpt56-luna" }.ToPromptConfig();
+
+        var result = OpenAIPromptDataProvider.ResolvePromptConfig(tipologia, null, defaults);
+
+        result!.ModelKey.Should().Be("prompt.gpt56-luna");
+    }
+
+    [Fact]
+    public void ResolvePromptConfig_PeticionConModelKey_Gana()
+    {
+        var tipologia = new PromptConfig { Enabled = true, ModelKey = "default.gpt4o-mini", SystemPrompt = "sys" };
+        var defaults = new PromptDefaultsSettings { ModelKey = "prompt.gpt56-luna" }.ToPromptConfig();
+        var peticion = new PromptInstrucciones { ModelKey = "prompt.x" };
+
+        var result = OpenAIPromptDataProvider.ResolvePromptConfig(tipologia, peticion, defaults);
+
+        result!.ModelKey.Should().Be("prompt.x");
     }
 
     [Fact]

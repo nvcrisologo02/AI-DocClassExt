@@ -101,6 +101,25 @@ public class OpenAIPromptDataProviderGuardaContenidoTests : IDisposable
     }
 
     [Fact]
+    public async Task EjecutarPromptAsync_DefectoVacioYSinClaveEnTipologia_DevuelveErrorClaroSinLlamarAlModelo()
+    {
+        var resiliencia = new Mock<IAzureOpenAIResilienceExecutor>(MockBehavior.Strict);
+        var sut = CrearSut(resiliencia.Object, defaultModelKey: "");
+
+        var input = new PromptActivityInput
+        {
+            Tipologia = "prpe.09",
+            MarkdownExtraido = "# Contenido real del documento",
+            ForzarResumenPorDefecto = true
+        };
+
+        var resultado = await sut.EjecutarPromptAsync(input);
+
+        resultado.Error.Should().Contain("PromptDefaults:ModelKey");
+        resiliencia.VerifyNoOtherCalls();
+    }
+
+    [Fact]
     public async Task EjecutarPromptAsync_ForzarResumenConMarkdown_PasaPorResilienceYDevuelveResumen()
     {
         // Camino positivo de la guarda (contrapartida del test anterior): con markdown disponible
@@ -180,7 +199,7 @@ public class OpenAIPromptDataProviderGuardaContenidoTests : IDisposable
         return ClientResult.FromValue(completion, new Mock<PipelineResponse>().Object);
     }
 
-    private OpenAIPromptDataProvider CrearSut(IAzureOpenAIResilienceExecutor resilience)
+    private OpenAIPromptDataProvider CrearSut(IAzureOpenAIResilienceExecutor resilience, string defaultModelKey = "default.gpt4o-mini")
     {
         var memoryCache = new MemoryCache(new MemoryCacheOptions());
         var scopeFactoryMock = new Mock<IServiceScopeFactory>();
@@ -214,7 +233,7 @@ public class OpenAIPromptDataProviderGuardaContenidoTests : IDisposable
         return new OpenAIPromptDataProvider(
             tipologiaConfigLoader,
             promptModelRegistryLoader,
-            Options.Create(new PromptDefaultsSettings()),
+            Options.Create(new PromptDefaultsSettings { ModelKey = defaultModelKey }),
             promptTraceTelemetry,
             resilience,
             new Mock<ILogger<OpenAIPromptDataProvider>>().Object);

@@ -22,6 +22,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
     private readonly ExtractionRoutingSettings _routingSettings;
+    private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<ConfigurableExtraerDataProvider> _logger;
 
     public ConfigurableExtraerDataProvider(
@@ -35,6 +36,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         ExtractionModelRegistryLoader extractionModelRegistryLoader,
         PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<ExtractionRoutingSettings> routingSettings,
+        IOptions<PromptDefaultsSettings> promptDefaults,
         ILogger<ConfigurableExtraerDataProvider> logger)
     {
         _tipologiaConfigLoader = tipologiaConfigLoader;
@@ -47,6 +49,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         _extractionModelRegistryLoader = extractionModelRegistryLoader;
         _promptModelRegistryLoader = promptModelRegistryLoader;
         _routingSettings = routingSettings.Value;
+        _promptDefaults = promptDefaults.Value;
         _logger = logger;
     }
 
@@ -232,7 +235,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
 
         ExtraccionResultado resultadoGpt;
         var promptConfig = HasPromptDefinition(config.PromptConfig)
-            ? OpenAIPromptDataProvider.ResolvePromptConfig(config.PromptConfig, null)
+            ? OpenAIPromptDataProvider.ResolvePromptConfig(config.PromptConfig, null, _promptDefaults.ToPromptConfig())
             : null;
 
         // Optimización: si prompt está habilitado y usa el mismo modelo/deployment que el fallback,

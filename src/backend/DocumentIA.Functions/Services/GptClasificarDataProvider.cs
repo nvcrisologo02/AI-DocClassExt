@@ -800,7 +800,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return new PromptConfig
             {
                 Enabled = true,
-                ModelKey = _promptDefaults.ModelKey ?? "default.gpt4o-mini",
+                ModelKey = PromptModelKeyResolver.Resolve(null, null, _promptDefaults.ModelKey),
                 SystemPrompt = systemPrompt.Content,
                 UserPromptTemplate = userPrompt.Content,
                 MaxTokens = _promptDefaults.MaxTokens,

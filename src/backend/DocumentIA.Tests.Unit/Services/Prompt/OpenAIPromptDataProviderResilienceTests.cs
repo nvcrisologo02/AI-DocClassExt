@@ -124,7 +124,7 @@ public class OpenAIPromptDataProviderResilienceTests : IDisposable
         return new OpenAIPromptDataProvider(
             tipologiaConfigLoader,
             promptModelRegistryLoader,
-            Options.Create(new PromptDefaultsSettings()),
+            Options.Create(new PromptDefaultsSettings { ModelKey = "default.gpt4o-mini" }),
             promptTraceTelemetry,
             resilience,
             new Mock<ILogger<OpenAIPromptDataProvider>>().Object);
