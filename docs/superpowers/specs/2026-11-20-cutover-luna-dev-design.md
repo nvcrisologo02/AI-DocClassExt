@@ -101,7 +101,7 @@ Para clasificación y extracción por fallback solo hay un camino sensato: mover
   - Defecto vacío da error claro.
   - El modo combinado sigue activándose con clave heredada.
   - El Admin acepta clave vacía y rechaza una inexistente.
-- Literal `Modelo = "gpt-4o-mini"` del camino «tipología no identificada» (`DocumentProcessOrchestrator` ~L1746): pasa a ser el `DeploymentName` del fallback de clasificación resuelto, con `gpt-4o-mini` como último recurso si no se resuelve. Lleva test.
+- Literal `Modelo = "gpt-4o-mini"` del camino «tipología no identificada» (`DocumentProcessOrchestrator` ~L1746): pasa a ser el `DeploymentName` del fallback de clasificación resuelto, con `gpt-4o-mini` como último recurso si no se resuelve. Lleva test. **Ajuste en la ejecución (2026-11-20, commit 6274755):** el orquestador Durable no puede leer el registro de modelos (sería E/S no determinista) y la excepción de `ClasificarActivity` solo trae el mensaje, así que `Modelo` queda vacío («no consta»). `ProveedorClasif` sigue en `GPT4oMini`. Admin oculta la línea «Modelo» si está vacía y la columna `ModeloClasificacion` es nullable.
 
 ### 2. Pipeline 802: `PromptDefaults__ModelKey` por entorno
 
