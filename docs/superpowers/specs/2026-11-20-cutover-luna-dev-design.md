@@ -155,6 +155,8 @@ Activar es `PromptDefaults__ModelKey = prompt.gpt56-luna`. Deshacer es `PromptDe
 
 ### 6. ADR
 
+Creado: `docs/decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md` (2026-11-20).
+
 `ADR-004-<slug>.md` en `docs/decisiones/`, con este contenido:
 
 - gpt-5.6-luna sustituye a gpt-4.1-mini en clasificación GPT, prompt, resumen y extracción GPT.
@@ -246,5 +248,5 @@ Cutover a gpt-5.6-luna ejecutado en DEV (AB#99939, pipeline AB#99938). Solo DEV:
 - **Rollback ensayado**: 07 a las 09:56 UTC y `PromptDefaults__ModelKey=default.gpt4o-mini` puesto por el usuario (~10:00 UTC). Pasada de 8 ficheros más 3 extras entre 10:12 y 10:15 UTC: 11 respuestas OK pero solo 10 filas en BD (falta la de la extra `IBI_1.1`, causa no identificada: la respuesta no la marca como reutilizada y su `ClaveIntencion` difiere de la del CERA-16 de la lista). Todo en `gpt-4o-mini` (clasificación, prompt, resumen y extracción). El 2001 con `default.gpt4o-mini_ex` se apoya en la respuesta guardada de esa extra, no en una fila de BD. El modo combinado no se pudo comprobar ni en esta pasada ni en la de vuelta (0 ejecuciones combinadas en ambas), así que el fallback combinado con gpt-4 tras el 07 no se probó Después, 06 reaplicado a las 10:15 UTC (0 altas, 4 indicadores, 2001; backups `__bak_20261120_101545`) y setting vuelto a `prompt.gpt56-luna` por el usuario (~10:20 UTC).
 - **Pasada de vuelta** (10:25 a 10:29 UTC): 11/11 OK; clasificación (`phase1` y `phase2`, 7 cada una), prompt (10) y extracción en `gpt-5.6-luna`, 2001 con `default.gpt56-luna_ex`, 0 errores de resolución; la extra con ad-hoc y `modelKey` explícito sale en `gpt-4o-mini`.
 - **Estado final de DEV**: luna en los cuatro usos (clasificación, extracción, prompt y resumen). Las filas gpt-4 se conservan sin indicador `UseAsFallback`.
-- **Límites**: la edición en el Admin no se comprobó porque una tipología Published no ofrece edición. 19 de las 50 ejecuciones de la muestra salen `Desconocido` en el flujo completo (23 de las 57 filas de la ventana, contando las extras), sin línea base del mismo flujo con la que compararlas. La cuenta az de la sesión no tiene permiso sobre la configuración de la Function de DEV: el usuario cambió el setting en ambos sentidos.
+- **Límites**: la edición en el Admin no se comprobó porque una tipología Published no ofrece edición. 19 de las 50 ejecuciones de la muestra salen `Desconocido` en el flujo completo (23 de las 57 filas de la ventana, contando las extras), sin línea base del mismo flujo con la que compararlas. En la pasada de rollback falta en BD la fila de la extra `IBI_1.1` (10 filas para 11 respuestas), sin causa identificada. La cuenta az de la sesión no tiene permiso sobre la configuración de la Function de DEV: el usuario cambió el setting en ambos sentidos.
 - **Temporales** (no versionados), en `docs/auxiliares/temps/2026-11-20/cutover-luna/` del clon principal: `humo.sql`, `humo-ingest.ps1`, `pasada-corta.txt`, salidas `humo-01-*`, `rollback-01-*`, `vuelta-01-*` y respuestas guardadas sin la clave.

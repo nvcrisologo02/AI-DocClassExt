@@ -175,7 +175,7 @@ Se escribe aquí sin ejecutar nada:
 
 ## Qué NO cubren estos scripts
 
-- **El cutover en PRE y PRO**: los scripts 06, 07 y 08 son solo DEV. Cambiar `PromptDefaults__ModelKey` y portar los scripts es la release (lista anterior). Se recogerá en el ADR de AB#99939, pendiente de crear. Las filas de gpt-4 (`gpt4o-mini*`, 1002, 1003, 1004, 1014) no se sustituyen: solo cambian los indicadores `UseAsFallback`.
+- **El cutover en PRE y PRO**: los scripts 06, 07 y 08 son solo DEV. Cambiar `PromptDefaults__ModelKey` y portar los scripts es la release (lista anterior). Recogido en `docs/decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md`. Las filas de gpt-4 (`gpt4o-mini*`, 1002, 1003, 1004, 1014) no se sustituyen: solo cambian los indicadores `UseAsFallback`.
 - **PRE y PRO**: el bloque `pre` del script de deployment está en TODO a propósito; `pro` tiene
   valores pero no se ejecuta en esta unidad. Las filas y la tarifa son solo DEV.
 - **App settings legacy del pipeline** (`Classification__GptFallback__DeploymentName`,
