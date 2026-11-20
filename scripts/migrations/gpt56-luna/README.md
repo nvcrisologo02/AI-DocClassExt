@@ -153,6 +153,16 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   Ningún OK queda por debajo de 0,6. La distancia con lo estimado viene de la variabilidad entre pasadas (28 cambios de TDN1).
   El control no se ha vuelto a medir.
 
+## Resultado del cutover en DEV (2026-11-20)
+
+Detalle completo en la spec `docs/superpowers/specs/2026-11-20-cutover-luna-dev-design.md`, «Resultado en DEV (2026-11-20)».
+
+- Run 80195 (802) sobre 20fec98 en verde; `PromptDefaults__ModelKey = prompt.gpt56-luna`.
+- 08: 219 tipologías cambiadas (13 PascalCase y 206 camelCase), 0 con otra clave, backup `Tipologias__bak_20261120_092949`; segunda ejecución 0. 06: altas 1029 y 1030, 4 indicadores, 2001 a `default.gpt56-luna_ex`, backups `__bak_20261120_093020`; segunda ejecución 0.
+- Humo 50/50 OK (09:39 a 09:50 UTC, HTTP directo porque el harness solo clasifica): 0 clasificaciones con `gpt-4o-mini`, prompt y resumen en luna, 2001 con `default.gpt56-luna_ex`, tarifa luna, 0 errores de resolución.
+- Rollback ensayado: 07 (09:56 UTC) y setting a `default.gpt4o-mini`; pasada 10:12 a 10:15 UTC, 11/11 en `gpt-4o-mini`. 06 reaplicado a las 10:15 UTC y setting de vuelta. Pasada de vuelta: 11/11 OK en luna (la petición con `modelKey` explícito, en `gpt-4o-mini`).
+- La clave de modelo de la petición no aplica al resumen por defecto (límite conocido, previo a esta unidad). Edición del Admin no comprobada.
+
 ## Lista para la release (PRE y PRO)
 
 Se escribe aquí sin ejecutar nada:

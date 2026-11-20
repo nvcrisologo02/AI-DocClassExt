@@ -228,3 +228,23 @@ Se escribe en el README de gpt56-luna, sin ejecutar nada:
   - Checklist de app settings (`PromptDefaults__ModelKey`).
 - Arquitectura: ADR-004.
 - Funcional: ninguno previsto. El comportamiento de negocio no cambia, cambia el modelo. Si el Admin cambia su formulario de tipologías, se revisa el manual de uso del Admin.
+
+## Resultado en DEV (2026-11-20)
+
+Cutover a gpt-5.6-luna ejecutado en DEV (AB#99939, pipeline AB#99938). Solo DEV: nada en PRE ni PRO.
+
+- **Despliegue**: run 80195 del pipeline 802 sobre 20fec98 (`targetEnvironment=dev`), en verde. El log fija `PromptDefaults__ModelKey = prompt.gpt56-luna`.
+- **Script 08**: 219 tipologías cambiadas (13 PascalCase y 206 camelCase) de 233, 0 con otra clave, backup `Tipologias__bak_20261120_092949`. Segunda ejecución: 0 cambios. Estado final: 233 heredan, 0 fijan `default.gpt4o-mini`.
+- **Script 06** (09:30 UTC): 2 altas (1029 `extraction.gpt56-luna`, 1030 `default.gpt56-luna_ex`), 4 indicadores `UseAsFallback` movidos (1027 y 1029 a true; 1003 y 1004 a false), tipología 2001 a `default.gpt56-luna_ex`, un fallback por Tipo. Backups `ModeloConfigs__bak_20261120_093020` y `Tipologias__bak_20261120_093020`. Segunda ejecución: 0 cambios.
+- **Humo** (tras 5 minutos de espera; la cuenta az de la sesión no tiene permiso sobre la configuración de la Function de DEV y no se reinició): 50/50 OK entre 09:39 y 09:50 UTC, más 6 peticiones extra, por HTTP directo a `/api/IngestDocument` con resumen forzado y extracción automática. Se usó HTTP porque el harness del Batch fija solo clasificación y sin resumen. Resultados:
+  - 0 clasificaciones GPT con `gpt-4o-mini`: `classification.phase1` y `phase2` solo `gpt-5.6-luna` (59 cada una).
+  - Prompt y resumen con `gpt-5.6-luna` (44 llamadas `prompt.json`); en modo combinado (9 ejecuciones) `Prompt.Modelo` trae la clave `prompt.gpt56-luna`.
+  - Tipología 2001 (`IBI_1.1`, pedida por `expectedType`) con `ModelKeyEfectivo = default.gpt56-luna_ex` y extracción en luna.
+  - Tarifa `gpt-5.6-luna@2026-11-17` en clasificación, extracción y prompt. 0 errores de resolución de modelo.
+  - Admin de DEV: la lista de tipologías y el detalle de una tipología Published abren sin error.
+- **Paso 6** (la petición manda): con prompt ad-hoc completo y `instrucciones.prompt.modelKey = "default.gpt4o-mini"` el prompt sale con `gpt-4o-mini`. Con solo `forzarResumenPorDefecto` la clave de la petición no aplica al resumen (sale luna). Es el comportamiento previo a esta unidad, no una regresión; queda como límite conocido.
+- **Rollback ensayado**: 07 a las 09:56 UTC y `PromptDefaults__ModelKey=default.gpt4o-mini` puesto por el usuario (~10:00 UTC). Pasada de 8 ficheros más 3 extras entre 10:12 y 10:15 UTC, 11/11 OK, todo en `gpt-4o-mini` (clasificación, prompt, resumen y extracción; 2001 con `default.gpt4o-mini_ex`). El modo combinado no se pudo comprobar en la pasada corta. Después, 06 reaplicado a las 10:15 UTC (0 altas, 4 indicadores, 2001; backups `__bak_20261120_101545`) y setting vuelto a `prompt.gpt56-luna` por el usuario (~10:20 UTC).
+- **Pasada de vuelta** (10:25 a 10:29 UTC): 11/11 OK; clasificación (`phase1` y `phase2`, 7 cada una), prompt (10) y extracción en `gpt-5.6-luna`, 2001 con `default.gpt56-luna_ex`, 0 errores de resolución; la extra con ad-hoc y `modelKey` explícito sale en `gpt-4o-mini`.
+- **Estado final de DEV**: luna en los cuatro usos (clasificación, extracción, prompt y resumen). Las filas gpt-4 se conservan sin indicador `UseAsFallback`.
+- **Límites**: la edición en el Admin no se comprobó porque una tipología Published no ofrece edición. 23 de 50 ejecuciones salen `Desconocido` en el flujo completo, sin línea base del mismo flujo con la que compararlas. La cuenta az de la sesión no tiene permiso sobre la configuración de la Function de DEV: el usuario cambió el setting en ambos sentidos.
+- **Temporales** (no versionados), en `docs/auxiliares/temps/2026-11-20/cutover-luna/` del clon principal: `humo.sql`, `humo-ingest.ps1`, `pasada-corta.txt`, salidas `humo-01-*`, `rollback-01-*`, `vuelta-01-*` y respuestas guardadas sin la clave.
