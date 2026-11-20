@@ -1361,7 +1361,7 @@ async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
 |-----------|-----------|-------------|-------------|
 | Documento duplicado, !forceReprocess, con ejecución de la misma intención | VerificarDuplicado | El de la ejecución original (`ReutilizadaPorDuplicado=true`) | Si: fila de reutilización vinculada a la original (AB#100258); sin contrato salvo que complete un prompt o resumen (AB#100930) |
 | Documento duplicado, !forceReprocess, sin ejecución reutilizable, `Dedup__ModoEstricto=false` | VerificarDuplicado | `DUPLICADO` | Si (parcial, AB#100178). En modo estricto (defecto) no es salida anticipada: el documento se procesa con `motivoNoReutilizacion` |
-| Confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (parcial) |
+| Tipologia de catalogo con confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | No: el contrato se devuelve pero no queda fila en `DocumentoEjecuciones` (comprobado en DEV con el golden del 2026-11-19, AB#101435) |
 | Tipologia virtual con confianza < umbral (instrucciones ?? proveedor ?? 0,6; AB#101435) | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (contrato completo de la rama virtual) |
 | Tipologia no resuelta | ResolverTipologia | `ERROR` | Si (parcial) |
 | Cuota Azure OpenAI agotada (429 sostenido tras reintentos/cooldown) | Clasificar | `PENDIENTE_REINTENTO` (ver 3.9.5) | Si (parcial) |

@@ -107,9 +107,12 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   467 (misma spec, «Golden completo en DEV»): TDN1 66,0% y TDN2 41,8% frente a 56,8% y 34,3% del control,
   76,0% en caché en la fase 1, ratio 0,45 y 48 contratos de baja confianza frente a 8.
 - AB#101435 (commit 7d325f3; DEV ejecuta 083885e desde el run 80182 del 802, del 2026-11-19, y el golden de luna
-  `eval/runs/20261119-155707-gpt56-luna-golden` del Batch estaba en curso al cerrar la sesión): la tipología virtual pasa a aplicar el umbral de baja
-  confianza. Estimación sobre el `results.csv` de ese golden, no medida: luna pasaría de 48 a unos 66 documentos en baja
-  confianza y los errores de TDN1 que salen como OK bajarían de 131 a 118. En el control, de 8 a 16.
+  `eval/runs/20261119-155707-gpt56-luna-golden` del Batch, 467 de 467): la tipología virtual pasa a aplicar el umbral de baja
+  confianza. Se estimó que luna pasaría de 48 a unos 66 en baja y de 131 a 118 errores de TDN1 en OK, y en el control
+  de 8 a 16. **Medido en luna** (spec `2026-11-19-umbral-confianza-tipologia-virtual-design.md`, «Resultado en DEV»):
+  79 en baja (29 virtuales, persistidas, y 50 de catálogo, sin fila en BD) y 113 errores de TDN1 en OK de 388 (29,1%). Los aciertos de TDN1 no cambian (308) y el TDN2 pasa de 195 a 193.
+  Ningún OK queda por debajo de 0,6. La distancia con lo estimado viene de la variabilidad entre pasadas (28 cambios de TDN1).
+  El control no se ha vuelto a medir.
 
 ## Qué NO cubren estos scripts
 

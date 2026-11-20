@@ -61,6 +61,23 @@ Subir el umbral apenas cambia el resultado hasta 0,9: la mayoría de los errores
 2. Build sin warnings nuevos, `dotnet test src/backend/DocumentIA.Tests.Unit` y `dotnet format --verify-no-changes`.
 3. **Opcional, con sí:** desplegar la rama en DEV con el 802 y repetir el golden de luna. Lo esperado es unos 66 en baja y unos 118 errores de TDN1 en OK. Recuento de virtuales en baja confianza con la consulta `medicion/02` adaptada.
 
+## Resultado en DEV (golden 2026-11-19, AB#101435)
+
+DEV con 083885e (run 80182 del 802, sin runs posteriores al medir). Golden de luna `eval/runs/20261119-155707-gpt56-luna-golden` del Batch, 467 de 467 OK (sin errores ni timeouts), frente a `20261119-103903-gpt56-luna-golden`. Bajas contadas con `estado_contrato` del `results.csv`.
+
+| | Antes (103903) | Ahora (155707) | Estimado |
+|---|---|---|---|
+| Contratos en baja confianza | 48 | 79 | 66 |
+| Errores de TDN1 que salen como OK | 131 de 419 (31,3%) | 113 de 388 (29,1%) | 118 de 401 |
+| Aciertos TDN1 / TDN2 (467) | 308 / 195 | 308 / 193 | — |
+| Confianza mínima entre los OK | 0,15 | 0,62 | — |
+
+- El umbral funciona: ningún OK queda por debajo de 0,6. Antes había 22.
+- Transiciones: 381 siguen en OK, 41 siguen en baja, 38 pasan de OK a baja y 7 de baja a OK. De las 38 nuevas bajas, 24 tenían el TDN1 mal y 14 bien. Su confianza va de 0,10 a 0,46; 18 de ellas tienen 0,42.
+- La diferencia con lo estimado no viene del umbral, sino de la variabilidad del modelo: 28 de los 467 documentos cambian de TDN1 entre las dos pasadas. Si se aplica el umbral de 0,6 sobre el CSV de 103903, salen 70 bajas y 115 errores en OK, no 66 y 118. No se ha averiguado de dónde sale la diferencia con la estimación de esta spec.
+- Las 79 bajas suman las de catálogo y las virtuales. El CSV no las distingue (en `proveedor` pone `GPT4oMini` en todas), así que se separan con BD. Consulta de solo lectura en DEV, patrón de `medicion/02`, sobre `DocumentoEjecuciones` con `SubmittedBy` del harness y ventana UTC 2026-11-19 14:57-16:13, agrupando por `ClasificacionParcial` y estado: 258 OK de catálogo, 130 OK virtuales y **29 virtuales en baja confianza, persistidas**. Los 388 OK coinciden con los del CSV. Las otras 50 bajas no tienen fila: son de catálogo, que no persisten. El cruce se ha hecho por recuento, no documento a documento.
+- Este golden está sesgado hacia casos difíciles: las cifras sirven para comparar, no son porcentajes de producción (ver «Situación actual»).
+
 ## Queda al constructor
 
 - Nombre y forma del helper de umbral, si conviene extraerlo para compartirlo con el camino de catálogo sin cambiar su cadena.
