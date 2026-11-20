@@ -620,6 +620,89 @@ public class ConfigurableExtraerDataProviderTests
         result.Consumos.Should().Contain(c => c.Operacion == "layout.contexto");
     }
 
+    [Fact]
+    public async Task ModoCombinado_ClaveHeredada_SeActiva()
+    {
+        // La tipologia declara el prompt sin modelKey: hereda PromptDefaults:ModelKey. La fila de
+        // prompt y el fallback de extraccion comparten deployment, asi que debe ir en una sola llamada.
+        using var fixture = TestFixture.Create(
+            minFieldsRatio: 0.5,
+            fallbackEnabled: true,
+            promptModelKeyTipologia: "",
+            promptDefaultModelKey: "prompt.gpt56-luna");
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CuExtraccionException("default.cu", "TimeoutException", "hard timeout"));
+
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackYPromptAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.Is<PromptConfig>(c => c.ModelKey == "prompt.gpt56-luna"),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object>()
+            });
+
+        var sut = fixture.BuildSut();
+
+        await sut.ObtenerDatosAsync(fixture.CreateInput());
+
+        fixture.GptProvider.Verify(
+            p => p.ObtenerDatosConFallbackYPromptAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<PromptConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()),
+            Times.Once);
+    }
+
+    [Fact]
+    public async Task ModoCombinado_SoloHeredaLaClave_NoLaPlantillaDeLosDefaults()
+    {
+        using var fixture = TestFixture.Create(
+            minFieldsRatio: 0.5,
+            fallbackEnabled: true,
+            promptModelKeyTipologia: "",
+            promptDefaultModelKey: "prompt.gpt56-luna",
+            promptTemplateTipologia: "",
+            promptDefaultTemplate: "plantilla-de-defecto {contenido}");
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CuExtraccionException("default.cu", "TimeoutException", "hard timeout"));
+
+        PromptConfig? recibido = null;
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackYPromptAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<PromptConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<ExtraccionInput, TipologiaValidationConfig, PromptConfig, string?, CancellationToken>(
+                (_, _, prompt, _, _) => recibido = prompt)
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object>()
+            });
+
+        await fixture.BuildSut().ObtenerDatosAsync(fixture.CreateInput());
+
+        recibido.Should().NotBeNull();
+        recibido!.ModelKey.Should().Be("prompt.gpt56-luna");
+        recibido.UserPromptTemplate.Should().BeEmpty();
+        recibido.SystemPrompt.Should().Be("sistema");
+    }
+
     private sealed class TestFixture : IDisposable
     {
         private readonly string _tempDir;
@@ -636,10 +719,14 @@ public class ConfigurableExtraerDataProviderTests
         private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
         private readonly MockExtraerDataProvider _mockProvider;
         private readonly ExtractionRoutingSettings _routingSettings;
+        private readonly string _promptDefaultModelKey;
+        private readonly string _promptDefaultTemplate;
 
-        private TestFixture(string tempDir, string tipologiaId, double minFieldsRatio, bool fallbackEnabled)
+        private TestFixture(string tempDir, string tipologiaId, double minFieldsRatio, bool fallbackEnabled, string promptDefaultModelKey, string promptDefaultTemplate)
         {
             _tempDir = tempDir;
+            _promptDefaultModelKey = promptDefaultModelKey;
+            _promptDefaultTemplate = promptDefaultTemplate;
             _tipologiaId = tipologiaId;
 
             _tipologiaConfigLoader = CreateLoaderFromTempDirectory(_tempDir);
@@ -725,7 +812,21 @@ public class ConfigurableExtraerDataProviderTests
             _extractionModelRegistryLoader = new ExtractionModelRegistryLoader(extractionRegistryPath);
 
             var promptRegistryPath = Path.Combine(_tempDir, "prompt.models.json");
-            File.WriteAllText(promptRegistryPath, "{\"models\":[]}");
+            File.WriteAllText(promptRegistryPath, JsonSerializer.Serialize(new
+            {
+                models = new object[]
+                {
+                    new
+                    {
+                        key = "prompt.gpt56-luna",
+                        provider = "azure-openai",
+                        endpoint = "https://example.openai.azure.com",
+                        apiKey = "test",
+                        authMode = "ApiKey",
+                        deploymentName = "deployment-test"
+                    }
+                }
+            }));
             _promptModelRegistryLoader = new PromptModelRegistryLoader(promptRegistryPath);
             _mockProvider = new MockExtraerDataProvider();
 
@@ -818,7 +919,12 @@ public class ConfigurableExtraerDataProviderTests
             double? tipExtracUmbralFallbackConfianza = null,
             // null = el modelKey por defecto del provider; "" reproduce una tipologia sin
             // bloque extraction (AB#100192), donde los defaults dejan ModelKey vacio.
-            string? extractionModelKey = null)
+            string? extractionModelKey = null,
+            // null = la tipologia no declara promptConfig; "" = lo declara sin modelKey (hereda el defecto).
+            string? promptModelKeyTipologia = null,
+            string promptDefaultModelKey = "",
+            string promptTemplateTipologia = "{contenido}",
+            string promptDefaultTemplate = "")
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "DocumentIA.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
@@ -840,6 +946,9 @@ public class ConfigurableExtraerDataProviderTests
                     autoMapUnmappedFields = true,
                     fieldMappings = Array.Empty<object>()
                 },
+                promptConfig = promptModelKeyTipologia is null
+                    ? null
+                    : new { enabled = true, modelKey = promptModelKeyTipologia, systemPrompt = "sistema", userPromptTemplate = promptTemplateTipologia },
                 confidenceConfig = new
                 {
                     extracUmbralFallback = tipExtracUmbralFallback,
@@ -856,7 +965,7 @@ public class ConfigurableExtraerDataProviderTests
 
             File.WriteAllText(tipologiaPath, JsonSerializer.Serialize(tipologiaConfig));
 
-            return new TestFixture(tempDir, tipologiaId, minFieldsRatio, fallbackEnabled);
+            return new TestFixture(tempDir, tipologiaId, minFieldsRatio, fallbackEnabled, promptDefaultModelKey, promptDefaultTemplate);
         }
 
         public ConfigurableExtraerDataProvider BuildSut() =>
@@ -871,6 +980,7 @@ public class ConfigurableExtraerDataProviderTests
                 _extractionModelRegistryLoader,
                 _promptModelRegistryLoader,
                 Options.Create(_routingSettings),
+                Options.Create(new PromptDefaultsSettings { ModelKey = _promptDefaultModelKey, UserPromptTemplate = _promptDefaultTemplate }),
                 Logger.Object);
 
         public ExtraccionInput CreateInput() => new()

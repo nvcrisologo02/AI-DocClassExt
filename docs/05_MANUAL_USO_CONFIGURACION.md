@@ -85,7 +85,7 @@ Estados habituales y accion recomendada:
 |---|---|---|
 | `OK` | Documento procesado correctamente | Continuar flujo normal |
 | `VALIDACION_CON_ERRORES` | Se extrajeron datos pero hay inconsistencias | Revisar campos marcados y corregir/confirmar |
-| `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
+| `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento. También se da cuando solo identifica la familia (TDN1) o el documento queda como Desconocido y la confianza no llega al umbral | Revisar manualmente y, si procede, reenviar. En el caso de familia o Desconocido, reenviar con `forceReprocess = true`, porque si no se devuelve el mismo resultado |
 | `DUPLICADO` | Solo con `Dedup__ModoEstricto = false`: el documento ya habia sido procesado y no hay ningun resultado anterior reutilizable (en modo estricto, el defecto, se procesa) | Usar resultado existente o seguir criterio de negocio |
 | _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
 | `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto legible: el servicio de lectura respondio sin contenido | Comprobar si es un escaneado sin OCR o una pagina en blanco y pedir un documento legible. Si lo que fallo fue la lectura, el estado es `ERROR` o `PENDIENTE_REINTENTO` con `No se pudo obtener el texto del documento: <motivo>` |
@@ -442,6 +442,9 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 - `forzarResumenPorDefecto=true` fuerza una llamada dedicada si todavia no existe `Resumen`.
 - Si esa llamada dedicada tambien debe ejecutar un prompt propio/ad-hoc, ambos prompts se combinan y se devuelven en campos separados.
 - `promptConfig.enabled=true` con `systemPrompt` y `userPromptTemplate` vacios no dispara `ResultadoPrompt` por si solo.
+- `promptConfig.modelKey` es opcional. Vacio (o ausente) significa heredar `PromptDefaults:ModelKey` del entorno; la peticion puede fijar otra clave y gana a ambas. Una tipologia solo debe informarlo si necesita un modelo distinto del entorno, y entonces la clave tiene que existir y estar activa en `ModeloConfigs`.
+- `PromptDefaults:ModelKey` se fija por entorno (app setting `PromptDefaults__ModelKey`): el pipeline fija `prompt.gpt56-luna` en DEV y `default.gpt4o-mini` en PRE y PRO. No puede quedar vacio ni apuntar a una clave inexistente o inactiva: el prompt y el resumen fallan en cada llamada.
+- Para cambiar de modelo o volver atras basta cambiar ese app setting. `ensure-app-settings.ps1` no sobrescribe claves que ya existen, asi que el cambio posterior se hace con `az functionapp config appsettings set`, ademas del valor del pipeline para que persista.
 - Si la clasificacion se hizo con recorte real de paginas y el resumen sale de ese contexto, se anade la nota: `* Resumen basado en las primeras N paginas del documento`.
 - En ejecucion completa (`classificationOnly=false`), extraccion y prompt libre se ejecutan con markdown del documento completo aunque la clasificacion haya usado recorte.
 
@@ -775,6 +778,7 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
   },
   "promptConfig": {
     "enabled": false,
+    "modelKey": "",
     "systemPrompt": "",
     "userPromptTemplate": ""
   },
@@ -1048,6 +1052,8 @@ Invoke-RestMethod \
 | `deploymentName` | string | Sí | Nombre del deployment en Azure OpenAI |
 | `temperature` | double | No | Temperatura de generacion. Default: `0.0` |
 | `maxTokens` | int | No | Tokens maximos de respuesta. Default: `4096` |
+| `reasoningEffort` | string | No | Solo modelos de razonamiento (familias `gpt-5*` y o-series): `none`, `minimal`, `low`, `medium`, `high`. Nulo o vacío = no se envía (comportamiento anterior). Con cualquier otro valor se registra un aviso en el log en todos los modelos, también en los clásicos, y no se envía. En modelos clásicos un valor válido se ignora. Cuando está informado y es válido, la llamada a un modelo de razonamiento envía `reasoning_effort` y, si hay límite de salida, `max_completion_tokens` (en lugar de `max_tokens`); a los modelos de razonamiento nunca se les envía `temperature`. El límite de salida depende de la operación: en clasificación es el mayor entre `maxTokens` del modelo y el que pide la fase; en prompt sale de `promptConfig.MaxTokens`, y en resumen de `max(resumenConfig.MaxTokens, promptConfig.MaxTokens)`. En prompt y resumen no se usa `maxTokens` del modelo. Aplica a clasificación y a prompt (incluido el resumen); la extracción con fallback GPT no lo usa. Ejemplo en DEV: filas `classification.gpt56-luna` y `prompt.gpt56-luna` (`scripts/migrations/gpt56-luna/`). |
+| `promptCache` | objeto | No | Solo modelos de clasificación de la familia GPT-5.6 y posteriores; los anteriores responden HTTP 400 a estos campos, así que en ellos se omite o se deja con `enabled: false`. Campos: `enabled` (bool, por defecto `false`), `keyPrefix` (por defecto `documentia-clasif`), `breakpoint` (bool, por defecto `true`: marca como prefijo reutilizable el mensaje de sistema y el tramo estable del mensaje de usuario, lo anterior a `{DOCUMENT_TEXT}`), `ttl` (por defecto `30m`) y `mode` (`implicit` por defecto, o `explicit`; un valor desconocido se trata como `implicit`). Usar `explicit`: con `implicit`, GPT-5.6 escribe y cobra el prompt entero, documento incluido, en cada llamada. Las escrituras en caché se tarifican con `EurEscrituraCachePor1M` de la línea del catálogo `tarifas.ia`. Ejemplo en DEV, fila `classification.gpt56-luna`: `{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m","mode":"explicit"}` (script `03-dev-promptcache-on-gpt56-luna.sql`). |
 | `minFieldsRatio` | double | No | Completitud minima para activar este modelo como fallback |
 | `useAsFallback` | bool | No | `true` = actuar como fallback de extraccion GPT |
 

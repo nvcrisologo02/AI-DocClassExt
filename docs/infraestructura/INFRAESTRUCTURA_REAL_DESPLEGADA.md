@@ -100,6 +100,8 @@ Pendientes de la Fase 3 (AB#100302 / AB#100321): Plataforma retira los roles de 
 
 > **Deployments de DEV/PRE:** replican el juego en sus cuentas 01/02 (`infra/ai/deployments.dev.json` y `infra/ai/deployments.pre.json`), incluido `gpt-5-mini`.
 
+> **Solo DEV (prueba AB#99934, desde 2026-11-17):** `srbaisrv01devdocai` tiene además el deployment `gpt-5.6-luna` (modelo `gpt-5.6-luna` 2026-07-09, `DataZoneStandard`, **150K TPM**: creado con 50 el 2026-11-17 a las 13:39 UTC y subido a 150 a las 16:22 UTC con sí explícito por los 429 de la golden, ver spec 10.1), creado con `scripts/migrations/gpt56-luna/create-gpt56-luna-deployment.sh` (AB#101370) y **no** declarado en `infra/ai/deployments.dev.json`: solo lo usan las filas `*.gpt56-luna` de `ModeloConfigs` cuando se piden por clave; el flujo por defecto no lo toca. Si la prueba se descarta, se borra con `az cognitiveservices account deployment delete`; si se aprueba, el cutover (AB#99939) lo lleva a `deployments.*.json` y a PRE/PRO.
+
 > **Regiones:** CU/OpenAI **primarios** (`upe48-mm2avmdm-swedencentral`) en **swedencentral**; CU/OpenAI **secundarios** (`srbaisrv-westeurope`) y **todos** los recursos de aplicación y DI en **West Europe**.
 
 **Réplica de analizadores CU (Sweden → West Europe): identidades y roles reales** (verificado 2026-07-17)

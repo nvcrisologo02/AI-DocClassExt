@@ -86,7 +86,7 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
 
             return new PromptResultado
             {
-                Modelo = FirstNonEmpty(effectivePromptConfig?.ModelKey, ResolveDefaultPromptModelKey()),
+                Modelo = TryResolveModelKey(effectivePromptConfig?.ModelKey),
                 Resultado = input.ResultadoPromptCombinado ?? string.Empty,
                 Resumen = input.ResumenCombinado ?? string.Empty,
                 TiempoMs = 0,
@@ -100,12 +100,15 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             return new PromptResultado { Error = "Prompt no habilitado para esta tipología." };
         }
 
-        var modelKey = FirstNonEmpty(promptConfig?.ModelKey, ResolveDefaultPromptModelKey());
-        if (string.IsNullOrWhiteSpace(modelKey))
+        string modelKey;
+        try
         {
-            var mensaje = "PromptConfig requiere ModelKey para ejecutar el prompt.";
-            _logger.LogError(mensaje);
-            return new PromptResultado { Modelo = string.Empty, Error = mensaje };
+            modelKey = PromptModelKeyResolver.Resolve(null, promptConfig?.ModelKey, _promptDefaults.ModelKey);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "No se pudo resolver la clave de modelo del prompt para la tipología {Tipologia}.", input.Tipologia);
+            return new PromptResultado { Modelo = string.Empty, Error = ex.Message };
         }
 
         PromptModelConfig modelConfig;
@@ -192,7 +195,8 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
             };
 
             var options = new ChatCompletionOptions();
-            OpenAiModelCapabilities.ConfigureChatOptions(options, modelConfig.DeploymentName, promptConfig.Temperature, promptConfig.MaxTokens);
+            OpenAiModelCapabilities.WarnIfInvalidReasoningEffort(_logger, modelConfig.ReasoningEffort, modelConfig.Key);
+            OpenAiModelCapabilities.ConfigureChatOptions(options, modelConfig.DeploymentName, promptConfig.Temperature, promptConfig.MaxTokens, modelConfig.ReasoningEffort);
 
             var traceContenido = !string.IsNullOrWhiteSpace(input.MarkdownExtraido)
                 ? input.MarkdownExtraido!
@@ -340,8 +344,9 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
+        OpenAiModelCapabilities.WarnIfInvalidReasoningEffort(_logger, modelConfig.ReasoningEffort, modelConfig.Key);
         OpenAiModelCapabilities.ConfigureChatOptions(options, modelConfig.DeploymentName, resumenConfig.Temperature,
-            Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0));
+            Math.Max(resumenConfig.MaxTokens, promptConfig?.MaxTokens ?? 0), modelConfig.ReasoningEffort);
 
         var perAttemptTimeout = TimeSpan.FromSeconds(modelConfig.TimeoutSeconds);
 
@@ -546,11 +551,12 @@ public class OpenAIPromptDataProvider : IPromptDataProvider
         return fallback ?? string.Empty;
     }
 
-    private string ResolveDefaultPromptModelKey()
+    // Solo para rotular el resultado reutilizado: sin clave efectiva devuelve vacío en vez de lanzar.
+    private string TryResolveModelKey(string? tipologiaModelKey)
     {
-        return !string.IsNullOrWhiteSpace(_promptDefaults.ModelKey)
-            ? _promptDefaults.ModelKey
-            : "default.gpt4o-mini";
+        return string.IsNullOrWhiteSpace(tipologiaModelKey) && string.IsNullOrWhiteSpace(_promptDefaults.ModelKey)
+            ? string.Empty
+            : PromptModelKeyResolver.Resolve(null, tipologiaModelKey, _promptDefaults.ModelKey);
     }
 
     private static bool HasPromptDefinition(PromptConfig promptConfig)

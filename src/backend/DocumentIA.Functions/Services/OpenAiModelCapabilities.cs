@@ -1,4 +1,6 @@
 using System.Text.RegularExpressions;
+using Azure.AI.OpenAI.Chat;
+using Microsoft.Extensions.Logging;
 using OpenAI.Chat;
 
 namespace DocumentIA.Functions.Services;
@@ -6,7 +8,12 @@ namespace DocumentIA.Functions.Services;
 /// <summary>
 /// Capacidades por familia de modelo Azure OpenAI. Los modelos de razonamiento
 /// (familia gpt-5 y o-series) rechazan el parámetro temperature con HTTP 400:
-/// solo debe enviarse a los modelos clásicos (gpt-4x, gpt-35).
+/// solo debe enviarse a los modelos clásicos (gpt-4x, gpt-35). El SDK actual admite
+/// 'reasoning_effort' y 'max_completion_tokens' (este último solo cuando el cliente de Azure
+/// lo emite, lo que exige activar SetNewMaxCompletionTokensPropertyEnabled; si no, sale como
+/// 'max_tokens'): la sobrecarga de cinco parámetros de
+/// ConfigureChatOptions los envía a los modelos de razonamiento; la de cuatro se
+/// conserva sin cambios para la extracción.
 /// </summary>
 public static partial class OpenAiModelCapabilities
 {
@@ -41,9 +48,8 @@ public static partial class OpenAiModelCapabilities
 
     /// <summary>
     /// Configura temperature y límite de salida según la familia del modelo.
-    /// Para modelos de razonamiento no se envía ninguno de los dos: rechazan
-    /// temperature != default y el SDK estable serializa el límite como
-    /// 'max_tokens', que estos modelos rechazan (exigen 'max_completion_tokens').
+    /// Sobrecarga conservada para la extracción: en modelos de razonamiento no se
+    /// envía ni temperature ni límite de salida.
     /// </summary>
     public static void ConfigureChatOptions(ChatCompletionOptions options, string? deploymentName, double temperature, int? maxOutputTokens)
     {
@@ -53,5 +59,73 @@ public static partial class OpenAiModelCapabilities
         {
             options.MaxOutputTokenCount = maxOutputTokens;
         }
+    }
+
+    /// <summary>
+    /// Interpreta el esfuerzo de razonamiento configurado (none, minimal, low, medium,
+    /// high; sin distinguir mayúsculas ni espacios). Devuelve false para nulo, vacío
+    /// o un valor desconocido.
+    /// </summary>
+    public static bool TryParseReasoningEffort(string? value, out ChatReasoningEffortLevel level)
+    {
+        var normalizado = value?.Trim().ToLowerInvariant();
+        if (normalizado is "none" or "minimal" or "low" or "medium" or "high")
+        {
+            level = new ChatReasoningEffortLevel(normalizado);
+            return true;
+        }
+
+        level = default;
+        return false;
+    }
+
+    /// <summary>
+    /// Avisa en el log cuando el esfuerzo de razonamiento está informado pero no es válido
+    /// (en ese caso no se envía). Nulo o vacío no genera aviso.
+    /// </summary>
+    public static void WarnIfInvalidReasoningEffort(ILogger logger, string? reasoningEffort, string modelKey)
+    {
+        if (!string.IsNullOrWhiteSpace(reasoningEffort) && !TryParseReasoningEffort(reasoningEffort, out _))
+        {
+            logger.LogWarning("ReasoningEffort '{ReasoningEffort}' no válido en el modelo {ModelKey}; no se envía.", reasoningEffort, modelKey);
+        }
+    }
+
+    /// <summary>
+    /// Configura temperature, límite de salida y esfuerzo de razonamiento. Los modelos clásicos
+    /// reciben temperature y límite. Los de razonamiento nunca reciben temperature; el límite
+    /// (como 'max_completion_tokens', activando la propiedad nueva en el cliente de Azure con
+    /// SetNewMaxCompletionTokensPropertyEnabled) y el esfuerzo se envían solo cuando
+    /// <paramref name="reasoningEffort"/> es válido. Sin esfuerzo válido, se comporta como la
+    /// sobrecarga de cuatro parámetros (ni límite ni esfuerzo), para no alterar las filas existentes.
+    /// </summary>
+    public static void ConfigureChatOptions(ChatCompletionOptions options, string? deploymentName, double temperature, int? maxOutputTokens, string? reasoningEffort)
+    {
+        ApplyTemperature(options, deploymentName, temperature);
+
+        if (SupportsTemperature(deploymentName))
+        {
+            if (maxOutputTokens is > 0)
+            {
+                options.MaxOutputTokenCount = maxOutputTokens;
+            }
+
+            return;
+        }
+
+        if (!TryParseReasoningEffort(reasoningEffort, out var level))
+        {
+            return;
+        }
+
+        if (maxOutputTokens is > 0)
+        {
+            options.MaxOutputTokenCount = maxOutputTokens;
+
+            // El cliente de Azure serializa el límite como 'max_tokens' salvo que se active la propiedad nueva.
+            options.SetNewMaxCompletionTokensPropertyEnabled();
+        }
+
+        options.ReasoningEffortLevel = level;
     }
 }

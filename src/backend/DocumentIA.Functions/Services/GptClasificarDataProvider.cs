@@ -205,19 +205,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         // Construir prompt Phase 1 desde configuración
         var phase1Catalog = _tipologiaPromptBuilder.BuildTdn1Catalog();
         var phase1SystemText = promptSet.Phase1SystemPrompt;
-        var phase1UserText = promptSet.Phase1UserPrompt
-            .Replace("{CONTEXT_PROMPT}", contextoPrompt)
-            .Replace("{TDN1_CATALOG}", phase1Catalog)
-            .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
+        // AB#101428: el usuario se monta en dos mitades (tramo estable y documento) para que la caché de
+        // prompt pueda cortar tras el catálogo; la instrucción de resumen va siempre en el resto.
+        var (phase1UserEstable, phase1UserResto) = MontarUsuarioFase1(
+            promptSet.Phase1UserPrompt,
+            contextoPrompt,
+            phase1Catalog,
+            contextoTexto ?? string.Empty,
+            resumenPrompt?.UserPromptTemplate);
+        var phase1UserText = phase1UserEstable + phase1UserResto;
 
         if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
         {
             phase1SystemText += $"\n\nINSTRUCCIÓN ADICIONAL PARA 'resumen':\n{resumenPrompt.SystemPrompt}";
-        }
-
-        if (resumenPrompt is not null)
-        {
-            phase1UserText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
         }
 
         if (string.IsNullOrWhiteSpace(contextoTexto))
@@ -250,7 +250,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             "classification.phase1",
             input.Entrada.Instrucciones.ExpectedType,
             phase1SystemText,
-            phase1UserText,
+            phase1UserEstable,
+            phase1UserResto,
             cancellationToken,
             resumenPrompt?.MaxTokens);
         consumos.Add(phase1Consumo);
@@ -396,7 +397,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 tipologiaDetectada: tdn1Code,
                 propuesta: tdn1Code,
                 confianza: confianzaPhase1,
-                resumen: resumenPhase1);
+                resumen: resumenPhase1,
+                tdn1Detectado: tdn1Code);
         }
 
         // Phase 2: NO incluir instrucción de resumen
@@ -405,10 +407,14 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         // Construir prompt Phase 2 desde configuración
         var phase2SystemText = promptSet.Phase2SystemPrompt;
-        var phase2UserText = promptSet.Phase2UserPrompt
-            .Replace("{TDN1_CODE}", tdn1Code)
-            .Replace("{TDN2_CATALOG}", phase2Catalog)
-            .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
+        var (phase2UserEstable, phase2UserResto) = UserPromptSplitter.Partir(
+            promptSet.Phase2UserPrompt,
+            [
+                new("{TDN1_CODE}", tdn1Code),
+                new("{TDN2_CATALOG}", phase2Catalog),
+                new(UserPromptSplitter.MarcadorDocumento, contextoTexto ?? string.Empty)
+            ]);
+        var phase2UserText = phase2UserEstable + phase2UserResto;
 
         // Log prompts finales si está habilitado
         if (_promptSettings.EnableFullPromptLogging)
@@ -428,7 +434,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             "classification.phase2",
             input.Entrada.Instrucciones.ExpectedType,
             phase2SystemText,
-            phase2UserText,
+            phase2UserEstable,
+            phase2UserResto,
             cancellationToken,
             resumenPrompt?.MaxTokens);
         consumos.Add(phase2Consumo);
@@ -464,7 +471,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 propuesta: string.IsNullOrWhiteSpace(propuesta) ? tdn1Code : propuesta,
                 confianza: confianzaPhase1,
                 resumen: resumenPhase1,
-                fallbackRazon: fallbackRazon);
+                fallbackRazon: fallbackRazon,
+                tdn1Detectado: tdn1Code);
         }
 
         var confianzaPhase2 = phase2Parsed.Value.Confianza ?? 0.9;
@@ -481,7 +489,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
                 propuesta: justificacionVirtual,
                 confianza: confianzaPhase2,
                 resumen: resumenPhase1,
-                tdn2Detectado: phase2Parsed.Value.Tdn2);
+                tdn2Detectado: phase2Parsed.Value.Tdn2,
+                tdn1Detectado: tdn1Code);
         }
 
         stopwatch.Stop();
@@ -562,10 +571,13 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         // en el prompt resuelto), bloque de resumen si aplica, y por último la instrucción de
         // formato de respuesta (en código, ver comentario anterior).
         var systemText = promptSet.RestrictedSystemPrompt;
-        var userText = promptSet.RestrictedUserPrompt
-            .Replace("{CONTEXT_PROMPT}", contextoPrompt)
-            .Replace("{CATALOGO}", catalogo)
-            .Replace("{DOCUMENT_TEXT}", contextoTexto ?? string.Empty);
+        var (userEstable, userResto) = UserPromptSplitter.Partir(
+            promptSet.RestrictedUserPrompt,
+            [
+                new("{CONTEXT_PROMPT}", contextoPrompt),
+                new("{CATALOGO}", catalogo),
+                new(UserPromptSplitter.MarcadorDocumento, contextoTexto ?? string.Empty)
+            ]);
 
         if (resumenPrompt is not null && !string.IsNullOrWhiteSpace(resumenPrompt.SystemPrompt))
         {
@@ -574,8 +586,10 @@ public class GptClasificarDataProvider : IClasificarDataProvider
 
         if (resumenPrompt is not null)
         {
-            userText += $"\n\nInstrucción adicional para devolver en resumen:\n{resumenPrompt.UserPromptTemplate}";
+            userResto += InstruccionResumenUsuario(resumenPrompt.UserPromptTemplate);
         }
+
+        var userText = userEstable + userResto;
 
         systemText += $"\n\n{responseInstruction}";
 
@@ -608,7 +622,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             "classification.restricted",
             input.Entrada.Instrucciones.ExpectedType,
             systemText,
-            userText,
+            userEstable,
+            userResto,
             cancellationToken,
             resumenPrompt?.MaxTokens);
         consumos.Add(restringidoConsumo);
@@ -709,8 +724,19 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return null;
         }
 
+        // En la clasificación GPT la clave del resumen es solo una etiqueta: el resumen lo genera el modelo
+        // de clasificación y nunca se usa para elegir deployment. Sin PromptDefaults:ModelKey no se lanza
+        // (tumbaría la clasificación entera): se registra el error y el resumen sale sin etiqueta de modelo.
+        var defaultModelKey = _promptDefaults.ModelKey;
+        if (string.IsNullOrWhiteSpace(defaultModelKey))
+        {
+            _logger.LogError(
+                "PromptDefaults:ModelKey no configurado; el resumen de clasificación sale sin etiqueta de modelo.");
+            defaultModelKey = string.Empty;
+        }
+
         // Intentar cargar prompts de resumen desde BD primero
-        var dbResumenPrompt = TryLoadResumenPromptFromDatabase().GetAwaiter().GetResult();
+        var dbResumenPrompt = TryLoadResumenPromptFromDatabase(defaultModelKey).GetAwaiter().GetResult();
         if (dbResumenPrompt is not null)
         {
             return new PromptConfig
@@ -746,7 +772,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return new PromptConfig
         {
             Enabled = true,
-            ModelKey = effectivePrompt.ModelKey,
+            ModelKey = string.IsNullOrWhiteSpace(effectivePrompt.ModelKey) ? defaultModelKey : effectivePrompt.ModelKey,
             SystemPrompt = effectivePrompt.SystemPrompt,
             UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
                 effectivePrompt.UserPromptTemplate,
@@ -758,7 +784,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private async Task<PromptConfig?> TryLoadResumenPromptFromDatabase()
+    private async Task<PromptConfig?> TryLoadResumenPromptFromDatabase(string defaultModelKey)
     {
         try
         {
@@ -785,7 +811,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return new PromptConfig
             {
                 Enabled = true,
-                ModelKey = _promptDefaults.ModelKey ?? "default.gpt4o-mini",
+                ModelKey = defaultModelKey,
                 SystemPrompt = systemPrompt.Content,
                 UserPromptTemplate = userPrompt.Content,
                 MaxTokens = _promptDefaults.MaxTokens,
@@ -831,15 +857,64 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         }
     }
 
+    /// <summary>
+    /// Monta el mensaje de usuario de la fase 1 en tramo estable (instrucciones, contexto y catálogo) y resto
+    /// (documento y, si se pide, la instrucción adicional de resumen, que va siempre detrás del documento).
+    /// </summary>
+    internal static (string Estable, string Resto) MontarUsuarioFase1(
+        string plantilla,
+        string contexto,
+        string catalogo,
+        string documento,
+        string? instruccionResumen)
+    {
+        var (estable, resto) = UserPromptSplitter.Partir(
+            plantilla,
+            [
+                new("{CONTEXT_PROMPT}", contexto),
+                new("{TDN1_CATALOG}", catalogo),
+                new(UserPromptSplitter.MarcadorDocumento, documento)
+            ]);
+
+        if (instruccionResumen is not null)
+        {
+            resto += InstruccionResumenUsuario(instruccionResumen);
+        }
+
+        return (estable, resto);
+    }
+
+    private static string InstruccionResumenUsuario(string instruccion) =>
+        $"\n\nInstrucción adicional para devolver en resumen:\n{instruccion}";
+
+    /// <summary>
+    /// Construye el mensaje de usuario. Con <paramref name="dividir"/> (caché de prompt encendida) y ambas
+    /// mitades no vacías, envía dos partes de texto para que la política marque el breakpoint al final del
+    /// tramo estable (AB#101428). En otro caso, una sola parte con el texto concatenado, igual que antes.
+    /// </summary>
+    internal static UserChatMessage ConstruirMensajeUsuario(string estable, string resto, bool dividir)
+    {
+        if (dividir && estable.Length > 0 && resto.Length > 0)
+        {
+            return new UserChatMessage(
+                ChatMessageContentPart.CreateTextPart(estable),
+                ChatMessageContentPart.CreateTextPart(resto));
+        }
+
+        return new UserChatMessage(ChatMessageContentPart.CreateTextPart(estable + resto));
+    }
+
     private async Task<(string Texto, ConsumoIA Consumo)> CompleteChatAsync(
         ClassificationModelConfig model,
         string operation,
         string? tipologia,
         string systemText,
-        string userText,
+        string userEstable,
+        string userResto,
         CancellationToken cancellationToken,
         int? maxOutputTokens = null)
     {
+        var userText = userEstable + userResto;
         _promptTraceTelemetry.TrackPrompt(
             provider: "gpt-classification",
             operation: operation,
@@ -850,18 +925,20 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             userPrompt: userText);
 
         var systemMessage = new SystemChatMessage(systemText);
-        var userMessage = new UserChatMessage(ChatMessageContentPart.CreateTextPart(userText));
 
         var options = new ChatCompletionOptions
         {
             ResponseFormat = ChatResponseFormat.CreateJsonObjectFormat()
         };
+        OpenAiModelCapabilities.WarnIfInvalidReasoningEffort(_logger, model.ReasoningEffort, model.Key);
         OpenAiModelCapabilities.ConfigureChatOptions(options, model.DeploymentName, model.Temperature,
-            Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens));
+            Math.Max(model.MaxTokens, maxOutputTokens ?? model.MaxTokens), model.ReasoningEffort);
 
         var perAttemptTimeout = TimeSpan.FromSeconds(Math.Max(1, model.TimeoutSeconds));
 
-        var chatClient = CreateChatClient(model);
+        var policy = PromptCacheRequestPolicy.Crear(model, operation, systemText);
+        var userMessage = ConstruirMensajeUsuario(userEstable, userResto, dividir: policy is not null);
+        var chatClient = CreateChatClient(model, policy);
         var circuitKey = $"{model.Endpoint}|{model.DeploymentName}";
         var response = await _resilience.ExecuteAsync(
             circuitKey,
@@ -880,7 +957,8 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             response.Value.Usage,
             actividad: ActividadesIA.Clasificar,
             operacion: operation,
-            modelo: model.DeploymentName);
+            modelo: model.DeploymentName,
+            tokensEscrituraCache: UsoOpenAiMapper.LeerCacheWriteTokens(response.GetRawResponse().Content));
 
         return (response.Value.Content[0].Text, consumo);
     }
@@ -1042,7 +1120,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null, string? fallbackRazon = null, string? tdn2Detectado = null)
+    private static ResultadoClasificacion BuildVirtualResult(ClassificationModelConfig model, string tipologiaDetectada, string propuesta, double confianza, string? resumen = null, string? fallbackRazon = null, string? tdn2Detectado = null, string? tdn1Detectado = null)
     {
         return new ResultadoClasificacion
         {
@@ -1050,6 +1128,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             ProveedorClasif = "GPT4oMini",
             TipologiaDetectada = tipologiaDetectada,
             Tdn2Detectado = tdn2Detectado,
+            Tdn1Detectado = tdn1Detectado,
             // Confianza autoreportada por el modelo (antes se forzaba a 0.1).
             Confianza = confianza,
             ConfianzaGPT = confianza,
@@ -1156,12 +1235,17 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return ValidateGptModel(_modelRegistryLoader.GetModel(requestedModel));
     }
 
-    private ChatClient CreateChatClient(ClassificationModelConfig model)
+    private ChatClient CreateChatClient(ClassificationModelConfig model, PromptCacheRequestPolicy? policy)
     {
         var clientOptions = new AzureOpenAIClientOptions
         {
             RetryPolicy = new ClientRetryPolicy(maxRetries: 0)
         };
+
+        if (policy is not null)
+        {
+            clientOptions.AddPolicy(policy, PipelinePosition.PerCall);
+        }
 
         AzureOpenAIClient azureClient;
 

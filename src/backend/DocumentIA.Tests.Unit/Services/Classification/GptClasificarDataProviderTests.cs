@@ -721,6 +721,111 @@ Contenido del documento:
         }
 
         [Fact]
+        public async Task ClasificarAsync_VirtualConTdn2SinTipologiaPublicada_PropagaLaFamiliaEnTdn1Detectado()
+        {
+            // Given: Phase 2 devuelve un TDN2 del catálogo sin tipología publicada
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+            SetupTipologiaRepository();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn2\": \"TASA-10\", \"confianza\": 0.8}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then
+            result.ClasificacionParcial.Should().BeTrue();
+            result.Tdn2Detectado.Should().Be("TASA-10");
+            result.Tdn1Detectado.Should().Be("TASA");
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_VirtualConPhase2SinTdn2Parseable_PropagaLaFamiliaEnTdn1Detectado()
+        {
+            // Given: Phase 2 responde tdn2 null explícito
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+            SetupTipologiaRepository();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": \"TASA\", \"propuesta\": \"TASA: informe de tasacion de activo\", \"resumen\": \"Resumen Phase 1\", \"confianza\": 0.72}"))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn2\": null, \"confianza\": 0.4}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then
+            result.ClasificacionParcial.Should().BeTrue();
+            result.TipologiaDetectada.Should().Be("TASA");
+            result.Tdn1Detectado.Should().Be("TASA");
+        }
+
+        [Fact]
+        public async Task ClasificarAsync_VirtualPropuestaSinTdn1_NoInformaTdn1Detectado()
+        {
+            // Given: Phase 1 no devuelve tdn1 y aporta una propuesta libre
+            var promptProviderMock = new Mock<IClassificationPromptProvider>();
+            promptProviderMock
+                .Setup(p => p.GetPromptSetAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreatePromptSet());
+
+            SeedClassificationCaches();
+            SetupTipologiaRepository();
+
+            var resilienceMock = new Mock<IAzureOpenAIResilienceExecutor>();
+            resilienceMock
+                .SetupSequence(r => r.ExecuteAsync(
+                    It.IsAny<string>(),
+                    It.IsAny<Func<CancellationToken, Task<ClientResult<ChatCompletion>>>>(),
+                    It.IsAny<CancellationToken>()))
+                .ReturnsAsync(CreateChatResult(
+                    "{\"tdn1\": null, \"propuesta\": \"documento ilegible o sin contenido identificable para clasificar\", \"confianza\": 0.1}"));
+
+            var provider = CreateProvider(promptProviderMock.Object, resilienceMock.Object);
+            var input = CreateClasificacionInput(generarResumenPorDefecto: false);
+            input.Entrada.Instrucciones.Classification.NivelClasificacion = "TDN1_TDN2";
+
+            // When
+            var result = await provider.ClasificarAsync(input);
+
+            // Then
+            result.FallbackRazon.Should().Be("tdn1_virtual_propuesta");
+            result.Tdn1Detectado.Should().BeNull();
+        }
+
+        [Fact]
         public async Task ClasificarAsync_CuandoTdn2ResuelveATipologiaPublicada_TambienInformaTdn2Detectado()
         {
             // Given: Phase 2 devuelve un TDN2 con tipología publicada (TASA-09 → tasa.09)
@@ -1218,6 +1323,53 @@ Contenido del documento:
             // qué documento estaría en juego, aunque desde AB#100006 el método ya no lo recibe.
             return InvokeResolveResumenPromptOnProvider(_provider, input, contextoTexto);
         }
+
+        [Fact]
+        public void ResolveResumenPrompt_DefectoVacio_NoLanzaYDejaModelKeyVacio()
+        {
+            var providerSinDefecto = CrearProviderConDefectos(new PromptDefaultsSettings
+            {
+                ModelKey = "",
+                SystemPrompt = "Sistema...",
+                UserPromptTemplate = "Resumen de {contenido}"
+            });
+            var input = CreateClasificacionInput(generarResumenPorDefecto: true);
+
+            var result = InvokeResolveResumenPromptOnProvider(providerSinDefecto, input, "# Contenido");
+
+            // En la clasificación GPT la clave del resumen es solo una etiqueta: no selecciona modelo.
+            result.Should().NotBeNull();
+            result!.ModelKey.Should().BeEmpty();
+            result.UserPromptTemplate.Should().Contain("Resumen de");
+        }
+
+        [Fact]
+        public void ResolveResumenPrompt_RamaFallback_DevuelveClaveEfectivaResuelta()
+        {
+            var input = CreateClasificacionInput(generarResumenPorDefecto: true);
+
+            var result = InvokeResolveResumenPromptOnProvider(_provider, input, "# Contenido");
+
+            result.Should().NotBeNull();
+            result!.ModelKey.Should().Be("default.gpt4o-mini");
+        }
+
+        private GptClasificarDataProvider CrearProviderConDefectos(PromptDefaultsSettings defaults) =>
+            new(
+                new ClassificationModelRegistryLoader(_memoryCache, _scopeFactoryMock.Object),
+                new ClassificationTipologiaPromptBuilder(
+                    _memoryCache,
+                    _scopeFactoryMock.Object,
+                    new Mock<ILogger<ClassificationTipologiaPromptBuilder>>().Object),
+                _tipologiaConfigLoader,
+                _scopeFactoryMock.Object,
+                _routingSettings,
+                Options.Create(defaults),
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
+                _promptTraceTelemetryMock,
+                _resilienceMock.Object,
+                _loggerMock.Object);
 
         private PromptConfig? InvokeResolveResumenPromptOnProvider(
             GptClasificarDataProvider provider,

@@ -247,6 +247,25 @@ Reglas de ejecucion:
 - Una tipologia con `promptConfig.enabled=true` pero `systemPrompt` y `userPromptTemplate` vacios no activa `ResultadoPrompt`; requiere definicion real o prompt ad-hoc.
 - Si el resumen procede de una clasificacion con recorte real (`paginasIncluidas < paginasDocumento`), se anade sufijo de transparencia: `* Resumen basado en las primeras {N} paginas del documento`.
 
+#### Resolucion del modelo de prompt
+
+La clave del modelo de prompt (`ModeloConfigs` de Tipo 2) se resuelve en `PromptModelKeyResolver.Resolve(peticion, tipologia, defecto)`, con este orden:
+
+1. La clave de la peticion (prompt ad-hoc).
+2. `promptConfig.modelKey` de la tipologia.
+3. `PromptDefaults:ModelKey` del entorno.
+
+Una clave vacia o solo con espacios se salta y hereda el siguiente nivel. Los defectos de `PromptConfig.ModelKey` y `PromptDefaultsSettings.ModelKey` son cadena vacia; `appsettings.json` mantiene `default.gpt4o-mini` como valor base y el pipeline fija el valor de cada entorno (`PromptDefaults__ModelKey`).
+
+- Si las tres claves estan vacias, se lanza `InvalidOperationException("PromptDefaults:ModelKey no configurado")`.
+- Si la clave efectiva no existe en el registro o esta inactiva, `GetModel` falla siempre con la clave en el mensaje. No hay vuelta silenciosa a otro modelo ni comprobacion al arrancar.
+- Todos los consumidores usan la clave efectiva, no la cruda de la tipologia. En el modo combinado de extraccion (`ConfigurableExtraerDataProvider.DebeUsarModoCombinado`) solo se hereda la clave del modelo, no el resto de campos del prompt.
+- El resumen de clasificacion falla con error claro si el defecto esta vacio.
+- En «tipologia no identificada» el orquestador deja `Modelo` vacio (antes ponia `gpt-4o-mini`).
+- El deployment sale siempre del registro de modelos: `Classification__GptFallback__DeploymentName` y `Extraction__GptFallback__DeploymentName` son legacy y no se leen (limpieza en AB#99938).
+
+Cambiar el modelo de prompt y resumen de un entorno es cambiar `PromptDefaults__ModelKey`, sin tocar tipologias.
+
 ### Clasificación Jerárquica GPT (nivelClasificacion) — D1, D2, D4, D6, D7
 
 Cuando se informa `instrucciones.classification.nivelClasificacion`:
@@ -287,6 +306,11 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
     `salida.Identificacion.Tipologia = "Desconocido"`, pipeline detenido, estado `OK`.
   - Si `tipologiaParcial` es un código TDN1 conocido → **código conocido**: `salida.Identificacion.Tdn1 = tipologiaParcial`,
     el pipeline continúa normalmente (extracción, validación, plugins). Estado final determinado por el resto del pipeline.
+- **`Tdn1` de la tipología virtual** (AB#101411): cuando la clasificación informa la familia de la fase 1
+  (`ResultadoClasificacion.Tdn1Detectado`, que rellena `GptClasificarDataProvider`), `salida.Identificacion.Tdn1`
+  toma esa familia. Si no la informa, se mantiene la regla anterior: `Tdn1` = código virtual cuando no es nulo
+  ni `Desconocido`. Sin esto, los modelos que escriben el TDN2 en `propuesta` (caso de `gpt-5.6-luna`) dejaban
+  `Tdn1 = Tdn2`. `Tipologia` y `TipologiaFamilia` siguen recibiendo el código virtual sin cambios.
 
 **D6 — PropuestaTipologia en salida** (`ContratoSalida.cs`):
 - Nueva propiedad `Identificacion.PropuestaTipologia` (string, inicializada a `string.Empty`). Solo se informa cuando hay tipología virtual.
@@ -342,6 +366,8 @@ Resumen de comportamiento por activity:
   - **Self-Reported Confidence**: GPT reporta su certeza sobre la clasificación mediante campo `confianza` (0.0 = incierto, 1.0 = muy seguro). El parser extrae el valor, aplica `Math.Clamp(0.0, 1.0)` automático, y usa fallback a 0.9 si el campo está ausente. Logging detallado: `ConfianzaSelfReported` vs `ConfianzaFinal`. Implementado en AB#99725 (2026-06-03). 
   - **Catalog Enrichment**: Cada tipología publicada en la familia aporta: tipologiacodigo (ESCR-06), tipologiaNombre (Escritura: venta), tdn2 (ESCR-06), gptdescripcion (texto enriquecido con descripción principal, contexto descriptivo, criterio de clasificación automática).
   - **Model Resolution**: Modelo LLM resuelto por petición desde `instrucciones.classification.model` (si viene explícito y válido). `auto`/vacío usa fallback del registro (`useAsFallback=true`). Cliente de chat creado dinámicamente por petición para evitar lock-in de deployment.
+  - **Capacidades por familia de modelo** (`OpenAiModelCapabilities`, `DocumentIA.Functions/Services`): los modelos de razonamiento (familias `gpt-5*` y o-series) rechazan `temperature` con HTTP 400, así que solo se envía a los clásicos (`gpt-4x`, `gpt-35`). Las configuraciones de modelo de clasificación y de prompt (`ClassificationModelConfig`, `PromptModelConfig`) admiten `ReasoningEffort` (`none`, `minimal`, `low`, `medium`, `high`; nulo = no enviar; inválido = aviso y no enviar). La sobrecarga de cinco parámetros de `ConfigureChatOptions` envía a los modelos de razonamiento `reasoning_effort` y, si hay límite de salida, `max_completion_tokens` (activando `SetNewMaxCompletionTokensPropertyEnabled()` del cliente de Azure) solo cuando el esfuerzo está informado y es válido; sin esfuerzo se comporta como la sobrecarga de cuatro, que conserva la extracción con fallback GPT sin cambios (`GptFallbackExtraerDataProvider`). La usan `GptClasificarDataProvider` y `OpenAIPromptDataProvider` (prompt libre y resumen). SDK: `Azure.AI.OpenAI` fijado en `2.9.0-beta.1` (sin comodín), que usa la api-version `2025-04-01-preview` para los cuatro clientes de Azure OpenAI del Function App (clasificación, prompt/resumen, `OpenAiClientFactory` de extracción y `AzureOpenAIEmbeddingsCliente`). Introducido en AB#99934 (prueba de `gpt-5.6-luna` en DEV, 2026-11-17); tests en `OpenAiModelCapabilitiesTests` y el test de serialización en el cable.
+  - **Caché de prompt por modelo** (AB#101412 y AB#101428): `ClassificationModelConfig.PromptCache` (`PromptCacheConfig`, Core) con `Enabled` (por defecto `false`), `KeyPrefix` (`documentia-clasif`), `Breakpoint` (`true`), `Ttl` (`30m`) y `Mode` (`implicit` por defecto; vacío o desconocido se trata como `implicit`). Solo vale para GPT-5.6 y posteriores: los modelos anteriores responden HTTP 400 a estos campos, así que en ellos el bloque se deja sin informar o con `enabled: false`. El SDK instalado no expone los campos, por eso `PromptCacheRequestPolicy` (política de pipeline, `DocumentIA.Functions/Services`) reescribe el cuerpo JSON de la petición. Añade `prompt_cache_key`, que construye `PromptCacheKeyBuilder` como `{keyPrefix}:{operación}:{12 primeros hex del SHA-256 del system}`, y `prompt_cache_options` (`mode`, `ttl`). Con `breakpoint` añade también `prompt_cache_breakpoint: {"mode":"explicit"}` en el mensaje de sistema y en la primera parte del mensaje de usuario. Con la caché activa, `CompleteChatAsync` envía el usuario en dos partes de texto: `UserPromptSplitter` corta la plantilla en el primer `{DOCUMENT_TEXT}`, de modo que la primera parte es el tramo estable (instrucciones y catálogo) y la segunda el documento y lo que va detrás. Sin caché, el cuerpo es idéntico al anterior (una sola parte). En GPT-5.6 las lecturas solo casan en breakpoints y las escrituras se cobran: en modo `explicit` solo se escriben los dos prefijos marcados, una vez por TTL, mientras que `implicit` marca además el último mensaje y escribe el prompt entero, documento incluido, en cada llamada. Por eso la fila de DEV usa `explicit`. El consumo lee `usage.prompt_tokens_details.cache_write_tokens` del cuerpo crudo de la respuesta (`UsoOpenAiMapper.LeerCacheWriteTokens`). Medido en DEV (muestra de 50, run 80164): fase 1 con el 74,1% de la entrada en caché y coste de clasificación de luna 0,49 veces el del control.
   - **Fallback Mapping**: ResolveTipologiaByTdn2() mapea TDN2 code a tipología final (ej., ESCR-06 → tipología con ResolvedTdn2='ESCR-06').
 - `ClassificationTipologiaPromptBuilder`: construye catálogos dinámicos. BuildTdn1Catalog() devuelve todas las familias TDN1 publicadas. BuildTdn2CatalogByFamilia(tdn1Code) consulta ITipologiaRepository directamente, filtra por ResolvedTdn1 = familia, retorna todas las tipologías published+activas con ConfiguracionJson poblado (incluyendo tipologiaNombre [nuevo campo] + gptdescripcion campos). El campo `Nombre` en TdnCatalogItem se resuelve desde TipologiaConfig.TipologiaNombre en tiempo de consulta, enriqueciendo los catálogos con nombre legible de tipología para GPT. Respeta cache 5-min TTL.
 - `ResolverTipologiaActivity`: resuelve configuración efectiva por familia/version.
@@ -356,6 +382,7 @@ Estados funcionales de cierre del pipeline:
 
 - `OK`
 - `OK` _(clasificación parcial — tipología virtual)_: cuando `nivelClasificacion` activo y tipología no mapeada al catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` informado. Pipeline detenido antes de extracción.
+- `BAJA_CONFIANZA_CLASIFICACION` _(tipología virtual)_ (AB#101435): la misma salida de tipología virtual pero con la confianza de clasificación por debajo del umbral. El umbral es el de las instrucciones o, si no lo traen, el `UmbralFallbackAplicado` del proveedor, que en DEV es 0,6 según el `FallbackThreshold` del modelo de fallback; si no hay ninguno, 0,6. No hay tipología de catálogo, así que `ClasifUmbralFallback` no interviene. A diferencia del camino de catálogo, la ejecución se persiste con el contrato completo de la rama virtual. En el Monitor no entra en ninguna de las categorías `EstadoEjecucion.Ok`, `Revision` ni `Error`: se ve en el desglose por estado de proceso. Al desplegarlo, parte del volumen que antes cerraba en `OK` pasa a este estado, lo que es un cambio esperado en las métricas de operación. Como queda persistida y es reutilizable por la deduplicación, para que se vuelva a clasificar hay que reenviar con `forceReprocess = true`.
 - `NO_CLASIFICADO`: clasificación parcial con código TDN1 conocido pero tipología TDN1/TDN2 no resuelta. Pipeline continúa con tipología parcial. Cuando el estado viene de una salida temprana (tipología no resoluble o `Desconocido`), el prompt y el resumen se ejecutan igualmente si la petición los pidió.
 - `SIN_CONTENIDO_DOCUMENTO`: se pidió clasificación GPT, prompt o resumen y Document Intelligence Layout respondió sin texto (documento vacío de verdad). Si lo que falló fue la obtención del texto, `ResultadoMarkdown.CausaSinContenido` lleva el motivo (`MotivoSinContenido`: `SinFuente`, `FormatoNoSoportado`, `LayoutTimeout`, `LayoutError` con código HTTP) desde `MarkdownResolver`, las guardas lo propagan en `FallbackRazon` / `PromptResultado.Error` y el orquestador cierra en `PENDIENTE_REINTENTO` (causa transitoria: timeout, 429, 5xx) o `ERROR`, persistiendo igual (AB#100880). No se invoca al LLM; la actividad `Prompt` queda en `Failed` y no se persiste ni `Resumen` ni `ResultadoPrompt`. **Cuenta y se filtra como error** (`EstadoEjecucion.Error` en `DocumentIA.Data/Repositories/EstadoEjecucion.cs`), de modo que los agregados del Monitor y el badge lo tratan como fallo, no como estado desconocido. Al desplegarlo, parte del volumen que antes cerraba en `OK` —con un resumen inventado sobre un documento que el sistema nunca leyó— pasa a contarse aquí: es un cambio esperado en las métricas de operación.
 - `VALIDACION_CON_ERRORES`
@@ -1353,7 +1380,8 @@ async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
 |-----------|-----------|-------------|-------------|
 | Documento duplicado, !forceReprocess, con ejecución de la misma intención | VerificarDuplicado | El de la ejecución original (`ReutilizadaPorDuplicado=true`) | Si: fila de reutilización vinculada a la original (AB#100258); sin contrato salvo que complete un prompt o resumen (AB#100930) |
 | Documento duplicado, !forceReprocess, sin ejecución reutilizable, `Dedup__ModoEstricto=false` | VerificarDuplicado | `DUPLICADO` | Si (parcial, AB#100178). En modo estricto (defecto) no es salida anticipada: el documento se procesa con `motivoNoReutilizacion` |
-| Confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (parcial) |
+| Tipologia de catalogo con confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | No: el contrato se devuelve pero no queda fila en `DocumentoEjecuciones` (comprobado en DEV con el golden del 2026-11-19, AB#101435) |
+| Tipologia virtual con confianza < umbral (instrucciones ?? proveedor ?? 0,6; AB#101435) | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (contrato completo de la rama virtual) |
 | Tipologia no resuelta | ResolverTipologia | `ERROR` | Si (parcial) |
 | Cuota Azure OpenAI agotada (429 sostenido tras reintentos/cooldown) | Clasificar | `PENDIENTE_REINTENTO` (ver 3.9.5) | Si (parcial) |
 
@@ -1541,7 +1569,7 @@ sumar los importes ya calculados, porque sumar decimales es determinista.
 | `TarifaRegistryLoader` | Core.Configuration | Carga el catalogo con cache de 5 min; tolerante a JSON invalido y a fila ausente |
 | `CalculadoraCosteIA` | Core.Services | Resuelve la linea vigente por modelo y fecha, calcula y agrega |
 | `ConsumosIA` | Core.Services | Fusiona consumos entre proveedores encadenados |
-| `UsoOpenAiMapper` | Functions.Services | Traduce el bloque de uso del SDK de OpenAI |
+| `UsoOpenAiMapper` | Functions.Services | Traduce el bloque de uso del SDK de OpenAI; lee `cache_write_tokens` del cuerpo crudo (`TokensEscrituraCache`), que el SDK no expone |
 | `UsoContentUnderstandingMapper` | Core.Services | Traduce el bloque `usage` de Content Understanding |
 | `TarificadorDeConsumos` | Functions.Services | Aplica el catalogo en la actividad; un fallo no tumba el procesamiento |
 
@@ -1575,6 +1603,10 @@ trae `incluirCostes`. Al ser anulable, se omite del JSON.
 5. Una llamada combinada (extraccion + resumen) genera **un solo** consumo.
 6. Un consumo sin ninguna magnitud no se tarifa a cero: se deja sin coste.
 7. El importe es `decimal`, nunca `double`.
+8. Los tokens escritos en cache (`TokensEscrituraCache`, AB#101412) son un **recargo**:
+   ya se pagan como entrada plena y no se restan de ella. Se tarifican con
+   `EurEscrituraCachePor1M` de la linea del catalogo. Si la linea no tiene ese precio,
+   no se suma nada y `TarifaAplicada` lleva la marca `|sin-precio-escritura`.
 
 Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) para el detalle funcional y de uso.
 

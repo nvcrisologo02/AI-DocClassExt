@@ -1743,7 +1743,9 @@ public class DocumentProcessOrchestrator
 
                         salida.DetalleEjecucion.Clasificacion = new ResultadoClasificacion
                         {
-                            Modelo = "gpt-4o-mini",
+                            // El fallo de la actividad solo trae el mensaje, no el deployment, y el
+                            // orquestador no puede leer el registro de modelos (E/S): no consta.
+                            Modelo = string.Empty,
                             Confianza = 0,
                             ConfianzaDI = 0,
                             ConfianzaGPT = 0,
@@ -1855,12 +1857,20 @@ public class DocumentProcessOrchestrator
                 {
                     // Tipología virtual: GPT identificó familia TDN1 pero no puede mapearla al catálogo,
                     // o se extrajo TDN1 de propuesta sin código de catálogo completo.
-                    // El pipeline se detiene aquí con Estado=OK y PropuestaTipologia accesible en la salida.
+                    // El pipeline se detiene aquí y persiste, con PropuestaTipologia accesible en la salida.
+                    // Estado=OK, o BAJA_CONFIANZA_CLASIFICACION si la confianza no alcanza el umbral
+                    // (instrucciones ?? proveedor ?? 0.6; no hay tipología de catálogo) (AB#101435).
                     salida.Identificacion.Tipologia = tipologiaParcial;
                     salida.Identificacion.TipologiaFamilia = tipologiaParcial;
 
+                    // Familia informada por la clasificación: los modelos que escriben el TDN2 en propuesta
+                    // dejarían Tdn1 = Tdn2 si se derivara de la tipología virtual.
+                    if (!string.IsNullOrWhiteSpace(resultadoClasificacion.Tdn1Detectado))
+                    {
+                        salida.Identificacion.Tdn1 = resultadoClasificacion.Tdn1Detectado;
+                    }
                     // Asignar Tdn1 si hay código válido (para todos los casos virtuales)
-                    if (!string.IsNullOrWhiteSpace(tipologiaParcial)
+                    else if (!string.IsNullOrWhiteSpace(tipologiaParcial)
                         && !string.Equals(tipologiaParcial, "Desconocido", StringComparison.OrdinalIgnoreCase))
                     {
                         salida.Identificacion.Tdn1 = tipologiaParcial;
@@ -1943,7 +1953,19 @@ public class DocumentProcessOrchestrator
                     MarcarActividadOmitida("SubirGDC", motivoOmision);
 
                     var confidenceCfgVirtual = new ConfidenceConfig();
-                    salida.Resultado.Estado = "OK";
+                    var umbralBajaConfianzaVirtual = entrada.Instrucciones.Classification.Umbral
+                        ?? resultadoClasificacion.UmbralFallbackAplicado
+                        ?? 0.6;
+                    var esBajaConfianzaVirtual = resultadoClasificacion.Confianza < umbralBajaConfianzaVirtual;
+                    if (esBajaConfianzaVirtual)
+                    {
+                        logger.LogWarning(
+                            "Confianza de clasificacion baja en tipologia virtual: {Confianza} (umbral: {Umbral})",
+                            resultadoClasificacion.Confianza,
+                            umbralBajaConfianzaVirtual);
+                    }
+
+                    salida.Resultado.Estado = esBajaConfianzaVirtual ? "BAJA_CONFIANZA_CLASIFICACION" : "OK";
                     salida.Resultado.ConfianzaGlobal = RedondearSalida(
                         ConfidenceCalculator.Global(resultadoClasificacion.Confianza, null, 1.0));
                     salida.Resultado.EstadoCalidad = ConfidenceCalculator.EstadoCalidad(
@@ -1969,7 +1991,9 @@ public class DocumentProcessOrchestrator
                         ? $"Tipología parcial TDN1: GlobalFallback identificó '{tipologiaParcial}' con confianza baja"
                         : "Tipología virtual TDN1: propuesta sin código de catálogo";
 
-                    FinalizarSeguimiento("Completed", mensajeFinal);
+                    FinalizarSeguimiento(
+                        "Completed",
+                        esBajaConfianzaVirtual ? $"{mensajeFinal}. Clasificación por debajo de umbral" : mensajeFinal);
                     return salida;
                 }
 
