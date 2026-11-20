@@ -196,6 +196,53 @@ public class TipologiasAdminFunctionIntegrationTests
         result.Should().Contain("gpt-inexistente");
     }
 
+    [Fact]
+    public async Task Validar_PromptHabilitadoSinModelKey_EsValido()
+    {
+        await using var db = CreateDbContext();
+        var function = CreateFunction(db);
+        var method = GetValidateTipologiaRequestAsyncMethod();
+
+        var payload = CreatePayload("mi-tipo", "Mi tipo", "1.0.0");
+        var config = MakeMinimalConfig("mi-tipo", "1.0.0");
+        config.PromptConfig = new PromptConfig
+        {
+            Enabled = true,
+            ModelKey = string.Empty,
+            SystemPrompt = "Prompt",
+            UserPromptTemplate = "Template"
+        };
+
+        var task = (Task<string?>)method.Invoke(function, new object?[] { payload, config, null })!;
+        var result = await task;
+
+        result.Should().NotBe("Prompt habilitado pero modelKey vacio.");
+        result.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Validar_PromptConModelKeyInexistente_Rechaza()
+    {
+        await using var db = CreateDbContext();
+        var function = CreateFunction(db);
+        var method = GetValidateTipologiaRequestAsyncMethod();
+
+        var payload = CreatePayload("mi-tipo", "Mi tipo", "1.0.0");
+        var config = MakeMinimalConfig("mi-tipo", "1.0.0");
+        config.PromptConfig = new PromptConfig
+        {
+            Enabled = true,
+            ModelKey = "prompt.noexiste",
+            SystemPrompt = "Prompt",
+            UserPromptTemplate = "Template"
+        };
+
+        var task = (Task<string?>)method.Invoke(function, new object?[] { payload, config, null })!;
+        var result = await task;
+
+        result.Should().Be("No existe modelo activo de prompt con key 'prompt.noexiste'.");
+    }
+
     // ─── ConfidenceConfig ordering ────────────────────────────────────────────
 
     [Fact]
