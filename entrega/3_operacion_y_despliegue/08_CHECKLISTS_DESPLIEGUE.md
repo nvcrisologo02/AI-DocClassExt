@@ -133,6 +133,7 @@ Settings clave a confirmar (ver detalle completo en `docs/auxiliares/migracion-d
 | `Classification__AzureDocumentIntelligence__Endpoint` | `https://srbdiprodocai.cognitiveservices.azure.com/` |
 | `Extraction__GptFallback__DeploymentName` | `gpt-4o-mini` |
 | `Classification__GptFallback__DeploymentName` | `gpt-4o-mini` |
+| `PromptDefaults__ModelKey` | Obligatorio y no vacío (sin él la resolución falla): `default.gpt4o-mini` en pre y pro, `prompt.gpt56-luna` solo en dev. Lo fija la variable de pipeline `promptDefaultsModelKey` (802) / `PROMPT_DEFAULTS_MODEL_KEY` (799); `ensure-app-settings` no pisa un valor ya existente (AB#99938) |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Connection string `srbappiprodocai` |
 | `AssetResolver__BaseUrl` | `https://srbwebpluginassetresolver.azurewebsites.net/` |
 | `AssetResolver__ApiKey` | Key Vault reference a `AssetResolverApiKey` |

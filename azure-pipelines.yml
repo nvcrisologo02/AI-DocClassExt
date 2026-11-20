@@ -34,6 +34,9 @@ variables:
       value: 'true'
     - name: BLOB_RETENTION_BATCH_SIZE
       value: '2000'
+    # promptDefaultsModelKey: modelo por defecto de las tipologias que no fijan ModelKey (PromptDefaults:ModelKey, AB#99938). Vacio no vale: la resolucion falla. Luna solo en DEV.
+    - name: PROMPT_DEFAULTS_MODEL_KEY
+      value: 'prompt.gpt56-luna'
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRE
@@ -57,6 +60,8 @@ variables:
       value: 'true'
     - name: BLOB_RETENTION_BATCH_SIZE
       value: '2000'
+    - name: PROMPT_DEFAULTS_MODEL_KEY
+      value: 'default.gpt4o-mini'
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: AZURE_SERVICE_CONNECTION
       value: AI DocClassExt PRO
@@ -80,6 +85,8 @@ variables:
       value: 'false'
     - name: BLOB_RETENTION_BATCH_SIZE
       value: '5000'
+    - name: PROMPT_DEFAULTS_MODEL_KEY
+      value: 'default.gpt4o-mini'
   # Endpoints de IA por entorno (AI_*): fuente unica compartida con azure-pipelines-functions.yml.
   - template: infra/ai/pipeline-variables.yml
     parameters:
@@ -364,6 +371,7 @@ stages:
                         "GDC__Endpoint=$(GDC_ENDPOINT)",
                         "DocumentIntelligence__UseInlineContent=$(DI_USE_INLINE_CONTENT)",
                         "Dedup__ModoEstricto=$(dedupModoEstricto)",
+                        "PromptDefaults__ModelKey=$(PROMPT_DEFAULTS_MODEL_KEY)",
                         "DOTNET_GCHeapHardLimitPercent=$(gcHeapHardLimitPercent)",
                         "BlobRetentionCleanupCron=$(blobRetentionCleanupCron)",
                         "BlobRetention__DefaultDays=$(blobRetentionDefaultDays)",
@@ -411,6 +419,7 @@ stages:
                         "PromptTracing__IncludePromptText",
                         "PromptTracing__MaxPromptTextChars",
                         "Dedup__ModoEstricto",
+                        "PromptDefaults__ModelKey",
                         "DOTNET_GCHeapHardLimitPercent",
                         "BlobRetentionCleanupCron",
                         "BlobRetention__DefaultDays",
@@ -420,7 +429,7 @@ stages:
                       $appliedSettings = az functionapp config appsettings list `
                         --resource-group "$(AZURE_RESOURCE_GROUP)" `
                         --name "$(AZURE_FUNCTIONS_APP_NAME)" `
-                        --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'Dedup__') || starts_with(name, 'DOTNET_GC') || starts_with(name, 'BlobRetention')].{name: name, value: value}" `
+                        --query "[?starts_with(name, 'Extraction__AzureContentUnderstanding') || starts_with(name, 'PromptTracing__') || starts_with(name, 'Dedup__') || starts_with(name, 'PromptDefaults__') || starts_with(name, 'DOTNET_GC') || starts_with(name, 'BlobRetention')].{name: name, value: value}" `
                         -o json | ConvertFrom-Json
                       
                       $appliedNames = $appliedSettings | Select-Object -ExpandProperty name
