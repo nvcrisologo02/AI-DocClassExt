@@ -155,13 +155,11 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
 
 ## Resultado del cutover en DEV (2026-11-20)
 
-Detalle completo en la spec `docs/superpowers/specs/2026-11-20-cutover-luna-dev-design.md`, «Resultado en DEV (2026-11-20)».
+Detalle (run, backups, horas y recuentos) en la spec `docs/superpowers/specs/2026-11-20-cutover-luna-dev-design.md`, «Resultado en DEV (2026-11-20)».
 
-- Run 80195 (802) sobre 20fec98 en verde; `PromptDefaults__ModelKey = prompt.gpt56-luna`.
-- 08: 219 tipologías cambiadas (13 PascalCase y 206 camelCase), 0 con otra clave, backup `Tipologias__bak_20261120_092949`; segunda ejecución 0. 06: altas 1029 y 1030, 4 indicadores, 2001 a `default.gpt56-luna_ex`, backups `__bak_20261120_093020`; segunda ejecución 0.
-- Humo 50/50 OK (09:39 a 09:50 UTC, HTTP directo porque el harness solo clasifica): 0 clasificaciones con `gpt-4o-mini`, prompt y resumen en luna, 2001 con `default.gpt56-luna_ex`, tarifa luna, 0 errores de resolución.
-- Rollback ensayado: 07 (09:56 UTC) y setting a `default.gpt4o-mini`; pasada 10:12 a 10:15 UTC, 11/11 en `gpt-4o-mini`. 06 reaplicado a las 10:15 UTC y setting de vuelta. Pasada de vuelta: 11/11 OK en luna (la petición con `modelKey` explícito, en `gpt-4o-mini`).
-- La clave de modelo de la petición no aplica al resumen por defecto (límite conocido, previo a esta unidad). Edición del Admin no comprobada.
+- Orden que exige cada entorno: pipeline con `PromptDefaults__ModelKey = prompt.gpt56-luna`, luego el 08 y después el 06; cada uno con segunda ejecución a 0 cambios. El rollback es el 07 más el setting a `default.gpt4o-mini`, y la vuelta el 06 más el setting a `prompt.gpt56-luna`; ensayado en DEV en ambos sentidos.
+- El cambio de `PromptDefaults__ModelKey` lo hizo el usuario: la cuenta az de la sesión no tiene permiso de escritura sobre la Function de DEV, y tras el cambio la Function se reinicia.
+- Límites descubiertos: la clave de modelo de la petición no aplica al resumen por defecto (solo con prompt ad-hoc), comportamiento previo a esta unidad; el modo combinado no se comprobó en las pasadas cortas de rollback y vuelta; la edición de tipologías en el Admin no se comprobó (una Published no ofrece edición); en la pasada de rollback falta una fila en BD sin causa identificada.
 
 ## Lista para la release (PRE y PRO)
 
