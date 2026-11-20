@@ -41,6 +41,17 @@ public class PromptConfig
     /// "vision"   — envía el PDF directamente como imagen al modelo multimodal.
     /// </summary>
     public string ContentMode { get; set; } = "markdown";
+
+    /// <summary>
+    /// Copia de esta configuración con otra clave de modelo. Copia todas las propiedades
+    /// (MemberwiseClone), así que no se desincroniza al añadir campos a la clase.
+    /// </summary>
+    public PromptConfig WithModelKey(string modelKey)
+    {
+        var copia = (PromptConfig)MemberwiseClone();
+        copia.ModelKey = modelKey;
+        return copia;
+    }
 }
 
 public class PromptDefaultsSettings
