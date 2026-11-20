@@ -142,7 +142,8 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   (72d4626, rama `feature/101411-prerrequisitos-cutover`)**. Por decisión del 2026-11-19, DEV se quedó en
   72d4626 para el golden completo (AB#101433, terminado el mismo día); el 2026-11-20 pasó a 20fec98 (run 80195, cutover
   AB#99939) y, tras integrar la rama en `develop` (merge c9b9fd5, AB#99934), a `develop` con el run **80198** sobre c9b9fd5.
-  Desde entonces `develop` lleva todo el código de caché y herencia (ver «Requisitos de código»).
+  Desde entonces `develop` lleva todo el código de caché y herencia (ver «Requisitos de código»). El run **80202**
+  (2026-11-20) desplegó develop 4965d8e6 con los menores de AB#101438; humo de 53 peticiones 53/53 Completed.
 - Medición con la muestra de 50 (spec `2026-11-18-breakpoint-tramo-estable-usuario-design.md`, «Resultado en
   DEV»): fase 1 con el 74,1% en caché, ratio de coste 0,49 frente al control y 0 HTTP 400. Golden completo de
   467 (misma spec, «Golden completo en DEV»): TDN1 66,0% y TDN2 41,8% frente a 56,8% y 34,3% del control,
@@ -161,7 +162,7 @@ Detalle (run, backups, horas y recuentos) en la spec `docs/superpowers/specs/202
 
 - Orden que exige cada entorno: pipeline con `PromptDefaults__ModelKey = prompt.gpt56-luna`, luego el 08 y después el 06; cada uno con segunda ejecución a 0 cambios. El rollback es el 07 más el setting a `default.gpt4o-mini`, y la vuelta el 06 más el setting a `prompt.gpt56-luna`; ensayado en DEV en ambos sentidos.
 - El cambio de `PromptDefaults__ModelKey` lo hizo el usuario: la cuenta az de la sesión no tiene permiso de escritura sobre la Function de DEV, y tras el cambio la Function se reinicia.
-- Límites descubiertos: la clave de modelo de la petición no aplica al resumen por defecto (solo con prompt ad-hoc), comportamiento previo a esta unidad; el modo combinado de extracción no se comprobó en DEV ni en el humo (las 9 «combinadas» son la rama de reutilización del resumen) y solo lo cubre el test `ModoCombinado_ClaveHeredada_SeActiva`; la edición de tipologías en el Admin no se comprobó (una Published no ofrece edición); la pasada de rollback fue 10 OK y 1 ERROR en `PersistirActivity` (0 filas afectadas) por procesar en paralelo el mismo fichero dos veces, defecto preexistente (Bug AB#101437). El recuento «Ok» del script de humo se basa en `runtimeStatus = Completed`; se revisaron las respuestas y solo esa trae ERROR.
+- Límites descubiertos: la clave de modelo de la petición no aplicaba al resumen por defecto (solo con prompt ad-hoc), comportamiento previo a esta unidad y corregido en develop 4965d8e6 (AB#101438; verificado en DEV con el run 80202: la petición con solo `prompt.modelKey = default.gpt4o-mini` etiqueta el resumen con `gpt-4o-mini`); el modo combinado de extracción no se comprobó en DEV ni en el humo (las 9 «combinadas» son la rama de reutilización del resumen) y solo lo cubre el test `ModoCombinado_ClaveHeredada_SeActiva`; la edición de tipologías en el Admin no se comprobó (una Published no ofrece edición); la pasada de rollback fue 10 OK y 1 ERROR en `PersistirActivity` (0 filas afectadas) por procesar en paralelo el mismo fichero dos veces, defecto preexistente (Bug AB#101437). El recuento «Ok» del script de humo se basa en `runtimeStatus = Completed`; se revisaron las respuestas y solo esa trae ERROR.
 
 ## Lista para la release (PRE y PRO)
 
