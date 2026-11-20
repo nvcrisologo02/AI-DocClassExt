@@ -1743,7 +1743,9 @@ public class DocumentProcessOrchestrator
 
                         salida.DetalleEjecucion.Clasificacion = new ResultadoClasificacion
                         {
-                            Modelo = "gpt-4o-mini",
+                            // El fallo de la actividad solo trae el mensaje, no el deployment, y el
+                            // orquestador no puede leer el registro de modelos (E/S): no consta.
+                            Modelo = string.Empty,
                             Confianza = 0,
                             ConfianzaDI = 0,
                             ConfianzaGPT = 0,

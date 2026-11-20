@@ -754,6 +754,24 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_TipologiaNoIdentificada_NoFijaGpt4oMini()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ClasificarActivity", new Exception("No se ha podido identificar la tipologia del documento"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().NotBe("gpt-4o-mini");
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().BeEmpty();
+        salida.DetalleEjecucion.Clasificacion.ProveedorClasif.Should().Be("GPT4oMini");
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClasificarRateLimitExcedido_RetornaEstadoPendienteReintento()
     {
         var orchestrator = CreateOrchestrator();
