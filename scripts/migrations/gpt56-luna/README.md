@@ -11,10 +11,11 @@ Requisitos de código: `Azure.AI.OpenAI` 2.9.0-beta.1 y la propiedad `ReasoningE
 en las configuraciones de modelo (rama `feature/99934-gpt56-luna-dev`, AB#101371). Sin
 ese código la fila resuelve pero el helper no envía `reasoning_effort` ni
 `max_completion_tokens`. La caché de prompt (scripts 03-05) necesita además el código de
-`feature/101411-prerrequisitos-cutover` (AB#101412 y AB#101428). Con `develop`, pedir la
-clave luna ignora el bloque `promptCache`: la llamada sale sin campos de caché, el servicio
-aplica su modo por defecto (`implicit`), que escribe y cobra el prompt entero en cada llamada,
-y `develop` tampoco registra esas escrituras en el coste.
+`feature/101411-prerrequisitos-cutover` (AB#101412 y AB#101428). Ambas ramas están integradas en
+`develop` desde el merge c9b9fd5 (2026-11-20, AB#99934); cualquier build de `develop` posterior lleva
+todo el código. Antes de ese merge, pedir la clave luna con `develop` ignoraba el bloque `promptCache`:
+la llamada salía sin campos de caché, el servicio aplicaba su modo por defecto (`implicit`), que escribe
+y cobra el prompt entero en cada llamada, y no registraba esas escrituras en el coste.
 
 ## Orden de ejecución
 
@@ -139,8 +140,9 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
 - Backups de `ModeloConfigs` de estos pasos: `ModeloConfigs__bak_20261118_123946` y `..._130459`.
 - Runs del 802 sobre DEV: 80158 (3d51225), 80160 (1af617c), 80161 (`develop`, vuelta temporal) y **80164
   (72d4626, rama `feature/101411-prerrequisitos-cutover`)**. Por decisión del 2026-11-19, DEV se quedó en
-  72d4626 para el golden completo (AB#101433, terminado el mismo día) y sigue ahí. Volver a `develop` se pregunta,
-  porque `develop` no tiene el código de caché (ver «Requisitos de código»).
+  72d4626 para el golden completo (AB#101433, terminado el mismo día); el 2026-11-20 pasó a 20fec98 (run 80195, cutover
+  AB#99939) y, tras integrar la rama en `develop` (merge c9b9fd5, AB#99934), a `develop` con el run **80198** sobre c9b9fd5.
+  Desde entonces `develop` lleva todo el código de caché y herencia (ver «Requisitos de código»).
 - Medición con la muestra de 50 (spec `2026-11-18-breakpoint-tramo-estable-usuario-design.md`, «Resultado en
   DEV»): fase 1 con el 74,1% en caché, ratio de coste 0,49 frente al control y 0 HTTP 400. Golden completo de
   467 (misma spec, «Golden completo en DEV»): TDN1 66,0% y TDN2 41,8% frente a 56,8% y 34,3% del control,
