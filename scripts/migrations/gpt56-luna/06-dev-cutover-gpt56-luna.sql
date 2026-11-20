@@ -49,8 +49,12 @@ IF ISJSON(@cls) <> 1 OR ISJSON(@ex) <> 1 OR ISJSON(@fb) <> 1
     THROW 50033, 'Alguna ConfiguracionJson origen no es JSON valido.', 1;
 IF JSON_VALUE(@cls, '$.UseAsFallback') IS NULL OR JSON_VALUE(@ex, '$.DeploymentName') IS NULL OR JSON_VALUE(@fb, '$.UseAsFallback') IS NULL
     THROW 50034, 'Las filas origen no usan claves PascalCase (UseAsFallback, DeploymentName): revisar el casing antes de aplicar.', 1;
-IF NOT EXISTS (SELECT 1 FROM dbo.ModeloConfigs WHERE Tipo = 0 AND [Key] = N'classification.gpt4o-mini-fallback')
-    THROW 50035, 'No existe classification.gpt4o-mini-fallback (Tipo 0).', 1;
+DECLARE @c03 NVARCHAR(MAX);
+SELECT @c03 = ConfiguracionJson FROM dbo.ModeloConfigs WHERE Tipo = 0 AND [Key] = N'classification.gpt4o-mini-fallback' AND Activo = 1;
+IF @c03 IS NULL
+    THROW 50035, 'No existe la fila activa classification.gpt4o-mini-fallback (Tipo 0).', 1;
+IF ISJSON(@c03) <> 1 OR JSON_VALUE(@c03, '$.UseAsFallback') IS NULL
+    THROW 50040, 'classification.gpt4o-mini-fallback no es JSON valido o no usa la clave PascalCase UseAsFallback: revisar el casing antes de aplicar.', 1;
 
 -- Filas a dar de alta: Nueva, Origen
 DECLARE @altas TABLE (Nueva NVARCHAR(200), Origen NVARCHAR(200));
@@ -106,13 +110,15 @@ BEGIN
     -- 2. Altas (Endpoint, ResourceAlias y AuthMode de la 1027; el resto, de la fila origen)
     INSERT INTO dbo.ModeloConfigs (Tipo, [Key], Provider, Activo, ConfiguracionJson, FechaCreacion, CreadoPor)
     SELECT m.Tipo, a.Nueva, m.Provider, 1,
-           JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(
+           JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(
                m.ConfiguracionJson,
                '$.Key', a.Nueva),
                '$.DeploymentName', N'gpt-5.6-luna'),
                '$.IsDefault', CAST(0 AS BIT)),
                '$.UseAsFallback', CAST(0 AS BIT)),
                '$.ReasoningEffort', N'none'),
+               '$.promptCache', NULL),
+               '$.PromptCache', NULL),
                '$.ResourceAlias', COALESCE(JSON_VALUE(@cls, '$.ResourceAlias'), JSON_VALUE(m.ConfiguracionJson, '$.ResourceAlias'))),
                '$.AuthMode', COALESCE(JSON_VALUE(@cls, '$.AuthMode'), JSON_VALUE(m.ConfiguracionJson, '$.AuthMode'))),
                '$.Endpoint', COALESCE(JSON_VALUE(@cls, '$.Endpoint'), JSON_VALUE(m.ConfiguracionJson, '$.Endpoint'), N'')),
@@ -144,8 +150,8 @@ BEGIN
     END
 
     -- 5. Comprobacion: exactamente un fallback por Tipo 0 y Tipo 1
-    IF (SELECT COUNT(*) FROM dbo.ModeloConfigs WHERE Tipo = 0 AND Activo = 1 AND JSON_VALUE(ConfiguracionJson, '$.UseAsFallback') = 'true') <> 1
-       OR (SELECT COUNT(*) FROM dbo.ModeloConfigs WHERE Tipo = 1 AND Activo = 1 AND JSON_VALUE(ConfiguracionJson, '$.UseAsFallback') = 'true') <> 1
+    IF (SELECT COUNT(*) FROM dbo.ModeloConfigs WHERE Tipo = 0 AND Activo = 1 AND COALESCE(JSON_VALUE(ConfiguracionJson, '$.UseAsFallback'), JSON_VALUE(ConfiguracionJson, '$.useAsFallback')) = 'true') <> 1
+       OR (SELECT COUNT(*) FROM dbo.ModeloConfigs WHERE Tipo = 1 AND Activo = 1 AND COALESCE(JSON_VALUE(ConfiguracionJson, '$.UseAsFallback'), JSON_VALUE(ConfiguracionJson, '$.useAsFallback')) = 'true') <> 1
         THROW 50038, 'Tras el cambio no hay exactamente un UseAsFallback en Tipo 0 y en Tipo 1: se deshace todo.', 1;
     IF EXISTS (SELECT 1 FROM dbo.ModeloConfigs WHERE [Key] LIKE N'%gpt56-luna%' AND ISJSON(ConfiguracionJson) <> 1)
         THROW 50039, 'Alguna fila luna quedo con JSON no valido: se deshace todo.', 1;

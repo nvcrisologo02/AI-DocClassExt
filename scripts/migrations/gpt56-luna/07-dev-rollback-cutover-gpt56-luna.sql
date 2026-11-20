@@ -94,8 +94,8 @@ BEGIN
     END
 
     -- 4. Comprobacion: exactamente un fallback por Tipo 0 y Tipo 1
-    IF (SELECT COUNT(*) FROM dbo.ModeloConfigs WHERE Tipo = 0 AND Activo = 1 AND JSON_VALUE(ConfiguracionJson, '$.UseAsFallback') = 'true') <> 1
-       OR (SELECT COUNT(*) FROM dbo.ModeloConfigs WHERE Tipo = 1 AND Activo = 1 AND JSON_VALUE(ConfiguracionJson, '$.UseAsFallback') = 'true') <> 1
+    IF (SELECT COUNT(*) FROM dbo.ModeloConfigs WHERE Tipo = 0 AND Activo = 1 AND COALESCE(JSON_VALUE(ConfiguracionJson, '$.UseAsFallback'), JSON_VALUE(ConfiguracionJson, '$.useAsFallback')) = 'true') <> 1
+       OR (SELECT COUNT(*) FROM dbo.ModeloConfigs WHERE Tipo = 1 AND Activo = 1 AND COALESCE(JSON_VALUE(ConfiguracionJson, '$.UseAsFallback'), JSON_VALUE(ConfiguracionJson, '$.useAsFallback')) = 'true') <> 1
         THROW 50044, 'Tras el rollback no hay exactamente un UseAsFallback en Tipo 0 y en Tipo 1: se deshace todo.', 1;
 
     COMMIT TRAN;
