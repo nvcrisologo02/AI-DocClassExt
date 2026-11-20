@@ -1324,6 +1324,52 @@ Contenido del documento:
             return InvokeResolveResumenPromptOnProvider(_provider, input, contextoTexto);
         }
 
+        [Fact]
+        public void ResolveResumenPrompt_DefectoVacio_FallaConErrorClaroSinCaerAOtraRama()
+        {
+            var providerSinDefecto = CrearProviderConDefectos(new PromptDefaultsSettings
+            {
+                ModelKey = "",
+                SystemPrompt = "Sistema...",
+                UserPromptTemplate = "Resumen de {contenido}"
+            });
+            var input = CreateClasificacionInput(generarResumenPorDefecto: true);
+
+            var act = () => InvokeResolveResumenPromptOnProvider(providerSinDefecto, input, "# Contenido");
+
+            act.Should().Throw<System.Reflection.TargetInvocationException>()
+                .WithInnerException<InvalidOperationException>()
+                .WithMessage("*PromptDefaults:ModelKey*");
+        }
+
+        [Fact]
+        public void ResolveResumenPrompt_RamaFallback_DevuelveClaveEfectivaResuelta()
+        {
+            var input = CreateClasificacionInput(generarResumenPorDefecto: true);
+
+            var result = InvokeResolveResumenPromptOnProvider(_provider, input, "# Contenido");
+
+            result.Should().NotBeNull();
+            result!.ModelKey.Should().Be("default.gpt4o-mini");
+        }
+
+        private GptClasificarDataProvider CrearProviderConDefectos(PromptDefaultsSettings defaults) =>
+            new(
+                new ClassificationModelRegistryLoader(_memoryCache, _scopeFactoryMock.Object),
+                new ClassificationTipologiaPromptBuilder(
+                    _memoryCache,
+                    _scopeFactoryMock.Object,
+                    new Mock<ILogger<ClassificationTipologiaPromptBuilder>>().Object),
+                _tipologiaConfigLoader,
+                _scopeFactoryMock.Object,
+                _routingSettings,
+                Options.Create(defaults),
+                Options.Create(new ClassificationPromptsSettings()),
+                new Mock<IClassificationPromptProvider>().Object,
+                _promptTraceTelemetryMock,
+                _resilienceMock.Object,
+                _loggerMock.Object);
+
         private PromptConfig? InvokeResolveResumenPromptOnProvider(
             GptClasificarDataProvider provider,
             ClasificacionInput input,

@@ -724,8 +724,12 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return null;
         }
 
+        // La clave efectiva se resuelve fuera del try de la carga desde BD: sin PromptDefaults:ModelKey
+        // el resumen falla con error claro en lugar de degradarse en silencio a otra rama.
+        var defaultModelKey = PromptModelKeyResolver.Resolve(null, null, _promptDefaults.ModelKey);
+
         // Intentar cargar prompts de resumen desde BD primero
-        var dbResumenPrompt = TryLoadResumenPromptFromDatabase().GetAwaiter().GetResult();
+        var dbResumenPrompt = TryLoadResumenPromptFromDatabase(defaultModelKey).GetAwaiter().GetResult();
         if (dbResumenPrompt is not null)
         {
             return new PromptConfig
@@ -761,7 +765,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return new PromptConfig
         {
             Enabled = true,
-            ModelKey = effectivePrompt.ModelKey,
+            ModelKey = PromptModelKeyResolver.Resolve(null, effectivePrompt.ModelKey, defaultModelKey),
             SystemPrompt = effectivePrompt.SystemPrompt,
             UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
                 effectivePrompt.UserPromptTemplate,
@@ -773,7 +777,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         };
     }
 
-    private async Task<PromptConfig?> TryLoadResumenPromptFromDatabase()
+    private async Task<PromptConfig?> TryLoadResumenPromptFromDatabase(string defaultModelKey)
     {
         try
         {
@@ -800,7 +804,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return new PromptConfig
             {
                 Enabled = true,
-                ModelKey = PromptModelKeyResolver.Resolve(null, null, _promptDefaults.ModelKey),
+                ModelKey = defaultModelKey,
                 SystemPrompt = systemPrompt.Content,
                 UserPromptTemplate = userPrompt.Content,
                 MaxTokens = _promptDefaults.MaxTokens,
