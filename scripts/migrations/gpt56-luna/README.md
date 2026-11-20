@@ -35,6 +35,45 @@ Prerrequisitos del cutover (AB#101412). Los scripts 03 y 04 **solo cambian la fi
 | 6 | `04-dev-promptcache-off-gpt56-luna.sql` — **solo DEV**: `promptCache.enabled = false` (conserva el resto del bloque para volver a encender con el 03). Idempotente: sin bloque o ya apagado, no hace nada | Ninguno: devuelve el comportamiento sin caché |
 | 7 | `05-dev-tarifa-escritura-cache-gpt56-luna.sql` — **solo DEV**: `EurEscrituraCachePor1M` en la línea `gpt-5.6-luna` de `tarifas.ia`. Precio confirmado el 2026-11-18: 0,2469 € por millón de tokens escritos en caché (medidor Data Zone de West Europe «5.6 luna ShortCo Cd Wr Std DZ», Retail Prices API, vigente desde 2026-08-01); el medidor de retención 12 h (0,5386) no aplica porque la petición usa ttl 30m. Si la variable queda a `NULL` el script falla con `THROW` y no toca nada. Falla si la línea no existe (ejecutar antes el 02) | Ninguno: solo añade una propiedad a una línea |
 
+Cutover en DEV (AB#99939). Los scripts 06, 07 y 08 son **solo DEV** y se aplican con `apply-sql-dev.ps1`
+(rechaza otros servidores). Son idempotentes, con backup, transacción y consulta de verificación al final.
+Respetan el casing de cada fila al escribir JSON.
+
+| Paso | Qué | Riesgo |
+|---|---|---|
+| 8 | `06-dev-cutover-gpt56-luna.sql`: da de alta, si no existen, `extraction.gpt56-luna` y `default.gpt56-luna_ex` (Tipo 1; toman `Endpoint`, recurso y `AuthMode` de la 1027 y el resto de la 1004 y la 1002; `DeploymentName` gpt-5.6-luna, `ReasoningEffort` none, sin `promptCache`; `UseAsFallback = false`). En la misma transacción pone `UseAsFallback` a `true` en `classification.gpt56-luna` y `extraction.gpt56-luna` y a `false` en 1003 y 1004, y comprueba que queda exactamente una fila con indicador por Tipo 0 y Tipo 1 (si no, `THROW` y rollback). Mueve la tipología 2001 de `default.gpt4o-mini_ex` a `default.gpt56-luna_ex`. Falla si no existe la 1027 | Cambia el modelo por defecto de clasificación GPT y de extracción GPT en DEV |
+| 9 | `07-dev-rollback-cutover-gpt56-luna.sql`: lo inverso del 06 en una transacción. Devuelve los indicadores a 1003 y 1004, la 2001 a `default.gpt4o-mini_ex` y repite la comprobación de un fallback por Tipo. **No borra** las filas nuevas: quedan sin indicador. Idempotente | Devuelve clasificación y extracción a gpt-4. No mueve prompt ni resumen (ver «Rollback») |
+| 10 | `08-dev-tipologias-heredan-modelo-prompt.sql`: quita `default.gpt4o-mini` de la clave de prompt (`PromptConfig.ModelKey` o su variante de casing) en las tipologías de cualquier estado: 219 (13 en PascalCase, 206 en camelCase). No toca las que fijen otra clave y lo dice en la verificación. Backup previo `Tipologias__bak_<ts>`, recuento antes y después. Es seguro con el código anterior (sin la propiedad se deserializa `default.gpt4o-mini`), así que puede aplicarse antes o después del despliegue. No forma parte del rollback | Las tipologías pasan a heredar `PromptDefaults:ModelKey` |
+
+Requisito de código: la herencia del modelo de prompt (`PromptModelKeyResolver`, rama
+`feature/101411-prerrequisitos-cutover`). Una clave de prompt vacía hereda `PromptDefaults:ModelKey`; si no
+resuelve, el prompt y el resumen fallan siempre.
+
+### Orden en DEV
+
+1. Rama con el código y el pipeline y 802 sobre DEV (con sí). El pipeline fija `PromptDefaults__ModelKey` por entorno: `prompt.gpt56-luna` en DEV y `default.gpt4o-mini` en PRE y PRO (el 799, `azure-pipelines.yml`, hace lo mismo).
+2. Script 08 y comprobación de que las tipologías heredan (siguen en gpt-4 hasta el paso 3 si el setting aún es `default.gpt4o-mini`).
+3. Script 06. Si se prefiere separar, el 802 se despliega con `default.gpt4o-mini` y el setting se cambia aquí.
+4. Esperar el refresco de caché (5 minutos) o reiniciar la Function.
+5. Humo con la muestra fija de 50 en procesamiento completo (harness del Batch, `-OnlyFiles eval/golden-muestra-cache.txt`) más un documento de IBI.
+6. Ensayo de rollback: script 07 y setting a `default.gpt4o-mini`, humo corto, script 06 y setting a `prompt.gpt56-luna`, humo corto.
+
+### Rollback
+
+- Activar prompt y resumen es `PromptDefaults__ModelKey = prompt.gpt56-luna`. Deshacer es `PromptDefaults__ModelKey = default.gpt4o-mini`.
+- **`ensure-app-settings.ps1` no sobrescribe claves que ya existen.** Cambiar el valor después del primer despliegue (rollback o release) exige `az functionapp config appsettings set --name <function> --resource-group <rg> --settings PromptDefaults__ModelKey=<clave>`. Cambiar solo el pipeline no basta. Conviene dejar también el valor del pipeline igual, para que persista.
+- Activación y rollback mueven a la vez el script 06/07 y el setting. El script 07 solo cubre clasificación y extracción.
+- Último recurso para las tipologías: restaurar `Tipologias` desde `Tipologias__bak_<ts>` del script 08.
+
+### Aviso: después de cada 799 o seed de tipologías
+
+El 799 reescribe filas de `ModeloConfigs` y el seed de tipologías puede dar de alta tipologías con clave de prompt. Tras cada ejecución hay que revisar:
+
+- Los indicadores `UseAsFallback`: una fila por Tipo (0 y 1) y que sean las de luna.
+- La tipología 2001: `Extraction.ModelKey` = `default.gpt56-luna_ex`.
+- Las claves de prompt de las tipologías: ninguna debe llevar `default.gpt4o-mini`. ConfigSeed solo da de alta por clave natural; con la herencia, las tipologías nuevas deberían llegar sin clave de prompt.
+- Que `PromptDefaults__ModelKey` sigue con el valor esperado del entorno.
+
 ### Consultas de medición (`medicion/`, solo lectura)
 
 Consultas para comparar pasadas de la golden (luna frente a control). Parámetros al principio de cada
@@ -114,14 +153,25 @@ pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-l
   Ningún OK queda por debajo de 0,6. La distancia con lo estimado viene de la variabilidad entre pasadas (28 cambios de TDN1).
   El control no se ha vuelto a medir.
 
+## Lista para la release (PRE y PRO)
+
+Se escribe aquí sin ejecutar nada:
+
+- Integrar la rama en `develop`. Lleva el SDK `Azure.AI.OpenAI 2.9.0-beta.1`, `OpenAiModelCapabilities`, la caché, el umbral virtual y la herencia del modelo de prompt.
+- Deployment `gpt-5.6-luna` Data Zone y su cuota en PRE y PRO. En PRO, ARM exige PIM. Hay que rellenar el bloque `pre` del script de deployment.
+- Filas 1027/1028 equivalentes, tarifa y escritura de caché en PRE y PRO, con los scripts 01-05 por entorno o con ConfigSeed.
+- Scripts 06/07/08 portados a PRE y PRO. La tipología IBI puede tener otro Id fuera de DEV: resolver por nombre o clave natural.
+- Comprobar que la fila `prompt.gpt56-luna` existe y está activa **antes** de poner `PromptDefaults__ModelKey`, porque si no resuelve falla siempre.
+- En PRE y PRO el pipeline fija `PromptDefaults__ModelKey = default.gpt4o-mini`. Cambiarlo a `prompt.gpt56-luna` exige `az functionapp config appsettings set` (el `ensure-app-settings.ps1` no sobrescribe claves existentes), además de cambiar la variable del pipeline.
+- Vigilancia de 48 h en PRO: HTTP 400, latencia, coste y volumen de baja confianza.
+
 ## Qué NO cubren estos scripts
 
-- **El cutover** (cambiar `DeploymentName` de las filas por defecto `gpt4o-mini*`): es AB#99939,
-  con su propio script y ADR, tras el resultado de la medición.
+- **El cutover en PRE y PRO**: los scripts 06, 07 y 08 son solo DEV. Cambiar `PromptDefaults__ModelKey` y portar los scripts es la release (lista anterior). La decisión queda recogida en el ADR de AB#99939 (se pregunta antes de crearlo). Las filas de gpt-4 (`gpt4o-mini*`, 1002, 1003, 1004, 1014) no se sustituyen: solo cambian los indicadores `UseAsFallback`.
 - **PRE y PRO**: el bloque `pre` del script de deployment está en TODO a propósito; `pro` tiene
   valores pero no se ejecuta en esta unidad. Las filas y la tarifa son solo DEV.
 - **App settings legacy del pipeline** (`Classification__GptFallback__DeploymentName`,
-  `Extraction__GptFallback__DeploymentName`): siguen en `gpt-4o-mini`; la resolución real
-  sale de `ModeloConfigs`.
-- **Extracción con fallback GPT**: no cambia de modelo en esta prueba (spec 2).
-- **Borrar el deployment `gpt-4o-mini`**: decisión del cutover, tras un periodo de convivencia.
+  `Extraction__GptFallback__DeploymentName`): son legacy y el código no los lee; el deployment sale
+  siempre de `ModeloConfigs`. La limpieza sigue en AB#99938.
+- **Extracción con fallback GPT**: pasa a luna en DEV con el script 06, pero no se ha medido (residual).
+- **Borrar el deployment `gpt-4o-mini`**: decisión posterior, tras un periodo de convivencia.

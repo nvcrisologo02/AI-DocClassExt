@@ -247,6 +247,25 @@ Reglas de ejecucion:
 - Una tipologia con `promptConfig.enabled=true` pero `systemPrompt` y `userPromptTemplate` vacios no activa `ResultadoPrompt`; requiere definicion real o prompt ad-hoc.
 - Si el resumen procede de una clasificacion con recorte real (`paginasIncluidas < paginasDocumento`), se anade sufijo de transparencia: `* Resumen basado en las primeras {N} paginas del documento`.
 
+#### Resolucion del modelo de prompt
+
+La clave del modelo de prompt (`ModeloConfigs` de Tipo 2) se resuelve en `PromptModelKeyResolver.Resolve(peticion, tipologia, defecto)`, con este orden:
+
+1. La clave de la peticion (prompt ad-hoc).
+2. `promptConfig.modelKey` de la tipologia.
+3. `PromptDefaults:ModelKey` del entorno.
+
+Una clave vacia o solo con espacios se salta y hereda el siguiente nivel. Los defectos de `PromptConfig.ModelKey` y `PromptDefaultsSettings.ModelKey` son cadena vacia; `appsettings.json` mantiene `default.gpt4o-mini` como valor base y el pipeline fija el valor de cada entorno (`PromptDefaults__ModelKey`).
+
+- Si las tres claves estan vacias, se lanza `InvalidOperationException("PromptDefaults:ModelKey no configurado")`.
+- Si la clave efectiva no existe en el registro o esta inactiva, `GetModel` falla siempre con la clave en el mensaje. No hay vuelta silenciosa a otro modelo ni comprobacion al arrancar.
+- Todos los consumidores usan la clave efectiva, no la cruda de la tipologia. En el modo combinado de extraccion (`ConfigurableExtraerDataProvider.DebeUsarModoCombinado`) solo se hereda la clave del modelo, no el resto de campos del prompt.
+- El resumen de clasificacion falla con error claro si el defecto esta vacio.
+- En «tipologia no identificada» el orquestador deja `Modelo` vacio (antes ponia `gpt-4o-mini`).
+- El deployment sale siempre del registro de modelos: `Classification__GptFallback__DeploymentName` y `Extraction__GptFallback__DeploymentName` son legacy y no se leen (limpieza en AB#99938).
+
+Cambiar el modelo de prompt y resumen de un entorno es cambiar `PromptDefaults__ModelKey`, sin tocar tipologias.
+
 ### Clasificación Jerárquica GPT (nivelClasificacion) — D1, D2, D4, D6, D7
 
 Cuando se informa `instrucciones.classification.nivelClasificacion`:
