@@ -159,7 +159,7 @@ Detalle (run, backups, horas y recuentos) en la spec `docs/superpowers/specs/202
 
 - Orden que exige cada entorno: pipeline con `PromptDefaults__ModelKey = prompt.gpt56-luna`, luego el 08 y después el 06; cada uno con segunda ejecución a 0 cambios. El rollback es el 07 más el setting a `default.gpt4o-mini`, y la vuelta el 06 más el setting a `prompt.gpt56-luna`; ensayado en DEV en ambos sentidos.
 - El cambio de `PromptDefaults__ModelKey` lo hizo el usuario: la cuenta az de la sesión no tiene permiso de escritura sobre la Function de DEV, y tras el cambio la Function se reinicia.
-- Límites descubiertos: la clave de modelo de la petición no aplica al resumen por defecto (solo con prompt ad-hoc), comportamiento previo a esta unidad; el modo combinado no se comprobó en las pasadas cortas de rollback y vuelta; la edición de tipologías en el Admin no se comprobó (una Published no ofrece edición); en la pasada de rollback falta una fila en BD sin causa identificada.
+- Límites descubiertos: la clave de modelo de la petición no aplica al resumen por defecto (solo con prompt ad-hoc), comportamiento previo a esta unidad; el modo combinado de extracción no se comprobó en DEV ni en el humo (las 9 «combinadas» son la rama de reutilización del resumen) y solo lo cubre el test `ModoCombinado_ClaveHeredada_SeActiva`; la edición de tipologías en el Admin no se comprobó (una Published no ofrece edición); la pasada de rollback fue 10 OK y 1 ERROR en `PersistirActivity` (0 filas afectadas) por procesar en paralelo el mismo fichero dos veces, defecto preexistente (Bug pendiente de crear). El recuento «Ok» del script de humo se basa en `runtimeStatus = Completed`; se revisaron las respuestas y solo esa trae ERROR.
 
 ## Lista para la release (PRE y PRO)
 
@@ -171,6 +171,11 @@ Se escribe aquí sin ejecutar nada:
 - Scripts 06/07/08 portados a PRE y PRO. La tipología IBI puede tener otro Id fuera de DEV: resolver por nombre o clave natural.
 - Comprobar que la fila `prompt.gpt56-luna` existe y está activa **antes** de poner `PromptDefaults__ModelKey`, porque si no resuelve falla siempre.
 - En PRE y PRO el pipeline fija `PromptDefaults__ModelKey = default.gpt4o-mini`. Cambiarlo a `prompt.gpt56-luna` exige `az functionapp config appsettings set` (el `ensure-app-settings.ps1` no sobrescribe claves existentes), además de cambiar la variable del pipeline.
+- Comprobar en PRE el log «Activando modo combinado fallback+prompt» con un documento que active a la vez extracción GPT de fallback y prompt de tipología: el humo de DEV no lo cubrió.
+- El script 08 solo trata `PromptConfig.ModelKey` y `promptConfig.modelKey`. Antes de portarlo a PRE y PRO, añadir una guarda para casing mixto (por ejemplo `LOWER(ConfiguracionJson) LIKE '%"modelkey":"default.gpt4o-mini"%'`) y revisar las tipologías que no cambie.
+- Los scripts 06/07/08 actualizan `Tipologias` sin tocar `FechaActualizacion`, que `TipologiaPromptConfigValidator` usa en su clave de caché: incorporarla en la versión portada.
+- Añadir un aviso en la validación del 802 cuando el `PromptDefaults__ModelKey` existente difiera de `$(promptDefaultsModelKey)`.
+- Comprobar si prompt y extracción con luna generan escrituras de caché implícitas facturadas (sus filas van sin `promptCache`).
 - Vigilancia de 48 h en PRO: HTTP 400, latencia, coste y volumen de baja confianza.
 
 ## Qué NO cubren estos scripts
