@@ -1691,6 +1691,41 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_ClasificacionParcialConTipologiaVacia_EntraEnLaRamaVirtualSinTdn1()
+    {
+        // Parcial sin tipología detectada y con un motivo que no está en la lista de la rama virtual:
+        // la tipología vacía basta para entrar en ella (no se resuelve tipología ni se extrae nada).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "",
+            ClasificacionParcial = true,
+            FallbackRazon = "motivo_no_catalogado",
+            PropuestaTipologia = "Documento sin familia reconocible"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().BeEmpty();
+        salida.Identificacion.Tdn1.Should().BeNullOrWhiteSpace();
+        salida.Identificacion.PropuestaTipologia.Should().Be("Documento sin familia reconocible");
+        salida.DetalleEjecucion.Extraccion.Modelo.Should().Be("skipped");
+        salida.DetalleEjecucion.Postproceso.Normalizaciones.Should().ContainSingle(n => n.StartsWith("Tipología virtual TDN1"));
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ExtraerActivity").Should().BeNull();
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ParcialPorFase2SinTdn2Parseable_EstadoOkConTdn1Virtual()
     {
         var orchestrator = CreateOrchestrator();

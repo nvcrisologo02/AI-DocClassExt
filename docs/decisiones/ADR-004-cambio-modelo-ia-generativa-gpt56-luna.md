@@ -38,3 +38,7 @@ gpt-5.6-luna (Data Zone Standard, `reasoning_effort` none, caché de prompt expl
 - Redirección de clave por app setting: mecanismo nuevo y configuración que no dice la verdad.
 - Reescribir las 219 tipologías a `prompt.gpt56-luna`: se repite en cada cambio de modelo y el rollback es masivo.
 - Sobrescribir el `DeploymentName` de `default.gpt4o-mini`: las filas de gpt-4 no se sustituyen, por decisión del usuario, para conservar la convivencia y el rollback.
+
+## Notas posteriores
+
+- 2026-11-20 (AB#101438): el «falla siempre» de Consecuencias aplica al prompt libre y al resumen de `OpenAIPromptDataProvider`. En la clasificación GPT la clave del resumen es solo una etiqueta y no selecciona modelo: sin `PromptDefaults:ModelKey` el resumen sale sin etiqueta y el error queda en el log (commit 66babf8). La decisión no cambia.
