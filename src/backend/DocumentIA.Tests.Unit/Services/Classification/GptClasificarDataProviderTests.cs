@@ -1325,7 +1325,7 @@ Contenido del documento:
         }
 
         [Fact]
-        public void ResolveResumenPrompt_DefectoVacio_FallaConErrorClaroSinCaerAOtraRama()
+        public void ResolveResumenPrompt_DefectoVacio_NoLanzaYDejaModelKeyVacio()
         {
             var providerSinDefecto = CrearProviderConDefectos(new PromptDefaultsSettings
             {
@@ -1335,11 +1335,12 @@ Contenido del documento:
             });
             var input = CreateClasificacionInput(generarResumenPorDefecto: true);
 
-            var act = () => InvokeResolveResumenPromptOnProvider(providerSinDefecto, input, "# Contenido");
+            var result = InvokeResolveResumenPromptOnProvider(providerSinDefecto, input, "# Contenido");
 
-            act.Should().Throw<System.Reflection.TargetInvocationException>()
-                .WithInnerException<InvalidOperationException>()
-                .WithMessage("*PromptDefaults:ModelKey*");
+            // En la clasificación GPT la clave del resumen es solo una etiqueta: no selecciona modelo.
+            result.Should().NotBeNull();
+            result!.ModelKey.Should().BeEmpty();
+            result.UserPromptTemplate.Should().Contain("Resumen de");
         }
 
         [Fact]

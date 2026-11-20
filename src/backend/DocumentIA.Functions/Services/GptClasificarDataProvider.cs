@@ -724,9 +724,16 @@ public class GptClasificarDataProvider : IClasificarDataProvider
             return null;
         }
 
-        // La clave efectiva se resuelve fuera del try de la carga desde BD: sin PromptDefaults:ModelKey
-        // el resumen falla con error claro en lugar de degradarse en silencio a otra rama.
-        var defaultModelKey = PromptModelKeyResolver.Resolve(null, null, _promptDefaults.ModelKey);
+        // En la clasificación GPT la clave del resumen es solo una etiqueta: el resumen lo genera el modelo
+        // de clasificación y nunca se usa para elegir deployment. Sin PromptDefaults:ModelKey no se lanza
+        // (tumbaría la clasificación entera): se registra el error y el resumen sale sin etiqueta de modelo.
+        var defaultModelKey = _promptDefaults.ModelKey;
+        if (string.IsNullOrWhiteSpace(defaultModelKey))
+        {
+            _logger.LogError(
+                "PromptDefaults:ModelKey no configurado; el resumen de clasificación sale sin etiqueta de modelo.");
+            defaultModelKey = string.Empty;
+        }
 
         // Intentar cargar prompts de resumen desde BD primero
         var dbResumenPrompt = TryLoadResumenPromptFromDatabase(defaultModelKey).GetAwaiter().GetResult();
@@ -765,7 +772,7 @@ public class GptClasificarDataProvider : IClasificarDataProvider
         return new PromptConfig
         {
             Enabled = true,
-            ModelKey = PromptModelKeyResolver.Resolve(null, effectivePrompt.ModelKey, defaultModelKey),
+            ModelKey = string.IsNullOrWhiteSpace(effectivePrompt.ModelKey) ? defaultModelKey : effectivePrompt.ModelKey,
             SystemPrompt = effectivePrompt.SystemPrompt,
             UserPromptTemplate = OpenAIPromptDataProvider.InterpolateTemplate(
                 effectivePrompt.UserPromptTemplate,
