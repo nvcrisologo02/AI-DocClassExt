@@ -235,8 +235,26 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
 
         ExtraccionResultado resultadoGpt;
         var promptConfig = HasPromptDefinition(config.PromptConfig)
-            ? OpenAIPromptDataProvider.ResolvePromptConfig(config.PromptConfig, null, _promptDefaults.ToPromptConfig())
+            ? OpenAIPromptDataProvider.ResolvePromptConfig(config.PromptConfig, null)
             : null;
+
+        // Solo la clave del modelo se hereda de PromptDefaults; el resto de campos queda como lo fija la tipología.
+        // Sin clave efectiva no se lanza aquí: DebeUsarModoCombinado la trata como no combinable.
+        if (promptConfig is not null &&
+            (!string.IsNullOrWhiteSpace(promptConfig.ModelKey) || !string.IsNullOrWhiteSpace(_promptDefaults.ModelKey)))
+        {
+            // Copia: ResolvePromptConfig devuelve la instancia de la tipología (en caché) cuando no hay defaults.
+            promptConfig = new PromptConfig
+            {
+                Enabled = promptConfig.Enabled,
+                ModelKey = PromptModelKeyResolver.Resolve(null, promptConfig.ModelKey, _promptDefaults.ModelKey),
+                SystemPrompt = promptConfig.SystemPrompt,
+                UserPromptTemplate = promptConfig.UserPromptTemplate,
+                MaxTokens = promptConfig.MaxTokens,
+                Temperature = promptConfig.Temperature,
+                ContentMode = promptConfig.ContentMode
+            };
+        }
 
         // Optimización: si prompt está habilitado y usa el mismo modelo/deployment que el fallback,
         // se ejecuta extracción + prompt en una única llamada LLM.

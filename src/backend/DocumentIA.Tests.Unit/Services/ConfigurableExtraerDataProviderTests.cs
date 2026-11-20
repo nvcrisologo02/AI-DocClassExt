@@ -663,6 +663,46 @@ public class ConfigurableExtraerDataProviderTests
             Times.Once);
     }
 
+    [Fact]
+    public async Task ModoCombinado_SoloHeredaLaClave_NoLaPlantillaDeLosDefaults()
+    {
+        using var fixture = TestFixture.Create(
+            minFieldsRatio: 0.5,
+            fallbackEnabled: true,
+            promptModelKeyTipologia: "",
+            promptDefaultModelKey: "prompt.gpt56-luna",
+            promptTemplateTipologia: "",
+            promptDefaultTemplate: "plantilla-de-defecto {contenido}");
+
+        fixture.AzureProvider
+            .Setup(p => p.ObtenerDatosAsync(It.IsAny<ExtraccionInput>(), It.IsAny<CancellationToken>()))
+            .ThrowsAsync(new CuExtraccionException("default.cu", "TimeoutException", "hard timeout"));
+
+        PromptConfig? recibido = null;
+        fixture.GptProvider
+            .Setup(p => p.ObtenerDatosConFallbackYPromptAsync(
+                It.IsAny<ExtraccionInput>(),
+                It.IsAny<TipologiaValidationConfig>(),
+                It.IsAny<PromptConfig>(),
+                It.IsAny<string?>(),
+                It.IsAny<CancellationToken>()))
+            .Callback<ExtraccionInput, TipologiaValidationConfig, PromptConfig, string?, CancellationToken>(
+                (_, _, prompt, _, _) => recibido = prompt)
+            .ReturnsAsync(new ExtraccionResultado
+            {
+                Proveedor = "azure-openai",
+                Modelo = "gpt-fallback",
+                DatosExtraidos = new Dictionary<string, object>()
+            });
+
+        await fixture.BuildSut().ObtenerDatosAsync(fixture.CreateInput());
+
+        recibido.Should().NotBeNull();
+        recibido!.ModelKey.Should().Be("prompt.gpt56-luna");
+        recibido.UserPromptTemplate.Should().BeEmpty();
+        recibido.SystemPrompt.Should().Be("sistema");
+    }
+
     private sealed class TestFixture : IDisposable
     {
         private readonly string _tempDir;
@@ -680,11 +720,13 @@ public class ConfigurableExtraerDataProviderTests
         private readonly MockExtraerDataProvider _mockProvider;
         private readonly ExtractionRoutingSettings _routingSettings;
         private readonly string _promptDefaultModelKey;
+        private readonly string _promptDefaultTemplate;
 
-        private TestFixture(string tempDir, string tipologiaId, double minFieldsRatio, bool fallbackEnabled, string promptDefaultModelKey)
+        private TestFixture(string tempDir, string tipologiaId, double minFieldsRatio, bool fallbackEnabled, string promptDefaultModelKey, string promptDefaultTemplate)
         {
             _tempDir = tempDir;
             _promptDefaultModelKey = promptDefaultModelKey;
+            _promptDefaultTemplate = promptDefaultTemplate;
             _tipologiaId = tipologiaId;
 
             _tipologiaConfigLoader = CreateLoaderFromTempDirectory(_tempDir);
@@ -880,7 +922,9 @@ public class ConfigurableExtraerDataProviderTests
             string? extractionModelKey = null,
             // null = la tipologia no declara promptConfig; "" = lo declara sin modelKey (hereda el defecto).
             string? promptModelKeyTipologia = null,
-            string promptDefaultModelKey = "")
+            string promptDefaultModelKey = "",
+            string promptTemplateTipologia = "{contenido}",
+            string promptDefaultTemplate = "")
         {
             var tempDir = Path.Combine(Path.GetTempPath(), "DocumentIA.Tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
@@ -904,7 +948,7 @@ public class ConfigurableExtraerDataProviderTests
                 },
                 promptConfig = promptModelKeyTipologia is null
                     ? null
-                    : new { enabled = true, modelKey = promptModelKeyTipologia, systemPrompt = "sistema", userPromptTemplate = "{contenido}" },
+                    : new { enabled = true, modelKey = promptModelKeyTipologia, systemPrompt = "sistema", userPromptTemplate = promptTemplateTipologia },
                 confidenceConfig = new
                 {
                     extracUmbralFallback = tipExtracUmbralFallback,
@@ -921,7 +965,7 @@ public class ConfigurableExtraerDataProviderTests
 
             File.WriteAllText(tipologiaPath, JsonSerializer.Serialize(tipologiaConfig));
 
-            return new TestFixture(tempDir, tipologiaId, minFieldsRatio, fallbackEnabled, promptDefaultModelKey);
+            return new TestFixture(tempDir, tipologiaId, minFieldsRatio, fallbackEnabled, promptDefaultModelKey, promptDefaultTemplate);
         }
 
         public ConfigurableExtraerDataProvider BuildSut() =>
@@ -936,7 +980,7 @@ public class ConfigurableExtraerDataProviderTests
                 _extractionModelRegistryLoader,
                 _promptModelRegistryLoader,
                 Options.Create(_routingSettings),
-                Options.Create(new PromptDefaultsSettings { ModelKey = _promptDefaultModelKey }),
+                Options.Create(new PromptDefaultsSettings { ModelKey = _promptDefaultModelKey, UserPromptTemplate = _promptDefaultTemplate }),
                 Logger.Object);
 
         public ExtraccionInput CreateInput() => new()
