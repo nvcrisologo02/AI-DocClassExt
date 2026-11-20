@@ -1,6 +1,6 @@
 # Cutover a gpt-5.6-luna en DEV: clasificación, prompt, resumen y extracción
 
-Fecha: 2026-11-20 · Línea: core · Padre: AB#99934 (migración de la clasificación a gpt-5.6-luna) · Task: AB#99939 (descripción desfasada: habla de gpt-5-mini; se reescribe con sí) · Tamaño: proyecto (diseño completo) · Estado: borrador, pendiente de aprobación del usuario
+Fecha: 2026-11-20 · Línea: core · Padre: AB#99934 (migración de la clasificación a gpt-5.6-luna) · Task: AB#99939 (descripción desfasada: habla de gpt-5-mini; se reescribe con sí) · Tamaño: proyecto (diseño completo) · Estado: aprobado por el usuario el 2026-11-20
 
 ## Intención
 
