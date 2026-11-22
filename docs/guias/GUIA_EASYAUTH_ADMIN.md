@@ -1,5 +1,7 @@
 # Guía: activar App Service Authentication (EasyAuth) para DocumentIA.Admin
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con INFRAESTRUCTURA_REAL_DESPLEGADA.md sección «Identidad y acceso al Admin (EasyAuth)», `azure-pipelines-admin.yml` y `CurrentUserService.cs`). EasyAuth está activo en el Admin de los tres entornos (DEV desde el 2026-08-06; PRE y PRO desde el 2026-09-04). Los nombres de App Service, resource group, suscripción y Key Vault coinciden con el repositorio. Ningún pipeline configura EasyAuth: es configuración manual en Azure. La existencia real de las app registrations, los grupos GSEC, los secretos y las asignaciones de usuario individual no se comprobó en la revisión del 2026-11-22 (la evidencia documental es de septiembre de 2026).
+
 > Configuración de infraestructura: la ejecuta el propietario de la suscripción.
 > El código del Admin ya está preparado: lee la cabecera `X-MS-CLIENT-PRINCIPAL-NAME`
 > que EasyAuth inyecta y la usa como usuario de auditoría. Sin EasyAuth, en
@@ -140,7 +142,7 @@ Recordatorios operativos de DEV:
 | Redirect URI | `https://srbwebadminprodocai.azurewebsites.net/.auth/login/aad/callback` |
 | Assignment required | Sí |
 | Emisión de ID tokens | Habilitada (verificado) |
-| Grupo de acceso asignado | `GSEC-DocumentIA-Admin-PRO` (único principal asignado) |
+| Grupo de acceso asignado | `GSEC-DocumentIA-Admin-PRO` (único principal asignado a 2026-09-04; no comprobado en la revisión del 2026-11-22) |
 | Client secret | En Key Vault `srbkvprodocai`, secreto `AdminEasyAuthClientSecret` |
 | App Service | `srbwebadminprodocai` (RG `SRBRGDOCSAIPROD`, suscripción Producción Central `647c7246-54bc-4d31-b909-431cacf03272`) |
 
@@ -234,4 +236,5 @@ Nota: en la enterprise application de PRE hay, además del grupo, un usuario
 asignado de forma individual (mismo patrón que se observó en DEV). Si no es
 deliberado, retirarlo para que todo el acceso se gobierne por el grupo.
 Comprobado el 2026-09-04: siguen asignados `GSEC-DocumentIA-Admin-PRE` y ese
-usuario individual, con *assignment required* activo.
+usuario individual, con *assignment required* activo. Estado a esa fecha; no
+comprobado en la revisión del 2026-11-22.

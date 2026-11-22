@@ -3,6 +3,8 @@
 Fecha: 2026-06-24
 Estado: Base de infraestructura entregada. Pendiente configuracion de aplicacion y primer despliegue.
 
+> Nota de revisión (2026-11-22, AB#101447): plan histórico de junio de 2026, se conserva sin reescribir. El estado y la fecha de la cabecera y del apartado 2 ya no son ciertos: DEV y PRE existen y están desplegados (PRE con bootstrap propio, ver AZURE_DEVOPS_BOOTSTRAP_SETUP.md). Los nombres de recursos de DEV y PRE (secciones 4.1 y 4.2) coinciden con `azure-pipelines-bootstrap.yml` y los scripts del apartado 8 existen. Sigue siendo cierto que `scripts/configuration/set-app-settings.ps1` está fijado a PRO. Qué pasos del plan se ejecutaron tal cual no se puede saber desde el repositorio. El procedimiento vigente es RELEASE_MANAGEMENT.md y el estado real de los entornos está en INFRAESTRUCTURA_REAL_DESPLEGADA.md.
+
 ## 1. Objetivo
 
 Definir y ejecutar el despliegue inicial de la solucion en DEV y PRE desde el estado actual.

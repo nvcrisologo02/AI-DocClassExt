@@ -1,5 +1,7 @@
 # Release v1.0.0
 
+> Nota de revisión (2026-11-22, AB#101447): documento histórico, no se reescribe. La cabecera refleja el estado del 2026-10-07 («Fecha: pendiente», candidato `17889bb`). La release se desplegó en PRO el 2026-10-08 (799 run 79704 sobre `333a9cf`). El tag anotado `v1.0.0` está sobre `333a9cf` (commit de documentación del 2026-10-08 que contiene el código de `17889bb`); la referencia vigente es la fila v1.0.0 de `docs/releases/README.md`. Los pendientes de la Fase 0 y las limpiezas diferidas se resolvieron o aplazaron en `runbook.md` (ver su nota). Desde esta release el 799 también fija `DOTNET_GCHeapHardLimitPercent` (comprobado en el `azure-pipelines.yml` actual, no en el momento de la release). Modelo generativo en esa fecha: gpt-4o-mini en los tres entornos; hoy DEV usa gpt-5.6-luna (ADR-004).
+
 Fecha: pendiente (ventana por fijar) · Tag: v1.0.0 · Commit candidato: `17889bb` (`origin/develop`, 2026-10-07, **definitivo**) · Tag anterior: `deploy-pro-2026-09-20` (`fe1533f`) · Entorno: PRO
 
 Primera versión con el esquema de `docs/releases/README.md`. Paso 0.1 del runbook: commit

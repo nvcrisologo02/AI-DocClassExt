@@ -1,5 +1,7 @@
 # Runbook de release — DEV → PRE → PRO
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con los siete `azure-pipelines*.yml`, `scripts/**`, `infra/ai/**` y `docs/releases/`). El catálogo del Anexo A coincide con los YAML; pools: `windows-latest` salvo `docia-mdp-private` (832 entero y Apply de 807). Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los checks de aprobación de los environments `pre` y `prod` (checks 64 y 65) existen desde el 2026-09-30; su estado actual en Azure DevOps, los IDs de pipeline y el secreto huérfano `GDC--Endpoint` de PRO: no comprobado en la revisión del 2026-11-22.
+
 Procedimiento permanente para llevar una versión de DocumentIA desde `develop` hasta PRO con
 PRE como puerta técnica obligatoria. Sustituye a la versión anterior de este documento (agosto
 de 2026) y absorbe `CI_CD_DEPLOYMENT_DETAILS.md`. Cada release crea su instancia en
@@ -16,9 +18,9 @@ plataforma (alta del SPN en la BD antes de 2.1, cuota o roles en 2.4) lo dicen e
 2. **PRE es puerta obligatoria.** Nada se despliega en PRO sin haber pasado por PRE con la
    misma versión de código, esquema, configuración y artefactos de IA.
 3. **Nada llega a PRO sin las cuatro puertas en PASS (la 3, o N/A con motivo cuando no aplica) y el Smoke pre-release (Test Plan 100069).**
-   Azure DevOps no tiene hoy ningún check de aprobación en los environments `pre` y `prod`
-   (verificado el 2026-09-24): el pipeline puede desplegar a PRO sin aprobación, así que la
-   puerta humana es el "go" escrito en `release.md` (Fase 3).
+   Desde el 2026-09-30 los environments `pre` y `prod` de Azure DevOps tienen un check de
+   aprobación (checks 64 y 65; ver 2.4). La puerta de la release sigue siendo el "go" escrito en
+   `release.md` (Fase 3). Antes de esa fecha (verificado el 2026-09-24) no había ninguno.
 4. **La configuración nunca se promociona por `Id`.** El export de DEV (`config-vX.Y.Z.sql`) es
    un MERGE por clave primaria con `IDENTITY_INSERT` y los `Id` no coinciden entre entornos: se
    usa como referencia y evidencia, y en PRE y PRO solo se aplican los seeds propios de la
@@ -46,6 +48,7 @@ script: se ejecutan con el mismo token partiendo por `GO`, como hizo
 | SQL Server (BD `DocumentIA`) | srbsqldevdocai | srbsqlpredocai | srbsqlprodocai |
 | `ENVIRONMENT_NAME` | Development | Preproduction | Production |
 | Azure OpenAI | srbaisrv01devdocai | srbaisrv01predocai | upe48-mm2avmdm-swedencentral |
+| Modelo generativo (deployment / `PROMPT_DEFAULTS_MODEL_KEY`) | gpt-5.6-luna, alias `prompt.gpt56-luna` (desde el 2026-11-20, ADR-004) | `gpt-4o-mini` (gpt-4.1-mini), `default.gpt4o-mini` | ídem PRE, hasta la siguiente release |
 | Content Understanding primario / secundario | srbaisrv01devdocai / srbaisrv02devdocai | srbaisrv01predocai / srbaisrv02predocai | upe48-mm2avmdm-swedencentral / srbaisrv-westeurope |
 | Document Intelligence | srbdidevdocai | srbdipredocai | srbdiprodocai |
 | Suscripción (`subscriptionId` de `infra/ai/resources.<env>.json`) | 8764f9ff-fe37-4c03-bde9-6294622bef6d | a4f6b357-8f13-4488-9ee8-b9f635426f91 | 647c7246-54bc-4d31-b909-431cacf03272 |
@@ -328,9 +331,10 @@ Prerrequisitos: puertas 1, 2 y 4 en PASS (la 3 puede estar pendiente al empezar,
 - [ ] **3.3** Puerta 3 (coste) cerrada o N/A con motivo (2.5.4).
 - [ ] **3.4** "Go" escrito en el bloque de aprobación de `release.md`: fecha, nombre y las cuatro puertas con fecha de PASS (o N/A con motivo en la 3).
 
-Nota: los environments `pre` y `prod` de Azure DevOps no tienen approval check (verificado el
-2026-09-24 con `GET _apis/pipelines/checks/configurations`). Mejora propuesta, fuera de este
-runbook: un check de aprobación en el environment `prod` con su propio work item.
+Nota: el 2026-09-24 los environments `pre` y `prod` no tenían approval check (verificado con
+`GET _apis/pipelines/checks/configurations`); el 2026-09-30 se crearon los checks 64 (`pre`) y 65
+(`prod`) al registrar el pipeline 832 (ver 2.4) y afectan a todos los pipelines que despliegan en
+esos environments. Estado actual en Azure DevOps: no comprobado en la revisión del 2026-11-22.
 
 Verificación: el bloque de aprobación de `release.md` tiene el run del Test Plan 100069, las
 cuatro puertas con fecha de PASS (la 3 puede ser N/A con motivo) y el "go" con fecha y nombre.
@@ -428,8 +432,9 @@ esa misma confirmación. Work items, `release.md` y la fila del README se corrig
 ## Anexo A — Catálogo de pipelines
 
 Todos con `trigger: none` y `pr: none`: se lanzan a mano desde Azure DevOps ("Run pipeline")
-eligiendo rama `develop` y el parámetro `targetEnvironment`. Los pipelines por componente (800,
-801, 802) sirven para redespliegues incrementales y asumen un entorno ya inicializado con 803 o
+eligiendo rama `develop` y el parámetro `targetEnvironment`. Pools: `windows-latest` en todos salvo
+`docia-mdp-private`, que usa el pipeline 832 entero y el stage Apply de 807. Los pipelines por
+componente (800, 801, 802) sirven para redespliegues incrementales y asumen un entorno ya inicializado con 803 o
 con un run previo de 799. Fuente única de los endpoints de IA por entorno:
 `infra/ai/pipeline-variables.yml`, consumido por 799 y 802.
 
@@ -444,7 +449,7 @@ la release no toca los demás componentes ni la configuración de bootstrap (803
 | 800 | AI DocClassExt (Admin) | `azure-pipelines-admin.yml` | `targetEnvironment` (default dev) | BuildAdmin → DeployAdmin (zipDeploy, RBAC KV, settings, "Ensure Functions environment name", contrato) | `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
 | 801 | AI DocClassExt (AssetResolver) | `azure-pipelines-assetresolver.yml` | `targetEnvironment` (default dev) | Build → Deploy | ninguno |
 | 803 | AI DocClassExt azure-pipelines-bootstrap. | `azure-pipelines-bootstrap.yml` | `targetEnvironment` (default dev) | Bootstrap | `check-azure-permissions.ps1`, `set-keyvault-secrets.ps1`, `verify-prod-prereqs.ps1`, `set-functionapp-keyvault-references.ps1`, `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
-| 807 | Migrations-BD | `azure-pipelines-migrations.yml` | `targetEnvironment` (default dev), `addTransientFirewallRule` (bool, default false) | Generate (agente hosted, `dotnet ef migrations script --idempotent`) → Apply (pool `docia-mdp-private`) | `scripts/deployment/apply-migrations.ps1` |
+| 807 | Migrations-BD | `azure-pipelines-migrations.yml` | `targetEnvironment` (default dev), `addTransientFirewallRule` (bool, default false), `backfillClaveIntencion` (bool, default false; AB#100930, ver 4.8) | Generate (agente hosted, `dotnet ef migrations script --idempotent`) → Apply (pool `docia-mdp-private`) | `scripts/deployment/apply-migrations.ps1`, `scripts/database/backfill-clave-intencion.ps1` |
 | 828 | AI DocClassExt (828) | no identificado en el repo | — | — | definición sin fichero identificado; comprobar en ADO antes de usarla |
 | 832 | AI DocClassExt (AiArtifacts) | `azure-pipelines-ai-artifacts.yml` | `targetEnvironment` (dev/pre/prod, default pre), `fromProd`, `preGatesPassed`, `releaseTag` (default `auto` = `build-<id>`), `runValidation`, `dryRun` | Guard → Export (origen del salto; no con `fromProd`) → AiArtifacts (pool `docia-mdp-private`, environment del destino) → ConfigSeed (solo diff; no con `fromProd`). Ver 2.4 | `scripts/ai/export-config-release.ps1`, `copy-labeling-dataset.ps1`, `apply-deployments.ps1` (fuera de `prod`), `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1`, `validate-analyzer.ps1`, `scripts/database/diff-config-exports.py` |
 

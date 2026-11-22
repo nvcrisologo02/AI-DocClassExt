@@ -408,6 +408,7 @@ Sin body (o body vacío). Sin headers obligatorios.
 | `timestamp` | Timestamp UTC del muestreo. |
 | `components.functions` | Salud del runtime Functions (siempre `healthy` si la respuesta sale). |
 | `components.assetResolver` | Probe HTTP a `GET {AssetResolver:BaseUrl}/api/assets/ping` (timeout 8 s). |
+| `components.gdc` | Probe SOAP `consultarObjetoExiste` con timeout de 30 s (corregido el 2026-11-22: antes decía 5 s); resultado cacheado 45 s con la clave `SystemHealthService:ComponentsHealth`. Detalle en [MANUAL_HEALTHCHECK.md](../manuales/MANUAL_HEALTHCHECK.md). |
 | `components.gdc` | Probe SOAP a `consultarObjetoExiste` con `idObjeto=HEALTHCHECK_PROBE` y MD5 sintético (timeout 5 s). |
 | `components.modelProviders.classification\|extraction\|prompt` | Verifica que el `*ModelRegistryLoader` esté registrado en DI. **Es un objeto único, no un array.** |
 

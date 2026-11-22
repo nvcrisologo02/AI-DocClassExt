@@ -181,7 +181,7 @@ dotnet build src/enrichments/SarebEnrichments/SarebEnrichments.csproj -c Release
 Copy-Item src/enrichments/SarebEnrichments/bin/Release/net8.0/SarebEnrichments.dll plugins/
 ```
 
-La DLL de `plugins/` está versionada en el repo y es la que se despliega con la Function App (`assemblyPath` relativo a `AppContext.BaseDirectory`). Pendiente: `docs/08_CHECKLISTS_DESPLIEGUE.md` remite aquí para «compilar plugins»; se revisa con la familia de explotación.
+La DLL de `plugins/` está versionada en el repo y es la que se despliega con la Function App (`assemblyPath` relativo a `AppContext.BaseDirectory`). `docs/08_CHECKLISTS_DESPLIEGUE.md` remite a este paso para «compilar plugins» (revisado el 2026-11-22). la familia de explotación.
 
 ### Paso 3: ejecutar Functions
 

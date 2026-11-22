@@ -1,6 +1,8 @@
 # Monitoreo y Alertas — Configuración REAL
 
-**Estado:** ✅ Verificado en código (2026-06-10); alertas de Azure Monitor y action group verificados en Azure (2026-08-04, AB#99083)  
+> Última revisión: 2026-11-22 (AB#101447, contraste con el código de `DocumentIA.Functions`, los pipelines `azure-pipelines*.yml`, `create-monitor-alerts.ps1`, `create-db-capacity-alert.ps1` e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Las alertas de memoria de PRO (AB#100815, develop dff86b1) están recogidas. El script gestiona 9 scheduled query rules (no 5). Se añade la telemetría de `AOAI.*`, `CU.RetryFailover`, `Classification.HybridTDN` y `Classification.Embeddings`. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO siguen en el deployment `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. Estado vivo de las reglas, del action group y del segundo workbook de PRO: no comprobado en la revisión del 2026-11-22 (última verificación en Azure: 2026-08-04).
+
+**Estado:** ✅ Verificado en código (2026-06-10; contraste con el repo 2026-11-22); alertas de Azure Monitor y action group verificados en Azure (2026-08-04, AB#99083)  
 **Fuente:** `src/backend/DocumentIA.Functions/` + `azure-pipelines*.yml` + `scripts/observability/create-monitor-alerts.ps1`  
 **Producción:** SRBRGDOCSAIPROD
 
@@ -18,8 +20,13 @@
 ### Eventos Telemetría Registrados
 | Evento | Propiedad Clave | Métrica | Origen |
 |--------|---|---|---|
-| `DocumentProcessed` | Tipologia, EstadoFinal, UseFallbackLLM, NombreDocumento | DuracionTotalMs, DuracionExtraccionMs, DuracionClasificacionMs | `PersistirActivity.cs` |
-| `CU.CircuitOpen` | tipologia, modelKey, reason, failureThreshold | openUntilUtc | `AzureContentUnderstandingProvider.cs` |
+| `DocumentProcessed` | Tipologia, EstadoFinal, UseFallbackLLM, NombreDocumento, EjecucionGuid | ver «Duraciones por Actividad» (`DocumentIA.Duracion.*`) | `PersistirActivity.cs` |
+| `CU.CircuitOpen` | tipologia, modelKey, reason, failureThreshold, openUntilUtc | - | `AzureContentUnderstandingProvider.cs` |
+| `CU.RetryFailover` | provider, operation, tipologia | - | `AzureContentUnderstandingProvider.cs` |
+| `AOAI.RateLimitRetry` | circuitKey, attempt, delayMs, statusCode | - | `AzureOpenAIResilienceExecutor.cs` |
+| `AOAI.CircuitOpen`, `AOAI.CircuitClosed`, `AOAI.CircuitRejected` | circuitKey | - | `AzureOpenAIResilienceExecutor.cs` |
+| `Classification.HybridTDN` | tipologia, resultado | - | `HybridTdnClasificarProvider.cs` |
+| `Classification.Embeddings` (solo DEV, en sombra) | tipologia, resultado | `Classification.Embeddings.LatenciaMs` | `EmbeddingsClasificarProvider.cs` |
 | `CU.CircuitClosed` | tipologia, modelKey, reason | - | `AzureContentUnderstandingProvider.cs` |
 | `CU.CircuitFailover` | tipologia, primaryModelKey, fallbackModelKey | - | `AzureContentUnderstandingProvider.cs` |
 | `CU.CircuitRejected` | tipologia, modelKey | - | `AzureContentUnderstandingProvider.cs` |
@@ -88,7 +95,7 @@ Prompt.Trace (evento)
 ├─ operation             → "extraction" | "classification" | ...
 ├─ tipologia             → tipología documento
 ├─ modelKey              → modelo específico
-├─ deployment            → deployment OpenAI (ej: "gpt-4o-mini")
+├─ deployment            → deployment OpenAI (p. ej. "gpt-4o-mini" en PRE y PRO; DEV usa gpt-5.6-luna desde el 2026-11-20, ADR-004)
 ├─ systemPromptSha256    → hash sistema (privacidad)
 ├─ userPromptSha256      → hash usuario (privacidad)
 ├─ systemPromptSnippet   → (si IncludePromptText=true) primeros 20KB
@@ -203,7 +210,7 @@ CircuitBreakerDurationMs = 30000 (30 seg)
 ExponentialBackoff = true
 ```
 
-**Evento:** Implícito en `ResilientPlugin.cs` (sin TrackEvent explícito, solo logs)
+**Evento:** Implícito en `Services/ResilientGdcService.cs` (sin TrackEvent explícito, solo logs)
 
 **Razón:** GDC es legacy SOAP sobre HTTP Basic Auth + SSL bypass — muy propenso a fallos
 
@@ -250,8 +257,8 @@ ExponentialBackoff = true
 
 ## 🔔 Alertas Implementadas en Azure Monitor (AB#99083, 2026-08-04)
 
-**Estado:** ✅ 5 scheduled query rules activas sobre `srbappiprodocai` + action group de correo asociado.
-Más 3 reglas de fiabilidad añadidas al script en AB#100181 (ver sección más abajo), pendientes de aplicar en PRO.
+**Estado:** ✅ 9 scheduled query rules en `create-monitor-alerts.ps1` (5 base verificadas en Azure el 2026-08-04 + 3 de fiabilidad AB#100181 + `srbalertoomprodocai`) + action group de correo asociado.
+Las 3 reglas de fiabilidad existen en PRO según INFRAESTRUCTURA_REAL_DESPLEGADA.md («3 alertas de calidad»); su alta en Azure no comprobado en la revisión del 2026-11-22 en vivo.
 
 | Regla | Condición | Ventana / Frecuencia | Sev |
 |-------|-----------|----------------------|-----|
@@ -352,7 +359,7 @@ código: `./scripts/observability/create-db-capacity-alert.ps1 -ActionGroupId <i
 
 - **Recurso:** `srbagoperprodocai` (short name `docaiops`), RG `SRBRGDOCSAIPROD`, ubicación Global.
 - **Receptores actuales:** `ignacio.varas@sareb.es` (common alert schema activado).
-- Asociado a las 5 scheduled query rules (no a las metric alerts de CPU/memoria).
+- Asociado a las 9 scheduled query rules y a `srbalertmemprodocai` (memoria, desde el 2026-10-01); `srbalertcpuprodocai` sigue sin action group (AB#100815). La alerta de capacidad de BD recibe el action group con `-ActionGroupId`.
 
 ### Cómo dar de alta (o quitar) correos de aviso
 
@@ -495,7 +502,7 @@ customEvents
 
 ## 📞 Escalation
 
-**Las 5 alertas de Azure Monitor notifican por correo al action group `srbagoperprodocai`; a partir del aviso, aplicar esta priorización:**
+**Las alertas de Azure Monitor con action group (9 scheduled query rules, `srbalertmemprodocai` y la de capacidad de BD) notifican por correo a `srbagoperprodocai`; a partir del aviso, aplicar esta priorización:**
 
 1. **P1 (Crítico):** CU circuit abierto > 30 min → contactar Azure CU support
 2. **P2 (Alto):** P95 CU > 120 seg → revisar workbook + diagnosticar tipología
@@ -511,10 +518,11 @@ customEvents
 | `src/backend/DocumentIA.Functions/Services/ApplicationInsightsTelemetryService.cs` | Wrapper TelemetryClient (TrackEvent, TrackMetric) |
 | `src/backend/DocumentIA.Functions/Services/PromptTraceTelemetryService.cs` | Registra prompts con privacidad (SHA256 + truncate) |
 | `src/backend/DocumentIA.Functions/host.json` | Logging config AppInsights (sampling, levels) |
-| `src/backend/DocumentIA.Functions/appsettings.json` | Local dev config (override en pipeline) |
+| `src/backend/DocumentIA.Functions/appsettings.json` | Solo desarrollo local y herramientas: el host de Functions no lo carga; los valores efectivos los fija el pipeline como app settings |
 | `docs/observabilidad/workbooks/documentia-cu-performance.workbook.json` | Dashboard interactivo AppInsights |
 | `scripts/reports/export-cu-performance-insights.ps1` | Script exporta KQL queries a CSV/JSON |
-| `scripts/observability/create-monitor-alerts.ps1` | Crea/actualiza las 5 alert rules de Azure Monitor (idempotente, `-ActionGroupId` opcional) |
+| `scripts/observability/create-monitor-alerts.ps1` | Crea/actualiza las 9 scheduled query rules de Azure Monitor (idempotente, `-ActionGroupId` opcional) |
+| `scripts/observability/create-db-capacity-alert.ps1` | Crea la alerta de capacidad de BD (`srbalertstoprodocai`, AB#100171) |
 | `azure-pipelines.yml` / `azure-pipelines-functions.yml` | Config resiliencia (circuit breaker, retries, timeout) |
 
 ---
@@ -527,7 +535,7 @@ customEvents
 - ✅ Circuit breaker thresholds verificados en pipeline YAML
 - ✅ Workbook queries verificadas en JSON schema
 - ✅ Connection string verificada en `set-app-settings.ps1`
-- ✅ 5 scheduled query rules y action group verificados en Azure (`az monitor scheduled-query list`, `actions.actionGroups`)
+- ✅ 5 scheduled query rules y action group verificados en Azure el 2026-08-04 (`az monitor scheduled-query list`, `actions.actionGroups`); las 3 de fiabilidad, OOM, capacidad de BD y memoria constan en el repo e INFRAESTRUCTURA_REAL, no comprobado en la revisión del 2026-11-22 en Azure
 - ✅ Queries de alerta validadas contra datos reales de App Insights (370 `DocumentProcessed` en 7 días, p95 duración 29,6 s)
 
-**Última verificación:** 2026-08-04 (alertas en Azure); 2026-06-10 (código fuente)
+**Última verificación:** 2026-08-04 (alertas en Azure); 2026-11-22 (contraste con el repositorio, AB#101447; Azure no comprobado en vivo)

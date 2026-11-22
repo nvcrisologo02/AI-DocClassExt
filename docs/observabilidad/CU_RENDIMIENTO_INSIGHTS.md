@@ -1,5 +1,7 @@
 # Workbook y reporte de rendimiento CU en Application Insights
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `AzureContentUnderstandingProvider.cs` y `documentia-cu-performance.workbook.json`). Los nombres de métrica (`CU.PrepareMs`, `CU.LimiterWaitMs`, `CU.AnalysisMs`, `CU.ParseMs`, `CU.Attempts`) y el evento `CU.TransientError` coinciden con el código y con el workbook. El workbook no incluye `CU.HardTimeout`, `CU.CircuitOpen`, `CU.CircuitRejected` ni `CU.RetryFailover` (ver OBSERVABILIDAD_KQL.md). Datos en App Insights de cada entorno: no comprobado en la revisión del 2026-11-22.
+
 ## Objetivo
 
 Dejar preparadas las consultas para entender la extraccion con Azure Content Understanding separando:
@@ -18,7 +20,7 @@ La lectura clave es comparar `CU.LimiterWaitMs` contra `CU.AnalysisMs`:
 
 ## Recurso objetivo
 
-- Application Insights: `srbappiprodocai`
+- Application Insights: `srbappiprodocai` (PRO; en DEV `srbappidevdocai`, en PRE `srbappipredocai`)
 - Resource group: `SRBRGDOCSAIPROD`
 - Suscripcion: `Produccion Central`
 

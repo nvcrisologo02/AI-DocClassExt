@@ -110,7 +110,8 @@ Release y despliegue, operación, observabilidad, incidentes y acceso.
 | [observabilidad/CU_RENDIMIENTO_INSIGHTS.md](observabilidad/CU_RENDIMIENTO_INSIGHTS.md) | Métricas por subfase de Content Understanding y su workbook | vigente |
 | [manuales/MANUAL_HEALTHCHECK.md](manuales/MANUAL_HEALTHCHECK.md) | Endpoint de health check: comprobaciones y lectura del resultado | vigente |
 | [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) | Autenticación del Admin con App Service Authentication. Fuente de verdad del acceso al Admin | vigente |
-| [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | Restricción de red al Admin, medida transitoria hasta EasyAuth | vigente |
+| [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | Restricción de red al Admin, medida complementaria opcional (EasyAuth ya está activo en los tres entornos). Revisado 2026-11-22 | vigente |
+| [guias/PERFORMANCE_TUNING.md](guias/PERFORMANCE_TUNING.md) | Ajustes de concurrencia, resiliencia de CU y Azure OpenAI, índices y escalado. Las cifras de benchmark son plantilla sin medición y los ajustes `GptFallback` no se leen (avisos en cabecera). Revisado 2026-11-22 | vigente con avisos |
 | [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md) | Texto de la solicitud de app registration y grupo de seguridad para el Admin | histórico |
 | [procedimientos/RUNBOOK_RELEASE_PRO_2026-09.md](procedimientos/RUNBOOK_RELEASE_PRO_2026-09.md) | Releases a PRO del 3 y el 20 de septiembre de 2026 | histórico |
 | [procedimientos/PLAN_DESPLIEGUE_INICIAL_DEV_PRE.md](procedimientos/PLAN_DESPLIEGUE_INICIAL_DEV_PRE.md) | Plan del primer despliegue de DEV y PRE (junio de 2026) | histórico |

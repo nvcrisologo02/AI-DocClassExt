@@ -1,6 +1,8 @@
 # 8. Checklists de Revision Azure y Azure DevOps — DocumentIA
 
-> Ultima actualizacion: 2026-04-06  
+> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json`, `scripts/**`, GUIA_EASYAUTH_ADMIN.md e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Hay una service connection por entorno (`AI DocClassExt DEV|PRE|PRO`) y los nombres de recursos de los bloques 2 a 8 son los de PRO; los de DEV y PRE están en la tabla de inventario de INFRAESTRUCTURA_REAL_DESPLEGADA.md. Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y `Extraction__AzureContentUnderstanding__*` (salvo los siete de resiliencia) siguen en el contrato y en el pipeline pero no se leen en runtime: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada. La numeración de las filas (3.x en el Bloque 2, 4.x en el Bloque 3…) es un desfase heredado que no se renumera. Lo no comprobable contra Azure en vivo (estado de recursos, RBAC, App Insights, restricciones de red) se marca como «no comprobado en la revisión del 2026-11-22».
+>
+> Ultima actualizacion anterior: 2026-04-06  
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -16,9 +18,9 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 
 | # | Tarea | Detalle | OK |
 |---|-------|---------|-----|
-| 1.1 | Crear Service Connection ARM `AI DocClassExt` | Project Settings → Service Connections → Azure Resource Manager → scope: `SRBRGDOCSAIPROD` | ☐ |
+| 1.1 | Crear una Service Connection ARM por entorno: `AI DocClassExt DEV`, `AI DocClassExt PRE`, `AI DocClassExt PRO` | Project Settings → Service Connections → Azure Resource Manager → scope: el resource group del entorno (`SRBRGDEVDOCSAI`, `SRBRGPREDOCSAI`, `SRBRGDOCSAIPROD`). Para el pipeline de promoción de IA (832) existe además la service connection WIF `AI DocClassExt Promocion IA` (ver RELEASE_MANAGEMENT §2.4) | ☐ |
 | 1.2 | Dar permisos al SP del SC sobre el Resource Group | `Contributor` + `Key Vault Secrets User` | ☐ |
-| 1.3 | Verificar que `azure-pipelines.yml` apunta al SC correcto | Variable `AZURE_SERVICE_CONNECTION` = `AI DocClassExt` | ☐ |
+| 1.3 | Verificar que `azure-pipelines.yml` apunta al SC correcto | Variable `AZURE_SERVICE_CONNECTION` = `AI DocClassExt DEV` / `PRE` / `PRO` según `targetEnvironment` (se resuelve en el propio YAML) | ☐ |
 
 ---
 
@@ -31,7 +33,7 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 | 3.3 | Storage Account (documentos) | `srbstgprodocai` | West Europe | Existente | ☐ |
 | 3.4 | Function App | `srbappprodocai` | West Europe | Existente (**.NET 10 Isolated**) | ☐ |
 | 3.5 | Document Intelligence | `srbdiprodocai` | West Europe | Existente | ☐ |
-| 3.6 | Azure OpenAI + Content Understanding | `upe48-mm2avmdm` | Sweden Central | Verificar deployment `gpt-4o-mini` activo | ☐ |
+| 3.6 | Azure OpenAI + Content Understanding | `upe48-mm2avmdm` (PRO; cuenta secundaria de CU `srbaisrv-westeurope`) | Sweden Central | Verificar deployment `gpt-4o-mini` (modelo gpt-4.1-mini) activo en PRE y PRO; en DEV el generativo es `gpt-5.6-luna` desde el 2026-11-20 (ADR-004) | ☐ |
 | 3.7 | Application Insights | `srbappiprodocai` | West Europe | Existente | ☐ |
 | 3.8 | Key Vault | `srbkvprodocai` | West Europe | Existente | ☐ |
 | 3.9 | **Azure SQL Server + Database** | `srbsqlprodocai` / `DocumentIA` | West Europe | Existente (Operativo) — verificado 2026-04-30 (ver `docs/auxiliares/auditorias/09_AUDITORIA_CONFIGURACION_2026-04-30.md`) | ☑ |
@@ -69,8 +71,8 @@ El foco es revisar plataforma Azure y cadena de despliegue en Azure DevOps.
 | 4.3 | Storage `srbstgprodocai`: rol `Storage Blob Data Contributor` a la MI | Portal → Storage → IAM | ☐ |
 | 4.4 | Storage `srbstgproapppdocai`: roles `Blob Data Owner` + `Queue Data Contributor` + `Table Data Contributor` a la MI | Portal → Storage → IAM | ☐ |
 | 4.5 | Azure SQL (cuando esté listo): `CREATE USER [srbappprodocai] FROM EXTERNAL PROVIDER` + `db_datareader` / `db_datawriter` | SSMS / sqlcmd en Azure SQL | ☐ |
-| 4.6 | Document Intelligence: `Cognitive Services User` a la MI (si AuthMode=MI) | Portal → DI → IAM | ☐ |
-| 4.7 | Azure OpenAI: `Cognitive Services User` a la MI (si AuthMode=MI) | Portal → OpenAI → IAM | ☐ |
+| 4.6 | Document Intelligence: `Cognitive Services User` a la MI | Obligatorio en los tres entornos: el acceso es por alias e identidad desde la release v1.0.0 (2026-10-08). Portal → DI → IAM | ☐ |
+| 4.7 | Azure OpenAI y cuentas AIServices (CU): `Cognitive Services User` y `Azure AI User` (Foundry) a la MI | Obligatorio en los tres entornos (ver `docs/releases/v1.0.0/release.md`, sección Configuración). Portal → recurso → IAM | ☐ |
 
 > **Nota:** `assign-keyvault-rbac.ps1` cubre solo el rol `Key Vault Secrets User` (causa del fallo del pipeline). Los roles de Storage/SQL/DI/OpenAI (4.3–4.7) siguen siendo manuales si aplican.
 
@@ -100,8 +102,11 @@ Secretos requeridos en KV:
 | `Extraction--GptFallback--ApiKey` | API Key Azure OpenAI (extraccion fallback) |
 | `Classification--AzureDocumentIntelligence--ApiKey` | API Key Document Intelligence |
 | `Classification--GptFallback--ApiKey` | API Key Azure OpenAI (clasificacion fallback) |
-| `GDC--Username` | Usuario servicio GDC |
-| `GDC--Password` | Password servicio GDC |
+| `FunctionsAdminApiFunctionKey` | Function key que usa el Admin para llamar a la Function App (exigido por el contrato; faltaba en esta tabla) |
+| `GDC--Username` | Usuario servicio GDC (no exigido por el contrato; lo comprueba `verify-prod-prereqs.ps1`) |
+| `GDC--Password` | Password servicio GDC (no exigido por el contrato; lo comprueba `verify-prod-prereqs.ps1`) |
+
+> Las cuatro claves `*--ApiKey` de Extraction y Classification siguen exigidas por el contrato (`ValidateConfiguration` falla sin ellas), pero la conexión asociada no se lee en runtime: solo se leen los siete ajustes de resiliencia de CU. Los endpoints y claves efectivos se resuelven por alias (`AI__Resources__*`) e identidad administrada.
 | `GDC--HttpBasicUsername` | Usuario HTTP Basic GDC |
 | `GDC--HttpBasicPassword` | Password HTTP Basic GDC |
 
@@ -123,7 +128,7 @@ Settings clave a confirmar (ver el inventario completo en `docs/infraestructura/
 | `FUNCTIONS_WORKER_RUNTIME` | `dotnet-isolated` |
 | `Extraction__DefaultProvider` | `azure-content-understanding` |
 | `Classification__DefaultProvider` | `azure-document-intelligence` |
-| `Extraction__AzureContentUnderstanding__Endpoint` | `https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/` |
+| `Extraction__AzureContentUnderstanding__Endpoint` | Por entorno (`AI_CU_PRIMARY_ENDPOINT` en `infra/ai/pipeline-variables.yml`): PRO `https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/`, PRE `https://srbaisrv01predocai.services.ai.azure.com/`, DEV `https://srbaisrv01devdocai.services.ai.azure.com/`. Heredado sin efecto en runtime (no se lee en el código) |
 | `Extraction__AzureContentUnderstanding__MaxConcurrentCalls` | `4` (baseline operativo actual; ajustar según carga) |
 | `Extraction__AzureContentUnderstanding__HardTimeoutSeconds` | `90` (timeout duro por intento CU) |
 | `Extraction__AzureContentUnderstanding__EnableCircuitBreaker` | `true` |
@@ -131,13 +136,15 @@ Settings clave a confirmar (ver el inventario completo en `docs/infraestructura/
 | `Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds` | `45` |
 | `Extraction__AzureContentUnderstanding__MaxRetries` | `3` (reintentos con backoff exponencial) |
 | `Extraction__AzureContentUnderstanding__InitialRetryDelayMs` | `500` (ms base para backoff; delay real = base × 2^(intento-1)) |
-| `Classification__AzureDocumentIntelligence__Endpoint` | `https://srbdiprodocai.cognitiveservices.azure.com/` |
-| `Extraction__GptFallback__DeploymentName` | `gpt-4o-mini` |
-| `Classification__GptFallback__DeploymentName` | `gpt-4o-mini` |
-| `PromptDefaults__ModelKey` | Obligatorio y no vacío (sin él la resolución falla): `default.gpt4o-mini` en pre y pro, `prompt.gpt56-luna` solo en dev. Lo fija la variable de pipeline `promptDefaultsModelKey` (802) / `PROMPT_DEFAULTS_MODEL_KEY` (799); `ensure-app-settings` no pisa un valor ya existente (AB#99938) |
+| `Classification__AzureDocumentIntelligence__Endpoint` | Por entorno (`AI_DI_ENDPOINT`): `srbdidevdocai` / `srbdipredocai` / `srbdiprodocai`.cognitiveservices.azure.com. Heredado sin efecto en runtime (no se lee en el código) |
+| `Extraction__GptFallback__DeploymentName` | `gpt-4o-mini` (lo escribe el YAML). Heredado sin efecto en runtime (no se lee en el código); el modelo generativo efectivo lo fijan `PromptDefaults__ModelKey` y la fila de `ModeloConfigs` |
+| `Classification__GptFallback__DeploymentName` | `gpt-4o-mini` (lo escribe el YAML). Heredado sin efecto en runtime (no se lee en el código) |
+| `Classification__DefaultModelKey` | `default.azure-di`. Heredado sin efecto en runtime (no se lee en el código) |
+| `PromptDefaults__ModelKey` | Obligatorio y no vacío (sin él la resolución falla): `default.gpt4o-mini` en pre y pro (deployment `gpt-4o-mini` = gpt-4.1-mini hasta la siguiente release), `prompt.gpt56-luna` solo en dev (gpt-5.6-luna desde el 2026-11-20, ADR-004). Lo fija la variable de pipeline `promptDefaultsModelKey` (802) / `PROMPT_DEFAULTS_MODEL_KEY` (799); `ensure-app-settings` no pisa un valor ya existente (AB#99938) |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Connection string `srbappiprodocai` |
 | `AssetResolver__BaseUrl` | `https://srbwebpluginassetresolver.azurewebsites.net/` |
 | `AssetResolver__ApiKey` | Key Vault reference a `AssetResolverApiKey` |
+| `GDC__BypassSslValidation` | `true` en los tres entornos (`azure-pipelines.yml`); decisión de seguridad pendiente, fuera de este checklist. El YAML fija 83 app settings; el inventario completo está en INFRAESTRUCTURA_REAL_DESPLEGADA.md |
 | `EnvironmentName` | `Production` (dev: `Development` · pre: `Preproduction`). Alimenta el campo `environment` de `GET management/configuration` con prioridad sobre `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` (no usar estos como fuente principal: en un Function App desplegado cambian el comportamiento del host — fallback a BD InMemory y omision de validacion TLS si valen `Development`). Lo fija la variable de pipeline `ENVIRONMENT_NAME` en **ambos** `azure-pipelines.yml` y `azure-pipelines-admin.yml` |
 
 ---
@@ -146,11 +153,11 @@ Settings clave a confirmar (ver el inventario completo en `docs/infraestructura/
 
 | # | Tarea | Detalle | OK |
 |---|-------|---------|-----|
-| 7.1 | Verificar modo de ejecucion del pipeline | `trigger: none` y `pr: none` en `azure-pipelines.yml`: el despliegue es **manual** ("Run pipeline" en AzDO) con el parametro `targetEnvironment`. No hay disparo automatico por merge | ☐ |
+| 7.1 | Verificar modo de ejecucion del pipeline | `trigger: none` y `pr: none` en los siete YAML de la raíz (`azure-pipelines.yml` es el pipeline 799): el despliegue es **manual** ("Run pipeline" en AzDO) con el parametro `targetEnvironment`. No hay disparo automatico por merge | ☐ |
 | 7.1a | Verificar que `azure-pipelines-admin.yml` resuelve `AZURE_ASSET_RESOLVER_WEB_APP_NAME` por entorno | Antes estaba fijo al assetresolver de PRODUCCION y la validacion de app settings fallaba en dev con un error criptico (AB#99997); ahora hay una variable por entorno igual que en `azure-pipelines.yml` | ☐ |
 | 7.1b | Confirmar el step "Ensure Functions environment name" del pipeline de Admin | Asegura el app setting `EnvironmentName` en el Function App tambien al desplegar el Admin (idempotente vía `ensure-app-settings.ps1`, no pisa valores existentes); asi el aviso de entorno del Admin funciona aunque solo se despliegue el Admin | ☐ |
 | 7.2 | Confirmar que el Stage Build ejecuta restore/build/test/publish | AzDO Run logs | ☐ |
-| 7.3 | Confirmar que el Stage DeployFunctions ejecuta zipDeploy | Task `AzureFunctionApp@2` en run | ☐ |
+| 7.3 | Confirmar que el Stage DeployFunctions ejecuta zipDeploy | Task `AzureFunctionApp@2` en run. El stage tiene dos jobs, `DeployFunctionsJob` (Functions) y `DeployAdminJob` (Admin); el stage `RunMigrations` aparece omitido (`condition: false`) a propósito: las migraciones van por el pipeline 807 | ☐ |
 | 7.4 | Confirmar que se aplica modo Key Vault en app settings | Task `AzureCLI@2` post-deploy | ☐ |
 | 7.5 | Confirmar Stage `ValidateConfiguration` (valida contrato de App Settings) | Task `Validate App Settings contract` en run. El smoke test del endpoint NO forma parte del pipeline; se ejecuta a mano post-deploy (Bloque 8, tarea 9.2). Si `validate-azure-appsettings-contract.ps1` no puede leer los settings de una app (no existe en el RG o sin permisos), falla con un mensaje explicito indicando la app y el resource group, en vez del error generico de PowerShell "The property 'value' cannot be found" | ☐ |
 | 7.6 | Verificar estado final del run | `Succeeded` en Build y DeployFunctions | ☐ |
@@ -163,9 +170,9 @@ Settings clave a confirmar (ver el inventario completo en `docs/infraestructura/
 
 | # | Tarea | Comando | OK |
 |---|-------|---------|-----|
-| 8.1 | Si `RunDatabaseMigrationsOnStartup=true`: verificar que el primer arranque aplica migraciones automaticamente | Logs de Function App en AppInsights o Kudu | ☐ |
+| 8.1 | ~~Si `RunDatabaseMigrationsOnStartup=true`: verificar que el primer arranque aplica migraciones automaticamente~~ No se usa: el pipeline fija `false` en cada despliegue y la vía vigente es el pipeline 807 (el código aún lee el setting) | ☐ |
 | 8.2 | Si se aplican de forma manual (recomendado en prod): generar script SQL idempotente | `dotnet ef migrations script --idempotent -p src/backend/DocumentIA.Data -s src/backend/DocumentIA.Functions -o migrations.sql` | ☐ |
-| 8.3 | Aplicar migrations con el pipeline **Migrations-BD** (`azure-pipelines-migrations.yml`), parámetro `targetEnvironment=prod`; revisar el artefacto `MigrationsScript` y aprobar el stage `Apply` | Run del pipeline en ADO | ☐ |
+| 8.3 | Aplicar migrations con el pipeline **Migrations-BD** (`azure-pipelines-migrations.yml`), parámetro `targetEnvironment=prod`; revisar el artefacto `MigrationsScript` y aprobar el stage `Apply` (Generate en agente hosted; Apply en el pool privado `docia-mdp-private`) | Run del pipeline en ADO | ☐ |
 | 8.4 | Una vez aplicadas las migraciones, cambiar `RunDatabaseMigrationsOnStartup=false` | `az functionapp config appsettings set --settings RunDatabaseMigrationsOnStartup=false ...` | ☐ |
 | 8.5 | Verificar conectividad y tablas creadas | `sqlcmd ... -Q "SELECT name FROM sys.tables"` o `.\scripts\database\Query-Tipologias.ps1` | ☐ |
 
@@ -206,6 +213,8 @@ dotnet ef database update `
 
 #### Paso 2 — Cargar/replicar los datos de configuración entre entornos
 
+> **Solo para un entorno vacío (carga inicial).** Este procedimiento conserva los `Id` y, en un entorno con datos, reescribiría filas distintas (en `Tipologias` los `Id` 2224-2231 difieren entre DEV y PRE). Para una release, la configuración se aplica con los seeds propios y el diff por clave natural: RELEASE_MANAGEMENT.md, regla fija 4 y pasos 2.3 y 4.3.
+
 Con [scripts/database/replicate-config-data.ps1](../scripts/database/replicate-config-data.ps1). Ejemplo **PROD → DEV** (PROD es origen de solo lectura; DEV el destino):
 
 ```powershell
@@ -223,7 +232,7 @@ pwsh ./scripts/database/replicate-config-data.ps1 -Mode Apply -EntraAuth -Mirror
 - Tablas replicadas: `ModeloConfigs` (modelos+providers), `PromptTemplates`, `Tipologias`, `CatalogoTdn1`, `CatalogoTdn2`, `PluginTipologiaConfigs`. **No** toca datos operativos (documentos, ejecuciones, auditoría, validaciones).
 - Con `-EntraAuth` las cadenas solo llevan `Server`/`Database`/`Encrypt` (sin credenciales); el script obtiene un token de Entra ID válido para todo el tenant.
 - Idempotente: `MERGE` por PK con `IDENTITY_INSERT` (conserva Ids → mantiene la FK `CatalogoTdn2 → CatalogoTdn1`). Reejecutable.
-- `-Mirror` borra en destino lo que no exista en origen (orden inverso de FK) y evita colisiones de clave única (`Codigo`/`Key` con distinto Id). Para destino = PROD, omitir `-Mirror` salvo intención explícita.
+- `-Mirror` borra en destino lo que no exista en origen (orden inverso de FK) y evita colisiones de clave única (`Codigo`/`Key` con distinto Id). No usar con destino PRE ni PRO (regla fija 4 de RELEASE_MANAGEMENT).
 - Modo directo sin fichero intermedio: `-Mode Copy` pasando ambas connection strings.
 - Para otros entornos cambiar los nombres de servidor: DEV `srbsqldevdocai` · PRE `srbsqlpredocai` · PROD `srbsqlprodocai`.
 
@@ -272,12 +281,12 @@ Usar para cualquier actualización sobre un entorno ya operativo con foco en con
 
 | # | Tarea | Detalle | OK |
 |---|-------|---------|-----|
-| B2.1 | Commit y push a rama de trabajo + PR a `main` | Flujo controlado con aprobacion | ☐ |
-| B2.2 | Lanzar el pipeline manualmente ("Run pipeline") con `targetEnvironment` correcto | El pipeline es `trigger: none`; no se dispara por merge a `main` | ☐ |
+| B2.1 | Commit y push a rama de trabajo + PR a `develop` | Flujo controlado con aprobacion | ☐ |
+| B2.2 | Lanzar el pipeline manualmente ("Run pipeline") con `targetEnvironment` correcto | El pipeline es `trigger: none`; no se dispara por merge a `develop` | ☐ |
 | B2.3 | Verificar Stage **Build** completo | restore/build/test/publish sin errores | ☐ |
 | B2.4 | Verificar Stage **DeployFunctions** completo | zipDeploy + AzureCLI settings + validacion de claves CU (el smoke test es manual, post-deploy) | ☐ |
 | B2.5 | Revisar evidencias del run | logs, artifacts, duracion, warnings | ☐ |
-| B2.6 | Si aplica Admin, habilitar y revisar Stage **DeployAdmin** | `condition: succeeded()` cuando exista `srbwebadminprodocai` | ☐ |
+| B2.6 | Si aplica Admin, revisar el job **`DeployAdminJob`** | El Admin se despliega en el job `DeployAdminJob` del stage DeployFunctions del 799 (y solo el Admin con el pipeline 800, stage `DeployAdmin`) | ☐ |
 
 ---
 
@@ -288,7 +297,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | # | Tarea | Comando | OK |
 |---|-------|---------|-----|
 | B3.1 | Activar PIM si necesario | Ver tareas VS Code: "Activate PIM role (user - device code)" | ☐ |
-| B3.2 | Obtener credenciales Kudu | `az functionapp deployment list-publishing-credentials --resource-group SRBRGDOCSAIPROD --name srbappprodocai` | ☐ |
+| B3.2 | Obtener credenciales Kudu | `az functionapp deployment list-publishing-credentials --resource-group SRBRGDOCSAIPROD --name srbappprodocai` (sustituir RG y Function App por los del entorno) | ☐ |
 | B3.3 | Ejecutar deploy-manual.ps1 | `.\scripts\deployment\deploy-manual.ps1 -KuduUser '$srbappprodocai' -KuduPassword '<PASS>'`  | ☐ |
 | B3.4 | Alternativa Cloud Shell | `.\scripts\deployment\deploy-manual.ps1` → subir `publish/functions.zip` → `az functionapp deploy ...` | ☐ |
 
@@ -316,11 +325,11 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 > Para **entorno limpio** (BD vacía) o para **promocionar datos de configuración** entre entornos (dev→pre→prod), ver el procedimiento completo paso a paso en **BLOQUE 7b** (migraciones de esquema + carga de datos con `replicate-config-data.ps1`).
 
-> ⚠️ **Pendiente en PRO (2026-08-05):** la migración `20260805100351_AgregarSubmittedByEjecucion` (columna `SubmittedBy` en `DocumentoEjecuciones`) está aplicada en **dev** pero **no en PRO**. Aplicarla con este procedimiento en el próximo despliegue, **antes** de desplegar las Functions que la usan.
+> ✅ **Resuelto (revisión 2026-11-22):** PRO está al día de migraciones desde el 2026-10-08 (807 `prod` run 79691: 37/37, `Pendientes: 0`; ver `docs/releases/v1.0.0/release.md`, tabla «Runs de pipeline»). Texto histórico: la migración `20260805100351_AgregarSubmittedByEjecucion` (columna `SubmittedBy` en `DocumentoEjecuciones`) estaba aplicada en **dev** pero **no en PRO** a 2026-08-05. Aplicarla con este procedimiento en el próximo despliegue, **antes** de desplegar las Functions que la usan.
 
-> ⚠️ **Costes de IA (2026-09-07):** la funcionalidad necesita **dos migraciones** (`20260907075128_AddCostesIAToEjecuciones` y `20260907103326_AddCostesPorActividadYEstimado`, siete columnas anulables en `DocumentoEjecuciones`) **más el catálogo de tarifas**, que no viaja en las migraciones: es una fila de `ModeloConfigs` que se carga con `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql`. Sin el catálogo el sistema no falla, pero toda ejecución sale con coste nulo y `tarifasCompletas=false`. Aplicar el catálogo **después** de las migraciones y **antes** de dar por buena la verificación. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md).
+> ⚠️ **Costes de IA (2026-09-07; en PRO ya aplicado con v1.0.0, sigue vigente para entornos nuevos):** la funcionalidad necesita **dos migraciones** (`20260907075128_AddCostesIAToEjecuciones` y `20260907103326_AddCostesPorActividadYEstimado`, siete columnas anulables en `DocumentoEjecuciones`) **más el catálogo de tarifas**, que no viaja en las migraciones: es una fila de `ModeloConfigs` que se carga con `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql`. Sin el catálogo el sistema no falla, pero toda ejecución sale con coste nulo y `tarifasCompletas=false`. Aplicar el catálogo **después** de las migraciones y **antes** de dar por buena la verificación. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md).
 
-> ⚠️ **Orden de despliegue Functions → Admin (2026-08-05):** los endpoints `/management/ejecuciones*` cambiaron de contrato (listado paginado `{items,total,page,pageSize}`, detalle por `{guid}/detalle`, agregados con filtro). El Admin actual depende de ellos: desplegar **primero la Function App y después el Admin**; en orden inverso, el Monitor quedará roto durante la ventana de despliegue.
+> ⚠️ **Orden de despliegue Functions → Admin (2026-08-05; lo respeta el 799, que ejecuta el job de Functions antes que el del Admin):** los endpoints `/management/ejecuciones*` cambiaron de contrato (listado paginado `{items,total,page,pageSize}`, detalle por `{guid}/detalle`, agregados con filtro). El Admin actual depende de ellos: desplegar **primero la Function App y después el Admin**; en orden inverso, el Monitor quedará roto durante la ventana de despliegue.
 
 ---
 
@@ -359,13 +368,15 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | `scripts\configuration\assign-keyvault-rbac.ps1 -TargetEnvironment <env>` | **Prerrequisito RBAC**: habilita las MI de Function App/Admin/AssetResolver y les asigna `Key Vault Secrets User` (rol elevado/PIM) | Una vez por entorno, antes del pipeline |
 | `scripts\configuration\verify-keyvault-rbac.ps1 -TargetEnvironment <env>` | Comprobar (solo lectura) que las MI tienen `Key Vault Secrets User` | Antes/después del pipeline o ante fallo de RBAC |
 
-> **Nota:** `compile-all-plugins.ps1` y `check-database.ps1` referenciados en versiones anteriores **ya no existen**. Para compilar plugins de enriquecimiento ver [docs/manuales/MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md); para la BD usar `scripts\database\Query-Tipologias.ps1`, `scripts\database\diagnose-assetresolver-sql.ps1` o `sqlcmd`.
+> **Nota:** `compile-all-plugins.ps1` y `check-database.ps1` referenciados en versiones anteriores **ya no existen**. Para compilar plugins de enriquecimiento ver [docs/manuales/MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md), Paso 2 (compilación manual: `dotnet build src/enrichments/SarebEnrichments/SarebEnrichments.csproj -c Release` y copia de la DLL a `plugins/`; los scripts `scripts/compile-*-plugins.ps1` se retiraron en el commit `ab365619`); para la BD usar `scripts\database\Query-Tipologias.ps1`, `scripts\database\diagnose-assetresolver-sql.ps1` o `sqlcmd`.
 
 > `set-keyvault-secrets.ps1` no contiene valores secretos versionados. Los valores deben aportarse mediante variables `DOCIA_SECRET_*` o mediante `-PreferLocalSettings -LocalSettingsPath <ruta local no versionada>`.
 
 ---
 
-## Notas de estado actual (2026-04-06)
+## Notas de estado (histórico 2026-04-06)
+
+> Estado actual: ver INFRAESTRUCTURA_REAL_DESPLEGADA.md. Admin y AssetResolver se despliegan con el 799 (y por separado con 800 y 801) en los tres entornos; el RBAC de Key Vault de las MI se asigna una vez por entorno con `assign-keyvault-rbac.ps1`. La fila «Parcialmente configurado» del RBAC es de abril de 2026 y no comprobado en la revisión del 2026-11-22.
 
 | Item | Estado |
 |------|--------|
@@ -381,9 +392,9 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 ---
 
-## BLOQUE 6 — Verificar App Insights post-despliegue
+## BLOQUE 9 — Verificar App Insights post-despliegue
 
-Usar tras cualquier despliegue a produccion para confirmar que la observabilidad esta operativa.
+Usar tras cualquier despliegue a produccion para confirmar que la observabilidad esta operativa. (Antes figuraba como un segundo «BLOQUE 6»; las filas conservan su numeración 6.x.) Los nombres son de PRO; en DEV y PRE: `srbappidevdocai` / `srbappipredocai`. Estado real de App Insights, Live Metrics, retención y queries guardadas: no comprobado en la revisión del 2026-11-22.
 
 | # | Tarea | Detalle | OK |
 |---|-------|---------|----|
@@ -393,7 +404,7 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 | 6.2 | Live Metrics accesible y reactivo | `srbappiprodocai` → Live Metrics → debe mostrar servidor activo en < 5 s tras invocar cualquier endpoint | ☐ |
 | 6.3 | Exceptions aparecen en Failures | Provocar un error controlado (parametro invalido) → verificar en App Insights → Failures en < 2 min | ☐ |
 | 6.4 | Durable Functions Monitor accesible | Portal → Function App → Durable Functions → listar instancias de las ultimas 24 h sin error de acceso | ☐ |
-| 6.5 | Log Analytics workspace vinculado y queries disponibles | `srbappiprodocai` → Logs → ejecutar Q1 (ver sec. 4.12.4 de Manual Explotacion) sin error de workspace | ☐ |
+| 6.5 | Log Analytics workspace vinculado y queries disponibles | `srbappiprodocai` → Logs → ejecutar la query guardada `DocumentIA-Q1` sin error de workspace (la referencia anterior a «sec. 4.12.4 de Manual Explotacion» no existe en `docs/`; las consultas vigentes están en [OBSERVABILIDAD_KQL.md](observabilidad/OBSERVABILIDAD_KQL.md)) | ☐ |
 | 6.6 | Retencion de datos ≥ 30 dias | `srbappiprodocai` → Usage and estimated costs → Data Retention: verificar ≥ 30 dias | ☐ |
 
 > **Referencia**: ver [MONITOREO_ALERTAS_REAL.md](observabilidad/MONITOREO_ALERTAS_REAL.md) y [OBSERVABILIDAD_KQL.md](observabilidad/OBSERVABILIDAD_KQL.md).  
@@ -401,15 +412,15 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 
 ---
 
-## Seguridad del Admin — exposicion y autenticacion (explotacion pendiente)
+## Seguridad del Admin — autenticacion (EasyAuth activo en DEV, PRE y PRO)
 
-Estado verificado 2026-07-31 en los App Service del Admin de dev y prod: autenticacion deshabilitada, restricciones de acceso "Allow all", `publicNetworkAccess` habilitado, sin private endpoints. La integracion VNet del Admin de prod es de salida (no limita el acceso entrante).
+Estado 2026-11-22: App Service Authentication (EasyAuth) activo en el Admin de DEV, PRE y PRO (DEV 2026-08-06; PRE y PRO 2026-09-04; detalle en [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md)). Restricciones de acceso de red, `publicNetworkAccess` y private endpoints: no comprobado en la revisión del 2026-11-22 (el estado del 2026-07-31 era «Allow all», sin private endpoints; la integracion VNet del Admin de prod es de salida y no limita el acceso entrante).
 
 | # | Tarea | Detalle | OK |
 |---|-------|---------|----|
-| S.1 | Activar App Service Authentication (EasyAuth) en el Admin | App registration single-tenant + grupo de seguridad con los usuarios autorizados y "Assignment required = Yes". Solicitud al equipo de identidad redactada en [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md); configuracion del App Service en [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md). **Estado: DEV activada (login corporativo operativo, 2026-08-06). PROD con app registration (`DocumentIA Admin - PRO`) y grupo (`GSEC-DocumentIA-Admin-PRO`) verificados, activacion pendiente con los comandos de la guia. PRE con app registration (`DocumentIA Admin - PRE`) y grupo (`GSEC-DocumentIA-Admin-PRE`) verificados, activacion pendiente con los comandos de la guia.** | ☐ |
+| S.1 | Activar App Service Authentication (EasyAuth) en el Admin | App registration single-tenant + grupo de seguridad con los usuarios autorizados y "Assignment required = Yes". Solicitud al equipo de identidad redactada en [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md); configuracion del App Service en [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md). **Estado: activada en los tres entornos (DEV 2026-08-06; PRE y PRO 2026-09-04), ver la guia.** | ☑ |
 | S.2 | (Medida transitoria, opcional) Restringir el acceso de red al Admin | Limita desde donde se accede, no quien; el sitio `scm` tiene reglas propias. Ver [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | ☐ |
-| S.3 | Confirmar que el modo solo lectura automatico esta activo mientras no haya EasyAuth | Sin usuario autenticado, el Admin rechaza toda escritura con "Modo solo lectura: no hay un usuario autenticado..."; las consultas siguen funcionando. No aplica en desarrollo local (localhost) | ☑ |
+| S.3 | Confirmar que el modo solo lectura automatico sigue como salvaguarda (con EasyAuth activo no se dispara salvo sesion anonima) | Sin usuario autenticado, el Admin rechaza toda escritura con "Modo solo lectura: no hay un usuario autenticado..."; las consultas siguen funcionando. No aplica en desarrollo local (localhost) | ☑ |
 
 ---
 
@@ -421,7 +432,8 @@ Estado verificado 2026-07-31 en los App Service del Admin de dev y prod: autenti
 | [procedimientos/RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release DEV → PRE → PRO, catálogo de pipelines y vuelta atrás |
 | [infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Recursos, app settings y secretos por entorno |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Configuracion tecnica detallada |
-| [../azure-pipelines.yml](../azure-pipelines.yml) | Pipeline CI/CD: Build + DeployFunctions + DeployAdmin + DeployAssetResolver + ValidateConfiguration |
+| [../azure-pipelines.yml](../azure-pipelines.yml) | Pipeline 799: Build + RunMigrations (deshabilitado) + DeployFunctions (jobs Functions y Admin) + DeployAssetResolver + ValidateConfiguration |
+| [procedimientos/DESPLIEGUE_IA.md](procedimientos/DESPLIEGUE_IA.md) | Promocion de artefactos de IA por entornos (pipeline 832) |
 | [../azure-pipelines-admin.yml](../azure-pipelines-admin.yml) | Pipeline hotfix del Admin: BuildAdmin + DeployAdmin (incluye RBAC KV, settings Functions API, `EnvironmentName` y validacion de contrato) |
 | [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) | Activar App Service Authentication (EasyAuth) en el Admin |
 | [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | Restringir el acceso de red al Admin |
