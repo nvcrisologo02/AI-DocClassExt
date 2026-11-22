@@ -56,3 +56,7 @@ Las alternativas B y C son una reconstrucción a partir de la spec, no verificad
 - Incluir el prompt y el resumen en la clave: obligaría a reprocesar el documento entero por un paso que se puede ejecutar sobre el markdown de la histórica.
 - Incluir las páginas y el modelo de extracción en la clave: el modelo de extracción depende de la tipología resuelta, que no se conoce antes de clasificar; las páginas son una cobertura (más sirve a menos), no una igualdad. Se comprueban sobre la candidata.
 - Reclasificar o corregir las 145 reutilizaciones ya servidas, reutilizar entre documentos distintos o por similitud, y añadir caducidad temporal: fuera de alcance de esta decisión.
+
+## Notas posteriores
+
+- 2026-11-22 (AB#101447, revisión documental; nota fuera del bloque, no reabre la decisión): contrastado con el código. `DedupOptions.ModoEstricto` sigue en `true` por defecto, `CalcularClaveIntencionActivity` precede a la verificación de duplicados y `DUPLICADO` solo se emite con `Dedup__ModoEstricto=false`. El criterio de éxito de AB#100930 se midió en PRO y el work item se cerró el 2026-11-18. La retirada del interruptor `Dedup__ModoEstricto` no tiene work item.

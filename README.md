@@ -1,5 +1,7 @@
 ﻿# Sistema de Clasificacion y Extraccion IA
 
+> Última revisión: 2026-11-22 (AB#101446 y AB#101447, repaso de la documentación por familias; índice completo en [docs/INDEX.md](docs/INDEX.md)). Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release.
+
 Sistema modular de procesamiento de documentos con clasificacion y extraccion automatica basado en Azure AI Document Intelligence y Azure OpenAI.
 
 ## Arquitectura
