@@ -3,15 +3,15 @@
 > Ultima actualizacion: 2026-06-05  
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. 
-> - Para cambios en v1.4-v1.5, ver [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md).
-> - **Fase 3.1 (2026-06-05):** 4 columnas legacy removidas. ConfiguracionJson es única fuente de verdad. Ver [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md).
+> - Los cambios de v1.4-v1.5 (retirada de `PromptGPT`) se describen en la guía histórica `12_MIGRACION_PROMPTGPT_V1_4.md` de `docs/auxiliares/`, carpeta no versionada.
+> - **Fase 3.1 (2026-06-05):** 4 columnas legacy retiradas. `ConfiguracionJson` es la única fuente de verdad.
 
 > Alcance de este manual:
 > - Parte A (usuario final): guia practica de uso, no tecnica.
 > - Parte B (equipo tecnico): APIs, contratos y configuracion.
 > 
 > Si solo necesitas usar DocumentIA en tu operativa diaria, lee la Parte A.
-> Para instalacion, infraestructura y despliegue, ver `docs/auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md`.
+> Para infraestructura y despliegue, ver `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md` y `docs/procedimientos/RELEASE_MANAGEMENT.md`.
 > Para contrato HTTP detallado, ver `docs/contratos/CONTRATO_API_HTTP.md`.
 
 ---
@@ -1783,7 +1783,8 @@ Detalle completo del mecanismo en [MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDU
 | Documento | Contenido |
 |-----------|-----------|
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Contratos API completos con JSON de ejemplo |
-| [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Instalacion, despliegue, variables de entorno |
+| [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Infraestructura desplegada, app settings y secretos por entorno |
+| [RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Despliegue y release DEV → PRE → PRO |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API original detallado |
 | [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de calculo de confianza |
 | [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecucion: que se mide, tarifas, consulta y relleno retroactivo |

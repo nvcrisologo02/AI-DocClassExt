@@ -201,7 +201,7 @@ IClasificarDataProvider (interfaz)
 - **Caching**: 5 min TTL per-family via IMemoryCache
 - **Enriquecimiento**: ConfiguracionJson ahora contiene tipologiaNombre + gptdescripcion (pobladas 2026-06-02, 204 tipologías)
 - **Fallback**: Integrado en fallback chain tras DI y Foundry LLM
-- **Documentación**: Ver [ANEXO_PROVIDER_GPT_CLASIFICACION_DOS_FASES.md](ANEXO_PROVIDER_GPT_CLASIFICACION_DOS_FASES.md)
+- **Documentación**: Ver la sección «Clasificación Jerárquica GPT (nivelClasificacion)» de [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md)
 
 ```
 IExtraerDataProvider (interfaz)
@@ -549,9 +549,10 @@ Plan de autenticación: **App Service Authentication (EasyAuth)** con app regist
 
 | Documento | Contenido |
 |-----------|-----------|
-| [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Problema de negocio, casos de uso, requisitos y diseno tecnico |
+| [02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md) | Problema de negocio, casos de uso y requisitos |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Flujo pipeline, secuencias, modelo ER, contratos |
-| [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Instalacion, despliegue, operacion |
+| [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Infraestructura desplegada por entorno (DEV, PRE, PRO) |
+| [RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release y despliegue DEV → PRE → PRO |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato de API REST detallado |
 | [MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Guia de desarrollo de plugins |
 | [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecucion: medicion, tarifas y consulta |

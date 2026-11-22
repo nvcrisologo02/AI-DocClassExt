@@ -1,5 +1,7 @@
 # TipologiasAdminFunction - API Documentation v1.4
 
+> **Documento sustituido (2026-11-22, AB#101445).** La fuente vigente de la API de administración de tipologías es [contratos/CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md), sección 9. Se conserva por referencia y no se mantiene.
+
 **Version:** 1.4 (PromptGPT Deprecation)  
 **Last Updated:** 2026-10-06  
 **Status:** Active  
@@ -649,7 +651,7 @@ string systemPrompt = tipologia.GetSystemPrompt();
 string userTemplate = tipologia.GetUserPromptTemplate();
 ```
 
-(See [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md) for full guide)
+(Guía histórica de migración `12_MIGRACION_PROMPTGPT_V1_4.md` en `docs/auxiliares/`, carpeta no versionada)
 
 ### Data Migration for v1.5
 
@@ -805,7 +807,7 @@ Published → Retirar → Retired → Draft → Update → Publicar → Publishe
 
 ### Q: Can I bulk import Tipologías?
 
-**A:** There's a separate `POST /management/tipologias/import` endpoint for ZIP imports. See [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) for details.
+**A:** There's a separate `POST /management/tipologias/import` endpoint for ZIP imports. See [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) for details.
 
 ### Q: What's the timeout for publish validation?
 
@@ -815,7 +817,6 @@ Published → Retirar → Retired → Draft → Update → Publicar → Publishe
 
 **A:** The API accepts any valid semantic version string. Conflict detection is **application logic**:
 - Audit trail tracks all changes
-- For merge conflicts in v1.5, see [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md)
 
 ### Q: What's the cache invalidation strategy?
 
@@ -836,8 +837,6 @@ Published → Retirar → Retired → Draft → Update → Publicar → Publishe
 ## Support & Feedback
 
 - **Issues:** File bug reports on Azure DevOps (AB#99732 epic)
-- **Questions:** See [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md) for detailed migration guide
-- **Deprecation Timeline:** [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md#deprecation-timeline)
 
 **Document Version:** 1.4.0  
 **Last Updated:** 2026-10-06  

@@ -1,5 +1,7 @@
 # Team Matrix & Responsabilidades — DocumentIA
 
+> **Documento sustituido (2026-11-22, AB#101445).** Plantilla genérica sin datos reales del equipo; los contactos y el escalado reales quedan por recoger en [RUNBOOK_INCIDENTES_PRODUCCION.md](../procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md). Se conserva por referencia y no se mantiene.
+
 ## 1. RACI MATRIX
 
 Who is **R**esponsible, **A**ccountable, **C**onsults, **I**nformed:

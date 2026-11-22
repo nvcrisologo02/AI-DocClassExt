@@ -3,8 +3,8 @@
 > Ultima actualizacion: 2026-09-14  
 > Proyecto: AI DocClassExt — SAREB  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. 
-> - Campo `Tipologias.PromptGPT` deprecated (see [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md)).
-> - **Fase 3.1 (2026-06-05):** 4 columnas legacy deprecated & dropped. See [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md).
+> - Campo `Tipologias.PromptGPT` retirado en v1.4 (la guía de migración `12_MIGRACION_PROMPTGPT_V1_4.md` es material histórico de `docs/auxiliares/`, carpeta no versionada).
+> - **Fase 3.1 (2026-06-05):** 4 columnas legacy retiradas; `ConfiguracionJson` es la única fuente de verdad (registro histórico `20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md`, no versionado).
 
 ---
 

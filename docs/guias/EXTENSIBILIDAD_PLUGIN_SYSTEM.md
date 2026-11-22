@@ -1202,6 +1202,6 @@ if (resultado.FallbackUsado)
 
 - [DocumentIA Architecture](../01_ARQUITECTURA_SISTEMA.md)
 - [Technical Design](../03_DISENO_TECNICO_DETALLADO.md)
-- [API Documentation](../15_API_DOCUMENTATION_V1_4.md)
+- [Contrato de la API HTTP](../contratos/CONTRATO_API_HTTP.md)
 - [Azure Functions Documentation](https://learn.microsoft.com/azure/azure-functions/)
 - [Durable Functions Patterns](https://learn.microsoft.com/azure/azure-functions/durable/)

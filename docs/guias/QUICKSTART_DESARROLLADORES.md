@@ -11,7 +11,7 @@ Antes de empezar, verifica que tienes instalado:
 - **Windows 11** (o Windows 10)
 - **PowerShell 5.1+** (viene con Windows)
 - **Git** → [git-scm.com](https://git-scm.com/download/win)
-- **.NET 8 SDK** → [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download/dotnet/8.0)
+- **.NET 10 SDK** (Functions y tests unitarios) y **.NET 8 SDK** (Core, Data, Plugins, Admin, AssetResolver) → [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download)
 - **Visual Studio Code** (opcional pero recomendado) → [code.visualstudio.com](https://code.visualstudio.com)
 - **Python 3.9+** (solo si vas a entrenar modelos IA)
 
@@ -74,7 +74,7 @@ dotnet restore
 pip install -r src/ai-models/requirements.txt
 ```
 
-**Esperado:** Sin errores de build. Si hay error de compatibilidad .NET, verifica que tienes .NET 8 instalado.
+**Esperado:** Sin errores de build. Si hay error de compatibilidad .NET, verifica que tienes instalados los SDK de .NET 10 y .NET 8.
 
 ---
 
@@ -345,7 +345,7 @@ Dos reglas que el analizador no perdona: las propiedades de raíz de `TipologiaV
 Ahora que tienes el sistema corriendo, profundiza:
 
 1. **Entiende el vocabulario:**
-   - Lee [docs/GLOSSARIO_TERMINOS.md](../GLOSSARIO_TERMINOS.md) (5 min)
+   - Lee [docs/referencias/GLOSSARIO_TERMINOS.md](../referencias/GLOSSARIO_TERMINOS.md) (5 min)
    - Aprende qué es Orquestación, Actividad, Instancia, etc.
 
 2. **Aprende la arquitectura:**

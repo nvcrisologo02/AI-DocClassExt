@@ -366,9 +366,9 @@ Orden recomendado:
 
 Pipelines:
 
-- Bootstrap por entorno: [azure-pipelines-bootstrap.yml](azure-pipelines-bootstrap.yml)
-- Despliegue multi-entorno: [azure-pipelines.yml](azure-pipelines.yml)
-- Hotfix del Admin: [azure-pipelines-admin.yml](azure-pipelines-admin.yml)
+- Bootstrap por entorno: [azure-pipelines-bootstrap.yml](../../azure-pipelines-bootstrap.yml)
+- Despliegue multi-entorno: [azure-pipelines.yml](../../azure-pipelines.yml)
+- Hotfix del Admin: [azure-pipelines-admin.yml](../../azure-pipelines-admin.yml)
 
 Uso esperado:
 
@@ -430,13 +430,13 @@ No necesitas crear pipeline nuevo adicional para cada entorno salvo que quieras 
 
 ## 8. Referencias del repositorio
 
-- [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md)
-- [docs/procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md](docs/procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md)
-- [scripts/configuration/check-azure-permissions.ps1](scripts/configuration/check-azure-permissions.ps1)
-- [scripts/configuration/set-keyvault-secrets.ps1](scripts/configuration/set-keyvault-secrets.ps1)
-- [scripts/configuration/set-app-settings.ps1](scripts/configuration/set-app-settings.ps1)
-- [scripts/configuration/set-functionapp-keyvault-references.ps1](scripts/configuration/set-functionapp-keyvault-references.ps1)
-- [scripts/deployment/verify-prod-prereqs.ps1](scripts/deployment/verify-prod-prereqs.ps1)
-- [scripts/testing/validate-azure-appsettings-contract.ps1](scripts/testing/validate-azure-appsettings-contract.ps1)
-- [scripts/config/azure-appsettings-contract.json](scripts/config/azure-appsettings-contract.json)
-- [azure-pipelines.yml](azure-pipelines.yml)
+- [docs/08_CHECKLISTS_DESPLIEGUE.md](../08_CHECKLISTS_DESPLIEGUE.md)
+- [docs/procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md](AZURE_DEVOPS_BOOTSTRAP_SETUP.md)
+- [scripts/configuration/check-azure-permissions.ps1](../../scripts/configuration/check-azure-permissions.ps1)
+- [scripts/configuration/set-keyvault-secrets.ps1](../../scripts/configuration/set-keyvault-secrets.ps1)
+- [scripts/configuration/set-app-settings.ps1](../../scripts/configuration/set-app-settings.ps1)
+- [scripts/configuration/set-functionapp-keyvault-references.ps1](../../scripts/configuration/set-functionapp-keyvault-references.ps1)
+- [scripts/deployment/verify-prod-prereqs.ps1](../../scripts/deployment/verify-prod-prereqs.ps1)
+- [scripts/testing/validate-azure-appsettings-contract.ps1](../../scripts/testing/validate-azure-appsettings-contract.ps1)
+- [scripts/config/azure-appsettings-contract.json](../../scripts/config/azure-appsettings-contract.json)
+- [azure-pipelines.yml](../../azure-pipelines.yml)

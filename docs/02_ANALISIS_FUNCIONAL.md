@@ -487,7 +487,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | HU11 | Observabilidad | Como operador, quiero metricas y logs en Application Insights para diagnosticar problemas. | Structured logging, telemetria AI SDK, metricas por actividad en seguimiento. | IN PROGRESS |
 | HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | REMOVED (fuera de alcance actual) |
 | HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Lifecycle rules en Storage + soft delete + archivado por antigüedad. | PLANNED |
-| HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR, Referencia Catastral y/o Direccion. | `ObtenerActivoActivity` busca en AssetResolver con tres criterios configurables (habilitar/deshabilitar cada uno). Soporta AND/OR. Si match unico, `IdActivo` se propaga. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). | DONE |
+| HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR, Referencia Catastral y/o Direccion. | `ObtenerActivoActivity` busca en AssetResolver con tres criterios configurables (habilitar/deshabilitar cada uno). Soporta AND/OR. Si match unico, `IdActivo` se propaga. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). | DONE |
 
 ---
 
@@ -512,6 +512,6 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 |-----------|-----------|
 | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Arquitectura tecnica, ADRs, despliegue |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Diagramas de flujo, secuencia, modelo ER |
-| [CAUSISTICAS_NOTA_SIMPLE_1_4.md](CAUSISTICAS_NOTA_SIMPLE_1_4.md) | Casuisticas especificas de Nota Simple 1.4 |
-| [CONFIANZA_AGREGADA.md](CONFIANZA_AGREGADA.md) | Logica detallada de calculo de confianza |
-| [TIPOLOGIAS_REFERENCIA.md](TIPOLOGIAS_REFERENCIA.md) | Catalogo de referencia de tipologias |
+| [CAUSISTICAS_NOTA_SIMPLE_1_4.md](referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md) | Casuisticas especificas de Nota Simple 1.4 |
+| [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica detallada de calculo de confianza |
+| [TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Catalogo de referencia de tipologias |

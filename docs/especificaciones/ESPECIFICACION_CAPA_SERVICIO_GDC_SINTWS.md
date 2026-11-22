@@ -214,7 +214,5 @@ Regla importante:
   - `docs/contratos/CONTRATO_API_HTTP.md`
 - Diseno tecnico general del pipeline:
   - `docs/03_DISENO_TECNICO_DETALLADO.md`
-- Manual de activities:
-  - `docs/not in use/MANUAL_ACTIVITIES_AZURE_FUNCTIONS.md`
 
 Este documento es el canon para GDC en DocumentIA.

@@ -82,16 +82,15 @@ func azure functionapp publish srbappprodocai
 
 ## Documentacion
 
-Ver carpeta docs/ para:
-- **Cambios v1.4 (IMPORTANTE):** [docs/auxiliares/migracion-deployment/12_MIGRACION_PROMPTGPT_V1_4.md](docs/auxiliares/migracion-deployment/12_MIGRACION_PROMPTGPT_V1_4.md) — PromptGPT deprecation y ConfiguracionJson refactorizado
-- Arquitectura detallada
-- Contratos de entrada/salida
-- Manuales de operacion
-- Manual de costes de IA: [docs/manuales/MANUAL_COSTES_IA.md](docs/manuales/MANUAL_COSTES_IA.md)
-- Manual de plugins: [docs/manuales/MANUAL_PLUGINS.md](docs/manuales/MANUAL_PLUGINS.md)
-- Manual del motor de validaciones: [docs/manuales/MANUAL_VALIDACIONES.md](docs/manuales/MANUAL_VALIDACIONES.md)
-- Plantillas de plugins: [docs/contratos/PLANTILLA_PLUGINS_JSON.md](docs/contratos/PLANTILLA_PLUGINS_JSON.md)
-- Fuente de verdad de configuracion: [docs/referencias/FUENTE_VERDAD_CONFIGURACION.md](docs/referencias/FUENTE_VERDAD_CONFIGURACION.md)
+El punto de entrada es [docs/INDEX.md](docs/INDEX.md), que cataloga toda la documentacion permanente por familia y estado. Lecturas principales:
+
+- Arquitectura: [docs/01_ARQUITECTURA_SISTEMA.md](docs/01_ARQUITECTURA_SISTEMA.md) e [infraestructura real desplegada](docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md)
+- Funcional: [docs/02_ANALISIS_FUNCIONAL.md](docs/02_ANALISIS_FUNCIONAL.md) y [guia de clasificacion](docs/guias/GUIA_CLASIFICACION_DOCUMENTOS.md)
+- Tecnica: [docs/03_DISENO_TECNICO_DETALLADO.md](docs/03_DISENO_TECNICO_DETALLADO.md), [manual de uso y configuracion](docs/05_MANUAL_USO_CONFIGURACION.md) y [contrato de la API HTTP](docs/contratos/CONTRATO_API_HTTP.md)
+- Explotacion: [runbook de release](docs/procedimientos/RELEASE_MANAGEMENT.md), [registro de releases](docs/releases/README.md) y [runbook de incidentes](docs/procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md)
+- Decisiones de arquitectura: [docs/decisiones/](docs/decisiones/)
+
+La carpeta `docs/auxiliares/` no esta versionada: los documentos permanentes no deben enlazar a ella.
 
 > Tipologias, modelos IA y plugins por tipologia se gestionan en BBDD mediante Admin API/DocumentIA.Admin. Los JSON fisicos del repositorio son seed inicial, plantillas o referencia historica; pueden estar desactualizados y no deben borrarse sin confirmacion explicita.
 

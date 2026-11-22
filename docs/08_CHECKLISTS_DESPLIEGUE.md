@@ -116,7 +116,7 @@ Secretos requeridos en KV:
 | 6.3 | Verificar que la Function App tiene `RunDatabaseMigrationsOnStartup=false` (valor real aplicado por el pipeline en cada deploy). Las migraciones **no** se aplican en runtime ni por pipeline: se aplican manualmente con script idempotente (ver Bloque 7) | `az functionapp config appsettings list --name srbappprodocai --resource-group SRBRGDOCSAIPROD` | ☐ |
 | 6.4 | Verificar `host.json`: `hubName=DocumentIAHub`, `maxConcurrentActivityFunctions=4`, `maxConcurrentOrchestratorFunctions=4` | `src/backend/DocumentIA.Functions/host.json` | ☐ |
 
-Settings clave a confirmar (ver detalle completo en `docs/auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md` § 4.4):
+Settings clave a confirmar (ver el inventario completo en `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md`):
 
 | Setting | Valor esperado |
 |---------|---------------|
@@ -359,7 +359,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 | `scripts\configuration\assign-keyvault-rbac.ps1 -TargetEnvironment <env>` | **Prerrequisito RBAC**: habilita las MI de Function App/Admin/AssetResolver y les asigna `Key Vault Secrets User` (rol elevado/PIM) | Una vez por entorno, antes del pipeline |
 | `scripts\configuration\verify-keyvault-rbac.ps1 -TargetEnvironment <env>` | Comprobar (solo lectura) que las MI tienen `Key Vault Secrets User` | Antes/después del pipeline o ante fallo de RBAC |
 
-> **Nota:** `compile-all-plugins.ps1` y `check-database.ps1` referenciados en versiones anteriores **ya no existen**. Para compilar plugins de enriquecimiento ver [docs/manuales/MANUAL_PLUGINS.md](../manuales/MANUAL_PLUGINS.md); para la BD usar `scripts\database\Query-Tipologias.ps1`, `scripts\database\diagnose-assetresolver-sql.ps1` o `sqlcmd`.
+> **Nota:** `compile-all-plugins.ps1` y `check-database.ps1` referenciados en versiones anteriores **ya no existen**. Para compilar plugins de enriquecimiento ver [docs/manuales/MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md); para la BD usar `scripts\database\Query-Tipologias.ps1`, `scripts\database\diagnose-assetresolver-sql.ps1` o `sqlcmd`.
 
 > `set-keyvault-secrets.ps1` no contiene valores secretos versionados. Los valores deben aportarse mediante variables `DOCIA_SECRET_*` o mediante `-PreferLocalSettings -LocalSettingsPath <ruta local no versionada>`.
 
@@ -396,7 +396,7 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 | 6.5 | Log Analytics workspace vinculado y queries disponibles | `srbappiprodocai` → Logs → ejecutar Q1 (ver sec. 4.12.4 de Manual Explotacion) sin error de workspace | ☐ |
 | 6.6 | Retencion de datos ≥ 30 dias | `srbappiprodocai` → Usage and estimated costs → Data Retention: verificar ≥ 30 dias | ☐ |
 
-> **Referencia**: ver seccion `4.12 Monitorizacion y Observabilidad en Portal Azure` del [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md).  
+> **Referencia**: ver [MONITOREO_ALERTAS_REAL.md](observabilidad/MONITOREO_ALERTAS_REAL.md) y [OBSERVABILIDAD_KQL.md](observabilidad/OBSERVABILIDAD_KQL.md).  
 > Queries KQL base guardadas en Log Analytics como `DocumentIA-Q1` … `DocumentIA-Q4`.
 
 ---
@@ -418,9 +418,9 @@ Estado verificado 2026-07-31 en los App Service del Admin de dev y prod: autenti
 | Documento | Contenido |
 |-----------|-----------|
 | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Arquitectura completa y diagrama de despliegue |
-| [auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md](auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md) | Procedimientos paso a paso, variables de entorno, scripts |
+| [procedimientos/RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release DEV → PRE → PRO, catálogo de pipelines y vuelta atrás |
+| [infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Recursos, app settings y secretos por entorno |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Configuracion tecnica detallada |
-| [auxiliares/planes/11_PLAN_CONFIGURACION_LIMPIA.md](auxiliares/planes/11_PLAN_CONFIGURACION_LIMPIA.md) | Plan de remediacion y gobierno de configuracion |
 | [../azure-pipelines.yml](../azure-pipelines.yml) | Pipeline CI/CD: Build + DeployFunctions + DeployAdmin + DeployAssetResolver + ValidateConfiguration |
 | [../azure-pipelines-admin.yml](../azure-pipelines-admin.yml) | Pipeline hotfix del Admin: BuildAdmin + DeployAdmin (incluye RBAC KV, settings Functions API, `EnvironmentName` y validacion de contrato) |
 | [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) | Activar App Service Authentication (EasyAuth) en el Admin |

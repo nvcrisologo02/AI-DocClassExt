@@ -189,7 +189,7 @@ Proceso de verificación de datos extraídos contra reglas tipología-específic
 
 **Retorna:** `ValidationReport` con campos válidos/inválidos, errores y warnings.
 
-**Referencia:** [docs/manuales/MANUAL_VALIDACIONES.md](../../manuales/MANUAL_VALIDACIONES.md)
+**Referencia:** [docs/manuales/MANUAL_VALIDACIONES.md](../manuales/MANUAL_VALIDACIONES.md)
 
 ---
 
@@ -424,13 +424,13 @@ Documento normalizado
 |-----------|----------|--------|
 | **Diseño Técnico Detallado** | Arquitectura pipeline, diagrama flujo, actividades. | [03_DISENO_TECNICO_DETALLADO.md](../03_DISENO_TECNICO_DETALLADO.md) |
 | **Análisis Funcional** | Casos de uso, actores, CU1-CU6. | [02_ANALISIS_FUNCIONAL.md](../02_ANALISIS_FUNCIONAL.md) |
-| **Manual Validaciones** | Especificación motor validación, 11 tipos. | [docs/manuales/MANUAL_VALIDACIONES.md](../../manuales/MANUAL_VALIDACIONES.md) |
-| **Manual Plugins** | Arquitectura plugins, integración REST/SOAP. | [docs/manuales/MANUAL_PLUGINS.md](../../manuales/MANUAL_PLUGINS.md) |
+| **Manual Validaciones** | Especificación motor validación, 11 tipos. | [docs/manuales/MANUAL_VALIDACIONES.md](../manuales/MANUAL_VALIDACIONES.md) |
+| **Manual Plugins** | Arquitectura plugins, integración REST/SOAP. | [docs/manuales/MANUAL_PLUGINS.md](../manuales/MANUAL_PLUGINS.md) |
 | **Especificación AssetResolver** | Detalles búsqueda activos, criterios AND/OR. | [docs/especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](../especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md) |
-| **Fuente Verdad Configuración** | Autoridad canónica BD config. | [docs/referencias/FUENTE_VERDAD_CONFIGURACION.md](../FUENTE_VERDAD_CONFIGURACION.md) |
+| **Fuente Verdad Configuración** | Autoridad canónica BD config. | [docs/referencias/FUENTE_VERDAD_CONFIGURACION.md](FUENTE_VERDAD_CONFIGURACION.md) |
 | **Plantilla Plugins JSON** | Formato config plugins. | [docs/contratos/PLANTILLA_PLUGINS_JSON.md](../contratos/PLANTILLA_PLUGINS_JSON.md) |
 | **Checklists Despliegue** | Validación pre-prod + prod. | [docs/08_CHECKLISTS_DESPLIEGUE.md](../08_CHECKLISTS_DESPLIEGUE.md) |
-| **API Documentation v1.4** | Contratos REST endpoints. | [docs/15_API_DOCUMENTATION_V1_4.md](../15_API_DOCUMENTATION_V1_4.md) |
+| **Contrato API HTTP** | Contratos REST de ingest, management y Admin. | [docs/contratos/CONTRATO_API_HTTP.md](../contratos/CONTRATO_API_HTTP.md) |
 
 ### Endpoints REST Principales
 
