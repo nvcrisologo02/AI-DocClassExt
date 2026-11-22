@@ -1,6 +1,7 @@
 # 1. Arquitectura del Sistema — DocumentIA
 
-> Ultima actualizacion: 2026-06-08 (Upgrade .NET 9→10 Isolated - Extended Support)  
+> Última revisión: 2026-11-22 (AB#101447, contraste con el código, las migraciones EF y los pipelines)  
+> Actualización anterior: 2026-06-08 (Upgrade .NET 9→10 Isolated - Extended Support)  
 > Proyecto: AI DocClassExt — SAREB  
 > Repositorio: Azure DevOps `sareb.visualstudio.com/AI%20DocClassExt`
 
@@ -10,7 +11,7 @@
 
 DocumentIA es un sistema de clasificacion y extraccion automatizada de documentos para SAREB. Procesa documentos inmobiliarios (notas simples registrales, tasaciones, resumenes documentales) empleando servicios de IA de Azure para:
 
-1. **Clasificar** el tipo documental mediante Azure AI Document Intelligence (modelos custom entrenados) con fallback a Azure OpenAI GPT-4o-mini (two-phase hierarchical: TDN1 family → TDN2 enriquecido con metadatos de BD).
+1. **Clasificar** el tipo documental mediante reglas deterministas, Azure AI Document Intelligence (modelos custom entrenados) y, como respaldo, el modelo generativo de Azure OpenAI del entorno (ver «Modelo generativo por entorno»; clasificación jerárquica en dos fases: familia TDN1 → TDN2 enriquecido con metadatos de BD). Desde la Fase A de [ADR-002](decisiones/ADR-002-clasificador-embeddings-hibrido.md) un clasificador por embeddings corre antes del GPT, en modo sombra en DEV.
 2. **Extraer** campos estructurados mediante Azure Content Understanding o Document Intelligence, con fallback GPT.
 3. **Validar** los datos extraidos contra un motor de reglas configurable por tipologia (NIF, fechas, rangos, referencias catastrales, campos obligatorios).
 4. **Enriquecer** los datos mediante un sistema de plugins de integracion (REST, SOAP, DLL custom).
@@ -25,15 +26,27 @@ DocumentIA es un sistema de clasificacion y extraccion automatizada de documento
 | Orquestacion | Azure Durable Functions v4 (soportado hasta 2027) |
 | Clasificacion IA | Azure AI Document Intelligence (custom classifier) |
 | Extraccion IA | Azure Content Understanding + Azure DI (custom models) |
-| LLM (fallback + prompt) | Azure OpenAI GPT-4o-mini |
-| Base de datos | SQL Server 2022 (EF Core 8 Code-First) |
+| LLM (respaldo de clasificación y extracción, prompt libre, resumen) | Azure OpenAI; el deployment depende del entorno (ver «Modelo generativo por entorno») |
+| Base de datos | Azure SQL Database `DocumentIA` (EF Core 8.0.1 Code-First); SQL Server 2022 en Docker solo para desarrollo local |
 | Almacenamiento blob | Azure Blob Storage (Azurite en local) |
 | Gestor documental | GDC SINTWS (SOAP, srbwidp04.sareb.srb:8090) |
 | Frontend operativo | WPF .NET 8 (MVVM, RestSharp) |
 | Frontend Admin | Blazor Server .NET 8 | 
-| **Backend Status** | ✅ Upgraded to .NET 10 Isolated (Jun 2026) |
+| Estado del backend | .NET 10 Isolated desde junio de 2026 (`DocumentIA.Functions` y `DocumentIA.Tests.Unit` en net10.0; el resto de proyectos en net8.0) |
 | CI/CD | Azure DevOps Pipelines (self-hosted agent) |
 | Observabilidad | Application Insights + Log Analytics |
+
+### Modelo generativo por entorno (2026-11-22)
+
+El modelo de Azure OpenAI que atiende la clasificación GPT de respaldo, el prompt libre, el resumen y la extracción GPT de respaldo no es el mismo en los tres entornos. Se resuelve por configuración, no por código: filas de `ModeloConfigs` con los indicadores `IsDefault` y `UseAsFallback`, y el app setting `PromptDefaults__ModelKey` que cada pipeline fija por entorno (variable `PROMPT_DEFAULTS_MODEL_KEY` en `azure-pipelines.yml` y `azure-pipelines-functions.yml`).
+
+| Entorno | Deployment generativo | Desde | Fuente |
+|---------|----------------------|-------|--------|
+| DEV | `gpt-5.6-luna` (modelo gpt-5.6-luna, Data Zone Standard, `reasoning_effort` none, caché de prompt explícita en clasificación) | 2026-11-20 | [ADR-004](decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md); `PROMPT_DEFAULTS_MODEL_KEY = prompt.gpt56-luna` |
+| PRE | `gpt-4o-mini` (el deployment se llama así, pero sirve el modelo gpt-4.1-mini) | hasta la siguiente release | `PROMPT_DEFAULTS_MODEL_KEY = default.gpt4o-mini` |
+| PRO | `gpt-4o-mini` (modelo gpt-4.1-mini) | hasta la siguiente release | `PROMPT_DEFAULTS_MODEL_KEY = default.gpt4o-mini` |
+
+Las menciones a GPT-4o-mini en el resto del documento describen PRE y PRO. Las filas de gpt-4 se conservan en DEV para la vuelta atrás y el deployment `gpt-4o-mini` sigue en los tres entornos durante la convivencia (ADR-004). Azure OpenAI retira gpt-4.1-mini el 2027-04-14.
 
 ---
 
@@ -47,18 +60,26 @@ flowchart TB
         API_EXT["Sistema Cliente API<br/>(externo)"]
     end
 
-    subgraph AzureFunctions["Azure Functions — srbappprodocai"]
+    subgraph AzureFunctions["Azure Functions — srbapp{env}docai"]
         TRIGGER["HTTP Trigger<br/>POST /api/IngestDocument"]
         HEALTH["HTTP Trigger<br/>POST /api/healthcheck"]
+        MD["HTTP Triggers<br/>GET /api/documentos/{sha256}/markdown<br/>GET /api/ejecuciones/{guid}/markdown"]
+        MGMT["HTTP Triggers<br/>/api/management/* (Admin API)"]
+        TIMER["Timer Trigger<br/>BlobCleanupTimerTrigger"]
         ORCH["Durable Orchestrator<br/>DocumentProcessOrchestrator"]
+        ACT_CLAVE["CalcularClaveIntencionActivity"]
         ACT_NORM["NormalizarActivity"]
+        ACT_PDF["ApplyPdfPageLimitActivity"]
         ACT_LAY["ObtenerMarkdownActivity"]
+        ACT_PERS_MD["PersistirMarkdownActivity"]
         ACT_DUP["VerificarDuplicadoActivity"]
         ACT_DUP_MD5["VerificarDuplicadoPorMD5Activity"]
         ACT_LAST["ObtenerUltimaEjecucionDuplicadoActivity"]
         ACT_GDC_DOC["ObtenerDocumentoGDCActivity"]
         ACT_GDC_META["ObtenerMetadatosDocumentoGDCActivity"]
         ACT_BLOB["SubirBlobActivity"]
+        ACT_PREP["PrepararDocumentoClasificacionActivity"]
+        ACT_EMB["ClasificarEmbeddingsActivity"]
         ACT_CLAS["ClasificarActivity"]
         ACT_RES["ResolverTipologiaActivity"]
         ACT_EXT["ExtraerActivity"]
@@ -71,14 +92,14 @@ flowchart TB
     end
 
     subgraph AzureAI["Servicios Azure AI"]
-        DI["Azure Document Intelligence<br/>srbdiprodocai"]
-        CU["Azure Content Understanding<br/>Sweden Central"]
-        OPENAI["Azure OpenAI<br/>GPT-4o-mini"]
+        DI["Azure Document Intelligence<br/>srbdi{env}docai"]
+        CU["Azure Content Understanding<br/>cuenta AIServices del entorno"]
+        OPENAI["Azure OpenAI<br/>deployment generativo por entorno<br/>+ text-embedding-3-large"]
     end
 
     subgraph Almacenamiento
-        SQL["SQL Server 2022<br/>DocumentIA DB"]
-        BLOB["Azure Blob Storage<br/>srbstgprodocai"]
+        SQL["Azure SQL Database<br/>DocumentIA (srbsql{env}docai)"]
+        BLOB["Azure Blob Storage<br/>srbstg{env}docai<br/>documents · markdown · documentai"]
     end
 
     subgraph Externos["Sistemas Externos"]
@@ -87,20 +108,22 @@ flowchart TB
     end
 
     subgraph Observabilidad
-        APPINS["Application Insights<br/>srbappiprodocai"]
-        KV["Azure Key Vault<br/>srbkvprodocai"]
+        APPINS["Application Insights<br/>srbappi{env}docai"]
+        KV["Azure Key Vault<br/>srbkv{env}docai"]
     end
 
     DESKTOP -->|"POST /api/IngestDocument"| TRIGGER
-    ADMIN -->|"GET/PUT /management/*"| TRIGGER
+    ADMIN -->|"GET/PUT/POST"| MGMT
     API_EXT -->|"POST /api/IngestDocument"| TRIGGER
     TRIGGER --> ORCH
 
-    ORCH --> ACT_NORM --> ACT_DUP --> ACT_BLOB
-    ACT_BLOB --> ACT_CLAS --> ACT_RES --> ACT_EXT
-    ACT_EXT --> ACT_PROMPT --> ACT_VAL --> ACT_INT
-    ACT_INT --> ACT_GDC --> ACT_PERS
+    ORCH --> ACT_CLAVE --> ACT_LAST
+    ORCH --> ACT_NORM --> ACT_PDF --> ACT_DUP --> ACT_BLOB
+    ACT_BLOB --> ACT_PREP --> ACT_EMB --> ACT_CLAS --> ACT_RES --> ACT_LAY --> ACT_EXT
+    ACT_EXT --> ACT_PROMPT --> ACT_VAL --> ACT_ASSET --> ACT_INT
+    ACT_INT --> ACT_GDC --> ACT_PERS_MD --> ACT_PERS
 
+    ACT_EMB -->|"Embeddings (sombra en DEV)"| OPENAI
     ACT_CLAS -->|"Clasificar"| DI
     ACT_CLAS -.->|"Fallback"| OPENAI
     ACT_EXT -->|"Extraer campos"| CU
@@ -111,10 +134,14 @@ flowchart TB
     ACT_PERS -->|"EF Core"| SQL
     ACT_BLOB -->|"Upload PDF"| BLOB
     ACT_DUP -->|"SHA256 lookup"| SQL
+    ACT_LAST -->|"Clave de intención (ADR-003)"| SQL
+    TIMER -->|"Borra blobs expirados"| BLOB
 
     AzureFunctions -->|"Telemetria"| APPINS
     AzureFunctions -.->|"Secrets"| KV
 ```
+
+> El orden de las activities es el simplificado del camino feliz; el orquestador tiene salidas tempranas (duplicado con reutilización, fallo GDC, límite de páginas) y pasos opcionales (prompt, AssetResolver, markdown). Los nombres `{env}` se sustituyen por `dev`, `pre` o `pro`; el inventario real por entorno está en [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md).
 
 ---
 
@@ -159,12 +186,12 @@ flowchart LR
 
 | Proyecto | Responsabilidad |
 |----------|----------------|
-| **DocumentIA.Functions** | Triggers HTTP (`IngestDocument`, `healthcheck`), Orchestrator Durable, **17 Activities**, Providers de IA (DI, CU, GPT), servicios GDC y AssetResolver, autenticacion |
+| **DocumentIA.Functions** | Triggers HTTP (`IngestDocument`, `healthcheck`, consulta de markdown por documento y por ejecución, tipologías publicadas y la Admin API `management/*`), timer de limpieza de blobs, Orchestrator Durable, **22 activities**, providers de IA (reglas, DI, embeddings, CU, GPT), servicios GDC y AssetResolver, autenticación |
 | **DocumentIA.Core** | Modelos de dominio (ContratoEntrada/Salida), motor de validacion (11 reglas), configuracion de tipologias, interfaces de servicio |
-| **DocumentIA.Data** | DbContext EF Core, 9 entidades, repositorios, migraciones, seed data |
+| **DocumentIA.Data** | DbContext EF Core, 13 entidades, repositorios, 38 migraciones (la última `20261013092225_ClaveIntencionDedup`), seed data |
 | **DocumentIA.Plugins** | Infraestructura de plugins: IIntegrationPlugin, PluginFactory, PluginManager, ResilientPlugin, RestPlugin, SoapPlugin, CustomPlugin |
-| **DocumentIA.Tests.Unit** | 33 clases de test (xUnit + Moq + FluentAssertions) |
-| **DocumentIA.Desktop** | WPF MVVM: ingesta de documentos, polling de estado en tiempo real, visualizacion de timeline |
+| **DocumentIA.Tests.Unit** | 154 ficheros de test (xUnit + Moq + FluentAssertions; recuento del 2026-11-22). Hay además `DocumentIA.Tests.Admin`, `DocumentIA.Tests.E2E` (contra entornos desplegados) y `DocumentIA.AssetResolver.Tests` |
+| **DocumentIA.Desktop** | WPF MVVM: ingesta de documentos, polling de estado, visualización de timeline. Existe en `src/frontend/`, pero **no forma parte de `DocumentIA.sln` ni de los pipelines**; es una herramienta de desarrollo, no un cliente desplegado |
 | **DocumentIA.Admin** | Blazor Server: CRUD tipologias, gestion modelos AI, configuracion plugins, Monitor de ejecuciones (KPIs, serie temporal y detalle por GUID consultados en servidor via `/management/ejecuciones*`) |
 | **SarebEnrichments** | Plugin custom .NET: enriquecimiento de Nota Simple (cargas, riesgo, datos de activo) |
 
@@ -174,7 +201,7 @@ flowchart LR
 
 ### 1.4.1 Durable Functions — Orquestacion tipo Saga
 
-El pipeline de procesamiento se implementa como un **Durable Function Orchestrator** (`DocumentProcessOrchestrator`) que coordina **17 activities** (no todas se ejecutan en cada peticion: hay early exits por duplicado, fallos GDC, skip de pasos opcionales como Prompt/AssetResolver). Las ventajas:
+El pipeline de procesamiento se implementa como un **Durable Function Orchestrator** (`DocumentProcessOrchestrator`) que coordina **22 activities** (no todas se ejecutan en cada peticion: hay early exits por duplicado, fallos GDC, skip de pasos opcionales como Prompt/AssetResolver). Las ventajas:
 
 - **Durabilidad**: el estado de la orquestacion persiste automaticamente en Azure Storage. Si el host se reinicia, el orquestador resume donde quedo.
 - **Replay-safe logging**: usa `context.CreateReplaySafeLogger` para evitar logs duplicados durante replays.
@@ -193,14 +220,20 @@ IClasificarDataProvider (interfaz)
   │   ├─ FoundryTdnRescueClassifier                                      ← Foundry LLM fallback
   │   ├─ GptClasificarDataProvider (two-phase hierarchy)                 ← Phase 1: TDN1 family, Phase 2: TDN2 enriquecido
   │   └─ MockClasificarDataProvider
+
+ClasificarEmbeddingsActivity (previa a ClasificarActivity, ADR-002 Fase A)
+  └─ EmbeddingsClasificarProvider ← embedding con text-embedding-3-large + inferencia en C# del artefacto JSON del blob `documentai`
+      └─ DecisorHibrido           ← modo off | sombra | hibrido y umbrales de la fila `clasificador.embeddings` (TipoModelo.Embeddings = 5)
 ```
 
-**GptClasificarDataProvider** (NEW):
+En `sombra` la predicción por embeddings se persiste junto a la del GPT sin alterar el resultado; en `hibrido` contestaría por confianza y derivaría al GPT el resto. Estado el 2026-11-22: DEV en `sombra` (código en producción desde la release v1.0.0; artefacto v4 desde el 2026-11-18, AB#101405); PRE y PRO llevan el código con la fila en `off`, según el README de `scripts/migrations/clasificador-embeddings/` (no comprobado en BD en esta revisión). El umbral de operación se fija con los cortes de la sombra (AB#101421).
+
+**GptClasificarDataProvider**:
 - **Phase 1**: Resuelve familia TDN1 (ej., ESCR) desde catálogo dinámico
 - **Phase 2**: Resuelve tipología TDN2 enriquecida (ej., ESCR-06) desde catálogo filtrado + metadatos (tipologiaNombre, gptdescripcion) de BD
 - **Caching**: 5 min TTL per-family via IMemoryCache
-- **Enriquecimiento**: ConfiguracionJson ahora contiene tipologiaNombre + gptdescripcion (pobladas 2026-06-02, 204 tipologías)
-- **Fallback**: Integrado en fallback chain tras DI y Foundry LLM
+- **Enriquecimiento**: ConfiguracionJson contiene tipologiaNombre + gptdescripcion (pobladas 2026-06-02, 204 tipologías)
+- **Fallback**: integrado en la cadena tras DI y Foundry LLM. El deployment que atiende la fase 1 y 2 es el del entorno (gpt-5.6-luna en DEV, gpt-4o-mini en PRE y PRO; ver «Modelo generativo por entorno»); con gpt-5.6-luna la fase 1 usa caché de prompt explícita
 - **Documentación**: Ver la sección «Clasificación Jerárquica GPT (nivelClasificacion)» de [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md)
 
 ```
@@ -238,6 +271,8 @@ Cada tipo de modelo tiene su propio loader que hereda de `ModelRegistryLoader<TC
 | `ExtractionModelRegistryLoader` | `TipoModelo.Extraccion` | `ExtractionModelConfig` |
 | `PromptModelRegistryLoader` | `TipoModelo.Prompt` | `PromptModelConfig` |
 | `LayoutModelRegistryLoader` | `TipoModelo.Layout` | `LayoutModelConfig` |
+| `TarifaRegistryLoader` | `TipoModelo.Tarifas` (4) | Catálogo de tarifas `tarifas.ia` para el coste por ejecución (ADR-007 de este documento) |
+| `EmbeddingsClasificadorConfigLoader` | `TipoModelo.Embeddings` (5) | Fila única `clasificador.embeddings`: deployment de embeddings, artefacto, modo y umbrales (ADR-002) |
 
 Los proveedores reciben el loader por inyección de dependencias y obtienen el modelo con `GetModel(key)` o `GetDefaultModel()`. Los archivos `config/{tipo}/models.json` solo actuan como seed/bootstrap de un entorno sin datos o como referencia historica; la configuracion valida en runtime es la publicada en BD y puede diferir de esos JSON.
 
@@ -287,7 +322,9 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 > autenticacion esta en §1.4.6 y la IA es propia de cada entorno desde la Epic AB#100298. Su numeracion es local a
 > este documento y no coincide con la de los ADR formales de `docs/decisiones/` (`ADR-NNN-<slug>.md`), que son los
 > vigentes: cuando una referencia cita "ADR-001", "ADR-002" o "ADR-003" sin otro contexto, se refiere a
-> `docs/decisiones/`.
+> `docs/decisiones/` (ADR-001 a ADR-004 el 2026-11-22). En particular, el bloque ADR-005 de abajo describe un estado de autenticación
+> superado (la identidad administrada está activa en los tres entornos, §1.4.6) y el ADR-006 habla de un SQL temporal que ya es
+> Azure SQL Database en los tres entornos.
 
 ### ADR-001: Azure Durable Functions como motor de orquestacion
 
@@ -385,11 +422,12 @@ flowchart TB
     FUNC_LOCAL --> MOCK_REST
 ```
 
-### 1.6.2 Entorno Azure (Produccion)
+### 1.6.2 Entorno Azure (PRO; DEV y PRE replican la topología con sus recursos)
 
 ```mermaid
 flowchart TB
     subgraph RG["SRBRGDOCSAIPROD — West Europe"]
+        SQL_PROD["srbsqlprodocai<br/>Azure SQL Database DocumentIA"]
         FUNCAPP["srbappprodocai<br/>Function App<br/>.NET 10 Isolated<br/>Consumption Plan Linux"]
         STG_HUB["srbstgproapppdocai<br/>Storage (Durable hub)"]
         STG_DOCS["srbstgprodocai<br/>Storage (documentos)"]
@@ -401,12 +439,11 @@ flowchart TB
 
     subgraph SwedenCentral["Sweden Central — PRIMARY AI"]
         CU_PROD["Azure AI Foundry<br/>Content Understanding<br/>upe48-mm2avmdm<br/>(Extraction + Prompt)"]
-        OAI["Azure OpenAI<br/>gpt-4o-mini<br/>(Fallback)"]
+        OAI["Azure OpenAI<br/>deployment gpt-4o-mini (gpt-4.1-mini)<br/>respaldo, prompt y resumen"]
     end
 
     subgraph OnPrem["Infraestructura SAREB"]
-        GDC_PROD["GDC SINTWS<br/>srbwidp04.sareb.srb:8090<br/>(réplica srbwidp05)"]
-        SQL_TEMP["SQL Server (Docker local)<br/>temporal hasta Azure SQL"]
+        GDC_PROD["GDC SINTWS<br/>srbwidp05.sareb.srb:8090<br/>(réplica; primario srbwidp04)"]
     end
 
     FUNCAPP --> STG_HUB
@@ -418,10 +455,12 @@ flowchart TB
     FUNCAPP --> OAI
     FUNCAPP --> CU_PROD
     FUNCAPP -->|"SOAP + Basic Auth"| GDC_PROD
-    FUNCAPP -->|"EF Core<br/>(SqlConnectionString)"| SQL_TEMP
+    FUNCAPP -->|"EF Core<br/>(SqlConnectionString, KV)"| SQL_PROD
 
     FUNCAPP -.->|"System MI<br/>e700ab11..."| DI_PROD
 ```
+
+> DEV (`SRBRGDEVDOCSAI`) y PRE (`SRBRGPREDOCSAI`) tienen la misma topología con recursos propios de IA en West Europe (`srbaisrv01<env>docai`, `srbaisrv02<env>docai`, `srbdi<env>docai`); DEV usa el deployment `gpt-5.6-luna` desde el 2026-11-20. Inventario completo en [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md).
 
 ---
 
@@ -459,8 +498,8 @@ flowchart TB
 
     subgraph DocumentIA["DocumentIA"]
         FUNCAPP["Azure Functions<br/>.NET 10 Isolated<br/>Durable Orchestrator<br/>+ 17 Activities<br/>+ HTTP Triggers (Ingest + Healthcheck)"]
-        SQLDB["SQL Server 2022<br/>DocumentIA DB<br/>9 tablas EF Core"]
-        BLOBST["Azure Blob Storage<br/>Contenedor: documents<br/>PDFs originales"]
+        SQLDB["Azure SQL Database<br/>DocumentIA<br/>13 tablas EF Core"]
+        BLOBST["Azure Blob Storage<br/>documents (originales) · markdown<br/>documentai (artefactos de IA)"]
         DESKTOP_APP["DocumentIA Desktop<br/>WPF .NET 8<br/>MVVM + RestSharp"]
         ADMIN_APP["DocumentIA Admin<br/>Blazor Server .NET 8<br/>CRUD tipologias"]
     end
@@ -468,7 +507,7 @@ flowchart TB
     subgraph External["Servicios Externos"]
         DI_SVC["Azure Document Intelligence"]
         CU_SVC["Azure Content Understanding"]
-        OAI_SVC["Azure OpenAI GPT-4o-mini"]
+        OAI_SVC["Azure OpenAI<br/>(deployment por entorno)"]
         GDC_SVC["GDC SINTWS (SOAP)"]
         REST_PLUGINS["Plugins REST/SOAP"]
     end
@@ -480,9 +519,9 @@ flowchart TB
 
     FUNCAPP -->|"EF Core"| SQLDB
     FUNCAPP -->|"Blob SDK"| BLOBST
-    FUNCAPP -->|"HTTP + ApiKey"| DI_SVC
-    FUNCAPP -->|"HTTP + ApiKey"| CU_SVC
-    FUNCAPP -->|"HTTP + ApiKey"| OAI_SVC
+    FUNCAPP -->|"HTTP + identidad administrada"| DI_SVC
+    FUNCAPP -->|"HTTP + identidad administrada"| CU_SVC
+    FUNCAPP -->|"HTTP + identidad administrada"| OAI_SVC
     FUNCAPP -->|"SOAP + Basic Auth"| GDC_SVC
     FUNCAPP -->|"HTTP"| REST_PLUGINS
 ```
@@ -498,8 +537,8 @@ flowchart TB
 | **Compute** | Azure Functions Consumption Plan: escala automatica de 0 a N instancias segun carga. Sin gestion de servidores. |
 | **Concurrencia** | Durable Functions gestiona multiples orquestaciones en paralelo. Cada instancia es independiente. |
 | **Storage** | Azure Blob Storage: escalado nativo sin limites practicos. Durable task hub en Storage separado (`srbstgproapppdocai`). |
-| **Base de datos** | SQL Server 2022 (actual: Docker local). Plan: Azure SQL Elastic Pool para escalado vertical/horizontal. |
-| **AI Services** | Azure AI tiene rate limits por region. Content Understanding en Sweden Central (alta capacidad). DI y OpenAI en West Europe. |
+| **Base de datos** | Azure SQL Database `DocumentIA` en `srbsql{env}docai`, una por entorno; PRO con límite de 20 GB desde el 2026-08-31. El plan de almacenamiento y sus índices están en [OPTIMIZACION_ALMACENAMIENTO_BD_PRO.md](especificaciones/OPTIMIZACION_ALMACENAMIENTO_BD_PRO.md) y en [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md). |
+| **AI Services** | Azure AI tiene rate limits por región. En PRO, CU y OpenAI primarios en Sweden Central y CU secundario, DI y el resto en West Europe; DEV y PRE tienen sus recursos de IA en West Europe. Cuota del deployment por entorno (gpt-5.6-luna en DEV: 150K TPM). |
 
 ### Disponibilidad
 
@@ -517,7 +556,7 @@ flowchart TB
 | **Plugins** | `ResilientPlugin`: retry exponencial (`InitialDelayMs * 2^attempt`) + circuit breaker (5 fallos → open, 5 min → half-open) |
 | **GDC SOAP** | `ResilientGdcService`: retry configurable (`GDC:MaxRetries`) + circuit breaker (`GDC:CircuitBreakerFailures/DurationMs`) |
 | **SubirGDC timeout** | `Task.WhenAny` con timer de 120s en el orchestrator. Si timeout, marca "Timeout" y continua a persistencia. |
-| **Clasificacion fallback** | Si confianza DI < umbral, automaticamente se invoca GPT-4o-mini. |
+| **Clasificacion fallback** | Si confianza DI < umbral, automaticamente se invoca el modelo generativo del entorno (ver «Modelo generativo por entorno»). |
 | **Extraccion fallback** | Si completitud CU < umbral, se redirige a GPT para campos faltantes. |
 | **Plugin critico** | Plugin con `Priority=1` falla → se detiene la cadena de plugins. Plugins no criticos: log warning y continua. |
 | **Error general** | Try/catch global en el orchestrator. Estado final `ERROR` con mensaje. Siempre persiste lo que tenga hasta ese punto. |
@@ -526,22 +565,20 @@ flowchart TB
 
 | Limite | Valor | Mitigacion |
 |--------|-------|-----------|
-| Tamaño input Durable Functions | ~60 KB (Storage entity) | El base64 del documento se pasa en el input; documentos muy grandes pueden requerir blob-reference pattern |
+| Tamaño input Durable Functions | ~60 KB (Storage entity) | Patrón blob-reference ya aplicado: el trigger vuelca el contenido al blob y pone `Content.Base64` a `null`; la orquestación viaja con `BlobPath` y el base64 solo queda como entrada legada |
 | Timeout Activity | Sin limite explicito (excepto GDC: 120s) | Considerar timeouts por activity en futuras fases |
 | Rate limit Azure DI | Varía por tier (S0: 15 TPS) | Durable Functions serializa por instancia; N instancias paralelas podrian saturar |
 | SSL GDC | Certificado CA corporativo SAREB no confiado en Linux | `GDC:BypassSslValidation=true` (solo para host Linux; en Windows la CA se instala en el cert store) |
 
-### Seguridad del Admin (DocumentIA.Admin) — estado y plan (AB#99999)
+### Seguridad del Admin (DocumentIA.Admin) — estado (AB#99999)
 
-Estado verificado (2026-07-31) de los App Service del Admin (dev y prod): autenticación deshabilitada (sin App Service Authentication), restricciones de acceso "Allow all", `publicNetworkAccess` habilitado, sin private endpoints. La integración VNet del Admin de prod es de salida (no limita el acceso entrante).
-
-Plan de autenticación: **App Service Authentication (EasyAuth)** con app registration single-tenant y un grupo de seguridad con los usuarios autorizados (`Assignment required = Yes`). La solicitud al equipo de identidad y la configuración del App Service se documentan en:
+Estado el 2026-11-22: **App Service Authentication (EasyAuth) activo en los tres entornos** (DEV desde el 2026-08-06, PRE y PRO desde el 2026-09-04) con app registration single-tenant por entorno y grupo de seguridad `GSEC-DocumentIA-Admin-<ENV>` con `Assignment required = Yes`; detalle en la sección «Identidad y acceso al Admin» de [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md). Histórico: el 2026-07-31 los App Service del Admin de dev y prod estaban sin autenticación, con acceso "Allow all" y `publicNetworkAccess` habilitado. La solicitud al equipo de identidad y la configuración aplicada se documentan en:
 
 - [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md) — solicitud a identidad (app registration + grupo de usuarios autorizados).
 - [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) — activación de App Service Authentication en el Admin.
 - [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) — restricción de acceso de red al Admin (limita desde dónde, no quién; el sitio scm tiene reglas propias).
 
-**Mitigación mientras EasyAuth no está activo:** modo solo lectura automático — sin identidad (`X-MS-CLIENT-PRINCIPAL-NAME` ausente), la capa de servicios del Admin (`TipologiaAdminService`, `PromptManagementService`) rechaza toda operación de escritura; solo quedan disponibles las consultas. Ver [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) §3.8.4.
+**Salvaguarda que sigue vigente:** modo solo lectura automático — sin identidad (`X-MS-CLIENT-PRINCIPAL-NAME` ausente), la capa de servicios del Admin (`TipologiaAdminService`, `PromptManagementService`) rechaza toda operación de escritura; solo quedan disponibles las consultas. Ver [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) §3.8.4.
 
 ---
 
@@ -552,6 +589,8 @@ Plan de autenticación: **App Service Authentication (EasyAuth)** con app regist
 | [02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md) | Problema de negocio, casos de uso y requisitos |
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Flujo pipeline, secuencias, modelo ER, contratos |
 | [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Infraestructura desplegada por entorno (DEV, PRE, PRO) |
+| [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md) | Modelo de datos, migraciones y versionado del esquema |
+| [decisiones/](decisiones/) | ADR formales vigentes (ADR-001 a ADR-004) |
 | [RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release y despliegue DEV → PRE → PRO |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato de API REST detallado |
 | [MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Guia de desarrollo de plugins |
