@@ -1,5 +1,7 @@
 # Manual del sistema de validaciones (DocumentIA)
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `TipologiaConfigLoader.cs`, `ValidationEngine.cs`, `ValidarActivity.cs`, `PersistirActivity.cs`, `ValidacionResultadoEntity.cs` y `DocumentProcessOrchestrator.cs`). Hallazgos: `ConfianzaGlobal` es el MÍNIMO de clasificación, extracción y validación (el §7 omitía la extracción); la tabla `ValidacionResultados` solo recibe los Warning e Info, nunca los Error (que van a `Postproceso.Inconsistencias`); `requireMunicipality` y `requireProvince` no actúan porque `ValidarActivity` no pasa contexto; los campos `boolean` y `array` ignoran su lista `rules`. Los 9 `ruleType` reales son `range`, `nif`, `catastral`, `date`, `address`, `enum`, `regex`, `minLength` y `maxLength`; `required`, `boolean` y `array` se activan por el campo. Los `fields[]` van en la raíz de `ConfiguracionJson` (hermanos de `extraction`, `confidenceConfig`, `classification`, `gdc`, `promptConfig`). Existencia de `nota.simple.1_4.validation.json` con esos campos exactos y detalle interno de los validadores NIF/catastral: no comprobado en la revisión del 2026-11-22.
+
 ## 1) Objetivo y valor
 
 El motor de validaciones de `DocumentIA.Core` aplica reglas de negocio sobre los campos extraídos de cada documento **antes** de su integración y persistencia.
@@ -8,7 +10,7 @@ El motor de validaciones de `DocumentIA.Core` aplica reglas de negocio sobre los
 
 - **Calidad de datos**: detecta campos ausentes, mal formados o fuera de rango antes de que lleguen a sistemas externos.
 - **Configuración sin código**: las reglas se definen en `Tipologias.ConfiguracionJson` por tipología, no en código. Los `.validation.json` físicos son seed o referencia.
-- **Severidades granulares**: distingue `Error` (bloquea confianza), `Warning` e `Info` sin detener el pipeline.
+- **Severidades granulares**: distingue `Error` (reduce `ConfianzaValidacion`; no bloquea el pipeline), `Warning` e `Info`.
 - **Reglas especializadas para España**: NIF/NIE/CIF, referencia catastral y dirección postal.
 - **Extensible**: añadir una nueva regla supone implementar `IValidationRule` y registrar el `ruleType` en `TipologiaConfigLoader`.
 
@@ -37,7 +39,7 @@ ValidationReport
 flowchart TD
   A[ValidarActivity\nrecibe tipología + datos] --> B[TipologiaConfigLoader\nlee Tipologias.ConfiguracionJson]
   B --> C{¿Existe configuracion publicada?}
-  C -- No --> D[Devuelve WARNING funcional\nConfianza = 0.5]
+  C -- No --> D[Devuelve WARNING funcional\nConfianza = 0.5\n(solo si falta la configuración publicada; un ConfiguracionJson inválido lanza InvalidDataException)]
   C -- Sí --> E[Construye ValidationEngine\ncon reglas por campo]
     E --> F[ValidationEngine.ValidateDocument]
     F --> G[Por cada campo\n ejecuta sus reglas en orden]
@@ -132,10 +134,13 @@ Valida direcciones postales españolas.
 
 Parámetros:
 
-- `minLength` / `maxLength`: longitud mínima/máxima.
-- `requireStreetNumber` (bool): exige número de portal.
-- `requireMunicipality` (bool): comprueba municipio contra contexto.
-- `requireProvince` (bool): comprueba provincia contra contexto.
+- `minLength` / `maxLength`: longitud mínima/máxima (defaults 5 / 260).
+- `requireStreetNumber` (bool, default `true`): exige número de portal.
+- `requirePostalCode` (bool, default `true`): exige código postal de 5 dígitos.
+- `requireMunicipality` (bool, default `false`): comprueba municipio contra contexto.
+- `requireProvince` (bool, default `false`): comprueba provincia contra contexto.
+
+> Revisión 2026-11-22: `requireMunicipality` y `requireProvince` solo comparan si el `context` trae `municipality`/`province`; `ValidarActivity` invoca `ValidateDocument(input.DatosExtraidos)` sin contexto, así que hoy estas dos opciones no producen fallos.
 
 Valida internamente:
 - caracteres permitidos (tildes, ñ, números, separadores comunes),
@@ -298,9 +303,11 @@ public class MiReglaValidator : ValidationRuleBase
 ## 7) Comportamiento del orquestador según validación
 
 - Errores de validación → el pipeline **no se detiene**, continúa hasta `PersistirActivity`.
-- Estado final `VALIDACION_CON_ERRORES` si `DetalleValidacion.Errores > 0`.
-- `ConfianzaGlobal = min(confianzaClasificacion, confianzaValidacion)`.
-- `ConfianzaValidacion = 1 - (errores / totalReglas)`.
+- Estado final `VALIDACION_CON_ERRORES` si `DetalleValidacion.Errores > 0` y no hay otro estado de cierre prioritario (por ejemplo `EXTRACCION_INCOMPLETA`).
+- `ConfianzaGlobal = MIN(confianzaClasificacion, confianzaExtraccion, confianzaValidacion)`; la extracción se omite si está deshabilitada o si la extracción GPT agotó su propio timeout.
+- `ConfianzaValidacion = report.IsValid ? 1.0 : max(0, 1 - errores / max(TotalChecked, 1))`; `TotalChecked` cuenta las reglas evaluadas, no las omitidas tras el primer `Error` de un campo.
+- Persistencia (revisión 2026-11-22): `ValidacionResultados` (`EjecucionId`, `Campo`, `Severidad`, `Mensaje`, `ValorOriginal`, `ValorEsperado`, `Pasado`, `FechaValidacion`) se rellena desde `Postproceso.Validaciones` (solo Warning/Info, con `Pasado = false` y sin `ValorOriginal`/`ValorEsperado`); los `Error` van a `Postproceso.Inconsistencias` (`[ERROR] Campo: Mensaje` más «Total de errores de validacion: N») y **no** se guardan en la tabla.
+- Contrato de salida: `Resultado.Estado`, `Resultado.ConfianzaValidacion`, `DetalleEjecucion.Postproceso.Validaciones`, `Postproceso.Inconsistencias`, `Postproceso.ConfianzaValidacion` y `Normalizaciones` («Aplicadas N reglas de validacion», «Confianza de validacion: NN %»). No existe un bloque `DetalleEjecucion.Validacion`.
 
 ---
 

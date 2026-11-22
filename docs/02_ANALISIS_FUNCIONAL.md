@@ -1,6 +1,8 @@
 # 2. Analisis Funcional — DocumentIA
 
-> Ultima actualizacion: 2026-03-31  
+> Última revisión: 2026-11-22 (AB#101447, contraste con el orquestador, los triggers, el contrato de la API y los documentos 01, 03 y de infraestructura revisados el mismo día). El sistema está en operación desde julio de 2026 (v1.0.0 en PRO el 2026-10-08). Corregidos: fuente `blobPath` (blob-first), orden del pipeline, tipología no resuelta (`NO_CLASIFICADO`), `PENDIENTE_REINTENTO` por cuota (no se persiste), `nivelClasificacion` (`TDN1_TDN2`), formatos aceptados y tamaño, retención de blobs (implementada), región de la IA y plan de la Function App. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release; las menciones a GPT-4o-mini describen PRE y PRO. Faltan como casos de uso los endpoints de markdown, el healthcheck y la limpieza de blobs, y los flujos `classificationOnly`, `restriccionTipologias`, `PAGINAS_EXCEDIDAS` y `EXTRACCION_INCOMPLETA` (los 10 estados están en CONTRATO_API_HTTP §5). Estado de epics y user stories en Azure DevOps, plan de hosting y SLA, duración típica, cobertura de tests, umbrales por tipología en BD y límite de tamaño de entrada: no comprobado en la revisión del 2026-11-22.
+>
+> Ultima actualizacion anterior: 2026-03-31  
 > Proyecto: AI DocClassExt — SAREB
 
 ---
@@ -88,13 +90,13 @@ flowchart TB
 | Campo | Detalle |
 |-------|---------|
 | **Actor principal** | Sistema Cliente API |
-| **Precondicion** | Debe informarse exactamente una fuente de documento: `documento.content.base64` (PDF en Base64) **o** `documento.objectIdGDC` (documento ya archivado en GDC). Function Key valida (si endpoint protegido). |
+| **Precondicion** | Debe informarse exactamente una fuente de documento: `documento.content.base64` (Base64), `documento.blobPath` (documento ya subido a Blob, modo blob-first) **o** `documento.objectIdGDC` (documento ya archivado en GDC). Function Key valida (si endpoint protegido). |
 | **Postcondicion** | Documento clasificado, datos extraidos, validados, enriquecidos, archivado en GDC, persistido en BD. |
 
 **Flujo normal:**
-1. Cliente envia `POST /api/IngestDocument` con documento en Base64 **o** `objectIdGDC`, e instrucciones opcionales.
+1. Cliente envia `POST /api/IngestDocument` con documento en Base64, `blobPath` **o** `objectIdGDC`, e instrucciones opcionales.
 2. Sistema genera `instanceId` y devuelve `statusQueryUri` para polling.
-3. Orchestrator ejecuta pipeline: Normalizar → Verificar duplicado → Subir blob → Clasificar → Resolver tipologia → Extraer → Prompt → Validar → ObtenerActivo → Integrar → Subir GDC → Persistir.
+3. Orchestrator ejecuta pipeline: Calcular clave de intencion → Normalizar → Verificar duplicado (y seleccion de la ejecucion reutilizable) → Preparar documento para clasificacion → Subir blob → Clasificar (embeddings en sombra en DEV) → Resolver tipologia → [si se excede el limite de paginas, cierra en `PAGINAS_EXCEDIDAS`] → Extraer (+ markdown) → Prompt → Validar → ObtenerActivo → Integrar → Subir GDC → Persistir (21 activities; detalle en 03 §3.1).
 4. Cliente consulta `statusQueryUri` hasta obtener estado `Completed`.
 5. Respuesta final incluye: datos extraidos, confianza global, estado calidad, auditoria.
 
@@ -106,14 +108,14 @@ flowchart TB
 | Entrada por `objectIdGDC` sin checksum/duplicado en BD | Descarga documento desde GDC y continúa pipeline normal. |
 | Documento duplicado (SHA256 ya existe en BD) | Si `forceReprocess=false`: retorna resultado anterior cacheado con `ReutilizadaPorDuplicado=true` y **registra la peticion como ejecucion reutilizada** (fila propia sin contrato ni coste, vinculada a la original) para que sea visible en el Monitor (AB#100258). |
 | ExpectedType informado | Omite clasificacion (confianza=1.0), usa la tipologia indicada directamente. |
-| Confianza clasificacion < umbral | Estado final `BAJA_CONFIANZA_CLASIFICACION`. No extrae ni valida. |
-| Tipologia no resoluble | Estado final `ERROR` con mensaje "No se ha podido identificar la tipologia". Si la peticion pidio prompt o resumen, se ejecutan igualmente antes de cerrar: no dependen de que el documento sea clasificable. |
+| Confianza clasificacion < umbral | Estado final `BAJA_CONFIANZA_CLASIFICACION`. No extrae ni valida. Con tipologia de catalogo el contrato se devuelve pero no se persiste fila en `DocumentoEjecuciones`; con tipologia virtual TDN1 si se persiste. |
+| Tipologia no resoluble | Estado final `NO_CLASIFICADO` (AB#100178; antes `ERROR` con mensaje "No se ha podido identificar la tipologia"). Si la peticion pidio prompt o resumen, se ejecutan igualmente antes de cerrar: no dependen de que el documento sea clasificable. |
 | Documento en formato Office (XLSX, PPTX, DOCX) o imagen | Se procesa con normalidad. El recorte por paginas se omite (solo aplica a PDF) y el documento completo se envia a Document Intelligence Layout por `BlobPath`, que autodetecta el formato y devuelve markdown. En Office se extrae el texto embebido; **no** se hace OCR de imagenes incrustadas, por lo que una presentacion hecha de capturas de pantalla producira poco o ningun texto. |
 | Prompt, resumen o clasificacion GPT solicitados y el documento no tiene texto (Document Intelligence responde sin contenido) | Estado final `SIN_CONTENIDO_DOCUMENTO`. No se invoca al modelo. Antes de esta guarda se le llamaba con el contenido vacio y devolvia respuestas del tipo "No has incluido el documento" que se persistian como resumen valido con confianza 1.0. |
 | El texto del documento no se pudo obtener (timeout o error HTTP de Document Intelligence, formato rechazado, ejecucion sin blob ni base64) | Estado final `PENDIENTE_REINTENTO` si la causa es transitoria (timeout, 429, 5xx) o `ERROR` en el resto, con `MensajeError = "No se pudo obtener el texto del documento: <motivo>"`. El documento puede tener contenido: la accion es reintentar o revisar la infraestructura, no reclamar al remitente (AB#100880). |
-| Cuota de Azure OpenAI agotada durante la clasificacion GPT (limite de peticiones excedido, tras reintentos automaticos) | Estado final `PENDIENTE_REINTENTO`. Desenlace limpio y retriable: el documento no se pierde ni queda en error definitivo, solo pospone la clasificacion para reprocesarse mas tarde. Operacion puede identificarlo y reencolar el documento; se distingue de `NO_CLASIFICADO` (documento genuinamente no clasificable) y de `ERROR` (fallo no recuperable). Ver RN3. |
+| Cuota de Azure OpenAI agotada durante la clasificacion GPT (limite de peticiones excedido, tras reintentos automaticos) | Estado final `PENDIENTE_REINTENTO`. Este desenlace no se persiste (AB#100178): el cliente recibe el contrato y no queda fila en `DocumentoEjecuciones`, asi que no es localizable desde el Monitor ni reencolable desde BD; el cliente reenvia la peticion. Solo el `PENDIENTE_REINTENTO` por texto no obtenido con causa transitoria (AB#100880) si se persiste. Desenlace limpio y retriable: el documento no se pierde ni queda en error definitivo, solo pospone la clasificacion para reprocesarse mas tarde. Operacion puede identificarlo y reencolar el documento; se distingue de `NO_CLASIFICADO` (documento genuinamente no clasificable) y de `ERROR` (fallo no recuperable). Ver RN3. |
 | Cuota de Azure OpenAI agotada durante un prompt de enriquecimiento (no en la clasificacion) | El prompt devuelve un resultado degradado de forma controlada; no bloquea el pipeline ni marca el documento como `PENDIENTE_REINTENTO`. |
-| Extraccion con baja completitud | Activa fallback GPT-4o-mini para campos faltantes. |
+| Extraccion con baja completitud | Activa el fallback GPT (modelo generativo del entorno: `gpt-5.6-luna` en DEV, `gpt-4o-mini` en PRE y PRO) para campos faltantes. |
 | Plugin critico (Priority=1) falla | Detiene cadena de plugins. Datos parciales se preservan. |
 | AssetResolver habilitado y activo encontrado | `ObtenerActivoActivity` resuelve IdActivo desde `DM_POSICION_AAII_TB` antes de la integracion. |
 | AssetResolver sin resultados | Paso se completa sin IdActivo; plugins posteriores pueden resolverlo. |
@@ -263,7 +265,7 @@ Instrucciones de la peticion (request)
 | Umbral | Significado | Default |
 |--------|------------|---------|
 | `clasifUmbralFallback` | Confianza minima de DI para NO activar fallback GPT en clasificacion | 0.6 (server) / 0.85 (tipologia) |
-| `extracUmbralFallback` | Completitud minima de CU para NO activar fallback GPT en extraccion | 0.5 (server) / 0.9 (tipologia) |
+| `extracUmbralFallback` | Completitud minima de CU para NO activar fallback GPT en extraccion | 0.5 (`MinFieldsRatio` del modelo del registro) / sin default en la tipologia (`null`; las tipologias de Nota Simple en BD fijan 0.9) |
 | `umbralOK` | Confianza global minima para estado calidad "OK" | 0.85 |
 | `umbralRevision` | Confianza global minima para estado calidad "REVISION" (entre revision y error) | 0.70 |
 
@@ -320,7 +322,7 @@ Solo las tipologias en estado `Published` son usadas por el pipeline de clasific
 
 ### RN7: Clasificacion Jerarquica GPT (nivelClasificacion)
 
-Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o `"TDN1/TDN2"`):
+Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o `"TDN1_TDN2"`, con guion bajo; cualquier otro valor devuelve 400):
 
 1. **D2 — Force provider GPT**: el sistema fuerza `classification.provider = "gpt"` automaticamente, independientemente
    de lo que se haya indicado en la peticion o configuracion de tipologia.
@@ -346,7 +348,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 - Cada plugin puede devolver `DatosEnriquecidos` que se mergean acumulativamente en `DatosFinales`.
 - Un plugin con `returnsIdActivo=true` puede resolver/sobreescribir el `IdActivo` del documento.
 
-### RN7: Resolucion de Activo (AssetResolver)
+### RN7b: Resolucion de Activo (AssetResolver)
 
 - La actividad `ObtenerActivo` se ejecuta entre Validar e Integrar, solo si esta habilitada.
 - Habilitacion por precedencia: `instrucciones.assetResolver.enabled ?? tipologia.assetResolver.enabled ?? false`.
@@ -364,7 +366,8 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 
 - Las operaciones de escritura del Admin (crear/editar/publicar/retirar/activar/eliminar tipologias, modelos, prompts y configuracion de plugins) requieren una identidad de usuario autenticada.
 - La identidad se resuelve desde la cabecera `X-MS-CLIENT-PRINCIPAL-NAME`, inyectada por App Service Authentication (EasyAuth) cuando esta activa en el Admin desplegado en Azure.
-- Mientras EasyAuth no este activo, el Admin opera en **modo solo lectura**: las consultas siguen funcionando, pero cualquier escritura se rechaza, porque no hay forma de auditar quien realizo el cambio. En desarrollo local (`localhost`) esta restriccion no aplica: el usuario se identifica automaticamente con el usuario del sistema operativo (prefijo `dev-`).
+- Estado el 2026-11-22: EasyAuth activo en el Admin de DEV, PRE y PRO (DEV desde el 2026-08-06; PRE y PRO desde el 2026-09-04), con acceso por grupo `GSEC-DocumentIA-Admin-<ENV>`.
+- Si EasyAuth no estuviera activo, el Admin opera en **modo solo lectura**: las consultas siguen funcionando, pero cualquier escritura se rechaza, porque no hay forma de auditar quien realizo el cambio. En desarrollo local (`localhost`) esta restriccion no aplica: el usuario se identifica automaticamente con el usuario del sistema operativo (prefijo `dev-`).
 - Sin identidad (entornos desplegados sin EasyAuth activo), la auditoria registra el usuario como `no-autenticado`. Los literales antiguos `ADMIN-UI`/`admin` ya no se usan.
 
 ### RN9: Versionado Inmutable de Prompts de Clasificacion
@@ -440,16 +443,16 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 
 | ID | Categoria | Requisito | Criterio | Estado |
 |----|-----------|-----------|----------|--------|
-| RNF01 | Rendimiento | Pipeline completo en < 120s para un documento tipico | Medido por DuracionTotalMs en seguimiento. GDC timeout 120s. | CUMPLIDO (tipico: 15-45s) |
-| RNF02 | Disponibilidad | Function App con SLA >= 99.95% | Azure Consumption Plan SLA. Durable Functions tolerante a reinicios. | CUMPLIDO (Azure SLA) |
+| RNF01 | Rendimiento | Pipeline completo en < 120s para un documento tipico | Medido por `DocumentIA.Duracion.Total`. GDC timeout 120s. | CUMPLIDO (duracion tipica no comprobado en la revisión del 2026-11-22) |
+| RNF02 | Disponibilidad | Function App con SLA >= 99.95% | Plan de App Service de la Function App (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md; no es Consumption). Durable Functions tolerante a reinicios. | SLA del plan no comprobado en la revisión del 2026-11-22 |
 | RNF03 | Escalabilidad | Soportar procesamiento concurrente de multiples documentos | Durable Functions escala automaticamente. Sin estado compartido entre instancias. | CUMPLIDO |
-| RNF04 | Seguridad | Autenticacion en todos los endpoints de gestion | `AuthorizationLevel.Function` (x-functions-key). Managed Identity preparada. | CUMPLIDO |
+| RNF04 | Seguridad | Autenticacion en todos los endpoints de gestion | `AuthorizationLevel.Function` (x-functions-key) en ingesta, markdown y `Admin_*`; `Anonymous` solo en `PostHealthcheck` y `GetTipologiasPublicadas`. Admin con EasyAuth y grupo de seguridad. Identidad administrada en uso para IA y Key Vault. | CUMPLIDO |
 | RNF05 | Seguridad | Credenciales nunca en codigo fuente | API Keys en configuration/Key Vault. SSL bypass solo configurable explicitamente. | CUMPLIDO |
 | RNF06 | Auditabilidad | Cada operacion registrada en tabla Auditoria | PersistirActivity escribe AuditoriaEntity con accion, nivel, mensaje, timestamp. | CUMPLIDO |
 | RNF07 | Extensibilidad | Anadir nueva tipologia sin cambiar codigo | Registro/configuracion en BD via Admin portal o Admin API. JSON fisico solo como seed/plantilla. Sin recompilacion. | CUMPLIDO |
 | RNF08 | Observabilidad | Telemetria en Application Insights | Structured logging + Application Insights SDK. Metricas custom por actividad. | CUMPLIDO |
 | RNF09 | Resiliencia | Tolerancia a fallos en servicios externos | Circuit breaker + retry exponencial en plugins, GDC y llamadas a Azure OpenAI (clasificacion GPT y prompts). Ante cuota agotada, la clasificacion produce el desenlace limpio y retriable `PENDIENTE_REINTENTO` en vez de un error crudo. Fallback IA automatico. | CUMPLIDO |
-| RNF10 | Mantenibilidad | Cobertura de tests unitarios >= 70% en modulos criticos | 33 clases de test. Validacion, plugins, configuracion bien cubiertos. | EN PROGRESO |
+| RNF10 | Mantenibilidad | Cobertura de tests unitarios >= 70% en modulos criticos | 191 ficheros de test (Unit, Admin, AssetResolver, E2E). Validacion, plugins, configuracion bien cubiertos. | Cobertura medida no comprobado en la revisión del 2026-11-22 |
 
 ---
 
@@ -466,8 +469,8 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | **EP5** | Configuracion y tipologias | IN PROGRESS | HU8, HU9, HU10 |
 | **EP6** | Observabilidad y pruebas | IN PROGRESS | HU11 |
 | **EP7** | Proteccion de datos / GDPR | REMOVED (fuera de alcance actual) | HU12 |
-| **EP8** | Mantenimiento Blob | PLANNED | HU13 |
-| **EP9** | GDC integracion completa | IN PROGRESS | — |
+| **EP8** | Mantenimiento Blob | IMPLEMENTADO (`BlobCleanupTimerTrigger`, AB#100868) | HU13 |
+| **EP9** | GDC integracion completa | IN PROGRESS (estado en Azure DevOps no comprobado en la revisión del 2026-11-22) | — |
 | **EP10** | Resolucion de Activo | DONE | HU14 |
 
 ### Detalle de User Stories
@@ -486,7 +489,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | HU10 | Configuracion de plugins | Como administrador de tipologias, quiero asignar y configurar plugins de integracion por tipologia. | Endpoints `/management/plugins-tipologias`. JSON con priority, retry, enabled. | DONE |
 | HU11 | Observabilidad | Como operador, quiero metricas y logs en Application Insights para diagnosticar problemas. | Structured logging, telemetria AI SDK, metricas por actividad en seguimiento. | IN PROGRESS |
 | HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | REMOVED (fuera de alcance actual) |
-| HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Lifecycle rules en Storage + soft delete + archivado por antigüedad. | PLANNED |
+| HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Retencion por temporizador (`BlobCleanupTimerTrigger`, cron `BlobRetentionCleanupCron`, parametrizable). Lifecycle rules de Storage y archivado por antigüedad: no comprobado en la revisión del 2026-11-22. | IMPLEMENTADO |
 | HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR, Referencia Catastral y/o Direccion. | `ObtenerActivoActivity` busca en AssetResolver con tres criterios configurables (habilitar/deshabilitar cada uno). Soporta AND/OR. Si match unico, `IdActivo` se propaga. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). | DONE |
 
 ---
@@ -496,12 +499,12 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | Restriccion | Detalle |
 |------------|---------|
 | **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional (EP7) queda fuera del alcance actual (`Removed` en ADO el 2026-05-26). |
-| **Formatos aceptados** | Solo PDF. Puede recibirse como Base64 sin saltos de línea (RFC 4648) o recuperarse desde GDC vía `documento.objectIdGDC`. |
-| **Tamaño maximo** | Limitado por el tamaño maximo de input de Durable Functions (~60 KB entity size en Storage). Documentos grandes pueden requerir blob-reference pattern (no implementado). |
+| **Formatos aceptados** | PDF (el recorte por paginas solo aplica a PDF), XLSX, PPTX, DOCX e imagenes (sin OCR de imagenes incrustadas). Puede recibirse como Base64 sin saltos de línea (RFC 4648), por `documento.blobPath` o desde GDC vía `documento.objectIdGDC`. |
+| **Tamaño maximo** | El base64 inline queda limitado por Durable Functions y Storage; para documentos grandes usar `documento.blobPath` (blob-first, implementado: el trigger vuelca el base64 a blob y lo pone a `null`). Limite exacto no comprobado en la revisión del 2026-11-22. |
 | **Timeouts** | GDC: 120s (hardcoded en orchestrator). Servicios AI: configurable por proveedor (DI: 120s, GPT: 30-60s, CU: configurable). |
 | **Conectividad GDC** | Requiere acceso de red al host GDC del entorno (prod: `srbwidp04.sareb.srb:8090`; dev: `srbwidd03.sareb.srb:8090`). SSL bypass configurable para certificado CA corporativo no confiado en Linux. |
-| **Region Azure** | Function App y mayoria de servicios en West Europe. Content Understanding en Sweden Central (unica region disponible con la funcionalidad requerida). |
-| **Modelo Consumption** | Function App en plan Consumption: cold start posible (~2-10s). Timeout maximo por ejecucion: 10 min (default) o 230s (HTTP trigger). |
+| **Region Azure** | Function App y mayoria de servicios en West Europe. En PRO, Azure OpenAI y CU primario en Sweden Central con CU secundario en West Europe; DEV y PRE tienen IA propia en West Europe (ver 01 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). |
+| **Plan de hosting** | Function App en plan de App Service (no Consumption; SKU en INFRAESTRUCTURA_REAL_DESPLEGADA.md, no comprobado en la revisión del 2026-11-22). Timeout maximo por ejecucion segun `host.json`; el HTTP trigger responde 202 y el cliente hace polling. |
 | **Idioma** | Documentos en espanol. Prompts GPT y reglas de validacion asumen idioma espanol. |
 
 ---

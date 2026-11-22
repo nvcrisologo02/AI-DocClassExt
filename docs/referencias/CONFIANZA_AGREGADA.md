@@ -1,5 +1,7 @@
 # Confianza Agregada — Análisis Técnico y Funcional
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `ConfidenceCalculator.cs`, `TipologiaValidationConfig.cs`, `DocumentProcessOrchestrator.cs`, `ConfigurableClasificarDataProvider.cs` y `ConfigurableExtraerDataProvider.cs`). Hallazgos: los pesos por defecto del código son 0.5 / 0.25 / 0.15 (suman 0.9), no 0.5 / 0.3 / 0.2 (los seeds del repo sí fijan 0.5/0.3/0.2 de forma explícita); el nivel 3 de umbrales no son app settings sino `FallbackThreshold` (default 0.6) y `MinFieldsRatio` (default 0.5) del modelo del registro `ModeloConfigs`; `Classification:GptFallback:FallbackThreshold` no se lee en el código; la decisión DI→GPT previa a la tipología solo usa el umbral de la petición o 0.6 fijo; `BAJA_CONFIANZA_CLASIFICACION` con tipología de catálogo se devuelve sin persistir y solo se persiste en el camino de tipología virtual TDN1. El ejemplo de la NS 2691 de §4.4 no coincide con el de §9 (no comprobado en la revisión del 2026-11-22). Modelo generativo del fallback: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release.
+>
 > Rama: `develop` | Implementado: 2026-03-26 | Actualizado: 2026-03-30
 
 ---
@@ -54,7 +56,7 @@ DocumentProcessOrchestrator (Durable)
         │
         ├─► ClasificarActivity ──────────────────────────────────────────┐
         │       ├─ Azure Document Intelligence  → ConfianzaDI            │
-        │       └─ GPT 4o-mini (fallback si DI < umbralFallback)        │
+        │       └─ GPT del entorno (fallback si DI no es satisfactorio) │
         │               └─ ConfianzaGPT                                  │
         │                                                                 ▼
         │                                              ConfigurableClasificarDataProvider
@@ -111,8 +113,8 @@ ConfianzaExtrac =
 | Variable | Descripción | Valor default del peso |
 |---|---|---|
 | `AvgConf` | Promedio de `fields[*].confidence` del response CU. Si CU no devuelve confianzas, se usa `camposPresentes / camposTotales` | `w_campos = 0.5` |
-| `RatioRequeridos` | `camposRequeridosPresentes / camposRequeridos` | `w_requeridos = 0.3` |
-| `1 − RatioWarnings` | Penalización por warnings. `RatioWarnings = min(1, warnings / camposTotales)` | `w_warnings = 0.2` |
+| `RatioRequeridos` | `camposRequeridosPresentes / camposRequeridos` | `w_requeridos = 0.25` (código; 0.3 en los seeds) |
+| `1 − RatioWarnings` | Penalización por warnings. `RatioWarnings = min(1, warnings / camposTotales)`. En el fallback GPT se llama con `warnings: 0`, así que este componente aporta siempre el peso completo | `w_warnings = 0.15` (código; 0.2 en los seeds) |
 
 **Métricas de debug** disponibles en `DetalleEjecucion.Extraccion.MetricasDebug` (no persistidas en BBDD):
 - `PromedioConfianza` — componente avgConf calculado
@@ -137,7 +139,7 @@ ConfianzaExtrac = CLAMP(confianzaExtraccionGpt ?? confianzaCalculada, 0, 1)
 - **`confianzaExtraccionGpt`**: valor `confianza_extraccion` del JSON de respuesta. Si el modelo lo devuelve, se usa directamente.
 - **`confianzaCalculada`**: resultado de `ExtracCU(fieldConfs, campos, requeridos, warnings, cfg)`, idéntico al cálculo de CU. Se usa como fallback si el modelo no incluye el campo o la respuesta está mal formada.
 
-El valor fijo `0.6` ha sido eliminado. GPT no devuelve confianzas por campo individuales; éstas siguen siendo solicitadas en `confianza_por_campo` y se propagan a `CamposBajaConfianza`.
+El valor fijo `0.6` ya no se usa en producción (`ConfidenceCalculator.ExtracGPT` sigue existiendo, pero no lo llama ningún código de producción). GPT no devuelve confianzas por campo individuales; éstas siguen siendo solicitadas en `confianza_por_campo` y se propagan a `CamposBajaConfianza`.
 
 ### 4.4 Validación — `ValidarActivity`
 
@@ -157,7 +159,7 @@ Ejemplo: 20 reglas, 1 falla con Error:
 ConfianzaValid = 1 - 1/20 = 0.95  →  EstadoCalidad = "OK"
 ```
 
-Ejemplo real (NS 2691): 28 reglas evaluadas, 2 errores de campo:
+Ejemplo (NS 2691; no coincide con el de §9, que da 3 reglas y 0.333 para el mismo caso: no comprobado en la revisión del 2026-11-22): 28 reglas evaluadas, 2 errores de campo:
 ```
 ConfianzaValid = 1 - 2/28 ≈ 0.93
 ```
@@ -187,26 +189,29 @@ petición HTTP (específico/legado)   →   tipología (específico/legado)   �
 |---|---|---|---|
 | **1 — Petición** | `instrucciones.classification.umbral` | `instrucciones.extraction.umbralCompletitud ?? instrucciones.extraction.umbral` | `instrucciones.extraction.umbralConfianza ?? instrucciones.extraction.umbral` |
 | **2 — Tipología** | `confidenceConfig.clasifUmbralFallback` | `confidenceConfig.extracUmbralFallbackCompletitud ?? confidenceConfig.extracUmbralFallback` | `confidenceConfig.extracUmbralFallbackConfianza ?? confidenceConfig.extracUmbralFallback` |
-| **3 — Modelo/Servidor** | `Classification:GptFallback:FallbackThreshold` | `Extraction:GptFallback:MinFieldsRatio` | `Extraction:GptFallback:MinFieldsRatio` |
+| **3 — Modelo del registro** | `FallbackThreshold` del modelo de clasificación en `ModeloConfigs` (default 0.6) | `MinFieldsRatio` del modelo de extracción fallback en `ModeloConfigs` (default 0.5) | `MinFieldsRatio` del modelo de extracción fallback (default 0.5) |
+
+> Corrección de la revisión del 2026-11-22: el nivel 3 **no** son los app settings `Classification:GptFallback:FallbackThreshold` ni `Extraction:GptFallback:MinFieldsRatio` (no se leen en el código). Además, la decisión DI→GPT previa a resolver la tipología usa solo `instrucciones.classification.umbral ?? 0.6` (`IsSatisfactory`), sin tipología ni modelo; la cadena completa se aplica al check `BAJA_CONFIANZA_CLASIFICACION`.
 
 > Regla de compatibilidad: en cada capa, el umbral legado (`umbral` / `extracUmbralFallback`) solo se usa cuando el específico del criterio está en `null`.
 
 El orquestador resuelve el umbral efectivo antes de invocar cada actividad:
 
 ```csharp
-// Clasificación (tipología no conocida todavía — solo niveles 1 y 4)
-var umbralClasifFallback = entrada.Instrucciones.Classification.Umbral
-    ?? _gptClasifSettings.FallbackThreshold;
+// Clasificación (tipología no conocida todavía): solo la petición; sin ella, 0.6 fijo en IsSatisfactory
+var umbralClasifFallback = entrada.Instrucciones.Classification.Umbral;   // ?? 0.6 dentro del provider
 
 // Clasificación — check BAJA_CONFIANZA (tipología ya resuelta — cadena completa)
+// UmbralFallbackAplicado = petición ?? modelo.FallbackThreshold (ModeloConfigs) ?? 0.6
 var umbralBajaConfianza = entrada.Instrucciones.Classification.Umbral
     ?? tipologiaResuelta.ConfidenceConfig?.ClasifUmbralFallback
-    ?? _gptClasifSettings.FallbackThreshold;
+    ?? resultadoClasificacion.UmbralFallbackAplicado
+    ?? 0.6;
 
 // Extracción — umbral legado (se pasa como UmbralFallbackEfectivo, nivel 3)
 var umbralExtracFallback = entrada.Instrucciones.Extraction.Umbral
     ?? tipologiaResuelta.ConfidenceConfig?.ExtracUmbralFallback
-    ?? _gptExtracSettings.MinFieldsRatio;
+    ?? minFieldsRatioFallback;   // ResolveExtractionFallbackMinFieldsRatio(): modelo del registro, default 0.5
 
 // Extracción — capa petición (específico si existe; si no, legado de la misma capa)
 var umbralExtracCompletitudRequest = entrada.Instrucciones.Extraction.UmbralCompletitud
@@ -232,7 +237,7 @@ umbralConfianza = umbralFallbackConfianzaRequest           // nivel 1
 return ratioCompletitud >= umbralCompletitud && confianzaCu >= umbralConfianza;
 ```
 
-> El nivel de tipología para clasificación se usa en el check `BAJA_CONFIANZA_CLASIFICACION` pero no en el umbral de DI→GPT previo a la resolución de tipología, donde solo se usan los niveles 1 y 4.
+> El nivel de tipología para clasificación se usa en el check `BAJA_CONFIANZA_CLASIFICACION` pero no en el umbral de DI→GPT previo a la resolución de tipología, donde solo cuenta el nivel de petición; sin él, el proveedor aplica 0.6 en `IsSatisfactory`.
 
 ### 5.2 Bloque `confidenceConfig`
 
@@ -254,17 +259,17 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 
 | Parámetro | Descripción | Default |
 |---|---|---|
-| `clasifUmbralFallback` | Umbral de confianza DI para activar fallback GPT en clasificación, y también para el check `BAJA_CONFIANZA_CLASIFICACION` (cuando la petición no especifica umbral). | `0.85` |
+| `clasifUmbralFallback` | Umbral del check `BAJA_CONFIANZA_CLASIFICACION` cuando la petición no especifica umbral (no interviene en la decisión DI→GPT). | `0.85` si el bloque `confidenceConfig` existe; sin bloque, el check cae a `UmbralFallbackAplicado ?? 0.6` |
 | `extracUmbralFallback` | Umbral **legado**: aplica a completitud y confianza si los campos específicos no están informados en la tipología ni en la petición. Mantiene retrocompatibilidad. | `null` |
 | `extracUmbralFallbackCompletitud` | Ratio mín. de campos esperados presentes (nivel tipología). Nivel 2 en la jerarquía de completitud. `null` = usar legado o global. | `null` |
 | `extracUmbralFallbackConfianza` | Confianza CU mínima para no activar fallback (nivel tipología). Nivel 2 en la jerarquía de confianza. `null` = usar legado o global. | `null` |
 | `extracWeightCampos` | Peso del promedio de confianzas de campo CU | `0.5` |
-| `extracWeightRequeridos` | Peso del ratio de campos requeridos presentes | `0.3` |
-| `extracWeightWarnings` | Peso de la penalización por warnings | `0.2` |
+| `extracWeightRequeridos` | Peso del ratio de campos requeridos presentes | `0.25` (código; los seeds fijan `0.3`) |
+| `extracWeightWarnings` | Peso de la penalización por warnings | `0.15` (código; los seeds fijan `0.2`) |
 | `umbralOK` | `ConfianzaGlobal ≥ umbral` → EstadoCalidad = "OK" | `0.85` |
 | `umbralRevision` | `ConfianzaGlobal ≥ umbral` → EstadoCalidad = "REVISION" | `0.70` |
 
-> La suma `extracWeightCampos + extracWeightRequeridos + extracWeightWarnings` debe ser `1.0`. Si no, el resultado queda fuera del rango esperado (aunque se aplica `CLAMP` final).
+> La suma `extracWeightCampos + extracWeightRequeridos + extracWeightWarnings` debe ser `1.0`. Con los defaults del código la suma es 0.9, así que la confianza máxima de CU es 0.9 salvo que la tipología fije los pesos (los seeds del repo lo hacen). Si no suman 1.0, el resultado queda fuera del rango esperado (aunque se aplica `CLAMP` final).
 
 ---
 
@@ -342,7 +347,7 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 | `DocumentIA.Functions/Services/GptFallbackExtraerDataProvider.cs` | Functions | Pide `confianza_extraccion` al modelo en el prompt; `BuildFallbackMetricas` devuelve `(double, ConfidenceMetricasExtraccion)`; `ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada`; `BuildFieldList` incluye hints de validación por campo (enum, regex, fecha, rango, dirección) |
 | `DocumentIA.Functions/Orchestrators/DocumentProcessOrchestrator.cs` | Functions | Resuelve jerarquía de umbrales (petición→tipología→config) en 3 puntos; agrega `Global()`, asigna `EstadoCalidad`, descompone campos en contrato |
 | `DocumentIA.Functions/config/tipologias/*.validation.json` | Config | Bloque `confidenceConfig` con defaults explícitos |
-| `DocumentIA.Tests.Unit/Services/ConfidenceCalculatorTests.cs` | Tests | 24 tests unitarios cubriendo todos los métodos y casos límite |
+| `DocumentIA.Tests.Unit/Services/ConfidenceCalculatorTests.cs` | Tests | 25 métodos de prueba (`[Fact]`/`[Theory]`) cubriendo los métodos y casos límite; resultado de ejecución no comprobado en la revisión del 2026-11-22 |
 
 ### 7.2 Principios de diseño
 

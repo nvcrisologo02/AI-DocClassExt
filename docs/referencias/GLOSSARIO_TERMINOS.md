@@ -1,6 +1,8 @@
 # Glosario de Términos — DocumentIA
 
-> **Última actualización:** 2026-06-10  
+> Última revisión: 2026-11-22 (AB#101447, contraste con el código de `src/backend/`, el esquema de datos, el contrato de la API y los documentos 01, 03 y de infraestructura revisados el mismo día). Modelo generativo por entorno: DEV usa `gpt-5.6-luna` desde el 2026-11-20 (ADR-004); PRE y PRO siguen con el deployment `gpt-4o-mini` (modelo gpt-4.1-mini) hasta la siguiente release; las menciones a GPT-4o-mini de este glosario describen PRE y PRO. Hallazgos: corregidos el número de activities (21 invocadas, 22 declaradas), los nombres de tabla y de clase, la confianza global (mínimo, no promedio), la cadena de clasificación y el momento de la subida a GDC; añadida la sección «Términos añadidos en la revisión» (clave de intención, blob-first, alias de `ModeloConfigs`, EasyAuth, luna, embeddings, estados y telemetría). Llegada de los eventos `DocumentIA.*` a Application Insights (AB#101246), carácter único del índice de SHA256 y uso de Python (ASGI): no comprobado en la revisión del 2026-11-22.
+>
+> **Última actualización anterior:** 2026-06-10  
 > **Proyecto:** AI DocClassExt — SAREB  
 > **Propósito:** Referencia centralizada de conceptos, términos técnicos y acrónimos del sistema DocumentIA.
 
@@ -36,7 +38,7 @@ Métrica numérica (0.0 - 1.0) que cuantifica el grado de certeza de una decisi�
 
 **Tipos:**
 - **Confianza de Clasificación:** Proporcionada por el modelo de clasificación (provider-specific).
-- **Confianza Agregada:** Promedio ponderado de confianzas de múltiples providers según prioridad/weight.
+- **Confianza Agregada (`ConfianzaGlobal`):** `MIN(confianzaClasificacion, confianzaExtraccion, confianzaValidacion)`, no un promedio. Umbrales por jerarquía petición → tipología → modelo del registro (ver CONFIANZA_AGREGADA.md).
 
 **Umbrales:** Configurables por tipología. Si confianza < umbral, el estado resultante es `BAJA_CONFIANZA_CLASIFICACION` y la extracción se omite.
 
@@ -47,8 +49,8 @@ Métrica numérica (0.0 - 1.0) que cuantifica el grado de certeza de una decisi�
 Componente modular que proporciona capacidades especializadas (clasificación, extracción, validación, enriquecimiento).
 
 **Tipos de Provider:**
-- **Clasificación:** Azure Content Understanding, Document Intelligence, modelo custom.
-- **Extracción:** Document Intelligence, Content Understanding, GPT-4o-mini fallback.
+- **Clasificación:** reglas deterministas (`RuleBasedTdnClassifier`), Document Intelligence, rescate Foundry (`FoundryTdnRescueClassifier`), GPT jerárquico (`GptClasificarDataProvider`) y clasificador por embeddings en sombra (solo DEV, ADR-002). El flujo por defecto es `hybrid-rules-gpt-di`.
+- **Extracción:** Content Understanding o Document Intelligence según configuración de la tipología, GPT directo y fallback GPT (modelo generativo del entorno).
 - **Validación:** Reglas JSON, patrones regex, lógica personalizada.
 - **Enriquecimiento (Plugins):** AssetResolver, GDC, servicios REST/SOAP externos.
 
@@ -58,7 +60,7 @@ Componente modular que proporciona capacidades especializadas (clasificación, e
 
 ### Orquestación / Orchestrator
 
-Durable Function (Microsoft.DurableTask) que coordina la ejecución secuencial de **14 actividades** del pipeline de procesamiento, con puntos de decisión, reintentos y manejo de fallos.
+Durable Function (Microsoft.DurableTask) que coordina la ejecución de **21 activities** (22 declaradas; `ApplyPdfPageLimitActivity` existe pero no se invoca) del pipeline de procesamiento, con puntos de decisión, reintentos y manejo de fallos.
 
 **Clase principal:** `DocumentProcessOrchestrator` (Durable Orchestration Function).
 
@@ -74,7 +76,7 @@ Durable Function (Microsoft.DurableTask) que coordina la ejecución secuencial d
 
 Función discreta en Durable Functions que ejecuta una unidad de trabajo (ej: normalizar PDF, verificar duplicado, clasificar, extraer datos, validar, integrar plugins).
 
-**Total en pipeline:** 14 actividades.
+**Total en pipeline:** 21 activities invocadas (22 declaradas); el camino principal tiene 14 pasos numerados y el resto son auxiliares (clave de intención, MD5, markdown, embeddings, GDC, última ejecución).
 
 **Características:** Determinística, idempotente (idealmente), con reintentos configurables.
 
@@ -84,7 +86,7 @@ Función discreta en Durable Functions que ejecuta una unidad de trabajo (ej: no
 
 ### Extracción
 
-Proceso de obtención de datos estructurados desde un documento procesado. Ejecuta `ExtraerActivity` contra proveedores configurables (Document Intelligence → Content Understanding → GPT-4o fallback).
+Proceso de obtención de datos estructurados desde un documento procesado. Ejecuta `ExtraerActivity` contra proveedores configurables: CU o DI según la tipología, con fallback GPT si la completitud o la confianza no alcanzan el umbral (modelo generativo del entorno).
 
 **Retorna:** `DatosExtraidos` (Dictionary<string, object>) con campos tipología-específicos.
 
@@ -98,7 +100,7 @@ Punto de entrada HTTP (Function) que recibe requests de ingestión de documentos
 
 **Endpoint:** `POST /api/IngestDocument`
 
-**Clase:** `OrquestarDocumentoHttpFunction` (HTTP Trigger Function).
+**Clase:** `IngestAPITrigger` (función `IngestDocument`, HTTP Trigger).
 
 **Retorna:** `statusQueryUri` (URL para polling del estado).
 
@@ -112,7 +114,7 @@ Registro completo de decisiones, transformaciones y eventos durante el procesami
 - Proveedores utilizados y resultados intermedios.
 - Errores y fallbacks activados.
 
-**Persistencia:** En tabla `EjecucionesDocumentos` (SQL Server) + logs en Application Insights.
+**Persistencia:** En tabla `DocumentoEjecuciones` (entidad `DocumentoEjecucionEntity`, Azure SQL) + logs en Application Insights.
 
 ---
 
@@ -120,7 +122,7 @@ Registro completo de decisiones, transformaciones y eventos durante el procesami
 
 Entidad de BD que almacena el historial de todas las ejecuciones de un documento, incluyendo estado final, datos extraídos, metadatos de ejecución y timestamps.
 
-**Tabla:** `EjecucionesDocumentos` en BD central.
+**Tabla:** `DocumentoEjecuciones` en BD central («ExecutionLog» es el nombre coloquial de esa fila).
 
 **Propósito:** Auditoría, deduplicación, análisis histórico.
 
@@ -139,9 +141,9 @@ Primera actividad del pipeline (`NormalizarActivity`). Calcula propiedades canó
 
 ### Duplicado
 
-Documento que ya ha sido procesado anteriormente (identificado por SHA256). Si `forceReprocess=false`, se retorna resultado cacheado con flag `ReutilizadaPorDuplicado=true`. El estado `DUPLICADO` solo aparece cuando no hay ninguna ejecución anterior reutilizable; si la hay, se devuelve su estado (normalmente `OK`).
+Documento que ya ha sido procesado anteriormente (identificado por SHA256 y MD5). Desde v1.1.0 solo se reutiliza una ejecución anterior si coincide la clave de intención (ADR-003, AB#100930); entonces se retorna su resultado con `ReutilizadaPorDuplicado=true`. Sin ejecución reutilizable, en modo estricto (defecto) el documento se procesa y `DUPLICADO` no se emite; `Dedup__ModoEstricto=false` restaura el comportamiento anterior. El estado `DUPLICADO` solo aparece cuando no hay ninguna ejecución anterior reutilizable; si la hay, se devuelve su estado (normalmente `OK`).
 
-**Verificación:** Realizada por `VerificarDuplicadoActivity` consultando BD por SHA256 (índice único).
+**Verificación:** Realizada por `VerificarDuplicadoActivity` y `VerificarDuplicadoPorMD5Activity` consultando BD por SHA256 y MD5 (índices `IX_Documentos_SHA256` e `IX_Documentos_MD5`).
 
 ---
 
@@ -209,7 +211,7 @@ Plugin especializado que enriquece datos extraídos con información de activos 
 
 ### GDC / Gestor Documental Corporativo
 
-Sistema externo de SAREB (`SINTWS`) que almacena y gestiona documentos clasificados. DocumentIA envía documentos procesados a GDC vía SOAP después de persistir resultados.
+Sistema externo de SAREB (`SINTWS`) que almacena y gestiona documentos clasificados. DocumentIA envía documentos procesados a GDC vía SOAP antes de persistir resultados (`SubirGDCActivity` precede a `PersistirActivity`; con timeout de 120 s se marca `Timeout` y se continúa a persistencia).
 
 **Actividad:** `SubirGDCActivity`.
 
@@ -233,7 +235,7 @@ Componente que ejecuta plugins de enriquecimiento en orden de prioridad. Cada pl
 
 ### Confianza Baja
 
-Estado resultante cuando clasificación retorna confianza < umbral tipología. Marca documento como `BAJA_CONFIANZA_CLASIFICACION`, omite extracción y validación, persiste estado parcial para auditoría.
+Estado resultante cuando clasificación retorna confianza < umbral tipología. Marca documento como `BAJA_CONFIANZA_CLASIFICACION`, omite extracción y validación. Con tipología de catálogo no se persiste (el contrato se devuelve sin fila en `DocumentoEjecuciones`); solo se persiste en el camino de tipología virtual TDN1.
 
 ---
 
@@ -259,7 +261,7 @@ Mecanismo de recuperación cuando un proveedor falla o retorna resultados insati
 
 ### ConfiguracionJson
 
-Campo JSON en tablas de BD (Tipologias, ModeloConfigs, TipologiasPlugins) que almacena configuración serializada de tipologías, modelos y plugins.
+Campo JSON en tablas de BD (`Tipologias`, `ModeloConfigs`, `PluginTipologiaConfigs`) que almacena configuración serializada de tipologías, modelos y plugins.
 
 **Propósito:** Flexibilidad sin cambios de schema; fuente operativa de configuración.
 
@@ -313,7 +315,7 @@ Estado global de la ejecución Durable Functions: `Pending`, `Running`, `Complet
 | **SQL** | Structured Query Language | BD SQL Server |
 | **EF** | Entity Framework Core | ORM .NET |
 | **ORM** | Object-Relational Mapping | Abstracción BD |
-| **ER** | Entity Resolution | Búsqueda/matching datos externos |
+| **ER** | Entidad-Relación | Modelo de datos (DATA_MODELS_ER_DIAGRAM.md) |
 | **PDF** | Portable Document Format | Formato entrada documentos |
 | **SHA256** | Secure Hash Algorithm 256-bit | Hash criptográfico deduplicación |
 | **MD5** | Message Digest 5 | Hash (complementario deduplicación GDC) |
@@ -423,7 +425,7 @@ Documento normalizado
 | Documento | Propósito | Enlace |
 |-----------|----------|--------|
 | **Diseño Técnico Detallado** | Arquitectura pipeline, diagrama flujo, actividades. | [03_DISENO_TECNICO_DETALLADO.md](../03_DISENO_TECNICO_DETALLADO.md) |
-| **Análisis Funcional** | Casos de uso, actores, CU1-CU6. | [02_ANALISIS_FUNCIONAL.md](../02_ANALISIS_FUNCIONAL.md) |
+| **Análisis Funcional** | Casos de uso, actores, CU1-CU10. | [02_ANALISIS_FUNCIONAL.md](../02_ANALISIS_FUNCIONAL.md) |
 | **Manual Validaciones** | Especificación motor validación, 11 tipos. | [docs/manuales/MANUAL_VALIDACIONES.md](../manuales/MANUAL_VALIDACIONES.md) |
 | **Manual Plugins** | Arquitectura plugins, integración REST/SOAP. | [docs/manuales/MANUAL_PLUGINS.md](../manuales/MANUAL_PLUGINS.md) |
 | **Especificación AssetResolver** | Detalles búsqueda activos, criterios AND/OR. | [docs/especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](../especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md) |
@@ -447,10 +449,10 @@ Documento normalizado
 | Componente | Ruta | Rol |
 |-----------|------|-----|
 | **Orchestrator** | `src/backend/DocumentIA.Functions/Orchestrators/DocumentProcessOrchestrator.cs` | Orquestación principal |
-| **Activities** | `src/backend/DocumentIA.Functions/Activities/` | 14 activity functions |
-| **Tipología Config** | `src/backend/DocumentIA.Core/Models/TipologiaConfig.cs` | Modelo configuración |
+| **Activities** | `src/backend/DocumentIA.Functions/Activities/` | 22 activity functions declaradas (21 invocadas) |
+| **Tipología Config** | `src/backend/DocumentIA.Core/Configuration/TipologiaValidationConfig.cs` y `ResolvedTipologia` en `ITipologiaVersionResolver.cs` | Modelo configuración |
 | **Validation Engine** | `src/backend/DocumentIA.Core/Validation/ValidationEngine.cs` | Motor validaciones |
-| **Plugin Manager** | `src/backend/DocumentIA.Core/Plugins/PluginManager.cs` | Integración plugins |
+| **Plugin Manager** | `src/backend/DocumentIA.Plugins/Integration/PluginManager.cs` | Integración plugins |
 | **Asset Resolver Plugin** | `src/plugins/DocumentIA.AssetResolver/` | Plugin búsqueda activos |
 | **Admin Portal** | `src/frontend/DocumentIA.Admin/` | Gestión tipologias/modelos |
 
@@ -465,5 +467,21 @@ Documento normalizado
 
 ---
 
-**Glosario generado:** 2026-06-10  
-**Versión:** 1.0
+## Términos añadidos en la revisión del 2026-11-22
+
+- **Clave de intención:** huella de la petición (modo, nivel, universo de tipologías, `expectedType`, modelo de clasificación efectivo) calculada por `CalcularClaveIntencionActivity`; decide si una ejecución anterior es reutilizable (ADR-003, AB#100930). El motivo de no reutilizar viaja en `detalleEjecucion.motivoNoReutilizacion`.
+- **Blob-first (`documento.blobPath`):** el documento se sube a Blob antes de la ingesta; el trigger pone `Content.Base64 = null` tras volcar el contenido. El base64 inline es la vía legada.
+- **Alias de `ModeloConfigs`:** las filas `IsDefault`/`UseAsFallback` y el app setting `PromptDefaults__ModelKey` resuelven el modelo generativo por entorno (DEV `prompt.gpt56-luna`; PRE y PRO `default.gpt4o-mini`), con endpoint e identidad administrada por alias. Los app settings `Classification__GptFallback__*` no se leen.
+- **gpt-5.6-luna:** modelo generativo de DEV desde el 2026-11-20 (ADR-004); PRE y PRO siguen en `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release.
+- **Clasificador por embeddings:** `ClasificarEmbeddingsActivity`, modos `off`/`sombra`/`hibrido` en la fila `clasificador.embeddings` de `ModeloConfigs`; en sombra solo en DEV (ADR-002).
+- **EasyAuth:** App Service Authentication con Entra en el Admin de los tres entornos, acceso por grupo `GSEC-DocumentIA-Admin-<ENV>`; sin identidad el Admin queda en modo solo lectura (RN8).
+- **Estados de resultado:** los 10 literales de CONTRATO_API_HTTP §5 (`OK`, `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO`, `PENDIENTE_REINTENTO`, `VALIDACION_CON_ERRORES`, `BAJA_CONFIANZA_CLASIFICACION`, `DUPLICADO`, `PAGINAS_EXCEDIDAS`, `EXTRACCION_INCOMPLETA`, `ERROR`). `BAJA_CONFIANZA_CLASIFICACION` de catálogo y `PENDIENTE_REINTENTO` por 429 no se persisten.
+- **`classificationOnly`, `restriccionTipologias`, `nivelClasificacion`:** instrucciones del contrato de entrada; `nivelClasificacion` admite `TDN1` o `TDN1_TDN2`; catálogos `CatalogoTdn1` y `CatalogoTdn2`.
+- **Entidades:** `Documentos`, `DocumentoEjecuciones`, `ResultadosProcesamiento`, `PluginEjecuciones`, `ValidacionResultados`, `TipologiaConfigAudit`, `Auditoria`, `PromptTemplates`, `PluginTipologiaConfigs`, `ModeloConfigs`, `Tipologias`. Coste de IA por ejecución (`CosteIAEur`, `TokensIA`, catálogo `tarifas.ia`) y «coste evitado» por reutilización.
+- **Telemetría:** eventos `DocumentProcessed`, `CU.*` (Attempts, AnalysisMs, PrepareMs, ParseMs, LimiterWaitMs, HardTimeout, TransientError, RetryFailover, CircuitOpen/Closed/Rejected/Failover), `AOAI.*` (RateLimitRetry, CircuitOpen, CircuitClosed, CircuitRejected), `Prompt.Trace`, `BlobCleanupCycle`, `Classification.HybridTDN`, `Classification.Embeddings`; métricas `DocumentIA.Duracion.*` y `Classification.Embeddings.LatenciaMs`. Su llegada a Application Insights: no comprobado en la revisión del 2026-11-22 (AB#101246).
+- **Healthcheck y limpieza de blobs:** `POST /api/healthcheck` (anónimo) y `BlobCleanupTimerTrigger` (cron `BlobRetentionCleanupCron`).
+
+---
+
+**Glosario generado:** 2026-06-10; revisado 2026-11-22  
+**Versión:** 1.1

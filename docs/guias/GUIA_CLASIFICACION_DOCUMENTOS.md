@@ -1,6 +1,11 @@
 ﻿# Guía de Clasificación de Documentos — DocumentIA
 
-> **Versión:** 1.0 | **Fecha:** Mayo 2026 | **Proyecto:** AI DocClassExt — SAREB  
+> Última revisión: 2026-11-22 (AB#101447, contraste con `DocumentProcessOrchestrator`, `ConfigurableClasificarDataProvider`, `ClassificationRoutingSettings`, `appsettings.json`, CONTRATO_API_HTTP.md, ADR-002, ADR-003 y ADR-004).
+> **Hallazgos de la revisión:** el flujo por defecto es `rules → gpt → di` (`Classification:DefaultFlow=hybrid-rules-gpt-di`) con fallback global `gpt`, no «DI → fallback GPT» como describe §4.1; cada provider se acepta si su tipología no es Desconocido/RESTO, está dentro del conjunto restringido y su confianza llega al umbral `instrucciones.classification.umbral ?? 0.6`; el umbral de `BAJA_CONFIANZA_CLASIFICACION` es `umbral ?? confidenceConfig.clasifUmbralFallback` (0.85 por defecto); `DUPLICADO` solo existe con `Dedup:ModoEstricto=false`; los estados finales son 10 (§5 del contrato); los valores de `fallbackRazon` de §4.3 y §11.2 no existen en el código (los reales: `global_fallback_final`, `global_fallback_baja_confianza`, `global_fallback_sin_clasificacion`, `global_fallback_failed:<Tipo>`, `fallback_global_disabled`, `fallback_unclassified`, `tdn1_virtual_propuesta`, `fuera_de_conjunto_restringido`); la fuente de las tipologías en ejecución es BD (`Tipologias.ConfiguracionJson`) y los `.validation.json` son solo semilla; los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*` y `Classification__DefaultModelKey` no se leen (modelo, endpoint y umbrales salen de `ModeloConfigs` y de `confidenceConfig`); los prompts de clasificación viven en `PromptTemplates` (ver PROMPT_CLASIFICACION_COMPLETO.md); existe un clasificador por embeddings (`ClasificarEmbeddingsActivity`, sombra solo en DEV, ADR-002); el `output` de la orquestación sale en PascalCase (`Resultado.Estado`) y el `customStatus` en camelCase; la salida se exporta como `FallbackLLM`, no `UseFallbackLLM`.
+> Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). `default.gpt4o-mini` es la clave histórica de la fila de `ModeloConfigs`, no el deployment.
+> Inventario de tipologías en BD, versión por defecto de cada familia, clasificador DI vigente (v0/v1), valores efectivos de `DefaultFlow` y `NivelClasificacionDefault` en PRE y PRO, URL de PRO, lista de formatos y soporte de `.xlsm`: no comprobado en la revisión del 2026-11-22.
+>
+> **Versión original:** 1.0 (mayo de 2026) | **Proyecto:** AI DocClassExt — SAREB  
 > **Audiencia:** Usuarios técnicos, usuarios de negocio, integradores de sistemas
 
 ---
@@ -131,7 +136,7 @@ Son dos campos independientes en el resultado:
 
 | Campo | Descripción | Valores posibles |
 |---|---|---|
-| `Estado` | Resultado del proceso (éxito o tipo de fallo) | `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO`, `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO`, `EXTRACCION_INCOMPLETA` (fallback de extracción sin datos), `PENDIENTE_REINTENTO` (transitorio, no persistido), `BAJA_CONFIANZA_CLASIFICACION` |
+| `Estado` | Resultado del proceso (éxito o tipo de fallo; los 10 estados en CONTRATO_API_HTTP §5) | `PAGINAS_EXCEDIDAS`, `OK`, `VALIDACION_CON_ERRORES`, `ERROR`, `DUPLICADO` (solo con `Dedup:ModoEstricto=false`), `NO_CLASIFICADO`, `SIN_CONTENIDO_DOCUMENTO`, `EXTRACCION_INCOMPLETA` (fallback de extracción sin datos), `PENDIENTE_REINTENTO` (transitorio, no persistido), `BAJA_CONFIANZA_CLASIFICACION` |
 | `EstadoCalidad` | Fiabilidad de los datos obtenidos | `OK`, `REVISION`, `ERROR` |
 
 Un documento puede terminar en `Estado=OK` pero `EstadoCalidad=REVISION` (proceso completado, pero con confianza media que requiere revisión humana).
@@ -176,7 +181,7 @@ flowchart TD
     I --> J["ValidarActivity\n• Motor de reglas\n• Validar campos extraídos"]
     J --> K["IntegrarActivity\n• Ejecutar plugins (REST/SOAP/DLL)\n• Enriquecer datos"]
     K --> L["SubirGDCActivity\n• Archivar en GDC SINTWS\n• Obtener objectId"]
-    L --> M["PromptActivity\n• Generar resumen ejecutivo\n• GPT-4o-mini"]
+    L --> M["PromptActivity\n• Generar resumen ejecutivo\n• GPT (deployment por entorno)"]
     M --> N["PersistirActivity\n• Guardar resultado en SQL Server\n• Registrar auditoría"]
     N --> O["✅ COMPLETADO\nResultado disponible via polling"]
 
@@ -231,7 +236,7 @@ flowchart TD
 
 #### Activar el modo solo clasificación
 
-Se activa mediante el parámetro `instrucciones.classification.classificationOnly` (o el script dedicado) con la instrucción de no ejecutar extracción:
+Se activa con `instrucciones.classificationOnly: true` (opcionales `maxPagesForClassificationOnly` y `executeIntegrarWhenClassificationOnly`); además, `nivelClasificacion = "TDN1"` fuerza `classificationOnly`. El ejemplo siguiente es anterior a esa forma: `classification.classificationOnly` y `extraction.provider = mock` no activan el modo (ver CONTRATO_API_HTTP §3):
 
 ```json
 {
@@ -257,12 +262,12 @@ Se activa mediante el parámetro `instrucciones.classification.classificationOnl
 
 | Característica | Flujo Completo | Solo Clasificación |
 |---|---|---|
-| Actividades ejecutadas | Todas (11 actividades) | 3–4 actividades |
+| Actividades ejecutadas | Todas (21 activities invocadas) | Subconjunto (clasificación y persistencia) |
 | Extracción de datos | ✅ Sí | ❌ No |
 | Validación de campos | ✅ Sí | ❌ No |
 | Plugins de enriquecimiento | ✅ Sí | ❌ No |
 | Subida a GDC | ✅ Sí (si configurado) | ❌ No |
-| Persistencia en BD | ✅ Completa | Mínima (solo clasificación) |
+| Persistencia en BD | ✅ Completa | Solo clasificación (detalle no comprobado en la revisión del 2026-11-22) |
 | Tiempo estimado | 15–60 s | 4–18 s |
 | Coste estimado (tokens IA) | Alto | Bajo |
 | Ideal para | Procesamiento definitivo | Pre-clasificación, enrutamiento, validación masiva |
@@ -310,9 +315,11 @@ GROUP BY JSON_VALUE(ContratoSalidaCompletoJson, '$.DetalleEjecucion.MarkdownFuen
 
 ## 4. Modos de Clasificación
 
-### 4.1 Clasificación Automática (Azure DI)
+### 4.1 Clasificación Automática (flujo por defecto `rules → gpt → di`)
 
-El modo por defecto. El sistema envía el documento a **Azure AI Document Intelligence** (modelo custom `DocumentAICC_v0`) que devuelve una tipología y una puntuación de confianza.
+> Corrección de la revisión del 2026-11-22: con `provider=auto` el sistema usa `Classification:DefaultFlow`, que es `hybrid-rules-gpt-di` (providers `rules`, `gpt`, `di` en ese orden). Cada provider se acepta si `IsSatisfactory`: tipología distinta de Desconocido/RESTO, dentro del conjunto restringido y confianza ≥ `instrucciones.classification.umbral ?? 0.6`. Si ninguno lo es y `UseGlobalFallback=true`, se ejecuta el `GlobalFallbackProvider` (`gpt`) con `fallbackRazon=global_fallback_final`. Los flujos `hybrid-tdn` (reglas → DI → rescate Foundry, umbrales 0.75), `di` y `gpt` siguen definidos. El diagrama y el párrafo siguientes describen el flujo `di` histórico (DI `DocumentAICC_v0` con umbral 0.85) y se conservan como referencia de ese flujo.
+
+Flujo `di` (histórico como defecto). El sistema envía el documento a **Azure AI Document Intelligence** (modelo custom `DocumentAICC_v0`) que devuelve una tipología y una puntuación de confianza.
 
 ```mermaid
 flowchart LR
@@ -327,7 +334,7 @@ flowchart LR
     F -->|"Desconocido / baja confianza"| H["⚠️ NO_CLASIFICADO"]
 ```
 
-**Configuración del modelo de clasificación:**
+**Configuración del modelo de clasificación** (`config/classification/models.json` es solo semilla y referencia: modelo y endpoint salen de `ModeloConfigs` por alias e identidad administrada; `FallbackThreshold` del JSON es 0.6, no 0.85):
 
 ```json
 // config/classification/models.json
@@ -369,10 +376,10 @@ flowchart LR
 
 | Umbral | Comportamiento |
 |---|---|
-| `0.85` (default) | Fallback GPT si DI < 0.85 |
-| `0.50` | Acepta clasificaciones DI con confianza ≥ 0.50, fallback solo si < 0.50 |
-| `1.0` | Siempre fallback GPT (DI nunca supera 1.0) |
-| `0.0` | Nunca fallback (acepta cualquier confianza DI, excepto RESTO) |
+| sin informar | Aceptación en la cadena de providers con 0.6; `BAJA_CONFIANZA_CLASIFICACION` con `confidenceConfig.clasifUmbralFallback` (0.85 por defecto de la tipología) |
+| `0.85` | Sube el listón de aceptación de cada provider a 0.85 y usa 0.85 también para `BAJA_CONFIANZA_CLASIFICACION` |
+| `0.50` | Acepta clasificaciones con confianza ≥ 0.50 |
+| `1.0` / `0.0` | Las filas «siempre fallback» / «nunca fallback» de versiones anteriores no describen el flujo actual: RESTO/Desconocido nunca es satisfactorio y pasa al siguiente provider o al fallback global |
 
 ---
 
@@ -431,7 +438,7 @@ flowchart LR
 
 ### 4.3 Fallback GPT
 
-Cuando Azure DI no puede clasificar con suficiente confianza, el sistema activa automáticamente el **fallback GPT** (modelo `gpt-4o-mini`).
+Cuando ningún provider de la cadena da un resultado satisfactorio, el sistema activa automáticamente el **fallback GPT global** (deployment del entorno: `gpt-4o-mini` en PRE y PRO, `gpt-5.6-luna` en DEV).
 
 #### Tipologías incluidas en el prompt GPT
 
@@ -451,16 +458,19 @@ Las tipologías con el mismo `tipologiaId` (distintas versiones de la misma fami
 
 | Condición | `FallbackRazon` en el resultado | ¿Fallback obligatorio? |
 |---|---|---|
-| DI devuelve `RESTO` | `resto_classification:{confianza}` | **Sí siempre** |
-| DI con `confianza < umbral` | `low_confidence:{confianza}` | Sí si < umbral |
-| Error/timeout de la API de DI | `exception:{mensaje}` | Sí si hay resultado DI parcial |
+| Ningún provider satisfactorio | `global_fallback_final` | **Sí** (si `UseGlobalFallback=true` y el flujo no incluía ya `gpt`) |
+| Fallback global con confianza baja / sin clasificación | `global_fallback_baja_confianza` / `global_fallback_sin_clasificacion` | — |
+| Fallback global fallido | `global_fallback_failed:<Tipo>` / `fallback_global_disabled` / `fallback_unclassified` | — |
+| Restricción de tipologías | `fuera_de_conjunto_restringido`; TDN1 virtual: `tdn1_virtual_propuesta` | — |
+
+> Los literales `resto_classification:`, `low_confidence:` y `exception:` de versiones anteriores no existen en el código de clasificación (revisión 2026-11-22).
 
 #### Qué ocurre si el fallback también falla
 
 | Situación del fallback GPT | Resultado final |
 |---|---|
-| GPT devuelve tipología con confianza ≥ 0.3 | ✅ Clasificado (con `FallbackLLM=true`) |
-| GPT devuelve "Desconocido" o confianza < 0.3 (RESTO) | ⚠️ `NO_CLASIFICADO` (fin controlado) |
+| GPT devuelve tipología satisfactoria (≥ umbral, no Desconocido/RESTO) | ✅ Clasificado (con `FallbackLLM=true`) |
+| GPT devuelve "Desconocido" o no alcanza el umbral | Código TDN1 de 4 letras → clasificación parcial; si no, ⚠️ `NO_CLASIFICADO` (`global_fallback_sin_clasificacion`). El umbral 0.3 de versiones anteriores no está en el código |
 | GPT devuelve "Desconocido" pero DI tenía resultado < umbral | El proceso mantiene el resultado DI (no termina en error) |
 | GPT lanza excepción técnica | ❌ `ERROR` |
 
@@ -540,7 +550,7 @@ Si ningún proveedor de la cadena devuelve un código dentro del conjunto, el re
 
 ### 5.1 Inventario completo
 
-> **Estado BD:** 15 tipologías Published+Activa (mayo 2026). 14 tienen `gptDescripcion` configurada y participan en el fallback GPT.
+> **Estado BD:** 15 tipologías Published+Activa (mayo 2026; inventario desactualizado: a 2026-11-22 hay 233 tipologías activas en DEV y 213 en PRO, ver TIPOLOGIAS_REFERENCIA.md). Cuántas tienen `gptDescripcion`: no comprobado en la revisión del 2026-11-22.
 
 #### Tipologías de extracción y prompt (motor clásico)
 
@@ -767,9 +777,9 @@ Valores por defecto del sistema
     "forceReprocess": false,                 // Forzar reproceso aunque sea duplicado
     "skipGDCUpload": null,                   // null=respetar config tipología, true/false=forzar
     "classification": {
-      "provider": "auto",                    // auto|azure-document-intelligence|mock
+      "provider": "auto",                    // auto|azure-document-intelligence|gpt|mock (con nivelClasificacion se fuerza gpt)
       "model": "auto",                       // auto (usar modelo default configurado)
-      "umbral": 0.85                         // Umbral fallback (0.0–1.0)
+      "umbral": 0.85                         // Umbral de aceptación (0.0–1.0); sin informar, 0.6. 0.85 sube el listón
     },
     "extraction": {
       "provider": "auto",                    // auto|azure-content-understanding|azure-openai|mock
@@ -1048,7 +1058,10 @@ x-functions-key: <function-key>    (producción)
 | `OK` | Procesamiento completado correctamente |
 | `VALIDACION_CON_ERRORES` | Completado pero con errores de validación de campos |
 | `ERROR` | Error técnico en alguna actividad del pipeline |
-| `DUPLICADO` | Documento ya procesado; se reutiliza el resultado anterior |
+| `DUPLICADO` | Solo con `Dedup:ModoEstricto=false`. En modo estricto (defecto) un duplicado con ejecución reutilizable devuelve el estado de aquella con `reutilizadaPorDuplicado=true`, y sin ella se procesa (ADR-003) |
+| `BAJA_CONFIANZA_CLASIFICACION` | Confianza por debajo del umbral de la tipología; se devuelve sin persistir (salvo tipología virtual TDN1) |
+| `PAGINAS_EXCEDIDAS` | El documento supera el límite de páginas; se persiste con `EstadoCalidad = REVISION` y sin extraer |
+| `PENDIENTE_REINTENTO` | Cuota de Azure OpenAI agotada (no se persiste; el cliente reenvía) o Layout transitorio (se persiste) |
 | `NO_CLASIFICADO` | No se pudo identificar el tipo de documento. Si la petición pidió prompt o resumen, se ejecutan igualmente y viajan en `datosExtraidos` |
 | `SIN_CONTENIDO_DOCUMENTO` | Se pidió prompt o resumen y no se obtuvo texto del documento por ninguna vía; el modelo no se invoca y no se persiste resumen |
 
@@ -1571,6 +1584,8 @@ flowchart TD
 
 ### 10.3 Comportamiento especial: documento RESTO
 
+> Revisión 2026-11-22: RESTO/Desconocido nunca es satisfactorio y pasa al siguiente provider de la cadena o al fallback global; el umbral 0.3 del ejemplo no está en el código. El ejemplo se conserva como ilustración del flujo `di`.
+
 Cuando Azure DI clasifica un documento como `RESTO`, indica que no lo reconoce en ninguna de las clases entrenadas. El fallback GPT es **obligatorio** e independiente del umbral configurado.
 
 ```
@@ -1609,13 +1624,15 @@ SHA256 del documento coincide con ejecución anterior
 | `Estado = ERROR` + error en plugin `refCatExcel` | El plugin de prioridad 1 falló | Verificar disponibilidad del servicio en `localhost:8082`; desactivar plugin si no está disponible |
 | `EstadoCalidad = REVISION` | Confianza global entre 0.70 y 0.85 | Revisar manualmente los datos extraídos |
 | `EstadoCalidad = ERROR` | Confianza global < 0.70 | Revisión humana obligatoria; considerar extracción manual |
-| `400 Bad Request` | Body inválido o campos fuera de rango | Verificar que `base64` y `objectIdGDC` no coexisten; revisar longitudes de prompts (≤ 5000 chars) |
+| `400 Bad Request` | Body inválido o campos fuera de rango | Verificar que `base64` y `objectIdGDC` no coexisten; revisar longitudes de prompts (≤ 50000 caracteres en `systemPrompt` y `userPromptTemplate`; `maxTokens` 100-16384) |
 | `confianzaClasificacion = 0` | NO_CLASIFICADO | Ver causística #22 |
 | `FallbackLLM = true` con `confianza < 0.85` | GPT clasificó pero con baja confianza | `EstadoCalidad` será REVISION; revisar tipología detectada |
 | Proceso en `Running` > 120 s | Timeout en Azure DI o GPT | El proceso fallará en timeout; verificar conectividad y cuotas de los servicios AI |
 | `runtimeStatus = "Failed"` (sin output) | Error no controlado en el orquestador | Revisar logs de Application Insights con el `instanceId` |
 
 ### 11.2 Interpretar el campo `detalleEjecucion.clasificacion`
+
+> Revisión 2026-11-22: los ejemplos siguientes son ilustrativos. En el `output` real los nombres van en PascalCase (`DetalleEjecucion.Clasificacion`), el campo de fallback es `FallbackLLM`, `clasificador` toma valores como `RuleBasedTDN`, `DocumentIntelligence`, `FoundryRescue` o `embeddings`, y `fallbackRazon` los literales listados en §4.3. Hay además `ConfianzaDI`, `ConfianzaGPT`, `UmbralFallbackAplicado`, `PagesProcessed`, `RamaClasificacion` y `Embeddings`.
 
 ```json
 // Clasificación exitosa sin fallback
@@ -1771,13 +1788,13 @@ flowchart TB
         TRIGGER["POST /api/IngestDocument\n(HTTP Trigger)"]
         HEALTH["POST /api/healthcheck\n(HTTP Trigger)"]
         ORCH["Durable Orchestrator\nDocumentProcessOrchestrator"]
-        ACTS["Activities\n(11 actividades en pipeline)"]
+        ACTS["Activities\n(21 activities invocadas)"]
     end
 
     subgraph AIServices["Servicios de IA (Azure)"]
         DI["Azure AI\nDocument Intelligence\nDocumentAICC_v0"]
         CU["Azure Content\nUnderstanding"]
-        GPT["Azure OpenAI\nGPT-4o-mini"]
+        GPT["Azure OpenAI\nGPT (deployment por entorno)"]
     end
 
     subgraph Storage["Almacenamiento"]
@@ -1822,4 +1839,4 @@ flowchart TB
 
 ---
 
-*Documento generado: Mayo 2026 | DocumentIA v1.0 | AI DocClassExt — SAREB*
+*Documento generado: mayo de 2026; revisado el 2026-11-22 (AB#101447) | AI DocClassExt — SAREB*

@@ -63,16 +63,16 @@ Análisis funcional, reglas de negocio, tipologías, confianza y validaciones.
 
 | Documento | Contenido | Estado |
 |---|---|---|
-| [02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md) | Problema de negocio, actores, casos de uso, historias y requisitos | vigente |
-| [guias/GUIA_CLASIFICACION_DOCUMENTOS.md](guias/GUIA_CLASIFICACION_DOCUMENTOS.md) | Cómo clasifica el sistema: flujos `hybrid-tdn`, niveles TDN1/TDN2, reglas, DI y GPT, modos de petición | vigente |
-| [guias/GUIA_CLASIFICACION_RESTRINGIDA.md](guias/GUIA_CLASIFICACION_RESTRINGIDA.md) | Clasificación restringida a un subconjunto de tipologías (`expectedType`, catálogo filtrado) | vigente |
-| [referencias/GLOSSARIO_TERMINOS.md](referencias/GLOSSARIO_TERMINOS.md) | Términos, acrónimos y conceptos del proyecto | vigente |
-| [referencias/TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Catálogo de referencia de tipologías. Contrastar siempre con la BD del entorno | vigente |
-| [referencias/CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Cálculo de la confianza agregada y umbrales. Fuente de verdad frente al diagrama | vigente |
-| [referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md](referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md) | Casuísticas de Nota Simple para el modelo 1.4; los analyzers de CU han seguido evolucionando | vigente |
-| [manuales/MANUAL_VALIDACIONES.md](manuales/MANUAL_VALIDACIONES.md) | Motor de validaciones: tipos de regla, configuración y resultados | vigente |
-| [especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md](especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md) | Límite de páginas por documento y su tratamiento. Implementada | vigente |
-| [diagrams/UMBRAL_PRIORIZACION.md](diagrams/UMBRAL_PRIORIZACION.md) | Diagrama de priorización por umbral | vigente |
+| [02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md) | Problema de negocio, actores, casos de uso, historias y requisitos. Revisado 2026-11-22 | vigente |
+| [guias/GUIA_CLASIFICACION_DOCUMENTOS.md](guias/GUIA_CLASIFICACION_DOCUMENTOS.md) | Cómo clasifica el sistema: flujo por defecto `rules → gpt → di` con fallback global, `hybrid-tdn`, niveles TDN1/TDN2, modos de petición. Revisado 2026-11-22; el §4.1 conserva el flujo `di` histórico con aviso | vigente |
+| [guias/GUIA_CLASIFICACION_RESTRINGIDA.md](guias/GUIA_CLASIFICACION_RESTRINGIDA.md) | Clasificación restringida a un subconjunto de tipologías (`restriccionTipologias`, catálogo filtrado). Revisado 2026-11-22 | vigente |
+| [referencias/GLOSSARIO_TERMINOS.md](referencias/GLOSSARIO_TERMINOS.md) | Términos, acrónimos y conceptos del proyecto. Revisado 2026-11-22 | vigente |
+| [referencias/TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Subconjunto del catálogo de tipologías (el catálogo real está en BD: 233 en DEV y 213 en PRO a 2026-11-22). Revisado 2026-11-22 | vigente |
+| [referencias/CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Cálculo de la confianza agregada y umbrales. Fuente de verdad frente al diagrama. Revisado 2026-11-22 | vigente |
+| [referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md](referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md) | Casuísticas de Nota Simple para el modelo 1.4 (analyzer `CU_NS_1.4_3`; la vigente es 1.5 con `CU_NS_1.5_0`). Revisado 2026-11-22 | vigente |
+| [manuales/MANUAL_VALIDACIONES.md](manuales/MANUAL_VALIDACIONES.md) | Motor de validaciones: tipos de regla, configuración, persistencia y resultados. Revisado 2026-11-22 | vigente |
+| [especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md](especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md) | Límite de páginas por documento y su tratamiento. Implementada (fbf33519). Revisado 2026-11-22 | vigente |
+| [diagrams/UMBRAL_PRIORIZACION.md](diagrams/UMBRAL_PRIORIZACION.md) | Diagrama de priorización por umbral. Revisado 2026-11-22 | vigente |
 | [diagrams/CONFIANZA_UMBRAL.md](diagrams/CONFIANZA_UMBRAL.md) | Diagrama del umbral de confianza | sustituido por CONFIANZA_AGREGADA |
 | [presentaciones/APOYO_VISUAL_PRESENTACION.md](presentaciones/APOYO_VISUAL_PRESENTACION.md), [presentaciones/GUION_PRESENTACION_30MIN.md](presentaciones/GUION_PRESENTACION_30MIN.md) | Presentación del sistema (abril y mayo de 2026) | histórico |
 
