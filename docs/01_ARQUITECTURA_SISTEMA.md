@@ -69,7 +69,6 @@ flowchart TB
         ORCH["Durable Orchestrator<br/>DocumentProcessOrchestrator"]
         ACT_CLAVE["CalcularClaveIntencionActivity"]
         ACT_NORM["NormalizarActivity"]
-        ACT_PDF["ApplyPdfPageLimitActivity"]
         ACT_LAY["ObtenerMarkdownActivity"]
         ACT_PERS_MD["PersistirMarkdownActivity"]
         ACT_DUP["VerificarDuplicadoActivity"]
@@ -118,7 +117,7 @@ flowchart TB
     TRIGGER --> ORCH
 
     ORCH --> ACT_CLAVE --> ACT_LAST
-    ORCH --> ACT_NORM --> ACT_PDF --> ACT_DUP --> ACT_BLOB
+    ORCH --> ACT_NORM --> ACT_DUP --> ACT_BLOB
     ACT_BLOB --> ACT_PREP --> ACT_EMB --> ACT_CLAS --> ACT_RES --> ACT_LAY --> ACT_EXT
     ACT_EXT --> ACT_PROMPT --> ACT_VAL --> ACT_ASSET --> ACT_INT
     ACT_INT --> ACT_GDC --> ACT_PERS_MD --> ACT_PERS
@@ -186,7 +185,7 @@ flowchart LR
 
 | Proyecto | Responsabilidad |
 |----------|----------------|
-| **DocumentIA.Functions** | Triggers HTTP (`IngestDocument`, `healthcheck`, consulta de markdown por documento y por ejecución, tipologías publicadas y la Admin API `management/*`), timer de limpieza de blobs, Orchestrator Durable, **22 activities**, providers de IA (reglas, DI, embeddings, CU, GPT), servicios GDC y AssetResolver, autenticación |
+| **DocumentIA.Functions** | Triggers HTTP (`IngestDocument`, `healthcheck`, consulta de markdown por documento y por ejecución, tipologías publicadas y la Admin API `management/*`), timer de limpieza de blobs, Orchestrator Durable, **21 activities invocadas** (hay 22 declaradas: `ApplyPdfPageLimitActivity` existe pero el orquestador no la llama; el recorte de páginas para clasificar lo hace `PrepararDocumentoClasificacionActivity`), providers de IA (reglas, DI, embeddings, CU, GPT), servicios GDC y AssetResolver, autenticación |
 | **DocumentIA.Core** | Modelos de dominio (ContratoEntrada/Salida), motor de validacion (11 reglas), configuracion de tipologias, interfaces de servicio |
 | **DocumentIA.Data** | DbContext EF Core, 13 entidades, repositorios, 38 migraciones (la última `20261013092225_ClaveIntencionDedup`), seed data |
 | **DocumentIA.Plugins** | Infraestructura de plugins: IIntegrationPlugin, PluginFactory, PluginManager, ResilientPlugin, RestPlugin, SoapPlugin, CustomPlugin |
@@ -201,7 +200,7 @@ flowchart LR
 
 ### 1.4.1 Durable Functions — Orquestacion tipo Saga
 
-El pipeline de procesamiento se implementa como un **Durable Function Orchestrator** (`DocumentProcessOrchestrator`) que coordina **22 activities** (no todas se ejecutan en cada peticion: hay early exits por duplicado, fallos GDC, skip de pasos opcionales como Prompt/AssetResolver). Las ventajas:
+El pipeline de procesamiento se implementa como un **Durable Function Orchestrator** (`DocumentProcessOrchestrator`) que coordina **21 activities** (22 declaradas, una sin invocar; no todas se ejecutan en cada peticion: hay early exits por duplicado, fallos GDC, skip de pasos opcionales como Prompt/AssetResolver). Las ventajas:
 
 - **Durabilidad**: el estado de la orquestacion persiste automaticamente en Azure Storage. Si el host se reinicia, el orquestador resume donde quedo.
 - **Replay-safe logging**: usa `context.CreateReplaySafeLogger` para evitar logs duplicados durante replays.
@@ -308,7 +307,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 
 | Modo | Mecanismo | Uso actual |
 |------|-----------|-----------|
-| `ApiKey` | Header `Ocp-Apim-Subscription-Key` (DI) / `api-key` (OpenAI/CU) | Opciones directas de app settings (`Extraction__AzureContentUnderstanding__*`, `Classification__AzureDocumentIntelligence__*`, `GptFallback__*`), con la clave desde Key Vault, en los tres entornos |
+| `ApiKey` | Header `Ocp-Apim-Subscription-Key` (DI) / `api-key` (OpenAI/CU) | Filas de `ModeloConfigs` con `AuthMode = ApiKey` (ninguna activa en los tres entornos desde octubre de 2026). Los app settings `Extraction__AzureContentUnderstanding__*` (conexión), `Classification__AzureDocumentIntelligence__*` y `GptFallback__*` que el pipeline fija con la clave desde Key Vault **no se leen en el código** (comprobado el 2026-11-22): son heredados |
 | `DefaultAzureCredential` | Bearer token via Managed Identity | Filas de `ModeloConfigs` en DEV, PRE y PRO. PRO paso a identidad en la release v1.0.0 (2026-10-08) y sus `ApiKey` se purgaron; ver `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md` |
 
 `DocumentIntelligenceAuthHelper` implementa la logica con lazy singleton de `DefaultAzureCredential` thread-safe.

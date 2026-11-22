@@ -1,9 +1,11 @@
 # Decisiones de Arquitectura: Prompts Configurables
 
-**Fecha:** 2026-06-11  
+**Fecha:** 2026-06-11 (revisado el 2026-11-22, AB#101447)  
 **Epic:** AB#99800 - Prompts de clasificación configurables sin recompilar  
 **Fase:** 0 - Preparación y decisiones arquitectónicas  
-**Estado:** Propuesta en revisión
+**Estado:** Implementado. La propuesta de este documento está en producción desde junio de 2026: tabla `PromptTemplates` (migración `20260611075104_AddPromptTemplateEntity`), seeds `SeedInitialPrompts` (4 claves jerárquicas), `AddSummaryPrompts` (`summary.system`, `summary.user`, 2026-06-15) y `SeedRestrictedClassificationPrompts` (`classification.restricted.system`, `classification.restricted.user`, 2026-08-12, AB#100063); `ClassificationPromptProvider` resuelve BD → caché → `appsettings` y `GptClasificarDataProvider` lo consume; Admin API `management/prompts*` y página `/admin/prompts`. Lo que sigue se conserva como registro de la decisión; las diferencias con lo construido se anotan en cada apartado con «Implementado:».
+
+> **Modelo generativo por entorno (2026-11-22):** los prompts no dependen del modelo, pero sí los parámetros de la llamada: DEV usa `gpt-5.6-luna` (`reasoning_effort` none, sin `temperature`, caché de prompt explícita que parte el mensaje de usuario en `{DOCUMENT_TEXT}`), y PRE y PRO el deployment `gpt-4o-mini` (modelo gpt-4.1-mini, con `temperature` y `max_tokens`) hasta la siguiente release (ADR-004). El modelo lo fija `PromptDefaults__ModelKey` por entorno y la herencia de `PromptModelKeyResolver` (petición → tipología → entorno).
 
 ---
 
@@ -11,12 +13,14 @@
 
 Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se definen las siguientes claves:
 
-| Clave | Descripción | Ubicación actual (hardcoded) |
+| Clave | Descripción | Ubicación en junio de 2026 (hardcoded; hoy en `PromptTemplates`) |
 |---|---|---|
 | `classification.phase1.system` | System message para clasificación TDN1 | GptClasificarDataProvider, línea ~89-96 |
 | `classification.phase1.user` | User prompt template para clasificación TDN1 | GptClasificarDataProvider, línea ~99-119 |
 | `classification.phase2.system` | System message para clasificación TDN2 | GptClasificarDataProvider, línea ~192-198 |
 | `classification.phase2.user` | User prompt template para clasificación TDN2 | GptClasificarDataProvider, línea ~200-218 |
+
+Implementado: además de las cuatro claves jerárquicas existen `summary.system` y `summary.user` (resumen) y `classification.restricted.system` y `classification.restricted.user` (clasificación restringida de fase única, con fallback a constantes de código, no a `appsettings`). Las cuatro jerárquicas se resuelven «todo o nada»; el par restringido se resuelve aparte. El `PromptKey` se normaliza a minúsculas.
 
 ### Convenciones de naming:
 - Formato: `{dominio}.{fase}.{role}`
@@ -33,7 +37,7 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 | Límite | Valor propuesto | Justificación |
 |---|---|---|
 | **Longitud máxima de prompt** | 16,000 caracteres | Equivalente aprox. a 4,000 tokens (asumiendo 4 chars/token) |
-| **Longitud máxima total (system + user)** | 32,000 caracteres | Límite conservador para contexto GPT-4 (128k tokens disponibles) |
+| **Longitud máxima total (system + user)** | 32,000 caracteres | Límite conservador frente al contexto de los modelos usados (gpt-4.1-mini en PRE y PRO, gpt-5.6-luna en DEV) |
 | **Número de placeholders por prompt** | Ilimitado | Validación por nombre de placeholder, no por cantidad |
 
 ### Validaciones en tiempo de guardado (implementadas en `PromptsAdminFunction`):
@@ -47,6 +51,8 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 
 ### Placeholders existentes en código actual:
 
+> Implementado: los placeholders reales son `{CONTEXT_PROMPT}`, `{TDN1_CATALOG}`, `{TDN2_CATALOG}`, `{TDN1_CODE}` y `{DOCUMENT_TEXT}` (jerárquicos), `{CATALOGO}` (restringida) y `{contenido}` / `{campo:X}` (resumen y prompt), en mayúsculas con guion bajo, no camelCase; la lista válida está en `AllowedPlaceholders` de `PromptsAdminFunction`. La instrucción de resumen se añade desde código fuera de los placeholders y el nombre de fichero ya no es placeholder. La tabla siguiente es la propuesta original.
+
 | Placeholder | Descripción | Usado en | Obligatorio |
 |---|---|---|---|
 | `{contextoPrompt}` | Instrucciones adicionales desde `Instrucciones.Prompt` | Phase1 User | No |
@@ -58,7 +64,7 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 | `{documentName}` | Nombre del archivo del documento | Phase1 User (fallback) | No |
 
 ### Sintaxis de placeholders:
-- Formato: `{nombreCamelCase}`
+- Formato propuesto: `{nombreCamelCase}`; implementado `{NOMBRE_EN_MAYUSCULAS}` (ver nota anterior)
 - Case-sensitive
 - Sin espacios ni caracteres especiales
 - Sustitución: reemplazar por cadena vacía si no está disponible (excepto obligatorios)
@@ -93,7 +99,7 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 **Implementación:**
 - Campo `Version` tipo `int` NOT NULL
 - Autoincremento por `PromptKey` (no global)
-- Restricción única: (`PromptKey`, `Version`, `Environment`)
+- Restricción única: (`PromptKey`, `Version`, `Environment`) (propuesta; implementado sin `Environment`, ver 4.2)
 
 ---
 
@@ -128,9 +134,9 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 - Suficientemente largo para evitar martilleo de BBDD (60 reads/hora en carga constante)
 
 **Configuración:**
-- TTL configurable via `appsettings.json` (`ClassificationPrompts:CacheTtlSeconds`)
+- TTL propuesto configurable (`ClassificationPrompts:CacheTtlSeconds`); implementado como constante de 120 segundos en `ClassificationPromptProvider`, sin clave de configuración
 - Default: 120 segundos
-- Mínimo aceptable: 30 segundos
+- Mínimo aceptable: 30 segundos (no aplica: no es configurable)
 - Máximo recomendado: 300 segundos (5 min)
 
 **Invalidación proactiva:**
@@ -161,6 +167,8 @@ Basado en el análisis del código actual en `GptClasificarDataProvider.cs`, se 
 ---
 
 ## 5. Modelo de datos propuesto (refinado)
+
+> Implementado: la tabla se llama `PromptTemplates` (plural), `Content` es `nvarchar(max)` sin `CHECK` de longitud (el límite de 16.000 lo aplica la entidad y la validación de la Admin API) y los índices son `UQ_PromptTemplate_Key_Version` e `IX_PromptTemplate_Key_Active` (filtrado por `IsActive = 1`). Detalle en DATA_MODELS_ER_DIAGRAM.md §3.13.
 
 ```sql
 CREATE TABLE [dbo].[PromptTemplate] (
@@ -218,7 +226,7 @@ WHERE [IsActive] = 1;
 - [x] Límites de contenido especificados con justificación
 - [x] Placeholders documentados con obligatoriedad por prompt
 - [x] Decisión de versionado tomada (numérico secuencial)
-- [x] Decisión de scopes tomada (campo Environment opcional)
+- [x] Decisión de scopes tomada (sin campo `Environment`; la nota original decía «opcional»)
 - [x] Decisión de TTL tomada (120 segundos)
 - [x] Decisión de política de edición tomada (inmutabilidad + versiones)
 - [x] Modelo de datos refinado con restricciones
@@ -226,14 +234,14 @@ WHERE [IsActive] = 1;
 
 ---
 
-## 8. Próximos pasos (Fase 1)
+## 8. Próximos pasos (Fase 1) — hechos
 
-1. Crear entidad EF `PromptTemplate` según modelo refinado
-2. Generar migración EF con restricciones y índices
-3. Implementar `IClassificationPromptProvider` con lógica de resolución (DB → cache → fallback)
-4. Añadir sección `ClassificationPrompts` a `appsettings.json` con prompts actuales como fallback
-5. Refactorizar `GptClasificarDataProvider` para consumir `IClassificationPromptProvider`
+1. Entidad EF `PromptTemplateEntity` (`PromptTemplates`) — hecho (`20260611075104`).
+2. Migración con restricciones e índices — hecho.
+3. `IClassificationPromptProvider` / `ClassificationPromptProvider` con resolución BD → caché → `appsettings` — hecho; repositorio `IPromptTemplateRepository`.
+4. Sección `ClassificationPrompts:Phase1/Phase2` en `appsettings.json` como fallback — hecho (sin `Fallback.` intermedio).
+5. `GptClasificarDataProvider` consume el provider — hecho.
 
 ---
 
-**Documento de trabajo:** Este documento sirve como base para implementación de Fase 1. Cualquier cambio debe actualizarse aquí antes de implementación.
+**Registro de decisión:** este documento se conserva como base de la implementación de junio de 2026. El estado vivo de los prompts (texto, versiones activas por entorno) está en la tabla `PromptTemplates` de cada entorno y se consulta desde el Admin (`/admin/prompts`); el seed del repositorio puede diferir del texto activo en PRO.

@@ -1,12 +1,18 @@
 # Manual de Configuración — DocumentIA Functions
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `Program.cs`, las clases de opciones y `azure-pipelines.yml`). Este manual manda en **app settings por entorno**; la Parte B de [05_MANUAL_USO_CONFIGURACION.md](../05_MANUAL_USO_CONFIGURACION.md) manda en contrato, `ConfiguracionJson`, modelos y alias de IA.
+>
+> **Hallazgo de la revisión.** Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y los de conexión de `Extraction__AzureContentUnderstanding__*` (`Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation`) **no se enlazan a ninguna clase ni se leen en el código** (comprobado el 2026-11-22 en `Program.cs`): los parámetros de conexión, modelo y umbrales de IA salen de las filas de `ModeloConfigs` resueltas por alias e identidad administrada. El pipeline sigue fijándolos y el contrato `scripts/config/azure-appsettings-contract.json` los exige, así que son settings heredados sin efecto en runtime; su retirada es una decisión pendiente. De `Extraction__AzureContentUnderstanding__*` solo se leen los siete de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`). Las secciones 4.2, 4.3, 5.2 (conexión) y 5.3 se conservan marcadas como heredadas.
+>
+> **Modelo generativo por entorno:** lo deciden las filas `UseAsFallback` de `ModeloConfigs` y el app setting `PromptDefaults__ModelKey` (DEV `prompt.gpt56-luna` desde el 2026-11-20, ADR-004; PRE y PRO `default.gpt4o-mini`, deployment `gpt-4o-mini` = modelo gpt-4.1-mini, hasta la siguiente release).
+
 ## 1. Visión general
 
-El sistema se configura a través de dos ficheros:
+El sistema se configura por app settings (Azure) o `local.settings.json` (local):
 
 | Fichero | Ámbito |
 |---|---|
-| `appsettings.json` | Valores por defecto (template, sin secretos). |
+| `appsettings.json` | Solo lo lee `DocumentIADbContextFactory` en tiempo de diseño y las pruebas; **el host de Functions no lo carga** (`Program.cs` usa `HostBuilder` sin `appsettings`). Los valores por defecto efectivos son los de las clases de opciones. |
 | `local.settings.json` | Entorno local. **No se sube al repositorio.** |
 | Variables de entorno de Azure | Producción/staging en Azure Functions App Settings. |
 
@@ -42,12 +48,14 @@ Sección raíz: `Classification`
 
 | Clave | Clase | Valores | Descripción |
 |---|---|---|---|
-| `Classification:DefaultProvider` | `ClassificationRoutingSettings` | `azure-document-intelligence` \| `mock` | Proveedor activo de clasificación. |
-| `Classification:DefaultModelKey` | `ClassificationRoutingSettings` | `default.azure-di` | Clave de modelo DI. Reservado para multi-modelo. |
+| `Classification:DefaultFlow` | `ClassificationRoutingSettings` | `hybrid-rules-gpt-di` (defecto de clase: `hybrid-tdn`) | Flujo que se ejecuta con `provider = auto`: secuencia de proveedores de `Classification:Flows`. En Azure el pipeline no fija `DefaultFlow` ni `Flows`, así que rige el defecto de la clase. |
+| `Classification:DefaultProvider` | `ClassificationRoutingSettings` | `hybrid-tdn` \| `gpt` \| `azure-document-intelligence` \| `rules` \| `mock` | Proveedor usado solo si no hay `DefaultFlow`. El pipeline fija `azure-document-intelligence`, sin efecto práctico mientras exista `DefaultFlow`. |
+| `Classification:UseGlobalFallback` / `GlobalFallbackProvider` | `ClassificationRoutingSettings` | `true` / `gpt` | Fallback final cuando el flujo no da resultado. |
+| `Classification:DefaultModelKey` | — | `default.azure-di` | **Sin consumidor en el código** (heredado). |
 
-### 4.2 Azure Document Intelligence
+### 4.2 Azure Document Intelligence (heredado, sin efecto en runtime)
 
-Sección: `Classification:AzureDocumentIntelligence`
+Sección: `Classification:AzureDocumentIntelligence`. **No se enlaza a ninguna clase**: endpoint, clave, `AuthMode` y versión de API salen de la fila de `ModeloConfigs` (`ClassificationModelConfig`, alias `di`). Se conserva como registro de los settings que el pipeline sigue fijando.
 
 | Clave | Tipo | Descripción | Default |
 |---|---|---|---|
@@ -57,9 +65,9 @@ Sección: `Classification:AzureDocumentIntelligence`
 | `PollIntervalMs` | int | Intervalo de polling para operaciones asíncronas (ms). | `1000` |
 | `TimeoutSeconds` | int | Timeout total de la operación DI. | `120` |
 
-### 4.3 GPT Fallback de Clasificación
+### 4.3 GPT Fallback de Clasificación (heredado, sin efecto en runtime)
 
-Sección: `Classification:GptFallback`
+Sección: `Classification:GptFallback`. **No se enlaza a ninguna clase** (`GptClasificarSettings` existe pero no se registra). El modelo de respaldo es la fila con `UseAsFallback = true` de tipo Clasificación en `ModeloConfigs` (`classification.gpt56-luna` en DEV, `classification.gpt4o-mini-fallback` en PRE y PRO) y el umbral es `FallbackThreshold` de esa fila (0,6 por defecto); `Enabled` no apaga nada.
 
 | Clave | Tipo | Descripción | Default |
 |---|---|---|---|
@@ -90,18 +98,22 @@ Sección raíz: `Extraction`
 
 ### 5.2 Azure Content Understanding
 
-Sección: `Extraction:AzureContentUnderstanding`
+Sección: `Extraction:AzureContentUnderstanding` (`AzureContentUnderstandingOptions`). Solo se enlazan los parámetros de resiliencia; endpoint, clave, `AuthMode` y `processingLocation` van por fila de `ModeloConfigs` (`ExtractionModelConfig`).
 
-| Clave | Tipo | Descripción | Default |
+| Clave | Tipo | Descripción | Default de clase · valor del pipeline |
 |---|---|---|---|
-| `Endpoint` | string | URL del recurso Azure AI. Ej: `https://xxx.services.ai.azure.com/` | — |
-| `ApiKey` | string | API Key del recurso. | — |
-| `AuthMode` | string | `ApiKey` \| `DefaultAzureCredential` | `ApiKey` |
-| `DefaultProcessingLocation` | string | `global` \| `geography` | `global` |
+| `MaxConcurrentCalls` | int | Llamadas concurrentes a CU | 2 · 4 |
+| `HardTimeoutSeconds` | int | Timeout duro por intento (`CU.HardTimeout`) | 300 · 90 |
+| `EnableCircuitBreaker` | bool | Circuit breaker por `modelKey` con failover al secundario | `true` · `true` |
+| `CircuitBreakerFailureThreshold` | int | Fallos para abrir | 5 · 5 |
+| `CircuitBreakerOpenSeconds` | int | Tiempo abierto | 45 · 45 |
+| `MaxRetries` | int | Reintentos en transitorios (429/500/502/503/504) | 2 · 3 |
+| `InitialRetryDelayMs` | int | Retardo inicial del backoff | 500 · 500 |
+| `Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation` | — | **Heredados, sin efecto**: el pipeline los fija con los valores del entorno, pero el proveedor usa `model.Endpoint` / `model.ApiKey` / `model.AuthMode` de la fila y `processingLocation` vacío cae a `global` | — |
 
-### 5.3 GPT Fallback de Extracción / Extracción GPT directa
+### 5.3 GPT Fallback de Extracción / Extracción GPT directa (heredado, sin efecto en runtime)
 
-Sección: `Extraction:GptFallback`
+Sección: `Extraction:GptFallback`. **No se enlaza a ninguna clase** (`GptFallbackExtraerSettings` existe pero no se registra). Endpoint, deployment, clave y `MinFieldsRatio` salen de la fila `UseAsFallback` de tipo Extracción en `ModeloConfigs` (`extraction.gpt56-luna` en DEV; en PRE y PRO la de gpt-4o-mini) y el proveedor directo resuelve `ModelKey` contra `ModeloConfigs`.
 
 > Esta sección configura **tanto el fallback GPT** (CU→GPT cuando la completitud/confianza no supera el umbral) **como el proveedor GPT directo** (`azure-openai`). Ambos modos comparten el registro de modelos en BD (`ModeloConfigs`) y los mismos parámetros de conexión. Los JSON de modelos son solo seed o referencia.
 
@@ -131,6 +143,9 @@ El sistema dispone de **dos modos distintos** de extracción basada en GPT:
 Extracción GPT: modelo 'default.gpt4o-mini_ex' requiere ApiKey configurada cuando AuthMode=ApiKey.
 Verifica la configuración en appsettings/KeyVault (ej: Extraction:GptFallback:ApiKey).
 ```
+(En DEV la fila equivalente es `default.gpt56-luna_ex`; la referencia a `Extraction:GptFallback:ApiKey` del mensaje es heredada: la clave vive en la fila de `ModeloConfigs` o se sustituye por `AuthMode = DefaultAzureCredential`.)
+```
+```
 
 **Markdown en modo directo:** El proveedor directo intenta obtener el markdown del documento desde `DatosNormalizados` (si viene de un paso previo). Si no está disponible, GPT extrae con el mínimo contexto disponible (nombre del archivo). Para obtener mejores resultados con tipologías de extracción directa, asegurarse de que el pipeline no omite la clasificación o que el markdown ya viene en los datos de entrada.
 
@@ -152,7 +167,7 @@ La jerarquía de resolución para **cada criterio** (de mayor a menor prioridad)
 | 1 · petición | `instrucciones.extraction` (API/HTTP) | `umbralCompletitud` | `umbralConfianza` |
 | 2 · tipología | `confidenceConfig` (JSON validación / BD) | `extracUmbralFallbackCompletitud` | `extracUmbralFallbackConfianza` |
 | 3 · legado | `instrucciones.extraction` o `confidenceConfig` | `umbral` / `extracUmbralFallback` | ídem |
-| 4 · global | `Extraction:GptFallback` (`appsettings.json`) | `MinFieldsRatio` | `MinFieldsRatio` |
+| 4 · modelo | fila `UseAsFallback` de tipo Extracción en `ModeloConfigs` (`ExtractionModelConfig.MinFieldsRatio`) | `MinFieldsRatio` | `MinFieldsRatio` |
 
 > El campo legado `umbral` / `extracUmbralFallback` actúa como valor único para ambos criterios cuando los específicos no están informados.
 
@@ -214,7 +229,7 @@ Sección raíz: `GDC`
 | `HttpBasicUsername` | string | Usuario HTTP Basic para autenticación en el proxy/gateway GDC. |
 | `HttpBasicPassword` | string | Contraseña HTTP Basic. |
 
-> **Nota:** En entorno de desarrollo con certificado autofirmado en el GDC, el handler HTTP omite la validación SSL (`DangerousAcceptAnyServerCertificateValidator`). En producción esto no aplica.
+> **Nota:** `GDC:BypassSslValidation` (app setting `GDC__BypassSslValidation`) hace que el handler HTTP acepte cualquier certificado del GDC (`DangerousAcceptAnyServerCertificateValidator`). El pipeline lo fija a `true` en los tres entornos, DEV, PRE y PRO, porque la CA corporativa no está en el host Linux; en `Development` se acepta siempre. Las credenciales HTTP Basic (`GDC:HttpBasicUsername` / `GDC:HttpBasicPassword`) vienen del Key Vault del entorno.
 
 ---
 
@@ -273,7 +288,7 @@ La gestión se realiza por API management (`/api/management/...`) y por la app `
 1. Instalar [Azurite](https://learn.microsoft.com/azure/storage/common/storage-use-azurite) para emular Azure Storage.
 2. Levantar SQL Server local (Docker recomendado: `docker run -e ACCEPT_EULA=Y -e SA_PASSWORD=COMPLETAR_SQL_PASSWORD -p 1433:1433 mcr.microsoft.com/mssql/server`).
 3. Copiar `local.settings.json` a partir de la plantilla del equipo y rellenar los valores de `Endpoint` y `ApiKey` de los servicios Azure.
-4. Verificar que `RunDatabaseMigrationsOnStartup = "true"` para que EF aplique migraciones al arrancar.
+4. `RunDatabaseMigrationsOnStartup` vacío, ausente o `true` aplica las migraciones al arrancar en local; en Azure el pipeline lo fija a `false` y las migraciones van por el pipeline Migrations-BD.
 5. Compilar y lanzar: tarea VS Code **"func: host start"** (usa `dotnet build` + `func host start`).
 
 ---
@@ -283,15 +298,24 @@ La gestión se realiza por API management (`/api/management/...`) y por la app `
 En Azure Functions App Settings, las secciones anidadas se escriben con `:` o `__`:
 
 ```
-Classification:AzureDocumentIntelligence:Endpoint  = https://...
-Classification:AzureDocumentIntelligence:ApiKey    = <key>
-Classification:GptFallback:Enabled                 = true
-Extraction:DefaultProvider                         = azure-content-understanding
-GDC:Endpoint                                       = https://...
-SqlConnectionString                                = Server=...
-AzureWebJobsStorage                                = DefaultEndpointsProtocol=https;...
-EnvironmentName                                    = Production
+FUNCTIONS_WORKER_RUNTIME                 = dotnet-isolated
+SecretsSource / KeyVaultName             = AzureVault / srbkv<env>docai
+EnvironmentName                          = Development | Preproduction | Production
+AI__Resources__openai_primary__Endpoint  = https://... (y cu_primary, cu_secondary, di)
+PromptDefaults__ModelKey                 = prompt.gpt56-luna (dev) | default.gpt4o-mini (pre, pro)
+Extraction__DefaultProvider              = azure-content-understanding
+Extraction__AzureContentUnderstanding__MaxConcurrentCalls = 4 (y el resto de resiliencia)
+AzureOpenAIResilience__*                 = reintentos y circuit breaker de Azure OpenAI
+Dedup__ModoEstricto                      = true
+DocumentIntelligence__UseInlineContent   = true (dev, pre) | false (pro)
+BlobRetention__BatchSize                 = 2000 (dev, pre) | 5000 (pro)
+PromptTracing__Enabled / IncludePromptText / MaxPromptTextChars = true / true / 20000
+DOTNET_GCHeapHardLimitPercent            = 28
+GDC__Endpoint / GDC__BypassSslValidation = https://... / true
+SqlConnectionString, AzureWebJobsStorage, AzureStorageConnectionString = @Microsoft.KeyVault(...)
 ```
+
+Los 83 settings que fija `azure-pipelines.yml` (los de arriba más los heredados sin efecto) están en INFRAESTRUCTURA_REAL_DESPLEGADA.md. No se fijan y rigen los defectos de clase: `CacheConfiguration:*` (caché de configuración), `Pipeline:MaxPaginasDocumento` (0 = sin límite), `HybridTdn:*`, `ClassificationPreparation:*`, `Extraction:InitialMarkdown:*`.
 
 > **Recomendación:** usar Azure Key Vault references para secretos (`ApiKey`, `Password`, `SqlConnectionString`).
 

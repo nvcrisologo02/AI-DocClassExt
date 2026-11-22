@@ -34,25 +34,23 @@ Sistema modular de procesamiento de documentos con clasificacion y extraccion au
 ## Setup Local
 
 1. Clonar el repositorio
-2. Configurar variables de entorno (copiar .env.example a .env)
+2. Configurar el host local: copiar `src/backend/DocumentIA.Functions/local.settings.template.json` a `local.settings.json` en la misma carpeta y rellenar los alias de IA y la cadena SQL (el host no lee `.env`; ver [QUICKSTART_DESARROLLADORES.md](docs/guias/QUICKSTART_DESARROLLADORES.md))
 3. Ejecutar scripts de setup: `.\scripts\setup\1 setup-folders.ps1`, `.\scripts\setup\3 setup-docs.ps1`, etc.
 4. Restaurar dependencias .NET: `dotnet restore src/backend/DocumentIA.sln`
-5. Instalar dependencias Python: `pip install -r src/ai-models/requirements.txt`
+5. Instalar dependencias Python solo para los scripts de análisis: `pip install -r src/ai-models/requirements.txt`
 
 ## Desarrollo
 
 ### Backend
-`ash
-cd src/backend
-dotnet build
-func start --csharp
+```bash
+dotnet build src/backend/DocumentIA.sln
+cd src/backend/DocumentIA.Functions
+func start
 ```
 
-### AI Models Training
-```bash
-cd src/ai-models
-python training/train_classifier.py
-```
+### Modelos de IA
+
+El entrenamiento del clasificador por embeddings y la evaluación viven en el repositorio DocumentIA.Batch; `src/ai-models/` solo contiene las dependencias Python de los scripts de análisis (no existe `training/`).
 
 ## Deploy
 

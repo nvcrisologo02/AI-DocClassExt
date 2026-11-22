@@ -3,9 +3,11 @@
 Para probar cambios del backend y de los frontends batch de punta a punta sin desplegar,
 escribiendo en la base de datos de DEV.
 
-> **Aviso.** `local.settings.json` viene apuntando a **PRODUCCIÓN**
-> (`srbsqlprodocai`, `srbkvprodocai`, GDC `srv_DocumentIA_pro`). Haz copia antes de tocarlo
-> y compruébalo siempre antes de lanzar nada.
+> Última revisión: 2026-11-22 (AB#101447).
+>
+> **Aviso.** `local.settings.json` no está versionado y es de cada equipo: la plantilla `local.settings.template.json` apunta a `localhost`, pero un fichero heredado **puede** apuntar a PRODUCCIÓN (`srbsqlprodocai`, `srbkvprodocai`, GDC `srv_DocumentIA_pro`). Haz copia antes de tocarlo y compruébalo siempre antes de lanzar nada. Mantén `SecretsSource=Config` (o `Local`): con `AzureVault` y `KeyVaultName=srbkvprodocai` el Key Vault de PRO pisaría la cadena de DEV.
+>
+> **Recursos de IA.** El host resuelve los modelos por alias: hacen falta `AI__Resources__openai_primary__Endpoint`, `AI__Resources__cu_primary__Endpoint`, `AI__Resources__cu_secondary__Endpoint` y `AI__Resources__di__Endpoint` con los valores de DEV de `infra/ai/pipeline-variables.yml` (`srbaisrv01devdocai`, `srbaisrv02devdocai`, `srbdidevdocai`); sin ellos el resolutor falla. Para prompt y resumen alinea `PromptDefaults__ModelKey` con DEV (`prompt.gpt56-luna` desde el 2026-11-20, ADR-004); el valor base de `appsettings.json` es `default.gpt4o-mini`, que es el de PRE y PRO.
 
 ## Requisitos
 
@@ -63,6 +65,8 @@ sqlcmd -S srbsqldevdocai.database.windows.net -d DocumentIA -G \
 ```
 
 ## 3. Storage local (Azurite) en puertos alternativos
+
+> Hay dos convenciones de puertos en el repo: `docker-compose.yml` y `scripts/legacy/start-azurite.ps1` usan 20000-20002 (QUICKSTART); esta guía usa 10000/10011/10012 porque el 10001 está ocupado en los portátiles corporativos. Cualquiera vale si la cadena de storage coincide.
 
 El puerto 10001 (cola de Azurite) lo ocupa `agentid-service.exe`, un servicio corporativo
 que no se puede parar. Por eso Azurite se levanta en 10011/10012 y el host se apunta a esos

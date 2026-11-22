@@ -1,7 +1,7 @@
 # Especificacion Unificada GDC (SINTWS) — DocumentIA
 
 > Version: 2.0 consolidada
-> Fecha: 24/04/2026
+> Fecha: 24/04/2026 · Última revisión: 2026-11-22 (AB#101447, contraste con `GdcService`, `ResilientGdcService`, `GdcSettings`, `SubirGDCActivity`, `ObtenerDocumentoGDCActivity` y `azure-pipelines.yml`)
 > Alcance: Documento canonico de GDC para DocumentIA (sustituye y unifica la antigua especificacion tecnica y la guia operativa de integracion).
 
 ---
@@ -32,10 +32,11 @@ Cuando se usa `objectIdGDC`, el sistema ejecuta un preflujo:
 1. Fuerza `instrucciones.skipGDCUpload = true`.
 2. Obtiene metadatos en GDC (`get` sin contenido).
 3. Si existe checksum MD5 y no hay `skipDuplicateCheck`, verifica duplicado temprano en BD.
-4. Descarga contenido (`get` con contenido) para hidratar el documento y continuar pipeline.
+4. Descarga el contenido (`get` con contenido), lo sube al blob de documentos y deja `BlobPath` y los hashes precalculados (`PreComputedSHA256`, `MD5`, tamaño) en el documento (blob-first, AB#100293); `Base64` solo queda si falla la subida. Si el checksum ya existe y no hay `forceReprocess`, intenta reutilizar la ejecución con la misma clave de intención (AB#100930, ADR-003).
 
 En el paso de subida GDC:
 - `skipGDC = instrucciones.skipGDCUpload ?? tipologia.skipGDCUpload`.
+- Si `IdActivo` está vacío la actividad se marca omitida (`IdActivo no disponible`) y no sube.
 - Si `skipGDC = true`, se omite subida intencionalmente y se devuelve:
   - `detalleEjecucion.gdc.exitoso = true`
   - `detalleEjecucion.gdc.mensaje = "Skipped"`
@@ -136,8 +137,13 @@ Campos usados por DocumentIA en `create`:
 Clave principal:
 - `GDC:Endpoint`
 
-Claves relevantes:
-- `GDC:TimeoutSeconds`
+Claves relevantes (defecto de `GdcSettings` · valor desplegado por el pipeline):
+- `GDC:TimeoutSeconds` (30 · 60)
+- `GDC:BypassSslValidation` (`false` · `true` en DEV, PRE y PRO; en `Development` se acepta siempre cualquier certificado)
+- `GDC:HttpBasicUsername` / `GDC:HttpBasicPassword` (Key Vault `GDC--HttpBasicUsername` / `GDC--HttpBasicPassword`; autenticación HTTP Basic del gateway, distinta del `Identity` SOAP)
+- `GDC:ApplicationId` (`CKP1`), `GDC:DocumentTypeId` (`document`), `GDC:ContentFieldName` (`content` · `Content`), `GDC:OrigenDocumento` (`8878`), `GDC:ClaseExpediente` (`AI04`), `GDC:DefaultMatricula` (`OTROS_DOCUMENTOS` · `AI-99-SCXX-00`), `GDC:Servicer` / `GDC:EntidadOrigen` (`9999`), `GDC:ProcesoCarga` (`PC01`), `GDC:TipoExpediente` (`AI`), `GDC:Publico` (`verdadero`)
+- Resiliencia (`ResilientGdcService`, envuelve `Consultar`, `Subir`, `ObtenerMetadatos` y `Obtener`): `GDC:MaxRetries` (3), `GDC:InitialDelayMs` (200), `GDC:ExponentialBackoff` (`true`), `GDC:CircuitBreakerFailures` (5), `GDC:CircuitBreakerDurationMs` (30000). Un reintento tras timeout en `create` puede devolver `AlreadyExists` en vez de duplicar.
+- El timeout de 120 s de `SubirGDC` es el timer del orquestador, no una configuración.
 - `GDC:ApplicationId`
 - `GDC:Username`
 - `GDC:Password`
@@ -166,12 +172,13 @@ Claves relevantes:
 
 El backend consume un endpoint configurable de `IDocService`:
 
+Valores que despliega `azure-pipelines.yml` (`GDC_ENDPOINT`, revisado 2026-11-22):
+
 - DEV: `https://srbwidd03.sareb.srb:8090/sintws/IDocService`
-- DEV alternativo: `https://srbwidd03.sareb.srb:8443/sintws/IDocService`
-- QA: `https://srbwidi03.sareb.srb:8443/sintws-162/IDocService`
-- PRD: `https://srbwidp04.sareb.srb:8090/sintws/IDocService`
-- PRD replica: `https://srbwidp05.sareb.srb:8090/sintws/IDocService`
-- Mock local: `http://localhost:8888/sintws/IDocService`
+- PRE: `https://srbwidi03.sareb.srb:8090/sintws-162/IDocService`
+- PRO: `https://srbwidp05.sareb.srb:8090/sintws/IDocService` (réplica; el primario `srbwidp04` no se usa desde la Function App)
+
+No verificados en la revisión y conservados como referencia histórica: `https://srbwidd03.sareb.srb:8443/sintws/IDocService` (DEV alternativo), `https://srbwidi03.sareb.srb:8443/sintws-162/IDocService` (antiguo «QA») y el mock local `http://localhost:8888/sintws/IDocService`.
 
 > Nota: en PROD el Function App tiene configurada la réplica `srbwidp05` (el primario es `srbwidp04`); en DEV el host es `srbwidd03`. El valor efectivo se resuelve por `GDC:Endpoint` (app setting `GDC__Endpoint`). Aviso operativo: en PROD existe un secreto de Key Vault `GDC--Endpoint` que, por el volcado masivo de secretos, tiene **precedencia** sobre el app setting.
 
@@ -196,12 +203,14 @@ Timeout de orquestador:
 
 ## 10. Interpretacion de estados GDC en salida
 
-Estados habituales en `detalleEjecucion.gdc.mensaje`:
+Estados habituales en `detalleEjecucion.gdc.mensaje` (revisado 2026-11-22 contra `GdcService` y `SubirGDCActivity`):
 - `OK`
-- `AlreadyExists`
-- `Skipped`
-- `Timeout`
-- `SoapFault` / `Exception` / `UnknownResponse`
+- `AlreadyExists` (SOAP Fault `DOC_OBJECT_EXISTS` en `create`)
+- `Documento ya existente` (deduplicación previa de `SubirGDCActivity`, `YaExistia = true`)
+- `Skipped` (skip explícito)
+- `IdActivo ausente, no se puede subir a GDC` y `Documento sin contenido...` (validaciones previas de la actividad)
+- `Timeout` (timer de 120 s del orquestador)
+- `Exception` / `UnknownResponse` / `HTTP <status>` / `ObjectId vacío`
 
 Regla importante:
 - `Skipped` no implica error. Es omision intencional y se reporta como exitosa.
