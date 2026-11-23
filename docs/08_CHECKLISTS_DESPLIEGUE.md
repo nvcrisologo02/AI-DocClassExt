@@ -1,6 +1,6 @@
 # 8. Checklists de Revision Azure y Azure DevOps — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json`, `scripts/**`, GUIA_EASYAUTH_ADMIN.md e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Hay una service connection por entorno (`AI DocClassExt DEV|PRE|PRO`) y los nombres de recursos de los bloques 2 a 8 son los de PRO; los de DEV y PRE están en la tabla de inventario de INFRAESTRUCTURA_REAL_DESPLEGADA.md. Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y `Extraction__AzureContentUnderstanding__*` (salvo los siete de resiliencia) siguen en el contrato y en el pipeline pero no se leen en runtime: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada. La numeración de las filas (3.x en el Bloque 2, 4.x en el Bloque 3…) es un desfase heredado que no se renumera. Lo no comprobable contra Azure en vivo (estado de recursos, RBAC, App Insights, restricciones de red) se marca como «no comprobado en la revisión del 2026-11-22».
+> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json`, `scripts/**`, GUIA_EASYAUTH_ADMIN.md e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Hay una service connection por entorno (`AI DocClassExt DEV|PRE|PRO`) y los nombres de recursos de los bloques 2 a 8 son los de PRO; los de DEV y PRE están en la tabla de inventario de INFRAESTRUCTURA_REAL_DESPLEGADA.md. Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y `Extraction__AzureContentUnderstanding__*` (salvo los siete de resiliencia) siguen en el contrato y en el pipeline pero no se leen en runtime: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada. La numeración de las filas (3.x en el Bloque 2, 4.x en el Bloque 3…) es un desfase heredado que no se renumera. El estado de recursos, RBAC, App Insights y restricciones de red se comprobó en Azure el 2026-11-23 (AB#101449).
 >
 > Ultima actualizacion anterior: 2026-04-06  
 > Proyecto: AI DocClassExt — SAREB
@@ -376,7 +376,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 ## Notas de estado (histórico 2026-04-06)
 
-> Estado actual: ver INFRAESTRUCTURA_REAL_DESPLEGADA.md. Admin y AssetResolver se despliegan con el 799 (y por separado con 800 y 801) en los tres entornos; el RBAC de Key Vault de las MI se asigna una vez por entorno con `assign-keyvault-rbac.ps1`. La fila «Parcialmente configurado» del RBAC es de abril de 2026 y no comprobado en la revisión del 2026-11-22.
+> Estado actual: ver INFRAESTRUCTURA_REAL_DESPLEGADA.md. Admin y AssetResolver se despliegan con el 799 (y por separado con 800 y 801) en los tres entornos; el RBAC de Key Vault de las MI se asigna una vez por entorno con `assign-keyvault-rbac.ps1`. La fila «Parcialmente configurado» del RBAC es de abril de 2026; a 2026-11-23 las tres identidades (Functions, Admin y AssetResolver) tienen Key Vault Secrets User sobre el Key Vault de su entorno en DEV, PRE y PRO.
 
 | Item | Estado |
 |------|--------|
@@ -394,7 +394,7 @@ Usar solo si el pipeline no esta disponible o hay urgencia.
 
 ## BLOQUE 9 — Verificar App Insights post-despliegue
 
-Usar tras cualquier despliegue a produccion para confirmar que la observabilidad esta operativa. (Antes figuraba como un segundo «BLOQUE 6»; las filas conservan su numeración 6.x.) Los nombres son de PRO; en DEV y PRE: `srbappidevdocai` / `srbappipredocai`. Estado real de App Insights, Live Metrics, retención y queries guardadas: no comprobado en la revisión del 2026-11-22.
+Usar tras cualquier despliegue a produccion para confirmar que la observabilidad esta operativa. (Antes figuraba como un segundo «BLOQUE 6»; las filas conservan su numeración 6.x.) Los nombres son de PRO; en DEV y PRE: `srbappidevdocai` / `srbappipredocai`. Estado a 2026-11-23: App Insights con retención de 90 días en los tres entornos, sin consultas guardadas compartidas en PRO y sin Availability Tests; Live Metrics es una vista en vivo sin estado que comprobar.
 
 | # | Tarea | Detalle | OK |
 |---|-------|---------|----|
@@ -414,7 +414,7 @@ Usar tras cualquier despliegue a produccion para confirmar que la observabilidad
 
 ## Seguridad del Admin — autenticacion (EasyAuth activo en DEV, PRE y PRO)
 
-Estado 2026-11-22: App Service Authentication (EasyAuth) activo en el Admin de DEV, PRE y PRO (DEV 2026-08-06; PRE y PRO 2026-09-04; detalle en [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md)). Restricciones de acceso de red, `publicNetworkAccess` y private endpoints: no comprobado en la revisión del 2026-11-22 (el estado del 2026-07-31 era «Allow all», sin private endpoints; la integracion VNet del Admin de prod es de salida y no limita el acceso entrante).
+Estado 2026-11-22: App Service Authentication (EasyAuth) activo en el Admin de DEV, PRE y PRO (DEV 2026-08-06; PRE y PRO 2026-09-04; detalle en [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md)). Restricciones de acceso de red a 2026-11-23: «Allow all», `publicNetworkAccess` habilitado y sin private endpoint en el Admin de DEV, PRE y PRO, igual que el 2026-07-31; la integracion VNet del Admin de prod es de salida y no limita el acceso entrante.
 
 | # | Tarea | Detalle | OK |
 |---|-------|---------|----|

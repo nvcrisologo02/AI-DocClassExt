@@ -1,6 +1,6 @@
 # Runbook de Incidentes — Producción SRBRGDOCSAIPROD
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Core`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos: el endpoint `force-fallback`, `OrquestadorActivity`, `ObtenerMarkdownActivity_Failed` y `GetMetadata` (no existen); `TimeoutSeconds` pasa a `HardTimeoutSeconds`; los settings `Extraction__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` son heredados sin efecto (no se leen en código; la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada); `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178), el de Layout sí. Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue: un cambio manual de app settings dura hasta el siguiente. Los contactos de escalado siguen sin rellenar y desde el repositorio no consta quién debe aportarlos. Los comandos usan los nombres de PRO; DEV y PRE (`SRBRGDEVDOCSAI`/`srbappdevdocai`, `SRBRGPREDOCSAI`/`srbapppredocai`) siguen el mismo patrón (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md). Alertas desplegadas, permisos, secretos de Key Vault y comandos `az`: no comprobado en la revisión del 2026-11-22.
+> Última revisión: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Core`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos: el endpoint `force-fallback`, `OrquestadorActivity`, `ObtenerMarkdownActivity_Failed` y `GetMetadata` (no existen); `TimeoutSeconds` pasa a `HardTimeoutSeconds`; los settings `Extraction__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` son heredados sin efecto (no se leen en código; la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada); `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178), el de Layout sí. Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue: un cambio manual de app settings dura hasta el siguiente. Los contactos de escalado siguen sin rellenar y desde el repositorio no consta quién debe aportarlos. Los comandos usan los nombres de PRO; DEV y PRE (`SRBRGDEVDOCSAI`/`srbappdevdocai`, `SRBRGPREDOCSAI`/`srbapppredocai`) siguen el mismo patrón (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md). Comprobado el 2026-11-23: las 12 alertas de PRO están habilitadas, las identidades tienen Key Vault Secrets User y las referencias a Key Vault de la Function App de PRO están resueltas; los comandos `az` de este runbook no se han ejecutado en la revisión.
 
 **Versión:** 1.1  
 **Última actualización:** 2026-11-22  
@@ -35,7 +35,7 @@
 
 ## Detección Automática (alertas de Azure Monitor)
 
-Desde 2026-08-04 (AB#99083) existen alert rules sobre `srbappiprodocai` que **notifican por correo** al action group `srbagoperprodocai`: las 5 de negocio (err, lat, fbk, exc, idle), las de memoria y OOM (2026-10-01) y las 3 de trazas de AB#100181 (`srbalertdupprodocai`, `srbalertexpprodocai`, `srbalertsctprodocai`; fuente de verdad en [MONITOREO_ALERTAS_REAL.md](../observabilidad/MONITOREO_ALERTAS_REAL.md), estado vivo en Azure no comprobado en la revisión del 2026-11-22). Al recibir un aviso, entrar por el incidente correspondiente:
+Desde 2026-08-04 (AB#99083) existen alert rules sobre `srbappiprodocai` que **notifican por correo** al action group `srbagoperprodocai`: las 5 de negocio (err, lat, fbk, exc, idle), las de memoria y OOM (2026-10-01) y las 3 de trazas de AB#100181 (`srbalertdupprodocai`, `srbalertexpprodocai`, `srbalertsctprodocai`; fuente de verdad en [MONITOREO_ALERTAS_REAL.md](../observabilidad/MONITOREO_ALERTAS_REAL.md), estado vivo comprobado en Azure el 2026-11-23: todas habilitadas). Al recibir un aviso, entrar por el incidente correspondiente:
 
 | Correo de alerta | Qué significa | Entrada al runbook |
 |------------------|---------------|--------------------|
@@ -187,7 +187,7 @@ traces
 
 2. **Si es connection pool:**
    - Aumentar `Connection Timeout=120` (default 30) dentro del secreto `SqlConnectionString` de Key Vault (el host de Functions no carga `appsettings.json`)
-   - Reducir `maxConcurrentActivityFunctions` temporalmente (del 4 al 2): vive en `host.json` (`extensions.durableTask`), así que requiere redeploy; la variante por app setting `extensions__durableTask__maxConcurrentActivityFunctions` no comprobado en la revisión del 2026-11-22
+   - Reducir `maxConcurrentActivityFunctions` temporalmente (del 4 al 2): vive en `host.json` (`extensions.durableTask`), así que requiere redeploy; la variante por app setting es `AzureFunctionsJobHost__extensions__durableTask__maxConcurrentActivityFunctions` (documentación oficial de host.json, consultada el 2026-11-23); no está definida en ningún entorno
    - Monitorear recuperación
 
 3. **Si es SQL outage:**
@@ -625,7 +625,7 @@ customEvents
 3. **If large document:**
    - Review `Pipeline__MaxPaginasDocumento` setting
    - If > 500 pages, consider splitting
-   - Que un fallback a GPT sea más rápido en documentos muy grandes no está medido (no comprobado en la revisión del 2026-11-22)
+   - Que un fallback a GPT sea más rápido en documentos muy grandes no está medido (sin medición disponible a 2026-11-23)
 
 4. **If specific tipología slow:**
    - Investigate classification rules (maybe too complex?)

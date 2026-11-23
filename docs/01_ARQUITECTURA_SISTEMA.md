@@ -225,7 +225,7 @@ ClasificarEmbeddingsActivity (previa a ClasificarActivity, ADR-002 Fase A)
       └─ DecisorHibrido           ← modo off | sombra | hibrido y umbrales de la fila `clasificador.embeddings` (TipoModelo.Embeddings = 5)
 ```
 
-En `sombra` la predicción por embeddings se persiste junto a la del GPT sin alterar el resultado; en `hibrido` contestaría por confianza y derivaría al GPT el resto. Estado el 2026-11-22: DEV en `sombra` (código en producción desde la release v1.0.0; artefacto v4 desde el 2026-11-18, AB#101405); PRE y PRO llevan el código con la fila en `off`, según el README de `scripts/migrations/clasificador-embeddings/` (no comprobado en BD en esta revisión). El umbral de operación se fija con los cortes de la sombra (AB#101421).
+En `sombra` la predicción por embeddings se persiste junto a la del GPT sin alterar el resultado; en `hibrido` contestaría por confianza y derivaría al GPT el resto. Estado el 2026-11-22: DEV en `sombra` (código en producción desde la release v1.0.0; artefacto v4 desde el 2026-11-18, AB#101405); PRE y PRO llevan el código con la fila en `off` y el artefacto v1 (comprobado en BD el 2026-11-23, AB#101449). El umbral de operación se fija con los cortes de la sombra (AB#101421).
 
 **GptClasificarDataProvider**:
 - **Phase 1**: Resuelve familia TDN1 (ej., ESCR) desde catálogo dinámico

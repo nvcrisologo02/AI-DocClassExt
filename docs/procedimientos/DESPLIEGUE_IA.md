@@ -1,6 +1,6 @@
 # Despliegue de IA — guía operativa de la promoción de artefactos por entornos
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines-ai-artifacts.yml`, `infra/ai/*`, `scripts/ai/lib/promotion-route.ps1` y ADR-001). La Copy API de Content Understanding funciona de PRO a DEV y PRE (manifiestos `copied` del 2026-09-21); solo falla entre las dos cuentas de PRO. Las menciones a gpt-4o-mini describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004), cuyo deployment no figura en `infra/ai/deployments.dev.json` (pendiente de la release). Los checks 64 y 65 de los environments y el pendiente del primer run real PRE → PRO: no comprobado en la revisión del 2026-11-22.
+> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines-ai-artifacts.yml`, `infra/ai/*`, `scripts/ai/lib/promotion-route.ps1` y ADR-001). La Copy API de Content Understanding funciona de PRO a DEV y PRE (manifiestos `copied` del 2026-09-21); solo falla entre las dos cuentas de PRO. Las menciones a gpt-4o-mini describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004), cuyo deployment no figura en `infra/ai/deployments.dev.json` (pendiente de la release). Comprobado el 2026-11-23: los checks 64 (`pre`) y 65 (`prod`) siguen activos y AB#100809 (primer run real) sigue en New.
 
 Guía de extremo a extremo para desplegar (promocionar) los artefactos de IA de
 DocumentIA entre entornos: qué se promociona, en qué sentido, con qué mecanismo,
@@ -106,7 +106,7 @@ Pendiente conocido para el primer run real PRE → PRO (estado 2026-09-30, READM
 tener en cuenta que ningún script copia todavía el dataset del clasificador de
 DI (`srbstgproapppdocai`). A 2026-11-22 los manifiestos `.prod.` siguen sin
 existir en el repo; v1.0.0 y v1.1.x declararon «Artefactos de IA: ninguno» y el
-primer run real contra PRO consta como pendiente (AB#100809); el resto no comprobado en la revisión del 2026-11-22.
+primer run real contra PRO consta como pendiente (AB#100809); el contenedor `documentai` ya existe en `srbstgprodocai` y en `srbstgproapppdocai` (comprobado el 2026-11-23); los manifiestos `.prod.` siguen pendientes de la primera pasada.
 
 ## 6. Contingencia manual
 

@@ -1,6 +1,6 @@
 # Troubleshooting & Diagnóstico — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Data`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos eventos y métricas inexistentes (`DocumentIngestedSuccessfully`, `ClassificationFailed`, `Activity.*`; `DocumentProcessed` es evento, no métrica), las dimensiones de los eventos CU (`modelKey`, `reason`, `tipologia` en minúscula), las consultas SQL (`Documentos` no guarda el estado final ni el contrato: están en `DocumentoEjecuciones`), la ruta `POST /api/IngestDocument` y el setting `SqlConnectionStringOptions` (no existe). Los settings `Classification__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` son heredados sin efecto (no se leen en código: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada). `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178). Cada entorno tiene su IA propia desde septiembre de 2026 (DEV luna desde el 2026-11-20, ADR-004; PRE y PRO `gpt-4o-mini`). Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue. Comandos `az`, permisos y valores de `ModeloConfigs.Tipo`: no comprobado en la revisión del 2026-11-22.
+> Última revisión: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Data`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos eventos y métricas inexistentes (`DocumentIngestedSuccessfully`, `ClassificationFailed`, `Activity.*`; `DocumentProcessed` es evento, no métrica), las dimensiones de los eventos CU (`modelKey`, `reason`, `tipologia` en minúscula), las consultas SQL (`Documentos` no guarda el estado final ni el contrato: están en `DocumentoEjecuciones`), la ruta `POST /api/IngestDocument` y el setting `SqlConnectionStringOptions` (no existe). Los settings `Classification__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` son heredados sin efecto (no se leen en código: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada). `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178). Cada entorno tiene su IA propia desde septiembre de 2026 (DEV luna desde el 2026-11-20, ADR-004; PRE y PRO `gpt-4o-mini`). Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue. Valores de `ModeloConfigs.Tipo` comprobados en BD el 2026-11-23: 0 a 5 en los tres entornos (0 clasificación, 1 extracción, 2 prompt, 3 layout, 4 tarifas, 5 embeddings). Los comandos `az` de este documento no se han ejecutado en la revisión.
 
 **Última actualización:** 2026-11-22  
 **Público objetivo:** Operadores, DevOps, Soporte 2º nivel
@@ -404,7 +404,7 @@ Una reutilización normalmente no repite la IA de la original. Si `costes.reutil
 
 2. **Si connection string está expirada:**
    - Regenerar en Azure Storage → Access keys
-   - Actualizar en Key Vault (el valor «Resolved» en el portal: no comprobado en la revisión del 2026-11-22)
+   - Actualizar en Key Vault (a 2026-11-23 las 12 referencias a Key Vault de la Function App de PRO están en estado «Resolved»)
 
 3. **Verificar firewall de Storage:**
    - Portal → Storage Account → Networking
@@ -465,7 +465,7 @@ Una reutilización normalmente no repite la IA de la original. Si `costes.reutil
      --start-ip-address "0.0.0.0" `
      --end-ip-address "0.0.0.0"
    ```
-   > No es un paso por defecto: con SQL por private endpoint en PRO puede no aplicar (no comprobado en la revisión del 2026-11-22). El pipeline 807 ya ofrece `addTransientFirewallRule` para su propio agente.
+   > No es un paso por defecto: con SQL por private endpoint en PRO no aplica (comprobado el 2026-11-23: el servidor SQL de PRO tiene el acceso público deshabilitado y un private endpoint, igual que PRE; en DEV el acceso público sigue habilitado). El pipeline 807 ya ofrece `addTransientFirewallRule` para su propio agente.
 
 3. **Escalar SQL:**
    - Si la carga es muy alta, aumentar DTU o vCores
@@ -616,7 +616,7 @@ traces
    SELECT ModelKey, LEN(ConfiguracionJson) AS Tamano, Activo
    FROM ModeloConfigs WHERE Tipo = 4;
    ```
-   Si no devuelve nada, cargar `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql` (el valor `Tipo = 4` del catálogo de tarifas: no comprobado en la revisión del 2026-11-22; contrastar con ese seed).
+   Si no devuelve nada, cargar `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql` (la fila `Tipo = 4`, `tarifas.ia`, existe en DEV, PRE y PRO a 2026-11-23).
 2. **El modelo consumido no está en el catálogo.** El propio bloque lo dice en `modelosSinTarifa`. Ocurre al dar de alta un deployment o un analyzer nuevo sin añadir su línea de precio. La tarifa se resuelve por **modelo físico** (nombre de deployment, analyzer, classifier o `prebuilt-layout`), no por la fila de configuración que lo invoca.
 3. **La tarifa existe pero su fecha de vigencia es posterior a la ejecución.** Cada línea lleva `vigenteDesde`; una ejecución se tarifa con lo que se facturaba entonces. Si se dio de alta el precio hoy, las ejecuciones de ayer siguen sin tarifa. Es el comportamiento correcto: añadir una línea con vigencia anterior si se quiere cubrirlas.
 4. **Caché del catálogo.** Se recarga cada cinco minutos. Tras editar las tarifas hay que esperar antes de dar por malo el resultado.
@@ -625,7 +625,7 @@ traces
 
 **Verificación:** `pwsh .\scripts\testing\test-costes-ia.ps1 -Environment <env>` comprueba de una pasada el cálculo, las tarifas completas, el cuadre del desglose y la visibilidad condicionada al parámetro.
 
-**Qué NO es:** que la suma de un entorno no cuadre con la factura de su grupo de recursos no es un defecto. Desde septiembre de 2026 cada entorno factura su propia cuenta de IA (`srbaisrv01<env>docai`, `srbaisrv02<env>docai`, `srbdi<env>docai`; PRO por alias desde el 2026-10-08), así que el aviso anterior sobre «la misma cuenta de IA de producción» queda superado; las diferencias con la factura suelen venir de consumo sin medir o de tarifas desactualizadas (causa concreta no comprobado en la revisión del 2026-11-22). Ver [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md).
+**Qué NO es:** que la suma de un entorno no cuadre con la factura de su grupo de recursos no es un defecto. Desde septiembre de 2026 cada entorno factura su propia cuenta de IA (`srbaisrv01<env>docai`, `srbaisrv02<env>docai`, `srbdi<env>docai`; PRO por alias desde el 2026-10-08), así que el aviso anterior sobre «la misma cuenta de IA de producción» queda superado; las diferencias con la factura suelen venir de consumo sin medir o de tarifas desactualizadas (la causa concreta se determina caso a caso contra la factura; no se ha hecho en la revisión). Ver [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md).
 
 ---
 
@@ -971,7 +971,7 @@ SELECT e.DocumentoId, d.SHA256, e.ContratoSalidaCompletoJson FROM DocumentoEjecu
 ```
 
 **¿Cuál es el timeout máximo?**
-- Activity individual: ~300 s (no comprobado en la revisión del 2026-11-22; en el orquestador solo consta `GdcActivityTimeoutSeconds = 120`)
+- Activity individual: sin timeout propio: `host.json` no fija `functionTimeout` (rige el del plan Premium, 30 min por defecto) y en el orquestador solo consta `GdcActivityTimeoutSeconds = 120` (comprobado el 2026-11-23)
 - Orchestration total: ~7 días (limit Durable Functions)
 - SubirGDC: 120 s de activity; `GDC__TimeoutSeconds=60` en el pipeline
 - CU hard timeout: 90 s (pipeline; default de código 300 s)

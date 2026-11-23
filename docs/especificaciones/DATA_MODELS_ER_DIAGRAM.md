@@ -1135,5 +1135,5 @@ WHERE vr.Severidad = 'Error';
 
 **Documento**: Data Models & ER Diagram — DocumentIA  
 **Última actualización**: 2026-11-22 (revisión AB#101447; anterior 2026-06-10)  
-**Versión BD**: 1.24 (`20261013092225_ClaveIntencionDedup`), aplicada en DEV y PRO; PRE no comprobado  
+**Versión BD**: 1.24 (`20261013092225_ClaveIntencionDedup`), aplicada en DEV, PRE y PRO (PRE comprobado el 2026-11-23)  
 **Status**: Production

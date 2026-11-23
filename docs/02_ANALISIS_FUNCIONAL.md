@@ -1,6 +1,6 @@
 # 2. Analisis Funcional — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con el orquestador, los triggers, el contrato de la API y los documentos 01, 03 y de infraestructura revisados el mismo día). El sistema está en operación desde julio de 2026 (v1.0.0 en PRO el 2026-10-08). Corregidos: fuente `blobPath` (blob-first), orden del pipeline, tipología no resuelta (`NO_CLASIFICADO`), `PENDIENTE_REINTENTO` por cuota (no se persiste), `nivelClasificacion` (`TDN1_TDN2`), formatos aceptados y tamaño, retención de blobs (implementada), región de la IA y plan de la Function App. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release; las menciones a GPT-4o-mini describen PRE y PRO. Faltan como casos de uso los endpoints de markdown, el healthcheck y la limpieza de blobs, y los flujos `classificationOnly`, `restriccionTipologias`, `PAGINAS_EXCEDIDAS` y `EXTRACCION_INCOMPLETA` (los 10 estados están en CONTRATO_API_HTTP §5). Estado de epics y user stories en Azure DevOps, plan de hosting y SLA, duración típica, cobertura de tests, umbrales por tipología en BD y límite de tamaño de entrada: no comprobado en la revisión del 2026-11-22.
+> Última revisión: 2026-11-22 (AB#101447, contraste con el orquestador, los triggers, el contrato de la API y los documentos 01, 03 y de infraestructura revisados el mismo día). El sistema está en operación desde julio de 2026 (v1.0.0 en PRO el 2026-10-08). Corregidos: fuente `blobPath` (blob-first), orden del pipeline, tipología no resuelta (`NO_CLASIFICADO`), `PENDIENTE_REINTENTO` por cuota (no se persiste), `nivelClasificacion` (`TDN1_TDN2`), formatos aceptados y tamaño, retención de blobs (implementada), región de la IA y plan de la Function App. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release; las menciones a GPT-4o-mini describen PRE y PRO. Faltan como casos de uso los endpoints de markdown, el healthcheck y la limpieza de blobs, y los flujos `classificationOnly`, `restriccionTipologias`, `PAGINAS_EXCEDIDAS` y `EXTRACCION_INCOMPLETA` (los 10 estados están en CONTRATO_API_HTTP §5). Comprobado el 2026-11-23 (AB#101449) contra Azure DevOps, Azure, App Insights y BD: estado de los epics (la numeración EP de este documento no coincide con la de Azure DevOps), plan de hosting EP1, duración típica, umbrales por tipología (223 de 233 tipologías activas en DEV y 203 de 213 en PRE y PRO llevan `confidenceConfig`, todas con `clasifUmbralFallback` 0.85) y límite de tamaño de entrada; la cobertura de tests no se mide en el proyecto.
 >
 > Ultima actualizacion anterior: 2026-03-31  
 > Proyecto: AI DocClassExt — SAREB
@@ -443,8 +443,8 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 
 | ID | Categoria | Requisito | Criterio | Estado |
 |----|-----------|-----------|----------|--------|
-| RNF01 | Rendimiento | Pipeline completo en < 120s para un documento tipico | Medido por `DocumentIA.Duracion.Total`. GDC timeout 120s. | CUMPLIDO (duracion tipica no comprobado en la revisión del 2026-11-22) |
-| RNF02 | Disponibilidad | Function App con SLA >= 99.95% | Plan de App Service de la Function App (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md; no es Consumption). Durable Functions tolerante a reinicios. | SLA del plan no comprobado en la revisión del 2026-11-22 |
+| RNF01 | Rendimiento | Pipeline completo en < 120s para un documento tipico | Medido por `DocumentIA.Duracion.Total`. GDC timeout 120s. | CUMPLIDO (PRO, 30 días hasta el 2026-11-23: 958 ejecuciones, mediana 21,7 s, percentil 90 42,3 s, máximo 164 s) |
+| RNF02 | Disponibilidad | Function App con SLA >= 99.95% | Plan de App Service de la Function App (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md; no es Consumption). Durable Functions tolerante a reinicios. | Plan EP1 (Elastic Premium) en DEV, PRE y PRO comprobado el 2026-11-23; la cifra de SLA es la que publica Microsoft para Functions en planes distintos de Consumption |
 | RNF03 | Escalabilidad | Soportar procesamiento concurrente de multiples documentos | Durable Functions escala automaticamente. Sin estado compartido entre instancias. | CUMPLIDO |
 | RNF04 | Seguridad | Autenticacion en todos los endpoints de gestion | `AuthorizationLevel.Function` (x-functions-key) en ingesta, markdown y `Admin_*`; `Anonymous` solo en `PostHealthcheck` y `GetTipologiasPublicadas`. Admin con EasyAuth y grupo de seguridad. Identidad administrada en uso para IA y Key Vault. | CUMPLIDO |
 | RNF05 | Seguridad | Credenciales nunca en codigo fuente | API Keys en configuration/Key Vault. SSL bypass solo configurable explicitamente. | CUMPLIDO |
@@ -452,7 +452,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | RNF07 | Extensibilidad | Anadir nueva tipologia sin cambiar codigo | Registro/configuracion en BD via Admin portal o Admin API. JSON fisico solo como seed/plantilla. Sin recompilacion. | CUMPLIDO |
 | RNF08 | Observabilidad | Telemetria en Application Insights | Structured logging + Application Insights SDK. Metricas custom por actividad. | CUMPLIDO |
 | RNF09 | Resiliencia | Tolerancia a fallos en servicios externos | Circuit breaker + retry exponencial en plugins, GDC y llamadas a Azure OpenAI (clasificacion GPT y prompts). Ante cuota agotada, la clasificacion produce el desenlace limpio y retriable `PENDIENTE_REINTENTO` en vez de un error crudo. Fallback IA automatico. | CUMPLIDO |
-| RNF10 | Mantenibilidad | Cobertura de tests unitarios >= 70% en modulos criticos | 191 ficheros de test (Unit, Admin, AssetResolver, E2E). Validacion, plugins, configuracion bien cubiertos. | Cobertura medida no comprobado en la revisión del 2026-11-22 |
+| RNF10 | Mantenibilidad | Cobertura de tests unitarios >= 70% en modulos criticos | 191 ficheros de test (Unit, Admin, AssetResolver, E2E). Validacion, plugins, configuracion bien cubiertos. | Sin medición de cobertura: ni los pipelines ni el repo la recogen (comprobado el 2026-11-23) |
 
 ---
 
@@ -464,13 +464,13 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 |------|--------|--------|-------------|
 | **EP1** | Ingesta y orquestacion | DONE | HU1, HU2 |
 | **EP2** | Clasificacion y extraccion AI | DONE | HU3, HU4 |
-| **EP3** | Validacion y motor de reglas | IN PROGRESS | HU5, HU6 |
+| **EP3** | Validacion y motor de reglas | DONE (AB#98368, comprobado el 2026-11-23) | HU5, HU6 |
 | **EP4** | Persistencia y auditoria | DONE | HU7 |
-| **EP5** | Configuracion y tipologias | IN PROGRESS | HU8, HU9, HU10 |
-| **EP6** | Observabilidad y pruebas | IN PROGRESS | HU11 |
+| **EP5** | Configuracion y tipologias | DONE (AB#98375, comprobado el 2026-11-23) | HU8, HU9, HU10 |
+| **EP6** | Observabilidad y pruebas | DONE (AB#98406, comprobado el 2026-11-23) | HU11 |
 | **EP7** | Proteccion de datos / GDPR | REMOVED (fuera de alcance actual) | HU12 |
 | **EP8** | Mantenimiento Blob | IMPLEMENTADO (`BlobCleanupTimerTrigger`, AB#100868) | HU13 |
-| **EP9** | GDC integracion completa | IN PROGRESS (estado en Azure DevOps no comprobado en la revisión del 2026-11-22) | — |
+| **EP9** | GDC integracion completa | Sin epic propio en Azure DevOps (comprobado el 2026-11-23: ninguno de los 30 epics del proyecto es de GDC; el «EP 9» de Azure DevOps es AB#98692, mantenimiento de blobs, Done) | — |
 | **EP10** | Resolucion de Activo | DONE | HU14 |
 
 ### Detalle de User Stories
@@ -489,7 +489,7 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 | HU10 | Configuracion de plugins | Como administrador de tipologias, quiero asignar y configurar plugins de integracion por tipologia. | Endpoints `/management/plugins-tipologias`. JSON con priority, retry, enabled. | DONE |
 | HU11 | Observabilidad | Como operador, quiero metricas y logs en Application Insights para diagnosticar problemas. | Structured logging, telemetria AI SDK, metricas por actividad en seguimiento. | IN PROGRESS |
 | HU12 | Proteccion GDPR | Como responsable de datos, quiero cifrado de datos sensibles y politica de retencion. | AES-256-GCM en campos PII, retencion configurable, masking en logs. | REMOVED (fuera de alcance actual) |
-| HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Retencion por temporizador (`BlobCleanupTimerTrigger`, cron `BlobRetentionCleanupCron`, parametrizable). Lifecycle rules de Storage y archivado por antigüedad: no comprobado en la revisión del 2026-11-22. | IMPLEMENTADO |
+| HU13 | Mantenimiento blob | Como operador, quiero politicas de retencion de blobs para gestionar almacenamiento. | Retencion por temporizador (`BlobCleanupTimerTrigger`, cron `BlobRetentionCleanupCron`, parametrizable). Lifecycle rules de Storage comprobadas el 2026-11-23 en los tres entornos: `delete-temp` (prefijo `temp`, 7 días) y `documents-clasif-7d` (prefijo `documents-clasif/`, 7 días); no hay archivado por antigüedad. | IMPLEMENTADO |
 | HU14 | Resolucion de activo | Como sistema, quiero resolver automaticamente el IdActivo del documento consultando la tabla `DM_POSICION_AAII_TB` usando IDUFIR, Referencia Catastral y/o Direccion. | `ObtenerActivoActivity` busca en AssetResolver con tres criterios configurables (habilitar/deshabilitar cada uno). Soporta AND/OR. Si match unico, `IdActivo` se propaga. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). | DONE |
 
 ---
@@ -500,11 +500,11 @@ Cuando se informa `instrucciones.classification.nivelClasificacion` (`"TDN1"` o 
 |------------|---------|
 | **GDPR/LOPD** | Los documentos pueden contener datos personales (NIF, nombres, direcciones). Este requisito regulatorio se mantiene, pero su implementación funcional (EP7) queda fuera del alcance actual (`Removed` en ADO el 2026-05-26). |
 | **Formatos aceptados** | PDF (el recorte por paginas solo aplica a PDF), XLSX, PPTX, DOCX e imagenes (sin OCR de imagenes incrustadas). Puede recibirse como Base64 sin saltos de línea (RFC 4648), por `documento.blobPath` o desde GDC vía `documento.objectIdGDC`. |
-| **Tamaño maximo** | El base64 inline queda limitado por Durable Functions y Storage; para documentos grandes usar `documento.blobPath` (blob-first, implementado: el trigger vuelca el base64 a blob y lo pone a `null`). Limite exacto no comprobado en la revisión del 2026-11-22. |
+| **Tamaño maximo** | El base64 inline queda limitado por Durable Functions y Storage; para documentos grandes usar `documento.blobPath` (blob-first, implementado: el trigger vuelca el base64 a blob y lo pone a `null`). Límite de la plataforma: 210 MB por petición HTTP en el plan Premium (límites de servicio de Azure Functions, consultados el 2026-11-23). |
 | **Timeouts** | GDC: 120s (hardcoded en orchestrator). Servicios AI: configurable por proveedor (DI: 120s, GPT: 30-60s, CU: configurable). |
 | **Conectividad GDC** | Requiere acceso de red al host GDC del entorno (prod: `srbwidp04.sareb.srb:8090`; dev: `srbwidd03.sareb.srb:8090`). SSL bypass configurable para certificado CA corporativo no confiado en Linux. |
 | **Region Azure** | Function App y mayoria de servicios en West Europe. En PRO, Azure OpenAI y CU primario en Sweden Central con CU secundario en West Europe; DEV y PRE tienen IA propia en West Europe (ver 01 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). |
-| **Plan de hosting** | Function App en plan de App Service (no Consumption; SKU en INFRAESTRUCTURA_REAL_DESPLEGADA.md, no comprobado en la revisión del 2026-11-22). Timeout maximo por ejecucion segun `host.json`; el HTTP trigger responde 202 y el cliente hace polling. |
+| **Plan de hosting** | Function App en plan de App Service (no Consumption; SKU EP1 Elastic Premium en DEV, PRE y PRO, comprobado el 2026-11-23). Timeout maximo por ejecucion segun `host.json`; el HTTP trigger responde 202 y el cliente hace polling. |
 | **Idioma** | Documentos en espanol. Prompts GPT y reglas de validacion asumen idioma espanol. |
 
 ---

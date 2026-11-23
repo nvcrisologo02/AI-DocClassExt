@@ -1,6 +1,6 @@
 # Monitoreo y Alertas — Configuración REAL
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con el código de `DocumentIA.Functions`, los pipelines `azure-pipelines*.yml`, `create-monitor-alerts.ps1`, `create-db-capacity-alert.ps1` e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Las alertas de memoria de PRO (AB#100815, develop dff86b1) están recogidas. El script gestiona 9 scheduled query rules (no 5). Se añade la telemetría de `AOAI.*`, `CU.RetryFailover`, `Classification.HybridTDN` y `Classification.Embeddings`. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO siguen en el deployment `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. Estado vivo de las reglas, del action group y del segundo workbook de PRO: no comprobado en la revisión del 2026-11-22 (última verificación en Azure: 2026-08-04).
+> Última revisión: 2026-11-22 (AB#101447, contraste con el código de `DocumentIA.Functions`, los pipelines `azure-pipelines*.yml`, `create-monitor-alerts.ps1`, `create-db-capacity-alert.ps1` e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Las alertas de memoria de PRO (AB#100815, develop dff86b1) están recogidas. El script gestiona 9 scheduled query rules (no 5). Se añade la telemetría de `AOAI.*`, `CU.RetryFailover`, `Classification.HybridTDN` y `Classification.Embeddings`. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO siguen en el deployment `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. Estado vivo comprobado en Azure el 2026-11-23: las 9 scheduled query rules y las 3 alertas de métrica (`srbalertmemprodocai`, `srbalertcpuprodocai`, `srbalertstoprodocai`) están habilitadas, el action group `srbagoperprodocai` está habilitado con un receptor de correo, y PRO tiene dos workbooks («DocumentIA Libro - 29/5/2026» y «DocumentIA - CU Performance») y el dashboard «srbappiprodocai Dashboard».
 
 **Estado:** ✅ Verificado en código (2026-06-10; contraste con el repo 2026-11-22); alertas de Azure Monitor y action group verificados en Azure (2026-08-04, AB#99083)  
 **Fuente:** `src/backend/DocumentIA.Functions/` + `azure-pipelines*.yml` + `scripts/observability/create-monitor-alerts.ps1`  
@@ -258,7 +258,7 @@ ExponentialBackoff = true
 ## 🔔 Alertas Implementadas en Azure Monitor (AB#99083, 2026-08-04)
 
 **Estado:** ✅ 9 scheduled query rules en `create-monitor-alerts.ps1` (5 base verificadas en Azure el 2026-08-04 + 3 de fiabilidad AB#100181 + `srbalertoomprodocai`) + action group de correo asociado.
-Las 3 reglas de fiabilidad existen en PRO según INFRAESTRUCTURA_REAL_DESPLEGADA.md («3 alertas de calidad»); su alta en Azure no comprobado en la revisión del 2026-11-22 en vivo.
+Las 3 reglas de fiabilidad existen en PRO según INFRAESTRUCTURA_REAL_DESPLEGADA.md («3 alertas de calidad»); su alta en Azure se comprobó el 2026-11-23 (`srbalertdupprodocai`, `srbalertexpprodocai` y `srbalertsctprodocai`, habilitadas).
 
 | Regla | Condición | Ventana / Frecuencia | Sev |
 |-------|-----------|----------------------|-----|
@@ -535,7 +535,7 @@ customEvents
 - ✅ Circuit breaker thresholds verificados en pipeline YAML
 - ✅ Workbook queries verificadas en JSON schema
 - ✅ Connection string verificada en `set-app-settings.ps1`
-- ✅ 5 scheduled query rules y action group verificados en Azure el 2026-08-04 (`az monitor scheduled-query list`, `actions.actionGroups`); las 3 de fiabilidad, OOM, capacidad de BD y memoria constan en el repo e INFRAESTRUCTURA_REAL, no comprobado en la revisión del 2026-11-22 en Azure
+- ✅ 5 scheduled query rules y action group verificados en Azure el 2026-08-04 (`az monitor scheduled-query list`, `actions.actionGroups`); las 3 de fiabilidad, OOM, capacidad de BD, memoria y CPU verificadas en Azure el 2026-11-23 (9 scheduled query rules y 3 alertas de métrica, todas habilitadas)
 - ✅ Queries de alerta validadas contra datos reales de App Insights (370 `DocumentProcessed` en 7 días, p95 duración 29,6 s)
 
-**Última verificación:** 2026-08-04 (alertas en Azure); 2026-11-22 (contraste con el repositorio, AB#101447; Azure no comprobado en vivo)
+**Última verificación:** 2026-11-23 (alertas, action group y workbooks en Azure, AB#101449); 2026-11-22 (contraste con el repositorio, AB#101447)

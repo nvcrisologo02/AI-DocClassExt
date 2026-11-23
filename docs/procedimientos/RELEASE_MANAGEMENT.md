@@ -1,6 +1,6 @@
 # Runbook de release — DEV → PRE → PRO
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con los siete `azure-pipelines*.yml`, `scripts/**`, `infra/ai/**` y `docs/releases/`). El catálogo del Anexo A coincide con los YAML; pools: `windows-latest` salvo `docia-mdp-private` (832 entero y Apply de 807). Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los checks de aprobación de los environments `pre` y `prod` (checks 64 y 65) existen desde el 2026-09-30; su estado actual en Azure DevOps, los IDs de pipeline y el secreto huérfano `GDC--Endpoint` de PRO: no comprobado en la revisión del 2026-11-22.
+> Última revisión: 2026-11-22 (AB#101447, contraste con los siete `azure-pipelines*.yml`, `scripts/**`, `infra/ai/**` y `docs/releases/`). El catálogo del Anexo A coincide con los YAML; pools: `windows-latest` salvo `docia-mdp-private` (832 entero y Apply de 807). Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los checks de aprobación de los environments `pre` y `prod` (checks 64 y 65) existen desde el 2026-09-30; comprobado el 2026-11-23: los dos checks siguen activos (environments `pre` 39 y `prod` 34), los IDs de pipeline del Anexo A coinciden con Azure DevOps (799, 800, 801, 802, 803, 807, 828 y 832) y el secreto `GDC--Endpoint` sigue en `srbkvprodocai` (AB#101451).
 
 Procedimiento permanente para llevar una versión de DocumentIA desde `develop` hasta PRO con
 PRE como puerta técnica obligatoria. Sustituye a la versión anterior de este documento (agosto
@@ -334,7 +334,7 @@ Prerrequisitos: puertas 1, 2 y 4 en PASS (la 3 puede estar pendiente al empezar,
 Nota: el 2026-09-24 los environments `pre` y `prod` no tenían approval check (verificado con
 `GET _apis/pipelines/checks/configurations`); el 2026-09-30 se crearon los checks 64 (`pre`) y 65
 (`prod`) al registrar el pipeline 832 (ver 2.4) y afectan a todos los pipelines que despliegan en
-esos environments. Estado actual en Azure DevOps: no comprobado en la revisión del 2026-11-22.
+esos environments. Comprobado el 2026-11-23: ambos checks siguen activos, con aprobación predeploy del propietario del proyecto.
 
 Verificación: el bloque de aprobación de `release.md` tiene el run del Test Plan 100069, las
 cuatro puertas con fecha de PASS (la 3 puede ser N/A con motivo) y el "go" con fecha y nombre.

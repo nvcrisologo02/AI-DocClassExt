@@ -553,7 +553,7 @@ El CU **primario** está en **Sweden Central** y el **secundario** en **West Eur
 - Resource group: `SRBRGDOCSAIPROD` (ambos recursos). El casing que devuelve `az` varía (`srbrgdocsaiprod` en el origen), pero los nombres de RG son *case-insensitive*: es el mismo grupo.
 - Ambos recursos son **kind `AIServices`** (Foundry), SKU `S0`. Es un requisito: un recurso `FormRecognizer` (como `srbdiprodocai`) **no puede alojar analizadores de CU**.
 - API version: `2025-11-01`.
-- Analizadores de nota simple en PRO (export de configuración v1.1.1): `CU_NS_1.4_3` para `nota.simple.1_4` y `CU_NS_1.5_0` para `nota.simple.1_5` (export en `scripts/arm/analyzer-CU_NS_1.5_0-export.json`); existe además `CU_NS_1.6_0_GGAA`. Estado en vivo no comprobado el 2026-11-22.
+- Analizadores de nota simple en PRO (export de configuración v1.1.1): `CU_NS_1.4_3` para `nota.simple.1_4` y `CU_NS_1.5_0` para `nota.simple.1_5` (export en `scripts/arm/analyzer-CU_NS_1.5_0-export.json`); existe además `CU_NS_1.6_0_GGAA`. Comprobado en vivo el 2026-11-23: los tres están `ready` en `upe48-mm2avmdm-swedencentral`, y `CU_NS_1.5_0` y `CU_NS_1.6_0_GGAA` también en `srbaisrv-westeurope`.
 - El endpoint de CU es el de **AI Foundry** (`*.services.ai.azure.com`), **no** el que devuelve `az cognitiveservices account show --query properties.endpoint` (que es `*.cognitiveservices.azure.com`). Confírmalo con:
   ```bash
   az cognitiveservices account show -n <recurso> -g SRBRGDOCSAIPROD \

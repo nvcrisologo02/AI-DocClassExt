@@ -1,6 +1,6 @@
 # Workbook y reporte de rendimiento CU en Application Insights
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `AzureContentUnderstandingProvider.cs` y `documentia-cu-performance.workbook.json`). Los nombres de métrica (`CU.PrepareMs`, `CU.LimiterWaitMs`, `CU.AnalysisMs`, `CU.ParseMs`, `CU.Attempts`) y el evento `CU.TransientError` coinciden con el código y con el workbook. El workbook no incluye `CU.HardTimeout`, `CU.CircuitOpen`, `CU.CircuitRejected` ni `CU.RetryFailover` (ver OBSERVABILIDAD_KQL.md). Datos en App Insights de cada entorno: no comprobado en la revisión del 2026-11-22.
+> Última revisión: 2026-11-22 (AB#101447, contraste con `AzureContentUnderstandingProvider.cs` y `documentia-cu-performance.workbook.json`). Los nombres de métrica (`CU.PrepareMs`, `CU.LimiterWaitMs`, `CU.AnalysisMs`, `CU.ParseMs`, `CU.Attempts`) y el evento `CU.TransientError` coinciden con el código y con el workbook. El workbook no incluye `CU.HardTimeout`, `CU.CircuitOpen`, `CU.CircuitRejected` ni `CU.RetryFailover` (ver OBSERVABILIDAD_KQL.md). Datos en App Insights a 2026-11-23 (30 días): las métricas `CU.*` solo llegan en DEV (11 muestras); PRO no registra ninguna `CU.*` en el periodo y PRE no tiene tráfico.
 
 ## Objetivo
 
