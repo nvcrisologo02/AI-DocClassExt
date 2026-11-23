@@ -1,7 +1,7 @@
 # Índice de documentación — DocumentIA
 
 > Última revisión estructural: 2026-11-22 (AB#101445). Rama de referencia: `develop`.
-> La verificación de contenido documento a documento sigue abierta bajo el mismo PBI; el estado de cada fichero se actualiza aquí cuando se cierra.
+> Verificación de contenido por familia cerrada el 2026-11-22 (AB#101447) e integrada en `develop` el 2026-11-23 (AB#101448). El estado de cada fichero se actualiza aquí con cada cambio que lo afecte; las decisiones derivadas están en las tasks AB#101449 a AB#101452.
 
 DocumentIA es el sistema de clasificación y extracción documental de SAREB, en operación desde julio de 2026. Esta página cataloga la documentación permanente del repositorio, organizada en las cuatro familias que usa el impacto documental de cada cambio: técnica, funcional, arquitectura y explotación. El mapa por familia también está declarado en el `CLAUDE.md` del proyecto.
 
