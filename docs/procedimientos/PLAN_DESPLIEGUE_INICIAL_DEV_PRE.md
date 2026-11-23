@@ -3,6 +3,8 @@
 Fecha: 2026-06-24
 Estado: Base de infraestructura entregada. Pendiente configuracion de aplicacion y primer despliegue.
 
+> Nota de revisión (2026-11-22, AB#101447): plan histórico de junio de 2026, se conserva sin reescribir. El estado y la fecha de la cabecera y del apartado 2 ya no son ciertos: DEV y PRE existen y están desplegados (PRE con bootstrap propio, ver AZURE_DEVOPS_BOOTSTRAP_SETUP.md). Los nombres de recursos de DEV y PRE (secciones 4.1 y 4.2) coinciden con `azure-pipelines-bootstrap.yml` y los scripts del apartado 8 existen. Sigue siendo cierto que `scripts/configuration/set-app-settings.ps1` está fijado a PRO. Qué pasos del plan se ejecutaron tal cual no se puede saber desde el repositorio. El procedimiento vigente es RELEASE_MANAGEMENT.md y el estado real de los entornos está en INFRAESTRUCTURA_REAL_DESPLEGADA.md.
+
 ## 1. Objetivo
 
 Definir y ejecutar el despliegue inicial de la solucion en DEV y PRE desde el estado actual.
@@ -366,9 +368,9 @@ Orden recomendado:
 
 Pipelines:
 
-- Bootstrap por entorno: [azure-pipelines-bootstrap.yml](azure-pipelines-bootstrap.yml)
-- Despliegue multi-entorno: [azure-pipelines.yml](azure-pipelines.yml)
-- Hotfix del Admin: [azure-pipelines-admin.yml](azure-pipelines-admin.yml)
+- Bootstrap por entorno: [azure-pipelines-bootstrap.yml](../../azure-pipelines-bootstrap.yml)
+- Despliegue multi-entorno: [azure-pipelines.yml](../../azure-pipelines.yml)
+- Hotfix del Admin: [azure-pipelines-admin.yml](../../azure-pipelines-admin.yml)
 
 Uso esperado:
 
@@ -430,13 +432,13 @@ No necesitas crear pipeline nuevo adicional para cada entorno salvo que quieras 
 
 ## 8. Referencias del repositorio
 
-- [docs/08_CHECKLISTS_DESPLIEGUE.md](docs/08_CHECKLISTS_DESPLIEGUE.md)
-- [docs/procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md](docs/procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md)
-- [scripts/configuration/check-azure-permissions.ps1](scripts/configuration/check-azure-permissions.ps1)
-- [scripts/configuration/set-keyvault-secrets.ps1](scripts/configuration/set-keyvault-secrets.ps1)
-- [scripts/configuration/set-app-settings.ps1](scripts/configuration/set-app-settings.ps1)
-- [scripts/configuration/set-functionapp-keyvault-references.ps1](scripts/configuration/set-functionapp-keyvault-references.ps1)
-- [scripts/deployment/verify-prod-prereqs.ps1](scripts/deployment/verify-prod-prereqs.ps1)
-- [scripts/testing/validate-azure-appsettings-contract.ps1](scripts/testing/validate-azure-appsettings-contract.ps1)
-- [scripts/config/azure-appsettings-contract.json](scripts/config/azure-appsettings-contract.json)
-- [azure-pipelines.yml](azure-pipelines.yml)
+- [docs/08_CHECKLISTS_DESPLIEGUE.md](../08_CHECKLISTS_DESPLIEGUE.md)
+- [docs/procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md](AZURE_DEVOPS_BOOTSTRAP_SETUP.md)
+- [scripts/configuration/check-azure-permissions.ps1](../../scripts/configuration/check-azure-permissions.ps1)
+- [scripts/configuration/set-keyvault-secrets.ps1](../../scripts/configuration/set-keyvault-secrets.ps1)
+- [scripts/configuration/set-app-settings.ps1](../../scripts/configuration/set-app-settings.ps1)
+- [scripts/configuration/set-functionapp-keyvault-references.ps1](../../scripts/configuration/set-functionapp-keyvault-references.ps1)
+- [scripts/deployment/verify-prod-prereqs.ps1](../../scripts/deployment/verify-prod-prereqs.ps1)
+- [scripts/testing/validate-azure-appsettings-contract.ps1](../../scripts/testing/validate-azure-appsettings-contract.ps1)
+- [scripts/config/azure-appsettings-contract.json](../../scripts/config/azure-appsettings-contract.json)
+- [azure-pipelines.yml](../../azure-pipelines.yml)

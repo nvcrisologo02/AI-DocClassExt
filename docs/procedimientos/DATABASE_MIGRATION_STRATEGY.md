@@ -1,5 +1,7 @@
 # Migraciones de base de datos — DocumentIA
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines-migrations.yml`, `DocumentIADbContextFactory` y `scripts/database/`). Estado del esquema: 38 migraciones, la última `20261013092225_ClaveIntencionDedup` (versión 1.24 en DATA_MODELS_ER_DIAGRAM.md).
+
 Guía de desarrollo para crear y probar migraciones de EF Core en local. La aplicación en DEV,
 PRE y PRO no se hace desde local ni desde los pipelines de aplicación: la hace el pipeline
 Migrations-BD (`azure-pipelines-migrations.yml`) siguiendo la Fase 2.1 y la Fase 4.2 de
@@ -58,8 +60,7 @@ Buenas prácticas:
 1. Un cambio lógico por migración.
 2. `Down()` siempre implementado.
 3. Índices para las columnas que se filtran con frecuencia; en tablas grandes, crear el índice
-   en un script aparte y medirlo primero en una copia (ver el índice del Monitor en
-   `scripts/database/indice-monitor-costes-pro.sql` como referencia).
+   en un script aparte con `ONLINE = ON` que además registre la migración en `__EFMigrationsHistory`, y medirlo primero en una copia. Hay cuatro de referencia en `scripts/database/`: `indice-monitor-reutilizacion-pro.sql`, `indice-monitor-costes-pro.sql`, `indice-documentos-md5-pro.sql` e `indice-documento-clave-pro.sql` (este último añade también las tres columnas de la clave de intención).
 4. `NOT NULL` solo con valor por defecto para las filas existentes.
 5. Compatibilidad hacia atrás: el código desplegado antes de la migración debe seguir
    funcionando con el esquema nuevo (regla "esquema antes que código" del runbook). Añadir
@@ -67,6 +68,8 @@ Buenas prácticas:
 6. Probar en local antes de hacer commit (sección 3).
 
 ## 3. Probar una migración en local
+
+> `dotnet ef` necesita una cadena en tiempo de diseño: `DocumentIADbContextFactory` lee `ConnectionStrings__DocumentIA` o `SqlConnectionString` del entorno, o `src/backend/DocumentIA.Functions/local.settings.json`. Sin ninguna, `migrations list` y `database update` fallan.
 
 1. BD local limpia: borrar la BD de desarrollo y ejecutar
    `dotnet ef database update --project src/backend/DocumentIA.Data/DocumentIA.Data.csproj --startup-project src/backend/DocumentIA.Data/DocumentIA.Data.csproj`.
@@ -80,3 +83,5 @@ Buenas prácticas:
 
 Ver [RELEASE_MANAGEMENT.md](RELEASE_MANAGEMENT.md): Fase 2.1 (PRE), Fase 4.1 y 4.2 (copia
 `prerel` y PRO) y Anexo B, capa 4 (restauración). Este documento no describe despliegues.
+
+Resumen del pipeline Migrations-BD (`azure-pipelines-migrations.yml`): stage `Generate` en `windows-latest` (SDK 8.0.x, `dotnet-ef` 8.0.*, `dotnet ef migrations script --idempotent --context DocumentIADbContext`, artefacto `MigrationsScript`) y stage `Apply` en el pool privado `docia-mdp-private` con `scripts/deployment/apply-migrations.ps1` y token de Entra. Parámetros: `targetEnvironment` (`dev` | `pre` | `prod`), `addTransientFirewallRule` (por defecto `false`) y `backfillClaveIntencion` (por defecto `false`; ejecuta `scripts/database/backfill-clave-intencion.ps1` con autoprueba y `-WhatIf` antes del backfill real, timeout de 240 minutos, reanudable con `-DesdeId`).

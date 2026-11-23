@@ -1,5 +1,7 @@
 ### Diagrama: Umbral de confianza
 
+> **Documento sustituido (2026-11-22, AB#101445).** El cálculo y el umbral de confianza vigentes están en [CONFIANZA_AGREGADA.md](../referencias/CONFIANZA_AGREGADA.md). Se conserva por referencia y no se mantiene.
+
 Pega este bloque en el preview de Markdown con soporte Mermaid o abre `confianza_umbral.mmd` en un visor de Mermaid.
 
 ```mermaid

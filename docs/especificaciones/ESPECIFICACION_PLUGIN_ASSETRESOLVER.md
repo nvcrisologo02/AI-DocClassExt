@@ -1,8 +1,11 @@
 # Especificacion Tecnica: Plugin AssetResolver
 
-> Ultima actualizacion: 2026-04-20  
+> Última revisión: 2026-11-22 (AB#101447, contraste con `src/plugins/DocumentIA.AssetResolver/`, `ObtenerActivoActivity`, el orquestador y los pipelines)  
+> Actualización anterior: 2026-04-20 (changelog hasta 1.4.0, 2026-07-08)  
 > Proyecto: AI DocClassExt — SAREB  
 > Componente: `DocumentIA.AssetResolver`
+>
+> **Complementos de la revisión.** Despliegue: App Services `srbwebpluginassetresolverdev`, `srbwebpluginassetresolverpre` y `srbwebpluginassetresolver` (PRO), con `ConnectionStrings__AssetResolverDb` y `ApiKey` como referencias al Key Vault del entorno (`user-ods-dwh`, `AssetResolverApiKey`); la Function App llama con `AssetResolver__BaseUrl` y la cabecera `X-Api-Key` (`AssetResolver__ApiKey`, timeout 30 s). Autenticación: `ApiKeyMiddleware` exige `X-Api-Key` en todo salvo `/swagger`; `GET /api/assets/ping` lo usa el healthcheck. Límites de la sección `Performance`: `SqlCommandTimeoutSeconds` 15, `MaxRowsPerExactSearch` 500, `MaxCandidatesDireccion` y `MaxCandidatesDireccionTipificada` 2000 (truncan resultados). Precedencia de criterios: si IDUFIR o referencia catastral vienen indicados (override de la petición o `MapeoIdufir` / `MapeoReferenciaCatastral` de la tipología) no se usan los aliases globales; «No consta» cuenta como no indicado; el override de `instrucciones.assetResolver.camposBusqueda.*` es el **nombre del campo** de `DatosExtraidos`, el orquestador lo resuelve y el plugin recibe el valor. Los criterios habilitados se ejecutan en **secuencia**, no en paralelo. Columnas obligatorias: seis (las cinco de §7.2 más `IND_STATUS`); las de dirección son `DES_NOMBRE_VIA` y `DES_MUNICP`. Aliases por defecto de `Idufir` en el código: `IDUFIR`, `CRU`, `CodigoRegistroUnico` (el `appsettings.json` desplegado añade `ID_IDUFIR`); existen también aliases para dirección tipificada (`DireccionNombreVia`, `DireccionNumero`, `DireccionMunicipio`, `DireccionCodigoPostal`). El IdActivo del AssetResolver puede ser sobrescrito por un plugin de integración (`IntegrarActivity` prioriza el del plugin). Activación por esquema de BD: `scripts/database/enable-assetresolver-by-schema.sql` (con `@WhatIf = 1` por defecto, `rollback-*` y README). La columna `IdActivo` de `DocumentoEjecuciones` es escalar desde AB#100168 (la calculada `IdActivoNormalizado` se retiró). Script de pruebas: `scripts/testing/Test-AssetResolver.ps1` (17 escenarios). La numeración de secciones está desordenada (13 antes de 12) y se deja como está.
 
 ---
 
@@ -548,7 +551,7 @@ Con `DatosExtraidos.DireccionPropiedades = [ {ReferenciaCastatral: "A", ...},
 | Sintoma | Causa | Solucion |
 |---------|-------|----------|
 | `Found=false`, mensaje "No se encontraron criterios" | Ningun criterio habilitado tiene valor en extractedData | Verificar mapeos y aliases. Revisar que extractedData contiene las claves esperadas. |
-| Score de direccion siempre bajo | Direccion mal parseada o datos BD incompletos | Revisar logs de `direccionNormalizada`. Verificar que `NOM_VIA`, `NOM_MUNIC` estan poblados en BD. |
+| Score de direccion siempre bajo | Direccion mal parseada o datos BD incompletos | Revisar logs de `direccionNormalizada`. Verificar que `DES_NOMBRE_VIA` y `DES_MUNICP` estan poblados en BD. |
 | Timeout en busqueda por direccion | Tabla muy grande + scoring en memoria | Considerar filtrar por provincia/municipio primero, o implementar busqueda en BD. |
 | Excepcion `Index was out of range` en combinacion OR | Todos los criterios devolvian 0 y no habia conjuntos para combinar | Corregido en `CombinarResultados`: devuelve lista vacia si no hay criterios con resultados. |
 | `camposConError` no vacio | Se solicitaron columnas inexistentes | Verificar nombres de columna en `requestedFields`. Usar `#ALL#` para descubrir columnas disponibles. |
@@ -558,7 +561,7 @@ Con `DatosExtraidos.DireccionPropiedades = [ {ReferenciaCastatral: "A", ...},
 ## 10. Tests Funcionales con Script
 
 Script principal:
-- `scripts/Test-AssetResolver.ps1`
+- `scripts/testing/Test-AssetResolver.ps1`
 
 Escenarios actuales:
 - `idufir-alias-default`
@@ -634,7 +637,7 @@ Desde el punto de vista funcional, los criterios tienen la siguiente fiabilidad 
 | 3 | Direccion fuzzy | Scoring Jaccard en memoria | Media — sujeto a normalizacion y umbral |
 | 4 | Direccion tipificada | Filtros AND en BD | Media — precision dependiente de campos informados |
 
-Esta tabla de fiabilidad **no implica un orden de ejecucion**: todos los criterios habilitados se ejecutan en paralelo. Su combinacion se controla mediante `modoCombinacionCriterios` (OR / AND).
+Esta tabla de fiabilidad **no implica un orden de ejecucion**: todos los criterios habilitados se ejecutan (en secuencia, revisado 2026-11-22). Su combinacion se controla mediante `modoCombinacionCriterios` (OR / AND).
 
 ### 13.3 Reglas de Propagacion de IdActivo
 

@@ -1,5 +1,7 @@
 # Prompt de clasificación completo (tal como se envía al modelo)
 
+> Última revisión: 2026-11-22 (AB#101447). Los placeholders y claves coinciden con el seed vigente del repo; la verdad en cada entorno es la tabla `PromptTemplates`. Modelo por entorno: DEV `gpt-5.6-luna` (ADR-004: `reasoning_effort` none, sin `temperature`, caché de prompt explícita con el mensaje de usuario en dos partes cortado en `{DOCUMENT_TEXT}`); PRE y PRO deployment `gpt-4o-mini` (modelo gpt-4.1-mini, con `temperature` y `max_tokens`) hasta la siguiente release. Las referencias a números de línea del código son las de junio-agosto de 2026 y pueden haberse desplazado.
+
 Documento de referencia: reconstruye, literalmente y en orden, los mensajes que `GptClasificarDataProvider`
 envía a Azure OpenAI para clasificar un documento, incluyendo qué placeholder se sustituye por qué, qué
 bloques son condicionales y qué parámetros acompañan a la llamada.
@@ -31,7 +33,7 @@ de arquitectura, versionado y placeholders permitidos): aquí se ve el prompt **
 ## 1. Dónde encaja la clasificación GPT
 
 `IClasificarDataProvider` se resuelve a `ConfigurableClasificarDataProvider`
-([Program.cs:206](../../src/backend/DocumentIA.Functions/Program.cs#L206)), que enruta a un flujo de providers
+([Program.cs](../../src/backend/DocumentIA.Functions/Program.cs), registro `AddSingleton<IClasificarDataProvider, ConfigurableClasificarDataProvider>`), que enruta a un flujo de providers
 (`rules`, `di`, `hybrid-tdn`, `gpt`, `mock`). La clasificación por prompt aquí descrita es la del provider
 `gpt` / `azure-openai` → [GptClasificarDataProvider.cs](../../src/backend/DocumentIA.Functions/Services/GptClasificarDataProvider.cs),
 que además es el **fallback global por defecto** (`ClassificationRouting:GlobalFallbackProvider = "gpt"`).
@@ -53,7 +55,7 @@ defecto) y si la familia tiene catálogo TDN2. El gate de confianza de Fase 1 (`
 ## 2. Anatomía de la llamada HTTP
 
 Ambas fases usan el mismo armado en `CompleteChatAsync`
-([GptClasificarDataProvider.cs:521-567](../../src/backend/DocumentIA.Functions/Services/GptClasificarDataProvider.cs#L521-L567)):
+([GptClasificarDataProvider.cs](../../src/backend/DocumentIA.Functions/Services/GptClasificarDataProvider.cs)). Desde AB#99934 y AB#101428 el armado tiene dos añadidos que el snippet de abajo no recoge: `ConfigureChatOptions` recibe también `model.ReasoningEffort` (en modelos de razonamiento envía `reasoning_effort` y `max_completion_tokens` en lugar de `max_tokens`), y con `promptCache.enabled` la política `PromptCacheRequestPolicy` inyecta `prompt_cache_key`, `prompt_cache_options` y `prompt_cache_breakpoint` en el cuerpo y el mensaje de usuario viaja en dos partes (`UserPromptSplitter`):
 
 ```csharp
 var systemMessage = new SystemChatMessage(systemText);
@@ -90,8 +92,12 @@ Notas relevantes:
 - **No se envían tools, few-shots ni mensajes de asistente.** Exactamente dos mensajes por llamada.
 - **El documento nunca viaja como imagen/binario.** Va como texto plano dentro del prompt de usuario
   (markdown de DI Layout, ver §3.3).
-- `temperature` y `max_tokens` **se omiten** para familias de razonamiento (`gpt-5*`, `o1`/`o3`/`o4`…), que las
-  rechazan ([OpenAiModelCapabilities.cs](../../src/backend/DocumentIA.Functions/Services/OpenAiModelCapabilities.cs)).
+- `temperature` **se omite** para familias de razonamiento (`gpt-5*`, `o1`/`o3`/`o4`…), que la rechazan; con un
+  `reasoningEffort` válido se envían `reasoning_effort` y, si hay límite de salida, `max_completion_tokens` en lugar de
+  `max_tokens` ([OpenAiModelCapabilities.cs](../../src/backend/DocumentIA.Functions/Services/OpenAiModelCapabilities.cs)).
+- Con `restriccionTipologias` en la petición, antes de la fase 1 corre la **clasificación restringida de fase única**
+  (`ClasificarRestringidoAsync`, claves `classification.restricted.system` / `.user`, placeholders `{CONTEXT_PROMPT}`,
+  `{CATALOGO}` y `{DOCUMENT_TEXT}`); no se describe aquí, ver GUIA_CLASIFICACION_RESTRINGIDA.md.
 - Sin reintentos del SDK (`maxRetries: 0`); la resiliencia (retry + circuit breaker + timeout por intento) la
   aporta `IAzureOpenAIResilienceExecutor`.
 
@@ -161,8 +167,11 @@ CONTENIDO DEL DOCUMENTO (texto/markdown):
    No hay contenido textual disponible para este fallback. Nombre de archivo: {nombre del fichero}.
    ```
 
-> **Atención**: el segundo bloque implica que, sin texto extraído, el modelo clasifica **solo por el nombre del
-> fichero**. Es la causa raíz de los "aciertos" engañosos de TDN1 cuando la extracción de texto falla.
+> **Atención**: el segundo bloque implicaba que, sin texto extraído, el modelo clasificaba **solo por el nombre del
+> fichero**. Era la causa raíz de los "aciertos" engañosos de TDN1 cuando la extracción de texto fallaba.
+> **Revisión 2026-11-22:** la guarda actual de `GptClasificarDataProvider` registra «Clasificación sin contenido textual» y
+> **no llama al LLM** (AB#100180) en la fase 1 y en la restringida; el bloque de fallback por nombre de fichero del
+> seed no se usa en ese caso. Comprobado por lectura del código, no con una ejecución.
 >
 > **Actualización 2026-08-10 (AB#100045).** Esta situación era sistemática con **todo documento
 > no-PDF**: en modo blob-first el recorte de páginas fallaba con XLSX/PPTX/DOCX, el orquestador se
@@ -338,6 +347,7 @@ Caché en memoria (TTL 120 s)
               classification.phase1.system / .phase1.user
               classification.phase2.system / .phase2.user
         └─ si falta alguna de las 4 → appsettings.json → ClassificationPrompts:Phase1/Phase2
+  (el par classification.restricted.* se resuelve aparte, con fallback a constantes de código)
 ```
 
 - Se exigen **las 4 claves activas**; si falta una, se descarta la BD entera y se cae al fallback (se registra

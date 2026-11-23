@@ -1,8 +1,10 @@
 # Contrato de la API HTTP — DocumentIA
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con los triggers HTTP, `ContratoEntrada`, `ContratoSalida` y las funciones `Admin_*`). El deployment generativo depende del entorno: DEV usa `gpt-5.6-luna` desde el 2026-11-20 (ADR-004) y PRE y PRO siguen con el deployment `gpt-4o-mini` (modelo gpt-4.1-mini) hasta la siguiente release; el pipeline fija `PromptDefaults__ModelKey` por entorno y las filas `UseAsFallback` de `ModeloConfigs` deciden el de clasificación y extracción.
+
 ## 1. Descripción
 
-El sistema expone una única Function HTTP de entrada: `IngestDocument`. El procesamiento es **asíncrono** (Durable Functions): la petición `POST` devuelve inmediatamente un `202 Accepted` con un `instanceId`, y el cliente hace polling sobre la URL de estado para conocer el resultado final.
+La Function HTTP de entrada para procesar documentos es `IngestDocument`; además existen `POST /api/healthcheck`, los `GET` de markdown (§4.ter), `GET /api/tipologias` y la Admin API `management/*` (§9). El procesamiento es **asíncrono** (Durable Functions): la petición `POST` devuelve inmediatamente un `202 Accepted` con un `instanceId`, y el cliente hace polling sobre la URL de estado para conocer el resultado final.
 
 Este documento define el contrato formal de la API (campos, validaciones y semántica). Para guía de uso paso a paso y ejemplos operativos, ver `docs/05_MANUAL_USO_CONFIGURACION.md`.
 
@@ -60,7 +62,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
     "prompt": {
       "systemPrompt": "Eres un asistente experto en documentos inmobiliarios.",
       "userPromptTemplate": "Resume el siguiente documento en 3 puntos clave:\n\n{{CONTENT}}",
-      "modelKey": "gpt-4o-mini",
+      "modelKey": "default.gpt4o-mini",
       "temperature": 0.2,
       "maxTokens": 800,
       "contentMode": "markdown"
@@ -99,7 +101,7 @@ En local (con `func host start`), el nivel es `Anonymous` efectivamente — no s
 | `classification.provider` | string | `auto` \| `azure-document-intelligence` \| `gpt` \| `mock`. Si se informa `nivelClasificacion`, el sistema **fuerza automáticamente** `provider="gpt"` (D2). |
 | `classification.model` | string | Reservado. Usar `"auto"`. El model key se resuelve desde la configuración de la tipología. |
 | `classification.umbral` | double? | _(Opcional)_ Umbral de confianza para activar fallback GPT y para el check `BAJA_CONFIANZA_CLASIFICACION`. `[0.0–1.0]`. Si se omite (`null`), se aplica la jerarquía: tipología → configuración servidor. |
-| `classification.nivelClasificacion` | string? | _(Opcional)_ Nivel jerárquico de clasificación deseado. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases, nivel completo). `null` / vacío = clasificación completa por defecto. Si se informa, el proveedor se fuerza a `"gpt"` automáticamente y el campo forma parte de la clave de intención con la que se decide la reutilización por duplicado (ver §5, estado `DUPLICADO`). |
+| `classification.nivelClasificacion` | string? | _(Opcional)_ Nivel jerárquico de clasificación deseado. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1_TDN2"` (dos fases, nivel completo; con guion bajo, sin distinguir mayúsculas; cualquier otro valor devuelve `400`). `null` / vacío = clasificación completa por defecto. Si se informa, el proveedor se fuerza a `"gpt"` automáticamente y el campo forma parte de la clave de intención con la que se decide la reutilización por duplicado (ver §5, estado `DUPLICADO`). |
 | `classification.markdown` | string? | _(Opcional)_ Markdown pre-procesado del documento aportado por el caller. Si se informa, gana siempre en `MarkdownResolver` (fuente `Caller`) y no se llama a Document Intelligence Layout ni se persiste. Útil para reutilizar texto ya extraído en integraciones batch. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3. |
 | `extraction.provider` | string | `auto` \| `azure-content-understanding` \| `azure-cu` \| `azure-document-intelligence` \| `azure-di` \| `azure-openai` \| `gpt` \| `mock`. Si se especifica un valor distinto de `"auto"`, sobreescribe el proveedor configurado en la tipología para esta petición. Con `azure-openai` se activa extracción GPT directa (sin CU). |
 | `extraction.model` | string | Model key del registro de modelos de extracción. Si se especifica un valor distinto de `"auto"`, sobreescribe el `modelKey` configurado en la tipología para esta petición. Debe coincidir con una clave publicada en `ModeloConfigs` (los JSON de modelos son solo seed/referencia). |
@@ -406,6 +408,7 @@ Sin body (o body vacío). Sin headers obligatorios.
 | `timestamp` | Timestamp UTC del muestreo. |
 | `components.functions` | Salud del runtime Functions (siempre `healthy` si la respuesta sale). |
 | `components.assetResolver` | Probe HTTP a `GET {AssetResolver:BaseUrl}/api/assets/ping` (timeout 8 s). |
+| `components.gdc` | Probe SOAP `consultarObjetoExiste` con timeout de 30 s (corregido el 2026-11-22: antes decía 5 s); resultado cacheado 45 s con la clave `SystemHealthService:ComponentsHealth`. Detalle en [MANUAL_HEALTHCHECK.md](../manuales/MANUAL_HEALTHCHECK.md). |
 | `components.gdc` | Probe SOAP a `consultarObjetoExiste` con `idObjeto=HEALTHCHECK_PROBE` y MD5 sintético (timeout 5 s). |
 | `components.modelProviders.classification\|extraction\|prompt` | Verifica que el `*ModelRegistryLoader` esté registrado en DI. **Es un objeto único, no un array.** |
 
@@ -547,7 +550,7 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 | `detalleEjecucion.operationId` | `operation_Id` de Application Insights (W3C TraceId). Usar en KQL: `union traces,requests,exceptions \| where operation_Id == "<operationId>"` para obtener la traza completa. Ídem: el de esta llamada, también en respuestas reutilizadas. |
 | `detalleEjecucion.ejecucionOriginalGuid` | **Solo en respuestas reutilizadas** (`resultado.reutilizadaPorDuplicado = true`): `EjecucionGuid` de la ejecución cuyo contrato se devuelve. En una ejecución normal es `null` y **se omite del JSON**. Es el identificador con el que localizar la ejecución original en el Monitor de Admin (AB#100258). |
 | `detalleEjecucion.classificationOnly` | Refleja el valor de `instrucciones.classificationOnly` de la petición original. |
-| `detalleEjecucion.nivelClasificacion` | Nivel de clasificación usado en la petición (`"TDN1"`, `"TDN1/TDN2"` o `null`). Es uno de los componentes de la clave de intención. |
+| `detalleEjecucion.nivelClasificacion` | Nivel de clasificación usado en la petición (`"TDN1"`, `"TDN1_TDN2"` o `null`). Es uno de los componentes de la clave de intención. |
 | `detalleEjecucion.claveIntencion` | _(AB#100930)_ string, 32 caracteres hexadecimales. Clave de intención de la petición (hash de modo, nivel, universo, `expectedType` y modelo de clasificación). Se informa siempre, también con `Dedup:ModoEstricto = false`. En una respuesta reutilizada es la de la petición, que por definición es la de la ejecución original. |
 | `detalleEjecucion.claveIntencionComponentes` | _(AB#100930)_ objeto `{ modo, nivel, universo, expectedType, modeloClasificacion }` con los componentes que dieron la clave: `modo` = `solo-clasificacion` \| `completo`; `universo` = `*` sin restricción o los códigos efectivos en mayúsculas, ordenados y separados por coma; `modeloClasificacion` = deployment GPT, id de clasificador de Document Intelligence o `expectedtype-input` cuando se informa `expectedType`. |
 | `detalleEjecucion.motivoReutilizacion` | _(AB#100930)_ **Solo en respuestas reutilizadas**: `clave-igual`. En el resto se omite del JSON. |
@@ -559,12 +562,16 @@ Las cadenas son literales (no hay enum) y la clave real del JSON es `Resultado.E
 | `detalleEjecucion.clasificacion.confianza` | Confianza final (DI o GPT si hubo fallback). |
 | `detalleEjecucion.clasificacion.confianzaDI` | Confianza bruta de DI. |
 | `detalleEjecucion.clasificacion.confianzaGPT` | Confianza de GPT fallback (0 si no se activó). |
-| `detalleEjecucion.clasificacion.proveedorClasif` | `"DocumentIntelligence"` \| `"GPT4oMini"` |
+| `detalleEjecucion.clasificacion.proveedorClasif` | `"Reglas"` \| `"DocumentIntelligence"` \| `"HybridTDN"` \| `"GPT4oMini"` \| `"Embeddings"` \| `"None"`. `GPT4oMini` es el literal histórico de la rama GPT y **no indica el modelo efectivo** (en DEV es gpt-5.6-luna); el deployment real va en `detalleEjecucion.modeloLLMUsado` y en `costes.consumos[].modelo`. |
+| `detalleEjecucion.clasificacion.ramaClasificacion` | `"gpt"` \| `"embeddings"` \| `"expectedtype"`: qué rama fijó la tipología (ADR-002). |
+| `detalleEjecucion.clasificacion.embeddings` | _(ADR-002)_ Resultado del clasificador por embeddings cuando la fila `clasificador.embeddings` no está en `off`: `versionModelo`, `modo`, `modoRestringido`, `tdn1`, `tdn2`, `tipologia`, `confianza`, `top3`, `decision` (`Omitido` \| `DerivarGpt` \| `Contesta`), `motivo`, `restringido`, `latenciaMs`, `error`, `deployment`. En DEV (sombra) se informa sin alterar el resultado; en PRE y PRO no se emite. |
+| `detalleEjecucion.clasificacion.detalleProveedores[]` | Propuestas de cada proveedor evaluado: `proveedor`, `tipologia`, `confianza`, `motivoDescarte`. |
+| `detalleEjecucion.clasificacion.{tdn1Detectado, tdn2Detectado, propuestaTipologia, clasificacionParcial, rateLimitExcedido, sinContenido, causaSinContenido, umbralFallbackAplicado}` | Detalle de la clasificación jerárquica, de la tipología virtual, del 429 y de la guarda de contenido (ver GUIA_CLASIFICACION_DOCUMENTOS.md). |
 | `detalleEjecucion.clasificacion.fallbackLLM` | `true` si se usó GPT fallback. |
 | `detalleEjecucion.clasificacion.fallbackRazon` | Motivo del fallback. `"fuera_de_conjunto_restringido"` cuando la clasificación se degrada a `"Desconocido"` por `instrucciones.restriccionTipologias`. |
 | `detalleEjecucion.clasificacion.restriccionTipologias` | Eco de la restricción aplicada (`null` si la petición no traía `instrucciones.restriccionTipologias`). `{ codigos, codigosIgnorados }` con los códigos efectivos y los descartados por no publicados. |
 | `detalleEjecucion.costes` | Consumo y coste de servicios de IA de la ejecución. **Solo presente si la petición trae `instrucciones.incluirCostes = true`**; en caso contrario la propiedad se omite del JSON. Ver sección 6.bis. |
-| `detalleEjecucion.extraccion.proveedorExtrac` | `"AzureContentUnderstanding"` \| `"DICustom"` \| `"GPT4oMini"` |
+| `detalleEjecucion.extraccion.proveedorExtrac` | `"AzureContentUnderstanding"` \| `"DocumentIntelligence"` \| `"GPT4oMini"` \| `"none"`. `GPT4oMini` es el literal histórico de la extracción GPT y no indica el modelo efectivo. |
 | `detalleEjecucion.extraccion.confianzaExtraccion` | Confianza de extracción. |
 | `detalleEjecucion.extraccion.fallbackUsado` | `true` si se usó GPT fallback en extracción. |
 | `detalleEjecucion.extraccion.modelKeyEfectivo` | Model key realmente utilizado en ejecución (incluye selección round-robin/failover si aplica). |
@@ -605,13 +612,14 @@ Cubre **solo servicios de IA**. No contabiliza Blob Storage, SQL, Functions ni n
       "Actividad": "Clasificar",
       "Operacion": "classification.phase1",
       "Proveedor": "AzureOpenAI",
-      "Modelo": "gpt-5-mini",
+      "Modelo": "gpt-5.6-luna",
       "TokensEntrada": 12480,
       "TokensEntradaCache": 7200,
+      "TokensEscrituraCache": 0,
       "TokensSalida": 310,
-      "TokensRazonamiento": 128,
-      "CosteEur": 0.004312,
-      "TarifaAplicada": "gpt-5-mini@2026-07-21",
+      "TokensRazonamiento": 0,
+      "CosteEur": 0.001542,
+      "TarifaAplicada": "gpt-5.6-luna@2026-11-17",
       "Descartado": false
     },
     {
@@ -645,6 +653,7 @@ Cubre **solo servicios de IA**. No contabiliza Blob Storage, SQL, Functions ni n
 | `consumos[].modelo` | Modelo físico consumido: nombre de despliegue, identificador de clasificador, `"prebuilt-layout"` o identificador de analizador. Es la clave con la que se resuelve la tarifa. |
 | `consumos[].tokensEntrada` | Tokens de entrada totales, **con los cacheados incluidos**, tal como los devuelve la API del proveedor. |
 | `consumos[].tokensEntradaCache` | Tokens de entrada servidos desde caché. Es un **subconjunto** de `tokensEntrada`, no un sumando: el sistema resta esa parte y le aplica su precio reducido. |
+| `consumos[].tokensEscrituraCache` | Tokens escritos en la caché de prompt (GPT-5.6 con caché explícita, AB#101428). Es un **recargo aparte**: no se resta de `tokensEntrada` y se tarifa con `EurEscrituraCachePor1M`; si la tarifa no lo tiene, `tarifaAplicada` lleva el sufijo `\|sin-precio-escritura`. |
 | `consumos[].tokensSalida` | Tokens de salida totales, con los de razonamiento incluidos. |
 | `consumos[].tokensRazonamiento` | Subconjunto informativo de `tokensSalida`. |
 | `consumos[].tokensContextualizacion` | Tokens de contextualización facturados por Content Understanding. |
@@ -722,7 +731,7 @@ $status.output.resultado
 - Las peticiones con `skipDuplicateCheck = false` (default) comparan el SHA256 del documento contra la base de datos interna. La reutilización exige la misma intención: se devuelve la última ejecución del documento con la misma clave de intención (ver §5, estado `DUPLICADO`); sin ella, el documento se descarga y procesa. La respuesta reutilizada no lleva `detalleEjecucion.postproceso.markdown`; se obtiene con el GET de §4.ter.
 - Cuando el documento llega por `objectIdGDC`, además de la deduplicación por SHA256 existe la **reutilización por checksum MD5 de GDC**: si el checksum ya fue procesado, se devuelve la última ejecución con la misma intención; sin ella, el documento se descarga y procesa. El mensaje es `Resultado.MensajeReutilizacion` = "Documento ya procesado previamente (checksum GDC)...". Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
 - **Toda petición servida por reutilización queda registrada** (AB#100258) como una ejecución propia en la base de datos, sin contrato propio y con coste cero salvo el del prompt o resumen que complete (AB#100930), vinculada a la original y visible en el Monitor de Admin. Para el llamador el cambio es **aditivo**: el único campo nuevo (`detalleEjecucion.ejecucionOriginalGuid`) solo aparece en respuestas reutilizadas, y lo único que cambia de valor es `detalleEjecucion.instanceId` / `operationId` en esas respuestas, que pasan a ser los de la llamada actual. `statusQueryUri`, los estados y el resto del contrato no cambian. Ver [MANUAL_DEDUPLICACION.md](../manuales/MANUAL_DEDUPLICACION.md).
-- **Aviso de cambio de contrato (AB#100930):** `resultado.estado = "DUPLICADO"` deja de emitirse en modo estricto (`Dedup:ModoEstricto = true`, el defecto): un documento duplicado sin ejecución con la misma intención se procesa y devuelve el estado del procesamiento, con `detalleEjecucion.motivoNoReutilizacion` informado. Los integradores que dependan de un `DUPLICADO` con contrato vacío deben tratar la respuesta como una procesada normal. Además, una petición que cambia modo, nivel, restricción de tipologías, `expectedType` o modelo, o que pide más páginas, ya no recibe la ejecución anterior sino un reproceso. El resto de campos del contrato no cambia; los campos nuevos de `detalleEjecucion` son aditivos. Fecha de despliegue en PRO: pendiente de confirmar (se anotará en el registro de la release).
+- **Aviso de cambio de contrato (AB#100930):** `resultado.estado = "DUPLICADO"` deja de emitirse en modo estricto (`Dedup:ModoEstricto = true`, el defecto): un documento duplicado sin ejecución con la misma intención se procesa y devuelve el estado del procesamiento, con `detalleEjecucion.motivoNoReutilizacion` informado. Los integradores que dependan de un `DUPLICADO` con contrato vacío deben tratar la respuesta como una procesada normal. Además, una petición que cambia modo, nivel, restricción de tipologías, `expectedType` o modelo, o que pide más páginas, ya no recibe la ejecución anterior sino un reproceso. El resto de campos del contrato no cambia; los campos nuevos de `detalleEjecucion` son aditivos. Desplegado en PRO con la release v1.1.0 (2026-10-16); el criterio de aceptación de AB#100930 se midió en PRO el 2026-11-18 (56 reutilizaciones, 0 anomalías). El interruptor `Dedup:ModoEstricto` sigue en el código y en el pipeline; su retirada está pendiente de decidir.
 - Si `skipGDCUpload=true` (o se fuerza automáticamente por entrada `objectIdGDC`), el paso GDC finaliza como `Skipped` y se reporta como exitoso (`detalleEjecucion.gdc.exitoso=true`).
 - Si se envía `instrucciones.prompt`, la validación ocurre en el trigger HTTP (respuesta `400` inmediata si inválido). No es necesario esperar al resultado de la orquestación para detectar errores de prompt.
 - En `classificationOnly=true`, `Integrar` solo se ejecuta con `executeIntegrarWhenClassificationOnly=true` y `trazabilidad.idActivo` informado.
@@ -766,7 +775,7 @@ El identificador de ruta es el `Id` numérico (`{id:int}`), no el código.
 
 | Método | Ruta | Descripción |
 |---|---|---|
-| `GET` | `/api/management/modelos/{tipo}` | Lista modelos del tipo indicado (`clasificacion`, `extraccion`, `prompt`, `layout`). |
+| `GET` | `/api/management/modelos/{tipo}` | Lista modelos del tipo indicado (`clasificacion`, `extraccion`, `prompt`, `layout`, `tarifas`, `embeddings`); un tipo no reconocido devuelve `400`. |
 | `POST` | `/api/management/modelos` | Crea un modelo nuevo. |
 | `PUT` | `/api/management/modelos/{id}` | Actualiza un modelo existente. |
 | `DELETE` | `/api/management/modelos/{id}` | Desactiva el modelo (soft-delete, `Activo=false`). Responde `200` con la entidad. |

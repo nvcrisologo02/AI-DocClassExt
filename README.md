@@ -1,5 +1,7 @@
 ﻿# Sistema de Clasificacion y Extraccion IA
 
+> Última revisión: 2026-11-22 (AB#101446 y AB#101447, repaso de la documentación por familias; índice completo en [docs/INDEX.md](docs/INDEX.md)). Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release.
+
 Sistema modular de procesamiento de documentos con clasificacion y extraccion automatica basado en Azure AI Document Intelligence y Azure OpenAI.
 
 ## Arquitectura
@@ -34,25 +36,23 @@ Sistema modular de procesamiento de documentos con clasificacion y extraccion au
 ## Setup Local
 
 1. Clonar el repositorio
-2. Configurar variables de entorno (copiar .env.example a .env)
+2. Configurar el host local: copiar `src/backend/DocumentIA.Functions/local.settings.template.json` a `local.settings.json` en la misma carpeta y rellenar los alias de IA y la cadena SQL (el host no lee `.env`; ver [QUICKSTART_DESARROLLADORES.md](docs/guias/QUICKSTART_DESARROLLADORES.md))
 3. Ejecutar scripts de setup: `.\scripts\setup\1 setup-folders.ps1`, `.\scripts\setup\3 setup-docs.ps1`, etc.
 4. Restaurar dependencias .NET: `dotnet restore src/backend/DocumentIA.sln`
-5. Instalar dependencias Python: `pip install -r src/ai-models/requirements.txt`
+5. Instalar dependencias Python solo para los scripts de análisis: `pip install -r src/ai-models/requirements.txt`
 
 ## Desarrollo
 
 ### Backend
-`ash
-cd src/backend
-dotnet build
-func start --csharp
+```bash
+dotnet build src/backend/DocumentIA.sln
+cd src/backend/DocumentIA.Functions
+func start
 ```
 
-### AI Models Training
-```bash
-cd src/ai-models
-python training/train_classifier.py
-```
+### Modelos de IA
+
+El entrenamiento del clasificador por embeddings y la evaluación viven en el repositorio DocumentIA.Batch; `src/ai-models/` solo contiene las dependencias Python de los scripts de análisis (no existe `training/`).
 
 ## Deploy
 
@@ -82,16 +82,15 @@ func azure functionapp publish srbappprodocai
 
 ## Documentacion
 
-Ver carpeta docs/ para:
-- **Cambios v1.4 (IMPORTANTE):** [docs/auxiliares/migracion-deployment/12_MIGRACION_PROMPTGPT_V1_4.md](docs/auxiliares/migracion-deployment/12_MIGRACION_PROMPTGPT_V1_4.md) — PromptGPT deprecation y ConfiguracionJson refactorizado
-- Arquitectura detallada
-- Contratos de entrada/salida
-- Manuales de operacion
-- Manual de costes de IA: [docs/manuales/MANUAL_COSTES_IA.md](docs/manuales/MANUAL_COSTES_IA.md)
-- Manual de plugins: [docs/manuales/MANUAL_PLUGINS.md](docs/manuales/MANUAL_PLUGINS.md)
-- Manual del motor de validaciones: [docs/manuales/MANUAL_VALIDACIONES.md](docs/manuales/MANUAL_VALIDACIONES.md)
-- Plantillas de plugins: [docs/contratos/PLANTILLA_PLUGINS_JSON.md](docs/contratos/PLANTILLA_PLUGINS_JSON.md)
-- Fuente de verdad de configuracion: [docs/referencias/FUENTE_VERDAD_CONFIGURACION.md](docs/referencias/FUENTE_VERDAD_CONFIGURACION.md)
+El punto de entrada es [docs/INDEX.md](docs/INDEX.md), que cataloga toda la documentacion permanente por familia y estado. Lecturas principales:
+
+- Arquitectura: [docs/01_ARQUITECTURA_SISTEMA.md](docs/01_ARQUITECTURA_SISTEMA.md) e [infraestructura real desplegada](docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md)
+- Funcional: [docs/02_ANALISIS_FUNCIONAL.md](docs/02_ANALISIS_FUNCIONAL.md) y [guia de clasificacion](docs/guias/GUIA_CLASIFICACION_DOCUMENTOS.md)
+- Tecnica: [docs/03_DISENO_TECNICO_DETALLADO.md](docs/03_DISENO_TECNICO_DETALLADO.md), [manual de uso y configuracion](docs/05_MANUAL_USO_CONFIGURACION.md) y [contrato de la API HTTP](docs/contratos/CONTRATO_API_HTTP.md)
+- Explotacion: [runbook de release](docs/procedimientos/RELEASE_MANAGEMENT.md), [registro de releases](docs/releases/README.md) y [runbook de incidentes](docs/procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md)
+- Decisiones de arquitectura: [docs/decisiones/](docs/decisiones/)
+
+La carpeta `docs/auxiliares/` no esta versionada: los documentos permanentes no deben enlazar a ella.
 
 > Tipologias, modelos IA y plugins por tipologia se gestionan en BBDD mediante Admin API/DocumentIA.Admin. Los JSON fisicos del repositorio son seed inicial, plantillas o referencia historica; pueden estar desactualizados y no deben borrarse sin confirmacion explicita.
 

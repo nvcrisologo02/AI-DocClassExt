@@ -1,14 +1,16 @@
 # Especificación Funcional — Límite de Páginas por Documento
 
-**Versión:** 1.0  
+**Versión:** 1.1  
 **Fecha:** 2026-05-28  
-**Estado:** Aprobado para implementación  
+**Estado:** Implementada (commit `fbf33519`, 2026-05-28). No se aplica en la rama `classificationOnly`. En los entornos desplegados el límite global está sin fijar (0 = sin límite); los límites por tipología dependen de la `ConfiguracionJson` de BD  
+
+> Última revisión: 2026-11-22 (AB#101447, contraste con el orquestador (Paso 3.9), `PipelineSettings`, `TipologiaValidationConfig`, el contrato de entrada y CONTRATO_API_HTTP §5). Hallazgos: el límite se aplica en línea en el orquestador tras clasificar y resolver la tipología; `ApplyPdfPageLimitActivity` no interviene (pertenece al recorte de `classificationOnly` con `maxPagesForClassificationOnly`, está declarada y no se invoca); `classificationOnly` retorna antes del Paso 3.9, por lo que el límite no se aplica en esa rama; `Pipeline__MaxPaginasDocumento` no lo fija el pipeline de despliegue (defecto 0); en el bloqueo se omiten Extraer, Prompt, Validar, ObtenerActivo, Integrar y SubirGDC, se fija `EstadoCalidad = "REVISION"`, `ConfianzaExtraccion = 0`, `ConfianzaValidacion = 1.0` y se persiste; el resumen solo existe si lo produjo la propia clasificación. Límites por tipología en BD, páginas en formatos no PDF, estado de los work items 99683-99697 en Azure DevOps y existencia de `CATALOGO_APP_SETTINGS.md`: no comprobado en la revisión del 2026-11-22.
 
 ---
 
 ## 1. Contexto y Motivación
 
-Actualmente la clasificación limita el número de páginas enviadas al modelo, pero la extracción y el resto de la orquestación procesan el documento completo. Un documento de 200 páginas tiene el mismo coste de clasificación que uno de 10, pero un coste de extracción drásticamente mayor. Sin un límite explícito, documentos grandes pueden consumir cuota de CU de forma desproporcionada, elevar costes y degradar el rendimiento del batch completo.
+Antes de esta funcionalidad, la clasificación limitaba el número de páginas enviadas al modelo, pero la extracción y el resto de la orquestación procesaban el documento completo. Un documento de 200 páginas tiene el mismo coste de clasificación que uno de 10, pero un coste de extracción drásticamente mayor. Sin un límite explícito, documentos grandes pueden consumir cuota de CU de forma desproporcionada, elevar costes y degradar el rendimiento del batch completo.
 
 ---
 
@@ -17,13 +19,13 @@ Actualmente la clasificación limita el número de páginas enviadas al modelo, 
 ### 2.1 `MaxPaginasDocumento` — Nivel de configuración global o de tipología
 
 - **Tipo:** entero positivo opcional
-- **Ubicación:** configuración global (`appsettings` / tabla de configuración) y/o JSON de tipología
+- **Ubicación:** sección `Pipeline` (app setting `Pipeline__MaxPaginasDocumento`, clase `PipelineSettings`, default 0; no hay tabla de configuración) y/o `maxPaginasDocumento` en la `ConfiguracionJson` de la tipología (`TipologiaValidationConfig.MaxPaginasDocumento`)
 - **Semántica:** define el máximo de páginas que un documento puede tener para ser procesado más allá de la clasificación. Si el documento supera este valor, el pipeline se detiene tras la clasificación con un resultado controlado.
 - **Valor 0 o ausente:** no se aplica límite.
 
 ### 2.2 `ForzarProcesadoSinLimitePaginas` — Nivel de instrucción de ejecución
 
-- **Tipo:** booleano opcional en el input de la orquestación
+- **Tipo:** booleano opcional, `instrucciones.forzarProcesadoSinLimitePaginas` del contrato de entrada
 - **Default:** `false`
 - **Semántica:** cuando es `true`, el sistema omite la validación de páginas y procesa el documento completo, asumiendo que el llamador es consciente del coste y la decisión es deliberada.
 
@@ -33,7 +35,7 @@ Actualmente la clasificación limita el número de páginas enviadas al modelo, 
 
 ### 3.1 Momento de la evaluación
 
-La validación de páginas ocurre **después de la clasificación** y después de que el sistema conoce el número de páginas del documento. No se puede evaluar antes porque el número de páginas se obtiene durante el procesado inicial. El punto exacto es la transición entre la fase de clasificación/resumen y el inicio de la extracción.
+La validación de páginas ocurre **después de la clasificación** y después de que el sistema conoce el número de páginas del documento. `NormalizarActivity` calcula las páginas del PDF al inicio y `PrepararDocumentoClasificacionActivity` las completa si son 0; la comprobación se hace en el Paso 3.9 del orquestador, tras clasificar y resolver la tipología, porque necesita su `MaxPaginasDocumento` (páginas en formatos no PDF: no comprobado en la revisión del 2026-11-22). No se puede evaluar antes porque el número de páginas se obtiene durante el procesado inicial. El punto exacto es la transición entre la fase de clasificación/resumen y el inicio de la extracción.
 
 ### 3.2 Condición de bloqueo
 
@@ -47,7 +49,7 @@ Si cualquiera de las tres no se cumple, el pipeline continúa con normalidad.
 
 ### 3.3 Resultado cuando se bloquea
 
-El orquestador **no lanza un error no controlado**. Devuelve un resultado de ejecución con estado específico, distinto de `OK` y distinto de `ERROR`:
+El orquestador **no lanza un error no controlado**. Devuelve un resultado de ejecución con estado específico, distinto de `OK` y distinto de `ERROR` (con `EstadoCalidad = "REVISION"`, `ConfianzaExtraccion = 0`, `ConfianzaValidacion = 1.0`; la instancia Durable termina en `Completed`):
 
 **Estado:** `PAGINAS_EXCEDIDAS`
 
@@ -66,7 +68,7 @@ Para forzar el procesado use ForzarProcesadoSinLimitePaginas = true en la solici
 | Ingesta y subida a blob | ✅ Sí |
 | Verificación de duplicado | ✅ Sí |
 | Clasificación | ✅ Sí |
-| Resumen general | ✅ Sí |
+| Resumen general | Solo si lo generó la propia clasificación (`ResumenCombinado` de TDN1); el prompt libre y el resumen dedicado se omiten |
 | **Validación del límite de páginas** | ✅ Sí — aquí se detiene |
 | Extracción (CU / GPT) | ❌ No |
 | Validación de campos | ❌ No |
@@ -74,7 +76,7 @@ Para forzar el procesado use ForzarProcesadoSinLimitePaginas = true en la solici
 | Persistencia GDC | ❌ No |
 | Persistencia en SQL | ✅ Sí — con estado `PAGINAS_EXCEDIDAS` |
 
-La clasificación y el resumen se persisten con normalidad. El documento queda registrado con la tipología identificada y el motivo de no procesado.
+La clasificación se persiste con normalidad (y el resumen, solo si ya existía). El documento queda registrado con la tipología identificada y el motivo de no procesado.
 
 ---
 
@@ -84,8 +86,8 @@ Cuando el llamador envía `ForzarProcesadoSinLimitePaginas = true`:
 
 - La validación de páginas se omite completamente
 - El documento se procesa en su totalidad igual que hoy
-- Se registra en telemetría y en el log que el límite fue omitido deliberadamente, incluyendo el número de páginas y quién lo solicitó
-- El estado final es `OK` o `ERROR` según el resultado normal del pipeline
+- Se registra en el log (`[AVISO] Límite de páginas omitido por ForzarProcesadoSinLimitePaginas=true…`, con documento, páginas y límite) que el límite fue omitido deliberadamente; el solicitante queda en `trazabilidad.submittedBy` de la ejecución persistida. No hay evento de telemetría específico (criterio 7: no comprobado en la revisión del 2026-11-22)
+- El estado final es el que corresponda al flujo normal del pipeline (`OK`, `VALIDACION_CON_ERRORES`, `ERROR`…)
 
 Esta traza es **obligatoria para auditoría de coste**: permite identificar a posteriori qué ejecuciones omitieron el límite y cuántas páginas procesaron.
 
@@ -113,7 +115,7 @@ El límite puede configurarse en dos niveles, con la siguiente **precedencia de 
 
 ## 6. Ejemplos de Configuración
 
-### Configuración global (`appsettings` o tabla de configuración):
+### Configuración global (app setting `Pipeline__MaxPaginasDocumento`; el host no carga `appsettings.json`):
 
 ```json
 {
@@ -123,7 +125,7 @@ El límite puede configurarse en dos niveles, con la siguiente **precedencia de 
 }
 ```
 
-### Configuración por tipología (JSON de tipología):
+### Configuración por tipología (`ConfiguracionJson.maxPaginasDocumento`; el ejemplo siguiente es ilustrativo, no el esquema real):
 
 ```json
 {
@@ -133,21 +135,20 @@ El límite puede configurarse en dos niveles, con la siguiente **precedencia de 
 }
 ```
 
-### Input de orquestación con bypass:
+### Input de orquestación con bypass (fragmento real del contrato de entrada):
 
 ```json
 {
-  "documentoId": "abc123",
-  "tipologia": "ESCRITURA_NOTARIAL",
-  "forzarProcesadoSinLimitePaginas": true
+  "documento": { "nombre": "escritura.pdf", "blobPath": "..." },
+  "instrucciones": { "forzarProcesadoSinLimitePaginas": true }
 }
 ```
 
 ---
 
-## 7. Impacto en Componentes Existentes
+## 7. Impacto en Componentes Existentes (implementados: `TipologiaValidationConfig.cs`, `PipelineSettings.cs`, `ContratoEntrada.cs`, `DocumentProcessOrchestrator.cs` Paso 3.9; el estado se guarda como cadena en `Resultado.Estado`, sin cambio de esquema)
 
-| Componente | Cambio requerido |
+| Componente | Cambio requerido (planificación original) |
 |---|---|
 | Modelo de configuración de tipología | Añadir `maxPaginasDocumento` entero opcional |
 | Configuración global (`appsettings` / tabla) | Añadir `Pipeline:MaxPaginasDocumento` |
@@ -168,7 +169,7 @@ El límite puede configurarse en dos niveles, con la siguiente **precedencia de 
 3. Una tipología con `maxPaginasDocumento = 20` bloquea a 20 páginas aunque el límite global sea 50.
 4. Una tipología sin `maxPaginasDocumento` usa el límite global.
 5. Si no hay límite global ni de tipología, todos los documentos se procesan sin restricción igual que hoy.
-6. La clasificación y el resumen del documento bloqueado se persisten correctamente.
+6. La clasificación del documento bloqueado se persiste correctamente (el resumen, solo si ya existía: ver §3.4).
 7. El estado `PAGINAS_EXCEDIDAS` es distinguible de `OK` y de `ERROR` en SQL, en la respuesta HTTP y en Application Insights.
 
 ---

@@ -1,5 +1,7 @@
 # Causísticas Nota Simple 1.4: Clasificación + Extracción
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `infra/ai/cu-analyzers.json`, los manifiestos de DEV y PRE y `ModeloConfigs` de DEV y PRO). Siguen vigentes las 22 casuísticas de negocio (clasificación por ExpectedType, DI, GPT o mock, y extracción por provider o fallback GPT); el nombre del fichero se mantiene por los enlaces. Ha cambiado el analyzer: la tipología `nota.simple.1_4` usa `CU_NS_1.4_3`; la Nota Simple default actual (`nota.simple` 1.5) usa `CU_NS_1.5_0`; y `nota.simple.ggaa.bal` 1.6 usa `CU_NS_1.6_0_GGAA` (no existe un analyzer llamado `CU_NS_1.6_0`). La casuística #22 se corrige: cierra en `NO_CLASIFICADO`, como ya decía el resumen. Clasificación generativa por entorno: DEV `gpt-5.6-luna` (ADR-004); PRE y PRO `gpt-4o-mini`. Comportamiento de cada casuística contra el código del orquestador: no comprobado en la revisión del 2026-11-22.
+
 ## **MATRIZ DE 22 CAUSÍSTICAS VÁLIDAS**
 
 | # | Clasificación | Fallback Clasif | Estado Clasif | Extracción | Resultado Extrac | Fallback Extrac | Resultado Final |
@@ -25,7 +27,7 @@
 | **19** | Mock | N/A | ✓ OK | Provider | ✓ OK | NO | `OK` |
 | **20** | DI error | GPT ✗ Fail | ✗ FAIL | — | — | — | **`ERROR`** |
 | **21** | DI = RESTO | GPT ✓ OK | ✓ OK | Provider | ✓ OK | NO | `OK` |
-| **22** | DI = RESTO | GPT ✗ Desconocido | ✗ FAIL | — | — | — | **`ERROR`** |
+| **22** | DI = RESTO | GPT ✗ Desconocido | ✗ FAIL | — | — | — | **`NO_CLASIFICADO`** |
 
 ---
 

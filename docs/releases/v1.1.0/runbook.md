@@ -1,5 +1,7 @@
 # Runbook ejecutado — release v1.1.0
 
+> Nota de revisión (2026-11-22, AB#101447): histórico, no se reescribe. Las casillas de las fases 4 y 5 están sin marcar y los pasos 4.2, 4.5, 4.8, 4.10, 4.12, 4.15, 5.2 y 5.7 conservan el marcador de plantilla; el resultado real de la ventana (runs 807 `prod` 79815 y 79816, 799 run 79817 sobre `efa094d`, tag `v1.1.0` el 2026-10-16, master `d1559ac`) consta en `release.md` (tablas «Aprobación» y «Runs de pipeline») y en `evidencias/`. La copia `DocumentIA-prerel-20261016` tenía borrado previsto el 2026-10-23; no consta en el repo que se hiciera (no comprobado en la revisión del 2026-11-22).
+
 Instancia de docs/procedimientos/RELEASE_MANAGEMENT.md. Marcar cada paso con fecha y resultado; tachar con motivo los que no aplican.
 
 ## Fase 0 — Preparación y versión

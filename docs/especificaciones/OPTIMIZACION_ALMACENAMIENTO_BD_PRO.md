@@ -11,6 +11,8 @@
 > alerta de capacidad (`create-db-capacity-alert.ps1`). La fase de *contract* del markdown
 > (dejar de escribir la Base64 y borrarla) queda fuera de alcance hasta verificar PRO.
 
+> **Nota de revisión (2026-11-22, AB#101447).** Documento histórico: el bloque «Pendiente PRO» de arriba describe el estado del 02/09/2026. La fase de BD (índice cubriente de AB#100185, columna `IdActivo` y SP de AB#100168, columna binaria del markdown de AB#100169) se aplicó en PRO el 03/09/2026 con los dos backfills por lotes verificados (`RUNBOOK_RELEASE_PRO_2026-09.md`; versión 1.17 del modelo de datos), y el índice de costes el 20/09/2026. La alerta de capacidad de BD (`srbalertstoprodocai`, > 80 %) existe en PRO. La fase de *contract* del markdown sigue sin hacerse: `PersistirActivity` graba las dos columnas (comprobado en el código el 2026-11-22). El estado vivo del esquema está en [DATA_MODELS_ER_DIAGRAM.md](DATA_MODELS_ER_DIAGRAM.md); las mediciones citadas abajo en `docs/auxiliares/temps/` y `docs/superpowers/specs/` son carpetas no versionadas.
+
 Plan de la iniciativa para reducir el consumo de almacenamiento de la BD `DocumentIA` en PRO
 (Azure SQL, `srbsqlprodocai`), tras alcanzar el límite configurado de 2 GB (ampliado a 20 GB
 el 31/08/2026) con 2.880 MB de datos y 58.624 ejecuciones en agosto de 2026.

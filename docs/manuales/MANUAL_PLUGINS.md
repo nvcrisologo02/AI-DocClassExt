@@ -1,5 +1,7 @@
 # Manual del sistema de plugins (DocumentIA)
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `DocumentIA.Plugins`, `IntegrarActivity`, `PluginConfigLoader` y la Admin API). Este manual es el canon de **plugin de integración** (`IIntegrationPlugin`); los providers de IA están en [EXTENSIBILIDAD_PLUGIN_SYSTEM.md](../guias/EXTENSIBILIDAD_PLUGIN_SYSTEM.md) y el servicio AssetResolver (que no es un `IIntegrationPlugin`) en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](../especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). Complementos de la revisión: la configuración publicada sigue el ciclo `Draft` → `Published` → `Retired` (solo se ejecuta lo `Published`) con la Admin API `GET/PUT management/plugins-tipologias/{codigo}` y `POST .../publicar` y `.../retirar`, y se cachea 5 minutos; `ResilientPlugin` abre el circuito a los 5 fallos consecutivos y lo reinicia a los 5 minutos; el `IdActivo` final se resuelve por precedencia plugin → AssetResolver (si devolvió un único activo) → entrada; `SarebEnrichments` no está en `DocumentIA.sln` y `plugins/SarebEnrichments.dll` va versionado.
+
 ## 1) ¿Qué es y qué aporta?
 
 El proyecto `DocumentIA.Plugins` implementa una capa de integración extensible para enriquecer los datos extraídos de documentos según la tipología.
@@ -50,7 +52,7 @@ El proyecto `DocumentIA.Plugins` implementa una capa de integración extensible 
 
 - `RestPlugin`
   - Integra HTTP (`GET/POST/PUT/DELETE`).
-  - Soporta headers, timeout y auth (`Bearer`, `ApiKey`, `None`).
+  - Soporta headers, timeout y auth (`Bearer` por defecto y `ApiKey` con cabecera `X-API-Key`; `Basic` solo existe en SOAP). `endpoint` y `method` (por defecto POST) pueden sobrescribirse desde el payload (`data["endpoint"]`, `data["method"]`).
   - Devuelve respuesta parseada en `ResponseData`.
 
 - `SoapPlugin`
@@ -172,12 +174,14 @@ Crear o editar la configuracion de plugins desde DocumentIA.Admin o Admin API. U
 
 ### Paso 2: si usas plugin custom, compilar y publicar DLL
 
-Hay scripts de apoyo:
+Los scripts `scripts/compile-all-plugins.ps1` y `scripts/compile-plugins.ps1` que citaban las versiones anteriores de este manual **ya no existen** (retirados en el commit ab365619). Compilación manual (revisado 2026-11-22):
 
-- `scripts/compile-all-plugins.ps1`
-- `scripts/compile-plugins.ps1`
+```powershell
+dotnet build src/enrichments/SarebEnrichments/SarebEnrichments.csproj -c Release
+Copy-Item src/enrichments/SarebEnrichments/bin/Release/net8.0/SarebEnrichments.dll plugins/
+```
 
-Ejemplo: `compile-all-plugins.ps1` compila `SarebEnrichments` y copia `SarebEnrichments.dll` a `plugins/`.
+La DLL de `plugins/` está versionada en el repo y es la que se despliega con la Function App (`assemblyPath` relativo a `AppContext.BaseDirectory`). `docs/08_CHECKLISTS_DESPLIEGUE.md` remite a este paso para «compilar plugins» (revisado el 2026-11-22). la familia de explotación.
 
 ### Paso 3: ejecutar Functions
 

@@ -42,3 +42,4 @@ gpt-5.6-luna (Data Zone Standard, `reasoning_effort` none, caché de prompt expl
 ## Notas posteriores
 
 - 2026-11-20 (AB#101438): el «falla siempre» de Consecuencias aplica al prompt libre y al resumen de `OpenAIPromptDataProvider`. En la clasificación GPT la clave del resumen es solo una etiqueta y no selecciona modelo: sin `PromptDefaults:ModelKey` el resumen sale sin etiqueta y el error queda en el log (commit 66babf8). La decisión no cambia.
+- 2026-11-22 (AB#101447, revisión documental): la documentación permanente redacta el modelo generativo por entorno (DEV `gpt-5.6-luna`; PRE y PRO `gpt-4o-mini` = gpt-4.1-mini hasta la siguiente release). El deployment de `gpt-5.6-luna` sigue sin declararse en `infra/ai/deployments.dev.json`; se incorpora con la release a PRE y PRO.

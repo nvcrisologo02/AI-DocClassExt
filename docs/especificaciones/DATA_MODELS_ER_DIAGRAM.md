@@ -1,5 +1,7 @@
 ﻿# Data Models & ER Diagram — DocumentIA
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con las entidades EF, `DocumentIADbContext`, las 38 migraciones de `src/backend/DocumentIA.Data/Migrations/` y los scripts de `scripts/database/`). Versión del esquema: 1.24 (`20261013092225_ClaveIntencionDedup`).
+
 ## 1. Introducción
 
 La base de datos DocumentIA está diseñada para un sistema de **clasificación inteligente de documentos** que:
@@ -13,7 +15,7 @@ La base de datos DocumentIA está diseñada para un sistema de **clasificación 
 
 **Normalización**: 3NF con soporte para JSON configuracional y versionado
 
-**ORM**: Entity Framework Core 8 (.NET 8/9)
+**ORM**: Entity Framework Core 8.0.1 (`DocumentIA.Data` en .NET 8; `DocumentIA.Functions` en .NET 10)
 
 **Estrategia de Identidad**: Identity (1,1) en SQL Server
 
@@ -26,15 +28,14 @@ erDiagram
     DOCUMENTOS ||--|| RESULTADOS_PROCESAMIENTO : tiene
     DOCUMENTOS ||--o{ AUDITORIA : registra
     DOCUMENTOS ||--o{ DOCUMENTO_EJECUCIONES : contiene
-    TIPOLOGIAS ||--o{ TIPOLOGIA_CONFIG_AUDIT : audita
+    DOCUMENTO_EJECUCIONES |o--o{ DOCUMENTO_EJECUCIONES : reutiliza
     DOCUMENTO_EJECUCIONES ||--o{ PLUGIN_EJECUCIONES : ejecuta
     DOCUMENTO_EJECUCIONES ||--o{ VALIDACION_RESULTADOS : valida
-    MODELO_CONFIGS ||--o{ PLUGIN_TIPOLOGIA_CONFIGS : configura
     CATALOGO_TDN1 ||--o{ CATALOGO_TDN2 : agrupa
 
     DOCUMENTOS {
         int Id PK
-        string Guid UK "GUID único del documento"
+        string Guid "GUID del documento en origen (sin índice único)"
         string NombreArchivo
         string SHA256 UK "Hash único para deduplicación"
         string MD5 "Hash de verificación"
@@ -51,6 +52,8 @@ erDiagram
         string RutaBlobStorage "Ruta en Azure Blob Storage"
         string NormalizacionMarkdownCompressed "Markdown Base64+GZip (historico, escritura dual)"
         binary NormalizacionMarkdownGzip "Markdown GZip binario (AB#100169)"
+        int MarkdownPaginas "Páginas cubiertas por el markdown (AB#100246)"
+        bool MarkdownCompleto "Markdown de todas las páginas (AB#100246)"
         string EvidenceUri "URI para auditoría"
         string ClassifierVersion "Versión del clasificador"
         string DedupSha256 "Hash de deduplicación"
@@ -137,6 +140,11 @@ erDiagram
         bool ClassificationOnly "Solo clasificación, sin extracción"
         string NivelClasificacion
         string IdActivo "Activo resuelto, normalizado (AB#100168)"
+        bool ReutilizadaPorDuplicado "Petición servida con otro contrato (AB#100258)"
+        int EjecucionOriginalId FK "Ejecución cuyo contrato se devolvió (autorreferencia)"
+        string ClaveIntencion "Hash de la intención de la petición (AB#100930, ADR-003)"
+        string ClaveIntencionJson "Componentes de la clave de intención"
+        string MotivoReutilizacion "Por qué se reutilizó o no"
         string DatosOriginalesJson "Ya no se graba (AB#100166); historico intacto"
         string DatosFinalesJson "Ya no se graba (AB#100166); historico intacto"
         string ContratoSalidaCompletoJson "Contrato JSON sin timeline desde AB#100166"
@@ -187,7 +195,7 @@ erDiagram
 
     MODELO_CONFIGS {
         int Id PK
-        int Tipo "Clasificacion|Extraccion|Prompt|Layout"
+        int Tipo "Clasificacion|Extraccion|Prompt|Layout|Tarifas|Embeddings"
         string Key UK "ej: openai-gpt4-prod"
         string Provider "openai|local|custom"
         bool Activo
@@ -210,7 +218,7 @@ erDiagram
 
     TIPOLOGIA_CONFIG_AUDIT {
         int Id PK
-        int TipologiaId FK
+        int TipologiaId "Referencia lógica a Tipologias, sin FK"
         string Accion "Created|Updated|Published|Retired"
         string Usuario
         datetime FechaHora
@@ -233,7 +241,24 @@ erDiagram
         string CodigoTdn1
         int Tdn1Id FK
     }
+
+    PROMPT_TEMPLATES {
+        long Id PK
+        string PromptKey "ej: summary.system"
+        int Version
+        string Content "Texto del prompt (hasta 16000)"
+        bool IsActive "Una versión activa por clave"
+        string Description
+        datetime CreatedAtUtc
+        string CreatedBy
+        datetime UpdatedAtUtc
+        string UpdatedBy
+        datetime PublishedAtUtc
+        string PublishedBy
+    }
 ```
+
+> Las relaciones `Tipologias → TipologiaConfigAudit` y `ModeloConfigs → PluginTipologiaConfigs` que aparecían en versiones anteriores no existen como claves foráneas: la primera es un índice sobre `TipologiaId` sin FK y la segunda se resuelve por `TipologiaCodigo` (texto). `PromptTemplates` no tiene FK con ninguna tabla.
 
 ---
 
@@ -250,11 +275,12 @@ erDiagram
 - `IX_Documentos_Estado` - Filtros de estado
 - `IX_Documentos_FechaExpiracionBlob` - Políticas de retención
 - `IX_Documentos_FechaExpiracionBlob_RutaBlobStorage` - Limpieza de blobs
+- `IX_Documentos_MD5` (INCLUDE `SHA256`) - Deduplicación por MD5 sin recorrer la tabla (`20261005140618_IndiceDocumentosMD5`, AB#100863; en PRO con `scripts/database/indice-documentos-md5-pro.sql`, `ONLINE = ON`)
 
 | Campo | Tipo | Restricciones | Descripción |
 |-------|------|---------------|-------------|
 | **Id** | INT | PK, Identity(1,1) | Identificador único |
-| **Guid** | NVARCHAR(100) | NOT NULL, UK | UUID del documento en sistema origen |
+| **Guid** | NVARCHAR(100) | NOT NULL | UUID del documento en sistema origen (sin índice único; la unicidad es por `SHA256`) |
 | **NombreArchivo** | NVARCHAR(500) | NOT NULL | Nombre original del PDF |
 | **SHA256** | NVARCHAR(64) | NOT NULL, UK | Hash para deduplicación |
 | **MD5** | NVARCHAR(32) | NOT NULL | Hash de verificación rápida |
@@ -270,7 +296,9 @@ erDiagram
 | **PagesProcessed** | INT | NOT NULL DEFAULT 0 | Páginas procesadas exitosamente |
 | **RutaBlobStorage** | NVARCHAR(500) | NULL | URL en Azure Blob Storage |
 | **NormalizacionMarkdownCompressed** | NVARCHAR(MAX) | NULL | Markdown normalizado como Base64 de GZip. **Forma histórica** (AB#100169): se sigue escribiendo en paralelo a la columna binaria para que revertir código o migración no pierda datos; su retirada es una fase posterior |
-| **NormalizacionMarkdownGzip** | VARBINARY(MAX) | NULL | Markdown normalizado en GZip binario (AB#100169). Ocupa ~2,7× menos que la variante Base64; la lectura prueba esta columna primero y cae a la Base64. Histórico migrado con `scripts/database/migrar-markdown-a-binario.ps1` |
+| **NormalizacionMarkdownGzip** | VARBINARY(MAX) | NULL | Markdown normalizado en GZip binario (AB#100169). Ocupa ~2,7× menos que la variante Base64; la lectura prueba esta columna primero y cae a la Base64. Histórico migrado con `scripts/database/migrar-markdown-a-binario.ps1`. La escritura dual sigue vigente el 2026-11-22 (`PersistirActivity` graba ambas columnas) |
+| **MarkdownPaginas** | INT | NULL | Páginas cubiertas por el markdown persistido (`20260908135330_MarkdownCobertura`, AB#100246); NULL en el histórico hasta el backfill |
+| **MarkdownCompleto** | BIT | NOT NULL DEFAULT 0 | 1 cuando el markdown cubre todas las páginas del documento (AB#100246) |
 | **EvidenceUri** | NVARCHAR(500) | NULL | URI para auditoría externa |
 | **ClassifierVersion** | NVARCHAR(50) | NULL | Versión del modelo de clasificación |
 | **DedupSha256** | NVARCHAR(64) | NULL | Hash deduplicado (si aplica) |
@@ -453,6 +481,11 @@ erDiagram
 - `IX_DocumentoEjecuciones_IdActivo_DocumentoId` - Consulta por activo (AB#100168); sustituye a
   `IX_DocumentoEjecuciones_IdActivoNormalizado_DocumentoId`, que colgaba de una columna
   calculada sobre `DatosFinalesJson` (columna que dejó de grabarse)
+- `IX_DocumentoEjecuciones_Documento_Clave` (`DocumentoId`, `ClaveIntencion`, `FechaEjecucion DESC`; INCLUDE
+  `EjecucionGuid`, `Tipologia`, `EstadoFinal`, `ReutilizadaPorDuplicado`) - Búsqueda de la última ejecución
+  reutilizable con la misma intención (`20261013092225_ClaveIntencionDedup`, AB#100930, ADR-003). En PRO con
+  `scripts/database/indice-documento-clave-pro.sql`, que además añade las tres columnas
+- `IX_DocumentoEjecuciones_DocumentoId` - Índice de la FK a Documentos, declarado explícito
 
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
@@ -493,7 +526,10 @@ erDiagram
 | **CosteClasificacionEur** | DECIMAL(18,6) | Coste de la clasificación, incluidos los proveedores evaluados y descartados (AB#100236) |
 | **CosteExtraccionEur** | DECIMAL(18,6) | Coste de la extracción, incluido el modelo generativo interno de Content Understanding (AB#100236) |
 | **CostePromptEur** | DECIMAL(18,6) | Coste del prompt libre o resumen (AB#100236) |
-| **CosteEstimado** | BIT | True cuando el importe procede del relleno retroactivo `scripts/database/backfill-costes-estimados.ps1` y no de consumo medido. La sección de costes de Admin lo presenta aparte y lo excluye de los importes salvo que se pida (AB#100236) |
+| **CosteEstimado** | BIT NOT NULL DEFAULT 0 | True cuando el importe procede del relleno retroactivo `scripts/database/backfill-costes-estimados.ps1` y no de consumo medido. La sección de costes de Admin lo presenta aparte y lo excluye de los importes salvo que se pida (AB#100236) |
+| **ClaveIntencion** | NVARCHAR(32) NULL | Hash de la intención de la petición (tipología esperada, instrucciones, modo) con la que se decide si una petición repetida puede reutilizar esta ejecución (`20261013092225_ClaveIntencionDedup`, AB#100930, [ADR-003](../decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md)). NULL en el histórico hasta `scripts/database/backfill-clave-intencion.ps1` (paso opcional del pipeline de migraciones) |
+| **ClaveIntencionJson** | NVARCHAR(MAX) NULL | Componentes que formaron la clave, para auditar por qué dos peticiones coinciden o no |
+| **MotivoReutilizacion** | NVARCHAR(40) NULL | Motivo de la decisión de reutilizar o de volver a procesar (AB#100930) |
 
 **Navegación**:
 - → `PluginEjecuciones` (1:N)
@@ -607,7 +643,7 @@ erDiagram
 | Campo | Tipo | Descripción |
 |-------|------|-------------|
 | **Id** | INT | PK |
-| **Tipo** | INT | 0=Clasificacion, 1=Extraccion, 2=Prompt, 3=Layout |
+| **Tipo** | INT | 0=Clasificacion, 1=Extraccion, 2=Prompt, 3=Layout, 4=Tarifas (fila única `tarifas.ia`, catálogo de precios por modelo físico), 5=Embeddings (fila única `clasificador.embeddings`: deployment, artefacto, modo y umbrales del clasificador por embeddings) |
 | **Key** | NVARCHAR(200) | Identificador único (ej: openai-gpt4o-prod) |
 | **Provider** | NVARCHAR(100) | openai, azure, local, custom |
 | **Activo** | BIT | Si está habilitado |
@@ -714,6 +750,31 @@ Tdn1Id: 13
 
 ---
 
+### 3.13 **PromptTemplates** (Plantillas de prompt versionadas)
+
+**Propósito**: Texto de los prompts de clasificación, resumen y clasificación restringida, versionado y editable desde el Admin sin redesplegar (`20260611075104_AddPromptTemplateEntity`; seeds `20260611180000_SeedInitialPrompts`, `20260615053434_AddSummaryPrompts` y `20260812065020_SeedRestrictedClassificationPrompts`). La fuente de verdad del texto en cada entorno es esta tabla, no el seed del repositorio.
+
+**PK**: `Id` (BIGINT)  
+**Índices**:
+- `UQ_PromptTemplate_Key_Version` (UNIQUE: `PromptKey`, `Version`)
+- `IX_PromptTemplate_Key_Active` (`PromptKey`, `IsActive`, filtrado `WHERE IsActive = 1`)
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| **Id** | BIGINT | PK, Identity |
+| **PromptKey** | NVARCHAR(100) | Clave del prompt (ej: `summary.system`, `summary.user`) |
+| **Version** | INT | Versión correlativa por clave |
+| **Content** | NVARCHAR(MAX) | Texto del prompt (la entidad limita a 16.000 caracteres) |
+| **IsActive** | BIT | Versión activa; una por clave |
+| **Description** | NVARCHAR(500) | Descripción opcional |
+| **CreatedAtUtc** / **CreatedBy** | DATETIME2 / NVARCHAR(100) | Alta |
+| **UpdatedAtUtc** / **UpdatedBy** | DATETIME2 / NVARCHAR(100) | Última edición |
+| **PublishedAtUtc** / **PublishedBy** | DATETIME2 / NVARCHAR(100) | Activación de la versión |
+
+Sin claves foráneas. Gestión desde `Admin_*PromptTemplate*` y `Admin_ActivatePromptVersion` / `Admin_RollbackPromptVersion`.
+
+---
+
 ## 4. Relaciones Principales
 
 ### 4.1 Diagrama de Relaciones Clave
@@ -728,11 +789,12 @@ DocumentoEjecuciones (1) → (N) PluginEjecuciones
     ↓
     → (N) ValidacionResultados
 
-Tipologias (1) → (N) TipologiaConfigAudit
+DocumentoEjecuciones (1) → (N) DocumentoEjecuciones (reutilizaciones, EjecucionOriginalId)
 
 CatalogoTdn1 (1) → (N) CatalogoTdn2
 
-ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
+Referencias lógicas sin FK: TipologiaConfigAudit.TipologiaId → Tipologias;
+PluginTipologiaConfigs.TipologiaCodigo → Tipologias.Codigo; PromptTemplates sin relaciones
 ```
 
 ### 4.2 Cascadas de Eliminación
@@ -743,6 +805,7 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
 - `DocumentoEjecuciones` → `PluginEjecuciones`: **CASCADE**
 - `DocumentoEjecuciones` → `ValidacionResultados`: **CASCADE**
 - `CatalogoTdn1` → `CatalogoTdn2`: **RESTRICT** (no eliminar si hay hijos)
+- `DocumentoEjecuciones` → `DocumentoEjecuciones` (`EjecucionOriginalId`): **NO ACTION** (autorreferencia; en PRO creada `WITH NOCHECK`)
 
 ---
 
@@ -768,17 +831,29 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
 | **1.13** | 2026-05-25 | Agregó NivelClasificacion |
 | **1.14** | 2026-05-26 | Agregó FechaExpiracionBlob + políticas de retención |
 | **1.15** | 2026-06-02 | Agregó TDN2_Prompt a CatalogoTdn1 |
-| **v1.5** | 2026-06-05 | Marca PromptGPT, ModeloClasificacionDI, UmbralClasificacion como [Obsolete] |
+| **1.15b** | 2026-06-05 | Retirada de las columnas legadas de Tipologias en tres migraciones: `v15_MarkPromptGPTObsolete` (solo datos del seed), `v20_DropPromptGPT` (elimina `PromptGPT`) y `v31_DropLegacyModelosUmbrales` (elimina `ModeloClasificacionDI`, `ModeloExtraccionDI`, `UmbralClasificacion` y `UmbralExtraccion`). La entidad conserva las propiedades como `[NotMapped][Obsolete]`. Sustituye al plan «v2.0» que figuraba en este historial |
+| **1.15c** | 2026-06-11 | Agregó `PromptTemplates` con sus dos índices (`20260611075104_AddPromptTemplateEntity`) y el seed inicial de prompts (`20260611180000_SeedInitialPrompts`); `summary.system` y `summary.user` v1 el 2026-06-15 (`20260615053434_AddSummaryPrompts`) |
 | **1.16** | 2026-08-05 | Agregó SubmittedBy a DocumentoEjecuciones (`20260805100351_AgregarSubmittedByEjecucion`). Aplicada en DEV y PRO |
+| **1.16b** | 2026-08-12 | Seed de los prompts de clasificación restringida en `PromptTemplates` (`20260812065020_SeedRestrictedClassificationPrompts`); solo datos |
 | **1.17** | 2026-09-02 | Release de rendimiento/almacenamiento: índice cubriente del Monitor (`20260902080254_IndiceCubrienteMonitorEjecuciones`, AB#100185); columna escalar `IdActivo` + SP por activo reescrito y retirada de `IdActivoNormalizado` (`20260902093812_IdActivoEscalarYSpPorIdActivo`, AB#100168); `Documentos.NormalizacionMarkdownGzip` con escritura dual (`20260902103313_MarkdownBinario`, AB#100169); `DatosFinalesJson`/`DatosOriginalesJson` dejan de grabarse y el contrato se persiste sin timeline (AB#100166/100167). Aplicadas en DEV (02/09) y en PRO (03/09, ventana manual única + backfills por lotes verificados: IdActivo tabla completa, markdown 64.466 filas con 0 discrepancias byte a byte) |
 | **1.18** | 2026-09-07 | Agregó `CosteIAEur` y `TokensIA` a DocumentoEjecuciones (`20260907075128_AddCostesIAToEjecuciones`, AB#100232). Migración puramente aditiva, sin relleno retroactivo. Aplicada en DEV (07/09, script idempotente con token de Entra) y en PRO (20/09, script idempotente de EF acotado a las tres pendientes, ejecutado a mano con token de Entra) |
 | **1.19** | 2026-09-07 | Agregó el desglose de coste por actividad (`CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`, `CostePromptEur`) y `CosteEstimado` a DocumentoEjecuciones (`20260907103326_AddCostesPorActividadYEstimado`, AB#100236). Migración aditiva; el relleno retroactivo es un script aparte, por marca de agua, que se lanza a mano. Aplicada en DEV (07/09) junto con el catálogo de tarifas (`ModeloConfigs__bak_20260907_110931`) y en PRO (20/09, con el catálogo: `ModeloConfigs__bak_20260919_233435`) |
 | **1.20** | 2026-09-08 | Cobertura del markdown persistido (`20260908135330_MarkdownCobertura`, AB#100246): `Documentos.MarkdownPaginas` (int, nulable) y `Documentos.MarkdownCompleto` (bit, default 0). Migración aditiva; el histórico nace con NULL/0 y lo corrige `scripts/database/backfill-markdown-cobertura.ps1` (caso seguro, por lotes). Aplicada en DEV (08/09) y en PRO (20/09) |
 | **1.21** | 2026-09-11 | Traza de las reutilizaciones por duplicado (`20260911093509_ReutilizacionPorDuplicado`, AB#100258): `ReutilizadaPorDuplicado` y `EjecucionOriginalId` en DocumentoEjecuciones, FK autorreferenciada, índices `EjecucionOriginalId` e `InstanceId_Reutilizadas` (filtrado) y el índice cubriente del Monitor con 19 INCLUDE. Migración aditiva. Aplicada en DEV (11/09) con el script idempotente de EF; en PRO va por `scripts/database/indice-monitor-reutilizacion-pro.sql` (recrea el índice cubriente con `ONLINE = ON` y registra la migración) más `sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql` (SP, fuera de EF). Aplicada en PRO el 20/09 por esa vía (índice cubriente reconstruido en 30 s; 3,6 min el script completo) |
-| **1.22** | 2026-09-20 | [ACTUAL] Índice cubriente del Monitor con las columnas de coste (`20260920063449_IndiceMonitorCostes`, AB#100662): recrea `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` con 26 INCLUDE (19 previas + `CosteIAEur`, `CosteEstimado`, `CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`, `CostePromptEur`, `TokensIA`). Solo índice, sin cambios de columnas ni datos. Motivo: los agregados de /costes hacían key lookup por fila y el de 90 días en PRO (67.928 filas, 19,5 s en frío) agotaba el timeout de 30 s de `Admin_GetCostes`. Aplicada el 20/09 en DEV (5,3 s; agregados de 90 días de 1,1 s a 40 ms), PRE (0,7 s) y PRO (34,1 s de rebuild ONLINE; los 5 agregados de 90 días de 7,3 s a 2,0 s en caliente, ninguno por encima de 0,7 s) con `scripts/database/indice-monitor-costes-pro.sql` (`ONLINE = ON`, registra la migración) |
-| **v2.0** | 2026-07-31 | [PLANIFICADO] Elimina PromptGPT, ModeloClasificacionDI, UmbralClasificacion |
+| **1.22** | 2026-09-20 | Índice cubriente del Monitor con las columnas de coste (`20260920063449_IndiceMonitorCostes`, AB#100662): recrea `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` con 26 INCLUDE (19 previas + `CosteIAEur`, `CosteEstimado`, `CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`, `CostePromptEur`, `TokensIA`). Solo índice, sin cambios de columnas ni datos. Motivo: los agregados de /costes hacían key lookup por fila y el de 90 días en PRO (67.928 filas, 19,5 s en frío) agotaba el timeout de 30 s de `Admin_GetCostes`. Aplicada el 20/09 en DEV (5,3 s; agregados de 90 días de 1,1 s a 40 ms), PRE (0,7 s) y PRO (34,1 s de rebuild ONLINE; los 5 agregados de 90 días de 7,3 s a 2,0 s en caliente, ninguno por encima de 0,7 s) con `scripts/database/indice-monitor-costes-pro.sql` (`ONLINE = ON`, registra la migración) |
+| **1.23** | 2026-10-05 | Índice `IX_Documentos_MD5` con INCLUDE `SHA256` (`20261005140618_IndiceDocumentosMD5`, AB#100863): la deduplicación por MD5 recorría la tabla completa y agotaba el S0 de PRO. Solo índice. En PRO con `scripts/database/indice-documentos-md5-pro.sql` (`ONLINE = ON`, registra la migración) |
+| **1.24** | 2026-10-13 | [ACTUAL] Clave de intención para la reutilización por duplicado (`20261013092225_ClaveIntencionDedup`, AB#100930, [ADR-003](../decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md)): `ClaveIntencion`, `ClaveIntencionJson` y `MotivoReutilizacion` en DocumentoEjecuciones e índice `IX_DocumentoEjecuciones_Documento_Clave`. Migración aditiva; el histórico se rellena con `scripts/database/backfill-clave-intencion.ps1` (paso opcional del pipeline `azure-pipelines-migrations.yml`). En PRO con `scripts/database/indice-documento-clave-pro.sql`; criterio de aceptación medido en PRO el 2026-11-18 (56 reutilizaciones, 0 anomalías). Aplicación en PRE no comprobada en la revisión del 2026-11-22 |
+| ~~v2.0~~ | — | El plan de eliminar PromptGPT, ModeloClasificacionDI y UmbralClasificacion en una «v2.0» se ejecutó el 2026-06-05 (fila 1.15b) |
 
-### 5.2 Cambios Recientes (Últimos 30 días)
+### 5.2 Cambios recientes (de más nuevo a más antiguo)
+
+-5. **Clave de intención en la deduplicación** (2026-10-13, AB#100930, ADR-003)
+   - Una petición repetida solo reutiliza una ejecución anterior si coincide su `ClaveIntencion` (tipología esperada, instrucciones y modo), no solo el SHA256
+   - `ClaveIntencionJson` y `MotivoReutilizacion` dejan auditable la decisión; el índice `IX_DocumentoEjecuciones_Documento_Clave` sirve la búsqueda
+   - El histórico se rellena por lotes con `backfill-clave-intencion.ps1`
+
+-4. **Índice por MD5 en Documentos** (2026-10-05, AB#100863)
+   - `IX_Documentos_MD5` evita el recorrido completo de la tabla en la deduplicación por MD5, que saturaba el S0 de PRO
 
 -3. **Traza de las reutilizaciones por duplicado** (2026-09-11, AB#100258)
    - Cada petición servida por deduplicación deja su propia fila en `DocumentoEjecuciones` (`ReutilizadaPorDuplicado = 1`, `EjecucionOriginalId`), sin `ContratoSalidaCompletoJson` ni coste, con el `InstanceId`/`OperationId`/`SubmittedBy` de la llamada actual
@@ -807,10 +882,9 @@ ModeloConfigs (1) → (N) PluginTipologiaConfigs (indirect)
    - Permite prompts personalizados por familia TDN1 para Phase 2
    - Fallback: genera dinámicamente si NULL
 
-2. **Deprecación PromptGPT** (2026-06-05)
-   - Migración a ConfiguracionJson.promptConfig
-   - 6 meses de deprecación warnings (hasta 2026-07-31)
-   - Eliminación programada en v2.0
+2. **Retirada de PromptGPT y de los modelos y umbrales legados de Tipologias** (2026-06-05)
+   - Su contenido vive en `ConfiguracionJson` (`promptConfig`, `classification`, `extraction`)
+   - Las columnas se eliminaron ese mismo día (migraciones `v20_DropPromptGPT` y `v31_DropLegacyModelosUmbrales`); no hubo periodo de seis meses ni «v2.0»
 
 3. **ActivityTimeline en DocumentoEjecuciones** (2026-03-24)
    - Tracking granular de duraciones por actividad (Clasificacion, Extraccion, Validacion, etc)
@@ -998,7 +1072,7 @@ ORDER BY d.FechaExpiracionBlob ASC;
 
 ### 7.3 Políticas de Retención
 
-- **Documentos/Blobs**: 2 días (configurable) después de procesamiento
+- **Documentos/Blobs**: `FechaExpiracionBlob` fija la fecha de borrado del blob, que ejecuta `BlobCleanupTimerTrigger` por lotes (`BlobRetention__BatchSize`); los días de retención se configuran por app setting y el histórico se ajustó a 2 días con `scripts/migrations/backfill-documentos-fecha-expiracion-blob-2-dias.sql` (AB#100868). El valor vigente por entorno no se ha comprobado en la revisión del 2026-11-22
 - **Auditoria**: 1 año (legal requirement)
 - **DocumentoEjecuciones**: 3 meses (debugging)
 - **ModeloConfigs**: Perpetua (referencia histórica)
@@ -1051,15 +1125,15 @@ WHERE vr.Severidad = 'Error';
 | `string` + `[MaxLength(N)]` | NVARCHAR(N) | NOT NULL (si no nullable) |
 | `string` + `[Column(TypeName = "nvarchar(max)")]` | NVARCHAR(MAX) | NULL by default |
 | `double` | FLOAT | NULL by default |
-| `bool` | BIT | NOT NULL, default 0 |
+| `bool` | BIT | NOT NULL; solo algunas columnas añadidas después (`CosteEstimado`, `MarkdownCompleto`, `ReutilizadaPorDuplicado`) llevan `DEFAULT 0` en la migración |
 | `long` | BIGINT | NOT NULL |
-| `DateTime` + `.UtcNow` | DATETIME2(7) | NOT NULL DEFAULT GETUTCDATE() |
+| `DateTime` + `.UtcNow` | DATETIME2(7) | NOT NULL; el valor por defecto lo pone el cliente (C#), ninguna migración usa `GETUTCDATE()` |
 | `DateTime?` | DATETIME2(7) | NULL |
 | `Enum` (int backing) | INT | NOT NULL |
 
 ---
 
 **Documento**: Data Models & ER Diagram — DocumentIA  
-**Última actualización**: 2026-06-10  
-**Versión BD**: v1.5  
+**Última actualización**: 2026-11-22 (revisión AB#101447; anterior 2026-06-10)  
+**Versión BD**: 1.24 (`20261013092225_ClaveIntencionDedup`), aplicada en DEV y PRO; PRE no comprobado  
 **Status**: Production
