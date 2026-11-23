@@ -4,7 +4,7 @@
 **Fecha:** 2026-05-28  
 **Estado:** Implementada (commit `fbf33519`, 2026-05-28). No se aplica en la rama `classificationOnly`. En los entornos desplegados el límite global está sin fijar (0 = sin límite); los límites por tipología dependen de la `ConfiguracionJson` de BD  
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con el orquestador (Paso 3.9), `PipelineSettings`, `TipologiaValidationConfig`, el contrato de entrada y CONTRATO_API_HTTP §5). Hallazgos: el límite se aplica en línea en el orquestador tras clasificar y resolver la tipología; `ApplyPdfPageLimitActivity` no interviene (pertenece al recorte de `classificationOnly` con `maxPagesForClassificationOnly`, está declarada y no se invoca); `classificationOnly` retorna antes del Paso 3.9, por lo que el límite no se aplica en esa rama; `Pipeline__MaxPaginasDocumento` no lo fija el pipeline de despliegue (defecto 0); en el bloqueo se omiten Extraer, Prompt, Validar, ObtenerActivo, Integrar y SubirGDC, se fija `EstadoCalidad = "REVISION"`, `ConfianzaExtraccion = 0`, `ConfianzaValidacion = 1.0` y se persiste; el resumen solo existe si lo produjo la propia clasificación. Límites por tipología en BD, páginas en formatos no PDF, estado de los work items 99683-99697 en Azure DevOps y existencia de `CATALOGO_APP_SETTINGS.md`: no comprobado en la revisión del 2026-11-22.
+> Última revisión: 2026-11-22 (AB#101447, contraste con el orquestador (Paso 3.9), `PipelineSettings`, `TipologiaValidationConfig`, el contrato de entrada y CONTRATO_API_HTTP §5). Hallazgos: el límite se aplica en línea en el orquestador tras clasificar y resolver la tipología; `ApplyPdfPageLimitActivity` no interviene (pertenece al recorte de `classificationOnly` con `maxPagesForClassificationOnly`, está declarada y no se invoca); `classificationOnly` retorna antes del Paso 3.9, por lo que el límite no se aplica en esa rama; `Pipeline__MaxPaginasDocumento` no lo fija el pipeline de despliegue (defecto 0); en el bloqueo se omiten Extraer, Prompt, Validar, ObtenerActivo, Integrar y SubirGDC, se fija `EstadoCalidad = "REVISION"`, `ConfianzaExtraccion = 0`, `ConfianzaValidacion = 1.0` y se persiste; el resumen solo existe si lo produjo la propia clasificación. Comprobado el 2026-11-23 (AB#101449): ninguna tipología activa fija `maxPaginasDocumento` en DEV, PRE ni PRO; los work items 99683-99697 están en Done; `CATALOGO_APP_SETTINGS.md` existe solo en `docs/auxiliares/auxiliares-sin-uso/`. El recuento de páginas en formatos no PDF se deja en el código (`PdfRecorteService`), sin comprobación en vivo.
 
 ---
 
@@ -35,7 +35,7 @@ Antes de esta funcionalidad, la clasificación limitaba el número de páginas e
 
 ### 3.1 Momento de la evaluación
 
-La validación de páginas ocurre **después de la clasificación** y después de que el sistema conoce el número de páginas del documento. `NormalizarActivity` calcula las páginas del PDF al inicio y `PrepararDocumentoClasificacionActivity` las completa si son 0; la comprobación se hace en el Paso 3.9 del orquestador, tras clasificar y resolver la tipología, porque necesita su `MaxPaginasDocumento` (páginas en formatos no PDF: no comprobado en la revisión del 2026-11-22). No se puede evaluar antes porque el número de páginas se obtiene durante el procesado inicial. El punto exacto es la transición entre la fase de clasificación/resumen y el inicio de la extracción.
+La validación de páginas ocurre **después de la clasificación** y después de que el sistema conoce el número de páginas del documento. `NormalizarActivity` calcula las páginas del PDF al inicio y `PrepararDocumentoClasificacionActivity` las completa si son 0; la comprobación se hace en el Paso 3.9 del orquestador, tras clasificar y resolver la tipología, porque necesita su `MaxPaginasDocumento` (el recuento de páginas lo hace `PdfRecorteService` sobre PDF; en otros formatos depende del código, sin comprobación en vivo). No se puede evaluar antes porque el número de páginas se obtiene durante el procesado inicial. El punto exacto es la transición entre la fase de clasificación/resumen y el inicio de la extracción.
 
 ### 3.2 Condición de bloqueo
 
@@ -86,7 +86,7 @@ Cuando el llamador envía `ForzarProcesadoSinLimitePaginas = true`:
 
 - La validación de páginas se omite completamente
 - El documento se procesa en su totalidad igual que hoy
-- Se registra en el log (`[AVISO] Límite de páginas omitido por ForzarProcesadoSinLimitePaginas=true…`, con documento, páginas y límite) que el límite fue omitido deliberadamente; el solicitante queda en `trazabilidad.submittedBy` de la ejecución persistida. No hay evento de telemetría específico (criterio 7: no comprobado en la revisión del 2026-11-22)
+- Se registra en el log (`[AVISO] Límite de páginas omitido por ForzarProcesadoSinLimitePaginas=true…`, con documento, páginas y límite) que el límite fue omitido deliberadamente; el solicitante queda en `trazabilidad.submittedBy` de la ejecución persistida. No hay evento de telemetría específico (criterio 7: comprobado el 2026-11-23, el código no emite ningún evento ni métrica de telemetría sobre el límite de páginas)
 - El estado final es el que corresponda al flujo normal del pipeline (`OK`, `VALIDACION_CON_ERRORES`, `ERROR`…)
 
 Esta traza es **obligatoria para auditoría de coste**: permite identificar a posteriori qué ejecuciones omitieron el límite y cuántas páginas procesaron.

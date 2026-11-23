@@ -1,6 +1,6 @@
 # Manual de Healthcheck por Componentes
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `HealthcheckFunction.cs`, `SystemHealthService.cs`, `Program.cs`, `azure-pipelines.yml` e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Hay tres entornos con el mismo endpoint `POST /api/healthcheck` (`srbappdevdocai`, `srbapppredocai`, `srbappprodocai`; autorización `Anonymous`). Correcciones de la revisión: el timeout del probe a GDC es de 30 s (no 5 s); la clave de caché es `SystemHealthService:ComponentsHealth`; los settings de GDC son `GDC:Endpoint`, `GDC:HttpBasicUsername`, `GDC:HttpBasicPassword` y `GDC:ApplicationId`, con secretos `GDC--HttpBasicUsername` y `GDC--HttpBasicPassword`. El probe de `modelProviders` solo comprueba que los loaders de clasificación, extracción y prompt están registrados (ni el modelo ni la conectividad), así que no distingue `gpt-5.6-luna` (DEV, ADR-004) de `gpt-4o-mini` (PRE y PRO). `ok` es `true` salvo en `unhealthy`: un entorno `unconfigured` devuelve 200 con `ok: true`, por lo que un probe externo debe mirar `status`. Availability Tests desplegados, roles de Key Vault e IDs de work item: no comprobado en la revisión del 2026-11-22.
+> Última revisión: 2026-11-22 (AB#101447, contraste con `HealthcheckFunction.cs`, `SystemHealthService.cs`, `Program.cs`, `azure-pipelines.yml` e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Hay tres entornos con el mismo endpoint `POST /api/healthcheck` (`srbappdevdocai`, `srbapppredocai`, `srbappprodocai`; autorización `Anonymous`). Correcciones de la revisión: el timeout del probe a GDC es de 30 s (no 5 s); la clave de caché es `SystemHealthService:ComponentsHealth`; los settings de GDC son `GDC:Endpoint`, `GDC:HttpBasicUsername`, `GDC:HttpBasicPassword` y `GDC:ApplicationId`, con secretos `GDC--HttpBasicUsername` y `GDC--HttpBasicPassword`. El probe de `modelProviders` solo comprueba que los loaders de clasificación, extracción y prompt están registrados (ni el modelo ni la conectividad), así que no distingue `gpt-5.6-luna` (DEV, ADR-004) de `gpt-4o-mini` (PRE y PRO). `ok` es `true` salvo en `unhealthy`: un entorno `unconfigured` devuelve 200 con `ok: true`, por lo que un probe externo debe mirar `status`. Comprobado el 2026-11-23 (AB#101449): no hay Availability Tests en ningún entorno; las tres identidades tienen Key Vault Secrets User en el Key Vault de su entorno; el Feature 99251 y las Tasks 99252-99255 están en Done.
 >
 > Ultima actualizacion anterior: 2026-05-01  
 > Proyecto: AI DocClassExt — DocumentIA  
@@ -18,7 +18,7 @@ Para el contrato completo de request/response ver `docs/contratos/CONTRATO_API_H
 | Aspecto | Valor |
 |---|---|
 | Endpoint | `POST /api/healthcheck` |
-| Auth | `AuthorizationLevel.Anonymous` (sin Function Key) en los tres entornos. Si EasyAuth o la red del Function App limitan el acceso desde fuera de la red corporativa: no comprobado en la revisión del 2026-11-22 |
+| Auth | `AuthorizationLevel.Anonymous` (sin Function Key) en los tres entornos. A 2026-11-23 la Function App no tiene EasyAuth, su acceso público está habilitado y las restricciones de red son «Allow all» en los tres entornos, así que el endpoint responde desde fuera de la red corporativa |
 | Metodo | `POST` (no soporta `GET`) |
 | Response codes | `200 OK` (healthy/degraded/unconfigured) o `503 Service Unavailable` (unhealthy) |
 | Cache interno | 45 s en `IMemoryCache` (clave `SystemHealthService:ComponentsHealth`) |
@@ -135,13 +135,13 @@ El snapshot se cachea para evitar martillear servicios externos (GDC, AssetResol
 
 ### 5.3 Tests
 
-- `DocumentIA.Tests.Unit.Triggers.HealthcheckFunctionTests` (7 metodos de prueba; recuento de ejecuciones no comprobado en la revisión del 2026-11-22): cubre casos sin servicio (fallback minimo), con servicio healthy, degraded, unhealthy, unconfigured y verifica codigo HTTP.
+- `DocumentIA.Tests.Unit.Triggers.HealthcheckFunctionTests` (7 metodos de prueba, 12 ejecuciones contando los casos de `[Theory]`; 12 de 12 en verde el 2026-11-23): cubre casos sin servicio (fallback minimo), con servicio healthy, degraded, unhealthy, unconfigured y verifica codigo HTTP.
 
 ### 5.4 Probes externos (recomendado)
 
 | Consumidor | Configuracion sugerida |
 |---|---|
-| Application Insights Availability Test | Una prueba por entorno: URL `POST https://srbapp<env>docai.azurewebsites.net/api/healthcheck` (DEV `srbappdevdocai`, PRE `srbapppredocai`, PRO `srbappprodocai`), esperar `200`, frecuencia 5 min, regiones multiples. Que existan hoy: no comprobado en la revisión del 2026-11-22. |
+| Application Insights Availability Test | Una prueba por entorno: URL `POST https://srbapp<env>docai.azurewebsites.net/api/healthcheck` (DEV `srbappdevdocai`, PRE `srbapppredocai`, PRO `srbappprodocai`), esperar `200`, frecuencia 5 min, regiones multiples. A 2026-11-23 no existe ninguna en DEV, PRE ni PRO: es una propuesta pendiente. |
 | Azure Front Door / balanceador (futuro) | Health probe HTTP `POST /api/healthcheck`, intervalo 30 s, umbral 3 fallos consecutivos antes de marcar instance unhealthy. |
 | Workbook App Insights | KQL sobre `requests` filtrando `name == "PostHealthcheck"` para latencia y tasa de error. |
 
@@ -185,4 +185,4 @@ Si solo se quiere comprobar el endpoint sin probes (escenario tests), puede inye
 - `src/backend/DocumentIA.Functions/Triggers/HealthcheckFunction.cs` (HTTP trigger).
 - `src/backend/DocumentIA.Tests.Unit/Triggers/HealthcheckFunctionTests.cs` (cobertura).
 - `docs/01_ARQUITECTURA_SISTEMA.md` (modulo healthcheck en diagrama).
-- ADO Feature `#99251` y Tasks `#99252`-`#99255` (epica original; IDs no comprobado en la revisión del 2026-11-22).
+- ADO Feature `#99251` y Tasks `#99252`-`#99255` (epica original; comprobado el 2026-11-23: Feature y Tasks en Done).

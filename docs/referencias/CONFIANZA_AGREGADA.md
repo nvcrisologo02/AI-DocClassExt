@@ -1,6 +1,6 @@
 # Confianza Agregada — Análisis Técnico y Funcional
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `ConfidenceCalculator.cs`, `TipologiaValidationConfig.cs`, `DocumentProcessOrchestrator.cs`, `ConfigurableClasificarDataProvider.cs` y `ConfigurableExtraerDataProvider.cs`). Hallazgos: los pesos por defecto del código son 0.5 / 0.25 / 0.15 (suman 0.9), no 0.5 / 0.3 / 0.2 (los seeds del repo sí fijan 0.5/0.3/0.2 de forma explícita); el nivel 3 de umbrales no son app settings sino `FallbackThreshold` (default 0.6) y `MinFieldsRatio` (default 0.5) del modelo del registro `ModeloConfigs`; `Classification:GptFallback:FallbackThreshold` no se lee en el código; la decisión DI→GPT previa a la tipología solo usa el umbral de la petición o 0.6 fijo; `BAJA_CONFIANZA_CLASIFICACION` con tipología de catálogo se devuelve sin persistir y solo se persiste en el camino de tipología virtual TDN1. El ejemplo de la NS 2691 de §4.4 no coincide con el de §9 (no comprobado en la revisión del 2026-11-22). Modelo generativo del fallback: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release.
+> Última revisión: 2026-11-22 (AB#101447, contraste con `ConfidenceCalculator.cs`, `TipologiaValidationConfig.cs`, `DocumentProcessOrchestrator.cs`, `ConfigurableClasificarDataProvider.cs` y `ConfigurableExtraerDataProvider.cs`). Hallazgos: los pesos por defecto del código son 0.5 / 0.25 / 0.15 (suman 0.9), no 0.5 / 0.3 / 0.2 (los seeds del repo sí fijan 0.5/0.3/0.2 de forma explícita); el nivel 3 de umbrales no son app settings sino `FallbackThreshold` (default 0.6) y `MinFieldsRatio` (default 0.5) del modelo del registro `ModeloConfigs`; `Classification:GptFallback:FallbackThreshold` no se lee en el código; la decisión DI→GPT previa a la tipología solo usa el umbral de la petición o 0.6 fijo; `BAJA_CONFIANZA_CLASIFICACION` con tipología de catálogo se devuelve sin persistir y solo se persiste en el camino de tipología virtual TDN1. El ejemplo de la NS 2691 de §4.4 no coincide con el de §9: son ejemplos ilustrativos no reproducidos contra una ejecución real. Modelo generativo del fallback: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release.
 >
 > Rama: `develop` | Implementado: 2026-03-26 | Actualizado: 2026-03-30
 
@@ -159,7 +159,7 @@ Ejemplo: 20 reglas, 1 falla con Error:
 ConfianzaValid = 1 - 1/20 = 0.95  →  EstadoCalidad = "OK"
 ```
 
-Ejemplo (NS 2691; no coincide con el de §9, que da 3 reglas y 0.333 para el mismo caso: no comprobado en la revisión del 2026-11-22): 28 reglas evaluadas, 2 errores de campo:
+Ejemplo (NS 2691; no coincide con el de §9, que da 3 reglas y 0.333 para el mismo caso: ambos son ilustrativos, no reproducidos contra una ejecución real): 28 reglas evaluadas, 2 errores de campo:
 ```
 ConfianzaValid = 1 - 2/28 ≈ 0.93
 ```
@@ -347,7 +347,7 @@ Cada fichero `*.validation.json` puede incluir un bloque `confidenceConfig` opci
 | `DocumentIA.Functions/Services/GptFallbackExtraerDataProvider.cs` | Functions | Pide `confianza_extraccion` al modelo en el prompt; `BuildFallbackMetricas` devuelve `(double, ConfidenceMetricasExtraccion)`; `ConfianzaExtraccion = confianzaExtraccionGpt ?? confianzaCalculada`; `BuildFieldList` incluye hints de validación por campo (enum, regex, fecha, rango, dirección) |
 | `DocumentIA.Functions/Orchestrators/DocumentProcessOrchestrator.cs` | Functions | Resuelve jerarquía de umbrales (petición→tipología→config) en 3 puntos; agrega `Global()`, asigna `EstadoCalidad`, descompone campos en contrato |
 | `DocumentIA.Functions/config/tipologias/*.validation.json` | Config | Bloque `confidenceConfig` con defaults explícitos |
-| `DocumentIA.Tests.Unit/Services/ConfidenceCalculatorTests.cs` | Tests | 25 métodos de prueba (`[Fact]`/`[Theory]`) cubriendo los métodos y casos límite; resultado de ejecución no comprobado en la revisión del 2026-11-22 |
+| `DocumentIA.Tests.Unit/Services/ConfidenceCalculatorTests.cs` | Tests | 25 métodos de prueba (`[Fact]`/`[Theory]`) cubriendo los métodos y casos límite; 25 de 25 en verde el 2026-11-23 |
 
 ### 7.2 Principios de diseño
 

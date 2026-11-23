@@ -1,7 +1,7 @@
 # Índice de documentación — DocumentIA
 
 > Última revisión estructural: 2026-11-22 (AB#101445). Rama de referencia: `develop`.
-> Verificación de contenido por familia cerrada el 2026-11-22 (AB#101447) e integrada en `develop` el 2026-11-23 (AB#101448). El estado de cada fichero se actualiza aquí con cada cambio que lo afecte; las decisiones derivadas están en las tasks AB#101449 a AB#101452.
+> Verificación de contenido por familia cerrada el 2026-11-22 (AB#101447) e integrada en `develop` el 2026-11-23 (AB#101448). El estado de cada fichero se actualiza aquí con cada cambio que lo afecte; las decisiones derivadas están en las tasks AB#101449 a AB#101452. Las marcas «no comprobado» del repaso se comprobaron en vivo contra Azure, Azure DevOps, App Insights y las BD de DEV, PRE y PRO el 2026-11-23 (AB#101449) y se sustituyeron por el estado real.
 
 DocumentIA es el sistema de clasificación y extracción documental de SAREB, en operación desde julio de 2026. Esta página cataloga la documentación permanente del repositorio, organizada en las cuatro familias que usa el impacto documental de cada cambio: técnica, funcional, arquitectura y explotación. El mapa por familia también está declarado en el `CLAUDE.md` del proyecto.
 
@@ -67,7 +67,7 @@ Análisis funcional, reglas de negocio, tipologías, confianza y validaciones.
 | [guias/GUIA_CLASIFICACION_DOCUMENTOS.md](guias/GUIA_CLASIFICACION_DOCUMENTOS.md) | Cómo clasifica el sistema: flujo por defecto `rules → gpt → di` con fallback global, `hybrid-tdn`, niveles TDN1/TDN2, modos de petición. Revisado 2026-11-22; el §4.1 conserva el flujo `di` histórico con aviso | vigente |
 | [guias/GUIA_CLASIFICACION_RESTRINGIDA.md](guias/GUIA_CLASIFICACION_RESTRINGIDA.md) | Clasificación restringida a un subconjunto de tipologías (`restriccionTipologias`, catálogo filtrado). Revisado 2026-11-22 | vigente |
 | [referencias/GLOSSARIO_TERMINOS.md](referencias/GLOSSARIO_TERMINOS.md) | Términos, acrónimos y conceptos del proyecto. Revisado 2026-11-22 | vigente |
-| [referencias/TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Subconjunto del catálogo de tipologías (el catálogo real está en BD: 233 en DEV y 213 en PRO a 2026-11-22). Revisado 2026-11-22 | vigente |
+| [referencias/TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Subconjunto del catálogo de tipologías (el catálogo real está en BD: 233 en DEV y 213 en PRE y PRO a 2026-11-23). Revisado 2026-11-22 | vigente |
 | [referencias/CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Cálculo de la confianza agregada y umbrales. Fuente de verdad frente al diagrama. Revisado 2026-11-22 | vigente |
 | [referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md](referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md) | Casuísticas de Nota Simple para el modelo 1.4 (analyzer `CU_NS_1.4_3`; la vigente es 1.5 con `CU_NS_1.5_0`). Revisado 2026-11-22 | vigente |
 | [manuales/MANUAL_VALIDACIONES.md](manuales/MANUAL_VALIDACIONES.md) | Motor de validaciones: tipos de regla, configuración, persistencia y resultados. Revisado 2026-11-22 | vigente |

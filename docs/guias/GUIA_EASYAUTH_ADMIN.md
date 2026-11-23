@@ -142,7 +142,7 @@ Recordatorios operativos de DEV:
 | Redirect URI | `https://srbwebadminprodocai.azurewebsites.net/.auth/login/aad/callback` |
 | Assignment required | Sí |
 | Emisión de ID tokens | Habilitada (verificado) |
-| Grupo de acceso asignado | `GSEC-DocumentIA-Admin-PRO` (único principal asignado a 2026-09-04; no comprobado en la revisión del 2026-11-22) |
+| Grupo de acceso asignado | `GSEC-DocumentIA-Admin-PRO` (único principal asignado; comprobado en Entra el 2026-11-23, con asignación de usuarios requerida) |
 | Client secret | En Key Vault `srbkvprodocai`, secreto `AdminEasyAuthClientSecret` |
 | App Service | `srbwebadminprodocai` (RG `SRBRGDOCSAIPROD`, suscripción Producción Central `647c7246-54bc-4d31-b909-431cacf03272`) |
 

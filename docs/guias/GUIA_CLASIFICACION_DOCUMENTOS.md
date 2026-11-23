@@ -3,7 +3,7 @@
 > Última revisión: 2026-11-22 (AB#101447, contraste con `DocumentProcessOrchestrator`, `ConfigurableClasificarDataProvider`, `ClassificationRoutingSettings`, `appsettings.json`, CONTRATO_API_HTTP.md, ADR-002, ADR-003 y ADR-004).
 > **Hallazgos de la revisión:** el flujo por defecto es `rules → gpt → di` (`Classification:DefaultFlow=hybrid-rules-gpt-di`) con fallback global `gpt`, no «DI → fallback GPT» como describe §4.1; cada provider se acepta si su tipología no es Desconocido/RESTO, está dentro del conjunto restringido y su confianza llega al umbral `instrucciones.classification.umbral ?? 0.6`; el umbral de `BAJA_CONFIANZA_CLASIFICACION` es `umbral ?? confidenceConfig.clasifUmbralFallback` (0.85 por defecto); `DUPLICADO` solo existe con `Dedup:ModoEstricto=false`; los estados finales son 10 (§5 del contrato); los valores de `fallbackRazon` de §4.3 y §11.2 no existen en el código (los reales: `global_fallback_final`, `global_fallback_baja_confianza`, `global_fallback_sin_clasificacion`, `global_fallback_failed:<Tipo>`, `fallback_global_disabled`, `fallback_unclassified`, `tdn1_virtual_propuesta`, `fuera_de_conjunto_restringido`); la fuente de las tipologías en ejecución es BD (`Tipologias.ConfiguracionJson`) y los `.validation.json` son solo semilla; los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*` y `Classification__DefaultModelKey` no se leen (modelo, endpoint y umbrales salen de `ModeloConfigs` y de `confidenceConfig`); los prompts de clasificación viven en `PromptTemplates` (ver PROMPT_CLASIFICACION_COMPLETO.md); existe un clasificador por embeddings (`ClasificarEmbeddingsActivity`, sombra solo en DEV, ADR-002); el `output` de la orquestación sale en PascalCase (`Resultado.Estado`) y el `customStatus` en camelCase; la salida se exporta como `FallbackLLM`, no `UseFallbackLLM`.
 > Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). `default.gpt4o-mini` es la clave histórica de la fila de `ModeloConfigs`, no el deployment.
-> Inventario de tipologías en BD, versión por defecto de cada familia, clasificador DI vigente (v0/v1), valores efectivos de `DefaultFlow` y `NivelClasificacionDefault` en PRE y PRO, URL de PRO, lista de formatos y soporte de `.xlsm`: no comprobado en la revisión del 2026-11-22.
+> Comprobado el 2026-11-23 (AB#101449): BD con 233 tipologías activas en DEV y 213 en PRE y PRO, 7 con `isDefault` en cada entorno; clasificador DI vigente `DocumentAICC_v1` (`default.azure-di`) en DEV y PRO; `Classification__DefaultFlow` y `Classification__NivelClasificacionDefault` no existen como app setting en ningún entorno y el host solo carga `local.settings.json`, así que rigen los valores del código (`hybrid-tdn` y `TDN1_TDN2`); la URL de PRO es `https://srbappprodocai.azurewebsites.net/api/`; `IngestAPITrigger` admite `.pdf`, `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.png`, `.jpg`, `.jpeg`, `.tif`, `.tiff`, `.bmp`, `.heif`, `.html` y `.htm`; `.xlsm` no está admitido.
 >
 > **Versión original:** 1.0 (mayo de 2026) | **Proyecto:** AI DocClassExt — SAREB  
 > **Audiencia:** Usuarios técnicos, usuarios de negocio, integradores de sistemas
@@ -267,7 +267,7 @@ Se activa con `instrucciones.classificationOnly: true` (opcionales `maxPagesForC
 | Validación de campos | ✅ Sí | ❌ No |
 | Plugins de enriquecimiento | ✅ Sí | ❌ No |
 | Subida a GDC | ✅ Sí (si configurado) | ❌ No |
-| Persistencia en BD | ✅ Completa | Solo clasificación (detalle no comprobado en la revisión del 2026-11-22) |
+| Persistencia en BD | ✅ Completa | Solo clasificación (el detalle de lo persistido en ese modo se describe en el código y en AB#100178, sin comprobación en vivo) |
 | Tiempo estimado | 15–60 s | 4–18 s |
 | Coste estimado (tokens IA) | Alto | Bajo |
 | Ideal para | Procesamiento definitivo | Pre-clasificación, enrutamiento, validación masiva |
@@ -550,7 +550,7 @@ Si ningún proveedor de la cadena devuelve un código dentro del conjunto, el re
 
 ### 5.1 Inventario completo
 
-> **Estado BD:** 15 tipologías Published+Activa (mayo 2026; inventario desactualizado: a 2026-11-22 hay 233 tipologías activas en DEV y 213 en PRO, ver TIPOLOGIAS_REFERENCIA.md). Cuántas tienen `gptDescripcion`: no comprobado en la revisión del 2026-11-22.
+> **Estado BD:** 15 tipologías Published+Activa (mayo 2026; inventario desactualizado: a 2026-11-22 hay 233 tipologías activas en DEV y 213 en PRO, ver TIPOLOGIAS_REFERENCIA.md). Con `gptDescripcion` a 2026-11-23: 229 de 233 en DEV y 209 de 213 en PRE y PRO.
 
 #### Tipologías de extracción y prompt (motor clásico)
 
