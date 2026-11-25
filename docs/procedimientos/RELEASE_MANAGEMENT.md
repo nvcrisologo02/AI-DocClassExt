@@ -448,9 +448,9 @@ la release no toca los demás componentes ni la configuración de bootstrap (803
 |---|---|---|---|---|---|
 | 799 | AI DocClassExt | `azure-pipelines.yml` | `targetEnvironment` (dev/pre/prod, default prod) | Build → RunMigrations (deshabilitado, `condition: false`) → DeployFunctions (jobs Functions y Admin) → DeployAssetResolver → ValidateConfiguration | `scripts/configuration/ensure-app-settings.ps1`, `scripts/configuration/assign-keyvault-rbac.ps1`, `scripts/configuration/verify-keyvault-rbac.ps1`, `scripts/testing/validate-azure-appsettings-contract.ps1` |
 | 802 | AI DocClassExt (Functions) | `azure-pipelines-functions.yml` | `targetEnvironment` (default dev) | Build → Deploy | `ensure-app-settings.ps1` |
-| 800 | AI DocClassExt (Admin) | `azure-pipelines-admin.yml` | `targetEnvironment` (default dev) | BuildAdmin → DeployAdmin (zipDeploy, RBAC KV, settings, "Ensure Functions environment name", contrato) | `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
+| 800 | AI DocClassExt (Admin) | `azure-pipelines-admin.yml` | `targetEnvironment` (default dev) | BuildAdmin → DeployAdmin (zipDeploy, RBAC KV, settings, "Ensure Functions environment name", contrato) | `ensure-app-settings.ps1`, `remove-legacy-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
 | 801 | AI DocClassExt (AssetResolver) | `azure-pipelines-assetresolver.yml` | `targetEnvironment` (default dev) | Build → Deploy | ninguno |
-| 803 | AI DocClassExt azure-pipelines-bootstrap. | `azure-pipelines-bootstrap.yml` | `targetEnvironment` (default dev) | Bootstrap | `check-azure-permissions.ps1`, `set-keyvault-secrets.ps1`, `verify-prod-prereqs.ps1`, `set-functionapp-keyvault-references.ps1`, `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
+| 803 | AI DocClassExt azure-pipelines-bootstrap. | `azure-pipelines-bootstrap.yml` | `targetEnvironment` (default dev) | Bootstrap | `check-azure-permissions.ps1`, `set-keyvault-secrets.ps1`, `verify-prod-prereqs.ps1`, `set-functionapp-keyvault-references.ps1`, `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1`. No borra los app settings heredados (AB#101450): un re-bootstrap de un entorno sin limpiar fallará en el contrato (`forbiddenSettings`) hasta pasar el 799 o el 802 |
 | 807 | Migrations-BD | `azure-pipelines-migrations.yml` | `targetEnvironment` (default dev), `addTransientFirewallRule` (bool, default false), `backfillClaveIntencion` (bool, default false; AB#100930, ver 4.8) | Generate (agente hosted, `dotnet ef migrations script --idempotent`) → Apply (pool `docia-mdp-private`) | `scripts/deployment/apply-migrations.ps1`, `scripts/database/backfill-clave-intencion.ps1` |
 | 828 | AI DocClassExt (828) | no identificado en el repo | — | — | definición sin fichero identificado; comprobar en ADO antes de usarla |
 | 832 | AI DocClassExt (AiArtifacts) | `azure-pipelines-ai-artifacts.yml` | `targetEnvironment` (dev/pre/prod, default pre), `fromProd`, `preGatesPassed`, `releaseTag` (default `auto` = `build-<id>`), `runValidation`, `dryRun` | Guard → Export (origen del salto; no con `fromProd`) → AiArtifacts (pool `docia-mdp-private`, environment del destino) → ConfigSeed (solo diff; no con `fromProd`). Ver 2.4 | `scripts/ai/export-config-release.ps1`, `copy-labeling-dataset.ps1`, `apply-deployments.ps1` (fuera de `prod`), `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1`, `validate-analyzer.ps1`, `scripts/database/diff-config-exports.py` |
@@ -479,7 +479,10 @@ De menos a más invasiva. Se retrocede solo la capa que falló; nunca se empieza
    anterior a `set-resource-aliases.sql`; los cuatro secretos `*--ApiKey` de IA ya no se usan
    (AB#101450), así que no hay que restaurarlos; reiniciar la Function App,
    comprobar con la consulta del paso 2b que las cuatro claves llevan los hosts esperados y
-   repetir el smoke.
+   repetir el smoke. Si se redespliega el 799 desde un tag anterior a AB#101450,
+   `ensure-app-settings.ps1` recrea los 27 settings heredados con referencias a secretos en soft delete
+   (sin efecto en runtime; errores de resolución de referencia en el portal); el siguiente despliegue
+   normal los vuelve a borrar.
 4. **Esquema.** Solo si una migración corrompió datos. Restaurar la copia `DocumentIA-prerel-<fecha>`
    con un nombre nuevo (`az sql db copy`), parar la Function App, renombrar la BD actual a
    `DocumentIA-failed-<fecha>` y la copia a `DocumentIA`, desplegar el commit anterior (capa 1) y
@@ -498,7 +501,7 @@ De menos a más invasiva. Se retrocede solo la capa que falló; nunca se empieza
   (por ejemplo las `AI__Resources__*__Endpoint`, paso 2b de `infra/ai/README.md`) exige
   `az functionapp config appsettings set`, con la captura previa de 2.2.4 o 4.11, la consulta de
   verificación de ese paso y nota en `runbook.md`.
-- Settings heredados sin efecto (AB#101450): `remove-legacy-app-settings.ps1` los borra en cada despliegue del 799 y del 802; el contrato los lista en `forbiddenSettings`; sus secretos se borran con `remove-legacy-keyvault-secrets.ps1` tras el despliegue.
+- Settings heredados sin efecto (AB#101450): `remove-legacy-app-settings.ps1` los borra en cada despliegue del 799 y del 802; el contrato los lista en `forbiddenSettings`; sus secretos se borran con `remove-legacy-keyvault-secrets.ps1` tras el despliegue. Las variables `DOCIA_SECRET_*_APIKEY` de IA (las cuatro de extracción y clasificación) de los grupos `docia-bootstrap-<env>-secrets` quedan huérfanas, porque el 803 ya no las publica; se vaciarán con sí explícito (pendiente).
 - El RBAC de Key Vault no lo gestiona el pipeline (`manageKeyVaultRbac=false`): se asigna una
   vez con `scripts/configuration/assign-keyvault-rbac.ps1` y se comprueba con
   `verify-keyvault-rbac.ps1`. Detalle en `docs/08_CHECKLISTS_DESPLIEGUE.md`, bloque 3.

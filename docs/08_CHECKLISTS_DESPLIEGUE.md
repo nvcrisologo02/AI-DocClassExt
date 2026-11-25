@@ -101,7 +101,6 @@ Secretos requeridos en KV:
 | `FunctionsAdminApiFunctionKey` | Function key que usa el Admin para llamar a la Function App (exigido por el contrato; faltaba en esta tabla) |
 | `GDC--Username` | Usuario servicio GDC (no exigido por el contrato; lo comprueba `verify-prod-prereqs.ps1`) |
 | `GDC--Password` | Password servicio GDC (no exigido por el contrato; lo comprueba `verify-prod-prereqs.ps1`) |
-
 | `GDC--HttpBasicUsername` | Usuario HTTP Basic GDC |
 | `GDC--HttpBasicPassword` | Password HTTP Basic GDC |
 

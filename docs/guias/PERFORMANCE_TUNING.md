@@ -1219,7 +1219,7 @@ Usar antes de producción:
 ---
 
 **Changelog:**
-- **2026-11-25:** Revisión AB#101450: los app settings heredados sin efecto (`Classification__GptFallback__*`, `Extraction__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey` y los de conexión de CU) se retiraron del pipeline y de los entornos.
+- **2026-11-25:** Revisión AB#101450: los app settings heredados sin efecto (`Classification__GptFallback__*`, `Extraction__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey` y los de conexión de CU) ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
 - **2026-11-22:** Revisión AB#101447 contra código y pipelines (ver cabecera): entornos DEV/PRE/PRO, 21 activities, settings heredados sin efecto, índices reales, métricas reales, modelo por entorno.
 - **2026-06-10:** Initial version v1.0
   - 14 activities profiled (hoy 21)

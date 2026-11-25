@@ -322,7 +322,7 @@ Los pipelines de despliegue aceptan el parámetro **`targetEnvironment: dev | pr
 |-------|--------|-----------|
 | **1. Build & Test** | .NET 10 SDK → restore → build (Release) → unit tests → publish 3 proyectos → subir 3 artifacts | siempre |
 | **2. Run Migrations** | stage heredado; las migraciones van por `azure-pipelines-migrations.yml` | ⛔ `condition: false` (deshabilitado) |
-| **3. Deploy Functions** | zipDeploy a `{app}` → aplicar los app settings (83 claves en el YAML el 2026-11-22) → validar variables de resiliencia CU, PromptTracing, Dedup, PromptDefaults y BlobRetention | `succeeded()` |
+| **3. Deploy Functions** | zipDeploy a `{app}` → aplicar los app settings (83 claves en el YAML el 2026-11-22; 52 el 2026-11-25 tras AB#101450, y un paso `remove-legacy-app-settings.ps1` borra a continuación los heredados que sigan en la Function App) → validar variables de resiliencia CU, PromptTracing, Dedup, PromptDefaults y BlobRetention | `succeeded()` |
 | **3b. Deploy Admin** | zipDeploy a `{admin}` → asignar Managed Identity → verificar/asignar RBAC "Key Vault Secrets User" → settings Functions API → asegurar `EnvironmentName` en `{app}` | dentro del stage DeployFunctions |
 | **4. Deploy AssetResolver** | zipDeploy a `{assetresolver}` → settings DB connection + API key | `dependsOn: DeployFunctions` |
 | **5. Validate Contract** | `validate-azure-appsettings-contract.ps1` sobre las 3 apps; falla si faltan settings | `dependsOn: DeployFunctions + DeployAssetResolver` |

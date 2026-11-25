@@ -54,11 +54,11 @@ Sección raíz: `Classification`
 
 ### 4.2 Azure Document Intelligence (retirado en AB#101450)
 
-Sección: `Classification:AzureDocumentIntelligence`. **Retirada en AB#101450**: no se enlazaba a ninguna clase; endpoint, clave, `AuthMode` y versión de API salen de la fila de `ModeloConfigs` (`ClassificationModelConfig`, alias `di`). Los app settings `Classification__AzureDocumentIntelligence__*` ya no existen en pipeline, contrato ni entornos.
+Sección: `Classification:AzureDocumentIntelligence`. **Retirada en AB#101450**: no se enlazaba a ninguna clase; endpoint, clave, `AuthMode` y versión de API salen de la fila de `ModeloConfigs` (`ClassificationModelConfig`, alias `di`). Los app settings `Classification__AzureDocumentIntelligence__*` ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
 
 ### 4.3 GPT Fallback de Clasificación (retirado en AB#101450)
 
-Sección: `Classification:GptFallback`. **Retirada en AB#101450**: no se enlazaba a ninguna clase. El modelo de respaldo es la fila con `UseAsFallback = true` de tipo Clasificación en `ModeloConfigs` (`classification.gpt56-luna` en DEV, `classification.gpt4o-mini-fallback` en PRE y PRO) y el umbral es `FallbackThreshold` de esa fila (0,6 por defecto); `Enabled` no apagaba nada. Los app settings `Classification__GptFallback__*` ya no existen en pipeline, contrato ni entornos.
+Sección: `Classification:GptFallback`. **Retirada en AB#101450**: no se enlazaba a ninguna clase. El modelo de respaldo es la fila con `UseAsFallback = true` de tipo Clasificación en `ModeloConfigs` (`classification.gpt56-luna` en DEV, `classification.gpt4o-mini-fallback` en PRE y PRO) y el umbral es `FallbackThreshold` de esa fila (0,6 por defecto); `Enabled` no apagaba nada. Los app settings `Classification__GptFallback__*` ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
 
 > **Comportamiento especial:** Si DI clasifica como `RESTO` (tipología genérica), el fallback GPT se activa **de forma obligatoria**, independientemente del umbral y de si `Enabled = false`.  
 > Si GPT devuelve `Desconocido` o confianza < 0.3, el orquestador termina de forma controlada con `Estado = NO_CLASIFICADO` (sin error técnico de ejecución). Si la petición incluye `instrucciones.prompt` o `forzarResumenPorDefecto`, el prompt y el resumen se ejecutan igualmente antes de cerrar: no dependen de que el documento sea clasificable.
@@ -92,7 +92,7 @@ Sección: `Extraction:AzureContentUnderstanding` (`AzureContentUnderstandingOpti
 
 ### 5.3 GPT Fallback de Extracción / Extracción GPT directa (retirado en AB#101450)
 
-Sección: `Extraction:GptFallback`. **Retirada en AB#101450**: no se enlazaba a ninguna clase. Endpoint, deployment, clave y `MinFieldsRatio` salen de la fila `UseAsFallback` de tipo Extracción en `ModeloConfigs` (`extraction.gpt56-luna` en DEV; en PRE y PRO la de gpt-4o-mini) y el proveedor directo resuelve `ModelKey` contra `ModeloConfigs`. Los app settings `Extraction__GptFallback__*` ya no existen en pipeline, contrato ni entornos.
+Sección: `Extraction:GptFallback`. **Retirada en AB#101450**: no se enlazaba a ninguna clase. Endpoint, deployment, clave y `MinFieldsRatio` salen de la fila `UseAsFallback` de tipo Extracción en `ModeloConfigs` (`extraction.gpt56-luna` en DEV; en PRE y PRO la de gpt-4o-mini) y el proveedor directo resuelve `ModelKey` contra `ModeloConfigs`. Los app settings `Extraction__GptFallback__*` ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
 
 > Esta sección describía **tanto el fallback GPT** (CU→GPT cuando la completitud/confianza no supera el umbral) **como el proveedor GPT directo** (`azure-openai`). Ambos modos comparten el registro de modelos en BD (`ModeloConfigs`) y los mismos parámetros de conexión. Los JSON de modelos son solo seed o referencia.
 
@@ -288,7 +288,7 @@ GDC__Endpoint / GDC__BypassSslValidation = https://... / false
 SqlConnectionString, AzureWebJobsStorage, AzureStorageConnectionString = @Microsoft.KeyVault(...)
 ```
 
-Los 83 settings que fija `azure-pipelines.yml` (los de arriba; los heredados sin efecto se retiraron en AB#101450 y el número bajará cuando el pipeline se despliegue) están en INFRAESTRUCTURA_REAL_DESPLEGADA.md. No se fijan y rigen los defectos de clase: `CacheConfiguration:*` (caché de configuración), `Pipeline:MaxPaginasDocumento` (0 = sin límite), `HybridTdn:*`, `ClassificationPreparation:*`, `Extraction:InitialMarkdown:*`.
+Los 52 settings que fija `azure-pipelines.yml` para la Function App (los de arriba; los heredados sin efecto se retiraron del YAML en AB#101450, cifra contada el 2026-11-25 en el array `$settings` del stage Deploy Functions) están en INFRAESTRUCTURA_REAL_DESPLEGADA.md. No se fijan y rigen los defectos de clase: `CacheConfiguration:*` (caché de configuración), `Pipeline:MaxPaginasDocumento` (0 = sin límite), `HybridTdn:*`, `ClassificationPreparation:*`, `Extraction:InitialMarkdown:*`.
 
 > **Recomendación:** usar Azure Key Vault references para secretos (`ApiKey`, `Password`, `SqlConnectionString`).
 

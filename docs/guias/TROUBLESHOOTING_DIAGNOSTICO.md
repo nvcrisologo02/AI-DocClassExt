@@ -2,7 +2,7 @@
 
 > Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto). Revisión previa: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Data`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos eventos y métricas inexistentes (`DocumentIngestedSuccessfully`, `ClassificationFailed`, `Activity.*`; `DocumentProcessed` es evento, no métrica), las dimensiones de los eventos CU (`modelKey`, `reason`, `tipologia` en minúscula), las consultas SQL (`Documentos` no guarda el estado final ni el contrato: están en `DocumentoEjecuciones`), la ruta `POST /api/IngestDocument` y el setting `SqlConnectionStringOptions` (no existe). Los settings `Classification__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` se retiraron en AB#101450 (no se leían en código: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada). `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178). Cada entorno tiene su IA propia desde septiembre de 2026 (DEV luna desde el 2026-11-20, ADR-004; PRE y PRO `gpt-4o-mini`). Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue. Valores de `ModeloConfigs.Tipo` comprobados en BD el 2026-11-23: 0 a 5 en los tres entornos (0 clasificación, 1 extracción, 2 prompt, 3 layout, 4 tarifas, 5 embeddings). Los comandos `az` de este documento no se han ejecutado en la revisión.
 
-**Última actualización:** 2026-11-22  
+**Última actualización:** 2026-11-25  
 **Público objetivo:** Operadores, DevOps, Soporte 2º nivel
 
 ---
