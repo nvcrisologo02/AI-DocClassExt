@@ -244,7 +244,6 @@ var host = new HostBuilder()
         // Todo se resuelve aquí, al arrancar, y no en la lambda del handler: IHttpClientFactory la evalúa
         // de forma perezosa y en cada rotación, lo que retrasaría el fallo y releería el PEM cada vez.
         var gdcSettings = context.Configuration.GetSection("GDC").Get<GdcSettings>() ?? new GdcSettings();
-        GdcServerCertificateValidator? gdcValidador = null;
         if (gdcSettings.BypassSslValidation)
         {
             Console.WriteLine("[GDC] AVISO: validación TLS del GDC desactivada por GDC__BypassSslValidation=true; solo para emergencias.");
@@ -253,11 +252,13 @@ var host = new HostBuilder()
         {
             // Sin captura de excepciones a propósito: si la cadena de confianza no carga (fichero ausente
             // o PEM inválido) el arranque del host falla con un error claro, no se degrada en silencio.
-            // El logger tiene vida de proceso (como el validador), por eso no se libera.
-            var gdcLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
+            // El validador se registra por DI para que sus rechazos lleguen a los proveedores de logging
+            // del host (Application Insights incluido).
             var confianza = GdcServerCertificateValidator.LoadTrustStore(gdcSettings.TrustedRootCertificate, gdcSettings.TrustedRootCertificatePath);
-            gdcValidador = new GdcServerCertificateValidator(confianza, gdcLoggerFactory.CreateLogger<GdcServerCertificateValidator>());
+            services.AddSingleton(sp => new GdcServerCertificateValidator(
+                confianza, sp.GetRequiredService<ILogger<GdcServerCertificateValidator>>()));
         }
+        var gdcBypassAvisado = 0;
 
         services.AddHttpClient("GDC", client =>
         {
@@ -285,12 +286,26 @@ var host = new HostBuilder()
                     new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
             }
         })
-        .ConfigurePrimaryHttpMessageHandler(() =>
+        .ConfigurePrimaryHttpMessageHandler(sp =>
         {
             var handler = new HttpClientHandler();
-            handler.ServerCertificateCustomValidationCallback = gdcValidador is null
-                ? HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-                : (_, cert, chain, errors) => gdcValidador.Validate(cert, chain, errors);
+            if (gdcSettings.BypassSslValidation)
+            {
+                // Aviso por DI una sola vez (el handler se recrea en cada rotación del factory).
+                if (System.Threading.Interlocked.Exchange(ref gdcBypassAvisado, 1) == 0)
+                {
+                    sp.GetRequiredService<ILogger<Program>>().LogWarning(
+                        "Validación TLS del GDC desactivada por GDC__BypassSslValidation=true; solo para emergencias.");
+                }
+
+                handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+            }
+            else
+            {
+                var gdcValidador = sp.GetRequiredService<GdcServerCertificateValidator>();
+                handler.ServerCertificateCustomValidationCallback = (_, cert, chain, errors) => gdcValidador.Validate(cert, chain, errors);
+            }
+
             return handler;
         });
 

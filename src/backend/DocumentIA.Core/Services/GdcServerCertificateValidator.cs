@@ -30,7 +30,12 @@ namespace DocumentIA.Core.Services
         public static X509Certificate2Collection LoadTrustStore(string? pem, string ruta)
         {
             var texto = pem?.Trim();
-            if (string.IsNullOrEmpty(texto))
+            string origen;
+            if (!string.IsNullOrEmpty(texto))
+            {
+                origen = "desde el app setting GDC__TrustedRootCertificate";
+            }
+            else
             {
                 var resuelta = Path.IsPathRooted(ruta) ? ruta : Path.Combine(AppContext.BaseDirectory, ruta);
                 if (!File.Exists(resuelta))
@@ -40,18 +45,28 @@ namespace DocumentIA.Core.Services
                 }
 
                 texto = File.ReadAllText(resuelta).Trim();
+                origen = $"desde el fichero {resuelta}";
             }
 
             if (!texto.Contains("-----BEGIN CERTIFICATE-----", StringComparison.Ordinal))
             {
-                throw new CryptographicException("El PEM de confianza del GDC no contiene ningún certificado.");
+                throw new CryptographicException($"El PEM de confianza del GDC cargado {origen} no contiene ningún certificado.");
             }
 
             var coleccion = new X509Certificate2Collection();
-            coleccion.ImportFromPem(texto);
+            try
+            {
+                coleccion.ImportFromPem(texto);
+            }
+            catch (CryptographicException ex)
+            {
+                throw new CryptographicException($"El PEM de confianza del GDC cargado {origen} no es válido: {ex.Message}", ex);
+            }
+
             if (coleccion.Count == 0)
             {
-                throw new InvalidOperationException("El almacén de confianza del GDC está vacío.");
+                throw new InvalidOperationException(
+                    $"El PEM de confianza del GDC cargado {origen} no produjo ningún certificado; conserve los saltos de línea reales del PEM (no la secuencia literal \\n) o separe las líneas con espacios.");
             }
 
             return coleccion;
@@ -78,6 +93,7 @@ namespace DocumentIA.Core.Services
                 using var propia = new X509Chain();
                 propia.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
                 propia.ChainPolicy.CustomTrustStore.AddRange(_certificadosConfianza);
+                propia.ChainPolicy.ApplicationPolicy.Add(new Oid("1.3.6.1.5.5.7.3.1")); // serverAuth
                 propia.ChainPolicy.DisableCertificateDownloads = true;
                 propia.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
                 propia.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;

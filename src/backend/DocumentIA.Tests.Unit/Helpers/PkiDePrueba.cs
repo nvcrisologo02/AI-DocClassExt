@@ -11,7 +11,8 @@ namespace DocumentIA.Tests.Unit.Helpers
     {
         public static (X509Certificate2 Raiz, X509Certificate2 Emisora, X509Certificate2 Hoja) Crear(
             string dnsHoja = "gdc.pruebas.local",
-            DateTimeOffset? hojaNotAfter = null)
+            DateTimeOffset? hojaNotAfter = null,
+            bool conEkuServidor = true)
         {
             var ahora = DateTimeOffset.UtcNow;
             var notBefore = ahora.AddDays(-3);
@@ -37,8 +38,10 @@ namespace DocumentIA.Tests.Unit.Helpers
             var reqHoja = new CertificateRequest($"CN={dnsHoja}", claveHoja, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
             reqHoja.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, true));
             reqHoja.CertificateExtensions.Add(new X509KeyUsageExtension(X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, true));
+            // Sin serverAuth la hoja lleva solo clientAuth: omitir la extensión la haría válida para cualquier uso.
+            var ekuOid = conEkuServidor ? "1.3.6.1.5.5.7.3.1" : "1.3.6.1.5.5.7.3.2";
             reqHoja.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
-                new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false));
+                new OidCollection { new Oid(ekuOid) }, false));
             var san = new SubjectAlternativeNameBuilder();
             san.AddDnsName(dnsHoja);
             reqHoja.CertificateExtensions.Add(san.Build());

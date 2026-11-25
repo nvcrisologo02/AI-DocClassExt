@@ -105,6 +105,17 @@ namespace DocumentIA.Tests.Unit.Services
         }
 
         [Fact]
+        public void Validate_HojaSinEkuDeServidor_Rechaza()
+        {
+            var (raiz, emisora, hoja) = PkiDePrueba.Crear(conEkuServidor: false);
+            var validador = Crear(raiz);
+
+            var ok = validador.Validate(PkiDePrueba.SinClavePrivada(hoja), CadenaConExtra(emisora), SslPolicyErrors.RemoteCertificateChainErrors);
+
+            ok.Should().BeFalse();
+        }
+
+        [Fact]
         public void Validate_SinErroresDePolitica_SigueExigiendoLaRaizConfiada()
         {
             var (raizA, _, _) = PkiDePrueba.Crear();
@@ -159,6 +170,46 @@ namespace DocumentIA.Tests.Unit.Services
             var almacen = GdcServerCertificateValidator.LoadTrustStore(pem, "no-se-usa.pem");
 
             almacen.Count.Should().Be(2);
+        }
+
+        [Fact]
+        public void LoadTrustStore_PemSinSaltosDeLinea_CargaPorqueImportFromPemLoTolera()
+        {
+            var (raiz, _, _) = PkiDePrueba.Crear();
+            var pem = raiz.ExportCertificatePem().Replace("\r", string.Empty).Replace("\n", string.Empty);
+
+            var almacen = GdcServerCertificateValidator.LoadTrustStore(pem, "no-se-usa.pem");
+
+            almacen.Count.Should().Be(1);
+        }
+
+        [Fact]
+        public void LoadTrustStore_PemConSaltosEscapados_LanzaConMensajeDeOrigen()
+        {
+            var (raiz, _, _) = PkiDePrueba.Crear();
+            var pem = raiz.ExportCertificatePem().Replace("\r", string.Empty).Replace("\n", "\\n");
+
+            Action accion = () => GdcServerCertificateValidator.LoadTrustStore(pem, "no-se-usa.pem");
+
+            accion.Should().Throw<InvalidOperationException>().Where(e => e.Message.Contains("GDC__TrustedRootCertificate"));
+        }
+
+        [Fact]
+        public void LoadTrustStore_PemEnSettingTienePrioridadSobreElFichero()
+        {
+            var (raiz, emisora, _) = PkiDePrueba.Crear();
+            var ruta = Path.Combine(Path.GetTempPath(), $"gdc-ca-{Guid.NewGuid():N}.pem");
+            File.WriteAllText(ruta, PemDe(raiz, emisora));
+            try
+            {
+                var almacen = GdcServerCertificateValidator.LoadTrustStore(raiz.ExportCertificatePem(), ruta);
+
+                almacen.Count.Should().Be(1);
+            }
+            finally
+            {
+                File.Delete(ruta);
+            }
         }
 
         [Fact]
