@@ -1,6 +1,6 @@
 # 1. Arquitectura del Sistema — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con el código, las migraciones EF y los pipelines)  
+> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con el código, las migraciones EF y los pipelines)  
 > Actualización anterior: 2026-06-08 (Upgrade .NET 9→10 Isolated - Extended Support)  
 > Proyecto: AI DocClassExt — SAREB  
 > Repositorio: Azure DevOps `sareb.visualstudio.com/AI%20DocClassExt`
@@ -567,7 +567,7 @@ flowchart TB
 | Tamaño input Durable Functions | ~60 KB (Storage entity) | Patrón blob-reference ya aplicado: el trigger vuelca el contenido al blob y pone `Content.Base64` a `null`; la orquestación viaja con `BlobPath` y el base64 solo queda como entrada legada |
 | Timeout Activity | Sin limite explicito (excepto GDC: 120s) | Considerar timeouts por activity en futuras fases |
 | Rate limit Azure DI | Varía por tier (S0: 15 TPS) | Durable Functions serializa por instancia; N instancias paralelas podrian saturar |
-| SSL GDC | Certificado CA corporativo SAREB no confiado en Linux | `GDC:BypassSslValidation=true` (solo para host Linux; en Windows la CA se instala en el cert store) |
+| SSL GDC | Certificado emitido por la CA corporativa SAREB, no confiada en el host Linux | Desde el despliegue de AB#101553 (pendiente) el handler valida la cadena contra `config/certs/sareb-ca-chain.pem` (raíz y emisora de SAREB) con `CustomRootTrust`; `GDC:BypassSslValidation=false` y `true` solo como interruptor de emergencia |
 
 ### Seguridad del Admin (DocumentIA.Admin) — estado (AB#99999)
 

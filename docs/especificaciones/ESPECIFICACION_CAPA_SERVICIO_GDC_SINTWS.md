@@ -1,7 +1,7 @@
 # Especificacion Unificada GDC (SINTWS) — DocumentIA
 
 > Version: 2.0 consolidada
-> Fecha: 24/04/2026 · Última revisión: 2026-11-22 (AB#101447, contraste con `GdcService`, `ResilientGdcService`, `GdcSettings`, `SubirGDCActivity`, `ObtenerDocumentoGDCActivity` y `azure-pipelines.yml`)
+> Fecha: 24/04/2026 · Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `GdcService`, `ResilientGdcService`, `GdcSettings`, `SubirGDCActivity`, `ObtenerDocumentoGDCActivity` y `azure-pipelines.yml`)
 > Alcance: Documento canonico de GDC para DocumentIA (sustituye y unifica la antigua especificacion tecnica y la guia operativa de integracion).
 
 ---
@@ -139,7 +139,9 @@ Clave principal:
 
 Claves relevantes (defecto de `GdcSettings` · valor desplegado por el pipeline):
 - `GDC:TimeoutSeconds` (30 · 60)
-- `GDC:BypassSslValidation` (`false` · `true` en DEV, PRE y PRO; en `Development` se acepta siempre cualquier certificado)
+- `GDC:BypassSslValidation` (`false`; el pipeline lo fija a `false`. `true` es solo un interruptor de emergencia que acepta cualquier certificado; hasta el despliegue de AB#101553 los tres entornos siguen con `true`)
+- `GDC:TrustedRootCertificate` (PEM opcional con la raíz y la emisora de confianza; sustituye al fichero sin desplegar)
+- `GDC:TrustedRootCertificatePath` (`config/certs/sareb-ca-chain.pem`: raíz y emisora de SAREB, raíz válida hasta 2040-12-16; validación con `CustomRootTrust` y sin comprobación de revocación; si falta o está corrupto el host no arranca)
 - `GDC:HttpBasicUsername` / `GDC:HttpBasicPassword` (Key Vault `GDC--HttpBasicUsername` / `GDC--HttpBasicPassword`; autenticación HTTP Basic del gateway, distinta del `Identity` SOAP)
 - `GDC:ApplicationId` (`CKP1`), `GDC:DocumentTypeId` (`document`), `GDC:ContentFieldName` (`content` · `Content`), `GDC:OrigenDocumento` (`8878`), `GDC:ClaseExpediente` (`AI04`), `GDC:DefaultMatricula` (`OTROS_DOCUMENTOS` · `AI-99-SCXX-00`), `GDC:Servicer` / `GDC:EntidadOrigen` (`9999`), `GDC:ProcesoCarga` (`PC01`), `GDC:TipoExpediente` (`AI`), `GDC:Publico` (`verdadero`)
 - Resiliencia (`ResilientGdcService`, envuelve `Consultar`, `Subir`, `ObtenerMetadatos` y `Obtener`): `GDC:MaxRetries` (3), `GDC:InitialDelayMs` (200), `GDC:ExponentialBackoff` (`true`), `GDC:CircuitBreakerFailures` (5), `GDC:CircuitBreakerDurationMs` (30000). Un reintento tras timeout en `create` puede devolver `AlreadyExists` en vez de duplicar.

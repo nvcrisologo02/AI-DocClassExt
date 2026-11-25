@@ -1,6 +1,6 @@
 # Infraestructura Real Desplegada — DEV / PRE / PRO
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json` y el código). Lo que no se ha podido comprobar contra Azure en esta revisión se marca como tal.
+> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json` y el código). Lo que no se ha podido comprobar contra Azure en esta revisión se marca como tal.
 
 ## 🌐 Modelo multi-entorno
 
@@ -279,7 +279,7 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 | **Proceso Carga** | PC01 |
 | **Tipo Expediente** | AI |
 | **Publico** | verdadero |
-| **SSL Validation Bypass** | true |
+| **SSL Validation Bypass** | `true` hasta el despliegue de AB#101553; después `false` (valida contra `sareb-ca-chain.pem`) |
 | **Timeout** | 60 seconds |
 
 #### **Prompt Tracing**
@@ -423,7 +423,7 @@ entornos; sin usuario autenticado el Admin opera en modo solo lectura.
 - ✅ RBAC "Key Vault Secrets User" (sin secretos en código — todo desde Key Vault).
 - ✅ SQL con autenticación por Managed Identity (patrón PROD replicado en DEV/PRE).
 - ✅ Recursos de IA (DI, CU, OpenAI) consumidos por `ModeloConfigs` con identidad administrada (`DefaultAzureCredential`) y sin API keys en BD en los tres entornos (DEV 2026-09-22, PRE 2026-09-23, PRO 2026-10-08); las opciones directas de App Settings conservan `ApiKey` desde Key Vault.
-- ⚠️ GDC con SSL bypass (`BypassSslValidation=true`) — workaround del sistema legado.
+- ⚠️ GDC con SSL bypass (`BypassSslValidation=true`): a 2026-11-25 el código valida el certificado del GDC contra la CA de SAREB (`config/certs/sareb-ca-chain.pem`) y el pipeline fija `false` (AB#101553), pero está pendiente de despliegue (DEV primero; PRE y PRO con la siguiente release). Hasta entonces los tres entornos siguen con `true`.
 - ✅ Admin con EasyAuth activo en los tres entornos (DEV desde 2026-08-06, PRE y PRO desde 2026-09-04; ver [GUIA_EASYAUTH_ADMIN.md](../guias/GUIA_EASYAUTH_ADMIN.md)). Histórico: hasta el 2026-07-31 el App Service del Admin (dev y prod) estaba sin autenticación y con acceso público; el modo solo lectura automático del Admin (sin usuario autenticado) rechaza toda escritura.
 
 ### ⚡ Concurrencia y resiliencia

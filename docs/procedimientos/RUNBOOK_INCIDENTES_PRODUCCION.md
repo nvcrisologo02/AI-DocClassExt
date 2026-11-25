@@ -1,6 +1,6 @@
 # Runbook de Incidentes — Producción SRBRGDOCSAIPROD
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Core`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos: el endpoint `force-fallback`, `OrquestadorActivity`, `ObtenerMarkdownActivity_Failed` y `GetMetadata` (no existen); `TimeoutSeconds` pasa a `HardTimeoutSeconds`; los settings `Extraction__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` son heredados sin efecto (no se leen en código; la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada); `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178), el de Layout sí. Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue: un cambio manual de app settings dura hasta el siguiente. Los contactos de escalado siguen sin rellenar y desde el repositorio no consta quién debe aportarlos. Los comandos usan los nombres de PRO; DEV y PRE (`SRBRGDEVDOCSAI`/`srbappdevdocai`, `SRBRGPREDOCSAI`/`srbapppredocai`) siguen el mismo patrón (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md). Comprobado el 2026-11-23: las 12 alertas de PRO están habilitadas, las identidades tienen Key Vault Secrets User y las referencias a Key Vault de la Function App de PRO están resueltas; los comandos `az` de este runbook no se han ejecutado en la revisión.
+> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Core`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos: el endpoint `force-fallback`, `OrquestadorActivity`, `ObtenerMarkdownActivity_Failed` y `GetMetadata` (no existen); `TimeoutSeconds` pasa a `HardTimeoutSeconds`; los settings `Extraction__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` son heredados sin efecto (no se leen en código; la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada); `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178), el de Layout sí. Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue: un cambio manual de app settings dura hasta el siguiente. Los contactos de escalado siguen sin rellenar y desde el repositorio no consta quién debe aportarlos. Los comandos usan los nombres de PRO; DEV y PRE (`SRBRGDEVDOCSAI`/`srbappdevdocai`, `SRBRGPREDOCSAI`/`srbapppredocai`) siguen el mismo patrón (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md). Comprobado el 2026-11-23: las 12 alertas de PRO están habilitadas, las identidades tienen Key Vault Secrets User y las referencias a Key Vault de la Function App de PRO están resueltas; los comandos `az` de este runbook no se han ejecutado en la revisión.
 
 **Versión:** 1.1  
 **Última actualización:** 2026-11-22  
@@ -217,7 +217,7 @@ traces
 **Causas Raíz Posibles:**
 - GDC HTTP Basic Auth credentials inválidas
 - GDC endpoint down (legacy SOAP service)
-- SSL certificate validation (GDC bypass SSL?)
+- SSL certificate validation (¿certificado del GDC de otra CA o PEM de confianza desactualizado?)
 - Request format cambió (GDC API incompatible)
 
 **Verificación Rápida (2 min):**
@@ -278,8 +278,16 @@ traces
    - Revisar app setting `GDC__Endpoint` — ¿correcto?
 
 4. **Si es SSL certificate:**
-   - GDC tiene certificado autofirmado → `GDC__BypassSslValidation=true` está en los tres entornos (`azure-pipelines.yml`) y se aplica en cada despliegue
-   - Si falta, agregar setting y redeploy
+   - Desde el despliegue de AB#101553 (pendiente: DEV primero; PRE y PRO con la siguiente release) el handler valida el certificado del GDC contra `config/certs/sareb-ca-chain.pem` y el pipeline fija `GDC__BypassSslValidation=false`. Antes de ese despliegue, los tres entornos siguen con `true`
+   - Causas habituales: el GDC presenta un certificado de otra CA o el PEM está desactualizado. En el log de rechazo constan sujeto, emisor y `ChainStatus`
+   - Si el PEM de confianza ya no sirve y hay que corregirlo sin desplegar, informar `GDC__TrustedRootCertificate` (PEM) en la Function App
+   - Procedimiento de emergencia (solo si el GDC está caído por esta causa):
+     1. Poner `GDC__BypassSslValidation=true` en los app settings de la Function App (patrón `az functionapp config appsettings set`)
+     2. Reiniciar la Function App
+     3. Confirmar el health del GDC; el log de arranque debe llevar el aviso `[GDC] AVISO`
+     4. Abrir incidencia para corregir la causa (certificado del GDC emitido por otra CA o PEM desactualizado)
+     5. Volver a `GDC__BypassSslValidation=false`; si se olvida, el siguiente despliegue lo devuelve a `false`
+   - Un fichero de confianza ausente o corrupto impide arrancar el host (`FileNotFoundException`, `CryptographicException` o `InvalidOperationException`)
 
 5. **Temporal workaround:**
    - Deshabilitar plugin GDC en orchestration (marcar como optional)
