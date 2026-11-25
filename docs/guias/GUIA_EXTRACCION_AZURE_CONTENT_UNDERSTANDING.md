@@ -437,7 +437,7 @@ Revisado 2026-11-22: la clasificación del orquestador usa por defecto el flujo 
 Precedencia para clasificación:
 
 1. `Instrucciones.Classification.Provider` (nombre de flujo o proveedor) y `Instrucciones.Classification.Model` (si no son `auto`).
-2. `Classification:DefaultFlow` (`hybrid-rules-gpt-di`) y, si no hay flujo, `Classification:DefaultProvider`. El bloque de configuración de abajo es el antiguo.
+2. `Classification:DefaultFlow` (`hybrid-rules-gpt-di`) y, si no hay flujo, `Classification:DefaultProvider`. Los app settings `Classification:DefaultModelKey` y `Classification:AzureDocumentIntelligence:*` se retiraron en AB#101450.
 
 Regla importante de negocio:
 
@@ -446,22 +446,7 @@ Regla importante de negocio:
   - `Confianza = 1.0`
   - `TipologiaDetectada = ExpectedType`
 
-Configuración mínima en `appsettings.json` / variables de entorno:
-
-```json
-{
-  "Classification": {
-    "DefaultProvider": "azure-document-intelligence",
-    "DefaultModelKey": "default.azure-di",
-    "AzureDocumentIntelligence": {
-      "Endpoint": "https://<tu-recurso>.cognitiveservices.azure.com/",
-      "ApiKey": "<api-key>",
-      "ApiVersion": "2024-11-30"
-    }
-  }
-}
-```
-
+Los app settings `Classification:DefaultModelKey` y `Classification:AzureDocumentIntelligence:{Endpoint, ApiKey, ApiVersion}` se retiraron en AB#101450 y ya no son configuración mínima: la conexión a DI sale de la fila de `ModeloConfigs` con alias `di` (`AI__Resources__di__Endpoint`) por identidad administrada. Solo se fija por app setting `Classification:DefaultProvider`.
 Registro de modelos de clasificación:
 
 - Archivo: `DocumentIA.Functions/config/classification/models.json`

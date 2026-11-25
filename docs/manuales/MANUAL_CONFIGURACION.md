@@ -111,9 +111,9 @@ El sistema dispone de **dos modos distintos** de extracción basada en GPT:
 **Validación temprana (modo directo):** Al iniciarse, se valida que el modelo esté completamente configurado (endpoint, deployment, API key si no usa Managed Identity). Un error en esta validación aparece como `InvalidOperationException` con un mensaje que indica exactamente qué clave de configuración falta, p. ej.:
 ```
 Extracción GPT: modelo 'default.gpt4o-mini_ex' requiere ApiKey configurada cuando AuthMode=ApiKey.
-Verifica la configuración en appsettings/KeyVault (ej: Extraction:GptFallback:ApiKey).
+Verifica la configuración en appsettings/KeyVault (campo ApiKey de la fila de ModeloConfigs).
 ```
-(En DEV la fila equivalente es `default.gpt56-luna_ex`; la referencia a `Extraction:GptFallback:ApiKey` del mensaje es heredada (ese setting se retiró en AB#101450): la clave vive en la fila de `ModeloConfigs` o se sustituye por `AuthMode = DefaultAzureCredential`.)
+(En DEV la fila equivalente es `default.gpt56-luna_ex`; la clave vive en la fila de `ModeloConfigs` o se sustituye por `AuthMode = DefaultAzureCredential`.)
 ```
 ```
 
