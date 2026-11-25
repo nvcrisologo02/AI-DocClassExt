@@ -1,6 +1,6 @@
 # Integración de Extracción con Azure AI Content Understanding
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `AzureContentUnderstandingProvider`, `AzureContentUnderstandingOptions`, `Program.cs`, `infra/ai/` y los pipelines). **Avisos:** (1) la configuración de conexión de CU **no** va por app settings `Extraction:AzureContentUnderstanding:{Endpoint, ApiKey, AuthMode, DefaultProcessingLocation}` (no se leen en el código) sino por la fila de `ModeloConfigs` de cada modelo (`Endpoint` o `ResourceAlias` → `AiEndpointResolver`, `ApiKey` o `AuthMode = DefaultAzureCredential`); de esa sección solo se enlazan los siete parámetros de resiliencia (`MaxConcurrentCalls` 4, `HardTimeoutSeconds` 90, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold` 5, `CircuitBreakerOpenSeconds` 45, `MaxRetries` 3, `InitialRetryDelayMs` 500 en los tres entornos), con los eventos `CU.TransientError`, `CU.HardTimeout`, `CU.CircuitOpen`, `CU.CircuitClosed`, `CU.CircuitFailover`, `CU.CircuitRejected` y `CU.RetryFailover`. (2) El proveedor es blob-first: descarga `BlobPath` y usa `Content.Base64` solo como fallback (AB#100814); selecciona `ModelKey` o `SecondaryModelKey` en round-robin con circuit breaker por clave y failover. (3) La **Copy API cross-resource sí funciona de PRO a DEV y PRE** y es el mecanismo de promoción de `azure-pipelines-ai-artifacts.yml` (`scripts/ai/copy-cu-analyzers.ps1`; analyzers `copied` en `infra/ai/cu-analyzers.<env>.manifest.json` el 2026-09-21); lo que falla es la copia entre las dos cuentas de PRO (§12). (4) Cada entorno tiene sus cuentas de CU (`srbaisrv01<env>docai` y `srbaisrv02<env>docai` en DEV y PRE); los analyzers vigentes en PRO según el export de configuración v1.1.1 son `CU_NS_1.4_3` (`nota.simple.1_4`), `CU_NS_1.5_0` (`nota.simple.1_5`) y `CU_NS_1.6_0_GGAA`; `CU_NS_1.4_2` es histórico y `CU_NS_1.6_0` es un identificador de ejemplo. (5) Los alias de CU (`gpt-4.1`, `gpt-4.1-mini`, `text-embedding-3-large`) no cambian con el cutover del modelo generativo a `gpt-5.6-luna` en DEV (ADR-004).
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto). Revisiones previas: 2026-11-22 (AB#101447, contraste con `AzureContentUnderstandingProvider`, `AzureContentUnderstandingOptions`, `Program.cs`, `infra/ai/` y los pipelines). **Avisos:** (1) la configuración de conexión de CU **no** va por app settings `Extraction:AzureContentUnderstanding:{Endpoint, ApiKey, AuthMode, DefaultProcessingLocation}` (no se leían en el código y se retiraron en AB#101450) sino por la fila de `ModeloConfigs` de cada modelo (`Endpoint` o `ResourceAlias` → `AiEndpointResolver`, `ApiKey` o `AuthMode = DefaultAzureCredential`); de esa sección solo se enlazan los siete parámetros de resiliencia (`MaxConcurrentCalls` 4, `HardTimeoutSeconds` 90, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold` 5, `CircuitBreakerOpenSeconds` 45, `MaxRetries` 3, `InitialRetryDelayMs` 500 en los tres entornos), con los eventos `CU.TransientError`, `CU.HardTimeout`, `CU.CircuitOpen`, `CU.CircuitClosed`, `CU.CircuitFailover`, `CU.CircuitRejected` y `CU.RetryFailover`. (2) El proveedor es blob-first: descarga `BlobPath` y usa `Content.Base64` solo como fallback (AB#100814); selecciona `ModelKey` o `SecondaryModelKey` en round-robin con circuit breaker por clave y failover. (3) La **Copy API cross-resource sí funciona de PRO a DEV y PRE** y es el mecanismo de promoción de `azure-pipelines-ai-artifacts.yml` (`scripts/ai/copy-cu-analyzers.ps1`; analyzers `copied` en `infra/ai/cu-analyzers.<env>.manifest.json` el 2026-09-21); lo que falla es la copia entre las dos cuentas de PRO (§12). (4) Cada entorno tiene sus cuentas de CU (`srbaisrv01<env>docai` y `srbaisrv02<env>docai` en DEV y PRE); los analyzers vigentes en PRO según el export de configuración v1.1.1 son `CU_NS_1.4_3` (`nota.simple.1_4`), `CU_NS_1.5_0` (`nota.simple.1_5`) y `CU_NS_1.6_0_GGAA`; `CU_NS_1.4_2` es histórico y `CU_NS_1.6_0` es un identificador de ejemplo. (5) Los alias de CU (`gpt-4.1`, `gpt-4.1-mini`, `text-embedding-3-large`) no cambian con el cutover del modelo generativo a `gpt-5.6-luna` en DEV (ADR-004).
 
 ## Índice
 
@@ -147,7 +147,7 @@ Cada entrada describe un analizador de Azure AI Content Understanding.
 | `provider` | ✅ | Debe ser `azure-content-understanding`. |
 | `analyzerId` | ✅ | ID del analizador tal como está creado en Azure AI Foundry. |
 | `contentType` | ✅ | MIME type del documento (`application/pdf`, `image/jpeg`, etc.). Si está vacío se intenta detectar automáticamente. |
-| `processingLocation` | ⬜ | Región de procesamiento. Si está vacío, el proveedor usa `global` (el setting `DefaultProcessingLocation` no se lee). |
+| `processingLocation` | ⬜ | Región de procesamiento. Si está vacío, el proveedor usa `global` (el setting `DefaultProcessingLocation` se retiró en AB#101450). |
 | `inputRange` | ⬜ | Rango de páginas a analizar (p. ej. `"pages": "1-3"`). Vacío = documento completo. |
 
 ### 4.2 Fichero de validación de tipología
@@ -186,13 +186,7 @@ Valores por defecto (sin datos sensibles). Se usan fuera del runtime de Azure Fu
 ```json
 {
   "Extraction": {
-    "DefaultProvider": "mock",
-    "AzureContentUnderstanding": {
-      "Endpoint": "",
-      "ApiKey": "",
-      "AuthMode": "ApiKey",
-      "DefaultProcessingLocation": "global"
-    }
+    "DefaultProvider": "mock"
   }
 }
 ```
@@ -207,11 +201,7 @@ Las claves relevantes dentro de `Values` son:
 ```json
 {
   "Values": {
-    "Extraction:DefaultProvider": "mock",
-    "Extraction:AzureContentUnderstanding:Endpoint": "https://<tu-recurso>.cognitiveservices.azure.com/",
-    "Extraction:AzureContentUnderstanding:ApiKey": "<tu-api-key>",
-    "Extraction:AzureContentUnderstanding:AuthMode": "ApiKey",
-    "Extraction:AzureContentUnderstanding:DefaultProcessingLocation": "global"
+    "Extraction:DefaultProvider": "mock"
   }
 }
 ```
@@ -286,25 +276,14 @@ Y en el fichero de validación de la tipología, poner `"provider": "mock"` (o d
 
 1. Crear un recurso **Azure AI Services** en Azure Portal o Azure AI Foundry.
 2. Obtener el **endpoint** (p. ej. `https://mi-recurso.cognitiveservices.azure.com/`) y una **API Key**.
-3. Rellenar `local.settings.json`:
-
-```json
-"Extraction:AzureContentUnderstanding:Endpoint": "https://mi-recurso.cognitiveservices.azure.com/",
-"Extraction:AzureContentUnderstanding:ApiKey": "<api-key>",
-"Extraction:AzureContentUnderstanding:AuthMode": "ApiKey"
-```
+3. Registrar el endpoint y la API Key en la fila de `ModeloConfigs` del modelo de extracción (`Endpoint`, `ApiKey`, `AuthMode = ApiKey`); los app settings `Extraction:AzureContentUnderstanding:{Endpoint, ApiKey, AuthMode}` se retiraron en AB#101450 y no se usan.
 
 4. Asegurarse de que el analizador referenciado en `models.json` (`analyzerId`) existe en ese recurso.
 
 ### Opción C: Llamada real a Azure con identidad (DefaultAzureCredential)
 
 1. Iniciar sesión con `az login` o Visual Studio.
-2. Configurar:
-
-```json
-"Extraction:AzureContentUnderstanding:Endpoint": "https://mi-recurso.cognitiveservices.azure.com/",
-"Extraction:AzureContentUnderstanding:AuthMode": "DefaultAzureCredential"
-```
+2. Configurar la fila de `ModeloConfigs` del modelo de extracción con su `Endpoint` y `AuthMode = DefaultAzureCredential` (los app settings equivalentes se retiraron en AB#101450).
 
 3. La identidad local debe tener el rol **Cognitive Services User** en el recurso de Azure AI Services.
 
@@ -319,10 +298,8 @@ Añadir en **Configuración > Variables de entorno** (o mediante Bicep/Terraform
 | Variable | Valor |
 |----------|-------|
 | `Extraction__DefaultProvider` | `azure-content-understanding` (o `mock` para deshabilitar) |
-| `Extraction__AzureContentUnderstanding__Endpoint` | Endpoint del recurso Azure AI Services |
-| `Extraction__AzureContentUnderstanding__AuthMode` | `DefaultAzureCredential` (recomendado) o `ApiKey` |
-| `Extraction__AzureContentUnderstanding__ApiKey` | Solo si `AuthMode=ApiKey`. Mejor usar un secreto de Key Vault. |
-| `Extraction__AzureContentUnderstanding__DefaultProcessingLocation` | `global` (por defecto) |
+
+La conexión a CU (endpoint y credencial) sale de la fila de `ModeloConfigs` resuelta por alias (`cu_primary` / `cu_secondary`) con identidad administrada; los app settings de conexión se retiraron en AB#101450. Solo se configuran por app setting los siete parámetros de resiliencia.
 
 > **Nota:** Azure Functions usa `__` como separador de jerarquía en variables de entorno (equivalente a `:` en JSON).
 

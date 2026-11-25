@@ -1,6 +1,6 @@
 # 1. Arquitectura del Sistema — DocumentIA
 
-> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con el código, las migraciones EF y los pipelines)  
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto; AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con el código, las migraciones EF y los pipelines)  
 > Actualización anterior: 2026-06-08 (Upgrade .NET 9→10 Isolated - Extended Support)  
 > Proyecto: AI DocClassExt — SAREB  
 > Repositorio: Azure DevOps `sareb.visualstudio.com/AI%20DocClassExt`
@@ -307,7 +307,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 
 | Modo | Mecanismo | Uso actual |
 |------|-----------|-----------|
-| `ApiKey` | Header `Ocp-Apim-Subscription-Key` (DI) / `api-key` (OpenAI/CU) | Filas de `ModeloConfigs` con `AuthMode = ApiKey` (ninguna activa en los tres entornos desde octubre de 2026). Los app settings `Extraction__AzureContentUnderstanding__*` (conexión), `Classification__AzureDocumentIntelligence__*` y `GptFallback__*` que el pipeline fija con la clave desde Key Vault **no se leen en el código** (comprobado el 2026-11-22): son heredados |
+| `ApiKey` | Header `Ocp-Apim-Subscription-Key` (DI) / `api-key` (OpenAI/CU) | Filas de `ModeloConfigs` con `AuthMode = ApiKey` (ninguna activa en los tres entornos desde octubre de 2026). Los app settings `Extraction__AzureContentUnderstanding__*` (conexión), `Classification__AzureDocumentIntelligence__*` y `GptFallback__*` que el pipeline fijaba con la clave desde Key Vault **no se leían en el código** (comprobado el 2026-11-22) y se retiraron en AB#101450 |
 | `DefaultAzureCredential` | Bearer token via Managed Identity | Filas de `ModeloConfigs` en DEV, PRE y PRO. PRO paso a identidad en la release v1.0.0 (2026-10-08) y sus `ApiKey` se purgaron; ver `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md` |
 
 `DocumentIntelligenceAuthHelper` implementa la logica con lazy singleton de `DefaultAzureCredential` thread-safe.
