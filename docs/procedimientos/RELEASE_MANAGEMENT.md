@@ -506,9 +506,14 @@ De menos a más invasiva. Se retrocede solo la capa que falló; nunca se empieza
   "Ensure Functions environment name" de 800).
 - `GDC__Endpoint` es un app setting no secreto y distinto por entorno; 799 lo fija desde la
   variable de pipeline `GDC_ENDPOINT` (`azure-pipelines.yml`). En el Key Vault de PRO existe un
-  secreto huérfano `GDC--Endpoint` que tiene precedencia sobre el app setting y debe eliminarse
-  (aviso en `docs/especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md`, línea 176; su
-  eliminación no consta como hecha, no verificado a fecha 2026-09-24).
+  secreto huérfano `GDC--Endpoint` que tiene precedencia sobre el app setting. Comprobado el
+  2026-11-25: el secreto sigue en `srbkvprodocai` con la URL de PRO (`srbwidp05`, actualizado el
+  2026-05-04) y la lectura ARM del 2026-11-23 mostró el app setting con la URL de DEV, así que hoy
+  el secreto es lo que hace que PRO apunte bien. Decisión AB#101451: no tocarlo hasta releer el app
+  setting con PIM; tras el siguiente despliegue a PRO, verificar que `GDC__Endpoint` vale
+  `https://srbwidp05.sareb.srb:8090/sintws/IDocService` y entonces borrar el secreto (soft delete
+  recuperable) con sí explícito. Aviso también en
+  `docs/especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md`.
 - Rotación de un secreto: nuevo valor en el Key Vault y reinicio de la Function App. La Function
   App carga el Key Vault al arrancar (`AddAzureKeyVault` sin `ReloadInterval` en
   `src/backend/DocumentIA.Functions/Program.cs`), así que sin reinicio sigue con el valor

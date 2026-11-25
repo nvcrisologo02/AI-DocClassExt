@@ -886,7 +886,7 @@ Requiere que la MI de `srbaisrv-westeurope` tenga `Storage Blob Data Reader` sob
 | **GDC Admin** | TBD | TBD | En horario |
 | **Soporte de red (Network team)** | TBD | TBD | En horario |
 
-> Pendiente de rellenar (revisión 2026-11-22): desde el repositorio no consta quién debe asignar los contactos de On-Call, Tech Lead, CTO, GDC Admin ni red, y el responsable de completarlos no está identificado. Hasta entonces el escalado P1/P2 no tiene destinatario nominal. No se inventan datos.
+> Pendiente de rellenar (revisión 2026-11-22): desde el repositorio no consta quién debe asignar los contactos de On-Call, Tech Lead, CTO, GDC Admin ni red, y el responsable de completarlos no está identificado. Hasta entonces el escalado P1/P2 no tiene destinatario nominal. No se inventan datos. Decisión AB#101451 (2026-11-25): el responsable de aportar los contactos es Ignacio Varas Crisologo, sin plazo comprometido; la tabla se mantiene con TBD hasta entonces.
 
 ---
 

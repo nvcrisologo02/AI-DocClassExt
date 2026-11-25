@@ -12,7 +12,7 @@
 
 ### Application Insights
 - **Component:** `srbappiprodocai`
-- **Connection String (Variable):** `InstrumentationKey=c57c6166-c5ac-4584-a4d6-13fbb37860c4;IngestionEndpoint=https://westeurope-5.in.applicationinsights.azure.com/;LiveEndpoint=https://westeurope.livediagnostics.monitor.azure.com/;ApplicationId=19eeb2fb-8544-41c5-931a-b0983a26e92e`
+- **Connection String:** `InstrumentationKey=c57c6166…` (recortada a propósito; el valor completo está en el Overview del recurso `srbappiprodocai`. Según Microsoft Learn la ikey no es un token de seguridad, pero permite enviar telemetría al recurso, por eso no se publica entera. Decisión AB#101451, 2026-11-25)
 - **Estado:** ✅ Habilitado en producción
 - **Sampling:** ✅ Habilitado (20 events/sec, excludes "Request" type)
 - **Live Metrics:** ✅ Habilitado
@@ -358,7 +358,7 @@ código: `./scripts/observability/create-db-capacity-alert.ps1 -ActionGroupId <i
 ### Action group de avisos (correo)
 
 - **Recurso:** `srbagoperprodocai` (short name `docaiops`), RG `SRBRGDOCSAIPROD`, ubicación Global.
-- **Receptores actuales:** `ignacio.varas@sareb.es` (common alert schema activado).
+- **Receptores actuales:** `ignacio.varas@sareb.es` (common alert schema activado). Decisión AB#101451 (2026-11-25): se mantiene aquí porque es el estado real del action group; el receptor debería pasar a un buzón compartido de operación, pendiente sin plazo (responsable: Ignacio Varas Crisologo).
 - Asociado a las 9 scheduled query rules y a `srbalertmemprodocai` (memoria, desde el 2026-10-01); `srbalertcpuprodocai` sigue sin action group (AB#100815). La alerta de capacidad de BD recibe el action group con `-ActionGroupId`.
 
 ### Cómo dar de alta (o quitar) correos de aviso
