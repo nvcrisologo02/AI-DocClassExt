@@ -330,10 +330,6 @@ stages:
                         "AI__Resources__cu_secondary__Endpoint=$(AI_CU_SECONDARY_ENDPOINT)",
                         "AI__Resources__di__Endpoint=$(AI_DI_ENDPOINT)",
                         "Extraction__DefaultProvider=azure-content-understanding",
-                        "Extraction__AzureContentUnderstanding__Endpoint=$(AI_CU_PRIMARY_ENDPOINT)",
-                        "Extraction__AzureContentUnderstanding__AuthMode=ApiKey",
-                        "Extraction__AzureContentUnderstanding__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--AzureContentUnderstanding--ApiKey)",
-                        "Extraction__AzureContentUnderstanding__DefaultProcessingLocation=geography",
                         "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=$(cuMaxConcurrentCalls)",
                         "Extraction__AzureContentUnderstanding__HardTimeoutSeconds=$(cuHardTimeoutSeconds)",
                         "Extraction__AzureContentUnderstanding__EnableCircuitBreaker=$(cuEnableCircuitBreaker)",
@@ -344,30 +340,7 @@ stages:
                         "PromptTracing__Enabled=$(promptTracingEnabled)",
                         "PromptTracing__IncludePromptText=$(promptTracingIncludePromptText)",
                         "PromptTracing__MaxPromptTextChars=$(promptTracingMaxPromptTextChars)",
-                        "Extraction__GptFallback__Enabled=true",
-                        "Extraction__GptFallback__Endpoint=$(AI_OPENAI_PRIMARY_ENDPOINT)",
-                        "Extraction__GptFallback__AuthMode=ApiKey",
-                        "Extraction__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Extraction--GptFallback--ApiKey)",
-                        "Extraction__GptFallback__DeploymentName=gpt-4o-mini",
-                        "Extraction__GptFallback__MinFieldsRatio=0.9",
-                        "Extraction__GptFallback__Temperature=0.0",
-                        "Extraction__GptFallback__MaxTokens=2000",
-                        "Extraction__GptFallback__TimeoutSeconds=60",
                         "Classification__DefaultProvider=azure-document-intelligence",
-                        "Classification__DefaultModelKey=default.azure-di",
-                        "Classification__AzureDocumentIntelligence__Endpoint=$(AI_DI_ENDPOINT)",
-                        "Classification__AzureDocumentIntelligence__AuthMode=ApiKey",
-                        "Classification__AzureDocumentIntelligence__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--AzureDocumentIntelligence--ApiKey)",
-                        "Classification__AzureDocumentIntelligence__ApiVersion=2024-11-30",
-                        "Classification__GptFallback__Enabled=true",
-                        "Classification__GptFallback__Endpoint=$(AI_OPENAI_PRIMARY_ENDPOINT)",
-                        "Classification__GptFallback__AuthMode=ApiKey",
-                        "Classification__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$(KEY_VAULT_NAME);SecretName=Classification--GptFallback--ApiKey)",
-                        "Classification__GptFallback__DeploymentName=gpt-4o-mini",
-                        "Classification__GptFallback__FallbackThreshold=0.5",
-                        "Classification__GptFallback__Temperature=0.0",
-                        "Classification__GptFallback__MaxTokens=150",
-                        "Classification__GptFallback__TimeoutSeconds=30",
                         "GDC__Endpoint=$(GDC_ENDPOINT)",
                         "DocumentIntelligence__UseInlineContent=$(DI_USE_INLINE_CONTENT)",
                         "Dedup__ModoEstricto=$(dedupModoEstricto)",
@@ -404,6 +377,11 @@ stages:
                         -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
                         -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
                         -SettingsJson $settingsJson
+
+                      Write-Host "Retirando app settings heredados sin efecto (AB#101450)..."
+                      & .\scripts\configuration\remove-legacy-app-settings.ps1 `
+                        -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                        -Name "$(AZURE_FUNCTIONS_APP_NAME)"
 
                       Write-Host "Validando que todas las variables de resiliencia CU se han aplicado..."
                       
