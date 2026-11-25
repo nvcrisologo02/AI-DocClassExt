@@ -238,9 +238,27 @@ var host = new HostBuilder()
         services.Configure<GdcSettings>(context.Configuration.GetSection("GDC"));
 
         // Named HttpClient for GDC (used by GdcService)
-        // Logger propio para el validador TLS: dentro del handler no hay ILogger del host.
-        // Se crea una sola vez, no en cada instanciación del handler.
-        var gdcLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
+        // Validación TLS del GDC. El GDC presenta un certificado de la CA corporativa de SAREB que el
+        // almacén del sistema no conoce, así que se valida contra esa cadena propia (raíz + emisora).
+        // El bypass total solo existe como interruptor de emergencia (GDC:BypassSslValidation=true).
+        // Todo se resuelve aquí, al arrancar, y no en la lambda del handler: IHttpClientFactory la evalúa
+        // de forma perezosa y en cada rotación, lo que retrasaría el fallo y releería el PEM cada vez.
+        var gdcSettings = context.Configuration.GetSection("GDC").Get<GdcSettings>() ?? new GdcSettings();
+        GdcServerCertificateValidator? gdcValidador = null;
+        if (gdcSettings.BypassSslValidation)
+        {
+            Console.WriteLine("[GDC] AVISO: validación TLS del GDC desactivada por GDC__BypassSslValidation=true; solo para emergencias.");
+        }
+        else
+        {
+            // Sin captura de excepciones a propósito: si la cadena de confianza no carga (fichero ausente
+            // o PEM inválido) el arranque del host falla con un error claro, no se degrada en silencio.
+            // El logger tiene vida de proceso (como el validador), por eso no se libera.
+            var gdcLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
+            var confianza = GdcServerCertificateValidator.LoadTrustStore(gdcSettings.TrustedRootCertificate, gdcSettings.TrustedRootCertificatePath);
+            gdcValidador = new GdcServerCertificateValidator(confianza, gdcLoggerFactory.CreateLogger<GdcServerCertificateValidator>());
+        }
+
         services.AddHttpClient("GDC", client =>
         {
             var endpoint = context.Configuration["GDC:Endpoint"];
@@ -270,24 +288,9 @@ var host = new HostBuilder()
         .ConfigurePrimaryHttpMessageHandler(() =>
         {
             var handler = new HttpClientHandler();
-            // El GDC presenta un certificado de la CA corporativa de SAREB que el almacén del
-            // sistema no conoce. Se valida contra esa cadena propia (raíz + emisora); el bypass
-            // total solo existe como interruptor de emergencia (GDC:BypassSslValidation=true).
-            var gdc = context.Configuration.GetSection("GDC").Get<GdcSettings>() ?? new GdcSettings();
-            if (gdc.BypassSslValidation)
-            {
-                handler.ServerCertificateCustomValidationCallback =
-                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
-                Console.WriteLine("[GDC] AVISO: validación TLS del GDC desactivada por GDC__BypassSslValidation=true; solo para emergencias.");
-            }
-            else
-            {
-                // Sin captura de excepciones a propósito: si la cadena de confianza no carga
-                // (fichero ausente o PEM inválido) el arranque del host debe fallar, no degradar.
-                var confianza = GdcServerCertificateValidator.LoadTrustStore(gdc.TrustedRootCertificate, gdc.TrustedRootCertificatePath);
-                var validador = new GdcServerCertificateValidator(confianza, gdcLoggerFactory.CreateLogger<GdcServerCertificateValidator>());
-                handler.ServerCertificateCustomValidationCallback = (_, cert, chain, errors) => validador.Validate(cert, chain, errors);
-            }
+            handler.ServerCertificateCustomValidationCallback = gdcValidador is null
+                ? HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
+                : (_, cert, chain, errors) => gdcValidador.Validate(cert, chain, errors);
             return handler;
         });
 
