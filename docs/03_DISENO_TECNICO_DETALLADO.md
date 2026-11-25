@@ -1,6 +1,6 @@
 ﻿# 3. Diseno Tecnico Detallado — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con el orquestador, los proveedores, el contrato y la Admin API)  
+> Última revisión: 2026-11-25 (AB#101553, retirada de la mención a la omisión TLS en `Development`). Revisiones previas: 2026-11-22 (AB#101447, contraste con el orquestador, los proveedores, el contrato y la Admin API)  
 > Actualización anterior: 2026-09-14  
 > Proyecto: AI DocClassExt — SAREB  
 > **Modelo generativo por entorno:** El deployment generativo depende del entorno: DEV usa `gpt-5.6-luna` desde el 2026-11-20 (ADR-004) y PRE y PRO siguen con el deployment `gpt-4o-mini` (modelo gpt-4.1-mini) hasta la siguiente release; el pipeline fija `PromptDefaults__ModelKey` por entorno y las filas `UseAsFallback` de `ModeloConfigs` deciden el de clasificación y extracción. Las menciones a GPT-4o-mini de este documento describen PRE y PRO.  
@@ -1809,7 +1809,7 @@ En todas las respuestas de `/management/modelos*` (GET/POST/PUT/DELETE), el camp
 
 La validación de contenido de `/management/prompts` (POST/PUT) es únicamente de longitud (10–16000 caracteres); los placeholders del contenido (`{CONTEXT_PROMPT}`, `{TDN1_CATALOG}`, `{TDN2_CATALOG}`, `{TDN1_CODE}`, `{DOCUMENT_TEXT}`, etc.) no se validan en backend — flexibilidad deliberada para edición iterativa. Ver [ESPECIFICACION_PROMPTS_CONFIGURABLES.md](especificaciones/ESPECIFICACION_PROMPTS_CONFIGURABLES.md).
 
-El campo `environment` de `/management/configuration` se resuelve con prioridad desde el app setting `EnvironmentName` (nuevo, desplegado por pipeline), con fallback a `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` y por último `"Unknown"`. No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque en un Function App desplegado altera el comportamiento del host (fallback a BD InMemory y omisión de validación TLS cuando vale `"Development"`).
+El campo `environment` de `/management/configuration` se resuelve con prioridad desde el app setting `EnvironmentName` (nuevo, desplegado por pipeline), con fallback a `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` y por último `"Unknown"`. No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque en un Function App desplegado altera el comportamiento del host (fallback a BD InMemory cuando vale `"Development"`).
 
 ---
 

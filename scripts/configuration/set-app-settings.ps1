@@ -151,7 +151,7 @@ az functionapp config appsettings set `
         "GDC__ProcesoCarga=PC01" `
         "GDC__TipoExpediente=AI" `
         "GDC__Publico=verdadero" `
-        "GDC__BypassSslValidation=true" `
+        "GDC__BypassSslValidation=false" `
     --output none
 
 if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Fallo en settings de GDC" -ForegroundColor Red; exit 1 }

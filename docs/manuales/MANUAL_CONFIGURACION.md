@@ -1,6 +1,6 @@
 # Manual de Configuración — DocumentIA Functions
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `Program.cs`, las clases de opciones y `azure-pipelines.yml`). Este manual manda en **app settings por entorno**; la Parte B de [05_MANUAL_USO_CONFIGURACION.md](../05_MANUAL_USO_CONFIGURACION.md) manda en contrato, `ConfiguracionJson`, modelos y alias de IA.
+> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `Program.cs`, las clases de opciones y `azure-pipelines.yml`). Este manual manda en **app settings por entorno**; la Parte B de [05_MANUAL_USO_CONFIGURACION.md](../05_MANUAL_USO_CONFIGURACION.md) manda en contrato, `ConfiguracionJson`, modelos y alias de IA.
 >
 > **Hallazgo de la revisión.** Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y los de conexión de `Extraction__AzureContentUnderstanding__*` (`Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation`) **no se enlazan a ninguna clase ni se leen en el código** (comprobado el 2026-11-22 en `Program.cs`): los parámetros de conexión, modelo y umbrales de IA salen de las filas de `ModeloConfigs` resueltas por alias e identidad administrada. El pipeline sigue fijándolos y el contrato `scripts/config/azure-appsettings-contract.json` los exige, así que son settings heredados sin efecto en runtime; su retirada es una decisión pendiente. De `Extraction__AzureContentUnderstanding__*` solo se leen los siete de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`). Las secciones 4.2, 4.3, 5.2 (conexión) y 5.3 se conservan marcadas como heredadas.
 >
@@ -228,8 +228,11 @@ Sección raíz: `GDC`
 | `Publico` | string | `"verdadero"` / `"falso"`. Visibilidad del documento en GDC. |
 | `HttpBasicUsername` | string | Usuario HTTP Basic para autenticación en el proxy/gateway GDC. |
 | `HttpBasicPassword` | string | Contraseña HTTP Basic. |
+| `BypassSslValidation` | bool | `false` por defecto y en el pipeline. `true` es solo un interruptor de emergencia: el cliente GDC acepta cualquier certificado y el arranque escribe el aviso `[GDC] AVISO`. |
+| `TrustedRootCertificate` | string | PEM opcional con la raíz y la emisora de confianza; si se informa, sustituye al fichero sin desplegar. |
+| `TrustedRootCertificatePath` | string | Ruta del PEM de confianza. Por defecto `config/certs/sareb-ca-chain.pem`. |
 
-> **Nota:** `GDC:BypassSslValidation` (app setting `GDC__BypassSslValidation`) hace que el handler HTTP acepte cualquier certificado del GDC (`DangerousAcceptAnyServerCertificateValidator`). El pipeline lo fija a `true` en los tres entornos, DEV, PRE y PRO, porque la CA corporativa no está en el host Linux; en `Development` se acepta siempre. Las credenciales HTTP Basic (`GDC:HttpBasicUsername` / `GDC:HttpBasicPassword`) vienen del Key Vault del entorno.
+> **Nota:** desde el despliegue de AB#101553 (pendiente: DEV primero; PRE y PRO con la siguiente release) el handler HTTP del GDC valida la cadena del certificado contra `config/certs/sareb-ca-chain.pem` (raíz y emisora de SAREB, raíz válida hasta 2040-12-16) con `CustomRootTrust` y sin comprobación de revocación. El pipeline fija `GDC__BypassSslValidation=false`. `true` queda solo como interruptor manual de emergencia: acepta cualquier certificado, deja el aviso `[GDC] AVISO` en el log de arranque y el siguiente despliegue lo devuelve a `false`. `GDC__TrustedRootCertificate` (PEM) sustituye al fichero sin desplegar. Un fichero ausente o corrupto impide arrancar el host. Hasta ese despliegue, los tres entornos siguen con `true`. `GDC__BypassSslValidation` admite solo `true` o `false` (otro valor impide arrancar el host). Un secreto de Key Vault `GDC--BypassSslValidation` o `GDC--TrustedRootCertificate` pisaría el app setting (el proveedor de Key Vault se carga el último) y el pipeline no lo restablecería; hoy no existe ninguno en los tres Key Vault (comprobado el 2026-11-25). Las credenciales HTTP Basic (`GDC:HttpBasicUsername` / `GDC:HttpBasicPassword`) vienen del Key Vault del entorno.
 
 ---
 
@@ -311,7 +314,7 @@ DocumentIntelligence__UseInlineContent   = true (dev, pre) | false (pro)
 BlobRetention__BatchSize                 = 2000 (dev, pre) | 5000 (pro)
 PromptTracing__Enabled / IncludePromptText / MaxPromptTextChars = true / true / 20000
 DOTNET_GCHeapHardLimitPercent            = 28
-GDC__Endpoint / GDC__BypassSslValidation = https://... / true
+GDC__Endpoint / GDC__BypassSslValidation = https://... / false
 SqlConnectionString, AzureWebJobsStorage, AzureStorageConnectionString = @Microsoft.KeyVault(...)
 ```
 
@@ -323,7 +326,7 @@ Los 83 settings que fija `azure-pipelines.yml` (los de arriba más los heredados
 
 App setting no secreto que declara el entorno del Function App (`Development` / `Preproduction` / `Production`). Lo consume `GET management/configuration` (campo `environment`) con esta prioridad: `EnvironmentName` → `AZURE_FUNCTIONS_ENVIRONMENT` → `DOTNET_ENVIRONMENT` → `"Unknown"`.
 
-No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque, en un Function App ya desplegado, esa variable también cambia el comportamiento del propio host (fallback a base de datos InMemory y omisión de validación TLS cuando vale `Development`); `EnvironmentName` permite declarar el entorno de cara al Admin sin ese efecto secundario.
+No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque, en un Function App ya desplegado, esa variable también cambia el comportamiento del propio host (fallback a base de datos InMemory cuando vale `Development`); `EnvironmentName` permite declarar el entorno de cara al Admin sin ese efecto secundario.
 
 Lo fija el pipeline (variable `ENVIRONMENT_NAME`: dev=`Development`, pre=`Preproduction`, prod=`Production`) en `azure-pipelines.yml` y también en `azure-pipelines-admin.yml` (paso "Ensure Functions environment name", idempotente), de forma que el aviso de entorno del Admin funciona aunque solo se despliegue el Admin.
 

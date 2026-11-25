@@ -238,6 +238,28 @@ var host = new HostBuilder()
         services.Configure<GdcSettings>(context.Configuration.GetSection("GDC"));
 
         // Named HttpClient for GDC (used by GdcService)
+        // Validación TLS del GDC. El GDC presenta un certificado de la CA corporativa de SAREB que el
+        // almacén del sistema no conoce, así que se valida contra esa cadena propia (raíz + emisora).
+        // El bypass total solo existe como interruptor de emergencia (GDC:BypassSslValidation=true).
+        // Todo se resuelve aquí, al arrancar, y no en la lambda del handler: IHttpClientFactory la evalúa
+        // de forma perezosa y en cada rotación, lo que retrasaría el fallo y releería el PEM cada vez.
+        var gdcSettings = context.Configuration.GetSection("GDC").Get<GdcSettings>() ?? new GdcSettings();
+        if (gdcSettings.BypassSslValidation)
+        {
+            Console.WriteLine("[GDC] AVISO: validación TLS del GDC desactivada por GDC__BypassSslValidation=true; solo para emergencias.");
+        }
+        else
+        {
+            // Sin captura de excepciones a propósito: si la cadena de confianza no carga (fichero ausente
+            // o PEM inválido) el arranque del host falla con un error claro, no se degrada en silencio.
+            // El validador se registra por DI para que sus rechazos lleguen a los proveedores de logging
+            // del host (Application Insights incluido).
+            var confianza = GdcServerCertificateValidator.LoadTrustStore(gdcSettings.TrustedRootCertificate, gdcSettings.TrustedRootCertificatePath);
+            services.AddSingleton(sp => new GdcServerCertificateValidator(
+                confianza, sp.GetRequiredService<ILogger<GdcServerCertificateValidator>>()));
+        }
+        var gdcBypassAvisado = 0;
+
         services.AddHttpClient("GDC", client =>
         {
             var endpoint = context.Configuration["GDC:Endpoint"];
@@ -264,18 +286,26 @@ var host = new HostBuilder()
                     new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
             }
         })
-        .ConfigurePrimaryHttpMessageHandler(() =>
+        .ConfigurePrimaryHttpMessageHandler(sp =>
         {
             var handler = new HttpClientHandler();
-            // Bypass SSL for internal endpoints with untrusted/self-signed certificates.
-            // Controlled via GDC:BypassSslValidation=true (app setting / local.settings.json).
-            var bypassSsl = context.Configuration["GDC:BypassSslValidation"];
-            if (context.HostingEnvironment.IsDevelopment() ||
-                string.Equals(bypassSsl, "true", StringComparison.OrdinalIgnoreCase))
+            if (gdcSettings.BypassSslValidation)
             {
-                handler.ServerCertificateCustomValidationCallback =
-                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                // Aviso por DI una sola vez (el handler se recrea en cada rotación del factory).
+                if (System.Threading.Interlocked.Exchange(ref gdcBypassAvisado, 1) == 0)
+                {
+                    sp.GetRequiredService<ILogger<Program>>().LogWarning(
+                        "Validación TLS del GDC desactivada por GDC__BypassSslValidation=true; solo para emergencias.");
+                }
+
+                handler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
             }
+            else
+            {
+                var gdcValidador = sp.GetRequiredService<GdcServerCertificateValidator>();
+                handler.ServerCertificateCustomValidationCallback = (_, cert, chain, errors) => gdcValidador.Validate(cert, chain, errors);
+            }
+
             return handler;
         });
 

@@ -34,6 +34,7 @@
         { "name": "Classification__GptFallback__ApiKey", "kind": "KeyVaultRef", "owner": "platform", "secretName": "Classification--GptFallback--ApiKey" },
         { "name": "GDC__Endpoint", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
         { "name": "GDC__TimeoutSeconds", "kind": "LiteralOrNonSecret", "owner": "pipeline" },
+        { "name": "GDC__BypassSslValidation", "kind": "LiteralOrNonSecret", "owner": "pipeline", "allowedValues": ["false", "true"] },
         { "name": "GDC__HttpBasicUsername", "kind": "KeyVaultRef", "owner": "platform", "secretName": "GDC--HttpBasicUsername" },
         { "name": "GDC__HttpBasicPassword", "kind": "KeyVaultRef", "owner": "platform", "secretName": "GDC--HttpBasicPassword" },
         { "name": "DocumentIntelligence__UseInlineContent", "kind": "LiteralOrNonSecret", "owner": "pipeline", "allowedValues": ["true", "false"] },
