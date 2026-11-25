@@ -279,8 +279,12 @@ traces
 
 4. **Si es SSL certificate:**
    - Desde el despliegue de AB#101553 (pendiente: DEV primero; PRE y PRO con la siguiente release) el handler valida el certificado del GDC contra `config/certs/sareb-ca-chain.pem` y el pipeline fija `GDC__BypassSslValidation=false`. Antes de ese despliegue, los tres entornos siguen con `true`
-   - Causas habituales: el GDC presenta un certificado de otra CA o el PEM está desactualizado. En el log de rechazo constan sujeto, emisor y `ChainStatus`
+   - Causas habituales: el GDC presenta un certificado de otra CA o el PEM está desactualizado. Los rechazos (sujeto, emisor y `ChainStatus`) y el aviso del bypass se trazan como Warning por Application Insights (categoría `DocumentIA.Core.Services.GdcServerCertificateValidator`) y también por consola (Log Stream); AB#101246 tiene abierto que algunas trazas `DocumentIA.*` no llegan a App Insights, así que ante la duda se mira el Log Stream
    - Si el PEM de confianza ya no sirve y hay que corregirlo sin desplegar, informar `GDC__TrustedRootCertificate` (PEM) en la Function App
+     - Formato aceptado: PEM con los saltos de línea conservados o con las líneas separadas por espacios. La secuencia literal `\n` no vale (el host no arranca)
+     - Un valor inválido impide arrancar toda la Function App, no solo el GDC; se revierte borrando el setting
+     - El pipeline NO gestiona ese setting: sobrevive a los despliegues y anula el PEM del repo hasta que se borra
+     - `GDC__BypassSslValidation` admite solo `true` o `false`; cualquier otro valor impide arrancar el host
    - Procedimiento de emergencia (solo si el GDC está caído por esta causa):
      1. Poner `GDC__BypassSslValidation=true` en los app settings de la Function App (patrón `az functionapp config appsettings set`)
      2. Reiniciar la Function App

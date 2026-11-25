@@ -78,7 +78,7 @@ Precedencia agregada: `unhealthy > degraded > unconfigured > healthy`.
 | `degraded` | Timeout > 30 s (no se considera unhealthy porque GDC ocasionalmente responde lento sin error funcional). |
 | `unhealthy` | SOAP fault, error de red, credenciales rechazadas, etc. |
 | `unconfigured` | `GDC:Endpoint` vacio. |
-| Diagnostico | 1) Comprobar conectividad de red al endpoint SOAP (puede requerir whitelist NSG). 2) Validar credenciales en KV (`GDC--HttpBasicUsername`, `GDC--HttpBasicPassword`). 3) Probar con `tests/api-tests/test-gdc-consultar-aislado.ps1`. Desde el despliegue de AB#101553 (pendiente: DEV primero) el certificado del GDC se valida contra `config/certs/sareb-ca-chain.pem` (`GDC__BypassSslValidation=false`); un fallo de cadena se ve en el log como rechazo con sujeto, emisor y `ChainStatus`. Hasta ese despliegue, la comprobación se omite por `GDC__BypassSslValidation=true` en los tres entornos. |
+| Diagnostico | 1) Comprobar conectividad de red al endpoint SOAP (puede requerir whitelist NSG). 2) Validar credenciales en KV (`GDC--HttpBasicUsername`, `GDC--HttpBasicPassword`). 3) Probar con `tests/api-tests/test-gdc-consultar-aislado.ps1`. Desde el despliegue de AB#101553 (pendiente: DEV primero) el certificado del GDC se valida contra `config/certs/sareb-ca-chain.pem` (`GDC__BypassSslValidation=false`); un fallo de cadena se traza como Warning (sujeto, emisor y `ChainStatus`) por Application Insights (categoría `DocumentIA.Core.Services.GdcServerCertificateValidator`) y por consola (Log Stream); AB#101246 tiene abierto que algunas trazas `DocumentIA.*` no llegan a App Insights. Hasta ese despliegue, la comprobación se omite por `GDC__BypassSslValidation=true` en los tres entornos. |
 
 ### 3.4 `modelProviders`
 
