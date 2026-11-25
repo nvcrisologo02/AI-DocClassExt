@@ -393,7 +393,7 @@ stages:
                         "GDC__ProcesoCarga=PC01",
                         "GDC__TipoExpediente=AI",
                         "GDC__Publico=verdadero",
-                        "GDC__BypassSslValidation=true",
+                        "GDC__BypassSslValidation=false",
                         "EnvironmentName=$(ENVIRONMENT_NAME)"
                       )
 

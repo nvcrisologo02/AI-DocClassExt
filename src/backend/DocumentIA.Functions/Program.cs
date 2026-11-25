@@ -238,6 +238,9 @@ var host = new HostBuilder()
         services.Configure<GdcSettings>(context.Configuration.GetSection("GDC"));
 
         // Named HttpClient for GDC (used by GdcService)
+        // Logger propio para el validador TLS: dentro del handler no hay ILogger del host.
+        // Se crea una sola vez, no en cada instanciación del handler.
+        var gdcLoggerFactory = LoggerFactory.Create(b => b.AddConsole());
         services.AddHttpClient("GDC", client =>
         {
             var endpoint = context.Configuration["GDC:Endpoint"];
@@ -267,14 +270,23 @@ var host = new HostBuilder()
         .ConfigurePrimaryHttpMessageHandler(() =>
         {
             var handler = new HttpClientHandler();
-            // Bypass SSL for internal endpoints with untrusted/self-signed certificates.
-            // Controlled via GDC:BypassSslValidation=true (app setting / local.settings.json).
-            var bypassSsl = context.Configuration["GDC:BypassSslValidation"];
-            if (context.HostingEnvironment.IsDevelopment() ||
-                string.Equals(bypassSsl, "true", StringComparison.OrdinalIgnoreCase))
+            // El GDC presenta un certificado de la CA corporativa de SAREB que el almacén del
+            // sistema no conoce. Se valida contra esa cadena propia (raíz + emisora); el bypass
+            // total solo existe como interruptor de emergencia (GDC:BypassSslValidation=true).
+            var gdc = context.Configuration.GetSection("GDC").Get<GdcSettings>() ?? new GdcSettings();
+            if (gdc.BypassSslValidation)
             {
                 handler.ServerCertificateCustomValidationCallback =
                     HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                Console.WriteLine("[GDC] AVISO: validación TLS del GDC desactivada por GDC__BypassSslValidation=true; solo para emergencias.");
+            }
+            else
+            {
+                // Sin captura de excepciones a propósito: si la cadena de confianza no carga
+                // (fichero ausente o PEM inválido) el arranque del host debe fallar, no degradar.
+                var confianza = GdcServerCertificateValidator.LoadTrustStore(gdc.TrustedRootCertificate, gdc.TrustedRootCertificatePath);
+                var validador = new GdcServerCertificateValidator(confianza, gdcLoggerFactory.CreateLogger<GdcServerCertificateValidator>());
+                handler.ServerCertificateCustomValidationCallback = (_, cert, chain, errors) => validador.Validate(cert, chain, errors);
             }
             return handler;
         });
