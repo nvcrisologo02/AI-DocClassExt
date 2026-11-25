@@ -1,4 +1,7 @@
 using System;
+using System.IO;
+using System.Linq;
+using System.Security.Cryptography;
 using System.Net.Security;
 using System.Security.Cryptography.X509Certificates;
 using DocumentIA.Core.Services;
@@ -132,6 +135,77 @@ namespace DocumentIA.Tests.Unit.Services
                 It.IsAny<Exception?>(),
                 It.IsAny<Func<It.IsAnyType, Exception?, string>>()),
                 Times.AtLeastOnce);
+        }
+
+        private static string PemDe(params X509Certificate2[] certs)
+            => string.Concat(Array.ConvertAll(certs, c => c.ExportCertificatePem() + "\n"));
+
+        [Fact]
+        public void LoadTrustStore_DesdePemEnSetting_CargaTodosLosCertificados()
+        {
+            var (raiz, emisora, _) = PkiDePrueba.Crear();
+
+            var almacen = GdcServerCertificateValidator.LoadTrustStore(PemDe(raiz, emisora), "no-se-usa.pem");
+
+            almacen.Count.Should().Be(2);
+        }
+
+        [Fact]
+        public void LoadTrustStore_PemConCrlf_Carga()
+        {
+            var (raiz, emisora, _) = PkiDePrueba.Crear();
+            var pem = "  " + PemDe(raiz, emisora).Replace("\n", "\r\n");
+
+            var almacen = GdcServerCertificateValidator.LoadTrustStore(pem, "no-se-usa.pem");
+
+            almacen.Count.Should().Be(2);
+        }
+
+        [Fact]
+        public void LoadTrustStore_DesdeFichero_Carga()
+        {
+            var (raiz, _, _) = PkiDePrueba.Crear();
+            var ruta = Path.Combine(Path.GetTempPath(), $"gdc-ca-{Guid.NewGuid():N}.pem");
+            File.WriteAllText(ruta, raiz.ExportCertificatePem());
+            try
+            {
+                var almacen = GdcServerCertificateValidator.LoadTrustStore(string.Empty, ruta);
+
+                almacen.Count.Should().Be(1);
+            }
+            finally
+            {
+                File.Delete(ruta);
+            }
+        }
+
+        [Fact]
+        public void LoadTrustStore_FicheroInexistente_Lanza()
+        {
+            var ruta = Path.Combine(Path.GetTempPath(), $"no-existe-{Guid.NewGuid():N}.pem");
+
+            Action accion = () => GdcServerCertificateValidator.LoadTrustStore(null, ruta);
+
+            accion.Should().Throw<FileNotFoundException>().Where(e => e.Message.Contains(ruta));
+        }
+
+        [Fact]
+        public void LoadTrustStore_PemInvalido_Lanza()
+        {
+            Action accion = () => GdcServerCertificateValidator.LoadTrustStore("no soy un pem", "no-se-usa.pem");
+
+            accion.Should().Throw<CryptographicException>();
+        }
+
+        [Fact]
+        public void LoadTrustStore_FicheroDelRepo_ContieneLaRaizDeSareb()
+        {
+            var almacen = GdcServerCertificateValidator.LoadTrustStore(null, "config/certs/sareb-ca-chain.pem");
+
+            almacen.Count.Should().Be(2);
+            almacen.Cast<X509Certificate2>()
+                .Select(c => c.GetCertHashString(HashAlgorithmName.SHA256))
+                .Should().Contain("EA0A8EAB540A7390B86E0763D368B0D5E204F0205B35640313A6B2DBCE43A367");
         }
     }
 }

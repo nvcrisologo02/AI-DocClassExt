@@ -1,6 +1,8 @@
 using System;
+using System.IO;
 using System.Linq;
 using System.Net.Security;
+using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Logging;
 
@@ -19,6 +21,40 @@ namespace DocumentIA.Core.Services
         {
             _certificadosConfianza = certificadosConfianza ?? throw new ArgumentNullException(nameof(certificadosConfianza));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
+
+        /// <summary>
+        /// Carga las CA de confianza. El PEM del setting tiene prioridad sobre el fichero;
+        /// la ruta relativa se resuelve contra <see cref="AppContext.BaseDirectory"/>.
+        /// </summary>
+        public static X509Certificate2Collection LoadTrustStore(string? pem, string ruta)
+        {
+            var texto = pem?.Trim();
+            if (string.IsNullOrEmpty(texto))
+            {
+                var resuelta = Path.IsPathRooted(ruta) ? ruta : Path.Combine(AppContext.BaseDirectory, ruta);
+                if (!File.Exists(resuelta))
+                {
+                    throw new FileNotFoundException(
+                        $"No se encontró el fichero de certificados de confianza del GDC: {resuelta}", resuelta);
+                }
+
+                texto = File.ReadAllText(resuelta).Trim();
+            }
+
+            if (!texto.Contains("-----BEGIN CERTIFICATE-----", StringComparison.Ordinal))
+            {
+                throw new CryptographicException("El PEM de confianza del GDC no contiene ningún certificado.");
+            }
+
+            var coleccion = new X509Certificate2Collection();
+            coleccion.ImportFromPem(texto);
+            if (coleccion.Count == 0)
+            {
+                throw new InvalidOperationException("El almacén de confianza del GDC está vacío.");
+            }
+
+            return coleccion;
         }
 
         public bool Validate(X509Certificate2? certificado, X509Chain? cadena, SslPolicyErrors errores)
@@ -42,6 +78,7 @@ namespace DocumentIA.Core.Services
                 using var propia = new X509Chain();
                 propia.ChainPolicy.TrustMode = X509ChainTrustMode.CustomRootTrust;
                 propia.ChainPolicy.CustomTrustStore.AddRange(_certificadosConfianza);
+                propia.ChainPolicy.DisableCertificateDownloads = true;
                 propia.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
                 propia.ChainPolicy.VerificationFlags = X509VerificationFlags.NoFlag;
 
