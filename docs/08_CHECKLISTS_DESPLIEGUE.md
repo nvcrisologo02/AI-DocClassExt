@@ -145,7 +145,7 @@ Settings clave a confirmar (ver el inventario completo en `docs/infraestructura/
 | `AssetResolver__BaseUrl` | `https://srbwebpluginassetresolver.azurewebsites.net/` |
 | `AssetResolver__ApiKey` | Key Vault reference a `AssetResolverApiKey` |
 | `GDC__BypassSslValidation` | `false` en `azure-pipelines.yml` desde AB#101553 (pendiente de despliegue: DEV primero; hasta entonces los tres entornos siguen con `true`); el handler valida contra `config/certs/sareb-ca-chain.pem`. `true` solo como emergencia manual. El YAML fija 83 app settings; el inventario completo está en INFRAESTRUCTURA_REAL_DESPLEGADA.md |
-| `EnvironmentName` | `Production` (dev: `Development` · pre: `Preproduction`). Alimenta el campo `environment` de `GET management/configuration` con prioridad sobre `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` (no usar estos como fuente principal: en un Function App desplegado cambian el comportamiento del host — fallback a BD InMemory y omision de validacion TLS si valen `Development`). Lo fija la variable de pipeline `ENVIRONMENT_NAME` en **ambos** `azure-pipelines.yml` y `azure-pipelines-admin.yml` |
+| `EnvironmentName` | `Production` (dev: `Development` · pre: `Preproduction`). Alimenta el campo `environment` de `GET management/configuration` con prioridad sobre `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` (no usar estos como fuente principal: en un Function App desplegado cambian el comportamiento del host — fallback a BD InMemory si valen `Development`). Lo fija la variable de pipeline `ENVIRONMENT_NAME` en **ambos** `azure-pipelines.yml` y `azure-pipelines-admin.yml` |
 
 ---
 

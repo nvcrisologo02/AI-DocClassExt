@@ -3,7 +3,7 @@
 > Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Core`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos: el endpoint `force-fallback`, `OrquestadorActivity`, `ObtenerMarkdownActivity_Failed` y `GetMetadata` (no existen); `TimeoutSeconds` pasa a `HardTimeoutSeconds`; los settings `Extraction__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` son heredados sin efecto (no se leen en código; la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada); `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178), el de Layout sí. Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue: un cambio manual de app settings dura hasta el siguiente. Los contactos de escalado siguen sin rellenar y desde el repositorio no consta quién debe aportarlos. Los comandos usan los nombres de PRO; DEV y PRE (`SRBRGDEVDOCSAI`/`srbappdevdocai`, `SRBRGPREDOCSAI`/`srbapppredocai`) siguen el mismo patrón (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md). Comprobado el 2026-11-23: las 12 alertas de PRO están habilitadas, las identidades tienen Key Vault Secrets User y las referencias a Key Vault de la Function App de PRO están resueltas; los comandos `az` de este runbook no se han ejecutado en la revisión.
 
 **Versión:** 1.1  
-**Última actualización:** 2026-11-22  
+**Última actualización:** 2026-11-25  
 **Aplicable a:** SRBRGDOCSAIPROD (los demás entornos siguen el mismo patrón de nombres)  
 **Fuente:** Código verificado en Activities + Providers
 

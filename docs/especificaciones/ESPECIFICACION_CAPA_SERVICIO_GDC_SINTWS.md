@@ -139,7 +139,7 @@ Clave principal:
 
 Claves relevantes (defecto de `GdcSettings` · valor desplegado por el pipeline):
 - `GDC:TimeoutSeconds` (30 · 60)
-- `GDC:BypassSslValidation` (`false`; el pipeline lo fija a `false`. `true` es solo un interruptor de emergencia que acepta cualquier certificado; hasta el despliegue de AB#101553 los tres entornos siguen con `true`)
+- `GDC:BypassSslValidation` (false · false desde el despliegue de AB#101553; hasta entonces true en DEV, PRE y PRO. `true` es solo un interruptor de emergencia que acepta cualquier certificado)
 - `GDC:TrustedRootCertificate` (PEM opcional con la raíz y la emisora de confianza; sustituye al fichero sin desplegar)
 - `GDC:TrustedRootCertificatePath` (`config/certs/sareb-ca-chain.pem`: raíz y emisora de SAREB, raíz válida hasta 2040-12-16; validación con `CustomRootTrust` y sin comprobación de revocación; si falta o está corrupto el host no arranca)
 - `GDC:HttpBasicUsername` / `GDC:HttpBasicPassword` (Key Vault `GDC--HttpBasicUsername` / `GDC--HttpBasicPassword`; autenticación HTTP Basic del gateway, distinta del `Identity` SOAP)
