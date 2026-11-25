@@ -102,7 +102,6 @@ Secretos requeridos en KV:
 | `GDC--Username` | Usuario servicio GDC (no exigido por el contrato; lo comprueba `verify-prod-prereqs.ps1`) |
 | `GDC--Password` | Password servicio GDC (no exigido por el contrato; lo comprueba `verify-prod-prereqs.ps1`) |
 
-> Las cuatro claves `*--ApiKey` de Extraction y Classification siguen exigidas por el contrato (`ValidateConfiguration` falla sin ellas), pero la conexión asociada no se lee en runtime: solo se leen los siete ajustes de resiliencia de CU. Los endpoints y claves efectivos se resuelven por alias (`AI__Resources__*`) e identidad administrada.
 | `GDC--HttpBasicUsername` | Usuario HTTP Basic GDC |
 | `GDC--HttpBasicPassword` | Password HTTP Basic GDC |
 

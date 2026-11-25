@@ -215,7 +215,7 @@ Los tres entornos siguen la **misma topología de red privada**: los servicios P
 
 ## 🔧 Configuración Post-Despliegue (App Settings)
 
-Los App Settings son **idénticos en los tres entornos** salvo los valores que el pipeline parametriza: nombre de Key Vault (`$(KEY_VAULT_NAME)`), resource group, nombres de app, URL de AssetResolver, `GDC__Endpoint`, `EnvironmentName`, `PromptDefaults__ModelKey`, `DocumentIntelligence__UseInlineContent` (`true` en DEV y PRE, `false` en PRO) y `BlobRetention__BatchSize` (2000 en DEV y PRE, 5000 en PRO). Los endpoints de IA de las opciones directas (`Extraction__*`, `Classification__*`) toman los valores del entorno (`AI_CU_PRIMARY_ENDPOINT`, `AI_OPENAI_PRIMARY_ENDPOINT`, `AI_DI_ENDPOINT` de `infra/ai/pipeline-variables.yml`) y su `AuthMode` sigue en `ApiKey` desde el Key Vault del entorno; las filas de `ModeloConfigs`, que son las que usa el flujo, resuelven por alias `AI__Resources__<alias>__Endpoint` e identidad administrada (ver "3) Alias e identidad por entorno").
+Los App Settings son **idénticos en los tres entornos** salvo los valores que el pipeline parametriza: nombre de Key Vault (`$(KEY_VAULT_NAME)`), resource group, nombres de app, URL de AssetResolver, `GDC__Endpoint`, `EnvironmentName`, `PromptDefaults__ModelKey`, `DocumentIntelligence__UseInlineContent` (`true` en DEV y PRE, `false` en PRO) y `BlobRetention__BatchSize` (2000 en DEV y PRE, 5000 en PRO). Las filas de `ModeloConfigs`, que son las que usa el flujo, resuelven por alias `AI__Resources__<alias>__Endpoint` e identidad administrada (ver "3) Alias e identidad por entorno").
 
 ### **Azure Functions (`{app}`)**
 
@@ -376,7 +376,7 @@ Cada entorno tiene su propio Key Vault (`srbkvdevdocai` · `srbkvpredocai` · `s
 | `FunctionsAdminApiFunctionKey` | Autenticación Admin ↔ Functions |
 | `user-ods-dwh` | Base de datos de AssetResolver |
 
-> Las API keys de CU/DI/OpenAI del KV del entorno solo las usan las opciones directas (`Extraction__*`, `Classification__*`), que apuntan a los recursos de IA del propio entorno. Las filas de `ModeloConfigs`, que son las que usa el flujo, no llevan key: resuelven por alias e identidad administrada desde 2026-09-22 (DEV), 2026-09-23 (PRE) y 2026-10-08 (PRO).
+> Las API keys de CU/DI/OpenAI del KV del entorno están retiradas (AB#101450): ya no hay app settings que las referencien y se borran tras el despliegue con `scripts/configuration/remove-legacy-keyvault-secrets.ps1`. Las filas de `ModeloConfigs`, que son las que usa el flujo, no llevan key: resuelven por alias e identidad administrada desde 2026-09-22 (DEV), 2026-09-23 (PRE) y 2026-10-08 (PRO).
 
 ---
 

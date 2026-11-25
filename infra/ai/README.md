@@ -755,8 +755,8 @@ Dos trampas conocidas y cómo quedan resueltas:
 
 - `scripts/configuration/ensure-app-settings.ps1` (el que usa el pipeline)
   no sobrescribe claves existentes, y no se cambia. Las cuatro
-  `AI__Resources__*__Endpoint` las crea el despliegue; las cuatro claves de
-  las opciones directas que ya existen con PRO se fuerzan a mano en cada
+  `AI__Resources__*__Endpoint` las crea el despliegue; las que ya existen con PRO
+  se fuerzan a mano en cada
   entorno (paso 2b) y se comprueban con la consulta de ese paso.
 - `ConfigurationSeedService.MergeMissingJsonProperties` reinyecta en cada
   arranque cualquier propiedad ausente o vacía desde los seeds
