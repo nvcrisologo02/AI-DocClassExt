@@ -1,6 +1,6 @@
 # 8. Checklists de Revision Azure y Azure DevOps — DocumentIA
 
-> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json`, `scripts/**`, GUIA_EASYAUTH_ADMIN.md e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Hay una service connection por entorno (`AI DocClassExt DEV|PRE|PRO`) y los nombres de recursos de los bloques 2 a 8 son los de PRO; los de DEV y PRE están en la tabla de inventario de INFRAESTRUCTURA_REAL_DESPLEGADA.md. Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y `Extraction__AzureContentUnderstanding__*` (salvo los siete de resiliencia) siguen en el contrato y en el pipeline pero no se leen en runtime: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada. La numeración de las filas (3.x en el Bloque 2, 4.x en el Bloque 3…) es un desfase heredado que no se renumera. El estado de recursos, RBAC, App Insights y restricciones de red se comprobó en Azure el 2026-11-23 (AB#101449).
+> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto), 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json`, `scripts/**`, GUIA_EASYAUTH_ADMIN.md e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Hay una service connection por entorno (`AI DocClassExt DEV|PRE|PRO`) y los nombres de recursos de los bloques 2 a 8 son los de PRO; los de DEV y PRE están en la tabla de inventario de INFRAESTRUCTURA_REAL_DESPLEGADA.md. Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y `Extraction__AzureContentUnderstanding__*` (salvo los siete de resiliencia) siguen en el contrato y en el pipeline pero no se leen en runtime: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada. La numeración de las filas (3.x en el Bloque 2, 4.x en el Bloque 3…) es un desfase heredado que no se renumera. El estado de recursos, RBAC, App Insights y restricciones de red se comprobó en Azure el 2026-11-23 (AB#101449).
 >
 > Ultima actualizacion anterior: 2026-04-06  
 > Proyecto: AI DocClassExt — SAREB
@@ -98,10 +98,6 @@ Secretos requeridos en KV:
 | `SqlConnectionString` | Connection string Azure SQL (o Docker temporal) |
 | `user-ods-dwh` | Connection string ODS DWH usada por `ConnectionStrings__AssetResolverDb` del AssetResolver |
 | `AssetResolverApiKey` | API key compartida entre Function App (`AssetResolver__ApiKey`) y Web App del AssetResolver (`ApiKey`) |
-| `Extraction--AzureContentUnderstanding--ApiKey` | API Key Content Understanding |
-| `Extraction--GptFallback--ApiKey` | API Key Azure OpenAI (extraccion fallback) |
-| `Classification--AzureDocumentIntelligence--ApiKey` | API Key Document Intelligence |
-| `Classification--GptFallback--ApiKey` | API Key Azure OpenAI (clasificacion fallback) |
 | `FunctionsAdminApiFunctionKey` | Function key que usa el Admin para llamar a la Function App (exigido por el contrato; faltaba en esta tabla) |
 | `GDC--Username` | Usuario servicio GDC (no exigido por el contrato; lo comprueba `verify-prod-prereqs.ps1`) |
 | `GDC--Password` | Password servicio GDC (no exigido por el contrato; lo comprueba `verify-prod-prereqs.ps1`) |
@@ -128,7 +124,6 @@ Settings clave a confirmar (ver el inventario completo en `docs/infraestructura/
 | `FUNCTIONS_WORKER_RUNTIME` | `dotnet-isolated` |
 | `Extraction__DefaultProvider` | `azure-content-understanding` |
 | `Classification__DefaultProvider` | `azure-document-intelligence` |
-| `Extraction__AzureContentUnderstanding__Endpoint` | Por entorno (`AI_CU_PRIMARY_ENDPOINT` en `infra/ai/pipeline-variables.yml`): PRO `https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/`, PRE `https://srbaisrv01predocai.services.ai.azure.com/`, DEV `https://srbaisrv01devdocai.services.ai.azure.com/`. Heredado sin efecto en runtime (no se lee en el código) |
 | `Extraction__AzureContentUnderstanding__MaxConcurrentCalls` | `4` (baseline operativo actual; ajustar según carga) |
 | `Extraction__AzureContentUnderstanding__HardTimeoutSeconds` | `90` (timeout duro por intento CU) |
 | `Extraction__AzureContentUnderstanding__EnableCircuitBreaker` | `true` |
@@ -136,16 +131,14 @@ Settings clave a confirmar (ver el inventario completo en `docs/infraestructura/
 | `Extraction__AzureContentUnderstanding__CircuitBreakerOpenSeconds` | `45` |
 | `Extraction__AzureContentUnderstanding__MaxRetries` | `3` (reintentos con backoff exponencial) |
 | `Extraction__AzureContentUnderstanding__InitialRetryDelayMs` | `500` (ms base para backoff; delay real = base × 2^(intento-1)) |
-| `Classification__AzureDocumentIntelligence__Endpoint` | Por entorno (`AI_DI_ENDPOINT`): `srbdidevdocai` / `srbdipredocai` / `srbdiprodocai`.cognitiveservices.azure.com. Heredado sin efecto en runtime (no se lee en el código) |
-| `Extraction__GptFallback__DeploymentName` | `gpt-4o-mini` (lo escribe el YAML). Heredado sin efecto en runtime (no se lee en el código); el modelo generativo efectivo lo fijan `PromptDefaults__ModelKey` y la fila de `ModeloConfigs` |
-| `Classification__GptFallback__DeploymentName` | `gpt-4o-mini` (lo escribe el YAML). Heredado sin efecto en runtime (no se lee en el código) |
-| `Classification__DefaultModelKey` | `default.azure-di`. Heredado sin efecto en runtime (no se lee en el código) |
 | `PromptDefaults__ModelKey` | Obligatorio y no vacío (sin él la resolución falla): `default.gpt4o-mini` en pre y pro (deployment `gpt-4o-mini` = gpt-4.1-mini hasta la siguiente release), `prompt.gpt56-luna` solo en dev (gpt-5.6-luna desde el 2026-11-20, ADR-004). Lo fija la variable de pipeline `promptDefaultsModelKey` (802) / `PROMPT_DEFAULTS_MODEL_KEY` (799); `ensure-app-settings` no pisa un valor ya existente (AB#99938) |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | Connection string `srbappiprodocai` |
 | `AssetResolver__BaseUrl` | `https://srbwebpluginassetresolver.azurewebsites.net/` |
 | `AssetResolver__ApiKey` | Key Vault reference a `AssetResolverApiKey` |
 | `GDC__BypassSslValidation` | `false` en `azure-pipelines.yml` y en `set-app-settings.ps1` desde AB#101553 (pendiente de despliegue: DEV primero; hasta entonces los tres entornos siguen con `true`); el handler valida contra `config/certs/sareb-ca-chain.pem`. `true` solo como emergencia manual. El YAML fija 83 app settings; el inventario completo está en INFRAESTRUCTURA_REAL_DESPLEGADA.md |
 | `EnvironmentName` | `Production` (dev: `Development` · pre: `Preproduction`). Alimenta el campo `environment` de `GET management/configuration` con prioridad sobre `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` (no usar estos como fuente principal: en un Function App desplegado cambian el comportamiento del host — fallback a BD InMemory si valen `Development`). Lo fija la variable de pipeline `ENVIRONMENT_NAME` en **ambos** `azure-pipelines.yml` y `azure-pipelines-admin.yml` |
+
+> Los 27 app settings heredados sin efecto (`Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y la conexión de `Extraction__AzureContentUnderstanding__*`) se retiraron en AB#101450: el pipeline los borra en cada despliegue con `scripts/configuration/remove-legacy-app-settings.ps1` y el contrato los prohíbe. Sus cuatro secretos `*--ApiKey` se borran tras el despliegue con `scripts/configuration/remove-legacy-keyvault-secrets.ps1 -TargetEnvironment <env>`.
 
 ---
 

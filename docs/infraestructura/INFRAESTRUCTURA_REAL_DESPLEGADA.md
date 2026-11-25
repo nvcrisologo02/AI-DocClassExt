@@ -1,6 +1,6 @@
 # Infraestructura Real Desplegada — DEV / PRE / PRO
 
-> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json` y el código). Lo que no se ha podido comprobar contra Azure en esta revisión se marca como tal.
+> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto), 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json` y el código). Lo que no se ha podido comprobar contra Azure en esta revisión se marca como tal.
 
 ## 🌐 Modelo multi-entorno
 
@@ -79,7 +79,7 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 | `ModeloConfigs` | filas con `ResourceAlias`, sin `Endpoint` | 27 filas con alias (cutover del 23/09) | 28 filas activas con alias (`openai_primary` 10, `cu_primary` 13, `cu_secondary` 2, `di` 3), 0 con `Endpoint` |
 | `AuthMode` de las filas | `DefaultAzureCredential` | `DefaultAzureCredential` | `DefaultAzureCredential`; `ApiKey` purgada en todas las filas activas el 2026-10-08 (`clear-model-api-keys.sql`) |
 | Roles de la identidad de la Function App sobre los recursos de IA del entorno | Cognitive Services User + Foundry User | Cognitive Services User + Foundry User | `srbappprodocai` (`e700ab11…`): Cognitive Services User sobre `upe48-mm2avmdm-swedencentral`, `srbaisrv-westeurope` y `srbdiprodocai`; Foundry User sobre `upe48-mm2avmdm-swedencentral` y `srbaisrv-westeurope` (este último añadido el 2026-10-08) |
-| Opciones directas (`Extraction__AzureContentUnderstanding__*`, `Classification__AzureDocumentIntelligence__*`, `GptFallback__*`) | `ApiKey` desde Key Vault | `ApiKey` desde Key Vault | `ApiKey` desde Key Vault (sin cambio en v1.0.0) |
+| Opciones directas (`Extraction__AzureContentUnderstanding__*`, `Classification__AzureDocumentIntelligence__*`, `GptFallback__*`) | Retiradas en AB#101450 (DEV: pendiente del despliegue a DEV, fecha al verificar) | Retiradas en AB#101450 (con su siguiente despliegue, release) | Retiradas en AB#101450 (con su siguiente despliegue, release) |
 | Validación por identidad | smoke y Fase A del clasificador | smoke 6/6 (cutover 23/09) | smoke 6/6 el 2026-10-08 (DI, OpenAI y CU en `srbaisrv-westeurope`); `cu_primary` por identidad pendiente de la primera extracción real (sin tráfico de negocio entre la ventana y el 2026-10-09 09:00Z) |
 
 Pendientes de la Fase 3 (AB#100302 / AB#100321): Plataforma retira los roles de `srbappdevdocai` y `srbapppredocai` sobre `upe48-mm2avmdm-swedencentral`, `srbaisrv-westeurope` y `srbdiprodocai` (Step 3); borrado de las 6 tablas `ModeloConfigs__bak_*` de PRO, ya sin keys, previsto el 2026-10-15 (comprobado el 2026-11-23: las dos identidades conservan Cognitive Services User sobre los tres recursos de IA de PRO y las 6 tablas `ModeloConfigs__bak_*` siguen en la BD de PRO; AB#100321 sigue en Committed, bloqueado en Plataforma).
@@ -112,7 +112,7 @@ Pendientes de la Fase 3 (AB#100302 / AB#100321): Plataforma retira los roles de 
 | PRE | `gpt-4o-mini` (modelo gpt-4.1-mini) en `srbaisrv01predocai` | `default.gpt4o-mini` | hasta la siguiente release |
 | PRO | `gpt-4o-mini` (modelo gpt-4.1-mini) en `upe48-mm2avmdm-swedencentral` | `default.gpt4o-mini` | hasta la siguiente release |
 
-> Las opciones directas `Extraction__GptFallback__DeploymentName` y `Classification__GptFallback__DeploymentName` siguen fijadas a `gpt-4o-mini` en los tres entornos por `azure-pipelines.yml`; el flujo resuelve el modelo por las filas de `ModeloConfigs`, así que en DEV esas opciones no describen el modelo que se usa. Azure OpenAI retira gpt-4.1-mini el 2027-04-14.
+> Los settings `Extraction__GptFallback__DeploymentName` y `Classification__GptFallback__DeploymentName` ya no existen (retirados en AB#101450); el deployment generativo lo fijan `PromptDefaults__ModelKey` y las filas de `ModeloConfigs`. Azure OpenAI retira gpt-4.1-mini el 2027-04-14.
 
 > **Regiones:** CU/OpenAI **primarios** (`upe48-mm2avmdm-swedencentral`) en **swedencentral**; CU/OpenAI **secundarios** (`srbaisrv-westeurope`) y **todos** los recursos de aplicación y DI en **West Europe**.
 
@@ -230,14 +230,14 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 | **DocumentIntelligence__UseInlineContent** | dev y pre: `true` · pro: `false` | pipeline var (`DI_USE_INLINE_CONTENT`) |
 | **BlobRetention__BatchSize** | dev y pre: 2000 · pro: 5000 | pipeline var (`BLOB_RETENTION_BATCH_SIZE`) |
 
-> **Settings heredados sin efecto (revisión 2026-11-22).** Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y los de conexión de `Extraction__AzureContentUnderstanding__*` (`Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation`) **no se enlazan a ninguna clase ni se leen en el código** (comprobado el 2026-11-22 en `Program.cs`): los parámetros de conexión, modelo y umbrales de IA salen de las filas de `ModeloConfigs` resueltas por alias e identidad administrada. El pipeline sigue fijándolos y el contrato `scripts/config/azure-appsettings-contract.json` los exige, así que son settings heredados sin efecto en runtime; su retirada es una decisión pendiente. De `Extraction__AzureContentUnderstanding__*` solo se leen los siete de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`).
+> **Settings heredados retirados (AB#101450, 2026-11-25).** Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y los de conexión de `Extraction__AzureContentUnderstanding__*` (`Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation`) no se enlazaban a ninguna clase ni se leían en el código (comprobado el 2026-11-22 en `Program.cs`): los parámetros de conexión, modelo y umbrales de IA salen de las filas de `ModeloConfigs` resueltas por alias e identidad administrada. Se retiraron en AB#101450 (27 settings): `azure-pipelines.yml` (799) ya no los fija, y tanto el 799 como el 802 ejecutan `scripts/configuration/remove-legacy-app-settings.ps1` en cada despliegue para borrar los que existan; el contrato `scripts/config/azure-appsettings-contract.json` los lista en `forbiddenSettings` y falla la validación si reaparece alguno. Estado por entorno: DEV, pendiente del despliegue a DEV (fecha al verificar); PRE y PRO, con su siguiente despliegue (release). De `Extraction__AzureContentUnderstanding__*` solo se leen los siete de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`).
 
 #### **Extraction Configuration**
 | Setting | Value |
 |---------|-------|
 | **DefaultProvider** | azure-content-understanding |
 | **CU Endpoint** | `$(AI_CU_PRIMARY_ENDPOINT)` del entorno (PRO: https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/) |
-| **CU AuthMode / ApiKey** | ApiKey · `@Microsoft.KeyVault(...Extraction--AzureContentUnderstanding--ApiKey)` (KV del entorno) |
+| **CU AuthMode / ApiKey** | Retirado (AB#101450); la autenticación de CU/DI sale de `ModeloConfigs` por identidad administrada |
 | **CU MaxConcurrentCalls** | 4 |
 | **CU HardTimeout** | 90 seconds |
 | **CU CircuitBreaker** | enabled (threshold=5, open=45s) |
@@ -255,7 +255,7 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 | **DefaultProvider** | azure-document-intelligence |
 | **DefaultModelKey** | default.azure-di |
 | **DI Endpoint** | `$(AI_DI_ENDPOINT)` del entorno (PRO: https://srbdiprodocai.cognitiveservices.azure.com/) |
-| **DI ApiKey** | `@Microsoft.KeyVault(...Classification--AzureDocumentIntelligence--ApiKey)` (KV del entorno) |
+| **DI ApiKey** | Retirado (AB#101450); la autenticación de CU/DI sale de `ModeloConfigs` por identidad administrada |
 | **DI API Version** | 2024-11-30 |
 | **GPT Fallback Enabled** | true |
 | **GPT Fallback Endpoint** | `$(AI_OPENAI_PRIMARY_ENDPOINT)` del entorno (PRO: https://upe48-mm2avmdm-swedencentral.openai.azure.com) |
@@ -384,10 +384,10 @@ Cada entorno tiene su propio Key Vault (`srbkvdevdocai` · `srbkvpredocai` · `s
 | `SqlConnectionString` | Conexión a base de datos (`{sql}` / DocumentIA) |
 | `AzureWebJobsStorage` | Durable Functions hub (`{stgapp}`) |
 | `AzureStorageConnectionString` | Almacenamiento de documentos + blob (`{stg}`) |
-| `Extraction--AzureContentUnderstanding--ApiKey` | Autenticación CU |
-| `Extraction--GptFallback--ApiKey` | GPT fallback de extracción |
-| `Classification--AzureDocumentIntelligence--ApiKey` | Autenticación DI |
-| `Classification--GptFallback--ApiKey` | GPT fallback de clasificación |
+| `Extraction--AzureContentUnderstanding--ApiKey` | Retirado en AB#101450; se borra tras el despliegue con `remove-legacy-keyvault-secrets.ps1` (DEV: pendiente del despliegue a DEV; PRE y PRO con su siguiente despliegue) |
+| `Extraction--GptFallback--ApiKey` | Retirado en AB#101450; se borra tras el despliegue con `remove-legacy-keyvault-secrets.ps1` (DEV: pendiente del despliegue a DEV; PRE y PRO con su siguiente despliegue) |
+| `Classification--AzureDocumentIntelligence--ApiKey` | Retirado en AB#101450; se borra tras el despliegue con `remove-legacy-keyvault-secrets.ps1` (DEV: pendiente del despliegue a DEV; PRE y PRO con su siguiente despliegue) |
+| `Classification--GptFallback--ApiKey` | Retirado en AB#101450; se borra tras el despliegue con `remove-legacy-keyvault-secrets.ps1` (DEV: pendiente del despliegue a DEV; PRE y PRO con su siguiente despliegue) |
 | `GDC--HttpBasicUsername` / `GDC--HttpBasicPassword` | Autenticación sistema legado GDC |
 | `AssetResolverApiKey` | Plugin AssetResolver |
 | `FunctionsAdminApiFunctionKey` | Autenticación Admin ↔ Functions |
