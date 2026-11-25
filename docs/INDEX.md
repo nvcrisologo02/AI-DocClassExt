@@ -1,6 +1,6 @@
 # Índice de documentación — DocumentIA
 
-> Última revisión estructural: 2026-11-22 (AB#101445). Rama de referencia: `develop`.
+> Última revisión estructural: 2026-11-25 (AB#101452, retirada de `entrega/`). Revisión estructural previa: 2026-11-22 (AB#101445). Rama de referencia: `develop`.
 > Verificación de contenido por familia cerrada el 2026-11-22 (AB#101447) e integrada en `develop` el 2026-11-23 (AB#101448). El estado de cada fichero se actualiza aquí con cada cambio que lo afecte; las decisiones derivadas están en las tasks AB#101449 a AB#101452. Las marcas «no comprobado» del repaso se comprobaron en vivo contra Azure, Azure DevOps, App Insights y las BD de DEV, PRE y PRO el 2026-11-23 (AB#101449) y se sustituyeron por el estado real.
 
 DocumentIA es el sistema de clasificación y extracción documental de SAREB, en operación desde julio de 2026. Esta página cataloga la documentación permanente del repositorio, organizada en las cuatro familias que usa el impacto documental de cada cambio: técnica, funcional, arquitectura y explotación. El mapa por familia también está declarado en el `CLAUDE.md` del proyecto.
@@ -18,7 +18,7 @@ DocumentIA es el sistema de clasificación y extracción documental de SAREB, en
 | `docs/auxiliares/` | Material de trabajo: análisis, planes, auditorías, manuales retirados (`migracion-deployment/`, `sql-schemas/`, `plans/`) y los temporales de sesión en `temps/<fecha>/` | No (`.gitignore`). Los documentos permanentes no deben enlazar aquí |
 | `docs/superpowers/specs/` y `plans/` | Especificaciones de diseño y planes de implementación de cada unidad de trabajo | Specs sí; planes no |
 | `docs/presentaciones/` | Guiones y apoyo visual de presentaciones (abril y mayo de 2026) | Solo los dos ficheros antiguos ya versionados; los nuevos se ignoran |
-| `entrega/` (raíz) | Copia congelada de la documentación entregada el 2026-06-30, con su propio índice | Sí, pero no se actualiza |
+| `entrega/` (raíz) | Retirada del árbol el 2026-11-25 (AB#101452): era la copia congelada de la documentación entregada el 2026-06-30 (87 ficheros, 15 MB) y solo la citaba este índice; sigue disponible en el historial de git hasta el commit 5b270177 | No (retirada) |
 
 ## Por dónde empezar
 
