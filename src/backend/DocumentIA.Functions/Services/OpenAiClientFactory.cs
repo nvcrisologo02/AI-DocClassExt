@@ -55,7 +55,7 @@ public class OpenAiClientFactory : IOpenAiClientFactory
             string.IsNullOrWhiteSpace(model.ApiKey))
         {
             throw new InvalidOperationException(
-                $"Extracción GPT: modelo '{model.Key}' requiere ApiKey configurada cuando AuthMode={model.AuthMode}. Verifica la configuración en appsettings/KeyVault (ej: Extraction:GptFallback:ApiKey).");
+                $"Extracción GPT: modelo '{model.Key}' requiere ApiKey configurada cuando AuthMode={model.AuthMode}. Verifica la configuración en appsettings/KeyVault (campo ApiKey de la fila de ModeloConfigs).");
         }
     }
 }
