@@ -9,6 +9,7 @@ Scripts de datos de la Fase A (sombra en DEV). No hay cambios de esquema.
 | `03-modeloconfig-embeddings-v2.sql` | Apunta la fila `clasificador.embeddings` al artefacto v2 (solo `Artefacto.BlobPath`; modo y umbrales intactos). | DEV (PRE y PRO con AB#100781) |
 | `04-modeloconfig-embeddings-v3.sql` | Apunta la fila `clasificador.embeddings` al artefacto v3 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
 | `05-modeloconfig-embeddings-v4.sql` | Apunta la fila `clasificador.embeddings` al artefacto v4 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
+| `06-modeloconfig-embeddings-v5.sql` | Apunta la fila `clasificador.embeddings` al artefacto v5 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
 
 Orden: 01 y despues 02. Ambos hacen backup `ModeloConfigs__bak_<fecha>` y son idempotentes.
 
