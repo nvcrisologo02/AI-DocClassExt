@@ -1,6 +1,6 @@
 # Runbook de release — DEV → PRE → PRO
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con los siete `azure-pipelines*.yml`, `scripts/**`, `infra/ai/**` y `docs/releases/`). El catálogo del Anexo A coincide con los YAML; pools: `windows-latest` salvo `docia-mdp-private` (832 entero y Apply de 807). Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los checks de aprobación de los environments `pre` y `prod` (checks 64 y 65) existen desde el 2026-09-30; comprobado el 2026-11-23: los dos checks siguen activos (environments `pre` 39 y `prod` 34), los IDs de pipeline del Anexo A coinciden con Azure DevOps (799, 800, 801, 802, 803, 807, 828 y 832) y el secreto `GDC--Endpoint` sigue en `srbkvprodocai` (AB#101451).
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto). Revisión previa: 2026-11-22 (AB#101447, contraste con los siete `azure-pipelines*.yml`, `scripts/**`, `infra/ai/**` y `docs/releases/`). El catálogo del Anexo A coincide con los YAML; pools: `windows-latest` salvo `docia-mdp-private` (832 entero y Apply de 807). Las menciones a gpt-4o-mini de este documento describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los checks de aprobación de los environments `pre` y `prod` (checks 64 y 65) existen desde el 2026-09-30; comprobado el 2026-11-23: los dos checks siguen activos (environments `pre` 39 y `prod` 34), los IDs de pipeline del Anexo A coinciden con Azure DevOps (799, 800, 801, 802, 803, 807, 828 y 832) y el secreto `GDC--Endpoint` sigue en `srbkvprodocai` (AB#101451).
 
 Procedimiento permanente para llevar una versión de DocumentIA desde `develop` hasta PRO con
 PRE como puerta técnica obligatoria. Sustituye a la versión anterior de este documento (agosto
@@ -150,6 +150,7 @@ Vuelta atrás: ver Anexo B, capa 4. El código anterior tolera columnas nuevas, 
 
 - [ ] **2.2.1** Pipeline 799 con `targetEnvironment=pre` desde el commit candidato. Stages esperados: Build → DeployFunctions (jobs Functions y Admin) → DeployAssetResolver → ValidateConfiguration. `RunMigrations` aparece como omitido: está deshabilitado a propósito.
 - [ ] **2.2.2** `ValidateConfiguration` en verde (contrato de app settings de `scripts/config/azure-appsettings-contract.json` verificado por `scripts/testing/validate-azure-appsettings-contract.ps1`).
+- [ ] **2.2.2a** Borrar los secretos heredados de IA del Key Vault de PRE: `pwsh ./scripts/configuration/remove-legacy-keyvault-secrets.ps1 -TargetEnvironment pre` (soft delete recuperable; solo después de `ValidateConfiguration` en verde, porque los app settings que los referenciaban ya no existen; AB#101450).
 - [ ] **2.2.3** Anotar el ID del run y el hash desplegado en la tabla "Runs de pipeline" de `release.md`.
 - [ ] **2.2.4** Antes de 2.2.1: guardar en `evidencias/` los endpoints de IA y los nombres de los app settings de `srbapppredocai` (comandos abajo); es de donde restaura el Anexo B, capas 2 y 3.
 
@@ -364,6 +365,7 @@ en claro en `ModeloConfigs` (no verificado): no sale de `artifacts/db-config/` (
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlprodocai.database.windows.net -ReleaseTag vX.Y.Z-pro
 
 - [ ] **4.4** Pipeline 799 con `targetEnvironment=prod` desde el commit candidato; `ValidateConfiguration` en verde. Anotar ID del run. Pipelines por componente solo en el caso que admite el Anexo A.
+- [ ] **4.4a** Borrar los secretos heredados de IA del Key Vault de PRO: `pwsh ./scripts/configuration/remove-legacy-keyvault-secrets.ps1 -TargetEnvironment prod` (soft delete recuperable; solo después de `ValidateConfiguration` en verde, porque los app settings que los referenciaban ya no existen; AB#101450).
 - [ ] **4.5** Reiniciar `srbappprodocai` solo si la release cambió alias o app settings de IA: `az functionapp restart -n srbappprodocai -g SRBRGDOCSAIPROD`.
 - [ ] **4.6** Smoke en PRO: `pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pro -Profile smoke` → 6/6.
 - [ ] **4.7** Deriva en PRO: export tras 4.6 (`-ReleaseTag vX.Y.Z-pro-despues`) frente al `config-vX.Y.Z-pro.hashes.json` de 4.3; hash idéntico salvo `ModeloConfigs`, que queda fuera. Toda diferencia se anota en `runbook.md` como cambio en caliente a retroportar a DEV.
@@ -446,9 +448,9 @@ la release no toca los demás componentes ni la configuración de bootstrap (803
 |---|---|---|---|---|---|
 | 799 | AI DocClassExt | `azure-pipelines.yml` | `targetEnvironment` (dev/pre/prod, default prod) | Build → RunMigrations (deshabilitado, `condition: false`) → DeployFunctions (jobs Functions y Admin) → DeployAssetResolver → ValidateConfiguration | `scripts/configuration/ensure-app-settings.ps1`, `scripts/configuration/assign-keyvault-rbac.ps1`, `scripts/configuration/verify-keyvault-rbac.ps1`, `scripts/testing/validate-azure-appsettings-contract.ps1` |
 | 802 | AI DocClassExt (Functions) | `azure-pipelines-functions.yml` | `targetEnvironment` (default dev) | Build → Deploy | `ensure-app-settings.ps1` |
-| 800 | AI DocClassExt (Admin) | `azure-pipelines-admin.yml` | `targetEnvironment` (default dev) | BuildAdmin → DeployAdmin (zipDeploy, RBAC KV, settings, "Ensure Functions environment name", contrato) | `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
+| 800 | AI DocClassExt (Admin) | `azure-pipelines-admin.yml` | `targetEnvironment` (default dev) | BuildAdmin → DeployAdmin (zipDeploy, RBAC KV, settings, "Ensure Functions environment name", contrato) | `ensure-app-settings.ps1`, `remove-legacy-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
 | 801 | AI DocClassExt (AssetResolver) | `azure-pipelines-assetresolver.yml` | `targetEnvironment` (default dev) | Build → Deploy | ninguno |
-| 803 | AI DocClassExt azure-pipelines-bootstrap. | `azure-pipelines-bootstrap.yml` | `targetEnvironment` (default dev) | Bootstrap | `check-azure-permissions.ps1`, `set-keyvault-secrets.ps1`, `verify-prod-prereqs.ps1`, `set-functionapp-keyvault-references.ps1`, `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1` |
+| 803 | AI DocClassExt azure-pipelines-bootstrap. | `azure-pipelines-bootstrap.yml` | `targetEnvironment` (default dev) | Bootstrap | `check-azure-permissions.ps1`, `set-keyvault-secrets.ps1`, `verify-prod-prereqs.ps1`, `set-functionapp-keyvault-references.ps1`, `ensure-app-settings.ps1`, `validate-azure-appsettings-contract.ps1`. No borra los app settings heredados (AB#101450): un re-bootstrap de un entorno sin limpiar fallará en el contrato (`forbiddenSettings`) hasta pasar el 799 o el 802 |
 | 807 | Migrations-BD | `azure-pipelines-migrations.yml` | `targetEnvironment` (default dev), `addTransientFirewallRule` (bool, default false), `backfillClaveIntencion` (bool, default false; AB#100930, ver 4.8) | Generate (agente hosted, `dotnet ef migrations script --idempotent`) → Apply (pool `docia-mdp-private`) | `scripts/deployment/apply-migrations.ps1`, `scripts/database/backfill-clave-intencion.ps1` |
 | 828 | AI DocClassExt (828) | no identificado en el repo | — | — | definición sin fichero identificado; comprobar en ADO antes de usarla |
 | 832 | AI DocClassExt (AiArtifacts) | `azure-pipelines-ai-artifacts.yml` | `targetEnvironment` (dev/pre/prod, default pre), `fromProd`, `preGatesPassed`, `releaseTag` (default `auto` = `build-<id>`), `runValidation`, `dryRun` | Guard → Export (origen del salto; no con `fromProd`) → AiArtifacts (pool `docia-mdp-private`, environment del destino) → ConfigSeed (solo diff; no con `fromProd`). Ver 2.4 | `scripts/ai/export-config-release.ps1`, `copy-labeling-dataset.ps1`, `apply-deployments.ps1` (fuera de `prod`), `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1`, `validate-analyzer.ps1`, `scripts/database/diff-config-exports.py` |
@@ -472,15 +474,15 @@ De menos a más invasiva. Se retrocede solo la capa que falló; nunca se empieza
    inversa del cutover de PRE del 2026-09-23: devolver el bloque del entorno en
    `infra/ai/pipeline-variables.yml` a los hosts de PRO (un redespliegue con 799 no cambia las
    claves que ya existen); forzar con `az functionapp config appsettings set` las
-   `AI__Resources__*__Endpoint` y los cuatro endpoints directos del paso 2b
-   (`Extraction__AzureContentUnderstanding__Endpoint`, `Extraction__GptFallback__Endpoint`,
-   `Classification__AzureDocumentIntelligence__Endpoint`, `Classification__GptFallback__Endpoint`)
+   `AI__Resources__*__Endpoint` del paso 2b (los cuatro endpoints directos ya no existen desde AB#101450)
    a los valores guardados en 2.2.4 o 4.11; restaurar `ConfiguracionJson` desde la copia `__bak`
-   anterior a `set-resource-aliases.sql`; restaurar las versiones anteriores de los cuatro
-   secretos de IA en el Key Vault del entorno (`az keyvault secret set-attributes` sobre la
-   versión previa o `az keyvault secret set` con el valor anterior); reiniciar la Function App,
-   comprobar con la consulta del paso 2b que las ocho claves llevan los hosts esperados y
-   repetir el smoke.
+   anterior a `set-resource-aliases.sql`; los cuatro secretos `*--ApiKey` de IA ya no se usan
+   (AB#101450), así que no hay que restaurarlos; reiniciar la Function App,
+   comprobar con la consulta del paso 2b que las cuatro claves llevan los hosts esperados y
+   repetir el smoke. Si se redespliega el 799 desde un tag anterior a AB#101450,
+   `ensure-app-settings.ps1` recrea los 27 settings heredados con referencias a secretos en soft delete
+   (sin efecto en runtime; errores de resolución de referencia en el portal); el siguiente despliegue
+   normal los vuelve a borrar.
 4. **Esquema.** Solo si una migración corrompió datos. Restaurar la copia `DocumentIA-prerel-<fecha>`
    con un nombre nuevo (`az sql db copy`), parar la Function App, renombrar la BD actual a
    `DocumentIA-failed-<fecha>` y la copia a `DocumentIA`, desplegar el commit anterior (capa 1) y
@@ -496,9 +498,10 @@ De menos a más invasiva. Se retrocede solo la capa que falló; nunca se empieza
   que faltan y nunca sobrescribe las existentes (`[SKIP] <clave> ya existe`), sin opción para
   hacerlo. Los verifica `scripts/testing/validate-azure-appsettings-contract.ps1` contra
   `scripts/config/azure-appsettings-contract.json`. Cambiar el valor de una clave que ya existe
-  (por ejemplo los endpoints directos de IA, paso 2b de `infra/ai/README.md`) exige
+  (por ejemplo las `AI__Resources__*__Endpoint`, paso 2b de `infra/ai/README.md`) exige
   `az functionapp config appsettings set`, con la captura previa de 2.2.4 o 4.11, la consulta de
   verificación de ese paso y nota en `runbook.md`.
+- Settings heredados sin efecto (AB#101450): `remove-legacy-app-settings.ps1` los borra en cada despliegue del 799 y del 802; el contrato los lista en `forbiddenSettings`; sus secretos se borran con `remove-legacy-keyvault-secrets.ps1` tras el despliegue. Las variables `DOCIA_SECRET_*_APIKEY` de IA (las cuatro de extracción y clasificación) de los grupos `docia-bootstrap-<env>-secrets` quedan huérfanas, porque el 803 ya no las publica; se vaciarán con sí explícito (pendiente).
 - El RBAC de Key Vault no lo gestiona el pipeline (`manageKeyVaultRbac=false`): se asigna una
   vez con `scripts/configuration/assign-keyvault-rbac.ps1` y se comprueba con
   `verify-keyvault-rbac.ps1`. Detalle en `docs/08_CHECKLISTS_DESPLIEGUE.md`, bloque 3.

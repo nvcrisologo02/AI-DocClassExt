@@ -237,6 +237,11 @@ stages:
                           -Name "$(AZURE_FUNCTIONS_APP_NAME)" `
                           -SettingsJson $functionsSettingsJson
 
+                        Write-Host "Retirando app settings heredados sin efecto (AB#101450)..."
+                        & .\scripts\configuration\remove-legacy-app-settings.ps1 `
+                          -ResourceGroup "$(AZURE_RESOURCE_GROUP)" `
+                          -Name "$(AZURE_FUNCTIONS_APP_NAME)"
+
                 - task: AzureCLI@2
                   displayName: Validate Admin App settings contract
                   inputs:

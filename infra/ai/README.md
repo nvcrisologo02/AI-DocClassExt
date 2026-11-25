@@ -686,13 +686,10 @@ Que las Functions de un entorno usen sus recursos propios en lugar de los de
 PRO es un cambio de configuración, no de artefactos, y se hace en este orden
 (ventana sin tráfico de evaluación en curso):
 
-1. **Keys en el Key Vault del entorno** con los nombres de secreto actuales
-   (`Extraction--AzureContentUnderstanding--ApiKey`,
-   `Extraction--GptFallback--ApiKey`, `Classification--GptFallback--ApiKey`
-   con la key de la cuenta Foundry primaria;
-   `Classification--AzureDocumentIntelligence--ApiKey` con la de DI). Solo
-   cubren el modo `ApiKey` de los App Settings; las filas de `ModeloConfigs`
-   usan `DefaultAzureCredential`.
+1. **Sin secretos de clave en el Key Vault del entorno.** Desde AB#101450 no hacen
+   falta secretos `*--ApiKey` de IA: las filas de `ModeloConfigs` usan
+   `DefaultAzureCredential` y los app settings de conexión que los referenciaban
+   se retiraron.
 2. **Variables `AI_*` del entorno en `infra/ai/pipeline-variables.yml`**
    (`AI_OPENAI_PRIMARY_ENDPOINT`, `AI_CU_PRIMARY_ENDPOINT`,
    `AI_CU_SECONDARY_ENDPOINT`, `AI_DI_ENDPOINT`) apuntando a
@@ -704,39 +701,25 @@ PRO es un cambio de configuración, no de artefactos, y se hace en este orden
    warning si ya existen con otro valor. El bloque `dev` apunta a DEV desde
    el 2026-09-22 y `pre` a PRE desde el 2026-09-23; `prod` apunta a los
    recursos de PRO, que PRO resuelve por alias desde el 2026-10-08 (v1.0.0,
-   AB#100321). Ningún pipeline cambia las
-   cuatro claves de las opciones directas que ya existen con PRO (ver paso
-   2b).
-2b. **Forzar a mano los cuatro endpoints de las opciones directas**
-   (`Extraction__AzureContentUnderstanding__Endpoint`,
-   `Extraction__GptFallback__Endpoint`,
-   `Classification__AzureDocumentIntelligence__Endpoint`,
-   `Classification__GptFallback__Endpoint`). `ensure-app-settings.ps1`
-   conserva a propósito las claves existentes, y se ha decidido no cambiarlo
-   (el cutover es un paso puntual por entorno). Con los valores de
-   `resources.<env>.json`, para DEV:
+   AB#100321). Ningún pipeline cambia las `AI__Resources__*__Endpoint` que ya
+   existen con PRO (ver paso 2b).
+2b. **Comprobar a mano los cuatro endpoints `AI__Resources__*__Endpoint`.**
+   `ensure-app-settings.ps1` conserva a propósito las claves existentes, y se
+   ha decidido no cambiarlo (el cutover es un paso puntual por entorno). Si
+   alguna ya existía con el host de PRO, se fuerza con `az functionapp config
+   appsettings set` y los valores de `resources.<env>.json`. Para comprobar,
+   en DEV:
 
    ```powershell
    # El RG de DEV está en la suscripción Core Desarrollo (8764f9ff…), no en la
    # de PRO que az usa por defecto: sin --subscription da AuthorizationFailed.
-   az functionapp config appsettings set --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d `
-     --resource-group SRBRGDEVDOCSAI --name srbappdevdocai --output none --settings `
-     "Extraction__AzureContentUnderstanding__Endpoint=https://srbaisrv01devdocai.services.ai.azure.com/" `
-     "Extraction__GptFallback__Endpoint=https://srbaisrv01devdocai.openai.azure.com" `
-     "Classification__AzureDocumentIntelligence__Endpoint=https://srbdidevdocai.cognitiveservices.azure.com/" `
-     "Classification__GptFallback__Endpoint=https://srbaisrv01devdocai.openai.azure.com"
-   ```
-
-   Después, comprobar que las ocho claves de IA llevan hosts del entorno:
-
-   ```powershell
    az functionapp config appsettings list --subscription 8764f9ff-fe37-4c03-bde9-6294622bef6d `
      --resource-group SRBRGDEVDOCSAI --name srbappdevdocai `
      --query "[?ends_with(name, '__Endpoint') && name != 'GDC__Endpoint'].[name, value]" -o table
    ```
 
-   Sin este paso, `AuthMode=ApiKey` con la key del entorno contra el host de
-   PRO devuelve 401 en CU, DI y fallback GPT.
+   Las cuatro claves `AI__Resources__*__Endpoint` deben llevar hosts del
+   entorno.
 3. **`scripts/ai/set-resource-aliases.sql`** contra la BD del entorno:
    asigna `ResourceAlias` (`openai_primary`, `cu_primary`, `cu_secondary`
    para las claves `-we`, `di`) a cada fila activa de `ModeloConfigs` y
@@ -772,8 +755,8 @@ Dos trampas conocidas y cómo quedan resueltas:
 
 - `scripts/configuration/ensure-app-settings.ps1` (el que usa el pipeline)
   no sobrescribe claves existentes, y no se cambia. Las cuatro
-  `AI__Resources__*__Endpoint` las crea el despliegue; las cuatro claves de
-  las opciones directas que ya existen con PRO se fuerzan a mano en cada
+  `AI__Resources__*__Endpoint` las crea el despliegue; las que ya existen con PRO
+  se fuerzan a mano en cada
   entorno (paso 2b) y se comprueban con la consulta de ese paso.
 - `ConfigurationSeedService.MergeMissingJsonProperties` reinyecta en cada
   arranque cualquier propiedad ausente o vacía desde los seeds

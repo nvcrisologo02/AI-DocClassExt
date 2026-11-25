@@ -199,6 +199,11 @@ stages:
                   -Name "$(functionAppName)" `
                   -SettingsJson $settingsJson
 
+                Write-Host "Retirando app settings heredados sin efecto (AB#101450)..."
+                & .\scripts\configuration\remove-legacy-app-settings.ps1 `
+                  -ResourceGroup "$(azureResourceGroup)" `
+                  -Name "$(functionAppName)"
+
                 Write-Host "Validando que todas las variables se han aplicado..."
                 
                 $requiredKeys = @(

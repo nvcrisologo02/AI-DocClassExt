@@ -1,8 +1,8 @@
 # Manual de Configuración — DocumentIA Functions
 
-> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `Program.cs`, las clases de opciones y `azure-pipelines.yml`). Este manual manda en **app settings por entorno**; la Parte B de [05_MANUAL_USO_CONFIGURACION.md](../05_MANUAL_USO_CONFIGURACION.md) manda en contrato, `ConfiguracionJson`, modelos y alias de IA.
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto; AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `Program.cs`, las clases de opciones y `azure-pipelines.yml`). Este manual manda en **app settings por entorno**; la Parte B de [05_MANUAL_USO_CONFIGURACION.md](../05_MANUAL_USO_CONFIGURACION.md) manda en contrato, `ConfiguracionJson`, modelos y alias de IA.
 >
-> **Hallazgo de la revisión.** Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y los de conexión de `Extraction__AzureContentUnderstanding__*` (`Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation`) **no se enlazan a ninguna clase ni se leen en el código** (comprobado el 2026-11-22 en `Program.cs`): los parámetros de conexión, modelo y umbrales de IA salen de las filas de `ModeloConfigs` resueltas por alias e identidad administrada. El pipeline sigue fijándolos y el contrato `scripts/config/azure-appsettings-contract.json` los exige, así que son settings heredados sin efecto en runtime; su retirada es una decisión pendiente. De `Extraction__AzureContentUnderstanding__*` solo se leen los siete de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`). Las secciones 4.2, 4.3, 5.2 (conexión) y 5.3 se conservan marcadas como heredadas.
+> **Settings heredados retirados (AB#101450, 2026-11-25).** Los 27 app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y los de conexión de `Extraction__AzureContentUnderstanding__*` (`Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation`) ya no existen en el pipeline ni en el contrato `scripts/config/azure-appsettings-contract.json` (que los prohíbe) ni en los entornos: DEV desde su despliegue (pendiente del despliegue a DEV, fecha al verificar); PRE y PRO con su siguiente despliegue. El pipeline los borra en cada despliegue si siguen presentes. No se enlazaban a ninguna clase (comprobado el 2026-11-22 en `Program.cs`): los parámetros de conexión, modelo y umbrales de IA salen de las filas de `ModeloConfigs` resueltas por alias e identidad administrada. De `Extraction__AzureContentUnderstanding__*` solo quedan los siete de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`). Las secciones 4.2, 4.3 y 5.3 y la fila de conexión de 5.2 se conservan solo como registro de lo retirado.
 >
 > **Modelo generativo por entorno:** lo deciden las filas `UseAsFallback` de `ModeloConfigs` y el app setting `PromptDefaults__ModelKey` (DEV `prompt.gpt56-luna` desde el 2026-11-20, ADR-004; PRE y PRO `default.gpt4o-mini`, deployment `gpt-4o-mini` = modelo gpt-4.1-mini, hasta la siguiente release).
 
@@ -51,35 +51,14 @@ Sección raíz: `Classification`
 | `Classification:DefaultFlow` | `ClassificationRoutingSettings` | `hybrid-rules-gpt-di` (defecto de clase: `hybrid-tdn`) | Flujo que se ejecuta con `provider = auto`: secuencia de proveedores de `Classification:Flows`. En Azure el pipeline no fija `DefaultFlow` ni `Flows`, así que rige el defecto de la clase. |
 | `Classification:DefaultProvider` | `ClassificationRoutingSettings` | `hybrid-tdn` \| `gpt` \| `azure-document-intelligence` \| `rules` \| `mock` | Proveedor usado solo si no hay `DefaultFlow`. El pipeline fija `azure-document-intelligence`, sin efecto práctico mientras exista `DefaultFlow`. |
 | `Classification:UseGlobalFallback` / `GlobalFallbackProvider` | `ClassificationRoutingSettings` | `true` / `gpt` | Fallback final cuando el flujo no da resultado. |
-| `Classification:DefaultModelKey` | — | `default.azure-di` | **Sin consumidor en el código** (heredado). |
 
-### 4.2 Azure Document Intelligence (heredado, sin efecto en runtime)
+### 4.2 Azure Document Intelligence (retirado en AB#101450)
 
-Sección: `Classification:AzureDocumentIntelligence`. **No se enlaza a ninguna clase**: endpoint, clave, `AuthMode` y versión de API salen de la fila de `ModeloConfigs` (`ClassificationModelConfig`, alias `di`). Se conserva como registro de los settings que el pipeline sigue fijando.
+Sección: `Classification:AzureDocumentIntelligence`. **Retirada en AB#101450**: no se enlazaba a ninguna clase; endpoint, clave, `AuthMode` y versión de API salen de la fila de `ModeloConfigs` (`ClassificationModelConfig`, alias `di`). Los app settings `Classification__AzureDocumentIntelligence__*` ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
 
-| Clave | Tipo | Descripción | Default |
-|---|---|---|---|
-| `Endpoint` | string | URL del recurso DI. Ej: `https://xxx.cognitiveservices.azure.com/` | — |
-| `ApiKey` | string | API Key del recurso. Vacío si se usa Managed Identity. | — |
-| `ApiVersion` | string | Versión de la API DI. | `2024-11-30` |
-| `PollIntervalMs` | int | Intervalo de polling para operaciones asíncronas (ms). | `1000` |
-| `TimeoutSeconds` | int | Timeout total de la operación DI. | `120` |
+### 4.3 GPT Fallback de Clasificación (retirado en AB#101450)
 
-### 4.3 GPT Fallback de Clasificación (heredado, sin efecto en runtime)
-
-Sección: `Classification:GptFallback`. **No se enlaza a ninguna clase** (`GptClasificarSettings` existe pero no se registra). El modelo de respaldo es la fila con `UseAsFallback = true` de tipo Clasificación en `ModeloConfigs` (`classification.gpt56-luna` en DEV, `classification.gpt4o-mini-fallback` en PRE y PRO) y el umbral es `FallbackThreshold` de esa fila (0,6 por defecto); `Enabled` no apaga nada.
-
-| Clave | Tipo | Descripción | Default |
-|---|---|---|---|
-| `Enabled` | bool | Activa/desactiva el fallback GPT. **Rollback instantáneo**: poner a `false`. | `false` |
-| `Endpoint` | string | URL Azure OpenAI. Ej: `https://xxx.openai.azure.com/` | — |
-| `ApiKey` | string | API Key Azure OpenAI. | — |
-| `AuthMode` | string | `ApiKey` \| `DefaultAzureCredential` | `ApiKey` |
-| `DeploymentName` | string | Nombre del deployment GPT. Ej: `gpt-4o-mini` | — |
-| `FallbackThreshold` | double | **Nivel 3 de la jerarquía de umbrales** (ver `../referencias/CONFIANZA_AGREGADA.md §5.1`). Umbral de confianza DI de último recurso para activar fallback GPT cuando la petición y la tipología no especifican umbral. Rango `[0.0–1.0]`. `0.0` = solo en excepción. `1.0` = siempre. | `0.6` |
-| `Temperature` | double | Temperatura del modelo. `0.0` = máximo determinismo. | `0.0` |
-| `MaxTokens` | int | Máximo tokens en respuesta GPT. | `150` |
-| `TimeoutSeconds` | int | Timeout de la llamada GPT. | `30` |
+Sección: `Classification:GptFallback`. **Retirada en AB#101450**: no se enlazaba a ninguna clase. El modelo de respaldo es la fila con `UseAsFallback = true` de tipo Clasificación en `ModeloConfigs` (`classification.gpt56-luna` en DEV, `classification.gpt4o-mini-fallback` en PRE y PRO) y el umbral es `FallbackThreshold` de esa fila (0,6 por defecto); `Enabled` no apagaba nada. Los app settings `Classification__GptFallback__*` ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
 
 > **Comportamiento especial:** Si DI clasifica como `RESTO` (tipología genérica), el fallback GPT se activa **de forma obligatoria**, independientemente del umbral y de si `Enabled = false`.  
 > Si GPT devuelve `Desconocido` o confianza < 0.3, el orquestador termina de forma controlada con `Estado = NO_CLASIFICADO` (sin error técnico de ejecución). Si la petición incluye `instrucciones.prompt` o `forzarResumenPorDefecto`, el prompt y el resumen se ejecutan igualmente antes de cerrar: no dependen de que el documento sea clasificable.
@@ -109,25 +88,16 @@ Sección: `Extraction:AzureContentUnderstanding` (`AzureContentUnderstandingOpti
 | `CircuitBreakerOpenSeconds` | int | Tiempo abierto | 45 · 45 |
 | `MaxRetries` | int | Reintentos en transitorios (429/500/502/503/504) | 2 · 3 |
 | `InitialRetryDelayMs` | int | Retardo inicial del backoff | 500 · 500 |
-| `Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation` | — | **Heredados, sin efecto**: el pipeline los fija con los valores del entorno, pero el proveedor usa `model.Endpoint` / `model.ApiKey` / `model.AuthMode` de la fila y `processingLocation` vacío cae a `global` | — |
+| `Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation` | — | **Retirados en AB#101450**: el proveedor usa `model.Endpoint` / `model.ApiKey` / `model.AuthMode` de la fila de `ModeloConfigs` y `processingLocation` vacío cae a `global` | — |
 
-### 5.3 GPT Fallback de Extracción / Extracción GPT directa (heredado, sin efecto en runtime)
+### 5.3 GPT Fallback de Extracción / Extracción GPT directa (retirado en AB#101450)
 
-Sección: `Extraction:GptFallback`. **No se enlaza a ninguna clase** (`GptFallbackExtraerSettings` existe pero no se registra). Endpoint, deployment, clave y `MinFieldsRatio` salen de la fila `UseAsFallback` de tipo Extracción en `ModeloConfigs` (`extraction.gpt56-luna` en DEV; en PRE y PRO la de gpt-4o-mini) y el proveedor directo resuelve `ModelKey` contra `ModeloConfigs`.
+Sección: `Extraction:GptFallback`. **Retirada en AB#101450**: no se enlazaba a ninguna clase. Endpoint, deployment, clave y `MinFieldsRatio` salen de la fila `UseAsFallback` de tipo Extracción en `ModeloConfigs` (`extraction.gpt56-luna` en DEV; en PRE y PRO la de gpt-4o-mini) y el proveedor directo resuelve `ModelKey` contra `ModeloConfigs`. Los app settings `Extraction__GptFallback__*` ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
 
-> Esta sección configura **tanto el fallback GPT** (CU→GPT cuando la completitud/confianza no supera el umbral) **como el proveedor GPT directo** (`azure-openai`). Ambos modos comparten el registro de modelos en BD (`ModeloConfigs`) y los mismos parámetros de conexión. Los JSON de modelos son solo seed o referencia.
+> Esta sección describía **tanto el fallback GPT** (CU→GPT cuando la completitud/confianza no supera el umbral) **como el proveedor GPT directo** (`azure-openai`). Ambos modos comparten el registro de modelos en BD (`ModeloConfigs`) y los mismos parámetros de conexión. Los JSON de modelos son solo seed o referencia.
 
 | Clave | Tipo | Descripción | Default |
 |---|---|---|---|
-| `Enabled` | bool | Activa el fallback GPT cuando CU no supera el umbral. No afecta al proveedor directo `azure-openai` (que siempre se activa si así está configurado en la tipología). | `false` |
-| `Endpoint` | string | URL Azure OpenAI. | — |
-| `ApiKey` | string | API Key Azure OpenAI. | — |
-| `AuthMode` | string | `ApiKey` \| `DefaultAzureCredential` | `ApiKey` |
-| `DeploymentName` | string | Nombre del deployment GPT. | — |
-| `MinFieldsRatio` | double | **Nivel 3 de la jerarquía de umbrales** (ver `../referencias/CONFIANZA_AGREGADA.md §5.1`). Ratio mínimo de campos rellenos de último recurso cuando la petición y la tipología no especifican umbral. Si CU no llega, se activa GPT. Rango `[0.0–1.0]`. | `0.5` |
-| `Temperature` | double | Temperatura del modelo. | `0.0` |
-| `MaxTokens` | int | Máximo tokens en respuesta GPT. | `2000` |
-| `TimeoutSeconds` | int | Timeout de la llamada GPT. | `60` |
 
 ### 5.4 Modos de extracción GPT
 
@@ -141,9 +111,9 @@ El sistema dispone de **dos modos distintos** de extracción basada en GPT:
 **Validación temprana (modo directo):** Al iniciarse, se valida que el modelo esté completamente configurado (endpoint, deployment, API key si no usa Managed Identity). Un error en esta validación aparece como `InvalidOperationException` con un mensaje que indica exactamente qué clave de configuración falta, p. ej.:
 ```
 Extracción GPT: modelo 'default.gpt4o-mini_ex' requiere ApiKey configurada cuando AuthMode=ApiKey.
-Verifica la configuración en appsettings/KeyVault (ej: Extraction:GptFallback:ApiKey).
+Verifica la configuración en appsettings/KeyVault (campo ApiKey de la fila de ModeloConfigs).
 ```
-(En DEV la fila equivalente es `default.gpt56-luna_ex`; la referencia a `Extraction:GptFallback:ApiKey` del mensaje es heredada: la clave vive en la fila de `ModeloConfigs` o se sustituye por `AuthMode = DefaultAzureCredential`.)
+(En DEV la fila equivalente es `default.gpt56-luna_ex`; la clave vive en la fila de `ModeloConfigs` o se sustituye por `AuthMode = DefaultAzureCredential`.)
 ```
 ```
 
@@ -318,7 +288,7 @@ GDC__Endpoint / GDC__BypassSslValidation = https://... / false
 SqlConnectionString, AzureWebJobsStorage, AzureStorageConnectionString = @Microsoft.KeyVault(...)
 ```
 
-Los 83 settings que fija `azure-pipelines.yml` (los de arriba más los heredados sin efecto) están en INFRAESTRUCTURA_REAL_DESPLEGADA.md. No se fijan y rigen los defectos de clase: `CacheConfiguration:*` (caché de configuración), `Pipeline:MaxPaginasDocumento` (0 = sin límite), `HybridTdn:*`, `ClassificationPreparation:*`, `Extraction:InitialMarkdown:*`.
+Los 52 settings que fija `azure-pipelines.yml` para la Function App (los de arriba; los heredados sin efecto se retiraron del YAML en AB#101450, cifra contada el 2026-11-25 en el array `$settings` del stage Deploy Functions) están en INFRAESTRUCTURA_REAL_DESPLEGADA.md. No se fijan y rigen los defectos de clase: `CacheConfiguration:*` (caché de configuración), `Pipeline:MaxPaginasDocumento` (0 = sin límite), `HybridTdn:*`, `ClassificationPreparation:*`, `Extraction:InitialMarkdown:*`.
 
 > **Recomendación:** usar Azure Key Vault references para secretos (`ApiKey`, `Password`, `SqlConnectionString`).
 

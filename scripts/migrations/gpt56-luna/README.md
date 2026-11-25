@@ -188,6 +188,6 @@ Se escribe aquí sin ejecutar nada:
   valores pero no se ejecuta en esta unidad. Las filas y la tarifa son solo DEV.
 - **App settings legacy del pipeline** (`Classification__GptFallback__DeploymentName`,
   `Extraction__GptFallback__DeploymentName`): son legacy y el código no los lee; el deployment sale
-  siempre de `ModeloConfigs`. La limpieza sigue en AB#99938.
+  siempre de `ModeloConfigs`. Retirados del pipeline y de los entornos en AB#101450 (2026-11-25).
 - **Extracción con fallback GPT**: pasa a luna en DEV con el script 06, pero no se ha medido (residual).
 - **Borrar el deployment `gpt-4o-mini`**: decisión posterior, tras un periodo de convivencia.

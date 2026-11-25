@@ -1,8 +1,8 @@
 # Performance Tuning — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `host.json`, `AzureContentUnderstandingOptions`, `azure-pipelines*.yml`, `DocumentIADbContext.cs` y migraciones EF, INFRAESTRUCTURA_REAL_DESPLEGADA.md y MONITOREO_ALERTAS_REAL.md).
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto). Revisiones previas: 2026-11-22 (AB#101447, contraste con `host.json`, `AzureContentUnderstandingOptions`, `azure-pipelines*.yml`, `DocumentIADbContext.cs` y migraciones EF, INFRAESTRUCTURA_REAL_DESPLEGADA.md y MONITOREO_ALERTAS_REAL.md).
 > **Estado: vigente con avisos.** Son plantilla sin medición las cifras de las secciones 1, 5, 6 y 8 (tiempos, throughput, SLA, costes por documento, infraestructura mensual) y los valores recomendados de 2.1, 2.3 y 4.2 a 4.3: no hay benchmark propio que las respalde. No existe entorno «staging»: los entornos son DEV, PRE y PRO.
-> Hallazgos: `host.json` real es 4/4 con `extendedSessionsEnabled=false` (las variables de pipeline `maxConcurrentActivityFunctions`/`maxConcurrentOrchestratorFunctions` no se aplican como app setting). De la conexión a CU solo se leen los siete ajustes de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`); valores de PRO por pipeline 4/90/true/5/45/3/500 (defaults de código 2/300/true/5/45/2/500). Los ajustes `Classification__GptFallback__*`, `Extraction__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey` y el resto de `Extraction__AzureContentUnderstanding__*` **no se leen**: este documento no sirve para ajustarlos; el modelo, el deployment y el endpoint salen de `ModeloConfigs`. La resiliencia de Azure OpenAI sí se ajusta con `AzureOpenAIResilience__*` (defaults 3 reintentos, umbral 5, apertura 45 s). Los índices reales están en `Documentos` y `DocumentoEjecuciones` (índice MD5, AB#100863). Las métricas `ActivityExecutionTime`, `DocumentProcessingLatency`, `ProviderCost` y análogas no se emiten (las reales: `DocumentIA.Duracion.*`, `DocumentProcessed`, `CU.*`, `AOAI.*`). Hay 21 activities. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. El host de Functions no carga `appsettings.json`. `DOTNET_GCHeapHardLimitPercent` lo fija el pipeline (AB#100814). Comprobado el 2026-11-23: plan EP1 en los tres entornos; BD de PRO en Standard S0 (10 DTU, 20 GB máximo, 8,4 GB usados) y Basic (2 GB) en DEV y PRE; deployment `gpt-4o-mini` de PRO en SKU Standard con capacidad 150; los límites de CU no se exponen por ARM.
+> Hallazgos: `host.json` real es 4/4 con `extendedSessionsEnabled=false` (las variables de pipeline `maxConcurrentActivityFunctions`/`maxConcurrentOrchestratorFunctions` no se aplican como app setting). De la conexión a CU solo se leen los siete ajustes de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`); valores de PRO por pipeline 4/90/true/5/45/3/500 (defaults de código 2/300/true/5/45/2/500). Los ajustes `Classification__GptFallback__*`, `Extraction__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey` y el resto de `Extraction__AzureContentUnderstanding__*` **no se leían y se retiraron en AB#101450**: este documento no sirve para ajustarlos; el modelo, el deployment y el endpoint salen de `ModeloConfigs`. La resiliencia de Azure OpenAI sí se ajusta con `AzureOpenAIResilience__*` (defaults 3 reintentos, umbral 5, apertura 45 s). Los índices reales están en `Documentos` y `DocumentoEjecuciones` (índice MD5, AB#100863). Las métricas `ActivityExecutionTime`, `DocumentProcessingLatency`, `ProviderCost` y análogas no se emiten (las reales: `DocumentIA.Duracion.*`, `DocumentProcessed`, `CU.*`, `AOAI.*`). Hay 21 activities. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. El host de Functions no carga `appsettings.json`. `DOTNET_GCHeapHardLimitPercent` lo fija el pipeline (AB#100814). Comprobado el 2026-11-23: plan EP1 en los tres entornos; BD de PRO en Standard S0 (10 DTU, 20 GB máximo, 8,4 GB usados) y Basic (2 GB) en DEV y PRE; deployment `gpt-4o-mini` de PRO en SKU Standard con capacidad 150; los límites de CU no se exponen por ARM.
 >
 > Última actualización anterior: 2026-06-10  
 > Versión: v1.4+  
@@ -216,7 +216,7 @@ El orquestador invoca 21 activities en secuencia/paralelo (la tabla siguiente es
 
 #### 2.3.2 Azure OpenAI (modelo generativo por entorno)
 
-> Revisión 2026-11-22: DEV usa `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO siguen en el deployment `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. Los bloques `GptFallback` / `Classification.GptFallback` / `FallbackThreshold` de esta sección (y de 3.2, 7 y 9) corresponden a app settings heredados **sin efecto** (no se leen en código): no recomendar tocarlos. El modelo, el deployment y el endpoint salen de `ModeloConfigs` en BD. Lo que sí se lee para la resiliencia de Azure OpenAI es `AzureOpenAIResilience__*` (`EnableCircuitBreaker`, `CircuitBreakerFailureThreshold=5`, `CircuitBreakerOpenSeconds=45`, `MaxRetries=3`). El límite de 128K aplica a gpt-4o-mini/gpt-4.1-mini; para luna la ventana no se expone en el deployment y hay que leerla de la ficha del modelo.
+> Revisión 2026-11-22: DEV usa `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO siguen en el deployment `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. Los bloques `GptFallback` / `Classification.GptFallback` / `FallbackThreshold` de esta sección (y de las secciones 3.3, 4, 6.3 y 9) se retiraron en AB#101450 y no tienen efecto: no recomendar tocarlos. El modelo, el deployment y el endpoint salen de `ModeloConfigs` en BD. Lo que sí se lee para la resiliencia de Azure OpenAI es `AzureOpenAIResilience__*` (`EnableCircuitBreaker`, `CircuitBreakerFailureThreshold=5`, `CircuitBreakerOpenSeconds=45`, `MaxRetries=3`). El límite de 128K aplica a gpt-4o-mini/gpt-4.1-mini; para luna la ventana no se expone en el deployment y hay que leerla de la ficha del modelo.
 
 **Configuración actual:**
 ```json
@@ -811,6 +811,8 @@ public async Task ProcessDocumentAsync(
 
 ### 6.3 Cost Optimization
 
+> **Aviso (AB#101450):** los ajustes `GptFallback` / `FallbackThreshold` de los pasos siguientes se retiraron y no tienen efecto; para el umbral se usa `confidenceConfig` de la tipología y el modelo sale de `ModeloConfigs`.
+
 **Meta:** Minimizar costo por documento, aceptar latencia variable
 
 **Recomendaciones:**
@@ -984,6 +986,8 @@ customMetrics
 
 ### 9.1 Latency Spike
 
+> **Aviso (AB#101450):** los ajustes `GptFallback` / `FallbackThreshold` de los pasos siguientes se retiraron y no tienen efecto; para el umbral se usa `confidenceConfig` de la tipología y el modelo sale de `ModeloConfigs`.
+
 **Síntomas:**
 - P99 latency aumentó de 20 sec a 40 sec (o más)
 - Algunos documentos toman 1-2 min (usualmente < 20 sec)
@@ -1040,6 +1044,8 @@ Restart-AzFunctionApp -ResourceGroupName "SRBRGDOCSAIPROD" -Name "srbappprodocai
 ---
 
 ### 9.2 Throughput Drops
+
+> **Aviso (AB#101450):** los ajustes `GptFallback` / `FallbackThreshold` de los pasos siguientes se retiraron y no tienen efecto; para el umbral se usa `confidenceConfig` de la tipología y el modelo sale de `ModeloConfigs`.
 
 **Síntomas:**
 - Documentos procesados por minuto cae de 10 a 2
@@ -1101,6 +1107,8 @@ New-AzFunctionApp -ResourceGroupName "SRBRGDOCSAIPROD" -Name "<nombre-nuevo>" -P
 ---
 
 ### 9.3 High Cost
+
+> **Aviso (AB#101450):** los ajustes `GptFallback` / `FallbackThreshold` de los pasos siguientes se retiraron y no tienen efecto; para el umbral se usa `confidenceConfig` de la tipología y el modelo sale de `ModeloConfigs`.
 
 **Síntomas:**
 - Costo diario aumentó de $50 a $200 (4x)
@@ -1211,6 +1219,7 @@ Usar antes de producción:
 ---
 
 **Changelog:**
+- **2026-11-25:** Revisión AB#101450: los app settings heredados sin efecto (`Classification__GptFallback__*`, `Extraction__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey` y los de conexión de CU) ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
 - **2026-11-22:** Revisión AB#101447 contra código y pipelines (ver cabecera): entornos DEV/PRE/PRO, 21 activities, settings heredados sin efecto, índices reales, métricas reales, modelo por entorno.
 - **2026-06-10:** Initial version v1.0
   - 14 activities profiled (hoy 21)

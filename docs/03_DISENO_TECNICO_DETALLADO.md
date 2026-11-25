@@ -1,6 +1,6 @@
 ﻿# 3. Diseno Tecnico Detallado — DocumentIA
 
-> Última revisión: 2026-11-25 (AB#101553, retirada de la mención a la omisión TLS en `Development`). Revisiones previas: 2026-11-22 (AB#101447, contraste con el orquestador, los proveedores, el contrato y la Admin API)  
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto; AB#101553, retirada de la mención a la omisión TLS en `Development`). Revisiones previas: 2026-11-22 (AB#101447, contraste con el orquestador, los proveedores, el contrato y la Admin API)  
 > Actualización anterior: 2026-09-14  
 > Proyecto: AI DocClassExt — SAREB  
 > **Modelo generativo por entorno:** El deployment generativo depende del entorno: DEV usa `gpt-5.6-luna` desde el 2026-11-20 (ADR-004) y PRE y PRO siguen con el deployment `gpt-4o-mini` (modelo gpt-4.1-mini) hasta la siguiente release; el pipeline fija `PromptDefaults__ModelKey` por entorno y las filas `UseAsFallback` de `ModeloConfigs` deciden el de clasificación y extracción. Las menciones a GPT-4o-mini de este documento describen PRE y PRO.  
@@ -260,7 +260,7 @@ Una clave vacia o solo con espacios se salta y hereda el siguiente nivel. Los de
 - Todos los consumidores usan la clave efectiva, no la cruda de la tipologia. En el modo combinado de extraccion (`ConfigurableExtraerDataProvider.DebeUsarModoCombinado`) solo se hereda la clave del modelo, no el resto de campos del prompt.
 - El resumen de clasificacion falla con error claro si el defecto esta vacio.
 - En «tipologia no identificada» el orquestador deja `Modelo` vacio (antes ponia `gpt-4o-mini`).
-- El deployment sale siempre del registro de modelos: `Classification__GptFallback__DeploymentName` y `Extraction__GptFallback__DeploymentName` son legacy y no se leen (limpieza en AB#99938).
+- El deployment sale siempre del registro de modelos: `Classification__GptFallback__DeploymentName` y `Extraction__GptFallback__DeploymentName` son legacy y no se leen (retirados en AB#101450).
 
 Cambiar el modelo de prompt y resumen de un entorno es cambiar `PromptDefaults__ModelKey`, sin tocar tipologias.
 
