@@ -1,7 +1,7 @@
 # Especificacion Unificada GDC (SINTWS) — DocumentIA
 
 > Version: 2.0 consolidada
-> Fecha: 24/04/2026 · Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; pendiente de despliegue, DEV primero). Revisiones previas: 2026-11-22 (AB#101447, contraste con `GdcService`, `ResilientGdcService`, `GdcSettings`, `SubirGDCActivity`, `ObtenerDocumentoGDCActivity` y `azure-pipelines.yml`)
+> Fecha: 24/04/2026 · Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; verificada en DEV el 2026-11-25; PRE y PRO con la siguiente release). Revisiones previas: 2026-11-22 (AB#101447, contraste con `GdcService`, `ResilientGdcService`, `GdcSettings`, `SubirGDCActivity`, `ObtenerDocumentoGDCActivity` y `azure-pipelines.yml`)
 > Alcance: Documento canonico de GDC para DocumentIA (sustituye y unifica la antigua especificacion tecnica y la guia operativa de integracion).
 
 ---
