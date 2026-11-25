@@ -236,33 +236,16 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 | Setting | Value |
 |---------|-------|
 | **DefaultProvider** | azure-content-understanding |
-| **CU Endpoint** | `$(AI_CU_PRIMARY_ENDPOINT)` del entorno (PRO: https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/) |
-| **CU AuthMode / ApiKey** | Retirado (AB#101450); la autenticación de CU/DI sale de `ModeloConfigs` por identidad administrada |
+| **Conexión CU/DI y GPT Fallback** | Retiradas en AB#101450; conexión y modelo salen de `ModeloConfigs` por alias e identidad administrada |
 | **CU MaxConcurrentCalls** | 4 |
 | **CU HardTimeout** | 90 seconds |
 | **CU CircuitBreaker** | enabled (threshold=5, open=45s) |
 | **CU Max Retries / Delay** | 3 · 500ms |
-| **GPT Fallback Enabled** | true |
-| **GPT Fallback Endpoint** | `$(AI_OPENAI_PRIMARY_ENDPOINT)` del entorno (PRO: https://upe48-mm2avmdm-swedencentral.openai.azure.com) |
-| **GPT Fallback Model** | gpt-4o-mini (opción directa, literal en los tres entornos; el flujo usa la fila `UseAsFallback` de `ModeloConfigs`: gpt-5.6-luna en DEV) |
-| **GPT Fallback MinFieldsRatio** | 0.9 |
-| **GPT Fallback Timeout** | 60 seconds |
-| **GPT Fallback Temperature / MaxTokens** | 0.0 · 2000 |
 
 #### **Classification Configuration**
 | Setting | Value |
 |---------|-------|
 | **DefaultProvider** | azure-document-intelligence |
-| **DefaultModelKey** | default.azure-di |
-| **DI Endpoint** | `$(AI_DI_ENDPOINT)` del entorno (PRO: https://srbdiprodocai.cognitiveservices.azure.com/) |
-| **DI ApiKey** | Retirado (AB#101450); la autenticación de CU/DI sale de `ModeloConfigs` por identidad administrada |
-| **DI API Version** | 2024-11-30 |
-| **GPT Fallback Enabled** | true |
-| **GPT Fallback Endpoint** | `$(AI_OPENAI_PRIMARY_ENDPOINT)` del entorno (PRO: https://upe48-mm2avmdm-swedencentral.openai.azure.com) |
-| **GPT Fallback Model** | gpt-4o-mini (opción directa, literal en los tres entornos; el flujo usa la fila `UseAsFallback` de `ModeloConfigs`: gpt-5.6-luna en DEV) |
-| **GPT Fallback Threshold** | 0.5 |
-| **GPT Fallback Timeout** | 30 seconds |
-| **GPT Fallback Temperature / MaxTokens** | 0.0 · 150 |
 
 #### **GDC (Legacy Document Management System)**
 | Setting | Value |
