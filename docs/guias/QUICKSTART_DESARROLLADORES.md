@@ -1,6 +1,6 @@
 # Quick-Start para Nuevos Desarrolladores — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `DocumentIA.sln`, `docker-compose.yml`, `local.settings.template.json` y `Program.cs`).
+> Última revisión: 2026-11-25 (AB#101452, retirada de `.env.example`: la plantilla local es `local.settings.template.json`). Revisión previa: 2026-11-22 (AB#101447, contraste con `DocumentIA.sln`, `docker-compose.yml`, `local.settings.template.json` y `Program.cs`).
 
 Bienvenido 👋. En los próximos **15 minutos** tendrás el proyecto corriendo localmente con tu primer clasificador ejecutado.
 
@@ -44,33 +44,31 @@ git checkout develop   # rama base de trabajo
 > El host de Functions **no lee `.env`**: en local carga `src/backend/DocumentIA.Functions/local.settings.json` (gitignored), que se crea copiando `local.settings.template.json` de esa misma carpeta (`SecretsSource=Local`, SQL en `localhost`, alias de IA `AI__Resources__*__Endpoint` vacíos). Los nombres de abajo son los de ese fichero; el antiguo `.env.example` apunta a recursos de PRO y no debe usarse.
 
 ```powershell
-# Copiar plantilla
-Copy-Item .env.example .env
+# Copiar la plantilla local del host de Functions
+Copy-Item src/backend/DocumentIA.Functions/local.settings.template.json src/backend/DocumentIA.Functions/local.settings.json
 ```
 
-Abre `.env` en tu editor favorito y completa los valores obligatorios:
+Abre `local.settings.json` en tu editor favorito y completa los valores obligatorios de `Values` (extracto: ajusta estas claves dentro de `Values` y deja el resto de la plantilla tal cual):
 
-```env
-# Estos son los mínimos para desarrollo local:
-AZURE_SUBSCRIPTION_ID=<tu-suscripcion-uuid>
-AZURE_TENANT_ID=<tu-tenant-uuid>
+```jsonc
+{
+  "Values": {
+    // Para dev local, Azurite (emulador) es suficiente:
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "AzureStorageConnectionString": "UseDevelopmentStorage=true",
 
-# Para dev local, Azurite (emulador) es suficiente:
-AzureWebJobsStorage=UseDevelopmentStorage=true
-AzureStorageConnectionString=UseDevelopmentStorage=true
+    // SQL local (si tienes SQL Server corriendo):
+    "SqlConnectionString": "Server=localhost,1433;Database=DocumentIA;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;",
 
-# SQL local (si tienes SQL Server corriendo):
-SqlConnectionString=Server=localhost,1433;Database=DocumentIA;User Id=sa;Password=tu_password;TrustServerCertificate=True;
-
-# Endpoints de IA por alias (los de DEV están en infra/ai/pipeline-variables.yml). Vacíos, cualquier modelo
-# con ResourceAlias falla al resolverse; para probar sin IA usa provider mock en la petición.
-AI__Resources__openai_primary__Endpoint=
-AI__Resources__cu_primary__Endpoint=
-AI__Resources__cu_secondary__Endpoint=
-AI__Resources__di__Endpoint=
+    // Endpoints de IA por alias (los de DEV están en infra/ai/pipeline-variables.yml). Vacíos, cualquier modelo
+    // con ResourceAlias falla al resolverse; para probar sin IA usa provider mock en la petición.
+    "AI__Resources__openai_primary__Endpoint": "",
+    "AI__Resources__cu_primary__Endpoint": "",
+    "AI__Resources__cu_secondary__Endpoint": "",
+    "AI__Resources__di__Endpoint": ""
+  }
+}
 ```
-
-> **Nota:** Valores de Azure (subscripción, tenant, etc.) se pueden obtener con `az account show` si tienes Azure CLI.
 
 ### 1.3 Restaurar dependencias
 
@@ -406,4 +404,3 @@ R: Contacta al equipo del proyecto; el backlog y los work items están en Azure 
 **¡Listo!** En 15 minutos ya tienes DocumentIA corriendo localmente. 🚀
 
 ¿Algo no funcionó? Revisa **Debugging & Tips** o pregunta al equipo.
-
