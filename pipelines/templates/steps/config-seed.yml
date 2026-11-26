@@ -1,0 +1,95 @@
+# Diff de config por clave natural entre el origen y el destino del salto: export del destino
+# (solo lectura), diff frente al db-config del origen, SQL de altas y comprobacion de los App
+# Settings de los alias con applyMissingConfig, y publicacion del artefacto config-diff.
+# Procede de la pipeline 832 (azure-pipelines-ai-artifacts.yml), que lo compone hoy en el job
+# Diff; la pipeline Release lo reutilizara en el hito 2. Incluye el checkout y el download del
+# artefacto db-config. Sin cambio de comportamiento.
+parameters:
+  - name: targetServiceConnection
+    type: string
+  - name: targetSqlServer
+    type: string
+  # Sin uso en estos pasos (el script no recibe -Database); se declara por el contrato del template.
+  - name: sqlDatabaseName
+    type: string
+  - name: targetResourceGroup
+    type: string
+  - name: targetFunctionApp
+    type: string
+  - name: targetEnvironment
+    type: string
+  - name: sourceEnvironment
+    type: string
+  - name: applyMissingConfig
+    type: boolean
+  - name: releaseTag
+    type: string
+
+steps:
+- checkout: self
+- download: current
+  artifact: db-config
+- task: AzureCLI@2
+  displayName: export-config-release.ps1 contra el destino
+  inputs:
+    azureSubscription: '${{ parameters.targetServiceConnection }}'
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      $tag = '${{ parameters.releaseTag }}'
+      if (-not $tag -or $tag -eq 'auto') { $tag = 'build-$(Build.BuildId)' }
+      pwsh -File ./scripts/ai/export-config-release.ps1 `
+        -SourceServer "${{ parameters.targetSqlServer }}.database.windows.net" `
+        -ReleaseTag "$tag-${{ parameters.targetEnvironment }}-antes" `
+        -OutDir "$(Agent.TempDirectory)/db-config-destino"
+      if ($LASTEXITCODE -ne 0) { throw "export-config-release.ps1 termino con codigo $LASTEXITCODE" }
+- pwsh: |
+    $tag = '${{ parameters.releaseTag }}'
+    if (-not $tag -or $tag -eq 'auto') { $tag = 'build-$(Build.BuildId)' }
+    $target = '${{ parameters.targetEnvironment }}'
+    $sourceSql = "$(Pipeline.Workspace)/db-config/config-$tag-${{ parameters.sourceEnvironment }}.sql"
+    $targetSql = "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-antes.sql"
+    # Claves naturales de RELEASE_MANAGEMENT.md 2.3.2. ModeloConfigs entra
+    # tambien en prod: desde el cutover de la v1.0.0 sus filas llevan
+    # ResourceAlias e identidad, sin endpoint ni key.
+    $keys = @('ModeloConfigs=Key', 'PromptTemplates=PromptKey+Version', 'Tipologias=Codigo', 'CatalogoTdn1=Codigo', 'CatalogoTdn2=Codigo', 'PluginTipologiaConfigs=TipologiaCodigo')
+    $out = "$(Build.ArtifactStagingDirectory)/config-diff"
+    New-Item -ItemType Directory -Force -Path $out | Out-Null
+    # Altas: el SQL sale solo de filas del origen (ya publicado en db-config).
+    $emit = @()
+    if ([bool]::Parse('${{ parameters.applyMissingConfig }}')) {
+      $emit = @('--emit-inserts', "$out/altas-config.sql", '--aliases-out', "$out/alias-modeloconfigs.txt")
+    }
+    python --version
+    python scripts/database/diff-config-exports.py $targetSql $sourceSql @keys @emit | Tee-Object -FilePath "$out/diff-config-$tag-${{ parameters.sourceEnvironment }}-$target.txt"
+    if ($LASTEXITCODE -ne 0) { throw "diff-config-exports.py termino con codigo $LASTEXITCODE" }
+    # Solo el hash del destino: su .sql no se publica (puede llevar keys).
+    Copy-Item "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-antes.hashes.json" $out
+  ${{ if parameters.applyMissingConfig }}:
+    displayName: Diff por clave natural y SQL de altas
+  ${{ else }}:
+    displayName: Diff por clave natural (no aplica nada)
+
+# Cada alias de las altas de ModeloConfigs necesita su App Setting en el
+# destino: sin el, AiEndpointResolver no resuelve el endpoint.
+- ${{ if parameters.applyMissingConfig }}:
+  - task: AzureCLI@2
+    displayName: App Settings de los alias de ModeloConfigs en el destino
+    inputs:
+      azureSubscription: '${{ parameters.targetServiceConnection }}'
+      scriptType: 'pscore'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        $aliasFile = "$(Build.ArtifactStagingDirectory)/config-diff/alias-modeloconfigs.txt"
+        $aliases = @(Get-Content -LiteralPath $aliasFile | Where-Object { $_ })
+        if ($aliases.Count -eq 0) { Write-Host "Ninguna alta de ModeloConfigs usa alias."; exit 0 }
+        $names = az functionapp config appsettings list --resource-group "${{ parameters.targetResourceGroup }}" --name "${{ parameters.targetFunctionApp }}" --query "[?starts_with(name, 'AI__Resources__')].name" -o tsv
+        if ($LASTEXITCODE -ne 0) { throw "az functionapp config appsettings list termino con codigo $LASTEXITCODE" }
+        $missing = @($aliases | Where-Object { @($names) -notcontains "AI__Resources__$($_)__Endpoint" })
+        if ($missing.Count -gt 0) { throw "Faltan en ${{ parameters.targetFunctionApp }} los App Settings: $(($missing | ForEach-Object { "AI__Resources__$($_)__Endpoint" }) -join ', ')" }
+        Write-Host "App Settings presentes para: $($aliases -join ', ')"
+
+- task: PublishPipelineArtifact@1
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/config-diff'
+    artifact: 'config-diff'

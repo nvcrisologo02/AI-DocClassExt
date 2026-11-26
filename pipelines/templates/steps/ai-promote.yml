@@ -1,0 +1,104 @@
+# Promocion de artefactos de IA del salto: datasets de etiquetado, deployments de modelo (fuera
+# de prod), analyzers de CU, modelos y clasificadores de DI, validacion y publicacion de los
+# manifiestos. Proceden de la pipeline 832 (azure-pipelines-ai-artifacts.yml), que los compone
+# hoy como deployment job; la pipeline Release los reutilizara en el hito 2. Incluye el checkout
+# y el download: none. Sin cambio de comportamiento.
+parameters:
+  - name: targetServiceConnection
+    type: string
+  - name: promotionServiceConnection
+    type: string
+  - name: targetEnvironment
+    type: string
+  # Sin uso en estos pasos (el origen llega en routeArgs); se declara por el contrato del template.
+  - name: sourceEnvironment
+    type: string
+  - name: routeArgs
+    type: string
+  - name: dryRunArg
+    type: string
+  - name: runValidation
+    type: boolean
+  - name: cuSecondaryAnalyzers
+    type: string
+  # Nombre completo del artefacto de manifiestos (lo fija el job con el intento).
+  - name: artifactName
+    type: string
+    default: ai-artifacts
+
+steps:
+- checkout: self
+- download: none
+
+# 1. Datasets de etiquetado de los analyzers con definicion versionada.
+- task: AzureCLI@2
+  displayName: copy-labeling-dataset.ps1
+  inputs:
+    azureSubscription: '${{ parameters.promotionServiceConnection }}'
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      $ids = Get-ChildItem infra/ai/analyzers -Filter '*.json' -File |
+        Where-Object { $_.BaseName -notlike '*@*' } | ForEach-Object BaseName
+      foreach ($id in $ids) {
+        pwsh -File ./scripts/ai/copy-labeling-dataset.ps1 -AnalyzerId $id ${{ parameters.routeArgs }} ${{ parameters.dryRunArg }}
+        if ($LASTEXITCODE -ne 0) { throw "copy-labeling-dataset.ps1 $id termino con codigo $LASTEXITCODE" }
+      }
+
+# 2. Deployments de modelo: fuera de prod, porque PRO no cambia de
+#    recursos por este pipeline (enmienda 2026-09-24). SC de entorno.
+- ${{ if ne(parameters.targetEnvironment, 'prod') }}:
+  - task: AzureCLI@2
+    displayName: apply-deployments.ps1
+    inputs:
+      azureSubscription: '${{ parameters.targetServiceConnection }}'
+      scriptType: 'pscore'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        pwsh -File ./scripts/ai/apply-deployments.ps1 -Environment ${{ parameters.targetEnvironment }} ${{ parameters.dryRunArg }}
+        if ($LASTEXITCODE -ne 0) { throw "apply-deployments.ps1 termino con codigo $LASTEXITCODE" }
+
+# 3. Analyzers de CU (cuenta primaria y secundaria), 4. modelos y
+#    clasificadores de DI.
+- task: AzureCLI@2
+  displayName: copy-cu-analyzers.ps1 y copy-di-artifacts.ps1
+  inputs:
+    azureSubscription: '${{ parameters.promotionServiceConnection }}'
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      pwsh -File ./scripts/ai/copy-cu-analyzers.ps1 ${{ parameters.routeArgs }} ${{ parameters.dryRunArg }}
+      if ($LASTEXITCODE -ne 0) { throw "copy-cu-analyzers.ps1 (cu_primary) termino con codigo $LASTEXITCODE" }
+      pwsh -File ./scripts/ai/copy-cu-analyzers.ps1 ${{ parameters.routeArgs }} ${{ parameters.dryRunArg }} -Only ${{ parameters.cuSecondaryAnalyzers }} -Target cu_secondary -SourceTarget cu_secondary
+      if ($LASTEXITCODE -ne 0) { throw "copy-cu-analyzers.ps1 (cu_secondary) termino con codigo $LASTEXITCODE" }
+      pwsh -File ./scripts/ai/copy-di-artifacts.ps1 ${{ parameters.routeArgs }} ${{ parameters.dryRunArg }}
+      if ($LASTEXITCODE -ne 0) { throw "copy-di-artifacts.ps1 termino con codigo $LASTEXITCODE" }
+
+# 5. Validacion: destino frente al origen del salto (cuenta primaria).
+- ${{ if parameters.runValidation }}:
+  - task: AzureCLI@2
+    displayName: validate-analyzer.ps1
+    inputs:
+      azureSubscription: '${{ parameters.promotionServiceConnection }}'
+      scriptType: 'pscore'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        pwsh -File ./scripts/ai/validate-analyzer.ps1 ${{ parameters.routeArgs }} ${{ parameters.dryRunArg }} `
+          -OutFile "$(Build.ArtifactStagingDirectory)/ai-artifacts/validacion-analyzers-${{ parameters.targetEnvironment }}.txt"
+        if ($LASTEXITCODE -ne 0) { throw "validate-analyzer.ps1 termino con codigo $LASTEXITCODE" }
+
+# Los manifiestos se escriben en el workspace del agente: se publican
+# para versionarlos a mano en infra/ai/.
+- pwsh: |
+    $out = "$(Build.ArtifactStagingDirectory)/ai-artifacts"
+    New-Item -ItemType Directory -Force -Path "$out/infra/ai/datasets" | Out-Null
+    Copy-Item infra/ai/*.${{ parameters.targetEnvironment }}*.manifest.json "$out/infra/ai/" -ErrorAction SilentlyContinue
+    Copy-Item infra/ai/datasets/*.${{ parameters.targetEnvironment }}.manifest.json "$out/infra/ai/datasets/" -ErrorAction SilentlyContinue
+    git status --short -- infra/ai
+  displayName: Recoger manifiestos
+  condition: succeededOrFailed()
+- task: PublishPipelineArtifact@1
+  condition: succeededOrFailed()
+  inputs:
+    targetPath: '$(Build.ArtifactStagingDirectory)/ai-artifacts'
+    artifact: '${{ parameters.artifactName }}'
