@@ -17,6 +17,26 @@ Convenciones:
 - Ningún paso de esta guía se salta si el anterior falló: se corrige y se repite desde donde falló, o se aborta la ventana. No se parchea PRE a mano (regla de RELEASE_MANAGEMENT, Fase 2).
 - Servidor SQL de PRE: `srbsqlpredocai.database.windows.net`, base `DocumentIA`. Function App: `srbapppredocai`. Grupo de recursos: `SRBRGPREDOCSAI`. Suscripción: `a4f6b357-8f13-4488-9ee8-b9f635426f91`. Storage de documentos: `srbstgpredocai`.
 
+## Glosario y mapa
+
+Fases del procedimiento general (RELEASE_MANAGEMENT): **0** preparación y versión; **1** DEV (build, tests, smoke y export de referencia); **2** PRE, puerta técnica (esta guía, pasos 1 a 19); **3** aprobación (Test Plan, revisión del diff, «Go»); **4** PRO; **5** cierre y registro (tag, `master`, work items). Esta guía cubre la Fase 2 y la Fase 3 de esta release.
+
+Las cuatro puertas de PRE (todas obligatorias; la 3 suele ser condicional, pero aquí lo es porque cambia el modelo):
+
+- **Puerta 1, smoke E2E:** el runner `run-e2e-postdeploy.ps1 -Profile smoke` contra PRE debe dar 6/6 PASS y la telemetría no debe mostrar dependencias a IA de PRO (paso 15).
+- **Puerta 2, golden:** 467 documentos clasificados en PRE comparados con la línea base de DEV (paso 16).
+- **Puerta 3, coste:** la factura de IA de PRE del día de las puertas 1 y 2, comparada con DEV, al día siguiente (paso 19).
+- **Puerta 4, deriva:** la configuración de PRE no ha cambiado entre la referencia y el final de las puertas (paso 17).
+
+Piezas de Azure DevOps que aparecen en la guía:
+
+- **Check 64:** la aprobación manual del environment `pre`. Se concede en Azure DevOps, en el propio run (botón *Review* / *Approve* de la etapa que espera) o en **Pipelines > Environments > pre > Approvals and checks**. Afecta a todo job de despliegue sobre `pre` (807 Apply, 832, 799). El aprobador es único.
+- **Pipeline 807 `Migrations-BD`** (`azure-pipelines-migrations.yml`): aplica las migraciones EF a la base de datos. Etapas Generate y Apply.
+- **Pipeline 832 `AI DocClassExt (AiArtifacts)`** (`azure-pipelines-ai-artifacts.yml`): promociona de DEV a PRE los deployments de IA (`apply-deployments.ps1`), los analyzers y los clasificadores, y da de alta configuración. Etapas: **Guard** (comprueba parámetros), **Export** (exporta la configuración de DEV, solo lectura), **AiArtifacts** (despliegue de IA, pide aprobación), **ConfigSeed** (diff de configuración DEV frente a PRE y genera `altas-config.sql`; no escribe) y **ConfigApply** (aplica las altas; solo existe con `applyMissingConfig=true` y `dryRun=false`, pide aprobación).
+- **Pipeline 799 `AI DocClassExt`** (`azure-pipelines.yml`): despliega el código (Functions, Admin y AssetResolver) y fija los app settings.
+- **6/6 frente a 5 Passed + 3 NotApplicable:** el runner con `-Profile smoke` ejecuta los 6 casos de perfil smoke de `tests/e2e-postdeploy/cases/` y el criterio de la puerta 1 es que los 6 pasen. El Test Plan 100069 tiene 8 casos SMK-1 a SMK-8 y se rellena a partir de dos pasadas del runner: 5 se publican como `Passed` y 3 como `NotApplicable` (SMK-2 y SMK-7, sin caso automatizado, y SMK-8, que solo aplica a PRO). Son dos medidas distintas y las dos son correctas.
+- **Carpeta temporal:** en esta guía, una carpeta fuera de lo versionado, por ejemplo `docs/auxiliares/temps/<AAAA-MM-DD>/` (está en `.gitignore`).
+
 Mapa de pasos:
 
 | Paso | Qué | Casilla del runbook |
@@ -65,11 +85,11 @@ Por qué este orden (para no «arreglarlo» sin querer):
       az account show --query "{usuario:user.name, suscripcion:id}" -o tsv
 
   Comprobar además, a mano:
-  1. `tests/e2e-postdeploy/config/environments.json` existe (está en `.gitignore`) y tiene la function key de PRE.
+  1. El fichero `tests/e2e-postdeploy/config/environments.json` existe (está en `.gitignore`; se crea copiando `environments.sample.json`, de la misma carpeta) y tiene la function key de PRE.
   2. La cuenta de `az login` tiene: usuario AAD con escritura en la BD `DocumentIA` de `srbsqlpredocai.database.windows.net`; `Storage Blob Data Reader` en `srbstgdevdocai`; `Storage Blob Data Contributor` en `srbstgpredocai`; acceso al proyecto de Azure DevOps (el script del Test Plan resuelve su token con `az account get-access-token`).
   3. Quien aprueba el check 64 del environment `pre` está localizable durante toda la ventana (el check 64 afecta a todo job de despliegue sobre `pre`: 807 Apply, 832 sin altas, cada job de despliegue del 799 y las dos del 832 con altas, ver pasos 3, 4, 5 y 12).
   4. `pwsh --version` da 7.x.
-- **Resultado esperado:** el árbol local está limpio; `origin/develop` es el commit candidato y se anota su hash (se usará como `<hash>` en todos los pasos); `git diff --stat ... -- src/` vacío (sin cambios de código desde el candidato validado en DEV; si no está vacío, parar y avisar: el smoke de DEV no cubre ese código).
+- **Resultado esperado:** el árbol local está limpio; `origin/develop` es el commit candidato y se anota su hash corto, de 8 caracteres (ese valor único, el HEAD de `origin/develop` al abrir la ventana, es el `<hash>` de todos los pasos que lo piden); `git diff --stat ... -- src/` vacío (sin cambios de código desde el candidato validado en DEV; si no está vacío, parar y avisar: el smoke de DEV no cubre ese código).
 - **Si falla:** sin function key, pedirla al responsable de PRE y no seguir; sin rol de datos en un storage, el paso 10 fallará: pedir el rol antes de empezar. No se abre la ventana con un prerrequisito sin cumplir.
 - **Evidencia:** el hash candidato en `release.md` (cabecera «Commit») y en la casilla 0.1 del runbook.
 
@@ -86,14 +106,26 @@ Por qué este orden (para no «arreglarlo» sin querer):
 - **Si falla:** `az login` caducado: repetir el login. Fichero vacío: no seguir; es de donde restaura el Anexo B (capas 2 y 3).
 - **Evidencia:** los dos ficheros anteriores.
 
-## Paso 2. Sin orquestaciones en vuelo y pausa de la ingesta (2.2.6)
+## Paso 2. Sin orquestaciones en vuelo y pausa de la ingesta
 
-- **Quién:** operador, con el equipo que alimenta la ingesta de PRE (la pausa la hace quien lanza los documentos; en el repo no hay script para ello).
-- **Dónde:** canal acordado con quien envía documentos a PRE; comprobación en el storage de la Function App de PRE.
-- **Comando:** no hay comando de pausa en el repo. Lo hace quien alimenta la ingesta, por el canal que use. Si no se puede pausar, esperar una ventana sin carga. Después comprobar que no quedan instancias `Running` ni `Pending` en la tabla `Instances` del task hub de Durable en el storage de la Function App de PRE, o con el endpoint de estado de Durable (RELEASE_MANAGEMENT 2.2.6).
-- **Resultado esperado:** cero instancias `Running` o `Pending`. La pausa dura **desde antes del paso 5 hasta después del paso 9** (reinicio posterior a `aplicar-luna.ps1`); lo normal es reanudar tras el paso 13.
-- **Si falla:** si quedan instancias, esperar a que terminen; no se despliega con orquestaciones en vuelo (precedente AB#100176).
-- **Evidencia:** una línea en el runbook (casilla 2.2.6) con la hora de la pausa y el resultado de la comprobación.
+- **Quién:** operador, con el equipo que alimenta la ingesta de PRE (la pausa la hace quien envía documentos, por el canal que use; en el repo no hay script para ello).
+- **Dónde:** canal acordado con quien envía documentos a PRE; comprobación desde Git Bash en la raíz del clon.
+- **Para qué:** esta release cambia el modelo y los prompts. Una orquestación de Durable Functions iniciada con la versión anterior y reanudada tras el despliegue puede romper el replay o dar un resultado vacío (precedente AB#100176).
+- **Comando:** la pausa no tiene comando; la hace quien alimenta la ingesta. Si no se puede pausar, esperar a una ventana sin carga. Después se comprueba que no queda ninguna instancia `Running` ni `Pending`. El task hub de la Function App se llama `DocumentIAHub` (`src/backend/DocumentIA.Functions/host.json`) y vive en la cuenta de almacenamiento del Durable hub de PRE, `srbstgpreappdocai` (`docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md`). Dos formas equivalentes:
+
+  1. Tabla de instancias del task hub (requiere un rol de datos de tablas sobre esa cuenta, por ejemplo `Storage Table Data Reader`):
+
+         az storage entity query --account-name srbstgpreappdocai --table-name DocumentIAHubInstances --filter "RuntimeStatus eq 'Running' or RuntimeStatus eq 'Pending'" --select PartitionKey RuntimeStatus CreatedTime --auth-mode login -o table
+
+  2. Endpoint de estado de Durable de la Function App (requiere una clave del host con permiso sobre la extensión Durable, por ejemplo la clave maestra; es el mismo endpoint que usa `docs/procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md`). Sustituir `<clave>`:
+
+         curl -s --ssl-no-revoke -H "x-functions-key: <clave>" "https://srbapppredocai.azurewebsites.net/runtime/webhooks/durableTask/instances?runtimeStatus=Running"
+         curl -s --ssl-no-revoke -H "x-functions-key: <clave>" "https://srbapppredocai.azurewebsites.net/runtime/webhooks/durableTask/instances?runtimeStatus=Pending"
+
+  Nota: estos comandos salen de la configuración del proyecto y del runbook de incidentes; no se han ejecutado contra PRE al escribir la guía. Si la tabla no existe, listar las de la cuenta con `az storage table list --account-name srbstgpreappdocai --auth-mode login -o table` y usar la que acaba en `Instances`.
+- **Resultado esperado:** la consulta de tabla devuelve 0 filas y los dos `curl` devuelven una lista vacía `[]`. La pausa dura **desde antes del paso 5 hasta después del paso 9** (reinicio posterior a `aplicar-luna.ps1`); lo normal es reanudar tras el paso 13.
+- **Si falla:** si quedan instancias, esperar a que terminen y repetir la consulta; no se despliega con orquestaciones en vuelo. Si no hay forma de leer la tabla ni el endpoint (falta de rol o de clave), no seguir: pedir el rol o la clave al responsable de PRE.
+- **Evidencia:** una línea en el runbook (casilla 2.2.6) con la hora de la pausa y el resultado de la consulta (0 filas).
 
 ## Paso 3. 807 Migrations-BD `pre` (2.1)
 
@@ -216,7 +248,7 @@ Por qué este orden (para no «arreglarlo» sin querer):
       pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql -Server srbsqlpredocai.database.windows.net -PermitirNoDev
 
 - **Resultado esperado:** crea la copia `ModeloConfigs__bak_<ts>` y un único `UPDATE`; el `SELECT` final muestra la fila `clasificador.embeddings` con `Modo = hibrido`, `ModoRestringido = hibrido` y `BlobPath = modelos/clasificador-embeddings/v5/clasificador-embeddings-v5.json`. La segunda ejecución imprime `0 cambios` y no crea copia.
-- **Si falla:** `THROW 50052` (no existe la fila `clasificador.embeddings` activa): falta aplicar antes el script 01 de esa carpeta; parar. Cualquier error de validación sale antes de crear la copia. La app refresca la configuración en 5 minutos como máximo (el reinicio del paso 13 lo fuerza).
+- **Si falla:** `THROW 50052` (no existe la fila `clasificador.embeddings` activa): falta aplicar antes el script 01 (`scripts/migrations/clasificador-embeddings/01-modeloconfig-clasificador-embeddings.sql`); parar y consultar, porque la fila ya existe en PRE y su ausencia no es esperada. Cualquier error de validación sale antes de crear la copia. La app refresca la configuración en 5 minutos como máximo (el reinicio del paso 13 lo fuerza).
 - **Evidencia:** la salida completa y el nombre de la copia `__bak` en `evidencias/embeddings-07-pre.txt`.
 
 ## Paso 12. 832 `pre` con `applyMissingConfig=true` (altas por clave natural)
@@ -253,7 +285,9 @@ Por qué este orden (para no «arreglarlo» sin querer):
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlpredocai.database.windows.net -ReleaseTag v1.2.0-pre
       python scripts/database/diff-config-exports.py artifacts/db-config/config-v1.2.0-pre.sql artifacts/db-config/config-v1.2.0.sql ModeloConfigs=Key PromptTemplates=PromptKey+Version Tipologias=Codigo CatalogoTdn1=Codigo CatalogoTdn2=Codigo PluginTipologiaConfigs=TipologiaCodigo
 
-  El primer export (DEV, solo lectura) es la referencia de la casilla 1.3 del runbook: si `artifacts/db-config/config-v1.2.0.sql` ya existe de la Fase 1, comprobar que se generó después del cambio de DEV a híbrido (2026-11-26 12:57Z) y, si no, regenerarlo. Ambos exports son solo lectura y salen en `artifacts/db-config/` (en `.gitignore`).
+  El primer export (DEV, solo lectura) es la referencia de la casilla 1.3 del runbook. Debe haberse generado después de que DEV pasase a híbrido (2026-11-26 12:57:42Z). Si `artifacts/db-config/config-v1.2.0.sql` ya existía, ver su fecha con `stat -c '%y' artifacts/db-config/config-v1.2.0.sql` (hora local; España es UTC+1 en noviembre, así que debe ser posterior a las 13:57:42 del 2026-11-26). Si es anterior o hay duda, ejecutar el primer comando, que lo sobrescribe. Ambos exports son solo lectura y salen en `artifacts/db-config/` (en `.gitignore`).
+
+  **Dependencia:** este paso solo vale con los pasos 8 a 13 aplicados (luna, copia v5, script 07 y altas del 832) y la Function App reiniciada en el paso 13; si falta alguno, el diff mostrará diferencias que no son reales.
 - **Resultado esperado:** `config-v1.2.0-pre.hashes.json` generado (es la referencia de la puerta 4). El diff termina sin error y solo deja diferencias cosméticas: `Id`, fechas, `ApiKey` vacía y `Endpoint` nulo. **Diferencia conocida y aceptada:** la tipología `IBI` (Id 1006 en DEV) extrae con `nota.simple.1_4.azure-cu` en DEV y con `default.gpt4o-mini_ex` en PRE; ninguna parte de la release la iguala (decisión pendiente del usuario, no bloquea). Si aparece la diferencia de `CatalogoTdn1.Descripcion` por CRLF, es el fleco conocido de RELEASE_MANAGEMENT (2.3). El ensayo del 832 del 2026-11-26, antes de aplicar nada, dio 16 `ModeloConfigs`, 199 `Tipologias` y 2 `PromptTemplates` distintas: tras los pasos 8 a 12 solo pueden quedar las cosméticas; cualquier otra se explica por escrito en `runbook.md` antes de seguir.
 - **Si falla:** error del diff por clave inexistente o repetida: es un fallo de datos, no de formato; parar. Diferencias no explicadas: no se pasa a las puertas hasta documentarlas o corregirlas con un seed de la release (nunca con el export completo; RELEASE_MANAGEMENT 2.3).
 - **Evidencia:** `config-v1.2.0-pre.hashes.json` y la salida del diff a `evidencias/`.
@@ -261,30 +295,67 @@ Por qué este orden (para no «arreglarlo» sin querer):
 ## Paso 15. Puerta 1: smoke E2E y KQL de hosts de IA (2.5.1)
 
 - **Quién:** operador.
-- **Dónde:** Git Bash para el runner; portal de Azure (Logs) para la KQL en el App Insights de PRE `srbappipredocai`.
+- **Dónde:** Git Bash para el runner; portal de Azure, App Insights de PRE `srbappipredocai` > **Logs**, para las consultas.
 - **Comando:**
 
       pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pre -Profile smoke
 
-  Anotar la hora de inicio y de fin (UTC) del run; el informe queda en `tests/e2e-postdeploy/artifacts/<timestamp>-pre-smoke`. Después, las KQL del Anexo D de RELEASE_MANAGEMENT sustituyendo `<inicio>` y `<fin>` por esa ventana: la de hosts de IA (si `data` sale vacío, la variante por `target`) y la de hosts de PRO (`n = 0`).
-- **Resultado esperado:** 6/6 PASS; en la ventana, cero dependencias a hosts de IA de PRO y cero 401/403.
-- **Si falla:** un FAIL: leer `report.md`, corregir en `develop` y repetir la Fase 2 entera con un commit nuevo (RELEASE_MANAGEMENT 2.5); no se parchea PRE. Hosts de PRO en la KQL: parar, hay una dependencia a IA de PRO que no debería existir tras el cambio de alias.
-- **Evidencia:** resumen del run y la salida de la KQL en `evidencias/puerta1-kql-smoke-pre-2026-11-26.txt` (ajustar la fecha); fila 1 de la tabla de aprobación de `release.md`.
+  Anotar la hora de inicio y de fin (UTC) del run. El informe queda en `tests/e2e-postdeploy/artifacts/<timestamp>-pre-smoke`: **conservar ese directorio**, el paso 18 lo usa como primera pasada del Test Plan.
+
+  Después, en App Insights de PRE, ejecutar las tres consultas siguientes sustituyendo `<inicio>` y `<fin>` por la ventana del smoke en UTC, con formato `2026-11-26T14:05:30Z`.
+
+  1. Hosts de IA usados en la ventana:
+
+         dependencies
+         | where timestamp between (datetime(<inicio>) .. datetime(<fin>))
+         | where type == "Http"
+         | extend host = tostring(parse_url(data).Host)
+         | where host has_any ("openai.azure.com", "services.ai.azure.com", "cognitiveservices.azure.com")
+         | summarize llamadas = count(), no_ok = countif(resultCode !in ("200", "201", "202")) by host, resultCode
+         | order by host asc
+
+     Esperado: solo hosts de PRE (`srbaisrv01predocai`, `srbaisrv02predocai`, `srbdipredocai`) y, en `resultCode`, solo 200, 201 o 202 (ningún 401 ni 403). Si no devuelve filas, es que en PRE el campo `data` llega vacío: usar la consulta 2.
+
+  2. Variante por `target` (la que suele hacer falta en PRE):
+
+         dependencies
+         | where timestamp between (datetime(<inicio>) .. datetime(<fin>))
+         | where target has_any ("openai.azure.com", "services.ai.azure.com", "cognitiveservices.azure.com")
+         | summarize llamadas = count(), no_ok = countif(resultCode !in ("200", "201", "202")) by target, resultCode
+         | order by target asc
+
+     Esperado: igual que la 1: solo hosts de PRE y ningún 401 ni 403.
+
+  3. Hosts de PRO en la ventana:
+
+         union dependencies, traces
+         | where timestamp between (datetime(<inicio>) .. datetime(<fin>))
+         | where target has "prodocai" or target has "upe48" or name has "prodocai" or message has "prodocai"
+         | summarize n = count()
+
+     Esperado: `n = 0`.
+- **Resultado esperado:** 6/6 PASS del runner; consulta 1 o 2 con solo hosts de PRE y cero 401/403; consulta 3 con `n = 0`.
+- **Si falla:** un FAIL del runner: leer `report.md` del directorio, corregir en `develop` y repetir la Fase 2 entera con un commit nuevo (no se parchea PRE). Cualquier host de PRO o `n > 0` en la consulta 3: parar; hay una dependencia a IA de PRO que no debería existir.
+- **Evidencia:** el resumen del run y las tres consultas con su salida en `evidencias/puerta1-kql-smoke-pre-<AAAA-MM-DD>.txt`; fila 1 de la tabla de aprobación de `release.md`.
 
 ## Paso 16. Puerta 2: golden contra la línea base de luna en DEV (2.5.2)
 
 - **Quién:** operador.
-- **Dónde:** repositorio `c:/temp/MVP/DocumentIA.Batch` (el comando no se lanza desde este clon). Necesita `<eval-config-pre.json>`, copia local fuera de git de `src/DocumentIA.Batch.Evaluation/config.sample.json` con un entorno `PRE` (`BackendUrl` `https://srbapppredocai.azurewebsites.net`, `FunctionKey` de `environments.json`) y `SelectedEnvironment=PRE`; lleva la function key: no se versiona ni va a `evidencias/`.
+- **Dónde:** repositorio `c:/temp/MVP/DocumentIA.Batch` (el comando no se lanza desde este clon). **Dependencia:** solo con los pasos 8 a 13 aplicados y la Function App de PRE reiniciada; la golden mide la configuración final.
+- **Datos que necesita:**
+  - `<corpus>`: la carpeta local con los documentos del golden. El valor por defecto del harness es `H:\Documentia\ParaNacho\Class` (`src/DocumentIA.Batch.Evaluation/Program.cs`); si en esa máquina el corpus está en otra ruta, se pasa con `--corpus-root`.
+  - `<eval-config-pre.json>`: copia local, fuera de git y fuera de `evidencias/`, de `src/DocumentIA.Batch.Evaluation/config.sample.json` con el entorno `PRE` (`BackendUrl` `https://srbapppredocai.azurewebsites.net`, `FunctionKey` de `environments.json`) y `SelectedEnvironment=PRE`. Lleva la function key: no se versiona. De modelo sirve `eval/runs/config-dev-luna.json`, que es el equivalente para DEV.
 - **Comando:**
 
       cd c:/temp/MVP/DocumentIA.Batch
       dotnet run --project src/DocumentIA.Batch.Evaluation -c Debug -- run --set golden --env PRE --parallel 2 --label v1.2.0-pre --corpus-root <corpus> --config <eval-config-pre.json>
       dotnet run --project src/DocumentIA.Batch.Evaluation -c Debug -- compare --a eval/runs/20261119-155707-gpt56-luna-golden --b eval/runs/<run-PRE>
 
-  La línea base de DEV con luna es el golden completo AB#101433 (`20261119-155707-gpt56-luna-golden`). `<corpus>` es la ruta local del corpus del golden y `<run-PRE>` es el directorio que crea el primer comando.
-- **Resultado esperado:** 467/467 OK sin timeouts y p ≥ 0,05 en TDN1 y TDN2 frente a la línea base. Anotar en `release.md` el commit del repo DocumentIA.Batch usado.
-- **Si falla:** la línea base de luna es anterior al modo híbrido v5 de DEV; si la diferencia se debe al híbrido y no al modelo, regenerar la línea base en DEV (regla de RELEASE_MANAGEMENT cuando cambia el modelo) y repetir el `compare`; no se declara PASS sin un p ≥ 0,05 medido. Un p menor: parar y consultar.
-- **Evidencia:** `compare.md` en `evidencias/` como `puerta2-compare-golden-pre.md`; fila 2 de la tabla de aprobación.
+  `dotnet run` compila antes de ejecutar. `<run-PRE>` es el directorio nuevo `eval/runs/<AAAAMMDD-HHMMSS>-v1.2.0-pre` que crea el primer comando. La línea base de DEV con luna es el golden completo AB#101433 (`20261119-155707-gpt56-luna-golden`). El `compare` escribe `compare.md`; el comando muestra su ruta.
+- **Cómo se lee `compare.md`:** para TDN1 y para TDN2 hay una sección con la línea `McNemar exacto, p-valor de dos colas: <valor>` y la línea `Veredicto: ...`; al final, `Veredicto global`. **PASS** = el p-valor es **mayor o igual que 0,05** en las dos secciones (veredicto «diferencia dentro del ruido»). Ejemplo de v1.1.0: `McNemar exacto, p-valor de dos colas: 0.0654` en TDN1 y `0.7539` en TDN2, con `Veredicto: **diferencia dentro del ruido**`. Un p-valor menor de 0,05 es una diferencia real y no es PASS. Además, el encabezado debe decir `Documentos evaluados en comun (interseccion por rel_path): 467` y el run no debe tener timeouts.
+- **Resultado esperado:** PASS según lo anterior. Anotar en `release.md` el commit del repo DocumentIA.Batch usado (`git -C c:/temp/MVP/DocumentIA.Batch rev-parse --short HEAD`).
+- **Si falla:** la línea base de luna es anterior al modo híbrido v5 de DEV. Si el p-valor baja de 0,05 por el híbrido y no por el modelo, regenerar la línea base en DEV (RELEASE_MANAGEMENT: «si la release cambia el modelo, regenerar la línea base en DEV antes») y repetir el `compare`. No se declara PASS sin un p-valor medido. Un p-valor menor sin explicación: parar y consultar.
+- **Evidencia:** copiar `compare.md` a `evidencias/puerta2-compare-golden-pre.md`; fila 2 de la tabla de aprobación. Anotar la hora de inicio y de fin (UTC) de la golden, `StartedAtUtc` y `CompletedAtUtc` de `<run-PRE>/run-info.json`: el paso 19 las necesita.
 
 ## Paso 17. Puerta 4: deriva (2.5.3)
 
@@ -294,7 +365,11 @@ Por qué este orden (para no «arreglarlo» sin querer):
 
       pwsh ./scripts/ai/export-config-release.ps1 -SourceServer srbsqlpredocai.database.windows.net -ReleaseTag v1.2.0-pre-puerta4
 
-  Comparar `artifacts/db-config/config-v1.2.0-pre-puerta4.hashes.json` con `config-v1.2.0-pre.hashes.json` del paso 14.
+  Comparar `artifacts/db-config/config-v1.2.0-pre-puerta4.hashes.json` con `config-v1.2.0-pre.hashes.json` del paso 14. Los ficheros llevan una marca de hora (`generatedAtUtc`) que siempre difiere, así que se comparan solo los hashes:
+
+      python -c "import json,sys; a=json.load(open(sys.argv[1]))['hashes']; b=json.load(open(sys.argv[2]))['hashes']; print({k:('IGUAL' if a[k]==b[k] else 'DISTINTO') for k in a}); sys.exit(0 if a==b else 1)" artifacts/db-config/config-v1.2.0-pre.hashes.json artifacts/db-config/config-v1.2.0-pre-puerta4.hashes.json
+
+  Código de salida 0 e `IGUAL` en las cinco tablas = PASS.
 - **Resultado esperado:** hash idéntico en `ModeloConfigs`, `PromptTemplates`, `Tipologias`, `CatalogoTdn1` y `CatalogoTdn2` (compara PRE consigo mismo, no con DEV).
 - **Si falla:** cualquier hash distinto es deriva desde la referencia: explicarla por escrito en `runbook.md` o corregirla antes de la Fase 3. Las puertas 1 y 2 pueden mover `ModeloConfigs` si algo escribe en la tabla; investigar qué.
 - **Evidencia:** los dos `.hashes.json` en `evidencias/`; fila 4 de la tabla de aprobación.
@@ -303,29 +378,46 @@ Por qué este orden (para no «arreglarlo» sin querer):
 
 - **Quién:** operador. Token de Azure DevOps vía `az login` (el script lo resuelve con `az account get-access-token`).
 - **Dónde:** Git Bash, raíz del clon.
-- **Comando:** la primera pasada es la misma del paso 15 (su directorio `artifacts/<timestamp>-pre-smoke` sirve como `<dir1>`; si no se conserva, repetir `-Profile smoke`). La segunda pasada es el juego extra:
+- **Comando:** la primera pasada es la del paso 15: su directorio `tests/e2e-postdeploy/artifacts/<timestamp>-pre-smoke` es `<dir1>`. La segunda pasada es el juego extra (SMK-3 y SMK-4) y su directorio es `<dir2>`:
 
       pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment pre -Profile smoke -CasesDir tests/e2e-postdeploy/cases-smk
       pwsh ./tests/e2e-postdeploy/ado/publish-smk-run.ps1 -Environment pre -Candidate <hash> -ReportDirs <dir1>,<dir2> -WhatIf
       pwsh ./tests/e2e-postdeploy/ado/publish-smk-run.ps1 -Environment pre -Candidate <hash> -ReportDirs <dir1>,<dir2>
 
-  `<hash>` es el commit candidato del paso 0; `<dir1>` y `<dir2>` son los directorios `tests/e2e-postdeploy/artifacts/<timestamp>-pre-smoke` de las dos pasadas. Detalle en `tests/e2e-postdeploy/README.md`, apartado «Smoke pre-release (Test Plan 100069)».
-- **Resultado esperado:** la vista previa (`-WhatIf`) muestra 5 `Passed` y 3 `NotApplicable` (SMK-2 y SMK-7 sin caso automatizado, SMK-8 solo PRO). La publicación crea un run llamado `Smoke pre-release v1.2.0 (PRE, <hash>)` y escribe `ado-run-<id>.json` en `<dir2>`.
-- **Si falla:** código 2 del script: un directorio no existe, un `report.md` declara otro entorno distinto de `pre` o falta credencial. Si la validación de puntos falla (primera publicación real con `-IncludeRootSuite`), guardar el error y publicar el run a mano como en v1.1.1 (skill `azure-devops-testplans`, REST); no se declara el SMK como pasado sin run publicado.
-- **Evidencia:** `evidencias/testplan-100069-smoke-pre-<fecha>.txt` con la salida; el ID del run en `release.md` (línea «Test Plan 100069»).
+  `<hash>` es el del paso 0. `<dir1>` y `<dir2>` se escriben con la ruta relativa al clon, separados por una coma sin espacios.
+- **Resultado esperado:** la vista previa (`-WhatIf`) muestra 5 `Passed` (SMK-1, 3, 4, 5 y 6) y 3 `NotApplicable` (SMK-2 y SMK-7 sin caso automatizado, SMK-8 solo PRO). La publicación crea un run llamado `Smoke pre-release v1.2.0 (PRE, <hash>)` en el plan 100069 y escribe `ado-run-<id>.json` en `<dir2>`.
+- **Si falla:** código 2 del script: un directorio no existe, un `report.md` declara otro entorno distinto de `pre` o falta credencial. Si falla la validación de los puntos de prueba (primera publicación real con `-IncludeRootSuite`), guardar el error y publicar el run a mano con la API REST de Azure DevOps (organización `https://sareb.visualstudio.com`, proyecto `AI DocClassExt`, cabecera `Authorization: Bearer <token de az>`; es lo que hace `tests/api-tests/ado-testplans-common.ps1`). Base: `https://sareb.visualstudio.com/AI%20DocClassExt/_apis/test`.
+  1. `GET <base>/Plans/100069/Suites/100070/points?api-version=7.1`: lista los 8 puntos de prueba; anotar el `id` de cada uno.
+  2. `POST <base>/runs?api-version=7.1` con cuerpo `{"name":"Smoke pre-release v1.2.0 (PRE, <hash>)","plan":{"id":100069},"pointIds":[<ids de los 8 puntos>],"isAutomated":true}`: devuelve el `id` del run (`<runId>`).
+  3. `GET <base>/runs/<runId>/results?api-version=7.1`: devuelve un resultado por punto, con su `id` (`<resultId>`).
+  4. `PATCH <base>/runs/<runId>/results?api-version=7.1` con una lista de `{"id":<resultId>,"outcome":"Passed" o "NotApplicable","state":"Completed","comment":"<caso del runner>"}` según el mapeo que mostró el `-WhatIf`; después `PATCH <base>/runs/<runId>?api-version=7.1` con `{"state":"Completed"}`.
+
+  Precedente: en v1.1.1 el run se creó primero sin resultados y se completó después con estos mismos pasos (`docs/releases/v1.1.1/evidencias/testplan-100069-smoke-pre-2026-10-16.txt`). No se declara el SMK como pasado sin run publicado.
+- **Evidencia:** `evidencias/testplan-100069-smoke-pre-<AAAA-MM-DD>.txt` con la tabla SMK, el ID del run y la URL; el ID del run en `release.md` (línea «Test Plan 100069»).
 
 ## Paso 19. Puerta 3: coste, al día siguiente (2.5.4 y 3.3)
 
-- **Quién:** operador; el día después del smoke y la golden, porque Cost Management ingiere con un día de retraso. Obligatoria en esta release porque cambia el modelo.
-- **Dónde:** portal de Cost Management y Git Bash.
+- **Quién:** operador; el día después del smoke y la golden, porque Cost Management ingiere con un día de retraso. Obligatoria en esta release porque cambia el modelo. La Fase 3 puede empezar con esta puerta pendiente.
+- **Dónde:** Git Bash.
+- **Dato previo:** la ventana UTC de las puertas 1 y 2, anotada en los pasos 15 y 16 (inicio del smoke y `CompletedAtUtc` de la golden, en `<run-PRE>/run-info.json`).
 - **Comando:**
-  1. Cost Management del grupo `SRBRGPREDOCSAI`, agrupación `ResourceId` + `Meter`, para el día del smoke y la golden. Para PRO usar `az rest` (con `curl` y el token de `az` devuelve 401).
-  2. Coste por ejecución en PRE, con la misma consulta que se usó para la línea base de DEV (`scripts/migrations/gpt56-luna/medicion/01-coste-tokens-por-pasada.sql`, ajustando `@From`, `@To` y `@SubmittedByPrefix` a la ventana de la golden de PRE, sin editar el fichero versionado: copiarlo al scratchpad):
+  1. Factura de IA de PRE por recurso y medidor para el día del smoke y la golden (lectura de Cost Management; con `curl` y el token de `az` devuelve 401, con `az rest` funciona). Crear en la carpeta temporal un `query.json`, con la fecha del día de las puertas:
 
-         pwsh -NoProfile -Command "& ./scripts/database/query-sql.ps1 -Server srbsqlpredocai.database.windows.net -Query (Get-Content -Raw <copia-ajustada.sql>)"
-- **Resultado esperado:** meters de IA (`gpt … Tokens`, `S0 Pre-built Pages`) facturados en `SRBRGPREDOCSAI`; PRO sin rampa atribuible a la release; coste medio por ejecución y porcentaje de caché de la fase en PRE en el orden de la línea base de DEV.
-- **Si falla:** si el coste de PRE se aparta claramente de DEV, anotar la diferencia y consultar antes del Go; la Fase 3 puede empezar con esta puerta pendiente.
-- **Evidencia:** el cuadre y la salida de la consulta en `evidencias/puerta3-coste-pre.txt`; fila 3 de la tabla de aprobación.
+         {"type":"Usage","timeframe":"Custom","timePeriod":{"from":"<AAAA-MM-DD>T00:00:00Z","to":"<AAAA-MM-DD>T23:59:59Z"},"dataset":{"granularity":"Daily","aggregation":{"totalCost":{"name":"Cost","function":"Sum"},"usage":{"name":"UsageQuantity","function":"Sum"}},"grouping":[{"type":"Dimension","name":"ResourceId"},{"type":"Dimension","name":"Meter"}]}}
+
+     y lanzar (endpoint y versión de `scripts/migrations/costes-ia/README.md`; la API tiene un límite de peticiones agresivo: espaciar los reintentos):
+
+         az rest --method post --url "https://management.azure.com/subscriptions/a4f6b357-8f13-4488-9ee8-b9f635426f91/resourceGroups/SRBRGPREDOCSAI/providers/Microsoft.CostManagement/query?api-version=2023-03-01" --body @<carpeta-temporal>/query.json
+
+     Leer las filas `[coste, cantidad, fecha, ResourceId, Meter, moneda]` de los recursos `srbaisrv01predocai`, `srbaisrv02predocai` y `srbdipredocai`. Equivale a **Cost Management > Cost analysis** en el portal, ámbito el grupo `SRBRGPREDOCSAI`, agrupando por *Resource* y *Meter*. Para comprobar que PRO no sube, repetir con la suscripción `647c7246-54bc-4d31-b909-431cacf03272` y el grupo `SRBRGDOCSAIPROD`.
+  2. Coste y tokens por ejecución en PRE. El fichero `scripts/migrations/gpt56-luna/medicion/01-coste-tokens-por-pasada.sql` lleva tres variables fijas en su cabecera (`@From`, `@To`, `@SubmittedByPrefix`). Copiarlo a la carpeta temporal como `01-coste-pre.sql` y ajustarlas **en la copia**: `@From` = inicio de la golden de PRE (UTC, formato `2026-11-27 08:00:00`), `@To` = `CompletedAtUtc` de la golden más unos minutos (el límite es exclusivo) y `@SubmittedByPrefix` = `N'DocumentIA.Batch.Evaluation/'` (el prefijo con el que el harness firma sus ejecuciones; es el valor que ya trae el fichero). Ejecutar con la copia:
+
+         pwsh -NoProfile -Command "& ./scripts/database/query-sql.ps1 -Server srbsqlpredocai.database.windows.net -Query (Get-Content -Raw <carpeta-temporal>/01-coste-pre.sql)"
+
+     (El fichero se lee desde PowerShell; desde Bash, `-Query "$(cat ...)"` rompe el análisis del argumento.) Repetir contra `srbsqldevdocai.database.windows.net` con la ventana de la golden de DEV de la línea base (`StartedAtUtc` y `CompletedAtUtc` en `eval/runs/20261119-155707-gpt56-luna-golden/run-info.json` del repo `c:/temp/MVP/DocumentIA.Batch`) para tener los dos lados.
+- **Resultado esperado:** meters de IA (`gpt … Tokens`, `S0 Pre-built Pages`) facturados en `SRBRGPREDOCSAI`; PRO sin rampa de tokens ni de páginas atribuible a la release; en la consulta SQL, coste medio por ejecución y porcentaje de caché de PRE en el mismo orden de magnitud que los de DEV con luna.
+- **Si falla:** si el coste de PRE se aparta claramente del de DEV, anotar la diferencia y consultar antes del Go. Si la factura no cuadra con las ejecuciones, revisar que la ventana y el prefijo son los correctos.
+- **Evidencia:** las filas de la factura y la salida de la consulta en `evidencias/puerta3-coste-pre.txt`; fila 3 de la tabla de aprobación.
 
 ## Paso 20. Go (3.4)
 
@@ -340,19 +432,24 @@ Por qué este orden (para no «arreglarlo» sin querer):
 
 ## Vuelta atrás por paso
 
-Orden general: Anexo B de RELEASE_MANAGEMENT por capas, de menos a más invasiva, sin empezar nunca por la BD. Complementos de esta release:
+Regla general: se retrocede solo la capa que falló, de menos a más invasiva, y nunca se empieza por la base de datos. Las cuatro capas del Anexo B de RELEASE_MANAGEMENT, resumidas:
+
+1. **Código.** Azure DevOps > pipeline 799 > último run correcto en `pre` > **Rerun** > **Rerun from stage** > `DeployFunctions`; después `ValidateConfiguration` y el smoke del paso 15. No hay deployment slots ni swap.
+2. **Configuración.** En la BD, restaurar `ConfiguracionJson` desde la copia `ModeloConfigs__bak_<fecha>` que creó el script SQL, con un `UPDATE ... FROM` sobre la columna cambiada y dentro del mismo entorno (el patrón completo está en la fila del 08 de más abajo); las demás tablas, desde su propia `__bak`. App settings: relanzar el 799 no restaura nada, porque `ensure-app-settings.ps1` no sobrescribe claves existentes; se devuelven a mano con `az functionapp config appsettings set --subscription a4f6b357-8f13-4488-9ee8-b9f635426f91 --resource-group SRBRGPREDOCSAI --name srbapppredocai --settings "CLAVE=VALOR"`, con los valores de las evidencias del paso 1, y se reinicia la Function App.
+3. **Alias de IA.** Solo si cambiaron alias o endpoints de IA (esta release no los cambia): devolver el bloque de `pre` de `infra/ai/pipeline-variables.yml` a los hosts anteriores, forzar con `appsettings set` las claves `AI__Resources__*__Endpoint` a los valores de las evidencias del paso 1, restaurar `ConfiguracionJson` desde la copia `__bak` anterior al script de alias, reiniciar y repetir el smoke.
+4. **Esquema.** Solo si una migración corrompió datos (esta release no trae migraciones): restaurar la copia `DocumentIA-prerel-<fecha>` con `az sql db copy` con un nombre nuevo, parar la Function App, renombrar la BD actual a `DocumentIA-failed-<fecha>` y la copia a `DocumentIA`, desplegar el commit anterior (capa 1) y arrancar. Se pierden las ejecuciones entre la copia y el fallo: anotarlas en `runbook.md`.
+
+Complementos de esta release, por paso. Todos los scripts SQL se aplican contra PRE con `apply-sql-dev.ps1 ... -Server srbsqlpredocai.database.windows.net -PermitirNoDev`.
 
 | Qué se deshace | Cómo |
 |---|---|
-| Código (paso 5) | Anexo B, capa 1: Rerun from stage `DeployFunctions` del último run correcto del 799 en `pre`. Después `ValidateConfiguration` y smoke. |
-| App settings (paso 5) | Anexo B, capa 2: `az functionapp config appsettings set` a mano con los valores de las evidencias del paso 1, y reinicio. Relanzar el 799 no restaura nada. |
-| Luna (paso 8) | Script `10-rollback-cutover-gpt56-luna-por-codigo.sql`: `pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-luna/10-rollback-cutover-gpt56-luna-por-codigo.sql -Server srbsqlpredocai.database.windows.net -PermitirNoDev`. Además hay que cambiar la variable `PROMPT_DEFAULTS_MODEL_KEY` del bloque `pre` de `azure-pipelines.yml` a `default.gpt4o-mini` y redesplegar con el 799: el pipeline fija el setting en cada despliegue, así que un `appsettings set` a mano no sobrevive al siguiente despliegue. |
-| Prompt cacheado (paso 8) | Script `04-dev-promptcache-off-gpt56-luna.sql`, por `Key`, con `apply-sql-dev.ps1` y los mismos parámetros de servidor. |
-| Tipologías del 08 (paso 8) | Restaurar desde la copia `Tipologias__bak_<ts>` que creó el 08 (`UPDATE ... FROM Tipologias t JOIN Tipologias__bak_<ts> b ON b.Id = t.Id`, solo la columna cambiada). |
-| Embeddings (paso 11) | Una copia del 07 en el scratchpad (nunca el fichero versionado) con `@Modo = N'sombra'` (o `N'off'`) y/o `@Version = N'v1'`, aplicada con `apply-sql-dev.ps1 ... -Server srbsqlpredocai.database.windows.net -PermitirNoDev`; o restaurar `ConfiguracionJson` desde `ModeloConfigs__bak_<ts>`. |
-| Altas del 832 (paso 12) | No se deshacen automáticamente. `apply-config-altas.ps1` deja `<Tabla>__bak_configseed_build<id>` (copia previa a las altas) y las altas son solo `INSERT` por clave natural: se revierten borrando por clave natural las filas que no estén en esa copia, con sí explícito del responsable. No hay script para ello. |
-| Secretos de Key Vault (paso 6) | Son soft delete: recuperables con `az keyvault secret recover` mientras dure la retención. Los app settings que los referenciaban ya no existen y el código no los lee (AB#101450). |
-| Ciclo de vida (paso 7) | Volver a escribir la política con las reglas anteriores (la salida del `-WhatIf` previo las muestra). |
-| Esquema | Anexo B, capa 4. Esta release no trae migraciones. |
+| Código y settings (paso 5) | Capas 1 y 2 de arriba. |
+| Luna entera (paso 8) | `pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-luna/10-rollback-cutover-gpt56-luna-por-codigo.sql -Server srbsqlpredocai.database.windows.net -PermitirNoDev`. Devuelve `UseAsFallback = true` a las filas `gpt4o-mini-fallback`, lo quita de las de luna y devuelve la tipología `IBI_1.1` a `default.gpt4o-mini_ex`; hace su propia copia `ModeloConfigs__bak_<ts>` y `Tipologias__bak_<ts>` solo si hay algo que cambiar. **No borra filas:** las filas de luna que insertaron los scripts 01, 02 y 05 quedan inertes sin el indicador de fallback y no hace falta eliminarlas. Además hay que cambiar la variable `PROMPT_DEFAULTS_MODEL_KEY` del bloque `pre` de `azure-pipelines.yml` a `default.gpt4o-mini` y redesplegar con el 799: el pipeline fija el setting en cada despliegue, así que un `appsettings set` a mano no sobrevive al siguiente. Los cambios llegan a la app en 5 minutos como máximo (o con el reinicio). |
+| Caché de prompt de luna (paso 8, script 03) | `pwsh ./scripts/database/apply-sql-dev.ps1 -ScriptPath scripts/migrations/gpt56-luna/04-dev-promptcache-off-gpt56-luna.sql -Server srbsqlpredocai.database.windows.net -PermitirNoDev` |
+| Tipologías del 08 (paso 8) | Usar la copia `Tipologias__bak_<ts>` que creó el 08 (su nombre sale en la salida de `aplicar-luna.ps1`, mensaje `Backup creado: dbo.Tipologias__bak_<ts>`; para deshacer también el 09, la copia del 09, anterior). Guardar en la carpeta temporal un fichero `restaurar-tipologias.sql` con la sentencia siguiente (sustituyendo `<ts>`) y aplicarlo con `apply-sql-dev.ps1 -ScriptPath <carpeta-temporal>/restaurar-tipologias.sql -Server srbsqlpredocai.database.windows.net -PermitirNoDev`: `UPDATE t SET t.ConfiguracionJson = b.ConfiguracionJson FROM dbo.Tipologias t JOIN dbo.Tipologias__bak_<ts> b ON b.Id = t.Id WHERE t.ConfiguracionJson <> b.ConfiguracionJson;` (el 08 solo cambia esa columna). |
+| Embeddings (paso 11) | Copiar el script 07 a la carpeta temporal, cambiar en la copia `@Modo = N'sombra'` (o `N'off'`) y/o `@Version = N'v1'` y aplicar la copia con `apply-sql-dev.ps1 -ScriptPath <copia> -Server srbsqlpredocai.database.windows.net -PermitirNoDev` (nunca se edita el fichero versionado); o restaurar `ConfiguracionJson` de la fila `clasificador.embeddings` desde la copia `ModeloConfigs__bak_<ts>` del 07. |
+| Altas del 832 (paso 12) | No se deshacen automáticamente. `apply-config-altas.ps1` deja antes de insertar la copia `<Tabla>__bak_configseed_build<id>` de cada tabla que recibe altas, y las altas son solo `INSERT` por clave natural: se revierten borrando por clave natural las filas que no estén en esa copia, con sí explícito del responsable. No hay script para ello. |
+| Secretos de Key Vault (paso 6) | Soft delete, recuperables mientras dure la retención: `az keyvault secret recover --vault-name srbkvpredocai --name <secreto>` (los cuatro nombres están en el paso 6). Los app settings que los referenciaban ya no existen y el código no los lee (AB#101450). |
+| Ciclo de vida (paso 7) | Escribir de nuevo la política con las reglas anteriores (la salida del `-WhatIf` previo las muestra). |
 
 Si se aborta la ventana con la configuración a medias, la ingesta de PRE no se reanuda hasta que el health esté sano y prompt y resumen funcionen (fila `prompt.gpt56-luna` presente, o el setting de vuelta a `default.gpt4o-mini` junto con su fila).
