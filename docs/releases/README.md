@@ -1,6 +1,6 @@
 # Releases
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con `git tag -n`, `git log` y los registros por versión). Índice coherente con los tags v1.0.0 (`333a9cf`), v1.1.0 (`efa094d`) y v1.1.1 (`ba0a5b3`). PRE y PRO siguen en v1.1.1 con el deployment `gpt-4o-mini`; DEV usa gpt-5.6-luna desde el 2026-11-20 (ADR-004) hasta la siguiente release.
+> Última revisión: 2026-11-22 (AB#101447, contraste con `git tag -n`, `git log` y los registros por versión). Índice coherente con los tags v1.0.0 (`333a9cf`), v1.1.0 (`efa094d`) y v1.1.1 (`ba0a5b3`). PRE y PRO siguen en v1.1.1 con el deployment `gpt-4o-mini`; DEV usa gpt-5.6-luna desde el 2026-11-20 (ADR-004) hasta la siguiente release. La v1.2.0 está en preparación (Fase 0-1 hechas, commit candidato `85626406`, registro en [v1.2.0/release.md](v1.2.0/release.md)); hasta su ventana PRE y PRO siguen en v1.1.1.
 
 Registro de cada versión desplegada en PRO. Procedimiento: [RELEASE_MANAGEMENT.md](../procedimientos/RELEASE_MANAGEMENT.md).
 
@@ -28,6 +28,7 @@ Cómo regenerar la plantilla: `_plantilla/runbook.md` no se edita a mano; tras c
 
 | Versión | Fecha | Commit | Work items | Registro |
 |---|---|---|---|---|
+| v1.2.0 | pendiente | `85626406` (candidato) | AB#101570 (PRE y PRO espejo de DEV), AB#99939 (luna), AB#101075 (altas por clave natural), AB#101564 (embeddings v5) | en preparación (Fase 0-1 hechas): [v1.2.0/release.md](v1.2.0/release.md), [runbook.md](v1.2.0/runbook.md) |
 | v1.1.1 | 2026-10-17 | `ba0a5b3` (registro sobre `develop`; código de `40b6c71`) | AB#100988 (reutilización en modo completo con extracción desactivada; Task AB#100989) | [v1.1.1/release.md](v1.1.1/release.md), [runbook.md](v1.1.1/runbook.md); tag `v1.1.1` |
 | v1.1.0 | 2026-10-16 | `efa094d` (código de `81ef03c`) | AB#100930 (dedup con clave de intención; cierre tras el criterio de éxito de 4.9), AB#100955, AB#100968 (GET de markdown), AB#100983 (retención de blobs desde los pipelines) | [v1.1.0/release.md](v1.1.0/release.md), [runbook.md](v1.1.0/runbook.md); tag `v1.1.0` |
 | v1.0.0 | 2026-10-08 | `333a9cf` (código de `17889bb`) | AB#100814, AB#100880, AB#100879, AB#100863, AB#100321 (Steps 1 y 2 ampliados a identidad), AB#100868, AB#100779 en `off`; backfill AB#100881 en D+1 | [v1.0.0/release.md](v1.0.0/release.md), [runbook.md](v1.0.0/runbook.md); tag `v1.0.0` |

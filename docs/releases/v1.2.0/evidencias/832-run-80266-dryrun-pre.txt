@@ -1,0 +1,46 @@
+Pipeline 832 run 80266 (AiArtifacts-20261126.1), rama feature/101075-configseed-alta-clave-natural f3af4b03, targetEnvironment=pre, dryRun=true, applyMissingConfig=true, runValidation=false, releaseTag=v1.2.0-dryrun-20261126. Resultado: succeeded (Guard, Export, AiArtifacts con check 64 aprobado 10:09Z, ConfigSeed). Sin escrituras. Lanzado a mano por el usuario el 2026-11-26 09:49Z. AB#101570.
+
+apply-deployments (dry-run) sobre srbaisrv01predocai y srbaisrv02predocai: 9 deployments ok, gpt-4o unmanaged; gpt-5.6-luna no esta en deployments.pre.json (pendiente de anadir en el hito 2).
+App Settings de alias en el destino: presentes para openai_primary.
+
+Diff por clave natural DEV -> PRE (log del job Diff):
+== CatalogoTdn1: config-v1.2.0-dryrun-20261126-pre-antes.sql 60 filas | config-v1.2.0-dryrun-20261126-dev.sql 60 filas | solo en A 0 | solo en B 0 | distintas 0
+   (clave Codigo; columnas: Id, Codigo, Nombre, Descripcion, CodigoTdn1, Tdn1Id; se ignoran Id)
+== CatalogoTdn2: config-v1.2.0-dryrun-20261126-pre-antes.sql 1186 filas | config-v1.2.0-dryrun-20261126-dev.sql 1188 filas | solo en A 0 | solo en B 2 | distintas 0
+   solo en B  PK=CERJ-71: NULL | CERJ-71 | Certificado de �ndice de Referencia de P�(58 chars) | Certificado informativo emitido a partir�(340 chars)
+   solo en B  PK=LIPR-13: NULL | LIPR-13 | Obra: licencia segunda ocupaci�n | Documento administrativo de car�cter mun�(225 chars)
+   (clave Key; columnas: Id, Tipo, Key, Provider, Activo, ConfiguracionJson, FechaCreacion, FechaActualizacion, CreadoPor; se ignoran CreadoPor, FechaActualizacion, Fecha
+== ModeloConfigs: config-v1.2.0-dryrun-20261126-pre-antes.sql 29 filas | config-v1.2.0-dryrun-20261126-dev.sql 33 filas | solo en A 0 | solo en B 4 | distintas 16
+   solo en B  PK=prompt.gpt56-luna: NULL | 2 | prompt.gpt56-luna | azure-openai
+   solo en B  PK=default.gpt56-luna_ex: NULL | 1 | default.gpt56-luna_ex | azure-openai
+   solo en B  PK=extraction.gpt56-luna: NULL | 1 | extraction.gpt56-luna | azure-openai
+   solo en B  PK=classification.gpt56-luna: NULL | 0 | classification.gpt56-luna | azure-openai
+== PluginTipologiaConfigs: config-v1.2.0-dryrun-20261126-pre-antes.sql 5 filas | config-v1.2.0-dryrun-20261126-dev.sql 5 filas | solo en A 0 | solo en B 0 | distintas 0
+== PromptTemplates: config-v1.2.0-dryrun-20261126-pre-antes.sql 8 filas | config-v1.2.0-dryrun-20261126-dev.sql 8 filas | solo en A 0 | solo en B 0 | distintas 2
+== Tipologias: config-v1.2.0-dryrun-20261126-pre-antes.sql 213 filas | config-v1.2.0-dryrun-20261126-dev.sql 237 filas | solo en A 0 | solo en B 24 | distintas 199
+   solo en B  PK=actt.04: NULL | actt.04 | Inspecci�n T�cnica de Edificios (ITE): a�(43 chars) | 1.0
+   solo en B  PK=acue.12: NULL | acue.12 | Alquiler: plan de pagos | 1.0
+   solo en B  PK=cera.04: NULL | cera.04 | Aval / fianza: justificante dep�sito | 1.0
+   solo en B  PK=cerj.54: NULL | cerj.54 | Alquiler: fianza / Aval | 1.0
+   solo en B  PK=cerj.71: NULL | cerj.71 | Certificado de �ndice de Referencia de P�(58 chars) | 1.0
+   solo en B  PK=cert.19: NULL | cert.19 | Vivienda de protecci�n: certificado defi�(46 chars) | 1.0
+   solo en B  PK=cncv.05: NULL | cncv.05 | Alquiler: contrato con opci�n a compra | 1.0
+   solo en B  PK=cncv.29: NULL | cncv.29 | Contrato: convenio | 1.0
+   solo en B  PK=cncv.70: NULL | cncv.70 | Rescisi�n Alquiler: contrato | 1.0
+   solo en B  PK=comu.18: NULL | comu.18 | Derramas y cuotas: carta reclamaci�n imp�(56 chars) | 1.0
+   solo en B  PK=comu.66: NULL | comu.66 | Autorizaci�n cargo en cuenta | 1.0
+   solo en B  PK=comu.84: NULL | comu.84 | Cedula de habitabilidad: Solicitud/Insta�(44 chars) | 1.0
+   solo en B  PK=comu.87: NULL | comu.87 | Alquiler: Burofax finalizaci�n contrato | 1.0
+   solo en B  PK=comu.88: NULL | comu.88 | Alquiler: carta subrogaci�n en contrato | 1.0
+   solo en B  PK=doca.39: NULL | doca.39 | Vivienda de protecci�n: pliego de condic�(45 chars) | 1.0
+   solo en B  PK=doct.15: NULL | doct.15 | Proyecto ejecuci�n: otros documentos t�c�(56 chars) | 1.0
+   solo en B  PK=escr.27: NULL | escr.27 | Alquiler: escritura | 1.0
+   solo en B  PK=esin.02: NULL | esin.02 | Administraci�n concursal: informe | 1.0
+   solo en B  PK=esin.45: NULL | esin.45 | Obra: informe estado | 1.0
+   solo en B  PK=esin.ah: NULL | esin.ah | Informe PAS/PIL | 1.0
+   solo en B  PK=esin.ai: NULL | esin.ai | Informe PAS/PIL  firmado | 1.0
+   solo en B  PK=fiav.06: NULL | fiav.06 | Alquiler: garant�a / aval | 1.0
+   solo en B  PK=fich.25: NULL | fich.25 | Ficha PAS/PIL | 1.0
+   solo en B  PK=lipr.13: NULL | lipr.13 | Obra: licencia segunda ocupaci�n | 1.0
+== altas: 30 (solo en B, por clave natural) -> D:\a\_work\1\a/config-diff/altas-config.sql
+   alias de ModeloConfigs: openai_primary

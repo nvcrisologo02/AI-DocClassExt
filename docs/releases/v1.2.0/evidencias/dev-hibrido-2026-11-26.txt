@@ -1,0 +1,132 @@
+ANTES: sombra / sombra / v5 (leido de dbo.ModeloConfigs, clasificador.embeddings)
+UTC inicio 07: 2026-11-26T12:57:39Z
+=== 07 ejecucion 1 ===
+Aplicando 1 lote(s) de 07-modeloconfig-embeddings-modo-version.sql contra srbsqldevdocai.database.windows.net/DocumentIA
+  [sql] Destino: Modo=hibrido | BlobPath=modelos/clasificador-embeddings/v5/clasificador-embeddings-v5.json
+  [sql] Backup creado: dbo.ModeloConfigs__bak_20261126_125742
+  [sql] 1 fila(s) actualizada(s)
+
+  Key | Modo | ModoRestringido | BlobPath | UmbralConfianza
+  clasificador.embeddings | hibrido | hibrido | modelos/clasificador-embeddings/v5/clasificador-embeddings-v5.json | 0.6
+  (1 fila(s))
+Lotes aplicados: 1
+=== 07 ejecucion 2 ===
+Aplicando 1 lote(s) de 07-modeloconfig-embeddings-modo-version.sql contra srbsqldevdocai.database.windows.net/DocumentIA
+  [sql] Destino: Modo=hibrido | BlobPath=modelos/clasificador-embeddings/v5/clasificador-embeddings-v5.json
+  [sql] 0 cambios
+
+  Key | Modo | ModoRestringido | BlobPath | UmbralConfianza
+  clasificador.embeddings | hibrido | hibrido | modelos/clasificador-embeddings/v5/clasificador-embeddings-v5.json | 0.6
+  (1 fila(s))
+Lotes aplicados: 1
+UTC cambio a hibrido (backup 20261126_125742): 2026-11-26T12:57:42Z aprox
+=== 08 ejecucion 1 ===
+Aplicando 1 lote(s) de 08-dev-tipologias-heredan-modelo-prompt.sql contra srbsqldevdocai.database.windows.net/DocumentIA
+  [sql] Antes: tipologias=237, JSON no valido=0, con default.gpt4o-mini (Pascal)=0, (camel)=4, con otra clave de prompt (no se tocan)=0
+  [sql] Backup creado: dbo.Tipologias__bak_20261126_125801
+  [sql] Cambiadas: Pascal=0, camel=4, total=4
+  [sql] Las tipologias heredan ahora PromptDefaults:ModelKey.
+
+  Tipologias | AunFijanGpt4oMini | FijanOtraClave | HeredanDelDefecto | JsonNoValido
+  237 | 0 | 0 | 237 | 0
+  (1 fila(s))
+Lotes aplicados: 1
+=== 08 ejecucion 2 ===
+Aplicando 1 lote(s) de 08-dev-tipologias-heredan-modelo-prompt.sql contra srbsqldevdocai.database.windows.net/DocumentIA
+  [sql] Antes: tipologias=237, JSON no valido=0, con default.gpt4o-mini (Pascal)=0, (camel)=0, con otra clave de prompt (no se tocan)=0
+  [sql] Nada que cambiar: ninguna tipologia fija default.gpt4o-mini (0 cambios). Sin backup.
+
+  Tipologias | AunFijanGpt4oMini | FijanOtraClave | HeredanDelDefecto | JsonNoValido
+  237 | 0 | 0 | 237 | 0
+  (1 fila(s))
+Lotes aplicados: 1
+=== conteos ===
+
+tip_camel tip_pascal
+--------- ----------
+        0          0
+
+
+=== S-S1 2026-11-26T12:58:38Z ===
+
+========================================================
+  E2E post-despliegue DocumentIA
+  Entorno: dev | Perfil: smoke | GDC: OFF | Parallel: 1
+  Endpoint: https://srbappdevdocai.azurewebsites.net/api/IngestDocument
+  Casos: 1 | Artifacts: C:\temp\MVP\documento-ia-clasificacion-mvp\tests\e2e-postdeploy\artifacts\20261126-135838-dev-smoke
+========================================================
+== Smoke test Functions ==
+Tipologias endpoint: https://srbappdevdocai.azurewebsites.net/api/tipologias
+Healthcheck endpoint: https://srbappdevdocai.azurewebsites.net/api/healthcheck
+Intento 1/6...
+[OK] Tipologias smoke test superado con HTTP 200.
+Respuesta recibida.
+Validando healthcheck y configuracion de AssetResolver...
+[OK] Healthcheck recibido. AssetResolver status: healthy
+Smoke test completado.
+
+  [S-S1] Pipeline completo auto: clasificacion + extraccion nota simple
+  --> PASS : OK
+
+========================================================
+  RESUMEN: Total=2 PASS=2 FAIL=0 SKIP=0 N/A=0
+  COBERTURA FUNCIONAL (smoke): 10.9% (6/55 aplicables)
+  Reporte : C:\temp\MVP\documento-ia-clasificacion-mvp\tests\e2e-postdeploy\artifacts\20261126-135838-dev-smoke\report.md
+  Cobertura JSON: C:\temp\MVP\documento-ia-clasificacion-mvp\tests\e2e-postdeploy\artifacts\20261126-135838-dev-smoke\coverage.json
+========================================================
+S-S1 PASS, instanceId e3d3a8f548164b698bd81f43d2d3d44c, artefactos tests/e2e-postdeploy/artifacts/20261126-135838-dev-smoke/result-S-S1.json
+153-          "ConfianzaDI": 0,
+154-          "ConfianzaGPT": 0,
+155:          "ProveedorClasif": "Embeddings",
+156-          "FallbackLLM": false,
+157-          "RateLimitExcedido": false,
+158-          "SinContenido": false,
+159-          "TipologiaDetectada": "nots.01",
+160-          "ClasificacionParcial": false,
+161-          "Tdn2Detectado": "NOTS-01",
+162-          "PropuestaTipologia": "",
+163-          "PagesProcessed": 0,
+164:          "Clasificador": "Embeddings",
+165-          "DetalleProveedores": [
+166-            {
+167:              "Proveedor": "Embeddings",
+168-              "Tipologia": "nots.01",
+169-              "Confianza": 0.8984763697781223
+170-            }
+171-          ],
+172-          "Consumos": [],
+173:          "Embeddings": {
+174-            "VersionModelo": "v5",
+175-            "Modo": "hibrido",
+176-            "Tdn1": "NOTS",
+177-            "Tdn2": "NOTS-01",
+178-            "Tipologia": "nots.01",
+179-            "Confianza": 0.8984763697781223,
+180-            "Top3": [
+181-              {
+182-                "Tdn1": "NOTS",
+183-                "Probabilidad": 0.8984763697781223
+184-              },
+185-              {
+186-                "Tdn1": "CERJ",
+187-                "Probabilidad": 0.0354040519525471
+188-              },
+189-              {
+190-                "Tdn1": "ESCR",
+191-                "Probabilidad": 0.020379159566935697
+192-              }
+193-            ],
+194-            "Decision": "Contesta",
+195-            "Motivo": "umbral",
+199:          "RamaClasificacion": "embeddings"
+=== medicion (ventana 2026-11-26) ===
+
+Dia                Ejecuciones RamaEmbeddings RamaGpt RamaExpectedType SinRama ConfianzaMediaEmbeddings ConAmbos AcuerdoTdn1
+---                ----------- -------------- ------- ---------------- ------- ------------------------ -------- -----------
+19/11/2026 0:00:00        1309              0    1309                0       0                               488         280
+20/11/2026 0:00:00         183              0     178                5       0                                 7           4
+24/11/2026 0:00:00           2              0       2                0       0                                 0           0
+25/11/2026 0:00:00          61              0      59                2       0                                 0           0
+26/11/2026 0:00:00           9              1       6                2       0 0,90                            0           0
+
+
