@@ -11,10 +11,18 @@ namespace DocumentIA.Tests.Unit.Configuration;
 /// Un trigger con expresión "%Setting%" no se indexa si el app setting no existe en Azure:
 /// appsettings.json no se carga en Functions. Cada setting así debe estar en el contrato de
 /// settings y lo deben crear los pipelines que despliegan Functions (AB#100983).
+/// El setting se busca en el YAML de cada pipeline y en los step templates de
+/// <c>pipelines/templates/steps/</c> que ese YAML incluye con <c>- template:</c>
+/// (el pipeline 799 fija los app settings de Functions en <c>deploy-functions.yml</c>).
 /// </summary>
 public class TriggerSettingsContractTests
 {
     private static readonly Regex SettingExpression = new("^%(?<name>[^%]+)%$", RegexOptions.Compiled);
+
+    private static readonly Regex StepTemplate = new(
+        @"template:\s*(?<ruta>pipelines/templates/steps/[^\s]+\.yml)", RegexOptions.Compiled);
+
+    private const string DeployFunctionsTemplate = "pipelines/templates/steps/deploy-functions.yml";
 
     public static TheoryData<string> SettingsDeTriggers()
     {
@@ -61,7 +69,25 @@ public class TriggerSettingsContractTests
     {
         foreach (var pipeline in new[] { "azure-pipelines-functions.yml", "azure-pipelines.yml" })
         {
-            File.ReadAllText(RutaRepo(pipeline)).Should().Contain($"\"{setting}=", $"{pipeline} debe asegurar {setting}");
+            var yaml = File.ReadAllText(RutaRepo(pipeline));
+            var plantillas = StepTemplate.Matches(yaml)
+                .Select(m => m.Groups["ruta"].Value)
+                .Distinct()
+                .ToList();
+
+            if (pipeline == "azure-pipelines.yml")
+            {
+                plantillas.Should().Contain(
+                    DeployFunctionsTemplate,
+                    $"{pipeline} debe incluir {DeployFunctionsTemplate}, donde se fijan los app settings de Functions");
+            }
+
+            var textos = new[] { yaml }
+                .Concat(plantillas.Select(p => File.ReadAllText(RutaRepo(p.Split('/')))));
+
+            string.Join('\n', textos).Should().Contain(
+                $"\"{setting}=",
+                $"{pipeline} (o los step templates que incluye) debe asegurar {setting}");
         }
     }
 
