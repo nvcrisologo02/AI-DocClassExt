@@ -1,0 +1,88 @@
+# Pasos de aplicacion del script de migraciones a Azure SQL de un entorno.
+# Proceden de la pipeline 807 (azure-pipelines-migrations.yml), que los compone hoy como
+# deployment job; la pipeline Release los reutilizara en el hito 2 en jobs normales. Sin cambio
+# de comportamiento: consumen el artefacto MigrationsScript y aplican las mismas migraciones.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: sqlServerName
+    type: string
+  - name: sqlDatabaseName
+    type: string
+  - name: addTransientFirewallRule
+    type: boolean
+  - name: backfillClaveIntencion
+    type: boolean
+
+steps:
+- checkout: self
+- download: current
+  artifact: MigrationsScript
+- ${{ if eq(parameters.addTransientFirewallRule, true) }}:
+  - task: AzureCLI@2
+    displayName: Add transient firewall rule (agent IP)
+    continueOnError: true
+    inputs:
+      azureSubscription: '${{ parameters.serviceConnection }}'
+      scriptType: 'pscore'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        $ip = (Invoke-RestMethod -Uri "https://api.ipify.org")
+        Write-Host "IP publica del agente: $ip"
+        az sql server firewall-rule create `
+          --resource-group "${{ parameters.resourceGroup }}" `
+          --server "${{ parameters.sqlServerName }}" `
+          --name "pipeline-migrations-$(Build.BuildId)" `
+          --start-ip-address $ip `
+          --end-ip-address $ip
+- task: AzureCLI@2
+  displayName: Apply migrations script
+  inputs:
+    azureSubscription: '${{ parameters.serviceConnection }}'
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      pwsh -File .\scripts\deployment\apply-migrations.ps1 `
+        -SqlServerFqdn "${{ parameters.sqlServerName }}.database.windows.net" `
+        -Database "${{ parameters.sqlDatabaseName }}" `
+        -ScriptPath "$(Pipeline.Workspace)/MigrationsScript/migrations.sql" `
+        -MigrationsDir "src/backend/DocumentIA.Data/Migrations"
+- ${{ if eq(parameters.backfillClaveIntencion, true) }}:
+  - task: AzureCLI@2
+    displayName: Backfill ClaveIntencion (AB#100930)
+    inputs:
+      azureSubscription: '${{ parameters.serviceConnection }}'
+      scriptType: 'pscore'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        # 1) Autotest sin red: si la forma canonica o el hash no coinciden con
+        #    ClaveIntencionBuilder, no se escribe nada.
+        pwsh -File .\scripts\database\backfill-clave-intencion.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { throw "SelfTest del backfill fallido; no se ejecuta." }
+        # 2) Recuento previo (tope: incluye filas que luego se saltan y quedan a NULL).
+        pwsh -File .\scripts\database\backfill-clave-intencion.ps1 `
+          -Server "${{ parameters.sqlServerName }}.database.windows.net" `
+          -Database "${{ parameters.sqlDatabaseName }}" `
+          -WhatIf
+        if ($LASTEXITCODE -ne 0) { throw "Recuento previo del backfill fallido." }
+        # 3) Backfill real por lotes. Solo toca filas con ClaveIntencion NULL.
+        pwsh -File .\scripts\database\backfill-clave-intencion.ps1 `
+          -Server "${{ parameters.sqlServerName }}.database.windows.net" `
+          -Database "${{ parameters.sqlDatabaseName }}"
+        if ($LASTEXITCODE -ne 0) { throw "Backfill de ClaveIntencion fallido; reanudar con -DesdeId del ultimo lote." }
+- ${{ if eq(parameters.addTransientFirewallRule, true) }}:
+  - task: AzureCLI@2
+    displayName: Remove transient firewall rule
+    condition: always()
+    continueOnError: true
+    inputs:
+      azureSubscription: '${{ parameters.serviceConnection }}'
+      scriptType: 'pscore'
+      scriptLocation: 'inlineScript'
+      inlineScript: |
+        az sql server firewall-rule delete `
+          --resource-group "${{ parameters.resourceGroup }}" `
+          --server "${{ parameters.sqlServerName }}" `
+          --name "pipeline-migrations-$(Build.BuildId)"
