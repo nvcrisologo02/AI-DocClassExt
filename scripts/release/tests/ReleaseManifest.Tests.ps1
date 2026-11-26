@@ -53,6 +53,17 @@ Describe 'Get-ReleaseManifest' {
         $m.embeddings.version | Should -Be 'v5'
         $m.embeddings.modo | Should -Be 'hibrido'
     }
+    It 'la copia del artefacto de embeddings sale de DEV hacia PRE y de PRE hacia PRO (un paso por salto, 3 pasos en cada entorno)' {
+        $pre = & $script:get -Environment pre -RepoRoot $script:fixtures
+        $prod = & $script:get -Environment prod -RepoRoot $script:fixtures
+        $prod.pasos.Count | Should -Be 3
+        $copiaPre = @($pre.pasos | Where-Object { $_.ruta -like '*copy-embeddings-artifacts.ps1' })
+        $copiaProd = @($prod.pasos | Where-Object { $_.ruta -like '*copy-embeddings-artifacts.ps1' })
+        $copiaPre.Count | Should -Be 1
+        $copiaPre[0].argumentos | Should -Match '-SourceEnvironment dev$'
+        $copiaProd.Count | Should -Be 1
+        $copiaProd[0].argumentos | Should -Match '-SourceEnvironment pre$'
+    }
     It 'devuelve plantilla en cada paso ($null si no la tiene)' {
         $m = & $script:get -Environment pre -RepoRoot $script:fixtures
         $m.pasos[0].plantilla | Should -BeNullOrEmpty

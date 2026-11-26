@@ -58,7 +58,7 @@ Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los defini
 | Recurso | Rol | Comprobación de solo lectura de `Guard` |
 |---|---|---|
 | `srbkvpredocai` | Key Vault Secrets Officer | `az keyvault secret list --vault-name srbkvpredocai --query "length(@)"` |
-| `srbstgdevdocai` (origen de la copia; por defecto DEV) | Storage Blob Data Reader | `az storage blob list --account-name srbstgdevdocai --container-name documentai --auth-mode login --num-results 1` |
+| `srbstgdevdocai` (origen de la copia; decidido: DEV → PRE, `-SourceEnvironment dev`) | Storage Blob Data Reader | `az storage blob list --account-name srbstgdevdocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgpredocai` (destino) | Storage Blob Data Contributor | `az storage blob list --account-name srbstgpredocai --container-name documentai --auth-mode login --num-results 1` (comprueba lectura; la escritura queda para el paso real) |
 | `srbstgpreappdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgpreappdocai --query "[0].keyName" -o tsv` |
 | `srbapppredocai` | Claves de función, reinicio y credenciales de Kudu | `az functionapp keys list -n srbapppredocai -g SRBRGPREDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbapppredocai -g SRBRGPREDOCSAI --query state -o tsv`; `az functionapp deployment list-publishing-credentials -n srbapppredocai -g SRBRGPREDOCSAI --query publishingUserName -o tsv` |
@@ -69,11 +69,13 @@ Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los defini
 | Recurso | Rol | Comprobación de solo lectura de `Guard` |
 |---|---|---|
 | `srbkvprodocai` | Key Vault Secrets Officer | `az keyvault secret list --vault-name srbkvprodocai --query "length(@)"` |
-| Storage de documentos del origen de la copia | Storage Blob Data Reader. Origen por confirmar: por defecto DEV (`srbstgdevdocai`); el script admite también PRE (`srbstgpredocai`) | `az storage blob list --account-name <origen> --container-name documentai --auth-mode login --num-results 1` |
+| `srbstgpredocai` (origen de la copia; decidido: PRE → PRO, `-SourceEnvironment pre`) | Storage Blob Data Reader | `az storage blob list --account-name srbstgpredocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgprodocai` (destino) | Storage Blob Data Contributor | `az storage blob list --account-name srbstgprodocai --container-name documentai --auth-mode login --num-results 1` |
 | `srbstgproapppdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgproapppdocai --query "[0].keyName" -o tsv` |
 | `srbappprodocai` | Claves de función, reinicio y credenciales de Kudu | `az functionapp keys list -n srbappprodocai -g SRBRGDOCSAIPROD --query "length(functionKeys)"`; `az functionapp show -n srbappprodocai -g SRBRGDOCSAIPROD --query state -o tsv`; `az functionapp deployment list-publishing-credentials -n srbappprodocai -g SRBRGDOCSAIPROD --query publishingUserName -o tsv` |
 | `srbwebadminprodocai`, `srbwebpluginassetresolver` | Credenciales de publicación de Kudu | `az webapp deployment list-publishing-credentials -n <app> -g SRBRGDOCSAIPROD --query publishingUserName -o tsv` |
+
+Decisión del usuario (2026-11-26): el artefacto de embeddings se copia por saltos, DEV → PRE y PRE → PRO, no DEV → PRO. El manifiesto de la v1.2.0 lleva un paso por salto (`-SourceEnvironment dev` para `pre`, `-SourceEnvironment pre` para `prod`). Por eso `AI DocClassExt PRO` necesita lectura (Storage Blob Data Reader) sobre `srbstgpredocai`, que es un recurso de otro entorno.
 
 ### 3.4 Test Plans (común a los tres entornos)
 
@@ -94,4 +96,4 @@ Limitación conocida: una lectura no demuestra un permiso de escritura (borrar s
 
 - [ ] Enviar la petición a Plataforma (quién la envía: por designar).
 - [ ] Anotar aquí la fecha de envío, la respuesta y los roles realmente concedidos por service connection.
-- [ ] Resolver los puntos «por confirmar»: resource group de los storages, origen de la copia en PRO, autorización de `AI DocClassExt Promocion IA` para la pipeline Release, escritura en Test Plans y aplicación de `grant-pipeline-sql-user.sql` en cada entorno.
+- [ ] Conceder a `AI DocClassExt PRO` lectura sobre `srbstgpredocai` (origen de la copia PRE → PRO, decidido el 2026-11-26) y resolver los puntos «por confirmar»: resource group de los storages, autorización de `AI DocClassExt Promocion IA` para la pipeline Release, escritura en Test Plans y aplicación de `grant-pipeline-sql-user.sql` en cada entorno.

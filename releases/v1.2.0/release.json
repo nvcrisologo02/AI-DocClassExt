@@ -15,8 +15,14 @@
     {
       "tipo": "ps1",
       "ruta": "scripts/storage/copy-embeddings-artifacts.ps1",
-      "argumentos": "-Version v5 -TargetEnvironment <env>",
-      "entornos": ["pre", "prod"]
+      "argumentos": "-Version v5 -TargetEnvironment <env> -SourceEnvironment dev",
+      "entornos": ["pre"]
+    },
+    {
+      "tipo": "ps1",
+      "ruta": "scripts/storage/copy-embeddings-artifacts.ps1",
+      "argumentos": "-Version v5 -TargetEnvironment <env> -SourceEnvironment pre",
+      "entornos": ["prod"]
     },
     {
       "tipo": "sql",
