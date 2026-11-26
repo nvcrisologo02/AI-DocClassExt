@@ -11,9 +11,15 @@ name: AiArtifacts-$(Date:yyyyMMdd)$(Rev:.r)
 #               clasificadores DI y validacion, con el SC "AI DocClassExt
 #               Promocion IA" (roles en origen y destino).
 #   ConfigSeed  export del destino (solo lectura) y diff por clave natural
-#               frente al origen. NO aplica nada: la configuracion nunca se
-#               promociona por Id (regla fija 4 de RELEASE_MANAGEMENT.md);
-#               los seeds de la release se aplican a mano (2.3.3 y 4.3).
+#               frente al origen. La configuracion nunca se promociona por Id
+#               (regla fija 4 de RELEASE_MANAGEMENT.md). Con applyMissingConfig
+#               genera ademas el SQL de altas de las filas que solo existen en
+#               el origen (AB#101075) y comprueba los App Settings de los alias
+#               de ModeloConfigs en el destino.
+#   ConfigApply solo con applyMissingConfig y sin dryRun: aprobacion del
+#               environment del destino, copia __bak de las tablas que reciben
+#               altas, INSERT por clave natural (nunca UPDATE ni DELETE) y diff
+#               posterior, que debe salir sin altas pendientes.
 #
 # Los scripts son idempotentes: sobre un entorno ya promocionado todo sale
 # "present"/"skip". Ninguno sobrescribe un analyzer o clasificador distinto
@@ -52,6 +58,10 @@ parameters:
     displayName: Ensayo sin escrituras (-DryRun en los scripts de scripts/ai; solo GET)
     type: boolean
     default: false
+  - name: applyMissingConfig
+    displayName: Dar de alta en el destino la config que solo existe en el origen (por clave natural; con dryRun solo genera el SQL)
+    type: boolean
+    default: false
 
 # Todas las etapas tocan red privada (SQL por private endpoint, DI de PRE con
 # private endpoint): mismo pool que el Apply de azure-pipelines-migrations.yml.
@@ -73,16 +83,28 @@ variables:
       value: AI DocClassExt DEV
     - name: targetSqlServer
       value: srbsqldevdocai
+    - name: targetFunctionApp
+      value: srbappdevdocai
+    - name: targetResourceGroup
+      value: SRBRGDEVDOCSAI
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
     - name: targetServiceConnection
       value: AI DocClassExt PRE
     - name: targetSqlServer
       value: srbsqlpredocai
+    - name: targetFunctionApp
+      value: srbapppredocai
+    - name: targetResourceGroup
+      value: SRBRGPREDOCSAI
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: targetServiceConnection
       value: AI DocClassExt PRO
     - name: targetSqlServer
       value: srbsqlprodocai
+    - name: targetFunctionApp
+      value: srbappprodocai
+    - name: targetResourceGroup
+      value: SRBRGDOCSAIPROD
 
   # Origen del salto. Vacio = combinacion no permitida (lo para la etapa Guard).
   - ${{ if parameters.fromProd }}:
@@ -293,19 +315,107 @@ stages:
           $target = '${{ parameters.targetEnvironment }}'
           $sourceSql = "$(Pipeline.Workspace)/db-config/config-$tag-${{ variables.sourceEnvironment }}.sql"
           $targetSql = "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-antes.sql"
-          # Claves naturales de RELEASE_MANAGEMENT.md 2.3.2; en prod sin
-          # ModeloConfigs, que queda fuera hasta el cutover de IA de PRO (4.3).
-          $keys = @('PromptTemplates=PromptKey+Version', 'Tipologias=Codigo', 'CatalogoTdn1=Codigo', 'CatalogoTdn2=Codigo', 'PluginTipologiaConfigs=TipologiaCodigo')
-          if ($target -ne 'prod') { $keys = @('ModeloConfigs=Key') + $keys }
+          # Claves naturales de RELEASE_MANAGEMENT.md 2.3.2. ModeloConfigs entra
+          # tambien en prod: desde el cutover de la v1.0.0 sus filas llevan
+          # ResourceAlias e identidad, sin endpoint ni key.
+          $keys = @('ModeloConfigs=Key', 'PromptTemplates=PromptKey+Version', 'Tipologias=Codigo', 'CatalogoTdn1=Codigo', 'CatalogoTdn2=Codigo', 'PluginTipologiaConfigs=TipologiaCodigo')
           $out = "$(Build.ArtifactStagingDirectory)/config-diff"
           New-Item -ItemType Directory -Force -Path $out | Out-Null
+          # Altas: el SQL sale solo de filas del origen (ya publicado en db-config).
+          $emit = @()
+          if ([bool]::Parse('${{ parameters.applyMissingConfig }}')) {
+            $emit = @('--emit-inserts', "$out/altas-config.sql", '--aliases-out', "$out/alias-modeloconfigs.txt")
+          }
           python --version
-          python scripts/database/diff-config-exports.py $targetSql $sourceSql @keys | Tee-Object -FilePath "$out/diff-config-$tag-${{ variables.sourceEnvironment }}-$target.txt"
+          python scripts/database/diff-config-exports.py $targetSql $sourceSql @keys @emit | Tee-Object -FilePath "$out/diff-config-$tag-${{ variables.sourceEnvironment }}-$target.txt"
           if ($LASTEXITCODE -ne 0) { throw "diff-config-exports.py termino con codigo $LASTEXITCODE" }
           # Solo el hash del destino: su .sql no se publica (puede llevar keys).
           Copy-Item "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-antes.hashes.json" $out
-        displayName: Diff por clave natural (no aplica nada)
+        ${{ if parameters.applyMissingConfig }}:
+          displayName: Diff por clave natural y SQL de altas
+        ${{ else }}:
+          displayName: Diff por clave natural (no aplica nada)
+
+      # Cada alias de las altas de ModeloConfigs necesita su App Setting en el
+      # destino: sin el, AiEndpointResolver no resuelve el endpoint.
+      - ${{ if parameters.applyMissingConfig }}:
+        - task: AzureCLI@2
+          displayName: App Settings de los alias de ModeloConfigs en el destino
+          inputs:
+            azureSubscription: '$(targetServiceConnection)'
+            scriptType: 'pscore'
+            scriptLocation: 'inlineScript'
+            inlineScript: |
+              $aliasFile = "$(Build.ArtifactStagingDirectory)/config-diff/alias-modeloconfigs.txt"
+              $aliases = @(Get-Content -LiteralPath $aliasFile | Where-Object { $_ })
+              if ($aliases.Count -eq 0) { Write-Host "Ninguna alta de ModeloConfigs usa alias."; exit 0 }
+              $names = az functionapp config appsettings list --resource-group "$(targetResourceGroup)" --name "$(targetFunctionApp)" --query "[?starts_with(name, 'AI__Resources__')].name" -o tsv
+              if ($LASTEXITCODE -ne 0) { throw "az functionapp config appsettings list termino con codigo $LASTEXITCODE" }
+              $missing = @($aliases | Where-Object { @($names) -notcontains "AI__Resources__$($_)__Endpoint" })
+              if ($missing.Count -gt 0) { throw "Faltan en $(targetFunctionApp) los App Settings: $(($missing | ForEach-Object { "AI__Resources__$($_)__Endpoint" }) -join ', ')" }
+              Write-Host "App Settings presentes para: $($aliases -join ', ')"
+
       - task: PublishPipelineArtifact@1
         inputs:
           targetPath: '$(Build.ArtifactStagingDirectory)/config-diff'
           artifact: 'config-diff'
+
+# Altas por clave natural (AB#101075). Etapa propia para que la aprobacion del
+# environment se pida despues de publicar config-diff: el aprobador revisa el
+# diff y altas-config.sql antes de aprobar.
+- ${{ if and(not(parameters.fromProd), parameters.applyMissingConfig, not(parameters.dryRun)) }}:
+  - stage: ConfigApply
+    displayName: Altas de config en ${{ parameters.targetEnvironment }}
+    dependsOn: ConfigSeed
+    jobs:
+    - deployment: Apply
+      displayName: Altas por clave natural
+      environment: ${{ parameters.targetEnvironment }}
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+            - checkout: self
+            - download: current
+              artifact: config-diff
+            - download: current
+              artifact: db-config
+            - task: AzureCLI@2
+              displayName: apply-config-altas.ps1 y diff posterior
+              inputs:
+                azureSubscription: '$(targetServiceConnection)'
+                scriptType: 'pscore'
+                scriptLocation: 'inlineScript'
+                inlineScript: |
+                  $tag = '${{ parameters.releaseTag }}'
+                  if (-not $tag -or $tag -eq 'auto') { $tag = 'build-$(Build.BuildId)' }
+                  $target = '${{ parameters.targetEnvironment }}'
+                  $out = "$(Build.ArtifactStagingDirectory)/config-apply"
+                  New-Item -ItemType Directory -Force -Path $out | Out-Null
+
+                  pwsh -File ./scripts/ai/apply-config-altas.ps1 `
+                    -Server "$(targetSqlServer).database.windows.net" `
+                    -SqlFile "$(Pipeline.Workspace)/config-diff/altas-config.sql" `
+                    -BackupSuffix "configseed_build$(Build.BuildId)" | Tee-Object -FilePath "$out/aplicacion.txt"
+                  if ($LASTEXITCODE -ne 0) { throw "apply-config-altas.ps1 termino con codigo $LASTEXITCODE" }
+
+                  # Comprobacion: tras las altas no debe quedar ninguna pendiente.
+                  pwsh -File ./scripts/ai/export-config-release.ps1 `
+                    -SourceServer "$(targetSqlServer).database.windows.net" `
+                    -ReleaseTag "$tag-$target-despues" `
+                    -OutDir "$(Agent.TempDirectory)/db-config-destino"
+                  if ($LASTEXITCODE -ne 0) { throw "export-config-release.ps1 termino con codigo $LASTEXITCODE" }
+                  $keys = @('ModeloConfigs=Key', 'PromptTemplates=PromptKey+Version', 'Tipologias=Codigo', 'CatalogoTdn1=Codigo', 'CatalogoTdn2=Codigo', 'PluginTipologiaConfigs=TipologiaCodigo')
+                  python scripts/database/diff-config-exports.py `
+                    "$(Agent.TempDirectory)/db-config-destino/config-$tag-$target-despues.sql" `
+                    "$(Pipeline.Workspace)/db-config/config-$tag-${{ variables.sourceEnvironment }}.sql" `
+                    @keys --emit-inserts "$(Agent.TempDirectory)/altas-pendientes.sql" | Tee-Object -FilePath "$out/diff-config-despues.txt"
+                  if ($LASTEXITCODE -ne 0) { throw "diff-config-exports.py termino con codigo $LASTEXITCODE" }
+                  $pending = Select-String -LiteralPath "$out/diff-config-despues.txt" -Pattern '^== altas: (\d+)' | ForEach-Object { [int]$_.Matches[0].Groups[1].Value }
+                  if ($pending -ne 0) { throw "Tras aplicar quedan $pending altas pendientes (ver diff-config-despues.txt)" }
+                  Write-Host "Sin altas pendientes en $target."
+            - task: PublishPipelineArtifact@1
+              condition: succeededOrFailed()
+              inputs:
+                targetPath: '$(Build.ArtifactStagingDirectory)/config-apply'
+                artifact: 'config-apply-$(System.JobAttempt)'
