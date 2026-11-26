@@ -41,7 +41,7 @@ Diseño técnico, API y contratos, configuración, desarrollo y plugins.
 | [05_MANUAL_USO_CONFIGURACION.md](05_MANUAL_USO_CONFIGURACION.md) | Parte A: uso diario. Parte B: APIs, contratos, `ConfiguracionJson`, claves de prompt y modelo | vigente |
 | [contratos/CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato REST de ingest, consulta, management y Admin de tipologías. Fuente de verdad de la API | vigente |
 | [contratos/PLANTILLA_PLUGINS_JSON.md](contratos/PLANTILLA_PLUGINS_JSON.md) | Plantillas JSON de configuración de plugins para copiar | vigente |
-| [manuales/MANUAL_CONFIGURACION.md](manuales/MANUAL_CONFIGURACION.md) | App settings por entorno y precedencia; manda en ese tema (05 Parte B manda en contrato, `ConfiguracionJson` y modelos; FUENTE_VERDAD en BD frente a seeds). Revisado 2026-11-22 | vigente |
+| [manuales/MANUAL_CONFIGURACION.md](manuales/MANUAL_CONFIGURACION.md) | App settings por entorno y precedencia; manda en ese tema (05 Parte B manda en contrato, `ConfiguracionJson` y modelos; FUENTE_VERDAD en BD frente a seeds). Revisado 2026-11-26 (AB#101570: `PromptDefaults__ModelKey` y `GDC__BypassSslValidation` fijados por el pipeline) | vigente |
 | [manuales/MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Runtime de plugins: carga, configuración por tipología, integración REST y SOAP | vigente |
 | [manuales/MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecución: medición, tarifas por modelo físico y consulta | vigente |
 | [manuales/MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md) | Deduplicación por SHA256 y clave de intención, reutilización de ejecuciones y su traza (ADR-003) | vigente |

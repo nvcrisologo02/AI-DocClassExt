@@ -40,6 +40,20 @@ Describe "Esquema de casos e2e-postdeploy" {
             @($c.requires) | Should -Contain "gdc" -Because $c.caseKey
         }
     }
+    It "los casos de cases-smk duplicados en cases/ coinciden salvo name y profiles" {
+        $smkDir = Join-Path $PSScriptRoot ".." "cases-smk"
+        $smkCases = @(Get-ChildItem $smkDir -Filter "*.json" | ForEach-Object {
+            Get-Content -Raw $_.FullName | ConvertFrom-Json
+        } | ForEach-Object { $_ })
+        $smkCases.Count | Should -BeGreaterThan 0
+        foreach ($smk in $smkCases) {
+            $orig = @($script:allCases | Where-Object { $_.caseKey -eq $smk.caseKey })
+            if ($orig.Count -eq 0) { continue }
+            foreach ($prop in @($orig[0].PSObject.Properties.Name | Where-Object { $_ -notin @("name", "profiles") })) {
+                ($smk.$prop | ConvertTo-Json -Depth 10 -Compress) | Should -Be ($orig[0].$prop | ConvertTo-Json -Depth 10 -Compress) -Because "$($smk.caseKey).$prop"
+            }
+        }
+    }
     It "los items de matriz sin caso son solo los documentados" {
         $covered = @($script:allCases | ForEach-Object { @($_.covers) } | Sort-Object -Unique)
         # Las areas Markdown y Dedup se excluyen aqui: sus casos viven en

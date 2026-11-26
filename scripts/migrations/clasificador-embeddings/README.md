@@ -6,10 +6,13 @@ Scripts de datos de la Fase A (sombra en DEV). No hay cambios de esquema.
 |---|---|---|
 | `01-modeloconfig-clasificador-embeddings.sql` | Fila `ModeloConfigs` Tipo=5 `clasificador.embeddings` con deployment, artefacto, modo y umbrales. Copia la credencial de `classification.gpt4o-mini-fallback`. | DEV con `@Modo='sombra'`; PRE y PRO con `@Modo='off'` |
 | `02-tarifas-embeddings-deployments.sql` | Lineas `text-embedding-3-large-030358` y `-010650` en el catalogo `tarifas.ia`. | DEV, PRE y PRO |
-| `03-modeloconfig-embeddings-v2.sql` | Apunta la fila `clasificador.embeddings` al artefacto v2 (solo `Artefacto.BlobPath`; modo y umbrales intactos). | DEV (PRE y PRO con AB#100781) |
-| `04-modeloconfig-embeddings-v3.sql` | Apunta la fila `clasificador.embeddings` al artefacto v3 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
-| `05-modeloconfig-embeddings-v4.sql` | Apunta la fila `clasificador.embeddings` al artefacto v4 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
-| `06-modeloconfig-embeddings-v5.sql` | Apunta la fila `clasificador.embeddings` al artefacto v5 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
+| `03-modeloconfig-embeddings-v2.sql` | Apunta la fila `clasificador.embeddings` al artefacto v2 (solo `Artefacto.BlobPath`; modo y umbrales intactos). | DEV (solo DEV por guardarrail; PRE y PRO: usar el 07) |
+| `04-modeloconfig-embeddings-v3.sql` | Apunta la fila `clasificador.embeddings` al artefacto v3 (misma mecanica que el 03). | DEV (solo DEV por guardarrail; PRE y PRO: usar el 07) |
+| `05-modeloconfig-embeddings-v4.sql` | Apunta la fila `clasificador.embeddings` al artefacto v4 (misma mecanica que el 03). | DEV (solo DEV por guardarrail; PRE y PRO: usar el 07) |
+| `06-modeloconfig-embeddings-v5.sql` | Apunta la fila `clasificador.embeddings` al artefacto v5 (misma mecanica que el 03). | DEV (solo DEV por guardarrail; PRE y PRO: usar el 07) |
+| `07-modeloconfig-embeddings-modo-version.sql` | Fija version del artefacto y modo en un solo paso (`@Version`, `@Modo`; actualiza `Artefacto.BlobPath`, `Modo` y `Restringido.Modo`). Sin guardarrail de servidor; idempotente (`0 cambios`). Con `apply-sql-dev.ps1`, y `-Server ... -PermitirNoDev` fuera de DEV. | DEV, PRE y PRO con la release v1.2.0 (ADR-006) |
+
+Aviso del 07: el blob de la version (`modelos/clasificador-embeddings/<vN>/clasificador-embeddings-<vN>.json`) debe existir en el storage del entorno **antes** de ejecutarlo; el loader conserva el ultimo modelo bueno y cachea el fallo 5 min (cache negativa).
 
 Orden: 01 y despues 02. Ambos hacen backup `ModeloConfigs__bak_<fecha>` y son idempotentes.
 
@@ -50,3 +53,7 @@ entra en vigor en 5 minutos. El analisis de la sombra esta en
 
 Documentacion: `docs/05_MANUAL_USO_CONFIGURACION.md`, seccion 5.6.1c; diseno en
 `docs/superpowers/specs/2026-10-01-clasificador-embeddings-hibrido-design.md` y ADR-002.
+
+### Consulta de medición (`medicion/`, solo lectura)
+
+`medicion/01-rama-clasificacion-por-dia.sql`: por día UTC y por modo de embeddings persistido (columna `Modo`), ejecuciones no reutilizadas por rama (`embeddings`, `gpt`, `expectedtype`), confianza media de embeddings y `AcuerdoTdn1Derivadas` (acuerdo de TDN1 con GPT sobre `ConAmbos`). En `hibrido` el acuerdo cubre solo las ejecuciones derivadas a GPT por baja confianza (predicciones rechazadas, sesgado a la baja), no el acuerdo del clasificador; el día del cambio de modo mezcla `sombra` e `hibrido`, por eso se agrupa por `Modo`. Parámetros `@From`, `@To` y `@SubmittedByPrefix` al inicio; se ejecuta con `query-sql.ps1` como las de `gpt56-luna/medicion/`.

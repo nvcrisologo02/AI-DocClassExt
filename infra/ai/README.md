@@ -36,7 +36,7 @@ de referencia para una limpieza futura de los recursos origen.
     solo existe en PRO; son las Tareas 1 y 2 del plan las que lo crean en DEV
     y PRE.
   - `"intent": "observed"` (`deployments.prod.json`): estado **real**,
-    verificado por ARM (`source: "arm"`, `observedAtUtc` con la fecha exacta
+    verificado por ARM, salvo `gpt-5.6-luna`, declarado como estado deseado desde v1.2.0 hasta que plataforma lo cree en PRO (`source: "arm"`, `observedAtUtc` con la fecha exacta
     del listado — `az cognitiveservices account deployment list`, sin
     escritura, el 2026-09-21). Incluye `gpt-4o` y un segundo `gpt-5-mini` en
     la cuenta secundaria (`srbaisrv-westeurope`) que no estaban en la
@@ -55,6 +55,7 @@ de referencia para una limpieza futura de los recursos origen.
     `text-embedding-3-large` y los tres alias `prebuilt-analyzer-*`) con los
     deployments de cada cuenta; cada nombre debe existir en `accounts` del
     mismo fichero.
+  - `gpt-5.6-luna` (modelo `gpt-5.6-luna`, versión `2026-07-09`, SKU `DataZoneStandard`, capacidad 150) figura en los tres ficheros, en la cuenta primaria de cada entorno, desde v1.2.0 en los tres entornos (ADR-004). En DEV ya existe; en PRE lo crea `apply-deployments.ps1` desde el pipeline 832. En PRO es estado deseado: el 832 no gestiona deployments en prod y lo crea plataforma o un run manual del script en la Fase 4 de la release.
 
 - **`di-artifacts.json`**: clasificadores y modelos personalizados de
   Document Intelligence en el recurso origen (`srbdiprodocai`, PRO) que hay

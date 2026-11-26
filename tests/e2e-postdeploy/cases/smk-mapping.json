@@ -1,0 +1,16 @@
+{
+  "planId": 100069,
+  "planName": "Smoke pre-release PRO",
+  "rootSuiteId": 100070,
+  "suiteId": 100070,
+  "cases": [
+    { "smk": "SMK-1", "testCaseId": 100071, "caseKey": "S-S1" },
+    { "smk": "SMK-2", "testCaseId": 100072, "caseKey": null, "motivo": "sin caso automatizado: el runner no envia restriccionTipologias" },
+    { "smk": "SMK-3", "testCaseId": 100073, "caseKey": "FF-FF2" },
+    { "smk": "SMK-4", "testCaseId": 100074, "caseKey": "FH-FH6" },
+    { "smk": "SMK-5", "testCaseId": 100075, "caseKey": "S-S5" },
+    { "smk": "SMK-6", "testCaseId": 100076, "caseKey": "S-S4" },
+    { "smk": "SMK-7", "testCaseId": 100077, "caseKey": null, "motivo": "comprobacion manual del Monitor Admin no automatizada" },
+    { "smk": "SMK-8", "testCaseId": 100078, "caseKey": "FG-FG1", "soloEntornos": ["pro"] }
+  ]
+}

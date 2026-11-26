@@ -281,6 +281,47 @@ usan `documento-12-paginas-marcado.pdf` y la limpieza por SHA256 de uno borrarí
 las filas del otro. DUP-04 compara agregados de una ventana de unos minutos:
 cualquier otra ejecución en DEV durante el caso lo desvía a `FAIL`.
 
+## Smoke pre-release (Test Plan 100069)
+
+El smoke SMK-1..8 del plan "Smoke pre-release PRO" (suite 100070) se ejecuta en
+dos pasadas del runner y se publica con un solo comando, sin pasos manuales:
+
+    # 1) casos smoke por defecto (S-S1, S-S4, S-S5, ...)
+    pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment dev -Profile smoke
+
+    # 2) juego extra SMK-3 (FF-FF2, XLSX) y SMK-4 (FH-FH6, PDF en blanco)
+    pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment dev -Profile smoke -CasesDir tests/e2e-postdeploy/cases-smk
+
+    # 3) vista previa del mapeo SMK -> resultado (sin llamadas a ADO)
+    pwsh ./tests/e2e-postdeploy/ado/publish-smk-run.ps1 -Environment dev -Candidate <hash> -ReportDirs <dir1>,<dir2> -WhatIf
+
+    # 4) publicacion del run en el plan 100069
+    pwsh ./tests/e2e-postdeploy/ado/publish-smk-run.ps1 -Environment dev -Candidate <hash> -ReportDirs <dir1>,<dir2>
+
+`<dir1>,<dir2>` son los directorios `artifacts/<timestamp>-<env>-smoke` de las
+dos pasadas. La relación SMK ↔ caso del runner (y los IDs del plan, la suite y
+los Test Cases) vive solo en `cases/smk-mapping.json`. Un SMK sin caso
+automatizado (SMK-2, SMK-7), el exclusivo de PRO (SMK-8, GDC) o con el caso
+ausente de los informes se publica como `NotApplicable`, nunca como `Passed`.
+El run se llama `Smoke pre-release <versión> (<ENTORNO>, <hash>)`
+(`-Version`, por defecto `v1.2.0`).
+
+- `-Candidate` es texto libre (normalmente el hash del commit candidato): solo
+  entra en el nombre del run, no se contrasta con nada.
+- Cada `report.md` de `-ReportDirs` debe declarar el mismo entorno que
+  `-Environment` (línea `- Entorno: **dev**`); si no, el script termina con
+  código 2 (también con `-WhatIf`) y no publica nada.
+- Los 8 test points del plan viven en su suite raíz (100070), no en una
+  subsuite; por eso `smk-mapping.json` repite el mismo id en `rootSuiteId` y
+  `suiteId`, y la publicación lee los puntos con `-IncludeRootSuite`
+  (`publish-results.ps1` no lo usa y no cambia).
+- El resumen `ado-run-<id>.json` se escribe en el último directorio de
+  `-ReportDirs`.
+- FF-FF2 está definido dos veces, en `cases/full-cases.json` y en
+  `cases-smk/smk-extra-cases.json` (solo difieren `name` y `profiles`); un test
+  de `cases-schema.Tests.ps1` lo comprueba en el pipeline, así que cualquier
+  cambio debe hacerse en los dos.
+
 ## Test Plan espejo en ADO
 
 - `ado/bootstrap-testplan.ps1` crea (idempotente) el Test Plan "E2E
