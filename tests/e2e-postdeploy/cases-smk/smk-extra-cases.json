@@ -1,0 +1,28 @@
+[
+  {
+    "group": "FF", "id": "FF2", "caseKey": "FF-FF2", "domain": "postdeploy",
+    "name": "Formato XLSX por el pipeline completo (SMK-3)",
+    "profiles": ["smoke"], "covers": ["FMT-03"],
+    "documentPath": "tests/e2e-postdeploy/corpus/formatos/listado-activos-sintetico.xlsx",
+    "classificationProvider": "auto", "classificationOnly": false,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectNoTechnicalError": true,
+      "expectedStatus": ["OK", "BAJA_CONFIANZA_CLASIFICACION", "NO_CLASIFICADO"]
+    }
+  },
+  {
+    "group": "FH", "id": "FH6", "caseKey": "FH-FH6", "domain": "postdeploy",
+    "name": "PDF de una pagina en blanco cierra en SIN_CONTENIDO_DOCUMENTO (SMK-4)",
+    "profiles": ["smoke"], "covers": ["HTTP-06"],
+    "documentPath": "tests/e2e-postdeploy/corpus/invalidos/pagina-en-blanco.pdf",
+    "classificationProvider": "auto", "classificationOnly": true,
+    "maxPagesForClassificationOnly": 3,
+    "skipDuplicateCheck": true, "forceReprocess": true, "skipGDCUpload": true,
+    "assertions": {
+      "expectedRuntimeStatus": "Completed",
+      "expectedStatus": ["SIN_CONTENIDO_DOCUMENTO"]
+    }
+  }
+]

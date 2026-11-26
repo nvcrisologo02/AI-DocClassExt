@@ -281,6 +281,31 @@ usan `documento-12-paginas-marcado.pdf` y la limpieza por SHA256 de uno borrarí
 las filas del otro. DUP-04 compara agregados de una ventana de unos minutos:
 cualquier otra ejecución en DEV durante el caso lo desvía a `FAIL`.
 
+## Smoke pre-release (Test Plan 100069)
+
+El smoke SMK-1..8 del plan "Smoke pre-release PRO" (suite 100070) se ejecuta en
+dos pasadas del runner y se publica con un solo comando, sin pasos manuales:
+
+    # 1) casos smoke por defecto (S-S1, S-S4, S-S5, ...)
+    pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment dev -Profile smoke
+
+    # 2) juego extra SMK-3 (FF-FF2, XLSX) y SMK-4 (FH-FH6, PDF en blanco)
+    pwsh ./tests/e2e-postdeploy/run-e2e-postdeploy.ps1 -Environment dev -Profile smoke -CasesDir tests/e2e-postdeploy/cases-smk
+
+    # 3) vista previa del mapeo SMK -> resultado (sin llamadas a ADO)
+    pwsh ./tests/e2e-postdeploy/ado/publish-smk-run.ps1 -Environment dev -Candidate <hash> -ReportDirs <dir1>,<dir2> -WhatIf
+
+    # 4) publicacion del run en el plan 100069
+    pwsh ./tests/e2e-postdeploy/ado/publish-smk-run.ps1 -Environment dev -Candidate <hash> -ReportDirs <dir1>,<dir2>
+
+`<dir1>,<dir2>` son los directorios `artifacts/<timestamp>-<env>-smoke` de las
+dos pasadas. La relación SMK ↔ caso del runner (y los IDs del plan, la suite y
+los Test Cases) vive solo en `cases/smk-mapping.json`. Un SMK sin caso
+automatizado (SMK-2, SMK-7), el exclusivo de PRO (SMK-8, GDC) o con el caso
+ausente de los informes se publica como `NotApplicable`, nunca como `Passed`.
+El run se llama `Smoke pre-release <versión> (<ENTORNO>, <hash>)`
+(`-Version`, por defecto `v1.2.0`).
+
 ## Test Plan espejo en ADO
 
 - `ado/bootstrap-testplan.ps1` crea (idempotente) el Test Plan "E2E
