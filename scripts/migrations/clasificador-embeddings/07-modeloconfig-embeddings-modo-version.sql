@@ -30,12 +30,12 @@ SET NOCOUNT ON;
 SET XACT_ABORT ON;
 
 DECLARE @Modo NVARCHAR(10) = N'hibrido';
-DECLARE @Version NVARCHAR(5) = N'v5';
+DECLARE @Version NVARCHAR(10) = N'v5';
 
 -- 0. Validacion de parametros (antes de cualquier backup)
-IF @Modo NOT IN (N'off', N'sombra', N'hibrido')
+IF @Modo IS NULL OR @Modo NOT IN (N'off', N'sombra', N'hibrido')
     THROW 50050, '@Modo invalido: debe ser off, sombra o hibrido.', 1;
-IF @Version IS NULL OR @Version NOT LIKE N'v[0-9]%'
+IF @Version IS NULL OR @Version NOT LIKE N'v[0-9]%' OR @Version LIKE N'v%[^0-9]%'
     THROW 50051, '@Version invalida: debe tener la forma vN (p. ej. v5).', 1;
 
 IF NOT EXISTS (SELECT 1 FROM dbo.ModeloConfigs WHERE Tipo = 5 AND [Key] = N'clasificador.embeddings' AND Activo = 1)
@@ -78,7 +78,19 @@ SET ConfiguracionJson = JSON_MODIFY(JSON_MODIFY(JSON_MODIFY(ConfiguracionJson,
         '$.Restringido.Modo', @Modo)
 WHERE Tipo = 5 AND [Key] = N'clasificador.embeddings' AND Activo = 1;
 
-PRINT CONCAT(@@ROWCOUNT, ' fila(s) actualizada(s)');
+DECLARE @filas INT = @@ROWCOUNT;
+PRINT CONCAT(@filas, ' fila(s) actualizada(s)');
+
+IF @filas <> 1
+    THROW 50054, 'El UPDATE no afecto exactamente a 1 fila: se revierte.', 1;
+
+-- Convergencia: JSON_MODIFY en modo lax no crea $.Restringido si falta
+IF NOT EXISTS (SELECT 1 FROM dbo.ModeloConfigs
+               WHERE Tipo = 5 AND [Key] = N'clasificador.embeddings' AND Activo = 1
+                 AND JSON_VALUE(ConfiguracionJson, '$.Artefacto.BlobPath') = @Ruta
+                 AND JSON_VALUE(ConfiguracionJson, '$.Modo') = @Modo
+                 AND JSON_VALUE(ConfiguracionJson, '$.Restringido.Modo') = @Modo)
+    THROW 50054, 'Convergencia no alcanzada: alguna de las tres claves no vale lo pedido (falta $.Restringido?): se revierte.', 1;
 
 IF EXISTS (SELECT 1 FROM dbo.ModeloConfigs
            WHERE Tipo = 5 AND [Key] = N'clasificador.embeddings' AND ISJSON(ConfiguracionJson) <> 1)
