@@ -1,5 +1,5 @@
 # ADR-007: Pipeline de release de un botón por step templates con vuelta atrás automática
-Fecha: 2026-11-26 · Estado: aceptada · Work Item: AB#101570 (release v1.2.0, origen) y PBI de la pipeline (en creación el 2026-11-26) · Session ID: sin Session ID (proyecto sin `Gobernanza: activa`; traspaso en `docs/auxiliares/temps/2026-11-26/`)
+Fecha: 2026-11-26 · Estado: aceptada · Work Item: AB#101570 (release v1.2.0, origen) y PBI AB#101581 (Tasks AB#101582, AB#101583 y AB#101584 por hito) · Session ID: sin Session ID (proyecto sin `Gobernanza: activa`; traspaso en `docs/auxiliares/temps/2026-11-26/`)
 
 ## Contexto y problema
 
