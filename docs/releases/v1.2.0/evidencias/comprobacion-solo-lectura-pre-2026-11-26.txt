@@ -1,0 +1,30 @@
+Comprobación en solo lectura contra PRE de los comandos de la guía del operador (pasos 0, 2, 7 y 19)
+Fecha: 2026-11-26 · Identidad: la permanente del operador, sin elevación PIM · Suscripción PRE a4f6b357 · RG SRBRGPREDOCSAI
+Sin secretos: no se leyeron claves ni cadenas de conexión.
+
+Roles permanentes de la identidad (roleAssignments, filtro assignedTo):
+- RG SRBRGPREDOCSAI: Cognitive Services Contributor, User Access Administrator
+- srbstgpredocai y srbstgdevdocai: Storage Blob Data Contributor (+ los dos heredados)
+- srbkvpredocai: Key Vault Administrator (+ los dos heredados)
+
+Paso 0 / 1 / 9 / 13 (ARM sobre srbapppredocai): AuthorizationFailed sin PIM
+- az functionapp config appsettings list ...            -> Microsoft.Web/sites/config/list/action denegado
+- az functionapp show ...                                -> Microsoft.Web/sites/publishxml/action denegado
+- az functionapp keys list ... (clave de Durable)        -> Microsoft.Web/sites/host/listkeys/action denegado
+Conclusión: la elevación PIM (Contributor sobre el RG) es prerrequisito de la ventana (añadido como punto 5 del paso 0).
+
+Paso 2 (orquestaciones en vuelo):
+- az storage table list --account-name srbstgpreappdocai --auth-mode login
+  -> DocumentIAHubHistory, DocumentIAHubInstances, DocumentIAHubPartitions (la tabla existe)
+- az storage entity query ... DocumentIAHubInstances --auth-mode login
+  -> denegado: falta un rol de datos de tablas (Storage Table Data Reader) sobre srbstgpreappdocai
+- curl sin clave a /runtime/webhooks/durableTask/instances?runtimeStatus=Running|Pending -> HTTP 401 (la ruta existe y pide clave)
+Pendiente para la ventana: consulta de filas (rol de datos o --auth-mode key con PIM) y curl con la clave de sistema durabletask_extension.
+
+Paso 7 (ciclo de vida de srbstgpredocai):
+- az storage account management-policy show -> reglas: delete-temp, documents-clasif-7d (la regla ya existe; el paso queda como confirmación idempotente)
+
+Paso 19 (Cost Management):
+- az rest POST .../SRBRGPREDOCSAI/providers/Microsoft.CostManagement/query?api-version=2023-03-01 con query.json de la guía, día 2026-11-25
+  -> 200, 41 filas [Cost, UsageQuantity, UsageDate, ResourceId, Meter, Currency]; sin medidores de IA (PRE sin tráfico de IA ese día)
+- Ventana real de la línea base de DEV (log golden-luna-20261119-155708.log): pasada 1 de 2026-11-19 14:57Z a 16:12Z; run-info.json solo recoge la reanudación (16:12:22Z-16:12:43Z)
