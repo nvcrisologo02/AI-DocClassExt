@@ -15,8 +15,14 @@
 -- traia restriccion y, si no, Modo; vacio si no hay bloque Embeddings.
 --
 -- LECTURA DEL ACUERDO (AcuerdoTdn1Derivadas sobre ConAmbos): solo hay acuerdo
--- medible en filas con Rama = gpt y bloque Embeddings presente, donde
--- Tdn1Detectado es el de GPT y se compara con Embeddings.Tdn1.
+-- medible en filas con Rama = gpt y bloque Embeddings presente, donde el TDN1
+-- final se compara con Embeddings.Tdn1. El TDN1 final es Tdn1Detectado cuando
+-- existe (solo lo escribe el proveedor GPT directo) y, si no, el prefijo de
+-- TipologiaDetectada hasta el primer '.' o '-', en mayusculas: esa columna vale
+-- "ESIN" (TDN1), "ESIN-89" (TDN1-TDN2) o "deac.07" (codigo de tipologia) segun el
+-- clasificador que decidio (HybridTDN y FoundryRescue no rellenan Tdn1Detectado).
+-- Comprobado en DEV el 2026-11-26: sin esta derivacion ConAmbos quedaba en 0 en
+-- casi todos los dias y modos.
 --   - En sombra son todas las ejecuciones con embeddings: el acuerdo es una
 --     muestra representativa.
 --   - En hibrido esas filas son SOLO las que el clasificador de embeddings
@@ -53,9 +59,13 @@ WITH Ej AS (
            COALESCE(JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.Embeddings.Tdn1'),
                     JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.embeddings.tdn1')) AS Tdn1Emb,
            COALESCE(JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.Tdn1Detectado'),
-                    JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.tdn1Detectado')) AS Tdn1Final
+                    JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.tdn1Detectado'),
+                    t.Tdn1DeTipologia) AS Tdn1Final
     FROM dbo.DocumentoEjecuciones e
     CROSS APPLY (SELECT CASE WHEN ISJSON(e.ContratoSalidaCompletoJson) = 1 THEN e.ContratoSalidaCompletoJson END AS J) j
+    CROSS APPLY (SELECT NULLIF(COALESCE(JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.TipologiaDetectada'),
+                                        JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.tipologiaDetectada')), N'') AS Tip) tp
+    CROSS APPLY (SELECT UPPER(LEFT(tp.Tip, PATINDEX('%[.-]%', tp.Tip + N'.') - 1)) AS Tdn1DeTipologia) t
     WHERE e.ReutilizadaPorDuplicado = 0
       AND e.FechaEjecucion >= @From AND e.FechaEjecucion < @To
       AND (@SubmittedByPrefix = N'' OR e.SubmittedBy LIKE @SubmittedByPrefix + '%')
