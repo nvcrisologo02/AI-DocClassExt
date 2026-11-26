@@ -53,6 +53,13 @@ Describe 'Get-ReleaseManifest' {
         $m.embeddings.version | Should -Be 'v5'
         $m.embeddings.modo | Should -Be 'hibrido'
     }
+    It 'devuelve plantilla en cada paso ($null si no la tiene)' {
+        $m = & $script:get -Environment pre -RepoRoot $script:fixtures
+        $m.pasos[0].plantilla | Should -BeNullOrEmpty
+        $m.pasos[1].plantilla | Should -BeNullOrEmpty
+        $m.pasos[2].plantilla | Should -Be 'embeddings'
+        $m.pasos[0].PSObject.Properties.Name | Should -Contain 'plantilla'
+    }
     It 'tolera CRLF y espacios en CURRENT' {
         New-TestFile $script:fixtures 'releases/CURRENT' "  v1.2.0  `r`n"
         (& $script:get -Environment prod -RepoRoot $script:fixtures).version | Should -Be 'v1.2.0'
@@ -92,6 +99,38 @@ Describe 'Test-ReleaseManifest' {
     It 'acepta el manifiesto de la v1.2.0 del repo' {
         & $script:test -ManifestPath "$script:repo/releases/v1.2.0/release.json" -RepoRoot $script:repo 6>&1 | Out-Null
         $LASTEXITCODE | Should -Be 0
+    }
+    It 'acepta el manifiesto de la v1.2.0 con plantilla embeddings en el 07' {
+        $m = Get-Content "$script:repo/releases/v1.2.0/release.json" -Raw | ConvertFrom-Json
+        @($m.pasos | Where-Object { $_.plantilla -eq 'embeddings' }).Count | Should -Be 1
+    }
+    It 'rechaza embeddings sin paso plantilla' {
+        $json = '{"version":"v9.9.6","embeddings":{"version":"v5","modo":"hibrido","restringidoModo":"hibrido"},"pasos":[{"tipo":"sql","ruta":"scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql","entornos":["pre"]}]}'
+        Invoke-ValidacionTemporal 'v9.9.6' $json | Should -Be 2
+    }
+    It 'rechaza paso plantilla sin bloque embeddings' {
+        $json = '{"version":"v9.9.5","pasos":[{"tipo":"sql","ruta":"scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql","plantilla":"embeddings","entornos":["pre"]}]}'
+        Invoke-ValidacionTemporal 'v9.9.5' $json | Should -Be 2
+    }
+    It 'rechaza mas de un paso plantilla embeddings y plantilla en pasos ps1' {
+        $dos = '{"version":"v9.9.4","embeddings":{"version":"v5","modo":"hibrido","restringidoModo":"hibrido"},"pasos":[{"tipo":"sql","ruta":"scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql","plantilla":"embeddings","entornos":["pre"]},{"tipo":"sql","ruta":"releases/_ensayo/ensayo-dev.sql","plantilla":"embeddings","entornos":["pre"]}]}'
+        Invoke-ValidacionTemporal 'v9.9.4' $dos | Should -Be 2
+        $ps1 = '{"version":"v9.9.3","embeddings":{"version":"v5","modo":"hibrido","restringidoModo":"hibrido"},"pasos":[{"tipo":"sql","ruta":"scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql","plantilla":"embeddings","entornos":["pre"]},{"tipo":"ps1","ruta":"scripts/storage/copy-embeddings-artifacts.ps1","argumentos":"-Version v5 -TargetEnvironment <env>","plantilla":"embeddings","entornos":["pre"]}]}'
+        Invoke-ValidacionTemporal 'v9.9.3' $ps1 | Should -Be 2
+    }
+    It 'rechaza -Version distinto de embeddings.version' {
+        $json = '{"version":"v9.9.2","embeddings":{"version":"v5","modo":"hibrido","restringidoModo":"hibrido"},"pasos":[{"tipo":"ps1","ruta":"scripts/storage/copy-embeddings-artifacts.ps1","argumentos":"-Version v4 -TargetEnvironment <env>","entornos":["pre"]},{"tipo":"sql","ruta":"scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql","plantilla":"embeddings","entornos":["pre"]}]}'
+        Invoke-ValidacionTemporal 'v9.9.2' $json | Should -Be 2
+    }
+    It 'rechaza rutas repetidas en el mismo entorno y las acepta en entornos disjuntos' {
+        $mismo = '{"version":"v9.9.1","pasos":[{"tipo":"sql","ruta":"releases/_ensayo/ensayo-dev.sql","entornos":["pre","prod"]},{"tipo":"sql","ruta":"releases/_ensayo/ensayo-dev.sql","entornos":["prod"]}]}'
+        Invoke-ValidacionTemporal 'v9.9.1' $mismo | Should -Be 2
+        $disjunto = '{"version":"v9.9.0","pasos":[{"tipo":"sql","ruta":"releases/_ensayo/ensayo-dev.sql","entornos":["pre"]},{"tipo":"sql","ruta":"releases/_ensayo/ensayo-dev.sql","entornos":["prod"]}]}'
+        Invoke-ValidacionTemporal 'v9.9.0' $disjunto | Should -Be 0
+    }
+    It 'rechaza dev en entornos de una version real' {
+        $json = '{"version":"v9.8.9","pasos":[{"tipo":"sql","ruta":"releases/_ensayo/ensayo-dev.sql","entornos":["dev","pre"]}]}'
+        Invoke-ValidacionTemporal 'v9.8.9' $json | Should -Be 2
     }
     It 'rechaza paso con fichero inexistente' {
         $json = '{"version":"v9.9.9","pasos":[{"tipo":"sql","ruta":"scripts/no-existe.sql","entornos":["pre"]}]}'

@@ -6,7 +6,7 @@
     dev usa releases/_ensayo/release.json; pre y prod usan releases/<CURRENT>/release.json.
     Antes de devolver nada valida el manifiesto con Test-ReleaseManifest.ps1 y, si falla,
     termina con error mostrando su salida. Devuelve un objeto con version, manifestPath,
-    embeddings (puede ser $null) y pasos (tipo, ruta, argumentos, entornos) del entorno pedido.
+    embeddings (puede ser $null) y pasos (tipo, ruta, argumentos, plantilla, entornos) del entorno pedido.
     No accede a red ni a BD.
 
 .PARAMETER Environment
@@ -66,6 +66,7 @@ $pasos = @(foreach ($p in $m.pasos) {
                 tipo       = $p.tipo
                 ruta       = $p.ruta
                 argumentos = if ($p.PSObject.Properties.Name -contains 'argumentos') { $p.argumentos } else { $null }
+                plantilla  = if ($p.PSObject.Properties.Name -contains 'plantilla') { $p.plantilla } else { $null }
                 entornos   = @($p.entornos)
             }
         }

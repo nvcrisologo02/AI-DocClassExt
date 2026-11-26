@@ -6,7 +6,9 @@
     Comprueba en PowerShell, sin dependencias externas, lo que dice el esquema: campos,
     tipos y enumeraciones; ademas la version coincide con la carpeta, cada ruta existe bajo
     RepoRoot, cada .ps1 admite -DryRun o -WhatIf y lleva <env> en argumentos, y _ensayo
-    solo se declara para dev. No accede a red ni a BD.
+    solo se declara para dev, las versiones reales no declaran dev, no hay rutas repetidas en
+    un mismo entorno y el bloque embeddings va ligado a un paso con plantilla embeddings
+    (y a -Version de los pasos ps1). No accede a red ni a BD.
 
     Codigo de salida: 0 si es valido; 2 con la lista de errores (un error por linea).
 
@@ -62,6 +64,9 @@ if ($m -isnot [pscustomobject]) {
 
 Test-Propiedades $m @('version', 'embeddings', 'pasos') @('version', 'pasos') 'manifiesto'
 
+$plantillasValidas = @('embeddings')
+$pasosValidos = [System.Collections.Generic.List[object]]::new()
+
 # version
 if ($m.PSObject.Properties.Name -contains 'version') {
     if ($m.version -isnot [string] -or $m.version -cnotmatch '^(v\d+\.\d+\.\d+|_ensayo)$') {
@@ -105,7 +110,7 @@ if ($m.PSObject.Properties.Name -contains 'pasos') {
             $i++
             $donde = "pasos[$i]"
             if ($p -isnot [pscustomobject]) { $errores.Add("${donde}: debe ser un objeto"); continue }
-            Test-Propiedades $p @('tipo', 'ruta', 'argumentos', 'entornos') @('tipo', 'ruta', 'entornos') $donde
+            Test-Propiedades $p @('tipo', 'ruta', 'argumentos', 'plantilla', 'entornos') @('tipo', 'ruta', 'entornos') $donde
             $props = @($p.PSObject.Properties.Name)
 
             $tipoOk = $props -contains 'tipo' -and $p.tipo -is [string] -and @('sql', 'ps1') -ccontains $p.tipo
@@ -132,6 +137,15 @@ if ($m.PSObject.Properties.Name -contains 'pasos') {
                 }
             }
 
+            if ($props -contains 'plantilla') {
+                if ($p.plantilla -isnot [string] -or $plantillasValidas -cnotcontains $p.plantilla) {
+                    $errores.Add("${donde}.plantilla: '$($p.plantilla)' no es uno de: $($plantillasValidas -join ', ')")
+                }
+                elseif ($tipoOk -and $p.tipo -cne 'sql') {
+                    $errores.Add("${donde}.plantilla: solo es valida en pasos sql")
+                }
+            }
+
             if ($props -contains 'argumentos' -and $p.argumentos -isnot [string]) {
                 $errores.Add("${donde}.argumentos: debe ser un texto")
             }
@@ -151,6 +165,42 @@ if ($m.PSObject.Properties.Name -contains 'pasos') {
                     }
                     if ($m.version -ceq '_ensayo' -and (@($p.entornos) | Where-Object { $_ -cne 'dev' })) {
                         $errores.Add("${donde}.entornos: _ensayo solo puede declarar ['dev']")
+                    }
+                    if ($m.version -is [string] -and $m.version -cne '_ensayo' -and @($p.entornos) -ccontains 'dev') {
+                        $errores.Add("${donde}.entornos: una version real no puede declarar 'dev' (dev siempre usa _ensayo)")
+                    }
+                }
+            }
+            $pasosValidos.Add([pscustomobject]@{ Indice = $i; Paso = $p })
+        }
+
+        # Rutas repetidas que comparten entorno: ReleaseAplicada identifica el paso por (Version, ruta).
+        for ($a = 0; $a -lt $pasosValidos.Count; $a++) {
+            for ($b = $a + 1; $b -lt $pasosValidos.Count; $b++) {
+                $pa = $pasosValidos[$a].Paso; $pb = $pasosValidos[$b].Paso
+                if ($pa.ruta -isnot [string] -or $pb.ruta -isnot [string] -or $pa.ruta -cne $pb.ruta) { continue }
+                $comunes = @(@($pa.entornos) | Where-Object { @($pb.entornos) -ccontains $_ })
+                if ($comunes.Count -gt 0) {
+                    $errores.Add("pasos[$($pasosValidos[$b].Indice)].ruta: '$($pb.ruta)' repetida con pasos[$($pasosValidos[$a].Indice)] en el entorno $($comunes -join ', ')")
+                }
+            }
+        }
+
+        # Bloque embeddings <-> paso con plantilla embeddings, y -Version de los ps1.
+        $conPlantilla = @($pasosValidos | Where-Object { $_.Paso.PSObject.Properties.Name -contains 'plantilla' -and $_.Paso.plantilla -ceq 'embeddings' -and $_.Paso.tipo -ceq 'sql' })
+        $hayEmbeddings = $m.PSObject.Properties.Name -contains 'embeddings'
+        if ($hayEmbeddings -and $conPlantilla.Count -ne 1) {
+            $errores.Add("embeddings: debe haber exactamente un paso sql con plantilla 'embeddings' (hay $($conPlantilla.Count))")
+        }
+        if (-not $hayEmbeddings -and $conPlantilla.Count -gt 0) {
+            $errores.Add("pasos: hay un paso con plantilla 'embeddings' pero falta el bloque embeddings")
+        }
+        if ($hayEmbeddings -and $m.embeddings -is [pscustomobject] -and $m.embeddings.PSObject.Properties.Name -contains 'version' -and $m.embeddings.version -is [string]) {
+            foreach ($x in $pasosValidos) {
+                $p = $x.Paso
+                if ($p.tipo -ceq 'ps1' -and $p.PSObject.Properties.Name -contains 'argumentos' -and $p.argumentos -is [string] -and $p.argumentos -cmatch '(^|\s)-Version\s+(\S+)') {
+                    if ($Matches[2] -cne $m.embeddings.version) {
+                        $errores.Add("pasos[$($x.Indice)].argumentos: -Version $($Matches[2]) no coincide con embeddings.version '$($m.embeddings.version)'")
                     }
                 }
             }

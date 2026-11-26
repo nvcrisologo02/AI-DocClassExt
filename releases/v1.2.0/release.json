@@ -21,6 +21,7 @@
     {
       "tipo": "sql",
       "ruta": "scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql",
+      "plantilla": "embeddings",
       "entornos": ["pre", "prod"]
     }
   ]
