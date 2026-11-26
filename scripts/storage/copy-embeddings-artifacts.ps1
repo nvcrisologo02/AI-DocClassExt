@@ -38,7 +38,7 @@
 .PARAMETER Version
     Version del artefacto, con formato vN (por ejemplo v5).
 .PARAMETER TargetEnvironment
-    Entorno destino: dev, pre o prod.
+    Entorno destino: pre o prod. dev solo se admite con -DryRun (solo lectura).
 .PARAMETER SourceEnvironment
     Entorno origen: dev (por defecto) o pre. No puede coincidir con el destino salvo con -DryRun.
 .PARAMETER DryRun
@@ -99,6 +99,9 @@ $tmpDir = $null
 try {
     if ($SourceEnvironment -eq $TargetEnvironment -and -not $DryRun) {
         throw "Origen y destino son el mismo entorno ($SourceEnvironment); solo se admite con -DryRun."
+    }
+    if ($TargetEnvironment -eq 'dev' -and -not $DryRun) {
+        throw "El entorno dev no es un destino de copia; solo se admite como destino con -DryRun."
     }
     $origen = $cuentas[$SourceEnvironment]
     $destino = $cuentas[$TargetEnvironment]
