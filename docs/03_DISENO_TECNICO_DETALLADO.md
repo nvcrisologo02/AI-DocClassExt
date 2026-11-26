@@ -940,9 +940,11 @@ classDiagram
 
 ## 3.5 Modelo Entidad-Relacion
 
-El modelo de datos completo (13 entidades, índices, claves foráneas, historial de las 38 migraciones y versión del esquema 1.24, `20261013092225_ClaveIntencionDedup`) vive en [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md), revisado el 2026-11-22. El diagrama de clases que había aquí describía 8 entidades con atributos desfasados (`Nombre`, `Extension`, `TipologiaDetectada`, `DuracionClasifMs`...) y se retira para no mantener dos copias.
+El modelo de datos completo (14 entidades, índices, claves foráneas, historial de las 39 migraciones y versión del esquema 1.25, `20261126190743_ReleaseAplicada`) vive en [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md), revisado el 2026-11-22. El diagrama de clases que había aquí describía 8 entidades con atributos desfasados (`Nombre`, `Extension`, `TipologiaDetectada`, `DuracionClasifMs`...) y se retira para no mantener dos copias.
 
-Entidades del `DocumentIADbContext`: `Documentos`, `ResultadosProcesamiento`, `Tipologias`, `Auditoria`, `DocumentoEjecuciones` (con las columnas de coste, reutilización y clave de intención), `PluginEjecuciones`, `ValidacionResultados`, `ModeloConfigs` (`Tipo` 0 a 5: Clasificacion, Extraccion, Prompt, Layout, Tarifas, Embeddings), `PluginTipologiaConfigs`, `TipologiaConfigAudit`, `CatalogoTdn1`, `CatalogoTdn2` y `PromptTemplates`.
+Entidades del `DocumentIADbContext`: `Documentos`, `ResultadosProcesamiento`, `Tipologias`, `Auditoria`, `DocumentoEjecuciones` (con las columnas de coste, reutilización y clave de intención), `PluginEjecuciones`, `ValidacionResultados`, `ModeloConfigs` (`Tipo` 0 a 5: Clasificacion, Extraccion, Prompt, Layout, Tarifas, Embeddings), `PluginTipologiaConfigs`, `TipologiaConfigAudit`, `CatalogoTdn1`, `CatalogoTdn2`, `PromptTemplates` y `ReleaseAplicada`.
+
+`ReleaseAplicada` (tabla `dbo.ReleaseAplicada`, AB#101570) guarda, por entorno, qué pasos del manifiesto de una release (`releases/<versión>/release.json`) se han aplicado: versión, ruta del paso, SHA-256 de su contenido, resultado (`Aplicado` o `Revertido`), identificador del run y fecha UTC. La escribe y la lee por SQL, con token de Entra, la pipeline Release (hito 2); la aplicación no la usa en ejecución y la entidad existe para que la migración `20261126190743_ReleaseAplicada` la cree en los tres entornos con el pipeline 807. Sin claves foráneas.
 
 ### Indices Configurados en OnModelCreating (resumen; la lista completa está en DATA_MODELS_ER_DIAGRAM.md)
 
@@ -961,6 +963,7 @@ Entidades del `DocumentIADbContext`: `Documentos`, `ResultadosProcesamiento`, `T
 | `DocumentoEntity` | MD5 (INCLUDE SHA256); FechaExpiracionBlob | Dedup por MD5; limpieza de blobs |
 | `PromptTemplateEntity` | (PromptKey, Version) único; (PromptKey, IsActive) filtrado | Prompts versionados |
 | `PluginEjecucionEntity` | (EjecucionId, PluginKey) | Compuesto |
+| `ReleaseAplicadaEntity` | (Version, Paso, Resultado) | Non-unique |
 | `ValidacionResultadoEntity` | (EjecucionId, Campo) | Compuesto |
 
 ---

@@ -1,0 +1,97 @@
+# Permisos de las service connections para la pipeline de release — DocumentIA
+
+> Estado: **solicitud pendiente de enviar** (AB#101570, hito 1). Nadie la ha enviado a Plataforma todavía; este documento es el texto de la petición y la referencia de lo que comprobará la pipeline. No hay respuesta ni fecha comprometida. Fuente: apartado «Permisos de la service connection» de `docs/superpowers/specs/2026-11-26-pipeline-release-un-boton-design.md`.
+
+La pipeline Release (hito 2) despliega un entorno de principio a fin con un solo lanzamiento y se vuelve atrás sola si algo falla. Para ello cada service connection necesita permisos que hoy no tiene todos. Sin ellos el hito 2 no se puede ensayar entero. Esta petición se envía a Plataforma antes de empezar el hito 2.
+
+## 1. Qué se pide
+
+Por cada entorno, a la service connection del entorno (la identidad con la que corre la pipeline):
+
+| Necesidad | Rol o permiso | Recurso | Para qué paso de la pipeline |
+|---|---|---|---|
+| Borrar secretos heredados de Key Vault | Key Vault Secrets Officer (o equivalente que permita listar y borrar secretos) | Key Vault del entorno | Stage `Configuracion`: `scripts/configuration/remove-legacy-keyvault-secrets.ps1` (primero `-WhatIf`, luego real) |
+| Copiar el artefacto de embeddings, lectura en el origen | Storage Blob Data Reader | Storage de documentos del entorno origen | Stage `Configuracion`: `scripts/storage/copy-embeddings-artifacts.ps1` |
+| Copiar el artefacto de embeddings, escritura en el destino | Storage Blob Data Contributor | Storage de documentos del entorno destino | Stage `Configuracion`: `scripts/storage/copy-embeddings-artifacts.ps1` |
+| Leer la clave de la cuenta del task hub de Durable | `listKeys` (viene con Contributor sobre la cuenta). Si la service connection no es Contributor sobre esa cuenta: Storage Table Data Reader sobre ella | Storage del task hub del entorno | Stage `Foto`: drenado de Durable (espera a que la tabla de instancias no tenga `Running` ni `Pending`) |
+| Leer claves de función y reiniciar la Function App | Lectura de claves de función y reinicio | Function App del entorno | Stages `Foto`, `Configuracion`, `Altas` (reinicio y health) y `Verificacion` (la function key del smoke se lee en el momento y no se almacena) |
+| Credenciales de publicación de Kudu | Lectura de las credenciales de publicación (las tiene si despliega) | Function App, Admin y AssetResolver del entorno | Stage `Foto`: descarga del paquete desplegado (vuelta atrás del código) |
+| Escribir en Test Plans | Escritura en Test Plans del proyecto `AI DocClassExt` para la identidad del build (`System.AccessToken`, Project Collection Build Service) | Plan 100069 | Stage `Verificacion`: `tests/e2e-postdeploy/ado/publish-smk-run.ps1` (`-WhatIf` y real) |
+
+Lo que ya existe y no se pide de nuevo: el despliegue de las tres apps y la aplicación de app settings (los pipelines 799, 800 y 802 ya lo hacen) y el acceso a SQL del entorno (`scripts/database/grant-pipeline-sql-user.sql` concede `db_ddladmin`, `db_datareader` y `db_datawriter`, suficientes para la tabla `ReleaseAplicada` y las copias `<Tabla>__rel_<BuildId>`; que el script esté aplicado en cada entorno es algo por confirmar).
+
+## 2. Recursos por entorno
+
+Valores de `pipelines/templates/variables/entorno.yml` y de `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md`.
+
+| | DEV | PRE | PRO |
+|---|---|---|---|
+| Service connection | `AI DocClassExt DEV` | `AI DocClassExt PRE` | `AI DocClassExt PRO` |
+| Resource group | `SRBRGDEVDOCSAI` | `SRBRGPREDOCSAI` | `SRBRGDOCSAIPROD` |
+| Key Vault | `srbkvdevdocai` | `srbkvpredocai` | `srbkvprodocai` |
+| Storage del task hub (Durable) | `srbstgdevappdocai` | `srbstgpreappdocai` | `srbstgproapppdocai` (tres «p») |
+| Storage de documentos (embeddings, contenedor `documentai`) | `srbstgdevdocai` | `srbstgpredocai` | `srbstgprodocai` |
+| Function App | `srbappdevdocai` | `srbapppredocai` | `srbappprodocai` |
+| Admin | `srbwebadmindevdocai` | `srbwebadminpredocai` | `srbwebadminprodocai` |
+| AssetResolver | `srbwebpluginassetresolverdev` | `srbwebpluginassetresolverpre` | `srbwebpluginassetresolver` |
+
+Resource group de los storages: por confirmar (no consta en los ficheros consultados; se asume el del entorno, sin verificar).
+
+Además, para la promoción de IA (`Promote`) la pipeline usa la service connection federada `AI DocClassExt Promocion IA` (la misma identidad opera origen y destino por exigencia de la Copy API de Content Understanding, ADR-001). Sus roles ya existen y no se piden de nuevo. Por confirmar: según `docs/procedimientos/DESPLIEGUE_IA.md` está autorizada solo para el pipeline 832, así que habrá que autorizarla también para la pipeline Release en el hito 2.
+
+## 3. Petición por service connection
+
+Las comprobaciones son las lecturas que hará la stage `Guard`; ninguna imprime secretos (solo recuentos, estados o el nombre de la clave).
+
+### 3.1 `AI DocClassExt DEV` (solo ensayos de la pipeline)
+
+| Recurso | Rol | Comprobación de solo lectura de `Guard` |
+|---|---|---|
+| `srbkvdevdocai` | Key Vault Secrets Officer | `az keyvault secret list --vault-name srbkvdevdocai --query "length(@)"` |
+| `srbstgdevdocai` | Storage Blob Data Reader. Contributor solo si el ensayo copia en DEV (`copy-embeddings-artifacts.ps1` admite `dev` como destino solo con `-DryRun`) | `az storage blob list --account-name srbstgdevdocai --container-name documentai --auth-mode login --num-results 1` |
+| `srbstgdevappdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgdevappdocai --query "[0].keyName" -o tsv` |
+| `srbappdevdocai` | Claves de función, reinicio y credenciales de Kudu | `az functionapp keys list -n srbappdevdocai -g SRBRGDEVDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbappdevdocai -g SRBRGDEVDOCSAI --query state -o tsv`; `az functionapp deployment list-publishing-credentials -n srbappdevdocai -g SRBRGDEVDOCSAI --query publishingUserName -o tsv` |
+| `srbwebadmindevdocai`, `srbwebpluginassetresolverdev` | Credenciales de publicación de Kudu | `az webapp deployment list-publishing-credentials -n <app> -g SRBRGDEVDOCSAI --query publishingUserName -o tsv` |
+
+### 3.2 `AI DocClassExt PRE`
+
+| Recurso | Rol | Comprobación de solo lectura de `Guard` |
+|---|---|---|
+| `srbkvpredocai` | Key Vault Secrets Officer | `az keyvault secret list --vault-name srbkvpredocai --query "length(@)"` |
+| `srbstgdevdocai` (origen de la copia; por defecto DEV) | Storage Blob Data Reader | `az storage blob list --account-name srbstgdevdocai --container-name documentai --auth-mode login --num-results 1` |
+| `srbstgpredocai` (destino) | Storage Blob Data Contributor | `az storage blob list --account-name srbstgpredocai --container-name documentai --auth-mode login --num-results 1` (comprueba lectura; la escritura queda para el paso real) |
+| `srbstgpreappdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgpreappdocai --query "[0].keyName" -o tsv` |
+| `srbapppredocai` | Claves de función, reinicio y credenciales de Kudu | `az functionapp keys list -n srbapppredocai -g SRBRGPREDOCSAI --query "length(functionKeys)"`; `az functionapp show -n srbapppredocai -g SRBRGPREDOCSAI --query state -o tsv`; `az functionapp deployment list-publishing-credentials -n srbapppredocai -g SRBRGPREDOCSAI --query publishingUserName -o tsv` |
+| `srbwebadminpredocai`, `srbwebpluginassetresolverpre` | Credenciales de publicación de Kudu | `az webapp deployment list-publishing-credentials -n <app> -g SRBRGPREDOCSAI --query publishingUserName -o tsv` |
+
+### 3.3 `AI DocClassExt PRO`
+
+| Recurso | Rol | Comprobación de solo lectura de `Guard` |
+|---|---|---|
+| `srbkvprodocai` | Key Vault Secrets Officer | `az keyvault secret list --vault-name srbkvprodocai --query "length(@)"` |
+| Storage de documentos del origen de la copia | Storage Blob Data Reader. Origen por confirmar: por defecto DEV (`srbstgdevdocai`); el script admite también PRE (`srbstgpredocai`) | `az storage blob list --account-name <origen> --container-name documentai --auth-mode login --num-results 1` |
+| `srbstgprodocai` (destino) | Storage Blob Data Contributor | `az storage blob list --account-name srbstgprodocai --container-name documentai --auth-mode login --num-results 1` |
+| `srbstgproapppdocai` | Contributor (`listKeys`), o Storage Table Data Reader | `az storage account keys list --account-name srbstgproapppdocai --query "[0].keyName" -o tsv` |
+| `srbappprodocai` | Claves de función, reinicio y credenciales de Kudu | `az functionapp keys list -n srbappprodocai -g SRBRGDOCSAIPROD --query "length(functionKeys)"`; `az functionapp show -n srbappprodocai -g SRBRGDOCSAIPROD --query state -o tsv`; `az functionapp deployment list-publishing-credentials -n srbappprodocai -g SRBRGDOCSAIPROD --query publishingUserName -o tsv` |
+| `srbwebadminprodocai`, `srbwebpluginassetresolver` | Credenciales de publicación de Kudu | `az webapp deployment list-publishing-credentials -n <app> -g SRBRGDOCSAIPROD --query publishingUserName -o tsv` |
+
+### 3.4 Test Plans (común a los tres entornos)
+
+La identidad del build es el Project Collection Build Service del proyecto `AI DocClassExt` y necesita escritura en Test Plans sobre el plan 100069. Comprobación de `Guard`: lectura del plan con `System.AccessToken` (`GET .../_apis/testplan/plans/100069?api-version=7.1`), que prueba el acceso pero no la escritura. La escritura se verifica en el ensayo en DEV con `publish-smk-run.ps1` (`-WhatIf` y real). Por confirmar.
+
+## 4. Cómo se comprueba (stage `Guard`)
+
+`Guard` ejecuta, con la service connection del entorno, las lecturas de las tablas anteriores antes de abrir ninguna ventana y no modifica nada. Si falla una lectura, el run termina en rojo con el recurso y el rol que faltan y esta página como referencia, y no se toca el entorno.
+
+Limitación conocida: una lectura no demuestra un permiso de escritura (borrar secretos, subir blobs, escribir en Test Plans). Esos se ejercitan antes en el modo de solo lectura de cada script (`-WhatIf` o `-DryRun`) y, la primera vez, en el ensayo en DEV.
+
+## 5. Si falta algún permiso
+
+- Sin permisos de Key Vault, Storage o Kudu, la pipeline no se puede ensayar entera en DEV y el hito 2 queda bloqueado en esa parte.
+- El camino manual de `docs/releases/v1.2.0/GUIA_OPERADOR_PRE.md` sigue disponible como respaldo y no depende de esta petición.
+
+## 6. Pendiente
+
+- [ ] Enviar la petición a Plataforma (quién la envía: por designar).
+- [ ] Anotar aquí la fecha de envío, la respuesta y los roles realmente concedidos por service connection.
+- [ ] Resolver los puntos «por confirmar»: resource group de los storages, origen de la copia en PRO, autorización de `AI DocClassExt Promocion IA` para la pipeline Release, escritura en Test Plans y aplicación de `grant-pipeline-sql-user.sql` en cada entorno.

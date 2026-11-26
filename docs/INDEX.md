@@ -1,6 +1,6 @@
 # Índice de documentación — DocumentIA
 
-> Última revisión estructural: 2026-11-25 (AB#101452, retirada de `entrega/`). Revisión estructural previa: 2026-11-22 (AB#101445). Rama de referencia: `develop`.
+> Última revisión estructural: 2026-11-26 (AB#101570, convención `releases/`, templates de `pipelines/` y petición de permisos del SPN para la pipeline de release). Revisión estructural previa: 2026-11-25 (AB#101452, retirada de `entrega/`) y 2026-11-22 (AB#101445). Rama de referencia: `develop`.
 > Verificación de contenido por familia cerrada el 2026-11-22 (AB#101447) e integrada en `develop` el 2026-11-23 (AB#101448). El estado de cada fichero se actualiza aquí con cada cambio que lo afecte; las decisiones derivadas están en las tasks AB#101449 a AB#101452. Las marcas «no comprobado» del repaso se comprobaron en vivo contra Azure, Azure DevOps, App Insights y las BD de DEV, PRE y PRO el 2026-11-23 (AB#101449) y se sustituyeron por el estado real.
 
 DocumentIA es el sistema de clasificación y extracción documental de SAREB, en operación desde julio de 2026. Esta página cataloga la documentación permanente del repositorio, organizada en las cuatro familias que usa el impacto documental de cada cambio: técnica, funcional, arquitectura y explotación. El mapa por familia también está declarado en el `CLAUDE.md` del proyecto.
@@ -101,6 +101,9 @@ Release y despliegue, operación, observabilidad, incidentes y acceso.
 | Documento | Contenido | Estado |
 |---|---|---|
 | [procedimientos/RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release DEV → PRE → PRO: fases 0 a 5, puertas de PRE, catálogo de pipelines, vuelta atrás, secretos y app settings | vigente |
+| [procedimientos/PERMISOS_SPN_RELEASE.md](procedimientos/PERMISOS_SPN_RELEASE.md) | Petición a Plataforma de los permisos de las service connections para la pipeline de release (por entorno, rol, paso y comprobación de `Guard`). Solicitud pendiente de enviar | vigente |
+| [../pipelines/README.md](../pipelines/README.md) | Step templates de `pipelines/templates/` (qué pipeline de origen, parámetros, artefactos) y cómo comparar el YAML expandido antes y después de refactorizar | vigente |
+| [../releases/README.md](../releases/README.md) | Convención `releases/` de la raíz: `CURRENT`, `release.schema.json` y `<versión>/release.json`, que lee la pipeline de release. No confundir con `docs/releases/` | vigente |
 | [releases/README.md](releases/README.md) | Registro de releases por versión (`releases/vX.Y.Z/release.md`, `runbook.md`, `evidencias/`) y plantillas en `releases/_plantilla/` | vigente; cada versión es histórico |
 | [procedimientos/DESPLIEGUE_IA.md](procedimientos/DESPLIEGUE_IA.md) | Promoción de artefactos de IA (analyzers, proyectos, deployments) entre entornos, según ADR-001 | vigente |
 | [08_CHECKLISTS_DESPLIEGUE.md](08_CHECKLISTS_DESPLIEGUE.md) | Checklists de comprobación de configuración, pipelines y observabilidad al desplegar | vigente |
@@ -151,7 +154,7 @@ docs/
 ├── manuales/           CONFIGURACION, PLUGINS, COSTES_IA, DEDUPLICACION, VALIDACIONES, HEALTHCHECK
 ├── observabilidad/     MONITOREO_ALERTAS_REAL, OBSERVABILIDAD_KQL, CU_RENDIMIENTO_INSIGHTS, workbooks
 ├── presentaciones/     (histórico; nuevos ficheros ignorados)
-├── procedimientos/     RELEASE_MANAGEMENT, DESPLIEGUE_IA, DATABASE_MIGRATION_STRATEGY, RUNBOOK_INCIDENTES_PRODUCCION, RUNBOOK_RELEASE_PRO_2026-09, PLAN_DESPLIEGUE_INICIAL_DEV_PRE, AZURE_DEVOPS_BOOTSTRAP_SETUP
+├── procedimientos/     RELEASE_MANAGEMENT, PERMISOS_SPN_RELEASE, DESPLIEGUE_IA, DATABASE_MIGRATION_STRATEGY, RUNBOOK_INCIDENTES_PRODUCCION, RUNBOOK_RELEASE_PRO_2026-09, PLAN_DESPLIEGUE_INICIAL_DEV_PRE, AZURE_DEVOPS_BOOTSTRAP_SETUP
 ├── referencias/        GLOSSARIO, TIPOLOGIAS_REFERENCIA, CONFIANZA_AGREGADA, CAUSISTICAS_NOTA_SIMPLE_1_4, FUENTE_VERDAD_CONFIGURACION, TEAM_MATRIX (sustituido)
 ├── releases/           README, _plantilla/, v1.0.0/, v1.1.0/, v1.1.1/
 ├── superpowers/        specs/ (versionadas) y plans/ (no versionados)

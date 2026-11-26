@@ -1,6 +1,6 @@
 ﻿# Data Models & ER Diagram — DocumentIA
 
-> Última revisión: 2026-11-22 (AB#101447, contraste con las entidades EF, `DocumentIADbContext`, las 38 migraciones de `src/backend/DocumentIA.Data/Migrations/` y los scripts de `scripts/database/`). Versión del esquema: 1.24 (`20261013092225_ClaveIntencionDedup`).
+> Última revisión: 2026-11-26 (AB#101570, entidad `ReleaseAplicada` y migración `20261126190743_ReleaseAplicada`). Revisión previa: 2026-11-22 (AB#101447, contraste con las entidades EF, `DocumentIADbContext`, las 38 migraciones de entonces de `src/backend/DocumentIA.Data/Migrations/` y los scripts de `scripts/database/`). Ahora son 39 migraciones. Versión del esquema: 1.25 (`20261126190743_ReleaseAplicada`).
 
 ## 1. Introducción
 
@@ -255,6 +255,16 @@ erDiagram
         string UpdatedBy
         datetime PublishedAtUtc
         string PublishedBy
+    }
+
+    RELEASE_APLICADA {
+        int Id PK
+        string Version "ej: v1.2.0"
+        string Paso "Ruta del paso o __cierre__"
+        string HashContenido "SHA-256 del fichero del paso"
+        string Resultado "Aplicado o Revertido"
+        string BuildId
+        datetime FechaUtc
     }
 ```
 
@@ -773,6 +783,26 @@ Tdn1Id: 13
 
 Sin claves foráneas. Gestión desde `Admin_*PromptTemplate*` y `Admin_ActivatePromptVersion` / `Admin_RollbackPromptVersion`.
 
+### 3.14 **ReleaseAplicada** (Registro de pasos de release aplicados por entorno)
+
+**Propósito**: Registra qué pasos del manifiesto `releases/<versión>/release.json` se han aplicado en el entorno (AB#101570, `20261126190743_ReleaseAplicada`). La escribe y la lee por SQL, con token de Entra, la pipeline Release; la aplicación (Functions y Admin) no la usa en ejecución. Existe como entidad EF para que la migración la cree en los tres entornos con el pipeline 807. Cada entorno tiene su propia tabla, en su BD.
+
+**PK**: `Id` (INT, Identity)  
+**Índices**:
+- `IX_ReleaseAplicada_Version_Paso_Resultado` (`Version`, `Paso`, `Resultado`; no único)
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| **Id** | INT | PK, Identity |
+| **Version** | NVARCHAR(32) | Versión de la release (ej: `v1.2.0`) |
+| **Paso** | NVARCHAR(400) | Ruta del paso, o `__cierre__` para la fila de cierre de la release |
+| **HashContenido** | NVARCHAR(64) | SHA-256 hexadecimal del fichero del paso; vacío en la fila de cierre |
+| **Resultado** | NVARCHAR(16) | `Aplicado` o `Revertido` |
+| **BuildId** | NVARCHAR(32) | Identificador del run de la pipeline que lo registró |
+| **FechaUtc** | DATETIME2 | Fecha y hora UTC del registro |
+
+Sin claves foráneas.
+
 ---
 
 ## 4. Relaciones Principales
@@ -794,7 +824,7 @@ DocumentoEjecuciones (1) → (N) DocumentoEjecuciones (reutilizaciones, Ejecucio
 CatalogoTdn1 (1) → (N) CatalogoTdn2
 
 Referencias lógicas sin FK: TipologiaConfigAudit.TipologiaId → Tipologias;
-PluginTipologiaConfigs.TipologiaCodigo → Tipologias.Codigo; PromptTemplates sin relaciones
+PluginTipologiaConfigs.TipologiaCodigo → Tipologias.Codigo; PromptTemplates y ReleaseAplicada sin relaciones
 ```
 
 ### 4.2 Cascadas de Eliminación
@@ -842,10 +872,16 @@ PluginTipologiaConfigs.TipologiaCodigo → Tipologias.Codigo; PromptTemplates si
 | **1.21** | 2026-09-11 | Traza de las reutilizaciones por duplicado (`20260911093509_ReutilizacionPorDuplicado`, AB#100258): `ReutilizadaPorDuplicado` y `EjecucionOriginalId` en DocumentoEjecuciones, FK autorreferenciada, índices `EjecucionOriginalId` e `InstanceId_Reutilizadas` (filtrado) y el índice cubriente del Monitor con 19 INCLUDE. Migración aditiva. Aplicada en DEV (11/09) con el script idempotente de EF; en PRO va por `scripts/database/indice-monitor-reutilizacion-pro.sql` (recrea el índice cubriente con `ONLINE = ON` y registra la migración) más `sp-obtener-ejecuciones-por-idactivo-reutilizaciones.sql` (SP, fuera de EF). Aplicada en PRO el 20/09 por esa vía (índice cubriente reconstruido en 30 s; 3,6 min el script completo) |
 | **1.22** | 2026-09-20 | Índice cubriente del Monitor con las columnas de coste (`20260920063449_IndiceMonitorCostes`, AB#100662): recrea `IX_DocumentoEjecuciones_FechaEjecucion_Monitor` con 26 INCLUDE (19 previas + `CosteIAEur`, `CosteEstimado`, `CosteLayoutEur`, `CosteClasificacionEur`, `CosteExtraccionEur`, `CostePromptEur`, `TokensIA`). Solo índice, sin cambios de columnas ni datos. Motivo: los agregados de /costes hacían key lookup por fila y el de 90 días en PRO (67.928 filas, 19,5 s en frío) agotaba el timeout de 30 s de `Admin_GetCostes`. Aplicada el 20/09 en DEV (5,3 s; agregados de 90 días de 1,1 s a 40 ms), PRE (0,7 s) y PRO (34,1 s de rebuild ONLINE; los 5 agregados de 90 días de 7,3 s a 2,0 s en caliente, ninguno por encima de 0,7 s) con `scripts/database/indice-monitor-costes-pro.sql` (`ONLINE = ON`, registra la migración) |
 | **1.23** | 2026-10-05 | Índice `IX_Documentos_MD5` con INCLUDE `SHA256` (`20261005140618_IndiceDocumentosMD5`, AB#100863): la deduplicación por MD5 recorría la tabla completa y agotaba el S0 de PRO. Solo índice. En PRO con `scripts/database/indice-documentos-md5-pro.sql` (`ONLINE = ON`, registra la migración) |
-| **1.24** | 2026-10-13 | [ACTUAL] Clave de intención para la reutilización por duplicado (`20261013092225_ClaveIntencionDedup`, AB#100930, [ADR-003](../decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md)): `ClaveIntencion`, `ClaveIntencionJson` y `MotivoReutilizacion` en DocumentoEjecuciones e índice `IX_DocumentoEjecuciones_Documento_Clave`. Migración aditiva; el histórico se rellena con `scripts/database/backfill-clave-intencion.ps1` (paso opcional del pipeline `azure-pipelines-migrations.yml`). En PRO con `scripts/database/indice-documento-clave-pro.sql`; criterio de aceptación medido en PRO el 2026-11-18 (56 reutilizaciones, 0 anomalías). Aplicación en PRE no comprobada en la revisión del 2026-11-22 |
+| **1.24** | 2026-10-13 | Clave de intención para la reutilización por duplicado (`20261013092225_ClaveIntencionDedup`, AB#100930, [ADR-003](../decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md)): `ClaveIntencion`, `ClaveIntencionJson` y `MotivoReutilizacion` en DocumentoEjecuciones e índice `IX_DocumentoEjecuciones_Documento_Clave`. Migración aditiva; el histórico se rellena con `scripts/database/backfill-clave-intencion.ps1` (paso opcional del pipeline `azure-pipelines-migrations.yml`). En PRO con `scripts/database/indice-documento-clave-pro.sql`; criterio de aceptación medido en PRO el 2026-11-18 (56 reutilizaciones, 0 anomalías). Aplicación en PRE no comprobada en la revisión del 2026-11-22 |
+| **1.25** | 2026-11-26 | [ACTUAL] Tabla `ReleaseAplicada` con el índice `IX_ReleaseAplicada_Version_Paso_Resultado` (`20261126190743_ReleaseAplicada`, AB#101570): registro de los pasos de release aplicados por entorno, que lee y escribe la pipeline Release. Migración aditiva, sin tocar tablas existentes. Pendiente de aplicar en los tres entornos: DEV con el ensayo del pipeline 807 desde la rama de trabajo; PRE y PRO con la release v1.2.0 |
 | ~~v2.0~~ | — | El plan de eliminar PromptGPT, ModeloClasificacionDI y UmbralClasificacion en una «v2.0» se ejecutó el 2026-06-05 (fila 1.15b) |
 
 ### 5.2 Cambios recientes (de más nuevo a más antiguo)
+
+-6. **Registro de releases aplicadas** (2026-11-26, AB#101570)
+   - Tabla `ReleaseAplicada` (`20261126190743_ReleaseAplicada`) para que la pipeline Release sepa qué pasos del manifiesto ya se aplicaron en cada entorno y no los repita
+   - Solo la usa la pipeline por SQL; la aplicación no la lee. Sin claves foráneas
+   - Migración aditiva, pendiente de aplicar en DEV, PRE y PRO
 
 -5. **Clave de intención en la deduplicación** (2026-10-13, AB#100930, ADR-003)
    - Una petición repetida solo reutiliza una ejecución anterior si coincide su `ClaveIntencion` (tipología esperada, instrucciones y modo), no solo el SHA256
@@ -1134,6 +1170,6 @@ WHERE vr.Severidad = 'Error';
 ---
 
 **Documento**: Data Models & ER Diagram — DocumentIA  
-**Última actualización**: 2026-11-22 (revisión AB#101447; anterior 2026-06-10)  
-**Versión BD**: 1.24 (`20261013092225_ClaveIntencionDedup`), aplicada en DEV, PRE y PRO (PRE comprobado el 2026-11-23)  
+**Última actualización**: 2026-11-26 (AB#101570; anterior 2026-11-22, revisión AB#101447)  
+**Versión BD**: 1.25 (`20261126190743_ReleaseAplicada`), pendiente de aplicar en DEV, PRE y PRO (DEV con el ensayo del pipeline 807 desde la rama; PRE y PRO con la release v1.2.0). Última versión aplicada en los tres entornos: 1.24 (`20261013092225_ClaveIntencionDedup`; PRE comprobado el 2026-11-23)  
 **Status**: Production
