@@ -1,6 +1,6 @@
 # Infraestructura Real Desplegada — DEV / PRE / PRO
 
-> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; verificada en DEV el 2026-11-25; PRE y PRO con la siguiente release). Revisiones previas: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto), 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json` y el código). Lo que no se ha podido comprobar contra Azure en esta revisión se marca como tal.
+> Última revisión: 2026-11-26 (AB#101570, cifra de entidades del `DocumentIADbContext`: 14 con `ReleaseAplicada`). Revisión previa: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; verificada en DEV el 2026-11-25; PRE y PRO con la siguiente release). Revisiones previas: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto), 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json` y el código). Lo que no se ha podido comprobar contra Azure en esta revisión se marca como tal.
 
 ## 🌐 Modelo multi-entorno
 
@@ -161,7 +161,7 @@ Cada resource group replica la misma topología. Sustituye `{app}`, `{kv}`, `{sq
 │   ├── Database: DocumentIA
 │   ├── Auth: Active Directory Managed Identity (patrón PROD)
 │   ├── Connection: SqlConnectionString (from KeyVault)
-│   └── Schema: DocumentIADbContext (13 entidades), migraciones EF por el pipeline `azure-pipelines-migrations.yml` (script idempotente aplicado desde el pool privado)
+│   └── Schema: DocumentIADbContext (14 entidades), migraciones EF por el pipeline `azure-pipelines-migrations.yml` (script idempotente aplicado desde el pool privado)
 ├── Azure Storage (Blob + Table + Queue)
 │   ├── Documentos: {stg}          (dev: srbstgdevdocai · pre: srbstgpredocai · pro: srbstgprodocai)
 │   ├── Durable hub: {stgapp}      (dev: srbstgdevappdocai · pre: srbstgpreappdocai · pro: srbstgproapppdocai)

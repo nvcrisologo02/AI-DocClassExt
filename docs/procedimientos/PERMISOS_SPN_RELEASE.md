@@ -41,7 +41,7 @@ Además, para la promoción de IA (`Promote`) la pipeline usa la service connect
 
 ## 3. Petición por service connection
 
-Las comprobaciones son las lecturas que hará la stage `Guard`; ninguna imprime secretos (solo recuentos, estados o el nombre de la clave).
+Comandos propuestos como referencia; la stage `Guard` del hito 2 fija los definitivos. La spec solo exige que `Guard` compruebe cada permiso con una lectura. Las propuestas no imprimen secretos (solo recuentos, estados o el nombre de la clave).
 
 ### 3.1 `AI DocClassExt DEV` (solo ensayos de la pipeline)
 
@@ -81,7 +81,7 @@ La identidad del build es el Project Collection Build Service del proyecto `AI D
 
 ## 4. Cómo se comprueba (stage `Guard`)
 
-`Guard` ejecuta, con la service connection del entorno, las lecturas de las tablas anteriores antes de abrir ninguna ventana y no modifica nada. Si falla una lectura, el run termina en rojo con el recurso y el rol que faltan y esta página como referencia, y no se toca el entorno.
+Según la spec, `Guard` comprobaría cada permiso con una lectura, con la service connection del entorno, antes de abrir ninguna ventana y sin modificar nada; las lecturas de las tablas anteriores son la propuesta. Si falla una lectura, el run debe terminar en rojo con el recurso y el rol que faltan y esta página como referencia, y no se toca el entorno.
 
 Limitación conocida: una lectura no demuestra un permiso de escritura (borrar secretos, subir blobs, escribir en Test Plans). Esos se ejercitan antes en el modo de solo lectura de cada script (`-WhatIf` o `-DryRun`) y, la primera vez, en el ensayo en DEV.
 
