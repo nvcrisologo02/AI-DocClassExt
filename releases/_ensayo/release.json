@@ -1,0 +1,10 @@
+{
+  "version": "_ensayo",
+  "pasos": [
+    {
+      "tipo": "sql",
+      "ruta": "releases/_ensayo/ensayo-dev.sql",
+      "entornos": ["dev"]
+    }
+  ]
+}

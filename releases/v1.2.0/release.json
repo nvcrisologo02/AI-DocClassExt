@@ -1,0 +1,27 @@
+{
+  "version": "v1.2.0",
+  "embeddings": {
+    "version": "v5",
+    "modo": "hibrido",
+    "restringidoModo": "hibrido"
+  },
+  "pasos": [
+    {
+      "tipo": "ps1",
+      "ruta": "scripts/migrations/gpt56-luna/aplicar-luna.ps1",
+      "argumentos": "-Environment <env>",
+      "entornos": ["pre", "prod"]
+    },
+    {
+      "tipo": "ps1",
+      "ruta": "scripts/storage/copy-embeddings-artifacts.ps1",
+      "argumentos": "-Version v5 -TargetEnvironment <env>",
+      "entornos": ["pre", "prod"]
+    },
+    {
+      "tipo": "sql",
+      "ruta": "scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql",
+      "entornos": ["pre", "prod"]
+    }
+  ]
+}
