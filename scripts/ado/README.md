@@ -30,3 +30,15 @@ Opcional recomendado: en los tiles, añadir reglas de color (Configure → Condi
 - "Estancados" = estados activos sin cambios en 14 días.
 - La descripción del dashboard tiene un máximo de 128 caracteres (límite de la API: `VS403360`).
 - Spec: `docs/superpowers/specs/2026-08-12-ado-dashboard-seguimiento-design.md`.
+
+## Get-PipelinePreview.ps1
+
+Obtiene el YAML expandido (con templates resueltos) de un pipeline de Azure DevOps mediante la API de preview (`POST .../_apis/pipelines/<id>/preview`, `previewRun: true`), para comparar el YAML final antes y después de refactorizar un pipeline sobre templates. **No ejecuta nada**: solo devuelve el YAML. La rama debe estar subida al remoto.
+
+Token: `az account get-access-token` por defecto; `-AccessToken` permite inyectarlo (tests o `System.AccessToken`). Con `-WhatIf` imprime URL y cuerpo sin llamar. Salida 0 si va bien; 2 si falla la API (un 403 puede ser falta de permiso de preview sobre el pipeline), falta `finalYaml` o no hay token.
+
+```bash
+pwsh -NoProfile -Command "& ./scripts/ado/Get-PipelinePreview.ps1 -PipelineId 807 -Branch feature/101570-pipeline-release-hito1 -TemplateParameters @{ targetEnvironment = 'dev' } -OutFile docs/auxiliares/temps/2026-11-27/preview-antes/807-dev.yml"
+```
+
+Tests: `pwsh -NoProfile -Command "Import-Module Pester -RequiredVersion 5.9.0; Invoke-Pester -Path ./scripts/ado/tests/Get-PipelinePreview.Tests.ps1 -Output Detailed"`.
