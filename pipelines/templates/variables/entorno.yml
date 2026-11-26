@@ -1,0 +1,102 @@
+# Variables por entorno (dev, pre, prod) del despliegue de DocumentIA: conexion de servicio, nombres de
+# recursos, endpoints y valores de configuracion que cambian segun el entorno. Salen del bloque de
+# variables de azure-pipelines.yml (799) sin cambiar valores; SQL_SERVER_NAME y TASKHUB_STORAGE_ACCOUNT
+# son nuevas. En este hito las pipelines 807 (migraciones) y 832 (artefactos de IA) conservan sus
+# propias variables; la pipeline Release del hito 2 usara esta plantilla.
+parameters:
+  - name: environment
+    type: string
+    values:
+      - dev
+      - pre
+      - prod
+
+variables:
+  - ${{ if eq(parameters.environment, 'dev') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt DEV
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbappdevdocai
+    - name: ENVIRONMENT_NAME
+      value: Development
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadmindevdocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverdev
+    - name: AZURE_ASSET_RESOLVER_BASE_URL
+      value: https://srbwebpluginassetresolverdev.azurewebsites.net/
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGDEVDOCSAI
+    - name: KEY_VAULT_NAME
+      value: srbkvdevdocai
+    - name: GDC_ENDPOINT
+      value: https://srbwidd03.sareb.srb:8090/sintws/IDocService
+    - name: DI_USE_INLINE_CONTENT
+      value: 'true'
+    - name: BLOB_RETENTION_BATCH_SIZE
+      value: '2000'
+    # promptDefaultsModelKey: modelo por defecto de las tipologias que no fijan ModelKey (PromptDefaults:ModelKey, AB#99938). Vacio no vale: la resolucion falla. Luna en los tres entornos desde v1.2.0 (ADR-004).
+    - name: PROMPT_DEFAULTS_MODEL_KEY
+      value: 'prompt.gpt56-luna'
+    - name: SQL_SERVER_NAME
+      value: srbsqldevdocai
+    - name: TASKHUB_STORAGE_ACCOUNT
+      value: srbstgdevappdocai
+  - ${{ if eq(parameters.environment, 'pre') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRE
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbapppredocai
+    - name: ENVIRONMENT_NAME
+      value: Preproduction
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadminpredocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolverpre
+    - name: AZURE_ASSET_RESOLVER_BASE_URL
+      value: https://srbwebpluginassetresolverpre.azurewebsites.net/
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGPREDOCSAI
+    - name: KEY_VAULT_NAME
+      value: srbkvpredocai
+    - name: GDC_ENDPOINT
+      value: https://srbwidi03.sareb.srb:8090/sintws-162/IDocService  # GDC PRE confirmado en documentación operativa
+    - name: DI_USE_INLINE_CONTENT
+      value: 'true'
+    - name: BLOB_RETENTION_BATCH_SIZE
+      value: '2000'
+    - name: PROMPT_DEFAULTS_MODEL_KEY
+      value: 'prompt.gpt56-luna'
+    - name: SQL_SERVER_NAME
+      value: srbsqlpredocai
+    - name: TASKHUB_STORAGE_ACCOUNT
+      value: srbstgpreappdocai
+  - ${{ if eq(parameters.environment, 'prod') }}:
+    - name: AZURE_SERVICE_CONNECTION
+      value: AI DocClassExt PRO
+    - name: AZURE_FUNCTIONS_APP_NAME
+      value: srbappprodocai
+    - name: ENVIRONMENT_NAME
+      value: Production
+    - name: AZURE_ADMIN_WEB_APP_NAME
+      value: srbwebadminprodocai
+    - name: AZURE_ASSET_RESOLVER_WEB_APP_NAME
+      value: srbwebpluginassetresolver
+    - name: AZURE_ASSET_RESOLVER_BASE_URL
+      value: https://srbwebpluginassetresolver.azurewebsites.net/
+    - name: AZURE_RESOURCE_GROUP
+      value: SRBRGDOCSAIPROD
+    - name: KEY_VAULT_NAME
+      value: srbkvprodocai
+    - name: GDC_ENDPOINT
+      value: https://srbwidp05.sareb.srb:8090/sintws/IDocService
+    - name: DI_USE_INLINE_CONTENT
+      value: 'false'
+    - name: BLOB_RETENTION_BATCH_SIZE
+      value: '5000'
+    - name: PROMPT_DEFAULTS_MODEL_KEY
+      value: 'prompt.gpt56-luna'
+    - name: SQL_SERVER_NAME
+      value: srbsqlprodocai
+    - name: TASKHUB_STORAGE_ACCOUNT
+      value: srbstgproapppdocai

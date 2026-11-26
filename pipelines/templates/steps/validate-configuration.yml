@@ -1,0 +1,30 @@
+# Validacion del contrato de app settings de Functions, Admin y AssetResolver. Procede de
+# ValidateConfigurationJob de azure-pipelines.yml (799); la pipeline Release lo reutilizara en el
+# hito 2. Sin cambio de comportamiento.
+parameters:
+  - name: serviceConnection
+    type: string
+  - name: resourceGroup
+    type: string
+  - name: functionAppName
+    type: string
+  - name: adminWebAppName
+    type: string
+  - name: assetResolverWebAppName
+    type: string
+
+steps:
+- checkout: self
+
+- task: AzureCLI@2
+  displayName: Validate App Settings contract
+  inputs:
+    azureSubscription: ${{ parameters.serviceConnection }}
+    scriptType: pscore
+    scriptLocation: inlineScript
+    inlineScript: |
+      ./scripts/testing/validate-azure-appsettings-contract.ps1 `
+        -ResourceGroup "${{ parameters.resourceGroup }}" `
+        -FunctionsAppName "${{ parameters.functionAppName }}" `
+        -AdminWebAppName "${{ parameters.adminWebAppName }}" `
+        -AssetResolverWebAppName "${{ parameters.assetResolverWebAppName }}"

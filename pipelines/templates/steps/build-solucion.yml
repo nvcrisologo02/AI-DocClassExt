@@ -1,0 +1,91 @@
+# Pasos de compilacion, pruebas y publicacion de los tres artefactos (drop-functions, drop-admin,
+# drop-assetresolver). Proceden del BuildJob de azure-pipelines.yml (799); la pipeline Release los
+# reutilizara en el hito 2. Sin cambio de comportamiento.
+parameters:
+  - name: solutionPath
+    type: string
+  - name: buildConfiguration
+    type: string
+  - name: testsProject
+    type: string
+  - name: functionsProject
+    type: string
+  - name: adminProject
+    type: string
+  - name: assetResolverProject
+    type: string
+
+steps:
+- task: UseDotNet@2
+  displayName: Use .NET 10 SDK
+  inputs:
+    packageType: sdk
+    version: 10.x
+
+- task: DotNetCoreCLI@2
+  displayName: Restore
+  inputs:
+    command: restore
+    projects: ${{ parameters.solutionPath }}
+
+- task: DotNetCoreCLI@2
+  displayName: Build
+  inputs:
+    command: build
+    projects: ${{ parameters.solutionPath }}
+    arguments: --configuration ${{ parameters.buildConfiguration }} --no-restore
+
+- task: DotNetCoreCLI@2
+  displayName: Test
+  inputs:
+    command: test
+    projects: ${{ parameters.testsProject }}
+    arguments: --configuration ${{ parameters.buildConfiguration }} --no-build
+
+- task: DotNetCoreCLI@2
+  displayName: Publish Functions
+  inputs:
+    command: publish
+    publishWebProjects: false
+    projects: ${{ parameters.functionsProject }}
+    arguments: --configuration ${{ parameters.buildConfiguration }} --output $(Build.ArtifactStagingDirectory)/functions
+    zipAfterPublish: false
+    modifyOutputPath: false
+
+- task: DotNetCoreCLI@2
+  displayName: Publish Admin
+  inputs:
+    command: publish
+    publishWebProjects: false
+    projects: ${{ parameters.adminProject }}
+    arguments: --configuration ${{ parameters.buildConfiguration }} --output $(Build.ArtifactStagingDirectory)/admin
+    zipAfterPublish: false
+    modifyOutputPath: false
+
+- task: DotNetCoreCLI@2
+  displayName: Publish AssetResolver
+  inputs:
+    command: publish
+    publishWebProjects: false
+    projects: ${{ parameters.assetResolverProject }}
+    arguments: --configuration ${{ parameters.buildConfiguration }} --output $(Build.ArtifactStagingDirectory)/assetresolver
+    zipAfterPublish: false
+    modifyOutputPath: false
+
+- task: PublishBuildArtifacts@1
+  displayName: Upload artifact - functions
+  inputs:
+    PathtoPublish: $(Build.ArtifactStagingDirectory)/functions
+    ArtifactName: drop-functions
+
+- task: PublishBuildArtifacts@1
+  displayName: Upload artifact - admin
+  inputs:
+    PathtoPublish: $(Build.ArtifactStagingDirectory)/admin
+    ArtifactName: drop-admin
+
+- task: PublishBuildArtifacts@1
+  displayName: Upload artifact - assetresolver
+  inputs:
+    PathtoPublish: $(Build.ArtifactStagingDirectory)/assetresolver
+    ArtifactName: drop-assetresolver
