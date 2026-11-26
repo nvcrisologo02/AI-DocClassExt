@@ -33,7 +33,7 @@ variables:
     # blobRetentionBatchSize: lote del BlobCleanupTimerTrigger (AB#100983). PRO usa 5000 desde v1.0.0 (AB#100868).
     - name: blobRetentionBatchSize
       value: '2000'
-    # promptDefaultsModelKey: modelo por defecto de las tipologias que no fijan ModelKey (PromptDefaults:ModelKey, AB#99938). Vacio no vale: la resolucion falla. Luna solo en DEV.
+    # promptDefaultsModelKey: modelo por defecto de las tipologias que no fijan ModelKey (PromptDefaults:ModelKey, AB#99938). Vacio no vale: la resolucion falla. Luna en los tres entornos desde v1.2.0 (ADR-004).
     - name: promptDefaultsModelKey
       value: 'prompt.gpt56-luna'
   - ${{ if eq(parameters.targetEnvironment, 'pre') }}:
@@ -50,7 +50,7 @@ variables:
     - name: blobRetentionBatchSize
       value: '2000'
     - name: promptDefaultsModelKey
-      value: 'default.gpt4o-mini'
+      value: 'prompt.gpt56-luna'
   - ${{ if eq(parameters.targetEnvironment, 'prod') }}:
     - name: azureSubscription
       value: AI DocClassExt PRO
@@ -65,7 +65,7 @@ variables:
     - name: blobRetentionBatchSize
       value: '5000'
     - name: promptDefaultsModelKey
-      value: 'default.gpt4o-mini'
+      value: 'prompt.gpt56-luna'
   # Endpoints de IA por entorno (AI_*): fuente unica compartida con azure-pipelines.yml.
   - template: infra/ai/pipeline-variables.yml
     parameters:
@@ -198,6 +198,24 @@ stages:
                   -ResourceGroup "$(azureResourceGroup)" `
                   -Name "$(functionAppName)" `
                   -SettingsJson $settingsJson
+
+                Write-Host "Fijando settings decisivos (AB#101570)..."
+                az functionapp config appsettings set --resource-group "$(azureResourceGroup)" --name "$(functionAppName)" --settings "PromptDefaults__ModelKey=$(promptDefaultsModelKey)" "GDC__BypassSslValidation=false" -o none
+                if ($LASTEXITCODE -ne 0) { throw "No se pudieron fijar PromptDefaults__ModelKey y GDC__BypassSslValidation (az exit $LASTEXITCODE)." }
+                $decisivos = az functionapp config appsettings list --resource-group "$(azureResourceGroup)" --name "$(functionAppName)" --query "[?name=='PromptDefaults__ModelKey' || name=='GDC__BypassSslValidation'].[name,value]" -o tsv
+                if ($LASTEXITCODE -ne 0) { throw "No se pudieron leer los settings decisivos (az exit $LASTEXITCODE)." }
+                $esperados = @{ "PromptDefaults__ModelKey" = "$(promptDefaultsModelKey)"; "GDC__BypassSslValidation" = "false" }
+                $leidos = @{}
+                foreach ($fila in @($decisivos)) {
+                  $partes = "$fila" -split "`t"
+                  if ($partes.Count -ge 2) { $leidos[$partes[0].Trim()] = $partes[1].Trim() }
+                }
+                foreach ($clave in $esperados.Keys) {
+                  if (-not $leidos.ContainsKey($clave) -or $leidos[$clave] -ne $esperados[$clave]) {
+                    throw "El setting $clave vale ``$($leidos[$clave])`` y debia valer ``$($esperados[$clave])`` tras fijarlo."
+                  }
+                }
+                Write-Host "Settings decisivos verificados: PromptDefaults__ModelKey=$($leidos['PromptDefaults__ModelKey']) GDC__BypassSslValidation=$($leidos['GDC__BypassSslValidation'])"
 
                 Write-Host "Retirando app settings heredados sin efecto (AB#101450)..."
                 & .\scripts\configuration\remove-legacy-app-settings.ps1 `

@@ -4,7 +4,7 @@
 >
 > **Settings heredados retirados (AB#101450, 2026-11-25).** Los 27 app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y los de conexión de `Extraction__AzureContentUnderstanding__*` (`Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation`) ya no existen en el pipeline ni en el contrato `scripts/config/azure-appsettings-contract.json` (que los prohíbe) ni en los entornos: DEV desde su despliegue (limpio el 2026-11-25 (run 80238 del 802), fecha al verificar); PRE y PRO con su siguiente despliegue. El pipeline los borra en cada despliegue si siguen presentes. No se enlazaban a ninguna clase (comprobado el 2026-11-22 en `Program.cs`): los parámetros de conexión, modelo y umbrales de IA salen de las filas de `ModeloConfigs` resueltas por alias e identidad administrada. De `Extraction__AzureContentUnderstanding__*` solo quedan los siete de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`). Las secciones 4.2, 4.3 y 5.3 y la fila de conexión de 5.2 se conservan solo como registro de lo retirado.
 >
-> **Modelo generativo por entorno:** lo deciden las filas `UseAsFallback` de `ModeloConfigs` y el app setting `PromptDefaults__ModelKey` (DEV `prompt.gpt56-luna` desde el 2026-11-20, ADR-004; PRE y PRO `default.gpt4o-mini`, deployment `gpt-4o-mini` = modelo gpt-4.1-mini, hasta la siguiente release).
+> **Modelo generativo por entorno:** lo deciden las filas `UseAsFallback` de `ModeloConfigs` y el app setting `PromptDefaults__ModelKey` (`prompt.gpt56-luna` en los tres entornos: DEV desde el 2026-11-20 y PRE y PRO desde la release v1.2.0, ADR-004). `PromptDefaults__ModelKey` y `GDC__BypassSslValidation` las fija el pipeline en cada despliegue; cambiarlas a mano no sobrevive al siguiente run.
 
 ## 1. Visión general
 
@@ -202,7 +202,7 @@ Sección raíz: `GDC`
 | `TrustedRootCertificate` | string | PEM opcional con la raíz y la emisora de confianza; si se informa, sustituye al fichero sin desplegar. |
 | `TrustedRootCertificatePath` | string | Ruta del PEM de confianza. Por defecto `config/certs/sareb-ca-chain.pem`. |
 
-> **Nota:** desde el despliegue de AB#101553 (verificado en DEV el 2026-11-25; PRE y PRO con la siguiente release) el handler HTTP del GDC valida la cadena del certificado contra `config/certs/sareb-ca-chain.pem` (raíz y emisora de SAREB, raíz válida hasta 2040-12-16) con `CustomRootTrust` y sin comprobación de revocación. El pipeline fija `GDC__BypassSslValidation=false`. `true` queda solo como interruptor manual de emergencia: acepta cualquier certificado, deja el aviso `[GDC] AVISO` en el log de arranque y el siguiente despliegue lo devuelve a `false`. `GDC__TrustedRootCertificate` (PEM) sustituye al fichero sin desplegar. Un fichero ausente o corrupto impide arrancar el host. Hasta ese despliegue, los tres entornos siguen con `true`. `GDC__BypassSslValidation` admite solo `true` o `false` (otro valor impide arrancar el host). Un secreto de Key Vault `GDC--BypassSslValidation` o `GDC--TrustedRootCertificate` pisaría el app setting (el proveedor de Key Vault se carga el último) y el pipeline no lo restablecería; hoy no existe ninguno en los tres Key Vault (comprobado el 2026-11-25). Las credenciales HTTP Basic (`GDC:HttpBasicUsername` / `GDC:HttpBasicPassword`) vienen del Key Vault del entorno.
+> **Nota:** desde el despliegue de AB#101553 (verificado en DEV el 2026-11-25; PRE y PRO con la siguiente release) el handler HTTP del GDC valida la cadena del certificado contra `config/certs/sareb-ca-chain.pem` (raíz y emisora de SAREB, raíz válida hasta 2040-12-16) con `CustomRootTrust` y sin comprobación de revocación. El pipeline fija `GDC__BypassSslValidation=false` en cada despliegue (paso `Fijando settings decisivos`, AB#101570); cambiarla a mano no sobrevive al siguiente run. `true` queda solo como interruptor manual de emergencia: acepta cualquier certificado, deja el aviso `[GDC] AVISO` en el log de arranque y el siguiente despliegue lo devuelve a `false`. `GDC__TrustedRootCertificate` (PEM) sustituye al fichero sin desplegar. Un fichero ausente o corrupto impide arrancar el host. Hasta ese despliegue, los tres entornos siguen con `true`. `GDC__BypassSslValidation` admite solo `true` o `false` (otro valor impide arrancar el host). Un secreto de Key Vault `GDC--BypassSslValidation` o `GDC--TrustedRootCertificate` pisaría el app setting (el proveedor de Key Vault se carga el último) y el pipeline no lo restablecería; hoy no existe ninguno en los tres Key Vault (comprobado el 2026-11-25). Las credenciales HTTP Basic (`GDC:HttpBasicUsername` / `GDC:HttpBasicPassword`) vienen del Key Vault del entorno.
 
 ---
 
@@ -275,7 +275,7 @@ FUNCTIONS_WORKER_RUNTIME                 = dotnet-isolated
 SecretsSource / KeyVaultName             = AzureVault / srbkv<env>docai
 EnvironmentName                          = Development | Preproduction | Production
 AI__Resources__openai_primary__Endpoint  = https://... (y cu_primary, cu_secondary, di)
-PromptDefaults__ModelKey                 = prompt.gpt56-luna (dev) | default.gpt4o-mini (pre, pro)
+PromptDefaults__ModelKey                 = prompt.gpt56-luna (dev; pre y pro desde la release v1.2.0) - la fija el pipeline en cada despliegue; cambiarla a mano no sobrevive al siguiente run
 Extraction__DefaultProvider              = azure-content-understanding
 Extraction__AzureContentUnderstanding__MaxConcurrentCalls = 4 (y el resto de resiliencia)
 AzureOpenAIResilience__*                 = reintentos y circuit breaker de Azure OpenAI
@@ -284,7 +284,7 @@ DocumentIntelligence__UseInlineContent   = true (dev, pre) | false (pro)
 BlobRetention__BatchSize                 = 2000 (dev, pre) | 5000 (pro)
 PromptTracing__Enabled / IncludePromptText / MaxPromptTextChars = true / true / 20000
 DOTNET_GCHeapHardLimitPercent            = 28
-GDC__Endpoint / GDC__BypassSslValidation = https://... / false
+GDC__Endpoint / GDC__BypassSslValidation = https://... / false   (BypassSslValidation la fija el pipeline en cada despliegue; cambiarla a mano no sobrevive al siguiente run)
 SqlConnectionString, AzureWebJobsStorage, AzureStorageConnectionString = @Microsoft.KeyVault(...)
 ```
 
