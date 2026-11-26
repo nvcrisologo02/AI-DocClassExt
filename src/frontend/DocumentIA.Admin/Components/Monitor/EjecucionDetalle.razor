@@ -10,7 +10,7 @@
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.06em;
-        color: #6c757d;
+        color: var(--sareb-verde-gris);
         margin-bottom: 0.35rem;
     }
     .activity-dot {
@@ -20,7 +20,7 @@
         text-align: center;
     }
     .activity-bar-bg {
-        background-color: #e9ecef;
+        background-color: rgba(var(--sareb-verde-claro-rgb), .15);
         flex: 1;
     }
 </style>
@@ -207,7 +207,7 @@ else
                                 @if (c > 0)
                                 {
                                     <td class="py-0 ps-1">
-                                        <div style="width:60px;height:5px;background:#e9ecef;border-radius:3px">
+                                        <div style="width:60px;height:5px;background:rgba(var(--sareb-verde-claro-rgb),.15);border-radius:3px">
                                             <div style="width:@((int)(c * 60))px;height:5px;border-radius:3px" class="@ConfianzaBarClass(c)"></div>
                                         </div>
                                     </td>

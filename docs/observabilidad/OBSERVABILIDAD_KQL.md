@@ -1,5 +1,7 @@
 # Observabilidad & KQL — DocumentIA
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `AzureContentUnderstandingProvider.cs`, `AzureOpenAIResilienceExecutor.cs`, `PersistirActivity.cs`, `host.json`, `create-monitor-alerts.ps1` y el workbook `documentia-cu-performance`). Las consultas sobre `CU.*`, `AOAI.*`, `DocumentProcessed`, `DocumentIA.Duracion.*`, `Prompt.Trace` y `BlobCleanupCycle` coinciden con el código. Las que usan `Activity.*`, `Orchestration.*`, `Classification.Confidence*`, `GPT.*Tokens`, `DI.Tokens`, `GDC.Upload*` y las dimensiones `ActivityName`, `ExecutionId`, `ExecutionState` y `DocumentName` **no tienen emisor en `src/backend` y no devuelven datos** (marcadas en el texto; se conservan como propuesta). El workbook del repo cubre solo las métricas CU y `CU.TransientError`. El clasificador por embeddings (`Classification.Embeddings`) está en sombra solo en DEV (ADR-002). Modelo generativo por entorno: DEV gpt-5.6-luna desde el 2026-11-20 (ADR-004); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. Comprobado el 2026-11-23: PRO tiene el workbook «DocumentIA Libro - 29/5/2026» además del de CU y el dashboard «srbappiprodocai Dashboard»; en App Insights de PRO (30 días) llegan `DocumentProcessed`, `DocumentIA.Duracion.Total`, `Prompt.Trace`, `BlobCleanupCycle`, `AOAI.*` y `Classification.HybridTDN`, pero ninguna métrica `CU.*`.
+
 > **Objetivo:** Un operador o dev puede diagnosticar issues en minutos usando KQL. Todas las queries son **copy-paste ready**.
 
 ---
@@ -26,7 +28,7 @@
 │  │     ├─ NormalizarActivity                        │
 │  │     ├─ VerificarDuplicadoActivity                │
 │  │     ├─ SubirGDCActivity                          │
-│  │     └─ ... (13+ activities)                      │
+│  │     └─ ... (21 activities invocadas)             │
 │  │                                                  │
 │  └─ Telemetry Channels:                             │
 │     ├─ TelemetryClient.TrackEvent()                 │
@@ -52,10 +54,10 @@
 | **CU.AnalysisMs** | AzureContentUnderstandingProvider | Tiempo real de Azure CU |
 | **CU.ParseMs** | AzureContentUnderstandingProvider | Parseo respuesta |
 | **CU.Attempts** | AzureContentUnderstandingProvider | Reintentos |
-| **Confianza** | GptClasificarDataProvider | Score clasificación GPT (0.0–1.0) |
-| **ConfianzaDI** | DocumentIntelligenceProvider | Score Document Intelligence (0.0–1.0) |
-| **Duration by Activity** | Durable Functions | Latencia por step |
-| **Execution State** | DocumentProcessOrchestrator | Estado orquestación |
+| **DocumentIA.Duracion.{Total\|Clasificacion\|Extraccion\|Validacion\|GDC\|Integracion\|Persistencia}** | PersistirActivity | Duración por fase (ms), con `Tipologia` |
+| **Classification.Embeddings.LatenciaMs** | EmbeddingsClasificarProvider | Latencia del clasificador por embeddings (solo DEV, en sombra) |
+
+> Las filas «Confianza», «ConfianzaDI», «Duration by Activity» y «Execution State» de versiones anteriores no tienen emisor en el código: la confianza se consulta en SQL (`DocumentoEjecuciones.ConfianzaGlobal`).
 
 ### Eventos Custom
 
@@ -63,15 +65,19 @@
 - `CU.HardTimeout` – Timeout permanente en CU
 - `CU.CircuitOpen` – Circuit breaker activado
 - `CU.CircuitClosed` – Circuit breaker normalizado
-- `CU.CircuitFailover` – Switchover a fallback
+- `CU.CircuitFailover` – Cambio a otro `modelKey` de CU (no a GPT)
+- `CU.RetryFailover` – Reintento sobre el modelo alternativo de CU
 - `CU.CircuitRejected` – Request rechazado por circuit
 - `AOAI.RateLimitRetry` – Reintento ante 429/5xx en llamadas a Azure OpenAI (clasificación GPT y prompts)
 - `AOAI.CircuitOpen` – Circuit breaker de Azure OpenAI activado (cuota agotada tras fallos consecutivos)
 - `AOAI.CircuitClosed` – Circuit breaker de Azure OpenAI normalizado (cooldown expirado o éxito)
 - `AOAI.CircuitRejected` – Request a Azure OpenAI rechazado por circuito abierto (fail-fast) — análogos a los `CU.Circuit*` de Content Understanding
-- `GDC.UploadSuccess`, `GDC.UploadFailed` – Subida a GDC
-- `Classification.Phase1Success`, `Classification.Phase1Failed` – Fases GPT
-- Otros eventos: `Orchestration.Started`, `Orchestration.Failed`, `Duplicado.Detected`
+- `DocumentProcessed` – Documento persistido (`Tipologia`, `EstadoFinal`, `UseFallbackLLM`, `NombreDocumento`, `EjecucionGuid`)
+- `Prompt.Trace` – Traza de prompts con hashes (PromptTraceTelemetryService)
+- `BlobCleanupCycle` – Ciclo del cron de limpieza de blobs
+- `Classification.HybridTDN` – Clasificador híbrido TDN
+- `Classification.Embeddings` – Clasificador por embeddings (solo DEV, en sombra, ADR-002)
+- No emitidos por el código (figuraban en versiones anteriores): `GDC.UploadSuccess`, `GDC.UploadFailed`, `Classification.Phase1Success`, `Classification.Phase1Failed`, `Orchestration.Started`, `Orchestration.Failed`, `Duplicado.Detected`
 
 ---
 
@@ -83,11 +89,12 @@
 
 **Ubicación:** `docs/observabilidad/workbooks/documentia-cu-performance.workbook.json`
 
-**Contenido:**
-- Timeline de CU latencias (PrepareMs, LimiterWaitMs, AnalysisMs, ParseMs)
-- Distribución de reintentos
-- Circuit breaker events
-- Correlación entre load y backpressure
+**Contenido** (por título de sus secciones):
+- Disponibilidad de métricas CU
+- P95 por subfase (PrepareMs, LimiterWaitMs, AnalysisMs, ParseMs)
+- Diagnóstico rápido: espera vs análisis
+- Top operaciones por espera
+- Errores transitorios CU (solo `CU.TransientError`; el workbook no contiene eventos `CU.Circuit*`)
 
 **Cómo importar:**
 1. Abrir Azure Portal → Application Insights `srbappiprodocai`
@@ -98,6 +105,8 @@
 6. **Guardar como** `DocumentIA - CU Performance`
 
 #### Recomendaciones para Otros Workbooks
+
+> Propuestas, no existen en el repo (que solo versiona `documentia-cu-performance`). INFRAESTRUCTURA_REAL_DESPLEGADA.md cita «1 dashboard + 2 workbooks» en PRO: el segundo workbook («DocumentIA Libro - 29/5/2026») y el dashboard («srbappiprodocai Dashboard») existen en Azure a 2026-11-23 pero no están en el repo.
 
 - **Clasificación Metrics** – Confianza por tipología, distribution de confianza
 - **Orquestación Timeline** – Duration por activity, estado final, retries
@@ -154,6 +163,8 @@ requests
 ---
 
 #### Query 2: Health Check — Activities by Status
+
+> **Sin emisor en el código (revisión 2026-11-22):** esta consulta usa nombres que `src/backend` no emite y no devuelve datos. Alternativa real: `DocumentIA.Duracion.*` (customMetrics) y `DocumentProcessed` (customEvents).
 
 ```kusto
 // Estado de activities en orquestación
@@ -270,6 +281,7 @@ requests
 
 ```kusto
 // Duration de cada activity en orquestación (últimas 24h)
+// SIN EMISOR (revisión 2026-11-22): Activity.Duration no se emite; usar DocumentIA.Duracion.*
 // Retorna: activity name, avg duration (s)
 customMetrics
 | where name == "Activity.Duration"
@@ -282,7 +294,7 @@ customMetrics
 **Cómo leer:**
 - Activities con AvgDuration > esperado → bottleneck
 - Si MaxDuration >> AvgDuration → outliers, investigar causa
-- Típicos:
+- Típicos (cifras orientativas, no medidas):
   - ExtraerActivity (CU): 5–15s
   - ClasificarActivity (GPT): 2–8s
   - SubirGDCActivity: 1–5s
@@ -334,6 +346,7 @@ exceptions
 
 ```kusto
 // Distribuir errores por activity
+// SIN EMISOR (revisión 2026-11-22): Activity.Error* no se emite; usar exceptions o DocumentProcessed con EstadoFinal ERROR
 // Retorna: activity, error count, error message sample
 customEvents
 | where name startswith "Activity.Error"
@@ -383,6 +396,8 @@ customEvents
 ### 3.4 Clasificación — Métricas de Negocio
 
 #### Query 12: Confianza Distribution (Todas las clasificaciones últimas 24h)
+
+> **Sin emisor en el código (revisión 2026-11-22):** esta consulta usa nombres que `src/backend` no emite y no devuelve datos. Alternativa real: la confianza vive en SQL (`DocumentoEjecuciones.ConfianzaGlobal`, `ConfianzaClasificacion`); en telemetría solo existen `Classification.Embeddings` (DEV) y `Classification.HybridTDN`. Aplica también a las queries 13, 14 y 15.
 
 ```kusto
 // Distribución de scores de confianza
@@ -475,6 +490,7 @@ customMetrics
 
 ```kusto
 // Timeline de ejecuciones orquestadas
+// SIN EMISOR (revisión 2026-11-22): Orchestration.* no se emite; usar DocumentProcessed y la API de instancias Durable
 // Retorna: execution id, start, end, duration, final state
 customEvents
 | where name in ("Orchestration.Started", "Orchestration.Completed", "Orchestration.Failed")
@@ -503,6 +519,7 @@ customEvents
 
 ```kusto
 // Success rate por activity en orquestación
+// SIN EMISOR (revisión 2026-11-22): Activity.* no se emite; usar DocumentProcessed por EstadoFinal
 // Retorna: activity name, total, success, failed, success rate %
 customEvents
 | where name startswith "Activity."
@@ -529,6 +546,7 @@ customEvents
 
 ```kusto
 // Distribución de reintentos por activity
+// SIN EMISOR (revisión 2026-11-22): Activity.RetryCount no se emite; los reintentos reales son CU.Attempts, CU.TransientError y AOAI.RateLimitRetry
 // Retorna: activity, retry count, frequency
 customMetrics
 | where name == "Activity.RetryCount"
@@ -573,6 +591,8 @@ performanceCounters
 ---
 
 #### Query 20: Cost Estimation — Tokens by Provider
+
+> **Sin emisor y tarifa de plantilla (revisión 2026-11-22):** `GPT.InputTokens`, `GPT.OutputTokens` y `DI.Tokens` no se emiten y «$0.015/1k» no es una tarifa real. El coste por ejecución y por modelo físico se lee de la BD (AB#100224, MANUAL_COSTES_IA.md). Modelo por entorno: DEV gpt-5.6-luna; PRE y PRO gpt-4o-mini (= gpt-4.1-mini) hasta la siguiente release.
 
 ```kusto
 // Estimación de costo de tokens (GPT, DI)
@@ -723,6 +743,7 @@ customEvents
 
 ```kusto
 // Documentos que terminaron en PENDIENTE_REINTENTO por 429 sostenido en clasificación GPT
+// SIN EMISOR (revisión 2026-11-22): requests no lleva ExecutionState ni DocumentName; el 429 no se persiste (AB#100178). Usar la traza "Clasificación pospuesta por rate limit (429)" y los eventos AOAI.*
 // Retorna: timestamp, operationId, nombre de documento, estado de ejecución
 requests
 | where timestamp > ago(24h)
@@ -764,6 +785,8 @@ traces
 
 ### 5.1 Alertas Recomendadas
 
+> Recomendaciones no implementadas tal cual. Las alertas reales (9 scheduled query rules de `create-monitor-alerts.ps1`, la de capacidad de BD y las metric alerts de CPU y memoria) están en [MONITOREO_ALERTAS_REAL.md](MONITOREO_ALERTAS_REAL.md). `Classification.LowConfidence` no se emite y no hay PagerDuty.
+
 | Alert | Condition | Threshold | Severity | Action |
 |-------|-----------|-----------|----------|--------|
 | **HTTP 5xx Error Rate** | `exceptions` count / `requests` count > threshold | > 5% in 5m | CRITICAL | Teams + PagerDuty |
@@ -777,7 +800,7 @@ traces
 
 ### 5.2 Crear una Alerta Custom
 
-> **Nota (2026-08-04, AB#99083):** producción ya cuenta con 5 alert rules activas sobre `srbappiprodocai` (errores, latencia p95, fallback LLM, excepciones, inactividad) asociadas al action group de correo `srbagoperprodocai`, gestionadas con `scripts/observability/create-monitor-alerts.ps1`. Antes de crear una alerta manual, revisar `MONITOREO_ALERTAS_REAL.md` (incluye el alta de nuevos destinatarios); para alertas nuevas permanentes, preferir añadirlas al script.
+> **Nota (2026-08-04, AB#99083; ampliada el 2026-11-22):** producción cuenta con 9 scheduled query rules en el script (5 base + 3 de fiabilidad AB#100181 + OOM AB#100815), la alerta de capacidad de BD (AB#100171) y las metric alerts de CPU y memoria; el texto original hablaba de 5 alert rules activas sobre `srbappiprodocai` (errores, latencia p95, fallback LLM, excepciones, inactividad) asociadas al action group de correo `srbagoperprodocai`, gestionadas con `scripts/observability/create-monitor-alerts.ps1`. Antes de crear una alerta manual, revisar `MONITOREO_ALERTAS_REAL.md` (incluye el alta de nuevos destinatarios); para alertas nuevas permanentes, preferir añadirlas al script.
 
 #### Paso 1: Abrir Application Insights
 
@@ -1005,7 +1028,7 @@ traces
 | Síntoma | Queries a Ejecutar | Probable Causa | Acción |
 |---------|-----------------|-----------------|--------|
 | API devuelve 500 | [Query 8](#query-8-error-rate-trend-último-24h), [Query 9](#query-9-top-error-messages-últimas-24h) | Code exception | Revisar stack trace |
-| Documentos tardan > 5m | [Query 6](#query-5-cu-performance--breakdown-temporal), [Query 18](#query-18-activity-success-rate-últimas-24h) | Activity lento | Ver duración por activity |
+| Documentos tardan > 5m | [Query 5](#query-5-cu-performance--breakdown-temporal), [Query 18](#query-18-activity-success-rate-últimas-24h) (sin emisor; usar `DocumentIA.Duracion.*`) | Activity lento | Ver duración por fase |
 | Confianza = 0 en muchos docs | [Query 12](#query-12-confianza-distribution-todas-las-clasificaciones-últimas-24h), ver logs GPT | GPT fallo o timeout | Revisar GPT provider |
 | CU.CircuitOpen events | [Query 11](#query-11-circuit-breaker-status), [Query 3](#query-3-service-health--cu-service-availability) | CU service unstable | Escalate Azure, aumentar timeout |
 | PENDIENTE_REINTENTO en muchos docs / AOAI.CircuitOpen events | [Query 26](#query-26-documentos-en-pendiente_reintento-cuota-azure-openai-agotada), [Query 24](#query-24-aperturas-de-circuito-azure-openai-recientes) | Cuota Azure OpenAI agotada (429 sostenido) | Reencolar tras cooldown, revisar TPM/cuota del deployment |
@@ -1082,6 +1105,7 @@ traces
 Cuando instrumentes código, añade propiedades en `customDimensions`:
 
 ```csharp
+// Ejemplo ilustrativo: las dimensiones reales son Tipologia/ModelKey (métricas CU), tipologia/modelKey/reason/circuitKey (eventos) y Tipologia/EstadoFinal/EjecucionGuid (DocumentProcessed)
 var properties = new Dictionary<string, string>
 {
     { "DocumentName", document.Name },
@@ -1111,5 +1135,5 @@ customMetrics
 
 ---
 
-**Última actualización:** 2026-06-10  
-**Próxima revisión:** 2026-06-24 (biweekly)
+**Última actualización:** 2026-11-22 (AB#101447)  
+**Próxima revisión:** con la siguiente release (sin fecha fija)

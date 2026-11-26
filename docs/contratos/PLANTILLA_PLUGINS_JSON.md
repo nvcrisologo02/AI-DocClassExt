@@ -1,5 +1,7 @@
 # Plantillas de configuración de plugins por tipología
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `PluginConfiguration`, `PluginFactory`, `RestPlugin`, `SoapPlugin` y `CustomPlugin`). Notas de comportamiento no escritas en las plantillas: `pluginType` no distingue mayúsculas; `pluginKey` debe ser único por convención (no se valida: el último pisa al anterior); en REST `authType` por defecto es `Bearer`, `ApiKey` envía la cabecera `X-API-Key` y `Basic` solo existe en SOAP; `method` se lee del payload (`data["method"]`, por defecto POST), no de `configuration`; `retryPolicy` por defecto 3 reintentos, 1000 ms, backoff exponencial, códigos 408/429/500/502/503/504. La configuración publicada pasa por los estados `Draft` → `Published` → `Retired` de la Admin API `management/plugins-tipologias` (CONTRATO_API_HTTP §9.3).
+
 Este documento ofrece plantillas listas para copiar y adaptar como configuracion de plugins por tipologia.
 
 Fuente de verdad runtime:
@@ -139,7 +141,7 @@ Para compatibilidad con el flujo de persistencia/GDC:
       "enabled": true,
       "priority": 3,
       "configuration": {
-        "assemblyPath": "C:\\temp\\MVP\\documento-ia-clasificacion-mvp\\plugins\\SarebEnrichments.dll",
+        "assemblyPath": "plugins/SarebEnrichments.dll",
         "className": "Sareb.Enrichments.NotaSimpleEnricher",
         "customConfig": {
           "enableCaching": true
@@ -202,7 +204,7 @@ Para compatibilidad con el flujo de persistencia/GDC:
       "enabled": true,
       "priority": 3,
       "configuration": {
-        "assemblyPath": "C:\\temp\\MVP\\documento-ia-clasificacion-mvp\\plugins\\SarebEnrichments.dll",
+        "assemblyPath": "plugins/SarebEnrichments.dll",
         "className": "Sareb.Enrichments.NotaSimpleEnricher",
         "customConfig": {
           "enableCaching": true
@@ -291,7 +293,7 @@ Para compatibilidad con el flujo de persistencia/GDC:
       "enabled": true,
       "priority": 2,
       "configuration": {
-        "assemblyPath": "C:\\temp\\MVP\\documento-ia-clasificacion-mvp\\plugins\\SarebEnrichments.dll",
+        "assemblyPath": "plugins/SarebEnrichments.dll",
         "className": "Sareb.Enrichments.NotaSimpleEnricher",
         "customConfig": {
           "enableCaching": true

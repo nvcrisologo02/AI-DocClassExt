@@ -1,6 +1,8 @@
 # Guía: restringir el acceso de red al Admin (DocumentIA)
 
-> Medida transitoria mientras no exista autenticación (EasyAuth) en el Admin.
+> Última revisión: 2026-11-22 (AB#101447, contraste con GUIA_EASYAUTH_ADMIN.md e INFRAESTRUCTURA_REAL_DESPLEGADA.md). EasyAuth (App Service Authentication con Entra) está activo en el Admin de DEV, PRE y PRO (DEV 2026-08-06; PRE y PRO 2026-09-04), así que la restricción de red de esta guía deja de ser transitoria y queda como medida complementaria opcional. Desde el repositorio no se puede saber si alguna regla de acceso de red se llegó a aplicar en algún entorno (no hay scripts ni pipelines que las apliquen). Las tablas de «Estado de partida» son del 2026-07-31 (dev y prod); el 2026-11-23 se comprobó en Azure que el Admin de DEV, PRE y PRO sigue en «Allow all» con acceso público habilitado y sin private endpoint, y que solo el de PRO tiene integración con VNet.
+
+> Medida de red complementaria: EasyAuth ya está activo en los tres entornos (ver la nota de revisión).
 > Restringir el acceso de red **no da identidad por usuario**: la auditoría de
 > tipologías, plugins y prompts seguirá registrando "no-autenticado" (o
 > "ADMIN-UI", según el punto en que se encuentre el desarrollo). Esto es una
@@ -10,8 +12,10 @@
 
 ## Estado de partida
 
-Comprobado el 2026-07-31 en dev y prod (pre no comprobado; verificar antes de
-aplicar cualquier cambio).
+Estado de partida comprobado el 2026-07-31 en dev y prod; pre nunca se
+comprobó. Se conserva como referencia histórica: no se ha vuelto a comprobar
+desde el repositorio (revisión del 2026-11-22). Verificar en Azure antes de
+aplicar cualquier cambio.
 
 | Entorno | App Service | Resource group | Suscripción | Host |
 |---|---|---|---|---|
@@ -19,10 +23,12 @@ aplicar cualquier cambio).
 | pre | `srbwebadminpredocai` | `SRBRGPREDOCSAI` | `a4f6b357-8f13-4488-9ee8-b9f635426f91` (Core Preproduccion) | `srbwebadminpredocai.azurewebsites.net` |
 | prod | `srbwebadminprodocai` | `SRBRGDOCSAIPROD` | `647c7246-54bc-4d31-b909-431cacf03272` (Producción Central) | `srbwebadminprodocai.azurewebsites.net` |
 
-Estado actual de cada App Service (dev y prod comprobados; pre pendiente de
-comprobar):
+Estado de cada App Service a 2026-07-31 (dev y prod comprobados entonces; pre
+sin comprobar; nada de esta lista se volvió a comprobar en la revisión del
+2026-11-22):
 
-- Autenticación de App Service (EasyAuth): deshabilitada (`enabled: false`).
+- Autenticación de App Service (EasyAuth): deshabilitada (`enabled: false`) a
+  2026-07-31; hoy activa en los tres entornos (ver GUIA_EASYAUTH_ADMIN.md).
 - Restricciones de acceso: una única regla "Allow all" con acción Allow, y
   acción por defecto Allow. Es decir, hoy no hay ninguna restricción de red
   efectiva.

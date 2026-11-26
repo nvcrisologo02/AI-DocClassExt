@@ -1,5 +1,7 @@
 # Runbook ejecutado — release vX.Y.Z
 
+> Nota de revisión (2026-11-22, AB#101447): este registro corresponde a la release v1.0.0 (el título conserva el marcador de la plantilla sin sustituir; no se reescribe). Ejecutado el 2026-10-07 y 08 sobre `17889bb` (tag en `333a9cf`). Es anterior a los pasos 2.2.6, 4.12 y 4.15 del runbook vigente, que no figuran aquí. Las dos casillas de «Limpiezas diferidas» (copia `DocumentIA-prerel-20261008` y tablas `ModeloConfigs__bak_*`, previstas para el 2026-10-15) quedaron sin marcar; el 2026-11-23 se comprobó que ninguna se ha hecho: la BD `DocumentIA-prerel-20261008` sigue en `srbsqlprodocai` y las 6 tablas `ModeloConfigs__bak_*` siguen en PRO (AB#100321 cubre las `__bak_*`).
+
 Instancia de docs/procedimientos/RELEASE_MANAGEMENT.md. Marcar cada paso con fecha y resultado; tachar con motivo los que no aplican.
 
 ## Fase 0 — Preparación y versión

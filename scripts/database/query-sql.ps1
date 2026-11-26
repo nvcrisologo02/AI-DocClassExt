@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Ejecuta una consulta contra una BD Azure SQL de DocumentIA con token de Entra ID y
   muestra las filas en tabla.
@@ -23,6 +23,10 @@
 .PARAMETER Database
   Base de datos. Por defecto DocumentIA.
 
+.PARAMETER OutJson
+  Ruta opcional. Si se indica, ademas de la tabla escribe las filas como array JSON
+  (solo columnas de datos, UTF-8 sin BOM). Un resultado de una fila sigue siendo array.
+
 .EXAMPLE
   az login
   pwsh ./scripts/database/query-sql.ps1 -Server srbsqlprodocai.database.windows.net `
@@ -31,7 +35,8 @@
 param(
     [Parameter(Mandatory)][string]$Query,
     [Parameter(Mandatory)][string]$Server,
-    [string]$Database = "DocumentIA"
+    [string]$Database = "DocumentIA",
+    [string]$OutJson
 )
 $ErrorActionPreference = "Stop"
 $token = az account get-access-token --resource https://database.windows.net/ --query accessToken -o tsv
@@ -44,5 +49,9 @@ $cmd = $conn.CreateCommand(); $cmd.CommandText = $Query; $cmd.CommandTimeout = 3
 $da = New-Object System.Data.SqlClient.SqlDataAdapter $cmd
 $dt = New-Object System.Data.DataTable
 $null = $da.Fill($dt)
+if ($OutJson) {
+    $json = $dt | Select-Object -Property ($dt.Columns.ColumnName) | ConvertTo-Json -Depth 3 -AsArray
+    [System.IO.File]::WriteAllText($OutJson, $json, (New-Object System.Text.UTF8Encoding($false)))
+}
 $dt | Format-Table -AutoSize | Out-String -Width 400
 $conn.Close()

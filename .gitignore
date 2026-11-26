@@ -126,8 +126,8 @@ scripts/generate-guia-clasificacion-word.py
 objectids.txt
 
 # Claude
-.claude/
-CLAUDE.md
+.claude/*
+!.claude/agents/
 
 # graphify (grafo de conocimiento generado, ~13MB; se regenera con `graphify update .`)
 graphify-out/
@@ -143,3 +143,6 @@ local.settings.*.json
 
 # Rotacion de credenciales SQL (operativa local, no forma parte del codigo)
 scripts/database/rotate-sql-user-password.ps1
+
+# Trazas del MCP de Playwright (logs y snapshots locales)
+.playwright-mcp/

@@ -1,477 +1,163 @@
-# 📚 Índice Maestro de Documentación — DocumentIA
-
-> **Última actualización:** 2026-08-05  
-> **Versión:** 1.5.1
-> **Rama:** develop
-> **Nuevos:** 6 documentos operacionales críticos agregados
-
-Bienvenido a la documentación centralizada de **DocumentIA**, un sistema de clasificación inteligente de documentos basado en Azure cloud-native. Esta página es tu punto de partida para navegar toda la documentación técnica del proyecto.
-
----
-
-## 🚀 **Inicio Rápido**
-
-### Para Nuevos Desarrolladores
-1. **[QUICKSTART_DESARROLLADORES.md](guias/QUICKSTART_DESARROLLADORES.md)** — Setup en 15 minutos
-2. **[GLOSSARIO_TERMINOS.md](referencias/GLOSSARIO_TERMINOS.md)** — Aprende la terminología
-3. **[01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md)** — Visión general del sistema
-
-### Para Operadores
-1. **[08_CHECKLISTS_DESPLIEGUE.md](08_CHECKLISTS_DESPLIEGUE.md)** — Procedimientos de despliegue
-2. **[TROUBLESHOOTING_DIAGNOSTICO.md](guias/TROUBLESHOOTING_DIAGNOSTICO.md)** — Resolver problemas rápidamente
-3. **[OBSERVABILIDAD_KQL.md](observabilidad/OBSERVABILIDAD_KQL.md)** — Monitoreo y diagnóstico
-
-### Para Arquitectos
-1. **[03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md)** — Diseño técnico profundo
-2. **[DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md)** — Schema de BD
-3. **[EXTENSIBILIDAD_PLUGIN_SYSTEM.md](guias/EXTENSIBILIDAD_PLUGIN_SYSTEM.md)** — Sistema de plugins
-
----
-
-## 📖 **Documentación Oficial (Raíz)**
-
-### Documentos Principales
-
-| Documento | Propósito | Audiencia |
-|-----------|-----------|-----------|
-| **[01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md)** | Arquitectura general, componentes, diagrama de despliegue | Todos |
-| **[02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md)** | Análisis de requisitos, casos de uso, flujos | PO, Architects |
-| **[03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md)** | Diseño técnico profundo, contratos, patterns | Devs, Architects |
-| **[05_MANUAL_USO_CONFIGURACION.md](05_MANUAL_USO_CONFIGURACION.md)** | Guía de uso del sistema, configuración | End-users, Devs |
-| **[08_CHECKLISTS_DESPLIEGUE.md](08_CHECKLISTS_DESPLIEGUE.md)** | Checklists para despliegue en todos los ambientes | Operators |
-| **[15_API_DOCUMENTATION_V1_4.md](15_API_DOCUMENTATION_V1_4.md)** | Documentación completa de endpoints REST | API consumers |
-
----
-
-## 🎓 **Guías Técnicas (docs/guias/)**
-
-Guías detalladas para tareas específicas:
-
-### Para Nuevos Desarrolladores
-- **[QUICKSTART_DESARROLLADORES.md](guias/QUICKSTART_DESARROLLADORES.md)** ⭐ **COMIENZA AQUÍ**
-  - Setup local en 15 minutos
-  - Primer classification end-to-end
-  - Debugging y tips de productividad
-  - *Líneas: ~400 | Tiempo: 15 min*
-
-### Para Extensibilidad & Desarrollo
-- **[EXTENSIBILIDAD_PLUGIN_SYSTEM.md](guias/EXTENSIBILIDAD_PLUGIN_SYSTEM.md)**
-  - Architecture de plugin system
-  - Interfaces y contratos reales
-  - 6 providers documentados
-  - Step-by-step: crear nuevo plugin en 2-3 horas
-  - Testing patterns e integración
-  - *Líneas: ~1,200 | Tiempo: 1h estudio*
-
-### Para Resolución de Problemas
-- **[TROUBLESHOOTING_DIAGNOSTICO.md](guias/TROUBLESHOOTING_DIAGNOSTICO.md)**
-  - Decision tree para diagnóstico rápido
-  - 6 casos prácticos documentados
-  - KQL queries para diagnosis
-  - PowerShell troubleshooting scripts
-  - Escalation path y SLAs
-  - *Líneas: ~860 | Tiempo: 30 min lookup*
-
-### Para Optimización
-- **[PERFORMANCE_TUNING.md](guias/PERFORMANCE_TUNING.md)**
-  - Benchmarks para 3 ambientes (dev, staging, prod)
-  - Identificar cuellos de botella
-  - Configuraciones recomendadas por escenario
-  - Scaling strategies (vertical, horizontal, queue-based)
-  - Troubleshooting de performance
-  - *Líneas: ~1,210 | Tiempo: 1h estudio*
-
-### Para Seguridad del Admin
-- **[GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md)**
-  - Activar App Service Authentication (EasyAuth) en `DocumentIA.Admin`
-  - Configuración en Azure Portal y verificación de la cabecera `X-MS-CLIENT-PRINCIPAL-NAME`
-- **[GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md)**
-  - Restringir el acceso de red al Admin (medida transitoria mientras no haya EasyAuth)
-- **[SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md)**
-  - Solicitud al equipo de identidad: app registration + grupo de seguridad para EasyAuth
-
----
-
-## 🔍 **Especificaciones & Modelos (docs/especificaciones/)**
-
-### Data Models & Architecture
-- **[DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md)**
-  - 12 entidades documentadas con detalles
-  - ER Diagram (Mermaid)
-  - Relaciones y constraints
-  - Versionado y evolución de schema
-  - 6 queries SQL comunes
-  - *Líneas: ~650 | Tiempo: 30 min study*
-
-### Especificaciones de Componentes
-- **[ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](ESPECIFICACION_PLUGIN_ASSETRESOLVER.md)**
-  - Plugin específico: AssetResolver
-  - Requisitos y comportamiento esperado
-
----
-
-## 📊 **Observabilidad & Monitoreo (docs/observabilidad/)**
-
-### ⭐ Monitoreo en Producción
-- **[MONITOREO_ALERTAS_REAL.md](observabilidad/MONITOREO_ALERTAS_REAL.md)** ✅ **VERIFICADO**
-  - Configuración REAL de Application Insights en SRBRGDOCSAIPROD
-  - Eventos telemetría registrados (DocumentProcessed, CU.*, Prompt.Trace, BlobCleanupCycle)
-  - Circuit breaker + Retry policy implementados en código
-  - Hard timeouts y métricas por subfase de CU
-  - Queries KQL validadas + script PowerShell para exportar reportes
-  - **Fuente:** Código verificado en `AzureContentUnderstandingProvider.cs`, `PromptTraceTelemetryService.cs`, `PersistirActivity.cs`
-  - *Líneas: ~450 | Verificado: 2026-06-10*
-
-### Guía de Observabilidad
-- **[OBSERVABILIDAD_KQL.md](observabilidad/OBSERVABILIDAD_KQL.md)**
-  - 20 KQL queries listas para copiar-pegar
-  - 8 alertas recomendadas con thresholds
-  - Dashboards y Workbooks existentes
-  - Debugging avanzado con distributed tracing
-  - Casos de estudio: investigar incidentes
-  - *Líneas: ~1,000 | Tiempo: 30 min lookup*
-
-### Workbooks & Dashboards
-- Documentos en formato `.workbook.json` para Azure Monitor
-- **Incluye:** `documentia-cu-performance.workbook.json` — Dashboard interactivo para CU performance diagnostics
-
----
-
-## 📚 **Referencias & Conceptos (docs/referencias/)**
-
-### Glosario
-- **[GLOSSARIO_TERMINOS.md](referencias/GLOSSARIO_TERMINOS.md)** ⭐ **LEE PRIMERO si es nuevo**
-  - 20 términos técnicos centrales
-  - 23 acrónimos del proyecto
-  - Conceptos relacionados y relaciones
-  - Patrones y antipatrones
-  - *Líneas: ~400 | Tiempo: 20 min*
-
-### Otras Referencias
-- **[FUENTE_VERDAD_CONFIGURACION.md](referencias/FUENTE_VERDAD_CONFIGURACION.md)**
-  - Configuración centralizada
-  - Tipologías y modelos
-  - Settings por ambiente
-
----
-
-## 📋 **Contratos & Interfaces (docs/contratos/)**
-
-### API & Integración
-- **[CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md)**
-  - Endpoints REST completos
-  - Request/Response schemas
-  - Error codes y manejo
-  - Ejemplos de uso
-
-- **[PLANTILLA_PLUGINS_JSON.md](contratos/PLANTILLA_PLUGINS_JSON.md)**
-  - Template para crear plugins
-  - Estructura esperada de configuración
-
-### Manuales
-- **[MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md)** — Coste de IA por ejecución: medición, tarifas y consulta
-- **[MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md)** — Deduplicación por SHA256: flags, reutilización de ejecuciones, traza de las reutilizaciones y su visibilidad en el Monitor
-- **[MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md)** — Cómo usar y configurar plugins
-- **[MANUAL_VALIDACIONES.md](manuales/MANUAL_VALIDACIONES.md)** — Rules engine de validación
-
----
-
-## 🚀 **Procedimientos Operacionales Críticos (docs/procedimientos/ — 2026-06-10)**
-
-⭐ **NUEVOS DOCUMENTOS** para control real del sistema en producción:
-
-### Gestión de Incidentes
-- **[RUNBOOK_INCIDENTES_PRODUCCION.md](procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md)** 
-  - 7 escenarios de incidentes (latency, errores, circuit breaker, stuck docs, memory leak, access denied)
-  - KQL queries para diagnóstico rápido
-  - Soluciones inmediatas y permanentes
-  - Escalation path y contactos
-  - *Líneas: ~337 | Tiempo: 15 min diagnosis*
-
-### Release y despliegue
-- **[RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md)** — runbook de release DEV → PRE → PRO
-  - Fases 0 a 5 con casillas, ejecutor y vuelta atrás; PRE como puerta técnica con cuatro puertas
-  - Anexos: catálogo de pipelines, vuelta atrás por capas, secretos y app settings, KQL
-- **[releases/README.md](releases/README.md)** — registro por versión SemVer (`docs/releases/vX.Y.Z/`)
-- **[RUNBOOK_RELEASE_PRO_2026-09.md](procedimientos/RUNBOOK_RELEASE_PRO_2026-09.md)** — instancia histórica de las releases del 03/09 y 20/09 de 2026
-
-### Migraciones de base de datos
-- **[DATABASE_MIGRATION_STRATEGY.md](procedimientos/DATABASE_MIGRATION_STRATEGY.md)** — crear y probar migraciones EF Core en local; el despliegue está en el runbook
-
----
-
-## 🏗️ **Infraestructura & Despliegue (docs/infraestructura/ — 2026-06-10)**
-
-### ✅ VERIFICADO CONTRA PIPELINES REALES
-
-- **[INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md)** ⭐ **FUENTE DE VERDAD**
-  - Topología completa: 13 recursos en SRBRGDOCSAIPROD
-  - Azure Functions (srbappprodocai) + 2 App Services
-  - Key Vault con 40+ secrets
-  - CU/DI/OpenAI endpoints reales
-  - 60+ App Settings documentadas
-  - Proceso de despliegue real (6 stages)
-  - Verificado contra: azure-pipelines*.yml
-  - *Líneas: ~500 | Tiempo: 30 min overview | Status: ✅ Verificado*
-
-### Procedimientos Relacionados
-- **[RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md)** — runbook de release con el catálogo de pipelines y el proceso de despliegue por fases
-
----
-
-## 👥 **Team & Responsabilidades (docs/referencias/ — 2026-06-10)**
-
-- **[TEAM_MATRIX_RESPONSABILIDADES.md](referencias/TEAM_MATRIX_RESPONSABILIDADES.md)**
-  - RACI matrix por componente
-  - On-call rotation schedule
-  - SLA response times (P1/P2/P3)
-  - Change approval process
-  - Training & onboarding workflows
-  - Performance metrics por rol
-  - *Líneas: ~188 | Tiempo: 15 min reference*
-
----
-
-## 🚀 **Procedimientos & Despliegue Legacy (docs/auxiliares/migracion-deployment/)**
-
-### Manuales Operacionales
-- **[04_MANUAL_EXPLOTACION.md](auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md)**
-  - Procedimientos day-to-day
-  - Scripts de operación
-  - Troubleshooting operacional
-
-### Migración & Deployment
-- **[12_MIGRACION_PROMPTGPT_V1_4.md](auxiliares/migracion-deployment/12_MIGRACION_PROMPTGPT_V1_4.md)**
-  - Migration guide para upgrading
-  - Changelog de versiones
-
----
-
-## 📈 **Reportes & Auditorías (docs/auxiliares/auditorias/)**
-
-- **09_AUDITORIA_CONFIGURACION_2026-04-30.md** — Auditoría de configuración
-- **10_AUDITORIA_DOCUMENTAL_2026-04-30.md** — Auditoría documental
-- Otros reportes de auditoría y compliance
-
----
-
-## 🎯 **Planes & Roadmap (docs/auxiliares/planes/)**
-
-- **11_PLAN_CONFIGURACION_LIMPIA.md** — Plan de limpieza de configuración
-- **14_ADO_BACKLOG_PIPELINE_CLASIFICACION_2026-05-21.md** — Backlog del proyecto
-- Otros planes de trabajo
-
----
-
-## 📊 **Visualizaciones & Diagramas (docs/diagrams/)**
-
-- Diagramas de arquitectura (Mermaid, Visio, etc.)
-- Flujos de proceso
-- Diagramas de despliegue
-
----
-
-## 🎬 **Presentaciones (docs/presentaciones/)**
-
-- **13_GUION_PRESENTACION_CLASIFICACION_V1_4_SLIDES.md** — Guión de presentación
-- Slides y materiales de presentación
-
----
-
-## 📝 **Ejemplos & Sandbox (docs/auxiliares/ejemplos/)**
-
-- Ejemplos de uso
-- JSON samples
-- Respuestas esperadas
-- Datasets de prueba
-
----
-
-## 📖 **Reportes de Progreso (docs/auxiliares/phase-reports/)**
-
-- Reportes de fases completadas
-- Progress tracking histórico
-- Cambios y evolución del proyecto
-
----
-
-## 🔗 **Mapa Rápido de Referencias Cruzadas**
-
-### Si Necesitas...
-
-| Necesidad | Documento | Ubicación |
-|-----------|-----------|-----------|
-| **Empezar desde cero** | QUICKSTART | `guias/` |
-| **Entender terminología** | GLOSSARIO | `referencias/` |
-| **Resolver error rápido** | TROUBLESHOOTING | `guias/` |
-| **Ver arquitectura** | ARQUITECTURA_SISTEMA | `docs/` (raíz) |
-| **Crear un plugin** | EXTENSIBILIDAD | `guias/` |
-| **Ver schema BD** | DATA_MODELS | `especificaciones/` |
-| **Monitorear sistema** | OBSERVABILIDAD + KQL | `observabilidad/` |
-| **Optimizar performance** | PERFORMANCE_TUNING | `guias/` |
-| **API reference** | CONTRATO_API_HTTP | `contratos/` |
-| **Desplegar a prod** | CHECKLISTS_DESPLIEGUE | `docs/` (raíz) |
-| **🆕 Incidente en producción** | RUNBOOK_INCIDENTES_PRODUCCION | `procedimientos/` |
-| **🆕 Infraestructura Azure (real desplegada)** | INFRAESTRUCTURA_REAL_DESPLEGADA ⭐ | `infraestructura/` |
-| Infraestructura — plantilla genérica (NO refleja lo desplegado) | INFRAESTRUCTURA_DESPLIEGUE ⚠️ | `infraestructura/` |
-| **Release a PRO (runbook)** | RELEASE_MANAGEMENT | `procedimientos/` |
-| **Registro de releases** | releases/README | `docs/releases/` |
-| **Migración BD (desarrollo)** | DATABASE_MIGRATION_STRATEGY | `procedimientos/` |
-| **🆕 Responsabilidades equipo** | TEAM_MATRIX_RESPONSABILIDADES | `referencias/` |
-| Activar autenticación del Admin (EasyAuth) | GUIA_EASYAUTH_ADMIN | `guias/` |
-| Restringir acceso de red al Admin | GUIA_RESTRICCION_ACCESO_ADMIN | `guias/` |
-| Solicitar app registration para el Admin | SOLICITUD_APP_REGISTRATION_ADMIN | `guias/` |
-
----
-
-## 🗂️ **Estructura de Carpetas Completa**
+# Índice de documentación — DocumentIA
+
+> Última revisión estructural: 2026-11-25 (AB#101452, retirada de `entrega/`). Revisión estructural previa: 2026-11-22 (AB#101445). Rama de referencia: `develop`.
+> Verificación de contenido por familia cerrada el 2026-11-22 (AB#101447) e integrada en `develop` el 2026-11-23 (AB#101448). El estado de cada fichero se actualiza aquí con cada cambio que lo afecte; las decisiones derivadas están en las tasks AB#101449 a AB#101452. Las marcas «no comprobado» del repaso se comprobaron en vivo contra Azure, Azure DevOps, App Insights y las BD de DEV, PRE y PRO el 2026-11-23 (AB#101449) y se sustituyeron por el estado real.
+
+DocumentIA es el sistema de clasificación y extracción documental de SAREB, en operación desde julio de 2026. Esta página cataloga la documentación permanente del repositorio, organizada en las cuatro familias que usa el impacto documental de cada cambio: técnica, funcional, arquitectura y explotación. El mapa por familia también está declarado en el `CLAUDE.md` del proyecto.
+
+## Cómo se lee este índice
+
+- **Estado** `vigente`: describe el sistema actual y se mantiene con cada cambio que lo afecte. `histórico`: registro de algo ya ocurrido (releases, runbooks de una fecha, planes iniciales, presentaciones); se conserva sin reescribir. `sustituido`: lo cubre otro documento; se conserva por referencia con un aviso en cabecera y no se mantiene.
+- **Fuente de verdad**: cuando dos documentos se solapan, la tabla dice cuál manda.
+- Las rutas son relativas a `docs/`.
+
+## Carpetas que no forman parte de la documentación permanente
+
+| Carpeta | Qué contiene | Versionada |
+|---|---|---|
+| `docs/auxiliares/` | Material de trabajo: análisis, planes, auditorías, manuales retirados (`migracion-deployment/`, `sql-schemas/`, `plans/`) y los temporales de sesión en `temps/<fecha>/` | No (`.gitignore`). Los documentos permanentes no deben enlazar aquí |
+| `docs/superpowers/specs/` y `plans/` | Especificaciones de diseño y planes de implementación de cada unidad de trabajo | Specs sí; planes no |
+| `docs/presentaciones/` | Guiones y apoyo visual de presentaciones (abril y mayo de 2026) | Solo los dos ficheros antiguos ya versionados; los nuevos se ignoran |
+| `entrega/` (raíz) | Retirada del árbol el 2026-11-25 (AB#101452): era la copia congelada de la documentación entregada el 2026-06-30 (87 ficheros, 15 MB) y solo la citaba este índice; sigue disponible en el historial de git hasta el commit 5b270177 | No (retirada) |
+
+## Por dónde empezar
+
+| Perfil | Lectura |
+|---|---|
+| Desarrollador nuevo | [QUICKSTART_DESARROLLADORES.md](guias/QUICKSTART_DESARROLLADORES.md), [GLOSSARIO_TERMINOS.md](referencias/GLOSSARIO_TERMINOS.md), [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md), [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) |
+| Integrador de la API | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md), [05_MANUAL_USO_CONFIGURACION.md](05_MANUAL_USO_CONFIGURACION.md) Parte B |
+| Negocio y configuración de tipologías | [02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md), [GUIA_CLASIFICACION_DOCUMENTOS.md](guias/GUIA_CLASIFICACION_DOCUMENTOS.md), [05_MANUAL_USO_CONFIGURACION.md](05_MANUAL_USO_CONFIGURACION.md) Parte A |
+| Operación y despliegue | [RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md), [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md), [RUNBOOK_INCIDENTES_PRODUCCION.md](procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md), [TROUBLESHOOTING_DIAGNOSTICO.md](guias/TROUBLESHOOTING_DIAGNOSTICO.md) |
+| Arquitectura y decisiones | [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md), [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md), carpeta [decisiones/](decisiones/) |
+
+## Familia técnica
+
+Diseño técnico, API y contratos, configuración, desarrollo y plugins.
+
+| Documento | Contenido | Estado |
+|---|---|---|
+| [README.md](../README.md) (raíz) | Visión general, requisitos (.NET 10 para Functions, .NET 8 para el resto), setup local y comandos | vigente |
+| [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Flujo del pipeline, orquestación Durable, clasificación jerárquica GPT, modelo ER, contratos internos | vigente |
+| [05_MANUAL_USO_CONFIGURACION.md](05_MANUAL_USO_CONFIGURACION.md) | Parte A: uso diario. Parte B: APIs, contratos, `ConfiguracionJson`, claves de prompt y modelo | vigente |
+| [contratos/CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato REST de ingest, consulta, management y Admin de tipologías. Fuente de verdad de la API | vigente |
+| [contratos/PLANTILLA_PLUGINS_JSON.md](contratos/PLANTILLA_PLUGINS_JSON.md) | Plantillas JSON de configuración de plugins para copiar | vigente |
+| [manuales/MANUAL_CONFIGURACION.md](manuales/MANUAL_CONFIGURACION.md) | App settings por entorno y precedencia; manda en ese tema (05 Parte B manda en contrato, `ConfiguracionJson` y modelos; FUENTE_VERDAD en BD frente a seeds). Revisado 2026-11-22 | vigente |
+| [manuales/MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Runtime de plugins: carga, configuración por tipología, integración REST y SOAP | vigente |
+| [manuales/MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecución: medición, tarifas por modelo físico y consulta | vigente |
+| [manuales/MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDUPLICACION.md) | Deduplicación por SHA256 y clave de intención, reutilización de ejecuciones y su traza (ADR-003) | vigente |
+| [guias/QUICKSTART_DESARROLLADORES.md](guias/QUICKSTART_DESARROLLADORES.md) | Setup local y primera clasificación de extremo a extremo | vigente |
+| [guias/GUIA_HOST_LOCAL_CONTRA_DEV.md](guias/GUIA_HOST_LOCAL_CONTRA_DEV.md) | Ejecutar el host de Functions en local contra los recursos de DEV | vigente |
+| [guias/EXTENSIBILIDAD_PLUGIN_SYSTEM.md](guias/EXTENSIBILIDAD_PLUGIN_SYSTEM.md) | Arquitectura del sistema de plugins y providers, cómo crear uno nuevo y probarlo | vigente |
+| [guias/GUIA_EXTRACCION_AZURE_CONTENT_UNDERSTANDING.md](guias/GUIA_EXTRACCION_AZURE_CONTENT_UNDERSTANDING.md) | Extracción con Azure Content Understanding: analyzers, proyectos y modelos requeridos | vigente |
+| [especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md) | Plugin AssetResolver: resolución de `IdActivo`, criterios y grupos | vigente |
+| [especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md](especificaciones/ESPECIFICACION_CAPA_SERVICIO_GDC_SINTWS.md) | Integración con GDC (SINTWS): contrato, errores y configuración | vigente |
+| [especificaciones/ESPECIFICACION_PROMPTS_CONFIGURABLES.md](especificaciones/ESPECIFICACION_PROMPTS_CONFIGURABLES.md) | Política de prompts configurables en BD (`PromptTemplates`). Cabecera aún en «propuesta»; la implementación está hecha | vigente |
+| [especificaciones/PROMPT_CLASIFICACION_COMPLETO.md](especificaciones/PROMPT_CLASIFICACION_COMPLETO.md) | Prompt de clasificación renderizado a partir del seed del repositorio. La verdad operativa está en la BD de cada entorno | vigente |
+| [referencias/FUENTE_VERDAD_CONFIGURACION.md](referencias/FUENTE_VERDAD_CONFIGURACION.md) | Qué configuración manda (BD frente a JSON del repo frente a app settings) | vigente |
+| [procedimientos/DATABASE_MIGRATION_STRATEGY.md](procedimientos/DATABASE_MIGRATION_STRATEGY.md) | Crear y probar migraciones EF Core en local; el despliegue está en el runbook de release | vigente |
+| [15_API_DOCUMENTATION_V1_4.md](15_API_DOCUMENTATION_V1_4.md) | Documentación en inglés de la API de administración de tipologías v1.4 | sustituido por CONTRATO_API_HTTP §9 |
+
+## Familia funcional
+
+Análisis funcional, reglas de negocio, tipologías, confianza y validaciones.
+
+| Documento | Contenido | Estado |
+|---|---|---|
+| [02_ANALISIS_FUNCIONAL.md](02_ANALISIS_FUNCIONAL.md) | Problema de negocio, actores, casos de uso, historias y requisitos. Revisado 2026-11-22 | vigente |
+| [guias/GUIA_CLASIFICACION_DOCUMENTOS.md](guias/GUIA_CLASIFICACION_DOCUMENTOS.md) | Cómo clasifica el sistema: flujo por defecto `rules → gpt → di` con fallback global, `hybrid-tdn`, niveles TDN1/TDN2, modos de petición. Revisado 2026-11-22; el §4.1 conserva el flujo `di` histórico con aviso | vigente |
+| [guias/GUIA_CLASIFICACION_RESTRINGIDA.md](guias/GUIA_CLASIFICACION_RESTRINGIDA.md) | Clasificación restringida a un subconjunto de tipologías (`restriccionTipologias`, catálogo filtrado). Revisado 2026-11-22 | vigente |
+| [referencias/GLOSSARIO_TERMINOS.md](referencias/GLOSSARIO_TERMINOS.md) | Términos, acrónimos y conceptos del proyecto. Revisado 2026-11-22 | vigente |
+| [referencias/TIPOLOGIAS_REFERENCIA.md](referencias/TIPOLOGIAS_REFERENCIA.md) | Subconjunto del catálogo de tipologías (el catálogo real está en BD: 233 en DEV y 213 en PRE y PRO a 2026-11-23). Revisado 2026-11-22 | vigente |
+| [referencias/CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Cálculo de la confianza agregada y umbrales. Fuente de verdad frente al diagrama. Revisado 2026-11-22 | vigente |
+| [referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md](referencias/CAUSISTICAS_NOTA_SIMPLE_1_4.md) | Casuísticas de Nota Simple para el modelo 1.4 (analyzer `CU_NS_1.4_3`; la vigente es 1.5 con `CU_NS_1.5_0`). Revisado 2026-11-22 | vigente |
+| [manuales/MANUAL_VALIDACIONES.md](manuales/MANUAL_VALIDACIONES.md) | Motor de validaciones: tipos de regla, configuración, persistencia y resultados. Revisado 2026-11-22 | vigente |
+| [especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md](especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md) | Límite de páginas por documento y su tratamiento. Implementada (fbf33519). Revisado 2026-11-22 | vigente |
+| [diagrams/UMBRAL_PRIORIZACION.md](diagrams/UMBRAL_PRIORIZACION.md) | Diagrama de priorización por umbral. Revisado 2026-11-22 | vigente |
+| [diagrams/CONFIANZA_UMBRAL.md](diagrams/CONFIANZA_UMBRAL.md) | Diagrama del umbral de confianza | sustituido por CONFIANZA_AGREGADA |
+| [presentaciones/APOYO_VISUAL_PRESENTACION.md](presentaciones/APOYO_VISUAL_PRESENTACION.md), [presentaciones/GUION_PRESENTACION_30MIN.md](presentaciones/GUION_PRESENTACION_30MIN.md) | Presentación del sistema (abril y mayo de 2026) | histórico |
+
+## Familia arquitectura
+
+Arquitectura, infraestructura, modelo de datos y decisiones.
+
+| Documento | Contenido | Estado |
+|---|---|---|
+| [01_ARQUITECTURA_SISTEMA.md](01_ARQUITECTURA_SISTEMA.md) | Componentes, flujo de extremo a extremo, proveedores de IA, despliegue lógico | vigente |
+| [infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Recursos, app settings, secretos, identidades y pipelines reales de DEV, PRE y PRO. Fuente de verdad de la infraestructura | vigente |
+| [especificaciones/DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md) | Modelo de datos: entidades, relaciones, versionado del esquema y consultas habituales | vigente |
+| [especificaciones/OPTIMIZACION_ALMACENAMIENTO_BD_PRO.md](especificaciones/OPTIMIZACION_ALMACENAMIENTO_BD_PRO.md) | Diseño de la reducción de almacenamiento de la BD de PRO, aplicado en las releases de septiembre de 2026 | histórico |
+| [decisiones/ADR-001-promocion-artefactos-ia-dev-pre-pro.md](decisiones/ADR-001-promocion-artefactos-ia-dev-pre-pro.md) | IA propia por entorno y promoción de artefactos DEV → PRE → PRO | vigente (aceptada) |
+| [decisiones/ADR-002-clasificador-embeddings-hibrido.md](decisiones/ADR-002-clasificador-embeddings-hibrido.md) | Clasificador híbrido por embeddings en sombra. El bloque sigue en «propuesta» | vigente (propuesta) |
+| [decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md](decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md) | Reutilización de ejecuciones duplicadas por clave de intención | vigente (aceptada) |
+| [decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md](decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md) | Cambio del modelo generativo a gpt-5.6-luna (DEV desde 2026-11-20; PRE y PRO con la siguiente release) | vigente (aceptada) |
+| [infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md](infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md) | Plantilla genérica Staging/Production que no refleja lo desplegado | sustituido por INFRAESTRUCTURA_REAL_DESPLEGADA |
+
+## Familia explotación
+
+Release y despliegue, operación, observabilidad, incidentes y acceso.
+
+| Documento | Contenido | Estado |
+|---|---|---|
+| [procedimientos/RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release DEV → PRE → PRO: fases 0 a 5, puertas de PRE, catálogo de pipelines, vuelta atrás, secretos y app settings | vigente |
+| [releases/README.md](releases/README.md) | Registro de releases por versión (`releases/vX.Y.Z/release.md`, `runbook.md`, `evidencias/`) y plantillas en `releases/_plantilla/` | vigente; cada versión es histórico |
+| [procedimientos/DESPLIEGUE_IA.md](procedimientos/DESPLIEGUE_IA.md) | Promoción de artefactos de IA (analyzers, proyectos, deployments) entre entornos, según ADR-001 | vigente |
+| [08_CHECKLISTS_DESPLIEGUE.md](08_CHECKLISTS_DESPLIEGUE.md) | Checklists de comprobación de configuración, pipelines y observabilidad al desplegar | vigente |
+| [infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Inventario operativo de recursos y configuración por entorno (también en arquitectura) | vigente |
+| [procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md](procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md) | Escenarios de incidente, diagnóstico KQL y acciones. Los contactos de escalado siguen por rellenar | vigente |
+| [guias/TROUBLESHOOTING_DIAGNOSTICO.md](guias/TROUBLESHOOTING_DIAGNOSTICO.md) | Árbol de diagnóstico, casos resueltos y consultas | vigente |
+| [observabilidad/MONITOREO_ALERTAS_REAL.md](observabilidad/MONITOREO_ALERTAS_REAL.md) | Telemetría, alertas y resiliencia verificadas en Azure. Fuente de verdad de las alertas | vigente |
+| [observabilidad/OBSERVABILIDAD_KQL.md](observabilidad/OBSERVABILIDAD_KQL.md) | Recetario de consultas KQL, workbooks y depuración | vigente |
+| [observabilidad/CU_RENDIMIENTO_INSIGHTS.md](observabilidad/CU_RENDIMIENTO_INSIGHTS.md) | Métricas por subfase de Content Understanding y su workbook | vigente |
+| [manuales/MANUAL_HEALTHCHECK.md](manuales/MANUAL_HEALTHCHECK.md) | Endpoint de health check: comprobaciones y lectura del resultado | vigente |
+| [guias/GUIA_EASYAUTH_ADMIN.md](guias/GUIA_EASYAUTH_ADMIN.md) | Autenticación del Admin con App Service Authentication. Fuente de verdad del acceso al Admin | vigente |
+| [guias/GUIA_RESTRICCION_ACCESO_ADMIN.md](guias/GUIA_RESTRICCION_ACCESO_ADMIN.md) | Restricción de red al Admin, medida complementaria opcional (EasyAuth ya está activo en los tres entornos). Revisado 2026-11-22 | vigente |
+| [guias/PERFORMANCE_TUNING.md](guias/PERFORMANCE_TUNING.md) | Ajustes de concurrencia, resiliencia de CU y Azure OpenAI, índices y escalado. Las cifras de benchmark son plantilla sin medición y los ajustes `GptFallback` no se leen (avisos en cabecera). Revisado 2026-11-22 | vigente con avisos |
+| [guias/SOLICITUD_APP_REGISTRATION_ADMIN.md](guias/SOLICITUD_APP_REGISTRATION_ADMIN.md) | Texto de la solicitud de app registration y grupo de seguridad para el Admin | histórico |
+| [procedimientos/RUNBOOK_RELEASE_PRO_2026-09.md](procedimientos/RUNBOOK_RELEASE_PRO_2026-09.md) | Releases a PRO del 3 y el 20 de septiembre de 2026 | histórico |
+| [procedimientos/PLAN_DESPLIEGUE_INICIAL_DEV_PRE.md](procedimientos/PLAN_DESPLIEGUE_INICIAL_DEV_PRE.md) | Plan del primer despliegue de DEV y PRE (junio de 2026) | histórico |
+| [procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md](procedimientos/AZURE_DEVOPS_BOOTSTRAP_SETUP.md) | Montaje inicial de pipelines y service connections en Azure DevOps | histórico |
+| [referencias/TEAM_MATRIX_RESPONSABILIDADES.md](referencias/TEAM_MATRIX_RESPONSABILIDADES.md) | RACI, guardias y SLA genéricos sin datos reales | sustituido; sin sustituto hasta que RUNBOOK_INCIDENTES recoja los contactos reales |
+
+## Documentos sustituidos
+
+Se conservan por referencia, con un aviso en su cabecera, y no se mantienen. Si vuelven a hacer falta, se parte del documento vigente.
+
+| Sustituido | Vigente |
+|---|---|
+| [15_API_DOCUMENTATION_V1_4.md](15_API_DOCUMENTATION_V1_4.md) | [contratos/CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) §9 |
+| [infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md](infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md) | [infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) |
+| [diagrams/CONFIANZA_UMBRAL.md](diagrams/CONFIANZA_UMBRAL.md) | [referencias/CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) |
+| [referencias/TEAM_MATRIX_RESPONSABILIDADES.md](referencias/TEAM_MATRIX_RESPONSABILIDADES.md) | Ninguno; contactos y escalado pendientes en [RUNBOOK_INCIDENTES_PRODUCCION.md](procedimientos/RUNBOOK_INCIDENTES_PRODUCCION.md) |
+
+## Estructura de carpetas
 
 ```
 docs/
-├── 📄 INDEX.md (TÚ ESTÁS AQUÍ)
+├── INDEX.md
 ├── 01_ARQUITECTURA_SISTEMA.md
 ├── 02_ANALISIS_FUNCIONAL.md
 ├── 03_DISENO_TECNICO_DETALLADO.md
 ├── 05_MANUAL_USO_CONFIGURACION.md
 ├── 08_CHECKLISTS_DESPLIEGUE.md
-├── 15_API_DOCUMENTATION_V1_4.md
-│
-├── 📁 guias/
-│   ├── QUICKSTART_DESARROLLADORES.md   ⭐
-│   ├── EXTENSIBILIDAD_PLUGIN_SYSTEM.md
-│   ├── TROUBLESHOOTING_DIAGNOSTICO.md
-│   ├── PERFORMANCE_TUNING.md
-│   ├── GUIA_EASYAUTH_ADMIN.md
-│   ├── GUIA_RESTRICCION_ACCESO_ADMIN.md
-│   └── SOLICITUD_APP_REGISTRATION_ADMIN.md
-│
-├── 📁 especificaciones/
-│   ├── DATA_MODELS_ER_DIAGRAM.md       ⭐
-│   └── ESPECIFICACION_PLUGIN_ASSETRESOLVER.md
-│
-├── 📁 referencias/
-│   ├── GLOSSARIO_TERMINOS.md           ⭐
-│   ├── FUENTE_VERDAD_CONFIGURACION.md
-│   └── TEAM_MATRIX_RESPONSABILIDADES.md (🆕 2026-06-10)
-│
-├── 📁 observabilidad/
-│   ├── OBSERVABILIDAD_KQL.md           ⭐
-│   └── CU_RENDIMIENTO_INSIGHTS.md
-│
-├── 📁 procedimientos/ (🆕 2026-06-10)
-│   ├── RUNBOOK_INCIDENTES_PRODUCCION.md
-│   ├── RELEASE_MANAGEMENT.md
-│   └── DATABASE_MIGRATION_STRATEGY.md
-│
-├── 📁 infraestructura/ (🆕 2026-06-10)
-│   └── INFRAESTRUCTURA_DESPLIEGUE.md
-│
-├── 📁 contratos/
-│   ├── CONTRATO_API_HTTP.md
-│   └── PLANTILLA_PLUGINS_JSON.md
-│
-├── 📁 manuales/
-│   ├── MANUAL_COSTES_IA.md
-│   ├── MANUAL_PLUGINS.md
-│   └── MANUAL_VALIDACIONES.md
-│
-├── 📁 diagrams/
-│   └── (Mermaid, Visio, etc.)
-│
-├── 📁 presentaciones/
-│   └── 13_GUION_PRESENTACION_CLASIFICACION_V1_4_SLIDES.md
-│
-└── 📁 auxiliares/
-    ├── migracion-deployment/
-    ├── auditorias/
-    ├── planes/
-    ├── phase-reports/
-    ├── ejemplos/
-    └── temps/                          ← Archivos temporales (gitignored)
+├── 15_API_DOCUMENTATION_V1_4.md        (sustituido)
+├── contratos/          CONTRATO_API_HTTP, PLANTILLA_PLUGINS_JSON
+├── decisiones/         ADR-001 … ADR-004
+├── diagrams/           UMBRAL_PRIORIZACION, CONFIANZA_UMBRAL (sustituido), fuentes .mmd
+├── especificaciones/   DATA_MODELS_ER_DIAGRAM, ASSETRESOLVER, GDC_SINTWS, PROMPTS_CONFIGURABLES, PROMPT_CLASIFICACION_COMPLETO, LIMITE_PAGINAS, OPTIMIZACION_ALMACENAMIENTO_BD_PRO
+├── guias/              QUICKSTART, HOST_LOCAL_CONTRA_DEV, EXTENSIBILIDAD_PLUGIN_SYSTEM, EXTRACCION_CU, CLASIFICACION_DOCUMENTOS, CLASIFICACION_RESTRINGIDA, TROUBLESHOOTING, EASYAUTH_ADMIN, RESTRICCION_ACCESO_ADMIN, SOLICITUD_APP_REGISTRATION_ADMIN
+├── infraestructura/    INFRAESTRUCTURA_REAL_DESPLEGADA, INFRAESTRUCTURA_DESPLIEGUE (sustituido)
+├── manuales/           CONFIGURACION, PLUGINS, COSTES_IA, DEDUPLICACION, VALIDACIONES, HEALTHCHECK
+├── observabilidad/     MONITOREO_ALERTAS_REAL, OBSERVABILIDAD_KQL, CU_RENDIMIENTO_INSIGHTS, workbooks
+├── presentaciones/     (histórico; nuevos ficheros ignorados)
+├── procedimientos/     RELEASE_MANAGEMENT, DESPLIEGUE_IA, DATABASE_MIGRATION_STRATEGY, RUNBOOK_INCIDENTES_PRODUCCION, RUNBOOK_RELEASE_PRO_2026-09, PLAN_DESPLIEGUE_INICIAL_DEV_PRE, AZURE_DEVOPS_BOOTSTRAP_SETUP
+├── referencias/        GLOSSARIO, TIPOLOGIAS_REFERENCIA, CONFIANZA_AGREGADA, CAUSISTICAS_NOTA_SIMPLE_1_4, FUENTE_VERDAD_CONFIGURACION, TEAM_MATRIX (sustituido)
+├── releases/           README, _plantilla/, v1.0.0/, v1.1.0/, v1.1.1/
+├── superpowers/        specs/ (versionadas) y plans/ (no versionados)
+└── auxiliares/         (no versionado)
 ```
 
----
+## Mantenimiento
 
-## 📌 **Documentos Esenciales (Top 5)**
-
-Para estar productivo rápidamente:
-
-1. ✅ **[GLOSSARIO_TERMINOS.md](referencias/GLOSSARIO_TERMINOS.md)** — Aprende qué es qué (20 min)
-2. ✅ **[QUICKSTART_DESARROLLADORES.md](guias/QUICKSTART_DESARROLLADORES.md)** — Setup + primer test (15 min)
-3. ✅ **[EXTENSIBILIDAD_PLUGIN_SYSTEM.md](guias/EXTENSIBILIDAD_PLUGIN_SYSTEM.md)** — Entiende la arquitectura (1 h)
-4. ✅ **[OBSERVABILIDAD_KQL.md](observabilidad/OBSERVABILIDAD_KQL.md)** — Monitorea el sistema (30 min lookup)
-5. ✅ **[TROUBLESHOOTING_DIAGNOSTICO.md](guias/TROUBLESHOOTING_DIAGNOSTICO.md)** — Resuelve problemas (30 min lookup)
-
-**Total: ~2.5 horas** para ser productivo = Onboarding acelerado ✅
-
----
-
-## 🆕 **Documentos Recientemente Agregados (v1.5 — 2026-06-10)**
-
-### Operacionales Críticos (6 documentos nuevos — 2026-06-10) ⭐
-
-| # | Documento | Propósito | Líneas | Commit |
-|----|-----------|-----------|--------|--------|
-| 1 | RUNBOOK_INCIDENTES_PRODUCCION.md | 7 escenarios de incidentes + diagnostic queries | 337 | `2d3543e` |
-| 2 | INFRAESTRUCTURA_DESPLIEGUE.md | ⚠️ Plantilla genérica (Staging/Prod, DR, SKU) — NO refleja lo desplegado; ver INFRAESTRUCTURA_REAL_DESPLEGADA.md | 245 | `6b78895` |
-| 3 | RELEASE_MANAGEMENT.md | Versioning, pre-release, rollback, hotfix | 263 | `65907d4` |
-| 4 | TEAM_MATRIX_RESPONSABILIDADES.md | RACI, on-call, SLAs, change approval, training | 188 | `058b6c8` |
-| 5 | DATABASE_MIGRATION_STRATEGY.md | EF Core, testing, blue-green, rollback | 332 | `5abdfb2` |
-| 6 | CI_CD_DEPLOYMENT_DETAILS.md | Pipelines, build, test, deploy, troubleshooting | 325 | `e49009e` |
-
-**Subtotal Operacionales:** 1,690 líneas de documentación crítica ✅
-
-### Técnicas Previas (7 documentos)
-
-| # | Documento | Secciones | Líneas |
-|----|-----------|-----------|--------|
-| 1 | GLOSSARIO_TERMINOS.md | Términos, Acrónimos, Conceptos, Patrones | ~400 |
-| 2 | DATA_MODELS_ER_DIAGRAM.md | ER, Tablas, Relaciones, Queries | ~650 |
-| 3 | QUICKSTART_DESARROLLADORES.md | Setup, Estructura, First Run, Debugging | ~400 |
-| 4 | EXTENSIBILIDAD_PLUGIN_SYSTEM.md | Architecture, Interfaces, 6 Providers, Testing | ~1,200 |
-| 5 | TROUBLESHOOTING_DIAGNOSTICO.md | Decision Tree, 6 Casos, KQL, Escalation | ~860 |
-| 6 | OBSERVABILIDAD_KQL.md | 20 Queries, 8 Alerts, Debugging | ~1,000 |
-| 7 | PERFORMANCE_TUNING.md | Benchmarks, Config, Scaling | ~1,210 |
-
-**Subtotal Técnicas:** ~5,720 líneas
-
-**TOTAL v1.5:** ~7,410 líneas de documentación nueva ✅
-
----
-
-## 📞 **Soporte & Preguntas**
-
-- **¿Nuevo en el proyecto?** → Lee [GLOSSARIO](referencias/GLOSSARIO_TERMINOS.md) + [QUICKSTART](guias/QUICKSTART_DESARROLLADORES.md)
-- **¿Error en producción?** → Revisa [TROUBLESHOOTING](guias/TROUBLESHOOTING_DIAGNOSTICO.md)
-- **¿Cómo monitorear?** → Ve a [OBSERVABILIDAD](observabilidad/OBSERVABILIDAD_KQL.md)
-- **¿Crear nuevo plugin?** → Sigue [EXTENSIBILIDAD](guias/EXTENSIBILIDAD_PLUGIN_SYSTEM.md)
-- **¿Optimizar performance?** → Lee [PERFORMANCE_TUNING](guias/PERFORMANCE_TUNING.md)
-
----
-
-## 📅 **Histórico de Versiones**
-
-| Versión | Fecha | Cambios |
-|---------|-------|---------|
-| **v1.5** | 2026-06-10 | Agregados 7 guías técnicas: Glossario, Data Models, Quickstart, Plugins, Troubleshooting, Observabilidad, Performance |
-| v1.4 | 2026-05-21 | ADO Backlog, Pipeline clasificación |
-| v1.3 | 2026-04-30 | Auditorías, Checklist despliegue |
-| v1.0-1.2 | 2025-2026 | Arquitectura, Diseño, API docs |
-
----
-
-## ✅ **Checklist: ¿Por Dónde Empiezo?**
-
-- [ ] Soy **nuevo dev** → Ve a [QUICKSTART](guias/QUICKSTART_DESARROLLADORES.md)
-- [ ] Soy **operator** → Ve a [TROUBLESHOOTING](guias/TROUBLESHOOTING_DIAGNOSTICO.md)
-- [ ] Soy **architect** → Ve a [ARQUITECTURA](01_ARQUITECTURA_SISTEMA.md) + [DATA_MODELS](especificaciones/DATA_MODELS_ER_DIAGRAM.md)
-- [ ] Necesito **crear plugin** → Ve a [EXTENSIBILIDAD](guias/EXTENSIBILIDAD_PLUGIN_SYSTEM.md)
-- [ ] Necesito **monitorear** → Ve a [OBSERVABILIDAD](observabilidad/OBSERVABILIDAD_KQL.md)
-- [ ] Necesito **optimizar** → Ve a [PERFORMANCE_TUNING](guias/PERFORMANCE_TUNING.md)
-- [ ] Necesito **resolver error** → Ve a [TROUBLESHOOTING](guias/TROUBLESHOOTING_DIAGNOSTICO.md)
-
----
-
-**¡Bienvenido a DocumentIA! 🚀**
-
-*Última actualización: 2026-06-10 | Próxima revisión: 2026-07-10*
+- Cada unidad de trabajo evalúa su impacto documental sobre las cuatro familias y actualiza en el mismo commit lo que deje de ser cierto; al cerrar sesión se repasan las cuatro familias contra todo lo cambiado.
+- Un documento nuevo entra en este índice con familia y estado. Un documento que deja de ser cierto se corrige o pasa a `sustituido` con su aviso de cabecera; no se deja desactualizado en silencio.
+- Los enlaces entre documentos permanentes son relativos y apuntan solo a ficheros versionados.

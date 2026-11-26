@@ -1,5 +1,7 @@
 # Solicitud de app registration para autenticar el Admin (DocumentIA)
 
+> Nota de revisión (2026-11-22, AB#101447): documento histórico, se conserva sin reescribir. La solicitud se resolvió con una app registration y un grupo de seguridad por entorno (`GSEC-DocumentIA-Admin-DEV`, `-PRE` y `-PRO`) y EasyAuth está activo en los tres entornos; los datos vigentes y el procedimiento están en GUIA_EASYAUTH_ADMIN.md e INFRAESTRUCTURA_REAL_DESPLEGADA.md (sección «Identidad y acceso al Admin (EasyAuth)»). Los redirect URIs, el requisito de ID tokens y «Assignment required = Yes» siguen vigentes. El nombre de grupo `SEC-DocumentIA-Admins` y la sugerencia de un único grupo para dev y pre no se aplicaron. La sección «Mientras tanto» (restricción de red) ya no es necesaria.
+
 > Objetivo de este documento: servir de base para el ticket/solicitud al
 > equipo de identidad y seguridad, para que se cree (o se autorice crear) la
 > app registration necesaria para activar App Service Authentication

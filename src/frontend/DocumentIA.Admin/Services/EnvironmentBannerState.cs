@@ -39,7 +39,7 @@ public sealed record EnvironmentBannerState(string Label, string CssClass)
 
         if (string.Equals(environment, "Production", StringComparison.OrdinalIgnoreCase))
         {
-            return new EnvironmentBannerState("⛔ ENTORNO: PRODUCCIÓN", "bg-danger text-white");
+            return new EnvironmentBannerState("⛔ ENTORNO: PRODUCCIÓN", "bg-danger text-black");
         }
 
         if (string.IsNullOrWhiteSpace(environment)
@@ -48,6 +48,6 @@ public sealed record EnvironmentBannerState(string Label, string CssClass)
             return new EnvironmentBannerState("⚠ Entorno del backend sin identificar", "bg-warning text-dark");
         }
 
-        return new EnvironmentBannerState($"Entorno backend: {environment}", "bg-info text-dark");
+        return new EnvironmentBannerState($"Entorno backend: {environment}", "bg-info text-black");
     }
 }

@@ -141,7 +141,7 @@ $grouped | Group-Object Category | Sort-Object Name | ForEach-Object {
 [void]$sb.AppendLine("- Las claves con prefijo doble `:` indican secciones jerarquicas (ej. `GDC:Endpoint`).")
 [void]$sb.AppendLine("- Para ver el valor concreto en cada entorno consultar Azure Portal -> Function App `srbappprodocai` -> Configuration, o el `local.settings.json` local.")
 [void]$sb.AppendLine("- Los secretos referenciados via `@Microsoft.KeyVault(...)` se documentan en `docs/INFRAESTRUCTURA_AZURE.md`.")
-[void]$sb.AppendLine("- Ver tambien `.env.example` (raiz del repo) y `MANUAL_HEALTHCHECK.md` para settings con probe especifico.")
+[void]$sb.AppendLine("- Ver tambien `src/backend/DocumentIA.Functions/local.settings.template.json` (plantilla local) y `MANUAL_HEALTHCHECK.md` para settings con probe especifico.")
 
 $outputDir = Split-Path $OutputPath -Parent
 if (-not (Test-Path $outputDir)) { New-Item -ItemType Directory -Path $outputDir -Force | Out-Null }

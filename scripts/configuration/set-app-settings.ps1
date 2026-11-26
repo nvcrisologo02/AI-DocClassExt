@@ -1,4 +1,4 @@
-# =============================================================================
+﻿# =============================================================================
 # Configura los Application Settings no secretos de la Function App en Azure
 # Uso: .\scripts\set-app-settings.ps1
 #
@@ -10,7 +10,7 @@
 
 $ErrorActionPreference = "Stop"
 
-# ─── PARAMETROS DE RECURSO ───────────────────────────────────────────────────
+# --- PARAMETROS DE RECURSO ---------------------------------------------------
 $resourceGroup   = "SRBRGDOCSAIPROD"
 $functionAppName = "srbappprodocai"
 $keyVaultName    = "srbkvprodocai"
@@ -94,34 +94,7 @@ az functionapp config appsettings set `
         "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=$cuMaxConcurrentCalls" `
         "Extraction__AzureContentUnderstanding__MaxRetries=$cuMaxRetries" `
         "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=$cuInitialRetryDelayMs" `
-        "Extraction__AzureContentUnderstanding__Endpoint=https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/" `
-        "Extraction__AzureContentUnderstanding__AuthMode=ApiKey" `
-        "Extraction__AzureContentUnderstanding__ApiKey=@Microsoft.KeyVault(VaultName=$keyVaultName;SecretName=Extraction--AzureContentUnderstanding--ApiKey)" `
-        "Extraction__AzureContentUnderstanding__DefaultProcessingLocation=geography" `
-        "Extraction__GptFallback__Enabled=true" `
-        "Extraction__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com" `
-        "Extraction__GptFallback__AuthMode=ApiKey" `
-        "Extraction__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$keyVaultName;SecretName=Extraction--GptFallback--ApiKey)" `
-        "Extraction__GptFallback__DeploymentName=gpt-4o-mini" `
-        "Extraction__GptFallback__MinFieldsRatio=0.9" `
-        "Extraction__GptFallback__Temperature=0.0" `
-        "Extraction__GptFallback__MaxTokens=2000" `
-        "Extraction__GptFallback__TimeoutSeconds=60" `
         "Classification__DefaultProvider=azure-document-intelligence" `
-        "Classification__DefaultModelKey=default.azure-di" `
-        "Classification__AzureDocumentIntelligence__Endpoint=https://srbdiprodocai.cognitiveservices.azure.com/" `
-        "Classification__AzureDocumentIntelligence__AuthMode=ApiKey" `
-        "Classification__AzureDocumentIntelligence__ApiKey=@Microsoft.KeyVault(VaultName=$keyVaultName;SecretName=Classification--AzureDocumentIntelligence--ApiKey)" `
-        "Classification__AzureDocumentIntelligence__ApiVersion=2024-11-30" `
-        "Classification__GptFallback__Enabled=true" `
-        "Classification__GptFallback__Endpoint=https://upe48-mm2avmdm-swedencentral.openai.azure.com" `
-        "Classification__GptFallback__AuthMode=ApiKey" `
-        "Classification__GptFallback__ApiKey=@Microsoft.KeyVault(VaultName=$keyVaultName;SecretName=Classification--GptFallback--ApiKey)" `
-        "Classification__GptFallback__DeploymentName=gpt-4o-mini" `
-        "Classification__GptFallback__FallbackThreshold=0.5" `
-        "Classification__GptFallback__Temperature=0.0" `
-        "Classification__GptFallback__MaxTokens=150" `
-        "Classification__GptFallback__TimeoutSeconds=30" `
     --output none
 
 if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Fallo en settings de AI" -ForegroundColor Red; exit 1 }
@@ -151,7 +124,7 @@ az functionapp config appsettings set `
         "GDC__ProcesoCarga=PC01" `
         "GDC__TipoExpediente=AI" `
         "GDC__Publico=verdadero" `
-        "GDC__BypassSslValidation=true" `
+        "GDC__BypassSslValidation=false" `
     --output none
 
 if ($LASTEXITCODE -ne 0) { Write-Host "[ERROR] Fallo en settings de GDC" -ForegroundColor Red; exit 1 }

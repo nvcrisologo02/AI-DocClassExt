@@ -1,5 +1,7 @@
 # Guía de Uso — Clasificación Restringida a un Conjunto de Tipologías
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `RestriccionTipologiasValidator`, `ConfigurableClasificarDataProvider`, `GptClasificarDataProvider`, `DocumentProcessOrchestrator`, `IngestAPITrigger` y CONTRATO_API_HTTP.md). Hallazgos: el resultado `Desconocido` por restricción cierra con `Resultado.Estado = NO_CLASIFICADO` (`MensajeError = "no clasificable: tipologia desconocida"`, confianzas a 0, `EstadoCalidad = ERROR`) y **sí se persiste y se ve en el Monitor** (AB#100178; §3.3 y §7 estaban desactualizados); la restricción es un post-proceso universal sobre cualquier provider (`AplicarRestriccionTipologiasAsync`, y `IsSatisfactory` rechaza resultados fuera del conjunto), incluido el clasificador por embeddings (modo propio `Restringido`, defecto `sombra`; a 2026-11-23 la fila `clasificador.embeddings` está en `sombra` en DEV y en `off` en PRE y PRO); un `expectedType` resoluble salta la clasificación y la restricción no se aplica sobre él; un `expectedType` no resoluble se ignora con aviso (AB#100179) y un `expectedType = "Desconocido"` cierra en `NO_CLASIFICADO`; el catálogo de códigos válidos se cachea 5 minutos. Las menciones a gpt-4o-mini describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004). Los códigos y `gptDescripcion` de los ejemplos son ilustrativos y no se han contrastado uno a uno con la BD; `.xlsm` no está entre las extensiones admitidas por `IngestAPITrigger` (comprobado el 2026-11-23); las 8 `PromptTemplates` de cada entorno no se han comparado con los fragmentos citados.
+
 > **Proyecto:** AI DocClassExt — SAREB
 > **Audiencia:** Integradores de sistemas, usuarios técnicos
 > **Relacionado con:** [CONTRATO_API_HTTP.md](../contratos/CONTRATO_API_HTTP.md) (contrato formal de `instrucciones.restriccionTipologias`) y [GUIA_CLASIFICACION_DOCUMENTOS.md](GUIA_CLASIFICACION_DOCUMENTOS.md) (guía general de clasificación, §4.5)
@@ -170,7 +172,7 @@ Si ninguna tipología del conjunto encaja, el resultado final es:
 }
 ```
 
-- `identificacion.propuestaTipologia` solo se informa cuando `proponerSiDesconocido = true`. Es una **propuesta libre** (texto/código, no necesariamente del catálogo formal), obtenida con el flujo jerárquico completo contra el catálogo entero — no contra el conjunto acotado. No se actúa sobre ella: no dispara extracción, GDC ni integración.
+- `identificacion.propuestaTipologia` solo se informa cuando `proponerSiDesconocido = true`. Es una **propuesta libre** (texto/código, no necesariamente del catálogo formal), obtenida reutilizando el mejor candidato descartado de la cadena (≥ umbral, fuera del conjunto) o, si no lo hay, con una única pasada GPT sin restricción (`OmitirRestriccionTipologias=true`; su fallo o un 429 agotado dejan `Desconocido` sin propuesta) — no contra el conjunto acotado. No se actúa sobre ella: no dispara extracción, GDC ni integración.
 - En `detalleEjecucion.clasificacion.detalleProveedores` aparece una entrada con `proveedor = "propuesta_libre"` cuando la propuesta procede de una llamada adicional (o de un candidato ya descartado por el router durante la cadena normal).
 - `confianza` de la propuesta viaja en esa misma entrada de `detalleProveedores`, no en `identificacion`.
 
@@ -190,7 +192,7 @@ El trigger HTTP valida la restricción antes de arrancar la orquestación. Error
 | Todos los códigos enviados son inválidos | El mensaje detalla los códigos rechazados. Si solo **algunos** son inválidos, la petición **no** se rechaza: se descartan con aviso y viajan en `codigosIgnorados` (ver [§3.1](#31-eco-de-la-restricción-aplicada)). |
 | Combinación con `nivelClasificacion = "TDN1"` | `instrucciones.restriccionTipologias requiere nivelClasificacion TDN1_TDN2 (no es compatible con TDN1)`. El nivel TDN1 devuelve familias, no tipologías, y no puede honrar una restricción expresada a granularidad de tipología. |
 
-`expectedType` sigue siendo un hint independiente y puede convivir con `restriccionTipologias` sin regla cruzada entre ambos.
+`expectedType` sigue siendo un hint independiente y puede convivir con `restriccionTipologias` sin regla cruzada entre ambos. Matiz (revisión 2026-11-22): un `expectedType` resoluble salta la clasificación por completo y la restricción no se aplica sobre él; uno no resoluble se ignora con aviso y se clasifica con restricción (AB#100179); `expectedType = "Desconocido"` cierra en `NO_CLASIFICADO`; con `expectedType` informado el clasificador por embeddings no contesta.
 
 ---
 
@@ -198,7 +200,7 @@ El trigger HTTP valida la restricción antes de arrancar la orquestación. Error
 
 ### 5.1 Tipologías publicadas y activas
 
-Solo participan en la restricción las tipologías con estado `Published` y activas. Un código correcto pero de una tipología en `Draft` o `Retired` se descarta como inválido igual que un código inexistente (aparece en `codigosIgnorados`).
+Solo participan en la restricción las tipologías con estado `Published` y activas (el catálogo de códigos válidos se cachea 5 minutos en memoria, así que un cambio de estado puede tardar hasta 5 min en reflejarse). Un código correcto pero de una tipología en `Draft` o `Retired` se descarta como inválido igual que un código inexistente (aparece en `codigosIgnorados`).
 
 ### 5.2 Los códigos son de tipología, no de TDN2
 
@@ -259,7 +261,7 @@ Ambas claves siguen el mismo ciclo de vida que el resto de `PromptTemplates` (bo
 
 ## 7. Limitaciones y comportamiento aguas abajo
 
-- **`"Desconocido"` no se persiste como tal ni aparece en el Monitor del Admin.** El resultado `"Desconocido"` por restricción solo viaja en la respuesta de la orquestación (polling del `instanceId`); no queda un registro navegable en el Monitor. Mejora pendiente.
+- **`"Desconocido"` por restricción cierra con `Resultado.Estado = NO_CLASIFICADO` y sí se persiste** (`MensajeError = "no clasificable: tipologia desconocida"`, confianzas a 0, `EstadoCalidad = ERROR`; AB#100178): queda en `DocumentoEjecuciones` y es visible en el Monitor. Texto anterior, superado: el resultado solo viajaba en la respuesta de la orquestación y no quedaba registro navegable. Mejora pendiente.
 - **Sin extracción, AssetResolver, GDC ni integración con `"Desconocido"`.** Igual que cualquier documento no clasificado: solo se permiten resumen documental y ejecución de prompt (si se solicitaron), nada más.
 - **El resumen se genera igual con `"Desconocido"`.** Si la petición incluye `forzarResumenPorDefecto` (o `instrucciones.prompt`), se ejecuta independientemente del resultado de clasificación.
 - **`.xlsm` no soportado.** El layout de Document Intelligence no procesa hojas de cálculo `.xlsm`; la clasificación se ejecuta sin texto (contexto vacío) y el resultado no es fiable para este formato.

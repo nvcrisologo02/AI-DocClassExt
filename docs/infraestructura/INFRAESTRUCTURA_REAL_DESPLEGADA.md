@@ -1,5 +1,7 @@
 # Infraestructura Real Desplegada — DEV / PRE / PRO
 
+> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; verificada en DEV el 2026-11-25; PRE y PRO con la siguiente release). Revisiones previas: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto), 2026-11-22 (AB#101447, contraste con `azure-pipelines*.yml`, `infra/ai/pipeline-variables.yml`, `infra/ai/deployments.*.json` y el código). Lo que no se ha podido comprobar contra Azure en esta revisión se marca como tal.
+
 ## 🌐 Modelo multi-entorno
 
 La solución se despliega en **tres entornos paralelos** que comparten el mismo código y el mismo contrato de configuración. El pipeline `azure-pipelines.yml` resuelve todos los nombres de recursos, la suscripción y la service connection a partir del parámetro `targetEnvironment` (`dev` | `pre` | `prod`).
@@ -65,7 +67,7 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 
 | Recurso PROD | Kind / SKU | Región | Endpoints | Rol |
 |--------------|-----------|--------|-----------|-----|
-| `upe48-mm2avmdm-swedencentral` | AIServices (Foundry) / S0 | swedencentral | CU: `https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/`<br>OpenAI: `https://upe48-mm2avmdm-swedencentral.openai.azure.com` | **CU primario** + **OpenAI primario** — deployment `gpt-4o-mini` = GptFallback de extracción y clasificación |
+| `upe48-mm2avmdm-swedencentral` | AIServices (Foundry) / S0 | swedencentral | CU: `https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/`<br>OpenAI: `https://upe48-mm2avmdm-swedencentral.openai.azure.com` | **CU primario** + **OpenAI primario** — deployment `gpt-4o-mini` (modelo gpt-4.1-mini) = respaldo GPT de extracción y clasificación, prompt libre y resumen en PRO (ver «Modelo generativo por entorno») |
 | `srbaisrv-westeurope` | AIServices (Foundry) / S0 | westeurope | CU: `https://srbaisrv-westeurope.services.ai.azure.com/`<br>OpenAI: `https://srbaisrv-westeurope.openai.azure.com/` (control-plane: `…cognitiveservices.azure.com/`) | **CU secundario** (failover / reparto de carga desde Sweden Central) + **OpenAI secundario**. Tag `Purpose=CU-secondary-endpoint`; identity SystemAssigned; reglas VNet a `RedServiciosProduccion`. **No cableado como fallback OpenAI en el pipeline** (los App Settings apuntan a Sweden Central) |
 | `srbdiprodocai` | FormRecognizer | westeurope | `https://srbdiprodocai.cognitiveservices.azure.com/` (API `2024-11-30`) | **Document Intelligence** (clasificación) |
 
@@ -77,10 +79,10 @@ Verificado con `az resource list` sobre cada RG (todos los recursos en **West Eu
 | `ModeloConfigs` | filas con `ResourceAlias`, sin `Endpoint` | 27 filas con alias (cutover del 23/09) | 28 filas activas con alias (`openai_primary` 10, `cu_primary` 13, `cu_secondary` 2, `di` 3), 0 con `Endpoint` |
 | `AuthMode` de las filas | `DefaultAzureCredential` | `DefaultAzureCredential` | `DefaultAzureCredential`; `ApiKey` purgada en todas las filas activas el 2026-10-08 (`clear-model-api-keys.sql`) |
 | Roles de la identidad de la Function App sobre los recursos de IA del entorno | Cognitive Services User + Foundry User | Cognitive Services User + Foundry User | `srbappprodocai` (`e700ab11…`): Cognitive Services User sobre `upe48-mm2avmdm-swedencentral`, `srbaisrv-westeurope` y `srbdiprodocai`; Foundry User sobre `upe48-mm2avmdm-swedencentral` y `srbaisrv-westeurope` (este último añadido el 2026-10-08) |
-| Opciones directas (`Extraction__AzureContentUnderstanding__*`, `Classification__AzureDocumentIntelligence__*`, `GptFallback__*`) | `ApiKey` desde Key Vault | `ApiKey` desde Key Vault | `ApiKey` desde Key Vault (sin cambio en v1.0.0) |
+| Opciones directas (`Extraction__AzureContentUnderstanding__*`, `Classification__AzureDocumentIntelligence__*`, `GptFallback__*`) | Retiradas en AB#101450 (DEV: limpio el 2026-11-25 (run 80238 del 802), fecha al verificar) | Retiradas en AB#101450 (con su siguiente despliegue, release) | Retiradas en AB#101450 (con su siguiente despliegue, release) |
 | Validación por identidad | smoke y Fase A del clasificador | smoke 6/6 (cutover 23/09) | smoke 6/6 el 2026-10-08 (DI, OpenAI y CU en `srbaisrv-westeurope`); `cu_primary` por identidad pendiente de la primera extracción real (sin tráfico de negocio entre la ventana y el 2026-10-09 09:00Z) |
 
-Pendientes de la Fase 3 (AB#100302 / AB#100321): Plataforma retira los roles de `srbappdevdocai` y `srbapppredocai` sobre `upe48-mm2avmdm-swedencentral`, `srbaisrv-westeurope` y `srbdiprodocai` (Step 3); borrado de las 6 tablas `ModeloConfigs__bak_*` de PRO, ya sin keys, previsto el 2026-10-15.
+Pendientes de la Fase 3 (AB#100302 / AB#100321): Plataforma retira los roles de `srbappdevdocai` y `srbapppredocai` sobre `upe48-mm2avmdm-swedencentral`, `srbaisrv-westeurope` y `srbdiprodocai` (Step 3); borrado de las 6 tablas `ModeloConfigs__bak_*` de PRO, ya sin keys, previsto el 2026-10-15 (comprobado el 2026-11-23: las dos identidades conservan Cognitive Services User sobre los tres recursos de IA de PRO y las 6 tablas `ModeloConfigs__bak_*` siguen en la BD de PRO; AB#100321 sigue en Committed, bloqueado en Plataforma).
 
 **Deployments de OpenAI por recurso PROD** (verificado con `az cognitiveservices account deployment list`; los sufijos numéricos son aleatorios y no coinciden entre recursos):
 
@@ -100,6 +102,18 @@ Pendientes de la Fase 3 (AB#100302 / AB#100321): Plataforma retira los roles de 
 
 > **Deployments de DEV/PRE:** replican el juego en sus cuentas 01/02 (`infra/ai/deployments.dev.json` y `infra/ai/deployments.pre.json`), incluido `gpt-5-mini`.
 
+> **Solo DEV (gpt-5.6-luna, en producción de DEV desde el 2026-11-20, ADR-004 / AB#99939):** `srbaisrv01devdocai` tiene además el deployment `gpt-5.6-luna` (modelo `gpt-5.6-luna` 2026-07-09, `DataZoneStandard`, **150K TPM**: creado con 50 el 2026-11-17 y subido a 150 el mismo día por los 429 de la golden), creado con `scripts/migrations/gpt56-luna/create-gpt56-luna-deployment.sh` (AB#101370). Desde el cutover es el deployment por defecto de DEV: las filas `classification.gpt56-luna` y `extraction.gpt56-luna` llevan `UseAsFallback`, la 2001 usa `default.gpt56-luna_ex` y las tipologías heredan `PromptDefaults__ModelKey = prompt.gpt56-luna` (scripts 06 y 08 de `scripts/migrations/gpt56-luna/`). Sigue **sin** declararse en `infra/ai/deployments.dev.json` (comprobado el 2026-11-22): llevarlo a `deployments.*.json` y crear el deployment, las filas y la tarifa en PRE y PRO es parte de la siguiente release (ADR-004, Consecuencias). El deployment `gpt-4o-mini` de DEV se conserva para la vuelta atrás (script 07 más el setting).
+
+### Modelo generativo por entorno (2026-11-22)
+
+| Entorno | Deployment generativo por defecto | `PromptDefaults__ModelKey` (pipeline) | Desde |
+|---------|-----------------------------------|----------------------------------------|-------|
+| DEV | `gpt-5.6-luna` en `srbaisrv01devdocai` (Data Zone Standard, 150K TPM, `reasoning_effort` none) | `prompt.gpt56-luna` | 2026-11-20 (ADR-004) |
+| PRE | `gpt-4o-mini` (modelo gpt-4.1-mini) en `srbaisrv01predocai` | `default.gpt4o-mini` | hasta la siguiente release |
+| PRO | `gpt-4o-mini` (modelo gpt-4.1-mini) en `upe48-mm2avmdm-swedencentral` | `default.gpt4o-mini` | hasta la siguiente release |
+
+> Los settings `Extraction__GptFallback__DeploymentName` y `Classification__GptFallback__DeploymentName` ya no existen (retirados en AB#101450); el deployment generativo lo fijan `PromptDefaults__ModelKey` y las filas de `ModeloConfigs`. Azure OpenAI retira gpt-4.1-mini el 2027-04-14.
+
 > **Regiones:** CU/OpenAI **primarios** (`upe48-mm2avmdm-swedencentral`) en **swedencentral**; CU/OpenAI **secundarios** (`srbaisrv-westeurope`) y **todos** los recursos de aplicación y DI en **West Europe**.
 
 **Réplica de analizadores CU (Sweden → West Europe): identidades y roles reales** (verificado 2026-07-17)
@@ -112,7 +126,7 @@ Ambos recursos AIServices tienen **identidad administrada System-Assigned**. La 
 | `srbaisrv-westeurope` (destino, `b69cbb95-…`) | ~~Cognitive Services User~~ (**revertido**) | Recurso origen `upe48-mm2avmdm-swedencentral` | Se concedió el 17-jul-2026 para probar el *pull* de la **Copy API cross-resource**; **no la desbloqueó** y se **revirtió** el mismo día. La MI del destino **no** mantiene rol sobre el origen. |
 
 > [!IMPORTANT]
-> **La Copy API cross-resource de CU (`grantCopyAuthorization` + `:copy`) NO funciona en este entorno** (verificado 2026-07-17): el grant responde `200` sin campo `source` y el copy devuelve `"has not granted the necessary permissions"` incluso con la MI del destino con `Cognitive Services User` sobre el origen; `:getCopyAuthorization` (token) da `404`. Probable limitación con analizadores project-scoped de Foundry → **caso de soporte Azure**.
+> **La Copy API cross-resource de CU (`grantCopyAuthorization` + `:copy`) NO funciona entre las dos cuentas de PRO** (`upe48-mm2avmdm-swedencentral` → `srbaisrv-westeurope`, verificado 2026-07-17). Sí funciona de PRO a las cuentas de DEV y PRE: es el mecanismo de promoción de `azure-pipelines-ai-artifacts.yml` (`scripts/ai/copy-cu-analyzers.ps1`), con los analyzers registrados como `copied` en `infra/ai/cu-analyzers.<env>.manifest.json` el 2026-09-21. Detalle del caso de PRO: el grant responde `200` sin campo `source` y el copy devuelve `"has not granted the necessary permissions"` incluso con la MI del destino con `Cognitive Services User` sobre el origen; `:getCopyAuthorization` (token) da `404`. Probable limitación con analizadores project-scoped de Foundry → **caso de soporte Azure**.
 > **La réplica operativa se hace reconstruyendo/reentrenando** el analizador en el destino con `scripts/deployment/recreate-cu-analyzer.ps1` (reentrena desde el blob etiquetado; requiere el rol *Storage Blob Data Reader* de la tabla). Detalle en `docs/guias/GUIA_EXTRACCION_AZURE_CONTENT_UNDERSTANDING.md` §12.
 
 ---
@@ -147,7 +161,7 @@ Cada resource group replica la misma topología. Sustituye `{app}`, `{kv}`, `{sq
 │   ├── Database: DocumentIA
 │   ├── Auth: Active Directory Managed Identity (patrón PROD)
 │   ├── Connection: SqlConnectionString (from KeyVault)
-│   └── Schema: DocumentIADbContext (12 entities), EF Core migrations manuales/on-demand
+│   └── Schema: DocumentIADbContext (13 entidades), migraciones EF por el pipeline `azure-pipelines-migrations.yml` (script idempotente aplicado desde el pool privado)
 ├── Azure Storage (Blob + Table + Queue)
 │   ├── Documentos: {stg}          (dev: srbstgdevdocai · pre: srbstgpredocai · pro: srbstgprodocai)
 │   ├── Durable hub: {stgapp}      (dev: srbstgdevappdocai · pre: srbstgpreappdocai · pro: srbstgproapppdocai)
@@ -201,7 +215,7 @@ Los tres entornos siguen la **misma topología de red privada**: los servicios P
 
 ## 🔧 Configuración Post-Despliegue (App Settings)
 
-Los App Settings son **idénticos en los tres entornos** salvo los valores que el pipeline parametriza: nombre de Key Vault (`$(KEY_VAULT_NAME)`), resource group, nombres de app, URL de AssetResolver y `GDC__Endpoint`. Los endpoints de IA de las opciones directas (`Extraction__*`, `Classification__*`) se aplican de forma literal con los valores de PRO y su `AuthMode` sigue en `ApiKey` desde el Key Vault del entorno; las filas de `ModeloConfigs`, que son las que usa el flujo, resuelven en los tres entornos por alias `AI__Resources__<alias>__Endpoint` e identidad administrada (ver "3) Alias e identidad por entorno").
+Los App Settings son **idénticos en los tres entornos** salvo los valores que el pipeline parametriza: nombre de Key Vault (`$(KEY_VAULT_NAME)`), resource group, nombres de app, URL de AssetResolver, `GDC__Endpoint`, `EnvironmentName`, `PromptDefaults__ModelKey`, `DocumentIntelligence__UseInlineContent` (`true` en DEV y PRE, `false` en PRO) y `BlobRetention__BatchSize` (2000 en DEV y PRE, 5000 en PRO). Las filas de `ModeloConfigs`, que son las que usa el flujo, resuelven por alias `AI__Resources__<alias>__Endpoint` e identidad administrada (ver "3) Alias e identidad por entorno").
 
 ### **Azure Functions (`{app}`)**
 
@@ -212,38 +226,26 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 | **KeyVaultName** | `{kv}` | pipeline var por entorno |
 | **RunDatabaseMigrationsOnStartup** | false | pipeline var |
 | **EnvironmentName** | dev: `Development` · pre: `Preproduction` · pro: `Production` | pipeline var por entorno (`ENVIRONMENT_NAME`); la aplican **ambos** `azure-pipelines.yml` y `azure-pipelines-admin.yml` (paso "Ensure Functions environment name" en el segundo, idempotente). La lee `GET management/configuration` con prioridad sobre `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` |
+| **PromptDefaults__ModelKey** | dev: `prompt.gpt56-luna` · pre y pro: `default.gpt4o-mini` | pipeline var por entorno (`PROMPT_DEFAULTS_MODEL_KEY`, AB#99938 / ADR-004). Modelo de prompt y resumen de las tipologías sin `PromptConfig.ModelKey`; si no resuelve, prompt y resumen fallan. `ensure-app-settings.ps1` no pisa claves existentes: cambiarla tras el primer despliegue exige `az functionapp config appsettings set` |
+| **DocumentIntelligence__UseInlineContent** | dev y pre: `true` · pro: `false` | pipeline var (`DI_USE_INLINE_CONTENT`) |
+| **BlobRetention__BatchSize** | dev y pre: 2000 · pro: 5000 | pipeline var (`BLOB_RETENTION_BATCH_SIZE`) |
+
+> **Settings heredados retirados (AB#101450, 2026-11-25).** Los app settings `Classification__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey`, `Extraction__GptFallback__*` y los de conexión de `Extraction__AzureContentUnderstanding__*` (`Endpoint`, `ApiKey`, `AuthMode`, `DefaultProcessingLocation`) no se enlazaban a ninguna clase ni se leían en el código (comprobado el 2026-11-22 en `Program.cs`): los parámetros de conexión, modelo y umbrales de IA salen de las filas de `ModeloConfigs` resueltas por alias e identidad administrada. Se retiraron en AB#101450 (27 settings): `azure-pipelines.yml` (799) ya no los fija, y tanto el 799 como el 802 ejecutan `scripts/configuration/remove-legacy-app-settings.ps1` en cada despliegue para borrar los que existan; el contrato `scripts/config/azure-appsettings-contract.json` los lista en `forbiddenSettings` y falla la validación si reaparece alguno. Estado por entorno: DEV, limpio el 2026-11-25 (run 80238 del 802); PRE y PRO, con su siguiente despliegue (release). De `Extraction__AzureContentUnderstanding__*` solo se leen los siete de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`).
 
 #### **Extraction Configuration**
 | Setting | Value |
 |---------|-------|
 | **DefaultProvider** | azure-content-understanding |
-| **CU Endpoint** | https://upe48-mm2avmdm-swedencentral.services.ai.azure.com/ (PRO; DEV/PRE usan sus recursos por alias `AI__Resources__*`) |
-| **CU AuthMode / ApiKey** | ApiKey · `@Microsoft.KeyVault(...Extraction--AzureContentUnderstanding--ApiKey)` (KV del entorno) |
+| **Conexión CU/DI y GPT Fallback** | Retiradas en AB#101450; conexión y modelo salen de `ModeloConfigs` por alias e identidad administrada |
 | **CU MaxConcurrentCalls** | 4 |
 | **CU HardTimeout** | 90 seconds |
 | **CU CircuitBreaker** | enabled (threshold=5, open=45s) |
 | **CU Max Retries / Delay** | 3 · 500ms |
-| **GPT Fallback Enabled** | true |
-| **GPT Fallback Endpoint** | https://upe48-mm2avmdm-swedencentral.openai.azure.com (PRO; DEV/PRE usan sus recursos por alias `AI__Resources__*`) |
-| **GPT Fallback Model** | gpt-4o-mini |
-| **GPT Fallback MinFieldsRatio** | 0.9 |
-| **GPT Fallback Timeout** | 60 seconds |
-| **GPT Fallback Temperature / MaxTokens** | 0.0 · 2000 |
 
 #### **Classification Configuration**
 | Setting | Value |
 |---------|-------|
 | **DefaultProvider** | azure-document-intelligence |
-| **DefaultModelKey** | default.azure-di |
-| **DI Endpoint** | https://srbdiprodocai.cognitiveservices.azure.com/ (PRO; DEV/PRE usan sus recursos por alias `AI__Resources__*`) |
-| **DI ApiKey** | `@Microsoft.KeyVault(...Classification--AzureDocumentIntelligence--ApiKey)` (KV del entorno) |
-| **DI API Version** | 2024-11-30 |
-| **GPT Fallback Enabled** | true |
-| **GPT Fallback Endpoint** | https://upe48-mm2avmdm-swedencentral.openai.azure.com (PRO; DEV/PRE usan sus recursos por alias `AI__Resources__*`) |
-| **GPT Fallback Model** | gpt-4o-mini |
-| **GPT Fallback Threshold** | 0.5 |
-| **GPT Fallback Timeout** | 30 seconds |
-| **GPT Fallback Temperature / MaxTokens** | 0.0 · 150 |
 
 #### **GDC (Legacy Document Management System)**
 | Setting | Value |
@@ -260,7 +262,7 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 | **Proceso Carga** | PC01 |
 | **Tipo Expediente** | AI |
 | **Publico** | verdadero |
-| **SSL Validation Bypass** | true |
+| **SSL Validation Bypass** | `true` hasta el despliegue de AB#101553; después `false` (valida contra `sareb-ca-chain.pem`) |
 | **Timeout** | 60 seconds |
 
 #### **Prompt Tracing**
@@ -302,21 +304,25 @@ Los App Settings son **idénticos en los tres entornos** salvo los valores que e
 
 ## 🚀 Proceso de Despliegue Real
 
-**Pipelines** (trigger manual, `pool: windows-latest`):
+**Pipelines** (todos de trigger manual; siete ficheros YAML en la raíz del repo el 2026-11-22):
 
-- **`azure-pipelines-bootstrap.yml`** — primera alta de entorno / remediación de prerrequisitos (permisos, carga de secretos en Key Vault, referencias KV, settings de Admin/AssetResolver, validación de contrato).
-- **`azure-pipelines.yml`** — despliegue repetible de código una vez el entorno está preparado.
-- **`azure-pipelines-admin.yml`** — hotfix del Admin (Blazor): `BuildAdmin` → `DeployAdmin`. Incluye la variable por entorno **`AZURE_ASSET_RESOLVER_WEB_APP_NAME`** (antes fija a PRODUCCIÓN, causaba un error críptico al validar en dev — AB#99997) y el step **"Ensure Functions environment name"**, que aplica `EnvironmentName=$(ENVIRONMENT_NAME)` en el Function App aunque solo se despliegue el Admin.
+- **`azure-pipelines-bootstrap.yml`** (`windows-latest`) — primera alta de entorno / remediación de prerrequisitos (permisos, carga de secretos en Key Vault, referencias KV, settings de Admin/AssetResolver, validación de contrato).
+- **`azure-pipelines.yml`** (`windows-latest`; pipeline 799) — despliegue repetible completo: Functions, Admin y AssetResolver, más la validación del contrato de app settings.
+- **`azure-pipelines-functions.yml`** (`windows-latest`; pipeline 802) — despliegue solo de Functions con las mismas variables de IA por entorno; es el que se usa en los cutovers de modelo (ADR-004).
+- **`azure-pipelines-admin.yml`** (`windows-latest`) — hotfix del Admin (Blazor): `BuildAdmin` → `DeployAdmin`. Incluye la variable por entorno **`AZURE_ASSET_RESOLVER_WEB_APP_NAME`** (antes fija a PRODUCCIÓN, causaba un error críptico al validar en dev — AB#99997) y el step **"Ensure Functions environment name"**, que aplica `EnvironmentName=$(ENVIRONMENT_NAME)` en el Function App aunque solo se despliegue el Admin.
+- **`azure-pipelines-assetresolver.yml`** (`windows-latest`) — build y despliegue del plugin AssetResolver por separado.
+- **`azure-pipelines-migrations.yml`** — migraciones de BD: `Generate` (`windows-latest`, `dotnet ef migrations script --idempotent`) y `Apply` desde el pool privado `docia-mdp-private` con token de Entra, con el backfill de `ClaveIntencion` como paso opcional. Procedimiento en [DATABASE_MIGRATION_STRATEGY.md](../procedimientos/DATABASE_MIGRATION_STRATEGY.md).
+- **`azure-pipelines-ai-artifacts.yml`** (pool `docia-mdp-private`) — promoción de artefactos de IA DEV → PRE → PRO según [ADR-001](../decisiones/ADR-001-promocion-artefactos-ia-dev-pre-pro.md): stages `Guard`, `Export`, `AiArtifacts` (analyzers CU, proyectos DI, deployments) y `ConfigSeed` (altas de `ModeloConfigs` y tipologías por clave natural). Procedimiento en [DESPLIEGUE_IA.md](../procedimientos/DESPLIEGUE_IA.md).
 
-Los tres aceptan el parámetro **`targetEnvironment: dev | pre | prod`**, que resuelve suscripción, RG, nombres de apps, Key Vault, service connection y `GDC_ENDPOINT`. Ambos pipelines de código (`azure-pipelines.yml` y `azure-pipelines-admin.yml`) son `trigger: none`: deben encolarse manualmente seleccionando la rama **`develop`**, que es donde viven estos cambios hasta el siguiente merge a `master`.
+Los pipelines de despliegue aceptan el parámetro **`targetEnvironment: dev | pre | prod`**, que resuelve suscripción, RG, nombres de apps, Key Vault, service connection y `GDC_ENDPOINT`. Ambos pipelines de código (`azure-pipelines.yml` y `azure-pipelines-admin.yml`) son `trigger: none`: deben encolarse manualmente seleccionando la rama **`develop`**, que es donde viven estos cambios hasta el siguiente merge a `master`.
 
 ### **Pipeline principal (`azure-pipelines.yml`)**
 
 | Stage | Acción | Condición |
 |-------|--------|-----------|
 | **1. Build & Test** | .NET 10 SDK → restore → build (Release) → unit tests → publish 3 proyectos → subir 3 artifacts | siempre |
-| **2. Run Migrations** | dotnet-ef 9.x → aplicar migraciones EF Core (`DocumentIA.Data` / startup `DocumentIA.Functions`) | ⛔ `condition: false` (deshabilitado) |
-| **3. Deploy Functions** | zipDeploy a `{app}` → aplicar ~65 App Settings → validar variables de resiliencia CU + PromptTracing | `succeeded()` |
+| **2. Run Migrations** | stage heredado; las migraciones van por `azure-pipelines-migrations.yml` | ⛔ `condition: false` (deshabilitado) |
+| **3. Deploy Functions** | zipDeploy a `{app}` → aplicar los app settings (83 claves en el YAML el 2026-11-22; 52 el 2026-11-25 tras AB#101450, y un paso `remove-legacy-app-settings.ps1` borra a continuación los heredados que sigan en la Function App) → validar variables de resiliencia CU, PromptTracing, Dedup, PromptDefaults y BlobRetention | `succeeded()` |
 | **3b. Deploy Admin** | zipDeploy a `{admin}` → asignar Managed Identity → verificar/asignar RBAC "Key Vault Secrets User" → settings Functions API → asegurar `EnvironmentName` en `{app}` | dentro del stage DeployFunctions |
 | **4. Deploy AssetResolver** | zipDeploy a `{assetresolver}` → settings DB connection + API key | `dependsOn: DeployFunctions` |
 | **5. Validate Contract** | `validate-azure-appsettings-contract.ps1` sobre las 3 apps; falla si faltan settings | `dependsOn: DeployFunctions + DeployAssetResolver` |
@@ -361,16 +367,16 @@ Cada entorno tiene su propio Key Vault (`srbkvdevdocai` · `srbkvpredocai` · `s
 | `SqlConnectionString` | Conexión a base de datos (`{sql}` / DocumentIA) |
 | `AzureWebJobsStorage` | Durable Functions hub (`{stgapp}`) |
 | `AzureStorageConnectionString` | Almacenamiento de documentos + blob (`{stg}`) |
-| `Extraction--AzureContentUnderstanding--ApiKey` | Autenticación CU |
-| `Extraction--GptFallback--ApiKey` | GPT fallback de extracción |
-| `Classification--AzureDocumentIntelligence--ApiKey` | Autenticación DI |
-| `Classification--GptFallback--ApiKey` | GPT fallback de clasificación |
+| `Extraction--AzureContentUnderstanding--ApiKey` | Retirado en AB#101450; se borra tras el despliegue con `remove-legacy-keyvault-secrets.ps1` (DEV: limpio el 2026-11-25 (run 80238 del 802); PRE y PRO con su siguiente despliegue) |
+| `Extraction--GptFallback--ApiKey` | Retirado en AB#101450; se borra tras el despliegue con `remove-legacy-keyvault-secrets.ps1` (DEV: limpio el 2026-11-25 (run 80238 del 802); PRE y PRO con su siguiente despliegue) |
+| `Classification--AzureDocumentIntelligence--ApiKey` | Retirado en AB#101450; se borra tras el despliegue con `remove-legacy-keyvault-secrets.ps1` (DEV: limpio el 2026-11-25 (run 80238 del 802); PRE y PRO con su siguiente despliegue) |
+| `Classification--GptFallback--ApiKey` | Retirado en AB#101450; se borra tras el despliegue con `remove-legacy-keyvault-secrets.ps1` (DEV: limpio el 2026-11-25 (run 80238 del 802); PRE y PRO con su siguiente despliegue) |
 | `GDC--HttpBasicUsername` / `GDC--HttpBasicPassword` | Autenticación sistema legado GDC |
 | `AssetResolverApiKey` | Plugin AssetResolver |
 | `FunctionsAdminApiFunctionKey` | Autenticación Admin ↔ Functions |
 | `user-ods-dwh` | Base de datos de AssetResolver |
 
-> Las API keys de CU/DI/OpenAI se leen del KV del entorno aunque el endpoint sea el compartido de producción: para que DEV/PRE funcionen, su KV debe contener una key válida contra el recurso de IA de producción.
+> Las API keys de CU/DI/OpenAI del KV del entorno están retiradas (AB#101450): ya no hay app settings que las referencien y se borran tras el despliegue con `scripts/configuration/remove-legacy-keyvault-secrets.ps1`. Las filas de `ModeloConfigs`, que son las que usa el flujo, no llevan key: resuelven por alias e identidad administrada desde 2026-09-22 (DEV), 2026-09-23 (PRE) y 2026-10-08 (PRO).
 
 ---
 
@@ -400,7 +406,7 @@ entornos; sin usuario autenticado el Admin opera en modo solo lectura.
 - ✅ RBAC "Key Vault Secrets User" (sin secretos en código — todo desde Key Vault).
 - ✅ SQL con autenticación por Managed Identity (patrón PROD replicado en DEV/PRE).
 - ✅ Recursos de IA (DI, CU, OpenAI) consumidos por `ModeloConfigs` con identidad administrada (`DefaultAzureCredential`) y sin API keys en BD en los tres entornos (DEV 2026-09-22, PRE 2026-09-23, PRO 2026-10-08); las opciones directas de App Settings conservan `ApiKey` desde Key Vault.
-- ⚠️ GDC con SSL bypass (`BypassSslValidation=true`) — workaround del sistema legado.
+- ⚠️ GDC con SSL bypass (`BypassSslValidation=true`): a 2026-11-25 el código valida el certificado del GDC contra la CA de SAREB (`config/certs/sareb-ca-chain.pem`) y el pipeline fija `false` (AB#101553), pero está pendiente de despliegue (DEV primero; PRE y PRO con la siguiente release). Hasta entonces los tres entornos siguen con `true`. Las hojas del GDC caducan el 2027-01-20 en PRE (`srbwidi03`), el 2027-01-23 en PRO (`SRBWIDP05`) y el 2028-11-12 en DEV (comprobado con openssl el 2026-11-25); con la validación activa una hoja caducada se rechaza, así que antes de la release a PRE/PRO hay que confirmar con el equipo del GDC la renovación y verificar la hoja nueva con `openssl verify -CAfile src/backend/DocumentIA.Functions/config/certs/sareb-ca-chain.pem`.
 - ✅ Admin con EasyAuth activo en los tres entornos (DEV desde 2026-08-06, PRE y PRO desde 2026-09-04; ver [GUIA_EASYAUTH_ADMIN.md](../guias/GUIA_EASYAUTH_ADMIN.md)). Histórico: hasta el 2026-07-31 el App Service del Admin (dev y prod) estaba sin autenticación y con acceso público; el modo solo lectura automático del Admin (sin usuario autenticado) rechaza toda escritura.
 
 ### ⚡ Concurrencia y resiliencia
@@ -428,5 +434,5 @@ entornos; sin usuario autenticado el Admin opera en modo solo lectura.
 
 
 
-**Última actualización:** 2026-10-09
+**Última actualización:** 2026-11-22 (revisión AB#101447; anterior 2026-10-09)
 

@@ -6,8 +6,15 @@ Scripts de datos de la Fase A (sombra en DEV). No hay cambios de esquema.
 |---|---|---|
 | `01-modeloconfig-clasificador-embeddings.sql` | Fila `ModeloConfigs` Tipo=5 `clasificador.embeddings` con deployment, artefacto, modo y umbrales. Copia la credencial de `classification.gpt4o-mini-fallback`. | DEV con `@Modo='sombra'`; PRE y PRO con `@Modo='off'` |
 | `02-tarifas-embeddings-deployments.sql` | Lineas `text-embedding-3-large-030358` y `-010650` en el catalogo `tarifas.ia`. | DEV, PRE y PRO |
+| `03-modeloconfig-embeddings-v2.sql` | Apunta la fila `clasificador.embeddings` al artefacto v2 (solo `Artefacto.BlobPath`; modo y umbrales intactos). | DEV (PRE y PRO con AB#100781) |
+| `04-modeloconfig-embeddings-v3.sql` | Apunta la fila `clasificador.embeddings` al artefacto v3 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
+| `05-modeloconfig-embeddings-v4.sql` | Apunta la fila `clasificador.embeddings` al artefacto v4 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
+| `06-modeloconfig-embeddings-v5.sql` | Apunta la fila `clasificador.embeddings` al artefacto v5 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
 
 Orden: 01 y despues 02. Ambos hacen backup `ModeloConfigs__bak_<fecha>` y son idempotentes.
+
+Para una version nueva del artefacto: se sube primero al blob (`modelos/clasificador-embeddings/vN/`) y despues se ejecuta el script de esa version (03 para v2, 04 para v3, 05 para v4); la app lo recoge en <= 5 min y las versiones anteriores se conservan en el blob (rollback: ejecutar el script de la version anterior). Si el script se ejecuta antes de subir el blob, el loader conserva el ultimo modelo bueno y cachea el fallo 5 min.
+El flujo completo de un corte nuevo (parametros, numeracion del script `0<V+1>` para la version `v<V>`, comandos, comprobaciones y cierre) esta en `eval/clasificador-embeddings/RUNBOOK_CORTES.md` de DocumentIA.Batch (AB#101421).
 
 En PRE y PRO el 01 (con `@Modo='off'`) va **antes de desplegar el codigo** que incluye el
 paso 3.0 del orquestador (develop 2aa9f02). El orquestador llama a la activity en todas las

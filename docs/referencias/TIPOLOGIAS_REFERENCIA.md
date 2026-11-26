@@ -1,22 +1,31 @@
 # Referencia de Tipologías
 
+> Última revisión: 2026-11-25 (AB#101564, altas en DEV; contraste anterior del 2026-11-22, AB#101447, en solo lectura con la BD de DEV y PRO (`Tipologias`, `ModeloConfigs`, `PluginTipologiaConfigs`) e `infra/ai/`). Catálogo en BD: DEV 237 tipologías y PRO 213, todas activas; las 24 que solo están en DEV son las altas «solo clasificación» (AB#101074), `fiav.06` (AB#100780), `cerj.71`, `doct.15`, `esin.02` y `esin.45` (AB#101564, `scripts/database/seed-tipologias-ab101564.sql`; CERJ-71 es además fila nueva de `CatalogoTdn2`, que no viaja por ConfigSeed) y 4 sin identificar. Este documento detalla solo un subconjunto (Nota Simple 1.0 a 1.4, tasación, resumen documental e IBI); la Nota Simple vigente es `nota.simple` 1.5 (default de la familia `nota.simple`, analyzer `CU_NS_1.5_0`) y existen `nota.simple_bal` 1.5, `nota.simple.ggaa.bal` 1.6 (`CU_NS_1.6_0_GGAA`), `nots.01` y `nots.02`. La Nota Simple 1.4 tiene `promptConfig.enabled=false` en BD. Modelo generativo: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini). PRE consultado el 2026-11-23: 213 tipologías activas, las mismas que PRO, con `promptConfig.enabled=false` y `modelKey` `default.gpt4o-mini` en las notas simples; clasificador DI vigente `DocumentAICC_v1` (`default.azure-di`) en DEV y PRO. Las reglas campo a campo y el contenido de los plugins en BD no se han contrastado uno a uno.
+
 > Esta referencia debe contrastarse con BBDD antes de tomar decisiones operativas. La fuente de verdad runtime es `Tipologias`, `ModeloConfigs` y `PluginTipologiaConfigs`; los JSON fisicos del repositorio son seed o referencia historica y pueden estar desactualizados.
 
-## 1. Resumen de tipologías activas
+## 1. Tipologías documentadas en este fichero (subconjunto del catálogo en BD)
+
+> El catálogo real tiene 237 tipologías activas en DEV (lectura del 2026-11-25) y 213 en PRO (lectura del 2026-11-22). Esta tabla solo detalla las familias históricas; para el resto, consultar la BD o el Admin.
 
 | Familia (`tipologiaId`) | Versión | Clave técnica | Default | GDC Tipo | GDC Subtipo | Skip GDC | Extracción (proveedor) | Prompt |
 |---|---|---|---|---|---|---|---|---|
 | `nota-simple` | 1.0 | `nota.simple.1_0` | No | NOTS | NOTS01 | No | — | — |
 | `nota-simple` | 1.2 | `nota.simple.1_2` | No | NOTS | NOTS01 | No | — | — |
 | `nota-simple` | 1.3 | `nota.simple.1_3` | No | NOTS | NOTS01 | No | — | — |
-| `nota-simple` | **1.4** | `nota.simple.1_4` | **Sí** | NOTS | NOTS01 | No | CU (`nota.simple.1_4.azure-cu`) | Sí (gpt4o-mini) |
+| `nota-simple` | **1.4** | `nota.simple.1_4` | **Sí** (de la familia `nota-simple`) | NOTS | NOTS01 | No | CU (`nota.simple.1_4.azure-cu`, analyzer `CU_NS_1.4_3`) | No (`promptConfig.enabled=false` en BD; el texto del prompt sigue configurado con `default.gpt4o-mini`) |
+| `nota.simple` | **1.5** | `nota.simple` | **Sí** (de la familia `nota.simple`) | NOTS | NOTS01 | No | CU (`nota.simple.1_5.azure-cu`, secundario `...azure-cu-we`, analyzer `CU_NS_1.5_0`) | No (`promptConfig.enabled=false` en DEV, PRE y PRO; `modelKey` `default.gpt4o-mini` en PRE y PRO; comprobado el 2026-11-23) |
+| `nota.simple` | 1.5 | `nota.simple_bal` | No | — | — | — | CU (`nota.simple.1_5.azure-cu-we`, secundario `nota.simple.1_5.azure-cu`) | No (`promptConfig.enabled=false` en los tres entornos; comprobado el 2026-11-23) |
+| `nota.simple` | 1.6 | `nota.simple.ggaa.bal` | No | — | — | — | CU (`nota.simple.1_6_GGAA.azure-cu`, analyzer `CU_NS_1.6_0_GGAA`, secundario `...azure-cu-we`) | No (`promptConfig.enabled=false` en los tres entornos; comprobado el 2026-11-23) |
+| `nots` | 1.0 | `nots.01`, `nots.02` | — | — | — | — | CU propia (`nots.01.1_0.azure-cu`, `nots.02.1_0.azure-cu`) | No (`promptConfig.enabled=false` en los tres entornos; comprobado el 2026-11-23) |
 | `tasacion` | 1.0 | `tasacion` | Sí | — | — | **Sí** | — | No |
 | `resumen-documental` | 1.0 | `resumen.documental` | Sí | — | — | **Sí** | Disabled (mock) | Sí (vision, gpt4o-mini) |
-| `ibi` ★ | 1.0 | DB-backed | No | — | — | No | GPT directo (`azure-openai`) | — |
+| `IBI` ★ | 1.0 | `IBI` | — | — | — | No | CU (`nota.simple.1_4.azure-cu`) | — |
+| `IBI` ★ | 1.1 | `IBI_1.1` | — | — | — | No | GPT directo (`azure-openai`; modelo `default.gpt56-luna_ex` en DEV, `default.gpt4o-mini_ex` en PRE y PRO) | — |
 
 > **Cédula:** la operatividad no se determina por la existencia de un fichero `.plugins.json`, sino por el estado publicado en BD. Validar `Tipologias` y `PluginTipologiaConfigs` antes de concluir si esta disponible.
 >
-> ★ **`ibi`** es una tipología almacenada exclusivamente en base de datos (sin fichero `.validation.json` en disco). Usa `extraction.provider = "azure-openai"` → `GptDirectExtraerDataProvider`. El modelo de extracción se define en la tabla `ModeloConfigs` (key `default.gpt4o-mini_ex`).
+> ★ **`IBI` / `IBI_1.1`** (dos filas en BD; el código ya no es `ibi`): tipología almacenada exclusivamente en base de datos (sin fichero `.validation.json` en disco). Usa `extraction.provider = "azure-openai"` → `GptDirectExtraerDataProvider`. El modelo de extracción se define en la tabla `ModeloConfigs` (key `default.gpt4o-mini_ex`).
 
 ---
 
@@ -32,7 +41,7 @@ Admite tres formas de referencia:
 
 | Formato de entrada | Resultado |
 |---|---|
-| `nota-simple` | Versión marcada `isDefault: true` dentro de la familia (actualmente v1.4) |
+| `nota-simple` | Versión marcada `isDefault: true` dentro de la familia (v1.4; la familia `nota.simple` tiene su propio default, v1.5) |
 | `nota-simple@1.3` | Versión exacta 1.3 |
 | `nota.simple.1_3` | Clave técnica directa (código en BD / nombre de archivo de seed sin extensión) |
 
@@ -117,7 +126,7 @@ flowchart TD
 
 **Código GDC:** `NOTS / NOTS01` — Serie `AI01` — Matrícula MGDC: `AI-01-NOTS-01`
 
-**Versión activa (default):** 1.4
+**Versión activa (default):** 1.4 para la familia `nota-simple`. La Nota Simple operativa más reciente es `nota.simple` 1.5 (analyzer `CU_NS_1.5_0`); existe también la 1.6 GGAA (`nota.simple.ggaa.bal`, `CU_NS_1.6_0_GGAA`).
 
 ### 4.1 Historial de versiones
 
@@ -128,7 +137,7 @@ flowchart TD
 | 1.3 | `nota.simple.1_3` | No | `RegistroPropiedad` pasa a optional. Añade plugins (mock REST, SOAP catastro, custom Sareb). |
 | **1.4** | `nota.simple.1_4` | **Sí** | Extracción real con Azure Content Understanding. Añade `Registrador`, `CodigoPostal`, `Provincia`, `Municipio`. Plugin de enriquecimiento en producción (`refCatExcel`). Genera resumen GPT. |
 
-### 4.2 Campos de validación (versión 1.4)
+### 4.2 Campos de validación principales (versión 1.4; la tipología tiene 28 campos en BD, entre ellos TipologiaInmueble, superficies, Anejos, Titular, NIF, Cargas, VPO y ArrendamientosInscritos)
 
 | Campo | Tipo | Obligatorio | Regla | Severidad |
 |---|---|---|---|---|
@@ -150,6 +159,7 @@ flowchart TD
 | Parámetro | Valor |
 |---|---|
 | `clasifUmbralFallback` | 0.85 |
+| `extracUmbralFallback` / `extracUmbralFallbackCompletitud` / `extracUmbralFallbackConfianza` | 0.9 |
 | `extracWeightCampos` | 0.5 |
 | `extracWeightRequeridos` | 0.3 |
 | `extracWeightWarnings` | 0.2 |
@@ -159,7 +169,7 @@ flowchart TD
 ### 4.4 Extracción (v1.4)
 
 - **Proveedor:** `azure-content-understanding`
-- **Model key:** `nota.simple.1_4.azure-cu`
+- **Model key:** `nota.simple.1_4.azure-cu` (analyzer `CU_NS_1.4_3`)
 - **autoMapUnmappedFields:** `true`
 - **fieldMappings:** vacíos (mapeo automático sin alias explícitos)
 
@@ -275,7 +285,7 @@ El campo `Resultado.MensajeError` está definido en `ContratoSalida.ResultadoFin
 ## 9. Añadir una nueva tipología
 
 1. Crear/editar registro en `Tipologias` con `ConfiguracionJson` válido.
-2. Usar estructura v1.2 recomendada:
+2. Usar la estructura de configuración recomendada («v1.2» es la versión de la estructura JSON, no una tipología: `Gdc.*`, `Classification.*`, `extraction`, `fields[]`; las propiedades de raíz `SkipGDCUpload`, `GdcTipoDocumento`, `GdcSerie`, `Tdn1` y `GptDescripcion` están `[Obsolete]`, aunque la BD aún guarda filas con ese formato):
   - `gdc.*` para metadatos de subida GDC.
   - `classification.*` para TDN y prompt descriptivo.
   - `classificationConfig.examplePhrases` / `classificationConfig.disambiguationHints` para pistas del clasificador por señales.

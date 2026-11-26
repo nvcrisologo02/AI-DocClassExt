@@ -312,4 +312,57 @@ public class CalculadoraCosteIATests
         costes.TarifasCompletas.Should().BeTrue();
         costes.ModelosSinTarifa.Should().BeEmpty();
     }
+
+    [Fact]
+    public void Aplicar_EscrituraEnCacheConPrecio_LaSumaAlCoste()
+    {
+        var registro = new TarifaRegistry
+        {
+            Tarifas =
+            {
+                new TarifaIA
+                {
+                    Modelo = "modelo-cache",
+                    VigenteDesde = new DateTime(2026, 7, 21),
+                    EurEntradaPor1M = 1.00m,
+                    EurEscrituraCachePor1M = 2.00m
+                }
+            }
+        };
+        var consumo = new ConsumoIA { Modelo = "modelo-cache", TokensEntrada = 1_000_000, TokensEscrituraCache = 1000 };
+
+        CalculadoraCosteIA.Aplicar(consumo, registro, new DateTime(2026, 8, 15));
+
+        // 1,00 de entrada plena (la escritura no se resta) + 1000 / 1M * 2 = 0,002.
+        consumo.CosteEur.Should().Be(1.002m);
+        consumo.TarifaAplicada.Should().Be("modelo-cache@2026-07-21");
+    }
+
+    [Fact]
+    public void Aplicar_EscrituraEnCacheSinPrecio_NoSumaYLoMarcaEnTarifaAplicada()
+    {
+        var consumo = new ConsumoIA { Modelo = "gpt-5-mini", TokensEntrada = 1_000_000, TokensEscrituraCache = 1000 };
+
+        CalculadoraCosteIA.Aplicar(consumo, Registro(), new DateTime(2026, 8, 15));
+
+        consumo.CosteEur.Should().Be(1.00m);
+        consumo.TarifaAplicada.Should().Be("gpt-5-mini@2026-07-21|sin-precio-escritura");
+    }
+
+    [Fact]
+    public void Aplicar_SinTokensEscritura_CosteIgualQueHoy()
+    {
+        var consumo = new ConsumoIA
+        {
+            Modelo = "gpt-5-mini",
+            TokensEntrada = 1_000_000,
+            TokensEntradaCache = 600_000,
+            TokensEscrituraCache = null
+        };
+
+        CalculadoraCosteIA.Aplicar(consumo, Registro(), new DateTime(2026, 8, 15));
+
+        consumo.CosteEur.Should().Be(0.46m);
+        consumo.TarifaAplicada.Should().Be("gpt-5-mini@2026-07-21");
+    }
 }

@@ -1,5 +1,7 @@
 # Azure DevOps Bootstrap Setup
 
+> Nota de revisión (2026-11-22, AB#101447): documento histórico (junio de 2026), se conserva sin reescribir. Sigue vigente: los tres Environments, los variable groups `docia-bootstrap-{dev,pre,prod}-secrets`, las 13 variables `DOCIA_SECRET_*` (coinciden con `azure-pipelines-bootstrap.yml`), una service connection por entorno (`AI DocClassExt DEV`, `PRE`, `PRO`) y el RBAC de Key Vault Secrets Officer de la sección 9. Ha cambiado: existen siete pipelines YAML en la raíz (`azure-pipelines.yml`, `-functions`, `-admin`, `-migrations`, `-ai-artifacts`, `-assetresolver`, `-bootstrap`), no solo los dos del flujo de uso; los pools son `windows-latest` salvo `docia-mdp-private` en `-ai-artifacts` y en el Apply de `-migrations`; y `-ai-artifacts` usa además la service connection `AI DocClassExt Promocion IA`. Que los Environments, variable groups y approvals existan hoy en Azure DevOps no se comprobó en la revisión del 2026-11-22. El estado real de los entornos está en INFRAESTRUCTURA_REAL_DESPLEGADA.md y el procedimiento de despliegue vigente en RELEASE_MANAGEMENT.md.
+
 Fecha: 2026-06-24
 
 Este documento define los objetos que deben existir en Azure DevOps para ejecutar el bootstrap multi-entorno sin depender de configuracion manual.

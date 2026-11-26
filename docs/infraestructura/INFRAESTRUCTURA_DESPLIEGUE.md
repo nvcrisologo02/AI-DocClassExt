@@ -1,5 +1,7 @@
 # Infraestructura & Despliegue — DocumentIA
 
+> **Documento sustituido (2026-11-22, AB#101445).** Plantilla genérica que no refleja lo desplegado; la fuente vigente es [INFRAESTRUCTURA_REAL_DESPLEGADA.md](INFRAESTRUCTURA_REAL_DESPLEGADA.md). Se conserva por referencia y no se mantiene.
+
 > ⚠️ **AVISO IMPORTANTE — DOCUMENTO DE REFERENCIA GENÉRICO, NO REFLEJA EL DESPLIEGUE REAL.**
 > Este documento describe una topología de plantilla (Staging + Production separados, Function App Premium EP1/EP2 "always on", App Service B2/P1v2 con auto-scale, SQL S2/S3 por DTU, Storage GRS, multi-región/DR). **La infraestructura realmente desplegada NO es así.**
 >

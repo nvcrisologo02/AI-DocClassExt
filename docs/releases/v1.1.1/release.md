@@ -1,5 +1,7 @@
 # Release v1.1.1
 
+> Nota de revisión (2026-11-22, AB#101447): histórico, no se reescribe. El tag `v1.1.1` está sobre `ba0a5b3` (commit de registro, descendiente de `40b6c71`, que contiene el código desplegado); el merge de sincronización de `master` es `7b4b132`. El pendiente del apartado «Cierre» (observación 4.9 y 4.14, ciclo del cron de blobs y criterio D+1 de AB#100930) se resolvió el 2026-10-17: ver `runbook.md` 4.9 y `../v1.1.0/evidencias/observacion-4.9-pro-2026-10-17.txt`; el criterio de AB#100930 se cerró el 2026-11-18.
+
 Fecha: 2026-10-17 · Tag: v1.1.1 · Commit: `40b6c71` (código desplegado en PRO con el 802 run 79820; `develop` puede llevar encima solo commits de documentación y del juego E2E de esta release) · Tag anterior: v1.1.0 (`efa094d`) · Entorno: PRO
 
 PATCH: un único fix de la reutilización por duplicado (AB#100988), encontrado en la validación en PRO de v1.1.0.

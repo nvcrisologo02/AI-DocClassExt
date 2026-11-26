@@ -51,7 +51,7 @@ Sistema modular de procesamiento de documentos con clasificacion y extraccion au
 ## Setup Local
 
 1. Clonar el repositorio
-2. Configurar variables de entorno (copiar .env.example a .env)
+2. Crear src/backend/DocumentIA.Functions/local.settings.json copiando local.settings.template.json de esa carpeta
 3. Ejecutar scripts/setup-environment.sh o scripts/setup-environment.ps1
 4. Restaurar dependencias .NET: dotnet restore src/backend/DocumentIA.sln
 5. Instalar dependencias Python: pip install -r src/ai-models/requirements.txt

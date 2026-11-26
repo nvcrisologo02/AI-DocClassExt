@@ -669,19 +669,18 @@ public class TipologiasAdminFunction
 
         if (config.PromptConfig?.Enabled == true)
         {
-            if (string.IsNullOrWhiteSpace(config.PromptConfig.ModelKey))
+            // Clave vacia = heredar PromptDefaults:ModelKey en ejecucion; solo se valida una clave informada.
+            if (!string.IsNullOrWhiteSpace(config.PromptConfig.ModelKey))
             {
-                return "Prompt habilitado pero modelKey vacio.";
-            }
+                var promptExists = await _dbContext.ModeloConfigs.AnyAsync(m =>
+                    m.Tipo == TipoModelo.Prompt &&
+                    m.Key == config.PromptConfig.ModelKey &&
+                    m.Activo);
 
-            var promptExists = await _dbContext.ModeloConfigs.AnyAsync(m =>
-                m.Tipo == TipoModelo.Prompt &&
-                m.Key == config.PromptConfig.ModelKey &&
-                m.Activo);
-
-            if (!promptExists)
-            {
-                return $"No existe modelo activo de prompt con key '{config.PromptConfig.ModelKey}'.";
+                if (!promptExists)
+                {
+                    return $"No existe modelo activo de prompt con key '{config.PromptConfig.ModelKey}'.";
+                }
             }
         }
 

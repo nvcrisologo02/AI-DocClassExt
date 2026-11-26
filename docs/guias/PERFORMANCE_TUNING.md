@@ -1,6 +1,10 @@
 # Performance Tuning — DocumentIA
 
-> Última actualización: 2026-06-10  
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto). Revisiones previas: 2026-11-22 (AB#101447, contraste con `host.json`, `AzureContentUnderstandingOptions`, `azure-pipelines*.yml`, `DocumentIADbContext.cs` y migraciones EF, INFRAESTRUCTURA_REAL_DESPLEGADA.md y MONITOREO_ALERTAS_REAL.md).
+> **Estado: vigente con avisos.** Son plantilla sin medición las cifras de las secciones 1, 5, 6 y 8 (tiempos, throughput, SLA, costes por documento, infraestructura mensual) y los valores recomendados de 2.1, 2.3 y 4.2 a 4.3: no hay benchmark propio que las respalde. No existe entorno «staging»: los entornos son DEV, PRE y PRO.
+> Hallazgos: `host.json` real es 4/4 con `extendedSessionsEnabled=false` (las variables de pipeline `maxConcurrentActivityFunctions`/`maxConcurrentOrchestratorFunctions` no se aplican como app setting). De la conexión a CU solo se leen los siete ajustes de resiliencia (`MaxConcurrentCalls`, `HardTimeoutSeconds`, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`); valores de PRO por pipeline 4/90/true/5/45/3/500 (defaults de código 2/300/true/5/45/2/500). Los ajustes `Classification__GptFallback__*`, `Extraction__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey` y el resto de `Extraction__AzureContentUnderstanding__*` **no se leían y se retiraron en AB#101450**: este documento no sirve para ajustarlos; el modelo, el deployment y el endpoint salen de `ModeloConfigs`. La resiliencia de Azure OpenAI sí se ajusta con `AzureOpenAIResilience__*` (defaults 3 reintentos, umbral 5, apertura 45 s). Los índices reales están en `Documentos` y `DocumentoEjecuciones` (índice MD5, AB#100863). Las métricas `ActivityExecutionTime`, `DocumentProcessingLatency`, `ProviderCost` y análogas no se emiten (las reales: `DocumentIA.Duracion.*`, `DocumentProcessed`, `CU.*`, `AOAI.*`). Hay 21 activities. Modelo generativo por entorno: DEV `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. El host de Functions no carga `appsettings.json`. `DOTNET_GCHeapHardLimitPercent` lo fija el pipeline (AB#100814). Comprobado el 2026-11-23: plan EP1 en los tres entornos; BD de PRO en Standard S0 (10 DTU, 20 GB máximo, 8,4 GB usados) y Basic (2 GB) en DEV y PRE; deployment `gpt-4o-mini` de PRO en SKU Standard con capacidad 150; los límites de CU no se exponen por ARM.
+>
+> Última actualización anterior: 2026-06-10  
 > Versión: v1.4+  
 > Aplicable a: Azure Functions v4, Durable Functions, .NET 10 Isolated
 
@@ -8,7 +12,7 @@
 
 ## 1. Benchmarks & Expectativas
 
-Este documento establece benchmarks de rendimiento realistas y proporciona guías de tuning para los tres ambientes principales: Local (Dev), Development (Staging) y Production.
+Este documento establece benchmarks de rendimiento realistas y proporciona guías de tuning para los entornos: Local, DEV, PRE y PRO. Las cifras de esta sección son objetivos de plantilla, no mediciones.
 
 ### 1.1 Ambiente Local (Dev)
 
@@ -26,7 +30,7 @@ Este documento establece benchmarks de rendimiento realistas y proporciona guía
 
 ---
 
-### 1.2 Ambiente Development (Staging)
+### 1.2 Ambientes DEV y PRE
 
 | Métrica | Valor | Notas |
 |---------|-------|-------|
@@ -35,7 +39,7 @@ Este documento establece benchmarks de rendimiento realistas y proporciona guía
 | P50 latency | < 5 sec | Mediana típica |
 | P95 latency | < 15 sec | Percentil 95 |
 | P99 latency | < 25 sec | Percentil 99 |
-| Availability | 99.5% | SLA objetivo staging |
+| Availability | 99.5% | Objetivo no medido |
 | Error rate | < 2% | Incluye circuit breaker trips, retries |
 | Max concurrent docs | 40+ | 10 instances × 4 concurrent activities |
 
@@ -90,7 +94,7 @@ Este documento establece benchmarks de rendimiento realistas y proporciona guía
 
 ### 2.1 Azure Functions / Durable Orchestrator
 
-**Ubicación:** `host.json`, `appsettings.json`
+**Ubicación:** `host.json` (el host de Functions no carga `appsettings.json`; los ajustes de producción van como app settings desde el pipeline)
 
 **Configuración actual (default):**
 ```json
@@ -117,8 +121,8 @@ Este documento establece benchmarks de rendimiento realistas y proporciona guía
 **Recomendaciones:**
 
 - **Local Dev:** Dejar como default (4, 4, false)
-- **Staging:** Aumentar a (8, 4, false) para test de carga
-- **Production:** Usar (12, 4, false) o (8, 4, true) según carga y latencia crítica
+- **DEV/PRE:** Aumentar a (8, 4, false) para test de carga (hipótesis no medida)
+- **Production:** Usar (12, 4, false) o (8, 4, true) según carga y latencia crítica (hipótesis no medida; PRO usa 4/4)
 
 **Impacto esperado:**
 - maxConcurrentActivityFunctions 4→8: +50% throughput, ~100ms latencia media
@@ -128,16 +132,16 @@ Este documento establece benchmarks de rendimiento realistas y proporciona guía
 
 ### 2.2 Activity Functions (por tipo)
 
-El orquestador ejecuta 14+ actividades en secuencia/paralelo. Cada una tiene características y timeouts específicos.
+El orquestador invoca 21 activities en secuencia/paralelo (la tabla siguiente es parcial y sus timeouts no tienen fuente en código salvo GDC, `GdcActivityTimeoutSeconds = 120`; faltan, entre otras, `CalcularClaveIntencionActivity`, `ClasificarEmbeddingsActivity` (solo DEV), `ObtenerDocumentoGDCActivity`, `ObtenerMetadatosDocumentoGDCActivity`, `PersistirMarkdownActivity`, `PrepararDocumentoClasificacionActivity`, `ResolverTipologiaActivity` y `VerificarDuplicadoPorMD5Activity`). Cada una tiene características y timeouts específicos.
 
 **Actividades I/O-heavy (candidatas a paralelismo):**
 
 | Actividad | Tipo | Timeout | Características | Tuning |
 |-----------|------|---------|-----------------|--------|
-| **IngestActivity** | I/O | 5m | Lectura de blob | Aumentar timeout si doc > 100MB |
+| **IngestAPITrigger** (no es activity) | I/O | 5m | Lectura de blob | Aumentar timeout si doc > 100MB |
 | **SubirBlobActivity** | I/O | 2m | Upload a Storage | Pool size Storage Account |
-| **VerificarDuplicadoActivity** | DB Query | 30s | SHA256 lookup | Index verificado, típicamente < 50ms |
-| **ObtenerUltimaEjecucionActivity** | DB Query | 30s | Última clasificación | Index, típicamente < 100ms |
+| **VerificarDuplicadoActivity** / **VerificarDuplicadoPorMD5Activity** | DB Query | 30s | SHA256 y MD5 lookup (`IX_Documentos_SHA256`, `IX_Documentos_MD5`, AB#100863) | Index verificado, típicamente < 50ms |
+| **ObtenerUltimaEjecucionDuplicadoActivity** | DB Query | 30s | Última clasificación | Index, típicamente < 100ms |
 | **ClasificarActivity** | API Call | 60s | CU hybrid + rules + GPT fallback | Aumentar timeout si fallback activo |
 | **ExtraerActivity** | API Call | 90s | CU/DI + GPT fallback | Circuit breaker habilitado (CU) |
 | **ObtenerMarkdownActivity** | API Call | 60s | DI layout extraction (via `MarkdownResolver`, cuando la BD/caché no cubren la necesidad) | Timeout típico: 2-5 sec |
@@ -148,9 +152,9 @@ El orquestador ejecuta 14+ actividades en secuencia/paralelo. Cada una tiene car
 | **SubirGDCActivity** | API Call | 120s | SOAP GDC upload | Timeout habitual: 5-10 sec |
 | **PersistirActivity** | DB Write | 30s | EF Core save + audit | Típico: 200-500ms |
 
-**Timeouts actuales en código** (ejemplos):
-- Classification GPT: `TimeoutSeconds: 30` (appsettings.json)
-- Extraction CU: `HardTimeoutSeconds: 90` (appsettings.json)
+**Timeouts actuales** (ejemplos):
+- Classification GPT: no existe una opción `TimeoutSeconds` leída por el código (la cita anterior a `appsettings.json` era errónea)
+- Extraction CU: `HardTimeoutSeconds: 90` (app setting fijado por el pipeline; default de código 300 s)
 - GDC Upload: implícito ~120s (DocumentProcessOrchestrator context)
 
 **Tuning recomendado:**
@@ -188,29 +192,31 @@ El orquestador ejecuta 14+ actividades en secuencia/paralelo. Cada una tiene car
 
 **Tuning:**
 
-| Parámetro | Default | Rango | Impacto |
+| Parámetro | Valor en pipeline (PRO) · default de código | Rango | Impacto |
 |-----------|---------|-------|--------|
-| `MaxConcurrentCalls` | 4 | 4-10 | Paralelismo local. Aumentar si carga > 10 docs/sec. |
-| `HardTimeoutSeconds` | 90 | 60-120 | Timeout total. Aumentar si docs complejos frecuentes. |
+| `MaxConcurrentCalls` | 4 · 2 | 4-10 | Paralelismo local. Aumentar si carga > 10 docs/sec. |
+| `HardTimeoutSeconds` | 90 · 300 | 60-120 | Timeout total. Aumentar si docs complejos frecuentes. |
 | `CircuitBreakerFailureThreshold` | 5 | 3-10 | Fallos antes de abrir. Bajar en prod para aislamiento rápido. |
 | `CircuitBreakerOpenSeconds` | 45 | 30-60 | Tiempo abierto. Aumentar si CU inestable. |
-| `MaxRetries` | 3 | 1-5 | Reintentos. 3 es standard, 5 si flakey network. |
+| `MaxRetries` | 3 · 2 | 1-5 | Reintentos. 3 es standard, 5 si flakey network. |
 | `InitialRetryDelayMs` | 500 | 300-1000 | Backoff inicial. 500ms es conservador. |
 
 **Recomendaciones:**
 
 - **Local:** MaxConcurrentCalls: 2, CircuitBreakerFailureThreshold: 3 (debug rápido)
-- **Staging:** MaxConcurrentCalls: 6, CircuitBreakerFailureThreshold: 5, MaxRetries: 3
-- **Production:** MaxConcurrentCalls: 8-10, CircuitBreakerFailureThreshold: 3, MaxRetries: 5
+- **DEV/PRE:** MaxConcurrentCalls: 6, CircuitBreakerFailureThreshold: 5, MaxRetries: 3 (propuesta no probada)
+- **Production:** MaxConcurrentCalls: 8-10, CircuitBreakerFailureThreshold: 3, MaxRetries: 5 (propuesta no probada; PRO usa 4/5/3)
 
 **Fallback & Cost:**
-- Si CU falla, ExtraerActivity cae a GPT (~2-3x más caro)
-- Circuit breaker abierto → fallback automático a GPT
-- Monitor: `CU_CircuitBreaker_Open` alerts en AppInsights
+- Si CU falla, el proveedor conmuta a **otro `modelKey` de CU** (`CU.CircuitFailover`, `secondaryModelKey` de la tipología); si no hay alternativo lanza excepción. Que la cadena termine en GPT depende del código de `ConfigurableExtraerDataProvider`, no de la configuración en vivo; sin comprobación adicional
+- Circuit breaker abierto → failover al CU secundario, no a GPT
+- Monitor: evento `CU.CircuitOpen` en AppInsights (`CU_CircuitBreaker_Open` no existe)
 
 ---
 
-#### 2.3.2 Azure OpenAI (GPT-4o-mini)
+#### 2.3.2 Azure OpenAI (modelo generativo por entorno)
+
+> Revisión 2026-11-22: DEV usa `gpt-5.6-luna` (ADR-004, desde el 2026-11-20); PRE y PRO siguen en el deployment `gpt-4o-mini` (= gpt-4.1-mini) hasta la siguiente release. Los bloques `GptFallback` / `Classification.GptFallback` / `FallbackThreshold` de esta sección (y de las secciones 3.3, 4, 6.3 y 9) se retiraron en AB#101450 y no tienen efecto: no recomendar tocarlos. El modelo, el deployment y el endpoint salen de `ModeloConfigs` en BD. Lo que sí se lee para la resiliencia de Azure OpenAI es `AzureOpenAIResilience__*` (`EnableCircuitBreaker`, `CircuitBreakerFailureThreshold=5`, `CircuitBreakerOpenSeconds=45`, `MaxRetries=3`). El límite de 128K aplica a gpt-4o-mini/gpt-4.1-mini; para luna la ventana no se expone en el deployment y hay que leerla de la ficha del modelo.
 
 **Configuración actual:**
 ```json
@@ -259,6 +265,8 @@ El orquestador ejecuta 14+ actividades en secuencia/paralelo. Cada una tiene car
 ---
 
 #### 2.3.3 Azure Document Intelligence (DI)
+
+> Revisión 2026-11-22: `PollIntervalMs` y `TimeoutSeconds` no se leen (`DocumentIntelligenceSettings` solo tiene `UseInlineContent`); los valores son los implícitos del SDK.
 
 **Uso:** Classification + Extraction fallback + Markdown layout
 
@@ -310,14 +318,14 @@ El orquestador ejecuta 14+ actividades en secuencia/paralelo. Cada una tiene car
 
 **Índices críticos:**
 
-- `Ejecuciones.SHA256` (deduplication lookup): **MUST BE PRESENT**
-- `Ejecuciones.FechaEjecucion` (histórico)
-- `ConfiguracionJson.Familia, Tipologia` (resolución tipología)
-- `TipologiasConfiguradas.Código` (lookup)
+- `Documentos.SHA256` (`IX_Documentos_SHA256`, único) y `Documentos.MD5` (`IX_Documentos_MD5`, AB#100863; su ausencia provocó timeouts en el S0 de PRO por scan): **deben existir**
+- `DocumentoEjecuciones.FechaEjecucion`, `FechaEjecucion_Monitor` (índice de costes del Monitor, AB#100662), `(DocumentoId, ClaveIntencion, FechaEjecucion)`, `EjecucionGuid` (único)
+- `Tipologias.Codigo` (único), `ModeloConfigs.Key` (único), `PluginTipologiaConfigs.TipologiaCodigo` (único)
+- No existen los índices `Ejecuciones.*`, `ConfiguracionJson.Familia, Tipologia` ni `TipologiasConfiguradas.Código` que citaban versiones anteriores
 
 **Recomendaciones:**
 
-- Verificar índices con: `SELECT name FROM sys.indexes WHERE object_id = OBJECT_ID('Ejecuciones');`
+- Verificar índices con: `SELECT name FROM sys.indexes WHERE object_id IN (OBJECT_ID('Documentos'), OBJECT_ID('DocumentoEjecuciones'));`
 - Monitor DTU: `sys.resource_stats` en SSMS o Azure Portal
 - Si DTU > 80% recurrente: Upgrade SKU o habilitar auto-scale (Serverless es opción)
 
@@ -532,7 +540,7 @@ customMetrics
 
 ---
 
-### 4.2 Staging / Production Base
+### 4.2 PRE / PRO base (plantilla: PRO usa 4/4 en `host.json`)
 
 **host.json:**
 ```json
@@ -658,7 +666,7 @@ customMetrics
 | Durable Task Hub partitioning | Multiple hubs | Escalado infinito, debugging difícil | Muy alta |
 
 **Recomendación:**
-- Staging/Prod < 50 docs/sec: Auto-scale Consumption (simple)
+- PRE/PRO < 50 docs/sec: Auto-scale Consumption (simple; propuesta sin fuente: el plan real es EP1 en DEV, PRE y PRO, comprobado el 2026-11-23)
 - Prod > 50 docs/sec: Auto-scale Premium con custom metrics (latency + error rate)
 - Prod > 200 docs/sec: Multiple hubs + Traffic Manager (enterprise)
 
@@ -803,6 +811,8 @@ public async Task ProcessDocumentAsync(
 
 ### 6.3 Cost Optimization
 
+> **Aviso (AB#101450):** los ajustes `GptFallback` / `FallbackThreshold` de los pasos siguientes se retiraron y no tienen efecto; para el umbral se usa `confidenceConfig` de la tipología y el modelo sale de `ModeloConfigs`.
+
 **Meta:** Minimizar costo por documento, aceptar latencia variable
 
 **Recomendaciones:**
@@ -904,11 +914,13 @@ customMetrics
 
 ### 7.2 Alertas Recomendadas
 
+> Recomendaciones; las alertas reales (9 scheduled query rules, memoria por instancia > 2,25 GiB y OOM, capacidad de BD > 80%) están en MONITOREO_ALERTAS_REAL.md. No hay regla de DTU de SQL ni de fallos de subida a GDC.
+
 | Alerta | Condición | Umbral | Acción |
 |--------|-----------|--------|--------|
 | **Latency spike** | P99 latency > 30 sec | > 2 sec aumento en 5 min | Page on-call, check CU/GDC status |
 | **Error rate high** | Error rate > 5% | > 2% aumento en 5 min | Investigate provider failures |
-| **CU circuit breaker** | CircuitBreakerOpen = true | Any occurrence | CU inestable, escalate |
+| **CU circuit breaker** | evento `CU.CircuitOpen` | Any occurrence | CU inestable, escalate |
 | **Cost spike** | Daily cost > baseline + 50% | $150/day (adjust per environment) | Review plugin usage, check failures |
 | **Activity timeout** | Activity timeouts > 1% | > 1 timeout per min | Increase timeout or parallelize |
 | **Throughput drop** | Docs/min < baseline - 50% | < 3 docs/min (adjust) | Rate limiting or service degradation |
@@ -974,6 +986,8 @@ customMetrics
 
 ### 9.1 Latency Spike
 
+> **Aviso (AB#101450):** los ajustes `GptFallback` / `FallbackThreshold` de los pasos siguientes se retiraron y no tienen efecto; para el umbral se usa `confidenceConfig` de la tipología y el modelo sale de `ModeloConfigs`.
+
 **Síntomas:**
 - P99 latency aumentó de 20 sec a 40 sec (o más)
 - Algunos documentos toman 1-2 min (usualmente < 20 sec)
@@ -1019,17 +1033,19 @@ $appsettings.Classification.GptFallback.TimeoutSeconds = 40
 $appsettings | ConvertTo-Json | Set-Content "appsettings.json"
 
 # 2. Aumentar concurrency
-$hostJson = Get-Content "host.json" -AsJson
+$hostJson = Get-Content "host.json" -Raw | ConvertFrom-Json
 $hostJson.extensions.durableTask.maxConcurrentActivityFunctions = 8
-$hostJson | ConvertTo-Json | Set-Content "host.json"
+$hostJson | ConvertTo-Json -Depth 10 | Set-Content "host.json"   # requiere redeploy por pipeline
 
-# 3. Restart function app
-Restart-AzFunctionApp -ResourceGroupName "rg-sareb-prod" -Name "srbappprodocai"
+# 3. Restart function app (RG real de PRO)
+Restart-AzFunctionApp -ResourceGroupName "SRBRGDOCSAIPROD" -Name "srbappprodocai"
 ```
 
 ---
 
 ### 9.2 Throughput Drops
+
+> **Aviso (AB#101450):** los ajustes `GptFallback` / `FallbackThreshold` de los pasos siguientes se retiraron y no tienen efecto; para el umbral se usa `confidenceConfig` de la tipología y el modelo sale de `ModeloConfigs`.
 
 **Síntomas:**
 - Documentos procesados por minuto cae de 10 a 2
@@ -1085,12 +1101,14 @@ $cfg | ConvertTo-Json | Set-Content "appsettings.json"
 # O reiniciar función app
 
 # 3. Scale out
-New-AzFunctionApp -ResourceGroupName "rg-sareb-prod" -Name "srbappprodocai2" -Plan "Premium"
+New-AzFunctionApp -ResourceGroupName "SRBRGDOCSAIPROD" -Name "<nombre-nuevo>" -Plan "<plan>"   # ilustrativo: no existe una segunda Function App
 ```
 
 ---
 
 ### 9.3 High Cost
+
+> **Aviso (AB#101450):** los ajustes `GptFallback` / `FallbackThreshold` de los pasos siguientes se retiraron y no tienen efecto; para el umbral se usa `confidenceConfig` de la tipología y el modelo sale de `ModeloConfigs`.
 
 **Síntomas:**
 - Costo diario aumentó de $50 a $200 (4x)
@@ -1170,7 +1188,7 @@ Usar antes de producción:
 - [ ] Runbook de escalation creado (who to page, escalation chain)
 - [ ] Performance baseline established (baseline latency, throughput, cost)
 - [ ] Failover strategy tested (CU down → GPT fallback, GDC down → skip upload)
-- [ ] SQL indexes verified (SHA256, Familia, Tipologia)
+- [ ] SQL indexes verified (Documentos.SHA256, Documentos.MD5, DocumentoEjecuciones.FechaEjecucion)
 - [ ] Cache strategy validated (if used)
 - [ ] Monitoring dashboard created (custom metrics)
 - [ ] Team trained on performance tuning
@@ -1183,13 +1201,13 @@ Usar antes de producción:
 **Documentación oficial:**
 - [Azure Durable Functions - Host.json documentation](https://docs.microsoft.com/en-us/azure/azure-functions/durable/durable-functions-host-json)
 - [Azure Functions performance tuning](https://learn.microsoft.com/en-us/azure/azure-functions/performance-tuning)
-- [Azure Content Understanding - Rate limits](https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/quotas-limits)
+- [Document Intelligence - Quotas and limits](https://learn.microsoft.com/en-us/azure/ai-services/document-intelligence/quotas-limits) (es de DI, no de CU; no respalda las cifras de límites de CU de la sección 2.3.1)
 - [Application Insights - Performance monitoring](https://learn.microsoft.com/en-us/azure/azure-monitor/app/performance-counters)
 
 **Documentación interna:**
-- `01_ARQUITECTURA_SISTEMA.md` - Architecture overview
-- `03_DISENO_TECNICO_DETALLADO.md` - Pipeline & activities detail
-- `05_MANUAL_USO_CONFIGURACION.md` - Configuration guide
+- `docs/01_ARQUITECTURA_SISTEMA.md` - Architecture overview
+- `docs/03_DISENO_TECNICO_DETALLADO.md` - Pipeline & activities detail
+- `docs/05_MANUAL_USO_CONFIGURACION.md` - Configuration guide
 - `docs/observabilidad/OBSERVABILIDAD_KQL.md` - KQL queries & monitoring
 
 **Herramientas útiles:**
@@ -1201,9 +1219,11 @@ Usar antes de producción:
 ---
 
 **Changelog:**
+- **2026-11-25:** Revisión AB#101450: los app settings heredados sin efecto (`Classification__GptFallback__*`, `Extraction__GptFallback__*`, `Classification__AzureDocumentIntelligence__*`, `Classification__DefaultModelKey` y los de conexión de CU) ya no existen en pipeline ni contrato y se retiran de cada entorno con su despliegue (DEV primero).
+- **2026-11-22:** Revisión AB#101447 contra código y pipelines (ver cabecera): entornos DEV/PRE/PRO, 21 activities, settings heredados sin efecto, índices reales, métricas reales, modelo por entorno.
 - **2026-06-10:** Initial version v1.0
-  - 14 activities profiled
-  - 3 environment configurations (Dev, Staging, Prod)
+  - 14 activities profiled (hoy 21)
+  - 3 environment configurations (Dev, Staging, Prod; hoy DEV, PRE, PRO)
   - 3 scaling scenarios (High throughput, Low latency, Cost optimization)
   - Troubleshooting guide (9 common issues)
   - Production readiness checklist

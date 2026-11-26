@@ -54,6 +54,17 @@ namespace DocumentIA.Core.Configuration
         public string HttpBasicUsername { get; set; } = string.Empty;
         public string HttpBasicPassword { get; set; } = string.Empty;
 
+        // TLS del GDC. La validación del certificado del servidor se ancla en la cadena de SAREB
+        // (raíz y emisora), nunca en las raíces del sistema.
+        // Interruptor de emergencia: desactiva la validación del certificado. Solo para diagnóstico.
+        public bool BypassSslValidation { get; set; } = false;
+
+        // PEM completo de las CA de confianza (opcional). Si se informa, sustituye al fichero.
+        public string TrustedRootCertificate { get; set; } = string.Empty;
+
+        // Ruta del fichero PEM con la cadena de confianza, relativa a AppContext.BaseDirectory.
+        public string TrustedRootCertificatePath { get; set; } = "config/certs/sareb-ca-chain.pem";
+
         // Retry behavior
         public int MaxRetries { get; set; } = 3;
         public int InitialDelayMs { get; set; } = 200;

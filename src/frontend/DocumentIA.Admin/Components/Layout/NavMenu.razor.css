@@ -16,12 +16,30 @@
 }
 
 .top-row {
-    height: 3.5rem;
-    background-color: rgba(0,0,0,0.4);
+    height: 5rem;
+    background-color: transparent;
 }
 
-.navbar-brand {
-    font-size: 1.1rem;
+/* Marca en negativo sobre el verde corporativo (manual 1.4). En pantalla se
+   prescinde del margen izquierdo del area de respeto porque va alineada al
+   margen (manual 1.5). */
+.sareb-marca {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+    padding: 0.5rem 0;
+}
+
+.sareb-logo {
+    height: 40px;
+    width: auto;
+}
+
+.sareb-denominacion {
+    font-size: 0.8rem;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.8);
 }
 
 .bi {
@@ -65,10 +83,12 @@
     }
 
     .nav-item ::deep .nav-link {
-        color: #d7d7d7;
+        color: white;
+        font-weight: 600;
         background: none;
         border: none;
-        border-radius: 4px;
+        border-left: 3px solid transparent;
+        border-radius: 0 4px 4px 0;
         height: 3rem;
         display: flex;
         align-items: center;
@@ -77,7 +97,8 @@
     }
 
 .nav-item ::deep a.active {
-    background-color: rgba(255,255,255,0.37);
+    background-color: rgba(255, 255, 255, 0.18);
+    border-left-color: var(--sareb-verde-claro);
     color: white;
 }
 
@@ -104,7 +125,7 @@
         display: block;
 
         /* Allow sidebar to scroll for tall menus */
-        height: calc(100vh - 3.5rem);
+        height: calc(100vh - 5rem);
         overflow-y: auto;
     }
 }

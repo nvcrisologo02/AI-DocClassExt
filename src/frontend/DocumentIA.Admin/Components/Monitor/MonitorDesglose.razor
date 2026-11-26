@@ -41,18 +41,18 @@
                                             <td class="text-truncate" style="max-width:150px" title="@g.Grupo">@g.Grupo</td>
                                             <td class="text-end fw-semibold">@g.Total</td>
                                             <td>
-                                                <div class="d-flex rounded overflow-hidden" style="height:9px;gap:1px;background:#e9ecef">
+                                                <div class="d-flex rounded overflow-hidden bg-light" style="height:9px;gap:1px">
                                                     @if (g.Ok > 0)
                                                     {
-                                                        <div style="width:@Ancho(g.Ok, g.Total)%;background:#0ca30c" title="@g.Ok con confianza suficiente"></div>
+                                                        <div style="width:@Ancho(g.Ok, g.Total)%;background:@SarebPaleta.Ok" title="@g.Ok con confianza suficiente"></div>
                                                     }
                                                     @if (g.Revision > 0)
                                                     {
-                                                        <div style="width:@Ancho(g.Revision, g.Total)%;background:#fab219" title="@g.Revision requieren revisión"></div>
+                                                        <div style="width:@Ancho(g.Revision, g.Total)%;background:@SarebPaleta.Revision" title="@g.Revision requieren revisión"></div>
                                                     }
                                                     @if (g.Error > 0)
                                                     {
-                                                        <div style="width:@Ancho(g.Error, g.Total)%;background:#d03b3b" title="@g.Error con confianza insuficiente"></div>
+                                                        <div style="width:@Ancho(g.Error, g.Total)%;background:@SarebPaleta.Error" title="@g.Error con confianza insuficiente"></div>
                                                     }
                                                 </div>
                                             </td>
@@ -63,7 +63,7 @@
                                             <td class="text-center">
                                                 @if (g.Fallbacks > 0)
                                                 {
-                                                    <span class="badge" style="font-size:0.65rem;background:#fdf3dd;color:#7a5300">@g.Fallbacks</span>
+                                                    <span class="badge bg-warning text-dark" style="font-size:0.65rem">@g.Fallbacks</span>
                                                 }
                                             </td>
                                         </tr>

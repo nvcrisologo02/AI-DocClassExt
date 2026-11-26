@@ -56,6 +56,7 @@ Sin el fix, activar el paso 4 provoca 400 en todas las llamadas GPT.
   `Extraction__GptFallback__DeploymentName=gpt-4o-mini` (defaults/legacy; la resolución
   real sale de `ModeloConfigs`). Actualizarlos a `gpt-5-mini` en el mismo PR del fix
   de código para no dejar config engañosa.
+  Retirados del pipeline y de los entornos en AB#101450 (2026-11-25).
 - **El gpt-4.1 interno de Content Understanding** (47 % del coste IA): lo migra el propio
   servicio CU con las api-version de los analyzers; no depende de estos scripts.
 - **Borrar el deployment `gpt-4o-mini`**: hacerlo manualmente tras un periodo de

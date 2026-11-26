@@ -1,8 +1,10 @@
 # Runbook de Incidentes — Producción SRBRGDOCSAIPROD
 
-**Versión:** 1.0  
-**Última actualización:** 2026-10-06  
-**Aplicable a:** SRBRGDOCSAIPROD (Production Only)  
+> Última revisión: 2026-11-25 (AB#101553, validación TLS del GDC contra la CA de SAREB; verificada en DEV el 2026-11-25; PRE y PRO con la siguiente release). Revisiones previas: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto), 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Core`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos: el endpoint `force-fallback`, `OrquestadorActivity`, `ObtenerMarkdownActivity_Failed` y `GetMetadata` (no existen); `TimeoutSeconds` pasa a `HardTimeoutSeconds`; los settings `Extraction__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` se retiraron en AB#101450 (no se leían en código; la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada); `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178), el de Layout sí. Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue: un cambio manual de app settings dura hasta el siguiente. Los contactos de escalado siguen sin rellenar y desde el repositorio no consta quién debe aportarlos. Los comandos usan los nombres de PRO; DEV y PRE (`SRBRGDEVDOCSAI`/`srbappdevdocai`, `SRBRGPREDOCSAI`/`srbapppredocai`) siguen el mismo patrón (ver INFRAESTRUCTURA_REAL_DESPLEGADA.md). Comprobado el 2026-11-23: las 12 alertas de PRO están habilitadas, las identidades tienen Key Vault Secrets User y las referencias a Key Vault de la Function App de PRO están resueltas; los comandos `az` de este runbook no se han ejecutado en la revisión.
+
+**Versión:** 1.1  
+**Última actualización:** 2026-11-25  
+**Aplicable a:** SRBRGDOCSAIPROD (los demás entornos siguen el mismo patrón de nombres)  
 **Fuente:** Código verificado en Activities + Providers
 
 ---
@@ -33,7 +35,7 @@
 
 ## Detección Automática (alertas de Azure Monitor)
 
-Desde 2026-08-04 (AB#99083) existen 5 alert rules sobre `srbappiprodocai` que **notifican por correo** al action group `srbagoperprodocai`. Al recibir un aviso, entrar por el incidente correspondiente:
+Desde 2026-08-04 (AB#99083) existen alert rules sobre `srbappiprodocai` que **notifican por correo** al action group `srbagoperprodocai`: las 5 de negocio (err, lat, fbk, exc, idle), las de memoria y OOM (2026-10-01) y las 3 de trazas de AB#100181 (`srbalertdupprodocai`, `srbalertexpprodocai`, `srbalertsctprodocai`; fuente de verdad en [MONITOREO_ALERTAS_REAL.md](../observabilidad/MONITOREO_ALERTAS_REAL.md), estado vivo comprobado en Azure el 2026-11-23: todas habilitadas). Al recibir un aviso, entrar por el incidente correspondiente:
 
 | Correo de alerta | Qué significa | Entrada al runbook |
 |------------------|---------------|--------------------|
@@ -59,7 +61,7 @@ Gestión de reglas y **alta de nuevos correos de aviso**: `docs/observabilidad/M
 - 🔴 AppInsights: evento `CU.CircuitOpen` o `TaskCanceledException`
 - ⏱️ P95 extraction > 90s o CU tarda > 90s (default timeout)
 - 📊 Métrica `CU.CircuitRejected` > 0
-- 🟡 **NEW:** `GDC health probe timeout` log (indica problema de red más amplio)
+- 🟡 `GDC health probe timeout` log (indica problema de red más amplio). La traza solo se emite cuando alguien invoca `POST /api/healthcheck`: el probe tiene timeout de 30 s, sale de `SystemHealthService` y el resultado se cachea 45 s; sin polling no hay traza
 - 📊 Retry 2/3, 3/3 fallando consecutivamente
 
 **Causas Raíz Posibles:**
@@ -125,15 +127,12 @@ customMetrics
 4. **Si es KeyVault:**
    - Verificar RBAC: Functions app tiene "Key Vault Secrets User"?
    - Check Key Vault firewall: ¿está permitido Azure Functions?
-   - Renovar connection string si expiró
+   - La autenticación de CU sale de `ModeloConfigs` por alias con identidad administrada, no de una cadena de conexión: verificar el rol de la MI sobre el recurso de IA y el alias en `ModeloConfigs`
 
 5. **Temporal workaround (mientras Azure responde):**
-   - Trigger manual del script de fallback GPT (si enabled):
-     ```json
-     PUT /api/classification/force-fallback?tipologia=XXX
-     ```
-   - Revisar `Extraction__GptFallback__Enabled` en app settings
-   - Aumentar `Extraction__AzureContentUnderstanding__TimeoutSeconds` desde 90 a 180 (si es timeout genuino de Azure CU)
+   - No hay conmutador manual a GPT (el endpoint `force-fallback` que citaba este runbook no existe). El failover de CU primario a secundario es automático (`CU.CircuitFailover`) si la tipología tiene `secondaryModelKey`
+   - `Extraction__GptFallback__Enabled` ya no existe (retirado en AB#101450): no sirve como remedio
+   - Aumentar `Extraction__AzureContentUnderstanding__HardTimeoutSeconds` desde 90 a 180 (si es timeout genuino de Azure CU); el pipeline lo fija en cada despliegue, así que un cambio manual se pierde en el siguiente
 
 **Escalation:**
 - Si GDC probe timeout > 5 min → **P2 — Network/Infrastructure issue** → Tech Lead + Network team
@@ -165,8 +164,8 @@ $connectionString = (az functionapp config appsettings list `
   --name srbappprodocai `
   --query "[?name=='SqlConnectionString'].value" -o tsv)
 
-# Test via sqlcmd
-sqlcmd -S "YOUR_SQL_SERVER.database.windows.net" -d "DocumentIA" -U "user@domain" -P "password" -Q "SELECT 1"
+# Test via sqlcmd (el valor de SqlConnectionString en PRO es una referencia a Key Vault; usar token de Entra, no contraseña en claro)
+sqlcmd -S "srbsqlprodocai.database.windows.net" -d "DocumentIA" -G -Q "SELECT 1"
 ```
 
 **Diagnóstico Profundo:**
@@ -187,8 +186,8 @@ traces
    - Revisar SQL Server firewall rules (¿permite Azure Functions IP?)
 
 2. **Si es connection pool:**
-   - Aumentar timeout en appsettings: `Connection Timeout=120` (default 30)
-   - Reducir `maxConcurrentActivityFunctions` temporalmente (del 4 al 2)
+   - Aumentar `Connection Timeout=120` (default 30) dentro del secreto `SqlConnectionString` de Key Vault (el host de Functions no carga `appsettings.json`)
+   - Reducir `maxConcurrentActivityFunctions` temporalmente (del 4 al 2): vive en `host.json` (`extensions.durableTask`), así que requiere redeploy; la variante por app setting es `AzureFunctionsJobHost__extensions__durableTask__maxConcurrentActivityFunctions` (documentación oficial de host.json, consultada el 2026-11-23); no está definida en ningún entorno
    - Monitorear recuperación
 
 3. **Si es SQL outage:**
@@ -218,7 +217,7 @@ traces
 **Causas Raíz Posibles:**
 - GDC HTTP Basic Auth credentials inválidas
 - GDC endpoint down (legacy SOAP service)
-- SSL certificate validation (GDC bypass SSL?)
+- SSL certificate validation (¿certificado del GDC de otra CA o PEM de confianza desactualizado?)
 - Request format cambió (GDC API incompatible)
 
 **Verificación Rápida (2 min):**
@@ -233,7 +232,8 @@ $auth = [System.Convert]::ToBase64String([System.Text.Encoding]::ASCII.GetBytes(
 $headers = @{ "Authorization" = "Basic $auth" }
 
 try {
-  $response = Invoke-WebRequest -Uri "$gdcEndpoint/GetMetadata" -Headers $headers -SkipCertificateCheck -TimeoutSec 10
+  # GDC es SOAP (IDocService); no hay GET /GetMetadata. El sondeo real es consultarObjetoExiste via POST /api/healthcheck (components.gdc)
+  $response = Invoke-WebRequest -Uri "https://srbappprodocai.azurewebsites.net/api/healthcheck" -Method Post -TimeoutSec 60
   Write-Output "✅ GDC respondiendo: $($response.StatusCode)"
 } catch {
   Write-Error "❌ Error GDC: $($_.Exception.Message)"
@@ -278,8 +278,20 @@ traces
    - Revisar app setting `GDC__Endpoint` — ¿correcto?
 
 4. **Si es SSL certificate:**
-   - GDC tiene certificado autofirmado → revisar `GDC__BypassSslValidation=true` en appsettings
-   - Si falta, agregar setting y redeploy
+   - Desde el despliegue de AB#101553 (verificado en DEV el 2026-11-25; PRE y PRO con la siguiente release) el handler valida el certificado del GDC contra `config/certs/sareb-ca-chain.pem` y el pipeline fija `GDC__BypassSslValidation=false`. Antes de ese despliegue, los tres entornos siguen con `true`
+   - Causas habituales: el GDC presenta un certificado de otra CA o el PEM está desactualizado. Los rechazos (sujeto, emisor y `ChainStatus`) y el aviso del bypass se trazan como Warning por Application Insights (categoría `DocumentIA.Core.Services.GdcServerCertificateValidator`) y también por consola (Log Stream); AB#101246 tiene abierto que algunas trazas `DocumentIA.*` no llegan a App Insights, así que ante la duda se mira el Log Stream
+   - Si el PEM de confianza ya no sirve y hay que corregirlo sin desplegar, informar `GDC__TrustedRootCertificate` (PEM) en la Function App
+     - Formato aceptado: PEM con los saltos de línea conservados o con las líneas separadas por espacios. La secuencia literal `\n` no vale (el host no arranca)
+     - Un valor inválido impide arrancar toda la Function App, no solo el GDC; se revierte borrando el setting
+     - El pipeline NO gestiona ese setting: sobrevive a los despliegues y anula el PEM del repo hasta que se borra
+     - `GDC__BypassSslValidation` admite solo `true` o `false`; cualquier otro valor impide arrancar el host
+   - Procedimiento de emergencia (solo si el GDC está caído por esta causa):
+     1. Poner `GDC__BypassSslValidation=true` en los app settings de la Function App (patrón `az functionapp config appsettings set`)
+     2. Reiniciar la Function App
+     3. Confirmar el health del GDC; el log de arranque debe llevar el aviso `[GDC] AVISO`
+     4. Abrir incidencia para corregir la causa (certificado del GDC emitido por otra CA o PEM desactualizado)
+     5. Volver a `GDC__BypassSslValidation=false`; si se olvida, el siguiente despliegue lo devuelve a `false`
+   - Un fichero de confianza ausente o corrupto impide arrancar el host (`FileNotFoundException`, `CryptographicException` o `InvalidOperationException`)
 
 5. **Temporal workaround:**
    - Deshabilitar plugin GDC en orchestration (marcar como optional)
@@ -308,22 +320,23 @@ traces
 
 **Verificación Rápida (1 min):**
 ```powershell
-# Ver instancias en ejecución
-$orchestrationState = az functionapp function list --resource-group SRBRGDOCSAIPROD --name srbappprodocai --query "[?name=='OrquestadorActivity'].{Name:name, Status:status}" -o json | ConvertFrom-Json
+# Ver instancias en ejecución (API de Durable; `az functionapp function list` no devuelve instancias y `OrquestadorActivity` no existe: el orquestador es DocumentProcessOrchestrator)
+$running = Invoke-RestMethod -Uri "https://srbappprodocai.azurewebsites.net/runtime/webhooks/durableTask/instances?runtimeStatus=Running" -Headers @{ "x-functions-key" = $functionKey }
 
 # Si hay muchas "Running" => possible deadlock
-Write-Output "Instancias Running: $($orchestrationState | Where-Object {$_.Status -eq 'Running'} | Measure-Object | Select-Object -ExpandProperty Count)"
+Write-Output "Instancias Running: $(@($running).Count)"
 ```
 
 **Diagnóstico Profundo:**
 ```kusto
-// Documentos stuck en "Running"
+// Documentos stuck en "Running": DocumentProcessed se emite al persistir, así que un documento atascado nunca lo tiene;
+// usar la API de instancias Durable (runtimeStatus=Running) o el Durable Functions Monitor. Esta consulta cuenta lo que SÍ terminó:
 customEvents
 | where timestamp > ago(2h)
-| where name == "DocumentProcessed" and customDimensions["EstadoFinal"] == "Running"
-| summarize stuck_docs=count() by tostring(customDimensions["Tipologia"])
+| where name == "DocumentProcessed"
+| summarize docs=count() by tostring(customDimensions["EstadoFinal"]), tostring(customDimensions["Tipologia"])
 
-// Ver activities que más tiempo tardan
+// Ver fases que más tiempo tardan (sufijos: Total, Clasificacion, Extraccion, Validacion, GDC, Integracion, Persistencia)
 customMetrics
 | where timestamp > ago(2h)
 | where name startswith "DocumentIA.Duracion."
@@ -378,7 +391,7 @@ customMetrics
 **Síntomas:**
 - ❌ `ObtenerMarkdownActivity` falla con HTTP 400 al resolver markdown vía Layout
 - 📊 Error: `"The file is corrupted or format is unsupported. Refer to documentation for the list of supported formats."`
-- ⏱️ En `AzureDocumentIntelligenceLayoutMarkdownProvider.cs:82`
+- ⏱️ En `AzureDocumentIntelligenceLayoutMarkdownProvider.cs` (los `throw` están hoy en las líneas 104 y 111; ante `InvalidContent` con `urlSource` el proveedor reintenta con `base64Source`, así que el 400 que ve el operador es el fallo tras ambos intentos)
 - 🔴 Mensaje: "Error iniciando DI layout. Status=400"
 - ✅ El mismo documento procesa N veces sin problema (indica corrupto en esta instancia específica)
 
@@ -396,10 +409,10 @@ customMetrics
 Detalle de diagnóstico por motivo en [TROUBLESHOOTING_DIAGNOSTICO.md](../guias/TROUBLESHOOTING_DIAGNOSTICO.md), caso "No se pudo obtener el texto del documento".
 
 **Causas Raíz Posibles:**
-- Base64 del documento está **incompleto o corrupto** en tránsito
+- El blob (`BlobPath`, vía principal desde blob-first) está **incompleto o corrupto**; el base64 solo es fallback legado y el trigger lo pone a `null` tras volcar el contenido a blob
 - PDF tiene sectores corruptos (descarga interrumpida, transmisión fallida)
-- Encoding/decoding base64 incorrecto en el trigger
-- Blob Storage descargó documento incompleto
+- Encoding/decoding base64 incorrecto en el cliente (solo en la vía legada)
+- Blob Storage descargó documento incompleto: comparar el tamaño del blob con el original
 - Documento original descargado de GDC está corrupto
 
 **Verificación Rápida (2 min):**
@@ -414,14 +427,15 @@ traces
 
 **Diagnóstico Profundo:**
 ```kusto
-// Documentos específicos con este error
-customEvents
+// Documentos específicos con este error (no existe el evento ObtenerMarkdownActivity_Failed; se usa la traza del MarkdownResolver)
+traces
 | where timestamp > ago(2h)
-| where name == "ObtenerMarkdownActivity_Failed"
-| where customDimensions["error"] contains "file is corrupted"
-| project timestamp, correlationId=customDimensions["correlationId"], documento=customDimensions["nombre_documento"], tipologia=customDimensions["tipologia"]
+| where message startswith "Layout fallo para"
+| where message contains "corrupted" or message contains "InvalidContent"
+| project timestamp, operation_Id, message
 | order by timestamp desc
 | take 20
+// Alternativa en BD: DocumentoEjecuciones.EstadoFinal = 'ERROR' y MensajeError que empieza por 'No se pudo obtener el texto del documento:'
 ```
 
 **Acciones:**
@@ -482,7 +496,7 @@ customEvents
 **Síntomas:**
 - ❌ Activity falla con `DurableSerializationException`
 - 📊 AppInsights: `Microsoft.Azure.Functions.Worker.Extensions.DurableTask` error
-- ⏱️ Error en `DurableFunctionExecutor.Activity.cs:39`
+- ⏱️ Error en el executor del worker de Durable (la cita a `DurableFunctionExecutor.Activity.cs:39` es histórica; ese fichero no está en el repositorio)
 - 🔴 Stacktrace menciona "RunActivityAsync" o "OutputBindingsMiddleware"
 
 **Causas Raíz Posibles:**
@@ -598,14 +612,21 @@ customMetrics
 customEvents
 | where timestamp > ago(1h)
 | where name == "DocumentProcessed"
-| summarize docs=count(), avg_total_ms=avg(todouble(customDimensions["DuracionTotalMs"])) by tostring(customDimensions["Tipologia"])
+| summarize docs=count() by tostring(customDimensions["Tipologia"])
+| join kind=leftouter (
+    customMetrics
+    | where timestamp > ago(1h)
+    | where name == "DocumentIA.Duracion.Total"
+    | summarize avg_total_ms=avg(value) by Tipologia=tostring(customDimensions["Tipologia"])
+) on Tipologia
 | order by avg_total_ms desc
+// DocumentProcessed no lleva DuracionTotalMs: las duraciones son las métricas DocumentIA.Duracion.*
 ```
 
 **Acciones:**
 1. **If local queue backpressure (LimiterWaitMs > 10s):**
-   - Aumentar `Extraction__AzureContentUnderstanding__MaxConcurrentCalls` (de 4 a 6-8)
-   - Aumentar `maxConcurrentActivityFunctions` (de 4 a 8)
+   - Aumentar `Extraction__AzureContentUnderstanding__MaxConcurrentCalls` (de 4 a 6-8); el pipeline lo restablece a 4 en el siguiente despliegue
+   - Aumentar `maxConcurrentActivityFunctions` (de 4 a 8) en `host.json` (requiere redeploy)
    - Monitor recovery
 
 2. **If Azure CU/DI slow (AnalysisMs > 60s):**
@@ -616,7 +637,7 @@ customEvents
 3. **If large document:**
    - Review `Pipeline__MaxPaginasDocumento` setting
    - If > 500 pages, consider splitting
-   - GPT fallback might be faster for very large docs
+   - Que un fallback a GPT sea más rápido en documentos muy grandes no está medido (sin medición disponible a 2026-11-23)
 
 4. **If specific tipología slow:**
    - Investigate classification rules (maybe too complex?)
@@ -632,6 +653,8 @@ customEvents
 ### 8️⃣ Azure OpenAI (AOAI) Rate Limit / Cuota Agotada (429) en Clasificación GPT y Prompts
 **Patrón:** Errores 429 sostenidos de Azure OpenAI; el circuit breaker abre para proteger el recurso; documentos de clasificación GPT quedan en estado retriable
 
+> Matiz (revisión 2026-11-22): por 429, `PENDIENTE_REINTENTO` va solo en la respuesta (`Resultado.Estado`) y **no se persiste** en `DocumentoEjecuciones` (decisión AB#100178, evita una fila por reintento); tampoco genera `DocumentProcessed`. El cliente debe reenviar la petición: no hay cola interna de reintento. Solo el `PENDIENTE_REINTENTO` por fallo transitorio de Layout (incidente 5) sí se persiste.
+
 **Impacto:** La clasificación de los documentos afectados se **pospone** (estado retriable `PENDIENTE_REINTENTO`), **no se pierden ni terminan en error crudo**. Los prompts (enriquecimiento) se degradan de forma no bloqueante. El circuit breaker protege el recurso Azure OpenAI durante el cooldown; no requiere intervención de emergencia salvo que se prolongue.
 
 **Síntomas:**
@@ -645,6 +668,7 @@ customEvents
 - `PAGINAS_EXCEDIDAS` → el documento supera `maxPages`, `EstadoCalidad = "REVISION"` (ver `docs/especificaciones/ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md`)
 - `EXTRACCION_INCOMPLETA` → falló Content Understanding, se usó el fallback y no se obtuvo ningún campo útil
 - `ERROR` → excepción capturada por el orquestador; `runtimeStatus = Failed` queda para input nulo, excepción en el preámbulo o fallo de infraestructura
+- Lista completa de estados (10, cadenas literales sin enum en código): CONTRATO_API_HTTP.md §5; faltaban aquí `NO_CLASIFICADO`, `DUPLICADO` (solo con `Dedup__ModoEstricto=false`), `BAJA_CONFIANZA_CLASIFICACION`, `VALIDACION_CON_ERRORES` y `SIN_CONTENIDO_DOCUMENTO`
 
 **Causas Raíz Posibles:**
 - Cuota/TPM (tokens-por-minuto) del deployment de Azure OpenAI agotada por volumen de documentos
@@ -664,11 +688,11 @@ customEvents
 
 **Diagnóstico Profundo:**
 ```kusto
-// Documentos pospuestos por cuota agotada
-customEvents
+// Documentos pospuestos por cuota agotada: el 429 no se persiste ni emite DocumentProcessed, así que se cuenta por la traza
+traces
 | where timestamp > ago(2h)
-| where name == "DocumentProcessed" and customDimensions["EstadoFinal"] == "PENDIENTE_REINTENTO"
-| summarize docs=count() by tostring(customDimensions["Tipologia"]), bin(timestamp, 15m)
+| where message startswith "Clasificación pospuesta por rate limit (429)"
+| summarize docs=count() by bin(timestamp, 15m)
 | order by timestamp desc
 
 // Evolución de reintentos y aperturas/cierres de circuito
@@ -696,14 +720,14 @@ Ver `docs/observabilidad/OBSERVABILIDAD_KQL.md` para más queries de circuit bre
 
 4. **Reprocesar documentos `PENDIENTE_REINTENTO`:**
    - Verificar que ya no se generan nuevos eventos `AOAI.CircuitOpen` / `AOAI.RateLimitRetry`
-   - Reencolar/reprocesar los documentos en `PENDIENTE_REINTENTO` según el mecanismo operativo estándar de reintento
+   - El cliente reenvía la petición de los documentos que recibieron `PENDIENTE_REINTENTO`: no hay cola interna ni filas que reprocesar (AB#100178)
 
 5. **Si el patrón se repite con frecuencia (tuning):**
-   - Ajustar la sección `AzureOpenAIResilience` en appsettings (`CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`) — ver `docs/manuales/MANUAL_CONFIGURACION.md`
+   - Ajustar los app settings `AzureOpenAIResilience__*` (`CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`, `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`; el host no carga `appsettings.json` y el pipeline no los fija, así que rigen los defaults de código: reintentos 3, umbral 5, apertura 45 s) — ver `docs/manuales/MANUAL_CONFIGURACION.md`
    - Evaluar reducir concurrencia de llamadas a Azure OpenAI o distribuir el volumen en el tiempo
 
 **Rollback:**
-- Para desactivar la lógica de resiliencia 429 y volver al comportamiento previo (retry por defecto del SDK, sin estado retriable diferenciado: el error crudo del SDK ante 429 acaba como `Resultado.Estado = "ERROR"` con `runtimeStatus = Completed`, no como HTTP 429 ni como `Failed`): `AzureOpenAIResilience.MaxRetries = 0` y `AzureOpenAIResilience.EnableCircuitBreaker = false` en appsettings
+- Para desactivar la lógica de resiliencia 429 y volver al comportamiento previo (retry por defecto del SDK, sin estado retriable diferenciado: el error crudo del SDK ante 429 acaba como `Resultado.Estado = "ERROR"` con `runtimeStatus = Completed`, no como HTTP 429 ni como `Failed`): app settings `AzureOpenAIResilience__MaxRetries=0` y `AzureOpenAIResilience__EnableCircuitBreaker=false`
 
 **Escalation:**
 - Si `PENDIENTE_REINTENTO` persiste > 30 min tras confirmar cuota disponible → P2 → Tech Lead
@@ -712,7 +736,9 @@ Ver `docs/observabilidad/OBSERVABILIDAD_KQL.md` para más queries de circuit bre
 
 ---
 
-### 9️⃣ Réplica de analizador CU a West Europe (Copy API cross-resource bloqueada)
+### 9️⃣ Réplica de analizador CU a West Europe (Copy API cross-resource bloqueada entre las dos cuentas de PRO)
+
+> Alcance (revisión 2026-11-22): la limitación se da entre las dos cuentas de PRO (`upe48-mm2avmdm-swedencentral` y `srbaisrv-westeurope`). La Copy API sí funciona de PRO a DEV y PRE (manifiestos `copied` del 2026-09-21 en `infra/ai/`); el procedimiento vigente es [DESPLIEGUE_IA.md](DESPLIEGUE_IA.md).
 
 **Síntomas:**
 - `scripts/deployment/copy-cu-analyzer.ps1` (cross-resource) falla en `:copy` con `ModelNotFound / "has not granted the necessary permissions"`, aunque `grantCopyAuthorization` responda `200`.
@@ -748,7 +774,7 @@ Requiere que la MI de `srbaisrv-westeurope` tenga `Storage Blob Data Reader` sob
 │  │  ├─ DI endpoint down? → Check Azure DI status
 │  │  ├─ Rule engine error? → Check logs
 │  │  ├─ DurableSerializationException? → Incident #6
-│  │  ├─ GPT fallback error? → Check OpenAI quota
+│  │  ├─ Error del clasificador GPT (alias en ModeloConfigs)? → Check OpenAI quota
 │  │  └─ Documento en PENDIENTE_REINTENTO / 429 Azure OpenAI? → Incident #8
 │  │
 │  └─ Integration error?
@@ -858,6 +884,9 @@ Requiere que la MI de `srbaisrv-westeurope` tenga `Storage Blob Data Reader` sob
 | **CTO** | TBD | TBD | En emergencias |
 | **Azure Support** | Microsoft | support.microsoft.com | - |
 | **GDC Admin** | TBD | TBD | En horario |
+| **Soporte de red (Network team)** | TBD | TBD | En horario |
+
+> Pendiente de rellenar (revisión 2026-11-22): desde el repositorio no consta quién debe asignar los contactos de On-Call, Tech Lead, CTO, GDC Admin ni red, y el responsable de completarlos no está identificado. Hasta entonces el escalado P1/P2 no tiene destinatario nominal. No se inventan datos. Decisión AB#101451 (2026-11-25): el responsable de aportar los contactos es Ignacio Varas Crisologo, sin plazo comprometido; la tabla se mantiene con TBD hasta entonces.
 
 ---
 
@@ -869,7 +898,7 @@ Requiere que la MI de `srbaisrv-westeurope` tenga `Storage Blob Data Reader` sob
 az login
 
 # Switch subscription
-az account set --subscription "YOUR_SUBSCRIPTION_ID"
+az account set --subscription "647c7246-54bc-4d31-b909-431cacf03272"   # PRO (Producción Central); DEV y PRE en INFRAESTRUCTURA_REAL_DESPLEGADA.md
 
 # Get app settings
 az functionapp config appsettings list --resource-group SRBRGDOCSAIPROD --name srbappprodocai
@@ -907,9 +936,9 @@ customEvents
 
 ## Validación
 
-✅ Incidents mapeados desde código real (IntegrarActivity.cs, AzureContentUnderstandingProvider.cs)  
-✅ Procedimientos basados en configuración actual (CU timeout 90s, retry 3x, circuit threshold 5)  
-✅ Escalation path incluye tiers y contactos (template para customer rellenar)  
-✅ Post-incident review template incluida  
+- Incidentes contrastados con el código el 2026-11-22 (ver la nota «Última revisión» de la cabecera).
+- Procedimientos basados en la configuración del pipeline (CU hard timeout 90 s, 3 reintentos, umbral de circuito 5).
+- El escalado tiene niveles pero sin contactos nominales (pendiente sin responsable identificado).
+- Plantilla de post-incident review incluida.
 
-**Próximas actualizaciones:** Agregar contactos reales, refinar based on actual incidents históricos
+**Próximas actualizaciones:** contactos reales; refinar con los incidentes históricos

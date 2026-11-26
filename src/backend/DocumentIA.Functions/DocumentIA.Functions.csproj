@@ -6,13 +6,15 @@
     <OutputType>Exe</OutputType>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <NoWarn>$(NoWarn);CS0618</NoWarn>
+    <!-- ChatReasoningEffortLevel y ReasoningEffortLevel son experimentales (OPENAI001) en OpenAI 2.9; se usan para reasoning_effort. -->
+    <!-- AOAI001: SetNewMaxCompletionTokensPropertyEnabled del cliente de Azure es experimental -->
+    <NoWarn>$(NoWarn);CS0618;OPENAI001;AOAI001</NoWarn>
     <UserSecretsId>0ecd525c-a090-4f0f-ae7d-c439477c4cec</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Azure.AI.ContentUnderstanding" Version="1.0.1" />
-    <PackageReference Include="Azure.AI.OpenAI" Version="2.*" />
+    <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <PackageReference Include="Azure.AI.FormRecognizer" Version="4.1.0" />
     <PackageReference Include="Azure.Extensions.AspNetCore.Configuration.Secrets" Version="1.3.2" />
@@ -48,6 +50,9 @@
 
   <ItemGroup>
     <None Update="config\**\*.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Update="config\**\*.pem">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>

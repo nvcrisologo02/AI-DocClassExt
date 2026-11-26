@@ -1,0 +1,263 @@
+/* Identidad corporativa SAREB (AB#101124). Manual de identidad 1.3 y 3.1, guia
+   de estilo 6.6. Se carga despues de bootstrap.min.css y antes de app.css.
+   Bootstrap es 5.1: las utilidades text-* y bg-* leen --bs-<color>-rgb, por eso
+   se redefinen las dos variables; botones y foco llevan los colores fijos y
+   necesitan reglas propias. Los mismos colores estan en SarebPaleta.cs. */
+
+:root {
+    --sareb-verde: #00858C;
+    --sareb-azul-oscuro: #046E97;
+    --sareb-azul: #0086AD;
+    --sareb-turquesa: #00ABA8;
+    --sareb-verde-claro: #90CCB7;
+    --sareb-verde-gris: #6F927C;
+    --sareb-gris: #BBBEB4;
+    --sareb-gris-claro: #AFB6AC;
+    --sareb-naranja: #F39E48;
+    --sareb-rojo: #EA6B43;
+
+    --sareb-verde-rgb: 0, 133, 140;
+    --sareb-verde-claro-rgb: 144, 204, 183;
+
+    --bs-primary: var(--sareb-verde);
+    --bs-primary-rgb: 0, 133, 140;
+    --bs-info: var(--sareb-azul);
+    --bs-info-rgb: 0, 134, 173;
+    --bs-success: var(--sareb-turquesa);
+    --bs-success-rgb: 0, 171, 168;
+    --bs-warning: var(--sareb-naranja);
+    --bs-warning-rgb: 243, 158, 72;
+    --bs-danger: var(--sareb-rojo);
+    --bs-danger-rgb: 234, 107, 67;
+    --bs-secondary: var(--sareb-gris);
+    --bs-secondary-rgb: 187, 190, 180;
+
+    --bs-font-sans-serif: Arial, Helvetica, sans-serif;
+    --bs-body-font-family: Arial, Helvetica, sans-serif;
+}
+
+html, body {
+    font-family: Arial, Helvetica, sans-serif;
+}
+
+a, .btn-link {
+    color: var(--sareb-verde);
+}
+
+    a:hover, .btn-link:hover {
+        color: var(--sareb-azul-oscuro);
+    }
+
+/* Bootstrap 5.1 fija el color de cada estado del boton (hover, foco, activo,
+   deshabilitado, btn-check); si no se cubren todos, reaparece el azul o el
+   verde de plantilla. */
+.btn-primary,
+.btn-primary:disabled, .btn-primary.disabled {
+    color: #fff;
+    background-color: var(--sareb-verde);
+    border-color: var(--sareb-verde);
+}
+
+    .btn-primary:hover, .btn-primary:focus, .btn-primary:active, .btn-primary.active,
+    .btn-check:checked + .btn-primary, .btn-check:active + .btn-primary, .btn-check:focus + .btn-primary {
+        color: #fff;
+        background-color: var(--sareb-azul-oscuro);
+        border-color: var(--sareb-azul-oscuro);
+    }
+
+.btn-outline-primary {
+    color: var(--sareb-verde);
+    border-color: var(--sareb-verde);
+}
+
+    .btn-outline-primary:hover, .btn-outline-primary:active, .btn-outline-primary.active,
+    .btn-check:checked + .btn-outline-primary, .btn-check:active + .btn-outline-primary {
+        color: #fff;
+        background-color: var(--sareb-verde);
+        border-color: var(--sareb-verde);
+    }
+
+    .btn-outline-primary:disabled, .btn-outline-primary.disabled {
+        color: var(--sareb-verde);
+        background-color: transparent;
+        border-color: var(--sareb-verde);
+    }
+
+/* Turquesa, rojo y naranja no llegan a AA con texto blanco (2,8:1, 3,1:1 y
+   2,1:1); con negro superan 6:1. Los estados conservan el color base. */
+.btn-success,
+.btn-success:hover, .btn-success:focus, .btn-success:active, .btn-success.active,
+.btn-success:disabled, .btn-success.disabled, .btn-check:checked + .btn-success {
+    color: #000;
+    background-color: var(--sareb-turquesa);
+    border-color: var(--sareb-turquesa);
+}
+
+.btn-danger,
+.btn-danger:hover, .btn-danger:focus, .btn-danger:active, .btn-danger.active,
+.btn-danger:disabled, .btn-danger.disabled, .btn-check:checked + .btn-danger {
+    color: #000;
+    background-color: var(--sareb-rojo);
+    border-color: var(--sareb-rojo);
+}
+
+.btn-warning,
+.btn-warning:hover, .btn-warning:focus, .btn-warning:active, .btn-warning.active,
+.btn-warning:disabled, .btn-warning.disabled, .btn-check:checked + .btn-warning {
+    color: #000;
+    background-color: var(--sareb-naranja);
+    border-color: var(--sareb-naranja);
+}
+
+/* Badges: Bootstrap los pinta en blanco; sobre gris, turquesa, naranja, rojo o
+   azul el negro es el que llega a AA. */
+.badge.bg-secondary, .badge.bg-success, .badge.bg-warning, .badge.bg-danger, .badge.bg-info {
+    color: #000;
+}
+
+.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .btn-check:focus + .btn,
+.form-control:focus, .form-select:focus, .form-check-input:focus {
+    border-color: var(--sareb-verde);
+    box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem rgba(var(--sareb-verde-rgb), 0.5);
+}
+
+.form-check-input:checked {
+    background-color: var(--sareb-verde);
+    border-color: var(--sareb-verde);
+}
+
+.page-link {
+    color: var(--sareb-verde);
+}
+
+    .page-link:hover {
+        color: var(--sareb-azul-oscuro);
+        background-color: rgba(var(--sareb-verde-claro-rgb), 0.25);
+    }
+
+    .page-link:focus {
+        color: var(--sareb-azul-oscuro);
+        box-shadow: 0 0 0 0.25rem rgba(var(--sareb-verde-rgb), 0.5);
+    }
+
+.page-item.active .page-link {
+    background-color: var(--sareb-verde);
+    border-color: var(--sareb-verde);
+}
+
+/* Validacion de formularios de Blazor. */
+.valid.modified:not([type=checkbox]) {
+    outline: 1px solid var(--sareb-turquesa);
+}
+
+.invalid {
+    outline: 1px solid var(--sareb-rojo);
+}
+
+.validation-message {
+    color: var(--sareb-rojo);
+}
+
+/* Superficie de los paneles de Monitor y Costes. Antes vivia duplicada en un
+   bloque <style> de cada pagina; el CSS aislado de Blazor no alcanza a los
+   componentes hijos, por eso va aqui y acotado bajo .mv2. */
+.mv2 { --mv2-border: var(--sareb-gris); --mv2-ink-2: #3c3c3b; --mv2-muted: var(--sareb-verde-gris); }
+.mv2 .card, .mv2 .mv2-card {
+    border: 1px solid var(--mv2-border);
+    border-radius: 8px;
+    box-shadow: none !important;
+    background: #fff;
+}
+.mv2 .card-header {
+    background: transparent;
+    border-bottom: 1px solid var(--mv2-border);
+    padding-top: .6rem; padding-bottom: .6rem;
+}
+.mv2 .card-header .fw-semibold { font-size: .875rem; }
+.mv2 h1 { color: var(--sareb-verde); }
+.mv2-hero { font-size: 2.9rem; font-weight: 700; line-height: 1.05; color: var(--sareb-verde); }
+.mv2-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 1.1rem; }
+.mv2-kpi-label { font-size: .75rem; color: var(--sareb-verde-gris); }
+.mv2-kpi-value { font-size: 1.5rem; font-weight: 700; line-height: 1.2; color: var(--sareb-verde); }
+.mv2-kpi-foot { font-size: .72rem; color: var(--mv2-ink-2); }
+.mv2 .table > :not(caption) > * > * { padding: .5rem .6rem; }
+
+/* Tablas (manual 3.5): titulo en blanco negrita sobre verde, cabeceras en negro
+   negrita sobre verde claro, datos en regular. Las tarjetas con tabla ponen la
+   tabla dentro de .card-body, a veces envuelta en .table-responsive o en un
+   bloque condicional, de ahi el descendiente y no el hijo directo. */
+.card:has(> .table-responsive > .table) > .card-header,
+.card:has(> .table) > .card-header,
+.card:has(> .card-body .table) > .card-header {
+    background-color: var(--sareb-verde);
+    color: #fff;
+    font-weight: 700;
+}
+/* text-muted lleva !important en Bootstrap: sobre el verde se aclara. Los
+   botones y enlaces de la cabecera pasan a blanco para no quedar verde sobre
+   verde (p. ej. «Recargar» en la auditoria de una tipologia). */
+.card:has(> .table-responsive > .table) > .card-header .text-muted,
+.card:has(> .table) > .card-header .text-muted,
+.card:has(> .card-body .table) > .card-header .text-muted {
+    color: rgba(255, 255, 255, .85) !important;
+}
+.card:has(> .table-responsive > .table) > .card-header .btn-outline-primary,
+.card:has(> .table) > .card-header .btn-outline-primary,
+.card:has(> .card-body .table) > .card-header .btn-outline-primary,
+.card:has(> .table-responsive > .table) > .card-header a:not(.btn),
+.card:has(> .table) > .card-header a:not(.btn),
+.card:has(> .card-body .table) > .card-header a:not(.btn) {
+    color: #fff;
+    border-color: #fff;
+}
+.card:has(> .table-responsive > .table) > .card-header .btn-outline-primary:hover,
+.card:has(> .table) > .card-header .btn-outline-primary:hover,
+.card:has(> .card-body .table) > .card-header .btn-outline-primary:hover {
+    color: var(--sareb-verde);
+    background-color: #fff;
+}
+.table thead th, .table .table-light th, .table-light th {
+    background-color: var(--sareb-verde-claro);
+    color: #000;
+    font-weight: 700;
+}
+.table {
+    --bs-table-striped-bg: rgba(var(--sareb-verde-claro-rgb), 0.12);
+    --bs-table-hover-bg: rgba(var(--sareb-verde-claro-rgb), 0.25);
+}
+/* Alertas: Bootstrap 5.1 las pinta con colores fijos. */
+.alert-danger { color: #7a2e17; background-color: rgba(234, 107, 67, .12); border-color: rgba(234, 107, 67, .4); }
+.alert-warning { color: #6b3f0f; background-color: rgba(243, 158, 72, .15); border-color: rgba(243, 158, 72, .45); }
+.alert-info { color: #023f56; background-color: rgba(0, 134, 173, .10); border-color: rgba(0, 134, 173, .35); }
+.alert-success { color: #00504e; background-color: rgba(0, 171, 168, .10); border-color: rgba(0, 171, 168, .35); }
+
+/* Graficos (guia 6.6): titulo breve en minuscula y negrita con el periodo,
+   unidad arriba a la derecha en regular y fuente en nota al pie. */
+.sareb-grafico-titulo { font-weight: 700; color: #000; }
+.sareb-grafico-unidad { font-size: .8rem; font-weight: 400; color: var(--sareb-verde-gris); }
+.sareb-grafico-fuente { font-size: .72rem; color: var(--sareb-verde-gris); margin-top: .5rem; }
+
+/* Inicio (AB#101127). */
+.sareb-inicio-titulo { color: var(--sareb-verde); font-weight: 700; }
+.sareb-acceso { border: 1px solid var(--sareb-gris); color: inherit; }
+.sareb-acceso:hover { border-color: var(--sareb-verde); }
+.sareb-acceso-titulo { color: var(--sareb-verde); font-weight: 700; }
+
+/* KPIs: la cifra va en verde corporativo (texto grande, 4,4:1); el estado lo
+   marca una barra lateral, porque turquesa y naranja como texto no llegan al
+   3:1 (revision final de AB#101124). */
+.sareb-kpi-ok, .sareb-kpi-revision, .sareb-kpi-error { border-left: 4px solid; padding-left: .4rem; }
+.sareb-kpi-ok { border-left-color: var(--sareb-turquesa); }
+.sareb-kpi-revision { border-left-color: var(--sareb-naranja); }
+.sareb-kpi-error { border-left-color: var(--sareb-rojo); }
+
+/* Tramos de las barras de lectura del Monitor: el recuento va dentro del tramo,
+   en negro sobre turquesa, naranja, rojo o gris, y se recorta si no cabe. */
+.sareb-tramo {
+    border-radius: 3px;
+    color: #000;
+    font-size: .7rem;
+    line-height: 22px;
+    white-space: nowrap;
+    overflow: hidden;
+}

@@ -43,3 +43,7 @@ Se adopta B. Los artefactos de IA se crean en DEV y llegan a PRO solo a través 
 - A (PRO como origen): mantiene la escritura sobre PRO fuera del pipeline, pero hace que los cambios de IA lleguen a PRO sin pasar por PRE y deja el etiquetado en producción. Solo tenía sentido para la carga inicial.
 - Usar dos service connections, uno por salto o uno por entorno: la Copy API de Content Understanding exige la misma identidad en origen y destino.
 - Ampliar el service connection de despliegue de PRE con derechos sobre PRO: mezclaría la identidad de despliegue con escritura de datos en producción.
+
+## Notas posteriores
+
+- 2026-11-22 (AB#101447, revisión documental; nota fuera del bloque, no reabre la decisión): las consecuencias previstas están aplicadas. `copy-cu-analyzers.ps1`, `copy-di-artifacts.ps1` y `copy-labeling-dataset.ps1` reciben `-SourceEnvironment` y `-FromProd` y resuelven la ruta con `scripts/ai/lib/promotion-route.ps1`; el pipeline 832 (`azure-pipelines-ai-artifacts.yml`) orquesta los saltos. Los environments `pre` y `prod` tienen approval check desde el 2026-09-30 (checks 64 y 65). La Copy API de Content Understanding funciona de PRO a DEV y PRE (manifiestos `copied` del 2026-09-21) y solo falla entre las dos cuentas de PRO. El primer run real PRE → PRO sigue pendiente (AB#100809); comprobado el 2026-11-23 (AB#101449): los checks 64 (`pre`) y 65 (`prod`) siguen activos y la service connection conserva exactamente 15 asignaciones de rol (5 por entorno). Procedimiento vigente: `docs/procedimientos/DESPLIEGUE_IA.md`.

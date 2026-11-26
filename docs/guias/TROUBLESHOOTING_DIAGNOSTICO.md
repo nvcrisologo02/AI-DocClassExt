@@ -1,6 +1,8 @@
 # Troubleshooting & Diagnóstico — DocumentIA
 
-**Última actualización:** 2026-10-06  
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto). Revisión previa: 2026-11-22 (AB#101447, contraste con `src/backend/DocumentIA.Functions` y `DocumentIA.Data`, `azure-pipelines.yml`, CONTRATO_API_HTTP.md §5 e INFRAESTRUCTURA_REAL_DESPLEGADA.md). Corregidos eventos y métricas inexistentes (`DocumentIngestedSuccessfully`, `ClassificationFailed`, `Activity.*`; `DocumentProcessed` es evento, no métrica), las dimensiones de los eventos CU (`modelKey`, `reason`, `tipologia` en minúscula), las consultas SQL (`Documentos` no guarda el estado final ni el contrato: están en `DocumentoEjecuciones`), la ruta `POST /api/IngestDocument` y el setting `SqlConnectionStringOptions` (no existe). Los settings `Classification__GptFallback__*` y la conexión `Extraction__AzureContentUnderstanding__*` se retiraron en AB#101450 (no se leían en código: la conexión, el modelo y los umbrales de IA salen de `ModeloConfigs` por alias e identidad administrada). `PENDIENTE_REINTENTO` por 429 de Azure OpenAI no se persiste (AB#100178). Cada entorno tiene su IA propia desde septiembre de 2026 (DEV luna desde el 2026-11-20, ADR-004; PRE y PRO `gpt-4o-mini`). Los valores que fija `azure-pipelines.yml` se restablecen en cada despliegue. Valores de `ModeloConfigs.Tipo` comprobados en BD el 2026-11-23: 0 a 5 en los tres entornos (0 clasificación, 1 extracción, 2 prompt, 3 layout, 4 tarifas, 5 embeddings). Los comandos `az` de este documento no se han ejecutado en la revisión.
+
+**Última actualización:** 2026-11-25  
 **Público objetivo:** Operadores, DevOps, Soporte 2º nivel
 
 ---
@@ -69,14 +71,16 @@
    # Obtener metadata del documento procesado
    $operationId = "guid-from-response"
    $kql = @"
+   // DocumentIngestedSuccessfully no existe; el evento real es DocumentProcessed (Tipologia, EstadoFinal, UseFallbackLLM, NombreDocumento, EjecucionGuid)
    customEvents
-   | where name == "DocumentIngestedSuccessfully"
-   | where tostring(customDimensions["OperationId"]) == "$operationId"
-   | project timestamp, Documento=customDimensions["DocumentName"], 
-             Confianza=tostring(customDimensions["ConfianzaGlobal"]),
+   | where name == "DocumentProcessed"
+   | where tostring(customDimensions["EjecucionGuid"]) == "$ejecucionGuid"
+   | project timestamp, Documento=customDimensions["NombreDocumento"],
              Tipologia=customDimensions["Tipologia"],
-             ProveedorClasif=customDimensions["ProveedorClasificacion"]
-   "@ 
+             EstadoFinal=customDimensions["EstadoFinal"],
+             Fallback=customDimensions["UseFallbackLLM"]
+   "@
+   # La confianza (ConfianzaGlobal, ConfianzaClasificacion, ModeloClasificacion) se consulta en SQL: DocumentoEjecuciones 
    # Ejecutar en Log Analytics (app insights)
    ```
 
@@ -94,7 +98,7 @@
 
 3. **Revisar configuración de tipología:**
    - ¿`confidenceConfig.clasifUmbralFallback` está muy alto (> 0.9)?
-   - ¿`Classification.GptFallback.Enabled` es `false`?
+   - ¿La tipología tiene desactivado el fallback en `confidenceConfig`? (`Classification__GptFallback__*` ya no existe, retirado en AB#101450)
 
 **Solución paso a paso:**
 
@@ -103,8 +107,8 @@
    - O bajar `umbralFallbackCompletitud`/`umbralConfianza` para este caso
 
 2. **Si debería haber fallback GPT:**
-   - Verificar `Classification__GptFallback__Enabled=true` en app settings
-   - Verificar `Classification__GptFallback__Endpoint` y `ApiKey` en Key Vault
+   - El fallback GPT y sus umbrales salen de la configuración de la tipología (`confidenceConfig`) y del alias GPT en `ModeloConfigs`; `Classification__GptFallback__*` ya no existe (retirado en AB#101450)
+   - Comprobar `UseFallbackLLM` y `FallbackRazon` en `DetalleEjecucion.Clasificacion` de la ejecución
    - Revisar logs: ¿hay exception en la llamada a GPT?
 
 3. **Si la tipología es muy restrictiva:**
@@ -122,7 +126,7 @@
 - Posible `"Timeout"` en `DetalleEjecucion.Seguimiento.Actividades[x].Mensaje`
 
 **Causas posibles:**
-1. Azure Content Understanding muy lento (> 90 segundos)
+1. Azure Content Understanding muy lento (> 90 segundos: `cuHardTimeoutSeconds=90` en el pipeline; el default de código es 300 s)
 2. Plugin REST/SOAP colgado indefinidamente
 3. SQL Server no responde
 4. Resource contention o saturación
@@ -134,7 +138,7 @@
    $instanceId = "instance-id-from-orchestration"
    
    # Desde Desktop App o via API status endpoint
-   $statusUri = "https://func-app.azurewebsites.net/runtime/webhooks/durableTask/instances/$instanceId"
+   $statusUri = "https://srbappprodocai.azurewebsites.net/runtime/webhooks/durableTask/instances/$instanceId"   # DEV: srbappdevdocai · PRE: srbapppredocai
    $status = Invoke-RestMethod -Uri $statusUri -Method Get -Headers @{
        "x-functions-key" = "function-key"
    }
@@ -167,7 +171,7 @@
 **Solución paso a paso:**
 
 1. **Si es ExtraerActivity (CU):**
-   - Verificar que `MaxConcurrentCalls` no sea muy bajo (default: 4)
+   - Verificar que `MaxConcurrentCalls` no sea muy bajo (4 en el pipeline; el default de código es 2)
    - Aumentar `HardTimeoutSeconds` si documentos complejos necesitan más tiempo
    - Revisar si hay circuit breaker abierto: ¿`EnableCircuitBreaker=true` y hay muchas fallas?
 
@@ -177,17 +181,16 @@
    - Aumentar timeout del plugin si es necesario
 
 3. **Si es GDC (SubirGDCActivity):**
-   - Default timeout es 120s; verificar `GDC__TimeoutSeconds`
+   - `GDC__TimeoutSeconds` es 60 s en el pipeline (el default de código es 30 s)
    - Verificar conectividad a GDC (firewall, endpoint)
    - Revisar si SOAP está respondiendo lentamente
 
 4. **Opción nuclear:** Cancelar la orquestación y reintentar:
    ```powershell
-   # Terminar instancia
-   az functionapp durable orchestration terminate `
-     --instance-id "instance-id" `
-     --resource-group "SRBRGDOCSAIPROD" `
-     --name "srbappprodocai"
+   # Terminar instancia por la API de Durable (el comando `az functionapp durable ...` no consta en el repo)
+   Invoke-RestMethod -Method Post `
+     -Uri "https://srbappprodocai.azurewebsites.net/runtime/webhooks/durableTask/instances/<instance-id>/terminate?reason=operador" `
+     -Headers @{ "x-functions-key" = "<function-key>" }
    ```
 
 ---
@@ -215,7 +218,7 @@
    | where name == "CU.TransientError" or name == "CU.CircuitOpen"
    | extend statusCode = tostring(customDimensions["statusCode"]),
            attempt = tostring(customDimensions["attempt"]),
-           tipologia = tostring(customDimensions["Tipologia"])
+           tipologia = tostring(customDimensions["tipologia"])   // en los eventos CU la clave va en minúscula
    | summarize ErrorCount=count() by bin(timestamp, 5m), statusCode, tipologia
    | order by timestamp desc
    ```
@@ -227,14 +230,8 @@
    # Si Throttled > 0, hay rate limiting
    ```
 
-3. **Verificar token de autenticación:**
-   ```powershell
-   # Si AuthMode=ApiKey, validar que la clave en Key Vault no esté expirada
-   $kvName = "srbkvprodocai"
-   $secretName = "Extraction--AzureContentUnderstanding--ApiKey"
-   az keyvault secret show --vault-name $kvName --name $secretName `
-     --query "attributes.expires" -o tsv
-   ```
+3. **Verificar la autenticación a CU:**
+   La conexión a CU sale de `ModeloConfigs` por alias (`cu_primary` / `cu_secondary`) con identidad administrada; `Extraction__AzureContentUnderstanding__ApiKey`/`AuthMode` ya no existen (retirados en AB#101450; la ApiKey se purgó en PRO el 2026-10-08). Comprobar el rol RBAC de la MI de la Function App sobre el recurso de CU del entorno (INFRAESTRUCTURA_REAL_DESPLEGADA.md).
 
 **Solución paso a paso:**
 
@@ -257,7 +254,7 @@
 
 3. **Habilitar secondary model (si existe):**
    - Si tipología tiene `secondaryModelKey`, el sistema hace round-robin automáticamente
-   - Verificar en base de datos: tabla `ModeloConfigs`, campo `ConfiguracionJson` → `secondaryModelKey`
+   - Verificar en base de datos: tabla `Tipologias`, campo `ConfiguracionJson` → `extraction.secondaryModelKey` (pertenece a `TipologiaValidationConfig`, no a `ModeloConfigs`; inferido de la clase, sin lectura de BD)
 
 4. **Escalar Azure CU:**
    - Si la cuota está agotada, contactar a Azure support
@@ -281,7 +278,7 @@
 
 1. **Obtener SHA256 del documento actual:**
    ```powershell
-   $base64Doc = "... content.Base64 ..."
+   $base64Doc = "... content.Base64 ..."   # vía legada: lo habitual es blobPath; descargar el blob y calcular el hash sobre sus bytes
    $bytes = [Convert]::FromBase64String($base64Doc)
    $sha256 = ([System.Security.Cryptography.HashAlgorithm]::Create("SHA256")).
              ComputeHash($bytes) | ForEach-Object { $_.ToString("x2") } | Join-String
@@ -290,10 +287,12 @@
 
 2. **Buscar en base de datos si existe:**
    ```sql
-   SELECT Documento, SHA256, FechaProceso, Estado
-   FROM Documentos
-   WHERE SHA256 = 'sha256-aqui'
-   ORDER BY FechaProceso DESC
+   -- Documentos no guarda el estado final ni el contrato: están en DocumentoEjecuciones
+   SELECT d.Id, d.NombreArchivo, d.SHA256, d.FechaProceso, e.EjecucionGuid, e.EstadoFinal, e.FechaEjecucion
+   FROM Documentos d
+   JOIN DocumentoEjecuciones e ON e.DocumentoId = d.Id
+   WHERE d.SHA256 = 'sha256-aqui'
+   ORDER BY e.FechaEjecucion DESC
    ```
 
 3. **Revisar si es falso positivo:**
@@ -316,16 +315,8 @@
    - Investigar el documento anterior en BD
    - Evaluar si necesita reprocess manual
 
-3. **Si se desea eliminar el duplicado anterior:**
-   ```powershell
-   # Buscar documento en BD y marcarlo como obsoleto (cambiar Estado)
-   # NO eliminar físicamente salvo instrucción explícita
-   $sql = @"
-   UPDATE Documentos
-   SET Estado = 'Obsoleto', FechaModificacion = GETUTCDATE()
-   WHERE SHA256 = '$sha256'
-   "@
-   ```
+3. **Si se desea ignorar el duplicado anterior:**
+   No se marca nada en BD (`Obsoleto` no es un estado y `FechaModificacion` no es columna de `Documentos`). Se fuerza el reproceso con `forceReprocess` en `instrucciones` o se espera a que la clave de intención sea distinta (AB#100930). No eliminar físicamente salvo instrucción explícita.
 
 **¿Por qué no se reutilizó? (AB#100930)**
 
@@ -413,7 +404,7 @@ Una reutilización normalmente no repite la IA de la original. Si `costes.reutil
 
 2. **Si connection string está expirada:**
    - Regenerar en Azure Storage → Access keys
-   - Actualizar en Key Vault
+   - Actualizar en Key Vault (a 2026-11-23 las 12 referencias a Key Vault de la Function App de PRO están en estado «Resolved»)
 
 3. **Verificar firewall de Storage:**
    - Portal → Storage Account → Networking
@@ -443,12 +434,7 @@ Una reutilización normalmente no repite la IA de la original. Si `costes.reutil
    Test-NetConnection -ComputerName $sqlServer -Port 1433 -InformationLevel Verbose
    ```
 
-2. **Verificar connection pool:**
-   ```kusto
-   customMetrics
-   | where name contains "DbPool" or name contains "Connection"
-   | summarize PoolSize=max(value), Active=avg(value) by name
-   ```
+2. **Verificar connection pool:** el código no emite ninguna métrica de pool (`DbPool`); usar `exceptions` filtrando `SqlException` y los tiempos de `DocumentIA.Duracion.Persistencia` en `customMetrics`.
 
 3. **Revisar logs de SQL:**
    ```sql
@@ -464,16 +450,7 @@ Una reutilización normalmente no repite la IA de la original. Si `costes.reutil
 
 **Solución paso a paso:**
 
-1. **Aumentar tamaño del connection pool:**
-   ```powershell
-   # En código: appsettings.json o connection string
-   # "Connection Timeout=30;Max Pool Size=100;"
-   
-   az functionapp config appsettings set `
-     --resource-group "SRBRGDOCSAIPROD" `
-     --name "srbappprodocai" `
-     --settings "SqlConnectionStringOptions=Max Pool Size=100"
-   ```
+1. **Aumentar tamaño del connection pool:** los parámetros (`Connection Timeout=30;Max Pool Size=100;`) van dentro del secreto `SqlConnectionString` de Key Vault que referencia el app setting; el setting `SqlConnectionStringOptions` no existe en código y el host no carga `appsettings.json`.
 
 2. **Verificar firewall de SQL:**
    ```powershell
@@ -488,6 +465,7 @@ Una reutilización normalmente no repite la IA de la original. Si `costes.reutil
      --start-ip-address "0.0.0.0" `
      --end-ip-address "0.0.0.0"
    ```
+   > No es un paso por defecto: con SQL por private endpoint en PRO no aplica (comprobado el 2026-11-23: el servidor SQL de PRO tiene el acceso público deshabilitado y un private endpoint, igual que PRE; en DEV el acceso público sigue habilitado). El pipeline 807 ya ofrece `addTransientFirewallRule` para su propio agente.
 
 3. **Escalar SQL:**
    - Si la carga es muy alta, aumentar DTU o vCores
@@ -537,9 +515,9 @@ Una reutilización normalmente no repite la IA de la original. Si `costes.reutil
 
 **Solución paso a paso:**
 
-1. **Reprocesar los documentos en `PENDIENTE_REINTENTO`** cuando la cuota se haya recuperado
+1. **El cliente reenvía la petición** de los documentos que recibieron `PENDIENTE_REINTENTO` cuando la cuota se haya recuperado: por 429 el estado va solo en la respuesta y no se persiste (AB#100178), así que no hay filas que reprocesar
 2. **Revisar y, si procede, ampliar la cuota/TPM** del deployment de Azure OpenAI en Azure Portal (o repartir carga entre deployments)
-3. **Ajustar la configuración `AzureOpenAIResilience`** (ver manual de configuración): `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`
+3. **Ajustar los app settings `AzureOpenAIResilience__*`** (el host no carga `appsettings.json`; el pipeline no los fija, rigen los defaults de código: reintentos 3, umbral 5, apertura 45 s; ver manual de configuración): `MaxRetries`, `InitialRetryDelayMs`, `MaxRetryDelaySeconds`, `CircuitBreakerFailureThreshold`, `CircuitBreakerOpenSeconds`
 4. **Rollback si es necesario:** `MaxRetries: 0` + `EnableCircuitBreaker: false` desactiva el reintento/circuito y vuelve al comportamiento anterior (sin estado retriable: el error del SDK ante 429 acaba como `Resultado.Estado = "ERROR"` con `runtimeStatus = Completed`, no como HTTP 429 ni como `Failed`)
 5. Los prompts con `rate_limit_exhausted:` no requieren acción sobre el documento (degradado no bloqueante); revisar solo si el volumen es alto y afecta a la calidad del enriquecimiento
 
@@ -602,7 +580,7 @@ Desde AB#100880 este estado **se reserva al documento vacío de verdad**. Si lo 
 
 **Síntoma:** `Resultado.Estado` es `ERROR` o `PENDIENTE_REINTENTO`, `MensajeError` empieza por `No se pudo obtener el texto del documento:` y sigue con el motivo, el código HTTP si lo hubo y el tipo de excepción. `detalleEjecucion.clasificacion.fallbackRazon` (ruta de clasificación) o `detalleEjecucion.prompt.error` (ruta de prompt) llevan el mismo texto. La ejecución está persistida y visible en el Monitor.
 
-**Qué significa:** el documento probablemente **sí tiene contenido**; lo que falló es la obtención del texto vía Document Intelligence Layout. Hasta AB#100880 estos casos cerraban en `SIN_CONTENIDO_DOCUMENTO` y el operador descartaba el documento o reclamaba al remitente. Casos reales: timeout de layout a los 120 s con un PDF de 123 páginas (DEV, 27/08), `400 InvalidContent` *"Could not download the file from the given URL"* (DEV, agosto), `401 PermissionDenied` del DI (DEV, julio), reciclado del worker durante el layout.
+**Qué significa:** el documento probablemente **sí tiene contenido**; lo que falló es la obtención del texto vía Document Intelligence Layout. Hasta AB#100880 estos casos cerraban en `SIN_CONTENIDO_DOCUMENTO` y el operador descartaba el documento o reclamaba al remitente. Casos reales: timeout de layout a los 120 s con un PDF de 123 páginas (DEV, 27/08), `400 InvalidContent` *"Could not download the file from the given URL"* (DEV, agosto), `401 PermissionDenied` del DI (DEV, julio; histórico hasta el 2026-09-22, cuando DEV pasó a resolver su propio DI por alias), reciclado del worker durante el layout.
 
 **Acción por motivo:**
 
@@ -611,7 +589,7 @@ Desde AB#100880 este estado **se reserva al documento vacío de verdad**. Si lo 
 | `LayoutTimeout` | `PENDIENTE_REINTENTO` | Reintentar más tarde. Si se repite con documentos grandes, subir `TimeoutSeconds` del modelo de layout en `ModeloConfigs` |
 | `LayoutError (HTTP 429)` o `(HTTP 5xx)` | `PENDIENTE_REINTENTO` | Reintentar más tarde; revisar la salud y cuota del recurso de Document Intelligence |
 | `LayoutError (HTTP 400)` con `InvalidContent` | `ERROR` | DI no pudo descargar el blob (SAS, red, Private Link) o el contenido está corrupto: ver runbook de incidentes, caso 5 |
-| `LayoutError (HTTP 401)` o `(HTTP 403)` | `ERROR` | Credenciales o rol del recurso de DI; revisar `ModeloConfigs` del entorno y el endpoint efectivo (en dev el layout apuntaba al DI de PRO) |
+| `LayoutError (HTTP 401)` o `(HTTP 403)` | `ERROR` | Credenciales o rol del recurso de DI; revisar `ModeloConfigs` del entorno y el endpoint efectivo (histórico: hasta el 2026-09-22 el layout de dev apuntaba al DI de PRO; ahora cada entorno resuelve su DI por alias) |
 | `LayoutError` sin código | `ERROR` | Excepción no HTTP (DNS, configuración del modelo de layout): el tipo de excepción va en el mensaje |
 | `FormatoNoSoportado` | `ERROR` | DI rechaza el formato (HTTP 415): convertir el documento a un formato soportado |
 | `SinFuente` | `ERROR` | La ejecución no tenía `blobPath` ni base64: revisar la subida a blob y la petición |
@@ -638,7 +616,7 @@ traces
    SELECT ModelKey, LEN(ConfiguracionJson) AS Tamano, Activo
    FROM ModeloConfigs WHERE Tipo = 4;
    ```
-   Si no devuelve nada, cargar `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql`.
+   Si no devuelve nada, cargar `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql` (la fila `Tipo = 4`, `tarifas.ia`, existe en DEV, PRE y PRO a 2026-11-23).
 2. **El modelo consumido no está en el catálogo.** El propio bloque lo dice en `modelosSinTarifa`. Ocurre al dar de alta un deployment o un analyzer nuevo sin añadir su línea de precio. La tarifa se resuelve por **modelo físico** (nombre de deployment, analyzer, classifier o `prebuilt-layout`), no por la fila de configuración que lo invoca.
 3. **La tarifa existe pero su fecha de vigencia es posterior a la ejecución.** Cada línea lleva `vigenteDesde`; una ejecución se tarifa con lo que se facturaba entonces. Si se dio de alta el precio hoy, las ejecuciones de ayer siguen sin tarifa. Es el comportamiento correcto: añadir una línea con vigencia anterior si se quiere cubrirlas.
 4. **Caché del catálogo.** Se recarga cada cinco minutos. Tras editar las tarifas hay que esperar antes de dar por malo el resultado.
@@ -647,7 +625,7 @@ traces
 
 **Verificación:** `pwsh .\scripts\testing\test-costes-ia.ps1 -Environment <env>` comprueba de una pasada el cálculo, las tarifas completas, el cuadre del desglose y la visibilidad condicionada al parámetro.
 
-**Qué NO es:** que la suma de un entorno no cuadre con la factura de su grupo de recursos no es un defecto. Los tres entornos consumen la misma cuenta de IA de producción, así que la factura agrega ejecuciones que viven en otras bases de datos. Ver [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md).
+**Qué NO es:** que la suma de un entorno no cuadre con la factura de su grupo de recursos no es un defecto. Desde septiembre de 2026 cada entorno factura su propia cuenta de IA (`srbaisrv01<env>docai`, `srbaisrv02<env>docai`, `srbdi<env>docai`; PRO por alias desde el 2026-10-08), así que el aviso anterior sobre «la misma cuenta de IA de producción» queda superado; las diferencias con la factura suelen venir de consumo sin medir o de tarifas desactualizadas (la causa concreta se determina caso a caso contra la factura; no se ha hecho en la revisión). Ver [MANUAL_COSTES_IA.md](../manuales/MANUAL_COSTES_IA.md).
 
 ---
 
@@ -694,7 +672,7 @@ El orquestador publica `customStatus` en tiempo real. Estructura:
   "version": "1.0",
   "estado": "Running",
   "actividadActual": "ClasificarActivity",
-  "actividadesTotales": 8,
+  "actividadesTotales": 8,  // ejemplo ilustrativo: el orquestador invoca 21 activities
   "actividadesCompletadas": ["ObtenerMetadatosGDC", "VerificarDuplicado"],
   "duracionTotalMs": 5234,
   "actividades": [
@@ -802,41 +780,37 @@ customMetrics
 
 ### 4.1 KQL Queries (guardadas en Log Analytics)
 
-**Q1: Últimas clasificaciones fallidas (últimas 24h)**
+**Q1: Últimas ejecuciones fallidas (últimas 24h)**
 ```kusto
+// ClassificationFailed no existe; el evento real es DocumentProcessed
 customEvents
-| where name == "ClassificationFailed"
+| where name == "DocumentProcessed"
 | where timestamp > ago(24h)
-| project timestamp, Documento=customDimensions["DocumentName"],
+| where customDimensions["EstadoFinal"] in ("ERROR", "Error", "Fallido")
+| project timestamp, Documento=customDimensions["NombreDocumento"],
           Tipologia=customDimensions["Tipologia"],
-          Confianza=tostring(customDimensions["Confidence"]),
-          Razon=customDimensions["Reason"]
+          EjecucionGuid=customDimensions["EjecucionGuid"]
 | order by timestamp desc
 | take 50
 ```
 
-**Q2: Promedio de confianza por tipología**
+**Q2: Ejecuciones por tipología y estado final (7 días)**
 ```kusto
-customMetrics
+// DocumentProcessed es un evento sin valor de confianza; la confianza media se consulta en SQL (DocumentoEjecuciones.ConfianzaGlobal)
+customEvents
 | where name == "DocumentProcessed"
 | where timestamp > ago(7d)
-| extend tipologia = tostring(customDimensions["Tipologia"])
-| summarize
-    Total=count(),
-    ConfianzaPromedio=avg(value),
-    ConfianzaMin=min(value),
-    ConfianzaMax=max(value),
-    ConfianzaP95=percentile(value, 95)
-  by tipologia
-| order by ConfianzaPromedio asc
+| summarize Total=count() by tipologia=tostring(customDimensions["Tipologia"]), estado=tostring(customDimensions["EstadoFinal"])
+| order by Total desc
 ```
 
-**Q3: Duración por actividad (últimas 24h)**
+**Q3: Duración por fase (últimas 24h)**
 ```kusto
+// No hay métricas Activity.*; las fases son DocumentIA.Duracion.{Total|Clasificacion|Extraccion|Validacion|GDC|Integracion|Persistencia}
 customMetrics
-| where name startswith "Activity."
+| where name startswith "DocumentIA.Duracion."
 | where timestamp > ago(24h)
-| extend activity=replace_regex(name, @"Activity\.", "")
+| extend activity=replace_regex(name, @"DocumentIA\.Duracion\.", "")
 | summarize
     Llamadas=count(),
     DuracionPromedio=avg(value),
@@ -846,13 +820,13 @@ customMetrics
 | order by P95 desc
 ```
 
-**Q4: Errores por proveedor (últimas 6h)**
+**Q4: Errores transitorios por proveedor (últimas 6h)**
 ```kusto
+// Las dimensiones Provider/ErrorCode no existen; se usan los eventos reales de CU y de Azure OpenAI
 customEvents
-| where name contains "Error" or severityLevel >= 3
+| where name in ("CU.TransientError", "AOAI.RateLimitRetry")
 | where timestamp > ago(6h)
-| extend provider=tostring(customDimensions["Provider"])
-| summarize ErrorCount=count() by provider, customDimensions["ErrorCode"]
+| summarize ErrorCount=count() by name, statusCode=tostring(customDimensions["statusCode"])
 | order by ErrorCount desc
 ```
 
@@ -861,13 +835,13 @@ customEvents
 customEvents
 | where name in ("CU.CircuitOpen", "CU.CircuitClosed", "CU.CircuitFailover")
 | where timestamp > ago(24h)
-| project timestamp, name, ModelKey=customDimensions["ModelKey"], Razon=customDimensions["Reason"]
+| project timestamp, name, ModelKey=customDimensions["modelKey"], Razon=customDimensions["reason"]   // en los eventos CU las claves van en minúscula
 | order by timestamp desc
 ```
 
 ### 4.2 PowerShell Scripts de Health Check
 
-**check-service-health.ps1:**
+**check-service-health.ps1** (bloque ilustrativo: no existe como fichero en `scripts/`; con identidad administrada preferir `--auth-mode login` en vez de leer claves de Storage):
 ```powershell
 param(
     [string]$ResourceGroup = "SRBRGDOCSAIPROD",
@@ -885,7 +859,7 @@ Write-Host "State: $funcStatus" -ForegroundColor $(if ($funcStatus -eq "Running"
 # 2. HTTP endpoint
 Write-Host "`n[2/5] HTTP endpoint..." -ForegroundColor Yellow
 try {
-    $health = Invoke-RestMethod -Uri "$ApiUrl/api/health" -ErrorAction Stop
+    $health = Invoke-RestMethod -Method POST -Uri "$ApiUrl/api/healthcheck" -ErrorAction Stop
     Write-Host "✓ API responding" -ForegroundColor Green
 } catch {
     Write-Host "✗ API not responding: $($_.Exception.Message)" -ForegroundColor Red
@@ -918,8 +892,7 @@ Write-Host "`n=== Check Complete ===" -ForegroundColor Cyan
 
 **health.http:**
 ```http
-GET https://srbappprodocai.azurewebsites.net/api/health
-x-functions-key: {{functionKey}}
+POST https://srbappprodocai.azurewebsites.net/api/healthcheck
 
 ###
 
@@ -928,7 +901,7 @@ x-functions-key: {{functionKey}}
 
 ###
 
-POST https://srbappprodocai.azurewebsites.net/api/documents/classify
+POST https://srbappprodocai.azurewebsites.net/api/IngestDocument
 x-functions-key: {{functionKey}}
 Content-Type: application/json
 
@@ -984,7 +957,7 @@ $status = Invoke-RestMethod -Uri $statusUri -Method Get -Headers @{"x-functions-
 $status.output | ConvertTo-Json
 
 # Opción 2: Desde BD
-SELECT DocumentoId, SHA256, Resultado FROM Documentos WHERE SHA256='...'
+SELECT e.DocumentoId, d.SHA256, e.ContratoSalidaCompletoJson FROM DocumentoEjecuciones e JOIN Documentos d ON d.Id = e.DocumentoId WHERE d.SHA256='...'
 ```
 
 **¿Cómo fuerzo reprocesamiento?**
@@ -998,17 +971,18 @@ SELECT DocumentoId, SHA256, Resultado FROM Documentos WHERE SHA256='...'
 ```
 
 **¿Cuál es el timeout máximo?**
-- Activity individual: configurable, default ~300s (5 min)
+- Activity individual: sin timeout propio: `host.json` no fija `functionTimeout` (rige el del plan Premium, 30 min por defecto) y en el orquestador solo consta `GdcActivityTimeoutSeconds = 120` (comprobado el 2026-11-23)
 - Orchestration total: ~7 días (limit Durable Functions)
-- SubirGDC: 120s
-- CU hard timeout: 90s
+- SubirGDC: 120 s de activity; `GDC__TimeoutSeconds=60` en el pipeline
+- CU hard timeout: 90 s (pipeline; default de código 300 s)
 
 **¿Cómo veo si CU circuit breaker está abierto?**
 ```kusto
 customEvents
 | where name == "CU.CircuitOpen"
 | where timestamp > ago(1h)
-| distinct ModelKey, Razon
+| extend modelKey=tostring(customDimensions["modelKey"]), reason=tostring(customDimensions["reason"])
+| distinct modelKey, reason
 ```
 
 **¿Cómo aumento concurrent requests?**
@@ -1020,6 +994,7 @@ az functionapp config appsettings set \
     "Extraction__AzureContentUnderstanding__MaxConcurrentCalls=8" \
     "Extraction__AzureContentUnderstanding__InitialRetryDelayMs=1000"
 ```
+> El pipeline restablece estos valores (4 y 500) en el siguiente despliegue.
 
 **¿Cómo me entero de un outage?**
 - Status Page de Azure (https://status.azure.com)
@@ -1050,3 +1025,4 @@ az functionapp config appsettings set \
 | 2026-09-07 | Añadido el caso de coste de IA a cero o incompleto (catálogo de tarifas, vigencia, caché) |
 | 2026-10-06 | Corregido el árbol de diagnóstico por `runtimeStatus` (los fallos de activity acaban en `Completed` + `ERROR`); añadidos `PAGINAS_EXCEDIDAS`, `EXTRACCION_INCOMPLETA` y `PendienteReintento`; aclarado el rollback de `MaxRetries: 0` |
 | 2026-10-07 | AB#100880: `SIN_CONTENIDO_DOCUMENTO` reservado al documento vacío de verdad; nuevo caso para `ERROR` / `PENDIENTE_REINTENTO` con "No se pudo obtener el texto del documento" y acción por motivo |
+| 2026-11-22 | AB#101447: revisión contra código y pipelines (eventos, métricas, SQL, settings heredados sin efecto, `PENDIENTE_REINTENTO` por 429 no persistido, IA por entorno) |

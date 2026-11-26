@@ -1,5 +1,9 @@
 # Extensibilidad — Plugin System de DocumentIA
 
+> Última revisión: 2026-11-22 (AB#101447). **Alcance y vocabulario.** Esta guía describe los **providers de IA** (`IExtraerDataProvider`, `IClasificarDataProvider`, `IPromptDataProvider`, más el clasificador por embeddings `IEmbeddingsClasificarProvider` y los de markdown `ILayoutMarkdownDataProvider` / `IMarkdownResolver`). Los **plugins de integración** (`IIntegrationPlugin`, cadena de enriquecimiento de `IntegrarActivity`) se documentan en [MANUAL_PLUGINS.md](../manuales/MANUAL_PLUGINS.md), y el **servicio AssetResolver** (que no es un `IIntegrationPlugin`) en [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](../especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). Aquí «plugin» significa provider de IA.
+>
+> **Avisos de la revisión.** Los ejemplos de código y de configuración de esta guía son ilustrativos y varios no compilan ni coinciden con las clases actuales: los contratos reales están en `src/backend/DocumentIA.Core/Models/` (`ExtraccionModels.cs`, `ClasificacionModels.cs`, `PromptResultado.cs`, `ContratoSalida.cs`). En particular: (1) no existe el bloque `Classification.{Provider, Model, FallbackThreshold, NivelClasificacion}` en la tipología; el enrutado vive en los app settings `Classification:*` (`DefaultFlow`, `Flows`, `UseGlobalFallback`, `GlobalFallbackProvider`) y `ConfigurableClasificarDataProvider` ejecuta flujos (`hybrid-rules-gpt-di` por defecto), no un `switch` de proveedor único; (2) `TipologiaExtractionConfig` tiene `Enabled`, `Provider`, `ModelKey`, `SecondaryModelKey`, `AutoMapUnmappedFields` y `FieldMappings`, y `PromptConfig` tiene `ModelKey`, `SystemPrompt`, `UserPromptTemplate`, `MaxTokens`, `Temperature` y `ContentMode`; `MinFieldsRatio` y `FallbackThreshold` están en el modelo de `ModeloConfigs`; (3) no existen `Pipeline:ExtraccionTimeoutSeconds`, `ClasificacionTimeoutSeconds`, `PromptTimeoutSeconds`, `RetryMaxAttempts` ni `RetryInitialDelaySeconds`, y el orquestador no usa `RetryOptions`: la resiliencia vive en cada proveedor (CU: reintentos y circuit breaker de `AzureContentUnderstandingOptions`; Azure OpenAI: `AzureOpenAIResilience`; GDC y plugins: sus decoradores); (4) el orquestador clasifica, luego resuelve la tipología y luego extrae; (5) `MockClasificarDataProvider` está en `Services/`, no en `Mocks/`; (6) los únicos placeholders del prompt libre son `{contenido}` y `{campo:X}`; (7) `IPromptDataProvider` se registra directo, sin router. Las claves de modelo de los ejemplos (`gpt-4o`, `doc-intelligence-v3`) no existen: usar claves reales de `ModeloConfigs` (`default.gpt4o-mini`, `prompt.gpt56-luna`, `nota.simple.1_5.azure-cu`). **Modelo generativo por entorno:** DEV `gpt-5.6-luna` desde el 2026-11-20 (ADR-004); PRE y PRO deployment `gpt-4o-mini` (modelo gpt-4.1-mini) hasta la siguiente release.
+
 ## 1. Filosofía & Arquitectura
 
 ### ¿Por qué Plugins?
@@ -30,7 +34,7 @@ DocumentIA utiliza un sistema **pluggable** para soportar múltiples proveedores
 
 ### Tipos de Plugins
 
-**DocumentIA tiene tres categorías principales:**
+**DocumentIA tiene tres categorías principales** (más el clasificador por embeddings de ADR-002 y los providers de markdown, ver el aviso de cabecera):
 
 | Tipo | Interface | Métodos | Responsabilidad |
 |------|-----------|---------|-----------------|
@@ -645,6 +649,8 @@ DocumentProcessOrchestrator
 
 ### Timeout & Retry Policy
 
+> **Revisión 2026-11-22:** esta sección describe una configuración que **no existe** en el código (`Pipeline:*TimeoutSeconds`, `RetryOptions` en el orquestador). Se conserva como idea original; la resiliencia real está en cada proveedor. `PipelineSettings` solo tiene `MaxPaginasDocumento`.
+
 **Durable Functions automáticamente:**
 - Timeout por Activity: `RetryOptions.FirstRetryInterval`
 - Reintentos configurables en Orchestrator
@@ -1069,6 +1075,8 @@ public async Task ClasificarAsync_WithInvoiceKeywords_ReturnsFactura()
 
 ### Plugin Timeout
 
+> **Revisión 2026-11-22:** la solución propuesta (subir `ExtraccionTimeoutSeconds`) no aplica porque esa clave no existe; el timeout de CU se ajusta con `Extraction__AzureContentUnderstanding__HardTimeoutSeconds` (90 s en los tres entornos) y el de GDC es el timer de 120 s del orquestador.
+
 **Síntomas:** Activity function falla después de 5 minutos
 
 **Causas:**
@@ -1202,6 +1210,6 @@ if (resultado.FallbackUsado)
 
 - [DocumentIA Architecture](../01_ARQUITECTURA_SISTEMA.md)
 - [Technical Design](../03_DISENO_TECNICO_DETALLADO.md)
-- [API Documentation](../15_API_DOCUMENTATION_V1_4.md)
+- [Contrato de la API HTTP](../contratos/CONTRATO_API_HTTP.md)
 - [Azure Functions Documentation](https://learn.microsoft.com/azure/azure-functions/)
 - [Durable Functions Patterns](https://learn.microsoft.com/azure/azure-functions/durable/)

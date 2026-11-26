@@ -264,7 +264,7 @@ namespace DocumentIA.Core.Configuration
         public double ClasifUmbralFallback { get; set; } = 0.85;
         /// <summary>Ratio mínimo de campos obtenidos/esperados para considerar la extracción CU suficiente.
         /// Si CU no supera este ratio, se activa el fallback GPT de extracción.
-        /// null = usar config.MinFieldsRatio (GptFallbackExtraerSettings) como último recurso.</summary>
+        /// null = usar config.MinFieldsRatio como último recurso.</summary>
         [System.Text.Json.Serialization.JsonPropertyName("extracUmbralFallback")]
         public double? ExtracUmbralFallback { get; set; } = null;
         /// <summary>Umbral mínimo de completitud (ratio de campos esperados presentes) para considerar CU suficiente.

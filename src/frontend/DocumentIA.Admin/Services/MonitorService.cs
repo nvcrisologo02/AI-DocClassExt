@@ -413,6 +413,11 @@ public class MonitorFiltroDto
 
     public bool EsRangoFijo => Desde is not null && Hasta is not null;
 
+    // Mes en curso (AB#101128): ventana viva desde el dia 1 del mes peninsular hasta
+    // ahora. No cuenta como rango fijo, asi que el auto-refresco sigue activo y la
+    // ventana se recalcula en cada consulta. Un rango fijo completo manda sobre ella.
+    public bool MesEnCurso { get; set; }
+
     // El input nativo de fecha no impide teclear un año de cuatro nueves. Fuera de
     // este tramo no hay datos que consultar y sumar un dia al maximo de DateOnly
     // lanza una excepcion que las paginas no capturan.
@@ -446,9 +451,13 @@ public class MonitorFiltroDto
     /// <summary>Filtra por motivo de la regla de duplicado (AB#100930); null no filtra.</summary>
     public string? Motivo { get; set; }
 
-    public string ToQueryString()
+    public string ToQueryString() => ToQueryString(TimeProvider.System);
+
+    // El "ahora" de las ventanas relativas entra como parametro para que los tests
+    // fijen la fecha en vez de leer el reloj del sistema.
+    public string ToQueryString(TimeProvider reloj)
     {
-        var (desde, hasta) = VentanaUtc();
+        var (desde, hasta) = VentanaUtc(reloj);
         var partes = new List<string>
         {
             $"desde={Uri.EscapeDataString(desde.ToString("o"))}",
@@ -474,7 +483,7 @@ public class MonitorFiltroDto
     // El backend filtra con ">= desde" y "< hasta": el extremo superior de un rango
     // fijo es la medianoche del dia siguiente al ultimo pedido, para que ese dia
     // entre completo. Extremos invertidos se intercambian en vez de fallar.
-    private (DateTime Desde, DateTime Hasta) VentanaUtc()
+    private (DateTime Desde, DateTime Hasta) VentanaUtc(TimeProvider reloj)
     {
         if (Desde is { } d1 && Hasta is { } d2)
         {
@@ -484,8 +493,30 @@ public class MonitorFiltroDto
             return (HoraEspana.InicioDelDiaUtc(primero), HoraEspana.InicioDelDiaUtc(ultimo.AddDays(1)));
         }
 
-        var ahora = DateTime.UtcNow;
+        var ahora = reloj.GetUtcNow().UtcDateTime;
+        if (MesEnCurso)
+        {
+            var hoy = DateOnly.FromDateTime(HoraEspana.Desde(ahora));
+            return (HoraEspana.InicioDelDiaUtc(new DateOnly(hoy.Year, hoy.Month, 1)), ahora);
+        }
+
         return (ahora.AddDays(-RangoDias), ahora);
+    }
+
+    // Texto del periodo para los titulos de los graficos (guia de estilo 6.6): los
+    // dos graficos lo escriben igual porque sale del mismo filtro.
+    public string DescripcionPeriodo()
+    {
+        if (Desde is { } d1 && Hasta is { } d2)
+        {
+            var (primero, ultimo) = d1 <= d2 ? (d1, d2) : (d2, d1);
+            // Cultura invariante: en un formato personalizado "/" es el separador de
+            // fecha de la cultura actual, no una barra literal.
+            return $"del {primero.ToString("d/M/yyyy", CultureInfo.InvariantCulture)} al {ultimo.ToString("d/M/yyyy", CultureInfo.InvariantCulture)}";
+        }
+
+        if (MesEnCurso) return "mes en curso";
+        return RangoDias == 1 ? "últimas 24 horas" : $"últimos {RangoDias} días";
     }
 
     private static DateOnly Acotar(DateOnly dia) =>

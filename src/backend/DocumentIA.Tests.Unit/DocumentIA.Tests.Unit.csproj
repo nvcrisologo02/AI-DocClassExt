@@ -5,6 +5,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <!-- OpenAIChatModelFactory.ChatCompletion pasa a ser experimental (OPENAI001) en OpenAI 2.9; los tests lo usan para simular respuestas. -->
+    <!-- AOAI001: API experimental del cliente de Azure usada por el helper -->
+    <NoWarn>$(NoWarn);OPENAI001;AOAI001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

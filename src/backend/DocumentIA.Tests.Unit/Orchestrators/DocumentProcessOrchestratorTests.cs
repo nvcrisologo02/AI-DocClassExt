@@ -754,6 +754,24 @@ public class DocumentProcessOrchestratorTests
     }
 
     [Fact]
+    public async Task RunOrchestrator_TipologiaNoIdentificada_NoFijaGpt4oMini()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivityThrow("ClasificarActivity", new Exception("No se ha podido identificar la tipologia del documento"));
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().NotBe("gpt-4o-mini");
+        salida.DetalleEjecucion.Clasificacion.Modelo.Should().BeEmpty();
+        salida.DetalleEjecucion.Clasificacion.ProveedorClasif.Should().Be("GPT4oMini");
+    }
+
+    [Fact]
     public async Task RunOrchestrator_ClasificarRateLimitExcedido_RetornaEstadoPendienteReintento()
     {
         var orchestrator = CreateOrchestrator();
@@ -1077,6 +1095,99 @@ public class DocumentProcessOrchestratorTests
         context.GetLastActivityInput<object>("ObtenerActivoActivity").Should().BeNull();
         context.GetLastActivityInput<object>("IntegrarActivity").Should().BeNull();
         context.GetLastActivityInput<PersistirInput>("PersistirActivity").Should().NotBeNull();
+    }
+
+    private static FakeTaskOrchestrationContext BuildContextoVirtual(
+        ContratoEntrada entrada,
+        double confianza,
+        double? umbralProveedor = null,
+        string tipologia = "Desconocido",
+        string? fallbackRazon = null)
+    {
+        var context = new FakeTaskOrchestrationContext(entrada);
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = confianza,
+            ConfianzaGPT = confianza,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = tipologia,
+            ClasificacionParcial = true,
+            FallbackRazon = fallbackRazon,
+            UmbralFallbackAplicado = umbralProveedor,
+            PropuestaTipologia = "Nota simple registral"
+        });
+        return context;
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionParcialVirtual_ConfianzaBajoUmbral_DevuelveBajaConfianzaYPersiste()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = BuildContextoVirtual(BuildEntrada(), confianza: 0.42);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("BAJA_CONFIANZA_CLASIFICACION");
+        salida.Resultado.ConfianzaClasificacion.Should().Be(0.42);
+        salida.Identificacion.PropuestaTipologia.Should().Be("Nota simple registral");
+        var persistido = context.GetLastActivityInput<PersistirInput>("PersistirActivity");
+        persistido.Should().NotBeNull();
+        persistido!.Salida.Resultado.Estado.Should().Be("BAJA_CONFIANZA_CLASIFICACION");
+        context.GetLastActivityInput<object>("ExtraerActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionParcialVirtual_ConfianzaIgualUmbral_DevuelveOk()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = BuildContextoVirtual(BuildEntrada(), confianza: 0.6);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        context.GetLastActivityInput<PersistirInput>("PersistirActivity").Should().NotBeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionParcialVirtual_UmbralPeticionPrecedeAlDelProveedor()
+    {
+        var entrada = BuildEntrada();
+        entrada.Instrucciones.Classification.Umbral = 0.95;
+        var orchestrator = CreateOrchestrator();
+        var context = BuildContextoVirtual(entrada, confianza: 0.92, umbralProveedor: 0.6);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("BAJA_CONFIANZA_CLASIFICACION");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionParcialVirtual_SinUmbralPeticion_UsaElDelProveedor()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = BuildContextoVirtual(BuildEntrada(), confianza: 0.5, umbralProveedor: 0.4);
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionParcialGlobalFallbackBajaConfianza_ConfianzaSobreUmbral_DevuelveOk()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = BuildContextoVirtual(
+            BuildEntrada(), confianza: 0.7, tipologia: "CERA", fallbackRazon: "global_fallback_baja_confianza");
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tdn1.Should().Be("CERA");
     }
 
     [Theory]
@@ -1469,8 +1580,8 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
         {
             Modelo = "gpt-4o-mini",
-            Confianza = 0.1,
-            ConfianzaGPT = 0.1,
+            Confianza = 0.92,
+            ConfianzaGPT = 0.92,
             ProveedorClasif = "GPT4oMini",
             TipologiaDetectada = "Desconocido",
             ClasificacionParcial = true
@@ -1502,8 +1613,8 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
         {
             Modelo = "gpt-4o-mini",
-            Confianza = 0.1,
-            ConfianzaGPT = 0.1,
+            Confianza = 0.92,
+            ConfianzaGPT = 0.92,
             ProveedorClasif = "GPT4oMini",
             TipologiaDetectada = "Desconocido",
             ClasificacionParcial = true
@@ -1560,8 +1671,8 @@ public class DocumentProcessOrchestratorTests
         context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
         {
             Modelo = "gpt-4o-mini",
-            Confianza = 0.1,
-            ConfianzaGPT = 0.1,
+            Confianza = 0.92,
+            ConfianzaGPT = 0.92,
             ProveedorClasif = "GPT4oMini",
             TipologiaDetectada = "Desconocido",
             ClasificacionParcial = true,
@@ -1577,6 +1688,41 @@ public class DocumentProcessOrchestratorTests
         salida.DetalleEjecucion.Clasificacion.FallbackRazon.Should().Be("tdn1_virtual_propuesta");
         salida.DetalleEjecucion.Clasificacion.PropuestaTipologia.Should().Be("Solicitud de cambio de titularidad");
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_ClasificacionParcialConTipologiaVacia_EntraEnLaRamaVirtualSinTdn1()
+    {
+        // Parcial sin tipología detectada y con un motivo que no está en la lista de la rama virtual:
+        // la tipología vacía basta para entrar en ella (no se resuelve tipología ni se extrae nada).
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "",
+            ClasificacionParcial = true,
+            FallbackRazon = "motivo_no_catalogado",
+            PropuestaTipologia = "Documento sin familia reconocible"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tipologia.Should().BeEmpty();
+        salida.Identificacion.Tdn1.Should().BeNullOrWhiteSpace();
+        salida.Identificacion.PropuestaTipologia.Should().Be("Documento sin familia reconocible");
+        salida.DetalleEjecucion.Extraccion.Modelo.Should().Be("skipped");
+        salida.DetalleEjecucion.Postproceso.Normalizaciones.Should().ContainSingle(n => n.StartsWith("Tipología virtual TDN1"));
+        context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+        context.GetLastActivityInput<object>("ExtraerActivity").Should().BeNull();
     }
 
     [Fact]
@@ -1643,6 +1789,68 @@ public class DocumentProcessOrchestratorTests
         salida.Identificacion.Tdn1.Should().Be("ESIN");
         salida.Identificacion.Tdn2.Should().Be("ESIN-40");
         context.GetLastActivityInput<object>("ResolverTipologiaActivity").Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualConTdn1Detectado_PersisteLaFamiliaEnTdn1()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "FICH-19",
+            Tdn2Detectado = "FICH-19",
+            Tdn1Detectado = "FICH",
+            ClasificacionParcial = true,
+            FallbackRazon = "Tipologia Virtual",
+            PropuestaTipologia = "Ficha de inmueble"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tdn1.Should().Be("FICH");
+        salida.Identificacion.Tdn2.Should().Be("FICH-19");
+        salida.Identificacion.Tipologia.Should().Be("FICH-19");
+        salida.Identificacion.TipologiaFamilia.Should().Be("FICH-19");
+        salida.DetalleEjecucion.RunTipologia.Should().Be("FICH-19");
+    }
+
+    [Fact]
+    public async Task RunOrchestrator_TipologiaVirtualSinTdn1Detectado_ConservaElComportamientoActual()
+    {
+        var orchestrator = CreateOrchestrator();
+        var context = new FakeTaskOrchestrationContext(BuildEntrada());
+
+        context.SetupActivity("NormalizarActivity", BuildNormalizarResult());
+        context.SetupActivity("VerificarDuplicadoActivity", false);
+        context.SetupActivity("SubirBlobActivity", "container/test.pdf");
+        context.SetupActivity("ClasificarActivity", new ResultadoClasificacion
+        {
+            Modelo = "gpt-4o-mini",
+            Confianza = 0.9,
+            ConfianzaGPT = 0.9,
+            ProveedorClasif = "GPT4oMini",
+            TipologiaDetectada = "FICH-19",
+            Tdn2Detectado = "FICH-19",
+            ClasificacionParcial = true,
+            FallbackRazon = "Tipologia Virtual",
+            PropuestaTipologia = "Ficha de inmueble"
+        });
+
+        var salida = await orchestrator.RunOrchestrator(context);
+
+        salida.Resultado.Estado.Should().Be("OK");
+        salida.Identificacion.Tdn1.Should().Be("FICH-19");
+        salida.Identificacion.Tdn2.Should().Be("FICH-19");
     }
 
     [Fact]

@@ -58,4 +58,17 @@ public class EnvironmentBannerStateTests
         state.Label.Should().Be("Entorno backend: Development");
         state.CssClass.Should().Contain("bg-info");
     }
+
+    // Con la paleta SAREB el blanco no llega a AA sobre el rojo (3,1:1) ni sobre
+    // el azul (4,2:1); el negro si (6,7:1 y 5,0:1). text-dark (#212529) se queda
+    // en 3,8:1 sobre el azul, por eso negro puro (AB#101124).
+    [Theory]
+    [InlineData("Production")]
+    [InlineData("Development")]
+    public void Resolve_EntornoConocido_TextoNegroSobreElColorDeLaPaleta(string environment)
+    {
+        var state = EnvironmentBannerState.Resolve(loaded: true, backendUnreachable: false, environment);
+
+        state.CssClass.Should().Contain("text-black").And.NotContain("text-white").And.NotContain("text-dark");
+    }
 }

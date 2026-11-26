@@ -1,5 +1,7 @@
 # Integración de Extracción con Azure AI Content Understanding
 
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto). Revisiones previas: 2026-11-22 (AB#101447, contraste con `AzureContentUnderstandingProvider`, `AzureContentUnderstandingOptions`, `Program.cs`, `infra/ai/` y los pipelines). **Avisos:** (1) la configuración de conexión de CU **no** va por app settings `Extraction:AzureContentUnderstanding:{Endpoint, ApiKey, AuthMode, DefaultProcessingLocation}` (no se leían en el código y se retiraron en AB#101450) sino por la fila de `ModeloConfigs` de cada modelo (`Endpoint` o `ResourceAlias` → `AiEndpointResolver`, `ApiKey` o `AuthMode = DefaultAzureCredential`); de esa sección solo se enlazan los siete parámetros de resiliencia (`MaxConcurrentCalls` 4, `HardTimeoutSeconds` 90, `EnableCircuitBreaker`, `CircuitBreakerFailureThreshold` 5, `CircuitBreakerOpenSeconds` 45, `MaxRetries` 3, `InitialRetryDelayMs` 500 en los tres entornos), con los eventos `CU.TransientError`, `CU.HardTimeout`, `CU.CircuitOpen`, `CU.CircuitClosed`, `CU.CircuitFailover`, `CU.CircuitRejected` y `CU.RetryFailover`. (2) El proveedor es blob-first: descarga `BlobPath` y usa `Content.Base64` solo como fallback (AB#100814); selecciona `ModelKey` o `SecondaryModelKey` en round-robin con circuit breaker por clave y failover. (3) La **Copy API cross-resource sí funciona de PRO a DEV y PRE** y es el mecanismo de promoción de `azure-pipelines-ai-artifacts.yml` (`scripts/ai/copy-cu-analyzers.ps1`; analyzers `copied` en `infra/ai/cu-analyzers.<env>.manifest.json` el 2026-09-21); lo que falla es la copia entre las dos cuentas de PRO (§12). (4) Cada entorno tiene sus cuentas de CU (`srbaisrv01<env>docai` y `srbaisrv02<env>docai` en DEV y PRE); los analyzers vigentes en PRO según el export de configuración v1.1.1 son `CU_NS_1.4_3` (`nota.simple.1_4`), `CU_NS_1.5_0` (`nota.simple.1_5`) y `CU_NS_1.6_0_GGAA`; `CU_NS_1.4_2` es histórico y `CU_NS_1.6_0` es un identificador de ejemplo. (5) Los alias de CU (`gpt-4.1`, `gpt-4.1-mini`, `text-embedding-3-large`) no cambian con el cutover del modelo generativo a `gpt-5.6-luna` en DEV (ADR-004).
+
 ## Índice
 
 1. [Descripción general](#1-descripción-general)
@@ -80,8 +82,8 @@ Proveedores soportados:
 | Valor en config | Proveedor | Descripción |
 |-----------------|-----------|-------------|
 | `azure-content-understanding` | `AzureContentUnderstandingProvider` | Llamada a Azure AI Content Understanding. Si la completitud es baja puede activar fallback GPT. |
-| `azure-document-intelligence` / `azure-di` | `AzureDocumentIntelligenceExtraerDataProvider` | Extracción con Azure Document Intelligence (layout/modelo). |
-| `azure-openai` / `openai` / `gpt` | `GptDirectExtraerDataProvider` | Extracción directa con GPT (sin CU previo). Requiere `Extraction:GptFallback:Endpoint/DeploymentName/ApiKey`. |
+| `azure-document-intelligence` / `azure-di` | `AzureDocumentIntelligenceExtraerDataProvider` | Extracción con un modelo custom de Azure Document Intelligence (`documentModels/{id}:analyze`). |
+| `azure-openai` / `openai` / `gpt` | `GptDirectExtraerDataProvider` | Extracción directa con GPT (sin CU previo). Resuelve `ModelKey` (instrucciones, tipología o fallback) contra `ModeloConfigs`. |
 | `mock` | `MockExtraerDataProvider` | Datos fijos para testing. |
 
 ### `AzureContentUnderstandingProvider`
@@ -91,9 +93,9 @@ Implementa la llamada real al servicio Azure AI Content Understanding:
 
 1. Carga la configuración de la tipología para obtener `ModelKey`.
 2. Resuelve el modelo en `ExtractionModelRegistryLoader` para obtener `AnalyzerId`, `ContentType`, etc.
-3. Decodifica el campo `Documento.Content.Base64` del contrato de entrada.
+3. Descarga el documento desde `Documento.BlobPath` (blob-first, AB#100814) y usa `Documento.Content.Base64` solo como fallback legado.
 
-> Nota: cuando la petición llega por `documento.objectIdGDC`, el orquestador recupera previamente el binario desde GDC y lo hidrata en `Documento.Content.Base64` antes de entrar en las actividades de normalización/extracción.
+> Nota: cuando la petición llega por `documento.objectIdGDC`, el orquestador descarga el binario desde GDC, lo sube al blob y deja `BlobPath` y los hashes precalculados (`PreComputed*`, AB#100293) antes de entrar en las actividades de normalización/extracción.
 4. Llama a `ContentUnderstandingClient.AnalyzeBinaryAsync` con `WaitUntil.Completed` (operación de larga duración, espera hasta que Azure finaliza el análisis).
 5. Parsea el JSON de respuesta y lo pasa al mapper.
 
@@ -145,7 +147,7 @@ Cada entrada describe un analizador de Azure AI Content Understanding.
 | `provider` | ✅ | Debe ser `azure-content-understanding`. |
 | `analyzerId` | ✅ | ID del analizador tal como está creado en Azure AI Foundry. |
 | `contentType` | ✅ | MIME type del documento (`application/pdf`, `image/jpeg`, etc.). Si está vacío se intenta detectar automáticamente. |
-| `processingLocation` | ⬜ | Región de procesamiento. Si está vacío, usa `DefaultProcessingLocation` de la configuración de la Function App (por defecto `global`). |
+| `processingLocation` | ⬜ | Región de procesamiento. Si está vacío, el proveedor usa `global` (el setting `DefaultProcessingLocation` se retiró en AB#101450). |
 | `inputRange` | ⬜ | Rango de páginas a analizar (p. ej. `"pages": "1-3"`). Vacío = documento completo. |
 
 ### 4.2 Fichero de validación de tipología
@@ -184,13 +186,7 @@ Valores por defecto (sin datos sensibles). Se usan fuera del runtime de Azure Fu
 ```json
 {
   "Extraction": {
-    "DefaultProvider": "mock",
-    "AzureContentUnderstanding": {
-      "Endpoint": "",
-      "ApiKey": "",
-      "AuthMode": "ApiKey",
-      "DefaultProcessingLocation": "global"
-    }
+    "DefaultProvider": "mock"
   }
 }
 ```
@@ -205,11 +201,7 @@ Las claves relevantes dentro de `Values` son:
 ```json
 {
   "Values": {
-    "Extraction:DefaultProvider": "mock",
-    "Extraction:AzureContentUnderstanding:Endpoint": "https://<tu-recurso>.cognitiveservices.azure.com/",
-    "Extraction:AzureContentUnderstanding:ApiKey": "<tu-api-key>",
-    "Extraction:AzureContentUnderstanding:AuthMode": "ApiKey",
-    "Extraction:AzureContentUnderstanding:DefaultProcessingLocation": "global"
+    "Extraction:DefaultProvider": "mock"
   }
 }
 ```
@@ -284,25 +276,14 @@ Y en el fichero de validación de la tipología, poner `"provider": "mock"` (o d
 
 1. Crear un recurso **Azure AI Services** en Azure Portal o Azure AI Foundry.
 2. Obtener el **endpoint** (p. ej. `https://mi-recurso.cognitiveservices.azure.com/`) y una **API Key**.
-3. Rellenar `local.settings.json`:
-
-```json
-"Extraction:AzureContentUnderstanding:Endpoint": "https://mi-recurso.cognitiveservices.azure.com/",
-"Extraction:AzureContentUnderstanding:ApiKey": "<api-key>",
-"Extraction:AzureContentUnderstanding:AuthMode": "ApiKey"
-```
+3. Registrar el endpoint y la API Key en la fila de `ModeloConfigs` del modelo de extracción (`Endpoint`, `ApiKey`, `AuthMode = ApiKey`); los app settings `Extraction:AzureContentUnderstanding:{Endpoint, ApiKey, AuthMode}` se retiraron en AB#101450 y no se usan.
 
 4. Asegurarse de que el analizador referenciado en `models.json` (`analyzerId`) existe en ese recurso.
 
 ### Opción C: Llamada real a Azure con identidad (DefaultAzureCredential)
 
 1. Iniciar sesión con `az login` o Visual Studio.
-2. Configurar:
-
-```json
-"Extraction:AzureContentUnderstanding:Endpoint": "https://mi-recurso.cognitiveservices.azure.com/",
-"Extraction:AzureContentUnderstanding:AuthMode": "DefaultAzureCredential"
-```
+2. Configurar la fila de `ModeloConfigs` del modelo de extracción con su `Endpoint` y `AuthMode = DefaultAzureCredential` (los app settings equivalentes se retiraron en AB#101450).
 
 3. La identidad local debe tener el rol **Cognitive Services User** en el recurso de Azure AI Services.
 
@@ -317,10 +298,8 @@ Añadir en **Configuración > Variables de entorno** (o mediante Bicep/Terraform
 | Variable | Valor |
 |----------|-------|
 | `Extraction__DefaultProvider` | `azure-content-understanding` (o `mock` para deshabilitar) |
-| `Extraction__AzureContentUnderstanding__Endpoint` | Endpoint del recurso Azure AI Services |
-| `Extraction__AzureContentUnderstanding__AuthMode` | `DefaultAzureCredential` (recomendado) o `ApiKey` |
-| `Extraction__AzureContentUnderstanding__ApiKey` | Solo si `AuthMode=ApiKey`. Mejor usar un secreto de Key Vault. |
-| `Extraction__AzureContentUnderstanding__DefaultProcessingLocation` | `global` (por defecto) |
+
+La conexión a CU (endpoint y credencial) sale de la fila de `ModeloConfigs` resuelta por alias (`cu_primary` / `cu_secondary`) con identidad administrada; los app settings de conexión se retiraron en AB#101450. Solo se configuran por app setting los siete parámetros de resiliencia.
 
 > **Nota:** Azure Functions usa `__` como separador de jerarquía en variables de entorno (equivalente a `:` en JSON).
 
@@ -438,7 +417,7 @@ Implicaciones:
 Si quieres, puedo aplicar un script que compare automáticamente el `fieldSchema` exportado desde Azure con `fields[]` de la tipología y generar un informe de discrepancias más detallado.
 
 **¿Qué pasa si `Endpoint` no está configurado y se usa `azure-content-understanding`?**
-`AzureContentUnderstandingProvider` lanza `InvalidOperationException` con el mensaje `"Extraction:AzureContentUnderstanding:Endpoint es obligatorio"` en el arranque de la Function App.
+`AzureContentUnderstandingProvider` lanza `InvalidOperationException` con el mensaje `"ExtractionModelConfig.Endpoint es obligatorio para el modelo '<key>'."` al ejecutar la extracción (no en el arranque): el endpoint es el de la fila de `ModeloConfigs`, directo o por `ResourceAlias`.
 
 **¿Se puede usar un analizador diferente para distintos entornos (dev/staging/prod)?**
 Sí. El `analyzerId` está en `ModeloConfigs` para cada entorno. Se puede mantener un `models.json` diferente como seed inicial, pero la decisión operativa debe quedar publicada en BD.
@@ -453,12 +432,12 @@ El log de la Function App con nivel `Debug` o `Trace` mostrará el JSON completo
 
 ## 11. Clasificación por defecto con Azure Document Intelligence
 
-Desde marzo 2026, la clasificación del orquestador usa por defecto **Azure Document Intelligence** cuando no se indique lo contrario en el contrato de entrada.
+Revisado 2026-11-22: la clasificación del orquestador usa por defecto el flujo `hybrid-rules-gpt-di` (reglas → GPT → Document Intelligence) con fallback global GPT; Document Intelligence es el tercer paso, no el proveedor por defecto. El `ExpectedType` de la petición se valida contra `ResolverTipologiaActivity` y una etiqueta no resoluble cae a «no clasificado» (AB#100242).
 
 Precedencia para clasificación:
 
-1. `Instrucciones.Classification.Provider` y `Instrucciones.Classification.Model` (si no son `auto`).
-2. `Classification:DefaultProvider` y `Classification:DefaultModelKey`.
+1. `Instrucciones.Classification.Provider` (nombre de flujo o proveedor) y `Instrucciones.Classification.Model` (si no son `auto`).
+2. `Classification:DefaultFlow` (`hybrid-rules-gpt-di`) y, si no hay flujo, `Classification:DefaultProvider`. Los app settings `Classification:DefaultModelKey` y `Classification:AzureDocumentIntelligence:*` se retiraron en AB#101450.
 
 Regla importante de negocio:
 
@@ -467,22 +446,7 @@ Regla importante de negocio:
   - `Confianza = 1.0`
   - `TipologiaDetectada = ExpectedType`
 
-Configuración mínima en `appsettings.json` / variables de entorno:
-
-```json
-{
-  "Classification": {
-    "DefaultProvider": "azure-document-intelligence",
-    "DefaultModelKey": "default.azure-di",
-    "AzureDocumentIntelligence": {
-      "Endpoint": "https://<tu-recurso>.cognitiveservices.azure.com/",
-      "ApiKey": "<api-key>",
-      "ApiVersion": "2024-11-30"
-    }
-  }
-}
-```
-
+Los app settings `Classification:DefaultModelKey` y `Classification:AzureDocumentIntelligence:{Endpoint, ApiKey, ApiVersion}` se retiraron en AB#101450 y ya no son configuración mínima: la conexión a DI sale de la fila de `ModeloConfigs` con alias `di` (`AI__Resources__di__Endpoint`) por identidad administrada. Solo se fija por app setting `Classification:DefaultProvider`.
 Registro de modelos de clasificación:
 
 - Archivo: `DocumentIA.Functions/config/classification/models.json`
@@ -512,7 +476,7 @@ Nota de diseño:
 La **Copy API de Content Understanding** copia el analizador **completo** —schema, configuración (extractiva/generativa, prompts, clasificación/segmentación) **y el estado entrenado ("knowledge")**— **sin reentrenar ni reconstruir nada**. El analizador destino queda **funcionalmente idéntico** al origen: mismos inputs → mismos resultados.
 
 > [!WARNING]
-> **Estado real (verificado 2026-07-17): la Copy API CROSS-RESOURCE NO funciona en este entorno.**
+> **Estado real (verificado 2026-07-17): la Copy API CROSS-RESOURCE NO funciona entre las dos cuentas de PRO** (`upe48-mm2avmdm-swedencentral` → `srbaisrv-westeurope`). **Sí funciona de PRO a DEV y PRE** (promoción con `scripts/ai/copy-cu-analyzers.ps1` por el pipeline de artefactos de IA, 2026-09-21; ver §12.2c). Lo que sigue describe el caso de PRO.
 > `grantCopyAuthorization` responde `200` pero con un cuerpo **sin el campo `source`** (stub), y el `:copy`
 > devuelve siempre `ModelNotFound / "has not granted the necessary permissions"`, incluso tras: (a) corregir
 > el casing del RG, (b) reintentos esperando propagación, y (c) **asignar `Cognitive Services User` a la
@@ -551,7 +515,7 @@ El CU **primario** está en **Sweden Central** y el **secundario** en **West Eur
 - Resource group: `SRBRGDOCSAIPROD` (ambos recursos). El casing que devuelve `az` varía (`srbrgdocsaiprod` en el origen), pero los nombres de RG son *case-insensitive*: es el mismo grupo.
 - Ambos recursos son **kind `AIServices`** (Foundry), SKU `S0`. Es un requisito: un recurso `FormRecognizer` (como `srbdiprodocai`) **no puede alojar analizadores de CU**.
 - API version: `2025-11-01`.
-- Analizador actual de nota simple: `CU_NS_1.5_0` (export en `scripts/arm/analyzer-CU_NS_1.5_0-export.json`).
+- Analizadores de nota simple en PRO (export de configuración v1.1.1): `CU_NS_1.4_3` para `nota.simple.1_4` y `CU_NS_1.5_0` para `nota.simple.1_5` (export en `scripts/arm/analyzer-CU_NS_1.5_0-export.json`); existe además `CU_NS_1.6_0_GGAA`. Comprobado en vivo el 2026-11-23: los tres están `ready` en `upe48-mm2avmdm-swedencentral`, y `CU_NS_1.5_0` y `CU_NS_1.6_0_GGAA` también en `srbaisrv-westeurope`.
 - El endpoint de CU es el de **AI Foundry** (`*.services.ai.azure.com`), **no** el que devuelve `az cognitiveservices account show --query properties.endpoint` (que es `*.cognitiveservices.azure.com`). Confírmalo con:
   ```bash
   az cognitiveservices account show -n <recurso> -g SRBRGDOCSAIPROD \
@@ -659,7 +623,7 @@ Notas de uso:
 - Los defaults del script ya apuntan a los recursos reales de [12.1](#121-recursos-reales); solo hay que sobreescribirlos para otro entorno.
 
 > [!IMPORTANT]
-> Para **replicar entre regiones (cross-resource)**, `copy-cu-analyzer.ps1` **no funciona hoy** (ver aviso al inicio de §12). Usa `recreate-cu-analyzer.ps1` ([12.2b](#122b-réplica-cross-resource-real-recreatereentrenar)). El modo **same-resource** (snapshot/rollback) de `copy-cu-analyzer.ps1` sí funciona.
+> Para **replicar entre las dos cuentas de PRO**, `copy-cu-analyzer.ps1` **no funciona hoy** (ver aviso al inicio de §12); entre entornos sí, con `scripts/ai/copy-cu-analyzers.ps1` (§12.2c). Usa `recreate-cu-analyzer.ps1` ([12.2b](#122b-réplica-cross-resource-real-recreatereentrenar)). El modo **same-resource** (snapshot/rollback) de `copy-cu-analyzer.ps1` sí funciona.
 
 ### 12.2b Réplica cross-resource real: recreate/reentrenar (recomendado)
 
@@ -694,7 +658,7 @@ Script: **`scripts/deployment/recreate-cu-analyzer.ps1`** (GET definición del o
 
 ### 12.2c Promoción entre entornos (DEV / PRE) desde `infra/ai`
 
-Para llevar los analizadores a los recursos Foundry propios de DEV y PRE, el mecanismo de promoción es la **reconstrucción** desde la definición versionada, no la Copy API: `scripts/ai/build-analyzers.ps1 -Environment dev|pre` lee `infra/ai/analyzers/<id>.json` (export de PRO), reescribe `knowledgeSources` al dataset copiado al storage del entorno (`infra/ai/datasets/<id>@<versión>.<env>.manifest.json`, uno por entorno, generado por `scripts/ai/copy-labeling-dataset.ps1`), comprueba y fija los defaults de modelo de la cuenta destino (`contentUnderstandingDefaults` en `infra/ai/deployments.<env>.json`; sin ellos el servicio responde `DefaultsNotSet`) y hace el `PUT` con sondeo hasta `ready`. Es idempotente (salta los que ya existen con la misma definición) y admite `-DryRun` y `-DumpDir` para revisar el cuerpo exacto antes de gastar. Detalle en `infra/ai/README.md`, sección "Reconstruir los analyzers en un entorno". La Copy API de Content Understanding queda como atajo no probado end-to-end (exige Cognitive Services User de la misma identidad en origen y destino; ver el spike documentado en ese README).
+Revisado 2026-11-22: el mecanismo de promoción vigente a DEV y PRE es la **Copy API** (`scripts/ai/copy-cu-analyzers.ps1`, stage `AiArtifacts` de `azure-pipelines-ai-artifacts.yml`; los manifiestos `infra/ai/cu-analyzers.dev.manifest.json`, `.pre...` y los `cu_secondary` registran los analyzers como `copied` con `definitionMatches: true`). La reconstrucción que describe este apartado quedó como alternativa descartada porque el dataset actual no reproduce PRO (`infra/ai/README.md`). Texto original de la reconstrucción: `scripts/ai/build-analyzers.ps1 -Environment dev|pre` lee `infra/ai/analyzers/<id>.json` (export de PRO), reescribe `knowledgeSources` al dataset copiado al storage del entorno (`infra/ai/datasets/<id>@<versión>.<env>.manifest.json`, uno por entorno, generado por `scripts/ai/copy-labeling-dataset.ps1`), comprueba y fija los defaults de modelo de la cuenta destino (`contentUnderstandingDefaults` en `infra/ai/deployments.<env>.json`; sin ellos el servicio responde `DefaultsNotSet`) y hace el `PUT` con sondeo hasta `ready`. Es idempotente (salta los que ya existen con la misma definición) y admite `-DryRun` y `-DumpDir` para revisar el cuerpo exacto antes de gastar. Detalle en `infra/ai/README.md`, sección "Reconstruir los analyzers en un entorno". La Copy API de Content Understanding queda como atajo no probado end-to-end (exige Cognitive Services User de la misma identidad en origen y destino; ver el spike documentado en ese README).
 
 ### 12.3 Pasos REST manuales (equivalentes al script)
 

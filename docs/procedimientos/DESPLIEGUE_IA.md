@@ -1,5 +1,7 @@
 # Despliegue de IA — guía operativa de la promoción de artefactos por entornos
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `azure-pipelines-ai-artifacts.yml`, `infra/ai/*`, `scripts/ai/lib/promotion-route.ps1` y ADR-001). La Copy API de Content Understanding funciona de PRO a DEV y PRE (manifiestos `copied` del 2026-09-21); solo falla entre las dos cuentas de PRO. Las menciones a gpt-4o-mini describen PRE y PRO; en DEV el modelo generativo es gpt-5.6-luna desde el 2026-11-20 (ADR-004), cuyo deployment no figura en `infra/ai/deployments.dev.json` (pendiente de la release). Comprobado el 2026-11-23: los checks 64 (`pre`) y 65 (`prod`) siguen activos y AB#100809 (primer run real) sigue en New.
+
 Guía de extremo a extremo para desplegar (promocionar) los artefactos de IA de
 DocumentIA entre entornos: qué se promociona, en qué sentido, con qué mecanismo,
 qué aprobaciones hacen falta, cómo se verifica y cómo se deshace. Ordena la
@@ -10,7 +12,7 @@ secuencia y remite a la fuente de cada comando; no los duplica (AB#100803).
 | [`infra/ai/README.md`](../../infra/ai/README.md) | Referencia técnica: ficheros y manifiestos, scripts paso a paso, pipeline en detalle, cutover, estados por entorno |
 | [`RELEASE_MANAGEMENT.md`](./RELEASE_MANAGEMENT.md) §2.4, §2.5 y 4.12 | Cuándo se lanza dentro de una release, contingencia manual, puertas y evidencias |
 | [ADR-001](../decisiones/ADR-001-promocion-artefactos-ia-dev-pre-pro.md) | La decisión del sentido DEV → PRE → PRO y sus consecuencias de permisos |
-| [`RUNBOOK_RELEASE_PRO_2026-09.md`](./RUNBOOK_RELEASE_PRO_2026-09.md) | Runbook de una release concreta; sus reglas fijas (p. ej. la configuración no se promociona por `Id`) |
+| [`RUNBOOK_RELEASE_PRO_2026-09.md`](./RUNBOOK_RELEASE_PRO_2026-09.md) | Runbook histórico de una release concreta (sustituido por RELEASE_MANAGEMENT); sus reglas fijas (p. ej. la configuración no se promociona por `Id`) |
 
 ## 1. Qué se promociona
 
@@ -107,7 +109,9 @@ Pendiente conocido para el primer run real PRE → PRO (estado 2026-09-30, READM
 "Estado de verificación"): crear el contenedor `documentai` en
 `srbstgprodocai`, versionar los manifiestos `.prod.` que genere la pasada, y
 tener en cuenta que ningún script copia todavía el dataset del clasificador de
-DI (`srbstgproapppdocai`).
+DI (`srbstgproapppdocai`). A 2026-11-22 los manifiestos `.prod.` siguen sin
+existir en el repo; v1.0.0 y v1.1.x declararon «Artefactos de IA: ninguno» y el
+primer run real contra PRO consta como pendiente (AB#100809); el contenedor `documentai` ya existe en `srbstgprodocai` y en `srbstgproapppdocai` (comprobado el 2026-11-23); los manifiestos `.prod.` siguen pendientes de la primera pasada.
 
 ## 6. Contingencia manual
 

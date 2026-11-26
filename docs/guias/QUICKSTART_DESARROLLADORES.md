@@ -1,5 +1,7 @@
 # Quick-Start para Nuevos Desarrolladores — DocumentIA
 
+> Última revisión: 2026-11-25 (AB#101452, retirada de `.env.example`: la plantilla local es `local.settings.template.json`). Revisión previa: 2026-11-22 (AB#101447, contraste con `DocumentIA.sln`, `docker-compose.yml`, `local.settings.template.json` y `Program.cs`).
+
 Bienvenido 👋. En los próximos **15 minutos** tendrás el proyecto corriendo localmente con tu primer clasificador ejecutado.
 
 ---
@@ -11,9 +13,9 @@ Antes de empezar, verifica que tienes instalado:
 - **Windows 11** (o Windows 10)
 - **PowerShell 5.1+** (viene con Windows)
 - **Git** → [git-scm.com](https://git-scm.com/download/win)
-- **.NET 8 SDK** → [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download/dotnet/8.0)
+- **.NET 10 SDK** (Functions y tests unitarios) y **.NET 8 SDK** (Core, Data, Plugins, Admin, AssetResolver) → [dotnet.microsoft.com/download](https://dotnet.microsoft.com/download)
 - **Visual Studio Code** (opcional pero recomendado) → [code.visualstudio.com](https://code.visualstudio.com)
-- **Python 3.9+** (solo si vas a entrenar modelos IA)
+- **Python 3.9+** (solo para los scripts de análisis de `src/ai-models/` y de `scripts/`; el entrenamiento del clasificador por embeddings vive en el repo DocumentIA.Batch)
 
 **Verifica tu instalación:**
 ```powershell
@@ -32,49 +34,53 @@ Si todos responden con versiones ✅, adelante.
 
 ```powershell
 cd C:\Users\tu-usuario\Documents
-git clone https://github.com/tu-org/documento-ia-clasificacion-mvp.git
+git clone "https://sareb.visualstudio.com/AI%20DocClassExt/_git/AI%20DocClassExt" documento-ia-clasificacion-mvp
 cd documento-ia-clasificacion-mvp
+git checkout develop   # rama base de trabajo
 ```
 
-### 1.2 Crear archivo .env local
+### 1.2 Crear `local.settings.json`
+
+> El host de Functions **no lee `.env`**: en local carga `src/backend/DocumentIA.Functions/local.settings.json` (gitignored), que se crea copiando `local.settings.template.json` de esa misma carpeta (`SecretsSource=Local`, SQL en `localhost`, alias de IA `AI__Resources__*__Endpoint` vacíos). Los nombres de abajo son los de ese fichero; el antiguo `.env.example` apunta a recursos de PRO y no debe usarse.
 
 ```powershell
-# Copiar plantilla
-Copy-Item .env.example .env
+# Copiar la plantilla local del host de Functions
+Copy-Item src/backend/DocumentIA.Functions/local.settings.template.json src/backend/DocumentIA.Functions/local.settings.json
 ```
 
-Abre `.env` en tu editor favorito y completa los valores obligatorios:
+Abre `local.settings.json` en tu editor favorito y completa los valores obligatorios de `Values` (extracto: ajusta estas claves dentro de `Values` y deja el resto de la plantilla tal cual):
 
-```env
-# Estos son los mínimos para desarrollo local:
-AZURE_SUBSCRIPTION_ID=<tu-suscripcion-uuid>
-AZURE_TENANT_ID=<tu-tenant-uuid>
+```jsonc
+{
+  "Values": {
+    // Para dev local, Azurite (emulador) es suficiente:
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "AzureStorageConnectionString": "UseDevelopmentStorage=true",
 
-# Para dev local, Azurite (emulador) es suficiente:
-AzureWebJobsStorage=UseDevelopmentStorage=true
-AzureStorageConnectionString=UseDevelopmentStorage=true
+    // SQL local (si tienes SQL Server corriendo):
+    "SqlConnectionString": "Server=localhost,1433;Database=DocumentIA;User Id=sa;Password=YourStrong@Passw0rd;TrustServerCertificate=True;",
 
-# SQL local (si tienes SQL Server corriendo):
-SqlConnectionString=Server=localhost,1433;Database=DocumentIA;User Id=sa;Password=tu_password;TrustServerCertificate=True;
-
-# Los endpoints de IA pueden dejarse vacíos por ahora (fallback a mock):
-Classification__AzureDocumentIntelligence__Endpoint=
-Extraction__AzureContentUnderstanding__Endpoint=
+    // Endpoints de IA por alias (los de DEV están en infra/ai/pipeline-variables.yml). Vacíos, cualquier modelo
+    // con ResourceAlias falla al resolverse; para probar sin IA usa provider mock en la petición.
+    "AI__Resources__openai_primary__Endpoint": "",
+    "AI__Resources__cu_primary__Endpoint": "",
+    "AI__Resources__cu_secondary__Endpoint": "",
+    "AI__Resources__di__Endpoint": ""
+  }
+}
 ```
-
-> **Nota:** Valores de Azure (subscripción, tenant, etc.) se pueden obtener con `az account show` si tienes Azure CLI.
 
 ### 1.3 Restaurar dependencias
 
 ```powershell
-# Restaurar paquetes .NET
-dotnet restore
+# Restaurar paquetes .NET (no hay solución en la raíz)
+dotnet restore src/backend/DocumentIA.sln
 
 # (Opcional) Instalar herramientas Python para tests
 pip install -r src/ai-models/requirements.txt
 ```
 
-**Esperado:** Sin errores de build. Si hay error de compatibilidad .NET, verifica que tienes .NET 8 instalado.
+**Esperado:** Sin errores de build. Si hay error de compatibilidad .NET, verifica que tienes instalados los SDK de .NET 10 y .NET 8.
 
 ---
 
@@ -85,20 +91,24 @@ documento-ia-clasificacion-mvp/
 │
 ├── src/
 │   ├── backend/
-│   │   └── DocumentIA.Functions/          ← Main API (Azure Functions)
-│   │       ├── Program.cs                 ← Startup config
-│   │       ├── IngestDocument.cs          ← Endpoint POST /api/IngestDocument
-│   │       └── DocumentIA.Functions.csproj
+│   │   ├── DocumentIA.sln                 ← Solución principal (Functions, Core, Data, Plugins, Admin, AssetResolver, tests)
+│   │   ├── DocumentIA.Functions/          ← API (Azure Functions, net10.0)
+│   │   │   ├── Program.cs                 ← Startup config
+│   │   │   ├── Triggers/IngestAPITrigger.cs ← POST /api/IngestDocument
+│   │   │   └── local.settings.template.json
+│   │   ├── DocumentIA.Core/ · DocumentIA.Data/ · DocumentIA.Plugins/ (net8.0)
+│   │   └── DocumentIA.Tests.Unit/ (net10.0) · Tests.Admin · Tests.E2E
 │   │
 │   ├── frontend/
-│   │   └── DocumentIA.Admin/              ← Admin UI (ASP.NET)
+│   │   ├── DocumentIA.Admin/              ← Admin (Blazor Server, net8.0)
+│   │   └── DocumentIA.Desktop/            ← WPF; fuera de la solución y de los pipelines
 │   │
-│   └── ai-models/
-│       └── training/                      ← Scripts de entrenamiento (Python)
+│   ├── plugins/DocumentIA.AssetResolver/  ← Servicio AssetResolver (App Service)
+│   └── ai-models/                         ← pyproject y requirements de análisis (sin carpeta training)
 │
-├── docs/                                  ← ← TU ESTÁS AQUÍ
+├── docs/                                  ← ← TU ESTÁS AQUÍ (índice: docs/INDEX.md)
 │   ├── 03_DISENO_TECNICO_DETALLADO.md    ← Lee esto después
-│   ├── GLOSSARIO_TERMINOS.md             ← Vocab del proyecto
+│   ├── referencias/GLOSSARIO_TERMINOS.md ← Vocab del proyecto
 │   └── especificaciones/
 │       └── DATA_MODELS_ER_DIAGRAM.md     ← Schema de BD
 │
@@ -154,20 +164,16 @@ Hit CTRL+C to exit...
 En una **tercera terminal**:
 
 ```powershell
-# Test simple para confirmar que funciona:
-curl http://localhost:7071/api/health
+# Test simple para confirmar que funciona (el endpoint es POST y anonimo):
+curl -X POST http://localhost:7071/api/healthcheck
 
 # O con PowerShell nativo:
-Invoke-WebRequest -Uri "http://localhost:7071/api/health" -Method GET
+Invoke-RestMethod -Method POST -Uri "http://localhost:7071/api/healthcheck"
 ```
 
-**Esperado:** Respuesta HTTP 200 con JSON:
-```json
-{
-  "status": "healthy",
-  "timestamp": "2026-06-10T10:30:45Z"
-}
-```
+**Esperado:** HTTP 200 (503 si algun componente esta `Unhealthy`) con un JSON con `ok`, `status`, `timestamp` y
+`components` (`functions`, `assetResolver`, `gdc`, `modelProviders`). Detalle en
+`docs/contratos/CONTRATO_API_HTTP.md` y `docs/manuales/MANUAL_HEALTHCHECK.md`.
 
 ✅ **¡Sistema está listo!**
 
@@ -244,6 +250,8 @@ Write-Host "Resultado: $($status.output | ConvertTo-Json)"
 
 ### 4.3 Resultado Esperado
 
+> La salida real es el `ContratoSalida` (`identificacion`, `integridad`, `datosExtraidos`, `detalleEjecucion`, `resultado`, `postproceso`), descrito campo a campo en [CONTRATO_API_HTTP.md](../contratos/CONTRATO_API_HTTP.md). El JSON siguiente es un esquema ilustrativo antiguo.
+
 ```json
 {
   "runtimeStatus": "Completed",
@@ -289,7 +297,7 @@ Write-Host "Resultado: $($status.output | ConvertTo-Json)"
 ### Application Insights (Observabilidad)
 
 Si tienes Azure accesible, verás telemetría en:
-- Azure Portal → Application Insights → sbainprodocai
+- Azure Portal → Application Insights → `srbappidevdocai` (DEV), `srbappipredocai` (PRE) o `srbappiprodocai` (PRO)
 - Busca tus requests por `correlationId` (que enviaste en trazabilidad)
 
 ### Ver Logs Locales
@@ -302,7 +310,7 @@ $storageContext = New-AzStorageContext -Local
 Get-AzStorageTable -Context $storageContext
 
 # Queries en BD local (si SQL está corriendo):
-sqlcmd -S localhost,1433 -U sa -P tu_password -Q "SELECT TOP 10 * FROM [DocumentIA].[dbo].[Executions]"
+sqlcmd -S localhost,1433 -U sa -P tu_password -Q "SELECT TOP 10 Id, EjecucionGuid, Tipologia, EstadoFinal, FechaEjecucion FROM [DocumentIA].[dbo].[DocumentoEjecuciones] ORDER BY Id DESC"
 ```
 
 ### Puertos en Uso
@@ -324,10 +332,10 @@ func start --csharp --port 7072
 
 | Error | Solución |
 |-------|----------|
-| `dotnet: command not found` | Reinstala .NET 8 SDK desde [dotnet.microsoft.com](https://dotnet.microsoft.com) |
+| `dotnet: command not found` | Reinstala los SDK de .NET 10 (Functions y tests unitarios) y .NET 8 (resto) desde [dotnet.microsoft.com](https://dotnet.microsoft.com) |
 | `Port 7071 already in use` | `Stop-Process -Name azurite -Force; Stop-Process -Name func -Force` |
 | `Azurite failing to start` | Verifica que puerto 20000-20002 estén libres |
-| `SqlConnectionString error` | Verifica SQL Server está corriendo; o deja vacío para usar InMemory DB |
+| `SqlConnectionString error` | Verifica que SQL Server está corriendo (`docker-compose.yml` levanta SQL Server 2022 + Azurite). Sin cadena solo arranca con BD en memoria si el entorno es `Development` |
 | `Base64 decoding fails` | Usa `[Convert]::ToBase64String([System.IO.File]::ReadAllBytes("tu.pdf"))` |
 
 ### Formato y warnings antes de subir
@@ -349,7 +357,7 @@ Dos reglas que el analizador no perdona: las propiedades de raíz de `TipologiaV
 Ahora que tienes el sistema corriendo, profundiza:
 
 1. **Entiende el vocabulario:**
-   - Lee [docs/GLOSSARIO_TERMINOS.md](../GLOSSARIO_TERMINOS.md) (5 min)
+   - Lee [docs/referencias/GLOSSARIO_TERMINOS.md](../referencias/GLOSSARIO_TERMINOS.md) (5 min)
    - Aprende qué es Orquestación, Actividad, Instancia, etc.
 
 2. **Aprende la arquitectura:**
@@ -389,11 +397,10 @@ R: Usa SQL Server Management Studio o Azure Data Studio conectando a `localhost,
 R: Sí, con VS Code + C# extension. Marca breakpoints y ejecuta `func start` con debugger activado.
 
 **P: ¿Dónde pido ayuda?**  
-R: Contacta al equipo en el canal #development en Teams o revisa las issues en GitHub.
+R: Contacta al equipo del proyecto; el backlog y los work items están en Azure DevOps (proyecto `AI DocClassExt`), no en GitHub.
 
 ---
 
 **¡Listo!** En 15 minutos ya tienes DocumentIA corriendo localmente. 🚀
 
 ¿Algo no funcionó? Revisa **Debugging & Tips** o pregunta al equipo.
-

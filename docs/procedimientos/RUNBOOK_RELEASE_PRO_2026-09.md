@@ -1,5 +1,7 @@
 # Runbook — Release a PRO de fiabilidad, rendimiento y almacenamiento (septiembre 2026)
 
+> Nota de revisión (2026-11-22, AB#101447): documento histórico de las releases a PRO del 3 y el 20 de septiembre de 2026, se conserva sin reescribir. Los commits `5b16b18`, `fe1533f` (tag `deploy-pro-2026-09-20`) y `16e51bc` existen en el repositorio y los scripts citados siguen en `scripts/`. El procedimiento vigente es RELEASE_MANAGEMENT.md, con el registro por versión en `docs/releases/` (v1.0.0 en PRO el 2026-10-08, v1.1.0 el 2026-10-16, v1.1.1 el 2026-10-17). Los scripts de `docs/auxiliares/temps/` de la Fase 0 son locales (carpeta no versionada) y no se pudieron comprobar.
+
 > ## Estado: dos releases ejecutadas
 >
 > **03/09/2026** — Fases 1-2 de este runbook (AB#100165, AB#100176, AB#100182, AB#100192);

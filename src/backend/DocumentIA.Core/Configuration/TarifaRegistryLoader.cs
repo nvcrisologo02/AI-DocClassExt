@@ -25,6 +25,9 @@ public class TarifaIA
     /// <summary>Euros por millon de tokens de entrada servidos desde cache.</summary>
     public decimal? EurEntradaCachePor1M { get; set; }
 
+    /// <summary>Euros por millon de tokens de entrada escritos en la cache de prompts (recargo sobre la entrada).</summary>
+    public decimal? EurEscrituraCachePor1M { get; set; }
+
     /// <summary>Euros por millon de tokens de salida.</summary>
     public decimal? EurSalidaPor1M { get; set; }
 

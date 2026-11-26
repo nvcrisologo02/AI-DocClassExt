@@ -2,12 +2,17 @@
 @implements IAsyncDisposable
 
 <div class="card mb-3"><div class="card-body">
-    <h6 class="text-muted mb-3">Evolución diaria</h6>
+    <div class="d-flex justify-content-between align-items-baseline mb-2">
+        <h6 class="sareb-grafico-titulo mb-0">@($"ejecuciones por día · {Periodo}")</h6>
+        <span class="sareb-grafico-unidad">nº</span>
+    </div>
     <div id="@_elementId" style="min-height: 260px;"></div>
+    <p class="sareb-grafico-fuente mb-0">Fuente: ejecuciones registradas en DocumentIA; horas en hora peninsular.</p>
 </div></div>
 
 @code {
     [Parameter] public List<SeriePuntoDto> Serie { get; set; } = [];
+    [Parameter] public string Periodo { get; set; } = "";
 
     private readonly string _elementId = $"gr-{Guid.NewGuid():N}";
     private bool _creado;
@@ -56,10 +61,12 @@
                     chart = new { type = "area", height = 260, toolbar = new { show = false }, animations = new { enabled = false } },
                     stroke = new { curve = "smooth", width = 2 },
                     dataLabels = new { enabled = false },
-                    colors = new[] { "#0d6efd", "#dc3545" },
-                    fill = new { type = "gradient", gradient = new { opacityFrom = 0.3, opacityTo = 0.05 } },
+                    // Guia de estilo 6.6: base neutra y un color intenso para destacar.
+                    colors = new[] { SarebPaleta.Neutro, SarebPaleta.Error },
+                    fill = new { type = "solid", opacity = 0.15 },
+                    grid = new { borderColor = SarebPaleta.GrisClaro, strokeDashArray = 2 },
                     xaxis = new { categories = categorias },
-                    legend = new { position = "top", horizontalAlign = "right" },
+                    legend = new { position = "bottom", horizontalAlign = "left" },
                     series
                 };
                 _creado = await JS.InvokeAsync<bool>("documentIaCharts.crear", _elementId, opciones);

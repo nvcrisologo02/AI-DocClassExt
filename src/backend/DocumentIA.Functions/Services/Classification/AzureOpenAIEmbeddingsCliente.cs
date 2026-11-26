@@ -6,6 +6,7 @@ using Azure;
 using Azure.AI.OpenAI;
 using Azure.Identity;
 using DocumentIA.Core.Configuration;
+using Microsoft.Extensions.Logging;
 using OpenAI.Embeddings;
 
 namespace DocumentIA.Functions.Services.Classification;
@@ -46,6 +47,12 @@ public sealed class AzureOpenAIEmbeddingsCliente : IEmbeddingsCliente
 public sealed class AzureOpenAIEmbeddingsClienteFactory : IEmbeddingsClienteFactory
 {
     private readonly ConcurrentDictionary<string, IEmbeddingsCliente> _clientes = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ILoggerFactory _loggerFactory;
+
+    public AzureOpenAIEmbeddingsClienteFactory(ILoggerFactory loggerFactory)
+    {
+        _loggerFactory = loggerFactory;
+    }
 
     public IEmbeddingsCliente Crear(EmbeddingsClasificadorConfig config)
     {
@@ -61,7 +68,7 @@ public sealed class AzureOpenAIEmbeddingsClienteFactory : IEmbeddingsClienteFact
     private static bool UsaIdentidadGestionada(EmbeddingsClasificadorConfig config) =>
         string.Equals(config.AuthMode, "DefaultAzureCredential", StringComparison.OrdinalIgnoreCase);
 
-    private static IEmbeddingsCliente Construir(EmbeddingsClasificadorConfig config)
+    private IEmbeddingsCliente Construir(EmbeddingsClasificadorConfig config)
     {
         if (string.IsNullOrWhiteSpace(config.Endpoint) || string.IsNullOrWhiteSpace(config.DeploymentName))
         {
@@ -77,6 +84,9 @@ public sealed class AzureOpenAIEmbeddingsClienteFactory : IEmbeddingsClienteFact
             ? new AzureOpenAIClient(new Uri(config.Endpoint), new DefaultAzureCredential(), opciones)
             : new AzureOpenAIClient(new Uri(config.Endpoint), new AzureKeyCredential(config.ApiKey), opciones);
 
-        return new AzureOpenAIEmbeddingsCliente(azureClient.GetEmbeddingClient(config.DeploymentName), config.DeploymentName);
+        // El decorador reintenta con la mitad del texto cuando el servicio rechaza la entrada por tokens (AB#101245).
+        return new EmbeddingsClienteConRecorte(
+            new AzureOpenAIEmbeddingsCliente(azureClient.GetEmbeddingClient(config.DeploymentName), config.DeploymentName),
+            _loggerFactory.CreateLogger<EmbeddingsClienteConRecorte>());
     }
 }

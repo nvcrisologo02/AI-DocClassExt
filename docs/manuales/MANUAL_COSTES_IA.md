@@ -1,5 +1,7 @@
 # Manual de Costes de IA — DocumentIA
 
+> Última revisión: 2026-11-22 (AB#101447, contraste con `CalculadoraCosteIA`, `TarifaRegistryLoader`, `CostesIA.cs`, los scripts de `scripts/migrations/costes-ia/` y `gpt56-luna/` y la página `/costes` del Admin). Los ejemplos con `gpt-4o-mini` describen PRE y PRO; en DEV el deployment generativo es `gpt-5.6-luna` desde el 2026-11-20 (ADR-004).
+
 ## 1. Propósito
 
 Cada ejecución registra lo que ha consumido en servicios de inteligencia artificial, desglosado por llamada y agregado en un total, expresado en euros y en tokens. El dato se persiste en base de datos y se puede consultar desde la aplicación de administración.
@@ -12,12 +14,13 @@ Responde a preguntas que antes solo se podían contestar a posteriori y de forma
 
 ## 2. Qué se mide
 
-El pipeline llama a un servicio de IA en siete puntos. Todos quedan registrados.
+El pipeline llama a un servicio de IA en ocho puntos. Todos quedan registrados.
 
 | Punto | Servicio | Unidad que se factura |
 |---|---|---|
 | Clasificación con Document Intelligence | Clasificador a medida | Páginas |
-| Clasificación generativa, fases 1 y 2 | Azure OpenAI | Tokens |
+| Clasificador por embeddings (ADR-002; operación `classification.embeddings`, actividad Clasificar) | Azure OpenAI (`text-embedding-3-large`) | Tokens de entrada |
+| Clasificación generativa, fases 1 y 2 | Azure OpenAI | Tokens (entrada, entrada en caché, escritura en caché con GPT-5.6, salida) |
 | Clasificación restringida y rescate | Azure OpenAI | Tokens |
 | Layout a Markdown, en sus cinco puntos de llamada | Document Intelligence | Páginas |
 | Extracción con Content Understanding | Content Understanding | Páginas, contextualización y tokens del modelo generativo interno |
@@ -58,6 +61,7 @@ El bloque se calcula y **se persiste siempre**, con independencia del parámetro
         "modelo": "gpt-4o-mini",
         "tokensEntrada": 12480,
         "tokensEntradaCache": 7200,
+        "tokensEscrituraCache": 0,
         "tokensSalida": 310,
         "costeEur": 0.004312,
         "tarifaAplicada": "gpt-4o-mini@2026-04-01",
@@ -87,7 +91,7 @@ Los campos están documentados uno a uno en la sección 6.bis del [contrato HTTP
 
 ### 3.3 Consultarlos en Admin
 
-La sección está en la ruta `/costes`. **No aparece en el menú**, se llega escribiendo la dirección.
+La sección está en la ruta `/costes`. Se abre desde la entrada **Cuadro de costes** del menú.
 
 Usa los mismos filtros que el Monitor: rango de fechas, tipología, estado, flujo, búsqueda por documento o identificador, y solicitante. Muestra cuatro bloques:
 
@@ -100,9 +104,9 @@ Un interruptor decide si los importes incluyen las ejecuciones estimadas. Por de
 
 #### Coste de un mes natural o de un periodo cerrado
 
-El desplegable **Rango** ofrece ventanas relativas (24 horas, 7, 30 o 90 días hacia atrás desde ahora) y la opción **Personalizado**. Al elegirla aparecen dos fechas, *Desde* y *Hasta*, precargadas con el día 1 del mes en curso y hoy: para un mes natural basta con ajustar el mes. Las dos fechas son inclusivas y se interpretan en hora peninsular, así que "del 1 al 31 de agosto" cubre desde las 00:00 del día 1 hasta las 23:59:59 del día 31. Cabecera, desglose, gráfico y listado responden al mismo periodo.
+El desplegable **Rango** ofrece ventanas relativas (24 horas, **Mes en curso**, 7, 30 o 90 días) y la opción **Personalizado**. «Mes en curso» va desde las 00:00 del día 1 del mes, en hora peninsular, hasta ahora, y se actualiza sola al cambiar de mes; la página arranca con ella seleccionada (AB#101128). Al elegir **Personalizado** aparecen dos fechas, *Desde* y *Hasta*, precargadas con el día 1 del mes en curso y hoy: para un mes natural basta con ajustar el mes. Las dos fechas son inclusivas y se interpretan en hora peninsular, así que "del 1 al 31 de agosto" cubre desde las 00:00 del día 1 hasta las 23:59:59 del día 31. Cabecera, desglose, gráfico y listado responden al mismo periodo.
 
-Mientras falte una de las dos fechas sigue vigente la ventana relativa anterior. Volver a cualquier ventana relativa borra las fechas.
+Mientras falte una de las dos fechas sigue vigente la ventana relativa anterior (en esta página, normalmente «Mes en curso»). Volver a cualquier ventana relativa borra las fechas.
 
 Una salvedad: los puntos de la evolución diaria se agrupan por día UTC, no peninsular. Los totales del periodo son exactos; un documento procesado a las 23:30 hora española de un día puede aparecer en la barra del día siguiente.
 
@@ -122,7 +126,11 @@ No se resuelve por la fila de configuración que lo invocó. La tabla de modelos
 
 La API de Azure OpenAI devuelve el total de tokens de entrada, y **los cacheados vienen incluidos dentro de ese total**. El sistema resta la parte cacheada y le aplica su precio reducido.
 
-Sumarlos contaría dos veces la parte servida desde caché, justo donde el sistema tiene una tasa de acierto alta por el tamaño del prompt fijo de clasificación.
+Sumarlos contaría dos veces la parte servida desde caché. La tasa de acierto depende del modelo y de la configuración de caché: con gpt-5.6-luna en DEV, la fase 1 de clasificación llegó al 74% de la entrada en caché tras fijar el breakpoint en el tramo estable del prompt (AB#101428); con `implicit` apenas se recuperaba.
+
+### 4.2b La escritura en caché es un recargo aparte
+
+Con GPT-5.6 y caché explícita (`promptCache` en la fila del modelo), el servicio cobra la **escritura** de los prefijos marcados una vez por TTL. Ese consumo llega en `tokensEscrituraCache`, **no se resta** de `tokensEntrada` y se tarifa con `EurEscrituraCachePor1M`. Si la línea del catálogo no tiene ese precio, el consumo queda sin tarificar y `tarifaAplicada` lleva el sufijo `|sin-precio-escritura`.
 
 ### 4.3 Dónde ocurre el cálculo
 
@@ -162,6 +170,11 @@ Una única fila en `ModeloConfigs` con `Tipo = 4` (Tarifas) y clave `tarifas.ia`
   "Tarifas": [
     { "Modelo": "gpt-4o-mini", "VigenteDesde": "2026-04-01",
       "EurEntradaPor1M": 0.416, "EurEntradaCachePor1M": 0.104, "EurSalidaPor1M": 1.662 },
+    { "Modelo": "gpt-5.6-luna", "VigenteDesde": "2026-11-17",
+      "EurEntradaPor1M": 0.1975, "EurEntradaCachePor1M": 0.0197, "EurSalidaPor1M": 1.185,
+      "EurEscrituraCachePor1M": 0.2469 },
+    { "Modelo": "text-embedding-3-large-030358", "VigenteDesde": "2026-10-01",
+      "EurEntradaPor1M": 0.112 },
     { "Modelo": "prebuilt-layout", "VigenteDesde": "2026-04-01",
       "EurPorPagina": 0.008586639 }
   ]
@@ -172,11 +185,14 @@ Una única fila en `ModeloConfigs` con `Tipo = 4` (Tarifas) y clave `tarifas.ia`
 |---|---|
 | `EurEntradaPor1M` | tokens de entrada a precio pleno |
 | `EurEntradaCachePor1M` | tokens de entrada servidos desde caché |
+| `EurEscrituraCachePor1M` | tokens escritos en la caché de prompt (GPT-5.6 con caché explícita); recargo aparte de la entrada |
 | `EurSalidaPor1M` | tokens de salida, razonamiento incluido |
 | `EurContextualizacionPor1M` | contextualización de Content Understanding |
 | `EurPorPagina` | servicios que facturan por página |
 
 Todos son opcionales; se aplica solo lo informado.
+
+Líneas del catálogo por entorno (2026-11-22): el seed `scripts/migrations/costes-ia/01-seed-tarifas-ia.sql` carga gpt-4o-mini, gpt-4.1-mini, gpt-4.1, gpt-5-mini, text-embedding-3-large (los dos deployments de PRO), prebuilt-layout, los analizadores DocumentAICC y los medidores de Content Understanding; `02-tarifas-cera16v2-gpt41-cached.sql` añade CERA16_v2 y gpt-4.1 cacheado. La línea `gpt-5.6-luna` (precio de lista Data Zone de West Europe, Retail Prices API del 2026-11-17: 0,1975 / 0,0197 / 1,185 € por millón y 0,2469 € por millón escrito en caché) solo existe en DEV (`scripts/migrations/gpt56-luna/02-...` y `05-...`); PRE y PRO la reciben con la release del cutover (ADR-004). La tarifa se busca por el nombre del deployment: en PRE y PRO `gpt-4o-mini` sirve el modelo gpt-4.1-mini y se tarifa con la línea `gpt-4o-mini`.
 
 ### 5.3 Regla de mantenimiento
 

@@ -6,34 +6,9 @@
 
 @* Seccion de costes de IA (AB#100239). Evolucion del Monitor v2: mismos filtros,
    mismo listado, mismo detalle y mismo modal, con la cabecera y el desglose
-   orientados al dinero. De momento no esta enlazada en el menu: se llega por la
-   ruta directamente. Solo servicios de IA; nada de almacenamiento ni computo. *@
+   orientados al dinero. Solo servicios de IA; nada de almacenamiento ni computo. *@
 
 <PageTitle>Costes de IA</PageTitle>
-
-<style>
-    .mv2 { --mv2-border: rgba(11,11,11,.10); --mv2-ink-2:#52514e; --mv2-muted:#898781; }
-    .mv2 .card, .mv2 .mv2-card {
-        border: 1px solid var(--mv2-border);
-        border-radius: 12px;
-        box-shadow: none !important;
-        background: #fff;
-    }
-    .mv2 .card-header {
-        background: transparent;
-        border-bottom: 1px solid var(--mv2-border);
-        padding-top: .6rem; padding-bottom: .6rem;
-    }
-    .mv2 .card-header .fw-semibold { font-size: .875rem; }
-    .mv2 h1 { letter-spacing: -.01em; }
-    .mv2-hero { font-size: 2.9rem; font-weight: 600; line-height: 1.05; letter-spacing: -.02em; }
-    .mv2-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 1.1rem; }
-    .mv2-kpi-label { font-size: .75rem; color: var(--mv2-muted); }
-    .mv2-kpi-value { font-size: 1.5rem; font-weight: 600; letter-spacing: -.01em; line-height: 1.2; }
-    .mv2-kpi-foot { font-size: .72rem; color: var(--mv2-ink-2); }
-    .mv2 .table > :not(caption) > * > * { padding: .5rem .6rem; }
-    .mv2 .table-light th { background: #f7f7f5; color: var(--mv2-muted); font-weight: 500; }
-</style>
 
 <div class="mv2">
 
@@ -75,7 +50,7 @@ else
 
     <CostesDesglose Costes="_costes" />
 
-    <CostesGrafico Serie="_costes?.Serie ?? []" />
+    <CostesGrafico Serie="_costes?.Serie ?? []" Periodo="@_filtro.DescripcionPeriodo()" />
 }
 
 <MonitorTabla Pagina="_pagina" Cargando="_cargando"
@@ -100,7 +75,7 @@ else
 @code {
     [Parameter] public string? Guid { get; set; }
 
-    private MonitorFiltroDto _filtro = new();
+    private MonitorFiltroDto _filtro = new() { MesEnCurso = true };
     private PagedResultDto<EjecucionResumenDto>? _pagina;
     private CostesResumenDto? _costes;
     private IReadOnlyList<string> _tipologias = [];

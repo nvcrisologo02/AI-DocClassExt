@@ -2,10 +2,31 @@
 
 <PageTitle>DocumentIA Admin</PageTitle>
 
-<h1>DocumentIA Admin</h1>
+<h1 class="sareb-inicio-titulo">DocumentIA</h1>
+<p class="text-muted">Administración de la clasificación documental: configuración, seguimiento y costes.</p>
 
-<p>Gestiona tipologias y modelos sin reiniciar las Functions.</p>
-<p>
-	<a class="btn btn-primary" href="/tipologias">Ir a Tipologias</a>
-	<a class="btn btn-outline-secondary ms-2" href="/modelos">Ir a Modelos</a>
-</p>
+<div class="row g-3 mt-2">
+    @foreach (var acceso in Accesos)
+    {
+        <div class="col-12 col-md-6 col-xl-3">
+            <a class="sareb-acceso card h-100 text-decoration-none" href="@acceso.Href">
+                <div class="card-body">
+                    <h2 class="sareb-acceso-titulo h6">@acceso.Titulo</h2>
+                    <p class="small text-muted mb-0">@acceso.Descripcion</p>
+                </div>
+            </a>
+        </div>
+    }
+</div>
+
+@code {
+    private sealed record Acceso(string Href, string Titulo, string Descripcion);
+
+    private static readonly Acceso[] Accesos =
+    [
+        new("tipologias", "Tipologías", "Alta y edición de tipologías y su configuración."),
+        new("monitor-v2", "Monitor", "Ejecuciones, calidad de la clasificación y salud del sistema."),
+        new("costes", "Cuadro de costes", "Coste de IA por periodo, actividad, tipología y modelo."),
+        new("configuracion-consulta", "Configuración", "Consulta de la configuración activa del entorno.")
+    ];
+}

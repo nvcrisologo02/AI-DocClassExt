@@ -178,4 +178,31 @@ public class CostesPaginaTests : TestContext
             cut.FindComponents<CostesDesglose>().Should().BeEmpty();
         });
     }
+
+    // AB#101128: el cuadro de costes arranca en el mes en curso.
+    [Fact]
+    public void ArrancaConMesEnCurso()
+    {
+        var desdes = new List<DateTime>();
+        RegistrarBackend(req =>
+        {
+            if (req.RequestUri!.AbsolutePath.EndsWith("/costes"))
+            {
+                var parte = req.RequestUri.Query.TrimStart('?').Split('&').Single(p => p.StartsWith("desde="));
+                desdes.Add(DateTime.Parse(Uri.UnescapeDataString(parte[6..]), null,
+                    System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal));
+            }
+            return Responder(req);
+        });
+
+        var cut = RenderComponent<CostesPagina>();
+
+        var hoy = DateOnly.FromDateTime(HoraEspana.Desde(DateTime.UtcNow));
+        cut.WaitForAssertion(() =>
+        {
+            cut.FindComponent<MonitorFiltros>().Instance.Filtro.MesEnCurso.Should().BeTrue();
+            desdes.Should().NotBeEmpty();
+            desdes[0].Should().Be(HoraEspana.InicioDelDiaUtc(new DateOnly(hoy.Year, hoy.Month, 1)));
+        });
+    }
 }

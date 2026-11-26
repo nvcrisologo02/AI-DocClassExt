@@ -27,6 +27,85 @@ public class MonitorFiltrosTests : TestContext
         textos.Should().Contain("Personalizado");
     }
 
+    // Mes en curso (AB#101128).
+    [Fact]
+    public void Rango_OfreceMesEnCursoTrasLasUltimas24Horas()
+    {
+        var cut = Render(new MonitorFiltroDto(), []);
+
+        var valores = SelectRango(cut).QuerySelectorAll("option").Select(o => o.GetAttribute("value")).ToList();
+
+        valores.Should().ContainInOrder("1", "mes", "7");
+        SelectRango(cut).QuerySelectorAll("option").Single(o => o.GetAttribute("value") == "mes")
+            .TextContent.Trim().Should().Be("Mes en curso");
+    }
+
+    [Fact]
+    public void ElegirMesEnCurso_EmiteMesEnCursoSinFechas()
+    {
+        var emitidos = new List<MonitorFiltroDto>();
+        var cut = Render(new MonitorFiltroDto { Desde = new DateOnly(2026, 8, 1), Hasta = new DateOnly(2026, 8, 31) }, emitidos);
+
+        SelectRango(cut).Change("mes");
+
+        emitidos.Should().ContainSingle();
+        emitidos[0].MesEnCurso.Should().BeTrue();
+        emitidos[0].Desde.Should().BeNull();
+        emitidos[0].Hasta.Should().BeNull();
+    }
+
+    [Fact]
+    public void ElegirUnPresetNumerico_DesactivaMesEnCurso()
+    {
+        var emitidos = new List<MonitorFiltroDto>();
+        var cut = Render(new MonitorFiltroDto { MesEnCurso = true }, emitidos);
+
+        SelectRango(cut).Change("30");
+
+        emitidos.Should().ContainSingle();
+        emitidos[0].MesEnCurso.Should().BeFalse();
+        emitidos[0].RangoDias.Should().Be(30);
+    }
+
+    // Un rango fijo completo manda sobre el mes en curso, asi que no hace falta
+    // apagarlo: queda como ventana de respaldo mientras falte una fecha.
+    [Fact]
+    public void ElegirPersonalizado_ConservaMesEnCursoComoVentanaDeRespaldo()
+    {
+        var emitidos = new List<MonitorFiltroDto>();
+        var cut = Render(new MonitorFiltroDto { MesEnCurso = true }, emitidos);
+
+        SelectRango(cut).Change("custom");
+
+        emitidos.Should().ContainSingle();
+        emitidos[0].MesEnCurso.Should().BeTrue();
+        emitidos[0].EsRangoFijo.Should().BeTrue();
+    }
+
+    // Costes arranca en mes en curso; al pasar a Personalizado y borrar una fecha
+    // la consulta caia a los 7 dias por defecto, que no era la ventana anterior.
+    [Fact]
+    public void PersonalizadoAMedias_SigueConsultandoElMesEnCurso()
+    {
+        var emitidos = new List<MonitorFiltroDto>();
+        var cut = Render(new MonitorFiltroDto { MesEnCurso = true }, emitidos);
+
+        SelectRango(cut).Change("custom");
+        cut.SetParametersAndRender(p => p.Add(c => c.Filtro, emitidos.Last()));
+        cut.FindAll("input[type=date]")[1].Change("");
+
+        emitidos.Last().DescripcionPeriodo().Should().Be("mes en curso");
+    }
+
+    [Fact]
+    public void ConMesEnCurso_SeleccionaMesYNoMuestraFechas()
+    {
+        var cut = Render(new MonitorFiltroDto { MesEnCurso = true }, []);
+
+        SelectRango(cut).GetAttribute("value").Should().Be("mes");
+        cut.FindAll("input[type=date]").Should().BeEmpty();
+    }
+
     [Fact]
     public void ConRangoRelativo_NoMuestraLasFechas()
     {

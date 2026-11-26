@@ -22,6 +22,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
     private readonly ExtractionModelRegistryLoader _extractionModelRegistryLoader;
     private readonly PromptModelRegistryLoader _promptModelRegistryLoader;
     private readonly ExtractionRoutingSettings _routingSettings;
+    private readonly PromptDefaultsSettings _promptDefaults;
     private readonly ILogger<ConfigurableExtraerDataProvider> _logger;
 
     public ConfigurableExtraerDataProvider(
@@ -35,6 +36,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         ExtractionModelRegistryLoader extractionModelRegistryLoader,
         PromptModelRegistryLoader promptModelRegistryLoader,
         IOptions<ExtractionRoutingSettings> routingSettings,
+        IOptions<PromptDefaultsSettings> promptDefaults,
         ILogger<ConfigurableExtraerDataProvider> logger)
     {
         _tipologiaConfigLoader = tipologiaConfigLoader;
@@ -47,6 +49,7 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         _extractionModelRegistryLoader = extractionModelRegistryLoader;
         _promptModelRegistryLoader = promptModelRegistryLoader;
         _routingSettings = routingSettings.Value;
+        _promptDefaults = promptDefaults.Value;
         _logger = logger;
     }
 
@@ -234,6 +237,16 @@ public class ConfigurableExtraerDataProvider : IExtraerDataProvider
         var promptConfig = HasPromptDefinition(config.PromptConfig)
             ? OpenAIPromptDataProvider.ResolvePromptConfig(config.PromptConfig, null)
             : null;
+
+        // Solo la clave del modelo se hereda de PromptDefaults; el resto de campos queda como lo fija la tipología.
+        // Sin clave efectiva no se lanza aquí: DebeUsarModoCombinado la trata como no combinable.
+        if (promptConfig is not null &&
+            (!string.IsNullOrWhiteSpace(promptConfig.ModelKey) || !string.IsNullOrWhiteSpace(_promptDefaults.ModelKey)))
+        {
+            // Copia: ResolvePromptConfig devuelve la instancia de la tipología (en caché) cuando no hay defaults.
+            promptConfig = promptConfig.WithModelKey(
+                PromptModelKeyResolver.Resolve(null, promptConfig.ModelKey, _promptDefaults.ModelKey));
+        }
 
         // Optimización: si prompt está habilitado y usa el mismo modelo/deployment que el fallback,
         // se ejecuta extracción + prompt en una única llamada LLM.

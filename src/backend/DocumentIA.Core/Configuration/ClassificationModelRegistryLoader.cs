@@ -165,4 +165,8 @@ public class ClassificationModelConfig
     public double FallbackThreshold { get; set; } = 0.6;
     public double Temperature { get; set; } = 0.0;
     public int MaxTokens { get; set; } = 150;
+    /// <summary>Esfuerzo de razonamiento (none, minimal, low, medium, high). Nulo o vacío significa no enviarlo al modelo.</summary>
+    public string? ReasoningEffort { get; set; }
+    /// <summary>Caché de prompt del modelo. Solo para GPT-5.6 y posteriores: los modelos anteriores rechazan los campos con 400. Nulo significa no usarla.</summary>
+    public PromptCacheConfig? PromptCache { get; set; }
 }

@@ -1,16 +1,18 @@
 ﻿# 3. Diseno Tecnico Detallado — DocumentIA
 
-> Ultima actualizacion: 2026-09-14  
+> Última revisión: 2026-11-25 (AB#101450, retirada de los app settings heredados sin efecto; AB#101553, retirada de la mención a la omisión TLS en `Development`). Revisiones previas: 2026-11-22 (AB#101447, contraste con el orquestador, los proveedores, el contrato y la Admin API)  
+> Actualización anterior: 2026-09-14  
 > Proyecto: AI DocClassExt — SAREB  
+> **Modelo generativo por entorno:** El deployment generativo depende del entorno: DEV usa `gpt-5.6-luna` desde el 2026-11-20 (ADR-004) y PRE y PRO siguen con el deployment `gpt-4o-mini` (modelo gpt-4.1-mini) hasta la siguiente release; el pipeline fija `PromptDefaults__ModelKey` por entorno y las filas `UseAsFallback` de `ModeloConfigs` deciden el de clasificación y extracción. Las menciones a GPT-4o-mini de este documento describen PRE y PRO.  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. 
-> - Campo `Tipologias.PromptGPT` deprecated (see [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md)).
-> - **Fase 3.1 (2026-06-05):** 4 columnas legacy deprecated & dropped. See [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md).
+> - Campo `Tipologias.PromptGPT` retirado en v1.4 (la guía de migración `12_MIGRACION_PROMPTGPT_V1_4.md` es material histórico de `docs/auxiliares/`, carpeta no versionada).
+> - **Fase 3.1 (2026-06-05):** 4 columnas legacy retiradas; `ConfiguracionJson` es la única fuente de verdad (registro histórico `20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md`, no versionado).
 
 ---
 
 ## 3.1 Diagrama de Flujo del Pipeline
 
-El pipeline de procesamiento esta orquestado por `DocumentProcessOrchestrator` (Durable Functions). Ejecuta 14 actividades en secuencia con multiples puntos de decision.
+El pipeline de procesamiento esta orquestado por `DocumentProcessOrchestrator` (Durable Functions). Invoca 21 activities (22 declaradas: `ApplyPdfPageLimitActivity` existe pero no se llama; el recorte lo hace `PrepararDocumentoClasificacionActivity`) con multiples puntos de decision y salidas tempranas. El diagrama siguiente es el camino simplificado; el preflujo GDC (MD5, metadatos, descarga), `CalcularClaveIntencionActivity`, `PrepararDocumentoClasificacionActivity`, `ClasificarEmbeddingsActivity` (ADR-002, sombra en DEV), `PersistirMarkdownActivity` y la salida por limite de paginas (`PAGINAS_EXCEDIDAS`) se describen en el texto y en 3.1.1.
 
 ```mermaid
 flowchart TD
@@ -23,10 +25,8 @@ flowchart TD
     CACHE --> FIN_OK([Completed])
     SEL -->|"No: sin historica<br/>compatible<br/>(motivoNoReutilizacion)"| LAST
 
-    DUP -->|"No duplicado /<br/>forceReprocess"| LAST{"skipDuplicateCheck?"}
-    LAST -->|"Si"| BLOB
-    LAST -->|"No"| EJEC["ObtenerUltimaEjecucionActivity<br/>(historico)"]
-    EJEC --> BLOB
+    DUP -->|"No duplicado /<br/>forceReprocess"| LAST([continua])
+    LAST --> BLOB
 
     BLOB["SubirBlobActivity<br/>Azure Blob Storage"] --> CLASIF{"expectedType<br/>informado?"}
 
@@ -35,12 +35,11 @@ flowchart TD
 
     SKIP_CLASIF --> RESOL
     CLASIF_ACT --> CHK_CONF{"Confianza <br/>< umbral?"}
-    CHK_CONF -->|"Si"| BAJA["Estado =<br/>BAJA_CONFIANZA_CLASIFICACION"]
-    BAJA --> PERSIST_ERR
+    CHK_CONF -->|"Si"| BAJA["Estado =<br/>BAJA_CONFIANZA_CLASIFICACION<br/>(catalogo: se devuelve sin persistir;<br/>tipologia virtual: se persiste)"]
     CHK_CONF -->|"No"| RESOL
 
     RESOL["ResolverTipologiaActivity<br/>familia@version → config"] --> CHK_TIP{"Tipologia<br/>resuelta?"}
-    CHK_TIP -->|"No"| ERR_TIP["Estado = ERROR<br/>No se identifico tipologia"]
+    CHK_TIP -->|"No"| ERR_TIP["Estado = NO_CLASIFICADO<br/>tipologia no resuelta (AB#100178)"]
     ERR_TIP --> PERSIST_ERR
     CHK_TIP -->|"Si"| EXTRACT
 
@@ -50,7 +49,7 @@ flowchart TD
     LAYOUT --> CHK_PROMPT
 
     CHK_PROMPT{"Prompt<br/>habilitado?"}
-    CHK_PROMPT -->|"Si"| PROMPT["PromptActivity<br/>GPT-4o-mini"]
+    CHK_PROMPT -->|"Si"| PROMPT["PromptActivity<br/>modelo de PromptDefaults:ModelKey"]
     CHK_PROMPT -->|"No"| VALID
     PROMPT --> VALID
 
@@ -78,25 +77,25 @@ flowchart TD
     style FIN_OK fill:#9f9,stroke:#333
 ```
 
-### Detalle de las 14 Actividades
+### Detalle de las actividades del camino principal
 
 | # | Actividad | Clase | Input principal | Output principal | Notas |
 |---|-----------|-------|----------------|-----------------|-------|
 | 1 | Normalizar | `NormalizarActivity` | byte[] PDF | SHA256, MD5, CRC32, Paginas | Calculo de hashes e info PDF |
-| 2 | VerificarDuplicado | `VerificarDuplicadoActivity` | SHA256 | Resultado previo o null | Busca en BD por SHA256 (indice unico) |
-| 3 | ObtenerUltimaEjecucion | `ObtenerUltimaEjecucionActivity` | SHA256 | Ultima ejecucion o null | Solo si no es duplicado y no skipDuplicateCheck |
+| 2 | VerificarDuplicado | `VerificarDuplicadoActivity` | SHA256 | `bool` (existe en BD) | Busca en BD por SHA256 (indice unico). Con duplicado y sin `forceReprocess`, `ObtenerUltimaEjecucionDuplicadoActivity` decide la reutilizacion por clave de intencion (ADR-003) |
+| 3 | PrepararDocumentoClasificacion | `PrepararDocumentoClasificacionActivity` | documento + `ClassificationPreparation` | documento recortado para clasificar + metricas | Solo con `ClassificationPreparation.Enabled`; recorte por paginas solo en PDF. Antes de clasificar, `ClasificarEmbeddingsActivity` (ADR-002) calcula el embedding e infiere en sombra (DEV) u off (PRE y PRO) |
 | 4 | SubirBlob | `SubirBlobActivity` | byte[] + nombre | URL blob | Container `documents/` |
 | 5 | Clasificar | `ClasificarActivity` | byte[] PDF | TipologiaDetectada, Confianza | Pipeline configurable por flujo (resuelto desde `Classification.Flows` + `Classification.DefaultFlow`), secuencial hasta satisfactorio y fallback global final. PostConfigure en Program.cs carga diccionario Flows desde configuracion. |
 | 6 | ResolverTipologia | `ResolverTipologiaActivity` | codigo tipologia | TipologiaConfig completa | Resuelve familia@version → config |
 | 7 | Extraer | `ExtraerActivity` | byte[] + tipologia config | DatosExtraidos (Dictionary) | CU/DI/GPT segun config |
 | 8 | ObtenerMarkdown | `ObtenerMarkdownActivity` | `NecesidadMarkdown` + `ContextoMarkdown` | `ResultadoMarkdown` (markdown, paginas, cobertura, consumos) | Delega en `MarkdownResolver`, que decide la fuente (cache, BD, Layout) segun lo que declare el paso llamante. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3. **Se omite** si `instrucciones.classification.markdown` viene informado (D4): en ese caso el markdown aportado se inyecta directamente en `datosNormalizados["Markdown"]` y se persiste via `PersistirMarkdownActivity`. |
-| 9 | Prompt | `PromptActivity` | datos + markdown + prompt config | Datos prompt enriquecidos | GPT-4o-mini con prompt libre (opcional) |
+| 9 | Prompt | `PromptActivity` | datos + markdown + prompt config | Datos prompt enriquecidos | Prompt libre o resumen (opcional) con el modelo que resuelve `PromptModelKeyResolver` (peticion → tipologia → `PromptDefaults:ModelKey` del entorno) |
 | 10 | Validar | `ValidarActivity` | DatosExtraidos + reglas JSON | ValidationReport | 11 tipos de validador |
 | 11 | ObtenerActivo | `ObtenerActivoActivity` | DatosExtraidos + config AssetResolver | ResultadoAssetResolver | Busca activo por IDUFIR/RefCatastral/Direccion en DM_POSICION_AAII_TB. Criterios configurables con AND/OR. Ver [ESPECIFICACION_PLUGIN_ASSETRESOLVER.md](especificaciones/ESPECIFICACION_PLUGIN_ASSETRESOLVER.md). |
 | 12 | Integrar | `IntegrarActivity` | datos + tipologia + plugins config | DatosFinales + plugins results | Ejecucion por prioridad |
 | 13 | SubirGDC | `SubirGDCActivity` | documento + metadata GDC | ObjectId GDC | SOAP (`searchEntities` + `create`) con timeout 120s |
 | 14 | Persistir | `PersistirActivity` | `PersistirInput` (ContratoSalida completo + `SubmittedBy` de `trazabilidad`; opcionalmente `Reutilizacion` = `{ EjecucionOriginalGuid, Sha256, Completada }`) | void | BD + auditoria. `PersistirInput` es un envoltorio interno del orquestador (no altera los contratos de entrada/salida): permite guardar el solicitante en `DocumentoEjecucionEntity.SubmittedBy`. Con `Reutilizacion` informado toma la **rama de reutilizacion** (AB#100258): inserta solo una fila de `DocumentoEjecuciones` marcada y vinculada a la original, mas auditoria; no toca `Documentos`, resultados, plugins ni validaciones. Con `Completada = true` (AB#100930: la reutilizacion ejecuto un prompt o resumen) la fila lleva ademas el contrato devuelto y el coste de ese paso. En toda fila persiste `ClaveIntencion`, `ClaveIntencionJson` y `MotivoReutilizacion`. |
-| — | CalcularClaveIntencion | `CalcularClaveIntencionActivity` | `Instrucciones` de la peticion | `ClaveIntencion` (clave de 32 hex + componentes) | Previa a todas las demas (no entra en el orden 1-14). Calcula la clave de intencion con `ClaveIntencionBuilder` (Core) a partir de la peticion y la configuracion activa (el registro de modelos lee BD, de ahi que sea actividad). Se persiste en toda ejecucion y alimenta `ObtenerUltimaEjecucionDuplicadoActivity`. AB#100930. |
+| — | CalcularClaveIntencion | `CalcularClaveIntencionActivity` | `Instrucciones` de la peticion | `ClaveIntencion` (clave de 32 hex + componentes) | Previa a todas las demas (no entra en el orden 1-14). Fuera de la tabla quedan tambien `VerificarDuplicadoPorMD5Activity`, `ObtenerMetadatosDocumentoGDCActivity` y `ObtenerDocumentoGDCActivity` (preflujo GDC), `ClasificarEmbeddingsActivity` (ADR-002) y `PersistirMarkdownActivity` (markdown aportado por el caller o por cobertura). Calcula la clave de intencion con `ClaveIntencionBuilder` (Core) a partir de la peticion y la configuracion activa (el registro de modelos lee BD, de ahi que sea actividad). Se persiste en toda ejecucion y alimenta `ObtenerUltimaEjecucionDuplicadoActivity`. AB#100930. |
 
 ### 3.1.1 Comportamiento del orquestador segun entrada y configuracion
 
@@ -121,8 +120,7 @@ flowchart TD
 
     DUP -->|no duplicado / forceReprocess| SKIP{"skipDuplicateCheck?"}
     SKIP -->|si| BLOB
-    SKIP -->|no| ULT["ObtenerUltimaEjecucionActivity<br/>historico"]
-    ULT --> BLOB
+    SKIP -->|no| BLOB
 
     BLOB["SubirBlobActivity<br/>Azure Blob Storage"] --> PREP{"ClassificationPreparation.Enabled?"}
     PREP -->|si| RECORTE["PrepararDocumentoClasificacionActivity<br/>recorte por paginas"]
@@ -130,17 +128,17 @@ flowchart TD
     RECORTE --> CLASIFCFG
 
     CLASIFCFG{"expectedType informado?"} -->|si| TIPOSKIP["Clasificacion omitida<br/>confianza=1.0"]
-    CLASIFCFG -->|no| FLOW["ClasificarActivity<br/>flow: DefaultFlow + UseGlobalFallback"]
+    CLASIFCFG -->|no| EMB["ClasificarEmbeddingsActivity<br/>ADR-002: sombra en DEV, off en PRE/PRO"]
+    EMB --> FLOW["ClasificarActivity<br/>flow: DefaultFlow + UseGlobalFallback"]
 
     FLOW --> CONF{"Confianza < umbral?"}
-    CONF -->|si| BAJA["BAJA_CONFIANZA_CLASIFICACION"]
-    BAJA --> PERSISTERR["PersistirActivity<br/>estado parcial/error"]
+    CONF -->|si| BAJA["BAJA_CONFIANZA_CLASIFICACION<br/>catalogo: sin persistir; virtual: persistida"]
     CONF -->|no| RESOL
     TIPOSKIP --> RESOL
 
     RESOL["ResolverTipologiaActivity<br/>config tipologia"] --> TIPO{"Tipologia resuelta?"}
-    TIPO -->|no| ERR["ERROR<br/>No se identifico tipologia"]
-    ERR --> PERSISTERR
+    TIPO -->|no| ERR["NO_CLASIFICADO<br/>tipologia no resuelta"]
+    ERR --> PERSISTERR["PersistirActivity<br/>estado parcial"]
     TIPO -->|si| CLY{"classificationOnly?"}
 
     CLY -->|si| RED["Rama reducida:<br/>Extraer/Validar/ObtenerActivo pueden omitir"]
@@ -214,7 +212,7 @@ Cuando `instrucciones.classificationOnly=true`, tras `Clasificar` y `ResolverTip
 
 - `Extraer`, `Validar` y `ObtenerActivo` no se ejecutan y quedan como `Skipped` en `detalleEjecucion.seguimiento`.
 - `Prompt` se ejecuta solo si hay prompt propio/ad-hoc aplicable o si `instrucciones.forzarResumenPorDefecto=true` y no hubo una llamada GPT previa que produjera `Resumen`.
-- `Integrar` solo se ejecuta si `instrucciones.executeIntegrarWhenClassificationOnly=true` y existe `trazabilidad.idActivo`.
+- `Integrar` solo se ejecuta si `instrucciones.executeIntegrarWhenClassificationOnly=true` y existe `trazabilidad.idActivo`. Con nivel TDN1 (solo familia) `Integrar` y `SubirGDC` se omiten siempre.
 - `SubirGDC` mantiene la prioridad de `SkipGDCUpload` y requiere `idActivo` resuelto/disponible.
 - `Persistir` siempre se ejecuta.
 
@@ -246,6 +244,25 @@ Reglas de ejecucion:
 - Si esa llamada dedicada coincide con un prompt propio/ad-hoc pendiente, ambos objetivos se combinan en una unica llamada y se devuelven `Resumen` y `ResultadoPrompt` por separado.
 - Una tipologia con `promptConfig.enabled=true` pero `systemPrompt` y `userPromptTemplate` vacios no activa `ResultadoPrompt`; requiere definicion real o prompt ad-hoc.
 - Si el resumen procede de una clasificacion con recorte real (`paginasIncluidas < paginasDocumento`), se anade sufijo de transparencia: `* Resumen basado en las primeras {N} paginas del documento`.
+
+#### Resolucion del modelo de prompt
+
+La clave del modelo de prompt (`ModeloConfigs` de Tipo 2) se resuelve en `PromptModelKeyResolver.Resolve(peticion, tipologia, defecto)`, con este orden:
+
+1. La clave de la peticion (prompt ad-hoc).
+2. `promptConfig.modelKey` de la tipologia.
+3. `PromptDefaults:ModelKey` del entorno.
+
+Una clave vacia o solo con espacios se salta y hereda el siguiente nivel. Los defectos de `PromptConfig.ModelKey` y `PromptDefaultsSettings.ModelKey` son cadena vacia; `appsettings.json` mantiene `default.gpt4o-mini` como valor base (el host en Azure no carga ese fichero) y el pipeline fija el valor de cada entorno (`PromptDefaults__ModelKey`): `prompt.gpt56-luna` en DEV desde el 2026-11-20 (ADR-004) y `default.gpt4o-mini` en PRE y PRO hasta la siguiente release.
+
+- Si las tres claves estan vacias, se lanza `InvalidOperationException("PromptDefaults:ModelKey no configurado")`.
+- Si la clave efectiva no existe en el registro o esta inactiva, `GetModel` falla siempre con la clave en el mensaje. No hay vuelta silenciosa a otro modelo ni comprobacion al arrancar.
+- Todos los consumidores usan la clave efectiva, no la cruda de la tipologia. En el modo combinado de extraccion (`ConfigurableExtraerDataProvider.DebeUsarModoCombinado`) solo se hereda la clave del modelo, no el resto de campos del prompt.
+- El resumen de clasificacion falla con error claro si el defecto esta vacio.
+- En «tipologia no identificada» el orquestador deja `Modelo` vacio (antes ponia `gpt-4o-mini`).
+- El deployment sale siempre del registro de modelos: `Classification__GptFallback__DeploymentName` y `Extraction__GptFallback__DeploymentName` son legacy y no se leen (retirados en AB#101450).
+
+Cambiar el modelo de prompt y resumen de un entorno es cambiar `PromptDefaults__ModelKey`, sin tocar tipologias.
 
 ### Clasificación Jerárquica GPT (nivelClasificacion) — D1, D2, D4, D6, D7
 
@@ -287,6 +304,11 @@ Cuando se informa `instrucciones.classification.nivelClasificacion`:
     `salida.Identificacion.Tipologia = "Desconocido"`, pipeline detenido, estado `OK`.
   - Si `tipologiaParcial` es un código TDN1 conocido → **código conocido**: `salida.Identificacion.Tdn1 = tipologiaParcial`,
     el pipeline continúa normalmente (extracción, validación, plugins). Estado final determinado por el resto del pipeline.
+- **`Tdn1` de la tipología virtual** (AB#101411): cuando la clasificación informa la familia de la fase 1
+  (`ResultadoClasificacion.Tdn1Detectado`, que rellena `GptClasificarDataProvider`), `salida.Identificacion.Tdn1`
+  toma esa familia. Si no la informa, se mantiene la regla anterior: `Tdn1` = código virtual cuando no es nulo
+  ni `Desconocido`. Sin esto, los modelos que escriben el TDN2 en `propuesta` (caso de `gpt-5.6-luna`) dejaban
+  `Tdn1 = Tdn2`. `Tipologia` y `TipologiaFamilia` siguen recibiendo el código virtual sin cambios.
 
 **D6 — PropuestaTipologia en salida** (`ContratoSalida.cs`):
 - Nueva propiedad `Identificacion.PropuestaTipologia` (string, inicializada a `string.Empty`). Solo se informa cuando hay tipología virtual.
@@ -316,7 +338,7 @@ Traza de la reutilización (AB#100258):
 
 Limit pages en ClassificationOnly:
 
-- Si `instrucciones.maxPagesForClassificationOnly > 0`, la orquestación aplica recorte defensivo del PDF a las primeras N páginas justo antes de `Clasificar`.
+- Si `instrucciones.maxPagesForClassificationOnly > 0`, ese valor fija el máximo de páginas para clasificar; el recorte lo aplica `PrepararDocumentoClasificacionActivity` antes de `Clasificar`, solo si `ClassificationPreparation.Enabled` (`ApplyPdfPageLimitActivity` existe en el código pero el orquestador no la invoca).
 - El documento original completo se mantiene para integridad, blob y trazabilidad; el recorte afecta solo al payload utilizado en clasificación.
 - En flujo no `classificationOnly`, tras clasificar con recorte se regenera markdown del documento completo antes de extraccion/prompt para evitar contaminar pasos posteriores con contexto parcial.
 - Si el resumen se genera durante la clasificacion recortada, se marca explicitamente como parcial con el sufijo de transparencia indicado arriba.
@@ -335,13 +357,16 @@ Resumen de comportamiento por activity:
 - `CalcularClaveIntencionActivity`: calcula la clave de intención de la petición (AB#100930).
 - `ObtenerUltimaEjecucionDuplicadoActivity`: recupera y rehidrata el contrato de la última ejecución con la misma clave de intención (y que supere la segunda fase de modelo de extracción y páginas), o informa del motivo de no reutilización (AB#100930); lo devuelve con `EjecucionOriginalGuid` informado (AB#100258).
 - `SubirBlobActivity`: persiste binario en blob (`documents/`) para trazabilidad operativa.
-- `ClasificarActivity`: resuelve un flujo configurable de providers y los ejecuta en orden hasta resultado satisfactorio; si no hay resultado, aplica fallback global final si está activo. Fallback chain: RuleBasedTdnClassifier → DocumentIntelligenceProvider → FoundryTdnRescueClassifier → GptClasificarDataProvider (two-phase).
+- `ClasificarEmbeddingsActivity` (ADR-002, previa a `ClasificarActivity`): `EmbeddingsClasificarProvider` calcula el embedding con `text-embedding-3-large`, infiere en C# con el artefacto JSON del blob `documentai` y `DecisorHibrido` aplica el modo de la fila `clasificador.embeddings` (`off`, `sombra`, `hibrido`; `TipoModelo.Embeddings = 5`). En sombra solo persiste la prediccion (`ClasificacionResultado.Embeddings`, `RamaClasificacion`, `DetalleProveedores`); ante cualquier fallo deriva al GPT sin excepcion. DEV en sombra; PRE y PRO con la fila en `off`.
+- `ClasificarActivity`: resuelve un flujo configurable de providers (`Classification:Flows` + `DefaultFlow`; por defecto `hybrid-rules-gpt-di`: reglas → GPT → DI) y los ejecuta en orden hasta resultado satisfactorio; si no hay resultado, aplica el fallback global (`gpt`) si `UseGlobalFallback`. Cosa distinta es la cadena interna del provider `hybrid-tdn` (`HybridTdnClasificarProvider`: RuleBasedTdnClassifier → DI → FoundryTdnRescueClassifier, que delega en GPT).
 - `GptClasificarDataProvider`: implementa clasificación jerárquica de dos fases:
   - **Phase 1 (TDN1 Family Selection)**: Consulta prompts enriquecidos con todas las familias TDN1 disponibles. Envía al LLM: catálogo TDN1 con formato "- CODIGO_TDN1: Descripcion". Espera respuesta JSON: `{"tdn1": "CODIGO" | null, "propuesta": "...", "confianza": 0.0-1.0}`. Cache por petición, 5 min TTL vía IMemoryCache.
   - **Phase 2 (TDN2 Specific Typology)**: Una vez resuelta familia TDN1, consulta catálogo enriquecido de tipologías para esa familia. Catálogo contiene: `- TIPOLOGIA_CODIGO [TDN2_CODE: TDN2_NAME] gptdescription` donde TipologiaNombre y gptdescripcion provienen de ConfiguracionJson (poblados desde BD). Envía al LLM: instrucciones mejoradas con contexto SAREB sector, ejemplos de formato fallback, límite 200 caracteres. Espera: `{"tdn2": "CODIGO_TDN2", "confianza": 0.0-1.0}`.
   - **Self-Reported Confidence**: GPT reporta su certeza sobre la clasificación mediante campo `confianza` (0.0 = incierto, 1.0 = muy seguro). El parser extrae el valor, aplica `Math.Clamp(0.0, 1.0)` automático, y usa fallback a 0.9 si el campo está ausente. Logging detallado: `ConfianzaSelfReported` vs `ConfianzaFinal`. Implementado en AB#99725 (2026-06-03). 
   - **Catalog Enrichment**: Cada tipología publicada en la familia aporta: tipologiacodigo (ESCR-06), tipologiaNombre (Escritura: venta), tdn2 (ESCR-06), gptdescripcion (texto enriquecido con descripción principal, contexto descriptivo, criterio de clasificación automática).
   - **Model Resolution**: Modelo LLM resuelto por petición desde `instrucciones.classification.model` (si viene explícito y válido). `auto`/vacío usa fallback del registro (`useAsFallback=true`). Cliente de chat creado dinámicamente por petición para evitar lock-in de deployment.
+  - **Capacidades por familia de modelo** (`OpenAiModelCapabilities`, `DocumentIA.Functions/Services`): los modelos de razonamiento (familias `gpt-5*` y o-series) rechazan `temperature` con HTTP 400, así que solo se envía a los clásicos (`gpt-4x`, `gpt-35`). Las configuraciones de modelo de clasificación y de prompt (`ClassificationModelConfig`, `PromptModelConfig`) admiten `ReasoningEffort` (`none`, `minimal`, `low`, `medium`, `high`; nulo = no enviar; inválido = aviso y no enviar). La sobrecarga de cinco parámetros de `ConfigureChatOptions` envía a los modelos de razonamiento `reasoning_effort` y, si hay límite de salida, `max_completion_tokens` (activando `SetNewMaxCompletionTokensPropertyEnabled()` del cliente de Azure) solo cuando el esfuerzo está informado y es válido; sin esfuerzo se comporta como la sobrecarga de cuatro, que conserva la extracción con fallback GPT sin cambios (`GptFallbackExtraerDataProvider`). La usan `GptClasificarDataProvider` y `OpenAIPromptDataProvider` (prompt libre y resumen). SDK: `Azure.AI.OpenAI` fijado en `2.9.0-beta.1` (sin comodín), que usa la api-version `2025-04-01-preview` para los cuatro clientes de Azure OpenAI del Function App (clasificación, prompt/resumen, `OpenAiClientFactory` de extracción y `AzureOpenAIEmbeddingsCliente`). Introducido en AB#99934 (prueba de `gpt-5.6-luna` en DEV, 2026-11-17); tests en `OpenAiModelCapabilitiesTests` y el test de serialización en el cable.
+  - **Caché de prompt por modelo** (AB#101412 y AB#101428): `ClassificationModelConfig.PromptCache` (`PromptCacheConfig`, Core) con `Enabled` (por defecto `false`), `KeyPrefix` (`documentia-clasif`), `Breakpoint` (`true`), `Ttl` (`30m`) y `Mode` (`implicit` por defecto; vacío o desconocido se trata como `implicit`). Solo vale para GPT-5.6 y posteriores: los modelos anteriores responden HTTP 400 a estos campos, así que en ellos el bloque se deja sin informar o con `enabled: false`. El SDK instalado no expone los campos, por eso `PromptCacheRequestPolicy` (política de pipeline, `DocumentIA.Functions/Services`) reescribe el cuerpo JSON de la petición. Añade `prompt_cache_key`, que construye `PromptCacheKeyBuilder` como `{keyPrefix}:{operación}:{12 primeros hex del SHA-256 del system}`, y `prompt_cache_options` (`mode`, `ttl`). Con `breakpoint` añade también `prompt_cache_breakpoint: {"mode":"explicit"}` en el mensaje de sistema y en la primera parte del mensaje de usuario. Con la caché activa, `CompleteChatAsync` envía el usuario en dos partes de texto: `UserPromptSplitter` corta la plantilla en el primer `{DOCUMENT_TEXT}`, de modo que la primera parte es el tramo estable (instrucciones y catálogo) y la segunda el documento y lo que va detrás. Sin caché, el cuerpo es idéntico al anterior (una sola parte). En GPT-5.6 las lecturas solo casan en breakpoints y las escrituras se cobran: en modo `explicit` solo se escriben los dos prefijos marcados, una vez por TTL, mientras que `implicit` marca además el último mensaje y escribe el prompt entero, documento incluido, en cada llamada. Por eso la fila de DEV usa `explicit`. El consumo lee `usage.prompt_tokens_details.cache_write_tokens` del cuerpo crudo de la respuesta (`UsoOpenAiMapper.LeerCacheWriteTokens`). Medido en DEV (muestra de 50, run 80164): fase 1 con el 74,1% de la entrada en caché y coste de clasificación de luna 0,49 veces el del control.
   - **Fallback Mapping**: ResolveTipologiaByTdn2() mapea TDN2 code a tipología final (ej., ESCR-06 → tipología con ResolvedTdn2='ESCR-06').
 - `ClassificationTipologiaPromptBuilder`: construye catálogos dinámicos. BuildTdn1Catalog() devuelve todas las familias TDN1 publicadas. BuildTdn2CatalogByFamilia(tdn1Code) consulta ITipologiaRepository directamente, filtra por ResolvedTdn1 = familia, retorna todas las tipologías published+activas con ConfiguracionJson poblado (incluyendo tipologiaNombre [nuevo campo] + gptdescripcion campos). El campo `Nombre` en TdnCatalogItem se resuelve desde TipologiaConfig.TipologiaNombre en tiempo de consulta, enriqueciendo los catálogos con nombre legible de tipología para GPT. Respeta cache 5-min TTL.
 - `ResolverTipologiaActivity`: resuelve configuración efectiva por familia/version.
@@ -355,13 +380,17 @@ Resumen de comportamiento por activity:
 Estados funcionales de cierre del pipeline:
 
 - `OK`
+- `EXTRACCION_INCOMPLETA`: la extracción no alcanzó la completitud exigida y no hubo fallback que la completara.
+- `PAGINAS_EXCEDIDAS`: el documento supera `tipologia.MaxPaginasDocumento` o `Pipeline:MaxPaginasDocumento` y la petición no trae `forzarProcesadoSinLimitePaginas`; se persiste y se omiten Extraer, Prompt, Validar, ObtenerActivo, Integrar y SubirGDC (ver ESPECIFICACION_LIMITE_PAGINAS_DOCUMENTO.md).
+- `PENDIENTE_REINTENTO`: cuota de Azure OpenAI agotada (no se persiste, 3.9.5) o texto no obtenido por causa transitoria (se persiste, AB#100880).
 - `OK` _(clasificación parcial — tipología virtual)_: cuando `nivelClasificacion` activo y tipología no mapeada al catálogo. `identificacion.tipologia = "Desconocido"`, `identificacion.propuestaTipologia` informado. Pipeline detenido antes de extracción.
+- `BAJA_CONFIANZA_CLASIFICACION` _(tipología virtual)_ (AB#101435): la misma salida de tipología virtual pero con la confianza de clasificación por debajo del umbral. El umbral es el de las instrucciones o, si no lo traen, el `UmbralFallbackAplicado` del proveedor, que en DEV es 0,6 según el `FallbackThreshold` del modelo de fallback; si no hay ninguno, 0,6. No hay tipología de catálogo, así que `ClasifUmbralFallback` no interviene. A diferencia del camino de catálogo, la ejecución se persiste con el contrato completo de la rama virtual. En el Monitor no entra en ninguna de las categorías `EstadoEjecucion.Ok`, `Revision` ni `Error`: se ve en el desglose por estado de proceso. Al desplegarlo, parte del volumen que antes cerraba en `OK` pasa a este estado, lo que es un cambio esperado en las métricas de operación. Como queda persistida y es reutilizable por la deduplicación, para que se vuelva a clasificar hay que reenviar con `forceReprocess = true`.
 - `NO_CLASIFICADO`: clasificación parcial con código TDN1 conocido pero tipología TDN1/TDN2 no resuelta. Pipeline continúa con tipología parcial. Cuando el estado viene de una salida temprana (tipología no resoluble o `Desconocido`), el prompt y el resumen se ejecutan igualmente si la petición los pidió.
 - `SIN_CONTENIDO_DOCUMENTO`: se pidió clasificación GPT, prompt o resumen y Document Intelligence Layout respondió sin texto (documento vacío de verdad). Si lo que falló fue la obtención del texto, `ResultadoMarkdown.CausaSinContenido` lleva el motivo (`MotivoSinContenido`: `SinFuente`, `FormatoNoSoportado`, `LayoutTimeout`, `LayoutError` con código HTTP) desde `MarkdownResolver`, las guardas lo propagan en `FallbackRazon` / `PromptResultado.Error` y el orquestador cierra en `PENDIENTE_REINTENTO` (causa transitoria: timeout, 429, 5xx) o `ERROR`, persistiendo igual (AB#100880). No se invoca al LLM; la actividad `Prompt` queda en `Failed` y no se persiste ni `Resumen` ni `ResultadoPrompt`. **Cuenta y se filtra como error** (`EstadoEjecucion.Error` en `DocumentIA.Data/Repositories/EstadoEjecucion.cs`), de modo que los agregados del Monitor y el badge lo tratan como fallo, no como estado desconocido. Al desplegarlo, parte del volumen que antes cerraba en `OK` —con un resumen inventado sobre un documento que el sistema nunca leyó— pasa a contarse aquí: es un cambio esperado en las métricas de operación.
 - `VALIDACION_CON_ERRORES`
 - `DUPLICADO`: solo con `Dedup__ModoEstricto = false` (modo de vuelta atrás), cuando el documento existe y **no hay ninguna ejecución reutilizable**; en modo estricto (defecto, AB#100930) ese documento se procesa y `Resultado.Estado` es el del procesamiento, con `DetalleEjecucion.MotivoNoReutilizacion`. Si hay ejecución con la misma intención, el estado devuelto es el de aquella ejecución con `Resultado.ReutilizadaPorDuplicado = true`, y la petición queda registrada como fila de reutilización (AB#100258).
-- `BAJA_CONFIANZA_CLASIFICACION`
-- `ERROR`
+- `BAJA_CONFIANZA_CLASIFICACION` _(tipología de catálogo)_: el contrato se devuelve pero **no se persiste** (solo se persiste la variante de tipología virtual).
+- `ERROR`: excepción no controlada o causa no transitoria; se persiste lo que haya hasta ese punto con `MensajeError`.
 
 ---
 
@@ -420,9 +449,9 @@ services.PostConfigure<ClassificationRoutingSettings>(settings =>
 
 ### Resolución de flujo en tiempo de ejecución
 
-En `ConfigurableClasificarDataProvider.ResolveFlowProviders()` (línea 164):
+En `ConfigurableClasificarDataProvider.ResolveFlowName()` y `ResolveFlowProviders()`:
 
-1. Si `instrucciones.classification.flujo` viene informado explícitamente, se busca en `_routingSettings.Flows`.
+1. Si `instrucciones.classification.provider` viene informado y distinto de `auto`, ese valor es el nombre de flujo y se busca en `_routingSettings.Flows`; con `auto` o vacío se usa `DefaultFlow` y, si no hay, `DefaultProvider`.
 2. Si la clave existe, se devuelve la secuencia configurada de providers.
 3. Si no existe, se devuelve `[flowName]` directamente (fallback: intenta ese nombre como single provider).
 4. Si en `ExecuteProviderAsync` no hay case para ese nombre, falla con `NotSupportedException`.
@@ -911,146 +940,11 @@ classDiagram
 
 ## 3.5 Modelo Entidad-Relacion
 
-```mermaid
-erDiagram
-    DocumentoEntity ||--o| ResultadoProcesamientoEntity : "1:1 resultado"
-    DocumentoEntity ||--o{ AuditoriaEntity : "1:N auditorias"
-    DocumentoEntity ||--o{ DocumentoEjecucionEntity : "1:N ejecuciones"
-    DocumentoEjecucionEntity ||--o{ PluginEjecucionEntity : "1:N plugins"
-    DocumentoEjecucionEntity ||--o{ ValidacionResultadoEntity : "1:N validaciones"
+El modelo de datos completo (13 entidades, índices, claves foráneas, historial de las 38 migraciones y versión del esquema 1.24, `20261013092225_ClaveIntencionDedup`) vive en [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md), revisado el 2026-11-22. El diagrama de clases que había aquí describía 8 entidades con atributos desfasados (`Nombre`, `Extension`, `TipologiaDetectada`, `DuracionClasifMs`...) y se retira para no mantener dos copias.
 
-    DocumentoEntity {
-        int Id PK
-        string SHA256 UK "indice unico"
-        string MD5
-        string CRC32
-        string Nombre
-        string Extension
-        long Tamano
-        string Tipologia
-        string Estado
-        double ConfianzaGlobal
-        int Paginas
-        string CorrelationId "indice"
-        string IdActivo
-        string RutaBlobStorage
-        DateTime FechaCreacion
-        DateTime FechaActualizacion
-    }
+Entidades del `DocumentIADbContext`: `Documentos`, `ResultadosProcesamiento`, `Tipologias`, `Auditoria`, `DocumentoEjecuciones` (con las columnas de coste, reutilización y clave de intención), `PluginEjecuciones`, `ValidacionResultados`, `ModeloConfigs` (`Tipo` 0 a 5: Clasificacion, Extraccion, Prompt, Layout, Tarifas, Embeddings), `PluginTipologiaConfigs`, `TipologiaConfigAudit`, `CatalogoTdn1`, `CatalogoTdn2` y `PromptTemplates`.
 
-    ResultadoProcesamientoEntity {
-        int Id PK
-        int DocumentoId FK "unico → DocumentoEntity"
-        string TipologiaDetectada
-        double ConfianzaClasificacion
-        double ConfianzaExtraccion
-        double ConfianzaValidacion
-        string ProveedorClasif
-        string ProveedorExtrac
-        bool FallbackClasif
-        bool FallbackExtrac
-        string DatosExtraidosJson
-        string ValidacionesJson
-        string InconsistenciasJson
-        int DuracionClasifMs
-        int DuracionExtracMs
-        int DuracionTotalMs
-        DateTime FechaCreacion
-    }
-
-    TipologiaEntity {
-        int Id PK
-        string Codigo UK "indice unico"
-        string Nombre
-        string Version
-        bool Activa
-        string Estado "Draft/Published/Retired"
-        double UmbralClasificacion
-        double UmbralExtraccion
-        string ConfiguracionJson
-        string PublicadaPor
-        string VersionPublicada
-        DateTime PublicadaEn
-        DateTime FechaCreacion
-        DateTime FechaActualizacion
-    }
-
-    AuditoriaEntity {
-        int Id PK
-        int DocumentoId FK "→ DocumentoEntity"
-        string Accion
-        string Nivel
-        string Mensaje
-        DateTime FechaCreacion
-    }
-
-    DocumentoEjecucionEntity {
-        int Id PK
-        int DocumentoId FK "→ DocumentoEntity"
-        string EjecucionGuid UK "indice unico"
-        string SubmittedBy "nullable — solicitante (trazabilidad.submittedBy); migracion 20260805100351"
-        string IdActivo "nullable — activo resuelto, normalizado (AB#100168)"
-        string ContratoSalidaCompletoJson "sin Seguimiento.Actividades desde AB#100166"
-        string ActivityTimelineJson "fuente unica del timeline; DatosFinales/DatosOriginales ya no se graban"
-        int DuracionClasifMs
-        int DuracionExtracMs
-        int DuracionValidMs
-        int DuracionIntegMs
-        int DuracionGdcMs
-        int DuracionAssetResolverMs "nullable — ms ObtenerActivo"
-        string AssetResolverResultJson "nullable — JSON [{IdActivo,FchCierre}]"
-        int DuracionTotalMs
-        DateTime FechaEjecucion "indice"
-    }
-
-    PluginEjecucionEntity {
-        int Id PK
-        int EjecucionId FK "→ DocumentoEjecucionEntity"
-        string PluginKey "indice compuesto(EjecucionId, PluginKey)"
-        int Priority
-        bool Success
-        string Mensaje
-        int StatusCode
-        int DuracionMs
-        string Error
-        string DatosEnriquecidosJson
-        DateTime FechaCreacion
-    }
-
-    ValidacionResultadoEntity {
-        int Id PK
-        int EjecucionId FK "→ DocumentoEjecucionEntity"
-        string Campo "indice compuesto(EjecucionId, Campo)"
-        string Regla
-        string Severidad
-        string Mensaje
-        string Valor
-        DateTime FechaCreacion
-    }
-
-    ModeloConfigEntity {
-        int Id PK
-        string Key UK "indice unico"
-        string Tipo "Clasificacion/Extraccion/Prompt"
-        string Provider
-        string Modelo
-        string ConfiguracionJson
-        bool Activo
-        DateTime FechaCreacion
-        DateTime FechaActualizacion
-    }
-
-    PluginTipologiaConfigEntity {
-        int Id PK
-        string TipologiaCodigo UK "indice unico"
-        string ConfiguracionJson
-        string Estado "Draft/Published/Retired"
-        DateTime FechaCreacion
-        DateTime FechaActualizacion
-    }
-```
-
-### Indices Configurados en OnModelCreating
+### Indices Configurados en OnModelCreating (resumen; la lista completa está en DATA_MODELS_ER_DIAGRAM.md)
 
 | Entidad | Indice | Tipo |
 |---------|--------|------|
@@ -1061,7 +955,11 @@ erDiagram
 | `ModeloConfigEntity` | Key | Unique |
 | `PluginTipologiaConfigEntity` | TipologiaCodigo | Unique |
 | `DocumentoEjecucionEntity` | EjecucionGuid | Unique |
-| `DocumentoEjecucionEntity` | FechaEjecucion | Non-unique |
+| `DocumentoEjecucionEntity` | FechaEjecucion (+26 INCLUDE, `..._Monitor`) | Cubriente del Monitor |
+| `DocumentoEjecucionEntity` | (DocumentoId, ClaveIntencion, FechaEjecucion DESC) | Clave de intención (ADR-003) |
+| `DocumentoEjecucionEntity` | EjecucionOriginalId; InstanceId (filtrado por reutilizadas); (IdActivo, DocumentoId) | Reutilización y consulta por activo |
+| `DocumentoEntity` | MD5 (INCLUDE SHA256); FechaExpiracionBlob | Dedup por MD5; limpieza de blobs |
+| `PromptTemplateEntity` | (PromptKey, Version) único; (PromptKey, IsActive) filtrado | Prompts versionados |
 | `PluginEjecucionEntity` | (EjecucionId, PluginKey) | Compuesto |
 | `ValidacionResultadoEntity` | (EjecucionId, Campo) | Compuesto |
 
@@ -1284,9 +1182,41 @@ Los archivos JSON en `config/tipologias/` son únicamente **fuente de seed**: al
 Los datos del proveedor de identidad por entorno (app registration, grupo de
 acceso, ubicación del secret) se mantienen en la sección "Identidad y acceso al
 Admin (EasyAuth)" de INFRAESTRUCTURA_REAL_DESPLEGADA y en la guía de activación
-GUIA_EASYAUTH_ADMIN. A fecha 2026-08-06, DEV dispone de app registration y grupo
-verificados (activación del App Service pendiente); PRE y PROD siguen sin
-proveedor, por lo que sus despliegues operan en modo solo lectura.
+GUIA_EASYAUTH_ADMIN. Estado el 2026-11-22: EasyAuth activo en los tres entornos (DEV
+desde el 2026-08-06, PRE y PRO desde el 2026-09-04); el modo solo lectura queda como
+salvaguarda cuando no llega identidad.
+
+### 3.8.5 Identidad visual del Admin
+
+El Admin sigue el manual de identidad y la guía de estilo de SAREB (AB#101124). El tema se aplica con tokens CSS sobre Bootstrap 5.1.0, sin recompilarlo:
+
+- `wwwroot/sareb.css` se carga en `App.razor` después de `bootstrap/bootstrap.min.css` y antes de `app.css`. Declara los tokens en `:root` y sobrescribe las variables de Bootstrap. En la 5.1 las utilidades `text-*` y `bg-*` leen `--bs-<color>-rgb`, así que se redefinen las dos variables de cada color; botones, foco de formularios, paginación y validación llevan colores fijos en Bootstrap y tienen reglas propias en `sareb.css`. `app.css` no conserva ningún color de la plantilla de Blazor (un test lo comprueba): el límite de error va en rojo de la paleta con texto negro y el checkbox de borde oscuro usa el verde gris.
+- `Services/SarebPaleta.cs` contiene los mismos colores como constantes para lo que se pinta desde C# (gráficos). Si cambia un valor, cambia en los dos sitios.
+- Logo en `wwwroot/img/sareb-logo-negativo.png` (negativo; el positivo no se incluye porque ninguna página lo usa, y un test comprueba que no quedan imágenes sin uso en `wwwroot/img`), reescalado desde `logos-sareb-services` de los recursos corporativos y recortado a su caja visible (sin margen transparente), para que a 40 px de alto la marca ocupe esa altura; el área de respeto la da el relleno de `.sareb-marca` (AB#101127). La barra lateral es verde corporativo con el logo negativo y la denominación «DocumentIA · Administración».
+
+| Token CSS | Valor | Uso |
+|---|---|---|
+| `--sareb-verde` | `#00858C` | primario (`--bs-primary`), enlaces, foco, barra lateral |
+| `--sareb-azul-oscuro` | `#046E97` | hover del primario, segunda serie de gráficos |
+| `--sareb-azul` | `#0086AD` | `--bs-info`, tercera serie |
+| `--sareb-turquesa` | `#00ABA8` | `--bs-success` (estado correcto) |
+| `--sareb-verde-claro` | `#90CCB7` | cabeceras de tabla, marcador del ítem activo del menú |
+| `--sareb-verde-gris` | `#6F927C` | texto secundario, etiquetas de KPI |
+| `--sareb-gris` | `#BBBEB4` | bordes, `--bs-secondary` |
+| `--sareb-gris-claro` | `#AFB6AC` | serie neutra adicional |
+| `--sareb-naranja` | `#F39E48` | `--bs-warning` (en revisión); con texto oscuro, no llega a AA con blanco |
+| `--sareb-rojo` | `#EA6B43` | `--bs-danger` (con error) |
+
+Tipografía `Arial, Helvetica, sans-serif` (manual 3.1). El manual imprime el color 7 como «GF927C»; es una errata de `#6F927C`.
+
+Gráficos, tablas y KPIs (AB#101126):
+
+- `wwwroot/js/apexcharts-interop.js` fija valores por defecto globales en `window.Apex` según la guía 6.6: Arial, sin animaciones ni degradados (`fill.type = solid`) y leyenda abajo a la izquierda. Ningún color se fija ahí, ni el de la rejilla (un test lo comprueba): cada componente los pasa desde `SarebPaleta` (`MonitorGraficos`: `Neutro` para el total y `Error` para los fallos; `CostesGrafico`: `Verde`; rejilla en `GrisClaro` en los dos). Las ventanas relativas de `MonitorFiltroDto` toman el «ahora» de un `TimeProvider` (`ToQueryString(TimeProvider)`), con `TimeProvider.System` por defecto.
+- `MonitorGraficos` y `CostesGrafico` reciben el parámetro `Periodo`, que las páginas rellenan con `MonitorFiltroDto.DescripcionPeriodo()` («últimas 24 horas», «últimos N días», «mes en curso» o «del d/M/yyyy al d/M/yyyy»). La tarjeta muestra título en minúscula y negrita con el periodo (`.sareb-grafico-titulo`), unidad arriba a la derecha (`.sareb-grafico-unidad`: `nº` o `€`) y la fuente en nota al pie (`.sareb-grafico-fuente`).
+- Tablas según el manual 3.5: el encabezado de una tarjeta que contiene una tabla va en blanco negrita sobre verde corporativo (selector `:has`, soportado por Chrome y Edge actuales); las cabeceras de columna en negro negrita sobre verde claro; filas alternas y hover con verde claro translúcido; `table-dark` pasa a verde corporativo. Las alertas de Bootstrap 5.1 tienen colores fijos y se redefinen con la paleta.
+- La superficie de los paneles de Monitor y Costes (`.mv2`: tarjetas, KPIs, cifra destacada) vivía duplicada en un bloque `<style>` de cada página; ahora está una sola vez en `sareb.css`. Los bloques `<style>` de `PromptEditor`, `EjecucionDetalle` y `JsonEditorComponent` conservan su estructura y solo cambian los literales de color por tokens.
+- Los componentes de lectura del Monitor y de Costes (`MonitorLecturas`, `MonitorHistograma`, `MonitorMatriz`, `MonitorDesglose`, `MonitorCalidadKpis`, `CostesKpis`, `CostesDesglose`) tampoco llevan literales de color: los estados usan `SarebPaleta.Ok`, `Revision`, `Error` y `Neutro` (los estados de proceso con incidencia y los de error comparten `Error`); los KPIs llevan la cifra en verde corporativo y el estado en una barra lateral (`.sareb-kpi-ok`, `.sareb-kpi-revision`, `.sareb-kpi-error`), porque turquesa y naranja como texto no llegan al 3:1; el desglose por actividad, `Verde`, `AzulOscuro`, `Turquesa` y `Naranja`; la matriz proceso × calidad, la escala `SarebPaleta.Escala` (de verde claro a azul oscuro). `PaletaComponentesTests` falla si aparece en su marcado un color hexadecimal fuera de la paleta (AB#101124).
+- Contraste: sobre turquesa, naranja, rojo, gris y azul el texto va en negro (6:1 o más), no en blanco (entre 1,9:1 y 4,2:1). Así se pintan badges, `btn-success`, `btn-danger`, el banner de entorno (`text-black`; `text-dark` se queda en 3,8:1 sobre el azul) y las cabeceras de tarjeta con `bg-*`. `sareb.css` cubre también hover, foco, activo, deshabilitado y `btn-check` de cada botón, y hover y foco de la paginación, para que no reaparezcan los colores de plantilla. En las cabeceras verdes de tarjetas con tabla, botones `btn-outline-primary`, enlaces y `text-muted` pasan a blanco. `SarebCssTests` y `KpisContrasteTests` vigilan estas reglas (AB#101124).
 
 
 ## 3.9 Manejo de Errores en Durable Functions
@@ -1321,9 +1251,11 @@ async Task<T> EjecutarPasoNegocio<T>(string nombre, Func<Task<T>> accion)
 |-----------|-----------|-------------|-------------|
 | Documento duplicado, !forceReprocess, con ejecución de la misma intención | VerificarDuplicado | El de la ejecución original (`ReutilizadaPorDuplicado=true`) | Si: fila de reutilización vinculada a la original (AB#100258); sin contrato salvo que complete un prompt o resumen (AB#100930) |
 | Documento duplicado, !forceReprocess, sin ejecución reutilizable, `Dedup__ModoEstricto=false` | VerificarDuplicado | `DUPLICADO` | Si (parcial, AB#100178). En modo estricto (defecto) no es salida anticipada: el documento se procesa con `motivoNoReutilizacion` |
-| Confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (parcial) |
-| Tipologia no resuelta | ResolverTipologia | `ERROR` | Si (parcial) |
-| Cuota Azure OpenAI agotada (429 sostenido tras reintentos/cooldown) | Clasificar | `PENDIENTE_REINTENTO` (ver 3.9.5) | Si (parcial) |
+| Tipologia de catalogo con confianza clasificacion < umbral | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | No: el contrato se devuelve pero no queda fila en `DocumentoEjecuciones` (comprobado en DEV con el golden del 2026-11-19, AB#101435) |
+| Tipologia virtual con confianza < umbral (instrucciones ?? proveedor ?? 0,6; AB#101435) | Clasificar | `BAJA_CONFIANZA_CLASIFICACION` | Si (contrato completo de la rama virtual) |
+| Tipologia no resuelta | ResolverTipologia | `NO_CLASIFICADO` (AB#100178) | Si (parcial); el prompt y el resumen se ejecutan si la peticion los pidio |
+| Documento por encima del limite de paginas sin `forzarProcesadoSinLimitePaginas` | tras Clasificar | `PAGINAS_EXCEDIDAS` | Si; se omiten Extraer, Prompt, Validar, ObtenerActivo, Integrar y SubirGDC |
+| Cuota Azure OpenAI agotada (429 sostenido tras reintentos/cooldown) | Clasificar | `PENDIENTE_REINTENTO` (ver 3.9.5) | No (decision AB#100178). Si se persiste el `PENDIENTE_REINTENTO` por texto no obtenido con causa transitoria (AB#100880) |
 
 ### 3.9.3 Timeout GDC
 
@@ -1364,7 +1296,7 @@ Componente reutilizable `AzureOpenAIResilienceExecutor` (interfaz `IAzureOpenAIR
 
 | Contexto | Comportamiento |
 |----------|----------------|
-| Clasificación GPT | `ClasificarActivity` captura `RateLimitExhaustedException` y devuelve `ResultadoClasificacion` con `RateLimitExcedido=true`, `FallbackRazon="rate_limit_exhausted"`, `TipologiaDetectada="Desconocido"`, `Confianza=0` — señal por dato, no excepción marshalada a través de la frontera Durable. `DocumentProcessOrchestrator` hace short-circuit a `Estado="PENDIENTE_REINTENTO"`, `EstadoCalidad="ERROR"`, confianzas a 0 y `MensajeError="Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`. Es un estado retriable, diferenciado de `NO_CLASIFICADO` (documento genuinamente no clasificable), pensado para reencolar/reprocesar más tarde. `Resultado.Estado` es un string libre (no enum cerrado); se persiste verbatim en `DocumentoEjecucion.EstadoFinal`, la agregación de métricas no lo cuenta como `ERROR`, y el Monitor lo muestra con badge `bg-warning`. |
+| Clasificación GPT | `ClasificarActivity` captura `RateLimitExhaustedException` y devuelve `ResultadoClasificacion` con `RateLimitExcedido=true`, `FallbackRazon="rate_limit_exhausted"`, `TipologiaDetectada="Desconocido"`, `Confianza=0` — señal por dato, no excepción marshalada a través de la frontera Durable. `DocumentProcessOrchestrator` hace short-circuit a `Estado="PENDIENTE_REINTENTO"`, `EstadoCalidad="ERROR"`, confianzas a 0 y `MensajeError="Clasificación pospuesta: cuota de Azure OpenAI agotada (429). Reintentar más tarde."`. Es un estado retriable, diferenciado de `NO_CLASIFICADO` (documento genuinamente no clasificable), pensado para reencolar/reprocesar más tarde. `Resultado.Estado` es un string libre (no enum cerrado). Por decisión AB#100178 este `PENDIENTE_REINTENTO` por cuota **no se persiste** (el que viene de texto no obtenido por causa transitoria sí, AB#100880); cuando hay fila, la agregación de métricas no lo cuenta como `ERROR` y el Monitor lo muestra con badge `bg-warning`. |
 | Prompts | Degradado graceful: `PromptResultado.Error` con prefijo `rate_limit_exhausted:`, sin escalar el documento a `PENDIENTE_REINTENTO` (no bloqueante). Se beneficia igual del reintento + cooldown. |
 
 **Configuración**
@@ -1387,7 +1319,7 @@ Análogos a los eventos `CU.CircuitOpen/Closed/Failover/Rejected` de la extracci
 - Failover a modelo alterno (sí existe en Content Understanding, no en GPT).
 - Retry de Durable Functions sobre la actividad de clasificación.
 - Extensión al proveedor de extracción `GptFallbackExtraerDataProvider` (el componente queda listo para aplicarlo).
-- Limitación conocida (`AB#99901`): si GPT se configura únicamente como `GlobalFallbackProvider` (no como paso del flujo), una rama con catch amplio en `ConfigurableClasificarDataProvider` absorbe la excepción antes de llegar a `PENDIENTE_REINTENTO`. El flujo por defecto `hybrid-rules-gpt-di` no está afectado.
+- Limitación conocida (`AB#99901`): si GPT se configura únicamente como `GlobalFallbackProvider` (no como paso del flujo), una rama con catch amplio en `ConfigurableClasificarDataProvider` absorbe la excepción antes de llegar a `PENDIENTE_REINTENTO`. El flujo por defecto `hybrid-rules-gpt-di` no está afectado. Vigencia no comprobada en la revisión del 2026-11-22: el proveedor ya captura `RateLimitExhaustedException` en ese camino.
 
 Feature Azure DevOps: `AB#99893`.
 
@@ -1451,16 +1383,17 @@ stateDiagram-v2
     GDCOmitido --> Persistido
     GDCTimeout --> Persistido
 
-    Persistido --> OK : ConfianzaGlobal >= 0.85
-    Persistido --> Revision : 0.70 <= ConfianzaGlobal < 0.85
+    Persistido --> OK : sin errores de validacion ni extraccion incompleta
     Persistido --> ValidacionConErrores : Validacion con errores
-    Persistido --> ErrorEstado : ConfianzaGlobal < 0.70
+    Persistido --> ExtraccionIncompleta : completitud insuficiente
+    Persistido --> Revision : EstadoCalidad REVISION (0.70 <= ConfianzaGlobal < 0.85)
+    Persistido --> ErrorEstado : EstadoCalidad ERROR (ConfianzaGlobal < 0.70)
 
     Duplicado --> ReutilizacionRegistrada : PersistirActivity<br/>(rama reutilizacion, AB#100258)
     ReutilizacionRegistrada --> [*]
-    BajaConfianza --> Persistido
+    BajaConfianza --> [*] : catalogo, sin persistir
     ErrorTipologia --> Persistido
-    RateLimitAgotado --> Persistido
+    RateLimitAgotado --> [*] : no se persiste (AB#100178)
     OK --> [*]
     Revision --> [*]
     ValidacionConErrores --> [*]
@@ -1468,13 +1401,14 @@ stateDiagram-v2
 
     state "Estados Finales" as finals {
         OK : Estado = OK
-        Revision : Estado = REVISION
+        Revision : EstadoCalidad = REVISION (Resultado.Estado sigue siendo OK, VALIDACION_CON_ERRORES o EXTRACCION_INCOMPLETA)
         ValidacionConErrores : Estado = VALIDACION_CON_ERRORES
+        ExtraccionIncompleta : Estado = EXTRACCION_INCOMPLETA
         BajaConfianza : Estado = BAJA_CONFIANZA_CLASIFICACION
-        ErrorEstado : Estado = ERROR
+        ErrorEstado : EstadoCalidad = ERROR (Resultado.Estado = ERROR solo con excepcion o causa no transitoria)
         Duplicado : Estado = el de la ejecucion original<br/>(DUPLICADO solo sin historico reutilizable<br/>y con Dedup__ModoEstricto=false)
         ReutilizacionRegistrada : Fila ReutilizadaPorDuplicado=1<br/>vinculada a la original
-        ErrorTipologia : Estado = ERROR (tipologia)
+        ErrorTipologia : Estado = NO_CLASIFICADO (tipologia no resuelta)
         RateLimitAgotado : Estado = PENDIENTE_REINTENTO (3.9.5)
     }
 ```
@@ -1509,15 +1443,15 @@ sumar los importes ya calculados, porque sumar decimales es determinista.
 | `TarifaRegistryLoader` | Core.Configuration | Carga el catalogo con cache de 5 min; tolerante a JSON invalido y a fila ausente |
 | `CalculadoraCosteIA` | Core.Services | Resuelve la linea vigente por modelo y fecha, calcula y agrega |
 | `ConsumosIA` | Core.Services | Fusiona consumos entre proveedores encadenados |
-| `UsoOpenAiMapper` | Functions.Services | Traduce el bloque de uso del SDK de OpenAI |
+| `UsoOpenAiMapper` | Functions.Services | Traduce el bloque de uso del SDK de OpenAI; lee `cache_write_tokens` del cuerpo crudo (`TokensEscrituraCache`), que el SDK no expone |
 | `UsoContentUnderstandingMapper` | Core.Services | Traduce el bloque `usage` de Content Understanding |
 | `TarificadorDeConsumos` | Functions.Services | Aplica el catalogo en la actividad; un fallo no tumba el procesamiento |
 
 ### 3.11b.3 Canal de transporte
 
-Los consumos viajan en los cuatro resultados que ya cruzan la frontera de actividad:
-`ResultadoClasificacion`, `ExtraccionResultado`, `ExtraerMarkdownLayoutResultado` y
-`PromptResultado`. No hace falta ningun canal nuevo.
+Los consumos viajan en los cinco resultados que ya cruzan la frontera de actividad:
+`ResultadoClasificacion`, `ResultadoEmbeddings` (ADR-002), `ExtraccionResultado`,
+`ExtraerMarkdownLayoutResultado` y `PromptResultado`. No hace falta ningun canal nuevo.
 
 **Los proveedores compuestos deben fusionar.** Los routers de clasificacion y
 extraccion, el clasificador hibrido y el rescate devuelven el resultado de un solo
@@ -1543,12 +1477,18 @@ trae `incluirCostes`. Al ser anulable, se omite del JSON.
 5. Una llamada combinada (extraccion + resumen) genera **un solo** consumo.
 6. Un consumo sin ninguna magnitud no se tarifa a cero: se deja sin coste.
 7. El importe es `decimal`, nunca `double`.
+8. Los tokens escritos en cache (`TokensEscrituraCache`, AB#101412) son un **recargo**:
+   ya se pagan como entrada plena y no se restan de ella. Se tarifican con
+   `EurEscrituraCachePor1M` de la linea del catalogo. Si la linea no tiene ese precio,
+   no se suma nada y `TarifaAplicada` lleva la marca `|sin-precio-escritura`.
 
 Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) para el detalle funcional y de uso.
 
 ---
 
 ## 3.12 Contratos API Completos
+
+> Los ejemplos de esta sección son ilustrativos y están incompletos: el contrato vigente, campo a campo (incluidos `clasificacion.embeddings`, `ramaClasificacion`, `detalleProveedores`, `costes`, `claveIntencion`, `motivoReutilizacion`, `markdownFuente`, `restriccionTipologias`, `blobPath`, `preComputed*`, `operationId`), es [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md). El seguimiento (`actividadesTotales`) arranca con las 7 actividades de negocio (Clasificar, Extraer, Validar, ObtenerActivo, Integrar, SubirGDC, Persistir), suma 3 si el documento entra por GDC y añade Prompt y otras de forma dinámica. `proveedorClasif: "GPT4oMini"` es un literal heredado del código y no indica el modelo efectivo.
 
 ### 3.12.1 POST /api/IngestDocument — Request
 
@@ -1626,8 +1566,8 @@ La URL llega sin clave; el sondeo exige añadir `?code=<clave de sistema durable
     "version": "1.0",
     "estado": "Running",
     "actividadActual": "Extraer",
-    "actividadesTotales": 12,
-    "actividadesCompletadas": ["Normalizar", "VerificarDuplicado", "SubirBlob", "Clasificar", "ResolverTipologia"],
+    "actividadesTotales": 7,
+    "actividadesCompletadas": ["Clasificar"],
     "duracionTotalMs": 4200,
     "actividades": [
       { "nombre": "Normalizar", "estado": "Completed", "duracionMs": 120, "fallbackActivado": false },
@@ -1698,6 +1638,7 @@ La URL llega sin clave; el sondeo exige añadir `?code=<clave de sistema durable
         "confianzaDI": 0.45,
         "confianzaGPT": 0.92,
         "proveedorClasif": "GPT4oMini",
+        "ramaClasificacion": "gpt",
         "fallbackLLM": true,
         "fallbackRazon": "Confianza DI 0.45 < umbral 0.85",
         "tipologiaDetectada": "nota-simple"
@@ -1794,15 +1735,13 @@ La URL llega sin clave; el sondeo exige añadir `?code=<clave de sistema durable
         "version": "1.0",
         "estado": "Completed",
         "actividadActual": "",
-        "actividadesTotales": 12,
+        "actividadesTotales": 7,
         "actividadesCompletadas": [
-          "Normalizar", "VerificarDuplicado", "SubirBlob",
-          "Clasificar", "ResolverTipologia", "Extraer",
+          "Clasificar", "Extraer",
           "Validar", "ObtenerActivo", "Integrar", "SubirGDC", "Persistir"
         ],
         "duracionTotalMs": 8500,
         "actividades": [
-          { "nombre": "Normalizar", "estado": "Completed", "duracionMs": 120, "fallbackActivado": false },
           { "nombre": "Clasificar", "estado": "Completed", "duracionMs": 2800, "fallbackActivado": true, "fallbackRazon": "Confianza DI 0.45 < umbral 0.85" },
           { "nombre": "Extraer", "estado": "Completed", "duracionMs": 3200, "fallbackActivado": false },
           { "nombre": "Validar", "estado": "Completed", "duracionMs": 45, "fallbackActivado": false },
@@ -1840,7 +1779,9 @@ La URL llega sin clave; el sondeo exige añadir `?code=<clave de sistema durable
 | POST | `/management/tipologias/{id}/publicar` | Publicar | Function |
 | POST | `/management/tipologias/{id}/retirar` | Retirar | Function |
 | POST | `/management/tipologias/{id}/draft` | Volver a Draft | Function |
-| GET | `/management/modelos/{tipo}` | Listar modelos por tipo (clasificacion/extraccion/prompt/layout) | Function |
+| GET | `/management/tipologias/{id}` · `/{id}/versions` · `/{id}/audit` · `/{id}/diff/{otherId}` · `/{id}/export` | Detalle, versiones, auditoria, comparacion y exportacion de una tipologia | Function |
+| POST | `/management/tipologias/import` | Importar una tipologia exportada | Function |
+| GET | `/management/modelos/{tipo}` | Listar modelos por tipo (clasificacion/extraccion/prompt/layout/tarifas/embeddings) | Function |
 | POST | `/management/modelos` | Crear modelo | Function |
 | PUT | `/management/modelos/{id}` | Actualizar modelo | Function |
 | DELETE | `/management/modelos/{id}` | Desactivar modelo (soft-delete, `Activo=false`, responde `200`) | Function |
@@ -1853,21 +1794,24 @@ La URL llega sin clave; el sondeo exige añadir `?code=<clave de sistema durable
 | POST | `/management/prompts/rollback` | Reactivar una versión previa (desactiva la actual) | Function |
 | DELETE | `/management/prompts/{id}` | Eliminar borrador. `403` si la versión está activa | Function |
 | GET | `/management/configuration` | Diagnóstico de configuración efectiva (incluye `environment`) | Function |
+| GET | `/management/plugins-tipologias` | Listado de configuraciones de plugins por tipologia | Function |
 | GET | `/management/plugins-tipologias/{codigo}` | Config plugins de tipologia | Function |
+| GET/POST/PUT/DELETE | `/management/catalogotdn1`, `/management/catalogotdn1/{id}`, `/management/catalogotdn2`, `/management/catalogotdn2/{id}`, `/management/catalogotdn2/by-tdn1/{codigoTdn1}` | CRUD de los catalogos TDN1 y TDN2 | Function |
 | PUT | `/management/plugins-tipologias/{codigo}` | Actualizar config plugins | Function |
 | POST | `/management/plugins-tipologias/{codigo}/publicar` | Publicar config plugins | Function |
 | POST | `/management/plugins-tipologias/{codigo}/retirar` | Retirar config plugins | Function |
 | GET | `/management/ejecuciones` | Listado paginado de ejecuciones. Query: `desde`, `hasta` (default: ultimos 7 dias), `tipologia`, `estado`, `flujo`, `submittedby`, `q` (nombre de documento o GUID), `page`, `pageSize`. Respuesta: `{items, total, page, pageSize}` | Function |
 | GET | `/management/ejecuciones/agregados` | KPIs y serie temporal diaria calculados en servidor sobre el mismo filtro que el listado | Function |
+| GET | `/management/ejecuciones/costes` | Agregados de coste de IA sobre el mismo filtro (`incluirestimados=true` para sumar los estimados); lo consume la pagina `/costes` del Admin | Function |
 | GET | `/management/ejecuciones/{guid}/detalle` | Detalle completo por GUID de ejecucion: contrato de salida completo (`ContratoSalidaCompletoJson`), timeline de actividades y nombres de tipologia resueltos contra el catalogo TDN1/TDN2 | Function |
 
-Los endpoints `/management/ejecuciones*` son los que consume el Monitor del Admin (páginas `/monitor` y `/monitor/{guid}`). El campo `submittedBy` del listado y del detalle se resuelve con `COALESCE(DocumentoEjecuciones.SubmittedBy, Documentos.SubmittedBy)`: las ejecuciones anteriores a la migración `20260805100351_AgregarSubmittedByEjecucion` no tienen el valor propio y heredan el del documento (esto preserva, por ejemplo, el marcador `migracion-dev` de la migración operativa DEV→PRO).
+Fuera de `management/*`: `POST /api/healthcheck` (anonimo), `GET /api/documentos/{sha256}/markdown` y `GET /api/ejecuciones/{guid}/markdown` (Function; AB#100968) y `GET /api/tipologias`. Los endpoints `/management/ejecuciones*` son los que consume el Monitor del Admin (páginas `/monitor`, `/monitor/{guid}`, `/monitor-v2` y `/costes`). El campo `submittedBy` del listado y del detalle se resuelve con `COALESCE(DocumentoEjecuciones.SubmittedBy, Documentos.SubmittedBy)`: las ejecuciones anteriores a la migración `20260805100351_AgregarSubmittedByEjecucion` no tienen el valor propio y heredan el del documento (esto preserva, por ejemplo, el marcador `migracion-dev` de la migración operativa DEV→PRO).
 
 En todas las respuestas de `/management/modelos*` (GET/POST/PUT/DELETE), el campo `ConfiguracionJson` sale con los valores de propiedades sensibles (nombre que contiene `apikey`, `password`, `secret` o `accountkey`, de forma recursiva) enmascarados como `"***"`. En escritura (POST/PUT), si una propiedad sensible llega con el valor `"***"` se conserva el valor previamente almacenado (round-trip seguro): esto permite editar un modelo sin reenviar la clave real y sin destruirla; para sustituirla basta con enviar el valor nuevo en claro.
 
 La validación de contenido de `/management/prompts` (POST/PUT) es únicamente de longitud (10–16000 caracteres); los placeholders del contenido (`{CONTEXT_PROMPT}`, `{TDN1_CATALOG}`, `{TDN2_CATALOG}`, `{TDN1_CODE}`, `{DOCUMENT_TEXT}`, etc.) no se validan en backend — flexibilidad deliberada para edición iterativa. Ver [ESPECIFICACION_PROMPTS_CONFIGURABLES.md](especificaciones/ESPECIFICACION_PROMPTS_CONFIGURABLES.md).
 
-El campo `environment` de `/management/configuration` se resuelve con prioridad desde el app setting `EnvironmentName` (nuevo, desplegado por pipeline), con fallback a `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` y por último `"Unknown"`. No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque en un Function App desplegado altera el comportamiento del host (fallback a BD InMemory y omisión de validación TLS cuando vale `"Development"`).
+El campo `environment` de `/management/configuration` se resuelve con prioridad desde el app setting `EnvironmentName` (nuevo, desplegado por pipeline), con fallback a `AZURE_FUNCTIONS_ENVIRONMENT`/`DOTNET_ENVIRONMENT` y por último `"Unknown"`. No se usa `AZURE_FUNCTIONS_ENVIRONMENT` como fuente principal porque en un Function App desplegado altera el comportamiento del host (fallback a BD InMemory cuando vale `"Development"`).
 
 ---
 

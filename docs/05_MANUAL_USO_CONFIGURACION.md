@@ -1,17 +1,19 @@
 # 5. Manual de Uso y Configuracion — DocumentIA
 
-> Ultima actualizacion: 2026-06-05  
+> Última revisión: 2026-11-25 (AB#101450, retirada de la referencia a `GptFallback:Enabled` en preguntas frecuentes; AB#101553, validación TLS del GDC contra la CA de SAREB; verificada en DEV el 2026-11-25; PRE y PRO con la siguiente release). Revisiones previas: 2026-11-22 (AB#101447, contraste con `ContratoEntrada`, `TipologiaValidationConfig`, `TipologiaConfigLoader`, `ClassificationLevelResolver`, los proveedores y `azure-pipelines.yml`)  
+> Actualización anterior: 2026-06-05  
 > Proyecto: AI DocClassExt — SAREB  
+> **Reparto con otros documentos:** este manual manda en contrato de uso, `ConfiguracionJson`, modelos y alias de IA y retención; [MANUAL_CONFIGURACION.md](manuales/MANUAL_CONFIGURACION.md) manda en app settings por entorno; [FUENTE_VERDAD_CONFIGURACION.md](referencias/FUENTE_VERDAD_CONFIGURACION.md) fija qué manda entre BD y seeds. **Modelo generativo por entorno:** DEV usa `gpt-5.6-luna` desde el 2026-11-20 (ADR-004); PRE y PRO siguen con el deployment `gpt-4o-mini` (modelo gpt-4.1-mini) hasta la siguiente release. Los ejemplos con `gpt-4o-mini` describen PRE y PRO.  
 > **Nota:** Versión v1.4+ con ConfiguracionJson refactorizado. 
-> - Para cambios en v1.4-v1.5, ver [12_MIGRACION_PROMPTGPT_V1_4.md](12_MIGRACION_PROMPTGPT_V1_4.md).
-> - **Fase 3.1 (2026-06-05):** 4 columnas legacy removidas. ConfiguracionJson es única fuente de verdad. Ver [20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md](20_FASE3_1_SCHEMA_CLEANUP_2026-06-05.md).
+> - Los cambios de v1.4-v1.5 (retirada de `PromptGPT`) se describen en la guía histórica `12_MIGRACION_PROMPTGPT_V1_4.md` de `docs/auxiliares/`, carpeta no versionada.
+> - **Fase 3.1 (2026-06-05):** 4 columnas legacy retiradas. `ConfiguracionJson` es la única fuente de verdad.
 
 > Alcance de este manual:
 > - Parte A (usuario final): guia practica de uso, no tecnica.
 > - Parte B (equipo tecnico): APIs, contratos y configuracion.
 > 
 > Si solo necesitas usar DocumentIA en tu operativa diaria, lee la Parte A.
-> Para instalacion, infraestructura y despliegue, ver `docs/auxiliares/migracion-deployment/04_MANUAL_EXPLOTACION.md`.
+> Para infraestructura y despliegue, ver `docs/infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md` y `docs/procedimientos/RELEASE_MANAGEMENT.md`.
 > Para contrato HTTP detallado, ver `docs/contratos/CONTRATO_API_HTTP.md`.
 
 ---
@@ -85,7 +87,7 @@ Estados habituales y accion recomendada:
 |---|---|---|
 | `OK` | Documento procesado correctamente | Continuar flujo normal |
 | `VALIDACION_CON_ERRORES` | Se extrajeron datos pero hay inconsistencias | Revisar campos marcados y corregir/confirmar |
-| `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento | Revisar manualmente y reenviar si procede |
+| `BAJA_CONFIANZA_CLASIFICACION` | El sistema no reconoce bien el tipo de documento. También se da cuando solo identifica la familia (TDN1) o el documento queda como Desconocido y la confianza no llega al umbral | Revisar manualmente y, si procede, reenviar. En el caso de familia o Desconocido, reenviar con `forceReprocess = true`, porque si no se devuelve el mismo resultado |
 | `DUPLICADO` | Solo con `Dedup__ModoEstricto = false`: el documento ya habia sido procesado y no hay ningun resultado anterior reutilizable (en modo estricto, el defecto, se procesa) | Usar resultado existente o seguir criterio de negocio |
 | _(estado de la ejecucion anterior, normalmente `OK`)_ con `reutilizadaPorDuplicado = true` | El documento ya se habia procesado y se devuelve aquel resultado tal cual, sin volver a analizarlo. La respuesta indica en `mensajeReutilizacion` que se ha reutilizado | Tratarlo como el resultado original. Si se necesita reanalizar (por ejemplo, tras un cambio de configuracion), reenviar con `forceReprocess = true` |
 | `SIN_CONTENIDO_DOCUMENTO` | El documento no tiene texto legible: el servicio de lectura respondio sin contenido | Comprobar si es un escaneado sin OCR o una pagina en blanco y pedir un documento legible. Si lo que fallo fue la lectura, el estado es `ERROR` o `PENDIENTE_REINTENTO` con `No se pudo obtener el texto del documento: <motivo>` |
@@ -358,7 +360,7 @@ $markdownTexto = "## Nota Simple\nFinca: 12345\n..."
 $body = @{
   instrucciones = @{
     classification = @{
-      nivelClasificacion = "TDN1/TDN2"
+      nivelClasificacion = "TDN1_TDN2"
       markdown           = $markdownTexto
     }
   }
@@ -392,10 +394,10 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 | `instrucciones.skipGDCUpload` | bool? | No | `null` = respetar config tipologia. `true` = no subir GDC. `false` = forzar subida. |
 | `instrucciones.incluirCostes` | bool | No | Default `false`. `true` = la salida incluye `detalleEjecucion.costes` con el coste de IA de la ejecucion. El coste se calcula y se persiste siempre; este parametro solo decide si se devuelve. Ver [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md). |
 | `instrucciones.classification` | object | No | Config clasificacion para esta peticion. |
-| `instrucciones.classification.provider` | string | No | `"auto"` / `"azure-document-intelligence"` / `"mock"`. Default: `"auto"`. |
+| `instrucciones.classification.provider` | string | No | `"auto"` (flujo por defecto `hybrid-rules-gpt-di`) / `"hybrid-tdn"` / `"gpt"` / `"azure-document-intelligence"` / `"rules"` / `"mock"`. Default: `"auto"`. |
 | `instrucciones.classification.model` | string | No | Model key del registro de clasificación para la ruta GPT. `"auto"` = usar modelo fallback marcado con `useAsFallback=true`. Si se informa un model key válido de provider GPT/Azure OpenAI, se utiliza en esa petición. |
 | `instrucciones.classification.umbral` | double? | No | Umbral confianza clasificacion (0.0-1.0). `null` = usar config tipologia/servidor. |
-| `instrucciones.classification.nivelClasificacion` | string? | No | Nivel de clasificacion jerarquica. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1/TDN2"` (dos fases). Si se informa, fuerza automaticamente `provider="gpt"` (D2). Forma parte de la clave de deduplicacion. `null` = clasificacion completa por defecto. |
+| `instrucciones.classification.nivelClasificacion` | string? | No | Nivel de clasificacion jerarquica. Valores: `"TDN1"` (solo nivel 1) \| `"TDN1_TDN2"` (dos fases; con guion bajo, cualquier otro valor devuelve `400`). Si se informa, fuerza automaticamente `provider="gpt"` (D2). Forma parte de la clave de deduplicacion. `null` = clasificacion completa por defecto. |
 | `instrucciones.classification.markdown` | string? | No | Markdown pre-procesado del documento. Si se informa, gana siempre en `MarkdownResolver` (fuente `Caller`) y no se llama a Document Intelligence Layout. Util en integraciones batch que ya han extraido el markdown. Ver GUIA_CLASIFICACION_DOCUMENTOS.md §3.3. |
 | `instrucciones.extraction` | object | No | Config extraccion para esta peticion. |
 | `instrucciones.extraction.provider` | string | No | `"auto"` / `"azure-content-understanding"` / `"azure-cu"` / `"azure-document-intelligence"` / `"azure-di"` / `"azure-openai"` / `"gpt"` / `"mock"`. Con `"azure-openai"` se activa el modo GPT directo (sin CU). |
@@ -424,8 +426,10 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 - Debe venir exactamente una fuente de documento: `objectIdGDC` o `content.base64`.
 - Si se usa `documento.objectIdGDC`, el sistema fuerza `instrucciones.skipGDCUpload = true`.
 - `instrucciones.classificationOnly=true` y `instrucciones.expectedType` informado son incompatibles (`400 Bad Request`).
-- La **clave de deduplicacion** es `SHA256 + classificationOnly + nivelClasificacion`. Peticiones con el mismo
-  documento pero distinto `nivelClasificacion` no reutilizan el resultado anterior.
+- Un documento ya procesado solo reutiliza una ejecucion anterior con la misma **clave de intencion** (modo,
+  `nivelClasificacion`, universo de tipologias, `expectedType` y modelo de clasificacion). Peticiones con el mismo
+  documento pero distinto `nivelClasificacion` no reutilizan el resultado anterior. Ver la seccion `Dedup` de este
+  manual y ADR-003.
 - Si se informa `instrucciones.classification.nivelClasificacion`, el sistema fuerza `provider="gpt"` aunque se
   haya indicado otro proveedor en la peticion.
 - En ruta `provider="gpt"` (directa o forzada por `nivelClasificacion`), `instrucciones.classification.model`
@@ -440,6 +444,9 @@ Invoke-RestMethod http://localhost:7071/api/tipologias | ConvertTo-Json -Depth 5
 - `forzarResumenPorDefecto=true` fuerza una llamada dedicada si todavia no existe `Resumen`.
 - Si esa llamada dedicada tambien debe ejecutar un prompt propio/ad-hoc, ambos prompts se combinan y se devuelven en campos separados.
 - `promptConfig.enabled=true` con `systemPrompt` y `userPromptTemplate` vacios no dispara `ResultadoPrompt` por si solo.
+- `promptConfig.modelKey` es opcional. Vacio (o ausente) significa heredar `PromptDefaults:ModelKey` del entorno; la peticion puede fijar otra clave y gana a ambas. Una tipologia solo debe informarlo si necesita un modelo distinto del entorno, y entonces la clave tiene que existir y estar activa en `ModeloConfigs`.
+- `PromptDefaults:ModelKey` se fija por entorno (app setting `PromptDefaults__ModelKey`): el pipeline fija `prompt.gpt56-luna` en DEV y `default.gpt4o-mini` en PRE y PRO. No puede quedar vacio ni apuntar a una clave inexistente o inactiva: el prompt y el resumen fallan en cada llamada.
+- Para cambiar de modelo o volver atras basta cambiar ese app setting. `ensure-app-settings.ps1` no sobrescribe claves que ya existen, asi que el cambio posterior se hace con `az functionapp config appsettings set`, ademas del valor del pipeline para que persista.
 - Si la clasificacion se hizo con recorte real de paginas y el resumen sale de ese contexto, se anade la nota: `* Resumen basado en las primeras N paginas del documento`.
 - En ejecucion completa (`classificationOnly=false`), extraccion y prompt libre se ejecutan con markdown del documento completo aunque la clasificacion haya usado recorte.
 
@@ -756,23 +763,17 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
 {
   "tipologiaId": "nota.simple.1_4",
   "version": "1.4",
-  "extractionConfig": {
+  "extraction": {
     "enabled": true,
     "provider": "azure-content-understanding",
     "modelKey": "nota.simple.1_4.azure-cu.sweden",
     "secondaryModelKey": "nota.simple.1_4.azure-cu.westeurope",
-    "expectedFields": [
-      "FincaRegistral",
-      "IDUFIR_CRU",
-      "Direccion",
-      "ReferenciaCatastral",
-      "FechaDocumento",
-      "Titulares",
-      "Cargas"
-    ]
+    "autoMapUnmappedFields": true,
+    "fieldMappings": {}
   },
   "promptConfig": {
     "enabled": false,
+    "modelKey": "",
     "systemPrompt": "",
     "userPromptTemplate": ""
   },
@@ -780,55 +781,41 @@ Archivo: `config/tipologias/{tipologia-codigo}.validation.json`
     "umbralOK": 0.85,
     "umbralRevision": 0.70
   },
-  "fields": {
-    "FincaRegistral": {
+  "fields": [
+    {
+      "name": "FincaRegistral",
+      "type": "string",
+      "required": true,
       "rules": [
-        {
-          "type": "required",
-          "severity": "Error",
-          "message": "Finca registral es obligatoria"
-        },
-        {
-          "type": "regex",
-          "severity": "Warning",
-          "params": { "pattern": "^\\d+$" },
-          "message": "Se espera formato numerico"
-        }
+        { "ruleType": "regex", "severity": "Warning", "parameters": { "pattern": "^\\d+$" } }
       ]
     },
-    "IDUFIR_CRU": {
+    {
+      "name": "IDUFIR_CRU",
+      "type": "string",
+      "required": false,
       "rules": [
-        { "type": "required", "severity": "Warning" },
-        { "type": "regex", "severity": "Error", "params": { "pattern": "^\\d{14}$" }, "message": "IDUFIR debe tener 14 digitos" }
+        { "ruleType": "regex", "severity": "Error", "parameters": { "pattern": "^\\d{14}$" } }
       ]
     },
-    "Titulares": {
+    { "name": "Titulares", "type": "array", "required": true, "rules": [] },
+    { "name": "NIF_Titular", "type": "string", "required": false, "rules": [ { "ruleType": "nif", "severity": "Error" } ] },
+    { "name": "ReferenciaCatastral", "type": "string", "required": false, "rules": [ { "ruleType": "catastral", "severity": "Warning" } ] },
+    {
+      "name": "FechaDocumento",
+      "type": "date",
+      "required": false,
       "rules": [
-        { "type": "required", "severity": "Error" },
-        { "type": "array", "severity": "Error", "params": { "minItems": 1 }, "message": "Debe haber al menos un titular" }
-      ]
-    },
-    "NIF_Titular": {
-      "rules": [
-        { "type": "nif", "severity": "Error", "message": "NIF/NIE/CIF invalido" }
-      ]
-    },
-    "ReferenciaCatastral": {
-      "rules": [
-        { "type": "catastralReference", "severity": "Warning", "message": "Formato de referencia catastral invalido" }
-      ]
-    },
-    "FechaDocumento": {
-      "rules": [
-        { "type": "required", "severity": "Warning" },
-        { "type": "dateFormat", "severity": "Error", "params": { "format": "dd/MM/yyyy" } }
+        { "ruleType": "date", "severity": "Error", "parameters": { "formats": ["dd/MM/yyyy", "yyyy-MM-dd"] } }
       ]
     }
-  }
+  ]
 }
 ```
 
-Campos relevantes de `extractionConfig` (tipología):
+> Estructura real (`TipologiaValidationConfig`, revisado 2026-11-22): la sección se llama `extraction` (no `extractionConfig`), `fields` es una lista de `{ name, type, required, rules[] }` y cada regla es `{ ruleType, severity, parameters }`; `required` es una propiedad del campo, no una regla, y no existe `message`. Los seeds de `src/backend/DocumentIA.Functions/config/tipologias/*.validation.json` siguen esta forma.
+
+Campos relevantes de `extraction` (tipología):
 
 | Campo | Tipo | Obligatorio | Notas |
 |-------|------|-------------|-------|
@@ -836,25 +823,25 @@ Campos relevantes de `extractionConfig` (tipología):
 | `provider` | string | No | Proveedor de extracción. Recomendado: `azure-content-understanding`. |
 | `modelKey` | string | Sí (si `enabled=true`) | Modelo principal de extracción (clave existente en `ModeloConfigs`). |
 | `secondaryModelKey` | string | No | Modelo secundario para reparto round-robin y failover por circuit breaker. |
-| `expectedFields` | array string | No | Lista de campos esperados para mapeo/validación. |
+| `autoMapUnmappedFields` | bool | No | Mapea automáticamente los campos del analizador no declarados en `fieldMappings`. |
+| `fieldMappings` | objeto | No | Correspondencia nombre del analizador → nombre del campo de salida. No existe `expectedFields`: los campos esperados son los de `fields`. |
 
 > `modelKey` y `secondaryModelKey` deben apuntar a modelos de tipo extracción en BD (`ModeloConfigs`). Si no se define `secondaryModelKey`, no hay reparto round-robin ni failover entre réplicas.
 
 ### 5.5.2 Tipos de Regla Disponibles
 
-| Tipo | Parametros | Uso |
+Valores de `ruleType` que reconoce `TipologiaConfigLoader` (revisado 2026-11-22). El campo obligatorio se declara con `required: true` en el campo, no con una regla; los campos de tipo `boolean` y `array` los validan `BooleanValidator` y `ArrayValidator` por el `type` del campo.
+
+| `ruleType` | `parameters` | Uso |
 |------|-----------|-----|
-| `required` | — | Campo obligatorio (no null, no vacio) |
 | `regex` | `pattern` | Valor debe coincidir con expresion regular |
 | `range` | `min`, `max` | Valor numerico en rango |
-| `dateFormat` | `format` | Fecha en formato especificado (`dd/MM/yyyy`, `yyyy-MM-dd`) |
-| `length` | `minLength`, `maxLength` | Longitud de cadena en rango |
+| `date` | `formats[]` | Fecha en alguno de los formatos indicados (`dd/MM/yyyy`, `yyyy-MM-dd`) |
+| `minLength` / `maxLength` | `value` | Longitud minima o maxima de cadena (dos reglas) |
 | `nif` | — | Validacion algoritmica NIF/NIE/CIF espanol |
 | `enum` | `values[]` | Valor debe estar en lista permitida |
-| `catastralReference` | — | Formato referencia catastral espanola (20 chars) |
+| `catastral` | — | Formato referencia catastral espanola (20 chars) |
 | `address` | — | Estructura basica de direccion |
-| `boolean` | — | Valor booleano (true/false/si/no) |
-| `array` | `minItems`, `maxItems` | Validacion de arrays (titulares, cargas) |
 
 ### 5.5.3 Severidades
 
@@ -979,7 +966,7 @@ Invoke-RestMethod \
 |-------|------|-------------|-------|
 | `endpoint` | string | Sí | URL base del servicio Azure DI |
 | `apiKey` | string | Si `authMode=ApiKey` | API Key del servicio |
-| `authMode` | string | Sí | `"ApiKey"` o `"ManagedIdentity"` |
+| `authMode` | string | Sí | `"ApiKey"` o `"DefaultAzureCredential"` (el único literal que activa la identidad administrada; cualquier otro valor se trata como ApiKey) |
 | `apiVersion` | string | No | Default: `"2024-11-30"` |
 | `pollIntervalMs` | int | No | ms entre sondeos de estado. Default: `1000` |
 | `timeoutSeconds` | int | No | Timeout total. Default: `120` |
@@ -1045,7 +1032,9 @@ Invoke-RestMethod \
 |-------|------|-------------|-------|
 | `deploymentName` | string | Sí | Nombre del deployment en Azure OpenAI |
 | `temperature` | double | No | Temperatura de generacion. Default: `0.0` |
-| `maxTokens` | int | No | Tokens maximos de respuesta. Default: `4096` |
+| `maxTokens` | int | No | Tokens maximos de respuesta. Defaults de clase: 2000 en extraccion, 150 en clasificacion; en prompt y resumen manda `promptConfig.MaxTokens` |
+| `reasoningEffort` | string | No | Solo modelos de razonamiento (familias `gpt-5*` y o-series): `none`, `minimal`, `low`, `medium`, `high`. Nulo o vacío = no se envía (comportamiento anterior). Con cualquier otro valor se registra un aviso en el log en todos los modelos, también en los clásicos, y no se envía. En modelos clásicos un valor válido se ignora. Cuando está informado y es válido, la llamada a un modelo de razonamiento envía `reasoning_effort` y, si hay límite de salida, `max_completion_tokens` (en lugar de `max_tokens`); a los modelos de razonamiento nunca se les envía `temperature`. El límite de salida depende de la operación: en clasificación es el mayor entre `maxTokens` del modelo y el que pide la fase; en prompt sale de `promptConfig.MaxTokens`, y en resumen de `max(resumenConfig.MaxTokens, promptConfig.MaxTokens)`. En prompt y resumen no se usa `maxTokens` del modelo. Aplica a clasificación y a prompt (incluido el resumen); la extracción con fallback GPT no lo usa. Ejemplo en DEV: filas `classification.gpt56-luna` y `prompt.gpt56-luna` (`scripts/migrations/gpt56-luna/`). |
+| `promptCache` | objeto | No | Solo modelos de clasificación de la familia GPT-5.6 y posteriores; los anteriores responden HTTP 400 a estos campos, así que en ellos se omite o se deja con `enabled: false`. Campos: `enabled` (bool, por defecto `false`), `keyPrefix` (por defecto `documentia-clasif`), `breakpoint` (bool, por defecto `true`: marca como prefijo reutilizable el mensaje de sistema y el tramo estable del mensaje de usuario, lo anterior a `{DOCUMENT_TEXT}`), `ttl` (por defecto `30m`) y `mode` (`implicit` por defecto, o `explicit`; un valor desconocido se trata como `implicit`). Usar `explicit`: con `implicit`, GPT-5.6 escribe y cobra el prompt entero, documento incluido, en cada llamada. Las escrituras en caché se tarifican con `EurEscrituraCachePor1M` de la línea del catálogo `tarifas.ia`. Ejemplo en DEV, fila `classification.gpt56-luna`: `{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m","mode":"explicit"}` (script `03-dev-promptcache-on-gpt56-luna.sql`). |
 | `minFieldsRatio` | double | No | Completitud minima para activar este modelo como fallback |
 | `useAsFallback` | bool | No | `true` = actuar como fallback de extraccion GPT |
 
@@ -1063,7 +1052,7 @@ Invoke-RestMethod \
 }
 ```
 
-> **Nota sobre `authMode`:** Con `"ManagedIdentity"` el campo `apiKey` se ignora y la autenticacion se realiza via Managed Identity de la Function App (sin credenciales en BD).
+> **Nota sobre `authMode`:** Con `"DefaultAzureCredential"` el campo `apiKey` se ignora y la autenticacion se realiza via Managed Identity de la Function App (sin credenciales en BD).
 
 ### 5.6.1b Alias de recurso de IA (ResourceAlias)
 
@@ -1115,7 +1104,7 @@ que corre antes del GPT y, segun el modo, solo se persiste o contesta.
 | `UmbralConfianza` | double | No | En `hibrido`, A contesta si su confianza TDN1 alcanza el umbral. Defecto 0,6 |
 | `Restringido.Modo` | string | No | Modo propio de las peticiones con `restriccionTipologias`. Defecto `sombra`. Una fila con `Modo = off` debe llevar tambien `Restringido.Modo = off`: el script 01 lo hace, pero una edicion manual desde el Admin que solo cambie `Modo` deja activo el modo restringido |
 | `Restringido.UmbralMasa`, `Restringido.UmbralConfianzaCondicionada` | double | No | Umbrales del hibrido restringido. Defectos 0,5 y 0,8. Solo actuan con un modelo `calibrado = true` |
-| `MaxChars` | int | No | Recorte del texto antes de la llamada. Defecto 24.000. El orquestador ya colapsa los espacios y recorta a 24.000 caracteres (`EmbeddingsClasificadorConfig.MaxCharsPorDefecto`) antes de llamar a la activity, para no duplicar el markdown completo en el historial Durable: `MaxChars` solo puede bajar ese tope, un valor mayor no tiene efecto |
+| `MaxChars` | int | No | Recorte del texto antes de la llamada, en caracteres (el tope real del deployment son 8.192 tokens; ver el reintento por mitades en Comportamiento). Defecto 24.000. El orquestador ya colapsa los espacios y recorta a 24.000 caracteres (`EmbeddingsClasificadorConfig.MaxCharsPorDefecto`) antes de llamar a la activity, para no duplicar el markdown completo en el historial Durable: `MaxChars` solo puede bajar ese tope, un valor mayor no tiene efecto |
 | `TimeoutSeconds` | int | No | Tiempo maximo de la llamada de embeddings. Defecto 20. Un endpoint colgado cuesta `TimeoutSeconds` en cada ejecucion y no abre el circuito de resiliencia (solo lo abren los 429 y los fallos HTTP); si ocurre, bajar `TimeoutSeconds` o poner la fila en `off` hasta que el endpoint responda |
 
 Comportamiento:
@@ -1130,6 +1119,10 @@ Comportamiento:
   `embeddings` o `expectedtype`.
 - Cualquier fallo (artefacto, 429, timeout) deriva al GPT con `Error` en el bloque. Un 429 de
   embeddings no se reintenta ni produce `PENDIENTE_REINTENTO`.
+- Excepcion (AB#101245): si el deployment rechaza la entrada por superar sus 8.192 tokens
+  (HTTP 400 con `maximum input length`), el cliente reintenta con la primera mitad del texto,
+  hasta tres veces, y deja un warning por recorte en el log del worker. Es el mismo tratamiento
+  con el que se entrenaron v1 y v2 en el Batch. Agotados los recortes, deriva al GPT con `Error`.
 - El consumo se registra como `classification.embeddings` con `Modelo` = nombre del
   deployment; el catalogo `tarifas.ia` necesita una linea por deployment
   (`scripts/migrations/clasificador-embeddings/02-tarifas-embeddings-deployments.sql`).
@@ -1148,7 +1141,7 @@ Mecanismo:
 1. **Reintento in-call** ante 429/500/502/503/504, respetando el header `Retry-After` (o backoff exponencial si no viene), acotado por `MaxRetryDelaySeconds`.
 2. **Circuit breaker con cooldown**: tras varios fallos consecutivos el circuito abre y las siguientes llamadas fallan rapido (sin reintentar) durante el cooldown; un exito lo cierra.
 
-Configuracion global en Functions (`appsettings.json`), seccion `AzureOpenAIResilience`:
+Configuracion global en Functions, seccion `AzureOpenAIResilience` (app settings `AzureOpenAIResilience__*`; el host en Azure no carga `appsettings.json`, los valores de abajo son los defaults de la clase):
 
 ```json
 "AzureOpenAIResilience": {
@@ -1178,7 +1171,7 @@ Configuracion global en Functions (`appsettings.json`), seccion `AzureOpenAIResi
 
 ## 5.7 Configuracion de Plugins
 
-> Los archivos `.plugins.json` son **solo seed**. En runtime, los plugins se resuelven desde la tabla `PluginTipologiaConfigs` en BD. Para modificar plugins en produccion, usar `PUT /management/tipologias/{id}/plugins`.
+> Los archivos `.plugins.json` son **solo seed**. En runtime, los plugins se resuelven desde la tabla `PluginTipologiaConfigs` en BD. Para modificar plugins en produccion, usar `PUT /management/plugins-tipologias/{tipologiaCodigo}` y despues `POST .../publicar`.
 
 ### 5.7.1 Estructura del Archivo de Plugins (referencia / seed)
 
@@ -1563,16 +1556,16 @@ Cuando AssetResolver se ejecuta, `detalleEjecucion.assetResolver` contiene:
 R: Verificar que el modelo DI esta entrenado con ejemplos suficientes del tipo documental. Revisar `clasificacion.confianzaDI` — si es baja, el fallback GPT puede suponer incorrectamente. Considerar usar `expectedType` para omitir clasificacion.
 
 **P: La extraccion devuelve campos vacios.**
-R: Verificar que el modelo CU tiene los campos correctos configurados. Revisar `extractionConfig.expectedFields` en el JSON de validacion. Comprobar que el analyzer de CU esta publicado. Si la completitud es baja, verificar que `GptFallback:Enabled=true`.
+R: Verificar que el modelo CU tiene los campos correctos configurados. Revisar `fields` y `extraction.fieldMappings` en el JSON de validacion. Comprobar que el analyzer de CU esta publicado. Si la completitud es baja, revisar los umbrales de `confidenceConfig` de la tipología y que la fila de `ModeloConfigs` con `UseAsFallback = true` de tipo Extracción esté activa y apunte a un modelo existente.
 
 **P: Error SSL al conectar con GDC.**
-R: El certificado del GDC SINTWS es emitido por una CA interna de SAREB no confiada fuera de la red corporativa. En desarrollo/Azure (Linux), configurar `GDC:BypassSslValidation=true`. En produccion, instalar el certificado CA corporativo.
+R: El certificado del GDC SINTWS lo emite la CA interna de SAREB, que el host Linux no trae de serie. Desde el despliegue de AB#101553 (verificado en DEV el 2026-11-25; PRE y PRO con la siguiente release) el handler valida la cadena contra `config/certs/sareb-ca-chain.pem` (raíz y emisora de SAREB, raíz válida hasta 2040-12-16), sin comprobación de revocación, y el pipeline fija `GDC__BypassSslValidation=false`. Si el GDC cambia de CA o el PEM se queda desactualizado, `GDC__TrustedRootCertificate` (PEM) sustituye al fichero sin desplegar. `GDC__BypassSslValidation=true` es solo un interruptor de emergencia (acepta cualquier certificado, aviso `[GDC] AVISO` al arrancar; el siguiente despliegue lo devuelve a `false`). Un fichero de confianza ausente o corrupto impide arrancar el host. Hasta el despliegue, los tres entornos siguen con `true`.
 
 **P: Plugin custom (.dll) no se encuentra.**
 R: Verificar que `assemblyPath` en el plugins.json apunta a la ruta correcta. En local: ruta absoluta a `plugins/SarebEnrichments.dll`. En Azure (deploy): ruta relativa `plugins/SarebEnrichments.dll` (el script `deploy-manual.ps1` ajusta automaticamente).
 
 **P: Timeout en GDC (120s).**
-R: La actividad `SubirGDCActivity` tiene un timeout hardcoded de 120s en el orchestrator. Si GDC es lento, el resultado se marca con `gdc.exitoso=false` y `gdc.mensaje="Timeout"`, pero el documento se persiste igualmente. Verificar estado de red hacia el host GDC del entorno (prod: `srbwidp04.sareb.srb:8090`; dev: `srbwidd03.sareb.srb:8090`).
+R: La actividad `SubirGDCActivity` tiene un timeout hardcoded de 120s en el orchestrator. Si GDC es lento, el resultado se marca con `gdc.exitoso=false` y `gdc.mensaje="Timeout"`, pero el documento se persiste igualmente. Verificar estado de red hacia el host GDC del entorno (pro: `srbwidp05.sareb.srb:8090`, la replica; pre: `srbwidi03.sareb.srb:8090/sintws-162`; dev: `srbwidd03.sareb.srb:8090`).
 
 **P: "Cold start" lento en Azure.**
 R: Normal en Consumption Plan (2-10s). Para reducirlo: considerar Premium Plan con warm instances, o mantener un health check periodico.
@@ -1646,7 +1639,7 @@ Un entorno sin identificar se trata siempre como advertencia (ambar), nunca como
 
 Si la sesion no tiene un usuario autenticado, el banner añade el sufijo `· solo lectura (sin usuario autenticado)`.
 
-**Modo solo lectura sin usuario autenticado.** Mientras el Admin desplegado no tenga activa la autenticacion (App Service Authentication / EasyAuth), todas las operaciones de escritura (crear, editar, publicar, retirar, activar, borrar tipologias, modelos, prompts o configuracion de plugins) se rechazan con el mensaje:
+**Modo solo lectura sin usuario autenticado.** EasyAuth esta activo en los tres entornos (DEV desde 2026-08-06, PRE y PRO desde 2026-09-04), asi que este modo es hoy una salvaguarda: si el Admin no recibe identidad, todas las operaciones de escritura (crear, editar, publicar, retirar, activar, borrar tipologias, modelos, prompts o configuracion de plugins) se rechazan con el mensaje:
 
 > «Modo solo lectura: no hay un usuario autenticado, así que no es posible registrar quién realiza el cambio. Active la autenticación del Admin (App Service Authentication) para poder modificar la configuración.»
 
@@ -1709,7 +1702,7 @@ El boton se encuentra alineado a la derecha de la barra de modos (Arbol / Codigo
 
 ### 5.9.3 Seccion Modelos
 
-Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI) de los cinco tipos: Clasificacion, Extraccion, Prompt, Layout y Tarifas. Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
+Permite registrar y gestionar los modelos de IA disponibles (Azure Document Intelligence, Azure Content Understanding, Azure OpenAI) de los seis tipos de `TipoModelo` (Clasificacion, Extraccion, Prompt, Layout, Tarifas y Embeddings); el editor del Admin ofrece los cuatro primeros, y las filas de tarifas y del clasificador por embeddings se mantienen por script (`scripts/migrations/costes-ia/`, `scripts/migrations/clasificador-embeddings/`). Cada modelo tiene un `key` unico que se referencia desde el JSON de configuracion de las tipologias.
 
 - **Editar** funciona igual para los cuatro tipos, incluidos los modelos de tipo Layout (antes de esta correccion, editar un modelo Layout creaba un duplicado en vez de actualizar el existente).
 - **Borrar** es un desactivado logico (soft-delete: `Activo=false`), no un borrado fisico. El dialogo de confirmacion lo indica explicitamente: "Desactivar modelo".
@@ -1740,7 +1733,7 @@ Ademas de las secciones anteriores, el Admin incluye:
 
 ### 5.9.7 Seccion Costes
 
-Pagina `/costes`. **No aparece en el menu de navegacion**: se accede por URL directa o desde el detalle de una ejecucion. Es la vista de coste de IA agregado y por ejecucion, con los mismos filtros del Monitor (rango de fechas, tipologia, estado, flujo, solicitante y busqueda libre).
+Pagina `/costes`. Entrada **Cuadro de costes** del menu de navegacion (AB#101127). Es la vista de coste de IA agregado y por ejecucion, con los mismos filtros del Monitor (rango de fechas, tipologia, estado, flujo, solicitante y busqueda libre).
 
 - **Totales del periodo**: coste, tokens, paginas y numero de ejecuciones con coste.
 - **Desglose** por actividad, por tipologia y por modelo, para ver donde se concentra el gasto.
@@ -1748,12 +1741,13 @@ Pagina `/costes`. **No aparece en el menu de navegacion**: se accede por URL dir
 - **Listado de ejecuciones** con su coste, paginado, con enlace al detalle. El detalle muestra el desglose por llamada de esa ejecucion.
 - **Ejecuciones estimadas**: las anteriores a la puesta en marcha de la medicion se rellenaron de forma retroactiva a partir de la volumetria persistida. Van marcadas y se pueden excluir con el conmutador de estimados. Son una estimacion, no facturacion.
 - **Rango personalizado** (AB#100284): ademas de las ventanas relativas, el desplegable Rango ofrece *Personalizado* con dos fechas Desde/Hasta, inclusivas y en hora peninsular, precargadas con el mes en curso. Sirve para sacar el coste de un mes natural o de cualquier periodo cerrado. La misma opcion existe en el Monitor, donde ademas pausa el auto-refresco mientras el rango sea fijo.
+- **Mes en curso** (AB#101128): opcion del desplegable Rango, tras *Ultimas 24 horas*. Va desde las 00:00 del dia 1 del mes en hora peninsular hasta ahora y se recalcula en cada consulta, asi que se actualiza sola al cambiar de mes. Costes arranca en *Mes en curso* y el Monitor en *Ultimas 24 horas*. Con *Mes en curso* el auto-refresco del Monitor no se pausa, porque no es un rango fijo.
 
-Aviso de lectura: cada entorno usa la cuenta de IA de produccion, asi que la suma de un entorno no es comparable con la factura de su grupo de recursos.
+Aviso de lectura: DEV y PRE usan sus propias cuentas de IA desde septiembre de 2026 y PRO las suyas; la suma de un entorno es una estimacion por tarifa de lista, no la factura. Hasta septiembre de 2026 los tres entornos compartian la cuenta de IA de produccion.
 
 ### 5.9.8 Reutilizaciones por duplicado en el Monitor
 
-Desde AB#100258, cada peticion que el sistema resuelve devolviendo el resultado de una ejecucion anterior (deduplicacion por SHA256) queda registrada como una fila propia, y el Monitor (`/monitor`) la distingue:
+Desde AB#100258, cada peticion que el sistema resuelve devolviendo el resultado de una ejecucion anterior (deduplicacion por SHA256) queda registrada como una fila propia, y el Monitor (entrada **Monitor** del menu, ruta `/monitor-v2`; la ruta `/monitor` de la version anterior se conserva sin entrada de menu, AB#101127) la distingue:
 
 - **Por defecto no se muestran** ni cuentan: quedan fuera del listado, de los KPIs, del histograma, de la matriz y de la seccion de costes, porque no son ejecuciones de IA. Las cifras que el Monitor mostraba antes no cambian.
 - **Filtro "Reutilizadas"** con tres valores: *Excluir* (por defecto), *Incluir* y *Solo reutilizadas*.
@@ -1770,7 +1764,8 @@ Detalle completo del mecanismo en [MANUAL_DEDUPLICACION.md](manuales/MANUAL_DEDU
 | Documento | Contenido |
 |-----------|-----------|
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Contratos API completos con JSON de ejemplo |
-| [04_MANUAL_EXPLOTACION.md](04_MANUAL_EXPLOTACION.md) | Instalacion, despliegue, variables de entorno |
+| [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Infraestructura desplegada, app settings y secretos por entorno |
+| [RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Despliegue y release DEV → PRE → PRO |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato API original detallado |
 | [CONFIANZA_AGREGADA.md](referencias/CONFIANZA_AGREGADA.md) | Logica de calculo de confianza |
 | [MANUAL_COSTES_IA.md](manuales/MANUAL_COSTES_IA.md) | Coste de IA por ejecucion: que se mide, tarifas, consulta y relleno retroactivo |

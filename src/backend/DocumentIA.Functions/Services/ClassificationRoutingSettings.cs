@@ -24,7 +24,6 @@ public class ClassificationRoutingSettings
     /// Provider de fallback global por defecto (ej: gpt, di, mock, hybrid-tdn).
     /// </summary>
     public string GlobalFallbackProvider { get; set; } = "gpt";
-    public string DefaultModelKey { get; set; } = string.Empty;
     /// <summary>
     /// Nivel jerárquico de clasificación usado cuando la petición no informa NivelClasificacion.
     /// Valores permitidos: TDN1, TDN1_TDN2.

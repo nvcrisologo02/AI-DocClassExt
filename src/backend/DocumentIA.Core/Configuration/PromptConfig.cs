@@ -12,7 +12,7 @@ public class PromptConfig
 
     /// <summary>
     /// Clave del modelo LLM a usar, referenciada en config/prompt/models.json.
-    /// Ejemplo: "default.gpt4o-mini"
+    /// Ejemplo: "prompt.gpt56-luna". Vacío significa heredar PromptDefaults:ModelKey.
     /// Si coincide con el DeploymentName del fallback de extracción, la ejecución se optimiza
     /// realizando una única llamada al LLM que extrae campos y ejecuta el prompt a la vez.
     /// </summary>
@@ -41,11 +41,22 @@ public class PromptConfig
     /// "vision"   — envía el PDF directamente como imagen al modelo multimodal.
     /// </summary>
     public string ContentMode { get; set; } = "markdown";
+
+    /// <summary>
+    /// Copia de esta configuración con otra clave de modelo. Copia todas las propiedades
+    /// (MemberwiseClone), así que no se desincroniza al añadir campos a la clase.
+    /// </summary>
+    public PromptConfig WithModelKey(string modelKey)
+    {
+        var copia = (PromptConfig)MemberwiseClone();
+        copia.ModelKey = modelKey;
+        return copia;
+    }
 }
 
 public class PromptDefaultsSettings
 {
-    public string ModelKey { get; set; } = "default.gpt4o-mini";
+    public string ModelKey { get; set; } = string.Empty;
     public string SystemPrompt { get; set; } = string.Empty;
     public string UserPromptTemplate { get; set; } = string.Empty;
     public int MaxTokens { get; set; } = 2000;
