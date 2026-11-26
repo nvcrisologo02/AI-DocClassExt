@@ -10,6 +10,9 @@ Scripts de datos de la Fase A (sombra en DEV). No hay cambios de esquema.
 | `04-modeloconfig-embeddings-v3.sql` | Apunta la fila `clasificador.embeddings` al artefacto v3 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
 | `05-modeloconfig-embeddings-v4.sql` | Apunta la fila `clasificador.embeddings` al artefacto v4 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
 | `06-modeloconfig-embeddings-v5.sql` | Apunta la fila `clasificador.embeddings` al artefacto v5 (misma mecanica que el 03). | DEV (PRE y PRO con AB#100781) |
+| `07-modeloconfig-embeddings-modo-version.sql` | Fija version del artefacto y modo en un solo paso (`@Version`, `@Modo`; actualiza `Artefacto.BlobPath`, `Modo` y `Restringido.Modo`). Sin guardarrail de servidor; idempotente (`0 cambios`). Con `apply-sql-dev.ps1`, y `-Server ... -PermitirNoDev` fuera de DEV. | DEV, PRE y PRO con la release v1.2.0 (ADR-006) |
+
+Aviso del 07: el blob de la version (`modelos/clasificador-embeddings/<vN>/clasificador-embeddings-<vN>.json`) debe existir en el storage del entorno **antes** de ejecutarlo; el loader conserva el ultimo modelo bueno y cachea el fallo 5 min (cache negativa).
 
 Orden: 01 y despues 02. Ambos hacen backup `ModeloConfigs__bak_<fecha>` y son idempotentes.
 
