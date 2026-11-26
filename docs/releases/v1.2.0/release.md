@@ -6,8 +6,7 @@ Commit candidato: `85626406`, HEAD de `develop` tras integrar el hito 2 de la re
 
 ## Validación
 
-- Build/tests sobre 85626406: <PENDIENTE>
-- Build `dotnet build src/backend/DocumentIA.sln` → 0 warnings / 0 errores · Tests unitarios: 1678/1678 · Formato `dotnet format --verify-no-changes`: limpio · Tests Python del diff (`python -m unittest scripts.database.tests.test_diff_config_exports`): OK. Valores pendientes de confirmar sobre 85626406 en la línea anterior.
+- Build/tests sobre `85626406` (2026-11-26): `dotnet build src/backend/DocumentIA.sln` → 0 warnings / 0 errores · Tests unitarios `dotnet test src/backend/DocumentIA.Tests.Unit`: 1678/1678 · Formato `dotnet format --verify-no-changes`: limpio · Tests Python del diff (`python -m unittest scripts.database.tests.test_diff_config_exports`): 11/11 OK.
 - E2E DEV: smoke sobre DEV con el candidato previo `bc41f289`: run 1076980 del Test Plan 100069 (5 Passed, 3 N/A) y runner `20261126-100941/101546` (9/9). Sin cambios en `src/` entre `bc41f289` y `85626406` (`git diff --stat bc41f289..85626406 -- src/` vacío), por lo que el resultado vale para el candidato. Evidencia: `evidencias/testplan-100069-smoke-dev-2026-11-26.txt`.
 - E2E PRE: smoke pendiente (Fase 2) · E2E PRO: smoke pendiente.
 - Ensayo en seco del pipeline 832 `pre` con `applyMissingConfig=true`: run 80266 (2026-11-26), 30 altas previstas. Evidencia: `evidencias/832-run-80266-dryrun-pre.txt`.
