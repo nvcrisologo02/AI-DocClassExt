@@ -43,6 +43,9 @@ else {
     if ([string]::IsNullOrWhiteSpace($version)) {
         throw 'releases/CURRENT esta vacio: debe contener la version en curso (por ejemplo v1.2.0).'
     }
+    if ($version -cnotmatch '^v\d+\.\d+\.\d+$') {
+        throw "CURRENT debe ser una version vX.Y.Z; valor leido: '$version'"
+    }
     $manifestPath = Join-Path $RepoRoot "releases/$version/release.json"
 }
 

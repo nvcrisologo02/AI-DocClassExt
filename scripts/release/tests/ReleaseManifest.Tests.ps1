@@ -67,7 +67,24 @@ Describe 'Get-ReleaseManifest' {
         $m.pasos.Count | Should -Be 1
     }
     It 'filtra los pasos por entorno' {
-        (& $script:get -Environment prod -RepoRoot $script:fixtures).pasos.ruta | Should -Not -Contain 'releases/_ensayo/ensayo-dev.sql'
+        $sql07 = 'scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql'
+        $json = '{"version":"v9.8.0","pasos":[{"tipo":"sql","ruta":"releases/_ensayo/ensayo-dev.sql","entornos":["pre"]},{"tipo":"sql","ruta":"' + $sql07 + '","entornos":["prod"]}]}'
+        New-TestFile $script:fixtures 'releases/v9.8.0/release.json' $json
+        New-TestFile $script:fixtures 'releases/CURRENT' 'v9.8.0'
+        $pre = & $script:get -Environment pre -RepoRoot $script:fixtures
+        $prod = & $script:get -Environment prod -RepoRoot $script:fixtures
+        New-TestFile $script:fixtures 'releases/CURRENT' "v1.2.0`r`n"
+        $pre.pasos.Count | Should -Be 1
+        $pre.pasos[0].ruta | Should -Be 'releases/_ensayo/ensayo-dev.sql'
+        $prod.pasos.Count | Should -Be 1
+        $prod.pasos[0].ruta | Should -Be $sql07
+    }
+    It 'rechaza CURRENT que no sea vX.Y.Z' {
+        foreach ($valor in '_ensayo', '..\x', 'v1.2') {
+            New-TestFile $script:fixtures 'releases/CURRENT' $valor
+            { & $script:get -Environment pre -RepoRoot $script:fixtures } | Should -Throw '*CURRENT debe ser una version vX.Y.Z*'
+        }
+        New-TestFile $script:fixtures 'releases/CURRENT' "v1.2.0`r`n"
     }
 }
 
