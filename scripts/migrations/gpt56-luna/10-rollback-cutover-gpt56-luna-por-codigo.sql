@@ -14,7 +14,9 @@
 -- cutover. Las filas de gpt-4 no cambian de contenido, salvo el indicador.
 -- El prompt libre y el resumen se devuelven con el app setting
 -- PromptDefaults__ModelKey = default.gpt4o-mini (no con este script); activacion
--- y rollback mueven a la vez el script y el setting. Los cambios llegan a la app
+-- y rollback mueven a la vez el script y el setting. En PRE y PRO el 799 y el 802
+-- vuelven a fijar el setting en cada despliegue: el rollback duradero es cambiar la
+-- variable del YAML del entorno. Los cambios llegan a la app
 -- en <= 5 min (cache de registro).
 --
 -- Idempotente: si todo esta ya en el estado de gpt-4, PRINT con 0 cambios, sin

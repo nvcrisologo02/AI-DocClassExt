@@ -36,7 +36,7 @@ de referencia para una limpieza futura de los recursos origen.
     solo existe en PRO; son las Tareas 1 y 2 del plan las que lo crean en DEV
     y PRE.
   - `"intent": "observed"` (`deployments.prod.json`): estado **real**,
-    verificado por ARM (`source: "arm"`, `observedAtUtc` con la fecha exacta
+    verificado por ARM, salvo `gpt-5.6-luna`, declarado como estado deseado desde v1.2.0 hasta que plataforma lo cree en PRO (`source: "arm"`, `observedAtUtc` con la fecha exacta
     del listado — `az cognitiveservices account deployment list`, sin
     escritura, el 2026-09-21). Incluye `gpt-4o` y un segundo `gpt-5-mini` en
     la cuenta secundaria (`srbaisrv-westeurope`) que no estaban en la

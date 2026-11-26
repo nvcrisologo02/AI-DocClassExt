@@ -36,7 +36,7 @@ Prerrequisitos del cutover (AB#101412). Los scripts 03 y 04 **solo cambian la fi
 | 6 | `04-dev-promptcache-off-gpt56-luna.sql` — **solo DEV**: `promptCache.enabled = false` (conserva el resto del bloque para volver a encender con el 03). Idempotente: sin bloque o ya apagado, no hace nada | Ninguno: devuelve el comportamiento sin caché |
 | 7 | `05-dev-tarifa-escritura-cache-gpt56-luna.sql` — **solo DEV**: `EurEscrituraCachePor1M` en la línea `gpt-5.6-luna` de `tarifas.ia`. Precio confirmado el 2026-11-18: 0,2469 € por millón de tokens escritos en caché (medidor Data Zone de West Europe «5.6 luna ShortCo Cd Wr Std DZ», Retail Prices API, vigente desde 2026-08-01); el medidor de retención 12 h (0,5386) no aplica porque la petición usa ttl 30m. Si la variable queda a `NULL` el script falla con `THROW` y no toca nada. Falla si la línea no existe (ejecutar antes el 02) | Ninguno: solo añade una propiedad a una línea |
 
-Cutover en DEV (AB#99939). Los scripts 06, 07 y 08 son **solo DEV** y se aplican con `apply-sql-dev.ps1 -ScriptPath <script>`
+Cutover en DEV (AB#99939). Los scripts 06 y 07 son solo DEV (sus equivalentes para cualquier entorno son el 09 y el 10); el 08 vale para los tres entornos. Se aplican con `apply-sql-dev.ps1 -ScriptPath <script>`
 (rechaza otros servidores). Son idempotentes, con backup, transacción y consulta de verificación al final.
 Respetan el casing de cada fila al escribir JSON.
 
@@ -56,7 +56,7 @@ resuelve, el prompt y el resumen fallan siempre.
 
 ### Orden en DEV
 
-1. Rama con el código y el pipeline y 802 sobre DEV (con sí). El pipeline fija `PromptDefaults__ModelKey` por entorno: `prompt.gpt56-luna` en DEV y `default.gpt4o-mini` en PRE y PRO (el 799, `azure-pipelines.yml`, hace lo mismo).
+1. Rama con el código y el pipeline y 802 sobre DEV (con sí). Desde v1.2.0 el 799 (`azure-pipelines.yml`) y el 802 fijan `PromptDefaults__ModelKey=prompt.gpt56-luna` en los tres entornos en cada despliegue.
 2. Script 08 y comprobación de que las tipologías heredan (solo en la variante en la que el 802 despliega con `default.gpt4o-mini` y el setting se cambia en el paso 3, siguen en gpt-4 hasta el paso 3).
 3. Script 06. Si se prefiere separar, el 802 se despliega con `default.gpt4o-mini` y el setting se cambia aquí.
 4. Esperar el refresco de caché (5 minutos) o reiniciar la Function.
@@ -65,7 +65,7 @@ resuelve, el prompt y el resumen fallan siempre.
 
 ### Rollback
 
-- Activar prompt y resumen es `PromptDefaults__ModelKey = prompt.gpt56-luna`. Deshacer es `PromptDefaults__ModelKey = default.gpt4o-mini`.
+- Activar prompt y resumen es `PromptDefaults__ModelKey = prompt.gpt56-luna`. Deshacer es `PromptDefaults__ModelKey = default.gpt4o-mini`; en PRE y PRO un cambio a mano del setting no sobrevive al siguiente despliegue: el rollback duradero es cambiar la variable `PROMPT_DEFAULTS_MODEL_KEY`/`promptDefaultsModelKey` del YAML del entorno.
 - **`ensure-app-settings.ps1` no sobrescribe claves que ya existen.** Cambiar el valor después del primer despliegue (rollback o release) exige `az functionapp config appsettings set --name <function> --resource-group <rg> --settings PromptDefaults__ModelKey=<clave>`. Cambiar solo el pipeline no basta. Conviene dejar también el valor del pipeline igual, para que persista.
 - Activación y rollback mueven a la vez el script 06/07 y el setting. El script 07 solo cubre clasificación y extracción.
 - Último recurso para las tipologías: restaurar `Tipologias` desde `Tipologias__bak_<ts>` del script 08.
@@ -173,13 +173,13 @@ Detalle (run, backups, horas y recuentos) en la spec `docs/superpowers/specs/202
 Se escribe aquí sin ejecutar nada:
 
 - Integrar la rama en `develop`. Lleva el SDK `Azure.AI.OpenAI 2.9.0-beta.1`, `OpenAiModelCapabilities`, la caché, el umbral virtual y la herencia del modelo de prompt.
-- Deployment `gpt-5.6-luna` Data Zone y su cuota en PRE y PRO. En PRO, ARM exige PIM. Hay que rellenar el bloque `pre` del script de deployment.
+- Deployment `gpt-5.6-luna` Data Zone y su cuota en PRE y PRO. En PRO, ARM exige PIM. El deployment de PRE lo declara `infra/ai/deployments.pre.json` y lo crea el 832 (`apply-deployments.ps1`); en PRO lo crea plataforma o un run manual (Fase 4).
 - Filas 1027/1028 equivalentes, tarifa y escritura de caché en PRE y PRO, con los scripts 01-05 por entorno o con ConfigSeed.
 - Scripts 06/07/08 portados a PRE y PRO. La tipología IBI puede tener otro Id fuera de DEV: resolver por nombre o clave natural.
 - Comprobar que la fila `prompt.gpt56-luna` existe y está activa **antes** de poner `PromptDefaults__ModelKey`, porque si no resuelve falla siempre.
-- En PRE y PRO el pipeline fija `PromptDefaults__ModelKey = default.gpt4o-mini`. Cambiarlo a `prompt.gpt56-luna` exige `az functionapp config appsettings set` (el `ensure-app-settings.ps1` no sobrescribe claves existentes), además de cambiar la variable del pipeline.
+- Resuelto en v1.2.0: el pipeline fija y verifica `PromptDefaults__ModelKey` en cada despliegue, sin `appsettings set` a mano.
 - Comprobar en PRE el log «Activando modo combinado fallback+prompt» con un documento que active a la vez extracción GPT de fallback y prompt de tipología: el humo de DEV no lo cubrió.
-- El script 08 solo trata `PromptConfig.ModelKey` y `promptConfig.modelKey`. Antes de portarlo a PRE y PRO, añadir una guarda para casing mixto (por ejemplo `LOWER(ConfiguracionJson) LIKE '%"modelkey":"default.gpt4o-mini"%'`) y revisar las tipologías que no cambie.
+- El 08 ya trata ambos casings; la comprobación de casing mixto (misma tipología con `PromptConfig.ModelKey` y `promptConfig.modelKey` a la vez) queda como comprobación previa del orquestador `aplicar-luna.ps1` (Task 6).
 - Los scripts 06/07/08 actualizan `Tipologias` sin tocar `FechaActualizacion`, que `TipologiaPromptConfigValidator` usa en su clave de caché: incorporarla en la versión portada.
 - Añadir un aviso en la validación del 802 cuando el `PromptDefaults__ModelKey` existente difiera de `$(promptDefaultsModelKey)`.
 - Comprobar si prompt y extracción con luna generan escrituras de caché implícitas facturadas (sus filas van sin `promptCache`).

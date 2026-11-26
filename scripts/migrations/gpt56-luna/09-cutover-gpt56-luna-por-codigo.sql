@@ -21,7 +21,7 @@
 -- extraction.gpt4o-mini-fallback.
 -- Prerrequisitos: filas classification.gpt56-luna, default.gpt4o-mini_ex y
 -- extraction.gpt4o-mini-fallback activas (scripts 01 y 03 en DEV; en PRE y PRO
--- llegan con el seed), deployment gpt-5.6-luna en el entorno. Los cambios llegan a la app
+-- llegan con el 01 (aplicar-luna.ps1), nunca con ConfigSeed), deployment gpt-5.6-luna en el entorno. Los cambios llegan a la app
 -- en <= 5 min (cache de registro). Para deshacerlo:
 -- 10-rollback-cutover-gpt56-luna-por-codigo.sql.
 --
