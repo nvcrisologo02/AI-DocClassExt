@@ -53,3 +53,7 @@ entra en vigor en 5 minutos. El analisis de la sombra esta en
 
 Documentacion: `docs/05_MANUAL_USO_CONFIGURACION.md`, seccion 5.6.1c; diseno en
 `docs/superpowers/specs/2026-10-01-clasificador-embeddings-hibrido-design.md` y ADR-002.
+
+### Consulta de medición (`medicion/`, solo lectura)
+
+`medicion/01-rama-clasificacion-por-dia.sql`: por día UTC, ejecuciones no reutilizadas por rama (`embeddings`, `gpt`, `expectedtype`), confianza media de embeddings y acuerdo de TDN1 con GPT cuando ambos se persisten. Parámetros `@From`, `@To` y `@SubmittedByPrefix` al inicio; se ejecuta con `query-sql.ps1` como las de `gpt56-luna/medicion/`.
