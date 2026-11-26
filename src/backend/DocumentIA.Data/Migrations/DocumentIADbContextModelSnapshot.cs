@@ -11711,6 +11711,49 @@ namespace DocumentIA.Data.Migrations
                     b.ToTable("PromptTemplates");
                 });
 
+            modelBuilder.Entity("DocumentIA.Data.Entities.ReleaseAplicadaEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("BuildId")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTime>("FechaUtc")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("HashContenido")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)");
+
+                    b.Property<string>("Paso")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("nvarchar(400)");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Version", "Paso", "Resultado");
+
+                    b.ToTable("ReleaseAplicada");
+                });
+
             modelBuilder.Entity("DocumentIA.Data.Entities.ResultadoProcesamientoEntity", b =>
                 {
                     b.Property<int>("Id")
@@ -11908,9 +11951,9 @@ namespace DocumentIA.Data.Migrations
                             Activa = true,
                             Codigo = "tasacion",
                             Estado = 1,
-                            FechaCreacion = new DateTime(2026, 10, 5, 14, 6, 17, 430, DateTimeKind.Utc).AddTicks(9235),
+                            FechaCreacion = new DateTime(2026, 11, 26, 19, 7, 41, 500, DateTimeKind.Utc).AddTicks(7533),
                             Nombre = "Tasación",
-                            PublicadaEn = new DateTime(2026, 10, 5, 14, 6, 17, 430, DateTimeKind.Utc).AddTicks(9230),
+                            PublicadaEn = new DateTime(2026, 11, 26, 19, 7, 41, 500, DateTimeKind.Utc).AddTicks(7527),
                             PublicadaPor = "seed",
                             Version = "1.0",
                             VersionPublicada = "1.0"

@@ -23,6 +23,7 @@ public class DocumentIADbContext : DbContext
     public DbSet<CatalogoTdn1Entity> CatalogoTdn1 { get; set; } = null!;
     public DbSet<CatalogoTdn2Entity> CatalogoTdn2 { get; set; } = null!;
     public DbSet<PromptTemplateEntity> PromptTemplates { get; set; } = null!;
+    public DbSet<ReleaseAplicadaEntity> ReleaseAplicadas { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -78,6 +79,9 @@ public class DocumentIADbContext : DbContext
 
         modelBuilder.Entity<TipologiaConfigAuditEntity>()
             .HasIndex(t => t.FechaHora);
+
+        modelBuilder.Entity<ReleaseAplicadaEntity>()
+            .HasIndex(r => new { r.Version, r.Paso, r.Resultado });
 
         modelBuilder.Entity<ModeloConfigEntity>()
             .HasIndex(m => m.Key)
