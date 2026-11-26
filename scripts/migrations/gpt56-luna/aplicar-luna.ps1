@@ -16,7 +16,9 @@
       classification.gpt4o-mini-fallback (Tipo 0), extraction.gpt4o-mini-fallback (Tipo 1),
       default.gpt4o-mini_ex (Tipo 1) y la tipologia activa Codigo = IBI_1.1; y no puede haber
       tipologias con PromptConfig.ModelKey y promptConfig.modelKey informados a la vez (casing
-      mixto ambiguo). Si algo falla, lista lo que falta y termina con codigo 2 sin tocar nada.
+      mixto ambiguo); ademas, las filas origen del 09 deben ser JSON valido con claves PascalCase
+      y IBI_1.1 debe tener Extraction.ModelKey default.gpt4o-mini_ex o default.gpt56-luna_ex.
+      Si algo falla, lista lo que falta y termina con codigo 2 sin tocar nada.
 
     Orden fijo de los scripts (cada uno es idempotente, con backup solo si cambia, y se para en
     el primero que falle):
@@ -121,6 +123,33 @@ WHERE ISJSON(ConfiguracionJson) = 1
     foreach ($m in $mixtas) {
         $problemas.Add("Casing mixto: la tipologia Id $($m.Id) ($($m.Codigo)) tiene PromptConfig.ModelKey y promptConfig.modelKey a la vez.")
     }
+
+    # Precondiciones del 09 sobre filas que ya existen: JSON valido y claves PascalCase.
+    $casing = Invoke-ConsultaFilas -Servidor $Servidor -Consulta @'
+SELECT [Key] FROM dbo.ModeloConfigs
+WHERE Activo = 1
+  AND ((Tipo = 0 AND [Key] = N'classification.gpt4o-mini-fallback')
+    OR (Tipo = 1 AND [Key] = N'extraction.gpt4o-mini-fallback')
+    OR (Tipo = 1 AND [Key] = N'default.gpt4o-mini_ex'))
+  AND (ISJSON(ConfiguracionJson) <> 1
+    OR ([Key] LIKE N'%fallback' AND JSON_VALUE(ConfiguracionJson, '$.UseAsFallback') IS NULL)
+    OR ([Key] = N'default.gpt4o-mini_ex' AND JSON_VALUE(ConfiguracionJson, '$.DeploymentName') IS NULL))
+'@
+    foreach ($c in $casing) {
+        $problemas.Add("La fila $($c.Key) no es JSON valido o no usa las claves PascalCase (UseAsFallback / DeploymentName) que exige el 09.")
+    }
+
+    # Precondicion del 09: Extraction.ModelKey de IBI_1.1 (cualquier casing) ya conocido.
+    $mk = Invoke-ConsultaFilas -Servidor $Servidor -Consulta @'
+SELECT Id, COALESCE(JSON_VALUE(ConfiguracionJson, '$.extraction.modelKey'), JSON_VALUE(ConfiguracionJson, '$.Extraction.ModelKey')) AS ModelKey
+FROM dbo.Tipologias
+WHERE Activa = 1 AND Codigo = N'IBI_1.1' AND ISJSON(ConfiguracionJson) = 1
+'@
+    foreach ($x in $mk) {
+        if ($null -eq $x.ModelKey -or $x.ModelKey.ToLowerInvariant() -notin @('default.gpt4o-mini_ex', 'default.gpt56-luna_ex')) {
+            $problemas.Add("La tipologia IBI_1.1 (Id $($x.Id)) tiene Extraction.ModelKey '$($x.ModelKey)': el 09 solo admite default.gpt4o-mini_ex o default.gpt56-luna_ex.")
+        }
+    }
     return $problemas
 }
 
@@ -140,7 +169,7 @@ try {
         $problemas | ForEach-Object { Write-Host "  - $_" }
         exit 2
     }
-    Write-Host "Comprobacion previa OK: filas requeridas, tipologia IBI_1.1 y sin casing mixto."
+    Write-Host "Comprobacion previa OK: filas requeridas, casing PascalCase de las filas origen, tipologia IBI_1.1 (con su Extraction.ModelKey) y sin casing mixto."
 
     Write-Host "Orden de aplicacion:"
     $n = 0
@@ -166,8 +195,8 @@ WHERE Activo = 1
   AND COALESCE(JSON_VALUE(ConfiguracionJson, '$.UseAsFallback'), JSON_VALUE(ConfiguracionJson, '$.useAsFallback')) = 'true'
 GROUP BY Tipo
 '@
-    $n0 = @($fb | Where-Object { $_.Tipo -eq 0 } | ForEach-Object { $_.N })[0]
-    $n1 = @($fb | Where-Object { $_.Tipo -eq 1 } | ForEach-Object { $_.N })[0]
+    $n0 = [int](@($fb | Where-Object { $_.Tipo -eq 0 } | ForEach-Object { $_.N })[0])
+    $n1 = [int](@($fb | Where-Object { $_.Tipo -eq 1 } | ForEach-Object { $_.N })[0])
     Write-Host "UseAsFallback activos: Tipo 0 = $n0, Tipo 1 = $n1 (esperado 1 y 1)"
 
     $g4 = Invoke-ConsultaFilas -Servidor $servidor -Consulta @'
