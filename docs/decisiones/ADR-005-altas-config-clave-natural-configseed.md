@@ -1,5 +1,7 @@
-# ADR-004: Altas de configuración por clave natural en ConfigSeed
+# ADR-005: Altas de configuración por clave natural en ConfigSeed
 Fecha: 2026-10-21 · Estado: aceptada (2026-10-22, tras el ensayo DEV→PRE del run 79876) · Work Item: AB#101075 · Session ID: sin Session ID (proyecto sin `Gobernanza: activa`; traspaso en `docs/auxiliares/temps/2026-10-21/`)
+> Nota (2026-11-26, AB#101570): esta decisión se redactó y aceptó en la rama `feature/101075-configseed-alta-clave-natural` como ADR-004. Al integrarla en `develop` ese número ya lo ocupaba ADR-004 (cambio del modelo generativo a gpt-5.6-luna, 2026-11-20), así que el fichero y su título pasan a ADR-005. El contenido del registro no cambia.
+
 
 ## Contexto y problema
 

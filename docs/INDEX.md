@@ -90,6 +90,7 @@ Arquitectura, infraestructura, modelo de datos y decisiones.
 | [decisiones/ADR-002-clasificador-embeddings-hibrido.md](decisiones/ADR-002-clasificador-embeddings-hibrido.md) | Clasificador híbrido por embeddings en sombra. El bloque sigue en «propuesta» | vigente (propuesta) |
 | [decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md](decisiones/ADR-003-reutilizacion-duplicado-clave-intencion.md) | Reutilización de ejecuciones duplicadas por clave de intención | vigente (aceptada) |
 | [decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md](decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md) | Cambio del modelo generativo a gpt-5.6-luna (DEV desde 2026-11-20; PRE y PRO con la siguiente release) | vigente (aceptada) |
+| [decisiones/ADR-005-altas-config-clave-natural-configseed.md](decisiones/ADR-005-altas-config-clave-natural-configseed.md) | Altas de configuración por clave natural en la etapa ConfigSeed del pipeline 832 (`applyMissingConfig`) | vigente (aceptada) |
 | [infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md](infraestructura/INFRAESTRUCTURA_DESPLIEGUE.md) | Plantilla genérica Staging/Production que no refleja lo desplegado | sustituido por INFRAESTRUCTURA_REAL_DESPLEGADA |
 
 ## Familia explotación
@@ -141,7 +142,7 @@ docs/
 ├── 08_CHECKLISTS_DESPLIEGUE.md
 ├── 15_API_DOCUMENTATION_V1_4.md        (sustituido)
 ├── contratos/          CONTRATO_API_HTTP, PLANTILLA_PLUGINS_JSON
-├── decisiones/         ADR-001 … ADR-004
+├── decisiones/         ADR-001 … ADR-005
 ├── diagrams/           UMBRAL_PRIORIZACION, CONFIANZA_UMBRAL (sustituido), fuentes .mmd
 ├── especificaciones/   DATA_MODELS_ER_DIAGRAM, ASSETRESOLVER, GDC_SINTWS, PROMPTS_CONFIGURABLES, PROMPT_CLASIFICACION_COMPLETO, LIMITE_PAGINAS, OPTIMIZACION_ALMACENAMIENTO_BD_PRO
 ├── guias/              QUICKSTART, HOST_LOCAL_CONTRA_DEV, EXTENSIBILIDAD_PLUGIN_SYSTEM, EXTRACCION_CU, CLASIFICACION_DOCUMENTOS, CLASIFICACION_RESTRINGIDA, TROUBLESHOOTING, EASYAUTH_ADMIN, RESTRICCION_ACCESO_ADMIN, SOLICITUD_APP_REGISTRATION_ADMIN

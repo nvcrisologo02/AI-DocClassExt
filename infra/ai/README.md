@@ -608,7 +608,7 @@ solicitud del 2026-09-22, fuera de git). Su uso dentro de una release está en
 | `releaseTag` | texto, `auto` (por defecto) = `build-<id>` | Nombre de los ficheros de config exportados; ADO trata como obligatorio un parámetro string sin default no vacío, de ahí el centinela `auto` |
 | `runValidation` | booleano, `true` | Lanza `validate-analyzer.ps1` (cuesta dinero: `analyzeBinary` en los dos lados) |
 | `dryRun` | booleano, `false` | Ensayo sin escrituras: todos los scripts de `scripts/ai/` reciben `-DryRun` (solo GET y el plan de lo que harían); Export y ConfigSeed corren igual porque solo leen, y ConfigApply no se incluye. Lanzar así el primer run de cada salto |
-| `applyMissingConfig` | booleano, `false` | Altas por clave natural de la config que solo existe en el origen (ADR-004): ConfigSeed genera `altas-config.sql` y, sin `dryRun`, ConfigApply lo aplica tras la aprobación |
+| `applyMissingConfig` | booleano, `false` | Altas por clave natural de la config que solo existe en el origen (ADR-005): ConfigSeed genera `altas-config.sql` y, sin `dryRun`, ConfigApply lo aplica tras la aprobación |
 
 Etapas, todas en el pool privado `docia-mdp-private` (SQL y DI de PRE por
 private endpoint):

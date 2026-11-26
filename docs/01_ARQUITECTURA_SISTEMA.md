@@ -589,7 +589,7 @@ Estado el 2026-11-22: **App Service Authentication (EasyAuth) activo en los tres
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Flujo pipeline, secuencias, modelo ER, contratos |
 | [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Infraestructura desplegada por entorno (DEV, PRE, PRO) |
 | [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md) | Modelo de datos, migraciones y versionado del esquema |
-| [decisiones/](decisiones/) | ADR formales vigentes (ADR-001 a ADR-004) |
+| [decisiones/](decisiones/) | ADR formales vigentes (ADR-001 a ADR-005) |
 | [RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release y despliegue DEV → PRE → PRO |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato de API REST detallado |
 | [MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Guia de desarrollo de plugins |
