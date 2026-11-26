@@ -17,7 +17,16 @@ Convención que lee la pipeline `Release` (stage `Guard`) para saber qué se des
 | `embeddings` | no | `version` (`vN`), `modo` y `restringidoModo` (`off`, `sombra` o `hibrido`); los tres campos son obligatorios si el bloque existe |
 | `pasos` | sí | lista ordenada de pasos; `[]` si la release no lleva scripts |
 
-Cada paso: `tipo` (`sql` o `ps1`), `ruta` (relativa a la raíz del repo, debe existir), `argumentos` (opcional; en los `.ps1` es obligatorio e incluye el marcador `<env>`, que la pipeline sustituye por el entorno) y `entornos` (lista no vacía de `dev`, `pre`, `prod`). Los `.ps1` deben admitir `-DryRun` o `-WhatIf`.
+Cada paso: `tipo` (`sql` o `ps1`), `ruta` (relativa a la raíz del repo, debe existir), `argumentos` (opcional; en los `.ps1` es obligatorio e incluye el marcador `<env>`, que la pipeline sustituye por el entorno) `plantilla` (opcional, solo en pasos `sql`; único valor: `embeddings`) y `entornos` (lista no vacía de `dev`, `pre`, `prod`; `dev` solo se admite en `_ensayo`). Los `.ps1` deben admitir `-DryRun` o `-WhatIf`.
+
+`plantilla: "embeddings"` marca el paso SQL que la pipeline del hito 2 genera sustituyendo los `DECLARE` del script por los valores del bloque `embeddings` (`version`, `modo`, `restringidoModo`).
+
+Reglas cruzadas que valida `Test-ReleaseManifest.ps1`:
+
+- El bloque `embeddings` existe si y solo si hay exactamente un paso con `plantilla: "embeddings"`.
+- Si un paso `.ps1` lleva `-Version <x>` en `argumentos` y existe el bloque `embeddings`, `<x>` debe coincidir con `embeddings.version`.
+- No se admiten dos pasos con la misma `ruta` que compartan algún entorno (`dbo.ReleaseAplicada` identifica el paso por versión y ruta).
+- `dev` solo se admite en `entornos` de `_ensayo`; una versión real (`vX.Y.Z`) no lo declara, porque `dev` siempre usa `_ensayo`.
 
 ## Resolución por entorno
 
