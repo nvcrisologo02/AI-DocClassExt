@@ -22,22 +22,21 @@ y cobra el prompt entero en cada llamada, y no registraba esas escrituras en el 
 | Paso | Qué | Riesgo |
 |---|---|---|
 | 0 (caché) | `./smoke-cache.sh` — puerta de la caché de prompt: dos llamadas al deployment con `prompt_cache_key`, `prompt_cache_options` (implicit, 30m) y `prompt_cache_breakpoint` explícito en el system (~5.800 caracteres, 1.332 tokens). Resultado en DEV (2026-11-18, URL del deployment con api-version `2025-04-01-preview`, sin hacer falta `URL_V1=1`): llamada 1 HTTP 200, `cached_tokens` 0, `cache_write_tokens` 1329; llamada 2 HTTP 200, `cached_tokens` 1329, `cache_write_tokens` 0. El servicio acepta los tres campos y la caché se recupera | Ninguno: solo lectura, dos llamadas |
-| 1 | `ENV=dev ./create-gpt56-luna-deployment.sh` — deployment `gpt-5.6-luna` (modelo `gpt-5.6-luna` 2026-07-09, `DataZoneStandard`, 50K TPM por defecto; `CAPACITY=nn` para otro valor). `ENV` es obligatoria: `pro` lleva los valores de PRO (`--with-secondary` para West Europe) y `pre` falla hasta rellenar su bloque. Comprueba antes que el modelo y el SKU existen en la región; si falta cuota Data Zone, falla y se para (no cambiar a Global). Idempotente | Ninguno: no toca el flujo |
+| 1 | `ENV=dev ./create-gpt56-luna-deployment.sh` — deployment `gpt-5.6-luna` (modelo `gpt-5.6-luna` 2026-07-09, `DataZoneStandard`, 50K TPM por defecto; `CAPACITY=nn` para otro valor). `ENV` es obligatoria: `pro` lleva los valores de PRO (`--with-secondary` para West Europe) y `pre` falla a propósito (el deployment de PRE lo crea el 832). Comprueba antes que el modelo y el SKU existen en la región; si falta cuota Data Zone, falla y se para (no cambiar a Global). Idempotente | Ninguno: no toca el flujo |
 | 2 | `./smoke-chat.sh` — una llamada de chat directa al deployment con `reasoning_effort: none` y `max_completion_tokens: 20`, api-version `2025-04-01-preview` (la que usa el SDK beta). Confirma que el servicio acepta ambos campos con este modelo; el test unitario solo prueba el cuerpo que genera el SDK | Ninguno: solo lectura, unos 30 tokens |
-| 3 | `01-dev-insert-gpt56-luna-rows.sql` — **solo DEV**: filas `classification.gpt56-luna` (Tipo 0) y `prompt.gpt56-luna` (Tipo 2) clonadas de `classification.gpt5-mini` y `prompt.gpt5-mini`, con `DeploymentName` gpt-5.6-luna, `ReasoningEffort` none, `Activo = 1`, sin IsDefault ni UseAsFallback (solo se resuelven pidiendo la clave). Idempotente, backup `ModeloConfigs__bak_<ts>` solo si inserta | Ninguno: el flujo por defecto no cambia |
-| 4 | `02-dev-tarifa-gpt56-luna.sql` — **solo DEV**: línea `gpt-5.6-luna` en el catálogo `tarifas.ia` (VigenteDesde 2026-11-17; 0,1975 / 0,0197 / 1,185 € por millón de entrada, entrada en caché y salida: medidores Data Zone de West Europe en EUR, Retail Prices API 2026-11-17, precios de lista). Idempotente, backup solo si añade, valida el JSON antes de guardar | Ninguno: solo añade una línea |
+| 3 | `01-dev-insert-gpt56-luna-rows.sql` — en DEV se aplicó a mano; en PRE y PRO lo encadena `aplicar-luna.ps1`: filas `classification.gpt56-luna` (Tipo 0) y `prompt.gpt56-luna` (Tipo 2) clonadas de `classification.gpt5-mini` y `prompt.gpt5-mini`, con `DeploymentName` gpt-5.6-luna, `ReasoningEffort` none, `Activo = 1`, sin IsDefault ni UseAsFallback (solo se resuelven pidiendo la clave). Idempotente, backup `ModeloConfigs__bak_<ts>` solo si inserta | Ninguno: el flujo por defecto no cambia |
+| 4 | `02-dev-tarifa-gpt56-luna.sql` — en DEV se aplicó a mano; en PRE y PRO lo encadena `aplicar-luna.ps1`: línea `gpt-5.6-luna` en el catálogo `tarifas.ia` (VigenteDesde 2026-11-17; 0,1975 / 0,0197 / 1,185 € por millón de entrada, entrada en caché y salida: medidores Data Zone de West Europe en EUR, Retail Prices API 2026-11-17, precios de lista). Idempotente, backup solo si añade, valida el JSON antes de guardar | Ninguno: solo añade una línea |
 
 Prerrequisitos del cutover (AB#101412). Los scripts 03 y 04 **solo cambian la fila
 `classification.gpt56-luna`** (Tipo 0): no tocan las filas por defecto de DEV ni `prompt.gpt56-luna`.
 
 | Paso | Qué | Riesgo |
 |---|---|---|
-| 5 | `03-dev-promptcache-on-gpt56-luna.sql` — **solo DEV**: escribe `promptCache` = `{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m","mode":"explicit"}` en la fila luna (`explicit` porque con `implicit` GPT-5.6 cobra la escritura del prompt entero, documento incluido, en cada llamada). Idempotente, backup solo si cambia, `ISJSON` antes de guardar | Solo afecta a las peticiones que piden la clave luna |
-| 6 | `04-dev-promptcache-off-gpt56-luna.sql` — **solo DEV**: `promptCache.enabled = false` (conserva el resto del bloque para volver a encender con el 03). Idempotente: sin bloque o ya apagado, no hace nada | Ninguno: devuelve el comportamiento sin caché |
-| 7 | `05-dev-tarifa-escritura-cache-gpt56-luna.sql` — **solo DEV**: `EurEscrituraCachePor1M` en la línea `gpt-5.6-luna` de `tarifas.ia`. Precio confirmado el 2026-11-18: 0,2469 € por millón de tokens escritos en caché (medidor Data Zone de West Europe «5.6 luna ShortCo Cd Wr Std DZ», Retail Prices API, vigente desde 2026-08-01); el medidor de retención 12 h (0,5386) no aplica porque la petición usa ttl 30m. Si la variable queda a `NULL` el script falla con `THROW` y no toca nada. Falla si la línea no existe (ejecutar antes el 02) | Ninguno: solo añade una propiedad a una línea |
+| 5 | `03-dev-promptcache-on-gpt56-luna.sql` — en DEV se aplicó a mano; en PRE y PRO lo encadena `aplicar-luna.ps1`: escribe `promptCache` = `{"enabled":true,"keyPrefix":"documentia-clasif","breakpoint":true,"ttl":"30m","mode":"explicit"}` en la fila luna (`explicit` porque con `implicit` GPT-5.6 cobra la escritura del prompt entero, documento incluido, en cada llamada). Idempotente, backup solo si cambia, `ISJSON` antes de guardar | Solo afecta a las peticiones que piden la clave luna |
+| 6 | `04-dev-promptcache-off-gpt56-luna.sql` — vale en cualquier entorno (rollback a mano, no lo encadena `aplicar-luna.ps1`): `promptCache.enabled = false` (conserva el resto del bloque para volver a encender con el 03). Idempotente: sin bloque o ya apagado, no hace nada | Ninguno: devuelve el comportamiento sin caché |
+| 7 | `05-dev-tarifa-escritura-cache-gpt56-luna.sql` — en DEV se aplicó a mano; en PRE y PRO lo encadena `aplicar-luna.ps1`: `EurEscrituraCachePor1M` en la línea `gpt-5.6-luna` de `tarifas.ia`. Precio confirmado el 2026-11-18: 0,2469 € por millón de tokens escritos en caché (medidor Data Zone de West Europe «5.6 luna ShortCo Cd Wr Std DZ», Retail Prices API, vigente desde 2026-08-01); el medidor de retención 12 h (0,5386) no aplica porque la petición usa ttl 30m. Si la variable queda a `NULL` el script falla con `THROW` y no toca nada. Falla si la línea no existe (ejecutar antes el 02) | Ninguno: solo añade una propiedad a una línea |
 
-Cutover en DEV (AB#99939). Los scripts 06 y 07 son solo DEV (sus equivalentes para cualquier entorno son el 09 y el 10); el 08 vale para los tres entornos. Se aplican con `apply-sql-dev.ps1 -ScriptPath <script>`
-(rechaza otros servidores). Son idempotentes, con backup, transacción y consulta de verificación al final.
+Cutover en DEV (AB#99939). Los scripts 06 y 07 son historia de DEV (usan Ids de DEV; sus equivalentes por `Codigo` son el 09 y el 10). En DEV se aplican con `apply-sql-dev.ps1 -ScriptPath <script>`. Son idempotentes, con backup, transacción y consulta de verificación al final.
 Respetan el casing de cada fila al escribir JSON.
 
 | Paso | Qué | Riesgo |
@@ -47,8 +46,6 @@ Respetan el casing de cada fila al escribir JSON.
 | 10 | `08-dev-tipologias-heredan-modelo-prompt.sql`: quita `default.gpt4o-mini` de la clave de prompt (`PromptConfig.ModelKey` o su variante de casing) en las tipologías de cualquier estado: 219 (13 en PascalCase, 206 en camelCase; leído en DEV el 2026-11-20). No toca las que fijen otra clave y lo dice en la verificación. Backup previo `Tipologias__bak_<ts>`, recuento antes y después. Es seguro con el código anterior (sin la propiedad se deserializa `default.gpt4o-mini`), así que puede aplicarse antes o después del despliegue. No forma parte del rollback | Las tipologías pasan a heredar `PromptDefaults:ModelKey` |
 | 11 | `09-cutover-gpt56-luna-por-codigo.sql`: igual que el 06, pero localiza la tipología por `Codigo = 'IBI_1.1'` (la fila que en DEV es la 2001) en lugar de por `Id`, y vale para cualquier entorno (`apply-sql-dev.ps1 -Server <servidor> -PermitirNoDev`; en PRE y PRO lo encadena `aplicar-luna.ps1`). Idempotente, con backup solo si cambia; en DEV, que ya está en cutover, sale con 0 cambios. El 06 queda como histórico de DEV | Cambia el modelo por defecto de clasificación GPT y de extracción GPT en el entorno donde se aplique |
 | 12 | `10-rollback-cutover-gpt56-luna-por-codigo.sql`: lo inverso del 09, también por `Codigo = 'IBI_1.1'` y para cualquier entorno. El 07 queda como histórico de DEV. **No lo ejecutes en DEV salvo que quieras deshacer su cutover** | Devuelve clasificación y extracción a gpt-4 en el entorno donde se aplique |
-
-Los scripts 01, 02, 03, 05 y 08 ya localizan por `Key` (no por `Id`), así que valen para PRE y PRO con `-PermitirNoDev`.
 
 Requisito de código: la herencia del modelo de prompt (`PromptModelKeyResolver`, AB#101411, rama
 `feature/101411-prerrequisitos-cutover`). Una clave de prompt vacía hereda `PromptDefaults:ModelKey`; si no
@@ -63,10 +60,33 @@ resuelve, el prompt y el resumen fallan siempre.
 5. Humo con la muestra fija de 50 en procesamiento completo (harness del Batch, `-OnlyFiles eval/golden-muestra-cache.txt`) más un documento de IBI.
 6. Ensayo de rollback: script 07 y setting a `default.gpt4o-mini`, humo corto, script 06 y setting a `prompt.gpt56-luna`, humo corto.
 
+### PRE y PRO
+
+Una sola regla: los scripts 01, 02, 03, 04, 05, 08, 09 y 10 localizan filas por `Key` o `Codigo` y valen en cualquier entorno con `apply-sql-dev.ps1 -Server <servidor> -PermitirNoDev`. Los scripts 06 y 07 son historia de DEV (usan Ids de DEV). En PRE y PRO el orquestador `aplicar-luna.ps1` encadena 01, 02, 05, 03, 09 y 08; el 04 y el 10 son rollbacks y se ejecutan a mano.
+
+```bash
+pwsh -NoProfile -File ./scripts/migrations/gpt56-luna/aplicar-luna.ps1 -Environment pre -DryRun
+pwsh -NoProfile -File ./scripts/migrations/gpt56-luna/aplicar-luna.ps1 -Environment pre
+```
+
+Con `-Environment prod` en PRO; `dev` se rechaza. Comprobación previa de solo lectura (filas `classification.gpt5-mini`, `prompt.gpt5-mini`, `classification.gpt4o-mini-fallback`, `extraction.gpt4o-mini-fallback` y `default.gpt4o-mini_ex` activas, tipología activa `IBI_1.1` y ninguna tipología con la clave de prompt en los dos casings a la vez): si falla, sale con código 2 sin tocar nada. Al terminar comprueba un `UseAsFallback` por Tipo 0 y 1 y ninguna tipología con `default.gpt4o-mini` como clave de prompt (código 1 si no).
+
+**Siempre antes del 832 con `applyMissingConfig`** (ADR-005): si ConfigSeed diera de alta antes las filas luna de DEV, entrarían con `UseAsFallback = true` y habría dos fallbacks por Tipo. ConfigSeed no crea las filas luna.
+
+Orden de la ventana de PRE (decisión del 2026-11-26):
+
+1. Pipeline 832 `pre` con `applyMissingConfig=false` (dryRun y real): crea el deployment `gpt-5.6-luna` y copia los artefactos CU/DI; no toca configuración.
+2. Pipeline 799 `pre`: código nuevo y settings decisivos (`PromptDefaults__ModelKey=prompt.gpt56-luna`, `GDC__BypassSslValidation=false`). Drenar la ingesta antes del siguiente paso.
+3. `aplicar-luna.ps1 -Environment pre -DryRun` y después sin `-DryRun`.
+4. Script 07 de embeddings (`scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql`, híbrido/v5) con `apply-sql-dev.ps1 -Server srbsqlpredocai.database.windows.net -PermitirNoDev`.
+5. Pipeline 832 `pre` con `applyMissingConfig` (dryRun y real).
+
+PRO sigue la misma secuencia en la Fase 4 con `-Environment prod`, salvo que el deployment lo crea plataforma o un run manual (el 832 no gestiona los de PRO).
+
 ### Rollback
 
 - Activar prompt y resumen es `PromptDefaults__ModelKey = prompt.gpt56-luna`. Deshacer es `PromptDefaults__ModelKey = default.gpt4o-mini`; en PRE y PRO un cambio a mano del setting no sobrevive al siguiente despliegue: el rollback duradero es cambiar la variable `PROMPT_DEFAULTS_MODEL_KEY`/`promptDefaultsModelKey` del YAML del entorno.
-- **`ensure-app-settings.ps1` no sobrescribe claves que ya existen.** Cambiar el valor después del primer despliegue (rollback o release) exige `az functionapp config appsettings set --name <function> --resource-group <rg> --settings PromptDefaults__ModelKey=<clave>`. Cambiar solo el pipeline no basta. Conviene dejar también el valor del pipeline igual, para que persista.
+- Desde v1.2.0 el 799 y el 802 fijan y verifican `PromptDefaults__ModelKey` en cada despliegue, así que el cambio duradero es la variable del YAML y no hace falta `appsettings set` a mano.
 - Activación y rollback mueven a la vez el script 06/07 y el setting. El script 07 solo cubre clasificación y extracción.
 - Último recurso para las tipologías: restaurar `Tipologias` desde `Tipologias__bak_<ts>` del script 08.
 
@@ -174,23 +194,21 @@ Se escribe aquí sin ejecutar nada:
 
 - Integrar la rama en `develop`. Lleva el SDK `Azure.AI.OpenAI 2.9.0-beta.1`, `OpenAiModelCapabilities`, la caché, el umbral virtual y la herencia del modelo de prompt.
 - Deployment `gpt-5.6-luna` Data Zone y su cuota en PRE y PRO. En PRO, ARM exige PIM. El deployment de PRE lo declara `infra/ai/deployments.pre.json` y lo crea el 832 (`apply-deployments.ps1`); en PRO lo crea plataforma o un run manual (Fase 4).
-- Filas 1027/1028 equivalentes, tarifa y escritura de caché en PRE y PRO, con los scripts 01-05 por entorno o con ConfigSeed.
-- Scripts 06/07/08 portados a PRE y PRO. La tipología IBI puede tener otro Id fuera de DEV: resolver por nombre o clave natural.
+- Filas luna, tarifa, caché, cutover y herencia del modelo de prompt en PRE y PRO: los aplica `aplicar-luna.ps1` (ver «PRE y PRO»), que localiza la tipología por `Codigo = 'IBI_1.1'`. ConfigSeed no crea las filas luna.
 - Comprobar que la fila `prompt.gpt56-luna` existe y está activa **antes** de poner `PromptDefaults__ModelKey`, porque si no resuelve falla siempre.
 - Resuelto en v1.2.0: el pipeline fija y verifica `PromptDefaults__ModelKey` en cada despliegue, sin `appsettings set` a mano.
 - Comprobar en PRE el log «Activando modo combinado fallback+prompt» con un documento que active a la vez extracción GPT de fallback y prompt de tipología: el humo de DEV no lo cubrió.
-- El 08 ya trata ambos casings; la comprobación de casing mixto (misma tipología con `PromptConfig.ModelKey` y `promptConfig.modelKey` a la vez) queda como comprobación previa del orquestador `aplicar-luna.ps1` (Task 6).
-- Los scripts 06/07/08 actualizan `Tipologias` sin tocar `FechaActualizacion`, que `TipologiaPromptConfigValidator` usa en su clave de caché: incorporarla en la versión portada.
+- El 08 ya trata ambos casings; la comprobación de casing mixto (misma tipología con `PromptConfig.ModelKey` y `promptConfig.modelKey` a la vez) está hecha en la comprobación previa de `aplicar-luna.ps1`.
+- Los scripts 08 y 09 actualizan `Tipologias` sin tocar `FechaActualizacion`, que `TipologiaPromptConfigValidator` usa en su clave de caché: pendiente en el 08 y el 09 (no la actualizan).
 - Añadir un aviso en la validación del 802 cuando el `PromptDefaults__ModelKey` existente difiera de `$(promptDefaultsModelKey)`.
 - Comprobar si prompt y extracción con luna generan escrituras de caché implícitas facturadas (sus filas van sin `promptCache`).
 - Vigilancia de 48 h en PRO: HTTP 400, latencia, coste y volumen de baja confianza.
 
 ## Qué NO cubren estos scripts
 
-- **El cutover en PRE y PRO**: el 06 y el 07 son solo DEV y sus equivalentes para cualquier entorno son el 09 y el 10; el 08 vale para los tres entornos. Cambiar `PromptDefaults__ModelKey` y aplicar los scripts es la release (lista anterior). Recogido en `docs/decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md`. Las filas de gpt-4 (`gpt4o-mini*`, 1002, 1003, 1004, 1014) no se sustituyen: solo cambian los indicadores `UseAsFallback`.
-- **PRE y PRO**: el deployment de PRE lo declara `infra/ai/deployments.pre.json` y lo crea el 832;
-  `create-gpt56-luna-deployment.sh` queda para DEV y para un run manual en PRO. Los scripts 01 a 05
-  (filas, tarifa y caché) son solo DEV.
+- **El cutover en PRE y PRO** lo hace la release con `aplicar-luna.ps1` (09 y 08 incluidos; ver «PRE y PRO»), no estos scripts a mano; el 06 y el 07 son historia de DEV. Recogido en `docs/decisiones/ADR-004-cambio-modelo-ia-generativa-gpt56-luna.md`. Las filas de gpt-4 (`gpt4o-mini*`, 1002, 1003, 1004, 1014) no se sustituyen: solo cambian los indicadores `UseAsFallback`.
+- **Deployment en PRE y PRO**: el de PRE lo declara `infra/ai/deployments.pre.json` y lo crea el 832;
+  `create-gpt56-luna-deployment.sh` queda para DEV y para un run manual en PRO.
 - **App settings legacy del pipeline** (`Classification__GptFallback__DeploymentName`,
   `Extraction__GptFallback__DeploymentName`): son legacy y el código no los lee; el deployment sale
   siempre de `ModeloConfigs`. Retirados del pipeline y de los entornos en AB#101450 (2026-11-25).
