@@ -306,6 +306,22 @@ ausente de los informes se publica como `NotApplicable`, nunca como `Passed`.
 El run se llama `Smoke pre-release <versión> (<ENTORNO>, <hash>)`
 (`-Version`, por defecto `v1.2.0`).
 
+- `-Candidate` es texto libre (normalmente el hash del commit candidato): solo
+  entra en el nombre del run, no se contrasta con nada.
+- Cada `report.md` de `-ReportDirs` debe declarar el mismo entorno que
+  `-Environment` (línea `- Entorno: **dev**`); si no, el script termina con
+  código 2 (también con `-WhatIf`) y no publica nada.
+- Los 8 test points del plan viven en su suite raíz (100070), no en una
+  subsuite; por eso `smk-mapping.json` repite el mismo id en `rootSuiteId` y
+  `suiteId`, y la publicación lee los puntos con `-IncludeRootSuite`
+  (`publish-results.ps1` no lo usa y no cambia).
+- El resumen `ado-run-<id>.json` se escribe en el último directorio de
+  `-ReportDirs`.
+- FF-FF2 está definido dos veces, en `cases/full-cases.json` y en
+  `cases-smk/smk-extra-cases.json` (solo difieren `name` y `profiles`); un test
+  de `cases-schema.Tests.ps1` lo comprueba en el pipeline, así que cualquier
+  cambio debe hacerse en los dos.
+
 ## Test Plan espejo en ADO
 
 - `ado/bootstrap-testplan.ps1` crea (idempotente) el Test Plan "E2E

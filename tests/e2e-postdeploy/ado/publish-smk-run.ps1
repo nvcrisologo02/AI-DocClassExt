@@ -19,7 +19,14 @@
     Credencial: -Pat > $env:ADO_PAT > "adoPat" en environments.json > token AAD
     de la sesion 'az' (Bearer), igual que publish-results.ps1.
     Con -WhatIf imprime la tabla y termina sin ninguna llamada HTTP.
-    Salida distinta de 0 si un directorio de -ReportDirs no existe.
+    Salida 2 si un directorio de -ReportDirs no existe, si su report.md declara un entorno
+    ("- Entorno: **dev**") distinto de -Environment (tambien con -WhatIf: un PASS de otro
+    entorno nunca se publica como resultado de este) o si falta credencial.
+    Los puntos de prueba de los SMK viven en la suite raiz del plan, por eso la publicacion
+    usa -IncludeRootSuite.
+    -Candidate es texto libre (normalmente el hash del commit): solo va al nombre del run,
+    no se contrasta con nada. El resumen ado-run-<id>.json se escribe en el ultimo
+    directorio de -ReportDirs.
 .EXAMPLE
     pwsh ./tests/e2e-postdeploy/ado/publish-smk-run.ps1 -Environment dev -Candidate bc41f289 `
         -ReportDirs tests/e2e-postdeploy/artifacts/20261126-100941-dev-smoke,tests/e2e-postdeploy/artifacts/20261126-101546-dev-smoke -WhatIf
@@ -74,6 +81,28 @@ if (-not (Test-Path $mappingPath)) {
     exit 2
 }
 $mapping = Get-Content -Raw $mappingPath | ConvertFrom-Json
+
+# --- El entorno de cada informe debe coincidir con -Environment ---------------
+$otroEntorno = @()
+foreach ($d in $dirs) {
+    $rp = Join-Path $d "report.md"
+    if (-not (Test-Path $rp)) { continue }
+    $envInforme = $null
+    foreach ($l in (Get-Content -Path $rp -Encoding UTF8 -TotalCount 40)) {
+        if ($l -match '^- Entorno:\s*\*\*([^*]+)\*\*') { $envInforme = $Matches[1].Trim(); break }
+    }
+    if ($null -eq $envInforme) {
+        $otroEntorno += "$d (sin linea '- Entorno: **...**')"
+    }
+    elseif ($envInforme -ne $Environment) {
+        $otroEntorno += "$d (entorno '$envInforme')"
+    }
+}
+if ($otroEntorno.Count -gt 0) {
+    Write-Host "[SMK] Informes de otro entorno que -Environment '$Environment'; no se publica nada:" -ForegroundColor Red
+    $otroEntorno | ForEach-Object { Write-Host "  - $_" -ForegroundColor Red }
+    exit 2
+}
 
 # --- Resultados del runner: caseKey -> @{ Status; Detail } -------------------
 $found = @{}
@@ -186,5 +215,5 @@ $publishable = @($rows | ForEach-Object {
 $artifactsDir = $dirs[-1]
 $run = Publish-AdoTestPlanResults -Results $publishable -Org $Org -Project $Project -Pat $resolvedPat -BearerToken $resolvedBearer `
     -PlanId $mapping.planId -RootSuiteId $mapping.rootSuiteId -ExpectedPlanName $mapping.planName `
-    -RunName $runName -AutomatedTestStorage "run-e2e-postdeploy.ps1" -ArtifactsDir $artifactsDir
+    -RunName $runName -AutomatedTestStorage "run-e2e-postdeploy.ps1" -ArtifactsDir $artifactsDir -IncludeRootSuite
 Write-Host "[SMK] Run publicado: $($run.runId) - $($run.runUrl)" -ForegroundColor Green

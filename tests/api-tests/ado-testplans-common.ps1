@@ -81,7 +81,9 @@ function Get-AdoSuiteTestCases {
 }
 
 function Get-AdoPlanPointsByTestCase {
-    param([string]$Org, [string]$Project, [string]$Pat, [int]$PlanId, [string]$BearerToken = "")
+    # -IncludeRootSuite (por defecto desactivado) tambien lee los puntos de la suite raiz del plan,
+    # donde viven los casos que cuelgan directamente de ella (p. ej. el smoke 100069).
+    param([string]$Org, [string]$Project, [string]$Pat, [int]$PlanId, [string]$BearerToken = "", [switch]$IncludeRootSuite)
 
     $headers = New-AdoAuthHeaders -Pat $Pat -BearerToken $BearerToken
     $projectPath = Get-AdoProjectPath -Org $Org -Project $Project
@@ -90,7 +92,7 @@ function Get-AdoPlanPointsByTestCase {
     $pointByTestCase = @{}
 
     foreach ($suite in @($suites)) {
-        if ($null -eq $suite.parentSuite) { continue }
+        if ($null -eq $suite.parentSuite -and -not $IncludeRootSuite) { continue }
         $pointsUri = "$apiBase/Plans/${PlanId}/Suites/$($suite.id)/points?api-version=7.1"
         $points = Invoke-RestMethod -Uri $pointsUri -Method Get -Headers $headers -ErrorAction Stop
         foreach ($point in @($points.value)) {
@@ -119,7 +121,8 @@ function Assert-AdoCaseMappings {
         [int]$PlanId,
         [int]$RootSuiteId,
         [string]$ExpectedPlanName,
-        [string]$BearerToken = ""
+        [string]$BearerToken = "",
+        [switch]$IncludeRootSuite
     )
 
     $plan = Assert-AdoCanonicalPlan -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId -RootSuiteId $RootSuiteId -ExpectedName $ExpectedPlanName
@@ -127,7 +130,7 @@ function Assert-AdoCaseMappings {
     $suiteById = @{}
     foreach ($suite in @($suites)) { $suiteById[[int]$suite.id] = $suite }
 
-    $pointByTestCase = Get-AdoPlanPointsByTestCase -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId
+    $pointByTestCase = Get-AdoPlanPointsByTestCase -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId -IncludeRootSuite:$IncludeRootSuite
     $errors = @()
 
     foreach ($case in @($Cases)) {
@@ -161,13 +164,14 @@ function Publish-AdoTestPlanResults {
         [string]$RunName,
         [string]$AutomatedTestStorage,
         [string]$ArtifactsDir,
-        [string]$BearerToken = ""
+        [string]$BearerToken = "",
+        [switch]$IncludeRootSuite
     )
 
     $casesForValidation = @($Results | ForEach-Object {
         [pscustomobject]@{ caseKey = $_.CaseKey; group = $_.Group; id = $_.Id; suiteId = $_.SuiteId; testCaseId = $_.TestCaseId }
     })
-    $validation = Assert-AdoCaseMappings -Cases $casesForValidation -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId -RootSuiteId $RootSuiteId -ExpectedPlanName $ExpectedPlanName
+    $validation = Assert-AdoCaseMappings -Cases $casesForValidation -Org $Org -Project $Project -Pat $Pat -BearerToken $BearerToken -PlanId $PlanId -RootSuiteId $RootSuiteId -ExpectedPlanName $ExpectedPlanName -IncludeRootSuite:$IncludeRootSuite
     $pointByTestCase = $validation.PointByTestCase
 
     $headers = New-AdoAuthHeaders -Pat $Pat -BearerToken $BearerToken
