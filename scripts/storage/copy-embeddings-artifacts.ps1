@@ -1,4 +1,5 @@
-﻿<#
+﻿#requires -Version 7
+<#
 .SYNOPSIS
     Copia verificada de los artefactos del clasificador por embeddings entre los storages
     de documentos de dos entornos (AB#101570).
@@ -13,7 +14,11 @@
       copy      no existe en el destino; se copia.
       present   existe en el destino con el mismo contentMd5; no se toca.
       conflict  existe en el destino con OTRO contentMd5 (solo aparece con MD5 distinto);
-                solo se sobrescribe con -Force. Sin -Force el script termina con codigo 1.
+                solo se sobrescribe con -Force. Sin -Force y sin -DryRun el script aborta
+                antes de escribir nada (0 escrituras) y termina con codigo 1.
+    Estados finales tras escribir:
+      copiado       copiado y con el MD5 del destino igual al del origen.
+      md5-distinto  copiado pero con MD5 distinto al del origen (error, codigo 1).
 
     Mecanica de copia: descarga del origen a un directorio temporal y subida al destino, ambas
     con az storage blob y --auth-mode login. No se usa az storage blob copy start porque con
@@ -95,7 +100,13 @@ function Get-Md5Fichero {
     return [Convert]::ToBase64String([Security.Cryptography.MD5]::HashData([IO.File]::ReadAllBytes($Ruta)))
 }
 
+function Show-Tabla {
+    param($Filas)
+    $Filas | Format-Table Blob, Estado, Md5Origen, Md5Destino -AutoSize | Out-String -Width 300 | Write-Host
+}
+
 $tmpDir = $null
+$filas = @()
 try {
     if ($SourceEnvironment -eq $TargetEnvironment -and -not $DryRun) {
         throw "Origen y destino son el mismo entorno ($SourceEnvironment); solo se admite con -DryRun."
@@ -113,7 +124,6 @@ try {
     $blobs = @($r.Salida | ConvertFrom-Json)
     if ($blobs.Count -eq 0) { throw "El origen $origen no tiene ningun blob con el prefijo $prefijo" }
 
-    $filas = @()
     foreach ($b in $blobs) {
         $md5Origen = Get-Md5Blob $b
         $s = Invoke-AzCapturado @('storage', 'blob', 'show', '--account-name', $destino, '--container-name', $contenedor,
@@ -122,7 +132,7 @@ try {
         if ($s.Codigo -eq 0) {
             $md5Destino = Get-Md5Blob ($s.Salida | ConvertFrom-Json)
             if ($md5Origen -and $md5Destino -and $md5Origen -eq $md5Destino) { $estado = 'present' } else { $estado = 'conflict' }
-        } elseif ($s.Error -match 'BlobNotFound|ResourceNotFound|does not exist') {
+        } elseif ($s.Error -match 'BlobNotFound|ResourceNotFound') {
             $estado = 'copy'
         } else {
             throw "Fallo al consultar el destino $destino para $($b.name) (az codigo $($s.Codigo)): $($s.Error)"
@@ -133,6 +143,12 @@ try {
     if ($DryRun) {
         Write-Host "DryRun: 0 escrituras"
     } else {
+        $conflictos = @($filas | Where-Object { $_.Estado -eq 'conflict' })
+        if ($conflictos.Count -gt 0 -and -not $Force) {
+            Show-Tabla $filas
+            Write-Host "Hay conflictos y no se ha pasado -Force: 0 escrituras"
+            exit 1
+        }
         $tmpDir = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
         New-Item -ItemType Directory -Path $tmpDir | Out-Null
         foreach ($f in $filas) {
@@ -159,7 +175,7 @@ try {
         }
     }
 
-    $filas | Format-Table Blob, Estado, Md5Origen, Md5Destino -AutoSize | Out-String -Width 300 | Write-Host
+    Show-Tabla $filas
 
     $fallos = @($filas | Where-Object { $_.Estado -in @('conflict', 'md5-distinto') })
     if ($fallos.Count -gt 0) {
@@ -168,6 +184,7 @@ try {
     }
     exit 0
 } catch {
+    if ($filas.Count -gt 0) { Show-Tabla $filas }
     Write-Host "ERROR: $($_.Exception.Message)"
     exit 1
 } finally {
