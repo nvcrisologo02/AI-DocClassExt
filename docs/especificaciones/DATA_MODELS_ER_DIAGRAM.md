@@ -261,7 +261,7 @@ erDiagram
         int Id PK
         string Version "ej: v1.2.0"
         string Paso "Ruta del paso o __cierre__"
-        string HashContenido "SHA-256 del fichero del paso"
+        string HashContenido "SHA-256 del contenido efectivo ejecutado"
         string Resultado "Aplicado o Revertido"
         string BuildId
         datetime FechaUtc
@@ -796,7 +796,7 @@ Sin claves foráneas. Gestión desde `Admin_*PromptTemplate*` y `Admin_ActivateP
 | **Id** | INT | PK, Identity |
 | **Version** | NVARCHAR(32) | Versión de la release (ej: `v1.2.0`) |
 | **Paso** | NVARCHAR(400) | Ruta del paso, o `__cierre__` para la fila de cierre de la release |
-| **HashContenido** | NVARCHAR(64) | SHA-256 hexadecimal del fichero del paso; vacío en la fila de cierre |
+| **HashContenido** | NVARCHAR(64) | SHA-256 hexadecimal del contenido efectivo ejecutado: el SQL ya generado (con los `DECLARE` sustituidos) o el fichero `.ps1` más sus argumentos ya expandidos; vacío en la fila de cierre |
 | **Resultado** | NVARCHAR(16) | `Aplicado` o `Revertido` |
 | **BuildId** | NVARCHAR(32) | Identificador del run de la pipeline que lo registró |
 | **FechaUtc** | DATETIME2 | Fecha y hora UTC del registro |

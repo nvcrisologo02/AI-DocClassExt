@@ -24,7 +24,7 @@ public class ReleaseAplicadaEntity
     [MaxLength(400)]
     public string Paso { get; set; } = string.Empty;
 
-    /// <summary>SHA-256 hexadecimal del fichero del paso; vacio en la fila de cierre.</summary>
+    /// <summary>SHA-256 hexadecimal del contenido efectivo ejecutado: el SQL ya generado (con los DECLARE sustituidos) o el fichero .ps1 mas sus argumentos ya expandidos; vacio en la fila de cierre.</summary>
     [Required]
     [MaxLength(64)]
     public string HashContenido { get; set; } = string.Empty;
