@@ -69,17 +69,19 @@ pwsh -NoProfile -File ./scripts/migrations/gpt56-luna/aplicar-luna.ps1 -Environm
 pwsh -NoProfile -File ./scripts/migrations/gpt56-luna/aplicar-luna.ps1 -Environment pre
 ```
 
-Con `-Environment prod` en PRO; `dev` se rechaza. Comprobación previa de solo lectura (filas `classification.gpt5-mini`, `prompt.gpt5-mini`, `classification.gpt4o-mini-fallback`, `extraction.gpt4o-mini-fallback` y `default.gpt4o-mini_ex` activas, tipología activa `IBI_1.1` y ninguna tipología con la clave de prompt en los dos casings a la vez): si falla, sale con código 2 sin tocar nada. Al terminar comprueba un `UseAsFallback` por Tipo 0 y 1 y ninguna tipología con `default.gpt4o-mini` como clave de prompt (código 1 si no).
+Con `-Environment prod` en PRO; `dev` se rechaza. Comprobación previa de solo lectura (si falla, sale con código 2 sin tocar nada): filas activas `classification.gpt5-mini`, `prompt.gpt5-mini`, `classification.gpt4o-mini-fallback`, `extraction.gpt4o-mini-fallback` y `default.gpt4o-mini_ex`; filas origen del 09 con JSON válido y claves PascalCase (`UseAsFallback`, `DeploymentName`); tipología activa `IBI_1.1` con JSON válido y `Extraction.ModelKey` = `default.gpt4o-mini_ex` o `default.gpt56-luna_ex`; ninguna tipología con los objetos `PromptConfig` y `promptConfig` a la vez (el 08 lanzaría el THROW 50053 y desharía todo después del 09); y que las únicas filas con `UseAsFallback = true` de Tipo 0 y 1 sean el par `gpt4o-mini-fallback` o el par `gpt56-luna` (otra fila con el indicador haría fallar el 09 con el THROW 50038). Al terminar comprueba un `UseAsFallback` por Tipo 0 y 1, que sean `classification.gpt56-luna` y `extraction.gpt56-luna`, y ninguna tipología con `default.gpt4o-mini` como clave de prompt (código 1 si no). Solo se ejecuta tras el 832 del paso 1 en verde (el deployment `gpt-5.6-luna` debe existir; el script no puede comprobarlo por ARM).
 
 **Siempre antes del 832 con `applyMissingConfig`** (ADR-005): si ConfigSeed diera de alta antes las filas luna de DEV, entrarían con `UseAsFallback = true` y habría dos fallbacks por Tipo. ConfigSeed no crea las filas luna.
 
-Orden de la ventana de PRE (decisión del 2026-11-26):
+Orden de la ventana de PRE (decisión del 2026-11-26, completada tras la revisión de la rama):
 
-1. Pipeline 832 `pre` con `applyMissingConfig=false` (dryRun y real): crea el deployment `gpt-5.6-luna` y copia los artefactos CU/DI; no toca configuración.
-2. Pipeline 799 `pre`: código nuevo y settings decisivos (`PromptDefaults__ModelKey=prompt.gpt56-luna`, `GDC__BypassSslValidation=false`). Drenar la ingesta antes del siguiente paso.
-3. `aplicar-luna.ps1 -Environment pre -DryRun` y después sin `-DryRun`.
-4. Script 07 de embeddings (`scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql`, híbrido/v5) con `apply-sql-dev.ps1 -Server srbsqlpredocai.database.windows.net -PermitirNoDev`.
-5. Pipeline 832 `pre` con `applyMissingConfig` (dryRun y real).
+1. Pipeline 832 `pre` con `applyMissingConfig=false` (dryRun y real): crea el deployment `gpt-5.6-luna` y copia los artefactos CU/DI; no toca configuración. Debe quedar en verde antes del paso 4.
+2. **Pausar la ingesta de PRE** (no basta con drenarla) y mantenerla pausada hasta que termine el paso 4: entre el 799 y `aplicar-luna.ps1`, `PromptDefaults__ModelKey` apunta a una fila `prompt.gpt56-luna` que todavía no existe y prompt y resumen fallarían en cada llamada.
+3. Pipeline 799 `pre`: código nuevo y settings decisivos (`PromptDefaults__ModelKey=prompt.gpt56-luna`, `GDC__BypassSslValidation=false`).
+4. `aplicar-luna.ps1 -Environment pre -DryRun` y después sin `-DryRun`. Crea la fila `prompt.gpt56-luna` y hace el cutover. Después, reiniciar la Function App de PRE (`az functionapp restart`) o esperar los 5 minutos de la caché de configuración, y solo entonces reanudar la ingesta.
+5. Copiar el artefacto de embeddings: `pwsh ./scripts/storage/copy-embeddings-artifacts.ps1 -Version v5 -TargetEnvironment pre -DryRun` y después sin `-DryRun`. El blob de la versión debe existir en PRE antes del script 07.
+6. Script 07 de embeddings (`scripts/migrations/clasificador-embeddings/07-modeloconfig-embeddings-modo-version.sql`, híbrido/v5) con `apply-sql-dev.ps1 -Server srbsqlpredocai.database.windows.net -PermitirNoDev`.
+7. Pipeline 832 `pre` con `applyMissingConfig` (dryRun y real).
 
 PRO sigue la misma secuencia en la Fase 4 con `-Environment prod`, salvo que el deployment lo crea plataforma o un run manual (el 832 no gestiona los de PRO).
 
@@ -195,7 +197,7 @@ Se escribe aquí sin ejecutar nada:
 - Integrar la rama en `develop`. Lleva el SDK `Azure.AI.OpenAI 2.9.0-beta.1`, `OpenAiModelCapabilities`, la caché, el umbral virtual y la herencia del modelo de prompt.
 - Deployment `gpt-5.6-luna` Data Zone y su cuota en PRE y PRO. En PRO, ARM exige PIM. El deployment de PRE lo declara `infra/ai/deployments.pre.json` y lo crea el 832 (`apply-deployments.ps1`); en PRO lo crea plataforma o un run manual (Fase 4).
 - Filas luna, tarifa, caché, cutover y herencia del modelo de prompt en PRE y PRO: los aplica `aplicar-luna.ps1` (ver «PRE y PRO»), que localiza la tipología por `Codigo = 'IBI_1.1'`. ConfigSeed no crea las filas luna.
-- Comprobar que la fila `prompt.gpt56-luna` existe y está activa **antes** de poner `PromptDefaults__ModelKey`, porque si no resuelve falla siempre.
+- La fila `prompt.gpt56-luna` la crea el paso 4 de la ventana (`aplicar-luna.ps1`), con la ingesta de PRE pausada; el 799 de v1.2.0 fija `PromptDefaults__ModelKey` antes, por diseño, y mientras la fila no exista prompt y resumen fallan en cada llamada.
 - Resuelto en v1.2.0: el pipeline fija y verifica `PromptDefaults__ModelKey` en cada despliegue, sin `appsettings set` a mano.
 - Comprobar en PRE el log «Activando modo combinado fallback+prompt» con un documento que active a la vez extracción GPT de fallback y prompt de tipología: el humo de DEV no lo cubrió.
 - El 08 ya trata ambos casings; la comprobación de casing mixto (misma tipología con `PromptConfig.ModelKey` y `promptConfig.modelKey` a la vez) está hecha en la comprobación previa de `aplicar-luna.ps1`.

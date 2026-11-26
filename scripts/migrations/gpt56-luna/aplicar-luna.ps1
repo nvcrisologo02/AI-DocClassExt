@@ -15,10 +15,16 @@
       classification.gpt5-mini (Tipo 0), prompt.gpt5-mini (Tipo 2),
       classification.gpt4o-mini-fallback (Tipo 0), extraction.gpt4o-mini-fallback (Tipo 1),
       default.gpt4o-mini_ex (Tipo 1) y la tipologia activa Codigo = IBI_1.1; y no puede haber
-      tipologias con PromptConfig.ModelKey y promptConfig.modelKey informados a la vez (casing
-      mixto ambiguo); ademas, las filas origen del 09 deben ser JSON valido con claves PascalCase
-      y IBI_1.1 debe tener Extraction.ModelKey default.gpt4o-mini_ex o default.gpt56-luna_ex.
+      tipologias con los objetos PromptConfig y promptConfig a la vez (el 08 lanza THROW 50053 y
+      desharia todo tras aplicar el 09); ademas, las filas origen del 09 deben ser JSON valido
+      con claves PascalCase, IBI_1.1 debe tener JSON valido y Extraction.ModelKey
+      default.gpt4o-mini_ex o default.gpt56-luna_ex, y las unicas filas con UseAsFallback = true
+      de Tipo 0 y Tipo 1 deben ser las gpt4o-mini-fallback (antes del cutover) o las gpt56-luna
+      (ya aplicado); otra fila con el indicador haria fallar el 09 con THROW 50038.
       Si algo falla, lista lo que falta y termina con codigo 2 sin tocar nada.
+
+    PRERREQUISITO QUE EL SCRIPT NO PUEDE COMPROBAR: ejecutalo solo tras el 832 del paso 1 en
+    verde (el deployment gpt-5.6-luna debe existir; no se puede comprobar por ARM desde aqui).
 
     Orden fijo de los scripts (cada uno es idempotente, con backup solo si cambia, y se para en
     el primero que falle):
@@ -30,7 +36,7 @@
       08-dev-tipologias-heredan-modelo-prompt.sql
 
     Verificacion final: debe haber exactamente un UseAsFallback = true activo por Tipo 0 y por
-    Tipo 1, y ninguna tipologia con default.gpt4o-mini como clave de prompt. Se imprimen ambas.
+    Tipo 1, que sean classification.gpt56-luna y extraction.gpt56-luna, y ninguna tipologia con default.gpt4o-mini como clave de prompt. Se imprimen ambas.
 
     En DEV no se usa: alli se ejecutan los scripts uno a uno con apply-sql-dev.ps1.
 
@@ -114,14 +120,15 @@ function Test-ComprobacionPrevia {
     $ibi = Invoke-ConsultaFilas -Servidor $Servidor -Consulta "SELECT Id, Codigo FROM dbo.Tipologias WHERE Activa = 1 AND Codigo = N'IBI_1.1'"
     if ($ibi.Count -eq 0) { $problemas.Add("Falta la tipologia activa Codigo = IBI_1.1 en dbo.Tipologias.") }
 
+    # Mismo predicado que el THROW 50053 del 08: los dos OBJETOS PromptConfig y promptConfig a la vez.
     $mixtas = Invoke-ConsultaFilas -Servidor $Servidor -Consulta @'
 SELECT Id, Codigo FROM dbo.Tipologias
 WHERE ISJSON(ConfiguracionJson) = 1
-  AND JSON_VALUE(ConfiguracionJson, '$.PromptConfig.ModelKey') IS NOT NULL
-  AND JSON_VALUE(ConfiguracionJson, '$.promptConfig.modelKey') IS NOT NULL
+  AND JSON_QUERY(ConfiguracionJson, '$.PromptConfig') IS NOT NULL
+  AND JSON_QUERY(ConfiguracionJson, '$.promptConfig') IS NOT NULL
 '@
     foreach ($m in $mixtas) {
-        $problemas.Add("Casing mixto: la tipologia Id $($m.Id) ($($m.Codigo)) tiene PromptConfig.ModelKey y promptConfig.modelKey a la vez.")
+        $problemas.Add("Casing mixto: la tipologia Id $($m.Id) ($($m.Codigo)) tiene los objetos PromptConfig y promptConfig a la vez (el 08 lanzaria THROW 50053 y desharia todo).")
     }
 
     # Precondiciones del 09 sobre filas que ya existen: JSON valido y claves PascalCase.
@@ -141,13 +148,37 @@ WHERE Activo = 1
 
     # Precondicion del 09: Extraction.ModelKey de IBI_1.1 (cualquier casing) ya conocido.
     $mk = Invoke-ConsultaFilas -Servidor $Servidor -Consulta @'
-SELECT Id, COALESCE(JSON_VALUE(ConfiguracionJson, '$.extraction.modelKey'), JSON_VALUE(ConfiguracionJson, '$.Extraction.ModelKey')) AS ModelKey
+SELECT Id, ISJSON(ConfiguracionJson) AS Valido,
+       CASE WHEN ISJSON(ConfiguracionJson) = 1
+            THEN COALESCE(JSON_VALUE(ConfiguracionJson, '$.extraction.modelKey'), JSON_VALUE(ConfiguracionJson, '$.Extraction.ModelKey')) END AS ModelKey
 FROM dbo.Tipologias
-WHERE Activa = 1 AND Codigo = N'IBI_1.1' AND ISJSON(ConfiguracionJson) = 1
+WHERE Activa = 1 AND Codigo = N'IBI_1.1'
 '@
     foreach ($x in $mk) {
-        if ($null -eq $x.ModelKey -or $x.ModelKey.ToLowerInvariant() -notin @('default.gpt4o-mini_ex', 'default.gpt56-luna_ex')) {
+        if ([int]$x.Valido -ne 1) {
+            $problemas.Add("La tipologia IBI_1.1 (Id $($x.Id)) no tiene ConfiguracionJson valido (el 09 lanzaria THROW 50036).")
+        }
+        elseif ($null -eq $x.ModelKey -or $x.ModelKey.ToLowerInvariant() -notin @('default.gpt4o-mini_ex', 'default.gpt56-luna_ex')) {
             $problemas.Add("La tipologia IBI_1.1 (Id $($x.Id)) tiene Extraction.ModelKey '$($x.ModelKey)': el 09 solo admite default.gpt4o-mini_ex o default.gpt56-luna_ex.")
+        }
+    }
+
+    # Unicidad del fallback: el 09 lanza THROW 50038 si, tras el cambio, no queda exactamente un
+    # UseAsFallback por Tipo. Los unicos con el indicador deben ser el par gpt4o-mini (antes del
+    # cutover) o el par luna (entorno ya en cutover o re-ejecucion).
+    $banderas = Invoke-ConsultaFilas -Servidor $Servidor -Consulta @'
+SELECT Tipo, [Key] FROM dbo.ModeloConfigs
+WHERE Activo = 1 AND Tipo IN (0, 1)
+  AND COALESCE(JSON_VALUE(ConfiguracionJson, '$.UseAsFallback'), JSON_VALUE(ConfiguracionJson, '$.useAsFallback')) = 'true'
+'@
+    $permitidas = @(
+        @{ Tipo = 0; Claves = @('classification.gpt4o-mini-fallback', 'classification.gpt56-luna') },
+        @{ Tipo = 1; Claves = @('extraction.gpt4o-mini-fallback', 'extraction.gpt56-luna') }
+    )
+    foreach ($b in $banderas) {
+        $ok = @($permitidas | Where-Object { $_.Tipo -eq [int]$b.Tipo -and $_.Claves -contains $b.Key }).Count -gt 0
+        if (-not $ok) {
+            $problemas.Add("La fila $($b.Key) (Tipo $($b.Tipo)) tiene UseAsFallback = true y no es gpt4o-mini-fallback ni gpt56-luna: el 09 fallaria con THROW 50038 tras aplicar 01, 02, 05 y 03.")
         }
     }
     return $problemas
@@ -169,7 +200,7 @@ try {
         $problemas | ForEach-Object { Write-Host "  - $_" }
         exit 2
     }
-    Write-Host "Comprobacion previa OK: filas requeridas, casing PascalCase de las filas origen, tipologia IBI_1.1 (con su Extraction.ModelKey) y sin casing mixto."
+    Write-Host "Comprobacion previa OK: filas requeridas, casing PascalCase de las filas origen, tipologia IBI_1.1 (JSON valido y Extraction.ModelKey), sin PromptConfig/promptConfig a la vez y fallbacks solo en el par gpt4o-mini o el par luna."
 
     Write-Host "Orden de aplicacion:"
     $n = 0
@@ -208,7 +239,16 @@ WHERE ISJSON(ConfiguracionJson) = 1
     $nG4 = $g4[0].N
     Write-Host "Tipologias con default.gpt4o-mini como clave de prompt: $nG4 (esperado 0)"
 
-    if ($n0 -ne 1 -or $n1 -ne 1 -or $nG4 -ne 0) {
+    $flagLuna = Invoke-ConsultaFilas -Servidor $servidor -Consulta @'
+SELECT Tipo, [Key] FROM dbo.ModeloConfigs
+WHERE Activo = 1 AND Tipo IN (0, 1)
+  AND COALESCE(JSON_VALUE(ConfiguracionJson, '$.UseAsFallback'), JSON_VALUE(ConfiguracionJson, '$.useAsFallback')) = 'true'
+'@
+    $esLuna = (@($flagLuna | Where-Object { $_.Tipo -eq 0 -and $_.Key -eq 'classification.gpt56-luna' }).Count -eq 1) -and
+              (@($flagLuna | Where-Object { $_.Tipo -eq 1 -and $_.Key -eq 'extraction.gpt56-luna' }).Count -eq 1)
+    Write-Host ("Filas con UseAsFallback: " + ((@($flagLuna | ForEach-Object { "$($_.Key) (Tipo $($_.Tipo))" })) -join ', ') + " (esperado classification.gpt56-luna y extraction.gpt56-luna)")
+
+    if ($n0 -ne 1 -or $n1 -ne 1 -or $nG4 -ne 0 -or -not $esLuna) {
         Write-Host "VERIFICACION FINAL FUERA DE LO ESPERADO: revisar el entorno."
         exit 1
     }
