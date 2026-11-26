@@ -1,23 +1,33 @@
 -- =====================================================================
--- medicion/01 - Rama de clasificacion por dia (clasificador por embeddings)
+-- medicion/01 - Rama de clasificacion por dia y modo (clasificador por embeddings)
 -- =====================================================================
--- AB#101570 / ADR-006. Por dia UTC de FechaEjecucion, sobre ejecuciones no
--- reutilizadas por duplicado: cuantas clasifico cada rama, la confianza media
--- de la rama embeddings y el acuerdo de TDN1 entre embeddings y GPT.
+-- AB#101570 / ADR-006. Por dia UTC de FechaEjecucion y por modo de embeddings
+-- persistido, sobre ejecuciones no reutilizadas por duplicado: cuantas clasifico
+-- cada rama, la confianza media de la rama embeddings y el acuerdo de TDN1 entre
+-- embeddings y GPT en las ejecuciones derivadas a GPT.
 --
 -- Donde se persiste: dbo.DocumentoEjecuciones.ContratoSalidaCompletoJson,
 --   $.DetalleEjecucion.Clasificacion.RamaClasificacion  ("gpt" | "embeddings" | "expectedtype")
---   $.DetalleEjecucion.Clasificacion.Embeddings.{Tdn1,Confianza,Decision,Modo}
+--   $.DetalleEjecucion.Clasificacion.Embeddings.{Tdn1,Confianza,Decision,Modo,ModoRestringido}
 --   $.DetalleEjecucion.Clasificacion.Tdn1Detectado      (TDN1 de la clasificacion final)
--- Cada ruta se lee en PascalCase y camelCase (COALESCE), segun la fila.
+-- Cada ruta se lee en PascalCase y camelCase (COALESCE), segun la fila. El modo
+-- (columna Modo) es el efectivo de la ejecucion: ModoRestringido si la peticion
+-- traia restriccion y, si no, Modo; vacio si no hay bloque Embeddings.
 --
--- Limite: GPT y embeddings no se persisten a la vez salvo cuando contesta GPT.
--- Si contesta embeddings (hibrido), no hay resultado GPT y no hay acuerdo
--- medible; si contesta GPT con el bloque Embeddings presente (sombra, o
--- hibrido que derivo a GPT), Tdn1Detectado es el de GPT y se compara con
--- Embeddings.Tdn1. Por eso el acuerdo se calcula solo en esas filas
--- (AcuerdoTdn1 sobre ConAmbos). Ejecuciones sin RamaClasificacion (previas a
--- AB#100779 o con modo off) salen en SinRama.
+-- LECTURA DEL ACUERDO (AcuerdoTdn1Derivadas sobre ConAmbos): solo hay acuerdo
+-- medible en filas con Rama = gpt y bloque Embeddings presente, donde
+-- Tdn1Detectado es el de GPT y se compara con Embeddings.Tdn1.
+--   - En sombra son todas las ejecuciones con embeddings: el acuerdo es una
+--     muestra representativa.
+--   - En hibrido esas filas son SOLO las que el clasificador de embeddings
+--     rechazo por baja confianza y se derivaron a GPT: el acuerdo se calcula
+--     unicamente sobre predicciones rechazadas y sale sesgado a la baja. No es
+--     el acuerdo del clasificador; las aceptadas (Rama = embeddings) no tienen
+--     resultado GPT con el que compararse.
+--   - El dia del cambio de modo mezcla sombra e hibrido: por eso se agrupa
+--     tambien por Modo y no se deben sumar filas de modos distintos.
+-- Ejecuciones sin RamaClasificacion (previas a AB#100779 o con modo off) salen
+-- en SinRama.
 --
 -- Parametros (UTC): @From inclusive, @To exclusivo, @SubmittedByPrefix
 -- (cadena vacia = sin filtro de origen).
@@ -31,21 +41,28 @@ DECLARE @SubmittedByPrefix NVARCHAR(200) = N'';
 
 WITH Ej AS (
     SELECT CAST(e.FechaEjecucion AS DATE) AS Dia,
-           COALESCE(JSON_VALUE(e.ContratoSalidaCompletoJson, '$.DetalleEjecucion.Clasificacion.RamaClasificacion'),
-                    JSON_VALUE(e.ContratoSalidaCompletoJson, '$.detalleEjecucion.clasificacion.ramaClasificacion')) AS Rama,
-           TRY_CAST(COALESCE(JSON_VALUE(e.ContratoSalidaCompletoJson, '$.DetalleEjecucion.Clasificacion.Embeddings.Confianza'),
-                             JSON_VALUE(e.ContratoSalidaCompletoJson, '$.detalleEjecucion.clasificacion.embeddings.confianza')) AS FLOAT) AS ConfEmb,
-           COALESCE(JSON_VALUE(e.ContratoSalidaCompletoJson, '$.DetalleEjecucion.Clasificacion.Embeddings.Tdn1'),
-                    JSON_VALUE(e.ContratoSalidaCompletoJson, '$.detalleEjecucion.clasificacion.embeddings.tdn1')) AS Tdn1Emb,
-           COALESCE(JSON_VALUE(e.ContratoSalidaCompletoJson, '$.DetalleEjecucion.Clasificacion.Tdn1Detectado'),
-                    JSON_VALUE(e.ContratoSalidaCompletoJson, '$.detalleEjecucion.clasificacion.tdn1Detectado')) AS Tdn1Final
+           COALESCE(JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.RamaClasificacion'),
+                    JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.ramaClasificacion')) AS Rama,
+           COALESCE(JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.Embeddings.ModoRestringido'),
+                    JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.embeddings.modoRestringido'),
+                    JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.Embeddings.Modo'),
+                    JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.embeddings.modo'),
+                    N'') AS ModoEmb,
+           TRY_CAST(COALESCE(JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.Embeddings.Confianza'),
+                             JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.embeddings.confianza')) AS FLOAT) AS ConfEmb,
+           COALESCE(JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.Embeddings.Tdn1'),
+                    JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.embeddings.tdn1')) AS Tdn1Emb,
+           COALESCE(JSON_VALUE(j.J, '$.DetalleEjecucion.Clasificacion.Tdn1Detectado'),
+                    JSON_VALUE(j.J, '$.detalleEjecucion.clasificacion.tdn1Detectado')) AS Tdn1Final
     FROM dbo.DocumentoEjecuciones e
+    CROSS APPLY (SELECT CASE WHEN ISJSON(e.ContratoSalidaCompletoJson) = 1 THEN e.ContratoSalidaCompletoJson END AS J) j
     WHERE e.ReutilizadaPorDuplicado = 0
       AND e.FechaEjecucion >= @From AND e.FechaEjecucion < @To
       AND (@SubmittedByPrefix = N'' OR e.SubmittedBy LIKE @SubmittedByPrefix + '%')
-      AND ISJSON(e.ContratoSalidaCompletoJson) = 1
+      AND j.J IS NOT NULL
 )
 SELECT Dia,
+       ModoEmb                                                   AS Modo,
        COUNT(*)                                                  AS Ejecuciones,
        SUM(CASE WHEN Rama = N'embeddings' THEN 1 ELSE 0 END)     AS RamaEmbeddings,
        SUM(CASE WHEN Rama = N'gpt' THEN 1 ELSE 0 END)            AS RamaGpt,
@@ -53,7 +70,7 @@ SELECT Dia,
        SUM(CASE WHEN Rama IS NULL THEN 1 ELSE 0 END)             AS SinRama,
        AVG(CASE WHEN Rama = N'embeddings' THEN ConfEmb END)      AS ConfianzaMediaEmbeddings,
        SUM(CASE WHEN Rama = N'gpt' AND Tdn1Emb IS NOT NULL AND Tdn1Final IS NOT NULL THEN 1 ELSE 0 END) AS ConAmbos,
-       SUM(CASE WHEN Rama = N'gpt' AND Tdn1Emb IS NOT NULL AND Tdn1Final IS NOT NULL AND Tdn1Emb = Tdn1Final THEN 1 ELSE 0 END) AS AcuerdoTdn1
+       SUM(CASE WHEN Rama = N'gpt' AND Tdn1Emb IS NOT NULL AND Tdn1Final IS NOT NULL AND Tdn1Emb = Tdn1Final THEN 1 ELSE 0 END) AS AcuerdoTdn1Derivadas
 FROM Ej
-GROUP BY Dia
-ORDER BY Dia;
+GROUP BY Dia, ModoEmb
+ORDER BY Dia, ModoEmb;

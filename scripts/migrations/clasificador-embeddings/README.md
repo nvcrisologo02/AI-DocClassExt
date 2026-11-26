@@ -56,4 +56,4 @@ Documentacion: `docs/05_MANUAL_USO_CONFIGURACION.md`, seccion 5.6.1c; diseno en
 
 ### Consulta de medición (`medicion/`, solo lectura)
 
-`medicion/01-rama-clasificacion-por-dia.sql`: por día UTC, ejecuciones no reutilizadas por rama (`embeddings`, `gpt`, `expectedtype`), confianza media de embeddings y acuerdo de TDN1 con GPT cuando ambos se persisten. Parámetros `@From`, `@To` y `@SubmittedByPrefix` al inicio; se ejecuta con `query-sql.ps1` como las de `gpt56-luna/medicion/`.
+`medicion/01-rama-clasificacion-por-dia.sql`: por día UTC y por modo de embeddings persistido (columna `Modo`), ejecuciones no reutilizadas por rama (`embeddings`, `gpt`, `expectedtype`), confianza media de embeddings y `AcuerdoTdn1Derivadas` (acuerdo de TDN1 con GPT sobre `ConAmbos`). En `hibrido` el acuerdo cubre solo las ejecuciones derivadas a GPT por baja confianza (predicciones rechazadas, sesgado a la baja), no el acuerdo del clasificador; el día del cambio de modo mezcla `sombra` e `hibrido`, por eso se agrupa por `Modo`. Parámetros `@From`, `@To` y `@SubmittedByPrefix` al inicio; se ejecuta con `query-sql.ps1` como las de `gpt56-luna/medicion/`.
