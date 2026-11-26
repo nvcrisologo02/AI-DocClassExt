@@ -2,7 +2,7 @@
 
 Fecha: pendiente (ventana de PRE; en preparación, Fase 0-1 hechas) · Tag: v1.2.0 (sin crear) · Commit: 85626406 · Tag anterior: v1.1.1 (ba0a5b3) · Entorno: PRE y PRO (espejo de DEV)
 
-Commit candidato: `85626406`, HEAD de `develop` tras integrar el hito 2 de la release (`feature/101570-release-v1.2.0-pre`: luna, embeddings y scripts de smoke) y la rama de ConfigSeed (`feature/101075-configseed-alta-clave-natural`). Sustituye al candidato previo `bc41f289`. Guía de la ventana de PRE: `GUIA_OPERADOR_PRE.md` en esta carpeta (se escribe en la tarea siguiente).
+Commit candidato: `85626406`, HEAD de `develop` tras integrar el hito 2 de la release (`feature/101570-release-v1.2.0-pre`: luna, embeddings y scripts de smoke) y la rama de ConfigSeed (`feature/101075-configseed-alta-clave-natural`). Sustituye al candidato previo `bc41f289`. Guía del operador: [GUIA_OPERADOR_PRE.md](GUIA_OPERADOR_PRE.md).
 
 ## Validación
 

@@ -200,7 +200,7 @@ Se escribe aquí sin ejecutar nada:
 - La fila `prompt.gpt56-luna` la crea el paso 4 de la ventana (`aplicar-luna.ps1`), con la ingesta de PRE pausada; el 799 de v1.2.0 fija `PromptDefaults__ModelKey` antes, por diseño, y mientras la fila no exista prompt y resumen fallan en cada llamada.
 - Resuelto en v1.2.0: el pipeline fija y verifica `PromptDefaults__ModelKey` en cada despliegue, sin `appsettings set` a mano.
 - Comprobar en PRE el log «Activando modo combinado fallback+prompt» con un documento que active a la vez extracción GPT de fallback y prompt de tipología: el humo de DEV no lo cubrió.
-- El 08 ya trata ambos casings; la comprobación de casing mixto (misma tipología con `PromptConfig.ModelKey` y `promptConfig.modelKey` a la vez) está hecha en la comprobación previa de `aplicar-luna.ps1`.
+- El 08 ya trata ambos casings; la comprobación de casing mixto (misma tipología con los objetos `PromptConfig` y `promptConfig` a la vez, el mismo predicado que el `THROW 50053` del 08) está hecha en la comprobación previa de `aplicar-luna.ps1`.
 - Los scripts 08 y 09 actualizan `Tipologias` sin tocar `FechaActualizacion`, que `TipologiaPromptConfigValidator` usa en su clave de caché: pendiente en el 08 y el 09 (no la actualizan).
 - Añadir un aviso en la validación del 802 cuando el `PromptDefaults__ModelKey` existente difiera de `$(promptDefaultsModelKey)`.
 - Comprobar si prompt y extracción con luna generan escrituras de caché implícitas facturadas (sus filas van sin `promptCache`).
