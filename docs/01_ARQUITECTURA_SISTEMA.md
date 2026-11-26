@@ -321,7 +321,7 @@ Los proveedores de IA soportan dos modos de autenticacion (`AuthMode`):
 > autenticacion esta en §1.4.6 y la IA es propia de cada entorno desde la Epic AB#100298. Su numeracion es local a
 > este documento y no coincide con la de los ADR formales de `docs/decisiones/` (`ADR-NNN-<slug>.md`), que son los
 > vigentes: cuando una referencia cita "ADR-001", "ADR-002" o "ADR-003" sin otro contexto, se refiere a
-> `docs/decisiones/` (ADR-001 a ADR-004 el 2026-11-22; ADR-005 y ADR-006 el 2026-11-26). En particular, el bloque ADR-005 de abajo describe un estado de autenticación
+> `docs/decisiones/` (ADR-001 a ADR-004 el 2026-11-22; ADR-005 a ADR-007 el 2026-11-26). En particular, el bloque ADR-005 de abajo describe un estado de autenticación
 > superado (la identidad administrada está activa en los tres entornos, §1.4.6) y el ADR-006 habla de un SQL temporal que ya es
 > Azure SQL Database en los tres entornos.
 
@@ -589,7 +589,7 @@ Estado el 2026-11-22: **App Service Authentication (EasyAuth) activo en los tres
 | [03_DISENO_TECNICO_DETALLADO.md](03_DISENO_TECNICO_DETALLADO.md) | Flujo pipeline, secuencias, modelo ER, contratos |
 | [INFRAESTRUCTURA_REAL_DESPLEGADA.md](infraestructura/INFRAESTRUCTURA_REAL_DESPLEGADA.md) | Infraestructura desplegada por entorno (DEV, PRE, PRO) |
 | [DATA_MODELS_ER_DIAGRAM.md](especificaciones/DATA_MODELS_ER_DIAGRAM.md) | Modelo de datos, migraciones y versionado del esquema |
-| [decisiones/](decisiones/) | ADR formales vigentes (ADR-001 a ADR-006) |
+| [decisiones/](decisiones/) | ADR formales vigentes (ADR-001 a ADR-007) |
 | [RELEASE_MANAGEMENT.md](procedimientos/RELEASE_MANAGEMENT.md) | Runbook de release y despliegue DEV → PRE → PRO |
 | [CONTRATO_API_HTTP.md](contratos/CONTRATO_API_HTTP.md) | Contrato de API REST detallado |
 | [MANUAL_PLUGINS.md](manuales/MANUAL_PLUGINS.md) | Guia de desarrollo de plugins |
