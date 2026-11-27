@@ -39,13 +39,14 @@ parameters:
       - dev
       - pre
       - prod
-  # Valor vacio = sin fallo simulado. Guard rechaza un valor no vacio fuera de dev.
+  # 'ninguna' = sin fallo simulado (Azure DevOps no admite la cadena vacia en values). Donde se pasa el
+  # valor se convierte a '' con replace(); Guard rechaza un valor distinto de ninguna fuera de dev.
   - name: simularFalloEn
-    displayName: 'Solo dev: fuerza un fallo en esa stage para ensayar la vuelta atras'
+    displayName: 'Solo dev: fuerza un fallo en esa stage para ensayar la vuelta atras (ninguna = sin fallo)'
     type: string
-    default: ''
+    default: ninguna
     values:
-      - ''
+      - ninguna
       - Migraciones
       - IA
       - Codigo
@@ -201,7 +202,7 @@ stages:
             -RepoRoot '$(Build.SourcesDirectory)' `
             -SqlServer '$(SQL_SERVER_NAME)' `
             -AprobadoresPath 'pipelines/templates/variables/aprobadores.yml' `
-            -SimularFalloEn '${{ parameters.simularFalloEn }}'
+            -SimularFalloEn '${{ replace(parameters.simularFalloEn, 'ninguna', '') }}'
           if ($LASTEXITCODE -ne 0) { throw "Invoke-ReleaseGuard.ps1 termino con codigo $LASTEXITCODE" }
 
 # ------------------------------------------------------------------------------------------------
@@ -418,7 +419,7 @@ stages:
         $todas = Join-Path $ws 'evidencias-all'
         New-Item -ItemType Directory -Force -Path $todas | Out-Null
         foreach ($d in @(Get-ChildItem -LiteralPath $ws -Directory -Filter 'evidencias-*' | Where-Object { $_.Name -ne 'evidencias-all' })) {
-          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' })) {
+          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' -and $_.Name -ne 'foto-settings.json' })) {
             $dest = Join-Path $todas (Join-Path $d.Name $f.FullName.Substring($d.FullName.Length).TrimStart('\', '/'))
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
             Copy-Item -LiteralPath $f.FullName -Destination $dest
@@ -466,7 +467,7 @@ stages:
     - template: pipelines/templates/steps/simular-fallo.yml
       parameters:
         stage: Migraciones
-        simularFalloEn: '${{ parameters.simularFalloEn }}'
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
     - template: pipelines/templates/steps/migrations-generate.yml
   - job: Apply
     displayName: Apply migrations to Azure SQL
@@ -513,7 +514,7 @@ stages:
     - template: pipelines/templates/steps/simular-fallo.yml
       parameters:
         stage: IA
-        simularFalloEn: '${{ parameters.simularFalloEn }}'
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
     - template: pipelines/templates/steps/ai-promote.yml
       parameters:
         targetServiceConnection: '$(AZURE_SERVICE_CONNECTION)'
@@ -544,7 +545,7 @@ stages:
     - template: pipelines/templates/steps/simular-fallo.yml
       parameters:
         stage: Codigo
-        simularFalloEn: '${{ parameters.simularFalloEn }}'
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
     - template: pipelines/templates/steps/deploy-functions.yml
       parameters:
         serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
@@ -628,7 +629,7 @@ stages:
     - template: pipelines/templates/steps/simular-fallo.yml
       parameters:
         stage: Configuracion
-        simularFalloEn: '${{ parameters.simularFalloEn }}'
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
     - checkout: self
     - task: AzureCLI@2
       displayName: Invoke-ReleasePasos.ps1
@@ -707,7 +708,7 @@ stages:
       - template: pipelines/templates/steps/simular-fallo.yml
         parameters:
           stage: Altas
-          simularFalloEn: '${{ parameters.simularFalloEn }}'
+          simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
       - template: pipelines/templates/steps/config-seed.yml
         parameters:
           targetServiceConnection: '$(AZURE_SERVICE_CONNECTION)'
@@ -790,7 +791,7 @@ stages:
     - template: pipelines/templates/steps/simular-fallo.yml
       parameters:
         stage: Verificacion
-        simularFalloEn: '${{ parameters.simularFalloEn }}'
+        simularFalloEn: "${{ replace(parameters.simularFalloEn, 'ninguna', '') }}"
     - checkout: self
     - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
       - download: current
@@ -923,9 +924,9 @@ stages:
         $ws = '$(Pipeline.Workspace)'
         $todas = Join-Path $ws 'evidencias-all'
         New-Item -ItemType Directory -Force -Path $todas | Out-Null
-        # Se reunen las evidencias de cada stage sin los zips de la foto del codigo.
+        # Se reunen las evidencias de cada stage sin los zips de la foto del codigo ni foto-settings.json (valores de app settings: solo queda en evidencias-Foto).
         foreach ($d in @(Get-ChildItem -LiteralPath $ws -Directory -Filter 'evidencias-*' | Where-Object { $_.Name -ne 'evidencias-all' })) {
-          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' })) {
+          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' -and $_.Name -ne 'foto-settings.json' })) {
             $dest = Join-Path $todas (Join-Path $d.Name $f.FullName.Substring($d.FullName.Length).TrimStart('\', '/'))
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
             Copy-Item -LiteralPath $f.FullName -Destination $dest
@@ -1092,6 +1093,8 @@ stages:
       releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
       resultadoGuard: $[ stageDependencies.Guard.GuardJob.result ]
       resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
+      resultadoRestaurar: $[ dependencies.Restaurar.result ]
+      resultadoRevertirCodigo: $[ dependencies.RevertirCodigo.result ]
       resultadoMigraciones: $[ stageDependencies.Migraciones.Apply.result ]
       resultadoIA: $[ stageDependencies.IA.Promote.result ]
       resultadoCodigo: $[ stageDependencies.Codigo.Validate.result ]
@@ -1102,7 +1105,8 @@ stages:
     steps:
     - checkout: self
     - task: AzureCLI@2
-      displayName: Set-ReleaseRevertida
+      displayName: Set-ReleaseRevertida (solo si la restauracion y el codigo se revirtieron)
+      condition: and(succeeded(), in(variables['resultadoRestaurar'], 'Succeeded', 'SucceededWithIssues', 'Skipped'), in(variables['resultadoRevertirCodigo'], 'Succeeded', 'SucceededWithIssues', 'Skipped'))
       inputs:
         azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
         scriptType: 'pscore'
@@ -1170,7 +1174,7 @@ stages:
         $todas = Join-Path $ws 'evidencias-all'
         New-Item -ItemType Directory -Force -Path $todas | Out-Null
         foreach ($d in @(Get-ChildItem -LiteralPath $ws -Directory -Filter 'evidencias-*' | Where-Object { $_.Name -ne 'evidencias-all' })) {
-          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' })) {
+          foreach ($f in @(Get-ChildItem -LiteralPath $d.FullName -Recurse -File | Where-Object { $_.Extension -ne '.zip' -and $_.Name -ne 'foto-settings.json' })) {
             $dest = Join-Path $todas (Join-Path $d.Name $f.FullName.Substring($d.FullName.Length).TrimStart('\', '/'))
             New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
             Copy-Item -LiteralPath $f.FullName -Destination $dest
@@ -1183,7 +1187,9 @@ stages:
           [ordered]@{ nombre = 'IA'; resultado = '$(resultadoIA)' },
           [ordered]@{ nombre = 'Codigo'; resultado = '$(resultadoCodigo)' },
           [ordered]@{ nombre = 'Configuracion'; resultado = '$(resultadoConfiguracion)' },
-          [ordered]@{ nombre = 'Verificacion'; resultado = '$(resultadoVerificacion)' }
+          [ordered]@{ nombre = 'Verificacion'; resultado = '$(resultadoVerificacion)' },
+          [ordered]@{ nombre = 'VueltaAtras: Restaurar BD y settings'; resultado = '$(resultadoRestaurar)' },
+          [ordered]@{ nombre = 'VueltaAtras: Revertir codigo'; resultado = '$(resultadoRevertirCodigo)' }
         )
         # Altas solo existe fuera de dev (compilacion condicional del YAML).
         if ('${{ ne(parameters.targetEnvironment, 'dev') }}' -eq 'True') { $resultados += [ordered]@{ nombre = 'Altas'; resultado = '$(resultadoAltas)' } }

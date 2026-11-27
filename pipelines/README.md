@@ -63,7 +63,7 @@ Los resultados de estas comparaciones van a `docs/auxiliares/temps/<fecha>/` (ca
 | Parámetro | Valores | Notas |
 |---|---|---|
 | `targetEnvironment` | `dev` (por defecto), `pre`, `prod` | `dev` es solo para ensayos. Origen del salto como en el 832: `pre` desde `dev`, `prod` desde `pre`; `dev` recupera desde PRO con `-FromProd -DryRun` y sin export ni altas. |
-| `simularFalloEn` | vacío (por defecto), `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas`, `Verificacion` | Solo en dev (Guard lo rechaza fuera de dev). Fuerza un fallo al inicio de esa stage (`simular-fallo.yml`) para ensayar la vuelta atrás. |
+| `simularFalloEn` | `ninguna` (por defecto, sin fallo; se pasa como vacío a Guard y a `simular-fallo.yml` porque Azure DevOps no admite la cadena vacía en `values`), `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas`, `Verificacion` | Solo en dev (Guard lo rechaza fuera de dev). Fuerza un fallo al inicio de esa stage (`simular-fallo.yml`) para ensayar la vuelta atrás. |
 
 Variables: `variables/entorno.yml`, `infra/ai/pipeline-variables.yml`, `variables/aprobadores.yml`, las constantes del 799 y del 832 y, por entorno, el origen del salto (`sourceEnvironment`, `sourceServiceConnection`, `sourceSqlServer`, `routeArgs`, `dryRunArg`). Pool por defecto `docia-mdp-private`; `Build`, `Generate` y `Validate` en `windows-latest`; `Aprobacion` agentless. Ninguna stage usa environments de Azure DevOps ni jobs de tipo deployment (ADR-008).
 
