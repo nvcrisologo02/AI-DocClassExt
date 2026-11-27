@@ -16,12 +16,18 @@ parameters:
     type: string
   - name: targetEnvironment
     type: string
+  - name: artifactName
+    type: string
+    default: drop-admin
+  - name: packagePath
+    type: string
+    default: $(Pipeline.Workspace)/drop-admin
 
 steps:
 - checkout: self
 
 - download: current
-  artifact: drop-admin
+  artifact: ${{ parameters.artifactName }}
 
 - task: AzureWebApp@1
   displayName: Deploy Admin Web App
@@ -29,7 +35,7 @@ steps:
     azureSubscription: ${{ parameters.serviceConnection }}
     appType: webApp
     appName: ${{ parameters.adminWebAppName }}
-    package: $(Pipeline.Workspace)/drop-admin
+    package: ${{ parameters.packagePath }}
     deploymentMethod: zipDeploy
 
 - task: AzureCLI@2

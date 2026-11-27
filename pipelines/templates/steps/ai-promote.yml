@@ -24,7 +24,6 @@ parameters:
   # Nombre completo del artefacto de manifiestos (lo fija el job con el intento).
   - name: artifactName
     type: string
-    default: ai-artifacts
 
 steps:
 - checkout: self
