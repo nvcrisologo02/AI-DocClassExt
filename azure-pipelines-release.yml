@@ -196,7 +196,9 @@ stages:
         scriptLocation: 'inlineScript'
         inlineScript: |
           # Emite las variables de salida version, manifestPath, yaAplicada e ignorarRegistro.
+          # -SinKudu: el scm de las apps no resuelve desde el pool privado; lo comprueba GuardKudu (hosted).
           pwsh -NoProfile -File ./scripts/release/Invoke-ReleaseGuard.ps1 `
+            -SinKudu `
             -Environment '${{ parameters.targetEnvironment }}' `
             -SourceBranch '$(Build.SourceBranch)' `
             -RepoRoot '$(Build.SourcesDirectory)' `
@@ -204,6 +206,28 @@ stages:
             -AprobadoresPath 'pipelines/templates/variables/aprobadores.yml' `
             -SimularFalloEn '${{ replace(parameters.simularFalloEn, 'ninguna', '') }}'
           if ($LASTEXITCODE -ne 0) { throw "Invoke-ReleaseGuard.ps1 termino con codigo $LASTEXITCODE" }
+  # Kudu (scm) de las tres apps con el token de Entra. Corre en un agente alojado: desde el pool privado
+  # el scm de la Function App no resuelve (endpoint privado sin enlace DNS a la VNet del pool). La stage
+  # Guard falla si falla cualquiera de los dos jobs. No produce variables de salida.
+  - job: GuardKudu
+    displayName: Comprobar Kudu de ${{ parameters.targetEnvironment }} (agente alojado)
+    timeoutInMinutes: 10
+    pool:
+      vmImage: windows-latest
+    steps:
+    - checkout: self
+    - task: AzureCLI@2
+      displayName: Test-ReleasePermisos.ps1 -SoloKudu
+      inputs:
+        azureSubscription: '$(AZURE_SERVICE_CONNECTION)'
+        scriptType: 'pscore'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          pwsh -NoProfile -File ./scripts/release/Test-ReleasePermisos.ps1 `
+            -Environment '${{ parameters.targetEnvironment }}' `
+            -SqlServer '$(SQL_SERVER_NAME)' `
+            -SoloKudu
+          if ($LASTEXITCODE -ne 0) { throw "Test-ReleasePermisos.ps1 -SoloKudu termino con codigo $LASTEXITCODE" }
 
 # ------------------------------------------------------------------------------------------------
 # 2. Build: compila y prueba. Corre en paralelo a la espera de aprobacion; Foto espera a los dos.
@@ -362,6 +386,20 @@ stages:
             -BuildId '$(Build.BuildId)' `
             -OutDir '$(evidenciasDir)'
           if ($LASTEXITCODE -ne 0) { throw "New-ReleaseFotoBd.ps1 termino con codigo $LASTEXITCODE" }
+    - template: pipelines/templates/steps/release-publicar-evidencias.yml
+      parameters:
+        stage: Foto
+  # Foto del codigo desplegado por Kudu: en un agente alojado (desde el pool privado el scm de las apps
+  # no resuelve). Corre tras FotoJob, es decir, tras el drenado. Su artefacto evidencias-FotoCodigo lleva
+  # foto-codigo/<clave>.zip y foto-codigo/foto-codigo.json; la vuelta atras redespliega desde el.
+  - job: FotoCodigoJob
+    displayName: Foto del codigo de ${{ parameters.targetEnvironment }} (agente alojado)
+    dependsOn: FotoJob
+    timeoutInMinutes: 30
+    pool:
+      vmImage: windows-latest
+    steps:
+    - checkout: self
     - task: AzureCLI@2
       displayName: Save-ReleaseFotoCodigo.ps1
       inputs:
@@ -370,7 +408,7 @@ stages:
         scriptLocation: 'inlineScript'
         inlineScript: |
           # En proceso (no con pwsh -File): -Apps es una hashtable. Los zips quedan en
-          # evidencias-Foto/foto-codigo/<clave>.zip (functions, admin, assetresolver).
+          # evidencias-FotoCodigo/foto-codigo/<clave>.zip (functions, admin, assetresolver).
           & ./scripts/release/Save-ReleaseFotoCodigo.ps1 `
             -ResourceGroup '$(AZURE_RESOURCE_GROUP)' `
             -Apps @{ functions = '$(AZURE_FUNCTIONS_APP_NAME)'; admin = '$(AZURE_ADMIN_WEB_APP_NAME)'; assetresolver = '$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)' } `
@@ -378,7 +416,7 @@ stages:
           if ($LASTEXITCODE -ne 0) { throw "Save-ReleaseFotoCodigo.ps1 termino con codigo $LASTEXITCODE" }
     - template: pipelines/templates/steps/release-publicar-evidencias.yml
       parameters:
-        stage: Foto
+        stage: FotoCodigo
 
 # Si Foto falla (p. ej. el drenado no termina), solo se rehabilita la ingesta y se publica el resumen:
 # no se ha tocado ninguna otra capa, no hay nada que deshacer.
@@ -396,6 +434,7 @@ stages:
       releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
       resultadoGuard: $[ stageDependencies.Guard.GuardJob.result ]
       resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
+      resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
     steps:
     - checkout: self
     - task: AzureCLI@2
@@ -413,6 +452,9 @@ stages:
     - download: current
       artifact: evidencias-Foto
       continueOnError: true
+    - download: current
+      artifact: evidencias-FotoCodigo
+      continueOnError: true
     - pwsh: |
         $ErrorActionPreference = 'Continue'
         $ws = '$(Pipeline.Workspace)'
@@ -427,7 +469,8 @@ stages:
         }
         $resultados = @(
           [ordered]@{ nombre = 'Guard'; resultado = '$(resultadoGuard)' },
-          [ordered]@{ nombre = 'Foto'; resultado = '$(resultadoFoto)' }
+          [ordered]@{ nombre = 'Foto'; resultado = '$(resultadoFoto)' },
+          [ordered]@{ nombre = 'FotoCodigo'; resultado = '$(resultadoFotoCodigo)' }
         )
         $json = ConvertTo-Json -InputObject $resultados -Compress
         $out = '$(Build.ArtifactStagingDirectory)/release'
@@ -541,6 +584,10 @@ stages:
   - job: Deploy
     displayName: Deploy Functions, Admin y AssetResolver
     timeoutInMinutes: 60
+    # Agente alojado, como el 799: zipDeploy va por Kudu y desde el pool privado el scm no resuelve.
+    # Todo lo del job es ARM o Kudu (settings, identidad y RBAC de Key Vault), nada de SQL ni storage.
+    pool:
+      vmImage: windows-latest
     steps:
     - template: pipelines/templates/steps/simular-fallo.yml
       parameters:
@@ -878,6 +925,7 @@ stages:
       resultadoBuild: $[ stageDependencies.Build.BuildJob.result ]
       resultadoAprobacion: $[ stageDependencies.Aprobacion.Aprobacion2.result ]
       resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
+      resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
       resultadoMigraciones: $[ stageDependencies.Migraciones.Apply.result ]
       resultadoIA: $[ stageDependencies.IA.Promote.result ]
       resultadoCodigo: $[ stageDependencies.Codigo.Validate.result ]
@@ -913,6 +961,8 @@ stages:
     - download: current
       artifact: evidencias-Foto
     - download: current
+      artifact: evidencias-FotoCodigo
+    - download: current
       artifact: evidencias-Configuracion
     - ${{ if ne(parameters.targetEnvironment, 'dev') }}:
       - download: current
@@ -937,6 +987,7 @@ stages:
           [ordered]@{ nombre = 'Build'; resultado = '$(resultadoBuild)' },
           [ordered]@{ nombre = 'Aprobacion'; resultado = '$(resultadoAprobacion)' },
           [ordered]@{ nombre = 'Foto'; resultado = '$(resultadoFoto)' },
+          [ordered]@{ nombre = 'FotoCodigo'; resultado = '$(resultadoFotoCodigo)' },
           [ordered]@{ nombre = 'Migraciones'; resultado = '$(resultadoMigraciones)' },
           [ordered]@{ nombre = 'IA'; resultado = '$(resultadoIA)' },
           [ordered]@{ nombre = 'Codigo'; resultado = '$(resultadoCodigo)' },
@@ -1056,13 +1107,17 @@ stages:
     dependsOn: Restaurar
     timeoutInMinutes: 60
     condition: and(not(canceled()), ne(stageDependencies.Codigo.Deploy.result, 'Skipped'))
+    # Agente alojado: zipDeploy va por Kudu y desde el pool privado el scm no resuelve. Los zips vienen
+    # del artefacto evidencias-FotoCodigo (job FotoCodigoJob de la stage Foto).
+    pool:
+      vmImage: windows-latest
     steps:
     - template: pipelines/templates/steps/deploy-functions.yml
       parameters:
         serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
         functionAppName: '$(AZURE_FUNCTIONS_APP_NAME)'
-        artifactName: evidencias-Foto
-        packagePath: '$(Pipeline.Workspace)/evidencias-Foto/foto-codigo/functions.zip'
+        artifactName: evidencias-FotoCodigo
+        packagePath: '$(Pipeline.Workspace)/evidencias-FotoCodigo/foto-codigo/functions.zip'
     - template: pipelines/templates/steps/deploy-admin.yml
       parameters:
         serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
@@ -1072,16 +1127,16 @@ stages:
         keyVaultName: '$(KEY_VAULT_NAME)'
         manageKeyVaultRbac: '$(manageKeyVaultRbac)'
         targetEnvironment: ${{ parameters.targetEnvironment }}
-        artifactName: evidencias-Foto
-        packagePath: '$(Pipeline.Workspace)/evidencias-Foto/foto-codigo/admin.zip'
+        artifactName: evidencias-FotoCodigo
+        packagePath: '$(Pipeline.Workspace)/evidencias-FotoCodigo/foto-codigo/admin.zip'
     - template: pipelines/templates/steps/deploy-assetresolver.yml
       parameters:
         serviceConnection: '$(AZURE_SERVICE_CONNECTION)'
         assetResolverWebAppName: '$(AZURE_ASSET_RESOLVER_WEB_APP_NAME)'
         resourceGroup: '$(AZURE_RESOURCE_GROUP)'
         keyVaultName: '$(KEY_VAULT_NAME)'
-        artifactName: evidencias-Foto
-        packagePath: '$(Pipeline.Workspace)/evidencias-Foto/foto-codigo/assetresolver.zip'
+        artifactName: evidencias-FotoCodigo
+        packagePath: '$(Pipeline.Workspace)/evidencias-FotoCodigo/foto-codigo/assetresolver.zip'
   - job: Cierre
     displayName: Registro, ingesta, reinicio y resumen
     dependsOn:
@@ -1093,6 +1148,7 @@ stages:
       releaseTag: $[ stageDependencies.Guard.GuardJob.outputs['guard.version'] ]
       resultadoGuard: $[ stageDependencies.Guard.GuardJob.result ]
       resultadoFoto: $[ stageDependencies.Foto.FotoJob.result ]
+      resultadoFotoCodigo: $[ stageDependencies.Foto.FotoCodigoJob.result ]
       resultadoRestaurar: $[ dependencies.Restaurar.result ]
       resultadoRevertirCodigo: $[ dependencies.RevertirCodigo.result ]
       resultadoMigraciones: $[ stageDependencies.Migraciones.Apply.result ]
@@ -1152,6 +1208,10 @@ stages:
       condition: succeededOrFailed()
       continueOnError: true
     - download: current
+      artifact: evidencias-FotoCodigo
+      condition: succeededOrFailed()
+      continueOnError: true
+    - download: current
       artifact: evidencias-VueltaAtras
       condition: succeededOrFailed()
       continueOnError: true
@@ -1183,6 +1243,7 @@ stages:
         $resultados = @(
           [ordered]@{ nombre = 'Guard'; resultado = '$(resultadoGuard)' },
           [ordered]@{ nombre = 'Foto'; resultado = '$(resultadoFoto)' },
+          [ordered]@{ nombre = 'FotoCodigo'; resultado = '$(resultadoFotoCodigo)' },
           [ordered]@{ nombre = 'Migraciones'; resultado = '$(resultadoMigraciones)' },
           [ordered]@{ nombre = 'IA'; resultado = '$(resultadoIA)' },
           [ordered]@{ nombre = 'Codigo'; resultado = '$(resultadoCodigo)' },

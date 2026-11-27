@@ -65,31 +65,35 @@ Los resultados de estas comparaciones van a `docs/auxiliares/temps/<fecha>/` (ca
 | `targetEnvironment` | `dev` (por defecto), `pre`, `prod` | `dev` es solo para ensayos. Origen del salto como en el 832: `pre` desde `dev`, `prod` desde `pre`; `dev` recupera desde PRO con `-FromProd -DryRun` y sin export ni altas. |
 | `simularFalloEn` | `ninguna` (por defecto, sin fallo; se pasa como vacío a Guard y a `simular-fallo.yml` porque Azure DevOps no admite la cadena vacía en `values`), `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas`, `Verificacion` | Solo en dev (Guard lo rechaza fuera de dev). Fuerza un fallo al inicio de esa stage (`simular-fallo.yml`) para ensayar la vuelta atrás. |
 
-Variables: `variables/entorno.yml`, `infra/ai/pipeline-variables.yml`, `variables/aprobadores.yml`, las constantes del 799 y del 832 y, por entorno, el origen del salto (`sourceEnvironment`, `sourceServiceConnection`, `sourceSqlServer`, `routeArgs`, `dryRunArg`). Pool por defecto `docia-mdp-private`; `Build`, `Generate` y `Validate` en `windows-latest`; `Aprobacion` agentless. Ninguna stage usa environments de Azure DevOps ni jobs de tipo deployment (ADR-008).
+Variables: `variables/entorno.yml`, `infra/ai/pipeline-variables.yml`, `variables/aprobadores.yml`, las constantes del 799 y del 832 y, por entorno, el origen del salto (`sourceEnvironment`, `sourceServiceConnection`, `sourceSqlServer`, `routeArgs`, `dryRunArg`). Pool por defecto `docia-mdp-private`; `Aprobacion` agentless; en `windows-latest` (agente alojado) van `Build`, `GuardKudu`, `FotoCodigoJob`, `Generate`, `Codigo/Deploy`, `Codigo/Validate` y `VueltaAtras/RevertirCodigo`. Todo lo que habla con SQL, Key Vault o storage sigue en el pool privado. Ninguna stage usa environments de Azure DevOps ni jobs de tipo deployment (ADR-008).
+
+### Qué corre en agente alojado y por qué
+
+El Kudu (`scm`) de la Function App no resuelve desde el pool privado `docia-mdp-private`: la app tiene endpoint privado y la zona DNS no está enlazada a la VNet del pool (NODATA). Desde un agente alojado resuelve a IP pública y Kudu con Bearer de Entra responde. Por eso todo lo que habla con Kudu va en `windows-latest`, como el 799: la comprobación de Kudu de Guard (`GuardKudu`), la foto del código (`FotoCodigoJob`) y los despliegues de código de `Codigo/Deploy` y `VueltaAtras/RevertirCodigo`. SQL, Key Vault y storage siguen en el pool privado. Las llamadas a `az` con paréntesis u otros caracteres de `cmd` en argumentos sin espacios las prepara `ConvertTo-ReleaseAzArgumento` (en Windows, `az.cmd` rompe con `( ) & | < > ^`).
 
 ### Stages
 
 | Stage | Qué hace |
 |---|---|
-| `Guard` | Solo lectura: rama esperada por entorno, manifiesto, aprobadores, simulación, registro `ReleaseAplicada` y permisos. Emite `version`, `manifestPath`, `yaAplicada` e `ignorarRegistro` (`guard.<variable>` del job `GuardJob`). Si la versión ya está aplicada se saltan todas las demás. |
+| `Guard` | Solo lectura: rama esperada por entorno, manifiesto, aprobadores, simulación, registro `ReleaseAplicada` y permisos. Emite `version`, `manifestPath`, `yaAplicada` e `ignorarRegistro` (`guard.<variable>` del job `GuardJob`, en el pool privado y con `-SinKudu`). La comprobación de Kudu de las tres apps va en el job `GuardKudu` (agente alojado, `Test-ReleasePermisos.ps1 -SoloKudu`); la stage falla si falla cualquiera de los dos. Si la versión ya está aplicada se saltan todas las demás. |
 | `Build` | Build y tests de la solución (template del 799); en paralelo a la espera de aprobación. |
 | `Aprobacion` | Dos `ManualValidation@1` encadenados (`Aprobacion1`, `Aprobacion2`), aprobadores de `aprobadores.yml`, 7 días de espera, rechazo al agotarse. En prod la segunda recuerda las cuatro puertas de PRE y el Smoke del Test Plan 100069. |
-| `Foto` | Foto de app settings, ingesta pausada, drenado del task hub (exit 3 = tiempo agotado: se rehabilita la ingesta y falla), copia de las tablas de configuración y foto del código de las tres apps. Espera a `Aprobacion` y `Build`. |
+| `Foto` | Foto de app settings, ingesta pausada, drenado del task hub (exit 3 = tiempo agotado: se rehabilita la ingesta y falla), copia de las tablas de configuración (`FotoJob`, pool privado) y, después, foto del código de las tres apps (`FotoCodigoJob`, agente alojado). Espera a `Aprobacion` y `Build`. |
 | `FotoFallida` | Solo si falla `Foto`: rehabilita la ingesta y publica el resumen en rojo. |
 | `Migraciones` | `Generate` y `Apply` (templates del 807, sin backfill ni regla de firewall). |
 | `IA` | `Export` de la config del origen (no en dev) y `Promote` de artefactos de IA (templates del 832). |
-| `Codigo` | `Deploy` (Functions, settings, Admin y AssetResolver, en ese orden) y `Validate` (templates del 799). |
+| `Codigo` | `Deploy` (Functions, settings, Admin y AssetResolver, en ese orden; agente alojado) y `Validate` (templates del 799). |
 | `Configuracion` | Pasos del manifiesto, secretos heredados de Key Vault y ciclo de vida del storage (cada uno con `-WhatIf` antes del real), reinicio con health. |
 | `Altas` | Solo pre y prod: `config-seed` y `config-apply` con `applyMissingConfig`, reinicio con health. |
 | `Verificacion` | Export `<versión>-<env>` (solo `.hashes.json` a evidencias), diff frente al origen (no en dev), smoke E2E con function key temporal y publicación en el Test Plan 100069. |
 | `Fin` | Solo con todo en verde: ingesta activa, cierre en `ReleaseAplicada`, `resumen.md` y artefacto `release-<env>-<build>`. |
-| `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto si `Codigo` llegó a empezar, marca el registro como `Revertido`, rehabilita la ingesta, reinicia, publica el resumen en rojo y deja el run en rojo. |
+| `VueltaAtras` | Solo si `Foto` pasó y falla una stage de `Migraciones` a `Verificacion`: restaura la BD y los settings, redespliega el código de la foto si `Codigo` llegó a empezar (`RevertirCodigo`, agente alojado, desde `evidencias-FotoCodigo`), marca el registro como `Revertido`, rehabilita la ingesta, reinicia, publica el resumen en rojo y deja el run en rojo. |
 
 `simularFalloEn` coloca `simular-fallo.yml` como primer paso de `Migraciones`, `IA`, `Codigo`, `Configuracion`, `Altas` y `Verificacion`.
 
 ### Artefactos
 
-- `evidencias-<stage>` (`Foto`, `Configuracion`, `Altas`, `Verificacion`, `VueltaAtras`, `VueltaAtrasCierre`): ficheros que dejan los scripts en `$(Build.ArtifactStagingDirectory)/evidencias`, sin secretos ni listado completo de app settings. `evidencias-Foto/foto-codigo/*.zip` es el código desplegado antes de la release (`functions.zip`, `admin.zip`, `assetresolver.zip`).
+- `evidencias-<stage>` (`Foto`, `FotoCodigo`, `Configuracion`, `Altas`, `Verificacion`, `VueltaAtras`, `VueltaAtrasCierre`): ficheros que dejan los scripts en `$(Build.ArtifactStagingDirectory)/evidencias`, sin secretos ni listado completo de app settings. `evidencias-FotoCodigo/foto-codigo/*.zip` (más `foto-codigo.json`) es el código desplegado antes de la release (`functions.zip`, `admin.zip`, `assetresolver.zip`).
 - `release-<env>-<build>`: `resumen.md` y las evidencias (sin los zips del código). Se publica en verde (`Fin`) y en rojo (`VueltaAtras`, `FotoFallida`).
 - Los propios de los templates: `drop-*` (build), `MigrationsScript`, `db-config`, `ai-artifacts-<env>-<intento>`, `config-diff` y `config-apply-<intento>`.
 

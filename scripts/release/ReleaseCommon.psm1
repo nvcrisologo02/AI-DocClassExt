@@ -299,6 +299,28 @@ function New-ReleaseRestoreSql {
     }
 }
 
+function ConvertTo-ReleaseAzArgumento {
+    <#
+    .SYNOPSIS
+        Prepara un argumento para az en Windows: az.cmd rompe con ( ) & | < > ^ si el argumento no lleva espacios.
+    .DESCRIPTION
+        PowerShell solo entrecomilla los argumentos con espacios. Los que llevan alguno de ( ) & | < > ^
+        y no llevan espacios ni empiezan por comilla doble llegan sin comillas al cmd.exe de az.cmd y lo
+        rompen ("-o was unexpected at this time", codigo 255). Se envuelven en comillas dobles literales.
+        EsWindows permite probar la rama sin depender del sistema; por defecto es $IsWindows.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory)][AllowEmptyString()][string]$Argumento,
+        [bool]$EsWindows = $IsWindows
+    )
+    if (-not $EsWindows) { return $Argumento }
+    if ($Argumento.StartsWith('"') -or $Argumento -match '\s') { return $Argumento }
+    if ($Argumento -match '[()&|<>^]') { return ('"' + $Argumento + '"') }
+    return $Argumento
+}
+
 function Invoke-ReleaseAz {
     <#
     .SYNOPSIS
@@ -314,7 +336,8 @@ function Invoke-ReleaseAz {
     if (-not ($args2 | Where-Object { $_ -ceq '-o' -or $_ -ceq '--output' })) { $args2 += @('-o', 'json') }
     $prev = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
-    $salida = & az @args2 2>&1
+    $args3 = @($args2 | ForEach-Object { ConvertTo-ReleaseAzArgumento -Argumento ([string]$_) })
+    $salida = & az @args3 2>&1
     $script:UltimoExitCodeAz = $LASTEXITCODE
     $ErrorActionPreference = $prev
     if ($script:UltimoExitCodeAz -ne 0) {
@@ -370,4 +393,4 @@ function Get-ReleaseAzUltimoExitCode {
 
 Export-ModuleMember -Function ConvertTo-ReleaseArgumentList, Get-ReleaseContentHash, New-EmbeddingsSql,
     Get-ReleaseBranchEsperada, ConvertTo-EnvironmentAlias, Get-DryRunSwitchName, Invoke-ReleaseSql,
-    Invoke-ReleaseSqlTransaccion, New-ReleaseRestoreSql, Invoke-ReleaseAz, Get-ReleaseAzUltimoExitCode, Get-ReleaseKuduToken
+    Invoke-ReleaseSqlTransaccion, New-ReleaseRestoreSql, Invoke-ReleaseAz, ConvertTo-ReleaseAzArgumento, Get-ReleaseAzUltimoExitCode, Get-ReleaseKuduToken

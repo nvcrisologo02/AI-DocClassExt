@@ -41,6 +41,14 @@
 .PARAMETER SinPermisos
     Omite la comprobacion de permisos (solo para tests).
 
+.PARAMETER SinKudu
+    Se pasa a Test-ReleasePermisos.ps1: salta las comprobaciones de Kudu (el scm de las apps no resuelve
+    desde el pool privado). Las hace el job GuardKudu desde un agente alojado.
+
+.PARAMETER SoloKudu
+    Solo ejecuta Test-ReleasePermisos.ps1 -SoloKudu (sin manifiesto, rama, aprobadores ni registro) y sale con 0
+    o con 2, sin variables de salida. Incompatible con -SinKudu.
+
 .PARAMETER PermisosScriptPath
     Ruta del script de permisos. Por defecto, Test-ReleasePermisos.ps1 junto a este (el parametro es para tests).
 #>
@@ -54,6 +62,8 @@ param(
     [Parameter(Mandatory)][string]$AprobadoresPath,
     [AllowEmptyString()][string]$SimularFalloEn = '',
     [switch]$SinPermisos,
+    [switch]$SinKudu,
+    [switch]$SoloKudu,
     [string]$PermisosScriptPath
 )
 
@@ -67,6 +77,42 @@ function Add-Fallo([string]$Mensaje) {
     $fallos.Add($Mensaje)
     Write-Host "##vso[task.logissue type=error]$Mensaje"
     Write-Host $Mensaje
+}
+
+# Permisos: Test-ReleasePermisos.ps1 con los switches de Kudu que correspondan.
+function Test-PermisosGuard {
+    if (-not $PermisosScriptPath) { $PermisosScriptPath = Join-Path $PSScriptRoot 'Test-ReleasePermisos.ps1' }
+    if (-not (Test-Path -LiteralPath $PermisosScriptPath -PathType Leaf)) {
+        Add-Fallo "No existe el script de permisos '$PermisosScriptPath'; no se puede comprobar."
+    }
+    else {
+        $parametros = @{ Environment = $Environment; SqlServer = $SqlServer; SqlDatabase = $SqlDatabase }
+        if ($SinKudu) { $parametros['SinKudu'] = $true }
+        if ($SoloKudu) { $parametros['SoloKudu'] = $true }
+        $global:LASTEXITCODE = 1
+        $salida = ''
+        try {
+            $salida = & $PermisosScriptPath @parametros 6>&1 | Out-String
+        }
+        catch {
+            $global:LASTEXITCODE = 1
+            $salida = "El script de permisos fallo: $($_.Exception.Message)"
+        }
+        if ($LASTEXITCODE -ne 0) {
+            Add-Fallo 'Permisos insuficientes o no comprobables:'
+            foreach ($linea in ($salida -split '\r?\n' | Where-Object { $_.Trim() })) {
+                Write-Host "##vso[task.logissue type=error]$linea"
+            }
+        }
+    }
+}
+
+# Modo -SoloKudu: solo la comprobacion de Kudu (job GuardKudu, agente alojado); sin salidas.
+if ($SinKudu -and $SoloKudu) { Add-Fallo '-SinKudu y -SoloKudu son incompatibles.'; exit 2 }
+if ($SoloKudu) {
+    Test-PermisosGuard
+    if ($fallos.Count -gt 0) { exit 2 }
+    exit 0
 }
 
 # 1. pwsh >= 7 y az.
@@ -119,29 +165,7 @@ if ($version) {
 }
 
 # 7. Permisos.
-if (-not $SinPermisos) {
-    if (-not $PermisosScriptPath) { $PermisosScriptPath = Join-Path $PSScriptRoot 'Test-ReleasePermisos.ps1' }
-    if (-not (Test-Path -LiteralPath $PermisosScriptPath -PathType Leaf)) {
-        Add-Fallo "No existe el script de permisos '$PermisosScriptPath'; no se puede comprobar."
-    }
-    else {
-        $global:LASTEXITCODE = 1
-        $salida = ''
-        try {
-            $salida = & $PermisosScriptPath -Environment $Environment -SqlServer $SqlServer -SqlDatabase $SqlDatabase 6>&1 | Out-String
-        }
-        catch {
-            $global:LASTEXITCODE = 1
-            $salida = "El script de permisos fallo: $($_.Exception.Message)"
-        }
-        if ($LASTEXITCODE -ne 0) {
-            Add-Fallo 'Permisos insuficientes o no comprobables:'
-            foreach ($linea in ($salida -split '\r?\n' | Where-Object { $_.Trim() })) {
-                Write-Host "##vso[task.logissue type=error]$linea"
-            }
-        }
-    }
-}
+if (-not $SinPermisos) { Test-PermisosGuard }
 
 if ($fallos.Count -gt 0) { exit 2 }
 

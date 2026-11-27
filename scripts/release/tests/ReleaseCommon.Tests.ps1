@@ -116,6 +116,45 @@ Describe 'Invoke-ReleaseAz diagnostico de fallos' {
     }
 }
 
+Describe 'ConvertTo-ReleaseAzArgumento' {
+    It 'entrecomilla un argumento con parentesis y sin espacios' {
+        ConvertTo-ReleaseAzArgumento -Argumento 'length(@)' -EsWindows $true | Should -Be '"length(@)"'
+    }
+    It 'entrecomilla un query con parentesis, corchetes y comillas simples' {
+        ConvertTo-ReleaseAzArgumento -Argumento "[?starts_with(name,'X')].name" -EsWindows $true | Should -Be "`"[?starts_with(name,'X')].name`""
+    }
+    It 'entrecomilla con el caracter especial <Arg> y sin espacios' -ForEach @(
+        @{ Arg = 'a&b' }, @{ Arg = 'a|b' }, @{ Arg = 'a<b' }, @{ Arg = 'a>b' }, @{ Arg = 'a^b' }
+    ) {
+        $esperado = '"' + $Arg + '"'
+        ConvertTo-ReleaseAzArgumento -Argumento $Arg -EsWindows $true | Should -Be $esperado
+    }
+    It 'no toca un argumento con espacios' {
+        ConvertTo-ReleaseAzArgumento -Argumento "[?name=='A' || name=='B']" -EsWindows $true | Should -Be "[?name=='A' || name=='B']"
+    }
+    It 'no toca un argumento que ya empieza por comilla doble' {
+        ConvertTo-ReleaseAzArgumento -Argumento '"ya"' -EsWindows $true | Should -Be '"ya"'
+    }
+    It 'no toca un argumento sin caracteres especiales' {
+        ConvertTo-ReleaseAzArgumento -Argumento 'abc' -EsWindows $true | Should -Be 'abc'
+        ConvertTo-ReleaseAzArgumento -Argumento '--query' -EsWindows $true | Should -Be '--query'
+    }
+    It 'fuera de Windows no cambia nada' {
+        ConvertTo-ReleaseAzArgumento -Argumento 'length(@)' -EsWindows $false | Should -Be 'length(@)'
+    }
+    It 'Invoke-ReleaseAz pasa a az los argumentos convertidos en Windows y el diagnostico usa los originales' -Skip:(-not $IsWindows) {
+        $global:AzArgsVistos = $null
+        function global:az { $global:AzArgsVistos = @($args); $global:LASTEXITCODE = 1; Write-Error 'ERROR: x' -ErrorAction Continue }
+        try {
+            $out = & { $null = Invoke-ReleaseAz -Arguments @('keyvault', 'secret', 'list', '--query', 'length(@)') } 6>&1 | Out-String
+            $global:AzArgsVistos | Should -Contain '"length(@)"'
+            $out | Should -Match 'az keyvault secret list fallo'
+            $out | Should -Not -Match 'length'
+        }
+        finally { Remove-Item function:global:az -ErrorAction SilentlyContinue }
+    }
+}
+
 Describe 'Get-ReleaseKuduToken' {
     BeforeEach { $script:tfPrev = $env:TF_BUILD }
     AfterEach {

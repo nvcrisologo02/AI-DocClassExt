@@ -92,4 +92,40 @@ Describe 'Test-ReleasePermisos' {
         $null = & $script:permisos -Environment dev -SqlServer srbsqldevdocai 6>&1
         Should -Not -Invoke Invoke-ReleaseAz -ParameterFilter { $Arguments -contains 'list-publishing-credentials' }
     }
+
+    Context 'switches -SinKudu y -SoloKudu' {
+        It '-SinKudu no pide token ni llama a Kudu y hace el resto de lecturas' {
+            $null = & $script:permisos -Environment dev -SqlServer srbsqldevdocai -SinKudu 6>&1
+            $LASTEXITCODE | Should -Be 0
+            Should -Not -Invoke Invoke-WebRequest
+            Should -Not -Invoke Get-ReleaseKuduToken
+            Should -Invoke Invoke-ReleaseAz -ParameterFilter { $Arguments -contains 'keyvault' }
+            Should -Invoke Invoke-ReleaseSql -Times 1 -Exactly
+        }
+        It '-SinKudu no falla aunque Kudu no se resuelva' {
+            Mock Invoke-WebRequest { throw 'NODATA' }
+            $out = & $script:permisos -Environment dev -SqlServer srbsqldevdocai -SinKudu 6>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0
+            $out | Should -Not -Match 'Kudu'
+        }
+        It '-SoloKudu comprueba las tres apps y no lee KV, storage, claves ni SQL' {
+            $null = & $script:permisos -Environment dev -SqlServer srbsqldevdocai -SoloKudu 6>&1
+            $LASTEXITCODE | Should -Be 0
+            Should -Invoke Invoke-WebRequest -Times 3 -Exactly
+            Should -Not -Invoke Invoke-ReleaseAz
+            Should -Not -Invoke Invoke-ReleaseSql
+        }
+        It '-SoloKudu sale con 2 si Kudu falla' {
+            Mock Invoke-WebRequest { throw 'NODATA' }
+            $out = & $script:permisos -Environment dev -SqlServer srbsqldevdocai -SoloKudu 6>&1 | Out-String
+            $LASTEXITCODE | Should -Be 2
+            $out | Should -Match 'Kudu srbappdevdocai: NODATA'
+        }
+        It '-SinKudu y -SoloKudu juntos son incompatibles y salen con 2' {
+            $out = & $script:permisos -Environment dev -SqlServer srbsqldevdocai -SinKudu -SoloKudu 6>&1 | Out-String
+            $LASTEXITCODE | Should -Be 2
+            $out | Should -Match 'incompatibles'
+            Should -Not -Invoke Invoke-WebRequest
+        }
+    }
 }

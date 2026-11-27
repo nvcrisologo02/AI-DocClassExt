@@ -131,4 +131,43 @@ Describe 'Invoke-ReleaseGuard' {
             $script:out | Should -Match 'variable=version;isOutput=true\]v1\.2\.0'
         }
     }
+
+    Context 'switches -SinKudu y -SoloKudu' {
+        BeforeAll {
+            $script:stubArgs = Join-Path $TestDrive 'permisos-args.ps1'
+            [System.IO.File]::WriteAllText($script:stubArgs, 'param([string]$Environment, [string]$SqlServer, [string]$SqlDatabase, [switch]$SinKudu, [switch]$SoloKudu)' + "`n" + '$global:StubArgs = "ARGS sin=$($SinKudu.IsPresent) solo=$($SoloKudu.IsPresent)"; exit 0')
+        }
+        It 'sin switches pasa SinKudu=False y SoloKudu=False al script de permisos' {
+            $global:StubArgs = $null
+            $o = & $script:guard -Environment pre -SourceBranch refs/heads/develop -RepoRoot $script:fixtures -SqlServer srbsqltest -AprobadoresPath $script:aprobOk -PermisosScriptPath $script:stubArgs 6>&1 | Out-String
+            $global:StubArgs | Should -Be 'ARGS sin=False solo=False'
+        }
+        It '-SinKudu se pasa al script de permisos y se publican las salidas' {
+            $global:StubArgs = $null
+            $o = & $script:guard -Environment pre -SourceBranch refs/heads/develop -RepoRoot $script:fixtures -SqlServer srbsqltest -AprobadoresPath $script:aprobOk -PermisosScriptPath $script:stubArgs -SinKudu 6>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0
+            $global:StubArgs | Should -Be 'ARGS sin=True solo=False'
+            $o | Should -Match 'variable=version;isOutput=true\]v1\.2\.0'
+        }
+        It '-SoloKudu solo ejecuta el script de permisos con -SoloKudu, sin manifiesto ni salidas' {
+            $global:StubArgs = $null
+            $o = & $script:guard -Environment pre -SourceBranch refs/heads/otra -RepoRoot $script:fixtures -SqlServer srbsqltest -AprobadoresPath (Join-Path $TestDrive 'no-existe.yml') -PermisosScriptPath $script:stubArgs -SoloKudu 6>&1 | Out-String
+            $LASTEXITCODE | Should -Be 0
+            $global:StubArgs | Should -Be 'ARGS sin=False solo=True'
+            $o | Should -Not -Match 'isOutput=true'
+            $o | Should -Not -Match 'no valida'
+        }
+        It '-SoloKudu sale con 2 si el script de permisos devuelve 2' {
+            $f = Join-Path $TestDrive 'permisos-solo-2.ps1'
+            [System.IO.File]::WriteAllText($f, 'param([string]$Environment, [string]$SqlServer, [string]$SqlDatabase, [switch]$SinKudu, [switch]$SoloKudu)' + "`n" + 'Write-Host "Kudu x: NODATA"; exit 2')
+            $o = & $script:guard -Environment pre -SourceBranch refs/heads/develop -RepoRoot $script:fixtures -SqlServer srbsqltest -AprobadoresPath $script:aprobOk -PermisosScriptPath $f -SoloKudu 6>&1 | Out-String
+            $LASTEXITCODE | Should -Be 2
+            $o | Should -Match 'logissue type=error\]Kudu x: NODATA'
+        }
+        It '-SinKudu y -SoloKudu juntos salen con 2' {
+            $o = & $script:guard -Environment pre -SourceBranch refs/heads/develop -RepoRoot $script:fixtures -SqlServer srbsqltest -AprobadoresPath $script:aprobOk -PermisosScriptPath $script:stubArgs -SinKudu -SoloKudu 6>&1 | Out-String
+            $LASTEXITCODE | Should -Be 2
+            $o | Should -Match 'incompatibles'
+        }
+    }
 }

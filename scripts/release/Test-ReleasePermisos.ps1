@@ -25,6 +25,14 @@
 .PARAMETER SqlDatabase
     Base de datos. Por defecto DocumentIA.
 
+.PARAMETER SinKudu
+    Salta las comprobaciones de Kudu. Es lo que usa Guard en el pool privado, desde el que el scm de
+    las apps no resuelve (endpoint privado sin enlace DNS a la VNet del pool).
+
+.PARAMETER SoloKudu
+    Hace solo las comprobaciones de Kudu (las tres apps) y sale con 0 o con 2. Es lo que usa el job
+    GuardKudu desde un agente alojado. Incompatible con -SinKudu.
+
 .EXAMPLE
     pwsh -NoProfile -File ./scripts/release/Test-ReleasePermisos.ps1 -Environment pre -SqlServer srbsqlpredocai
 #>
@@ -32,11 +40,17 @@
 param(
     [Parameter(Mandatory)][ValidateSet('dev', 'pre', 'prod')][string]$Environment,
     [Parameter(Mandatory)][string]$SqlServer,
-    [string]$SqlDatabase = 'DocumentIA'
+    [string]$SqlDatabase = 'DocumentIA',
+    [switch]$SinKudu,
+    [switch]$SoloKudu
 )
 
 $ErrorActionPreference = 'Continue'
 if (-not (Get-Module ReleaseCommon)) { Import-Module (Join-Path $PSScriptRoot 'ReleaseCommon.psm1') }
+if ($SinKudu -and $SoloKudu) {
+    Write-Host '-SinKudu y -SoloKudu son incompatibles.'
+    exit 2
+}
 
 # Recursos por entorno (apartado 2 de PERMISOS_SPN_RELEASE.md).
 $tabla = @{
@@ -96,40 +110,45 @@ function Test-KuduAlcanzable([string]$App) {
     }
 }
 
-# 3.x: Key Vault.
-if (-not (Test-Lectura @('keyvault', 'secret', 'list', '--vault-name', $r.kv, '--query', 'length(@)'))) {
-    Add-Fallo $r.kv 'Key Vault Secrets Officer' $sec
-}
-# Storage de documentos de destino y origen de la copia (contenedor documentai).
-foreach ($stg in @($r.stg, $r.origen) | Where-Object { $_ }) {
-    $rol = if ($stg -eq $r.stg) { 'Storage Blob Data Reader/Contributor' } else { 'Storage Blob Data Reader (origen de la copia)' }
-    if (-not (Test-Lectura @('storage', 'blob', 'list', '--account-name', $stg, '--container-name', 'documentai', '--auth-mode', 'login', '--num-results', '1'))) {
-        Add-Fallo $stg $rol $sec
+if (-not $SoloKudu) {
+    # 3.x: Key Vault.
+    if (-not (Test-Lectura @('keyvault', 'secret', 'list', '--vault-name', $r.kv, '--query', 'length(@)'))) {
+        Add-Fallo $r.kv 'Key Vault Secrets Officer' $sec
+    }
+    # Storage de documentos de destino y origen de la copia (contenedor documentai).
+    foreach ($stg in @($r.stg, $r.origen) | Where-Object { $_ }) {
+        $rol = if ($stg -eq $r.stg) { 'Storage Blob Data Reader/Contributor' } else { 'Storage Blob Data Reader (origen de la copia)' }
+        if (-not (Test-Lectura @('storage', 'blob', 'list', '--account-name', $stg, '--container-name', 'documentai', '--auth-mode', 'login', '--num-results', '1'))) {
+            Add-Fallo $stg $rol $sec
+        }
+    }
+    # Storage del task hub.
+    if (-not (Test-Lectura @('storage', 'account', 'keys', 'list', '--account-name', $r.taskhub, '--query', '[0].keyName', '-o', 'tsv'))) {
+        Add-Fallo $r.taskhub 'Contributor (listKeys) o Storage Table Data Reader' $sec
+    }
+    # Function App: claves y estado.
+    if (-not (Test-Lectura @('functionapp', 'keys', 'list', '-n', $r.func, '-g', $r.rg, '--query', 'length(functionKeys)'))) {
+        Add-Fallo $r.func 'lectura de claves de funcion' $sec
+    }
+    if (-not (Test-Lectura @('functionapp', 'show', '-n', $r.func, '-g', $r.rg, '--query', 'state', '-o', 'tsv'))) {
+        Add-Fallo $r.func 'lectura y reinicio de la Function App' $sec
+    }
+    # Acceso SQL.
+    try {
+        $uno = Invoke-ReleaseSql -Server $SqlServer -Database $SqlDatabase -Query 'SELECT 1' -Scalar
+        if ([int]$uno -ne 1) { throw 'resultado inesperado' }
+    }
+    catch {
+        Add-Fallo "$SqlServer/$SqlDatabase" 'acceso SQL (db_datareader y db_datawriter)' 'apartado 1 (grant-pipeline-sql-user.sql)'
     }
 }
-# Storage del task hub.
-if (-not (Test-Lectura @('storage', 'account', 'keys', 'list', '--account-name', $r.taskhub, '--query', '[0].keyName', '-o', 'tsv'))) {
-    Add-Fallo $r.taskhub 'Contributor (listKeys) o Storage Table Data Reader' $sec
-}
-# Function App: claves y estado.
-if (-not (Test-Lectura @('functionapp', 'keys', 'list', '-n', $r.func, '-g', $r.rg, '--query', 'length(functionKeys)'))) {
-    Add-Fallo $r.func 'lectura de claves de funcion' $sec
-}
-if (-not (Test-Lectura @('functionapp', 'show', '-n', $r.func, '-g', $r.rg, '--query', 'state', '-o', 'tsv'))) {
-    Add-Fallo $r.func 'lectura y reinicio de la Function App' $sec
-}
-# Nuevas: Kudu alcanzable con token de Entra (las tres apps) y acceso SQL.
-foreach ($par in @(@($r.func), @($r.admin), @($r.resolver))) {
-    if (-not (Test-KuduAlcanzable -App $par[0])) {
-        Add-Fallo $par[0] 'Kudu alcanzable con token de Entra (Contributor sobre el RG)' $sec
+# Kudu alcanzable con token de Entra (las tres apps).
+if (-not $SinKudu) {
+    foreach ($par in @(@($r.func), @($r.admin), @($r.resolver))) {
+        if (-not (Test-KuduAlcanzable -App $par[0])) {
+            Add-Fallo $par[0] 'Kudu alcanzable con token de Entra (Contributor sobre el RG)' $sec
+        }
     }
-}
-try {
-    $uno = Invoke-ReleaseSql -Server $SqlServer -Database $SqlDatabase -Query 'SELECT 1' -Scalar
-    if ([int]$uno -ne 1) { throw 'resultado inesperado' }
-}
-catch {
-    Add-Fallo "$SqlServer/$SqlDatabase" 'acceso SQL (db_datareader y db_datawriter)' 'apartado 1 (grant-pipeline-sql-user.sql)'
 }
 
 if ($fallos.Count -gt 0) {
